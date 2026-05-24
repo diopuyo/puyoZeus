@@ -1,0 +1,85 @@
+{
+  "video_id": "v21",
+  "video_path": "data/phase_l/cut/v21m1499.0_buf15s.mp4",
+  "n_frames_processed": 1081,
+  "elapsed_sec": 76.26160788536072,
+  "sample_counts": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "9": 327
+  },
+  "per_video_ranges": {
+    "9": [
+      152,
+      159,
+      8,
+      12,
+      129,
+      130
+    ]
+  },
+  "online_hsv_state": {
+    "high_conf": 0.85,
+    "min_samples": 50,
+    "require_cnn_proba": false,
+    "stats": {
+      "1": {
+        "h_mean": 0.0,
+        "h_var": 0.0,
+        "s_mean": 0.0,
+        "s_var": 0.0,
+        "v_mean": 0.0,
+        "v_var": 0.0,
+        "n": 0
+      },
+      "2": {
+        "h_mean": 0.0,
+        "h_var": 0.0,
+        "s_mean": 0.0,
+        "s_var": 0.0,
+        "v_mean": 0.0,
+        "v_var": 0.0,
+        "n": 0
+      },
+      "3": {
+        "h_mean": 0.0,
+        "h_var": 0.0,
+        "s_mean": 0.0,
+        "s_var": 0.0,
+        "v_mean": 0.0,
+        "v_var": 0.0,
+        "n": 0
+      },
+      "4": {
+        "h_mean": 0.0,
+        "h_var": 0.0,
+        "s_mean": 0.0,
+        "s_var": 0.0,
+        "v_mean": 0.0,
+        "v_var": 0.0,
+        "n": 0
+      },
+      "5": {
+        "h_mean": 0.0,
+        "h_var": 0.0,
+        "s_mean": 0.0,
+        "s_var": 0.0,
+        "v_mean": 0.0,
+        "v_var": 0.0,
+        "n": 0
+      },
+      "9": {
+        "h_mean": 155.36397277310118,
+        "h_var": 2.028058725215353,
+        "s_mean": 10.411835020236325,
+        "s_var": 1.613149632135738,
+        "v_mean": 130.15966297661407,
+        "v_var": 0.23824941644111142,
+        "n": 327
+      }
+    }
+  }
+}

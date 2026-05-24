@@ -1,0 +1,432 @@
+"""
+image_reader.py のテスト
+
+合成画像（純色セルグリッド）を使って色分類・盤面読み取りをテストする。
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+import cv2
+
+from src.board import (
+    BOARD_COLS,
+    BOARD_ROWS,
+    COLOR_BLUE,
+    COLOR_EMPTY,
+    COLOR_GREEN,
+    COLOR_OJAMA,
+    COLOR_PURPLE,
+    COLOR_RED,
+    COLOR_UNKNOWN,
+    COLOR_YELLOW,
+    HIDDEN_ROWS,
+    VISIBLE_ROWS,
+    Board,
+)
+from src.image_reader import (
+    CELL_SAMPLE_RATIO,
+    BoardRegion,
+    ColorClassifier,
+    HsvRange,
+    ImageReader,
+    DEFAULT_COLOR_RANGES,
+)
+
+# ============================
+# テスト用BGR色定義 (OpenCV HSV上で確実に分類される純色)
+# ============================
+# BGR (Blue, Green, Red)
+BGR_RED:    tuple[int, int, int] = (0,   0,   200)   # HSV H≈0
+BGR_BLUE:   tuple[int, int, int] = (200, 50,  0)     # HSV H≈110
+BGR_GREEN:  tuple[int, int, int] = (0,   200, 0)     # HSV H≈60
+BGR_YELLOW: tuple[int, int, int] = (0,   200, 200)   # HSV H≈30
+BGR_PURPLE: tuple[int, int, int] = (180, 0,  180)    # HSV H≈150
+BGR_OJAMA:  tuple[int, int, int] = (200, 200, 200)   # HSV S≈0
+BGR_EMPTY:  tuple[int, int, int] = (10,  10,  10)    # HSV V≈4
+
+COLOR_BGR_MAP: dict[int, tuple[int, int, int]] = {
+    COLOR_RED:    BGR_RED,
+    COLOR_BLUE:   BGR_BLUE,
+    COLOR_GREEN:  BGR_GREEN,
+    COLOR_YELLOW: BGR_YELLOW,
+    COLOR_PURPLE: BGR_PURPLE,
+    COLOR_OJAMA:  BGR_OJAMA,
+    COLOR_EMPTY:  BGR_EMPTY,
+}
+
+
+# ============================
+# ヘルパー関数
+# ============================
+
+def make_synthetic_frame(
+    region: BoardRegion,
+    color_grid: list[list[int]],
+    frame_h: int = 600,
+    frame_w: int = 600,
+) -> np.ndarray:
+    """
+    指定された色グリッドで各セルを塗りつぶした合成フレームを生成する。
+
+    row < HIDDEN_ROWS (隠し段) の色は画面上には描画されない (画面外のため)。
+    region は可視領域 (VISIBLE_ROWS=12 行) のみを表す。
+
+    Args:
+        region: 盤面領域 (可視領域のみ)。
+        color_grid: BOARD_ROWS × BOARD_COLS の色コードグリッド。
+        frame_h, frame_w: フレームサイズ。
+
+    Returns:
+        np.ndarray: BGR画像 (frame_h × frame_w × 3)。
+    """
+    frame = np.zeros((frame_h, frame_w, 3), dtype=np.uint8)
+
+    for row in range(BOARD_ROWS):
+        if row < HIDDEN_ROWS:
+            continue  # 隠し段は画面外
+        visible_row = row - HIDDEN_ROWS
+        for col in range(BOARD_COLS):
+            color_code = color_grid[row][col]
+            bgr = COLOR_BGR_MAP.get(color_code, BGR_EMPTY)
+
+            x1 = int(region.x + col * region.cell_width)
+            x2 = int(region.x + (col + 1) * region.cell_width)
+            y1 = int(region.y + visible_row * region.cell_height)
+            y2 = int(region.y + (visible_row + 1) * region.cell_height)
+
+            frame[y1:y2, x1:x2] = bgr
+
+    return frame
+
+
+def all_same_color_grid(color: int) -> list[list[int]]:
+    """全セルが同じ色のグリッドを生成する。"""
+    return [[color] * BOARD_COLS for _ in range(BOARD_ROWS)]
+
+
+# テスト用のコンパクトな盤面領域 (可視12行 × 50x40 セル)
+TEST_REGION = BoardRegion(x=10, y=10, width=300, height=480)
+
+
+# ============================
+# HsvRange テスト
+# ============================
+
+class TestHsvRange:
+    def test_default_s_max_is_255(self):
+        rng = HsvRange(h_min=0, h_max=10)
+        assert rng.s_max == 255
+
+    def test_custom_range(self):
+        rng = HsvRange(h_min=50, h_max=80, s_min=100, v_min=120)
+        assert rng.h_min == 50
+        assert rng.h_max == 80
+
+
+# ============================
+# BoardRegion テスト
+# ============================
+
+class TestBoardRegion:
+    def test_cell_width(self):
+        region = BoardRegion(x=0, y=0, width=120, height=260)
+        assert region.cell_width == pytest.approx(20.0)
+
+    def test_cell_height(self):
+        # height/VISIBLE_ROWS (=12) で計算される
+        region = BoardRegion(x=0, y=0, width=120, height=240)
+        assert region.cell_height == pytest.approx(20.0)
+
+    def test_cell_center_first_visible_row(self):
+        # row=HIDDEN_ROWS (最初の可視行) の中心が領域内の最上部中央
+        region = BoardRegion(x=0, y=0, width=60, height=120)
+        cx, cy = region.cell_center(HIDDEN_ROWS, 0)
+        assert cx == 5   # cell_w/2 = 10/2
+        assert cy == 5   # cell_h/2 = 10/2
+
+    def test_cell_sample_rect_within_cell(self):
+        region = BoardRegion(x=0, y=0, width=120, height=260)
+        x1, y1, x2, y2 = region.cell_sample_rect(0, 0)
+        assert x1 < x2
+        assert y1 < y2
+
+
+# ============================
+# ColorClassifier テスト
+# ============================
+
+class TestColorClassifier:
+    """純色パッチが正しく分類されることを確認する。"""
+
+    @pytest.fixture
+    def clf(self) -> ColorClassifier:
+        return ColorClassifier()
+
+    def _make_patch(self, bgr: tuple[int, int, int], size: int = 20) -> np.ndarray:
+        patch = np.zeros((size, size, 3), dtype=np.uint8)
+        patch[:, :] = bgr
+        return patch
+
+    def test_classify_red(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_RED)) == COLOR_RED
+
+    def test_classify_blue(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_BLUE)) == COLOR_BLUE
+
+    def test_classify_green(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_GREEN)) == COLOR_GREEN
+
+    def test_classify_yellow(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_YELLOW)) == COLOR_YELLOW
+
+    def test_classify_purple(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_PURPLE)) == COLOR_PURPLE
+
+    def test_classify_ojama(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_OJAMA)) == COLOR_OJAMA
+
+    def test_classify_empty_dark(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_EMPTY)) == COLOR_EMPTY
+
+    def test_classify_empty_patch(self, clf: ColorClassifier):
+        """空パッチは COLOR_EMPTY を返す。"""
+        assert clf.classify(np.zeros((0, 0, 3), dtype=np.uint8)) == COLOR_EMPTY
+
+    def test_classify_hsv_shortcut(self, clf: ColorClassifier):
+        """classify_hsv がclassify と同じ結果を返す。"""
+        result = clf.classify_hsv(0, 200, 180)  # 赤寄り
+        assert result == COLOR_RED
+
+    def test_custom_ranges(self):
+        """カスタム閾値が優先される。"""
+        custom = {
+            COLOR_RED: [HsvRange(h_min=50, h_max=70, s_min=100, v_min=80)]
+        }
+        clf = ColorClassifier(color_ranges=custom)
+        # 緑の純色パッチ (H≈60) がカスタム閾値でCOLOR_REDに分類される
+        patch = np.zeros((10, 10, 3), dtype=np.uint8)
+        patch[:, :] = BGR_GREEN
+        assert clf.classify(patch) == COLOR_RED
+
+
+# ============================
+# サイクル71: 投票方式 ColorClassifier テスト
+# ============================
+
+class TestColorClassifierVoteMode:
+    """vote_mode=True での per-pixel 投票方式の動作確認."""
+
+    @pytest.fixture
+    def clf(self) -> ColorClassifier:
+        return ColorClassifier(vote_mode=True)
+
+    def _make_patch(
+        self, bgr: tuple[int, int, int], size: int = 20,
+    ) -> np.ndarray:
+        patch = np.zeros((size, size, 3), dtype=np.uint8)
+        patch[:, :] = bgr
+        return patch
+
+    def test_vote_classify_pure_red(self, clf: ColorClassifier):
+        """純赤パッチは COLOR_RED."""
+        assert clf.classify(self._make_patch(BGR_RED)) == COLOR_RED
+
+    def test_vote_classify_pure_blue(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_BLUE)) == COLOR_BLUE
+
+    def test_vote_classify_pure_green(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_GREEN)) == COLOR_GREEN
+
+    def test_vote_classify_pure_yellow(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_YELLOW)) == COLOR_YELLOW
+
+    def test_vote_classify_pure_purple(self, clf: ColorClassifier):
+        assert clf.classify(self._make_patch(BGR_PURPLE)) == COLOR_PURPLE
+
+    def test_vote_classify_pure_ojama(self, clf: ColorClassifier):
+        """全面グレーは OJAMA."""
+        assert clf.classify(self._make_patch(BGR_OJAMA)) == COLOR_OJAMA
+
+    def test_vote_classify_pure_empty(self, clf: ColorClassifier):
+        """全面暗色は EMPTY."""
+        assert clf.classify(self._make_patch(BGR_EMPTY)) == COLOR_EMPTY
+
+    def test_vote_classify_half_red_half_empty(self, clf: ColorClassifier):
+        """半分赤・半分空 cell は puyo 票 50% で COLOR_RED 採用 (= 主目的)."""
+        patch = np.zeros((20, 20, 3), dtype=np.uint8)
+        patch[10:, :] = BGR_RED  # 下半分が赤
+        patch[:10, :] = BGR_EMPTY  # 上半分が空
+        assert clf.classify(patch) == COLOR_RED
+
+    def test_vote_classify_quarter_blue_rest_empty(
+        self, clf: ColorClassifier,
+    ):
+        """1/4 だけ青、 残り空 → 25% > 10% 閾値で COLOR_BLUE 採用."""
+        patch = np.zeros((20, 20, 3), dtype=np.uint8)
+        patch[:, :] = BGR_EMPTY
+        patch[10:, 10:] = BGR_BLUE  # 右下 10x10 = 25% が青
+        assert clf.classify(patch) == COLOR_BLUE
+
+    def test_vote_classify_tiny_puyo_below_threshold(
+        self, clf: ColorClassifier,
+    ):
+        """puyo 票が 10% 未満 (5x5=25 / 400=6%) → EMPTY (= ノイズ抑制)."""
+        patch = np.zeros((20, 20, 3), dtype=np.uint8)
+        patch[:, :] = BGR_EMPTY
+        patch[0:5, 0:5] = BGR_RED  # 6% だけ赤
+        assert clf.classify(patch) == COLOR_EMPTY
+
+    def test_vote_classify_red_vs_yellow_mixed(self, clf: ColorClassifier):
+        """赤と黄の混合: 赤の方が多ければ赤、 同数なら HSV 順位の方."""
+        patch = np.zeros((20, 20, 3), dtype=np.uint8)
+        patch[:, :10] = BGR_RED
+        patch[:, 10:] = BGR_YELLOW
+        result = clf.classify(patch)
+        # 赤と黄が半々 → どちらか採用 (両方 puyo 色なので非 EMPTY 確認)
+        assert result in (COLOR_RED, COLOR_YELLOW)
+
+    def test_vote_classify_empty_patch_size_zero(self, clf: ColorClassifier):
+        """空パッチは EMPTY."""
+        assert clf.classify(
+            np.zeros((0, 0, 3), dtype=np.uint8),
+        ) == COLOR_EMPTY
+
+    def test_vote_mode_default_is_false(self):
+        """vote_mode 未指定 (= デフォルト False) は median 方式と同じ挙動."""
+        clf_default = ColorClassifier()
+        # 半分埋まり cell は median 方式では空に倒れる可能性が高い
+        # (= 投票方式と挙動が違うことを確認、 backwards compat 担保)
+        patch = np.zeros((20, 20, 3), dtype=np.uint8)
+        patch[15:, :] = BGR_RED
+        patch[:15, :] = BGR_EMPTY
+        # median 方式は 75% empty で empty に倒れる
+        assert clf_default.classify(patch) == COLOR_EMPTY
+
+
+# ============================
+# ImageReader テスト
+# ============================
+
+class TestImageReader:
+    @pytest.fixture
+    def reader(self) -> ImageReader:
+        return ImageReader(p1_region=TEST_REGION, p2_region=TEST_REGION)
+
+    def test_read_empty_board(self, reader: ImageReader):
+        """全空の合成フレームから空盤面が返される。"""
+        grid = all_same_color_grid(COLOR_EMPTY)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.count_puyos() == 0
+
+    def test_read_all_red_board(self, reader: ImageReader):
+        """全赤の合成フレームから、可視行が全赤・隠し段は UNKNOWN。"""
+        grid = all_same_color_grid(COLOR_RED)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        # 可視領域のみ puyo (VISIBLE_ROWS * BOARD_COLS)
+        assert board.count_puyos() == VISIBLE_ROWS * BOARD_COLS
+        assert board.get(0, 0) == COLOR_UNKNOWN
+        assert board.get(HIDDEN_ROWS, 0) == COLOR_RED
+        assert board.get(12, 5) == COLOR_RED
+
+    def test_read_all_blue_board(self, reader: ImageReader):
+        grid = all_same_color_grid(COLOR_BLUE)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.get(6, 3) == COLOR_BLUE
+
+    def test_read_all_green_board(self, reader: ImageReader):
+        grid = all_same_color_grid(COLOR_GREEN)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        # 隠し段は UNKNOWN、可視領域は GREEN
+        assert board.get(0, 0) == COLOR_UNKNOWN
+        assert board.get(HIDDEN_ROWS, 0) == COLOR_GREEN
+
+    def test_read_all_yellow_board(self, reader: ImageReader):
+        grid = all_same_color_grid(COLOR_YELLOW)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.get(12, 5) == COLOR_YELLOW
+
+    def test_read_all_purple_board(self, reader: ImageReader):
+        grid = all_same_color_grid(COLOR_PURPLE)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.get(6, 2) == COLOR_PURPLE
+
+    def test_read_all_ojama_board(self, reader: ImageReader):
+        grid = all_same_color_grid(COLOR_OJAMA)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.get(0, 0) == COLOR_UNKNOWN
+        assert board.get(HIDDEN_ROWS, 0) == COLOR_OJAMA
+
+    def test_read_mixed_board(self, reader: ImageReader):
+        """複数色が混在する盤面を正しく読み取れる。"""
+        grid = all_same_color_grid(COLOR_EMPTY)
+        grid[12][0] = COLOR_RED
+        grid[12][1] = COLOR_BLUE
+        grid[12][2] = COLOR_GREEN
+        grid[12][3] = COLOR_YELLOW
+        grid[12][4] = COLOR_PURPLE
+        grid[12][5] = COLOR_OJAMA
+
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+
+        assert board.get(12, 0) == COLOR_RED
+        assert board.get(12, 1) == COLOR_BLUE
+        assert board.get(12, 2) == COLOR_GREEN
+        assert board.get(12, 3) == COLOR_YELLOW
+        assert board.get(12, 4) == COLOR_PURPLE
+        assert board.get(12, 5) == COLOR_OJAMA
+
+    def test_read_both_boards_same_region(self, reader: ImageReader):
+        """read_both_boards が2つのBoardを返す。"""
+        grid = all_same_color_grid(COLOR_RED)
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        b1, b2 = reader.read_both_boards(frame)
+        assert isinstance(b1, Board)
+        assert isinstance(b2, Board)
+
+    def test_read_board_clips_to_frame_boundary(self):
+        """領域がフレーム端に近い場合もクラッシュしない。"""
+        # 小さなフレームで領域が境界をはみ出す状況
+        region = BoardRegion(x=0, y=0, width=60, height=130)
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        reader = ImageReader(p1_region=region, p2_region=region)
+        board = reader.read_board(frame, region)
+        assert isinstance(board, Board)
+
+    def test_debug_frame_returns_image(self, reader: ImageReader):
+        """debug_frame が同じサイズの画像を返す。"""
+        frame = np.zeros((600, 600, 3), dtype=np.uint8)
+        result = reader.debug_frame(frame, TEST_REGION)
+        assert result.shape == frame.shape
+
+    def test_is_dead_detection_via_reader(self, reader: ImageReader):
+        """
+        画像読み取りでは隠し段 (row 0) は物理推論される。
+        可視最上段 (row 1) が空なら row 0 も空と確定。
+        """
+        grid = all_same_color_grid(COLOR_EMPTY)
+        grid[0][2] = COLOR_RED  # 画面外なので描画されない
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        # 可視最上段が空なので row 0 も empty 確定
+        assert board.get(0, 2) == COLOR_EMPTY
+        assert board.is_dead() is False
+
+    def test_hidden_row_unknown_when_top_occupied(self, reader: ImageReader):
+        """可視最上段に puyo があると同列の row 0 は UNKNOWN (回し入れ可能性)。"""
+        grid = all_same_color_grid(COLOR_EMPTY)
+        grid[HIDDEN_ROWS][0] = COLOR_RED  # 可視最上段
+        frame = make_synthetic_frame(TEST_REGION, grid)
+        board = reader.read_board(frame, TEST_REGION)
+        assert board.get(0, 0) == COLOR_UNKNOWN
+        # 他の列は row 1 が空なので row 0 も空
+        assert board.get(0, 1) == COLOR_EMPTY

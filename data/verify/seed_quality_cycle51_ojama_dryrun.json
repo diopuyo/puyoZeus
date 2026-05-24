@@ -1,0 +1,55 @@
+{
+  "summary": {
+    "videos_evaluated": 1,
+    "total_samples": 2700,
+    "total_pure": 2700,
+    "overall_purity": 1.0,
+    "per_color_purity": {
+      "empty": 1.0,
+      "red": 1.0,
+      "purple": 1.0,
+      "blue": 1.0,
+      "green": 1.0,
+      "yellow": 1.0
+    },
+    "per_color_counts": {
+      "empty": 200,
+      "red": 500,
+      "purple": 500,
+      "blue": 500,
+      "green": 500,
+      "yellow": 500
+    }
+  },
+  "per_video": [
+    {
+      "video_id": "v89m7_ojama_dryrun",
+      "per_color_counts": {
+        "empty": 200,
+        "red": 500,
+        "purple": 500,
+        "blue": 500,
+        "green": 500,
+        "yellow": 500
+      },
+      "per_color_pure": {
+        "empty": 200,
+        "red": 500,
+        "purple": 500,
+        "blue": 500,
+        "green": 500,
+        "yellow": 500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    }
+  ]
+}

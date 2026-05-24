@@ -1,0 +1,762 @@
+{
+  "summary": {
+    "videos_evaluated": 26,
+    "total_samples": 149523,
+    "total_pure": 149523,
+    "overall_purity": 1.0,
+    "per_color_purity": {
+      "empty": 1.0,
+      "red": 1.0,
+      "blue": 1.0,
+      "purple": 1.0,
+      "yellow": 1.0,
+      "green": 1.0
+    },
+    "per_color_counts": {
+      "empty": 7268,
+      "red": 28345,
+      "blue": 28268,
+      "purple": 32038,
+      "yellow": 25021,
+      "green": 28583
+    }
+  },
+  "per_video": [
+    {
+      "video_id": "v20m1765.0",
+      "per_color_counts": {
+        "empty": 315
+      },
+      "per_color_pure": {
+        "empty": 315
+      },
+      "per_color_purity": {
+        "empty": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v29m22",
+      "per_color_counts": {
+        "empty": 158,
+        "red": 333,
+        "blue": 233,
+        "purple": 476,
+        "yellow": 186,
+        "green": 52
+      },
+      "per_color_pure": {
+        "empty": 158,
+        "red": 333,
+        "blue": 233,
+        "purple": 476,
+        "yellow": 186,
+        "green": 52
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v30m23",
+      "per_color_counts": {
+        "red": 1500,
+        "purple": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "yellow": 1186,
+        "empty": 500
+      },
+      "per_color_pure": {
+        "red": 1500,
+        "purple": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "yellow": 1186,
+        "empty": 500
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "purple": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "empty": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v31m10",
+      "per_color_counts": {
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 49,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 49,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v34m13",
+      "per_color_counts": {
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "empty": 500,
+        "purple": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "empty": 500,
+        "purple": 1500,
+        "red": 1500
+      },
+      "per_color_purity": {
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 1.0,
+        "empty": 1.0,
+        "purple": 1.0,
+        "red": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v36m34",
+      "per_color_counts": {
+        "purple": 1500,
+        "green": 886,
+        "red": 974,
+        "blue": 392,
+        "yellow": 893
+      },
+      "per_color_pure": {
+        "purple": 1500,
+        "green": 886,
+        "red": 974,
+        "blue": 392,
+        "yellow": 893
+      },
+      "per_color_purity": {
+        "purple": 1.0,
+        "green": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v37m44",
+      "per_color_counts": {
+        "empty": 105,
+        "purple": 1500,
+        "red": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_pure": {
+        "empty": 105,
+        "purple": 1500,
+        "red": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "red": 1.0,
+        "green": 1.0,
+        "yellow": 1.0,
+        "blue": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v40m10",
+      "per_color_counts": {
+        "empty": 500,
+        "yellow": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "red": 1500,
+        "purple": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "yellow": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "red": 1500,
+        "purple": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "red": 1.0,
+        "purple": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v43m8",
+      "per_color_counts": {
+        "empty": 500,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "green": 1.0,
+        "red": 1.0,
+        "yellow": 1.0,
+        "blue": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v50m26",
+      "per_color_counts": {
+        "green": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "green": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "green": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v52m5",
+      "per_color_counts": {
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 113,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 113,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v54m18",
+      "per_color_counts": {
+        "empty": 81,
+        "red": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "purple": 1500,
+        "yellow": 52
+      },
+      "per_color_pure": {
+        "empty": 81,
+        "red": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "purple": 1500,
+        "yellow": 52
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "green": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v61m15",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "green": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v64m29",
+      "per_color_counts": {
+        "blue": 468,
+        "empty": 500,
+        "green": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "blue": 468,
+        "empty": 500,
+        "green": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "blue": 1.0,
+        "empty": 1.0,
+        "green": 1.0,
+        "purple": 1.0,
+        "red": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v66m29",
+      "per_color_counts": {
+        "blue": 1500,
+        "empty": 8,
+        "green": 1231,
+        "purple": 1500,
+        "yellow": 967,
+        "red": 828
+      },
+      "per_color_pure": {
+        "blue": 1500,
+        "empty": 8,
+        "green": 1231,
+        "purple": 1500,
+        "yellow": 967,
+        "red": 828
+      },
+      "per_color_purity": {
+        "blue": 1.0,
+        "empty": 1.0,
+        "green": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0,
+        "red": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v73m14",
+      "per_color_counts": {
+        "empty": 500,
+        "green": 447,
+        "blue": 731,
+        "yellow": 200,
+        "purple": 609,
+        "red": 308
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "green": 447,
+        "blue": 731,
+        "yellow": 200,
+        "purple": 609,
+        "red": 308
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "purple": 1.0,
+        "red": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v74m16",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1423,
+        "purple": 857,
+        "green": 902,
+        "blue": 1500,
+        "yellow": 974
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1423,
+        "purple": 857,
+        "green": 902,
+        "blue": 1500,
+        "yellow": 974
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v75m14",
+      "per_color_counts": {
+        "empty": 96,
+        "blue": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 96,
+        "blue": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "red": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v78m2",
+      "per_color_counts": {
+        "purple": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "empty": 66,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "purple": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "empty": 66,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "purple": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "empty": 1.0,
+        "green": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v79m1",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1072,
+        "blue": 675,
+        "yellow": 645,
+        "purple": 1297,
+        "green": 1004
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1072,
+        "blue": 675,
+        "yellow": 645,
+        "purple": 1297,
+        "green": 1004
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "purple": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v81m8",
+      "per_color_counts": {
+        "empty": 500,
+        "yellow": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "yellow": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "yellow": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v86m17",
+      "per_color_counts": {
+        "red": 213,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 2,
+        "yellow": 885,
+        "green": 10
+      },
+      "per_color_pure": {
+        "red": 213,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 2,
+        "yellow": 885,
+        "green": 10
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v89m7",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 829,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 225
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 829,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 225
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v92m11",
+      "per_color_counts": {
+        "empty": 113,
+        "red": 901,
+        "yellow": 569,
+        "green": 1072,
+        "purple": 935,
+        "blue": 20
+      },
+      "per_color_pure": {
+        "empty": 113,
+        "red": 901,
+        "yellow": 569,
+        "green": 1072,
+        "purple": 935,
+        "blue": 20
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "yellow": 1.0,
+        "green": 1.0,
+        "purple": 1.0,
+        "blue": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v93m20",
+      "per_color_counts": {
+        "empty": 158,
+        "green": 452,
+        "blue": 115,
+        "purple": 364,
+        "yellow": 144,
+        "red": 208
+      },
+      "per_color_pure": {
+        "empty": 158,
+        "green": 452,
+        "blue": 115,
+        "purple": 364,
+        "yellow": 144,
+        "red": 208
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0,
+        "red": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v95m3",
+      "per_color_counts": {
+        "yellow": 95,
+        "purple": 500,
+        "blue": 134,
+        "red": 256,
+        "empty": 4,
+        "green": 27
+      },
+      "per_color_pure": {
+        "yellow": 95,
+        "purple": 500,
+        "blue": 134,
+        "red": 256,
+        "empty": 4,
+        "green": 27
+      },
+      "per_color_purity": {
+        "yellow": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "red": 1.0,
+        "empty": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    }
+  ]
+}
