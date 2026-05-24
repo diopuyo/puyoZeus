@@ -27,7 +27,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.board import (
-    BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN, Board,
+    BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN,
+    HIDDEN_ROWS, Board,
 )
 from src.hidden_row_inferrer import infer_hidden_row
 from src.probabilistic_board import ProbabilisticBoard

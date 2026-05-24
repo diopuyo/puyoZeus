@@ -69,6 +69,20 @@ RED_GREEN_DIFF_FOR_RED: int = 80
 PURPLE_V_MAX_FOR_RED_CANDIDATE: int = 170
 
 # ============================
+# 背景 FP tier 1 (EXTREME) threshold (cycle 33/37 確定値)
+# ============================
+# tier 1: 距離 < BG_EXTREME_THRESHOLD_DEFAULT → 無条件 EMPTY (= 全 cell 共通)
+# cycle 37 sweep 結果: t=25 が「副作用最小 + v97m11 -32 件改善」 最適。
+BG_EXTREME_THRESHOLD_DEFAULT: float = 25.0
+# 軸 3-b (Phase L): 1P/2P 盤面左上エリア (visible_row >= 5, col <= 1) 用閾値。
+# CNN がキャラ背景の HSV に近い緑/紫を確信誤認し、 30 STABLE frame 継続する問題
+# (= grey zone 距離 25-100 範囲) を解消するため、 DEFAULT + 15.0 に引き上げる。
+BG_EXTREME_THRESHOLD_LEFT_UPPER: float = BG_EXTREME_THRESHOLD_DEFAULT + 15.0
+# 左上エリアの定義: 表示行 (visible_row = row - HIDDEN_ROWS) のうち中盤 ~ 下部
+BG_LEFT_UPPER_VISIBLE_ROW_MIN: int = 5  # 表示行 5 以上 (= 表示中盤下から最下段)
+BG_LEFT_UPPER_COL_MAX: int = 1  # 列 0-1 (= 最左 2 列)
+
+# ============================
 # データクラス
 # ============================
 
@@ -542,7 +556,8 @@ class ImageReader:
         # sweep 結果: t=20 (101.7) > t=25 (92.3) ✅ > t=27 (99.7) 副作用大 > t=30 (90.0)
         # 25 が「副作用最小 + v97m11 -32 件改善」 の最適バランス。
         # 27 は非線形挙動で auto_correction +53 副作用、 30 は v89m3 副作用 +35。
-        self._bg_extreme_threshold: float = 25.0
+        # 軸 3-b (Phase L): 定数参照に変更 (= マジックナンバー排除)
+        self._bg_extreme_threshold: float = BG_EXTREME_THRESHOLD_DEFAULT
         self._apply_inference: bool = bool(apply_inference)
         self._floating_min_gap: int = int(floating_min_gap)
         # UI Mask (X 印など UI オーバーレイの誤検出を排除)
@@ -642,6 +657,22 @@ class ImageReader:
             height=base.height,
         )
 
+    def _resolve_tier1_threshold(self, visible_row: int, col: int) -> float:
+        """tier 1 (EXTREME) threshold をセル位置に応じて返す。
+
+        軸 3-b (Phase L): 1P/2P 盤面左上エリア (visible_row >= BG_LEFT_UPPER_VISIBLE_ROW_MIN,
+        col <= BG_LEFT_UPPER_COL_MAX) はキャラ背景の HSV に近い誤認が多発するため、
+        DEFAULT より +15.0 高い LEFT_UPPER threshold を使って grey zone も EMPTY に倒す。
+        """
+        is_left_upper = (
+            visible_row >= BG_LEFT_UPPER_VISIBLE_ROW_MIN
+            and col <= BG_LEFT_UPPER_COL_MAX
+        )
+        return (
+            BG_EXTREME_THRESHOLD_LEFT_UPPER if is_left_upper
+            else self._bg_extreme_threshold
+        )
+
     def read_board(
         self,
         frame: np.ndarray,
@@ -714,7 +745,12 @@ class ImageReader:
                         dist = cur_fp.distance_to(bg_cell)
                         cell_bg_distance = float(dist)
                         # tier 1: extreme close = 確実な背景
-                        if dist < self._bg_extreme_threshold:
+                        # 軸 3-b (Phase L): 左上エリアは threshold を引き上げて
+                        # grey zone (距離 25-100) も EMPTY に倒す。
+                        tier1_threshold = self._resolve_tier1_threshold(
+                            visible_row, col,
+                        )
+                        if dist < tier1_threshold:
                             board.set(row, col, COLOR_EMPTY)
                             continue
                         # tier 2: AND 条件 (= cycle 19 既存)
