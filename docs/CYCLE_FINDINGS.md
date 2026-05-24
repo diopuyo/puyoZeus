@@ -221,3 +221,42 @@ DB pre-inject (cycle_12 で検証済) は本番 default に組み込む価値あ
   - **cycle_27**: A3 = placement_inferrer + rotation_tracker 連携 (= 4 回転判別精度向上)
   - **cycle_28**: Phase L 前哨 = 全 66 動画 raw 再 DL + seed 拡大 + CNN 再学習 + viz 目視併用評価。 背景誤認 (v89m3 1P 等) の根本対策
   - cycle_25 (連鎖中 step-by-step 物理推論) は **優先度低** で保留 (= 連鎖時間/火力/連鎖後形は ChainSimulator で既に取れているため指標的に問題なし)
+
+## 7. Phase L 本番化最優先 attack 対象 (= 2026-05-25 追記)
+
+### 7.1 v30_5min 55 秒問題
+
+- **症状**: v30_5min_90s.mp4 の frame 3262-3302 (= 55 秒地点) で 1P 側 confirmed_board が 0.7 秒間 null (= 43 frame 連続)、 直後 frame 3304 で 8 cells が auto_correction critical 発火
+- **真因 (= 4 エージェント分析確定)**: CNN が 1P 盤面 row 5-11, col 0-1 エリアに緑 (= color 3) / 紫 (= color 5) を確信誤認、 30 STABLE frame に渡って同色出力を継続
+- **背景**: 1P 側 light キャラの暗赤背景が盤面内に広く露出 (= 試合 2 開始 12 秒後で盤面ほぼ空)、 CNN が「赤背景 ≒ 赤ぷよ」 と確信誤認 (ただし実際は緑/紫を出力 = 学習 seed と背景 HSV の overlap が複雑)
+
+### 7.2 推論軸での試行履歴 (= phase-l-bg-mask branch、 全て主目標未達)
+
+| 軸 | 内容 | 結果 |
+|---|---|---|
+| 軸 1 (= cnn_board EMPTY gate) | 試合開始後 15 秒間 S<80 V<150 cell を EMPTY 強制 | regression +2、 revert |
+| 軸 1' 案 b (= score_zero_both tsumo clear) | 試合切り替わり検知時に tsumo_count 強制 reset | regression 0、 55 秒改善ゼロ、 revert |
+| 軸 3-b (= tier 1 threshold エリア別) | row 5-11, col 0-1 で threshold +15.0 緩和 | 副次 -9 critical (= 0-20 秒の 2P 認識ノイズ削減)、 55 秒主目標未達 |
+
+**軸 3-b の扱い**: branch 上に残置 (= main には未反映)。 副次効果数値確認済のため保留知見として記録。
+
+### 7.3 Phase L 本番化での attack 方向 (= 次回最優先)
+
+- **動画追加 DL** で v30 系の試合 2-3 等 (= 異なるキャラ・盤面状態) を seed 拡充
+- **キャラ別 seed 採取** で light キャラの暗赤背景を明示的に学習データに含める
+- **新 CNN scratch 学習** で row 5-11, col 0-1 の特定エリアへの確信誤認を解消
+- **per-match HSV** (= 案 4) は単発実装で先行検証可能、 ただし工数 1-2 日
+
+### 7.4 推論軸の限界 (= cycle 32 系 7 連敗 + 軸 1/1'/3-b 全敗で確定)
+
+- bg_fingerprint tier 1/2 の **grey zone (= distance 25-100)** は推論層で止められない
+- CNN 確信誤認 + 30 STABLE frame 持続は推論層で構造的に解決不能
+- 解決には **新規 seed (= キャラ別暗赤背景含む) + scratch 学習** が必要 = Phase L 本番化フェーズ
+
+### 7.5 全 12 動画 eval 結果 (= 軸 3-b 適用時 per_video_inject、 2026-05-24 完走)
+
+- baseline_existing_critical: 1512
+- per_video_inject_critical: 1583 (+71、 +4.7%)
+- v30_5min: critical 107 (= 主目標の 55 秒問題改善ゼロを数値確認)
+- 参考: merged38 比では -4 (= -0.3%) で実質同等
+- **解釈**: per_video_inject 自体の評価であり、 軸 3-b 単体の -9 副次効果は別コンテキスト
