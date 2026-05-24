@@ -1,0 +1,5385 @@
+{
+  "summary": {
+    "videos_evaluated": 22,
+    "total_samples": 170512,
+    "total_pure": 165995,
+    "overall_purity": 0.9735,
+    "per_color_purity": {
+      "empty": 1.0,
+      "red": 0.8935,
+      "blue": 0.9998,
+      "yellow": 0.9791,
+      "green": 0.9897,
+      "purple": 1.0
+    },
+    "per_color_counts": {
+      "empty": 8562,
+      "red": 33000,
+      "blue": 32004,
+      "yellow": 31909,
+      "green": 32037,
+      "purple": 33000
+    }
+  },
+  "per_video": [
+    {
+      "video_id": "v29m22",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1500,
+        "blue": 1500,
+        "yellow": 1500,
+        "green": 1500,
+        "purple": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1202,
+        "blue": 1500,
+        "yellow": 1452,
+        "purple": 1499,
+        "green": 1493
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 0.8013,
+        "blue": 1.0,
+        "yellow": 0.968,
+        "green": 0.9953,
+        "purple": 0.9993
+      },
+      "overall_purity": 0.9557,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 31,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 150,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        },
+        {
+          "color": "red",
+          "h_med": 30,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 30,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 30,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 30,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 30,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 26,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 26,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 24,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 24,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 23,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v31m10",
+      "per_color_counts": {
+        "red": 1500,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 372,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "red": 1402,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 372,
+        "green": 1455,
+        "yellow": 1462
+      },
+      "per_color_purity": {
+        "red": 0.9347,
+        "blue": 1.0,
+        "purple": 1.0,
+        "empty": 1.0,
+        "green": 0.97,
+        "yellow": 0.9747
+      },
+      "overall_purity": 0.977,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 24,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 87,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 87,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 87,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v34m13",
+      "per_color_counts": {
+        "empty": 500,
+        "blue": 1500,
+        "green": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "purple": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "blue": 1496,
+        "green": 1500,
+        "red": 1453,
+        "yellow": 1500,
+        "purple": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 0.9973,
+        "green": 1.0,
+        "red": 0.9687,
+        "yellow": 1.0,
+        "purple": 1.0
+      },
+      "overall_purity": 0.9936,
+      "contamination_examples": [
+        {
+          "color": "blue",
+          "h_med": 97,
+          "expected_center": 110
+        },
+        {
+          "color": "blue",
+          "h_med": 96,
+          "expected_center": 110
+        },
+        {
+          "color": "blue",
+          "h_med": 96,
+          "expected_center": 110
+        },
+        {
+          "color": "blue",
+          "h_med": 96,
+          "expected_center": 110
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v36m34",
+      "per_color_counts": {
+        "empty": 134,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 134,
+        "purple": 1500,
+        "green": 1490,
+        "red": 1131,
+        "blue": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "green": 0.9933,
+        "red": 0.754,
+        "blue": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 0.9504,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 81,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 90,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 34,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 19,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 17,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 18,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 18,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 21,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 21,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 21,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 21,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 29,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 21,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v37m44",
+      "per_color_counts": {
+        "empty": 234,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_pure": {
+        "empty": 234,
+        "purple": 1500,
+        "red": 1022,
+        "yellow": 1404,
+        "green": 1466,
+        "blue": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "green": 0.9773,
+        "red": 0.6813,
+        "yellow": 0.936,
+        "blue": 1.0
+      },
+      "overall_purity": 0.9214,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 82,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 81,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v40m10",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1500,
+        "yellow": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "purple": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 894,
+        "yellow": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "purple": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 0.596,
+        "yellow": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "purple": 1.0
+      },
+      "overall_purity": 0.9243,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v43m8",
+      "per_color_counts": {
+        "empty": 500,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1420,
+        "yellow": 1500,
+        "blue": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "green": 1.0,
+        "red": 0.9467,
+        "yellow": 1.0,
+        "blue": 1.0
+      },
+      "overall_purity": 0.99,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 109,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 107,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v52m5",
+      "per_color_counts": {
+        "empty": 317,
+        "purple": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 317,
+        "purple": 1500,
+        "red": 1188,
+        "blue": 1500,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "red": 0.792,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 0.9601,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 27,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 65,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v54m18",
+      "per_color_counts": {
+        "empty": 224,
+        "blue": 1500,
+        "green": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "yellow": 409
+      },
+      "per_color_pure": {
+        "empty": 224,
+        "blue": 1500,
+        "green": 1489,
+        "red": 1474,
+        "purple": 1500,
+        "yellow": 326
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 1.0,
+        "green": 0.9927,
+        "red": 0.9827,
+        "purple": 1.0,
+        "yellow": 0.7971
+      },
+      "overall_purity": 0.9819,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 80,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 80,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 80,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 49,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 47,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 47,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 47,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 45,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 45,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 150,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 39,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 41,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 41,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "yellow",
+          "h_med": 132,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 138,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 11,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 11,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 11,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 43,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 46,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 43,
+          "expected_center": 25
+        }
+      ]
+    },
+    {
+      "video_id": "v61m15",
+      "per_color_counts": {
+        "empty": 500,
+        "green": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "purple": 1500,
+        "red": 1317,
+        "blue": 1500,
+        "green": 1450,
+        "yellow": 1466
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "green": 0.9667,
+        "red": 0.878,
+        "purple": 1.0,
+        "blue": 1.0,
+        "yellow": 0.9773
+      },
+      "overall_purity": 0.9666,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 73,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 139,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 140,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 140,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 140,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 140,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 139,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 139,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 139,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v64m29",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1500,
+        "blue": 504,
+        "green": 1500,
+        "purple": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1500,
+        "blue": 504,
+        "green": 1453,
+        "purple": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "blue": 1.0,
+        "green": 0.9687,
+        "purple": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 0.9933,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 81,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 81,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 83,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        }
+      ]
+    },
+    {
+      "video_id": "v66m29",
+      "per_color_counts": {
+        "blue": 1500,
+        "empty": 171,
+        "yellow": 1500,
+        "green": 1500,
+        "purple": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "blue": 1500,
+        "empty": 171,
+        "yellow": 1500,
+        "green": 1500,
+        "purple": 1500,
+        "red": 1476
+      },
+      "per_color_purity": {
+        "blue": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0,
+        "purple": 1.0,
+        "red": 0.984
+      },
+      "overall_purity": 0.9969,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 167,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 43,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 44,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 40,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v73m14",
+      "per_color_counts": {
+        "empty": 500,
+        "blue": 1500,
+        "purple": 1500,
+        "yellow": 1500,
+        "green": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "blue": 1500,
+        "purple": 1500,
+        "yellow": 1500,
+        "green": 1500,
+        "red": 1330
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0,
+        "green": 1.0,
+        "red": 0.8867
+      },
+      "overall_purity": 0.9788,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 150,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 146,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 57,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 99,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 99,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 99,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v74m16",
+      "per_color_counts": {
+        "empty": 500,
+        "green": 1500,
+        "blue": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "green": 1500,
+        "blue": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "yellow": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "green": 1.0,
+        "blue": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v78m2",
+      "per_color_counts": {
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 456,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "red": 1475,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 456,
+        "green": 1500,
+        "yellow": 1458
+      },
+      "per_color_purity": {
+        "red": 0.9833,
+        "purple": 1.0,
+        "blue": 1.0,
+        "empty": 1.0,
+        "green": 1.0,
+        "yellow": 0.972
+      },
+      "overall_purity": 0.9916,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 48,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "yellow",
+          "h_med": 104,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 81,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 41,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 46,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 11,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 174,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 176,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 177,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 12,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 42,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 42,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 10,
+          "expected_center": 25
+        }
+      ]
+    },
+    {
+      "video_id": "v79m1",
+      "per_color_counts": {
+        "empty": 500,
+        "blue": 1500,
+        "yellow": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "blue": 1500,
+        "yellow": 1500,
+        "purple": 1500,
+        "red": 1498,
+        "green": 1488
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "purple": 1.0,
+        "red": 0.9987,
+        "green": 0.992
+      },
+      "overall_purity": 0.9982,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 99,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 102,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        }
+      ]
+    },
+    {
+      "video_id": "v81m8",
+      "per_color_counts": {
+        "empty": 500,
+        "yellow": 1500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "yellow": 1493,
+        "red": 1490,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1410
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "yellow": 0.9953,
+        "red": 0.9933,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 0.94
+      },
+      "overall_purity": 0.9866,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 75,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 81,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 84,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 84,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 84,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 86,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 86,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 86,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 79,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "yellow",
+          "h_med": 40,
+          "expected_center": 25
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "yellow",
+          "h_med": 43,
+          "expected_center": 25
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        }
+      ]
+    },
+    {
+      "video_id": "v86m17",
+      "per_color_counts": {
+        "purple": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "empty": 97,
+        "yellow": 1500,
+        "green": 537
+      },
+      "per_color_pure": {
+        "purple": 1500,
+        "red": 962,
+        "blue": 1500,
+        "empty": 97,
+        "yellow": 1500,
+        "green": 530
+      },
+      "per_color_purity": {
+        "purple": 1.0,
+        "red": 0.6413,
+        "blue": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 0.987
+      },
+      "overall_purity": 0.9178,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 13,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 59,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 60,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 58,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 137,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 138,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v89m7",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1500
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1430
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 0.9533
+      },
+      "overall_purity": 0.9912,
+      "contamination_examples": [
+        {
+          "color": "yellow",
+          "h_med": 57,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 53,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 53,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 53,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 53,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 53,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 52,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 52,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 52,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 38,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        },
+        {
+          "color": "yellow",
+          "h_med": 39,
+          "expected_center": 25
+        }
+      ]
+    },
+    {
+      "video_id": "v92m11",
+      "per_color_counts": {
+        "empty": 316,
+        "blue": 1500,
+        "yellow": 1500,
+        "purple": 1500,
+        "green": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "empty": 316,
+        "blue": 1499,
+        "yellow": 1500,
+        "purple": 1500,
+        "green": 1496,
+        "red": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "blue": 0.9993,
+        "yellow": 1.0,
+        "purple": 1.0,
+        "green": 0.9973,
+        "red": 1.0
+      },
+      "overall_purity": 0.9994,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 73,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "blue",
+          "h_med": 144,
+          "expected_center": 110
+        }
+      ]
+    },
+    {
+      "video_id": "v93m20",
+      "per_color_counts": {
+        "empty": 441,
+        "purple": 1500,
+        "green": 1500,
+        "blue": 1500,
+        "yellow": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "empty": 441,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1488,
+        "yellow": 1500,
+        "red": 1459
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "purple": 1.0,
+        "green": 0.992,
+        "blue": 1.0,
+        "yellow": 1.0,
+        "red": 0.9727
+      },
+      "overall_purity": 0.9933,
+      "contamination_examples": [
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 76,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 77,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 78,
+          "expected_center": 60
+        },
+        {
+          "color": "green",
+          "h_med": 74,
+          "expected_center": 60
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        }
+      ]
+    },
+    {
+      "video_id": "v95m3",
+      "per_color_counts": {
+        "empty": 300,
+        "yellow": 1500,
+        "purple": 1500,
+        "red": 1500,
+        "blue": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "empty": 300,
+        "yellow": 1250,
+        "purple": 1500,
+        "red": 1293,
+        "blue": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "yellow": 0.8333,
+        "purple": 1.0,
+        "red": 0.862,
+        "blue": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 0.9414,
+      "contamination_examples": [
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 16,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 12,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 15,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        },
+        {
+          "color": "red",
+          "h_med": 14,
+          "expected_center": "wrap"
+        }
+      ]
+    }
+  ]
+}

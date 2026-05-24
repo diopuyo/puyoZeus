@@ -1,0 +1,142 @@
+{
+  "summary": {
+    "videos_evaluated": 4,
+    "total_samples": 26262,
+    "total_pure": 26262,
+    "overall_purity": 1.0,
+    "per_color_purity": {
+      "blue": 1.0,
+      "green": 1.0,
+      "yellow": 1.0,
+      "empty": 1.0,
+      "purple": 1.0,
+      "red": 1.0
+    },
+    "per_color_counts": {
+      "blue": 6000,
+      "green": 4510,
+      "yellow": 4391,
+      "empty": 1115,
+      "purple": 6000,
+      "red": 4246
+    }
+  },
+  "per_video": [
+    {
+      "video_id": "v34m13",
+      "per_color_counts": {
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "empty": 500,
+        "purple": 1500,
+        "red": 1500
+      },
+      "per_color_pure": {
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 1500,
+        "empty": 500,
+        "purple": 1500,
+        "red": 1500
+      },
+      "per_color_purity": {
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 1.0,
+        "empty": 1.0,
+        "purple": 1.0,
+        "red": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v52m5",
+      "per_color_counts": {
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 113,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_pure": {
+        "red": 1500,
+        "purple": 1500,
+        "blue": 1500,
+        "empty": 113,
+        "yellow": 1500,
+        "green": 1500
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v86m17",
+      "per_color_counts": {
+        "red": 213,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 2,
+        "yellow": 885,
+        "green": 10
+      },
+      "per_color_pure": {
+        "red": 213,
+        "blue": 1500,
+        "purple": 1500,
+        "empty": 2,
+        "yellow": 885,
+        "green": 10
+      },
+      "per_color_purity": {
+        "red": 1.0,
+        "blue": 1.0,
+        "purple": 1.0,
+        "empty": 1.0,
+        "yellow": 1.0,
+        "green": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    },
+    {
+      "video_id": "v89m7",
+      "per_color_counts": {
+        "empty": 500,
+        "red": 1033,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 506
+      },
+      "per_color_pure": {
+        "empty": 500,
+        "red": 1033,
+        "purple": 1500,
+        "blue": 1500,
+        "green": 1500,
+        "yellow": 506
+      },
+      "per_color_purity": {
+        "empty": 1.0,
+        "red": 1.0,
+        "purple": 1.0,
+        "blue": 1.0,
+        "green": 1.0,
+        "yellow": 1.0
+      },
+      "overall_purity": 1.0,
+      "contamination_examples": []
+    }
+  ]
+}

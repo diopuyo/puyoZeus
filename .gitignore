@@ -1,0 +1,129 @@
+# ============================
+# 版権関連 (= ぷよぷよ動画 + 派生データ)
+# ============================
+# raw 動画
+data/frames/
+
+# 切り出し済動画
+data/evaluation_videos/
+data/evaluation_videos_v2/
+data/holdout_videos/
+data/phase_l/cut/
+data/phase_l/review/
+
+# seed 画像 patch (= 元動画から切り出した cell 画像、 cell.jsonl に画像エンコード)
+data/pseudo_labels/
+data/pseudo_labels_*/
+data/phase_l/seeds/
+
+# viz overlay 動画 (= 元動画 + 認識結果)
+data/review_videos/
+data/seed_review/
+
+# 評価 viz mp4 (= 大量バイナリ、 数百 MB - 数 GB)
+data/verify/**/*.mp4
+*.mp4
+
+# debug frames
+data/debug/
+review_videos/
+
+# test fixtures に含まれる版権画像
+tests/fixtures/frames/
+tests/fixtures/*.png
+tests/fixtures/*.jpg
+tests/fixtures/*.mp4
+
+# ============================
+# 学習済 model (= 版権データ派生)
+# ============================
+models/*.pt
+models/*.pth
+models/*.onnx
+models/_archive_*/
+models/_archive/
+
+# ============================
+# board log (= 試合内容再現可能、 グレー)
+# ============================
+logs/board_logs/
+logs/
+
+# ============================
+# Python
+# ============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ============================
+# 仮想環境
+# ============================
+venv/
+.venv/
+env/
+
+# ============================
+# IDE / OS
+# ============================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================
+# 一時ファイル
+# ============================
+*.tmp
+*.log
+*.bak
+*~
+.~lock.*
+
+# ============================
+# Claude Code ローカル設定 (= ユーザー個別、 共有不要)
+# ============================
+.claude/
+
+# ============================
+# 異常ファイル (= 過去の shell エラー由来等)
+# ============================
+=1.5
+=*.txt
+
+# ============================
+# 実行用 batch (= Windows 環境依存、 個別運用)
+# ============================
+*.bat
+
+# ============================
+# data/ 配下 (= 大量バイナリ + 版権データ + 評価結果は別管理)
+# ソースコード版本管理 scope 外。 以下 sub-dir のみ git 管理:
+#   - data/per_video_hsv_ranges/ (= HSV キャリブレーション設定、 32KB)
+#   - data/verify/**/*.json (= 評価結果 JSON、 数 KB)
+#   - data/phase_e_dl_index.tsv (= 動画 URL メタデータ)
+# ============================
+data/*
+!data/per_video_hsv_ranges/
+!data/per_video_hsv_ranges/**
+!data/verify/
+data/verify/*
+!data/verify/**/_summary.json
+!data/verify/**/_comparison.json
+!data/verify/**/_partial_summary.json
+!data/verify/seed_quality_*.json
+!data/phase_e_dl_index.tsv
+
+# archive / examples 除外
+archive/
+examples/
