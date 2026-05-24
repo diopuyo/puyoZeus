@@ -40,8 +40,13 @@ tests/fixtures/*.mp4
 models/*.pt
 models/*.pth
 models/*.onnx
+models/*.npz
 models/_archive_*/
 models/_archive/
+# UI テンプレート画像 (= ゲーム画面から切り出した版権派生素材)
+models/ui_templates/
+# その他 models/ 配下のバイナリ/JSON (= 派生データ)
+models/*.json
 
 # ============================
 # board log (= 試合内容再現可能、 グレー)
