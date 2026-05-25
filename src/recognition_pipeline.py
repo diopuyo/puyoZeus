@@ -27,7 +27,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from src.board import (
-    BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN, Board,
+    BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN,
+    HIDDEN_ROWS, Board,
 )
 from src.hidden_row_inferrer import infer_hidden_row
 from src.probabilistic_board import ProbabilisticBoard
@@ -122,6 +123,49 @@ class PipelineResult:
     is_match_active: bool
     p1: SideResult
     p2: SideResult
+
+
+# ============================
+# ヘルパー関数 (テスト可能な純粋関数)
+# ============================
+
+# η (2026-05-25): score_zero 空盤面ガードの閾値 (RecognitionPipeline 定数と同値)
+_SCORE_ZERO_EMPTY_BOARD_MIN_PUYOS: int = 2
+
+
+def _apply_score_zero_empty_board_guard(
+    score_zero_both: bool,
+    p1_confirmed: "Board | None",
+    p2_confirmed: "Board | None",
+    min_puyos: int = _SCORE_ZERO_EMPTY_BOARD_MIN_PUYOS,
+) -> bool:
+    """score_zero_both に空盤面ガードを適用して返す (純粋関数).
+
+    以下いずれかの場合に score_zero_both を False として返す:
+      (A) p1 または p2 が min_puyos 以上のぷよを持つ → 試合中確定
+      (B) 両側ともに None or 空盤面 → まだ認識できていない = 試合外ではない
+
+    上記 (A)(B) 以外 (= 片方だけ min_puyos 未満で他方も未観測) も
+    ケース (B) に包含されるため、score_zero_both の True 維持ケースは存在しない。
+
+    Args:
+        score_zero_both: 元の score_zero_both フラグ。
+        p1_confirmed: 1P の confirmed_board (None 可)。
+        p2_confirmed: 2P の confirmed_board (None 可)。
+        min_puyos: 試合中と見なすための最低ぷよ数 (デフォルト 2)。
+
+    Returns:
+        ガード適用後の score_zero_both (False のみ)。
+    """
+    if not score_zero_both:
+        return False
+    p1_count = p1_confirmed.count_puyos() if p1_confirmed is not None else 0
+    p2_count = p2_confirmed.count_puyos() if p2_confirmed is not None else 0
+    # (A) どちらかが min_puyos 以上 → 試合中確定 (= 元ロジック)
+    if p1_count >= min_puyos or p2_count >= min_puyos:
+        return False
+    # (B) 両側ともに未認識 / 空盤面 → 試合外とは断定できない (= η 追加ガード)
+    return False
 
 
 # ============================
@@ -237,10 +281,20 @@ class RecognitionPipeline:
     # 異なり一定 ratio 以上なら CNN 側で上書き. 「ずっと残る誤色」 を自動修正する.
     # cycle 71p (2026-05-13): 認識 30fps × 0.6 秒 = 18 update 呼出分の履歴.
     # 副作用回避のため ratio 0.9 維持 (= 16/18 一致で上書き、 ほぼ確実).
-    STABLE_CNN_HISTORY_FRAMES: int = 18  # 約 0.6 秒 (= update 30fps × 0.6s)
+    # 新-A (2026-05-25): 24 frame (= 約 0.8 秒) に延長して誤 EMPTY 防止.
+    # アナリスト計測根拠: v30_5min 55s 地点 ghost cells 9.9s 残存対策.
+    STABLE_CNN_HISTORY_FRAMES: int = 24  # 約 0.8 秒 (= update 30fps × 0.8s)
     # cycle 2 (2026-05-15, F4): 0.9 → 0.75 で long-term vote 補正速度↑.
-    # 18 frame 中 14 frame (= 78%) 一致で override 発火、 0.6s 以内に補正完了.
-    STABLE_OVERRIDE_MIN_RATIO: float = 0.75
+    # 新-A (2026-05-25): 0.75 → 0.85 に引き上げ (= 24 frame 中 21 frame 一致で発火).
+    # ぷよ→EMPTY 上書きを解禁する代わりに閾値を厳格化して誤消去を抑制.
+    STABLE_OVERRIDE_MIN_RATIO: float = 0.85
+
+    # η (2026-05-25): score_zero ガード強化: 空盤面ガード閾値.
+    # confirmed_board のぷよ数がこの値未満のとき、 「試合外」 と即断せず
+    # score_zero_both を無効化する。 空盤面 = まだ認識できていないだけで
+    # 試合中の可能性が高いため。 実際に試合中でぷよが認識できていれば
+    # count_puyos() >= 2 を満たすため誤発火しない。
+    SCORE_ZERO_EMPTY_BOARD_MIN_PUYOS: int = 2
 
     def __init__(
         self,
@@ -814,12 +868,15 @@ class RecognitionPipeline:
             # cnn_1p_raw / cnn_2p_raw はまだ未計算なので、 sm.context.confirmed_board
             # から puyo 数を推定。
             if score_zero_both and not match_end_locked:
-                p1_b = self._sm_1p.context.confirmed_board
-                p2_b = self._sm_2p.context.confirmed_board
-                if p1_b is not None and p1_b.count_puyos() >= 2:
-                    score_zero_both = False  # 既に puyo 観測 = 試合中
-                if p2_b is not None and p2_b.count_puyos() >= 2:
-                    score_zero_both = False
+                # η (2026-05-25): _apply_score_zero_empty_board_guard で
+                # confirmed_board の状態 (None / 空盤面 / ぷよあり) を一元判定。
+                # 空盤面 = 未認識状態であり試合外とは断定できない。
+                score_zero_both = _apply_score_zero_empty_board_guard(
+                    score_zero_both=score_zero_both,
+                    p1_confirmed=self._sm_1p.context.confirmed_board,
+                    p2_confirmed=self._sm_2p.context.confirmed_board,
+                    min_puyos=self.SCORE_ZERO_EMPTY_BOARD_MIN_PUYOS,
+                )
                 hard_match_off = score_zero_both or match_end_locked
             if hard_match_off:
                 raw_active = False
@@ -2186,9 +2243,11 @@ class RecognitionPipeline:
                         conf_v = int(ctx.confirmed_board.get(r, c))
                         if (
                             most_common != conf_v
-                            and most_common not in (
-                                COLOR_EMPTY, COLOR_UNKNOWN,
-                            )
+                            # 新-A (2026-05-25): EMPTY への上書きを解禁.
+                            # ぷよ→EMPTY 方向の long-term vote を許可することで
+                            # 誤認識で残り続けた ghost ぷよを自動消去できる.
+                            # UNKNOWN への上書きは引き続き禁止 (= 不確定 cell 保護).
+                            and most_common != COLOR_UNKNOWN
                             and ratio >= self.STABLE_OVERRIDE_MIN_RATIO
                         ):
                             # cycle 71v 浮きぷよ防止 (2026-05-14):
