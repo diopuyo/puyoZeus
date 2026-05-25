@@ -73,6 +73,13 @@ class ChainPhaseDetector:
                         # 4 連結なし = 偽 chain event を無視
                         return None  # state 維持
             return BoardState.CHAIN
+        # Stage 1 (2026-05-25): CHAIN → STABLE 遷移条件は
+        # (a) chain_event 消失 (= chain_event is None、上の if を通過) OR
+        # (b) ojama_fall_detected=True (= お邪魔降下で連鎖終了とみなす)
+        # のいずれかで state==CHAIN の場合に STABLE 復帰。
+        # chain_event is not None の場合は上の分岐で CHAIN を返すため
+        # ここには来ない (= test 4 の「chain_event 有り → CHAIN 維持」は
+        # pipeline 側で chain_event を None にクリアする実装で担保)。
         if ctx.state == BoardState.CHAIN:
             return BoardState.STABLE
         return None
