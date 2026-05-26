@@ -152,6 +152,12 @@ class DetectorSignals:
     # 開始フィールド corruption を防ぐ。 ぷよぷよ eスポーツの物理ルール:
     # 「試合開始時のフィールドは必ず空」 を構造的に取り込んだ防御層。
     match_just_started: bool = False
+    # Stage 1 (2026-05-25): おじゃま降下検出 signal。
+    # OjamaPhaseDetector が OJAMA_FALL state を検出した frame で True を
+    # 立て、 ChainPhaseDetector の CHAIN → STABLE 遷移条件に OR 追加する。
+    # 連鎖終了判定 = (a) chain_event 消失 OR (b) ojama_fall_detected。
+    # default False で backwards compat 維持 (既存 API への影響なし)。
+    ojama_fall_detected: bool = False
 
 
 class StateTransitionDetector(Protocol):
