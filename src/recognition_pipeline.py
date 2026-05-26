@@ -296,12 +296,6 @@ class RecognitionPipeline:
     # count_puyos() >= 2 を満たすため誤発火しない。
     SCORE_ZERO_EMPTY_BOARD_MIN_PUYOS: int = 2
 
-    # Stage 1 (2026-05-25): おじゃま降下で CHAIN 強制終了する score 閾値。
-    # OjamaPhaseDetector.score_threshold (デフォルト 70) と同値。
-    # 相手 score_delta >= この値のとき ojama_fall_detected=True を立て、
-    # CHAIN state を STABLE に遷移させる。
-    OJAMA_CHAIN_END_SCORE_THRESHOLD: int = 70
-
     def __init__(
         self,
         image_reader: ImageReader,
@@ -1732,36 +1726,17 @@ class RecognitionPipeline:
             and (frame_idx - self._match_active_started_frame)
             < self.MATCH_JUST_STARTED_WINDOW_FRAMES
         )
-        # Stage 1 (2026-05-25): おじゃま降下検出 signal。
-        # 相手 score が OJAMA_CHAIN_END_SCORE_THRESHOLD 以上増えた frame で
-        # ojama_fall_detected=True を立てる。
-        # CHAIN state 中に発火した場合は chain_event を None にクリアし、
-        # ChainPhaseDetector が CHAIN → STABLE 遷移を即時実行するようにする。
-        # これにより連鎖終了検知が「(a) chain_event 消失 OR (b) おじゃま降下」
-        # の OR 条件で機能する。
-        ojama_fall_detected = (
-            score_d_2p_for_ojama >= self.OJAMA_CHAIN_END_SCORE_THRESHOLD
-        )
-        # Stage 1 (2026-05-25): CHAIN 中におじゃま降下を検出:
-        # chain_event を強制クリアして ChainPhaseDetector に STABLE 復帰を促す。
-        chain_event_for_signal = chain_event
-        if (
-            ojama_fall_detected
-            and sm.context.state == BoardState.CHAIN
-        ):
-            chain_event_for_signal = None
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
             is_match_active=is_active,
-            chain_event=chain_event_for_signal,
+            chain_event=chain_event,
             score_delta=score_d_2p_for_ojama,
             next_pair=next_pair,
             slide_motion=slide_motion,
             placement_validated=placement_validated,
             effect_visible=effect_vis,
             match_just_started=match_just_started,
-            ojama_fall_detected=ojama_fall_detected,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
