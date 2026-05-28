@@ -53,6 +53,7 @@ from pathlib import Path
 
 from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
+    capture_patch_pair_robust,
 )
 from src.chain_detector import ChainEvent, VideoChainTracker
 from src.drift_detector import DriftDetector, DriftResult
@@ -112,6 +113,10 @@ class SideResult:
     # 既存 backward compat 維持のため default None
     next_pair: tuple[int, int] | None = None
     dnext_pair: tuple[int, int] | None = None
+    # T4 PuyoErasureMonitor: STABLE 中の「色→EMPTY」 遷移 alert リスト。
+    # fail-silent 自動検知用。eval スクリプトが p_to_e_count を集計する。
+    # backwards compat のため default None。
+    erasure_alerts: list[tuple[int, int]] | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +204,10 @@ class RecognitionPipeline:
     # 試合切替後 short window では puyo 数を問わず採取する。 短期間限定なので
     # 試合中の puyo 色を背景 fingerprint に取り込むリスクは小。
     BG_FP_FORCE_WINDOW_FRAMES: int = 120  # 2 秒
+    # cycle 18 (2026-05-16, B3): cnn_phase_i_hsv_seed.pt (= empty 学習なし) では
+    # bg_fp 鶏卵問題が再発するため 5→144 に緩和した定数。
+    # B2 (A/B 対照実験): 144→4 に絞る仮説あり。__init__ で _bg_fp_force_max_puyo
+    # instance 変数に上書きし、 load_default(bg_fp_force_max_puyo=4) で有効化。
     BG_FP_FORCE_MAX_PUYO: int = 144
 
     # cycle 71h: 着地後 vote 累積 refinement 設定.
@@ -262,7 +271,16 @@ class RecognitionPipeline:
         match_end_detector: MatchEndDetector | None = None,
         telop_detector: TelopDetector | None = None,
         online_hsv: OnlineHsvCalibrator | None = None,
+        enable_warmup_guard: bool = False,
+        bg_fp_force_max_puyo: int | None = None,
     ) -> None:
+        # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
+        # None なら class attribute 値 (= 144) を使う。
+        self._bg_fp_force_max_puyo: int = (
+            int(bg_fp_force_max_puyo)
+            if bg_fp_force_max_puyo is not None
+            else self.BG_FP_FORCE_MAX_PUYO
+        )
         self._reader = image_reader
         self._match_detector = match_state_detector
         # A: 試合境界補強 detector 群 (memory: 試合判定甘さ対策)。
@@ -360,8 +378,11 @@ class RecognitionPipeline:
         self._bg_fp_captured: bool = False
         self._bg_frame_buffer: deque[np.ndarray] = deque(maxlen=5)
         # MatchStateDetector が試合中なのに NOT_IN_MATCH を返す bug の対策で
-        # is_match_active を常に True に強制する option (デバッグ・レビュー用)
+        # is_match_active を常に True に強制する option (デバッグ・レビュー・用)
         self._force_in_match = bool(force_in_match)
+        # 案 R3 改: 動画 ID (per-video プロファイル自動ロード用)。
+        # set_video_id() で外部からセット可能。bg_fp 採取完了時に自動ロード。
+        self._video_id: str | None = None
         # next_detector (任意): あれば毎 frame の next_pair を signals に渡す
         self._next_detector = next_detector
         # Phase I R-7: NEXT ROI スライド motion 検出器 (1P/2P 別 instance)。
@@ -410,8 +431,13 @@ class RecognitionPipeline:
         self._recent_scores_1p: list[int | None] = []
         self._recent_scores_2p: list[int | None] = []
         # 1P/2P state machine (独立)
-        self._sm_1p = self._build_state_machine(stable_frame_count)
-        self._sm_2p = self._build_state_machine(stable_frame_count)
+        # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
+        self._sm_1p = self._build_state_machine(
+            stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+        )
+        self._sm_2p = self._build_state_machine(
+            stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+        )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
         self._gen_2p = InferenceBoardGenerator()
@@ -427,6 +453,13 @@ class RecognitionPipeline:
         # 旧実装は遅延初期化していたが、 着地時に毎回呼ぶため事前構築.
         from src.chain import ChainSimulator as _ChainSimulator
         self._chain_sim: _ChainSimulator = _ChainSimulator()
+        # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」 遷移を自動検知。
+        # 1P/2P 独立 instance。試合切替時は reset() で消去。
+        from src.puyo_erasure_monitor import PuyoErasureMonitor as _PEM
+        self._erasure_monitor_1p: _PEM = _PEM()
+        self._erasure_monitor_2p: _PEM = _PEM()
+        # T4: 静的背景マスク (per-video 保存用ディレクトリ)
+        self._static_mask_captured: bool = False
 
     @staticmethod
     def _build_hybrid_reader(
@@ -435,6 +468,7 @@ class RecognitionPipeline:
         cnn_override_prob: float | None = None,
         mask_ojama_logit: bool = False,
         use_puyo_gate: bool = False,
+        patch_ncc_threshold: float | None = None,
     ) -> ImageReader:
         """HybridClassifier (HSV + CNN) で ImageReader を組み立てる.
 
@@ -501,6 +535,7 @@ class RecognitionPipeline:
             classifier=classifier,
             use_match_state=False,
             use_telop_mask=True,
+            patch_ncc_threshold=patch_ncc_threshold,
         )
 
     @staticmethod
@@ -525,10 +560,17 @@ class RecognitionPipeline:
         return smoothed
 
     @staticmethod
-    def _build_state_machine(stable_n: int) -> BoardStateMachine:
+    def _build_state_machine(
+        stable_n: int,
+        *,
+        enable_warmup_guard: bool = False,
+    ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
+        # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame
+        # confirmed 更新を凍結する (A/B 対照実験用 optional 機能)。
         from src.chain import ChainSimulator
+        from src.board_state_machine import STABLE_WARMUP_FRAMES
         return BoardStateMachine(
             detectors=[
                 ChainPhaseDetector(chain_sim=ChainSimulator()),
@@ -537,6 +579,8 @@ class RecognitionPipeline:
                 TsumoPhaseDetector(),
             ],
             stable_frame_count=stable_n,
+            enable_warmup_guard=enable_warmup_guard,
+            warmup_frames=STABLE_WARMUP_FRAMES,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -561,6 +605,9 @@ class RecognitionPipeline:
         cnn_override_prob: float | None = None,
         mask_ojama_logit: bool = False,
         use_puyo_gate: bool = False,
+        enable_warmup_guard: bool = False,
+        bg_fp_force_max_puyo: int | None = None,
+        patch_ncc_threshold: float | None = None,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -593,11 +640,13 @@ class RecognitionPipeline:
                 cnn_override_prob=cnn_override_prob,
                 mask_ojama_logit=mask_ojama_logit,
                 use_puyo_gate=use_puyo_gate,
+                patch_ncc_threshold=patch_ncc_threshold,
             )
         else:
             reader = ImageReader(
                 use_match_state=False,
                 classifier=ColorClassifier(vote_mode=vote_mode),
+                patch_ncc_threshold=patch_ncc_threshold,
             )
         match_detector = MatchStateDetector.load_default()
         score: ScoreOcr | None = None
@@ -681,11 +730,24 @@ class RecognitionPipeline:
             match_end_detector=match_end_det,
             telop_detector=telop_det,
             online_hsv=online_hsv,
+            enable_warmup_guard=enable_warmup_guard,
+            bg_fp_force_max_puyo=bg_fp_force_max_puyo,
         )
 
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
+
+    def set_video_id(self, video_id: str | None) -> None:
+        """案 R3 改: 動画 ID を設定する。
+
+        per-video ぷよ色プロファイルのロードに使用する。
+        bg_fp 採取完了直後に profile が自動ロードされる。
+
+        Args:
+            video_id: 動画 ID (例: "v29")。None でリセット。
+        """
+        self._video_id = video_id
 
     def reset(self) -> None:
         """全 state を初期化 (試合切替時など)。"""
@@ -704,9 +766,11 @@ class RecognitionPipeline:
         self._last_active_frame_idx = -1
         self._match_active_started_frame = -1
         self._bg_fp_captured = False
-        # ImageReader の bg_fp も解除
+        # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
             self._reader.set_background_fingerprints(None, None)
+        if hasattr(self._reader, "set_pre_capture_mode"):
+            self._reader.set_pre_capture_mode(True)
         if self._score_tracker_1p is not None:
             self._score_tracker_1p.reset()
         if self._score_tracker_2p is not None:
@@ -737,6 +801,12 @@ class RecognitionPipeline:
         if self._slide_detector_2p is not None:
             self._slide_detector_2p.reset()
         self._prev_frame = None
+        # T4: PuyoErasureMonitor + StaticBoardMask もリセット
+        self._erasure_monitor_1p.reset()
+        self._erasure_monitor_2p.reset()
+        self._static_mask_captured = False
+        if hasattr(self._reader, "set_static_mask"):
+            self._reader.set_static_mask(None, None)
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -884,6 +954,9 @@ class RecognitionPipeline:
             self._bg_frame_buffer.clear()
             if hasattr(self._reader, "set_background_fingerprints"):
                 self._reader.set_background_fingerprints(None, None)
+            # I1 対応 A: 試合終了時も pre_capture_mode を on に戻す
+            if hasattr(self._reader, "set_pre_capture_mode"):
+                self._reader.set_pre_capture_mode(True)
             # サイクル66: NEXT 累積制約も試合切り替えでリセット
             self._tsumo_count_1p.clear()
             self._tsumo_count_2p.clear()
@@ -901,6 +974,10 @@ class RecognitionPipeline:
             self._ever_seen_colors_2p.clear()
 
         # 2. CNN raw board 取得 (BG FP 採取より先に必要)
+        # I1 対応 A: bg_fp 採取前は pre_capture_mode を on にして tier 1 を無効化
+        # (= HSV-only 経路に強制)。 bg_fp 採取後は通常モードに戻す。
+        if hasattr(self._reader, "set_pre_capture_mode"):
+            self._reader.set_pre_capture_mode(not self._bg_fp_captured)
         cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(frame)
 
         # 背景 FP 自動採取 (Phase C-5: robust 化):
@@ -925,7 +1002,7 @@ class RecognitionPipeline:
             match_age = frame_idx - self._match_active_started_frame
             bg_fp_relaxed = (
                 match_age <= self.BG_FP_FORCE_WINDOW_FRAMES
-                and puyo_count_total <= self.BG_FP_FORCE_MAX_PUYO
+                and puyo_count_total <= self._bg_fp_force_max_puyo
             )
             if puyo_count_total == 0 or bg_fp_relaxed:
                 self._bg_frame_buffer.append(frame.copy())
@@ -937,15 +1014,52 @@ class RecognitionPipeline:
                     p1r = DEFAULT_P1_REGION
                     p2r = DEFAULT_P2_REGION
                     frames_list = list(self._bg_frame_buffer)
-                    bg1 = capture_robust_fingerprint(
-                        frames_list, p1r.x, p1r.y, p1r.width, p1r.height,
-                    )
-                    bg2 = capture_robust_fingerprint(
-                        frames_list, p2r.x, p2r.y, p2r.width, p2r.height,
+                    # 案 d: PatchBackgroundFingerprint で 1P/2P を一括採取
+                    bg1, bg2 = capture_patch_pair_robust(
+                        frames_list,
+                        (p1r.x, p1r.y, p1r.width, p1r.height),
+                        (p2r.x, p2r.y, p2r.width, p2r.height),
                     )
                     if hasattr(self._reader, "set_background_fingerprints"):
                         self._reader.set_background_fingerprints(bg1, bg2)
+                    # T4: StaticBoardMask を同フレームバッファから採取して inject
+                    # 2026-05-28 user 目視で v40m7 お邪魔ぷよ認識消失で撤回。
+                    # PuyoErasureMonitor は「色→空」 のみで「初回から空」 系
+                    # fail-silent を検知できず。 将来 ojama 救済機構 (案 b/c 等)
+                    # 追加で再評価可能性のため inject コードは残置。
+                    # 詳細: memory feedback_fail_silent_initial_zero.md
+                    if False and not self._static_mask_captured:  # noqa: SIM210
+                        try:
+                            from src.background_fingerprint import (
+                                capture_static_mask_pair,
+                            )
+                            smask1, smask2 = capture_static_mask_pair(
+                                frames_list,
+                                (p1r.x, p1r.y, p1r.width, p1r.height),
+                                (p2r.x, p2r.y, p2r.width, p2r.height),
+                            )
+                            if hasattr(self._reader, "set_static_mask"):
+                                self._reader.set_static_mask(smask1, smask2)
+                            self._static_mask_captured = True
+                        except Exception:
+                            pass  # 採取失敗は無視 (保守的動作維持)
                     self._bg_fp_captured = True
+                    # I1 対応 A: bg_fp 採取完了 → pre_capture_mode を解除
+                    if hasattr(self._reader, "set_pre_capture_mode"):
+                        self._reader.set_pre_capture_mode(False)
+                    # 案 R3 改: bg_fp 採取完了直後に per-video プロファイル自動ロード
+                    # 2026-05-28 fail-silent 確認 (v40m7 + v95m15 でぷよが消える) により
+                    # デフォルト OFF 化で撤回。コードは将来 threshold 緩和 sweep で
+                    # 再評価可能性のため残置。set_puyo_profile_db / ImageReader 側も残置。
+                    if False and hasattr(self._reader, "set_puyo_profile_db"):  # noqa: SIM210
+                        try:
+                            from src.puyo_color_profile import PuyoColorProfileDB
+                            profile_db = PuyoColorProfileDB.load_for_video(
+                                self._video_id,
+                            )
+                            self._reader.set_puyo_profile_db(profile_db)
+                        except Exception as _e:
+                            pass  # プロファイルロード失敗は無視 (保守的動作維持)
                     self._bg_frame_buffer.clear()
                 except Exception:
                     pass
@@ -1759,6 +1873,29 @@ class RecognitionPipeline:
                 bg_fp=bg_fp_for_side,
             )
             if inferred_landing is not None:
+                # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
+                # next_pair (= 今消費された NEXT) が明示されていれば整合性チェック。
+                # alert のみ (= 棄却はしない。 現時点は fail-silent 検知用)。
+                if (
+                    falling_pair is not None
+                    and next_pair is not None
+                ):
+                    valid_colors = {
+                        c for c in falling_pair
+                        if c not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+                    }
+                    for r in range(BOARD_ROWS):
+                        for c in range(BOARD_COLS):
+                            before_v = int(prev_confirmed.get(r, c))
+                            after_v = int(inferred_landing.get(r, c))
+                            if (
+                                before_v == COLOR_EMPTY
+                                and after_v not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+                                and valid_colors
+                                and after_v not in valid_colors
+                            ):
+                                # NEXT 色以外が着地 → 認識誤り可能性 (alert のみ)
+                                pass  # 将来: alert 記録 or 棄却
                 # W-α: 隠し段 (row 0) の量子推論 (= 既存ロジック維持)
                 if (
                     falling_pair is not None
@@ -2062,6 +2199,9 @@ class RecognitionPipeline:
                     # 試合 active 再起動: _bg_fp_captured フラグも reset
                     if hasattr(self, "_bg_fp_captured"):
                         self._bg_fp_captured = False
+                    # I1 対応 A: bg_fp 再採取中は pre_capture_mode を on に戻す
+                    if hasattr(self._reader, "set_pre_capture_mode"):
+                        self._reader.set_pre_capture_mode(True)
             else:
                 setattr(self, consec_attr, 0)
 
@@ -2254,6 +2394,31 @@ class RecognitionPipeline:
                         cnn_v = int(cnn_board.get(r, c))
                         if cnn_v not in (COLOR_UNKNOWN,):
                             ctx.confirmed_board.set(r, c, cnn_v)
+            # T2: STABLE → STABLE 遷移時の色変化検証。
+            # 前 STABLE と現 STABLE で「色A → 色B」(異色間変化) かつ
+            # 間に CHAIN signal がなければ認識誤りと判断し前値で上書き。
+            # grace 中・chain_event あり・prev_stable なし は skip。
+            prev_stable_t2 = (
+                self._prev_stable_confirmed_1p if side == "1P"
+                else self._prev_stable_confirmed_2p
+            )
+            if (
+                prev_stable is not None
+                and chain_event is None
+                and not in_grace
+            ):
+                for r in range(BOARD_ROWS):
+                    for c in range(BOARD_COLS):
+                        cur_v = int(ctx.confirmed_board.get(r, c))
+                        pv = int(prev_stable.get(r, c))
+                        # 「色A → 色B」 (いずれも非 EMPTY / 非 UNKNOWN / 異色)
+                        both_colored = (
+                            pv not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                            and cur_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                        )
+                        if both_colored and pv != cur_v:
+                            # 前 STABLE 値で上書き (= 認識誤り棄却)
+                            ctx.confirmed_board.set(r, c, pv)
             # 現 STABLE を「直前 STABLE」 として記憶 (= 次 frame で参照)
             if side == "1P":
                 self._prev_stable_confirmed_1p = ctx.confirmed_board.copy()
@@ -2290,6 +2455,26 @@ class RecognitionPipeline:
                 frame_bgr=frame_bgr,
                 region=region_for_validate,
             )
+        # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」遷移を記録。
+        # prev_stable と current confirmed_board を比較する。
+        erasure_mon = (
+            self._erasure_monitor_1p if side == "1P"
+            else self._erasure_monitor_2p
+        )
+        prev_stable_for_monitor = (
+            self._prev_stable_confirmed_1p if side == "1P"
+            else self._prev_stable_confirmed_2p
+        )
+        erasure_mon.update(
+            frame_idx, ctx.state,
+            prev_stable_for_monitor,
+            published_confirmed,
+        )
+        # alert リストを SideResult に格納 (frame 座標 = (row, col) のみ)
+        recent_alerts = [
+            (r, c) for (fi, r, c) in erasure_mon.alerts
+            if fi == frame_idx
+        ]
         return SideResult(
             side=side,
             state=ctx.state,
@@ -2303,6 +2488,7 @@ class RecognitionPipeline:
             prob_board=publish_prob_board,
             next_pair=next_pair,
             dnext_pair=dnext_pair,
+            erasure_alerts=recent_alerts if recent_alerts else None,
         )
 
 

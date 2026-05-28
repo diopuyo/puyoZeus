@@ -143,6 +143,10 @@ class FrameEntry:
     p2_state: str
     p1_confirmed: list[list[int]] | None
     p2_confirmed: list[list[int]] | None
+    # T4 PuyoErasureMonitor: 当該 frame での新規 alert [(row, col), ...]
+    # backwards compat: 古い board_log は本フィールドを持たないため default []。
+    p1_erasure_alerts: list[list[int]] = field(default_factory=list)
+    p2_erasure_alerts: list[list[int]] = field(default_factory=list)
 
     @classmethod
     def from_jsonable(cls, obj: dict[str, Any]) -> "FrameEntry":
@@ -153,6 +157,9 @@ class FrameEntry:
             p2_state=str(obj["p2_state"]),
             p1_confirmed=obj.get("p1_confirmed"),
             p2_confirmed=obj.get("p2_confirmed"),
+            # backwards compat: キーなし (古い board_log) は空リストで処理継続。
+            p1_erasure_alerts=obj.get("p1_erasure_alerts", []),
+            p2_erasure_alerts=obj.get("p2_erasure_alerts", []),
         )
 
 
@@ -899,6 +906,27 @@ class RecognitionEvaluator:
         all_violations.sort(key=lambda v: (v.frame_idx, v.side, v.metric))
         return all_violations
 
+    def count_erasure_alerts(self) -> dict[str, int]:
+        """全 frame の erasure_alerts を 1P/2P 別に集計する。
+
+        board_log JSONL の各行に埋め込まれた p1/p2_erasure_alerts を合計し、
+        _eval_static_mask.sh の verdict ロジック (REJECT_P_TO_E) に使う。
+
+        Returns:
+            dict: {
+                "p1": int,  # 1P 側の alert 総数
+                "p2": int,  # 2P 側の alert 総数
+                "total": int,  # 合計
+            }
+        """
+        p1_total = sum(len(e.p1_erasure_alerts) for e in self.entries)
+        p2_total = sum(len(e.p2_erasure_alerts) for e in self.entries)
+        return {
+            "p1": p1_total,
+            "p2": p2_total,
+            "total": p1_total + p2_total,
+        }
+
     def generate_report(self) -> dict[str, Any]:
         """評価サマリレポートを生成 (= 採否判定材料)."""
         violations = self.evaluate_all()
@@ -909,6 +937,9 @@ class RecognitionEvaluator:
         # severity 別集計
         critical_count = sum(1 for v in violations if v.severity == SEVERITY_CRITICAL)
         warning_count = sum(1 for v in violations if v.severity == SEVERITY_WARNING)
+        # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」遷移 alert 集計
+        erasure_counts = self.count_erasure_alerts()
+        p_to_e_count = erasure_counts["total"]
         # 採否判定: critical が一定数以上 OR 特定メトリクスがある = REJECT
         verdict = "ACCEPT"
         if critical_count >= 20:
@@ -932,4 +963,8 @@ class RecognitionEvaluator:
                 },
             },
             "verdict": verdict,
+            # T4 PuyoErasureMonitor: fail-silent 自動検知カウンタ。
+            # _eval_static_mask.sh の verdict ロジック (REJECT_P_TO_E) で参照。
+            "p_to_e_count": p_to_e_count,
+            "p_to_e_detail": erasure_counts,
         }

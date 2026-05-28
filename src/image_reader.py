@@ -75,12 +75,17 @@ PURPLE_V_MAX_FOR_RED_CANDIDATE: int = 170
 # cycle 37 sweep 結果: t=25 が「副作用最小 + v97m11 -32 件改善」 最適。
 BG_EXTREME_THRESHOLD_DEFAULT: float = 25.0
 # 軸 3-b (Phase L): 1P/2P 盤面左上エリア (visible_row >= 5, col <= 1) 用閾値。
-# CNN がキャラ背景の HSV に近い緑/紫を確信誤認し、 30 STABLE frame 継続する問題
-# (= grey zone 距離 25-100 範囲) を解消するため、 DEFAULT + 15.0 に引き上げる。
-BG_EXTREME_THRESHOLD_LEFT_UPPER: float = BG_EXTREME_THRESHOLD_DEFAULT + 15.0
+# 2026-05-27 v40 col=1 EMPTY 症状により軸 3-b 撤回: +15.0 → +0.0 (= DEFAULT と同値)。
+# _resolve_tier1_threshold のエリア別分岐ロジックは将来の per-region 調整のため残す。
+BG_EXTREME_THRESHOLD_LEFT_UPPER: float = BG_EXTREME_THRESHOLD_DEFAULT + 0.0
 # 左上エリアの定義: 表示行 (visible_row = row - HIDDEN_ROWS) のうち中盤 ~ 下部
 BG_LEFT_UPPER_VISIBLE_ROW_MIN: int = 5  # 表示行 5 以上 (= 表示中盤下から最下段)
 BG_LEFT_UPPER_COL_MAX: int = 1  # 列 0-1 (= 最左 2 列)
+
+# bg_fp 採取前保護モード (= I1 対応 A):
+# bg_fp が未採取の期間に tier 1 を 0.0 に設定して CNN 経路を無効化し
+# HSV-only 経路に倒す。 bg_fp 採取完了後は DEFAULT に戻る。
+BG_EXTREME_THRESHOLD_PRE_CAPTURE: float = 0.0
 
 # ============================
 # データクラス
@@ -500,6 +505,20 @@ class ColorClassifier:
 
 
 # ============================
+# 案 P2: 白ハイライト blob override ヘルパー
+# ============================
+
+def _has_puyo_highlight(patch_hsv: np.ndarray) -> bool:
+    """現フレームパッチに白ハイライト blob があれば True。
+
+    背景 FP が tier1 EMPTY と判定したセルに対して、
+    ぷよ固有の白ハイライト円を検出して「本物ぷよ」として救済する。
+    """
+    from src.background_fingerprint import detect_highlight_blob
+    return detect_highlight_blob(patch_hsv)
+
+
+# ============================
 # 画像読み取り器
 # ============================
 
@@ -525,6 +544,9 @@ class ImageReader:
         use_ui_mask: bool = True,
         use_match_state: bool = False,
         use_telop_mask: bool = False,
+        patch_ncc_threshold: float | None = None,
+        use_highlight_override: bool = False,
+        puyo_profile_db: "PuyoColorProfileDB | None" = None,
     ) -> None:
         """
         Args:
@@ -538,6 +560,17 @@ class ImageReader:
                 None ならデフォルト (DEFAULT_EMPTY_HSV_DISTANCE)。
             apply_inference: 浮遊ぷよ削除・隠し段推論を行うか。
             floating_min_gap: 浮遊判定の最小ギャップ。
+            patch_ncc_threshold: PatchBackgroundFingerprint NCC 空判定閾値の上書き値。
+                None なら background_fingerprint.py の PATCH_NCC_EMPTY_THRESHOLD (= 0.92) を使用。
+                NCC sweep 用 (case d 閾値探索)。
+            use_highlight_override: 案 P2 白ハイライト blob 検出による tier1 EMPTY 却下。
+                2026-05-28 案 R3 改: デフォルトを False に変更 (案 P2 同時撤回)。
+                True の場合、tier1 が EMPTY 判定したセルでも白ハイライト blob が
+                検出されれば「ぷよあり」として classify に進む (再評価可能性のため残置)。
+                False (デフォルト) は override 無効 (= 従来挙動)。
+            puyo_profile_db: 案 R3 改 per-video ぷよ色プロファイル DB。
+                指定すると classify 後の色に対してプロファイル距離チェックを行い、
+                不一致なら EMPTY 化 (= 幻ぷよ抑制)。None で無効 (既存挙動)。
         """
         self._classifier: ColorClassifier = classifier or ColorClassifier()
         self._p1_region: BoardRegion = p1_region or DEFAULT_P1_REGION
@@ -558,6 +591,17 @@ class ImageReader:
         # 27 は非線形挙動で auto_correction +53 副作用、 30 は v89m3 副作用 +35。
         # 軸 3-b (Phase L): 定数参照に変更 (= マジックナンバー排除)
         self._bg_extreme_threshold: float = BG_EXTREME_THRESHOLD_DEFAULT
+        # I1 対応 A: bg_fp 採取前は tier 1 threshold を 0 に倒して CNN 経路を無効化
+        # (= HSV-only 経路に強制)。 RecognitionPipeline が採取前後で切り替える。
+        self._pre_capture_mode: bool = False
+        # NCC sweep 用: PatchBackgroundFingerprint の空判定閾値上書き。
+        # None なら PATCH_NCC_EMPTY_THRESHOLD (= 0.92) をそのまま使う。
+        self._patch_ncc_threshold: float | None = patch_ncc_threshold
+        # 案 P2: 白ハイライト blob override (tier1 EMPTY 判定後に救済チェック)
+        # 2026-05-28 案 R3 改: デフォルト False (= 案 P2 同時撤回)
+        self._use_highlight_override: bool = bool(use_highlight_override)
+        # 案 R3 改: per-video ぷよ色プロファイル DB (classify 後の下段 EMPTY 化用)
+        self._puyo_profile_db: "PuyoColorProfileDB | None" = puyo_profile_db
         self._apply_inference: bool = bool(apply_inference)
         self._floating_min_gap: int = int(floating_min_gap)
         # UI Mask (X 印など UI オーバーレイの誤検出を排除)
@@ -587,6 +631,10 @@ class ImageReader:
             self._telop_detector = None
         # フレーム単位で 1 度だけテロップ検出する用キャッシュ (read_both_boards で更新)
         self._cached_telop_bbox: tuple[int, int, int, int] | None = None
+        # T4: 静的背景マスク (pixel-level diff による AND ガード)
+        # RecognitionPipeline が bg_fp 採取と同タイミングで inject する。
+        self._static_mask_p1: "StaticBoardMask | None" = None
+        self._static_mask_p2: "StaticBoardMask | None" = None
 
     def set_resolution_aware_s_min(self, source_height: int) -> None:
         """source_height に応じて HSV/CNN を低解像度向けに調整.
@@ -616,12 +664,51 @@ class ImageReader:
 
     def set_background_fingerprints(
         self,
-        bg_fp_p1: "BackgroundFingerprint | None",
-        bg_fp_p2: "BackgroundFingerprint | None",
+        bg_fp_p1: "BackgroundFingerprint | PatchBackgroundFingerprint | None",
+        bg_fp_p2: "BackgroundFingerprint | PatchBackgroundFingerprint | None",
     ) -> None:
-        """試合開始時の背景 FP を設定する (動画/試合ごとに更新可能)。"""
+        """試合開始時の背景 FP を設定する (動画/試合ごとに更新可能)。
+        案 d: PatchBackgroundFingerprint も受け付ける (後退互換)。
+        """
         self._bg_fp_p1 = bg_fp_p1
         self._bg_fp_p2 = bg_fp_p2
+
+    def set_static_mask(
+        self,
+        mask_p1: "StaticBoardMask | None",
+        mask_p2: "StaticBoardMask | None",
+    ) -> None:
+        """T4: 試合開始時の静的背景マスクを設定する (試合ごとに更新可)。
+
+        Args:
+            mask_p1: 1P 側 StaticBoardMask。None で無効化。
+            mask_p2: 2P 側 StaticBoardMask。None で無効化。
+        """
+        self._static_mask_p1 = mask_p1
+        self._static_mask_p2 = mask_p2
+
+    def set_puyo_profile_db(
+        self,
+        db: "PuyoColorProfileDB | None",
+    ) -> None:
+        """案 R3 改: per-video ぷよ色プロファイル DB を設定 (試合ごとに更新可)。
+
+        Args:
+            db: PuyoColorProfileDB インスタンス、または None (無効化)
+        """
+        self._puyo_profile_db = db
+
+    def set_pre_capture_mode(self, enabled: bool) -> None:
+        """bg_fp 採取前保護モードを切り替える (I1 対応 A)。
+
+        enabled=True のとき tier 1 threshold を BG_EXTREME_THRESHOLD_PRE_CAPTURE
+        (= 0.0) に設定し、bg_fp が None の場合でも tier 1 スキップで HSV-only
+        経路に倒す。bg_fp 採取完了後は RecognitionPipeline が False に戻す。
+
+        Args:
+            enabled: True = 採取前保護モード、 False = 通常モード (DEFAULT 閾値)。
+        """
+        self._pre_capture_mode = enabled
 
     def _bg_fp_for_region(
         self, region: BoardRegion,
@@ -657,21 +744,170 @@ class ImageReader:
             height=base.height,
         )
 
-    def _resolve_tier1_threshold(self, visible_row: int, col: int) -> float:
+    def _resolve_tier1_threshold(
+        self, visible_row: int, col: int,
+    ) -> float:
         """tier 1 (EXTREME) threshold をセル位置に応じて返す。
 
-        軸 3-b (Phase L): 1P/2P 盤面左上エリア (visible_row >= BG_LEFT_UPPER_VISIBLE_ROW_MIN,
-        col <= BG_LEFT_UPPER_COL_MAX) はキャラ背景の HSV に近い誤認が多発するため、
-        DEFAULT より +15.0 高い LEFT_UPPER threshold を使って grey zone も EMPTY に倒す。
+        優先順位:
+          1. pre_capture_mode = True → BG_EXTREME_THRESHOLD_PRE_CAPTURE (= 0.0)
+             bg_fp 未採取期間は tier 1 をスキップして HSV-only 経路に倒す (I1 対応 A)。
+          2. キャラ背景隣接エリア (軸 3-b, Phase L) → BG_EXTREME_THRESHOLD_LEFT_UPPER
+             1P: col=0,1 (= 画面左端、 キャラ背景隣接)
+          3. その他 → BG_EXTREME_THRESHOLD_DEFAULT (_bg_extreme_threshold)
+
+        Args:
+            visible_row: 表示行インデックス (0〜VISIBLE_ROWS-1)。
+            col: 列インデックス (0〜BOARD_COLS-1)。
         """
-        is_left_upper = (
+        if self._pre_capture_mode:
+            return BG_EXTREME_THRESHOLD_PRE_CAPTURE
+        is_outer_edge = (
             visible_row >= BG_LEFT_UPPER_VISIBLE_ROW_MIN
             and col <= BG_LEFT_UPPER_COL_MAX
         )
         return (
-            BG_EXTREME_THRESHOLD_LEFT_UPPER if is_left_upper
+            BG_EXTREME_THRESHOLD_LEFT_UPPER if is_outer_edge
             else self._bg_extreme_threshold
         )
+
+    def _is_empty_tier1(
+        self,
+        bg_cell: "CellFingerprint | CellPatchFingerprint",
+        cur_patch_hsv: np.ndarray,
+        cur_fp: "CellFingerprint",
+        visible_row: int,
+        col: int,
+    ) -> bool:
+        """tier 1 (EXTREME) 空判定。案 d の NCC 経路と従来の距離経路を切り替える。
+
+        PatchBackgroundFingerprint の場合は NCC 比較、
+        BackgroundFingerprint の場合は従来の距離閾値比較を行う。
+
+        Args:
+            bg_cell: 背景セル FP (CellFingerprint or CellPatchFingerprint)。
+            cur_patch_hsv: 現在フレームのセルパッチ HSV (float32 or uint8)。
+            cur_fp: 現在フレームの CellFingerprint (median 3 値)。
+            visible_row: 表示行インデックス (0〜VISIBLE_ROWS-1)。
+            col: 列インデックス (0〜BOARD_COLS-1)。
+
+        Returns:
+            True = 空 (背景と同じ)、False = ぷよあり (次 tier に進む)。
+        """
+        from src.background_fingerprint import CellPatchFingerprint, is_empty_by_patch_fp
+        if isinstance(bg_cell, CellPatchFingerprint):
+            cur_cell_patch = CellPatchFingerprint(
+                patch_hsv=cur_patch_hsv.astype(np.float32),
+            )
+            # NCC sweep: None なら is_empty_by_patch_fp が PATCH_NCC_EMPTY_THRESHOLD を使用
+            if self._patch_ncc_threshold is not None:
+                return is_empty_by_patch_fp(
+                    cur_cell_patch, bg_cell, threshold=self._patch_ncc_threshold,
+                )
+            return is_empty_by_patch_fp(cur_cell_patch, bg_cell)
+        # 従来の距離閾値比較 (BackgroundFingerprint 経路)
+        tier1_threshold = self._resolve_tier1_threshold(visible_row, col)
+        dist = cur_fp.distance_to(bg_cell)
+        return dist < tier1_threshold
+
+    def _get_static_mask_for_region(
+        self, region: BoardRegion,
+    ) -> "StaticBoardMask | None":
+        """region に対応する StaticBoardMask を返す (P1 / P2 を判別)。"""
+        if region is self._p1_region:
+            return self._static_mask_p1
+        if region is self._p2_region:
+            return self._static_mask_p2
+        # シフト済 region: 中央線で判別
+        if region.x + region.width / 2 < 960:
+            return self._static_mask_p1
+        return self._static_mask_p2
+
+    def _is_empty_static_mask(
+        self,
+        frame: np.ndarray,
+        region: BoardRegion,
+        visible_row: int,
+        col: int,
+        cur_patch_hsv: np.ndarray,
+    ) -> bool:
+        """T4: StaticBoardMask + AND ガードによる空判定。
+
+        設計:
+          A = StaticBoardMask の diff < STATIC_BG_DIFF_THRESHOLD (= 背景と同じ)
+          D = HSV 各色 range に hit (= 色あり signal)
+          戻り値 = A AND NOT D
+
+        「ぷよっぽい」 信号が 1 つでもあれば EMPTY 化しない (= fail-silent 禁止)。
+        StaticBoardMask が未設定なら常に False を返す (= 判定スキップ)。
+
+        Args:
+            frame: 現在フレーム (BGR)。
+            region: 盤面領域。
+            visible_row: 可視行インデックス (0 〜 VISIBLE_ROWS-1)。
+            col: 列インデックス (0 〜 BOARD_COLS-1)。
+            cur_patch_hsv: 現フレームのセルパッチ HSV (float32 or uint8)。
+
+        Returns:
+            True = 「背景と同じかつ色なし」 → EMPTY 化してよい。
+            False = 判定スキップ (従来経路に委ねる)。
+        """
+        from src.background_fingerprint import STATIC_BG_DIFF_THRESHOLD
+        static_mask = self._get_static_mask_for_region(region)
+        if static_mask is None:
+            return False
+        # A: pixel-level diff < 閾値
+        # _cell_bgr_patch の bg は static_mask.bg_roi の座標から切り出す
+        x1, y1, x2, y2 = region.cell_sample_rect(
+            visible_row + HIDDEN_ROWS, col,
+        )
+        img_h, img_w = frame.shape[:2]
+        x1 = max(0, min(x1, img_w - 1))
+        x2 = max(x1 + 1, min(x2, img_w))
+        y1 = max(0, min(y1, img_h - 1))
+        y2 = max(y1 + 1, min(y2, img_h))
+        cur_bgr = frame[y1:y2, x1:x2].astype(np.float32)
+        bg_roi = static_mask.bg_roi
+        bg_h, bg_w = bg_roi.shape[:2]
+        bx1 = max(0, min(x1, bg_w - 1))
+        bx2 = max(bx1 + 1, min(x2, bg_w))
+        by1 = max(0, min(y1, bg_h - 1))
+        by2 = max(by1 + 1, min(y2, bg_h))
+        bg_patch = bg_roi[by1:by2, bx1:bx2].astype(np.float32)
+        if cur_bgr.size == 0 or bg_patch.size == 0:
+            return False
+        # shape 不一致はリサイズ (region ずれ対策)
+        if cur_bgr.shape != bg_patch.shape:
+            bg_patch = cv2.resize(
+                bg_patch.astype(np.float32),
+                (cur_bgr.shape[1], cur_bgr.shape[0]),
+                interpolation=cv2.INTER_LINEAR,
+            )
+        diff_max = float(np.max(np.abs(cur_bgr - bg_patch)))
+        if diff_max >= STATIC_BG_DIFF_THRESHOLD:
+            return False  # A = False (差分大 = ぷよ存在可能性)
+        # D: HSV 各色 range に hit するか (AND ガード)
+        if cur_patch_hsv is None or cur_patch_hsv.size == 0:
+            return True  # A=True, D=False → EMPTY 化
+        h_med = int(np.median(cur_patch_hsv[:, :, 0]))
+        s_med = int(np.median(cur_patch_hsv[:, :, 1]))
+        v_med = int(np.median(cur_patch_hsv[:, :, 2]))
+        scale = getattr(
+            getattr(self._classifier, "_hsv", self._classifier),
+            "_s_min_scale", 1.0,
+        )
+        for ranges in self._classifier._ranges.values() if hasattr(
+            self._classifier, "_ranges",
+        ) else []:
+            for rng in ranges:
+                eff_s = int(rng.s_min * scale) if scale < 1.0 else rng.s_min
+                if (
+                    rng.h_min <= h_med <= rng.h_max
+                    and eff_s <= s_med <= rng.s_max
+                    and rng.v_min <= v_med <= rng.v_max
+                ):
+                    return False  # D=True → EMPTY 化キャンセル
+        return True  # A=True, D=False → EMPTY 化
 
     def read_board(
         self,
@@ -690,6 +926,7 @@ class ImageReader:
         Args:
             frame: BGR形式のフレーム画像 (H×W×3 のnumpy配列)。
             region: 読み取る盤面の領域 (可視領域のみ)。
+            hsv_full: 事前計算済み HSV 全画像 (省略時は内部で変換)。
 
         Returns:
             Board: 読み取った盤面データ。
@@ -702,6 +939,7 @@ class ImageReader:
         if bg_fp is not None:
             from src.background_fingerprint import (
                 CellFingerprint,
+                CellPatchFingerprint,
                 is_empty_by_fp,
             )
             # Z-3C: hsv_full を呼び出し側から受け取れば cvtColor を回避
@@ -719,7 +957,10 @@ class ImageReader:
         # 1st pass: patch 切り出し + 背景 FP 早期判定
         # cycle 34 (2026-05-20): bg_fp 距離も track して 2nd pass (= HybridClassifier
         # classify_batch) に渡す → CNN logit に soft prior 適用
-        cells_to_classify: list[tuple[int, int, np.ndarray, float | None]] = []
+        # 案 R3 改: hsv_patch も保持して 2nd pass のプロファイルチェックで再利用
+        cells_to_classify: list[
+            tuple[int, int, np.ndarray, float | None, np.ndarray | None]
+        ] = []
         for row in range(HIDDEN_ROWS, BOARD_ROWS):
             visible_row = row - HIDDEN_ROWS
             for col in range(BOARD_COLS):
@@ -734,9 +975,12 @@ class ImageReader:
                 # tier 2 (cycle 19 既存): 距離 < _bg_threshold → AND 条件で early empty
                 # tier 3 (cycle 34): それ以外 → CNN 経路 + bg_distance を soft prior に
                 cell_bg_distance: float | None = None
+                # 案 R3 改: 1st pass で hsv_patch を記録し 2nd pass でプロファイル検査に再利用
+                cell_hsv_patch: np.ndarray | None = None
                 if bg_fp is not None and hsv_full is not None and patch.size > 0:
                     hsv_patch = hsv_full[y1:y2, x1:x2]
                     if hsv_patch.size > 0:
+                        cell_hsv_patch = hsv_patch  # 2nd pass 再利用用に保持
                         h_med = int(np.median(hsv_patch[:, :, 0]))
                         s_med = int(np.median(hsv_patch[:, :, 1]))
                         v_med = int(np.median(hsv_patch[:, :, 2]))
@@ -744,15 +988,38 @@ class ImageReader:
                         bg_cell = bg_fp.cell_at(visible_row, col)
                         dist = cur_fp.distance_to(bg_cell)
                         cell_bg_distance = float(dist)
-                        # tier 1: extreme close = 確実な背景
-                        # 軸 3-b (Phase L): 左上エリアは threshold を引き上げて
-                        # grey zone (距離 25-100) も EMPTY に倒す。
-                        tier1_threshold = self._resolve_tier1_threshold(
-                            visible_row, col,
-                        )
-                        if dist < tier1_threshold:
+                        # T4: StaticBoardMask AND ガード (既存 tier 1 より先に評価)
+                        # A (diff < 閾値) AND NOT D (HSV 色あり) の場合のみ EMPTY 化。
+                        # 片方でも「ぷよっぽい」 なら skip して従来経路に流す。
+                        if self._is_empty_static_mask(
+                            frame, region, visible_row, col, hsv_patch,
+                        ):
                             board.set(row, col, COLOR_EMPTY)
                             continue
+                        # tier 1: extreme close = 確実な背景 (案 d: NCC or 距離)
+                        # PatchBackgroundFingerprint の場合は _is_empty_tier1 が NCC 判定。
+                        # BackgroundFingerprint の場合は従来の距離閾値比較。
+                        # PatchBackgroundFingerprint では cell_at_patch を使う
+                        from src.background_fingerprint import PatchBackgroundFingerprint
+                        if isinstance(bg_fp, PatchBackgroundFingerprint):
+                            bg_cell_for_tier1 = bg_fp.cell_at_patch(visible_row, col)
+                        else:
+                            bg_cell_for_tier1 = bg_cell
+                        if self._is_empty_tier1(
+                            bg_cell_for_tier1, hsv_patch, cur_fp,
+                            visible_row, col,
+                        ):
+                            # 案 P2: 白ハイライト blob override
+                            # tier1 が EMPTY 判定しても、ぷよ固有の白ハイライト円が
+                            # あれば「本物ぷよあり」として classify に進む
+                            if (
+                                self._use_highlight_override
+                                and _has_puyo_highlight(hsv_patch)
+                            ):
+                                pass  # EMPTY 却下 → cells_to_classify に流れる
+                            else:
+                                board.set(row, col, COLOR_EMPTY)
+                                continue
                         # tier 2: AND 条件 (= cycle 19 既存)
                         if is_empty_by_fp(
                             cur_fp, bg_cell, threshold=self._bg_threshold,
@@ -772,13 +1039,15 @@ class ImageReader:
                             ):
                                 board.set(row, col, COLOR_EMPTY)
                                 continue
-                cells_to_classify.append((row, col, patch, cell_bg_distance))
+                cells_to_classify.append(
+                    (row, col, patch, cell_bg_distance, cell_hsv_patch),
+                )
 
         # 2nd pass: バッチ classify (HybridClassifier で 5-20x 高速化)
         # cycle 34: bg_distance を classify_batch に渡して CNN logit soft prior
         if has_batch_api and cells_to_classify:
-            patches = [p for _, _, p, _ in cells_to_classify]
-            distances = [d for _, _, _, d in cells_to_classify]
+            patches = [p for _, _, p, _, _ in cells_to_classify]
+            distances = [d for _, _, _, d, _ in cells_to_classify]
             try:
                 colors = self._classifier.classify_batch(
                     patches, bg_distances=distances,
@@ -786,14 +1055,16 @@ class ImageReader:
             except TypeError:
                 # backwards compat: 古い classify_batch は bg_distances 未対応
                 colors = self._classifier.classify_batch(patches)
-            for (row, col, patch, _), color in zip(
+            for (row, col, patch, _, hsv_p), color in zip(
                 cells_to_classify, colors,
             ):
+                # 案 R3 改: プロファイル不一致の色を EMPTY 化 (下段方向のみ)
+                color = self._apply_profile_filter(color, hsv_p, patch)
                 # classify_batch は UI mask 適用済 (HybridClassifier 内で処理)
                 board.set(row, col, color)
         else:
             # フォールバック: 個別 classify
-            for row, col, patch, _ in cells_to_classify:
+            for row, col, patch, _, hsv_p in cells_to_classify:
                 visible_row = row - HIDDEN_ROWS
                 if has_position_api:
                     color = self._classifier.classify_at(
@@ -808,6 +1079,8 @@ class ImageReader:
                     and self._ui_matcher.is_ui(patch)
                 ):
                     color = COLOR_EMPTY
+                # 案 R3 改: プロファイル不一致の色を EMPTY 化 (下段方向のみ)
+                color = self._apply_profile_filter(color, hsv_p, patch)
                 board.set(row, col, color)
 
         # V3.1: テロップ被覆セルを COLOR_UNKNOWN に倒す (浮遊削除前)
@@ -833,7 +1106,53 @@ class ImageReader:
 
         # 隠し段を物理推論で確定 or UNKNOWN にする
         self._infer_hidden_rows(board)
+
         return board
+
+    def _apply_profile_filter(
+        self,
+        color: int,
+        hsv_patch: np.ndarray | None,
+        bgr_patch: np.ndarray,
+    ) -> int:
+        """案 R3 改: classify 結果がプロファイルに合致しない場合 EMPTY 化する。
+
+        設計制約:
+          - 下段方向のみ: classify が色を返した場合に EMPTY 化 (上段救済は禁止)
+          - hsv_patch が None (= bg_fp 未採取期間) の場合は bgr_patch から計算
+          - COLOR_EMPTY / COLOR_UNKNOWN は通過させる (変更しない)
+
+        Args:
+            color: classify が返した色コード
+            hsv_patch: 1st pass で計算済の HSV パッチ (None なら再計算)
+            bgr_patch: BGR パッチ (hsv_patch が None のとき変換元)
+
+        Returns:
+            int: 確認済み色コード (プロファイル不一致なら COLOR_EMPTY)
+        """
+        # EMPTY / UNKNOWN は変更しない
+        if color in (COLOR_EMPTY, COLOR_UNKNOWN):
+            return color
+        # プロファイル DB なし → 無効 (既存挙動維持)
+        if self._puyo_profile_db is None:
+            return color
+        # HSV 中央値を取得 (1st pass 再利用 or 再計算)
+        if hsv_patch is not None and hsv_patch.size > 0:
+            h_med = int(np.median(hsv_patch[:, :, 0]))
+            s_med = int(np.median(hsv_patch[:, :, 1]))
+            v_med = int(np.median(hsv_patch[:, :, 2]))
+        elif bgr_patch.size > 0:
+            _hsv = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
+            h_med = int(np.median(_hsv[:, :, 0]))
+            s_med = int(np.median(_hsv[:, :, 1]))
+            v_med = int(np.median(_hsv[:, :, 2]))
+        else:
+            # パッチが空 → 判定不能、保守的に通過
+            return color
+        # プロファイル距離チェック: 不一致なら EMPTY 化
+        if not self._puyo_profile_db.is_puyo_like(color, h_med, s_med, v_med):
+            return COLOR_EMPTY
+        return color
 
     # T-v2 系融合判定は archive/legacy_phase_t_v2/ に移動 (Phase U で廃止)。
 
