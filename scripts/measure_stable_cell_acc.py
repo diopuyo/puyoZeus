@@ -48,6 +48,7 @@ from src.board import (
     COLOR_YELLOW,
 )
 from src.board_state_machine import BoardState
+from src.recognition_evaluator import compute_avg_puyo_count
 from src.recognition_pipeline import RecognitionPipeline
 # ============================
 # 定数定義
@@ -160,6 +161,10 @@ class VideoStats:
     # _non_stable_current_by_side: side 別 non-stable 連続カウンタ (内部、init 時 {}).
     # non_stable_max_consecutive の更新用。直接参照禁止。
     _non_stable_current_by_side: dict = field(default_factory=dict, repr=False, compare=False)
+    # C1: avg_puyo_count メトリクス (後方互換のため default 付き)
+    # STABLE フレームの 1P+2P 合算ぷよ数合計と frame 数
+    _puyo_count_sum: int = 0
+    _puyo_count_n_stable: int = 0
 
 
 # ============================
@@ -314,6 +319,8 @@ def _eval_one_frame(
         # STABLE フレームで non-stable カウントをリセット
         stats._non_stable_current_by_side[side] = 0
         stats.stable_frame_count += 1
+        # C1: STABLE confirmed_board のぷよ数を集計 (= avg_puyo_count 計算用)
+        _collect_puyo_count(sr_cnn.confirmed_board, stats)
         _eval_side_frame(
             side, fi, t_sec, video_id,
             raw_cnn_board=sr_cnn.cnn_board,
@@ -481,6 +488,24 @@ def _eval_side_frame(
         _collect_col_metrics(fi, t_sec, confirmed_board, stats)
 
 
+def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
+    """STABLE confirmed_board の非 EMPTY・非 UNKNOWN cell 数を stats に加算する。
+
+    C1 avg_puyo_count_per_stable_frame 計算用。
+    1 サイド分のカウントを加算する (= frame ごとに 1P / 2P 別に呼ばれる)。
+    """
+    if confirmed_board is None:
+        return
+    count = 0
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            val = int(confirmed_board.get(row, col))
+            if val not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                count += 1
+    stats._puyo_count_sum += count
+    stats._puyo_count_n_stable += 1
+
+
 def _collect_col_metrics(
     fi: int,
     t_sec: float,
@@ -577,6 +602,12 @@ def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
                 )
                 for col in range(6)
             },
+            # C1 avg_puyo_count_per_stable_frame (= fail-silent 経路検知)
+            "avg_puyo_count_per_stable_frame": (
+                s._puyo_count_sum / s._puyo_count_n_stable
+                if s._puyo_count_n_stable > 0 else None
+            ),
+            "n_stable_frames_puyo": s._puyo_count_n_stable,
         }
         for s in stats_list
     }
@@ -895,6 +926,18 @@ def _print_summary(
             for col_key, rate in sorted(rates.items()):
                 if rate is not None and rate >= MIDGAME_COL_EMPTY_CRITICAL:
                     print(f"  [{vid_id}] col={col_key}: {rate:.1%}  [CRITICAL]")
+    # C1: avg_puyo_count_per_stable_frame 出力 (= fail-silent 経路検知)
+    has_avg = any(
+        v.get("avg_puyo_count_per_stable_frame") is not None
+        for v in per_vid.values()
+    )
+    if has_avg:
+        print("[C1 avg_puyo_count_per_stable_frame (STABLE フレームの 1P or 2P 平均ぷよ数)]")
+        for vid_id, vid_data in per_vid.items():
+            avg = vid_data.get("avg_puyo_count_per_stable_frame")
+            n_st = vid_data.get("n_stable_frames_puyo", 0)
+            if avg is not None:
+                print(f"  [{vid_id}] avg={avg:.2f} (n_stable={n_st})")
     if failures:
         print("[FAIL 理由]")
         for reason in failures:

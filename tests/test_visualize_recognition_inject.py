@@ -96,6 +96,8 @@ class _StubImageReader:
         frame: np.ndarray,
         p1_roi_offset: tuple[float, float] = (0.0, 0.0),
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
+        skip_tier1_1p: bool = False,
+        skip_tier1_2p: bool = False,
     ) -> tuple[object, object]:
         return self._p1.copy(), self._p2.copy()
 
