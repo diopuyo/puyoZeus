@@ -136,6 +136,24 @@
   3. 数値「劇的改善」 が出たら逆に懐疑的 (= empty bias で fail-silent 化していないか確認)
   4. memory `feedback_viz_eval_required.md` 参照
 
+### 4.2-ter I1 メトリクスも採否ゲートに含める (2026-05-26 確定)
+
+**mismatch / replace と同様に fail-silent** な認識崩壊を自動検出する 3 メトリクスを
+`scripts/measure_stable_cell_acc.py` に実装 (I1 メトリクス)。
+cycle を採用する前に以下の全てが NG でないことを確認する。
+
+| メトリクス | 閾値 | 発火条件 | 検出対象 |
+|---|---|---|---|
+| `per_col_unknown_rate` | WARNING 15% / CRITICAL 30% | STABLE confirmed_board で col 別 COLOR_UNKNOWN 比率 | v89_match01 27-30s col=0,1 認識不能 |
+| `non_stable_consecutive_frames` | CRITICAL 180 frames | warmup (15s) 後の最長連続 non-STABLE フレーム数 | state machine 初期化失敗 / 長時間 CHAIN 状態 |
+| `per_col_midgame_empty_rate` | CRITICAL 99% | 中盤 (30s 以降) で col 単位の EMPTY 率 (最低 30 STABLE frame 必要) | v40_match01 1P col=1 全 EMPTY 誤判定 |
+
+- `_judge_pass_fail(stats_list=stats_list)` を呼ぶと 3 メトリクスを含む PASS/FAIL 判定が出る
+- **per_col_unknown_rate は mismatch と同様に採用ゲートに含める** (cycle 23/24 の反省)
+  - mismatch/replace が改善していても per_col_unknown_rate が CRITICAL なら FAIL
+- テスト: `tests/test_i1_metrics.py` (17 件、 必須 v89/v40 シナリオ含む)
+
+
 ### 4.3 動画品質依存度を見る
 - 高画質 (v97) と低画質 (v89m3) の `constraint_replaced` 比 = 動画品質依存度
 - cycle_5: 189 / 19 = 10 倍格差
