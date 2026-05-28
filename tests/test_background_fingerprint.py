@@ -135,3 +135,63 @@ def test_capture_pair_robust_returns_two_fps() -> None:
     )
     assert isinstance(fp1, BackgroundFingerprint)
     assert isinstance(fp2, BackgroundFingerprint)
+
+
+# ============================
+# 案 P2: detect_highlight_blob テスト
+# ============================
+
+from src.background_fingerprint import (  # noqa: E402
+    HIGHLIGHT_MIN_PIXEL_RATIO,
+    HIGHLIGHT_S_MAX,
+    HIGHLIGHT_V_MIN,
+    detect_highlight_blob,
+)
+
+
+def _make_patch_hsv(
+    h: int, s: int, v: int, h_size: int = 20, w_size: int = 20,
+) -> np.ndarray:
+    """指定 HSV で均一なパッチを生成 (uint8)。"""
+    patch = np.zeros((h_size, w_size, 3), dtype=np.uint8)
+    patch[:, :, 0] = h
+    patch[:, :, 1] = s
+    patch[:, :, 2] = v
+    return patch
+
+
+def test_highlight_detected_white_blob() -> None:
+    """上部帯域に白 blob (V=240, S=20) が十分あれば True。"""
+    # 20×20 パッチ全体が白 → 上部帯域 (15%〜55% = 行3〜11) が白 → min_ratio を超える
+    patch = _make_patch_hsv(h=0, s=20, v=240)
+    assert detect_highlight_blob(patch) is True
+
+
+def test_highlight_not_detected_dark() -> None:
+    """全セルが暗い (V=30) → 白 blob なし → False。"""
+    patch = _make_patch_hsv(h=0, s=0, v=30)
+    assert detect_highlight_blob(patch) is False
+
+
+def test_highlight_not_detected_colored() -> None:
+    """彩度が高い色 (S=200, V=240) → 白判定不可 → False。"""
+    patch = _make_patch_hsv(h=60, s=200, v=240)
+    assert detect_highlight_blob(patch) is False
+
+
+def test_highlight_boundary_v_min() -> None:
+    """V = HIGHLIGHT_V_MIN (境界値) かつ S=0 → True (以上は含む)。"""
+    patch = _make_patch_hsv(h=0, s=0, v=HIGHLIGHT_V_MIN)
+    assert detect_highlight_blob(patch) is True
+
+
+def test_highlight_boundary_s_max() -> None:
+    """S = HIGHLIGHT_S_MAX (境界値) かつ V=255 → True (以下は含む)。"""
+    patch = _make_patch_hsv(h=0, s=HIGHLIGHT_S_MAX, v=255)
+    assert detect_highlight_blob(patch) is True
+
+
+def test_highlight_uniform_zero() -> None:
+    """全ゼロパッチ (V=0, S=0) → V < HIGHLIGHT_V_MIN → False。"""
+    patch = np.zeros((20, 20, 3), dtype=np.uint8)
+    assert detect_highlight_blob(patch) is False

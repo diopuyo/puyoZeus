@@ -1,8 +1,12 @@
 """軸 3-b (Phase L): BG_EXTREME_THRESHOLD_LEFT_UPPER エリア別閾値 ユニットテスト。
 
+2026-05-27 軸 3-b 撤回: +15.0 → +0.0 (= v40 col=1 EMPTY 症状が真因と確定)。
+_resolve_tier1_threshold のエリア別分岐ロジック自体は残存するため、
+定数整合テストを「LEFT_UPPER == DEFAULT」 に更新。
+
 テスト概要:
-    test 1: visible_row=5, col=0 で距離 < LEFT_UPPER threshold なら EMPTY (= 左上エリア緩和判定)
-    test 2: visible_row=5, col=0 で距離 >= LEFT_UPPER threshold は EMPTY にならない (= 上限あり)
+    test 1: visible_row=5, col=0 で _resolve_tier1_threshold が LEFT_UPPER threshold を返す
+    test 2: LEFT_UPPER threshold は DEFAULT 以上であること (撤回後は等値)
     test 3: visible_row=4, col=0 (= 左上エリア外) では DEFAULT threshold が適用される
     test 4: visible_row=5, col=2 (= 左上エリア外) では DEFAULT threshold が適用される
     test 5: visible_row=5, col=0 で距離 < DEFAULT threshold は当然 EMPTY (= regression check)
@@ -25,9 +29,10 @@ from src.image_reader import (
 
 
 def test_left_upper_threshold_is_larger_than_default() -> None:
-    """LEFT_UPPER threshold は DEFAULT より大きくなければならない。"""
-    assert BG_EXTREME_THRESHOLD_LEFT_UPPER > BG_EXTREME_THRESHOLD_DEFAULT, (
-        f"LEFT_UPPER ({BG_EXTREME_THRESHOLD_LEFT_UPPER}) > "
+    """LEFT_UPPER threshold は DEFAULT 以上でなければならない。
+    2026-05-27 軸 3-b 撤回: +15.0 → +0.0 のため等値 (>=) に緩和。"""
+    assert BG_EXTREME_THRESHOLD_LEFT_UPPER >= BG_EXTREME_THRESHOLD_DEFAULT, (
+        f"LEFT_UPPER ({BG_EXTREME_THRESHOLD_LEFT_UPPER}) >= "
         f"DEFAULT ({BG_EXTREME_THRESHOLD_DEFAULT}) が必要"
     )
 

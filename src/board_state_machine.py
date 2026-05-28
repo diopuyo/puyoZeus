@@ -40,6 +40,14 @@ DEFAULT_NON_STABLE_HISTORY_SIZE: int = 5
 # N=5 中 3 frame 以上で同色観測 = 信頼。 それ以下は瞬間的誤認とみなし baseline 維持。
 DEFAULT_EMPTY_TO_COLOR_MIN_VOTES: int = 3
 
+# B1 (M1 warmup guard): STABLE 判定直後に confirmed 更新を N frame スキップ。
+# NON-STABLE → STABLE 遷移直後は CNN 出力がまだ不安定 (= エフェクト残光、
+# 背景誤認の溶け残り) であり、この期間に _update_within_current_state 経由で
+# confirmed が更新されると誤色が焼き付く。
+# WARMUP 中は STABLE state を維持したまま confirmed を凍結する。
+# 0.4 秒 @ 30fps。
+STABLE_WARMUP_FRAMES: int = 12
+
 # 推論優先 (NON-STABLE) state の集合
 NON_STABLE_STATES: frozenset["BoardState"] = frozenset()  # 後で初期化
 
@@ -99,6 +107,10 @@ class StateContext:
     # F (cycle 56): NON-STABLE 中の cnn_board 履歴。 STABLE 復帰時に多数決を取り、
     # 瞬間的な背景誤認が confirmed_board に焼き付くのを防ぐ。 最大 N frame 保持。
     non_stable_cnn_history: list[Board] = field(default_factory=list)
+    # B1 (M1 warmup guard): NON-STABLE → STABLE 遷移直後の confirmed 凍結残りフレーム数。
+    # 0 = warmup なし (通常 STABLE)。0 より大きければ confirmed 更新をスキップ。
+    # backwards compat: default=0 で既存動作と同一。
+    stable_warmup_remaining: int = 0
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -334,10 +346,16 @@ class BoardStateMachine:
         non_stable_history_size: int = DEFAULT_NON_STABLE_HISTORY_SIZE,
         empty_to_color_min_votes: int = DEFAULT_EMPTY_TO_COLOR_MIN_VOTES,
         enable_stable_resume_gate: bool = True,
+        enable_warmup_guard: bool = False,
+        warmup_frames: int = STABLE_WARMUP_FRAMES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
         self._enable_stable_resume_gate = bool(enable_stable_resume_gate)
+        # B1 (M1 warmup guard): STABLE 遷移直後の confirmed 凍結を有効化するか。
+        # backwards compat: default False で既存動作と同一。
+        self._enable_warmup_guard = bool(enable_warmup_guard)
+        self._warmup_frames = max(0, int(warmup_frames))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -447,6 +465,11 @@ class BoardStateMachine:
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
             self._ctx.pending_count = 1
+            # B1 (M1 warmup guard): STABLE 復帰直後は N frame 間 confirmed 凍結。
+            # 遷移直後の CNN 出力が不安定 (エフェクト残光・背景誤認) な期間に
+            # _update_within_current_state が confirmed を書き換えるのを防ぐ。
+            if self._enable_warmup_guard:
+                self._ctx.stable_warmup_remaining = self._warmup_frames
         self._ctx.state = new_state
         # F: state 切替で NON-STABLE history をリセット
         self._ctx.non_stable_cnn_history = []
@@ -471,6 +494,14 @@ class BoardStateMachine:
             ):
                 self._ctx.non_stable_cnn_history.pop(0)
             # アクション中: 認識結果は盤面確定に使わない
+            return
+
+        # B1 (M1 warmup guard): STABLE 遷移直後の warmup 期間中は confirmed 更新をスキップ。
+        # エフェクト残光・背景誤認の CNN 出力が confirmed に焼き付くのを防ぐ。
+        # last_stable_idx は更新し「STABLE 中」であることだけ伝える。
+        if self._ctx.state == BoardState.STABLE and self._ctx.stable_warmup_remaining > 0:
+            self._ctx.stable_warmup_remaining -= 1
+            self._ctx.last_stable_idx = self._ctx.frame_idx
             return
 
         # MENU (試合復帰直後) または STABLE: 連続多数決で confirmed を更新。
@@ -534,6 +565,7 @@ __all__ = [
     "_vote_majority_board",
     "DEFAULT_NON_STABLE_HISTORY_SIZE",
     "DEFAULT_EMPTY_TO_COLOR_MIN_VOTES",
+    "STABLE_WARMUP_FRAMES",
     "StateContext",
     "StateTransitionDetector",
 ]

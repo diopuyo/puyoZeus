@@ -365,3 +365,108 @@ class TestOjamaGlobalScarcity:
         ev.entries = entries
         vs = ev.check_ojama_global_scarcity("1P")
         assert len(vs) == 0
+
+
+class TestErasureAlertsIntegration:
+    """T4 PuyoErasureMonitor: board_log → FrameEntry → p_to_e_count 集計の統合テスト。"""
+
+    def _make_frame_entry_with_alerts(
+        self,
+        fi: int,
+        p1_alerts: list[list[int]],
+        p2_alerts: list[list[int]],
+    ) -> FrameEntry:
+        """erasure_alerts 付きの FrameEntry を生成する。"""
+        return FrameEntry(
+            frame_idx=fi,
+            t_sec=fi / 60.0,
+            p1_state="stable",
+            p2_state="stable",
+            p1_confirmed=_make_empty_grid(),
+            p2_confirmed=_make_empty_grid(),
+            p1_erasure_alerts=p1_alerts,
+            p2_erasure_alerts=p2_alerts,
+        )
+
+    def test_no_alerts_p_to_e_count_zero(self) -> None:
+        """alert なしなら p_to_e_count = 0。"""
+        entries = [
+            self._make_frame_entry_with_alerts(i, [], []) for i in range(10)
+        ]
+        ev = RecognitionEvaluator()
+        ev.entries = entries
+        counts = ev.count_erasure_alerts()
+        assert counts["total"] == 0
+        assert counts["p1"] == 0
+        assert counts["p2"] == 0
+
+    def test_alerts_summed_correctly(self) -> None:
+        """1P 2 件 + 2P 1 件 = total 3 件に集計される。"""
+        entries = [
+            self._make_frame_entry_with_alerts(0, [[5, 2], [6, 3]], []),
+            self._make_frame_entry_with_alerts(1, [], [[4, 1]]),
+        ]
+        ev = RecognitionEvaluator()
+        ev.entries = entries
+        counts = ev.count_erasure_alerts()
+        assert counts["p1"] == 2
+        assert counts["p2"] == 1
+        assert counts["total"] == 3
+
+    def test_generate_report_contains_p_to_e_count(self) -> None:
+        """generate_report() に p_to_e_count キーが含まれる。"""
+        entries = [
+            self._make_frame_entry_with_alerts(i, [[5, 2]], []) for i in range(5)
+        ]
+        ev = RecognitionEvaluator()
+        ev.entries = entries
+        report = ev.generate_report()
+        assert "p_to_e_count" in report
+        assert report["p_to_e_count"] == 5  # 5 frame × 1 alert
+
+    def test_frame_entry_from_jsonable_with_erasure_alerts(self) -> None:
+        """from_jsonable() が erasure_alerts を正しく読み込む。"""
+        obj = {
+            "frame_idx": 100,
+            "t_sec": 1.67,
+            "p1_state": "stable",
+            "p2_state": "stable",
+            "p1_confirmed": None,
+            "p2_confirmed": None,
+            "p1_erasure_alerts": [[5, 2], [6, 3]],
+            "p2_erasure_alerts": [[4, 1]],
+        }
+        entry = FrameEntry.from_jsonable(obj)
+        assert entry.p1_erasure_alerts == [[5, 2], [6, 3]]
+        assert entry.p2_erasure_alerts == [[4, 1]]
+
+    def test_frame_entry_from_jsonable_backward_compat_no_key(self) -> None:
+        """古い board_log (erasure_alerts キーなし) でも空リストで処理継続。"""
+        obj = {
+            "frame_idx": 50,
+            "t_sec": 0.83,
+            "p1_state": "stable",
+            "p2_state": "stable",
+            "p1_confirmed": None,
+            "p2_confirmed": None,
+        }
+        entry = FrameEntry.from_jsonable(obj)
+        assert entry.p1_erasure_alerts == []
+        assert entry.p2_erasure_alerts == []
+
+    def test_generate_report_p_to_e_count_zero_on_old_board_log(self) -> None:
+        """古い board_log (erasure_alerts キーなし) は p_to_e_count = 0。"""
+        # erasure_alerts なしの FrameEntry (= backwards compat path)
+        entries = [
+            FrameEntry(
+                frame_idx=i, t_sec=i / 60.0,
+                p1_state="stable", p2_state="stable",
+                p1_confirmed=_make_empty_grid(), p2_confirmed=_make_empty_grid(),
+                # p1_erasure_alerts / p2_erasure_alerts はデフォルト []
+            )
+            for i in range(10)
+        ]
+        ev = RecognitionEvaluator()
+        ev.entries = entries
+        report = ev.generate_report()
+        assert report["p_to_e_count"] == 0

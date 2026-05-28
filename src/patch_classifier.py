@@ -160,6 +160,16 @@ class PuyoPresenceGate:
     SATURATION_PIXEL_RATIO: float = 0.20  # 飽和 puyo 色画素の最低比率
     SATURATION_MIN: int = 80              # HSV S 閾値
 
+    # T3: 円形スコアの重み (Hough circle 検出)
+    # 0.0 で無効 (デフォルト後方互換)、 > 0.0 で _compute_presence_score に加算。
+    CIRCLE_SCORE_WEIGHT: float = 0.0
+    # Hough circle パラメータ (= dp, minDist, param1, param2, minR, maxR)
+    CIRCLE_HOUGH_DP: float = 1.5
+    CIRCLE_HOUGH_PARAM1: float = 30.0
+    CIRCLE_HOUGH_PARAM2: float = 8.0
+    CIRCLE_MIN_RADIUS_RATIO: float = 0.20  # パッチ幅に対する最小半径比
+    CIRCLE_MAX_RADIUS_RATIO: float = 0.55  # パッチ幅に対する最大半径比
+
     # 厳格モード (X印対策): 水平ペア眼のパラメータ
     strict_pair_eyes: bool = False
     PAIR_Y_TOLERANCE_RATIO: float = 0.20    # 2眼のY座標差の許容値 (中央領域の高さ比)
@@ -187,6 +197,13 @@ class PuyoPresenceGate:
         has_eyes = self._has_eyes(center)
         has_shading = self._has_shading(center)
         has_saturation = self._has_saturation(center)
+
+        # T3: 円形スコア追加 (CIRCLE_SCORE_WEIGHT=0.0 のデフォルトでは影響なし)
+        if self.CIRCLE_SCORE_WEIGHT > 0.0:
+            circle_score = self._has_circle_shape(bgr_patch) * self.CIRCLE_SCORE_WEIGHT
+            # circle が検出された場合、 shading + saturation 閾値を緩和して通す
+            if circle_score > 0.0 and has_saturation:
+                return True
 
         if has_eyes:
             return True
@@ -220,6 +237,41 @@ class PuyoPresenceGate:
         s_chan = hsv[:, :, 1]
         sat_ratio = float(np.mean(s_chan >= cls.SATURATION_MIN))
         return sat_ratio >= cls.SATURATION_PIXEL_RATIO
+
+    @classmethod
+    def _has_circle_shape(cls, patch_bgr: np.ndarray) -> float:
+        """T3: Canny + Hough circle でぷよ円形スコアを返す。
+
+        ぷよは画面上ほぼ円形。円が 1 個以上検出されれば 1.0、なければ 0.0。
+        CIRCLE_SCORE_WEIGHT=0.0 のデフォルトでは is_puyo の判定に影響しない。
+
+        Args:
+            patch_bgr: セルパッチ (BGR, uint8)。
+
+        Returns:
+            float: 0.0 (円なし) または 1.0 (円あり)。
+        """
+        if patch_bgr.size == 0:
+            return 0.0
+        h, w = patch_bgr.shape[:2]
+        gray = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2GRAY)
+        gray_blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        min_r = max(2, int(w * cls.CIRCLE_MIN_RADIUS_RATIO))
+        max_r = max(min_r + 1, int(w * cls.CIRCLE_MAX_RADIUS_RATIO))
+        try:
+            circles = cv2.HoughCircles(
+                gray_blur,
+                cv2.HOUGH_GRADIENT,
+                dp=cls.CIRCLE_HOUGH_DP,
+                minDist=float(w) * 0.4,
+                param1=cls.CIRCLE_HOUGH_PARAM1,
+                param2=cls.CIRCLE_HOUGH_PARAM2,
+                minRadius=min_r,
+                maxRadius=max_r,
+            )
+        except Exception:
+            return 0.0
+        return 1.0 if circles is not None else 0.0
 
     def _has_horizontal_eye_pair(self, center_bgr: np.ndarray) -> bool:
         """

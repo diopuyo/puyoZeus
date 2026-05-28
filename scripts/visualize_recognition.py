@@ -233,6 +233,301 @@ def resolve_hsv_path(video_path: Path) -> Path:
     return _HSV_MERGED_DEFAULT
 
 
+def _extract_raw_hsv_board(
+    reader: object,
+    frame: "np.ndarray",
+    region: object,
+) -> list[list[int]]:
+    """ImageReader から HSV-only 経路の直出力 board を取得する。
+
+    HybridClassifier の _hsv 属性、または ColorClassifier 直参照で
+    全 visible cell に HSV 分類を適用して 13×6 grid を返す。
+    bg_fp / CNN 経路をバイパスした純 HSV 結果。
+
+    Args:
+        reader: ImageReader インスタンス。
+        frame: 1920x1080 BGR フレーム。
+        region: BoardRegion インスタンス。
+
+    Returns:
+        13×6 の int grid (COLOR_* 定数)。
+    """
+    import cv2 as _cv2
+    import numpy as _np
+    from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, HIDDEN_ROWS
+
+    # HSV 分類器の取得 (HybridClassifier._hsv or ColorClassifier 直)
+    classifier_raw = getattr(reader, "_classifier", None)
+    hsv_cls = getattr(classifier_raw, "_hsv", classifier_raw)
+
+    img_h, img_w = frame.shape[:2]
+    grid: list[list[int]] = []
+    for row in range(BOARD_ROWS):
+        row_vals: list[int] = []
+        for col in range(BOARD_COLS):
+            if row < HIDDEN_ROWS:
+                row_vals.append(COLOR_EMPTY)
+                continue
+            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+            x1 = max(0, min(x1, img_w - 1))
+            x2 = max(x1 + 1, min(x2, img_w))
+            y1 = max(0, min(y1, img_h - 1))
+            y2 = max(y1 + 1, min(y2, img_h))
+            patch = frame[y1:y2, x1:x2]
+            try:
+                color = int(hsv_cls.classify(patch)) if hsv_cls is not None else COLOR_EMPTY
+            except Exception:
+                color = COLOR_EMPTY
+            row_vals.append(color)
+        grid.append(row_vals)
+    return grid
+
+
+def _extract_bg_fp_distance_grid(
+    reader: object,
+    frame: "np.ndarray",
+    region: object,
+    side: str,
+) -> list[list[float]] | None:
+    """各 cell の bg_fp 距離 (float) を 13×6 grid で返す。
+
+    bg_fp が未採取の場合は None を返す。
+    hidden rows (row < HIDDEN_ROWS) は -1.0 で埋める。
+
+    Args:
+        reader: ImageReader インスタンス。
+        frame: 1920x1080 BGR フレーム。
+        region: BoardRegion インスタンス。
+        side: "1P" or "2P"。
+
+    Returns:
+        13×6 の float grid、または None (bg_fp 未採取)。
+    """
+    import cv2 as _cv2
+    import numpy as _np
+    from src.board import BOARD_COLS, BOARD_ROWS, HIDDEN_ROWS
+
+    bg_fp = getattr(reader, "_bg_fp_p1" if side == "1P" else "_bg_fp_p2", None)
+    if bg_fp is None:
+        return None
+
+    try:
+        from src.background_fingerprint import CellFingerprint
+    except Exception:
+        return None
+
+    hsv_full = _cv2.cvtColor(frame, _cv2.COLOR_BGR2HSV)
+    img_h, img_w = frame.shape[:2]
+
+    grid: list[list[float]] = []
+    for row in range(BOARD_ROWS):
+        row_vals: list[float] = []
+        for col in range(BOARD_COLS):
+            if row < HIDDEN_ROWS:
+                row_vals.append(-1.0)
+                continue
+            visible_row = row - HIDDEN_ROWS
+            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+            x1 = max(0, min(x1, img_w - 1))
+            x2 = max(x1 + 1, min(x2, img_w))
+            y1 = max(0, min(y1, img_h - 1))
+            y2 = max(y1 + 1, min(y2, img_h))
+            hsv_patch = hsv_full[y1:y2, x1:x2]
+            if hsv_patch.size == 0:
+                row_vals.append(-1.0)
+                continue
+            h_med = int(_np.median(hsv_patch[:, :, 0]))
+            s_med = int(_np.median(hsv_patch[:, :, 1]))
+            v_med = int(_np.median(hsv_patch[:, :, 2]))
+            cur_fp = CellFingerprint(h_med, s_med, v_med)
+            try:
+                bg_cell = bg_fp.cell_at(visible_row, col)
+                dist = float(cur_fp.distance_to(bg_cell))
+            except Exception:
+                dist = -1.0
+            row_vals.append(dist)
+        grid.append(row_vals)
+    return grid
+
+
+def _extract_tier1_threshold_grid(
+    reader: object,
+    region: object,
+) -> list[list[float]]:
+    """各 cell の tier1 閾値 (float) を 13×6 grid で返す。
+
+    _resolve_tier1_threshold() が存在しない場合は全 cell DEFAULT を使う。
+    hidden rows は -1.0 で埋める。
+
+    Args:
+        reader: ImageReader インスタンス。
+        region: 使用しない (visible_row/col のみで閾値は決まる)。
+
+    Returns:
+        13×6 の float grid。
+    """
+    from src.board import BOARD_COLS, BOARD_ROWS, HIDDEN_ROWS
+    from src.image_reader import BG_EXTREME_THRESHOLD_DEFAULT
+
+    resolve_fn = getattr(reader, "_resolve_tier1_threshold", None)
+
+    grid: list[list[float]] = []
+    for row in range(BOARD_ROWS):
+        row_vals: list[float] = []
+        for col in range(BOARD_COLS):
+            if row < HIDDEN_ROWS:
+                row_vals.append(-1.0)
+                continue
+            visible_row = row - HIDDEN_ROWS
+            if resolve_fn is not None:
+                try:
+                    thresh = float(resolve_fn(visible_row, col))
+                except Exception:
+                    thresh = BG_EXTREME_THRESHOLD_DEFAULT
+            else:
+                thresh = BG_EXTREME_THRESHOLD_DEFAULT
+            row_vals.append(thresh)
+        grid.append(row_vals)
+    return grid
+
+
+def _board_diff_cells(
+    board_before: "Board | None",
+    board_after: "Board | None",
+) -> list[list[int]]:
+    """2 つの board の差分 cell を [[row, col, before, after], ...] で返す。
+
+    None の場合は空リストを返す。
+
+    Args:
+        board_before: 変更前の Board。
+        board_after: 変更後の Board。
+
+    Returns:
+        差分 cell リスト。各要素 = [row, col, color_before, color_after]。
+    """
+    from src.board import BOARD_COLS, BOARD_ROWS
+    if board_before is None or board_after is None:
+        return []
+    diffs: list[list[int]] = []
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            bv = int(board_before.get(r, c))
+            av = int(board_after.get(r, c))
+            if bv != av:
+                diffs.append([r, c, bv, av])
+    return diffs
+
+
+def _build_detailed_log_entry(
+    fi: int,
+    t_sec: float,
+    result: object,
+    frame: "np.ndarray",
+    pipeline: object,
+    prev_p1_confirmed: "Board | None",
+    prev_p2_confirmed: "Board | None",
+) -> dict:
+    """詳細 board log の 1 エントリを生成する。
+
+    SideResult.cnn_board (= ImageReader 直出力)、raw_hsv_board、
+    bg_fp_distance_grid、tier1_threshold_grid、constraint_fill_changed_cells
+    (= cnn_board → confirmed_board の差分) を記録する。
+
+    Args:
+        fi: frame index。
+        t_sec: 経過秒数。
+        result: PipelineResult インスタンス。
+        frame: 1920x1080 BGR フレーム。
+        pipeline: RecognitionPipeline インスタンス。
+        prev_p1_confirmed: 前フレームの 1P confirmed_board (差分計算用)。
+        prev_p2_confirmed: 前フレームの 2P confirmed_board (差分計算用)。
+
+    Returns:
+        JSON シリアライズ可能な dict。
+    """
+    from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
+
+    reader = getattr(pipeline, "_reader", None)
+
+    # raw_cnn_board = SideResult.cnn_board (= ImageReader 直出力、pipeline 内で保持済)
+    p1_cnn = getattr(result.p1, "cnn_board", None)
+    p2_cnn = getattr(result.p2, "cnn_board", None)
+
+    # raw_hsv_board: HSV-only 経路の全 cell 再分類
+    p1_hsv_grid: list[list[int]] | None = None
+    p2_hsv_grid: list[list[int]] | None = None
+    if reader is not None:
+        try:
+            p1_hsv_grid = _extract_raw_hsv_board(reader, frame, DEFAULT_P1_REGION)
+            p2_hsv_grid = _extract_raw_hsv_board(reader, frame, DEFAULT_P2_REGION)
+        except Exception:
+            pass
+
+    # bg_fp_distance_grid
+    p1_bg_dist: list[list[float]] | None = None
+    p2_bg_dist: list[list[float]] | None = None
+    if reader is not None:
+        try:
+            p1_bg_dist = _extract_bg_fp_distance_grid(reader, frame, DEFAULT_P1_REGION, "1P")
+            p2_bg_dist = _extract_bg_fp_distance_grid(reader, frame, DEFAULT_P2_REGION, "2P")
+        except Exception:
+            pass
+
+    # tier1_threshold_grid
+    p1_tier1: list[list[float]] | None = None
+    p2_tier1: list[list[float]] | None = None
+    if reader is not None:
+        try:
+            p1_tier1 = _extract_tier1_threshold_grid(reader, DEFAULT_P1_REGION)
+            p2_tier1 = _extract_tier1_threshold_grid(reader, DEFAULT_P2_REGION)
+        except Exception:
+            pass
+
+    # pre_capture_mode
+    pre_capture = bool(getattr(reader, "_pre_capture_mode", False)) if reader else False
+
+    # constraint_fill_changed_cells: cnn_board → confirmed_board の差分
+    # (constraint-fill / physics-fix 両方含む「何かが変えた」差分)
+    p1_constraint_diff = _board_diff_cells(p1_cnn, result.p1.confirmed_board)
+    p2_constraint_diff = _board_diff_cells(p2_cnn, result.p2.confirmed_board)
+
+    # physics_fix_changed_cells: prev_confirmed → confirmed の差分
+    p1_physics_diff = _board_diff_cells(prev_p1_confirmed, result.p1.confirmed_board)
+    p2_physics_diff = _board_diff_cells(prev_p2_confirmed, result.p2.confirmed_board)
+
+    return {
+        "frame_idx": fi,
+        "t_sec": t_sec,
+        "p1_state": result.p1.state.value,
+        "p2_state": result.p2.state.value,
+        "p1_confirmed": (
+            result.p1.confirmed_board.to_dict()["grid"]
+            if result.p1.confirmed_board is not None else None
+        ),
+        "p2_confirmed": (
+            result.p2.confirmed_board.to_dict()["grid"]
+            if result.p2.confirmed_board is not None else None
+        ),
+        # 詳細フィールド
+        "p1_raw_cnn_board": p1_cnn.to_dict()["grid"] if p1_cnn is not None else None,
+        "p2_raw_cnn_board": p2_cnn.to_dict()["grid"] if p2_cnn is not None else None,
+        "p1_raw_hsv_board": p1_hsv_grid,
+        "p2_raw_hsv_board": p2_hsv_grid,
+        "p1_bg_fp_distance_grid": p1_bg_dist,
+        "p2_bg_fp_distance_grid": p2_bg_dist,
+        "p1_tier1_threshold_grid": p1_tier1,
+        "p2_tier1_threshold_grid": p2_tier1,
+        "pre_capture_mode": pre_capture,
+        # constraint_fill で変更された cell: [row, col, cnn_color, confirmed_color]
+        "p1_constraint_fill_changed_cells": p1_constraint_diff,
+        "p2_constraint_fill_changed_cells": p2_constraint_diff,
+        # physics_fix で変更された cell: [row, col, prev_confirmed_color, new_confirmed_color]
+        "p1_physics_fix_changed_cells": p1_physics_diff,
+        "p2_physics_fix_changed_cells": p2_physics_diff,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", type=Path, required=True)
@@ -289,6 +584,37 @@ def main() -> int:
              "chain_event を JSONL 形式で保存 (= 強化アナリスト用)。 "
              "evaluator が後処理で読み込んで自動評価する。",
     )
+    parser.add_argument(
+        "--dump-board-log-detailed", type=Path, default=None,
+        help="Q1 全力施策: 各 frame の raw_cnn_board / raw_hsv_board / "
+             "bg_fp_distance_grid / tier1_threshold_grid / pre_capture_mode / "
+             "constraint_fill_changed_cells / physics_fix_changed_cells を含む "
+             "詳細 JSONL を保存。 --dump-board-log の superset。 "
+             "認識不能 frame の真因解明用 (= extract_unrecognized_frames.py の入力)。",
+    )
+    # B1 (warmup guard): STABLE 遷移直後 N frame confirmed 凍結 (= A/B 仮説 B1/B3 対応)
+    # backwards compat: store_true で default=False、既存挙動は変わらない。
+    parser.add_argument(
+        "--enable-warmup-guard", action="store_true",
+        help="B1 (M1 warmup guard): STABLE 遷移直後 N frame の confirmed board 更新を凍結。 "
+             "遷移直後の CNN ノイズ (エフェクト残光・背景誤認) を吸収する。 "
+             "A/B 仮説 B1/B3 用 (2026-05-27)。",
+    )
+    # B2 (bg_fp_force_max_puyo): 背景 FP 採取の緩和条件を絞る (= A/B 仮説 B2/B3 対応)
+    # backwards compat: default=None で既存 class attribute 値 (=144) を維持。
+    parser.add_argument(
+        "--bg-fp-force-max-puyo", type=int, default=None,
+        help="B2 (BG_FP_FORCE_MAX_PUYO): 背景 FP 採取緩和の puyo 上限数を上書き。 "
+             "None (省略時) = class attribute 値 144 を維持。 "
+             "4 に絞ると試合序盤の FP 採取機会が減り誤採取を抑制する。 "
+             "A/B 仮説 B2/B3 用 (2026-05-27)。",
+    )
+    parser.add_argument(
+        "--patch-ncc-threshold", type=float, default=None,
+        help="PatchBackgroundFingerprint NCC 閾値を上書き (= default は "
+             "background_fingerprint.py の PATCH_NCC_EMPTY_THRESHOLD = 0.92)。 "
+             "NCC sweep 用 (候補: 0.85, 0.88, 0.90, 0.92)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -338,7 +664,25 @@ def main() -> int:
         cnn_override_prob=args.cnn_override_prob,
         mask_ojama_logit=args.mask_ojama_logit,
         use_puyo_gate=args.use_puyo_gate,
+        # B1/B2/B3 仮説対応 (2026-05-27): --enable-warmup-guard / --bg-fp-force-max-puyo
+        enable_warmup_guard=args.enable_warmup_guard,
+        bg_fp_force_max_puyo=args.bg_fp_force_max_puyo,
+        # NCC sweep 用 (2026-05-28): --patch-ncc-threshold で閾値上書き
+        patch_ncc_threshold=args.patch_ncc_threshold,
     )
+    if args.patch_ncc_threshold is not None:
+        print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
+    # 案 R3 改 (2026-05-28): pipeline に video_id を設定
+    # bg_fp 採取完了後に per-video PuyoColorProfileDB が自動ロードされる
+    _vid_match = __import__("re").search(r"(v\d+)", args.video.name)
+    if _vid_match and hasattr(pipeline, "set_video_id"):
+        _vid_id = _vid_match.group(1)
+        pipeline.set_video_id(_vid_id)
+        print(f"[viz] puyo_profile video_id={_vid_id} (R3改: per-video profile 自動ロード)")
+    if args.enable_warmup_guard:
+        print("[viz] enable_warmup_guard=ON (B1: STABLE 直後 confirmed 凍結)")
+    if args.bg_fp_force_max_puyo is not None:
+        print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化
     if args.no_online_hsv:
         pipeline._online_hsv = None
@@ -411,6 +755,15 @@ def main() -> int:
         args.dump_board_log.parent.mkdir(parents=True, exist_ok=True)
         board_log_fp = open(args.dump_board_log, "w", encoding="utf-8")
         print(f"[viz] board log → {args.dump_board_log}")
+    # Q1 全力施策: 詳細 board log JSONL (raw_hsv / bg_fp_distance / tier1 等)
+    board_log_detail_fp = None
+    if args.dump_board_log_detailed is not None:
+        args.dump_board_log_detailed.parent.mkdir(parents=True, exist_ok=True)
+        board_log_detail_fp = open(args.dump_board_log_detailed, "w", encoding="utf-8")
+        print(f"[viz] detailed board log → {args.dump_board_log_detailed}")
+    # 詳細 dump 用: prev frame の confirmed_board (physics_fix diff 計算用)
+    prev_p1_confirmed: Board | None = None
+    prev_p2_confirmed: Board | None = None
 
     for fi in range(n_frames):
         ok, frame = cap.read()
@@ -436,6 +789,10 @@ def main() -> int:
             # cycle 33: 各 frame の認識結果を JSONL に保存
             if board_log_fp is not None:
                 import json as _json
+                # erasure_alerts: SideResult に乗った「当該 frame での新規 alert」
+                # backwards compat: キーなし既存 JSONL を読む側は .get('p1_erasure_alerts', []) で対処。
+                p1_ea = result.p1.erasure_alerts if result.p1.erasure_alerts is not None else []
+                p2_ea = result.p2.erasure_alerts if result.p2.erasure_alerts is not None else []
                 entry = {
                     "frame_idx": fi,
                     "t_sec": t_sec,
@@ -449,8 +806,37 @@ def main() -> int:
                         result.p2.confirmed_board.to_dict()["grid"]
                         if result.p2.confirmed_board is not None else None
                     ),
+                    # T4 PuyoErasureMonitor: 当該 frame で検出した新規 alert [(row, col), ...]
+                    "p1_erasure_alerts": [list(a) for a in p1_ea],
+                    "p2_erasure_alerts": [list(a) for a in p2_ea],
                 }
                 board_log_fp.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+            # Q1 全力施策: 詳細 JSONL 出力 (raw_hsv / bg_fp_distance 等)
+            if board_log_detail_fp is not None:
+                import json as _json2
+                try:
+                    detail_entry = _build_detailed_log_entry(
+                        fi, t_sec, result, frame, pipeline,
+                        prev_p1_confirmed, prev_p2_confirmed,
+                    )
+                except Exception as _detail_err:
+                    # 詳細 dump 失敗は本流に影響させない
+                    detail_entry = {
+                        "frame_idx": fi, "t_sec": t_sec,
+                        "error": str(_detail_err),
+                    }
+                board_log_detail_fp.write(
+                    _json2.dumps(detail_entry, ensure_ascii=False) + "\n"
+                )
+            # prev_confirmed を更新 (次 frame の physics_fix diff 計算用)
+            prev_p1_confirmed = (
+                result.p1.confirmed_board.copy()
+                if result.p1.confirmed_board is not None else prev_p1_confirmed
+            )
+            prev_p2_confirmed = (
+                result.p2.confirmed_board.copy()
+                if result.p2.confirmed_board is not None else prev_p2_confirmed
+            )
         # 描画用エイリアス
         last_p1_board = last_p1_eval_board
         last_p2_board = last_p2_eval_board
@@ -472,6 +858,9 @@ def main() -> int:
     if board_log_fp is not None:
         board_log_fp.close()
         print(f"[done] board log saved")
+    if board_log_detail_fp is not None:
+        board_log_detail_fp.close()
+        print(f"[done] detailed board log saved → {args.dump_board_log_detailed}")
     print(f"[done] {args.output}")
     return 0
 

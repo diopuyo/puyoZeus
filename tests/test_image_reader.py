@@ -27,6 +27,8 @@ from src.board import (
 )
 from src.image_reader import (
     CELL_SAMPLE_RATIO,
+    BG_EXTREME_THRESHOLD_DEFAULT,
+    BG_EXTREME_THRESHOLD_PRE_CAPTURE,
     BoardRegion,
     ColorClassifier,
     HsvRange,
@@ -430,3 +432,145 @@ class TestImageReader:
         assert board.get(0, 0) == COLOR_UNKNOWN
         # 他の列は row 1 が空なので row 0 も空
         assert board.get(0, 1) == COLOR_EMPTY
+
+
+# ============================
+# I1 対応 A: bg_fp 採取前保護モードテスト
+# ============================
+
+
+class TestPreCaptureModeI1A:
+    """set_pre_capture_mode の挙動を検証するテスト群。"""
+
+    def test_pre_capture_mode_default_is_false(self) -> None:
+        """ImageReader のデフォルト pre_capture_mode は False。"""
+        reader = ImageReader()
+        assert reader._pre_capture_mode is False
+
+    def test_set_pre_capture_mode_true(self) -> None:
+        """set_pre_capture_mode(True) で _pre_capture_mode が True になる。"""
+        reader = ImageReader()
+        reader.set_pre_capture_mode(True)
+        assert reader._pre_capture_mode is True
+
+    def test_set_pre_capture_mode_false(self) -> None:
+        """set_pre_capture_mode(False) で _pre_capture_mode が False に戻る。"""
+        reader = ImageReader()
+        reader.set_pre_capture_mode(True)
+        reader.set_pre_capture_mode(False)
+        assert reader._pre_capture_mode is False
+
+    def test_resolve_tier1_threshold_pre_capture_returns_zero(self) -> None:
+        """pre_capture_mode=True のとき _resolve_tier1_threshold は 0.0 を返す。"""
+        reader = ImageReader()
+        reader.set_pre_capture_mode(True)
+        # 全セル位置で 0.0 (= tier1 スキップ) になることを確認
+        for visible_row in range(12):
+            for col in range(6):
+                threshold = reader._resolve_tier1_threshold(visible_row, col)
+                assert threshold == BG_EXTREME_THRESHOLD_PRE_CAPTURE, (
+                    f"visible_row={visible_row}, col={col}: "
+                    f"expected {BG_EXTREME_THRESHOLD_PRE_CAPTURE}, got {threshold}"
+                )
+
+    def test_resolve_tier1_threshold_normal_mode_returns_default(self) -> None:
+        """pre_capture_mode=False のとき通常の DEFAULT threshold を返す。"""
+        reader = ImageReader()
+        reader.set_pre_capture_mode(False)
+        # 左上エリア外のセル (row=0, col=5) は DEFAULT を返す
+        threshold = reader._resolve_tier1_threshold(0, 5)
+        assert threshold == BG_EXTREME_THRESHOLD_DEFAULT
+
+    def test_pre_capture_mode_overrides_left_upper_threshold(self) -> None:
+        """pre_capture_mode=True は左上エリア (軸 3-b) の threshold も上書きする。
+
+        pre_capture_mode が優先度最高なので、左上エリア (visible_row>=5, col<=1)
+        でも 0.0 を返すことを確認。
+        """
+        reader = ImageReader()
+        reader.set_pre_capture_mode(True)
+        # 左上エリアのセル (visible_row=5, col=0)
+        threshold = reader._resolve_tier1_threshold(5, 0)
+        assert threshold == BG_EXTREME_THRESHOLD_PRE_CAPTURE
+
+
+# ============================
+# 案 P2: use_highlight_override テスト
+# ============================
+
+class TestHighlightOverride:
+    """ImageReader の use_highlight_override 引数テスト。"""
+
+    def test_image_reader_highlight_override_default_false(self) -> None:
+        """案 R3 改 (2026-05-28): 案 P2 撤回により default が False に変更。"""
+        reader = ImageReader()
+        assert reader._use_highlight_override is False
+
+    def test_image_reader_highlight_override_explicit_true(self) -> None:
+        """use_highlight_override=True で明示的に有効化できる (再評価用)。"""
+        reader = ImageReader(use_highlight_override=True)
+        assert reader._use_highlight_override is True
+
+    def test_image_reader_highlight_override_disabled(self) -> None:
+        """use_highlight_override=False で _use_highlight_override が False。"""
+        reader = ImageReader(use_highlight_override=False)
+        assert reader._use_highlight_override is False
+
+
+class TestStaticMaskAndGuard:
+    """T4 StaticBoardMask AND ガード: ImageReader.set_static_mask テスト。"""
+
+    def test_set_static_mask_stores_values(self) -> None:
+        """set_static_mask で _static_mask_p1 / _static_mask_p2 が設定される。"""
+        from src.background_fingerprint import StaticBoardMask
+        reader = ImageReader()
+        bg = np.zeros((720, 384, 3), dtype=np.uint8)
+        m = StaticBoardMask(bg_roi=bg, region_x=0, region_y=0, region_w=384, region_h=720)
+        reader.set_static_mask(m, None)
+        assert reader._static_mask_p1 is m
+        assert reader._static_mask_p2 is None
+
+    def test_set_static_mask_none_clears(self) -> None:
+        """None をセットすると無効化される。"""
+        from src.background_fingerprint import StaticBoardMask
+        reader = ImageReader()
+        bg = np.zeros((720, 384, 3), dtype=np.uint8)
+        m = StaticBoardMask(bg_roi=bg, region_x=0, region_y=0, region_w=384, region_h=720)
+        reader.set_static_mask(m, m)
+        reader.set_static_mask(None, None)
+        assert reader._static_mask_p1 is None
+        assert reader._static_mask_p2 is None
+
+    def test_initial_static_mask_is_none(self) -> None:
+        """初期状態で static_mask は None。"""
+        reader = ImageReader()
+        assert reader._static_mask_p1 is None
+        assert reader._static_mask_p2 is None
+
+    def test_is_empty_static_mask_no_mask(self) -> None:
+        """StaticBoardMask が None の場合は常に False (= 判定スキップ)。"""
+        reader = ImageReader()
+        frame = np.zeros((720, 384, 3), dtype=np.uint8)
+        region = BoardRegion(x=0, y=0, width=384, height=720)
+        hsv = np.zeros((6, 6, 3), dtype=np.float32)
+        result = reader._is_empty_static_mask(frame, region, 0, 0, hsv)
+        assert result is False
+
+    def test_is_empty_static_mask_same_frame(self) -> None:
+        """背景と同じフレームで diff=0 → True (色なし前提)。"""
+        from src.background_fingerprint import StaticBoardMask
+        bg_color = (50, 50, 50)
+        bg = np.full((720, 384, 3), bg_color, dtype=np.uint8)
+        mask = StaticBoardMask(
+            bg_roi=bg, region_x=0, region_y=0, region_w=384, region_h=720,
+        )
+        reader = ImageReader()
+        reader.set_static_mask(mask, None)
+        frame = np.full((720, 384, 3), bg_color, dtype=np.uint8)
+        region = reader._p1_region  # p1 と同一オブジェクト
+        # HSV: 暗色 (彩度 0) → 色なし signal
+        hsv = np.zeros((6, 6, 3), dtype=np.float32)
+        result = reader._is_empty_static_mask(frame, region, 0, 0, hsv)
+        assert result is True
+
+
