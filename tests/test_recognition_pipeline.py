@@ -46,12 +46,19 @@ class _StubImageReader:
     def __init__(self, p1: Board, p2: Board) -> None:
         self._p1 = p1
         self._p2 = p2
+        # skip_tier1 呼び出し記録 (テスト検証用)
+        self.last_skip_tier1_1p: bool = False
+        self.last_skip_tier1_2p: bool = False
 
     def read_both_boards(
         self, frame: np.ndarray,
         p1_roi_offset: tuple[float, float] = (0.0, 0.0),
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
+        skip_tier1_1p: bool = False,
+        skip_tier1_2p: bool = False,
     ) -> tuple[Board, Board]:
+        self.last_skip_tier1_1p = skip_tier1_1p
+        self.last_skip_tier1_2p = skip_tier1_2p
         return self._p1.copy(), self._p2.copy()
 
 
@@ -317,4 +324,141 @@ def test_non_all_clear_does_not_extend_chain_hold() -> None:
     expected_base = t + pipe._chain_hold_per_step_sec * 2
     assert pipe._chain_until_1p == pytest.approx(expected_base)
 
+
+# ============================
+# B1 PiecePersistenceGuard 統合テスト
+# ============================
+
+def _make_pipe_with_persistence(
+    p1: Board, p2: Board,
+    stable_n: int = 2,
+    enable: bool = True,
+) -> RecognitionPipeline:
+    """PiecePersistenceGuard を有効化した pipeline を返す。"""
+    reader = _StubImageReader(p1, p2)
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=stable_n,
+        enable_piece_persistence=enable,
+    )
+
+
+def test_pipeline_piece_persistence_disabled_by_default() -> None:
+    """default OFF で _piece_persistence_1p / 2p が None。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._piece_persistence_1p is None
+    assert pipe._piece_persistence_2p is None
+
+
+def test_pipeline_piece_persistence_enabled_creates_guards() -> None:
+    """enable_piece_persistence=True で guard インスタンスが生成される。"""
+    pipe = _make_pipe_with_persistence(_empty_board(), _empty_board())
+    assert pipe._piece_persistence_1p is not None
+    assert pipe._piece_persistence_2p is not None
+
+
+def test_pipeline_piece_persistence_reset_clears_guards() -> None:
+    """reset() で guard が完全リセットされる。"""
+    from src.board import COLOR_RED
+    p1 = Board()
+    p1.set(12, 0, COLOR_RED)
+    pipe = _make_pipe_with_persistence(p1, _empty_board(), stable_n=2)
+    # STABLE に到達させて保護を登録
+    for i in range(65):  # MATCH_JUST_STARTED_WINDOW を超える
+        pipe.update(i, i * 0.033, _dummy_frame())
+    guard = pipe._piece_persistence_1p
+    assert guard is not None
+    # reset 後は保護がクリアされる
+    pipe.reset()
+    assert len(pipe._piece_persistence_1p._protected) == 0  # type: ignore[union-attr]
+
+
+def test_pipeline_piece_persistence_on_returns_side_result() -> None:
+    """enable=True でも SideResult が正常に返る (= 既存 API 維持)。"""
+    pipe = _make_pipe_with_persistence(_empty_board(), _empty_board(), stable_n=2)
+    res = pipe.update(0, 0.0, _dummy_frame())
+    assert res is not None
+    assert hasattr(res.p1, "confirmed_board")
+    assert hasattr(res.p2, "confirmed_board")
+
+
+# ===== tier1 warmup guard テスト群 =====
+
+
+def _make_pipe_with_tier1_warmup(
+    p1: Board, p2: Board, stable_n: int = 2,
+) -> RecognitionPipeline:
+    """enable_tier1_warmup=True の RecognitionPipeline を構築する。"""
+    reader = _StubImageReader(p1, p2)
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=stable_n,
+        enable_tier1_warmup=True,
+    )
+
+
+def test_pipeline_tier1_warmup_disabled_by_default() -> None:
+    """default OFF で _enable_tier1_warmup が False。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._enable_tier1_warmup is False
+
+
+def test_pipeline_tier1_warmup_enabled_flag() -> None:
+    """enable_tier1_warmup=True で _enable_tier1_warmup が True。"""
+    pipe = _make_pipe_with_tier1_warmup(_empty_board(), _empty_board())
+    assert pipe._enable_tier1_warmup is True
+
+
+def test_pipeline_tier1_warmup_initial_counters_zero() -> None:
+    """初期状態でカウンタが 0。"""
+    pipe = _make_pipe_with_tier1_warmup(_empty_board(), _empty_board())
+    assert pipe._tier1_warmup_remaining_1p == 0
+    assert pipe._tier1_warmup_remaining_2p == 0
+
+
+def test_pipeline_tier1_warmup_resets_on_reset() -> None:
+    """reset() でカウンタが 0 に戻る。"""
+    pipe = _make_pipe_with_tier1_warmup(_empty_board(), _empty_board())
+    pipe._tier1_warmup_remaining_1p = 2
+    pipe._tier1_warmup_remaining_2p = 3
+    pipe.reset()
+    assert pipe._tier1_warmup_remaining_1p == 0
+    assert pipe._tier1_warmup_remaining_2p == 0
+
+
+def test_pipeline_tier1_warmup_disabled_no_skip_tier1() -> None:
+    """enable_tier1_warmup=False ではどの frame も skip_tier1_1p=False で呼ばれる。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_tier1_warmup=False,
+    )
+    pipe.update(0, 0.0, _dummy_frame())
+    assert reader.last_skip_tier1_1p is False
+    assert reader.last_skip_tier1_2p is False
+
+
+def test_pipeline_tier1_warmup_result_is_side_result() -> None:
+    """enable_tier1_warmup=True でも SideResult が正常に返る (= API 維持)。"""
+    pipe = _make_pipe_with_tier1_warmup(_empty_board(), _empty_board(), stable_n=2)
+    res = pipe.update(0, 0.0, _dummy_frame())
+    assert res is not None
+    assert hasattr(res.p1, "confirmed_board")
+    assert hasattr(res.p2, "confirmed_board")
 

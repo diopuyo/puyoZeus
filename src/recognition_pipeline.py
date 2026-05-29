@@ -36,6 +36,7 @@ from src.board_state_machine import (
     BoardState,
     BoardStateMachine,
     DetectorSignals,
+    NON_STABLE_STATES,
     StateContext,
 )
 
@@ -49,6 +50,12 @@ PROB_BOARD_PUBLISH_ON_STABLE: bool = True
 # でフォールバック生成して indicator 計算を継続するか。下流 (phase_e_collect)
 # 側で扱う方が pipeline の単純さを保てるため、本モジュールでは生成しない。
 PROBABILISTIC_FALLBACK_USE_FROM_BOARD: bool = True
+
+# NON-STABLE → STABLE 遷移後、tier1 (bg_fp NCC による無条件 EMPTY 化) を
+# スキップする frame 数。ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ。
+# v95m15 分析: fi=540-565 で tier1 が着地直後の cell を誤 EMPTY 化 →
+# false tsumo_fall 遷移 5 回連発 → multi-vote リセット → STABLE 復帰 0.4 秒遅延。
+TIER1_WARMUP_FRAMES: int = 3
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -117,6 +124,10 @@ class SideResult:
     # fail-silent 自動検知用。eval スクリプトが p_to_e_count を集計する。
     # backwards compat のため default None。
     erasure_alerts: list[tuple[int, int]] | None = None
+    # C2 StableTransitionMonitor: STABLE→STABLE 間で物理事由なき大幅ぷよ減少 alert。
+    # [(frame_idx, t_sec, prev_count, curr_count, drop), ...] の形式。
+    # backwards compat のため default None。
+    transition_drop_alerts: list[tuple] | None = None
 
 
 @dataclass(frozen=True)
@@ -273,6 +284,8 @@ class RecognitionPipeline:
         online_hsv: OnlineHsvCalibrator | None = None,
         enable_warmup_guard: bool = False,
         bg_fp_force_max_puyo: int | None = None,
+        enable_piece_persistence: bool = False,
+        enable_tier1_warmup: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -460,6 +473,32 @@ class RecognitionPipeline:
         self._erasure_monitor_2p: _PEM = _PEM()
         # T4: 静的背景マスク (per-video 保存用ディレクトリ)
         self._static_mask_captured: bool = False
+        # C2 StableTransitionMonitor: STABLE→STABLE 間の物理事由なきぷよ減少検知。
+        # 1P/2P 独立 instance。試合切替時は reset() で消去。
+        from src.stable_transition_monitor import StableTransitionMonitor as _STM
+        self._transition_monitor_1p: _STM = _STM()
+        self._transition_monitor_2p: _STM = _STM()
+        # B1 PiecePersistenceGuard: STABLE 中 cell 色の物理保護ガード。
+        # default False で既存挙動を維持 (backwards compat)。
+        # ⚠️ 2026-05-28 user 目視で v89m7/v40m7/v30_5min 等にて
+        #   「連鎖中エフェクトをぷよと誤認 / お邪魔認識なし / 序盤誤認多い」 確定で撤回。
+        #   PuyoErasureMonitor の「色→空」 検知では捕捉できない blind spot (= NON-STABLE
+        #   → STABLE 遷移直後の誤確定値が物理保護で固定化)。
+        #   True にしてはいけない。実装は参照用に残置。
+        from src.piece_persistence_guard import PiecePersistenceGuard as _PPG
+        self._piece_persistence_1p: "_PPG | None" = (
+            _PPG() if enable_piece_persistence else None
+        )
+        self._piece_persistence_2p: "_PPG | None" = (
+            _PPG() if enable_piece_persistence else None
+        )
+        # NON-STABLE → STABLE 遷移直後の tier1 warmup guard。
+        # True で TIER1_WARMUP_FRAMES の間 tier1 (bg_fp NCC 無条件 EMPTY 化) をスキップ。
+        # default False で既存テスト全て pass を維持 (backwards compat)。
+        # v95m15: tier1 が着地直後 cell を誤 EMPTY 化 → false tsumo_fall 5 回連発の対策。
+        self._enable_tier1_warmup: bool = bool(enable_tier1_warmup)
+        self._tier1_warmup_remaining_1p: int = 0
+        self._tier1_warmup_remaining_2p: int = 0
 
     @staticmethod
     def _build_hybrid_reader(
@@ -608,6 +647,10 @@ class RecognitionPipeline:
         enable_warmup_guard: bool = False,
         bg_fp_force_max_puyo: int | None = None,
         patch_ncc_threshold: float | None = None,
+        # ⚠️ B1 撤回済 (2026-05-28): enable_piece_persistence は常に False のまま。
+        # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
+        enable_piece_persistence: bool = False,
+        enable_tier1_warmup: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -732,6 +775,8 @@ class RecognitionPipeline:
             online_hsv=online_hsv,
             enable_warmup_guard=enable_warmup_guard,
             bg_fp_force_max_puyo=bg_fp_force_max_puyo,
+            enable_piece_persistence=enable_piece_persistence,
+            enable_tier1_warmup=enable_tier1_warmup,
         )
 
     # ------------------------------------------------------------------
@@ -807,6 +852,17 @@ class RecognitionPipeline:
         self._static_mask_captured = False
         if hasattr(self._reader, "set_static_mask"):
             self._reader.set_static_mask(None, None)
+        # C2 StableTransitionMonitor もリセット
+        self._transition_monitor_1p.reset()
+        self._transition_monitor_2p.reset()
+        # B1 PiecePersistenceGuard: 試合切替時に保護リセット
+        if self._piece_persistence_1p is not None:
+            self._piece_persistence_1p.reset()
+        if self._piece_persistence_2p is not None:
+            self._piece_persistence_2p.reset()
+        # tier1 warmup guard リセット
+        self._tier1_warmup_remaining_1p = 0
+        self._tier1_warmup_remaining_2p = 0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -978,7 +1034,22 @@ class RecognitionPipeline:
         # (= HSV-only 経路に強制)。 bg_fp 採取後は通常モードに戻す。
         if hasattr(self._reader, "set_pre_capture_mode"):
             self._reader.set_pre_capture_mode(not self._bg_fp_captured)
-        cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(frame)
+        # tier1 warmup guard: NON-STABLE → STABLE 遷移直後 TIER1_WARMUP_FRAMES は
+        # tier1 をスキップして着地直後の cell が誤 EMPTY 化されるのを防ぐ。
+        # カウンタは _step_side の state 遷移後に更新するため、 ここでは現在値を読む。
+        _skip_t1_1p = (
+            self._enable_tier1_warmup
+            and self._tier1_warmup_remaining_1p > 0
+        )
+        _skip_t1_2p = (
+            self._enable_tier1_warmup
+            and self._tier1_warmup_remaining_2p > 0
+        )
+        cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(
+            frame,
+            skip_tier1_1p=_skip_t1_1p,
+            skip_tier1_2p=_skip_t1_2p,
+        )
 
         # 背景 FP 自動採取 (Phase C-5: robust 化):
         # 試合 active 開始から 5 frame 経過後、CNN 盤面が puyo 0 個 (= 真の空盤面)
@@ -1250,6 +1321,10 @@ class RecognitionPipeline:
             self._constraint_valid_1p = False
 
         # 5. side ごとに state machine + 推論 + drift
+        # tier1 warmup guard: _step_side 呼び出し前の state を保存
+        # (= NON-STABLE → STABLE 遷移の検知に必要)。
+        _pre_state_1p = self._sm_1p.context.state
+        _pre_state_2p = self._sm_2p.context.state
         p1 = self._step_side(
             "1P", frame_idx, time_sec, is_active, cnn_1p,
             chain_ev_1p, score_d_2p_for_ojama=score_d_2p,
@@ -1272,6 +1347,21 @@ class RecognitionPipeline:
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
         )
+        # tier1 warmup guard: _step_side 後にカウンタを更新。
+        # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
+        # p1.state / p2.state = _step_side が返した現フレームの state。
+        if self._enable_tier1_warmup:
+            self._tier1_warmup_remaining_1p = _update_tier1_warmup_counter(
+                prev_state=_pre_state_1p,
+                p_state=p1.state,
+                remaining=self._tier1_warmup_remaining_1p,
+            )
+            self._tier1_warmup_remaining_2p = _update_tier1_warmup_counter(
+                prev_state=_pre_state_2p,
+                p_state=p2.state,
+                remaining=self._tier1_warmup_remaining_2p,
+            )
+
         # cycle 71d (案 D8): VideoChainTracker 次 frame 入力用に confirmed_board を保存.
         # None (= STABLE 以外) なら前回値を維持し、 直近の安定 board を提供し続ける.
         if p1.confirmed_board is not None:
@@ -2475,6 +2565,35 @@ class RecognitionPipeline:
             (r, c) for (fi, r, c) in erasure_mon.alerts
             if fi == frame_idx
         ]
+        # C2 StableTransitionMonitor: STABLE 遷移イベントを通知。
+        # STABLE→NON-STABLE 遷移: on_stable_end で board をスナップショット。
+        # NON-STABLE 中の連鎖 / ojama イベント: on_non_stable_event で記録。
+        # NON-STABLE→STABLE 遷移: on_stable_start でぷよ数比較。
+        transition_mon = (
+            self._transition_monitor_1p if side == "1P"
+            else self._transition_monitor_2p
+        )
+        transition_drop_alerts = _update_transition_monitor(
+            monitor=transition_mon,
+            prev_state=prev_state,
+            curr_state=ctx.state,
+            frame_idx=frame_idx,
+            time_sec=time_sec,
+            chain_event=chain_event,
+            confirmed_board=published_confirmed,
+        )
+        # B1 PiecePersistenceGuard: STABLE 中 cell 色の物理保護。
+        # NON-STABLE → STABLE 遷移: on_non_stable_enter は NON-STABLE 遷移時に呼ぶ。
+        # STABLE 中 confirmed_board 確定後: on_stable_confirmed で保護登録 + guard 適用。
+        published_confirmed = _apply_piece_persistence_guard(
+            guard=(
+                self._piece_persistence_1p if side == "1P"
+                else self._piece_persistence_2p
+            ),
+            prev_state=prev_state,
+            curr_state=ctx.state,
+            published_confirmed=published_confirmed,
+        )
         return SideResult(
             side=side,
             state=ctx.state,
@@ -2489,6 +2608,7 @@ class RecognitionPipeline:
             next_pair=next_pair,
             dnext_pair=dnext_pair,
             erasure_alerts=recent_alerts if recent_alerts else None,
+            transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
         )
 
 
@@ -2670,3 +2790,126 @@ __all__ = [
     "RecognitionPipeline",
     "SideResult",
 ]
+
+
+# ============================
+# C2: StableTransitionMonitor 呼出ヘルパー (= クラス外 stateless 関数)
+# ============================
+
+def _update_transition_monitor(
+    monitor: "object",  # StableTransitionMonitor (型循環回避のため文字列)
+    prev_state: "BoardState",
+    curr_state: "BoardState",
+    frame_idx: int,
+    time_sec: float,
+    chain_event: "ChainEvent | None",
+    confirmed_board: "Board | None",
+) -> list[tuple]:
+    """STABLE 遷移を StableTransitionMonitor に通知し、 alert リストを返す。
+
+    遷移パターン:
+        STABLE → NON-STABLE: on_stable_end (= board をスナップショット)
+        NON-STABLE 中の chain_event: on_non_stable_event("chain_start")
+        NON-STABLE → STABLE: on_stable_start (= ぷよ数比較 → alert)
+
+    Args:
+        monitor: StableTransitionMonitor インスタンス。
+        prev_state: 前 frame の BoardState。
+        curr_state: 現 frame の BoardState (= state machine 更新後)。
+        frame_idx: 現 frame の index。
+        time_sec: 現 frame の時刻 (秒)。
+        chain_event: 現 frame で検出された ChainEvent (= None なら無し)。
+        confirmed_board: 現 frame の confirmed_board (STABLE 時のみ非 None)。
+
+    Returns:
+        alert の tuple リスト。 通常は空。
+    """
+    alerts: list[tuple] = []
+    # STABLE → NON-STABLE 遷移
+    if prev_state == BoardState.STABLE and curr_state != BoardState.STABLE:
+        if confirmed_board is not None:
+            monitor.on_stable_end(frame_idx, confirmed_board)
+        elif hasattr(monitor, "_last_stable_board") and monitor._last_stable_board is not None:
+            # confirmed_board が None でも既存スナップショットを維持 (= 上書きしない)
+            pass
+    # NON-STABLE 中の chain イベントを記録
+    if curr_state != BoardState.STABLE and chain_event is not None:
+        monitor.on_non_stable_event("chain_start", frame_idx, time_sec)
+    # NON-STABLE → STABLE 遷移
+    if prev_state != BoardState.STABLE and curr_state == BoardState.STABLE:
+        if confirmed_board is not None:
+            drop_alerts = monitor.on_stable_start(frame_idx, time_sec, confirmed_board)
+            for a in drop_alerts:
+                alerts.append(a.to_tuple())
+    return alerts
+
+
+def _update_tier1_warmup_counter(
+    prev_state: "BoardState",
+    p_state: "BoardState",
+    remaining: int,
+) -> int:
+    """tier1 warmup カウンタを更新して新しい残余 frame 数を返す。
+
+    NON-STABLE → STABLE 遷移を検知したら TIER1_WARMUP_FRAMES をセット。
+    STABLE 継続中はデクリメント (0 未満にはしない)。
+    STABLE 以外への遷移は 0 にリセット (= 次の NON-STABLE→STABLE 待ち)。
+
+    Args:
+        prev_state: 現 frame の _step_side 後の state machine state。
+            ※ update() では _step_side 後に呼ぶため「現フレームの state」 を渡す。
+        p_state: SideResult.state (= _step_side が返した現フレームの state)。
+        remaining: 現在の warmup 残余 frame 数。
+
+    Returns:
+        更新後の warmup 残余 frame 数 (0 以上)。
+    """
+    # NON-STABLE → STABLE 遷移: warmup 開始
+    if (
+        prev_state in NON_STABLE_STATES
+        and p_state == BoardState.STABLE
+    ):
+        return TIER1_WARMUP_FRAMES
+    # STABLE 継続: デクリメント
+    if p_state == BoardState.STABLE and remaining > 0:
+        return remaining - 1
+    # STABLE 以外: リセット
+    if p_state != BoardState.STABLE:
+        return 0
+    return remaining
+
+
+def _apply_piece_persistence_guard(
+    guard: "object | None",  # PiecePersistenceGuard | None (型循環回避)
+    prev_state: "BoardState",
+    curr_state: "BoardState",
+    published_confirmed: "Board | None",
+) -> "Board | None":
+    """B1 PiecePersistenceGuard: 状態遷移に応じてフックを呼び保護後盤面を返す。
+
+    遷移パターン:
+        STABLE → NON-STABLE: on_non_stable_enter (= 保護リセット)
+        STABLE 中 (confirmed_board あり): on_stable_confirmed + guard 適用
+
+    Args:
+        guard: PiecePersistenceGuard インスタンス (None なら無効)。
+        prev_state: 前 frame の BoardState。
+        curr_state: 現 frame の BoardState。
+        published_confirmed: 現 frame の確定盤面 (None なら STABLE 以外)。
+
+    Returns:
+        guard 適用後の confirmed_board。guard=None or confirmed=None ならそのまま。
+    """
+    if guard is None:
+        return published_confirmed
+    # STABLE → NON-STABLE: 保護リセット
+    if (
+        prev_state == BoardState.STABLE
+        and curr_state in NON_STABLE_STATES
+    ):
+        guard.on_non_stable_enter()
+    # STABLE 中で confirmed あり: 保護登録 + guard 適用
+    if curr_state == BoardState.STABLE and published_confirmed is not None:
+        guard.on_stable_confirmed(published_confirmed)
+        return guard.guard(published_confirmed)
+    return published_confirmed

@@ -18,9 +18,12 @@ from src.board import (
     Board,
 )
 from src.recognition_evaluator import (
+    AVG_PUYO_COUNT_CRITICAL_RATIO,
     FrameEntry,
     RecognitionEvaluator,
     SEVERITY_CRITICAL,
+    compute_avg_puyo_count,
+    judge_cycle,
 )
 
 
@@ -470,3 +473,193 @@ class TestErasureAlertsIntegration:
         ev.entries = entries
         report = ev.generate_report()
         assert report["p_to_e_count"] == 0
+
+
+# ============================
+# C1: compute_avg_puyo_count
+# ============================
+
+class TestComputeAvgPuyoCount:
+    def test_all_empty_boards(self) -> None:
+        """全 STABLE フレームが空盤面 → avg = 0。"""
+        entries = [
+            {"frame_idx": i, "t_sec": i / 60.0,
+             "p1_state": "stable", "p2_state": "stable",
+             "p1_confirmed": _make_empty_grid(),
+             "p2_confirmed": _make_empty_grid()}
+            for i in range(5)
+        ]
+        result = compute_avg_puyo_count(entries)
+        assert result["avg_puyo_count_per_stable_frame"] == 0.0
+        assert result["n_stable_frames"] == 5
+
+    def test_known_puyo_count(self) -> None:
+        """1P に 10 個, 2P に 6 個 → 合算 avg = 16.0 / 1 frame = 16.0。"""
+        grid_p1 = _make_grid_with_color(COLOR_RED, 10)
+        grid_p2 = _make_grid_with_color(COLOR_BLUE, 6)
+        entries = [
+            {"frame_idx": 0, "t_sec": 0.0,
+             "p1_state": "stable", "p2_state": "stable",
+             "p1_confirmed": grid_p1, "p2_confirmed": grid_p2}
+        ]
+        result = compute_avg_puyo_count(entries)
+        assert result["avg_puyo_count_per_stable_frame"] == 16.0
+        assert result["n_stable_frames"] == 1
+
+    def test_non_stable_frames_excluded(self) -> None:
+        """non-stable フレームは集計から除外される。"""
+        entries = [
+            {"frame_idx": 0, "t_sec": 0.0,
+             "p1_state": "chain", "p2_state": "chain",
+             "p1_confirmed": None, "p2_confirmed": None},
+            {"frame_idx": 1, "t_sec": 1.0,
+             "p1_state": "stable", "p2_state": "stable",
+             "p1_confirmed": _make_grid_with_color(COLOR_RED, 8),
+             "p2_confirmed": _make_empty_grid()},
+        ]
+        result = compute_avg_puyo_count(entries)
+        assert result["n_stable_frames"] == 1
+        assert result["avg_puyo_count_per_stable_frame"] == 8.0
+
+    def test_no_stable_frames_returns_zero(self) -> None:
+        """STABLE フレームゼロ → avg=0, n=0。"""
+        entries = [
+            {"frame_idx": 0, "t_sec": 0.0,
+             "p1_state": "menu", "p2_state": "menu",
+             "p1_confirmed": None, "p2_confirmed": None}
+        ]
+        result = compute_avg_puyo_count(entries)
+        assert result["avg_puyo_count_per_stable_frame"] == 0.0
+        assert result["n_stable_frames"] == 0
+
+
+# ============================
+# C1: generate_report avg_puyo_count 統合
+# ============================
+
+class TestGenerateReportAvgPuyo:
+    def test_report_includes_avg_puyo_count(self) -> None:
+        """generate_report() の summary に avg_puyo_count_per_stable_frame が入る。"""
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            FrameEntry(
+                frame_idx=i, t_sec=i / 60.0,
+                p1_state="stable", p2_state="stable",
+                p1_confirmed=_make_grid_with_color(COLOR_RED, 10),
+                p2_confirmed=_make_grid_with_color(COLOR_BLUE, 5),
+            )
+            for i in range(3)
+        ]
+        report = ev.generate_report()
+        summary = report["summary"]
+        assert "avg_puyo_count_per_stable_frame" in summary
+        assert summary["avg_puyo_count_per_stable_frame"] == 15.0
+        assert summary["n_stable_frames"] == 3
+
+    def test_report_reject_on_low_avg_puyo_ratio(self) -> None:
+        """baseline_avg_puyo_count 指定時に ratio < 0.85 → verdict = REJECT。"""
+        ev = RecognitionEvaluator()
+        # 盤面に 5 個だけ → avg = 5.0
+        ev.entries = [
+            FrameEntry(
+                frame_idx=i, t_sec=i / 60.0,
+                p1_state="stable", p2_state="stable",
+                p1_confirmed=_make_grid_with_color(COLOR_RED, 5),
+                p2_confirmed=_make_empty_grid(),
+            )
+            for i in range(5)
+        ]
+        # baseline = 20 → ratio = 5/20 = 0.25 < 0.85
+        report = ev.generate_report(baseline_avg_puyo_count=20.0)
+        assert report["verdict"] == "REJECT"
+        summary = report["summary"]
+        assert summary["avg_puyo_count_ratio"] is not None
+        assert summary["avg_puyo_count_ratio"] < AVG_PUYO_COUNT_CRITICAL_RATIO
+
+    def test_report_no_reject_on_high_avg_puyo_ratio(self) -> None:
+        """ratio >= 0.85 なら avg_puyo 起因の REJECT はなし。"""
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            FrameEntry(
+                frame_idx=i, t_sec=i / 60.0,
+                p1_state="stable", p2_state="stable",
+                p1_confirmed=_make_grid_with_color(COLOR_RED, 18),
+                p2_confirmed=_make_empty_grid(),
+            )
+            for i in range(3)
+        ]
+        # baseline = 20 → ratio = 18/20 = 0.90 >= 0.85
+        report = ev.generate_report(baseline_avg_puyo_count=20.0)
+        # critical が少なければ REJECT にならない
+        assert report["verdict"] != "REJECT"
+
+    def test_report_no_baseline_skips_ratio_check(self) -> None:
+        """baseline_avg_puyo_count=None → ratio check skip、 avg_puyo_ratio=None。"""
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            FrameEntry(
+                frame_idx=0, t_sec=0.0,
+                p1_state="stable", p2_state="stable",
+                p1_confirmed=_make_empty_grid(),
+                p2_confirmed=_make_empty_grid(),
+            )
+        ]
+        report = ev.generate_report()
+        assert report["summary"]["avg_puyo_count_ratio"] is None
+
+
+# ============================
+# C3: judge_cycle
+# ============================
+
+class TestJudgeCycle:
+    def _make_stats(
+        self,
+        critical: int = 0,
+        p_to_e: int = 0,
+        avg_puyo: float = 20.0,
+    ) -> dict:
+        return {
+            "summary": {
+                "critical": critical,
+                "avg_puyo_count_per_stable_frame": avg_puyo,
+            },
+            "p_to_e_count": p_to_e,
+        }
+
+    def test_auto_accept_all_good(self) -> None:
+        """全条件クリア → AUTO_ACCEPT_PROVISIONAL。"""
+        base = self._make_stats(critical=5, p_to_e=10, avg_puyo=20.0)
+        cand = self._make_stats(critical=5, p_to_e=9, avg_puyo=19.0)
+        assert judge_cycle(base, cand) == "AUTO_ACCEPT_PROVISIONAL"
+
+    def test_auto_reject_low_avg_puyo(self) -> None:
+        """avg_puyo_ratio < 0.85 → AUTO_REJECT。"""
+        base = self._make_stats(avg_puyo=20.0)
+        cand = self._make_stats(avg_puyo=10.0)  # ratio = 0.5
+        assert judge_cycle(base, cand) == "AUTO_REJECT"
+
+    def test_auto_reject_critical_surge(self) -> None:
+        """critical > baseline × 1.10 → AUTO_REJECT。"""
+        base = self._make_stats(critical=100)
+        cand = self._make_stats(critical=120, avg_puyo=20.0)  # +20% > +10%
+        assert judge_cycle(base, cand) == "AUTO_REJECT"
+
+    def test_auto_reject_p_to_e_surge(self) -> None:
+        """p_to_e > baseline × 1.20 → AUTO_REJECT。"""
+        base = self._make_stats(p_to_e=100, avg_puyo=20.0)
+        cand = self._make_stats(p_to_e=130, avg_puyo=19.0)  # +30% > +20%
+        assert judge_cycle(base, cand) == "AUTO_REJECT"
+
+    def test_needs_review_critical_slightly_increased(self) -> None:
+        """critical が baseline+3 (= ACCEPT_DELTA=2 超) かつ REJECT 閾値未満で NEEDS_REVIEW。
+
+        REJECT 判定 = baseline_critical × 1.10 超。
+        baseline=100 なら REJECT 閾値 = 110、 ACCEPT 上限 = 102。
+        critical=105 は 102 超かつ 110 未満 → NEEDS_REVIEW。
+        """
+        base = self._make_stats(critical=100, avg_puyo=20.0)
+        # +5 > ACCEPT_DELTA (2)、 かつ < REJECT (100 × 1.10 = 110)
+        cand = self._make_stats(critical=105, avg_puyo=19.5)
+        result = judge_cycle(base, cand)
+        assert result == "NEEDS_REVIEW"

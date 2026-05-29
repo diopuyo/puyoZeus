@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -128,6 +128,21 @@ OJAMA_GLOBAL_SCARCITY_MIN_FRAMES: int = 100  # 最低 100 STABLE frame で発火
 STATIC_COLOR_FLICKER_WARNING_THRESHOLD: int = 50  # 動画全体で 50 件以上 = WARNING
 STATIC_COLOR_FLICKER_CRITICAL_THRESHOLD: int = 200  # 動画全体で 200 件以上 = CRITICAL
 STATIC_COLOR_FLICKER_MIN_FRAMES: int = 30  # 最低 30 STABLE frame で発火
+
+# C1 (Phase 1 = 2026-05-28): avg_puyo_count_per_stable_frame baseline 比閾値.
+# STABLE 確定盤面の平均ぷよ数 (1P+2P 合算) が baseline 比 85% 未満なら
+# 「ぷよを消す経路の fail-silent」 (= puyo→empty 大量誤認) を検知して REJECT。
+# cycle 56_v2 で confirmed puyo 数が -30% 落ちていたのに mismatch 改善で見過ごした
+# パターンを構造的に catch する。
+AVG_PUYO_COUNT_CRITICAL_RATIO: float = 0.85  # baseline 比 85% 未満で CRITICAL
+
+# C3 (Phase 1 = 2026-05-28): 複合 verdict の critical 悪化許容幅。
+# baseline 比 +10% 以内の critical 増加は NEEDS_REVIEW、 +10% 超は AUTO_REJECT。
+JUDGE_CYCLE_CRITICAL_REJECT_RATIO: float = 1.10
+# AUTO_ACCEPT_PROVISIONAL とするための critical 許容上限 (= baseline + 2 件以内)
+JUDGE_CYCLE_CRITICAL_ACCEPT_DELTA: int = 2
+# p_to_e_count が baseline 比 +20% かつ > 0 なら AUTO_REJECT
+JUDGE_CYCLE_P_TO_E_REJECT_RATIO: float = 1.20
 
 
 # ============================
@@ -927,8 +942,17 @@ class RecognitionEvaluator:
             "total": p1_total + p2_total,
         }
 
-    def generate_report(self) -> dict[str, Any]:
-        """評価サマリレポートを生成 (= 採否判定材料)."""
+    def generate_report(
+        self,
+        baseline_avg_puyo_count: float | None = None,
+    ) -> dict[str, Any]:
+        """評価サマリレポートを生成 (= 採否判定材料).
+
+        Args:
+            baseline_avg_puyo_count: baseline の avg_puyo_count_per_stable_frame。
+                指定時は ratio check を行い、 0.85 未満で CRITICAL アラートを追加。
+                backwards compat のため optional (= None なら ratio check skip)。
+        """
         violations = self.evaluate_all()
         # メトリクス別集計
         by_metric: dict[str, list[Violation]] = {}
@@ -940,12 +964,24 @@ class RecognitionEvaluator:
         # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」遷移 alert 集計
         erasure_counts = self.count_erasure_alerts()
         p_to_e_count = erasure_counts["total"]
+        # C1: avg_puyo_count 集計 (= baseline 比チェック)
+        avg_puyo_stats = compute_avg_puyo_count(
+            [e.__dict__ for e in self.entries]
+        )
+        avg_puyo = avg_puyo_stats["avg_puyo_count_per_stable_frame"]
+        n_stable = avg_puyo_stats["n_stable_frames"]
+        avg_puyo_ratio: float | None = None
+        if baseline_avg_puyo_count is not None and baseline_avg_puyo_count > 0:
+            avg_puyo_ratio = avg_puyo / baseline_avg_puyo_count
         # 採否判定: critical が一定数以上 OR 特定メトリクスがある = REJECT
         verdict = "ACCEPT"
         if critical_count >= 20:
             verdict = "REJECT"
         elif critical_count >= 5 or warning_count >= 30:
             verdict = "REVIEW"
+        # C1: ratio チェックで REJECT 追加 (= baseline 指定時のみ)
+        if avg_puyo_ratio is not None and avg_puyo_ratio < AVG_PUYO_COUNT_CRITICAL_RATIO:
+            verdict = "REJECT"
         return {
             "total_frames": len(self.entries),
             "violations": [v.to_dict() for v in violations],
@@ -961,6 +997,10 @@ class RecognitionEvaluator:
                     m: sum(1 for v in vs if v.severity == SEVERITY_CRITICAL)
                     for m, vs in by_metric.items()
                 },
+                # C1: avg_puyo_count メトリクス (= fail-silent 経路の新規 catch)
+                "avg_puyo_count_per_stable_frame": avg_puyo,
+                "n_stable_frames": n_stable,
+                "avg_puyo_count_ratio": avg_puyo_ratio,
             },
             "verdict": verdict,
             # T4 PuyoErasureMonitor: fail-silent 自動検知カウンタ。
@@ -968,3 +1008,145 @@ class RecognitionEvaluator:
             "p_to_e_count": p_to_e_count,
             "p_to_e_detail": erasure_counts,
         }
+
+
+# ============================
+# C1: モジュールレベル関数 (stateless)
+# ============================
+
+
+def compute_avg_puyo_count(entries: list[dict]) -> dict[str, Any]:
+    """STABLE フレームの平均ぷよ数 (1P+2P 合算) を計算する。
+
+    Args:
+        entries: board_log JSONL を読み込んだ dict リスト。
+            各 dict は FrameEntry.from_jsonable() と同等の構造を持つ。
+            "p1_state" / "p2_state" が "stable" かつ "p1_confirmed" /
+            "p2_confirmed" が非 None のフレームのみを集計対象とする。
+
+    Returns:
+        dict:
+            "avg_puyo_count_per_stable_frame": float  # 1P+2P 合算 STABLE 平均ぷよ数
+            "n_stable_frames": int  # 集計対象フレーム数 (1P STABLE OR 2P STABLE)
+            "total_puyo_sum": int   # 合計ぷよ数 (デバッグ用)
+
+    Note:
+        COLOR_EMPTY (0) と COLOR_UNKNOWN (10) 以外のすべての色を「ぷよあり」 として
+        カウントする (= COLOR_OJAMA=9 も含む)。
+    """
+    total_sum: int = 0
+    n_stable: int = 0
+    for e in entries:
+        p1_state = str(e.get("p1_state", ""))
+        p2_state = str(e.get("p2_state", ""))
+        p1_grid = e.get("p1_confirmed")
+        p2_grid = e.get("p2_confirmed")
+        frame_count = _count_puyo_in_grids(p1_state, p1_grid, p2_state, p2_grid)
+        if frame_count is not None:
+            total_sum += frame_count
+            n_stable += 1
+    avg = total_sum / n_stable if n_stable > 0 else 0.0
+    return {
+        "avg_puyo_count_per_stable_frame": avg,
+        "n_stable_frames": n_stable,
+        "total_puyo_sum": total_sum,
+    }
+
+
+def _count_puyo_in_grids(
+    p1_state: str,
+    p1_grid: list[list[int]] | None,
+    p2_state: str,
+    p2_grid: list[list[int]] | None,
+) -> int | None:
+    """1P + 2P の STABLE ぷよ数を返す。両方 non-STABLE なら None。"""
+    total = 0
+    has_stable = False
+    if p1_state == "stable" and p1_grid is not None:
+        total += _count_grid_puyos(p1_grid)
+        has_stable = True
+    if p2_state == "stable" and p2_grid is not None:
+        total += _count_grid_puyos(p2_grid)
+        has_stable = True
+    return total if has_stable else None
+
+
+def _count_grid_puyos(grid: list[list[int]]) -> int:
+    """grid (list[list[int]]) の非 EMPTY・非 UNKNOWN cell 数を返す。"""
+    count = 0
+    for row in grid:
+        for cell in row:
+            if int(cell) not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                count += 1
+    return count
+
+
+# ============================
+# C3: 複合 verdict ロジック (module-level export)
+# ============================
+
+
+def judge_cycle(
+    baseline_stats: dict,
+    candidate_stats: dict,
+) -> Literal["AUTO_ACCEPT_PROVISIONAL", "AUTO_REJECT", "NEEDS_REVIEW"]:
+    """cycle 採否の複合 verdict を返す。
+
+    評価ロジック:
+        AUTO_REJECT: 以下の 1 つでも該当
+            1. avg_puyo_count_ratio < 0.85
+            2. p_to_e_count > 0 かつ baseline 比 +20% 以上
+            3. critical > baseline_critical × 1.10
+
+        AUTO_ACCEPT_PROVISIONAL: 以下を全て満たす
+            1. critical <= baseline_critical + 2
+            2. avg_puyo_count_ratio >= 0.85 (or baseline 未指定)
+            3. p_to_e_count <= baseline p_to_e (増加なし)
+            4. transition_drop_alerts 増加なし (or 未提供)
+
+        NEEDS_REVIEW: それ以外
+
+    Args:
+        baseline_stats: baseline の generate_report() 出力 dict。
+        candidate_stats: candidate cycle の generate_report() 出力 dict。
+
+    Returns:
+        "AUTO_ACCEPT_PROVISIONAL" / "AUTO_REJECT" / "NEEDS_REVIEW"
+    """
+    base_critical = int(baseline_stats.get("summary", {}).get("critical", 0))
+    cand_critical = int(candidate_stats.get("summary", {}).get("critical", 0))
+    base_p2e = int(baseline_stats.get("p_to_e_count", 0))
+    cand_p2e = int(candidate_stats.get("p_to_e_count", 0))
+    base_avg = baseline_stats.get("summary", {}).get(
+        "avg_puyo_count_per_stable_frame", None
+    )
+    cand_avg = candidate_stats.get("summary", {}).get(
+        "avg_puyo_count_per_stable_frame", None
+    )
+    base_drops = baseline_stats.get("transition_drop_alert_count", None)
+    cand_drops = candidate_stats.get("transition_drop_alert_count", None)
+
+    # --- AUTO_REJECT 判定 ---
+    if base_avg is not None and cand_avg is not None and base_avg > 0:
+        ratio = cand_avg / base_avg
+        if ratio < AVG_PUYO_COUNT_CRITICAL_RATIO:
+            return "AUTO_REJECT"
+    if cand_p2e > 0 and base_p2e > 0:
+        if cand_p2e > base_p2e * JUDGE_CYCLE_P_TO_E_REJECT_RATIO:
+            return "AUTO_REJECT"
+    if base_critical > 0 and cand_critical > base_critical * JUDGE_CYCLE_CRITICAL_REJECT_RATIO:
+        return "AUTO_REJECT"
+
+    # --- AUTO_ACCEPT_PROVISIONAL 判定 ---
+    critical_ok = cand_critical <= base_critical + JUDGE_CYCLE_CRITICAL_ACCEPT_DELTA
+    ratio_ok = True
+    if base_avg is not None and cand_avg is not None and base_avg > 0:
+        ratio_ok = (cand_avg / base_avg) >= AVG_PUYO_COUNT_CRITICAL_RATIO
+    p2e_ok = cand_p2e <= base_p2e
+    drops_ok = True
+    if base_drops is not None and cand_drops is not None:
+        drops_ok = cand_drops <= base_drops
+    if critical_ok and ratio_ok and p2e_ok and drops_ok:
+        return "AUTO_ACCEPT_PROVISIONAL"
+
+    return "NEEDS_REVIEW"
