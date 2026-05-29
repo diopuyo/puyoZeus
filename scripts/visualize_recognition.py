@@ -615,6 +615,20 @@ def main() -> int:
              "background_fingerprint.py の PATCH_NCC_EMPTY_THRESHOLD = 0.92)。 "
              "NCC sweep 用 (候補: 0.85, 0.88, 0.90, 0.92)。",
     )
+    parser.add_argument(
+        "--enable-piece-persistence",
+        action="store_true",
+        default=False,
+        help="B1 PiecePersistenceGuard を有効化 (= STABLE 中 cell 色保護、 散発色ブレ削減)。",
+    )
+    parser.add_argument(
+        "--enable-tier1-warmup",
+        action="store_true",
+        default=False,
+        help="tier1 warmup guard を有効化 (= NON-STABLE → STABLE 遷移直後 "
+             f"TIER1_WARMUP_FRAMES={3} frame 間 tier1 を skip し、"
+             "ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -669,6 +683,10 @@ def main() -> int:
         bg_fp_force_max_puyo=args.bg_fp_force_max_puyo,
         # NCC sweep 用 (2026-05-28): --patch-ncc-threshold で閾値上書き
         patch_ncc_threshold=args.patch_ncc_threshold,
+        # B1 PiecePersistenceGuard (2026-05-28): --enable-piece-persistence
+        enable_piece_persistence=args.enable_piece_persistence,
+        # tier1 warmup guard (2026-05-28): --enable-tier1-warmup
+        enable_tier1_warmup=args.enable_tier1_warmup,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -681,6 +699,13 @@ def main() -> int:
         print(f"[viz] puyo_profile video_id={_vid_id} (R3改: per-video profile 自動ロード)")
     if args.enable_warmup_guard:
         print("[viz] enable_warmup_guard=ON (B1: STABLE 直後 confirmed 凍結)")
+    if args.enable_piece_persistence:
+        print("[viz] enable_piece_persistence=ON (B1: STABLE 中 cell 色保護 / 散発色ブレ削減)")
+    if args.enable_tier1_warmup:
+        print(
+            "[viz] enable_tier1_warmup=ON "
+            "(NON-STABLE→STABLE 遷移直後 3 frame tier1 skip / 着地直後誤 EMPTY 化防止)"
+        )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化

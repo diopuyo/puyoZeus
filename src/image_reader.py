@@ -914,6 +914,7 @@ class ImageReader:
         frame: np.ndarray,
         region: BoardRegion,
         hsv_full: np.ndarray | None = None,
+        skip_tier1: bool = False,
     ) -> Board:
         """
         フレームから指定領域の盤面を読み取る。
@@ -927,6 +928,10 @@ class ImageReader:
             frame: BGR形式のフレーム画像 (H×W×3 のnumpy配列)。
             region: 読み取る盤面の領域 (可視領域のみ)。
             hsv_full: 事前計算済み HSV 全画像 (省略時は内部で変換)。
+            skip_tier1: True のとき tier1 (bg_fp NCC / 距離による無条件 EMPTY 化)
+                をスキップする。NON-STABLE → STABLE 遷移直後の N frame に使用し、
+                ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ。
+                HSV + CNN の通常判定は走るので背景誤認のリスクは小さい。
 
         Returns:
             Board: 読み取った盤面データ。
@@ -1000,12 +1005,15 @@ class ImageReader:
                         # PatchBackgroundFingerprint の場合は _is_empty_tier1 が NCC 判定。
                         # BackgroundFingerprint の場合は従来の距離閾値比較。
                         # PatchBackgroundFingerprint では cell_at_patch を使う
+                        # skip_tier1=True (NON-STABLE→STABLE 遷移直後) はスキップ:
+                        # ツモ着地直後の cell を誤 EMPTY 化しない (= 失敗教訓遵守)。
+                        # HSV + CNN の通常判定は続行するため背景誤認リスクは小さい。
                         from src.background_fingerprint import PatchBackgroundFingerprint
                         if isinstance(bg_fp, PatchBackgroundFingerprint):
                             bg_cell_for_tier1 = bg_fp.cell_at_patch(visible_row, col)
                         else:
                             bg_cell_for_tier1 = bg_cell
-                        if self._is_empty_tier1(
+                        if not skip_tier1 and self._is_empty_tier1(
                             bg_cell_for_tier1, hsv_patch, cur_fp,
                             visible_row, col,
                         ):
@@ -1185,6 +1193,8 @@ class ImageReader:
         frame: np.ndarray,
         p1_roi_offset: tuple[float, float] = (0.0, 0.0),
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
+        skip_tier1_1p: bool = False,
+        skip_tier1_2p: bool = False,
     ) -> tuple[Board, Board]:
         """
         フレームから1P・2P両方の盤面を読み取る。
@@ -1195,6 +1205,8 @@ class ImageReader:
                 振動検出器が返した dx, dy を渡すと、毎フレーム ROI を補正
                 できる。デフォルト (0, 0) で従来挙動。
             p2_roi_offset: 2P 盤面の ROI 補正シフト (dx, dy) px。
+            skip_tier1_1p: True のとき 1P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
+            skip_tier1_2p: True のとき 2P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
 
         Returns:
             tuple[Board, Board]: (1P盤面, 2P盤面) のタプル。
@@ -1231,8 +1243,8 @@ class ImageReader:
         if (self._bg_fp_for_region(p1_region) is not None
                 or self._bg_fp_for_region(p2_region) is not None):
             hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full)
-        board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full)
+        board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full, skip_tier1=skip_tier1_1p)
+        board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
         return board_1p, board_2p
 
     def debug_frame(

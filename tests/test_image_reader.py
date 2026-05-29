@@ -574,3 +574,46 @@ class TestStaticMaskAndGuard:
         assert result is True
 
 
+# ===== skip_tier1 テスト群 =====
+
+class TestSkipTier1:
+    """read_board / read_both_boards の skip_tier1 引数のテスト。"""
+
+    def test_read_board_skip_tier1_default_is_false(self) -> None:
+        """skip_tier1 のデフォルト値が False であること (= 既存挙動維持)。"""
+        import inspect
+        sig = inspect.signature(ImageReader.read_board)
+        default = sig.parameters["skip_tier1"].default
+        assert default is False
+
+    def test_read_board_skip_tier1_false_returns_board(self) -> None:
+        """skip_tier1=False で Board が正常に返る (= 既存挙動)。"""
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        reader = ImageReader()
+        board = reader.read_board(frame, reader._p1_region, skip_tier1=False)
+        assert board is not None
+
+    def test_read_board_skip_tier1_true_returns_board(self) -> None:
+        """skip_tier1=True でも Board が正常に返る (= tier1 skip は例外を投げない)。"""
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        reader = ImageReader()
+        board = reader.read_board(frame, reader._p1_region, skip_tier1=True)
+        assert board is not None
+
+    def test_read_both_boards_skip_tier1_defaults_false(self) -> None:
+        """read_both_boards の skip_tier1_1p / skip_tier1_2p デフォルトが False。"""
+        import inspect
+        sig = inspect.signature(ImageReader.read_both_boards)
+        assert sig.parameters["skip_tier1_1p"].default is False
+        assert sig.parameters["skip_tier1_2p"].default is False
+
+    def test_read_both_boards_skip_tier1_returns_tuple(self) -> None:
+        """skip_tier1_1p=True, skip_tier1_2p=True でも (Board, Board) が返る。"""
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        reader = ImageReader()
+        result = reader.read_both_boards(
+            frame, skip_tier1_1p=True, skip_tier1_2p=True,
+        )
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+

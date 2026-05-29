@@ -153,6 +153,46 @@ cycle を採用する前に以下の全てが NG でないことを確認する�
   - mismatch/replace が改善していても per_col_unknown_rate が CRITICAL なら FAIL
 - テスト: `tests/test_i1_metrics.py` (17 件、 必須 v89/v40 シナリオ含む)
 
+### 4.2-quater Phase 1 評価基盤強化メトリクス (2026-05-28 確定)
+
+**C1: `avg_puyo_count_per_stable_frame`** — STABLE 確定盤面の 1P+2P 合算平均ぷよ数。
+- 実装: `src/recognition_evaluator.py` の `compute_avg_puyo_count()` (module-level)
+- `generate_report(baseline_avg_puyo_count=X)` で baseline 比 check 有効化
+- **baseline 比 < 0.85 → AUTO_REJECT** (= puyo→empty fail-silent の構造的 catch)
+- 定数: `AVG_PUYO_COUNT_CRITICAL_RATIO = 0.85`
+
+**baseline 値 (= patch_fp 採用、 main HEAD `ea505f2` / commit `b42a0c9`):**
+
+| 動画 | avg_puyo_count | n_stable_frames |
+|---|---|---|
+| v89m7 | 40.32 | 2958 |
+| v30_match11 | 33.12 | 2575 |
+| v30_5min | 35.07 | 2120 |
+| v97_match11 | 27.80 | 2755 |
+| v29m2 | 54.08 | 3536 |
+| v40m7 | 48.62 | 3078 |
+| v51m2 | 41.49 | 2713 |
+| v57m2 | 22.17 | 2493 |
+| v70m2 | 34.76 | 2824 |
+| v89m3 | 37.44 | 2059 |
+| v95m15 | 15.56 | 2519 |
+| v97m11 | 27.80 | 2755 |
+| **12 動画加重平均** | **35.67** | **32385** |
+
+- 今後の cycle で avg_puyo_count が **35.67 × 0.85 = 30.32 未満** なら REJECT
+- compute コマンド: `compute_avg_puyo_count(entries)` に board_log JSONL エントリを渡す
+
+**C2: `StableTransitionMonitor`** — STABLE→STABLE 間の物理事由なきぷよ大幅減少検知。
+- 実装: `src/stable_transition_monitor.py` (新規)
+- `RecognitionPipeline` に統合済: `_transition_monitor_1p/2p`
+- `SideResult.transition_drop_alerts` に alert tuple リストを格納 (backwards compat: default None)
+- 定数: `STABLE_TRANSITION_DROP_THRESHOLD = 2` (= 1 ツモ = 2 cell 以内は正常)
+
+**C3: `judge_cycle()`** — 複合 verdict ロジック。
+- 実装: `src/recognition_evaluator.py` の module-level 関数 `judge_cycle(baseline_stats, candidate_stats)`
+- 戻り値: `"AUTO_ACCEPT_PROVISIONAL"` / `"AUTO_REJECT"` / `"NEEDS_REVIEW"`
+- AUTO_REJECT 条件: avg_puyo_ratio < 0.85 OR p_to_e +20% 超 OR critical +10% 超
+- テスト: `tests/test_recognition_evaluator.py` に新規 TestJudgeCycle / TestComputeAvgPuyoCount 等追加
 
 ### 4.3 動画品質依存度を見る
 - 高画質 (v97) と低画質 (v89m3) の `constraint_replaced` 比 = 動画品質依存度
