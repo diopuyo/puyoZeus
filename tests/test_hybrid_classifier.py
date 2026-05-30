@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from src.board import (
-    COLOR_BLUE, COLOR_EMPTY, COLOR_RED, COLOR_YELLOW,
+    COLOR_BLUE, COLOR_EMPTY, COLOR_RED,
 )
 from src.hybrid_classifier import (
     DEFAULT_CNN_OVERRIDE_PROB, HybridClassifier,
