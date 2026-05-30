@@ -19,8 +19,10 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime
 import json
+import multiprocessing as _mp
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -165,6 +167,10 @@ class VideoStats:
     # STABLE フレームの 1P+2P 合算ぷよ数合計と frame 数
     _puyo_count_sum: int = 0
     _puyo_count_n_stable: int = 0
+    # 並列ワーカが収集した不一致 cell リスト (後方互換のため default=[])
+    # 逐次モードでは空リスト。並列モードではワーカ内で収集した値が入り、
+    # 親プロセスで各動画分を統合する。pickle 可能な plain dict リスト。
+    _local_disagreements: list = field(default_factory=list, repr=False, compare=False)
 
 
 # ============================
@@ -411,6 +417,41 @@ def _process_video(
         f"total={stats.total_cells} 合意率={rate:.4f} disagree={stats.disagreement_count}"
     )
     return stats
+def _process_video_worker(
+    video_id: str,
+    video_path_str: str,
+    is_holdout: bool,
+    max_frames: int,
+    sample_interval_sec: float,
+    enable_constraint_fill: bool,
+) -> VideoStats:
+    """並列ワーカ用: 1 動画を処理して VideoStats を返す。
+
+    引数はすべて pickle 可能な軽量型のみ。
+    pipeline は本関数内で load_default() してワーカ内ロードする (CUDA spawn 安全)。
+    不一致 cell は stats._local_disagreements に格納して返す。
+    """
+    # ワーカ内で sys.path を復元する (spawn では親の path が引き継がれない場合がある)
+    import sys
+    from pathlib import Path as _Path
+    _proj = str(_Path(__file__).resolve().parent.parent)
+    if _proj not in sys.path:
+        sys.path.insert(0, _proj)
+    # ワーカ内でローカル disagreements を収集する
+    local_disagrees: list[dict] = []
+    stats = _process_video(
+        video_id=video_id,
+        video_path=_Path(video_path_str),
+        is_holdout=is_holdout,
+        max_frames=max_frames,
+        sample_interval_sec=sample_interval_sec,
+        disagreements=local_disagrees,
+        enable_constraint_fill=enable_constraint_fill,
+    )
+    stats._local_disagreements = local_disagrees
+    return stats
+
+
 def _majority_vote(a: int, b: int, c: int) -> int:
     """3 値の多数決を返す。全員不一致の場合は a (raw_cnn) を返す。"""
     if a == b or a == c:
@@ -855,6 +896,16 @@ def _parse_args() -> argparse.Namespace:
             "省略時は従来挙動 (constraint_fill 有効)。"
         ),
     )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "動画単位の並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。 "
+            "2 以上で ProcessPoolExecutor (spawn) による並列処理を有効化。 "
+            "推奨上限は CPU コア数 (GPU 使用率が低い場合に有効)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -875,6 +926,7 @@ def _collect_results(
     sample_interval_sec: float,
     disagreements: list[dict],
     enable_constraint_fill: bool = True,
+    workers: int = 1,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -882,13 +934,46 @@ def _collect_results(
         enable_constraint_fill: False にすると confirmed 経路の
             constraint_fill を無効化して測定する。
             backwards compat: デフォルト True = 従来挙動。
+        workers: 並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。
+            2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
     """
-    stats_list: list[VideoStats] = []
+    # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
+    video_tasks: list[tuple[str, Path]] = []
     for vid in video_ids:
         vpath = _resolve_video_path(vid, video_dir)
         if vpath is None:
             print(f"[measure] 動画ファイル未発見: {vid} → スキップ", file=sys.stderr)
             continue
+        video_tasks.append((vid, vpath))
+
+    if not video_tasks:
+        return []
+
+    effective_workers = min(workers, len(video_tasks))
+
+    if effective_workers <= 1:
+        return _collect_serial(
+            video_tasks, holdout_ids, max_frames,
+            sample_interval_sec, disagreements, enable_constraint_fill,
+        )
+    return _collect_parallel(
+        video_tasks, holdout_ids, max_frames,
+        sample_interval_sec, disagreements, enable_constraint_fill,
+        effective_workers,
+    )
+
+
+def _collect_serial(
+    video_tasks: list[tuple[str, Path]],
+    holdout_ids: list[str],
+    max_frames: int,
+    sample_interval_sec: float,
+    disagreements: list[dict],
+    enable_constraint_fill: bool,
+) -> list[VideoStats]:
+    """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
+    stats_list: list[VideoStats] = []
+    for vid, vpath in video_tasks:
         vstats = _process_video(
             video_id=vid,
             video_path=vpath,
@@ -899,6 +984,63 @@ def _collect_results(
             enable_constraint_fill=enable_constraint_fill,
         )
         stats_list.append(vstats)
+    return stats_list
+
+
+def _collect_parallel(
+    video_tasks: list[tuple[str, Path]],
+    holdout_ids: list[str],
+    max_frames: int,
+    sample_interval_sec: float,
+    disagreements: list[dict],
+    enable_constraint_fill: bool,
+    workers: int,
+) -> list[VideoStats]:
+    """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
+
+    各ワーカは _process_video_worker 内で load_default() する (CUDA spawn 安全)。
+    不一致 cell は stats._local_disagreements 経由で親プロセスに返却し、
+    ここで disagreements リストに統合する。
+    """
+    # spawn コンテキストを明示 (fork だと CUDA が壊れる)
+    mp_ctx = _mp.get_context("spawn")
+    futures: dict = {}
+    stats_list: list[VideoStats] = []
+
+    print(f"[measure] 並列モード: workers={workers} 動画数={len(video_tasks)}")
+
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=workers, mp_context=mp_ctx
+    ) as executor:
+        for vid, vpath in video_tasks:
+            fut = executor.submit(
+                _process_video_worker,
+                vid,
+                str(vpath),
+                (vid in holdout_ids),
+                max_frames,
+                sample_interval_sec,
+                enable_constraint_fill,
+            )
+            futures[fut] = vid
+
+        for fut in concurrent.futures.as_completed(futures):
+            vid = futures[fut]
+            try:
+                vstats = fut.result()
+                # ワーカが収集した不一致 cell を親リストへ統合
+                disagreements.extend(vstats._local_disagreements)
+                vstats._local_disagreements = []  # メモリ節約
+                stats_list.append(vstats)
+            except Exception as exc:
+                print(
+                    f"[measure] {vid} 並列処理エラー: {exc!r}",
+                    file=sys.stderr,
+                )
+
+    # 動画 ID 順でソートして決定論的な出力順を保つ
+    id_order = {vid: i for i, (vid, _) in enumerate(video_tasks)}
+    stats_list.sort(key=lambda s: id_order.get(s.video_id, 9999))
     return stats_list
 
 
@@ -998,7 +1140,8 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
     enable_constraint_fill: bool = not args.no_constraint_fill
-    print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids}")
+    workers: int = max(1, args.workers)
+    print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     if not enable_constraint_fill:
         print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
@@ -1007,6 +1150,7 @@ def main() -> int:
         video_ids, holdout_ids, args.video_dir,
         args.max_frames, args.sample_interval, disagreements,
         enable_constraint_fill=enable_constraint_fill,
+        workers=workers,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1034,6 +1178,8 @@ def main() -> int:
             "pass_per_color_threshold": PASS_PER_COLOR_THRESHOLD,
             # constraint_fill の on/off を記録 (後日比較用)
             "enable_constraint_fill": enable_constraint_fill,
+            # 並列ワーカ数を記録 (後日比較用)
+            "workers": workers,
         },
     }
     with output_path.open("w", encoding="utf-8") as f:
