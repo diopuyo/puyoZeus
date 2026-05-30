@@ -20,13 +20,10 @@ from src.board import (
     BOARD_COLS,
     COLOR_EMPTY,
     COLOR_OJAMA,
-    COLOR_RED,
-    COLOR_YELLOW,
     HIDDEN_ROWS,
     VISIBLE_ROWS,
 )
 from src.image_reader import (
-    RED_GREEN_DIFF_FOR_RED,
     BoardRegion,
     ColorClassifier,
 )
@@ -36,40 +33,6 @@ from src.patch_classifier import (
     CnnPatchClassifier,
     PuyoPresenceGate,
 )
-
-def _correct_red_yellow(
-    color: int, bgr_patch: np.ndarray,
-    rg_diff_threshold: int = RED_GREEN_DIFF_FOR_RED,
-) -> int:
-    """CNN が RED と判定したパッチを BGR R-G diff で黄/赤に補正する。
-
-    CNN 高確信経路では HSV チェックが完全にスキップされるため、黄ぷよを
-    赤と誤認するケースが発生する (実測 193 件)。
-    本関数は color == COLOR_RED のときのみ動作し、R-G diff が
-    rg_diff_threshold 未満なら COLOR_YELLOW に補正して返す。
-    それ以外の色は無変更で返す (= backwards compat 維持)。
-
-    image_reader.py:295 の HSV 経路と同一ロジックを流用。
-
-    Args:
-        color: CNN が判定した色コード。
-        bgr_patch: BGR パッチ (np.ndarray、空でも可)。
-        rg_diff_threshold: R-G 差の閾値 (デフォルト: RED_GREEN_DIFF_FOR_RED=80)。
-
-    Returns:
-        int: 補正後の色コード。
-    """
-    if color != COLOR_RED:
-        return color
-    if bgr_patch.size == 0:
-        return color
-    g_med = float(np.median(bgr_patch[:, :, 1]))
-    r_med = float(np.median(bgr_patch[:, :, 2]))
-    if r_med - g_med < rg_diff_threshold:
-        # R-G 差が不十分 → 黄ぷよ誤認を補正
-        return COLOR_YELLOW
-    return COLOR_RED
-
 
 # CNN 確信度がこの値超で HSV と異なる場合 CNN 採用.
 # 2026-05-11 サイクル71: 0.75 → 0.70 に引き下げ (= CNN メイン化方針).
@@ -163,9 +126,9 @@ class HybridClassifier:
             cnn_prob = float(probs[best_idx])
         except Exception:
             return self._hsv.classify(bgr_patch)
-        # 高確信度なら CNN を採用 (赤/黄補正を後付け適用)
+        # 高確信度なら CNN を採用
         if cnn_prob >= self._cnn_override_prob:
-            return _correct_red_yellow(cnn_color, bgr_patch)
+            return cnn_color
         # 低確信度: HSV と一致なら CNN、不一致なら HSV or UNKNOWN
         hsv_color = self._hsv.classify(bgr_patch)
         if cnn_color == hsv_color:
@@ -273,8 +236,8 @@ class HybridClassifier:
             cnn_color = CLASS_INDEX_TO_COLOR[best_idx]
             cnn_prob = float(probs_eff[best_idx])
             if cnn_prob >= self._cnn_override_prob:
-                # 赤/黄補正を後付け適用 (CNN 高確信経路で黄→赤誤認を補正)
-                out2.append(_correct_red_yellow(cnn_color, patch))
+                # CNN 高確信経路: そのまま採用
+                out2.append(cnn_color)
                 continue
             # 低確信度: HSV と一致なら CNN、不一致なら HSV or UNKNOWN
             hsv_color = self._hsv.classify(patch)
