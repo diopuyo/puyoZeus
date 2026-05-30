@@ -300,6 +300,7 @@ class RecognitionPipeline:
         # (project_color_corruption_infer_placement_t2)。constraint OFF 効果は red +0.26% 程度の僅少で
         # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
         enable_constraint_fill: bool = True,
+        enable_t2_highconf_yield: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -525,6 +526,13 @@ class RecognitionPipeline:
         # --no-constraint-fill 等で False にすると CNN/HSV 高確信セルが誤置換される問題を
         # 完全回避できるが、 count 補正も無効化される点に注意。
         self._enable_constraint_fill: bool = bool(enable_constraint_fill)
+        # T2 高確信 yield トグル (= True で T2 prev_stable 上書きを CNN 一致セルで解除)。
+        # デフォルト False = 従来挙動維持 (backwards compat)。
+        # True にすると「cnn_board が cur_v と同一有色」のセルは T2 の prev_stable
+        # 上書きをスキップし、infer_placement 誤推論 + T2 自己強化フリーズを解除する。
+        # B1 禁忌 (= 色→空 変化を無差別保護) とは逆方向: prev_stable の古い色による
+        # 上書きを「CNN が正色を支持している箇所でのみ」解除する (保護を弱める方向)。
+        self._enable_t2_highconf_yield: bool = bool(enable_t2_highconf_yield)
 
     @staticmethod
     def _build_hybrid_reader(
@@ -679,6 +687,7 @@ class RecognitionPipeline:
         enable_tier1_warmup: bool = False,
         enable_ojama_tier1_warmup: bool = False,
         enable_constraint_fill: bool = True,
+        enable_t2_highconf_yield: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -807,6 +816,7 @@ class RecognitionPipeline:
             enable_tier1_warmup=enable_tier1_warmup,
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_constraint_fill=enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
         )
 
     # ------------------------------------------------------------------
@@ -2588,6 +2598,25 @@ class RecognitionPipeline:
                             and cur_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
                         )
                         if both_colored and pv != cur_v:
+                            # T2 高確信 yield: enable_t2_highconf_yield=True かつ
+                            # CNN が現在の confirmed 色 (cur_v) を支持している場合は
+                            # prev_stable での上書きをスキップ。
+                            # 理由: infer_placement が誤色を confirmed に書き込み、
+                            # それを T2 が毎フレーム prev_stable で維持することで
+                            # 誤色フリーズが数百フレーム継続する問題を解除する。
+                            # B1 禁忌との違い: B1 は「色→空」保護 (連鎖エフェクト誤固定)。
+                            # 本修正は逆に「prev_stable の古い色による上書き」を
+                            # CNN 支持時に解除する (保護を弱める方向)。
+                            # CHAIN 非 STABLE 中は T2 自体が実行されないため
+                            # 連鎖エフェクト誤固定リスクはゼロ。
+                            if self._enable_t2_highconf_yield:
+                                cnn_v = int(cnn_board.get(r, c))
+                                if (
+                                    cnn_v == cur_v
+                                    and cnn_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                ):
+                                    # CNN が cur_v を支持 → T2 上書きをスキップ
+                                    continue
                             # 前 STABLE 値で上書き (= 認識誤り棄却)
                             ctx.confirmed_board.set(r, c, pv)
             # 現 STABLE を「直前 STABLE」 として記憶 (= 次 frame で参照)

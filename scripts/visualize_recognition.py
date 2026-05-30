@@ -647,6 +647,17 @@ def main() -> int:
              "CNN/HSV 高確信セルが誤置換される問題をトグルで完全回避したい場合に使用。 "
              "デフォルト OFF = 従来挙動 (constraint_fill 有効)。",
     )
+    parser.add_argument(
+        "--t2-highconf-yield",
+        action="store_true",
+        default=False,
+        dest="enable_t2_highconf_yield",
+        help="T2 高確信 yield を有効化。 "
+             "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
+             "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
+             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊 (16 動画 77K 件) の修正。 "
+             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -709,6 +720,8 @@ def main() -> int:
         enable_ojama_tier1_warmup=args.enable_ojama_tier1_warmup,
         # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
         enable_constraint_fill=not args.no_constraint_fill,
+        # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
+        enable_t2_highconf_yield=args.enable_t2_highconf_yield,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -735,6 +748,12 @@ def main() -> int:
         )
     if args.no_constraint_fill:
         print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    if args.enable_t2_highconf_yield:
+        print(
+            "[viz] t2_highconf_yield=ON "
+            "(T2 高確信 yield: CNN 支持セルは prev_stable 上書きスキップ / "
+            "infer_placement 誤推論 + T2 自己強化フリーズ修正)"
+        )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化

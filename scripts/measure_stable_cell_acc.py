@@ -269,6 +269,7 @@ def _inject_hsv(pipe: RecognitionPipeline, hsv_path: Path) -> None:
 def _make_pipeline_cnn(
     video_id: str,
     enable_constraint_fill: bool = True,
+    enable_t2_highconf_yield: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -278,10 +279,14 @@ def _make_pipeline_cnn(
             色 count 補正 (_apply_next_count_constraint) を無効化する。
             confirmed 経路 (CNN+物理推論 post-process) に効く。
             backwards compat: デフォルト True = 従来挙動。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -415,6 +420,7 @@ def _process_video(
     sample_interval_sec: float,
     disagreements: list[dict],
     enable_constraint_fill: bool = True,
+    enable_t2_highconf_yield: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -422,15 +428,22 @@ def _process_video(
         enable_constraint_fill: False にすると confirmed 経路の
             constraint_fill を無効化して測定する。
             backwards compat: デフォルト True = 従来挙動。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
     cap, fps, n_target, interval_frames = cap_info
-    # confirmed 経路 (CNN+物理推論) のみ enable_constraint_fill を制御する。
+    # confirmed 経路 (CNN+物理推論) のみ enable_constraint_fill / enable_t2_highconf_yield を制御する。
     # raw_hsv 経路は constraint_fill を通らないため変更不要。
-    pipe_cnn = _make_pipeline_cnn(video_id, enable_constraint_fill=enable_constraint_fill)
+    pipe_cnn = _make_pipeline_cnn(
+        video_id,
+        enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+    )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
     stats = _run_frame_loop(
@@ -451,6 +464,7 @@ def _process_video_worker(
     max_frames: int,
     sample_interval_sec: float,
     enable_constraint_fill: bool,
+    enable_t2_highconf_yield: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -474,6 +488,7 @@ def _process_video_worker(
         sample_interval_sec=sample_interval_sec,
         disagreements=local_disagrees,
         enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1152,6 +1167,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--t2-highconf-yield",
+        action="store_true",
+        default=False,
+        dest="enable_t2_highconf_yield",
+        help=(
+            "T2 高確信 yield を有効化する。 "
+            "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
+            "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
+            "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正の "
+            "net 効果測定用。省略時は従来挙動 (T2 yield 無効)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1182,6 +1210,7 @@ def _collect_results(
     disagreements: list[dict],
     enable_constraint_fill: bool = True,
     workers: int = 1,
+    enable_t2_highconf_yield: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1191,6 +1220,8 @@ def _collect_results(
             backwards compat: デフォルト True = 従来挙動。
         workers: 並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。
             2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1210,11 +1241,13 @@ def _collect_results(
         return _collect_serial(
             video_tasks, holdout_ids, max_frames,
             sample_interval_sec, disagreements, enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
         sample_interval_sec, disagreements, enable_constraint_fill,
         effective_workers,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
     )
 
 
@@ -1225,6 +1258,7 @@ def _collect_serial(
     sample_interval_sec: float,
     disagreements: list[dict],
     enable_constraint_fill: bool,
+    enable_t2_highconf_yield: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1237,6 +1271,7 @@ def _collect_serial(
             sample_interval_sec=sample_interval_sec,
             disagreements=disagreements,
             enable_constraint_fill=enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1250,6 +1285,7 @@ def _collect_parallel(
     disagreements: list[dict],
     enable_constraint_fill: bool,
     workers: int,
+    enable_t2_highconf_yield: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1276,6 +1312,7 @@ def _collect_parallel(
                 max_frames,
                 sample_interval_sec,
                 enable_constraint_fill,
+                enable_t2_highconf_yield,
             )
             futures[fut] = vid
 
@@ -1395,17 +1432,24 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
     enable_constraint_fill: bool = not args.no_constraint_fill
+    # t2_highconf_yield フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_t2_highconf_yield: bool = bool(
+        getattr(args, "enable_t2_highconf_yield", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     if not enable_constraint_fill:
         print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
+    if enable_t2_highconf_yield:
+        print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
         args.max_frames, args.sample_interval, disagreements,
         enable_constraint_fill=enable_constraint_fill,
         workers=workers,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1442,6 +1486,8 @@ def main() -> int:
             "pass_per_color_threshold": PASS_PER_COLOR_THRESHOLD,
             # constraint_fill の on/off を記録 (後日比較用)
             "enable_constraint_fill": enable_constraint_fill,
+            # t2_highconf_yield の on/off を記録 (後日比較用)
+            "enable_t2_highconf_yield": enable_t2_highconf_yield,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
         },

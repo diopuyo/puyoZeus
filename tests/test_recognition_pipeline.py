@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from src.board import COLOR_RED, Board
+from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED, Board
 from src.board_state_machine import BoardState
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.match_state import MatchState, MatchStateDetector
@@ -774,4 +774,183 @@ def test_ojama_tier1_warmup_independent_from_generic_warmup() -> None:
     pipe.update(0, 0.0, _dummy_frame())
     # skip_tier1_1p が True で呼ばれた (= ojama warmup が発火した)
     assert reader.last_skip_tier1_1p is True
+
+
+# ============================
+# T2 高確信 yield (enable_t2_highconf_yield) テスト
+# ============================
+
+
+def _make_pipe_t2(
+    cnn_board_1p: Board,
+    t2_highconf_yield: bool = False,
+) -> RecognitionPipeline:
+    """T2 テスト用 pipeline を構築する。
+
+    stable_frame_count=2 で即 STABLE に遷移させる。
+    enable_t2_highconf_yield で T2 yield トグルを制御する。
+    """
+    reader = _StubImageReader(cnn_board_1p, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_t2_highconf_yield=t2_highconf_yield,
+    )
+
+
+def _inject_prev_stable_and_confirmed(
+    pipe: RecognitionPipeline,
+    prev_color: int,
+    confirmed_color: int,
+    row: int = 12,
+    col: int = 0,
+) -> None:
+    """T2 テスト用: prev_stable と confirmed_board を指定色で手動セットする。
+
+    prev_stable_1p に prev_color を入れ、confirmed_board に confirmed_color を
+    設定することで T2 の「色A → 色B」判定が発火する状態を作る。
+    _match_active_started_frame = -1000 にして match_just_started を無効化する。
+    """
+    # match_just_started window を解除 (= 試合開始から十分時間が経過した想定)
+    pipe._match_active_started_frame = -1000
+
+    # prev_stable_1p に prev_color をセット
+    prev_board = Board()
+    prev_board.set(row, col, prev_color)
+    pipe._prev_stable_confirmed_1p = prev_board
+
+    # sm_1p の confirmed_board に confirmed_color をセット
+    conf_board = Board()
+    conf_board.set(row, col, confirmed_color)
+    if pipe._sm_1p.context.confirmed_board is None:
+        pipe._sm_1p.context.confirmed_board = conf_board
+    else:
+        pipe._sm_1p.context.confirmed_board.set(row, col, confirmed_color)
+
+
+def test_t2_highconf_yield_on_skips_overwrite() -> None:
+    """トグル ON: raw_cnn==cur_v (緑) のセルは T2 が prev_stable(青) で上書きしない。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑 (prev_stable には一致)
+      - prev_stable = 青 (BLUE)
+      - T2 条件: both_colored かつ pv != cur_v → 通常は青で上書き
+      - enable_t2_highconf_yield=True かつ cnn_v==cur_v → スキップ (緑を維持)
+    """
+    row, col = 12, 0
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    # pipeline を STABLE に持ち込む (2 フレーム分 update)
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # 手動 inject: prev_stable=青, confirmed=緑
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    # CNN は依然として緑を返す状態で 1 フレーム処理
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    # T2 が青で上書きしなかった → confirmed は緑のまま
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_GREEN, (
+        f"トグル ON 時: T2 が青で上書きすべきでない (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_off_applies_overwrite() -> None:
+    """トグル OFF (default): T2 は従来通り prev_stable(青) で上書きする。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑
+      - prev_stable = 青 (BLUE)
+      - enable_t2_highconf_yield=False (デフォルト)
+      - T2 が青で上書き → confirmed は青になる
+    """
+    row, col = 12, 0
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=False)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_BLUE, (
+        f"トグル OFF 時: T2 が青で上書きすべき (期待=青={COLOR_BLUE}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_cnn_mismatch_still_applies() -> None:
+    """raw_cnn != cur_v のセルはトグル ON でも T2 上書きが適用される (高確信でない)。
+
+    シナリオ:
+      - CNN 出力 = 赤 (RED) ← cur_v (緑) と不一致
+      - confirmed_board = 緑 (GREEN)
+      - prev_stable = 青 (BLUE)
+      - enable_t2_highconf_yield=True でも cnn_v!=cur_v → T2 適用 → 青で上書き
+    """
+    row, col = 12, 0
+    cnn_red = Board()
+    cnn_red.set(row, col, COLOR_RED)
+
+    pipe = _make_pipe_t2(cnn_red, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # CNN は赤, confirmed に緑を手動セット, prev_stable は青
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_BLUE, (
+        f"CNN 不一致時: T2 が青で上書きすべき (期待=青={COLOR_BLUE}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_default_is_false() -> None:
+    """enable_t2_highconf_yield のデフォルト値が False (backwards compat)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        # enable_t2_highconf_yield を明示せず → デフォルト False
+    )
+    assert pipe._enable_t2_highconf_yield is False
 
