@@ -629,6 +629,14 @@ def main() -> int:
              f"TIER1_WARMUP_FRAMES={3} frame 間 tier1 を skip し、"
              "ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ)。",
     )
+    parser.add_argument(
+        "--no-constraint-fill",
+        action="store_true",
+        default=False,
+        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を無効化。 "
+             "CNN/HSV 高確信セルが誤置換される問題をトグルで完全回避したい場合に使用。 "
+             "デフォルト OFF = 従来挙動 (constraint_fill 有効)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -687,6 +695,8 @@ def main() -> int:
         enable_piece_persistence=args.enable_piece_persistence,
         # tier1 warmup guard (2026-05-28): --enable-tier1-warmup
         enable_tier1_warmup=args.enable_tier1_warmup,
+        # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
+        enable_constraint_fill=not args.no_constraint_fill,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -706,6 +716,8 @@ def main() -> int:
             "[viz] enable_tier1_warmup=ON "
             "(NON-STABLE→STABLE 遷移直後 3 frame tier1 skip / 着地直後誤 EMPTY 化防止)"
         )
+    if args.no_constraint_fill:
+        print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化

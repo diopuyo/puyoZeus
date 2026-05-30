@@ -286,6 +286,7 @@ class RecognitionPipeline:
         bg_fp_force_max_puyo: int | None = None,
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_constraint_fill: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -499,6 +500,11 @@ class RecognitionPipeline:
         self._enable_tier1_warmup: bool = bool(enable_tier1_warmup)
         self._tier1_warmup_remaining_1p: int = 0
         self._tier1_warmup_remaining_2p: int = 0
+        # 案2: constraint_fill トグル (= False で _apply_next_count_constraint を skip)。
+        # デフォルト True = 従来挙動維持 (backwards compat)。
+        # --no-constraint-fill 等で False にすると CNN/HSV 高確信セルが誤置換される問題を
+        # 完全回避できるが、 count 補正も無効化される点に注意。
+        self._enable_constraint_fill: bool = bool(enable_constraint_fill)
 
     @staticmethod
     def _build_hybrid_reader(
@@ -651,6 +657,7 @@ class RecognitionPipeline:
         # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_constraint_fill: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -777,6 +784,7 @@ class RecognitionPipeline:
             bg_fp_force_max_puyo=bg_fp_force_max_puyo,
             enable_piece_persistence=enable_piece_persistence,
             enable_tier1_warmup=enable_tier1_warmup,
+            enable_constraint_fill=enable_constraint_fill,
         )
 
     # ------------------------------------------------------------------
@@ -1460,6 +1468,8 @@ class RecognitionPipeline:
     def _apply_next_count_constraint(
         self, board: "Board", tsumo_count: "Counter",
         side: str, frame_idx: int,
+        *,
+        protect_board: "Board | None" = None,
     ) -> "Board":
         """NEXT 累積色制約による confirmed_board 補正.
 
@@ -1476,6 +1486,11 @@ class RecognitionPipeline:
             tsumo_count: 累積 NEXT 色 count (Counter)
             side: '1P' or '2P' (ログ用)
             frame_idx: 現 frame index (ログ用)
+            protect_board: None でない場合、 board と protect_board のセル色が
+                一致するセルを excess 置換候補から除外する (= CNN 高確信セル保護)。
+                cnn_board を渡すと「CNN が認識した色と confirmed が一致するセル」
+                = 高確信正解セルを保護できる。None 時は従来挙動 (全セル対象)。
+                backwards compat: デフォルト None で旧挙動と完全同一。
 
         Returns:
             補正後 board (差分があれば新 instance、 なければ元 board)
@@ -1525,14 +1540,32 @@ class RecognitionPipeline:
         for c, n in deficit.items():
             deficit_list.extend([c] * n)
         # 過剰色 cell を「上から (row 小)」 候補リスト化
+        # 案1: protect_board が指定された場合、 board と protect_board のセル色が
+        # 一致するセルは保護 = 置換候補から除外する (CNN 高確信正解セル保護)。
+        # protect_board=None (default) の場合は全セル対象 (従来挙動)。
+        # 注意: n_extra 個の excess があるとき、 保護されたものをスキップしつつ
+        # 非保護セルから n_extra 個収集する (= 保護分を後続 cell で補う)。
         excess_cells: list[tuple[int, int, int]] = []
         for color, n_extra in excess.items():
             cells = sorted(
                 cell_by_color.get(color, []),
                 key=lambda rc: rc[0],  # row 昇順
             )
-            for rc in cells[:n_extra]:
-                excess_cells.append((rc[0], rc[1], color))
+            # 保護されていない候補を n_extra 個収集 (全 cell を走査して保護除外)
+            collected = 0
+            for rc in cells:
+                if collected >= n_extra:
+                    break
+                r_c, c_c = rc[0], rc[1]
+                # 保護チェック: protect_board が指定されていて、 かつ
+                # protect_board のそのセルが board の色 (= excess color) と一致するなら
+                # 「CNN も同色と判断した = 高確信正解」 → 置換候補から除外
+                if protect_board is not None:
+                    protect_color = int(protect_board.get(r_c, c_c))
+                    if protect_color == color:
+                        continue  # 高確信正解セルは保護 → 次の候補へ
+                excess_cells.append((r_c, c_c, color))
+                collected += 1
         # ペア化して置換 (最小 len(excess_cells) と len(deficit_list))
         n_replace = min(len(excess_cells), len(deficit_list))
         for i in range(n_replace):
@@ -2340,9 +2373,18 @@ class RecognitionPipeline:
                 self._constraint_valid_1p if side == "1P"
                 else self._constraint_valid_2p
             )
-            if constraint_valid and sum(tsumo_count.values()) > 0:
+            # 案2: enable_constraint_fill=False のとき constraint_fill を完全 skip
+            if (
+                self._enable_constraint_fill
+                and constraint_valid
+                and sum(tsumo_count.values()) > 0
+            ):
+                # 案1: cnn_board を protect_board として渡す。
+                # CNN が認識した色と confirmed が一致するセルは excess でも保護される。
+                # hsv_board は image_reader 改修なしでは取得不可のため cnn のみ渡す。
                 ctx.confirmed_board = self._apply_next_count_constraint(
                     ctx.confirmed_board, tsumo_count, side, frame_idx,
+                    protect_board=cnn_board,
                 )
                 ctx.pending_board = ctx.confirmed_board.copy()
 

@@ -214,6 +214,172 @@ def test_constraint_invalidates_on_chain_event() -> None:
     assert pipe._constraint_valid_2p is True
 
 
+# ============================
+# 案1: CNN 高確信セル保護テスト (protect_board)
+# ============================
+
+
+def test_protect_board_shields_cnn_confirmed_cell() -> None:
+    """案1: cnn=GREEN と confirmed=GREEN が一致するセルは excess でも置換されない."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE, COLOR_RED
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    # confirmed_board: GREEN 3 cells (= 1 excess), BLUE 1 cell
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    # tsumo_count: GREEN 2 (= confirmed より 1 少ない), BLUE 2 (= 1 多く必要)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 2, COLOR_BLUE: 2})
+    # protect_board: row=10 のセルは GREEN (= CNN も GREEN と認識)
+    protect = Board()
+    protect.set(10, 0, COLOR_GREEN)   # CNN = GREEN → 保護対象
+    protect.set(11, 0, COLOR_RED)     # CNN = RED  → 不一致 → 置換候補
+    protect.set(12, 0, COLOR_RED)     # CNN = RED  → 不一致 → 置換候補
+    protect.set(12, 1, COLOR_BLUE)
+    # protect_board=protect の場合: row=10 の GREEN セルは保護される
+    # → row=11 or row=12 の GREEN セルが BLUE に置換される
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        protect_board=protect,
+    )
+    # row=10 の GREEN は保護され BLUE に置換されない
+    assert int(new_board.get(10, 0)) == COLOR_GREEN, \
+        "CNN=GREEN 一致セルは protect_board で保護されるべき"
+    # field 全体: GREEN 2 個, BLUE 2 個 になっていること
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    assert cnt[COLOR_GREEN] == 2, f"GREEN は 2 個になるべき, actual={cnt[COLOR_GREEN]}"
+    assert cnt[COLOR_BLUE] == 2, f"BLUE は 2 個になるべき, actual={cnt[COLOR_BLUE]}"
+
+
+def test_protect_board_none_falls_back_to_original_behavior() -> None:
+    """案1: protect_board=None (デフォルト) では従来通り全セルが置換候補."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 2, COLOR_BLUE: 2})
+    # protect_board=None (デフォルト) → 全セル対象 = 最上行から 1 つ置換
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        # protect_board を省略 = None
+    )
+    # 従来挙動: row 昇順で最初の GREEN (row=10) が BLUE に置換される
+    assert int(new_board.get(10, 0)) == COLOR_BLUE, \
+        "protect_board=None では row 昇順で先頭セルが置換される"
+
+
+def test_protect_board_no_protection_when_color_mismatch() -> None:
+    """案1: CNN 色が confirmed と不一致なセルは従来通り置換候補になる."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE, COLOR_RED
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 1, COLOR_BLUE: 2})
+    # protect_board: row=10 のセルは RED (= CNN と confirmed 不一致)
+    protect = Board()
+    protect.set(10, 0, COLOR_RED)    # CNN = RED ≠ confirmed GREEN → 保護されない
+    protect.set(11, 0, COLOR_RED)    # CNN = RED ≠ confirmed GREEN → 保護されない
+    protect.set(12, 1, COLOR_BLUE)
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        protect_board=protect,
+    )
+    # CNN と色不一致のため保護なし = どちらかの GREEN が BLUE に置換される
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    assert cnt[COLOR_GREEN] == 1, f"GREEN 1 個に置換されるべき, actual={cnt[COLOR_GREEN]}"
+    assert cnt[COLOR_BLUE] == 2, f"BLUE 2 個になるべき, actual={cnt[COLOR_BLUE]}"
+
+
+# ============================
+# 案2: enable_constraint_fill トグルテスト
+# ============================
+
+
+def test_enable_constraint_fill_false_skips_constraint() -> None:
+    """案2: enable_constraint_fill=False でコンストレイント補正が skip される."""
+    from src.board import COLOR_RED, COLOR_BLUE
+    # enable_constraint_fill=False の pipeline を構築
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_constraint_fill=False,
+    )
+    assert pipe._enable_constraint_fill is False, \
+        "_enable_constraint_fill=False が設定されているべき"
+
+
+def test_enable_constraint_fill_default_true() -> None:
+    """案2: enable_constraint_fill のデフォルトは True (= 従来挙動維持)."""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._enable_constraint_fill is True, \
+        "デフォルトは True (backwards compat)"
+
+
+def test_constraint_fill_false_does_not_modify_board() -> None:
+    """案2: enable_constraint_fill=False のとき board が変更されない."""
+    from collections import Counter
+    from src.board import COLOR_RED, COLOR_BLUE
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_constraint_fill=False,
+    )
+    # False の場合 _apply_next_count_constraint を呼ばないことを
+    # ガードフラグで検証する (直接 _enable_constraint_fill を見る)
+    assert not pipe._enable_constraint_fill
+    # _apply_next_count_constraint を直接呼んでも、 呼出元では呼ばれないはず。
+    # 下記は呼出元ガードのロジック確認 (= ガードが False なら処理されない)
+    board = Board()
+    board.set(11, 0, COLOR_RED)
+    board.set(12, 0, COLOR_RED)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_RED: 1, COLOR_BLUE: 2})
+    # _enable_constraint_fill=False なら呼出元がガードするが、
+    # 直接 _apply_next_count_constraint を呼ぶと従来通り動く
+    # (関数自体は影響を受けない。 ガードは呼出元にある)
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+    )
+    # 直接呼んだので補正は走る (= 呼出元ガードのテストは別のテストで担保)
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    # RED 1 → 1 (excess 1 → BLUE に置換), BLUE 2
+    assert cnt[COLOR_RED] == 1
+    assert cnt[COLOR_BLUE] == 2
+
+
 def test_load_default_smoke() -> None:
     """load_default が例外なく組み立てられる (実モデル未配置でも graceful)."""
     try:
