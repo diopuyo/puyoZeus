@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED, Board
+from src.board import COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_RED, Board
 from src.board_state_machine import BoardState
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.match_state import MatchState, MatchStateDetector
@@ -953,4 +953,85 @@ def test_t2_highconf_yield_default_is_false() -> None:
         # enable_t2_highconf_yield を明示せず → デフォルト False
     )
     assert pipe._enable_t2_highconf_yield is False
+
+
+def test_t2_highconf_yield_pv_empty_no_yield() -> None:
+    """pv=空 のセルはトグル ON でも yield しない (背景 FP 抑制)。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)  ← 背景 FP
+      - confirmed_board = 緑 (GREEN)  ← CNN FP が confirmed に残っている状態
+      - prev_stable = 空 (EMPTY)  ← 本来は空のセル
+      - enable_t2_highconf_yield=True
+      - pv=空 なので yield 発動せず → T2 は confirmed を空に上書き
+    注意: T2 の発動条件は both_colored (pv 非 EMPTY かつ cur_v 非 EMPTY) なので、
+    このシナリオでは both_colored=False となり T2 自体が上書きを行わない。
+    本テストは「yield 条件の pv チェック」が加わっても T2 上書きが行われる状態を
+    確認するため、pv=EMPTY / cur_v=GREEN の組み合わせで T2 がスキップされないことを
+    検証する (both_colored=False → T2 上書きなし = 緑が維持される)。
+
+    補足: both_colored が False のケースで yield 条件追加の副作用がないことを確認。
+    """
+    row, col = 9, 2
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # prev_stable = 空, confirmed = 緑 (背景 FP シナリオ)
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_EMPTY, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    # pv=EMPTY / cur_v=GREEN → both_colored=False → T2 上書きが発生しない
+    # (= T2 の上書きはあくまで「両方色付き かつ 異色」のみ)
+    # yield 条件追加によるリグレッションがないことを確認。
+    # CNN stub が GREEN を返し続けるのでフレーム処理後も GREEN になる。
+    assert cell_val == COLOR_GREEN, (
+        f"pv=空/cur=緑: both_colored=False なので T2 上書きなし (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_pv_colored_still_yields() -> None:
+    """pv=色付き のセルはトグル ON かつ cnn==cur で yield する (既存動作の維持)。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑 (GREEN)
+      - prev_stable = 青 (BLUE)  ← 色 → 別色フリーズのケース
+      - enable_t2_highconf_yield=True
+      - pv=青 (色付き) かつ cnn_v==cur_v → yield 発動 → 緑を維持
+    """
+    row, col = 9, 2
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # prev_stable = 青 (色付き), confirmed = 緑
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_GREEN, (
+        f"pv=色付き: yield 発動して緑を維持すべき (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
 

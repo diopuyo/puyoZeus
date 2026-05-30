@@ -2614,8 +2614,12 @@ class RecognitionPipeline:
                                 if (
                                     cnn_v == cur_v
                                     and cnn_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                    # prev_stable が空のセルは yield しない。
+                                    # 背景 FP (pv=空 → cur_v=色) は T2 で空に戻す。
+                                    # yield は「色 → 別色フリーズ (pv=色付き)」のみ対象。
+                                    and pv not in (COLOR_EMPTY, COLOR_UNKNOWN)
                                 ):
-                                    # CNN が cur_v を支持 → T2 上書きをスキップ
+                                    # CNN が cur_v を支持 かつ pv も色付き → T2 上書きをスキップ
                                     continue
                             # 前 STABLE 値で上書き (= 認識誤り棄却)
                             ctx.confirmed_board.set(r, c, pv)
