@@ -56,6 +56,13 @@ PROBABILISTIC_FALLBACK_USE_FROM_BOARD: bool = True
 # v95m15 分析: fi=540-565 で tier1 が着地直後の cell を誤 EMPTY 化 →
 # false tsumo_fall 遷移 5 回連発 → multi-vote リセット → STABLE 復帰 0.4 秒遅延。
 TIER1_WARMUP_FRAMES: int = 3
+
+# OJAMA_FALL → STABLE 遷移後、tier1 をスキップする frame 数。
+# お邪魔降下→消滅後にセル実画素が静的 BackgroundFingerprint に近づき
+# (dist 138→3 等) tier1 が強制 EMPTY 化 → physics_fix が前 STABLE 色を上書き
+# → 列崩壊が固定されるのを防ぐ。TSUMO_FALL 用 (3 frame) より長め。
+# v70 frame=1674 分析: col=0,1,2 row7-12 が崩壊。
+OJAMA_TIER1_WARMUP_FRAMES: int = 8
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -286,6 +293,7 @@ class RecognitionPipeline:
         bg_fp_force_max_puyo: int | None = None,
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_ojama_tier1_warmup: bool = False,
         enable_constraint_fill: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
@@ -500,6 +508,13 @@ class RecognitionPipeline:
         self._enable_tier1_warmup: bool = bool(enable_tier1_warmup)
         self._tier1_warmup_remaining_1p: int = 0
         self._tier1_warmup_remaining_2p: int = 0
+        # 経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup guard。
+        # True で OJAMA_TIER1_WARMUP_FRAMES の間 tier1 をスキップ。
+        # 汎用 tier1_warmup (v51m2 で +108 退行) と独立して、お邪魔消滅後の
+        # セル背景化による列崩壊のみを対処する。default False で既存挙動不変。
+        self._enable_ojama_tier1_warmup: bool = bool(enable_ojama_tier1_warmup)
+        self._ojama_tier1_warmup_remaining_1p: int = 0
+        self._ojama_tier1_warmup_remaining_2p: int = 0
         # 案2: constraint_fill トグル (= False で _apply_next_count_constraint を skip)。
         # デフォルト True = 従来挙動維持 (backwards compat)。
         # --no-constraint-fill 等で False にすると CNN/HSV 高確信セルが誤置換される問題を
@@ -657,6 +672,7 @@ class RecognitionPipeline:
         # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_ojama_tier1_warmup: bool = False,
         enable_constraint_fill: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
@@ -784,6 +800,7 @@ class RecognitionPipeline:
             bg_fp_force_max_puyo=bg_fp_force_max_puyo,
             enable_piece_persistence=enable_piece_persistence,
             enable_tier1_warmup=enable_tier1_warmup,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_constraint_fill=enable_constraint_fill,
         )
 
@@ -871,6 +888,9 @@ class RecognitionPipeline:
         # tier1 warmup guard リセット
         self._tier1_warmup_remaining_1p = 0
         self._tier1_warmup_remaining_2p = 0
+        # 経路 A': OJAMA 専用 tier1 warmup guard リセット
+        self._ojama_tier1_warmup_remaining_1p = 0
+        self._ojama_tier1_warmup_remaining_2p = 0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1045,13 +1065,14 @@ class RecognitionPipeline:
         # tier1 warmup guard: NON-STABLE → STABLE 遷移直後 TIER1_WARMUP_FRAMES は
         # tier1 をスキップして着地直後の cell が誤 EMPTY 化されるのを防ぐ。
         # カウンタは _step_side の state 遷移後に更新するため、 ここでは現在値を読む。
+        # 経路 A': OJAMA 専用 warmup (ojama_remaining > 0) が汎用 warmup と OR で発火。
         _skip_t1_1p = (
-            self._enable_tier1_warmup
-            and self._tier1_warmup_remaining_1p > 0
+            (self._enable_tier1_warmup and self._tier1_warmup_remaining_1p > 0)
+            or (self._enable_ojama_tier1_warmup and self._ojama_tier1_warmup_remaining_1p > 0)
         )
         _skip_t1_2p = (
-            self._enable_tier1_warmup
-            and self._tier1_warmup_remaining_2p > 0
+            (self._enable_tier1_warmup and self._tier1_warmup_remaining_2p > 0)
+            or (self._enable_ojama_tier1_warmup and self._ojama_tier1_warmup_remaining_2p > 0)
         )
         cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(
             frame,
@@ -1368,6 +1389,19 @@ class RecognitionPipeline:
                 prev_state=_pre_state_2p,
                 p_state=p2.state,
                 remaining=self._tier1_warmup_remaining_2p,
+            )
+        # 経路 A': OJAMA 専用 tier1 warmup guard カウンタ更新。
+        # OJAMA_FALL → STABLE 遷移時のみ OJAMA_TIER1_WARMUP_FRAMES をセット。
+        if self._enable_ojama_tier1_warmup:
+            self._ojama_tier1_warmup_remaining_1p = _update_ojama_tier1_warmup_counter(
+                prev_state=_pre_state_1p,
+                p_state=p1.state,
+                remaining=self._ojama_tier1_warmup_remaining_1p,
+            )
+            self._ojama_tier1_warmup_remaining_2p = _update_ojama_tier1_warmup_counter(
+                prev_state=_pre_state_2p,
+                p_state=p2.state,
+                remaining=self._ojama_tier1_warmup_remaining_2p,
             )
 
         # cycle 71d (案 D8): VideoChainTracker 次 frame 入力用に confirmed_board を保存.
@@ -2912,6 +2946,40 @@ def _update_tier1_warmup_counter(
         and p_state == BoardState.STABLE
     ):
         return TIER1_WARMUP_FRAMES
+    # STABLE 継続: デクリメント
+    if p_state == BoardState.STABLE and remaining > 0:
+        return remaining - 1
+    # STABLE 以外: リセット
+    if p_state != BoardState.STABLE:
+        return 0
+    return remaining
+
+
+def _update_ojama_tier1_warmup_counter(
+    prev_state: "BoardState",
+    p_state: "BoardState",
+    remaining: int,
+) -> int:
+    """経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup カウンタ更新。
+
+    OJAMA_FALL → STABLE 遷移のみ OJAMA_TIER1_WARMUP_FRAMES をセット。
+    汎用 tier1 warmup (全 NON_STABLE_STATES) と異なり、OJAMA_FALL 起因の
+    セル背景化による列崩壊だけを対処する (v51m2 退行を回避するため分離)。
+
+    Args:
+        prev_state: _step_side 呼び出し前の state (= 前フレームの state)。
+        p_state: _step_side が返した現フレームの state。
+        remaining: 現在の warmup 残余 frame 数。
+
+    Returns:
+        更新後の warmup 残余 frame 数 (0 以上)。
+    """
+    # OJAMA_FALL → STABLE 遷移: ojama 専用 warmup 開始
+    if (
+        prev_state == BoardState.OJAMA_FALL
+        and p_state == BoardState.STABLE
+    ):
+        return OJAMA_TIER1_WARMUP_FRAMES
     # STABLE 継続: デクリメント
     if p_state == BoardState.STABLE and remaining > 0:
         return remaining - 1

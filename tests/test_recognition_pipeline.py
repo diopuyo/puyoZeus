@@ -11,7 +11,13 @@ from src.board import COLOR_RED, Board
 from src.board_state_machine import BoardState
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.match_state import MatchState, MatchStateDetector
-from src.recognition_pipeline import RecognitionPipeline, SideResult
+from src.recognition_pipeline import (
+    RecognitionPipeline,
+    SideResult,
+    OJAMA_TIER1_WARMUP_FRAMES,
+    TIER1_WARMUP_FRAMES,
+    _update_ojama_tier1_warmup_counter,
+)
 
 
 # ============================
@@ -627,4 +633,141 @@ def test_pipeline_tier1_warmup_result_is_side_result() -> None:
     assert res is not None
     assert hasattr(res.p1, "confirmed_board")
     assert hasattr(res.p2, "confirmed_board")
+
+
+# ============================
+# 経路 A': OJAMA 専用 tier1 warmup (_update_ojama_tier1_warmup_counter)
+# ============================
+
+
+def test_ojama_tier1_warmup_sets_ojama_frames_on_ojama_to_stable() -> None:
+    """OJAMA_FALL → STABLE 遷移で OJAMA_TIER1_WARMUP_FRAMES がセットされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.OJAMA_FALL,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    assert result == OJAMA_TIER1_WARMUP_FRAMES
+
+
+def test_ojama_tier1_warmup_default_false_no_effect() -> None:
+    """enable_ojama_tier1_warmup=False (default) では ojama 専用カウンタが 0 のまま。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    assert pipe._enable_ojama_tier1_warmup is False
+    assert pipe._ojama_tier1_warmup_remaining_1p == 0
+    assert pipe._ojama_tier1_warmup_remaining_2p == 0
+
+
+def test_ojama_tier1_warmup_tsumo_fall_does_not_trigger_ojama_counter() -> None:
+    """TSUMO_FALL → STABLE は OJAMA 分岐に入らず TIER1_WARMUP_FRAMES のまま変化しない。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.TSUMO_FALL,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    # TSUMO_FALL → STABLE は OJAMA 分岐対象外 → カウンタは 0 のまま
+    assert result == 0
+    # なお OJAMA_TIER1_WARMUP_FRAMES にはセットされない
+    assert result != OJAMA_TIER1_WARMUP_FRAMES
+
+
+def test_ojama_tier1_warmup_enabled_flag() -> None:
+    """enable_ojama_tier1_warmup=True で _enable_ojama_tier1_warmup が True。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_tier1_warmup=True,
+    )
+    assert pipe._enable_ojama_tier1_warmup is True
+
+
+def test_ojama_tier1_warmup_resets_on_reset() -> None:
+    """reset() で ojama 専用カウンタが 0 に戻る。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_tier1_warmup=True,
+    )
+    pipe._ojama_tier1_warmup_remaining_1p = 5
+    pipe._ojama_tier1_warmup_remaining_2p = 7
+    pipe.reset()
+    assert pipe._ojama_tier1_warmup_remaining_1p == 0
+    assert pipe._ojama_tier1_warmup_remaining_2p == 0
+
+
+def test_ojama_tier1_warmup_counter_decrements_in_stable() -> None:
+    """STABLE 継続中は OJAMA カウンタがデクリメントされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.STABLE,
+        p_state=BoardState.STABLE,
+        remaining=4,
+    )
+    assert result == 3
+
+
+def test_ojama_tier1_warmup_counter_resets_on_non_stable() -> None:
+    """STABLE → TSUMO_FALL 遷移で OJAMA カウンタが 0 にリセットされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.STABLE,
+        p_state=BoardState.TSUMO_FALL,
+        remaining=6,
+    )
+    assert result == 0
+
+
+def test_ojama_tier1_warmup_chain_does_not_trigger() -> None:
+    """CHAIN → STABLE 遷移では OJAMA 分岐に入らず 0 のまま。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.CHAIN,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    assert result == 0
+
+
+def test_ojama_tier1_warmup_independent_from_generic_warmup() -> None:
+    """汎用 enable_tier1_warmup=False でも enable_ojama_tier1_warmup=True なら skip 発火する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_tier1_warmup=False,
+        enable_ojama_tier1_warmup=True,
+    )
+    # 汎用 warmup は OFF
+    assert pipe._enable_tier1_warmup is False
+    # ojama 専用 warmup は ON
+    assert pipe._enable_ojama_tier1_warmup is True
+    # ojama カウンタを手動セット → skip_tier1 が True になることを確認
+    pipe._ojama_tier1_warmup_remaining_1p = 3
+    # update() を呼び skip_tier1_1p=True で read_both_boards が呼ばれるか確認
+    pipe.update(0, 0.0, _dummy_frame())
+    # skip_tier1_1p が True で呼ばれた (= ojama warmup が発火した)
+    assert reader.last_skip_tier1_1p is True
 

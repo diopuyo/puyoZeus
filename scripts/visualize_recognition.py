@@ -630,6 +630,16 @@ def main() -> int:
              "ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ)。",
     )
     parser.add_argument(
+        "--ojama-tier1-warmup",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_tier1_warmup",
+        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を有効化。"
+             f" OJAMA_TIER1_WARMUP_FRAMES={8} frame 間 tier1 を skip し、"
+             "お邪魔消滅後のセル背景化による誤 EMPTY 化 → 列崩壊を防ぐ (v70 対策)。"
+             " 汎用 --enable-tier1-warmup (v51m2 退行あり) と独立して有効化できる。",
+    )
+    parser.add_argument(
         "--no-constraint-fill",
         action="store_true",
         default=False,
@@ -695,6 +705,8 @@ def main() -> int:
         enable_piece_persistence=args.enable_piece_persistence,
         # tier1 warmup guard (2026-05-28): --enable-tier1-warmup
         enable_tier1_warmup=args.enable_tier1_warmup,
+        # 経路 A' (2026-05-30): --ojama-tier1-warmup で OJAMA 専用 warmup 有効化
+        enable_ojama_tier1_warmup=args.enable_ojama_tier1_warmup,
         # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
         enable_constraint_fill=not args.no_constraint_fill,
     )
@@ -715,6 +727,11 @@ def main() -> int:
         print(
             "[viz] enable_tier1_warmup=ON "
             "(NON-STABLE→STABLE 遷移直後 3 frame tier1 skip / 着地直後誤 EMPTY 化防止)"
+        )
+    if args.enable_ojama_tier1_warmup:
+        print(
+            "[viz] enable_ojama_tier1_warmup=ON "
+            "(経路 A': OJAMA_FALL→STABLE 遷移直後 8 frame tier1 skip / v70 列崩壊対策)"
         )
     if args.no_constraint_fill:
         print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
