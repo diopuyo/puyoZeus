@@ -118,6 +118,20 @@ _DEFAULT_VIDEO_DIRS: tuple[Path, ...] = (
     Path("data/evaluation_videos"),
     Path("data/holdout_videos"),
 )
+
+# ============================
+# 後処理破壊検知 (postprocess_corruption) 定数
+# ============================
+# corruption ログ上限 (メモリ節約のため)
+CORRUPTION_LOG_LIMIT: int = 100
+# 0.1% 超で FAIL
+POSTPROCESS_CORRUPTION_REJECT_RATE: float = 0.001
+# 0.05% 超で WARNING
+POSTPROCESS_CORRUPTION_WARNING_RATE: float = 0.0005
+# 片側に 50% 以上集中したら side_bias あり
+POSTPROCESS_SIDE_BIAS_THRESHOLD: float = 0.50
+# side_bias 判定に必要な最低 corruption セル数
+POSTPROCESS_SIDE_BIAS_MIN_CELLS: int = 3
 # ============================
 # データクラス
 # ============================
@@ -171,6 +185,19 @@ class VideoStats:
     # 逐次モードでは空リスト。並列モードではワーカ内で収集した値が入り、
     # 親プロセスで各動画分を統合する。pickle 可能な plain dict リスト。
     _local_disagreements: list = field(default_factory=list, repr=False, compare=False)
+    # ------------------------------------------------
+    # 後処理破壊検知 (postprocess_corruption) フィールド (後方互換 default 付き)
+    # raw_cnn==raw_hsv で一致しているのに confirmed が異なるセルを検知する。
+    # constraint_fill が正解を上書き破壊しているケースを定量化する。
+    # ------------------------------------------------
+    # 破壊 cell 総数
+    postprocess_corruption_count: int = 0
+    # side → count
+    postprocess_corruption_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    # (from_color, to_color) → count
+    postprocess_corruption_color_pairs: dict = field(default_factory=lambda: defaultdict(int))
+    # 座標ログ (repr=False でデバッグ出力肥大化を防ぐ)
+    postprocess_corruption_log: list = field(default_factory=list, repr=False)
 
 
 # ============================
@@ -461,6 +488,54 @@ def _majority_vote(a: int, b: int, c: int) -> int:
     return a  # 全員不一致: raw_cnn を基準にする
 
 
+def _check_postprocess_corruption(
+    video_id: str,
+    fi: int,
+    t_sec: float,
+    side: str,
+    row: int,
+    col: int,
+    raw_cnn_val: int,
+    raw_hsv_val: int,
+    confirmed_val: int,
+    stats: VideoStats,
+    *,
+    log_limit: int = CORRUPTION_LOG_LIMIT,
+) -> None:
+    """後処理破壊 (postprocess_corruption) を検知して stats に記録する。
+
+    検知条件:
+      - raw_cnn_val == raw_hsv_val  (CNN と HSV が一致: 正解候補として信頼できる)
+      - confirmed_val != raw_cnn_val  (後処理が書き換えた)
+      - raw_cnn_val と confirmed_val どちらも COLOR_UNKNOWN でない
+
+    これは constraint_fill が CNN・HSV 一致セルを誤って上書きしたケースを捕捉する。
+    NOTE: raw_cnn==raw_hsv==誤りの全列崩壊型は本検知の対象外。
+    　　　その場合は per_col_midgame_empty (I1) / avg_puyo_count (C1) で別途検知。
+    UNKNOWN 除外は per_col_unknown_rate (I1) が担当するためここでは除外のみ実施。
+    """
+    if (
+        raw_cnn_val == raw_hsv_val
+        and confirmed_val != raw_cnn_val
+        and raw_cnn_val not in (COLOR_UNKNOWN,)
+        and confirmed_val not in (COLOR_UNKNOWN,)
+    ):
+        stats.postprocess_corruption_count += 1
+        stats.postprocess_corruption_by_side[side] += 1
+        stats.postprocess_corruption_color_pairs[(raw_cnn_val, confirmed_val)] += 1
+        if len(stats.postprocess_corruption_log) < log_limit:
+            stats.postprocess_corruption_log.append({
+                "video": video_id,
+                "frame": fi,
+                "t_sec": round(t_sec, 2),
+                "side": side,
+                "row": row,
+                "col": col,
+                "raw_cnn": COLOR_NAMES.get(raw_cnn_val, str(raw_cnn_val)),
+                "confirmed": COLOR_NAMES.get(confirmed_val, str(confirmed_val)),
+            })
+
+
 def _record_cell(
     video_id: str, fi: int, t_sec: float, side: str,
     row: int, col: int,
@@ -546,6 +621,12 @@ def _eval_side_frame(
                 video_id, fi, t_sec, side, row, col,
                 raw_cnn_val, raw_hsv_val, confirmed_val,
                 stats, disagreements,
+            )
+            # 後処理破壊検知: raw_cnn==raw_hsv なのに confirmed が異なるセルを検知
+            _check_postprocess_corruption(
+                video_id, fi, t_sec, side, row, col,
+                raw_cnn_val, raw_hsv_val, confirmed_val,
+                stats,
             )
     # I1 メトリクス集計: confirmed_board の col 別 UNKNOWN 率 + 中盤 EMPTY 率
     if confirmed_board is not None:
@@ -756,6 +837,8 @@ def _aggregate_stats(stats_list: list[VideoStats]) -> dict:
         "per_video": _build_video_acc(stats_list),
         # I1 メトリクス集計サマリ (全動画 worst-case)
         "i1_metrics_summary": _build_i1_summary(stats_list),
+        # 後処理破壊検知 (postprocess_corruption)
+        "postprocess_corruption": _aggregate_corruption(stats_list, total_cells),
     }
 
 
@@ -810,6 +893,26 @@ def _judge_pass_fail(
     return ("PASS" if not failures else "FAIL"), failures
 
 
+def _judge_pass_fail_with_corruption(
+    overall_acc: float,
+    per_color: dict[str, float],
+    holdout_acc: Optional[float],
+    stats_list: Optional[list] = None,
+    corruption_section: Optional[dict] = None,
+) -> tuple[str, list[str]]:
+    """PASS/FAIL 判定に postprocess_corruption 判定を加えたラッパー。
+
+    backwards compat: _judge_pass_fail の引数を踏襲しつつ corruption_section を追加。
+    corruption_section=None なら corruption 判定をスキップする (従来挙動と同等)。
+    """
+    verdict, failures = _judge_pass_fail(
+        overall_acc, per_color, holdout_acc, stats_list
+    )
+    if corruption_section is not None:
+        failures.extend(_judge_corruption_metrics(corruption_section))
+    return ("PASS" if not failures else "FAIL"), failures
+
+
 def _judge_i1_metrics(stats_list: list) -> list[str]:
     """I1 追加メトリクスの FAIL 判定を返す。
 
@@ -852,6 +955,158 @@ def _judge_i1_metrics(stats_list: list) -> list[str]:
                     f" (v40_match01 全EMPTY誤判定パターン)"
                 )
     return failures
+
+def _aggregate_corruption(
+    stats_list: list["VideoStats"],
+    total_stable_cells: int,
+) -> dict:
+    """全動画の postprocess_corruption 集計を返す。
+
+    Args:
+        stats_list: 動画統計リスト。
+        total_stable_cells: 分母 (STABLE 確定 cell 総数)。
+
+    Returns:
+        count / rate / by_side / color_pairs / side_bias / corruption_ratio / log
+        を含む dict。
+    """
+    total_corruption = sum(s.postprocess_corruption_count for s in stats_list)
+    total_physics_fix = sum(s.physics_fix_count for s in stats_list)
+    rate = total_corruption / total_stable_cells if total_stable_cells > 0 else 0.0
+
+    # side 別集計
+    by_side: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for side, cnt in s.postprocess_corruption_by_side.items():
+            by_side[side] += cnt
+
+    # color_pair 集計 (JSON キーに変換)
+    color_pairs: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for (fc, tc), cnt in s.postprocess_corruption_color_pairs.items():
+            key = f"{COLOR_NAMES.get(fc, str(fc))}->{COLOR_NAMES.get(tc, str(tc))}"
+            color_pairs[key] += cnt
+
+    # side_bias: 片側 & 1 色が POSTPROCESS_SIDE_BIAS_THRESHOLD 以上集中 & >=MIN セル
+    side_bias = _detect_side_bias(stats_list, total_corruption)
+
+    # corruption_ratio = corruption / (corruption + physics_fix)
+    denom = total_corruption + total_physics_fix
+    corruption_ratio = total_corruption / denom if denom > 0 else 0.0
+
+    # ログ: 全動画分を CORRUPTION_LOG_LIMIT 件まで統合
+    log: list[dict] = []
+    for s in stats_list:
+        log.extend(s.postprocess_corruption_log)
+        if len(log) >= CORRUPTION_LOG_LIMIT:
+            log = log[:CORRUPTION_LOG_LIMIT]
+            break
+
+    return {
+        "count": total_corruption,
+        "rate": rate,
+        "by_side": dict(by_side),
+        "color_pairs": dict(color_pairs),
+        "side_bias": side_bias,
+        "corruption_ratio": corruption_ratio,
+        "log": log,
+        # fail-silent 罠注記: raw_cnn==raw_hsv==誤りの全列崩壊型は本指標で検知不可
+        "blind_spot_note": (
+            "raw_cnn==raw_hsv==誤り の全列崩壊型は本指標では検知不可。"
+            "per_col_midgame_empty (I1) / avg_puyo_count (C1) で別途確認・viz 目視必須。"
+        ),
+    }
+
+
+def _detect_side_bias(
+    stats_list: list["VideoStats"],
+    total_corruption: int,
+) -> dict:
+    """side_bias: 片側 & 書換先 1 色が THRESHOLD 以上集中を検知する。
+
+    Returns:
+        {"detected": bool, "dominant_side": str|None, "dominant_color": str|None,
+         "dominant_rate": float}
+    """
+    if total_corruption < POSTPROCESS_SIDE_BIAS_MIN_CELLS:
+        return {
+            "detected": False, "dominant_side": None,
+            "dominant_color": None, "dominant_rate": 0.0,
+        }
+
+    # side 別 color_pair 集計
+    side_color: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for s in stats_list:
+        for (fc, tc), cnt in s.postprocess_corruption_color_pairs.items():
+            # side 別は by_side から派生できないので per-stats の side 情報を利用
+            pass
+    # side_color は postprocess_corruption_by_side と color_pairs から近似判定
+    # side 別合計が >= THRESHOLD * total_corruption かつ >= MIN_CELLS
+    by_side_total: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for side, cnt in s.postprocess_corruption_by_side.items():
+            by_side_total[side] += cnt
+
+    dominant_side = None
+    dominant_rate = 0.0
+    for side, cnt in by_side_total.items():
+        if total_corruption > 0:
+            r = cnt / total_corruption
+            if r >= POSTPROCESS_SIDE_BIAS_THRESHOLD and cnt >= POSTPROCESS_SIDE_BIAS_MIN_CELLS:
+                if r > dominant_rate:
+                    dominant_rate = r
+                    dominant_side = side
+
+    # 書換先 1 色が >= THRESHOLD 集中を確認
+    dominant_color = None
+    if dominant_side is not None:
+        color_pair_for_side: dict[str, int] = defaultdict(int)
+        for s in stats_list:
+            # side 別内訳は postprocess_corruption_log から再集計
+            for entry in s.postprocess_corruption_log:
+                if entry.get("side") == dominant_side:
+                    color_pair_for_side[entry.get("confirmed", "")] += 1
+        total_for_side = sum(color_pair_for_side.values())
+        if total_for_side > 0:
+            for color, cnt in color_pair_for_side.items():
+                if cnt / total_for_side >= POSTPROCESS_SIDE_BIAS_THRESHOLD:
+                    dominant_color = color
+                    break
+
+    return {
+        "detected": dominant_side is not None,
+        "dominant_side": dominant_side,
+        "dominant_color": dominant_color,
+        "dominant_rate": dominant_rate,
+    }
+
+
+def _judge_corruption_metrics(
+    corruption_section: dict,
+) -> list[str]:
+    """postprocess_corruption セクションから FAIL 判定を返す。
+
+    corruption_rate >= POSTPROCESS_CORRUPTION_REJECT_RATE で FAIL。
+    side_bias.detected == True で FAIL。
+    """
+    failures: list[str] = []
+    rate = corruption_section.get("rate", 0.0)
+    if rate >= POSTPROCESS_CORRUPTION_REJECT_RATE:
+        failures.append(
+            f"postprocess_corruption_rate {rate:.4%}"
+            f" >= REJECT閾値 {POSTPROCESS_CORRUPTION_REJECT_RATE:.4%}"
+            f" (constraint_fill が CNN・HSV 一致セルを破壊している可能性)"
+        )
+    side_bias = corruption_section.get("side_bias", {})
+    if side_bias.get("detected", False):
+        failures.append(
+            f"postprocess_corruption side_bias 検知:"
+            f" dominant_side={side_bias.get('dominant_side')}"
+            f" dominant_color={side_bias.get('dominant_color')}"
+            f" rate={side_bias.get('dominant_rate', 0.0):.1%}"
+        )
+    return failures
+
 
 # ============================
 # CLI
@@ -1158,12 +1413,21 @@ def main() -> int:
     agg = _aggregate_stats(stats_list)
     holdout_summary = _compute_holdout_summary(stats_list, holdout_ids)
     holdout_acc = holdout_summary.get("acc") if holdout_ids else None
-    verdict, failures = _judge_pass_fail(
+    corruption_section = agg.get("postprocess_corruption")
+    verdict, failures = _judge_pass_fail_with_corruption(
         overall_acc=agg["overall"]["acc"],
         per_color=agg["per_color"],
         holdout_acc=holdout_acc,
         stats_list=stats_list,
+        corruption_section=corruption_section,
     )
+    # constraint_fill 無効時の注記: 本指標は 0 になりやすい
+    postprocess_note: Optional[str] = None
+    if not enable_constraint_fill:
+        postprocess_note = (
+            "constraint_fill 無効中のため本指標は 0 になりやすい。"
+            "全列崩壊型は per_col_midgame_empty/avg_puyo_count で別途確認、viz 目視必須"
+        )
     result = {
         **agg,
         "holdout_summary": holdout_summary,
@@ -1182,6 +1446,9 @@ def main() -> int:
             "workers": workers,
         },
     }
+    # constraint_fill 無効時の postprocess_corruption_note を追加
+    if postprocess_note is not None:
+        result["postprocess_corruption_note"] = postprocess_note
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     _print_summary(agg, holdout_summary, holdout_acc, holdout_ids,
