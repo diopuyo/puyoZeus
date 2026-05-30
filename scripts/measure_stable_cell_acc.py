@@ -233,9 +233,23 @@ def _inject_hsv(pipe: RecognitionPipeline, hsv_path: Path) -> None:
                 pipe._online_hsv_injected = True
     except Exception as e:
         print(f"[measure] HSV inject 失敗 ({hsv_path}): {e}", file=sys.stderr)
-def _make_pipeline_cnn(video_id: str) -> RecognitionPipeline:
-    """CNN + HSV ハイブリッド pipeline を構築する。"""
-    pipe = RecognitionPipeline.load_default(force_in_match=True)
+def _make_pipeline_cnn(
+    video_id: str,
+    enable_constraint_fill: bool = True,
+) -> RecognitionPipeline:
+    """CNN + HSV ハイブリッド pipeline を構築する。
+
+    Args:
+        video_id: 動画 ID (per-video HSV 解決に使用)。
+        enable_constraint_fill: False にすると NEXT 累積制約による
+            色 count 補正 (_apply_next_count_constraint) を無効化する。
+            confirmed 経路 (CNN+物理推論 post-process) に効く。
+            backwards compat: デフォルト True = 従来挙動。
+    """
+    pipe = RecognitionPipeline.load_default(
+        force_in_match=True,
+        enable_constraint_fill=enable_constraint_fill,
+    )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
 
@@ -367,14 +381,23 @@ def _process_video(
     max_frames: int,
     sample_interval_sec: float,
     disagreements: list[dict],
+    enable_constraint_fill: bool = True,
 ) -> VideoStats:
-    """1 動画を処理し VideoStats を返す。"""
+    """1 動画を処理し VideoStats を返す。
+
+    Args:
+        enable_constraint_fill: False にすると confirmed 経路の
+            constraint_fill を無効化して測定する。
+            backwards compat: デフォルト True = 従来挙動。
+    """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
     cap, fps, n_target, interval_frames = cap_info
-    pipe_cnn = _make_pipeline_cnn(video_id)
+    # confirmed 経路 (CNN+物理推論) のみ enable_constraint_fill を制御する。
+    # raw_hsv 経路は constraint_fill を通らないため変更不要。
+    pipe_cnn = _make_pipeline_cnn(video_id, enable_constraint_fill=enable_constraint_fill)
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
     stats = _run_frame_loop(
@@ -821,6 +844,17 @@ def _parse_args() -> argparse.Namespace:
         "--sample-interval", type=float, default=DEFAULT_SAMPLE_INTERVAL_SEC,
         help="認識処理間隔 (秒)。",
     )
+    p.add_argument(
+        "--no-constraint-fill",
+        action="store_true",
+        default=False,
+        help=(
+            "NEXT 累積制約による色 count 補正 (constraint_fill) を無効化する。 "
+            "constraint_fill の net 効果測定用。 "
+            "confirmed 経路 (CNN+物理推論 post-process) に効く。 "
+            "省略時は従来挙動 (constraint_fill 有効)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -840,8 +874,15 @@ def _collect_results(
     max_frames: int,
     sample_interval_sec: float,
     disagreements: list[dict],
+    enable_constraint_fill: bool = True,
 ) -> list[VideoStats]:
-    """動画リストを走らせ VideoStats リストを返す。"""
+    """動画リストを走らせ VideoStats リストを返す。
+
+    Args:
+        enable_constraint_fill: False にすると confirmed 経路の
+            constraint_fill を無効化して測定する。
+            backwards compat: デフォルト True = 従来挙動。
+    """
     stats_list: list[VideoStats] = []
     for vid in video_ids:
         vpath = _resolve_video_path(vid, video_dir)
@@ -855,6 +896,7 @@ def _collect_results(
             max_frames=max_frames,
             sample_interval_sec=sample_interval_sec,
             disagreements=disagreements,
+            enable_constraint_fill=enable_constraint_fill,
         )
         stats_list.append(vstats)
     return stats_list
@@ -954,12 +996,17 @@ def main() -> int:
     )
     output_path = _resolve_output_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
+    enable_constraint_fill: bool = not args.no_constraint_fill
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids}")
     print(f"[measure] 出力先: {output_path}")
+    if not enable_constraint_fill:
+        print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
         args.max_frames, args.sample_interval, disagreements,
+        enable_constraint_fill=enable_constraint_fill,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -985,6 +1032,8 @@ def main() -> int:
             "sample_interval_sec": args.sample_interval,
             "pass_overall_threshold": PASS_OVERALL_THRESHOLD,
             "pass_per_color_threshold": PASS_PER_COLOR_THRESHOLD,
+            # constraint_fill の on/off を記録 (後日比較用)
+            "enable_constraint_fill": enable_constraint_fill,
         },
     }
     with output_path.open("w", encoding="utf-8") as f:
