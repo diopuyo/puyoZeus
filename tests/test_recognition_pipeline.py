@@ -338,11 +338,15 @@ def test_enable_constraint_fill_false_skips_constraint() -> None:
         "_enable_constraint_fill=False が設定されているべき"
 
 
-def test_enable_constraint_fill_default_true() -> None:
-    """案2: enable_constraint_fill のデフォルトは True (= 従来挙動維持)."""
+def test_enable_constraint_fill_default_false() -> None:
+    """2026-05-31: enable_constraint_fill のデフォルトは False に変更.
+
+    constraint_fill が tsumo_count 誤算で正解セルを誤色置換していたため
+    (16動画 eval で OFF が net プラス)、本番 default を OFF 化した。
+    """
     pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
-    assert pipe._enable_constraint_fill is True, \
-        "デフォルトは True (backwards compat)"
+    assert pipe._enable_constraint_fill is False, \
+        "デフォルトは False (constraint_fill 誤置換対策、2026-05-31)"
 
 
 def test_constraint_fill_false_does_not_modify_board() -> None:

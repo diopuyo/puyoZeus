@@ -294,7 +294,11 @@ class RecognitionPipeline:
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
         enable_ojama_tier1_warmup: bool = False,
-        enable_constraint_fill: bool = True,
+        # 2026-05-31: default OFF に変更。constraint_fill は tsumo_count 誤算で
+        # CNN/HSV 正解セルを誤色に置換していた (16動画 eval: OFF で red +0.26%
+        # yellow +0.08% overall +0.0002 回復、blue -0.03% 微減)。CNN 精度向上で
+        # 補助輪不要。再有効化は明示 True 指定で可能。
+        enable_constraint_fill: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -673,7 +677,7 @@ class RecognitionPipeline:
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
         enable_ojama_tier1_warmup: bool = False,
-        enable_constraint_fill: bool = True,
+        enable_constraint_fill: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
