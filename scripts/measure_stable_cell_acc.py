@@ -280,6 +280,7 @@ def _make_pipeline_cnn(
     video_id: str,
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -292,11 +293,15 @@ def _make_pipeline_cnn(
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement の空セル
+            hallucination ガードを有効化する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -431,6 +436,7 @@ def _process_video(
     disagreements: list[dict],
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -441,18 +447,22 @@ def _process_video(
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement 空セル
+            hallucination ガードを有効化する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
     cap, fps, n_target, interval_frames = cap_info
-    # confirmed 経路 (CNN+物理推論) のみ enable_constraint_fill / enable_t2_highconf_yield を制御する。
+    # confirmed 経路 (CNN+物理推論) のみ各フラグを制御する。
     # raw_hsv 経路は constraint_fill を通らないため変更不要。
     pipe_cnn = _make_pipeline_cnn(
         video_id,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
@@ -475,6 +485,7 @@ def _process_video_worker(
     sample_interval_sec: float,
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -499,6 +510,7 @@ def _process_video_worker(
         disagreements=local_disagrees,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1303,6 +1315,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--infer-empty-guard",
+        action="store_true",
+        default=False,
+        dest="enable_infer_empty_guard",
+        help=(
+            "infer_placement 空セル hallucination ガードを有効化する。 "
+            "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
+            "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
+            "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
+            "省略時は従来挙動 (guard 無効)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1334,6 +1359,7 @@ def _collect_results(
     enable_constraint_fill: bool = True,
     workers: int = 1,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1345,6 +1371,8 @@ def _collect_results(
             2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement 空セル
+            hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1365,12 +1393,14 @@ def _collect_results(
             video_tasks, holdout_ids, max_frames,
             sample_interval_sec, disagreements, enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
         sample_interval_sec, disagreements, enable_constraint_fill,
         effective_workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
 
 
@@ -1382,6 +1412,7 @@ def _collect_serial(
     disagreements: list[dict],
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1395,6 +1426,7 @@ def _collect_serial(
             disagreements=disagreements,
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1409,6 +1441,7 @@ def _collect_parallel(
     enable_constraint_fill: bool,
     workers: int,
     enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1436,6 +1469,7 @@ def _collect_parallel(
                 sample_interval_sec,
                 enable_constraint_fill,
                 enable_t2_highconf_yield,
+                enable_infer_empty_guard,
             )
             futures[fut] = vid
 
@@ -1559,6 +1593,10 @@ def main() -> int:
     enable_t2_highconf_yield: bool = bool(
         getattr(args, "enable_t2_highconf_yield", False)
     )
+    # infer_empty_guard フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_infer_empty_guard: bool = bool(
+        getattr(args, "enable_infer_empty_guard", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1566,6 +1604,8 @@ def main() -> int:
         print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
     if enable_t2_highconf_yield:
         print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
+    if enable_infer_empty_guard:
+        print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1573,6 +1613,7 @@ def main() -> int:
         enable_constraint_fill=enable_constraint_fill,
         workers=workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)

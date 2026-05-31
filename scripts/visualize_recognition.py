@@ -658,6 +658,17 @@ def main() -> int:
              "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊 (16 動画 77K 件) の修正。 "
              "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
     )
+    parser.add_argument(
+        "--infer-empty-guard",
+        action="store_true",
+        default=False,
+        dest="enable_infer_empty_guard",
+        help="infer_placement 空セル hallucination ガードを有効化。 "
+             "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
+             "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
+             "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
+             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -722,6 +733,8 @@ def main() -> int:
         enable_constraint_fill=not args.no_constraint_fill,
         # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
         enable_t2_highconf_yield=args.enable_t2_highconf_yield,
+        # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
+        enable_infer_empty_guard=args.enable_infer_empty_guard,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -753,6 +766,11 @@ def main() -> int:
             "[viz] t2_highconf_yield=ON "
             "(T2 高確信 yield: CNN 支持セルは prev_stable 上書きスキップ / "
             "infer_placement 誤推論 + T2 自己強化フリーズ修正)"
+        )
+    if args.enable_infer_empty_guard:
+        print(
+            "[viz] infer_empty_guard=ON "
+            "(空セル hallucination ガード: 非 diff セルが CNN EMPTY なら候補スキップ)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

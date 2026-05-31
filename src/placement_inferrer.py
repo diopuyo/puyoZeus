@@ -367,6 +367,35 @@ def _chain_count_of(
         return 0
 
 
+def _is_empty_hallucination(
+    pattern: LandingPattern,
+    diff_cells: list[tuple[int, int]],
+    cnn_after: Board,
+) -> bool:
+    """guard_empty_hallucination 用: パターンの非 diff セルが cnn_after で明示 EMPTY か判定.
+
+    Args:
+        pattern: 判定対象の着地パターン (2 cell).
+        diff_cells: CNN 差分として検出されたセル座標リスト.
+        cnn_after: 着地後の CNN 観測盤面.
+
+    Returns:
+        True = 非 diff セルが明示 COLOR_EMPTY → hallucination とみなす (候補スキップ).
+        False = 非 diff セルが COLOR_UNKNOWN or 有色 → 補完許容 (採用継続).
+    """
+    diff_set = frozenset(diff_cells)
+    for cell in pattern.cells:
+        if cell in diff_set:
+            # diff セルは CNN が変化を観測 → hallucination 対象外
+            continue
+        r, c = cell
+        cnn_val = int(cnn_after.get(r, c))
+        if cnn_val == COLOR_EMPTY:
+            # CNN が明示的に EMPTY → hallucination とみなす
+            return True
+    return False
+
+
 def infer_placement(
     confirmed_before: Board,
     cnn_after: Board | None,
@@ -377,6 +406,7 @@ def infer_placement(
     region: "object | None" = None,
     bg_fp: "object | None" = None,
     bg_threshold: float | None = None,
+    guard_empty_hallucination: bool = False,
 ) -> Board | None:
     """物理推論主軸の置き判定 (= Phase 1 主 API, cycle 71 + 71b).
 
@@ -394,6 +424,10 @@ def infer_placement(
         frame_bgr: 着地後の 1920x1080 BGR frame. 渡されれば β2' で着地 2 cell の
                    HSV と NEXT 色 2 種類の距離で順序確定.
         region: BoardRegion. frame_bgr とセットで渡す.
+        guard_empty_hallucination: True にすると、 pattern の非 diff セルが cnn_after で
+            明示 COLOR_EMPTY な候補をスキップする (= CNN が確信して空なセルへの
+            NEXT 色書込 hallucination を防ぐ). 非 diff セルが COLOR_UNKNOWN なら
+            補完を許容し従来通り採用. default False = 従来挙動維持 (backwards compat).
 
     Returns:
         着地後の確定盤面. 物理パターン 0 件 / next_pair 不明等で None.
@@ -407,6 +441,9 @@ def infer_placement(
     patterns = enumerate_landing_patterns(confirmed_before)
     if not patterns:
         return None
+    # diff_cells は cnn_after is not None の場合のみ設定される。
+    # guard_empty_hallucination で参照するため事前に空リストで初期化。
+    diff_cells: list[tuple[int, int]] = []
     # cycle 71v (2026-05-15): CNN diff の物理整合性ガードを厳格化.
     # 旧実装は CNN 観測が不完全 (= diff=0 or diff=1) でも infer を強制実行し、
     # arbitrary column の placement (= ゴースト) を生成する原因だった。
@@ -447,7 +484,19 @@ def infer_placement(
         and region is not None
         and next_pair[0] != next_pair[1]
     )
+    # guard_empty_hallucination: 候補生成前にパターン単位でスキップ判定。
+    # cnn_after が None の場合は diff_cells が空リストのため guard は実質無効。
+    # diff_cells は上記 if cnn_after is not None ブロックで設定済み。
     for p in patterns:
+        # guard_empty_hallucination: 非 diff セルが明示 EMPTY なら候補スキップ。
+        # cnn_after が None の場合は diff_cells が空 → _is_empty_hallucination は
+        # 全セルを「diff セルではない」と判定するため安全のため条件を絞る。
+        if (
+            guard_empty_hallucination
+            and cnn_after is not None
+            and _is_empty_hallucination(p, diff_cells, cnn_after)
+        ):
+            continue
         if use_hsv_classification:
             (r1, c1_pos), (r2, c2_pos) = p.cells
             patch_a = _extract_cell_patch_from_frame(
@@ -472,6 +521,9 @@ def infer_placement(
             candidates.append((
                 materialize_pattern(confirmed_before, p, c_a, c_b), p,
             ))
+    # 全候補がガードでスキップされた場合は commit refuse (= TSUMO_FALL 維持)
+    if not candidates:
+        return None
     if cnn_after is None:
         return candidates[0][0]
     # CNN 一致度で score, 案 A の連鎖整合性で tie-break.

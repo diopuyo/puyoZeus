@@ -301,6 +301,7 @@ class RecognitionPipeline:
         # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
         enable_constraint_fill: bool = True,
         enable_t2_highconf_yield: bool = False,
+        enable_infer_empty_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -533,6 +534,12 @@ class RecognitionPipeline:
         # B1 禁忌 (= 色→空 変化を無差別保護) とは逆方向: prev_stable の古い色による
         # 上書きを「CNN が正色を支持している箇所でのみ」解除する (保護を弱める方向)。
         self._enable_t2_highconf_yield: bool = bool(enable_t2_highconf_yield)
+        # 案 B1: infer_placement 空セル hallucination ガード。
+        # True にすると、 pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補を
+        # スキップし、 CNN が確信して空なセルへの NEXT 色書込を防ぐ。
+        # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
+        # デフォルト False = 従来挙動維持 (backwards compat)。
+        self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
 
     @staticmethod
     def _build_hybrid_reader(
@@ -688,6 +695,7 @@ class RecognitionPipeline:
         enable_ojama_tier1_warmup: bool = False,
         enable_constraint_fill: bool = True,
         enable_t2_highconf_yield: bool = False,
+        enable_infer_empty_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -817,6 +825,7 @@ class RecognitionPipeline:
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
         )
 
     # ------------------------------------------------------------------
@@ -2043,6 +2052,7 @@ class RecognitionPipeline:
                 frame_bgr=frame_bgr,
                 region=region_for_side,
                 bg_fp=bg_fp_for_side,
+                guard_empty_hallucination=self._enable_infer_empty_guard,
             )
             if inferred_landing is not None:
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。

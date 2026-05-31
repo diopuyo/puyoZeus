@@ -281,6 +281,70 @@ class TestInferPlacementCycle71b:
         assert result.get(9, 2) == COLOR_BLUE
 
 
+class TestInferPlacementEmptyGuard:
+    """案 B1: guard_empty_hallucination オプションのテスト."""
+
+    def test_guard_off_legacy_behavior_unchanged(self):
+        """guard OFF (default) → 非 diff セルが EMPTY でも従来通り候補採用."""
+        before = _empty_board()
+        # CNN は col=2 の下セルのみ変化 (diff=1)、 上セルは EMPTY のまま
+        cnn = _empty_board()
+        cnn.set(12, 2, COLOR_RED)  # diff=1 cell のみ
+        # guard OFF では diff=1 cell を含む pattern が採用される
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=False)
+        assert result is not None
+
+    def test_guard_on_empty_nondiff_skips_pattern(self):
+        """guard ON + 非 diff セルが CNN EMPTY → そのパターンをスキップ.
+
+        diff=1 (下セルのみ変化) のとき、 縦置きパターンは
+        cells = (row=11, col=2), (row=12, col=2) で、 diff は (row=12, col=2) のみ。
+        非 diff の (row=11, col=2) を CNN で確認すると EMPTY →
+        guard ON ではこの縦置きパターンをスキップ。
+        全パターンがスキップされた場合は None を返す (= commit refuse)。
+        """
+        before = _empty_board()
+        cnn = _empty_board()
+        # col=2 の下セルだけ変化、 上セルは EMPTY のまま
+        cnn.set(12, 2, COLOR_RED)  # diff=1 cell
+        # guard ON: 縦置きパターン (row11,col2)-(row12,col2) の
+        # 非 diff セル (row11,col2) = EMPTY → スキップ。
+        # 横置きパターン (row12,col2)-(row12,col3) があるが、
+        # diff に (row12,col3) が含まれないため diff_set が subset にならず
+        # pos_filtered で除外済 → patterns が存在しないため None。
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is None
+
+    def test_guard_on_unknown_nondiff_allows_pattern(self):
+        """guard ON + 非 diff セルが CNN UNKNOWN → 補完を許容、候補採用継続."""
+        before = _empty_board()
+        cnn = _empty_board()
+        # 下セルが COLOR_RED に変化 (diff)
+        cnn.set(12, 2, COLOR_RED)
+        # 上セルを COLOR_UNKNOWN に設定 (CNN 不確実)
+        cnn.set(11, 2, COLOR_UNKNOWN)
+        # guard ON でも UNKNOWN なら補完許容 → 候補が存在するはず
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        # UNKNOWN セルは補完許容なので None にならない
+        assert result is not None
+
+    def test_guard_on_both_diff_both_colored_allows_pattern(self):
+        """guard ON + 2 セルともに diff かつ有色 → hallucination 対象外、採用継続."""
+        before = _empty_board()
+        cnn = _empty_board()
+        # 縦置きパターン 2 セルともに diff
+        cnn.set(11, 2, COLOR_RED)
+        cnn.set(12, 2, COLOR_BLUE)
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is not None
+        assert result.get(11, 2) == COLOR_RED
+        assert result.get(12, 2) == COLOR_BLUE
+
+
 class TestResolveAfterPlacementGuard:
     """cycle 71c: 大量 add ガードのテスト (= A=hit α ケース対策)."""
 
