@@ -282,10 +282,11 @@ class TestInferPlacementCycle71b:
 
 
 class TestInferPlacementEmptyGuard:
-    """案 B1: guard_empty_hallucination オプションのテスト."""
+    """guard_empty_hallucination 案 B: 観測セルは NEXT 色、非観測 EMPTY セルは
+    COLOR_UNKNOWN 留保、commit refuse 廃止のテスト。"""
 
     def test_guard_off_legacy_behavior_unchanged(self):
-        """guard OFF (default) → 非 diff セルが EMPTY でも従来通り候補採用."""
+        """guard OFF (default) → 非 diff セルが EMPTY でも従来通り候補採用。"""
         before = _empty_board()
         # CNN は col=2 の下セルのみ変化 (diff=1)、 上セルは EMPTY のまま
         cnn = _empty_board()
@@ -295,44 +296,43 @@ class TestInferPlacementEmptyGuard:
                                  guard_empty_hallucination=False)
         assert result is not None
 
-    def test_guard_on_empty_nondiff_skips_pattern(self):
-        """guard ON + 非 diff セルが CNN EMPTY → そのパターンをスキップ.
+    def test_guard_on_diff1_empty_nondiff_commits_with_unknown(self):
+        """guard ON + diff=1 + 非 diff セルが CNN EMPTY → None を返さず盤面を commit。
 
-        diff=1 (下セルのみ変化) のとき、 縦置きパターンは
-        cells = (row=11, col=2), (row=12, col=2) で、 diff は (row=12, col=2) のみ。
-        非 diff の (row=11, col=2) を CNN で確認すると EMPTY →
-        guard ON ではこの縦置きパターンをスキップ。
-        全パターンがスキップされた場合は None を返す (= commit refuse)。
+        案 B 変更点: 旧実装は全パターンスキップ→None (commit refuse) だったが、
+        新実装は「観測セル (row=12,col=2) に NEXT 色、非観測セル (row=11,col=2) に
+        COLOR_UNKNOWN」として盤面を返す。color→empty 副作用を除去。
         """
         before = _empty_board()
         cnn = _empty_board()
         # col=2 の下セルだけ変化、 上セルは EMPTY のまま
         cnn.set(12, 2, COLOR_RED)  # diff=1 cell
-        # guard ON: 縦置きパターン (row11,col2)-(row12,col2) の
-        # 非 diff セル (row11,col2) = EMPTY → スキップ。
-        # 横置きパターン (row12,col2)-(row12,col3) があるが、
-        # diff に (row12,col3) が含まれないため diff_set が subset にならず
-        # pos_filtered で除外済 → patterns が存在しないため None。
         result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
                                  guard_empty_hallucination=True)
-        assert result is None
+        # 案 B: commit refuse しない (None を返さない)
+        assert result is not None
+        # 観測した下セルには NEXT 色のいずれかが書かれる
+        assert result.get(12, 2) in (COLOR_RED, COLOR_BLUE)
+        # 非観測 EMPTY だった上セルは COLOR_UNKNOWN 留保 (hallucination 防止)
+        assert result.get(11, 2) == COLOR_UNKNOWN
 
-    def test_guard_on_unknown_nondiff_allows_pattern(self):
-        """guard ON + 非 diff セルが CNN UNKNOWN → 補完を許容、候補採用継続."""
+    def test_guard_on_unknown_nondiff_allows_physical_completion(self):
+        """guard ON + 非 diff セルが CNN UNKNOWN → 物理補完で NEXT 色を書く。"""
         before = _empty_board()
         cnn = _empty_board()
         # 下セルが COLOR_RED に変化 (diff)
         cnn.set(12, 2, COLOR_RED)
         # 上セルを COLOR_UNKNOWN に設定 (CNN 不確実)
         cnn.set(11, 2, COLOR_UNKNOWN)
-        # guard ON でも UNKNOWN なら補完許容 → 候補が存在するはず
         result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
                                  guard_empty_hallucination=True)
-        # UNKNOWN セルは補完許容なので None にならない
         assert result is not None
+        # UNKNOWN セルは物理補完 → NEXT 色のいずれかが書かれる
+        assert result.get(11, 2) in (COLOR_RED, COLOR_BLUE)
+        assert result.get(12, 2) in (COLOR_RED, COLOR_BLUE)
 
     def test_guard_on_both_diff_both_colored_allows_pattern(self):
-        """guard ON + 2 セルともに diff かつ有色 → hallucination 対象外、採用継続."""
+        """guard ON + 2 セルともに diff かつ有色 → 両方 NEXT 色で通常 commit。"""
         before = _empty_board()
         cnn = _empty_board()
         # 縦置きパターン 2 セルともに diff
@@ -343,6 +343,19 @@ class TestInferPlacementEmptyGuard:
         assert result is not None
         assert result.get(11, 2) == COLOR_RED
         assert result.get(12, 2) == COLOR_BLUE
+
+    def test_guard_on_no_hallucination_when_both_diff(self):
+        """guard ON + 両 diff → COLOR_UNKNOWN 上書きなし (留保が起きない)。"""
+        before = _empty_board()
+        cnn = _empty_board()
+        cnn.set(11, 2, COLOR_BLUE)
+        cnn.set(12, 2, COLOR_RED)
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is not None
+        # どちらも diff → UNKNOWN への置換は発生しない
+        assert result.get(11, 2) != COLOR_UNKNOWN
+        assert result.get(12, 2) != COLOR_UNKNOWN
 
 
 class TestResolveAfterPlacementGuard:
