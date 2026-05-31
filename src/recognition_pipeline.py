@@ -2227,6 +2227,7 @@ class RecognitionPipeline:
                             frame_bgr=frame_bgr,
                             region=region_for_side_b,
                             bg_fp=bg_fp_for_side_b,
+                            guard_empty_hallucination=self._enable_infer_empty_guard,
                         )
                         if inferred_b is not None:
                             # 即時連鎖判定 (= 短い TSUMO_FALL 取りこぼし時も適用)
