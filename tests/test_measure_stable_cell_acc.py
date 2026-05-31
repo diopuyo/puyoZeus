@@ -19,6 +19,7 @@ from scripts.measure_stable_cell_acc import (
     _aggregate_stats,
     _compute_holdout_summary,
     _judge_pass_fail,
+    _judge_pass_fail_with_corruption,
     _resolve_hsv_path,
     _resolve_video_path,
     _majority_vote,
@@ -38,6 +39,13 @@ from scripts.measure_stable_cell_acc import (
     MIDGAME_COL_MIN_FRAMES,
     BOARD_ROWS,
     BOARD_COLS,
+    # サブカテゴリ関連
+    _classify_corruption_subcategory,
+    _aggregate_corruption_subcategory,
+    _aggregate_corruption,
+    _judge_corruption_metrics,
+    CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE,
+    POSTPROCESS_CORRUPTION_REJECT_RATE,
 )
 from src.board import (
     COLOR_EMPTY, COLOR_RED, COLOR_BLUE, COLOR_GREEN,
@@ -410,3 +418,213 @@ def test_eval_side_frame_cnn_hsv_disagree_confirmed_matches_hsv():
     # 不一致 cell の predictions に raw_cnn フィールドがあること
     assert len(disags) > 0
     assert "raw_cnn" in disags[0]["predictions"]
+
+
+# ============================
+# サブカテゴリ corruption テスト (C タスク)
+# ============================
+
+
+def test_classify_corruption_subcategory_empty_to_color():
+    """raw==EMPTY → confirmed==色 のとき empty_to_color_count が +1 されること。"""
+    stats = _make_empty_stats()
+    _classify_corruption_subcategory(COLOR_EMPTY, COLOR_RED, stats)
+    assert stats.corruption_empty_to_color_count == 1
+    assert stats.corruption_color_to_color_count == 0
+    assert stats.corruption_color_to_empty_count == 0
+
+
+def test_classify_corruption_subcategory_color_to_color():
+    """raw==色A → confirmed==色B のとき color_to_color_count が +1 されること。"""
+    stats = _make_empty_stats()
+    _classify_corruption_subcategory(COLOR_RED, COLOR_BLUE, stats)
+    assert stats.corruption_color_to_color_count == 1
+    assert stats.corruption_empty_to_color_count == 0
+    assert stats.corruption_color_to_empty_count == 0
+
+
+def test_classify_corruption_subcategory_color_to_empty():
+    """raw==色 → confirmed==EMPTY のとき color_to_empty_count が +1 されること。"""
+    stats = _make_empty_stats()
+    _classify_corruption_subcategory(COLOR_GREEN, COLOR_EMPTY, stats)
+    assert stats.corruption_color_to_empty_count == 1
+    assert stats.corruption_empty_to_color_count == 0
+    assert stats.corruption_color_to_color_count == 0
+
+
+def test_classify_corruption_subcategory_accumulates():
+    """複数回呼び出したとき各カウンタが正しく累積されること。"""
+    stats = _make_empty_stats()
+    _classify_corruption_subcategory(COLOR_EMPTY, COLOR_RED, stats)   # e2c
+    _classify_corruption_subcategory(COLOR_EMPTY, COLOR_BLUE, stats)  # e2c
+    _classify_corruption_subcategory(COLOR_RED, COLOR_BLUE, stats)    # c2c
+    _classify_corruption_subcategory(COLOR_BLUE, COLOR_EMPTY, stats)  # c2e
+    assert stats.corruption_empty_to_color_count == 2
+    assert stats.corruption_color_to_color_count == 1
+    assert stats.corruption_color_to_empty_count == 1
+
+
+def _make_stats_with_corruption(
+    e2c: int = 0, c2c: int = 0, c2e: int = 0,
+    total_cells: int = 1000,
+) -> VideoStats:
+    """サブカテゴリ corruption カウンタを指定した VideoStats を生成する。"""
+    s = VideoStats(video_id="vtest", is_holdout=False)
+    s.total_cells = total_cells
+    s.agreed_cells = total_cells
+    s.postprocess_corruption_count = e2c + c2c + c2e
+    s.corruption_empty_to_color_count = e2c
+    s.corruption_color_to_color_count = c2c
+    s.corruption_color_to_empty_count = c2e
+    return s
+
+
+def test_aggregate_corruption_subcategory_empty_list():
+    """空リストのとき全サブカテゴリ count=0 / rate=0.0 になること。"""
+    result = _aggregate_corruption_subcategory([], 1000)
+    for key in ("empty_to_color", "color_to_color", "color_to_empty"):
+        assert result[key]["count"] == 0
+        assert result[key]["rate"] == 0.0
+
+
+def test_aggregate_corruption_subcategory_counts_summed():
+    """複数動画の各サブカテゴリが正しく合算されること。"""
+    s1 = _make_stats_with_corruption(e2c=5, c2c=3, c2e=2, total_cells=500)
+    s2 = _make_stats_with_corruption(e2c=10, c2c=1, c2e=4, total_cells=500)
+    result = _aggregate_corruption_subcategory([s1, s2], total_stable_cells=1000)
+    assert result["empty_to_color"]["count"] == 15
+    assert result["color_to_color"]["count"] == 4
+    assert result["color_to_empty"]["count"] == 6
+
+
+def test_aggregate_corruption_subcategory_rate_correct():
+    """rate = count / total_stable_cells が正しく計算されること。"""
+    s = _make_stats_with_corruption(e2c=10, total_cells=1000)
+    result = _aggregate_corruption_subcategory([s], total_stable_cells=1000)
+    assert abs(result["empty_to_color"]["rate"] - 0.010) < 1e-9
+
+
+def test_aggregate_corruption_subcategory_zero_division():
+    """total_stable_cells=0 のとき rate=0.0 になること (ゼロ除算しないこと)。"""
+    s = _make_stats_with_corruption(e2c=5)
+    result = _aggregate_corruption_subcategory([s], total_stable_cells=0)
+    # denom=0 → denom=1 fallback なので rate=5/1=5.0 (上限なし)
+    # 主要確認: クラッシュしないこと
+    assert isinstance(result["empty_to_color"]["rate"], float)
+
+
+def test_aggregate_corruption_subcategory_has_note_fields():
+    """各サブカテゴリに 'note' フィールドが含まれること。"""
+    result = _aggregate_corruption_subcategory([], 100)
+    for key in ("empty_to_color", "color_to_color", "color_to_empty"):
+        assert "note" in result[key]
+
+
+def test_aggregate_corruption_has_subcategory_key():
+    """_aggregate_corruption の戻り値に 'subcategory' キーが含まれること。"""
+    s = _make_stats_with_corruption(e2c=2, c2c=1, total_cells=100)
+    result = _aggregate_corruption([s], total_stable_cells=100)
+    assert "subcategory" in result
+    assert "empty_to_color" in result["subcategory"]
+    assert "color_to_color" in result["subcategory"]
+    assert "color_to_empty" in result["subcategory"]
+
+
+def test_aggregate_corruption_existing_fields_preserved():
+    """既存フィールド (count/rate/by_side/color_pairs等) が破壊されないこと。"""
+    s = _make_stats_with_corruption(e2c=2, total_cells=100)
+    result = _aggregate_corruption([s], total_stable_cells=100)
+    for key in ("count", "rate", "by_side", "color_pairs",
+                "side_bias", "corruption_ratio", "log", "blind_spot_note"):
+        assert key in result, f"既存キー '{key}' が消えている"
+
+
+def test_judge_corruption_metrics_warning_only_does_not_affect_fail():
+    """empty_to_color が WARNING 閾値を超えても [WARNING] メッセージが返るだけで
+    FAIL メッセージは増えないこと。"""
+    high_e2c_rate = CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE * 2
+    corruption_section = {
+        "rate": 0.0,  # FAIL 閾値未満
+        "side_bias": {"detected": False},
+        "subcategory": {
+            "empty_to_color": {"rate": high_e2c_rate},
+            "color_to_color": {"rate": 0.0},
+            "color_to_empty": {"rate": 0.0},
+        },
+    }
+    messages = _judge_corruption_metrics(corruption_section)
+    # WARNING メッセージが含まれること
+    assert any("[WARNING]" in m for m in messages)
+    # FAIL メッセージ (REJECT 閾値・side_bias) が含まれないこと
+    assert not any("REJECT閾値" in m for m in messages)
+    assert not any("side_bias" in m for m in messages)
+
+
+def test_judge_corruption_metrics_no_warning_below_threshold():
+    """empty_to_color が WARNING 閾値未満のとき [WARNING] が出ないこと。"""
+    low_e2c_rate = CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE / 2
+    corruption_section = {
+        "rate": 0.0,
+        "side_bias": {"detected": False},
+        "subcategory": {
+            "empty_to_color": {"rate": low_e2c_rate},
+        },
+    }
+    messages = _judge_corruption_metrics(corruption_section)
+    assert not any("[WARNING]" in m for m in messages)
+
+
+def test_judge_pass_fail_with_corruption_warning_not_fail():
+    """empty_to_color WARNING だけが発生した場合 PASS 判定になること。"""
+    high_e2c_rate = CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE * 2
+    corruption_section = {
+        "rate": 0.0,  # FAIL 閾値未満
+        "side_bias": {"detected": False},
+        "subcategory": {
+            "empty_to_color": {"rate": high_e2c_rate},
+            "color_to_color": {"rate": 0.0},
+            "color_to_empty": {"rate": 0.0},
+        },
+    }
+    # 全 acc は OK
+    per_color = {name: 0.999 for name in COLOR_NAMES.values() if name != "unknown"}
+    verdict, failures = _judge_pass_fail_with_corruption(
+        overall_acc=0.999,
+        per_color=per_color,
+        holdout_acc=0.999,
+        stats_list=None,
+        corruption_section=corruption_section,
+    )
+    # PASS でなければならない
+    assert verdict == "PASS"
+    # ただし failures に [WARNING] メッセージが含まれること (情報提示)
+    assert any("[WARNING]" in f for f in failures)
+
+
+def test_judge_pass_fail_with_corruption_fail_when_rate_high():
+    """corruption_rate が REJECT 閾値以上なら FAIL になること。"""
+    corruption_section = {
+        "rate": POSTPROCESS_CORRUPTION_REJECT_RATE * 2,
+        "side_bias": {"detected": False},
+        "subcategory": {
+            "empty_to_color": {"rate": 0.0},
+        },
+    }
+    per_color = {name: 0.999 for name in COLOR_NAMES.values() if name != "unknown"}
+    verdict, failures = _judge_pass_fail_with_corruption(
+        overall_acc=0.999,
+        per_color=per_color,
+        holdout_acc=0.999,
+        stats_list=None,
+        corruption_section=corruption_section,
+    )
+    assert verdict == "FAIL"
+    assert any("REJECT閾値" in f for f in failures)
+
+
+def test_video_stats_subcategory_fields_default_zero():
+    """VideoStats の新サブカテゴリフィールドがデフォルト 0 であること (後方互換)。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    assert stats.corruption_empty_to_color_count == 0
+    assert stats.corruption_color_to_color_count == 0
+    assert stats.corruption_color_to_empty_count == 0

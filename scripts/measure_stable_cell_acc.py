@@ -132,6 +132,9 @@ POSTPROCESS_CORRUPTION_WARNING_RATE: float = 0.0005
 POSTPROCESS_SIDE_BIAS_THRESHOLD: float = 0.50
 # side_bias 判定に必要な最低 corruption セル数
 POSTPROCESS_SIDE_BIAS_MIN_CELLS: int = 3
+# サブカテゴリ: empty_to_color の WARNING 閾値 (FAIL にはしない、情報提示のみ)
+# raw_cnn==raw_hsv==EMPTY なのに confirmed が色になっているケース (空→色FP)
+CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE: float = 0.001  # 0.1% 超で WARNING
 # ============================
 # データクラス
 # ============================
@@ -198,6 +201,13 @@ class VideoStats:
     postprocess_corruption_color_pairs: dict = field(default_factory=lambda: defaultdict(int))
     # 座標ログ (repr=False でデバッグ出力肥大化を防ぐ)
     postprocess_corruption_log: list = field(default_factory=list, repr=False)
+    # サブカテゴリ別 count (後方互換のため全て default=0)
+    # empty_to_color: raw_cnn==raw_hsv==EMPTY なのに confirmed が色 (空→色FP = 主課題)
+    corruption_empty_to_color_count: int = 0
+    # color_to_color: raw_cnn==raw_hsv==色A なのに confirmed が色B (色フリーズ系)
+    corruption_color_to_color_count: int = 0
+    # color_to_empty: raw_cnn==raw_hsv==色 なのに confirmed が EMPTY (色→空 消失)
+    corruption_color_to_empty_count: int = 0
 
 
 # ============================
@@ -503,6 +513,35 @@ def _majority_vote(a: int, b: int, c: int) -> int:
     return a  # 全員不一致: raw_cnn を基準にする
 
 
+def _classify_corruption_subcategory(
+    raw_val: int,
+    confirmed_val: int,
+    stats: "VideoStats",
+) -> None:
+    """corruption のサブカテゴリを判定して stats に加算する。
+
+    サブカテゴリ:
+      empty_to_color: raw==EMPTY → confirmed==色 (空→色FP、infer_placement hallucination 主因)
+      color_to_color: raw==色A  → confirmed==色B (色フリーズ系、T2 自己強化が主因)
+      color_to_empty: raw==色   → confirmed==EMPTY (色→空 消失)
+
+    Args:
+        raw_val: raw_cnn == raw_hsv の合意値。
+        confirmed_val: 後処理後の確定値。
+        stats: 加算先の VideoStats インスタンス。
+    """
+    # EVAL_COLORS に含まれない値は呼び出し元でガード済みのため追加チェック不要
+    if raw_val == COLOR_EMPTY and confirmed_val != COLOR_EMPTY:
+        # 空→色 FP: infer_placement / constraint_fill deficit force-fill が主因
+        stats.corruption_empty_to_color_count += 1
+    elif raw_val != COLOR_EMPTY and confirmed_val != COLOR_EMPTY:
+        # 色→別色: T2 フリーズ / constraint_fill replace が主因
+        stats.corruption_color_to_color_count += 1
+    elif raw_val != COLOR_EMPTY and confirmed_val == COLOR_EMPTY:
+        # 色→空: infer_placement commit refuse 後に T2 が消す等の経路
+        stats.corruption_color_to_empty_count += 1
+
+
 def _check_postprocess_corruption(
     video_id: str,
     fi: int,
@@ -538,6 +577,10 @@ def _check_postprocess_corruption(
         stats.postprocess_corruption_count += 1
         stats.postprocess_corruption_by_side[side] += 1
         stats.postprocess_corruption_color_pairs[(raw_cnn_val, confirmed_val)] += 1
+        # サブカテゴリ分類: 変化方向で分類する
+        _classify_corruption_subcategory(
+            raw_cnn_val, confirmed_val, stats,
+        )
         if len(stats.postprocess_corruption_log) < log_limit:
             stats.postprocess_corruption_log.append({
                 "video": video_id,
@@ -919,13 +962,28 @@ def _judge_pass_fail_with_corruption(
 
     backwards compat: _judge_pass_fail の引数を踏襲しつつ corruption_section を追加。
     corruption_section=None なら corruption 判定をスキップする (従来挙動と同等)。
+
+    _judge_corruption_metrics が返す "[WARNING]" プレフィックス付きメッセージは
+    failures に追加するが FAIL 判定には使わない (情報提示のみ)。
     """
     verdict, failures = _judge_pass_fail(
         overall_acc, per_color, holdout_acc, stats_list
     )
     if corruption_section is not None:
-        failures.extend(_judge_corruption_metrics(corruption_section))
-    return ("PASS" if not failures else "FAIL"), failures
+        corruption_messages = _judge_corruption_metrics(corruption_section)
+        # [WARNING] プレフィックス付きメッセージは FAIL 判定に使わず情報提示のみ
+        fail_messages = [
+            m for m in corruption_messages if not m.startswith("[WARNING]")
+        ]
+        warning_messages = [
+            m for m in corruption_messages if m.startswith("[WARNING]")
+        ]
+        failures.extend(fail_messages)
+        # WARNING は failures に追加するが verdict 計算前に済んでいない → 後で追加
+        verdict = "PASS" if not failures else "FAIL"
+        # WARNING を failures 末尾に追加 (verdict には影響しない)
+        failures.extend(warning_messages)
+    return verdict, failures
 
 
 def _judge_i1_metrics(stats_list: list) -> list[str]:
@@ -970,6 +1028,51 @@ def _judge_i1_metrics(stats_list: list) -> list[str]:
                     f" (v40_match01 全EMPTY誤判定パターン)"
                 )
     return failures
+
+def _aggregate_corruption_subcategory(
+    stats_list: list["VideoStats"],
+    total_stable_cells: int,
+) -> dict:
+    """corruption のサブカテゴリ別 count / rate を集計して返す。
+
+    サブカテゴリ:
+      empty_to_color: raw==EMPTY → confirmed==色 (空→色FP)
+      color_to_color: raw==色A  → confirmed==色B (色フリーズ系)
+      color_to_empty: raw==色   → confirmed==EMPTY (色→空 消失)
+
+    Args:
+        stats_list: 動画統計リスト。
+        total_stable_cells: 分母 (STABLE 確定 cell 総数)。
+
+    Returns:
+        サブカテゴリ別 {count, rate} dict。後方互換のため既存フィールドとは別キー。
+    """
+    empty_to_color = sum(s.corruption_empty_to_color_count for s in stats_list)
+    color_to_color = sum(s.corruption_color_to_color_count for s in stats_list)
+    color_to_empty = sum(s.corruption_color_to_empty_count for s in stats_list)
+    denom = total_stable_cells if total_stable_cells > 0 else 1
+
+    def _rate(n: int) -> float:
+        return n / denom
+
+    return {
+        "empty_to_color": {
+            "count": empty_to_color,
+            "rate": _rate(empty_to_color),
+            "note": "infer_placement hallucination / constraint_fill deficit force-fill 主因",
+        },
+        "color_to_color": {
+            "count": color_to_color,
+            "rate": _rate(color_to_color),
+            "note": "T2 自己強化フリーズ / constraint_fill replace 主因",
+        },
+        "color_to_empty": {
+            "count": color_to_empty,
+            "rate": _rate(color_to_empty),
+            "note": "infer_placement commit refuse 後 T2 消去等",
+        },
+    }
+
 
 def _aggregate_corruption(
     stats_list: list["VideoStats"],
@@ -1017,6 +1120,9 @@ def _aggregate_corruption(
             log = log[:CORRUPTION_LOG_LIMIT]
             break
 
+    # サブカテゴリ別集計 (後方互換: 既存フィールドに追加)
+    subcategory = _aggregate_corruption_subcategory(stats_list, total_stable_cells)
+
     return {
         "count": total_corruption,
         "rate": rate,
@@ -1025,6 +1131,8 @@ def _aggregate_corruption(
         "side_bias": side_bias,
         "corruption_ratio": corruption_ratio,
         "log": log,
+        # サブカテゴリ別 count / rate (後方互換: 追加フィールド)
+        "subcategory": subcategory,
         # fail-silent 罠注記: raw_cnn==raw_hsv==誤りの全列崩壊型は本指標で検知不可
         "blind_spot_note": (
             "raw_cnn==raw_hsv==誤り の全列崩壊型は本指標では検知不可。"
@@ -1099,10 +1207,15 @@ def _detect_side_bias(
 def _judge_corruption_metrics(
     corruption_section: dict,
 ) -> list[str]:
-    """postprocess_corruption セクションから FAIL 判定を返す。
+    """postprocess_corruption セクションから FAIL / WARNING 判定を返す。
 
-    corruption_rate >= POSTPROCESS_CORRUPTION_REJECT_RATE で FAIL。
-    side_bias.detected == True で FAIL。
+    FAIL 条件:
+      - corruption_rate >= POSTPROCESS_CORRUPTION_REJECT_RATE
+      - side_bias.detected == True
+
+    WARNING 条件 (FAIL にはしない、情報提示のみ):
+      - subcategory.empty_to_color.rate >= CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE
+        (空→色FP が多い = infer_placement hallucination / constraint_fill deficit 主因)
     """
     failures: list[str] = []
     rate = corruption_section.get("rate", 0.0)
@@ -1119,6 +1232,16 @@ def _judge_corruption_metrics(
             f" dominant_side={side_bias.get('dominant_side')}"
             f" dominant_color={side_bias.get('dominant_color')}"
             f" rate={side_bias.get('dominant_rate', 0.0):.1%}"
+        )
+    # サブカテゴリ WARNING: empty_to_color 高率 (FAIL にはしない)
+    subcategory = corruption_section.get("subcategory", {})
+    e2c_rate = subcategory.get("empty_to_color", {}).get("rate", 0.0)
+    if e2c_rate >= CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE:
+        failures.append(
+            f"[WARNING] corruption_empty_to_color_rate {e2c_rate:.4%}"
+            f" >= WARNING閾値 {CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE:.4%}"
+            f" (空→色FP多発: infer_placement hallucination / constraint_fill deficit 主因。"
+            f" FAIL にはしない = 情報提示)"
         )
     return failures
 
