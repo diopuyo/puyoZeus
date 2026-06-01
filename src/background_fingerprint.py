@@ -60,6 +60,15 @@ PATCH_NCC_UNIFORM_FALLBACK: float = 1.0
 # std の最小値ガード: これ未満なら均一パッチとみなして NCC 計算をスキップ
 PATCH_NCC_STD_MIN: float = 1e-6
 
+# bg_fp 採取失敗パッチの検出閾値 (V channel median)。
+# bg_fp 採取時に画面外 / 黒フレーム等で V≈0 のゼロパッチが記録されることがある。
+# このようなパッチは「採取失敗」であり、どんな現フレームとも NCC≈1.0 になって
+# EMPTY 強制誤判定を引き起こす真因。
+# bg パッチの V channel median がこの値未満なら「採取失敗ゼロパッチ」とみなし、
+# NCC を 0.0 (= 判定不能 = 非 EMPTY) に倒す。
+# 正当な均一空セル (明るい平坦背景) は V median が 20〜255 程度なので影響なし。
+BG_PATCH_VALID_V_MIN: float = 5.0
+
 
 @dataclass(frozen=True)
 class CellFingerprint:
@@ -78,19 +87,52 @@ class CellFingerprint:
         return H_WEIGHT * dh + S_WEIGHT * ds + V_WEIGHT * dv
 
 
+def _is_bg_patch_valid(b: np.ndarray) -> bool:
+    """bg パッチが採取失敗 (= ゼロパッチ) でないかを確認する。
+
+    bg_fp 採取時に黒フレーム / 画面外で V≈0 のパッチが記録される場合がある。
+    そのパッチは std≈0 となり _compute_ncc が PATCH_NCC_UNIFORM_FALLBACK=1.0 を返し、
+    どんな現フレームとも「背景と同じ = EMPTY」と誤判定する真因になる。
+
+    b の V channel (index 2) の median が BG_PATCH_VALID_V_MIN 以上であれば有効。
+    形状が 1D (ravel 済み) の場合は全体 median で代替する。
+
+    Args:
+        b: bg パッチ。shape (H, W, 3) または 1D。
+
+    Returns:
+        bool: True = 有効な bg パッチ、False = 採取失敗ゼロパッチ。
+    """
+    b_arr = np.asarray(b, dtype=np.float64)
+    if b_arr.ndim == 3 and b_arr.shape[2] == 3:
+        # V channel (index 2) の median で判定
+        v_med = float(np.median(b_arr[:, :, 2]))
+    else:
+        # ravel 済みまたは shape 不明: 全体 median で代替
+        v_med = float(np.median(b_arr))
+    return v_med >= BG_PATCH_VALID_V_MIN
+
+
 def _compute_ncc(a: np.ndarray, b: np.ndarray) -> float:
     """2 つのパッチ配列の Normalized Cross-Correlation を計算。
 
     ゼロ除算ガード付き (std < PATCH_NCC_STD_MIN の場合は均一パッチとして
     PATCH_NCC_UNIFORM_FALLBACK を返す)。
 
+    多層防御: b (= bg パッチ) が採取失敗ゼロパッチ (V median < BG_PATCH_VALID_V_MIN)
+    の場合は 0.0 (= 判定不能 = 非 EMPTY) を返す。これにより FALLBACK=1.0 の誤発火を防ぐ。
+    a (= 現フレームパッチ) が均一かつ b が有効な場合は FALLBACK を返す (従来通り)。
+
     Args:
-        a: 比較元パッチ (ravel して 1D で計算)
-        b: 比較先パッチ (同 shape 前提)
+        a: 比較元パッチ (現フレーム、ravel して 1D で計算)
+        b: 比較先パッチ (bg FP、同 shape 前提)
 
     Returns:
-        float: NCC 値 (-1.0〜1.0)。均一パッチは PATCH_NCC_UNIFORM_FALLBACK。
+        float: NCC 値 (-1.0〜1.0)。採取失敗 bg パッチは 0.0、均一パッチは FALLBACK。
     """
+    # 多層防御: bg パッチが採取失敗ゼロパッチなら 0.0 (= 非 EMPTY 側)
+    if not _is_bg_patch_valid(b):
+        return 0.0
     a_flat = a.ravel().astype(np.float64)
     b_flat = b.ravel().astype(np.float64)
     if a_flat.std() < PATCH_NCC_STD_MIN or b_flat.std() < PATCH_NCC_STD_MIN:
@@ -632,6 +674,8 @@ __all__ = [
     "PATCH_NCC_EMPTY_THRESHOLD",
     "PATCH_NCC_UNIFORM_FALLBACK",
     "PATCH_NCC_STD_MIN",
+    "BG_PATCH_VALID_V_MIN",
+    "_is_bg_patch_valid",
     "CellPatchFingerprint",
     "PatchBackgroundFingerprint",
     "capture_patch_robust_fingerprint",

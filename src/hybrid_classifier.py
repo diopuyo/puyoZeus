@@ -23,7 +23,10 @@ from src.board import (
     HIDDEN_ROWS,
     VISIBLE_ROWS,
 )
-from src.image_reader import BoardRegion, ColorClassifier
+from src.image_reader import (
+    BoardRegion,
+    ColorClassifier,
+)
 from src.patch_classifier import (
     CLASS_INDEX_TO_COLOR,
     COLOR_TO_CLASS_INDEX,
@@ -233,6 +236,7 @@ class HybridClassifier:
             cnn_color = CLASS_INDEX_TO_COLOR[best_idx]
             cnn_prob = float(probs_eff[best_idx])
             if cnn_prob >= self._cnn_override_prob:
+                # CNN 高確信経路: そのまま採用
                 out2.append(cnn_color)
                 continue
             # 低確信度: HSV と一致なら CNN、不一致なら HSV or UNKNOWN

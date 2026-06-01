@@ -56,6 +56,13 @@ PROBABILISTIC_FALLBACK_USE_FROM_BOARD: bool = True
 # v95m15 分析: fi=540-565 で tier1 が着地直後の cell を誤 EMPTY 化 →
 # false tsumo_fall 遷移 5 回連発 → multi-vote リセット → STABLE 復帰 0.4 秒遅延。
 TIER1_WARMUP_FRAMES: int = 3
+
+# OJAMA_FALL → STABLE 遷移後、tier1 をスキップする frame 数。
+# お邪魔降下→消滅後にセル実画素が静的 BackgroundFingerprint に近づき
+# (dist 138→3 等) tier1 が強制 EMPTY 化 → physics_fix が前 STABLE 色を上書き
+# → 列崩壊が固定されるのを防ぐ。TSUMO_FALL 用 (3 frame) より長め。
+# v70 frame=1674 分析: col=0,1,2 row7-12 が崩壊。
+OJAMA_TIER1_WARMUP_FRAMES: int = 8
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -286,6 +293,15 @@ class RecognitionPipeline:
         bg_fp_force_max_puyo: int | None = None,
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_ojama_tier1_warmup: bool = False,
+        # 2026-05-31: 一旦 OFF にしたが撤回し default ON 維持 (= main と同じ、判断保留)。
+        # 理由: 当初「constraint_fill が色破壊の主因」としたが誤診断 (16動画で corruption は
+        # ON 77279/OFF 76610 とほぼ不変)。真因は infer_placement 誤推論 + T2 自己強化フリーズ
+        # (project_color_corruption_infer_placement_t2)。constraint OFF 効果は red +0.26% 程度の僅少で
+        # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
+        enable_constraint_fill: bool = True,
+        enable_t2_highconf_yield: bool = False,
+        enable_infer_empty_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -499,6 +515,31 @@ class RecognitionPipeline:
         self._enable_tier1_warmup: bool = bool(enable_tier1_warmup)
         self._tier1_warmup_remaining_1p: int = 0
         self._tier1_warmup_remaining_2p: int = 0
+        # 経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup guard。
+        # True で OJAMA_TIER1_WARMUP_FRAMES の間 tier1 をスキップ。
+        # 汎用 tier1_warmup (v51m2 で +108 退行) と独立して、お邪魔消滅後の
+        # セル背景化による列崩壊のみを対処する。default False で既存挙動不変。
+        self._enable_ojama_tier1_warmup: bool = bool(enable_ojama_tier1_warmup)
+        self._ojama_tier1_warmup_remaining_1p: int = 0
+        self._ojama_tier1_warmup_remaining_2p: int = 0
+        # 案2: constraint_fill トグル (= False で _apply_next_count_constraint を skip)。
+        # デフォルト True = 従来挙動維持 (backwards compat)。
+        # --no-constraint-fill 等で False にすると CNN/HSV 高確信セルが誤置換される問題を
+        # 完全回避できるが、 count 補正も無効化される点に注意。
+        self._enable_constraint_fill: bool = bool(enable_constraint_fill)
+        # T2 高確信 yield トグル (= True で T2 prev_stable 上書きを CNN 一致セルで解除)。
+        # デフォルト False = 従来挙動維持 (backwards compat)。
+        # True にすると「cnn_board が cur_v と同一有色」のセルは T2 の prev_stable
+        # 上書きをスキップし、infer_placement 誤推論 + T2 自己強化フリーズを解除する。
+        # B1 禁忌 (= 色→空 変化を無差別保護) とは逆方向: prev_stable の古い色による
+        # 上書きを「CNN が正色を支持している箇所でのみ」解除する (保護を弱める方向)。
+        self._enable_t2_highconf_yield: bool = bool(enable_t2_highconf_yield)
+        # 案 B1: infer_placement 空セル hallucination ガード。
+        # True にすると、 pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補を
+        # スキップし、 CNN が確信して空なセルへの NEXT 色書込を防ぐ。
+        # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
+        # デフォルト False = 従来挙動維持 (backwards compat)。
+        self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
 
     @staticmethod
     def _build_hybrid_reader(
@@ -651,6 +692,10 @@ class RecognitionPipeline:
         # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
+        enable_ojama_tier1_warmup: bool = False,
+        enable_constraint_fill: bool = True,
+        enable_t2_highconf_yield: bool = False,
+        enable_infer_empty_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -777,6 +822,10 @@ class RecognitionPipeline:
             bg_fp_force_max_puyo=bg_fp_force_max_puyo,
             enable_piece_persistence=enable_piece_persistence,
             enable_tier1_warmup=enable_tier1_warmup,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+            enable_constraint_fill=enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
         )
 
     # ------------------------------------------------------------------
@@ -863,6 +912,9 @@ class RecognitionPipeline:
         # tier1 warmup guard リセット
         self._tier1_warmup_remaining_1p = 0
         self._tier1_warmup_remaining_2p = 0
+        # 経路 A': OJAMA 専用 tier1 warmup guard リセット
+        self._ojama_tier1_warmup_remaining_1p = 0
+        self._ojama_tier1_warmup_remaining_2p = 0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1037,13 +1089,14 @@ class RecognitionPipeline:
         # tier1 warmup guard: NON-STABLE → STABLE 遷移直後 TIER1_WARMUP_FRAMES は
         # tier1 をスキップして着地直後の cell が誤 EMPTY 化されるのを防ぐ。
         # カウンタは _step_side の state 遷移後に更新するため、 ここでは現在値を読む。
+        # 経路 A': OJAMA 専用 warmup (ojama_remaining > 0) が汎用 warmup と OR で発火。
         _skip_t1_1p = (
-            self._enable_tier1_warmup
-            and self._tier1_warmup_remaining_1p > 0
+            (self._enable_tier1_warmup and self._tier1_warmup_remaining_1p > 0)
+            or (self._enable_ojama_tier1_warmup and self._ojama_tier1_warmup_remaining_1p > 0)
         )
         _skip_t1_2p = (
-            self._enable_tier1_warmup
-            and self._tier1_warmup_remaining_2p > 0
+            (self._enable_tier1_warmup and self._tier1_warmup_remaining_2p > 0)
+            or (self._enable_ojama_tier1_warmup and self._ojama_tier1_warmup_remaining_2p > 0)
         )
         cnn_1p_raw, cnn_2p_raw = self._reader.read_both_boards(
             frame,
@@ -1361,6 +1414,19 @@ class RecognitionPipeline:
                 p_state=p2.state,
                 remaining=self._tier1_warmup_remaining_2p,
             )
+        # 経路 A': OJAMA 専用 tier1 warmup guard カウンタ更新。
+        # OJAMA_FALL → STABLE 遷移時のみ OJAMA_TIER1_WARMUP_FRAMES をセット。
+        if self._enable_ojama_tier1_warmup:
+            self._ojama_tier1_warmup_remaining_1p = _update_ojama_tier1_warmup_counter(
+                prev_state=_pre_state_1p,
+                p_state=p1.state,
+                remaining=self._ojama_tier1_warmup_remaining_1p,
+            )
+            self._ojama_tier1_warmup_remaining_2p = _update_ojama_tier1_warmup_counter(
+                prev_state=_pre_state_2p,
+                p_state=p2.state,
+                remaining=self._ojama_tier1_warmup_remaining_2p,
+            )
 
         # cycle 71d (案 D8): VideoChainTracker 次 frame 入力用に confirmed_board を保存.
         # None (= STABLE 以外) なら前回値を維持し、 直近の安定 board を提供し続ける.
@@ -1460,6 +1526,8 @@ class RecognitionPipeline:
     def _apply_next_count_constraint(
         self, board: "Board", tsumo_count: "Counter",
         side: str, frame_idx: int,
+        *,
+        protect_board: "Board | None" = None,
     ) -> "Board":
         """NEXT 累積色制約による confirmed_board 補正.
 
@@ -1476,6 +1544,11 @@ class RecognitionPipeline:
             tsumo_count: 累積 NEXT 色 count (Counter)
             side: '1P' or '2P' (ログ用)
             frame_idx: 現 frame index (ログ用)
+            protect_board: None でない場合、 board と protect_board のセル色が
+                一致するセルを excess 置換候補から除外する (= CNN 高確信セル保護)。
+                cnn_board を渡すと「CNN が認識した色と confirmed が一致するセル」
+                = 高確信正解セルを保護できる。None 時は従来挙動 (全セル対象)。
+                backwards compat: デフォルト None で旧挙動と完全同一。
 
         Returns:
             補正後 board (差分があれば新 instance、 なければ元 board)
@@ -1525,14 +1598,32 @@ class RecognitionPipeline:
         for c, n in deficit.items():
             deficit_list.extend([c] * n)
         # 過剰色 cell を「上から (row 小)」 候補リスト化
+        # 案1: protect_board が指定された場合、 board と protect_board のセル色が
+        # 一致するセルは保護 = 置換候補から除外する (CNN 高確信正解セル保護)。
+        # protect_board=None (default) の場合は全セル対象 (従来挙動)。
+        # 注意: n_extra 個の excess があるとき、 保護されたものをスキップしつつ
+        # 非保護セルから n_extra 個収集する (= 保護分を後続 cell で補う)。
         excess_cells: list[tuple[int, int, int]] = []
         for color, n_extra in excess.items():
             cells = sorted(
                 cell_by_color.get(color, []),
                 key=lambda rc: rc[0],  # row 昇順
             )
-            for rc in cells[:n_extra]:
-                excess_cells.append((rc[0], rc[1], color))
+            # 保護されていない候補を n_extra 個収集 (全 cell を走査して保護除外)
+            collected = 0
+            for rc in cells:
+                if collected >= n_extra:
+                    break
+                r_c, c_c = rc[0], rc[1]
+                # 保護チェック: protect_board が指定されていて、 かつ
+                # protect_board のそのセルが board の色 (= excess color) と一致するなら
+                # 「CNN も同色と判断した = 高確信正解」 → 置換候補から除外
+                if protect_board is not None:
+                    protect_color = int(protect_board.get(r_c, c_c))
+                    if protect_color == color:
+                        continue  # 高確信正解セルは保護 → 次の候補へ
+                excess_cells.append((r_c, c_c, color))
+                collected += 1
         # ペア化して置換 (最小 len(excess_cells) と len(deficit_list))
         n_replace = min(len(excess_cells), len(deficit_list))
         for i in range(n_replace):
@@ -1961,6 +2052,7 @@ class RecognitionPipeline:
                 frame_bgr=frame_bgr,
                 region=region_for_side,
                 bg_fp=bg_fp_for_side,
+                guard_empty_hallucination=self._enable_infer_empty_guard,
             )
             if inferred_landing is not None:
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
@@ -2135,6 +2227,7 @@ class RecognitionPipeline:
                             frame_bgr=frame_bgr,
                             region=region_for_side_b,
                             bg_fp=bg_fp_for_side_b,
+                            guard_empty_hallucination=self._enable_infer_empty_guard,
                         )
                         if inferred_b is not None:
                             # 即時連鎖判定 (= 短い TSUMO_FALL 取りこぼし時も適用)
@@ -2340,9 +2433,18 @@ class RecognitionPipeline:
                 self._constraint_valid_1p if side == "1P"
                 else self._constraint_valid_2p
             )
-            if constraint_valid and sum(tsumo_count.values()) > 0:
+            # 案2: enable_constraint_fill=False のとき constraint_fill を完全 skip
+            if (
+                self._enable_constraint_fill
+                and constraint_valid
+                and sum(tsumo_count.values()) > 0
+            ):
+                # 案1: cnn_board を protect_board として渡す。
+                # CNN が認識した色と confirmed が一致するセルは excess でも保護される。
+                # hsv_board は image_reader 改修なしでは取得不可のため cnn のみ渡す。
                 ctx.confirmed_board = self._apply_next_count_constraint(
                     ctx.confirmed_board, tsumo_count, side, frame_idx,
+                    protect_board=cnn_board,
                 )
                 ctx.pending_board = ctx.confirmed_board.copy()
 
@@ -2507,6 +2609,29 @@ class RecognitionPipeline:
                             and cur_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
                         )
                         if both_colored and pv != cur_v:
+                            # T2 高確信 yield: enable_t2_highconf_yield=True かつ
+                            # CNN が現在の confirmed 色 (cur_v) を支持している場合は
+                            # prev_stable での上書きをスキップ。
+                            # 理由: infer_placement が誤色を confirmed に書き込み、
+                            # それを T2 が毎フレーム prev_stable で維持することで
+                            # 誤色フリーズが数百フレーム継続する問題を解除する。
+                            # B1 禁忌との違い: B1 は「色→空」保護 (連鎖エフェクト誤固定)。
+                            # 本修正は逆に「prev_stable の古い色による上書き」を
+                            # CNN 支持時に解除する (保護を弱める方向)。
+                            # CHAIN 非 STABLE 中は T2 自体が実行されないため
+                            # 連鎖エフェクト誤固定リスクはゼロ。
+                            if self._enable_t2_highconf_yield:
+                                cnn_v = int(cnn_board.get(r, c))
+                                if (
+                                    cnn_v == cur_v
+                                    and cnn_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                    # prev_stable が空のセルは yield しない。
+                                    # 背景 FP (pv=空 → cur_v=色) は T2 で空に戻す。
+                                    # yield は「色 → 別色フリーズ (pv=色付き)」のみ対象。
+                                    and pv not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                ):
+                                    # CNN が cur_v を支持 かつ pv も色付き → T2 上書きをスキップ
+                                    continue
                             # 前 STABLE 値で上書き (= 認識誤り棄却)
                             ctx.confirmed_board.set(r, c, pv)
             # 現 STABLE を「直前 STABLE」 として記憶 (= 次 frame で参照)
@@ -2870,6 +2995,40 @@ def _update_tier1_warmup_counter(
         and p_state == BoardState.STABLE
     ):
         return TIER1_WARMUP_FRAMES
+    # STABLE 継続: デクリメント
+    if p_state == BoardState.STABLE and remaining > 0:
+        return remaining - 1
+    # STABLE 以外: リセット
+    if p_state != BoardState.STABLE:
+        return 0
+    return remaining
+
+
+def _update_ojama_tier1_warmup_counter(
+    prev_state: "BoardState",
+    p_state: "BoardState",
+    remaining: int,
+) -> int:
+    """経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup カウンタ更新。
+
+    OJAMA_FALL → STABLE 遷移のみ OJAMA_TIER1_WARMUP_FRAMES をセット。
+    汎用 tier1 warmup (全 NON_STABLE_STATES) と異なり、OJAMA_FALL 起因の
+    セル背景化による列崩壊だけを対処する (v51m2 退行を回避するため分離)。
+
+    Args:
+        prev_state: _step_side 呼び出し前の state (= 前フレームの state)。
+        p_state: _step_side が返した現フレームの state。
+        remaining: 現在の warmup 残余 frame 数。
+
+    Returns:
+        更新後の warmup 残余 frame 数 (0 以上)。
+    """
+    # OJAMA_FALL → STABLE 遷移: ojama 専用 warmup 開始
+    if (
+        prev_state == BoardState.OJAMA_FALL
+        and p_state == BoardState.STABLE
+    ):
+        return OJAMA_TIER1_WARMUP_FRAMES
     # STABLE 継続: デクリメント
     if p_state == BoardState.STABLE and remaining > 0:
         return remaining - 1

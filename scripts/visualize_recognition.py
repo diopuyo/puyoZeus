@@ -629,6 +629,46 @@ def main() -> int:
              f"TIER1_WARMUP_FRAMES={3} frame 間 tier1 を skip し、"
              "ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ)。",
     )
+    parser.add_argument(
+        "--ojama-tier1-warmup",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_tier1_warmup",
+        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を有効化。"
+             f" OJAMA_TIER1_WARMUP_FRAMES={8} frame 間 tier1 を skip し、"
+             "お邪魔消滅後のセル背景化による誤 EMPTY 化 → 列崩壊を防ぐ (v70 対策)。"
+             " 汎用 --enable-tier1-warmup (v51m2 退行あり) と独立して有効化できる。",
+    )
+    parser.add_argument(
+        "--no-constraint-fill",
+        action="store_true",
+        default=False,
+        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を無効化。 "
+             "CNN/HSV 高確信セルが誤置換される問題をトグルで完全回避したい場合に使用。 "
+             "デフォルト OFF = 従来挙動 (constraint_fill 有効)。",
+    )
+    parser.add_argument(
+        "--t2-highconf-yield",
+        action="store_true",
+        default=False,
+        dest="enable_t2_highconf_yield",
+        help="T2 高確信 yield を有効化。 "
+             "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
+             "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
+             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊 (16 動画 77K 件) の修正。 "
+             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+    )
+    parser.add_argument(
+        "--infer-empty-guard",
+        action="store_true",
+        default=False,
+        dest="enable_infer_empty_guard",
+        help="infer_placement 空セル hallucination ガードを有効化。 "
+             "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
+             "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
+             "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
+             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -687,6 +727,14 @@ def main() -> int:
         enable_piece_persistence=args.enable_piece_persistence,
         # tier1 warmup guard (2026-05-28): --enable-tier1-warmup
         enable_tier1_warmup=args.enable_tier1_warmup,
+        # 経路 A' (2026-05-30): --ojama-tier1-warmup で OJAMA 専用 warmup 有効化
+        enable_ojama_tier1_warmup=args.enable_ojama_tier1_warmup,
+        # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
+        enable_constraint_fill=not args.no_constraint_fill,
+        # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
+        enable_t2_highconf_yield=args.enable_t2_highconf_yield,
+        # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
+        enable_infer_empty_guard=args.enable_infer_empty_guard,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -705,6 +753,24 @@ def main() -> int:
         print(
             "[viz] enable_tier1_warmup=ON "
             "(NON-STABLE→STABLE 遷移直後 3 frame tier1 skip / 着地直後誤 EMPTY 化防止)"
+        )
+    if args.enable_ojama_tier1_warmup:
+        print(
+            "[viz] enable_ojama_tier1_warmup=ON "
+            "(経路 A': OJAMA_FALL→STABLE 遷移直後 8 frame tier1 skip / v70 列崩壊対策)"
+        )
+    if args.no_constraint_fill:
+        print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    if args.enable_t2_highconf_yield:
+        print(
+            "[viz] t2_highconf_yield=ON "
+            "(T2 高確信 yield: CNN 支持セルは prev_stable 上書きスキップ / "
+            "infer_placement 誤推論 + T2 自己強化フリーズ修正)"
+        )
+    if args.enable_infer_empty_guard:
+        print(
+            "[viz] infer_empty_guard=ON "
+            "(空セル hallucination ガード: 非 diff セルが CNN EMPTY なら候補スキップ)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

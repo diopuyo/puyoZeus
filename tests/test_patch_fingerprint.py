@@ -12,12 +12,14 @@ import numpy as np
 import pytest
 
 from src.background_fingerprint import (
+    BG_PATCH_VALID_V_MIN,
     PATCH_NCC_EMPTY_THRESHOLD,
     PATCH_NCC_UNIFORM_FALLBACK,
     CellFingerprint,
     CellPatchFingerprint,
     PatchBackgroundFingerprint,
     _compute_ncc,
+    _is_bg_patch_valid,
     capture_patch_pair_robust,
     is_empty_by_patch_fp,
     load_patch_fingerprint_pair,
@@ -201,3 +203,95 @@ def test_patch_ncc_shape_mismatch() -> None:
     ncc = a.ncc_to(b)
     # クラッシュしないことを確認 (-1〜1 の範囲)
     assert -1.0 <= ncc <= 1.0 + 1e-9
+
+
+# ===== 修正①: 採取失敗ゼロパッチ ガードテスト =====
+
+def test_is_bg_patch_valid_zero_patch_returns_false() -> None:
+    """V=0 の真っ黒ゼロパッチは採取失敗として _is_bg_patch_valid=False を返す。"""
+    zero_patch = np.zeros((8, 8, 3), dtype=np.float32)
+    assert _is_bg_patch_valid(zero_patch) is False
+
+
+def test_is_bg_patch_valid_bright_uniform_returns_true() -> None:
+    """明るい均一パッチ (V=150) は正当な背景として True を返す。"""
+    bright_patch = _make_patch(30.0, 100.0, 150.0)
+    assert _is_bg_patch_valid(bright_patch) is True
+
+
+def test_is_bg_patch_valid_threshold_boundary() -> None:
+    """V median が BG_PATCH_VALID_V_MIN ちょうどで True、未満で False。"""
+    # V = BG_PATCH_VALID_V_MIN (= 5.0): True 境界
+    on_threshold = _make_patch(0.0, 0.0, BG_PATCH_VALID_V_MIN)
+    assert _is_bg_patch_valid(on_threshold) is True
+    # V = BG_PATCH_VALID_V_MIN - 1 (= 4.0): False 境界
+    below_threshold = _make_patch(0.0, 0.0, BG_PATCH_VALID_V_MIN - 1.0)
+    assert _is_bg_patch_valid(below_threshold) is False
+
+
+def test_compute_ncc_zero_bg_returns_zero() -> None:
+    """bg パッチが採取失敗ゼロパッチの場合、_compute_ncc は 0.0 を返す (FALLBACK=1.0 を返さない)。"""
+    # 採取失敗パッチ: V≈0 のゼロパッチ (std=0 → 従来なら FALLBACK=1.0)
+    zero_bg = np.zeros((8, 8, 3), dtype=np.float32)
+    # 現フレームパッチ: 任意 (均一でも非均一でも)
+    cur_patch = _make_patch(30.0, 100.0, 150.0)
+    ncc = _compute_ncc(cur_patch, zero_bg)
+    assert ncc == 0.0, (
+        f"採取失敗 bg パッチに対して NCC={ncc} が返された。"
+        f"0.0 でなければ FALLBACK=1.0 で EMPTY 誤判定が発生する。"
+    )
+
+
+def test_compute_ncc_zero_bg_uniform_cur_returns_zero() -> None:
+    """bg=ゼロパッチ、cur=均一パッチの場合も 0.0 を返す (旧バグ: 1.0 を返していた)。"""
+    zero_bg = np.zeros((8, 8, 3), dtype=np.float32)
+    uniform_cur = _make_patch(30.0, 100.0, 150.0)
+    ncc = _compute_ncc(uniform_cur, zero_bg)
+    assert ncc == 0.0, (
+        f"採取失敗 bg に対して NCC={ncc}。0.0 でなければ列崩壊の真因が残る。"
+    )
+
+
+def test_compute_ncc_bright_uniform_bg_still_fallback() -> None:
+    """明るい均一 bg パッチ (= 正当な空セル背景) は従来通り FALLBACK=1.0 を返す。
+
+    均一の明るい背景 (V=150) を bg として、均一 cur パッチと比較したとき
+    PATCH_NCC_UNIFORM_FALLBACK が返ることを確認する。
+    これにより「正当な均一 EMPTY セル」が非 EMPTY に倒れないことを保証する。
+    """
+    bright_uniform_bg = _make_patch(30.0, 100.0, 150.0)
+    uniform_cur = _make_patch(30.0, 100.0, 150.0)
+    ncc = _compute_ncc(uniform_cur, bright_uniform_bg)
+    assert ncc == PATCH_NCC_UNIFORM_FALLBACK, (
+        f"明るい均一 bg に対して NCC={ncc} != FALLBACK={PATCH_NCC_UNIFORM_FALLBACK}。"
+        f"正当な均一 EMPTY セルが壊れる。"
+    )
+
+
+def test_is_empty_tier1_skips_zero_bg_patch() -> None:
+    """_is_empty_tier1: bg パッチが採取失敗ゼロパッチなら False を返す (EMPTY 誤判定しない)。
+
+    ImageReader._is_empty_tier1 に CellPatchFingerprint (V≈0) を渡したとき
+    False (= 非 EMPTY) が返ることを確認する。
+    """
+    from src.image_reader import ImageReader
+    reader = ImageReader()
+    zero_patch = np.zeros((8, 8, 3), dtype=np.float32)
+    bg_cell = CellPatchFingerprint(patch_hsv=zero_patch)
+    # 現フレームは任意 (均一明るいパッチ)
+    cur_patch = _make_patch(30.0, 100.0, 150.0)
+    cur_fp_arr = _make_patch(30.0, 100.0, 150.0)
+    # CellFingerprint (median 3 値) も必要
+    from src.background_fingerprint import CellFingerprint as CF
+    cur_fp = CF(h=30, s=100, v=150)
+    result = reader._is_empty_tier1(
+        bg_cell=bg_cell,
+        cur_patch_hsv=cur_patch,
+        cur_fp=cur_fp,
+        visible_row=0,
+        col=0,
+    )
+    assert result is False, (
+        f"採取失敗 bg パッチに対して _is_empty_tier1={result}。"
+        f"True だと列まるごと EMPTY 崩壊が再現する。"
+    )

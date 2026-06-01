@@ -794,8 +794,20 @@ class ImageReader:
         Returns:
             True = 空 (背景と同じ)、False = ぷよあり (次 tier に進む)。
         """
-        from src.background_fingerprint import CellPatchFingerprint, is_empty_by_patch_fp
+        from src.background_fingerprint import (
+            BG_PATCH_VALID_V_MIN,
+            CellPatchFingerprint,
+            is_empty_by_patch_fp,
+        )
         if isinstance(bg_cell, CellPatchFingerprint):
+            # 第一層ガード: bg パッチが採取失敗ゼロパッチ (V median 極小) なら
+            # NCC を実行せず False (= 非 EMPTY) を返す。
+            # これにより「採取失敗パッチが FALLBACK=1.0 → 強制 EMPTY」を防ぐ。
+            # 正当な均一 EMPTY セル (明るい平坦背景) は V median が
+            # BG_PATCH_VALID_V_MIN (5.0) を超えるため従来通り NCC 経路に進む。
+            bg_v_med = float(np.median(bg_cell.patch_hsv[:, :, 2]))
+            if bg_v_med < BG_PATCH_VALID_V_MIN:
+                return False
             cur_cell_patch = CellPatchFingerprint(
                 patch_hsv=cur_patch_hsv.astype(np.float32),
             )
