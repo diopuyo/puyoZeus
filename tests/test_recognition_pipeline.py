@@ -1114,9 +1114,23 @@ def test_is_game_event_chain_exit_max_hold_cap() -> None:
 
 
 def test_game_event_chain_exit_flag_off_is_backward_compat() -> None:
-    """OFF 時は従来挙動不変: enable_game_event_chain_exit=False でインスタンス生成可能。"""
-    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
-    # デフォルト False = game-event chain exit 無効
+    """OFF 時は従来挙動不変: enable_game_event_chain_exit=False でインスタンス生成可能。
+
+    default が True に変わっても False を明示すると従来 timing hold 挙動に戻る
+    ことを確認する (= OFF 経路の回帰防止)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_game_event_chain_exit=False,  # 明示 OFF = 従来挙動
+    )
+    # 明示 False = game-event chain exit 無効
     assert pipe._enable_game_event_chain_exit is False
     # 従来 chain_until 変数が存在すること
     assert hasattr(pipe, "_chain_until_1p")

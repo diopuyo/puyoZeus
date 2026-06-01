@@ -334,8 +334,9 @@ class RecognitionPipeline:
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True にすると CHAIN 状態を timing hold だけでなく、
         # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
-        # を検知するまで維持する。デフォルト False = 従来挙動維持 (backwards compat)。
-        enable_game_event_chain_exit: bool = False,
+        # を検知するまで維持する。True = default ON (2026-06-01 user 採用承認)。
+        # False を明示すると従来 timing hold のみの挙動に戻る (backwards compat)。
+        enable_game_event_chain_exit: bool = True,
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費済みツモ色) に切り替える。
         # slide_motion(R-7) 経由で「1 つ前のツモ」を指してしまう誤色問題の修正。
@@ -785,7 +786,7 @@ class RecognitionPipeline:
         enable_constraint_fill: bool = True,
         enable_t2_highconf_yield: bool = False,
         enable_infer_empty_guard: bool = False,
-        enable_game_event_chain_exit: bool = False,
+        enable_game_event_chain_exit: bool = True,
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
