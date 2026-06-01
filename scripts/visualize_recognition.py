@@ -710,6 +710,17 @@ def main() -> int:
              "enable_game_event_chain_exit と独立フラグ (効果分解のため)。 "
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
+    parser.add_argument(
+        "--hsv-classify-fallback",
+        action="store_true",
+        default=False,
+        dest="enable_hsv_classify_fallback",
+        help="HSV 分類 fallback を有効化。 "
+             "_classify_next_pair_by_hsv の 2 択強制確定を回避し、 "
+             "両候補が拮抗・両候補とも遠い・低彩度 patch の場合は next_pair 素返しにする。 "
+             "黄(H26)→赤(H7) 誤分類 (~900 件、 H 差 19) 発火点対策。 "
+             "デフォルト OFF = 従来挙動不変 (2 択強制確定、 backwards compat)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -782,6 +793,8 @@ def main() -> int:
         enable_landing_color_fix=args.enable_landing_color_fix,
         # X1/X4 短連鎖ちらつき対策 (2026-06-01): --chain-min-display で有効化
         enable_chain_min_display=args.enable_chain_min_display,
+        # HSV 分類 fallback (fix/v70-zeropatch-redyellow, 2026-06-01): --hsv-classify-fallback で有効化
+        enable_hsv_classify_fallback=args.enable_hsv_classify_fallback,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -836,6 +849,12 @@ def main() -> int:
             "[viz] chain_min_display=ON "
             f"(X1: 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s 表示保証 / "
             f"X4: chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} で exit 抑止)"
+        )
+    if args.enable_hsv_classify_fallback:
+        print(
+            "[viz] hsv_classify_fallback=ON "
+            "(2 択強制確定回避: 両候補拮抗/遠い/低彩度で next_pair 素返し / "
+            "黄→赤誤分類 ~900 件発火点対策)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

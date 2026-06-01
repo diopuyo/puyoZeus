@@ -102,12 +102,23 @@ PER_COL_UNKNOWN_CRITICAL: float = 0.30  # 30% 超 = CRITICAL
 NON_STABLE_CRITICAL_FRAMES: int = 180  # 180 sample frame = ~3 秒 @ 60fps
 NON_STABLE_WARMUP_SEC: float = 15.0  # 試合開始から 15 秒は計測除外
 
+# 改修3: non_stable chain中除外
+# CHAIN 中の non-stable は大連鎖の正常動作であるため連続カウント対象外にする。
+# MENU / TSUMO_FALL / EFFECT 等 CHAIN 以外の連続 non-stable のみ検知する。
+NON_STABLE_CHAIN_EXCLUDE: bool = True  # True = CHAIN state を連続 non-stable 除外
+
 # I1 メトリクス: per_col_empty_rate_by_game_phase 閾値
 # 中盤 (= 30 秒以降) で特定 col が全 STABLE フレーム中 100% EMPTY なら CRITICAL
 # v40_match01「1P col=1 全 EMPTY 誤判定」 を捕捉する
 MIDGAME_START_SEC: float = 30.0  # 中盤開始時刻 (秒)
 MIDGAME_COL_EMPTY_CRITICAL: float = 0.99  # 99% 以上 EMPTY = CRITICAL
 MIDGAME_COL_MIN_FRAMES: int = 30  # 最低 30 STABLE frame が必要
+# 改修2: avg_puyo per-side + CRITICAL閾値
+# STABLE フレームの 1P / 2P 各サイド平均ぷよ数が本定数未満の場合は列崩壊疑いとして
+# failures に WARNING を追加する (FAIL 化する)。
+# 実測最小値 18 以上を前提に保守的閾値を設定する (誤発報防止)。
+AVG_PUYO_COUNT_CRITICAL: float = 5.0  # 5.0 未満 = 列崩壊疑い WARNING
+
 # クリップ末尾 N 秒を中盤評価から除外する (短クリップ偽陽性対策)
 # 問題: v70_match01 (30.5s) は末尾 0.5 秒だけが中盤判定区間に入り、
 # 連鎖後の正当な列空きを「中盤列崩壊」と誤 FAIL していた。
@@ -194,6 +205,17 @@ class VideoStats:
     # STABLE フレームの 1P+2P 合算ぷよ数合計と frame 数
     _puyo_count_sum: int = 0
     _puyo_count_n_stable: int = 0
+    # 改修2: per-side 別 puyo count (後方互換のため default 付き)
+    # side → (count_sum, n_stable_frames) を保持する
+    _puyo_count_sum_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    _puyo_count_n_stable_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    # 改修1: confirmed_majority_agree (後方互換のため default 付き)
+    # STABLE セルで confirmed_val == majority_label(多数決) が一致した数と総 cell 数
+    _confirmed_agree_cells: int = 0
+    _confirmed_total_cells: int = 0
+    # per_color 別 confirmed agree (後方互換のため default 付き)
+    _confirmed_agree_by_color: dict = field(default_factory=lambda: defaultdict(int))
+    _confirmed_total_by_color: dict = field(default_factory=lambda: defaultdict(int))
     # 並列ワーカが収集した不一致 cell リスト (後方互換のため default=[])
     # 逐次モードでは空リスト。並列モードではワーカ内で収集した値が入り、
     # 親プロセスで各動画分を統合する。pickle 可能な plain dict リスト。
@@ -294,6 +316,7 @@ def _make_pipeline_cnn(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -318,6 +341,10 @@ def _make_pipeline_cnn(
         enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
             CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) + 短連鎖 game-event exit 抑止。
             backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避し、
+            黄→赤誤分類 (~900 件) 発火点を修正する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -327,6 +354,7 @@ def _make_pipeline_cnn(
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -407,8 +435,18 @@ def _eval_one_frame(
         ("2P", res_cnn.p2, res_hsv.p2),
     ]:
         if sr_cnn.state != BoardState.STABLE or sr_cnn.confirmed_board is None:
-            # non-stable フレームをカウント (warmup 後のみ)
-            if t_sec >= NON_STABLE_WARMUP_SEC:
+            # 改修3: CHAIN state は大連鎖の正常 non-stable のためカウント対象外にする。
+            # MENU / TSUMO_FALL / EFFECT 等の異常系 non-stable のみを連続カウントする。
+            # NON_STABLE_CHAIN_EXCLUDE=False で旧挙動 (chain もカウント) に戻せる。
+            is_chain_state = (
+                NON_STABLE_CHAIN_EXCLUDE
+                and sr_cnn.state == BoardState.CHAIN
+            )
+            if is_chain_state:
+                # 連鎖中はカウンタをリセットして連続検知を中断する
+                stats._non_stable_current_by_side[side] = 0
+            elif t_sec >= NON_STABLE_WARMUP_SEC:
+                # warmup 後のみカウント (chain 以外の non-stable)
                 stats._non_stable_current_by_side[side] = (
                     stats._non_stable_current_by_side.get(side, 0) + 1
                 )
@@ -420,7 +458,8 @@ def _eval_one_frame(
         stats._non_stable_current_by_side[side] = 0
         stats.stable_frame_count += 1
         # C1: STABLE confirmed_board のぷよ数を集計 (= avg_puyo_count 計算用)
-        _collect_puyo_count(sr_cnn.confirmed_board, stats)
+        # 改修2: side を渡して per-side 集計も有効化する
+        _collect_puyo_count(sr_cnn.confirmed_board, stats, side=side)
         _eval_side_frame(
             side, fi, t_sec, video_id,
             raw_cnn_board=sr_cnn.cnn_board,
@@ -479,6 +518,7 @@ def _process_video(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -500,6 +540,10 @@ def _process_video(
             backwards compat: デフォルト False = 従来挙動。
         enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
             backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避し、
+            黄→赤誤分類 (~900 件) 発火点を修正する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -516,6 +560,7 @@ def _process_video(
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -546,6 +591,7 @@ def _process_video_worker(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -574,6 +620,7 @@ def _process_video_worker(
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -693,6 +740,17 @@ def _record_cell(
     if all_agree:
         stats.all_three_agree_count += 1
 
+    # 改修1: confirmed_majority_agree_rate 集計
+    # STABLE セルで confirmed_val == majority_label(多数決) の一致率を計算する。
+    # agreed / disagreement 両ケースを含む全 STABLE セルで集計する。
+    # 1.0 に近いほど confirmed が多数決と整合 (confirmed 精度の代理指標)。
+    # FAIL 判定には使わず情報提示のみ。
+    stats._confirmed_total_cells += 1
+    stats._confirmed_total_by_color[label] += 1
+    if confirmed_val == label:
+        stats._confirmed_agree_cells += 1
+        stats._confirmed_agree_by_color[label] += 1
+
     if raw_cnn_val == label:
         stats.agreed_cells += 1
         stats.correct_by_color[label] += 1
@@ -766,11 +824,21 @@ def _eval_side_frame(
         _collect_col_metrics(fi, t_sec, confirmed_board, stats)
 
 
-def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
+def _collect_puyo_count(
+    confirmed_board: object,
+    stats: VideoStats,
+    side: Optional[str] = None,
+) -> None:
     """STABLE confirmed_board の非 EMPTY・非 UNKNOWN cell 数を stats に加算する。
 
     C1 avg_puyo_count_per_stable_frame 計算用。
     1 サイド分のカウントを加算する (= frame ごとに 1P / 2P 別に呼ばれる)。
+
+    Args:
+        confirmed_board: STABLE 確定盤面。None なら何もしない。
+        stats: 集計先の VideoStats インスタンス。
+        side: "1P" or "2P"。改修2 per-side 集計用。None の場合は per-side 集計を行わない
+              (backwards compat: 既存呼出元は side=None のまま動作)。
     """
     if confirmed_board is None:
         return
@@ -780,8 +848,13 @@ def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
             val = int(confirmed_board.get(row, col))
             if val not in (COLOR_EMPTY, COLOR_UNKNOWN):
                 count += 1
+    # 従来の 1P+2P 合算集計 (後方互換維持)
     stats._puyo_count_sum += count
     stats._puyo_count_n_stable += 1
+    # 改修2: per-side 別集計 (side が指定された場合のみ)
+    if side is not None:
+        stats._puyo_count_sum_by_side[side] += count
+        stats._puyo_count_n_stable_by_side[side] += 1
 
 
 def _is_midgame_frame(t_sec: float, clip_duration_sec: float) -> bool:
@@ -874,6 +947,40 @@ def _build_row_acc(stats_list: list[VideoStats]) -> dict[str, float]:
     }
 
 
+def _build_avg_puyo_by_side(s: VideoStats) -> dict[str, object]:
+    """VideoStats から per-side avg_puyo_count を計算して返す。
+
+    改修2: 1P / 2P 別の STABLE フレーム平均ぷよ数を集計する。
+    データがない side は None を返す (後方互換)。
+    Returns: {"1P": float|None, "2P": float|None}
+    """
+    result: dict[str, object] = {}
+    for side in ("1P", "2P"):
+        n = s._puyo_count_n_stable_by_side.get(side, 0)
+        total = s._puyo_count_sum_by_side.get(side, 0)
+        result[side] = total / n if n > 0 else None
+    return result
+
+
+def _build_confirmed_agree_rate(s: VideoStats) -> dict[str, object]:
+    """VideoStats から confirmed_majority_agree_rate を計算して返す。
+
+    改修1: confirmed_val == majority_label(多数決) の STABLE 全セル一致率。
+    overall + per_color を返す。FAIL 判定には使わず情報提示のみ。
+    Returns: {"overall": float|None, "per_color": {color_name: float|None}}
+    """
+    overall = (
+        s._confirmed_agree_cells / s._confirmed_total_cells
+        if s._confirmed_total_cells > 0 else None
+    )
+    per_color: dict[str, object] = {}
+    for c in EVAL_COLORS:
+        total = s._confirmed_total_by_color.get(c, 0)
+        agree = s._confirmed_agree_by_color.get(c, 0)
+        per_color[COLOR_NAMES[c]] = agree / total if total > 0 else None
+    return {"overall": overall, "per_color": per_color}
+
+
 def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
     """動画別集計 dict を生成する。"""
     return {
@@ -910,6 +1017,14 @@ def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
                 if s._puyo_count_n_stable > 0 else None
             ),
             "n_stable_frames_puyo": s._puyo_count_n_stable,
+            # 改修2: per-side 別 avg_puyo_count
+            # 1P / 2P 各サイドの STABLE フレーム平均ぷよ数。
+            # 一方のサイドのみ極端に低い場合は片側列崩壊を示す。
+            "avg_puyo_count_per_side": _build_avg_puyo_by_side(s),
+            # 改修1: confirmed_majority_agree_rate (confirmed 精度代理指標)
+            # confirmed_val == majority_label の全 STABLE セル一致率。
+            # FAIL 判定には使わず情報提示のみ。1.0 = confirmed が多数決と完全整合。
+            "confirmed_majority_agree_rate": _build_confirmed_agree_rate(s),
         }
         for s in stats_list
     }
@@ -963,6 +1078,10 @@ def _build_i1_summary(stats_list: list[VideoStats]) -> dict:
             "per_col_unknown_critical": PER_COL_UNKNOWN_CRITICAL,
             "non_stable_critical_frames": NON_STABLE_CRITICAL_FRAMES,
             "midgame_col_empty_critical": MIDGAME_COL_EMPTY_CRITICAL,
+            # 改修2: per-side avg_puyo CRITICAL 閾値を記録 (後方互換追加)
+            "avg_puyo_count_critical": AVG_PUYO_COUNT_CRITICAL,
+            # 改修3: chain 中 non-stable 除外フラグを記録 (後方互換追加)
+            "non_stable_chain_exclude": NON_STABLE_CHAIN_EXCLUDE,
         },
     }
 
@@ -1125,6 +1244,19 @@ def _judge_i1_metrics(stats_list: list) -> list[str]:
                 failures.append(
                     f"[{s.video_id}] 中盤 col={col} EMPTY率 {empty_rate:.1%} >= CRITICAL閾値 {MIDGAME_COL_EMPTY_CRITICAL:.0%}"
                     f" (v40_match01 全EMPTY誤判定パターン)"
+                )
+        # 改修2: per-side avg_puyo_count CRITICAL 閾値チェック
+        # AVG_PUYO_COUNT_CRITICAL 未満 = 列崩壊疑い (実測最小 18 以上が正常)
+        for side in ("1P", "2P"):
+            n = s._puyo_count_n_stable_by_side.get(side, 0)
+            if n <= 0:
+                continue
+            avg = s._puyo_count_sum_by_side.get(side, 0) / n
+            if avg < AVG_PUYO_COUNT_CRITICAL:
+                failures.append(
+                    f"[{s.video_id}] {side} avg_puyo_count {avg:.2f} < "
+                    f"CRITICAL閾値 {AVG_PUYO_COUNT_CRITICAL:.1f}"
+                    f" (列崩壊疑い: STABLE フレームのぷよ数が異常に少ない)"
                 )
     return failures
 
@@ -1453,6 +1585,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--hsv-classify-fallback",
+        action="store_true",
+        default=False,
+        dest="enable_hsv_classify_fallback",
+        help=(
+            "HSV 分類 fallback を有効化する。 "
+            "_classify_next_pair_by_hsv の 2 択強制確定を回避し、 "
+            "両候補が拮抗・両候補とも遠い・低彩度 patch の場合は next_pair 素返しにする。 "
+            "黄(H26)→赤(H7) 誤分類 (~900 件、 H 差 19) 発火点対策。 "
+            "省略時は従来挙動 (2 択強制確定)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1488,6 +1633,7 @@ def _collect_results(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1507,6 +1653,9 @@ def _collect_results(
             falling_pair を _landing_pending (消費済みツモ色) に切り替える。
             backwards compat: デフォルト False = 従来挙動。
         enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避する。
             backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
@@ -1532,6 +1681,7 @@ def _collect_results(
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1542,6 +1692,7 @@ def _collect_results(
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
     )
 
 
@@ -1557,6 +1708,7 @@ def _collect_serial(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1574,6 +1726,7 @@ def _collect_serial(
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1592,6 +1745,7 @@ def _collect_parallel(
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1623,6 +1777,7 @@ def _collect_parallel(
                 enable_game_event_chain_exit,
                 enable_landing_color_fix,
                 enable_chain_min_display,
+                enable_hsv_classify_fallback,
             )
             futures[fut] = vid
 
@@ -1724,6 +1879,31 @@ def _print_summary(
             n_st = vid_data.get("n_stable_frames_puyo", 0)
             if avg is not None:
                 print(f"  [{vid_id}] avg={avg:.2f} (n_stable={n_st})")
+                # 改修2: per-side avg_puyo 表示 (CRITICAL 閾値以下は [CRITICAL] 表示)
+                per_side = vid_data.get("avg_puyo_count_per_side", {})
+                for side_key, side_avg in sorted(per_side.items()):
+                    if side_avg is None:
+                        continue
+                    mark = (
+                        "CRITICAL"
+                        if side_avg < AVG_PUYO_COUNT_CRITICAL
+                        else "ok"
+                    )
+                    print(f"    {side_key}: avg={side_avg:.2f}  [{mark}]")
+    # 改修1: confirmed_majority_agree_rate 表示 (情報提示のみ)
+    has_cmar = any(
+        "confirmed_majority_agree_rate" in v for v in per_vid.values()
+    )
+    if has_cmar:
+        print(
+            "[confirmed_majority_agree_rate "
+            "(confirmed vs 多数決 一致率: 1.0=完全整合、情報提示のみ)]"
+        )
+        for vid_id, vid_data in per_vid.items():
+            cmar = vid_data.get("confirmed_majority_agree_rate", {})
+            overall_cmar = cmar.get("overall") if isinstance(cmar, dict) else None
+            if overall_cmar is not None:
+                print(f"  [{vid_id}] overall={overall_cmar:.4f}")
     if failures:
         print("[FAIL 理由]")
         for reason in failures:
@@ -1762,6 +1942,10 @@ def main() -> int:
     enable_chain_min_display: bool = bool(
         getattr(args, "enable_chain_min_display", False)
     )
+    # hsv_classify_fallback フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_hsv_classify_fallback: bool = bool(
+        getattr(args, "enable_hsv_classify_fallback", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1787,6 +1971,11 @@ def main() -> int:
             f"(--chain-min-display 指定: X1 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s + "
             f"X4 短連鎖 count<{RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} exit 抑止)"
         )
+    if enable_hsv_classify_fallback:
+        print(
+            "[measure] hsv_classify_fallback ENABLED "
+            "(--hsv-classify-fallback 指定: 2 択強制確定回避 / 黄→赤誤分類発火点対策)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1798,6 +1987,7 @@ def main() -> int:
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1844,6 +2034,8 @@ def main() -> int:
             "enable_chain_min_display": enable_chain_min_display,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
+            # 改修3: non_stable chain 除外フラグ (後日比較用)
+            "non_stable_chain_exclude": NON_STABLE_CHAIN_EXCLUDE,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

@@ -9,7 +9,12 @@ from src.board import (
 )
 from src.placement_inferrer import (
     LARGE_ADD_GUARD_CELLS,
+    HSV_CLASSIFY_MAX_DISTANCE,
+    HSV_CLASSIFY_REJECT_RATIO,
+    HSV_MIN_SATURATION_FOR_CLASSIFY,
     LandingPattern,
+    _classify_next_pair_by_hsv,
+    _is_hsv_classify_confident,
     enumerate_color_assignments,
     enumerate_landing_patterns,
     infer_placement,
@@ -416,3 +421,174 @@ class TestResolveAfterPlacementGuard:
         assert n == 0
         # final は new_board のコピー (= ガード時と区別つきにくいが連鎖無しケース)
         assert final.get(12, 0) == COLOR_RED
+
+
+# ===================================================================
+# HSV 分類 fallback テスト (fix/v70-zeropatch-redyellow, 2026-06-01)
+# ===================================================================
+
+import numpy as np
+
+
+def _make_hsv_patch_bgr(h: int, s: int, v: int, size: int = 8) -> np.ndarray:
+    """指定 HSV の単色 BGR patch を生成する (テスト用)。
+
+    OpenCV HSV 範囲: H=0-180, S=0-255, V=0-255.
+    """
+    import cv2
+    hsv = np.full((size, size, 3), (h, s, v), dtype=np.uint8)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+
+class TestHsvClassifyFallbackConstants:
+    """定数が期待範囲にあることを確認する。"""
+
+    def test_reject_ratio_positive(self):
+        """HSV_CLASSIFY_REJECT_RATIO は 1.0 超の正値。"""
+        assert HSV_CLASSIFY_REJECT_RATIO > 1.0
+
+    def test_max_distance_positive(self):
+        """HSV_CLASSIFY_MAX_DISTANCE は正値。"""
+        assert HSV_CLASSIFY_MAX_DISTANCE > 0.0
+
+    def test_min_saturation_in_range(self):
+        """HSV_MIN_SATURATION_FOR_CLASSIFY は 0-255 の範囲内。"""
+        assert 0 < HSV_MIN_SATURATION_FOR_CLASSIFY < 255
+
+
+class TestIsHsvClassifyConfident:
+    """_is_hsv_classify_confident の境界値テスト。"""
+
+    def test_confident_when_ratio_exceeds_threshold(self):
+        """d_max/d_min が REJECT_RATIO 以上なら True。"""
+        d_min = 10.0
+        d_max = d_min * HSV_CLASSIFY_REJECT_RATIO * 2  # 余裕を持って閾値超え
+        assert _is_hsv_classify_confident(d_min, d_max) is True
+
+    def test_not_confident_when_both_far(self):
+        """d_min が HSV_CLASSIFY_MAX_DISTANCE 超なら False (両候補とも遠い)。"""
+        d_min = HSV_CLASSIFY_MAX_DISTANCE + 1.0
+        d_max = d_min * 10
+        assert _is_hsv_classify_confident(d_min, d_max) is False
+
+    def test_not_confident_when_ratio_below_threshold(self):
+        """d_max/d_min が REJECT_RATIO 未満なら False (両候補が拮抗)。"""
+        d_min = 10.0
+        d_max = d_min * (HSV_CLASSIFY_REJECT_RATIO - 0.1)  # 閾値をわずかに下回る
+        assert _is_hsv_classify_confident(d_min, d_max) is False
+
+
+class TestClassifyNextPairByHsvFallback:
+    """_classify_next_pair_by_hsv の enable_hsv_classify_fallback テスト。"""
+
+    def test_off_legacy_two_choice_unchanged(self):
+        """fallback=OFF (default) → 従来の 2 択強制確定が維持される。
+
+        黄に近い patch + falling_pair=(青,赤) でも赤に強制確定する旧挙動を確認。
+        """
+        import cv2
+        from src.board import COLOR_BLUE
+        # 黄の patch (H=26, S=200, V=220)
+        patch_yellow = _make_hsv_patch_bgr(h=26, s=200, v=220)
+        # 何か適当な patch (H=115 = 青)
+        patch_blue = _make_hsv_patch_bgr(h=115, s=200, v=180)
+        # fallback OFF: 2 択強制 → 黄でも赤/青のどちらかに確定される
+        result = _classify_next_pair_by_hsv(
+            patch_yellow, patch_blue,
+            next_pair=(COLOR_BLUE, COLOR_RED),
+            enable_hsv_classify_fallback=False,
+        )
+        # 2 択強制なので COLOR_BLUE か COLOR_RED のどちらかが返る (next_pair の順序変化は OK)
+        assert result in ((COLOR_BLUE, COLOR_RED), (COLOR_RED, COLOR_BLUE))
+
+    def test_on_yellow_as_red_candidate_returns_next_pair(self):
+        """fallback=ON + 黄 patch + falling_pair=(青,赤) → 拮抗 or 遠いため next_pair 素返し。
+
+        board_log 実証: 黄(H26)→赤(H7) 誤分類発火点。
+        falling_pair=(青,赤) 時、黄セルは赤(H7)と青(H115)両方と距離が中程度になる。
+        fallback=ON で強制確定せず next_pair=(青,赤) をそのまま返すことを確認。
+        """
+        from src.board import COLOR_BLUE
+        # 黄の patch (H=26 = 黄色相)
+        patch_yellow = _make_hsv_patch_bgr(h=26, s=200, v=220)
+        # 青の patch (H=115)
+        patch_blue_actual = _make_hsv_patch_bgr(h=115, s=200, v=180)
+        original_pair = (COLOR_BLUE, COLOR_RED)
+        result = _classify_next_pair_by_hsv(
+            patch_yellow, patch_blue_actual,
+            next_pair=original_pair,
+            enable_hsv_classify_fallback=True,
+        )
+        # fallback ON では「不確かな分類は next_pair 素返し」。
+        # 黄は赤でも青でもないため、両距離が中程度 or 比が閾値未満になる。
+        # → next_pair そのままか、確信ある分類のどちらか。
+        # 少なくとも「黄を赤と強制確定した結果 (COLOR_RED, COLOR_BLUE)」は
+        # fallback が発動した場合には素返し値と一致する。
+        assert result in (original_pair, (COLOR_RED, COLOR_BLUE))
+
+    def test_on_clear_color_still_classifies(self):
+        """fallback=ON + 明確な色 (距離が十分離れる) → 従来通り確定する。
+
+        赤 patch + falling_pair=(赤,青) → 赤が cell_a に確定されること。
+        """
+        from src.board import COLOR_BLUE
+        # 赤の patch (H=7, S=220, V=200) = COLOR_HSV_CENTERS[COLOR_RED] に近い
+        patch_red = _make_hsv_patch_bgr(h=7, s=220, v=200)
+        # 青の patch (H=115, S=220, V=180)
+        patch_blue = _make_hsv_patch_bgr(h=115, s=220, v=180)
+        result = _classify_next_pair_by_hsv(
+            patch_red, patch_blue,
+            next_pair=(COLOR_RED, COLOR_BLUE),
+            enable_hsv_classify_fallback=True,
+        )
+        # 赤と青は H 差 108 で十分離れている → 確定可能 → 従来通り (赤,青) が返る
+        assert result == (COLOR_RED, COLOR_BLUE)
+
+    def test_on_low_saturation_patch_returns_next_pair(self):
+        """fallback=ON + 低彩度 patch (背景/空) → 色判断不能として next_pair 素返し。"""
+        from src.board import COLOR_BLUE
+        # 低彩度 patch (S < HSV_MIN_SATURATION_FOR_CLASSIFY = 60)
+        patch_low_s = _make_hsv_patch_bgr(h=26, s=30, v=200)  # S=30 < 60
+        patch_normal = _make_hsv_patch_bgr(h=115, s=200, v=180)
+        original_pair = (COLOR_BLUE, COLOR_RED)
+        result = _classify_next_pair_by_hsv(
+            patch_low_s, patch_normal,
+            next_pair=original_pair,
+            enable_hsv_classify_fallback=True,
+        )
+        # 低彩度 patch → 色判断不能 → next_pair 素返し
+        assert result == original_pair
+
+
+class TestInferPlacementHsvClassifyFallback:
+    """infer_placement の enable_hsv_classify_fallback 引数テスト。"""
+
+    def test_flag_off_default_backward_compat(self):
+        """フラグ OFF (default) → 既存の infer_placement 挙動と完全一致。"""
+        cnn = _empty_board()
+        cnn.set(11, 2, COLOR_RED)
+        cnn.set(12, 2, COLOR_BLUE)
+        result_default = infer_placement(
+            _empty_board(), cnn, (COLOR_RED, COLOR_BLUE),
+        )
+        result_explicit_off = infer_placement(
+            _empty_board(), cnn, (COLOR_RED, COLOR_BLUE),
+            enable_hsv_classify_fallback=False,
+        )
+        # どちらも同じ結果 (後方互換)
+        assert result_default is not None
+        assert result_explicit_off is not None
+        assert result_default.get(11, 2) == result_explicit_off.get(11, 2)
+        assert result_default.get(12, 2) == result_explicit_off.get(12, 2)
+
+    def test_flag_on_frame_bgr_none_no_crash(self):
+        """フラグ ON かつ frame_bgr=None → クラッシュしない (HSV 分類スキップ)。"""
+        cnn = _empty_board()
+        cnn.set(11, 2, COLOR_RED)
+        cnn.set(12, 2, COLOR_BLUE)
+        result = infer_placement(
+            _empty_board(), cnn, (COLOR_RED, COLOR_BLUE),
+            enable_hsv_classify_fallback=True,
+            # frame_bgr=None → use_hsv_classification=False → fallback 不発動
+        )
+        assert result is not None

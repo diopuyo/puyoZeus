@@ -348,6 +348,11 @@ class RecognitionPipeline:
         # 実質 enable_game_event_chain_exit=True と併用される前提。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_min_display: bool = False,
+        # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback。
+        # True にすると _classify_next_pair_by_hsv の 2 択強制確定を回避する。
+        # 黄(H26)→赤(H7) 誤分類 (H 差 19) の発火点対策。
+        # デフォルト False = 従来の 2 択強制確定 (完全不変、 backwards compat)。
+        enable_hsv_classify_fallback: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -606,6 +611,10 @@ class RecognitionPipeline:
         # True で CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) / 短連鎖 game-event exit 抑止を有効化。
         # False = 従来挙動完全維持 (backwards compat)。
         self._enable_chain_min_display: bool = bool(enable_chain_min_display)
+        # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback トグル。
+        # True で _classify_next_pair_by_hsv の 2 択強制確定を回避。
+        # 黄→赤誤分類 (~900 件) 発火点対策。default False = 従来挙動完全維持。
+        self._enable_hsv_classify_fallback: bool = bool(enable_hsv_classify_fallback)
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -779,6 +788,7 @@ class RecognitionPipeline:
         enable_game_event_chain_exit: bool = False,
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
+        enable_hsv_classify_fallback: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -912,6 +922,7 @@ class RecognitionPipeline:
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         )
 
     # ------------------------------------------------------------------
@@ -2276,6 +2287,7 @@ class RecognitionPipeline:
                 region=region_for_side,
                 bg_fp=bg_fp_for_side,
                 guard_empty_hallucination=self._enable_infer_empty_guard,
+                enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
             )
             if inferred_landing is not None:
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
@@ -2459,6 +2471,7 @@ class RecognitionPipeline:
                             region=region_for_side_b,
                             bg_fp=bg_fp_for_side_b,
                             guard_empty_hallucination=self._enable_infer_empty_guard,
+                            enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
                         )
                         if inferred_b is not None:
                             # 即時連鎖判定 (= 短い TSUMO_FALL 取りこぼし時も適用)
