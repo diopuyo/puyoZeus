@@ -108,6 +108,13 @@ NON_STABLE_WARMUP_SEC: float = 15.0  # 試合開始から 15 秒は計測除外
 MIDGAME_START_SEC: float = 30.0  # 中盤開始時刻 (秒)
 MIDGAME_COL_EMPTY_CRITICAL: float = 0.99  # 99% 以上 EMPTY = CRITICAL
 MIDGAME_COL_MIN_FRAMES: int = 30  # 最低 30 STABLE frame が必要
+# クリップ末尾 N 秒を中盤評価から除外する (短クリップ偽陽性対策)
+# 問題: v70_match01 (30.5s) は末尾 0.5 秒だけが中盤判定区間に入り、
+# 連鎖後の正当な列空きを「中盤列崩壊」と誤 FAIL していた。
+# 対策: クリップ末尾 MIDGAME_TRAIL_EXCLUDE_SEC を中盤評価から除外する。
+# 真の中盤列崩壊 (v40_match01 等の 60s クリップ中盤) は影響を受けない。
+# 後方互換のため既存定数は変更せず新定数として追加する。
+MIDGAME_TRAIL_EXCLUDE_SEC: float = 10.0  # 末尾 10 秒は中盤評価から除外
 
 # HSV DB ルート
 _HSV_DB_ROOT = Path("data/per_video_hsv_ranges")
@@ -177,6 +184,9 @@ class VideoStats:
     per_col_midgame_empty_cells: dict = field(default_factory=lambda: defaultdict(int))
     # per_col_midgame_cells[col]: 中盤 STABLE フレームで確認した cell 数 (col 別、分母)
     per_col_midgame_cells: dict = field(default_factory=lambda: defaultdict(int))
+    # クリップ総時間 (秒)。0.0 = 不明 (末尾除外を適用しない)
+    # 後方互換のため default=0.0。_open_capture で設定される。
+    clip_duration_sec: float = 0.0
     # _non_stable_current_by_side: side 別 non-stable 連続カウンタ (内部、init 時 {}).
     # non_stable_max_consecutive の更新用。直接参照禁止。
     _non_stable_current_by_side: dict = field(default_factory=dict, repr=False, compare=False)
@@ -332,7 +342,13 @@ def _open_capture(
     max_frames: int,
     sample_interval_sec: float,
 ) -> tuple:
-    """動画キャプチャを開き (cap, fps, n_target, interval_frames) を返す。"""
+    """動画キャプチャを開き (cap, fps, n_target, interval_frames, clip_duration_sec) を返す。
+
+    clip_duration_sec: クリップ全体の時間 (秒)。中盤末尾除外判定に使う。
+    戻り値: (cap, fps, n_target, interval_frames, clip_duration_sec) または None。
+    backwards compat: 既存呼出元は 4 要素 tuple を期待しているため、
+    5 要素 tuple に拡張。呼出元 (_process_video) も同時に更新する。
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -340,7 +356,9 @@ def _open_capture(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     n_target = total_frames if max_frames <= 0 else min(total_frames, max_frames)
     interval_frames = max(1, int(round(sample_interval_sec * fps)))
-    return cap, fps, n_target, interval_frames
+    # クリップ全体の秒数 (= 実総フレーム数を使う。max_frames 制限前の値)
+    clip_duration_sec = total_frames / fps if fps > 0 else 0.0
+    return cap, fps, n_target, interval_frames, clip_duration_sec
 
 
 
@@ -408,9 +426,15 @@ def _run_frame_loop(
     pipe_cnn: RecognitionPipeline,
     pipe_hsv: RecognitionPipeline,
     disagreements: list[dict],
+    clip_duration_sec: float = 0.0,
 ) -> VideoStats:
-    """動画 frame ループを走らせ VideoStats を返す。"""
+    """動画 frame ループを走らせ VideoStats を返す。
+
+    clip_duration_sec: クリップ全体の秒数 (中盤末尾除外に使用)。
+    0.0 = 不明 → 末尾除外を適用しない (後方互換)。
+    """
     stats = VideoStats(video_id=video_id, is_holdout=is_holdout)
+    stats.clip_duration_sec = clip_duration_sec
     for fi in range(n_target):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -455,7 +479,7 @@ def _process_video(
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
-    cap, fps, n_target, interval_frames = cap_info
+    cap, fps, n_target, interval_frames, clip_duration_sec = cap_info
     # confirmed 経路 (CNN+物理推論) のみ各フラグを制御する。
     # raw_hsv 経路は constraint_fill を通らないため変更不要。
     pipe_cnn = _make_pipeline_cnn(
@@ -465,10 +489,14 @@ def _process_video(
         enable_infer_empty_guard=enable_infer_empty_guard,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
-    print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
+    print(
+        f"[measure] {video_id}: fps={fps:.1f} target={n_target} "
+        f"holdout={is_holdout} clip_duration={clip_duration_sec:.1f}s"
+    )
     stats = _run_frame_loop(
         video_id, cap, fps, n_target, interval_frames,
         is_holdout, pipe_cnn, pipe_hsv, disagreements,
+        clip_duration_sec=clip_duration_sec,
     )
     cap.release()
     rate = stats.agreed_cells / stats.total_cells if stats.total_cells > 0 else 0.0
@@ -721,6 +749,29 @@ def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
     stats._puyo_count_n_stable += 1
 
 
+def _is_midgame_frame(t_sec: float, clip_duration_sec: float) -> bool:
+    """フレームが中盤評価区間に属するかを返す。
+
+    中盤評価区間の定義:
+      [MIDGAME_START_SEC, clip_duration_sec - MIDGAME_TRAIL_EXCLUDE_SEC)
+
+    clip_duration_sec=0.0 (不明) の場合は末尾除外を適用せず、
+    従来通り t_sec >= MIDGAME_START_SEC のみで判定する (後方互換)。
+
+    短クリップ偽陽性対策 (v70_match01 問題):
+      30.5s クリップでは末尾 10s を除外すると有効中盤区間が
+      [30.0, 20.5) となりフレームが含まれなくなる。
+      MIDGAME_COL_MIN_FRAMES (=30) に満たないため CRITICAL 判定されない。
+    """
+    if t_sec < MIDGAME_START_SEC:
+        return False
+    if clip_duration_sec <= 0.0:
+        # clip 長が不明のときは末尾除外を適用しない (後方互換)
+        return True
+    trail_cutoff = clip_duration_sec - MIDGAME_TRAIL_EXCLUDE_SEC
+    return t_sec < trail_cutoff
+
+
 def _collect_col_metrics(
     fi: int,
     t_sec: float,
@@ -731,8 +782,9 @@ def _collect_col_metrics(
 
     col 別 UNKNOWN 率が高い = STABLE 中の認識崩壊 (v89 27-30s 相当) を捕捉。
     中盤 EMPTY 率が 100% = col=1 全 EMPTY 誤判定 (v40_match01 相当) を捕捉。
+    clip_duration_sec は stats.clip_duration_sec から取得する。
     """
-    is_midgame = t_sec >= MIDGAME_START_SEC
+    is_midgame = _is_midgame_frame(t_sec, stats.clip_duration_sec)
     for col in range(BOARD_COLS):
         col_unknown = 0
         col_cells = 0

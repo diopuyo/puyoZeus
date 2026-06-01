@@ -37,6 +37,8 @@ from scripts.measure_stable_cell_acc import (
     MIDGAME_START_SEC,
     MIDGAME_COL_EMPTY_CRITICAL,
     MIDGAME_COL_MIN_FRAMES,
+    MIDGAME_TRAIL_EXCLUDE_SEC,
+    _is_midgame_frame,
     BOARD_ROWS,
     BOARD_COLS,
     # サブカテゴリ関連
@@ -628,3 +630,168 @@ def test_video_stats_subcategory_fields_default_zero():
     assert stats.corruption_empty_to_color_count == 0
     assert stats.corruption_color_to_color_count == 0
     assert stats.corruption_color_to_empty_count == 0
+
+
+# ============================
+# _is_midgame_frame / 短クリップ偽陽性対策 テスト (v70_match01 問題)
+# ============================
+
+
+def test_is_midgame_frame_before_start():
+    """MIDGAME_START_SEC 未満のフレームは中盤でないこと。"""
+    assert _is_midgame_frame(MIDGAME_START_SEC - 1.0, 60.0) is False
+
+
+def test_is_midgame_frame_at_start_long_clip():
+    """十分長いクリップで MIDGAME_START_SEC ちょうどのフレームは中盤に含まれること。"""
+    # clip_duration=60s → trail_cutoff=50s → 30s < 50s なので True
+    assert _is_midgame_frame(MIDGAME_START_SEC, 60.0) is True
+
+
+def test_is_midgame_frame_trail_excluded():
+    """クリップ末尾 MIDGAME_TRAIL_EXCLUDE_SEC 以内のフレームは除外されること。"""
+    clip_dur = 60.0
+    # trail_cutoff = 60 - 10 = 50s
+    # t=50.0 は < 50.0 でないので False
+    assert _is_midgame_frame(50.0, clip_dur) is False
+    # t=49.9 は < 50.0 なので True
+    assert _is_midgame_frame(49.9, clip_dur) is True
+
+
+def test_is_midgame_frame_short_clip_v70_match01():
+    """v70_match01 相当 (30.5s) で MIDGAME_START_SEC=30.0 直後のフレームが除外されること。
+
+    30.5s クリップで末尾 10s を除外すると有効中盤区間は [30.0, 20.5) となる。
+    t=30.1 は trail_cutoff=20.5 以上なので False になるべき。
+    これが修正の核心: 修正前は True → CRITICAL 誤発火していた。
+    """
+    clip_dur = 30.5
+    trail_cutoff = clip_dur - MIDGAME_TRAIL_EXCLUDE_SEC  # = 20.5
+    # t_sec=30.1 >= MIDGAME_START_SEC=30.0 だが t_sec >= trail_cutoff=20.5 なので除外
+    assert _is_midgame_frame(30.1, clip_dur) is False
+
+
+def test_is_midgame_frame_short_clip_31s():
+    """31s クリップ (v51_match02 相当) でも同様に末尾が除外されること。"""
+    clip_dur = 31.0
+    # trail_cutoff = 31 - 10 = 21s
+    # t=30.5 >= 21s なので除外
+    assert _is_midgame_frame(30.5, clip_dur) is False
+
+
+def test_is_midgame_frame_unknown_clip_duration_backward_compat():
+    """clip_duration_sec=0.0 (不明) のとき末尾除外を適用せず従来挙動になること (後方互換)。"""
+    # clip_duration_sec=0.0 → trail_cutoff 計算せず t_sec >= MIDGAME_START_SEC のみ
+    assert _is_midgame_frame(30.1, 0.0) is True
+    assert _is_midgame_frame(29.9, 0.0) is False
+
+
+def test_is_midgame_frame_negative_trail_cutoff():
+    """trail_cutoff が負になる超短クリップ (<= MIDGAME_TRAIL_EXCLUDE_SEC) では全フレーム除外。"""
+    # clip_duration=8s → trail_cutoff=-2s → t_sec=30s >= -2 なので除外
+    # (ただし t_sec=30 < MIDGAME_START_SEC=30 は False で先にはじかれる)
+    # t_sec=31s の場合: trail_cutoff=-2s → t_sec < trail_cutoff は False → 除外
+    assert _is_midgame_frame(31.0, 8.0) is False
+
+
+def test_video_stats_clip_duration_default_zero():
+    """VideoStats の clip_duration_sec がデフォルト 0.0 であること (後方互換)。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    assert stats.clip_duration_sec == 0.0
+
+
+def test_collect_col_metrics_short_clip_no_midgame():
+    """短クリップ (30.5s) でクリップ末尾フレームが midgame に集計されないこと。
+
+    これが v70_match01 偽陽性の直接修正検証。
+    修正前: t_sec=30.1 で is_midgame=True → per_col_midgame_cells に積算。
+    修正後: t_sec=30.1, clip_duration=30.5s → is_midgame=False → 積算なし。
+    """
+    stats = VideoStats(video_id="v70_match01", is_holdout=False)
+    stats.clip_duration_sec = 30.5  # v70_match01 の実クリップ長
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.1s フレームを処理 (修正前は midgame と判定されていた)
+    _collect_col_metrics(fi=0, t_sec=30.1, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame セル数は 0 のままであること
+    for col in range(BOARD_COLS):
+        assert stats.per_col_midgame_cells.get(col, 0) == 0, (
+            f"col={col} が midgame として集計されてしまった (短クリップ偽陽性)"
+        )
+
+
+def test_collect_col_metrics_long_clip_midgame_counted():
+    """長クリップ (60s) で中盤区間 (30s) のフレームが midgame に集計されること。
+
+    真の中盤列崩壊検知 (v40_match01 相当) が引き続き機能することの確認。
+    """
+    stats = VideoStats(video_id="v40_match01", is_holdout=False)
+    stats.clip_duration_sec = 60.0  # 十分長いクリップ
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.0s = MIDGAME_START_SEC ちょうど、trail_cutoff=50s なので midgame に含まれる
+    _collect_col_metrics(fi=0, t_sec=30.0, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame セル数が積算されていること
+    for col in range(BOARD_COLS):
+        assert stats.per_col_midgame_cells.get(col, 0) == BOARD_ROWS, (
+            f"col={col} が midgame に集計されなかった (長クリップで本来検知すべき)"
+        )
+
+
+def test_judge_i1_midgame_short_clip_not_critical():
+    """短クリップ (30.5s) で全列 EMPTY でも midgame CRITICAL にならないこと。
+
+    clip_duration_sec を設定したとき、per_col_midgame_cells < MIDGAME_COL_MIN_FRAMES
+    となるため CRITICAL 判定を回避できることを検証する。
+    """
+    stats = VideoStats(video_id="v70_match01", is_holdout=False)
+    stats.clip_duration_sec = 30.5
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 末尾 0.5 秒分のフレームをすべて処理 (30.0s〜30.5s を 30fps で約 15 フレーム)
+    for i in range(15):
+        t_sec = 30.0 + i * (1.0 / 30.0)
+        _collect_col_metrics(fi=i, t_sec=t_sec, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame cells が MIDGAME_COL_MIN_FRAMES 未満なので CRITICAL が出ないこと
+    failures = _judge_i1_metrics([stats])
+    midgame_failures = [f for f in failures if "中盤 col=" in f and "EMPTY率" in f]
+    assert midgame_failures == [], (
+        f"短クリップで偽 CRITICAL が発生: {midgame_failures}"
+    )
+
+
+def test_judge_i1_midgame_long_clip_all_empty_critical():
+    """長クリップ (60s) で中盤 MIDGAME_COL_MIN_FRAMES 以上全列 EMPTY なら CRITICAL になること。
+
+    真の中盤列崩壊 (v40_match01 パターン) が引き続き検知できることの確認。
+    """
+    stats = VideoStats(video_id="v40_match01", is_holdout=False)
+    stats.clip_duration_sec = 60.0
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.0s〜45.0s を 30fps で 450 フレーム処理 (MIDGAME_COL_MIN_FRAMES=30 を大幅超過)
+    for i in range(MIDGAME_COL_MIN_FRAMES + 10):
+        t_sec = 30.0 + i * (1.0 / 30.0)
+        _collect_col_metrics(fi=i, t_sec=t_sec, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # 全列が MIDGAME_COL_EMPTY_CRITICAL 以上の EMPTY 率なので CRITICAL が出ること
+    failures = _judge_i1_metrics([stats])
+    midgame_failures = [f for f in failures if "中盤 col=" in f and "EMPTY率" in f]
+    assert len(midgame_failures) > 0, (
+        "長クリップで全 EMPTY 列が CRITICAL 検知されなかった (真の崩壊を見逃す)"
+    )
