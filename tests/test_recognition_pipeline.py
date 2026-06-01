@@ -1035,3 +1035,107 @@ def test_t2_highconf_yield_pv_colored_still_yields() -> None:
         f"pv=色付き: yield 発動して緑を維持すべき (期待=緑={COLOR_GREEN}, 実際={cell_val})"
     )
 
+
+# ============================
+# game-event ベース連鎖終了 (C-1/C-2) テスト
+# ============================
+
+
+from src.recognition_pipeline import _is_game_event_chain_exit
+
+
+def test_is_game_event_chain_exit_next_change() -> None:
+    """① 次ツモ変化: current_next != start_next → True を返す。"""
+    start = (COLOR_RED, COLOR_BLUE)
+    current = (COLOR_GREEN, COLOR_RED)   # 変化あり
+    result = _is_game_event_chain_exit(
+        current_next=current,
+        start_next=start,
+        current_board=None,
+        start_board=None,
+    )
+    assert result is True, "next_pair 変化時は True を返すべき"
+
+
+def test_is_game_event_chain_exit_next_no_change() -> None:
+    """① 次ツモ変化なし: current_next == start_next → False (お邪魔もなし)。"""
+    same = (COLOR_RED, COLOR_BLUE)
+    result = _is_game_event_chain_exit(
+        current_next=same,
+        start_next=same,
+        current_board=None,
+        start_board=None,
+    )
+    assert result is False, "next_pair 変化なし / お邪魔なし → False"
+
+
+def test_is_game_event_chain_exit_ojama_appears() -> None:
+    """② 連鎖 side にお邪魔新規出現: True を返す。"""
+    from src.board import COLOR_OJAMA
+    start_board = Board()  # お邪魔なし
+    current_board = Board()
+    current_board.set(5, 2, COLOR_OJAMA)  # 新規お邪魔出現
+    result = _is_game_event_chain_exit(
+        current_next=None,
+        start_next=None,
+        current_board=current_board,
+        start_board=start_board,
+    )
+    assert result is True, "自 side にお邪魔新規出現 → True"
+
+
+def test_is_game_event_chain_exit_ojama_preexisting() -> None:
+    """② 多段連鎖ガード: start_board にも同位置お邪魔あり → False。
+
+    連鎖開始前から存在するお邪魔は「新規出現」ではないため終了しない。
+    """
+    from src.board import COLOR_OJAMA
+    start_board = Board()
+    start_board.set(5, 2, COLOR_OJAMA)  # 連鎖開始前から存在
+    current_board = Board()
+    current_board.set(5, 2, COLOR_OJAMA)  # 変化なし (同位置)
+    result = _is_game_event_chain_exit(
+        current_next=None,
+        start_next=None,
+        current_board=current_board,
+        start_board=start_board,
+    )
+    assert result is False, "既存お邪魔は新規出現でない → False"
+
+
+def test_is_game_event_chain_exit_max_hold_cap() -> None:
+    """安全弁: CHAIN_MAX_HOLD_SEC 超過で game-event なしでも終了する設計を確認。
+
+    _is_game_event_chain_exit は stateless (安全弁は pipeline 側 eff_until で制御)。
+    本テストは: next 変化なし / お邪魔なし → False を返すことで
+    「安全弁は pipeline の time_sec >= eff_until で chain_ev を None にする」
+    側の責任であることを明示する。
+    """
+    same_next = (COLOR_RED, COLOR_BLUE)
+    board_no_change = Board()
+    result = _is_game_event_chain_exit(
+        current_next=same_next,
+        start_next=same_next,
+        current_board=board_no_change,
+        start_board=board_no_change,
+    )
+    assert result is False, (
+        "安全弁は pipeline 側 (eff_until) 管理のため、"
+        "game-event なし時は False を返す"
+    )
+
+
+def test_game_event_chain_exit_flag_off_is_backward_compat() -> None:
+    """OFF 時は従来挙動不変: enable_game_event_chain_exit=False でインスタンス生成可能。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    # デフォルト False = game-event chain exit 無効
+    assert pipe._enable_game_event_chain_exit is False
+    # 従来 chain_until 変数が存在すること
+    assert hasattr(pipe, "_chain_until_1p")
+    assert hasattr(pipe, "_chain_until_2p")
+    # 新規 game-event 変数が初期化されていること (OFF 時も初期化済)
+    assert pipe._chain_event_max_until_1p == 0.0
+    assert pipe._chain_event_max_until_2p == 0.0
+    assert pipe._chain_start_next_1p is None
+    assert pipe._chain_start_next_2p is None
+

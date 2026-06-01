@@ -291,6 +291,7 @@ def _make_pipeline_cnn(
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -306,12 +307,16 @@ def _make_pipeline_cnn(
         enable_infer_empty_guard: True にすると infer_placement の空セル
             hallucination ガードを有効化する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -461,6 +466,7 @@ def _process_video(
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -473,6 +479,9 @@ def _process_video(
             backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
             backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
@@ -487,6 +496,7 @@ def _process_video(
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -514,6 +524,7 @@ def _process_video_worker(
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -539,6 +550,7 @@ def _process_video_worker(
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1380,6 +1392,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--game-event-chain-exit",
+        action="store_true",
+        default=False,
+        dest="enable_game_event_chain_exit",
+        help=(
+            "game-event ベース連鎖終了を有効化する。 "
+            "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
+            "「連鎖側お邪魔降下」を検知するまで維持する。 "
+            "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
+            "省略時は従来挙動 (timing hold のみ)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1412,6 +1437,7 @@ def _collect_results(
     workers: int = 1,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1425,6 +1451,8 @@ def _collect_results(
             CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する。backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1446,6 +1474,7 @@ def _collect_results(
             sample_interval_sec, disagreements, enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
+            enable_game_event_chain_exit=enable_game_event_chain_exit,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1453,6 +1482,7 @@ def _collect_results(
         effective_workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
 
 
@@ -1465,6 +1495,7 @@ def _collect_serial(
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1479,6 +1510,7 @@ def _collect_serial(
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
+            enable_game_event_chain_exit=enable_game_event_chain_exit,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1494,6 +1526,7 @@ def _collect_parallel(
     workers: int,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1522,6 +1555,7 @@ def _collect_parallel(
                 enable_constraint_fill,
                 enable_t2_highconf_yield,
                 enable_infer_empty_guard,
+                enable_game_event_chain_exit,
             )
             futures[fut] = vid
 
@@ -1649,6 +1683,10 @@ def main() -> int:
     enable_infer_empty_guard: bool = bool(
         getattr(args, "enable_infer_empty_guard", False)
     )
+    # game_event_chain_exit フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_game_event_chain_exit: bool = bool(
+        getattr(args, "enable_game_event_chain_exit", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1658,6 +1696,11 @@ def main() -> int:
         print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
     if enable_infer_empty_guard:
         print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
+    if enable_game_event_chain_exit:
+        print(
+            "[measure] game_event_chain_exit ENABLED "
+            "(--game-event-chain-exit 指定: game-event ベース連鎖終了)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1666,6 +1709,7 @@ def main() -> int:
         workers=workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1704,6 +1748,8 @@ def main() -> int:
             "enable_constraint_fill": enable_constraint_fill,
             # t2_highconf_yield の on/off を記録 (後日比較用)
             "enable_t2_highconf_yield": enable_t2_highconf_yield,
+            # game_event_chain_exit の on/off を記録 (後日比較用)
+            "enable_game_event_chain_exit": enable_game_event_chain_exit,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
         },
