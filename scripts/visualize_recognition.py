@@ -721,6 +721,16 @@ def main() -> int:
              "黄(H26)→赤(H7) 誤分類 (~900 件、 H 差 19) 発火点対策。 "
              "デフォルト OFF = 従来挙動不変 (2 択強制確定、 backwards compat)。",
     )
+    parser.add_argument(
+        "--landing-observed-color",
+        action="store_true",
+        default=False,
+        dest="enable_landing_observed_color",
+        help="真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化。 "
+             "TSUMO_FALL→STABLE 着地時に 2 つの独立認識器 (CNN/HSV) が "
+             "一致した着地色を優先し、 falling_pair タイミングずれによる誤色を断つ。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -795,6 +805,8 @@ def main() -> int:
         enable_chain_min_display=args.enable_chain_min_display,
         # HSV 分類 fallback (fix/v70-zeropatch-redyellow, 2026-06-01): --hsv-classify-fallback で有効化
         enable_hsv_classify_fallback=args.enable_hsv_classify_fallback,
+        # 真因 A 対処 (2026-06-01): --landing-observed-color で有効化
+        enable_landing_observed_color=args.enable_landing_observed_color,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -855,6 +867,11 @@ def main() -> int:
             "[viz] hsv_classify_fallback=ON "
             "(2 択強制確定回避: 両候補拮抗/遠い/低彩度で next_pair 素返し / "
             "黄→赤誤分類 ~900 件発火点対策)"
+        )
+    if args.enable_landing_observed_color:
+        print(
+            "[viz] landing_observed_color=ON "
+            "(真因 A 対処: 着地 2 cell の CNN==HSV 一致色で falling_pair ズレを補正)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

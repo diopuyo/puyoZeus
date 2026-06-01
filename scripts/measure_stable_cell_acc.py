@@ -317,6 +317,7 @@ def _make_pipeline_cnn(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -345,6 +346,9 @@ def _make_pipeline_cnn(
             _classify_next_pair_by_hsv の 2 択強制確定を回避し、
             黄→赤誤分類 (~900 件) 発火点を修正する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -355,6 +359,7 @@ def _make_pipeline_cnn(
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -519,6 +524,7 @@ def _process_video(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -544,6 +550,9 @@ def _process_video(
             _classify_next_pair_by_hsv の 2 択強制確定を回避し、
             黄→赤誤分類 (~900 件) 発火点を修正する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -561,6 +570,7 @@ def _process_video(
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -592,6 +602,7 @@ def _process_video_worker(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -621,6 +632,7 @@ def _process_video_worker(
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1598,6 +1610,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--landing-observed-color",
+        action="store_true",
+        default=False,
+        dest="enable_landing_observed_color",
+        help=(
+            "真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化する。 "
+            "TSUMO_FALL→STABLE 着地時に infer_placement 後の着地 2 cell で "
+            "CNN 観測色と HSV-only 観測色が一致する場合は観測色を採用し、 "
+            "falling_pair タイミングずれによる yellow→red 等の誤色を上流で断つ。 "
+            "省略時は従来挙動 (infer_placement の結果をそのまま使用)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1634,6 +1659,7 @@ def _collect_results(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1656,6 +1682,8 @@ def _collect_results(
             backwards compat: デフォルト False = 従来挙動。
         enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
             _classify_next_pair_by_hsv の 2 択強制確定を回避する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
             backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
@@ -1682,6 +1710,7 @@ def _collect_results(
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1693,6 +1722,7 @@ def _collect_results(
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
 
 
@@ -1709,6 +1739,7 @@ def _collect_serial(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1727,6 +1758,7 @@ def _collect_serial(
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1746,6 +1778,7 @@ def _collect_parallel(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1778,6 +1811,7 @@ def _collect_parallel(
                 enable_landing_color_fix,
                 enable_chain_min_display,
                 enable_hsv_classify_fallback,
+                enable_landing_observed_color,
             )
             futures[fut] = vid
 
@@ -1946,6 +1980,10 @@ def main() -> int:
     enable_hsv_classify_fallback: bool = bool(
         getattr(args, "enable_hsv_classify_fallback", False)
     )
+    # landing_observed_color フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_landing_observed_color: bool = bool(
+        getattr(args, "enable_landing_observed_color", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1976,6 +2014,11 @@ def main() -> int:
             "[measure] hsv_classify_fallback ENABLED "
             "(--hsv-classify-fallback 指定: 2 択強制確定回避 / 黄→赤誤分類発火点対策)"
         )
+    if enable_landing_observed_color:
+        print(
+            "[measure] landing_observed_color ENABLED "
+            "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1988,6 +2031,7 @@ def main() -> int:
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -2032,6 +2076,8 @@ def main() -> int:
             "enable_landing_color_fix": enable_landing_color_fix,
             # chain_min_display の on/off を記録 (後日比較用)
             "enable_chain_min_display": enable_chain_min_display,
+            # landing_observed_color の on/off を記録 (後日比較用)
+            "enable_landing_observed_color": enable_landing_observed_color,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
             # 改修3: non_stable chain 除外フラグ (後日比較用)

@@ -1422,3 +1422,46 @@ def test_chain_min_display_flag_on_blocks_short_chain_game_event_exit() -> None:
         "_chain_entry_t_1p が ChainEvent 受信時刻に更新されるべき"
     )
 
+
+# ---------------------------------------------------------------------------
+# 真因 A 対処: enable_landing_observed_color フラグテスト
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_landing_observed(enable_flag: bool) -> RecognitionPipeline:
+    """enable_landing_observed_color フラグ付きの pipeline を構築する。"""
+    # _StubImageReader は (p1, p2) の 2 引数が必須
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=detector,
+        enable_landing_observed_color=enable_flag,
+    )
+
+
+def test_enable_landing_observed_color_flag_off_default():
+    """フラグ OFF (default) → _enable_landing_observed_color が False。"""
+    pipe = _make_pipe_landing_observed(False)
+    assert not pipe._enable_landing_observed_color, (
+        "default OFF: _enable_landing_observed_color は False であるべき"
+    )
+
+
+def test_enable_landing_observed_color_flag_on():
+    """フラグ ON → _enable_landing_observed_color が True。"""
+    pipe = _make_pipe_landing_observed(True)
+    assert pipe._enable_landing_observed_color, (
+        "ON時: _enable_landing_observed_color は True であるべき"
+    )
+
+
+def test_enable_landing_observed_color_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_landing_observed(False)
+    frame = _dummy_frame()
+    # 複数フレーム連続 update でクラッシュしないことを確認
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
