@@ -606,12 +606,9 @@ class RecognitionPipeline:
         self._chain_event_max_until_2p: float = 0.0
         # game-event モード: CHAIN 発火時の連鎖側 prev_next_pair (next 変化検知用)。
         # 連鎖が始まった瞬間の next_pair をスナップショットし、変化したら終了する。
+        # ※②お邪魔信号撤去 (2026-06-01): board snapshot (_chain_start_board_*) は不要。
         self._chain_start_next_1p: tuple[int, int] | None = None
         self._chain_start_next_2p: tuple[int, int] | None = None
-        # game-event モード: CHAIN 発火直前の連鎖側 confirmed_board スナップショット。
-        # 連鎖開始前のお邪魔 cell 位置を記録し、連鎖後の「新規お邪魔出現」を検知する。
-        self._chain_start_board_1p: Board | None = None
-        self._chain_start_board_2p: Board | None = None
 
     @staticmethod
     def _build_hybrid_reader(
@@ -998,8 +995,7 @@ class RecognitionPipeline:
         self._chain_event_max_until_2p = 0.0
         self._chain_start_next_1p = None
         self._chain_start_next_2p = None
-        self._chain_start_board_1p = None
-        self._chain_start_board_2p = None
+        # ※②お邪魔信号撤去 (2026-06-01): _chain_start_board_* は削除済。
         # X1: CHAIN 突入時刻リセット
         self._chain_entry_t_1p = 0.0
         self._chain_entry_t_2p = 0.0
@@ -1324,17 +1320,14 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
-                # game-event モード: 安全弁上限 + 連鎖開始時 snapshot を記録。
+                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
                 # enable_game_event_chain_exit=False 時も安全弁は無害 (使われない)。
+                # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_1p = (
                         time_sec + self.CHAIN_MAX_HOLD_SEC
                     )
                     self._chain_start_next_1p = self._last_seen_next_1p
-                    self._chain_start_board_1p = (
-                        board_for_tracker_1p.copy()
-                        if board_for_tracker_1p is not None else None
-                    )
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
                 # enable_game_event_chain_exit 非依存で常に更新。
                 self._chain_entry_t_1p = time_sec
@@ -1350,16 +1343,13 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
-                # game-event モード: 安全弁上限 + 連鎖開始時 snapshot を記録。
+                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
+                # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_2p = (
                         time_sec + self.CHAIN_MAX_HOLD_SEC
                     )
                     self._chain_start_next_2p = self._last_seen_next_2p
-                    self._chain_start_board_2p = (
-                        board_for_tracker_2p.copy()
-                        if board_for_tracker_2p is not None else None
-                    )
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
                 # enable_game_event_chain_exit 非依存で常に更新。
                 self._chain_entry_t_2p = time_sec
@@ -1515,8 +1505,6 @@ class RecognitionPipeline:
             if not _suppress_1p and _is_game_event_chain_exit(
                 current_next=self._last_seen_next_1p,
                 start_next=self._chain_start_next_1p,
-                current_board=board_for_tracker_1p,
-                start_board=self._chain_start_board_1p,
             ):
                 chain_ev_1p = None
                 self._active_chain_1p = None
@@ -1535,8 +1523,6 @@ class RecognitionPipeline:
             if not _suppress_2p and _is_game_event_chain_exit(
                 current_next=self._last_seen_next_2p,
                 start_next=self._chain_start_next_2p,
-                current_board=board_for_tracker_2p,
-                start_board=self._chain_start_board_2p,
             ):
                 chain_ev_2p = None
                 self._active_chain_2p = None
@@ -3290,24 +3276,20 @@ def _apply_piece_persistence_guard(
 def _is_game_event_chain_exit(
     current_next: "tuple[int, int] | None",
     start_next: "tuple[int, int] | None",
-    current_board: "Board | None",
-    start_board: "Board | None",
 ) -> bool:
     """game-event ベース連鎖終了条件を判定する (stateless)。
 
     連鎖終了を示す game-event を検知したら True を返す:
       ① 次ツモ変化: current_next != start_next (どちらも有効色の場合のみ)
-      ② 連鎖した side の盤面に新規 COLOR_OJAMA 出現:
-         start_board になかったが current_board にある OJAMA cell
 
-    多段連鎖ガード: ② は score 増加 (相手への送りお邪魔) では発火しない。
-    自 side の盤面に実際に OJAMA が降ってきた場合のみ終了。
+    ※②お邪魔信号は撤去済 (2026-06-01):
+      confirmed 凍結が連鎖終了後に「既存お邪魔に追いつく」だけで新規落下と
+      誤認し、短連鎖を 0.1 秒で早期終了させていた問題を解消。
+      NextDetector は精度 100% が確認済であり、①のみで十分。
 
     Args:
         current_next: 現在の next_pair (None = 未検知)
         start_next: CHAIN 開始時の next_pair スナップショット (None = 未記録)
-        current_board: 現在の連鎖 side の盤面 (None = 未取得)
-        start_board: CHAIN 開始時の盤面スナップショット (None = 未記録)
 
     Returns:
         True = 連鎖終了 game-event 検知、 False = 維持
@@ -3320,16 +3302,6 @@ def _is_game_event_chain_exit(
         and current_next != start_next
     ):
         return True
-
-    # ② 連鎖した side の盤面に新規 OJAMA 出現検知。
-    # start_board が None (= 記録失敗) の場合は安全のため False を返す。
-    if current_board is not None and start_board is not None:
-        for r in range(BOARD_ROWS):
-            for c in range(BOARD_COLS):
-                was_ojama = int(start_board.get(r, c)) == COLOR_OJAMA
-                now_ojama = int(current_board.get(r, c)) == COLOR_OJAMA
-                if now_ojama and not was_ojama:
-                    return True
 
     return False
 

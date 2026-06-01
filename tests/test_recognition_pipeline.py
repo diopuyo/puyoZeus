@@ -1051,73 +1051,61 @@ def test_is_game_event_chain_exit_next_change() -> None:
     result = _is_game_event_chain_exit(
         current_next=current,
         start_next=start,
-        current_board=None,
-        start_board=None,
     )
     assert result is True, "next_pair 変化時は True を返すべき"
 
 
 def test_is_game_event_chain_exit_next_no_change() -> None:
-    """① 次ツモ変化なし: current_next == start_next → False (お邪魔もなし)。"""
+    """① 次ツモ変化なし: current_next == start_next → False。"""
     same = (COLOR_RED, COLOR_BLUE)
     result = _is_game_event_chain_exit(
         current_next=same,
         start_next=same,
-        current_board=None,
-        start_board=None,
     )
-    assert result is False, "next_pair 変化なし / お邪魔なし → False"
+    assert result is False, "next_pair 変化なし → False"
 
 
-def test_is_game_event_chain_exit_ojama_appears() -> None:
-    """② 連鎖 side にお邪魔新規出現: True を返す。"""
-    from src.board import COLOR_OJAMA
-    start_board = Board()  # お邪魔なし
-    current_board = Board()
-    current_board.set(5, 2, COLOR_OJAMA)  # 新規お邪魔出現
-    result = _is_game_event_chain_exit(
-        current_next=None,
-        start_next=None,
-        current_board=current_board,
-        start_board=start_board,
-    )
-    assert result is True, "自 side にお邪魔新規出現 → True"
+def test_is_game_event_chain_exit_ojama_appears_no_exit() -> None:
+    """②お邪魔信号撤去後: お邪魔新規出現だけでは終了しない (next変化なし → False)。
 
-
-def test_is_game_event_chain_exit_ojama_preexisting() -> None:
-    """② 多段連鎖ガード: start_board にも同位置お邪魔あり → False。
-
-    連鎖開始前から存在するお邪魔は「新規出現」ではないため終了しない。
+    2026-06-01 撤去: confirmed凍結が連鎖終了後に既存お邪魔へ追いつくだけで
+    新規落下と誤認し短連鎖を早期終了させていた問題を解消。
+    お邪魔引数は廃止されたため next=None / next一致どちらも False を返す。
     """
-    from src.board import COLOR_OJAMA
-    start_board = Board()
-    start_board.set(5, 2, COLOR_OJAMA)  # 連鎖開始前から存在
-    current_board = Board()
-    current_board.set(5, 2, COLOR_OJAMA)  # 変化なし (同位置)
+    # next 変化なし → ①も②もなし → False
     result = _is_game_event_chain_exit(
         current_next=None,
         start_next=None,
-        current_board=current_board,
-        start_board=start_board,
     )
-    assert result is False, "既存お邪魔は新規出現でない → False"
+    assert result is False, "next変化なし / お邪魔信号撤去後 → False"
+
+
+def test_is_game_event_chain_exit_ojama_preexisting_no_exit() -> None:
+    """②お邪魔信号撤去後: 既存お邪魔継続も終了しない (next変化なし → False)。
+
+    引数から current_board / start_board が除去されたことを確認する。
+    """
+    same_next = (COLOR_RED, COLOR_BLUE)
+    result = _is_game_event_chain_exit(
+        current_next=same_next,
+        start_next=same_next,
+    )
+    assert result is False, "next変化なし → False (お邪魔引数は撤去済)"
 
 
 def test_is_game_event_chain_exit_max_hold_cap() -> None:
     """安全弁: CHAIN_MAX_HOLD_SEC 超過で game-event なしでも終了する設計を確認。
 
     _is_game_event_chain_exit は stateless (安全弁は pipeline 側 eff_until で制御)。
-    本テストは: next 変化なし / お邪魔なし → False を返すことで
+    本テストは: next 変化なし → False を返すことで
     「安全弁は pipeline の time_sec >= eff_until で chain_ev を None にする」
     側の責任であることを明示する。
+    ※②お邪魔信号撤去 (2026-06-01) により board 引数は不要になった。
     """
     same_next = (COLOR_RED, COLOR_BLUE)
-    board_no_change = Board()
     result = _is_game_event_chain_exit(
         current_next=same_next,
         start_next=same_next,
-        current_board=board_no_change,
-        start_board=board_no_change,
     )
     assert result is False, (
         "安全弁は pipeline 側 (eff_until) 管理のため、"
