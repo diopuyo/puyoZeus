@@ -699,6 +699,17 @@ def main() -> int:
              "デフォルト OFF = 従来挙動不変 (backwards compat)。 "
              "フラグ OFF でも --dump-board-log-detailed に landing_diag フィールドが記録される。",
     )
+    parser.add_argument(
+        "--chain-min-display",
+        action="store_true",
+        default=False,
+        dest="enable_chain_min_display",
+        help="X1/X4 短連鎖ちらつき対策を有効化。 "
+             f"CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC={RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s) + "
+             f"短連鎖 game-event exit 抑止 (chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT})。 "
+             "enable_game_event_chain_exit と独立フラグ (効果分解のため)。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -769,6 +780,8 @@ def main() -> int:
         enable_game_event_chain_exit=args.enable_game_event_chain_exit,
         # 着地色修正 案1 (2026-06-01): --landing-color-fix で有効化
         enable_landing_color_fix=args.enable_landing_color_fix,
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01): --chain-min-display で有効化
+        enable_chain_min_display=args.enable_chain_min_display,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -817,6 +830,12 @@ def main() -> int:
             "[viz] landing_color_fix=ON "
             "(着地色修正 案1: falling_pair を _landing_pending 消費色に切り替え / "
             "slide_motion 経由の 1 つ前ツモ色誤書き修正)"
+        )
+    if args.enable_chain_min_display:
+        print(
+            "[viz] chain_min_display=ON "
+            f"(X1: 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s 表示保証 / "
+            f"X4: chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} で exit 抑止)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

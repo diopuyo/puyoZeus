@@ -1224,3 +1224,144 @@ def test_landing_diag_none_in_non_landing_frame() -> None:
         "非着地フレーム (STABLE 継続) では landing_diag=None"
     )
 
+
+# ============================
+# X1/X4 短連鎖ちらつき対策 (enable_chain_min_display) テスト
+# ============================
+
+
+from src.recognition_pipeline import _should_suppress_game_event_exit
+
+
+def _make_pipe_with_chain_min_display(
+    chain_event_1p: object | None,
+    enable_game_event_chain_exit: bool = True,
+    enable_chain_min_display: bool = True,
+) -> RecognitionPipeline:
+    """chain_min_display テスト用 pipeline を構築するヘルパー。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(chain_event_1p)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_chain_min_display=enable_chain_min_display,
+    )
+
+
+def test_chain_min_display_flag_default_off() -> None:
+    """①OFF時: デフォルトで enable_chain_min_display=False (回帰テスト)。
+
+    enable_chain_min_display のデフォルトが False であり、
+    state 変数 _chain_entry_t_1p/_chain_entry_t_2p が 0.0 で初期化されること、
+    定数 CHAIN_MIN_DISPLAY_SEC / CHAIN_GAME_EVENT_MIN_COUNT が存在することを確認。
+    """
+    pipe = _make_pipe(
+        _empty_board(), _empty_board(),
+        in_match=True, stable_n=2,
+    )
+    assert pipe._enable_chain_min_display is False, (
+        "デフォルト OFF: 従来 game-event exit 挙動を完全維持"
+    )
+    assert pipe._chain_entry_t_1p == 0.0
+    assert pipe._chain_entry_t_2p == 0.0
+    assert hasattr(RecognitionPipeline, "CHAIN_MIN_DISPLAY_SEC")
+    assert hasattr(RecognitionPipeline, "CHAIN_GAME_EVENT_MIN_COUNT")
+    assert RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC == 0.8
+    assert RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT == 3
+
+
+def test_should_suppress_x1_min_display_time() -> None:
+    """②X1: CHAIN_MIN_DISPLAY_SEC 未満の経過時間では exit を抑止する。
+
+    突入 1.0s、現在 1.5s (= 経過 0.5s < 0.8s) は抑止。
+    突入 1.0s、現在 2.0s (= 経過 1.0s >= 0.8s) は通過 (抑止しない)。
+    """
+    min_sec = RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC
+    min_count = RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT
+
+    # 最小表示時間内 → 抑止
+    assert _should_suppress_game_event_exit(
+        time_sec=1.5,
+        chain_entry_t=1.0,
+        chain_count=min_count,  # X4 は通過する count
+        chain_min_display_sec=min_sec,
+        chain_game_event_min_count=min_count,
+    ) is True, f"経過 {1.5 - 1.0}s < {min_sec}s → 抑止すべき"
+
+    # 最小表示時間経過後 → 抑止しない (chain_count >= min_count も満たす)
+    assert _should_suppress_game_event_exit(
+        time_sec=2.0,
+        chain_entry_t=1.0,
+        chain_count=min_count,
+        chain_min_display_sec=min_sec,
+        chain_game_event_min_count=min_count,
+    ) is False, f"経過 {2.0 - 1.0}s >= {min_sec}s かつ count >= min → exit 許可すべき"
+
+
+def test_should_suppress_x4_short_chain() -> None:
+    """③X4: chain_count < CHAIN_GAME_EVENT_MIN_COUNT の短連鎖は exit を抑止する。
+
+    chain_count=2 (< 3) は最小時間経過後でも抑止。
+    chain_count=3 (== min_count) は最小時間経過後に抑止しない。
+    """
+    min_sec = RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC
+    min_count = RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT
+
+    # 短連鎖 (count < min_count): 時間経過後でも抑止
+    assert _should_suppress_game_event_exit(
+        time_sec=10.0,   # 十分な時間経過
+        chain_entry_t=1.0,
+        chain_count=min_count - 1,  # 短連鎖
+        chain_min_display_sec=min_sec,
+        chain_game_event_min_count=min_count,
+    ) is True, f"chain_count={min_count - 1} < {min_count} → exit 抑止すべき"
+
+    # 長連鎖 (count == min_count) + 最小時間経過: exit 許可
+    assert _should_suppress_game_event_exit(
+        time_sec=10.0,
+        chain_entry_t=1.0,
+        chain_count=min_count,
+        chain_min_display_sec=min_sec,
+        chain_game_event_min_count=min_count,
+    ) is False, f"chain_count={min_count} >= min_count かつ時間経過 → exit 許可すべき"
+
+
+def test_chain_min_display_flag_on_blocks_short_chain_game_event_exit() -> None:
+    """④ON時: 短連鎖 (count<3) で game-event exit が発動せず chain_ev が維持される。
+
+    enable_chain_min_display=True + enable_game_event_chain_exit=True で、
+    chain_count=2 の短連鎖では chainexit 条件が成立しても _active_chain_1p が
+    維持されることを確認する。
+    enable_chain_min_display=False の時は従来通り chainexit が発動する回帰も確認。
+    """
+    from src.recognition_pipeline import ChainEvent as _CE
+
+    # chain_count=2 の短連鎖 ChainEvent を作成
+    short_ev = _make_chain_event(is_all_clear=False, chain_count=2)
+
+    # ON: enable_chain_min_display=True → 短連鎖は exit 抑止
+    pipe_on = _make_pipe_with_chain_min_display(
+        short_ev,
+        enable_game_event_chain_exit=True,
+        enable_chain_min_display=True,
+    )
+    _prime_match_active(pipe_on, frames=35)
+    # chain_tracker に event をセット (既に _prime_match_active で消費されているので再セット)
+    pipe_on._chain_tracker_1p = _StubChainTracker(short_ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe_on.update(40, t_fire, _dummy_frame())
+
+    # 突入直後: X1 により exit 抑止 → _active_chain_1p が生きているはず
+    assert pipe_on._active_chain_1p is not None, (
+        "ON時 + 短連鎖: X1 により突入直後は exit 抑止 → chain が維持されるべき"
+    )
+    assert pipe_on._chain_entry_t_1p == pytest.approx(t_fire), (
+        "_chain_entry_t_1p が ChainEvent 受信時刻に更新されるべき"
+    )
+

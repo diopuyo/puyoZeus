@@ -185,6 +185,17 @@ class RecognitionPipeline:
     # 十分にカバーし、かつ異常時 (event 永続不達) での CHAIN 永続化を防ぐ。
     CHAIN_MAX_HOLD_SEC: float = 5.0
 
+    # X1: CHAIN 最小表示時間 (enable_chain_min_display=True 時に有効)。
+    # 一度 CHAIN に入ったら最低この秒数は game-event 終了を抑止する。
+    # 短連鎖 (1-2 連鎖 × 0.3s = 0.3-0.6s) がお邪魔信号で 0.1-0.2s で即終了し
+    # 「一瞬表示/ちらつき」になる問題を防ぐ。
+    CHAIN_MIN_DISPLAY_SEC: float = 0.8
+
+    # X4: game-event 終了を発動する最小連鎖数。
+    # chain_count < この値の連鎖は game-event 終了を発動せず timing hold のみ。
+    # 短連鎖 (1-2 連鎖) では chainexit がノイズになるため除外する。
+    CHAIN_GAME_EVENT_MIN_COUNT: int = 3
+
     # 全消し演出 overlay の chain_until 延長秒数 (2026-05-14, cycle 71v).
     # is_all_clear=True の ChainEvent では、 通常の chain hold に加えて
     # この秒数だけ CHAIN state を延長する。 これにより CHAIN→STABLE 遷移時の
@@ -327,6 +338,13 @@ class RecognitionPipeline:
         # slide_motion(R-7) 経由で「1 つ前のツモ」を指してしまう誤色問題の修正。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_landing_color_fix: bool = False,
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01):
+        # True で CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) および
+        # 短連鎖 game-event exit 抑止 (CHAIN_GAME_EVENT_MIN_COUNT) を有効化。
+        # enable_game_event_chain_exit と独立フラグ (効果分解のため)。
+        # 実質 enable_game_event_chain_exit=True と併用される前提。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_min_display: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -573,6 +591,14 @@ class RecognitionPipeline:
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_color_fix: bool = bool(enable_landing_color_fix)
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01):
+        # True で CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) / 短連鎖 game-event exit 抑止を有効化。
+        # False = 従来挙動完全維持 (backwards compat)。
+        self._enable_chain_min_display: bool = bool(enable_chain_min_display)
+        # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
+        # CHAIN 発火時に代入し、_on_match_end でリセット。
+        self._chain_entry_t_1p: float = 0.0
+        self._chain_entry_t_2p: float = 0.0
         # game-event モード用: CHAIN 発火時刻の上限 (安全弁)。
         # CHAIN 発火 time_sec + CHAIN_MAX_HOLD_SEC を超えたら強制終了。
         # 1P/2P 別に管理 (float: 未発火時は 0.0)。
@@ -744,6 +770,7 @@ class RecognitionPipeline:
         enable_infer_empty_guard: bool = False,
         enable_game_event_chain_exit: bool = False,
         enable_landing_color_fix: bool = False,
+        enable_chain_min_display: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -876,6 +903,7 @@ class RecognitionPipeline:
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
         )
 
     # ------------------------------------------------------------------
@@ -972,6 +1000,9 @@ class RecognitionPipeline:
         self._chain_start_next_2p = None
         self._chain_start_board_1p = None
         self._chain_start_board_2p = None
+        # X1: CHAIN 突入時刻リセット
+        self._chain_entry_t_1p = 0.0
+        self._chain_entry_t_2p = 0.0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1304,6 +1335,9 @@ class RecognitionPipeline:
                         board_for_tracker_1p.copy()
                         if board_for_tracker_1p is not None else None
                     )
+                # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
+                # enable_game_event_chain_exit 非依存で常に更新。
+                self._chain_entry_t_1p = time_sec
         if is_active and self._chain_tracker_2p is not None:
             ev = self._chain_tracker_2p.update(time_sec, board_for_tracker_2p)
             if ev is not None and not chain_banned:
@@ -1326,6 +1360,9 @@ class RecognitionPipeline:
                         board_for_tracker_2p.copy()
                         if board_for_tracker_2p is not None else None
                     )
+                # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
+                # enable_game_event_chain_exit 非依存で常に更新。
+                self._chain_entry_t_2p = time_sec
 
         # 有効期限内の chain_event を signals に乗せる
         # game-event モード (enable_game_event_chain_exit=True) の場合、
@@ -1464,7 +1501,18 @@ class RecognitionPipeline:
         #   ② 連鎖側お邪魔降下: 連鎖した side の盤面に新規 COLOR_OJAMA 出現
         # どちらかを検知したら chain_ev を None に倒し _active_chain を解放する。
         if self._enable_game_event_chain_exit and chain_ev_1p is not None:
-            if _is_game_event_chain_exit(
+            # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
+            _suppress_1p = (
+                self._enable_chain_min_display
+                and _should_suppress_game_event_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_1p,
+                    chain_count=chain_ev_1p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                )
+            )
+            if not _suppress_1p and _is_game_event_chain_exit(
                 current_next=self._last_seen_next_1p,
                 start_next=self._chain_start_next_1p,
                 current_board=board_for_tracker_1p,
@@ -1473,7 +1521,18 @@ class RecognitionPipeline:
                 chain_ev_1p = None
                 self._active_chain_1p = None
         if self._enable_game_event_chain_exit and chain_ev_2p is not None:
-            if _is_game_event_chain_exit(
+            # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
+            _suppress_2p = (
+                self._enable_chain_min_display
+                and _should_suppress_game_event_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_2p,
+                    chain_count=chain_ev_2p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                )
+            )
+            if not _suppress_2p and _is_game_event_chain_exit(
                 current_next=self._last_seen_next_2p,
                 start_next=self._chain_start_next_2p,
                 current_board=board_for_tracker_2p,
@@ -3272,4 +3331,35 @@ def _is_game_event_chain_exit(
                 if now_ojama and not was_ojama:
                     return True
 
+    return False
+
+
+def _should_suppress_game_event_exit(
+    time_sec: float,
+    chain_entry_t: float,
+    chain_count: int,
+    chain_min_display_sec: float,
+    chain_game_event_min_count: int,
+) -> bool:
+    """X1/X4 ガード: game-event exit を抑止すべきか判定する (stateless)。
+
+    X1: CHAIN 突入から chain_min_display_sec 以内は exit 抑止。
+    X4: chain_count < chain_game_event_min_count の短連鎖は exit 抑止 (timing hold のみ)。
+
+    Args:
+        time_sec: 現在の動画内時刻 (秒)。
+        chain_entry_t: CHAIN 突入時の time_sec (= ChainEvent 受信時刻)。
+        chain_count: 連鎖数。
+        chain_min_display_sec: X1 の最小表示時間 (秒)。
+        chain_game_event_min_count: X4 の最小連鎖数 (この数未満は exit 抑止)。
+
+    Returns:
+        True = exit 抑止 (= CHAIN 状態維持)、 False = exit 許可。
+    """
+    # X1: 最小表示時間以内は exit を抑止する
+    if time_sec - chain_entry_t < chain_min_display_sec:
+        return True
+    # X4: 短連鎖 (chain_count < min_count) は game-event exit を発動しない
+    if chain_count < chain_game_event_min_count:
+        return True
     return False
