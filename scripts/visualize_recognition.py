@@ -669,6 +669,18 @@ def main() -> int:
              "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
              "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
     )
+    parser.add_argument(
+        "--game-event-chain-exit",
+        action="store_true",
+        default=False,
+        dest="enable_game_event_chain_exit",
+        help="game-event ベース連鎖終了を有効化。 "
+             "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
+             "「連鎖側お邪魔降下」を検知するまで維持する。 "
+             "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
+             "連鎖中 state ちらつき (早期終了→再発火振動) の根治修正。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -735,6 +747,8 @@ def main() -> int:
         enable_t2_highconf_yield=args.enable_t2_highconf_yield,
         # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
         enable_infer_empty_guard=args.enable_infer_empty_guard,
+        # game-event ベース連鎖終了 (2026-06-01): --game-event-chain-exit で有効化
+        enable_game_event_chain_exit=args.enable_game_event_chain_exit,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -771,6 +785,12 @@ def main() -> int:
         print(
             "[viz] infer_empty_guard=ON "
             "(空セル hallucination ガード: 非 diff セルが CNN EMPTY なら候補スキップ)"
+        )
+    if args.enable_game_event_chain_exit:
+        print(
+            "[viz] game_event_chain_exit=ON "
+            "(game-event ベース連鎖終了: 次ツモ変化 / お邪魔降下で CHAIN 終了 / "
+            f"安全弁 max={RecognitionPipeline.CHAIN_MAX_HOLD_SEC}s)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
