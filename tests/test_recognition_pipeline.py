@@ -1139,3 +1139,88 @@ def test_game_event_chain_exit_flag_off_is_backward_compat() -> None:
     assert pipe._chain_start_next_1p is None
     assert pipe._chain_start_next_2p is None
 
+
+# ============================
+# 着地色修正 案1 テスト (2026-06-01)
+# ============================
+
+
+def _make_pipe_with_flags(
+    p1: "Board", p2: "Board",
+    stable_n: int = 2,
+    enable_landing_color_fix: bool = False,
+) -> RecognitionPipeline:
+    """フラグ付き pipeline を生成するヘルパー。"""
+    from src.board import Board as _Board
+    reader = _StubImageReader(p1, p2)
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=stable_n,
+        enable_landing_color_fix=enable_landing_color_fix,
+    )
+
+
+def test_landing_color_fix_flag_default_off() -> None:
+    """①フラグOFF時: _enable_landing_color_fix=False で従来 falling_pair 不変 (回帰テスト)。
+
+    enable_landing_color_fix のデフォルトが False であり、
+    pipeline のフラグが False で初期化されることを確認する。
+    フラグ OFF 時は _landing_pending の有無に関わらず従来ロジック
+    (prev_next_queue[-2]) が使われる。
+    """
+    pipe = _make_pipe_with_flags(
+        _empty_board(), _empty_board(),
+        enable_landing_color_fix=False,
+    )
+    assert pipe._enable_landing_color_fix is False, (
+        "デフォルト OFF: 従来 falling_pair ロジック (prev_next_queue[-2]) を維持"
+    )
+
+
+def test_landing_color_fix_flag_on_exists() -> None:
+    """②フラグ ON: _enable_landing_color_fix=True で pipeline が生成可能 (インターフェース確認)。
+
+    フラグ ON で init が通ること、フラグが True に設定されること、
+    SideResult に landing_diag フィールドが存在することを確認する。
+    """
+    pipe = _make_pipe_with_flags(
+        _empty_board(), _empty_board(),
+        enable_landing_color_fix=True,
+    )
+    assert pipe._enable_landing_color_fix is True, (
+        "フラグ ON: _landing_pending 由来の falling_pair を使う修正ロジックが有効"
+    )
+    # SideResult に landing_diag フィールドが存在すること (backwards compat 確認)
+    from src.recognition_pipeline import SideResult
+    import inspect
+    fields = {f.name for f in SideResult.__dataclass_fields__.values()}
+    assert "landing_diag" in fields, (
+        "SideResult に landing_diag フィールドが追加されていること"
+    )
+
+
+def test_landing_diag_none_in_non_landing_frame() -> None:
+    """③非着地フレームでは SideResult.landing_diag=None。
+
+    TSUMO_FALL→STABLE 遷移なし (= STABLE 連続) のフレームでは
+    landing_diag フィールドが None であることを確認する (非着地フレームの backwards compat)。
+    """
+    p1 = _empty_board()
+    p2 = _empty_board()
+    pipe = _make_pipe_with_flags(p1, p2, stable_n=2, enable_landing_color_fix=False)
+    frame = _dummy_frame()
+    # STABLE に達させる (3 フレーム)
+    result = None
+    for i in range(3):
+        result = pipe.update(i, 0.05 * i, frame)
+    assert result is not None
+    # STABLE 中のフレームでは landing_diag=None (着地遷移なし)
+    assert result.p1.landing_diag is None, (
+        "非着地フレーム (STABLE 継続) では landing_diag=None"
+    )
+

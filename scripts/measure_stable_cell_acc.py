@@ -292,6 +292,7 @@ def _make_pipeline_cnn(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -310,6 +311,9 @@ def _make_pipeline_cnn(
         enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
             有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -317,6 +321,7 @@ def _make_pipeline_cnn(
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -467,6 +472,7 @@ def _process_video(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -483,6 +489,9 @@ def _process_video(
         enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
             有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -497,6 +506,7 @@ def _process_video(
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -525,6 +535,7 @@ def _process_video_worker(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -551,6 +562,7 @@ def _process_video_worker(
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1405,6 +1417,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--landing-color-fix",
+        action="store_true",
+        default=False,
+        dest="enable_landing_color_fix",
+        help=(
+            "着地色修正 案1: TSUMO_FALL→STABLE 着地時の falling_pair を "
+            "_landing_pending (消費済みツモ色) に切り替える。 "
+            "slide_motion(R-7) 経由で 1 つ前のツモ色を指してしまう誤色問題の修正。 "
+            "省略時は従来挙動 (prev_next_queue[-2] を使用)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1438,6 +1462,7 @@ def _collect_results(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1453,6 +1478,9 @@ def _collect_results(
             hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
         enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
             有効化する。backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1475,6 +1503,7 @@ def _collect_results(
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1483,6 +1512,7 @@ def _collect_results(
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
     )
 
 
@@ -1496,6 +1526,7 @@ def _collect_serial(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1511,6 +1542,7 @@ def _collect_serial(
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1527,6 +1559,7 @@ def _collect_parallel(
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1556,6 +1589,7 @@ def _collect_parallel(
                 enable_t2_highconf_yield,
                 enable_infer_empty_guard,
                 enable_game_event_chain_exit,
+                enable_landing_color_fix,
             )
             futures[fut] = vid
 
@@ -1687,6 +1721,10 @@ def main() -> int:
     enable_game_event_chain_exit: bool = bool(
         getattr(args, "enable_game_event_chain_exit", False)
     )
+    # landing_color_fix フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_landing_color_fix: bool = bool(
+        getattr(args, "enable_landing_color_fix", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1701,6 +1739,11 @@ def main() -> int:
             "[measure] game_event_chain_exit ENABLED "
             "(--game-event-chain-exit 指定: game-event ベース連鎖終了)"
         )
+    if enable_landing_color_fix:
+        print(
+            "[measure] landing_color_fix ENABLED "
+            "(--landing-color-fix 指定: 着地色修正 案1 / falling_pair を _landing_pending に切り替え)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1710,6 +1753,7 @@ def main() -> int:
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1750,6 +1794,8 @@ def main() -> int:
             "enable_t2_highconf_yield": enable_t2_highconf_yield,
             # game_event_chain_exit の on/off を記録 (後日比較用)
             "enable_game_event_chain_exit": enable_game_event_chain_exit,
+            # landing_color_fix の on/off を記録 (後日比較用)
+            "enable_landing_color_fix": enable_landing_color_fix,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
         },
