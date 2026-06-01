@@ -367,6 +367,57 @@ def _chain_count_of(
         return 0
 
 
+def _apply_empty_hallucination_guard(
+    base: Board,
+    pattern: LandingPattern,
+    diff_cells: list[tuple[int, int]],
+    cnn_after: Board,
+    color_first: int,
+    color_second: int,
+) -> Board:
+    """guard_empty_hallucination 案 B: 観測セルのみ NEXT 色を書き、非観測 EMPTY セルは
+    COLOR_UNKNOWN 留保した盤面を返す。
+
+    設計変更 (案 B、2026-06-01):
+    旧実装は「非 diff セルが明示 EMPTY な候補をスキップ → 全候補スキップ時 None 返却」
+    だったが、正当な 2 ぷよ着地 (CNN が片側のみ観測) を丸ごと取りこぼし
+    color→empty 破壊を増やす構造的副作用があった。
+
+    新挙動:
+    - diff_cells に含まれる (= CNN が観測した) セルには NEXT 色を書く。
+    - 非 diff かつ cnn_after で明示 COLOR_EMPTY のセルには COLOR_UNKNOWN を書く
+      (= hallucination 回避かつ commit refuse しない)。
+    - 非 diff かつ cnn_after で COLOR_UNKNOWN のセルには NEXT 色で物理補完する
+      (= CNN 不確実なので物理補完が妥当)。
+
+    Args:
+        base: 着地前の確定盤面。
+        pattern: 着地パターン (2 cell 固定)。
+        diff_cells: CNN 差分として検出されたセル座標リスト。
+        cnn_after: 着地後の CNN 観測盤面。
+        color_first: pattern.cells[0] へ書く予定の NEXT 色。
+        color_second: pattern.cells[1] へ書く予定の NEXT 色。
+
+    Returns:
+        guard 適用後の盤面 (color_first/color_second を一部 COLOR_UNKNOWN で上書き)。
+    """
+    # まず通常通り materialize する
+    result = materialize_pattern(base, pattern, color_first, color_second)
+    diff_set = frozenset(diff_cells)
+    planned = {pattern.cells[0]: color_first, pattern.cells[1]: color_second}
+    for cell, _ in planned.items():
+        if cell in diff_set:
+            # diff セルは CNN が観測済 → NEXT 色をそのまま維持
+            continue
+        r, c = cell
+        cnn_val = int(cnn_after.get(r, c))
+        if cnn_val == COLOR_EMPTY:
+            # 非観測かつ CNN が明示 EMPTY → COLOR_UNKNOWN 留保 (hallucination 防止)
+            result.set(r, c, COLOR_UNKNOWN)
+        # cnn_val == COLOR_UNKNOWN の場合は物理補完 (NEXT 色) をそのまま維持
+    return result
+
+
 def infer_placement(
     confirmed_before: Board,
     cnn_after: Board | None,
@@ -377,6 +428,7 @@ def infer_placement(
     region: "object | None" = None,
     bg_fp: "object | None" = None,
     bg_threshold: float | None = None,
+    guard_empty_hallucination: bool = False,
 ) -> Board | None:
     """物理推論主軸の置き判定 (= Phase 1 主 API, cycle 71 + 71b).
 
@@ -394,6 +446,12 @@ def infer_placement(
         frame_bgr: 着地後の 1920x1080 BGR frame. 渡されれば β2' で着地 2 cell の
                    HSV と NEXT 色 2 種類の距離で順序確定.
         region: BoardRegion. frame_bgr とセットで渡す.
+        guard_empty_hallucination: True にすると、 案 B ガードを適用する。
+            diff_cells に含まれる (= CNN が観測した) セルは NEXT 色を書く。
+            非 diff かつ cnn_after で明示 COLOR_EMPTY のセルには COLOR_UNKNOWN を書き
+            hallucination を防ぎつつ commit refuse しない。
+            非 diff かつ COLOR_UNKNOWN セルは NEXT 色で物理補完 (従来通り)。
+            default False = 従来挙動維持 (backwards compat)。
 
     Returns:
         着地後の確定盤面. 物理パターン 0 件 / next_pair 不明等で None.
@@ -407,6 +465,9 @@ def infer_placement(
     patterns = enumerate_landing_patterns(confirmed_before)
     if not patterns:
         return None
+    # diff_cells は cnn_after is not None の場合のみ設定される。
+    # guard_empty_hallucination で参照するため事前に空リストで初期化。
+    diff_cells: list[tuple[int, int]] = []
     # cycle 71v (2026-05-15): CNN diff の物理整合性ガードを厳格化.
     # 旧実装は CNN 観測が不完全 (= diff=0 or diff=1) でも infer を強制実行し、
     # arbitrary column の placement (= ゴースト) を生成する原因だった。
@@ -447,6 +508,9 @@ def infer_placement(
         and region is not None
         and next_pair[0] != next_pair[1]
     )
+    # guard_empty_hallucination: 候補生成前にパターン単位でスキップ判定。
+    # cnn_after が None の場合は diff_cells が空リストのため guard は実質無効。
+    # diff_cells は上記 if cnn_after is not None ブロックで設定済み。
     for p in patterns:
         if use_hsv_classification:
             (r1, c1_pos), (r2, c2_pos) = p.cells
@@ -460,18 +524,34 @@ def infer_placement(
                 color_a, color_b = _classify_next_pair_by_hsv(
                     patch_a, patch_b, next_pair,
                 )
-                candidates.append((
-                    materialize_pattern(
+                # guard_empty_hallucination 案 B: 観測セルは NEXT 色、
+                # 非観測 EMPTY セルは COLOR_UNKNOWN 留保にして materialize。
+                if guard_empty_hallucination and cnn_after is not None:
+                    board = _apply_empty_hallucination_guard(
+                        confirmed_before, p, diff_cells,
+                        cnn_after, color_a, color_b,
+                    )
+                else:
+                    board = materialize_pattern(
                         confirmed_before, p, color_a, color_b,
-                    ),
-                    p,
-                ))
+                    )
+                candidates.append((board, p))
                 continue
-            # 取得失敗時は fallback (= 2 通り全 enumerate)
+            # HSV patch 取得失敗時は fallback (= 2 通り全 enumerate)
         for (c_a, c_b) in enumerate_color_assignments(p, next_pair):
-            candidates.append((
-                materialize_pattern(confirmed_before, p, c_a, c_b), p,
-            ))
+            # guard_empty_hallucination 案 B: 観測セルは NEXT 色、
+            # 非観測 EMPTY セルは COLOR_UNKNOWN 留保にして materialize。
+            if guard_empty_hallucination and cnn_after is not None:
+                board = _apply_empty_hallucination_guard(
+                    confirmed_before, p, diff_cells,
+                    cnn_after, c_a, c_b,
+                )
+            else:
+                board = materialize_pattern(confirmed_before, p, c_a, c_b)
+            candidates.append((board, p))
+    # 全候補がガードでスキップされた場合は commit refuse (= TSUMO_FALL 維持)
+    if not candidates:
+        return None
     if cnn_after is None:
         return candidates[0][0]
     # CNN 一致度で score, 案 A の連鎖整合性で tie-break.

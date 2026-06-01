@@ -281,6 +281,83 @@ class TestInferPlacementCycle71b:
         assert result.get(9, 2) == COLOR_BLUE
 
 
+class TestInferPlacementEmptyGuard:
+    """guard_empty_hallucination 案 B: 観測セルは NEXT 色、非観測 EMPTY セルは
+    COLOR_UNKNOWN 留保、commit refuse 廃止のテスト。"""
+
+    def test_guard_off_legacy_behavior_unchanged(self):
+        """guard OFF (default) → 非 diff セルが EMPTY でも従来通り候補採用。"""
+        before = _empty_board()
+        # CNN は col=2 の下セルのみ変化 (diff=1)、 上セルは EMPTY のまま
+        cnn = _empty_board()
+        cnn.set(12, 2, COLOR_RED)  # diff=1 cell のみ
+        # guard OFF では diff=1 cell を含む pattern が採用される
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=False)
+        assert result is not None
+
+    def test_guard_on_diff1_empty_nondiff_commits_with_unknown(self):
+        """guard ON + diff=1 + 非 diff セルが CNN EMPTY → None を返さず盤面を commit。
+
+        案 B 変更点: 旧実装は全パターンスキップ→None (commit refuse) だったが、
+        新実装は「観測セル (row=12,col=2) に NEXT 色、非観測セル (row=11,col=2) に
+        COLOR_UNKNOWN」として盤面を返す。color→empty 副作用を除去。
+        """
+        before = _empty_board()
+        cnn = _empty_board()
+        # col=2 の下セルだけ変化、 上セルは EMPTY のまま
+        cnn.set(12, 2, COLOR_RED)  # diff=1 cell
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        # 案 B: commit refuse しない (None を返さない)
+        assert result is not None
+        # 観測した下セルには NEXT 色のいずれかが書かれる
+        assert result.get(12, 2) in (COLOR_RED, COLOR_BLUE)
+        # 非観測 EMPTY だった上セルは COLOR_UNKNOWN 留保 (hallucination 防止)
+        assert result.get(11, 2) == COLOR_UNKNOWN
+
+    def test_guard_on_unknown_nondiff_allows_physical_completion(self):
+        """guard ON + 非 diff セルが CNN UNKNOWN → 物理補完で NEXT 色を書く。"""
+        before = _empty_board()
+        cnn = _empty_board()
+        # 下セルが COLOR_RED に変化 (diff)
+        cnn.set(12, 2, COLOR_RED)
+        # 上セルを COLOR_UNKNOWN に設定 (CNN 不確実)
+        cnn.set(11, 2, COLOR_UNKNOWN)
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is not None
+        # UNKNOWN セルは物理補完 → NEXT 色のいずれかが書かれる
+        assert result.get(11, 2) in (COLOR_RED, COLOR_BLUE)
+        assert result.get(12, 2) in (COLOR_RED, COLOR_BLUE)
+
+    def test_guard_on_both_diff_both_colored_allows_pattern(self):
+        """guard ON + 2 セルともに diff かつ有色 → 両方 NEXT 色で通常 commit。"""
+        before = _empty_board()
+        cnn = _empty_board()
+        # 縦置きパターン 2 セルともに diff
+        cnn.set(11, 2, COLOR_RED)
+        cnn.set(12, 2, COLOR_BLUE)
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is not None
+        assert result.get(11, 2) == COLOR_RED
+        assert result.get(12, 2) == COLOR_BLUE
+
+    def test_guard_on_no_hallucination_when_both_diff(self):
+        """guard ON + 両 diff → COLOR_UNKNOWN 上書きなし (留保が起きない)。"""
+        before = _empty_board()
+        cnn = _empty_board()
+        cnn.set(11, 2, COLOR_BLUE)
+        cnn.set(12, 2, COLOR_RED)
+        result = infer_placement(before, cnn, (COLOR_RED, COLOR_BLUE),
+                                 guard_empty_hallucination=True)
+        assert result is not None
+        # どちらも diff → UNKNOWN への置換は発生しない
+        assert result.get(11, 2) != COLOR_UNKNOWN
+        assert result.get(12, 2) != COLOR_UNKNOWN
+
+
 class TestResolveAfterPlacementGuard:
     """cycle 71c: 大量 add ガードのテスト (= A=hit α ケース対策)."""
 

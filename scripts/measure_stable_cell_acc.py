@@ -19,8 +19,10 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime
 import json
+import multiprocessing as _mp
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -116,6 +118,23 @@ _DEFAULT_VIDEO_DIRS: tuple[Path, ...] = (
     Path("data/evaluation_videos"),
     Path("data/holdout_videos"),
 )
+
+# ============================
+# 後処理破壊検知 (postprocess_corruption) 定数
+# ============================
+# corruption ログ上限 (メモリ節約のため)
+CORRUPTION_LOG_LIMIT: int = 100
+# 0.1% 超で FAIL
+POSTPROCESS_CORRUPTION_REJECT_RATE: float = 0.001
+# 0.05% 超で WARNING
+POSTPROCESS_CORRUPTION_WARNING_RATE: float = 0.0005
+# 片側に 50% 以上集中したら side_bias あり
+POSTPROCESS_SIDE_BIAS_THRESHOLD: float = 0.50
+# side_bias 判定に必要な最低 corruption セル数
+POSTPROCESS_SIDE_BIAS_MIN_CELLS: int = 3
+# サブカテゴリ: empty_to_color の WARNING 閾値 (FAIL にはしない、情報提示のみ)
+# raw_cnn==raw_hsv==EMPTY なのに confirmed が色になっているケース (空→色FP)
+CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE: float = 0.001  # 0.1% 超で WARNING
 # ============================
 # データクラス
 # ============================
@@ -165,6 +184,30 @@ class VideoStats:
     # STABLE フレームの 1P+2P 合算ぷよ数合計と frame 数
     _puyo_count_sum: int = 0
     _puyo_count_n_stable: int = 0
+    # 並列ワーカが収集した不一致 cell リスト (後方互換のため default=[])
+    # 逐次モードでは空リスト。並列モードではワーカ内で収集した値が入り、
+    # 親プロセスで各動画分を統合する。pickle 可能な plain dict リスト。
+    _local_disagreements: list = field(default_factory=list, repr=False, compare=False)
+    # ------------------------------------------------
+    # 後処理破壊検知 (postprocess_corruption) フィールド (後方互換 default 付き)
+    # raw_cnn==raw_hsv で一致しているのに confirmed が異なるセルを検知する。
+    # constraint_fill が正解を上書き破壊しているケースを定量化する。
+    # ------------------------------------------------
+    # 破壊 cell 総数
+    postprocess_corruption_count: int = 0
+    # side → count
+    postprocess_corruption_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    # (from_color, to_color) → count
+    postprocess_corruption_color_pairs: dict = field(default_factory=lambda: defaultdict(int))
+    # 座標ログ (repr=False でデバッグ出力肥大化を防ぐ)
+    postprocess_corruption_log: list = field(default_factory=list, repr=False)
+    # サブカテゴリ別 count (後方互換のため全て default=0)
+    # empty_to_color: raw_cnn==raw_hsv==EMPTY なのに confirmed が色 (空→色FP = 主課題)
+    corruption_empty_to_color_count: int = 0
+    # color_to_color: raw_cnn==raw_hsv==色A なのに confirmed が色B (色フリーズ系)
+    corruption_color_to_color_count: int = 0
+    # color_to_empty: raw_cnn==raw_hsv==色 なのに confirmed が EMPTY (色→空 消失)
+    corruption_color_to_empty_count: int = 0
 
 
 # ============================
@@ -233,9 +276,33 @@ def _inject_hsv(pipe: RecognitionPipeline, hsv_path: Path) -> None:
                 pipe._online_hsv_injected = True
     except Exception as e:
         print(f"[measure] HSV inject 失敗 ({hsv_path}): {e}", file=sys.stderr)
-def _make_pipeline_cnn(video_id: str) -> RecognitionPipeline:
-    """CNN + HSV ハイブリッド pipeline を構築する。"""
-    pipe = RecognitionPipeline.load_default(force_in_match=True)
+def _make_pipeline_cnn(
+    video_id: str,
+    enable_constraint_fill: bool = True,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
+) -> RecognitionPipeline:
+    """CNN + HSV ハイブリッド pipeline を構築する。
+
+    Args:
+        video_id: 動画 ID (per-video HSV 解決に使用)。
+        enable_constraint_fill: False にすると NEXT 累積制約による
+            色 count 補正 (_apply_next_count_constraint) を無効化する。
+            confirmed 経路 (CNN+物理推論 post-process) に効く。
+            backwards compat: デフォルト True = 従来挙動。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement の空セル
+            hallucination ガードを有効化する。
+            backwards compat: デフォルト False = 従来挙動。
+    """
+    pipe = RecognitionPipeline.load_default(
+        force_in_match=True,
+        enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
+    )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
 
@@ -367,14 +434,36 @@ def _process_video(
     max_frames: int,
     sample_interval_sec: float,
     disagreements: list[dict],
+    enable_constraint_fill: bool = True,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> VideoStats:
-    """1 動画を処理し VideoStats を返す。"""
+    """1 動画を処理し VideoStats を返す。
+
+    Args:
+        enable_constraint_fill: False にすると confirmed 経路の
+            constraint_fill を無効化して測定する。
+            backwards compat: デフォルト True = 従来挙動。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement 空セル
+            hallucination ガードを有効化する。
+            backwards compat: デフォルト False = 従来挙動。
+    """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
     cap, fps, n_target, interval_frames = cap_info
-    pipe_cnn = _make_pipeline_cnn(video_id)
+    # confirmed 経路 (CNN+物理推論) のみ各フラグを制御する。
+    # raw_hsv 経路は constraint_fill を通らないため変更不要。
+    pipe_cnn = _make_pipeline_cnn(
+        video_id,
+        enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
+    )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
     stats = _run_frame_loop(
@@ -388,6 +477,45 @@ def _process_video(
         f"total={stats.total_cells} 合意率={rate:.4f} disagree={stats.disagreement_count}"
     )
     return stats
+def _process_video_worker(
+    video_id: str,
+    video_path_str: str,
+    is_holdout: bool,
+    max_frames: int,
+    sample_interval_sec: float,
+    enable_constraint_fill: bool,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
+) -> VideoStats:
+    """並列ワーカ用: 1 動画を処理して VideoStats を返す。
+
+    引数はすべて pickle 可能な軽量型のみ。
+    pipeline は本関数内で load_default() してワーカ内ロードする (CUDA spawn 安全)。
+    不一致 cell は stats._local_disagreements に格納して返す。
+    """
+    # ワーカ内で sys.path を復元する (spawn では親の path が引き継がれない場合がある)
+    import sys
+    from pathlib import Path as _Path
+    _proj = str(_Path(__file__).resolve().parent.parent)
+    if _proj not in sys.path:
+        sys.path.insert(0, _proj)
+    # ワーカ内でローカル disagreements を収集する
+    local_disagrees: list[dict] = []
+    stats = _process_video(
+        video_id=video_id,
+        video_path=_Path(video_path_str),
+        is_holdout=is_holdout,
+        max_frames=max_frames,
+        sample_interval_sec=sample_interval_sec,
+        disagreements=local_disagrees,
+        enable_constraint_fill=enable_constraint_fill,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
+    )
+    stats._local_disagreements = local_disagrees
+    return stats
+
+
 def _majority_vote(a: int, b: int, c: int) -> int:
     """3 値の多数決を返す。全員不一致の場合は a (raw_cnn) を返す。"""
     if a == b or a == c:
@@ -395,6 +523,87 @@ def _majority_vote(a: int, b: int, c: int) -> int:
     if b == c:
         return b
     return a  # 全員不一致: raw_cnn を基準にする
+
+
+def _classify_corruption_subcategory(
+    raw_val: int,
+    confirmed_val: int,
+    stats: "VideoStats",
+) -> None:
+    """corruption のサブカテゴリを判定して stats に加算する。
+
+    サブカテゴリ:
+      empty_to_color: raw==EMPTY → confirmed==色 (空→色FP、infer_placement hallucination 主因)
+      color_to_color: raw==色A  → confirmed==色B (色フリーズ系、T2 自己強化が主因)
+      color_to_empty: raw==色   → confirmed==EMPTY (色→空 消失)
+
+    Args:
+        raw_val: raw_cnn == raw_hsv の合意値。
+        confirmed_val: 後処理後の確定値。
+        stats: 加算先の VideoStats インスタンス。
+    """
+    # EVAL_COLORS に含まれない値は呼び出し元でガード済みのため追加チェック不要
+    if raw_val == COLOR_EMPTY and confirmed_val != COLOR_EMPTY:
+        # 空→色 FP: infer_placement / constraint_fill deficit force-fill が主因
+        stats.corruption_empty_to_color_count += 1
+    elif raw_val != COLOR_EMPTY and confirmed_val != COLOR_EMPTY:
+        # 色→別色: T2 フリーズ / constraint_fill replace が主因
+        stats.corruption_color_to_color_count += 1
+    elif raw_val != COLOR_EMPTY and confirmed_val == COLOR_EMPTY:
+        # 色→空: infer_placement commit refuse 後に T2 が消す等の経路
+        stats.corruption_color_to_empty_count += 1
+
+
+def _check_postprocess_corruption(
+    video_id: str,
+    fi: int,
+    t_sec: float,
+    side: str,
+    row: int,
+    col: int,
+    raw_cnn_val: int,
+    raw_hsv_val: int,
+    confirmed_val: int,
+    stats: VideoStats,
+    *,
+    log_limit: int = CORRUPTION_LOG_LIMIT,
+) -> None:
+    """後処理破壊 (postprocess_corruption) を検知して stats に記録する。
+
+    検知条件:
+      - raw_cnn_val == raw_hsv_val  (CNN と HSV が一致: 正解候補として信頼できる)
+      - confirmed_val != raw_cnn_val  (後処理が書き換えた)
+      - raw_cnn_val と confirmed_val どちらも COLOR_UNKNOWN でない
+
+    これは constraint_fill が CNN・HSV 一致セルを誤って上書きしたケースを捕捉する。
+    NOTE: raw_cnn==raw_hsv==誤りの全列崩壊型は本検知の対象外。
+    　　　その場合は per_col_midgame_empty (I1) / avg_puyo_count (C1) で別途検知。
+    UNKNOWN 除外は per_col_unknown_rate (I1) が担当するためここでは除外のみ実施。
+    """
+    if (
+        raw_cnn_val == raw_hsv_val
+        and confirmed_val != raw_cnn_val
+        and raw_cnn_val not in (COLOR_UNKNOWN,)
+        and confirmed_val not in (COLOR_UNKNOWN,)
+    ):
+        stats.postprocess_corruption_count += 1
+        stats.postprocess_corruption_by_side[side] += 1
+        stats.postprocess_corruption_color_pairs[(raw_cnn_val, confirmed_val)] += 1
+        # サブカテゴリ分類: 変化方向で分類する
+        _classify_corruption_subcategory(
+            raw_cnn_val, confirmed_val, stats,
+        )
+        if len(stats.postprocess_corruption_log) < log_limit:
+            stats.postprocess_corruption_log.append({
+                "video": video_id,
+                "frame": fi,
+                "t_sec": round(t_sec, 2),
+                "side": side,
+                "row": row,
+                "col": col,
+                "raw_cnn": COLOR_NAMES.get(raw_cnn_val, str(raw_cnn_val)),
+                "confirmed": COLOR_NAMES.get(confirmed_val, str(confirmed_val)),
+            })
 
 
 def _record_cell(
@@ -482,6 +691,12 @@ def _eval_side_frame(
                 video_id, fi, t_sec, side, row, col,
                 raw_cnn_val, raw_hsv_val, confirmed_val,
                 stats, disagreements,
+            )
+            # 後処理破壊検知: raw_cnn==raw_hsv なのに confirmed が異なるセルを検知
+            _check_postprocess_corruption(
+                video_id, fi, t_sec, side, row, col,
+                raw_cnn_val, raw_hsv_val, confirmed_val,
+                stats,
             )
     # I1 メトリクス集計: confirmed_board の col 別 UNKNOWN 率 + 中盤 EMPTY 率
     if confirmed_board is not None:
@@ -692,6 +907,8 @@ def _aggregate_stats(stats_list: list[VideoStats]) -> dict:
         "per_video": _build_video_acc(stats_list),
         # I1 メトリクス集計サマリ (全動画 worst-case)
         "i1_metrics_summary": _build_i1_summary(stats_list),
+        # 後処理破壊検知 (postprocess_corruption)
+        "postprocess_corruption": _aggregate_corruption(stats_list, total_cells),
     }
 
 
@@ -746,6 +963,41 @@ def _judge_pass_fail(
     return ("PASS" if not failures else "FAIL"), failures
 
 
+def _judge_pass_fail_with_corruption(
+    overall_acc: float,
+    per_color: dict[str, float],
+    holdout_acc: Optional[float],
+    stats_list: Optional[list] = None,
+    corruption_section: Optional[dict] = None,
+) -> tuple[str, list[str]]:
+    """PASS/FAIL 判定に postprocess_corruption 判定を加えたラッパー。
+
+    backwards compat: _judge_pass_fail の引数を踏襲しつつ corruption_section を追加。
+    corruption_section=None なら corruption 判定をスキップする (従来挙動と同等)。
+
+    _judge_corruption_metrics が返す "[WARNING]" プレフィックス付きメッセージは
+    failures に追加するが FAIL 判定には使わない (情報提示のみ)。
+    """
+    verdict, failures = _judge_pass_fail(
+        overall_acc, per_color, holdout_acc, stats_list
+    )
+    if corruption_section is not None:
+        corruption_messages = _judge_corruption_metrics(corruption_section)
+        # [WARNING] プレフィックス付きメッセージは FAIL 判定に使わず情報提示のみ
+        fail_messages = [
+            m for m in corruption_messages if not m.startswith("[WARNING]")
+        ]
+        warning_messages = [
+            m for m in corruption_messages if m.startswith("[WARNING]")
+        ]
+        failures.extend(fail_messages)
+        # WARNING は failures に追加するが verdict 計算前に済んでいない → 後で追加
+        verdict = "PASS" if not failures else "FAIL"
+        # WARNING を failures 末尾に追加 (verdict には影響しない)
+        failures.extend(warning_messages)
+    return verdict, failures
+
+
 def _judge_i1_metrics(stats_list: list) -> list[str]:
     """I1 追加メトリクスの FAIL 判定を返す。
 
@@ -789,6 +1041,223 @@ def _judge_i1_metrics(stats_list: list) -> list[str]:
                 )
     return failures
 
+def _aggregate_corruption_subcategory(
+    stats_list: list["VideoStats"],
+    total_stable_cells: int,
+) -> dict:
+    """corruption のサブカテゴリ別 count / rate を集計して返す。
+
+    サブカテゴリ:
+      empty_to_color: raw==EMPTY → confirmed==色 (空→色FP)
+      color_to_color: raw==色A  → confirmed==色B (色フリーズ系)
+      color_to_empty: raw==色   → confirmed==EMPTY (色→空 消失)
+
+    Args:
+        stats_list: 動画統計リスト。
+        total_stable_cells: 分母 (STABLE 確定 cell 総数)。
+
+    Returns:
+        サブカテゴリ別 {count, rate} dict。後方互換のため既存フィールドとは別キー。
+    """
+    empty_to_color = sum(s.corruption_empty_to_color_count for s in stats_list)
+    color_to_color = sum(s.corruption_color_to_color_count for s in stats_list)
+    color_to_empty = sum(s.corruption_color_to_empty_count for s in stats_list)
+    denom = total_stable_cells if total_stable_cells > 0 else 1
+
+    def _rate(n: int) -> float:
+        return n / denom
+
+    return {
+        "empty_to_color": {
+            "count": empty_to_color,
+            "rate": _rate(empty_to_color),
+            "note": "infer_placement hallucination / constraint_fill deficit force-fill 主因",
+        },
+        "color_to_color": {
+            "count": color_to_color,
+            "rate": _rate(color_to_color),
+            "note": "T2 自己強化フリーズ / constraint_fill replace 主因",
+        },
+        "color_to_empty": {
+            "count": color_to_empty,
+            "rate": _rate(color_to_empty),
+            "note": "infer_placement commit refuse 後 T2 消去等",
+        },
+    }
+
+
+def _aggregate_corruption(
+    stats_list: list["VideoStats"],
+    total_stable_cells: int,
+) -> dict:
+    """全動画の postprocess_corruption 集計を返す。
+
+    Args:
+        stats_list: 動画統計リスト。
+        total_stable_cells: 分母 (STABLE 確定 cell 総数)。
+
+    Returns:
+        count / rate / by_side / color_pairs / side_bias / corruption_ratio / log
+        を含む dict。
+    """
+    total_corruption = sum(s.postprocess_corruption_count for s in stats_list)
+    total_physics_fix = sum(s.physics_fix_count for s in stats_list)
+    rate = total_corruption / total_stable_cells if total_stable_cells > 0 else 0.0
+
+    # side 別集計
+    by_side: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for side, cnt in s.postprocess_corruption_by_side.items():
+            by_side[side] += cnt
+
+    # color_pair 集計 (JSON キーに変換)
+    color_pairs: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for (fc, tc), cnt in s.postprocess_corruption_color_pairs.items():
+            key = f"{COLOR_NAMES.get(fc, str(fc))}->{COLOR_NAMES.get(tc, str(tc))}"
+            color_pairs[key] += cnt
+
+    # side_bias: 片側 & 1 色が POSTPROCESS_SIDE_BIAS_THRESHOLD 以上集中 & >=MIN セル
+    side_bias = _detect_side_bias(stats_list, total_corruption)
+
+    # corruption_ratio = corruption / (corruption + physics_fix)
+    denom = total_corruption + total_physics_fix
+    corruption_ratio = total_corruption / denom if denom > 0 else 0.0
+
+    # ログ: 全動画分を CORRUPTION_LOG_LIMIT 件まで統合
+    log: list[dict] = []
+    for s in stats_list:
+        log.extend(s.postprocess_corruption_log)
+        if len(log) >= CORRUPTION_LOG_LIMIT:
+            log = log[:CORRUPTION_LOG_LIMIT]
+            break
+
+    # サブカテゴリ別集計 (後方互換: 既存フィールドに追加)
+    subcategory = _aggregate_corruption_subcategory(stats_list, total_stable_cells)
+
+    return {
+        "count": total_corruption,
+        "rate": rate,
+        "by_side": dict(by_side),
+        "color_pairs": dict(color_pairs),
+        "side_bias": side_bias,
+        "corruption_ratio": corruption_ratio,
+        "log": log,
+        # サブカテゴリ別 count / rate (後方互換: 追加フィールド)
+        "subcategory": subcategory,
+        # fail-silent 罠注記: raw_cnn==raw_hsv==誤りの全列崩壊型は本指標で検知不可
+        "blind_spot_note": (
+            "raw_cnn==raw_hsv==誤り の全列崩壊型は本指標では検知不可。"
+            "per_col_midgame_empty (I1) / avg_puyo_count (C1) で別途確認・viz 目視必須。"
+        ),
+    }
+
+
+def _detect_side_bias(
+    stats_list: list["VideoStats"],
+    total_corruption: int,
+) -> dict:
+    """side_bias: 片側 & 書換先 1 色が THRESHOLD 以上集中を検知する。
+
+    Returns:
+        {"detected": bool, "dominant_side": str|None, "dominant_color": str|None,
+         "dominant_rate": float}
+    """
+    if total_corruption < POSTPROCESS_SIDE_BIAS_MIN_CELLS:
+        return {
+            "detected": False, "dominant_side": None,
+            "dominant_color": None, "dominant_rate": 0.0,
+        }
+
+    # side 別 color_pair 集計
+    side_color: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for s in stats_list:
+        for (fc, tc), cnt in s.postprocess_corruption_color_pairs.items():
+            # side 別は by_side から派生できないので per-stats の side 情報を利用
+            pass
+    # side_color は postprocess_corruption_by_side と color_pairs から近似判定
+    # side 別合計が >= THRESHOLD * total_corruption かつ >= MIN_CELLS
+    by_side_total: dict[str, int] = defaultdict(int)
+    for s in stats_list:
+        for side, cnt in s.postprocess_corruption_by_side.items():
+            by_side_total[side] += cnt
+
+    dominant_side = None
+    dominant_rate = 0.0
+    for side, cnt in by_side_total.items():
+        if total_corruption > 0:
+            r = cnt / total_corruption
+            if r >= POSTPROCESS_SIDE_BIAS_THRESHOLD and cnt >= POSTPROCESS_SIDE_BIAS_MIN_CELLS:
+                if r > dominant_rate:
+                    dominant_rate = r
+                    dominant_side = side
+
+    # 書換先 1 色が >= THRESHOLD 集中を確認
+    dominant_color = None
+    if dominant_side is not None:
+        color_pair_for_side: dict[str, int] = defaultdict(int)
+        for s in stats_list:
+            # side 別内訳は postprocess_corruption_log から再集計
+            for entry in s.postprocess_corruption_log:
+                if entry.get("side") == dominant_side:
+                    color_pair_for_side[entry.get("confirmed", "")] += 1
+        total_for_side = sum(color_pair_for_side.values())
+        if total_for_side > 0:
+            for color, cnt in color_pair_for_side.items():
+                if cnt / total_for_side >= POSTPROCESS_SIDE_BIAS_THRESHOLD:
+                    dominant_color = color
+                    break
+
+    return {
+        "detected": dominant_side is not None,
+        "dominant_side": dominant_side,
+        "dominant_color": dominant_color,
+        "dominant_rate": dominant_rate,
+    }
+
+
+def _judge_corruption_metrics(
+    corruption_section: dict,
+) -> list[str]:
+    """postprocess_corruption セクションから FAIL / WARNING 判定を返す。
+
+    FAIL 条件:
+      - corruption_rate >= POSTPROCESS_CORRUPTION_REJECT_RATE
+      - side_bias.detected == True
+
+    WARNING 条件 (FAIL にはしない、情報提示のみ):
+      - subcategory.empty_to_color.rate >= CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE
+        (空→色FP が多い = infer_placement hallucination / constraint_fill deficit 主因)
+    """
+    failures: list[str] = []
+    rate = corruption_section.get("rate", 0.0)
+    if rate >= POSTPROCESS_CORRUPTION_REJECT_RATE:
+        failures.append(
+            f"postprocess_corruption_rate {rate:.4%}"
+            f" >= REJECT閾値 {POSTPROCESS_CORRUPTION_REJECT_RATE:.4%}"
+            f" (constraint_fill が CNN・HSV 一致セルを破壊している可能性)"
+        )
+    side_bias = corruption_section.get("side_bias", {})
+    if side_bias.get("detected", False):
+        failures.append(
+            f"postprocess_corruption side_bias 検知:"
+            f" dominant_side={side_bias.get('dominant_side')}"
+            f" dominant_color={side_bias.get('dominant_color')}"
+            f" rate={side_bias.get('dominant_rate', 0.0):.1%}"
+        )
+    # サブカテゴリ WARNING: empty_to_color 高率 (FAIL にはしない)
+    subcategory = corruption_section.get("subcategory", {})
+    e2c_rate = subcategory.get("empty_to_color", {}).get("rate", 0.0)
+    if e2c_rate >= CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE:
+        failures.append(
+            f"[WARNING] corruption_empty_to_color_rate {e2c_rate:.4%}"
+            f" >= WARNING閾値 {CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE:.4%}"
+            f" (空→色FP多発: infer_placement hallucination / constraint_fill deficit 主因。"
+            f" FAIL にはしない = 情報提示)"
+        )
+    return failures
+
+
 # ============================
 # CLI
 # ============================
@@ -821,6 +1290,53 @@ def _parse_args() -> argparse.Namespace:
         "--sample-interval", type=float, default=DEFAULT_SAMPLE_INTERVAL_SEC,
         help="認識処理間隔 (秒)。",
     )
+    p.add_argument(
+        "--no-constraint-fill",
+        action="store_true",
+        default=False,
+        help=(
+            "NEXT 累積制約による色 count 補正 (constraint_fill) を無効化する。 "
+            "constraint_fill の net 効果測定用。 "
+            "confirmed 経路 (CNN+物理推論 post-process) に効く。 "
+            "省略時は従来挙動 (constraint_fill 有効)。"
+        ),
+    )
+    p.add_argument(
+        "--t2-highconf-yield",
+        action="store_true",
+        default=False,
+        dest="enable_t2_highconf_yield",
+        help=(
+            "T2 高確信 yield を有効化する。 "
+            "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
+            "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
+            "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正の "
+            "net 効果測定用。省略時は従来挙動 (T2 yield 無効)。"
+        ),
+    )
+    p.add_argument(
+        "--infer-empty-guard",
+        action="store_true",
+        default=False,
+        dest="enable_infer_empty_guard",
+        help=(
+            "infer_placement 空セル hallucination ガードを有効化する。 "
+            "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
+            "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
+            "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
+            "省略時は従来挙動 (guard 無効)。"
+        ),
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "動画単位の並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。 "
+            "2 以上で ProcessPoolExecutor (spawn) による並列処理を有効化。 "
+            "推奨上限は CPU コア数 (GPU 使用率が低い場合に有効)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -840,14 +1356,67 @@ def _collect_results(
     max_frames: int,
     sample_interval_sec: float,
     disagreements: list[dict],
+    enable_constraint_fill: bool = True,
+    workers: int = 1,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
 ) -> list[VideoStats]:
-    """動画リストを走らせ VideoStats リストを返す。"""
-    stats_list: list[VideoStats] = []
+    """動画リストを走らせ VideoStats リストを返す。
+
+    Args:
+        enable_constraint_fill: False にすると confirmed 経路の
+            constraint_fill を無効化して測定する。
+            backwards compat: デフォルト True = 従来挙動。
+        workers: 並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。
+            2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
+        enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
+            CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
+        enable_infer_empty_guard: True にすると infer_placement 空セル
+            hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
+    """
+    # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
+    video_tasks: list[tuple[str, Path]] = []
     for vid in video_ids:
         vpath = _resolve_video_path(vid, video_dir)
         if vpath is None:
             print(f"[measure] 動画ファイル未発見: {vid} → スキップ", file=sys.stderr)
             continue
+        video_tasks.append((vid, vpath))
+
+    if not video_tasks:
+        return []
+
+    effective_workers = min(workers, len(video_tasks))
+
+    if effective_workers <= 1:
+        return _collect_serial(
+            video_tasks, holdout_ids, max_frames,
+            sample_interval_sec, disagreements, enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
+        )
+    return _collect_parallel(
+        video_tasks, holdout_ids, max_frames,
+        sample_interval_sec, disagreements, enable_constraint_fill,
+        effective_workers,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
+    )
+
+
+def _collect_serial(
+    video_tasks: list[tuple[str, Path]],
+    holdout_ids: list[str],
+    max_frames: int,
+    sample_interval_sec: float,
+    disagreements: list[dict],
+    enable_constraint_fill: bool,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
+) -> list[VideoStats]:
+    """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
+    stats_list: list[VideoStats] = []
+    for vid, vpath in video_tasks:
         vstats = _process_video(
             video_id=vid,
             video_path=vpath,
@@ -855,8 +1424,72 @@ def _collect_results(
             max_frames=max_frames,
             sample_interval_sec=sample_interval_sec,
             disagreements=disagreements,
+            enable_constraint_fill=enable_constraint_fill,
+            enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_infer_empty_guard=enable_infer_empty_guard,
         )
         stats_list.append(vstats)
+    return stats_list
+
+
+def _collect_parallel(
+    video_tasks: list[tuple[str, Path]],
+    holdout_ids: list[str],
+    max_frames: int,
+    sample_interval_sec: float,
+    disagreements: list[dict],
+    enable_constraint_fill: bool,
+    workers: int,
+    enable_t2_highconf_yield: bool = False,
+    enable_infer_empty_guard: bool = False,
+) -> list[VideoStats]:
+    """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
+
+    各ワーカは _process_video_worker 内で load_default() する (CUDA spawn 安全)。
+    不一致 cell は stats._local_disagreements 経由で親プロセスに返却し、
+    ここで disagreements リストに統合する。
+    """
+    # spawn コンテキストを明示 (fork だと CUDA が壊れる)
+    mp_ctx = _mp.get_context("spawn")
+    futures: dict = {}
+    stats_list: list[VideoStats] = []
+
+    print(f"[measure] 並列モード: workers={workers} 動画数={len(video_tasks)}")
+
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=workers, mp_context=mp_ctx
+    ) as executor:
+        for vid, vpath in video_tasks:
+            fut = executor.submit(
+                _process_video_worker,
+                vid,
+                str(vpath),
+                (vid in holdout_ids),
+                max_frames,
+                sample_interval_sec,
+                enable_constraint_fill,
+                enable_t2_highconf_yield,
+                enable_infer_empty_guard,
+            )
+            futures[fut] = vid
+
+        for fut in concurrent.futures.as_completed(futures):
+            vid = futures[fut]
+            try:
+                vstats = fut.result()
+                # ワーカが収集した不一致 cell を親リストへ統合
+                disagreements.extend(vstats._local_disagreements)
+                vstats._local_disagreements = []  # メモリ節約
+                stats_list.append(vstats)
+            except Exception as exc:
+                print(
+                    f"[measure] {vid} 並列処理エラー: {exc!r}",
+                    file=sys.stderr,
+                )
+
+    # 動画 ID 順でソートして決定論的な出力順を保つ
+    id_order = {vid: i for i, (vid, _) in enumerate(video_tasks)}
+    stats_list.sort(key=lambda s: id_order.get(s.video_id, 9999))
     return stats_list
 
 
@@ -954,12 +1587,33 @@ def main() -> int:
     )
     output_path = _resolve_output_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids}")
+    # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
+    enable_constraint_fill: bool = not args.no_constraint_fill
+    # t2_highconf_yield フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_t2_highconf_yield: bool = bool(
+        getattr(args, "enable_t2_highconf_yield", False)
+    )
+    # infer_empty_guard フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_infer_empty_guard: bool = bool(
+        getattr(args, "enable_infer_empty_guard", False)
+    )
+    workers: int = max(1, args.workers)
+    print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
+    if not enable_constraint_fill:
+        print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
+    if enable_t2_highconf_yield:
+        print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
+    if enable_infer_empty_guard:
+        print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
         args.max_frames, args.sample_interval, disagreements,
+        enable_constraint_fill=enable_constraint_fill,
+        workers=workers,
+        enable_t2_highconf_yield=enable_t2_highconf_yield,
+        enable_infer_empty_guard=enable_infer_empty_guard,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -967,12 +1621,21 @@ def main() -> int:
     agg = _aggregate_stats(stats_list)
     holdout_summary = _compute_holdout_summary(stats_list, holdout_ids)
     holdout_acc = holdout_summary.get("acc") if holdout_ids else None
-    verdict, failures = _judge_pass_fail(
+    corruption_section = agg.get("postprocess_corruption")
+    verdict, failures = _judge_pass_fail_with_corruption(
         overall_acc=agg["overall"]["acc"],
         per_color=agg["per_color"],
         holdout_acc=holdout_acc,
         stats_list=stats_list,
+        corruption_section=corruption_section,
     )
+    # constraint_fill 無効時の注記: 本指標は 0 になりやすい
+    postprocess_note: Optional[str] = None
+    if not enable_constraint_fill:
+        postprocess_note = (
+            "constraint_fill 無効中のため本指標は 0 になりやすい。"
+            "全列崩壊型は per_col_midgame_empty/avg_puyo_count で別途確認、viz 目視必須"
+        )
     result = {
         **agg,
         "holdout_summary": holdout_summary,
@@ -985,8 +1648,17 @@ def main() -> int:
             "sample_interval_sec": args.sample_interval,
             "pass_overall_threshold": PASS_OVERALL_THRESHOLD,
             "pass_per_color_threshold": PASS_PER_COLOR_THRESHOLD,
+            # constraint_fill の on/off を記録 (後日比較用)
+            "enable_constraint_fill": enable_constraint_fill,
+            # t2_highconf_yield の on/off を記録 (後日比較用)
+            "enable_t2_highconf_yield": enable_t2_highconf_yield,
+            # 並列ワーカ数を記録 (後日比較用)
+            "workers": workers,
         },
     }
+    # constraint_fill 無効時の postprocess_corruption_note を追加
+    if postprocess_note is not None:
+        result["postprocess_corruption_note"] = postprocess_note
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     _print_summary(agg, holdout_summary, holdout_acc, holdout_ids,

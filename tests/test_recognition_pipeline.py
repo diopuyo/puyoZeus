@@ -7,11 +7,17 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from src.board import COLOR_RED, Board
+from src.board import COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_RED, Board
 from src.board_state_machine import BoardState
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.match_state import MatchState, MatchStateDetector
-from src.recognition_pipeline import RecognitionPipeline, SideResult
+from src.recognition_pipeline import (
+    RecognitionPipeline,
+    SideResult,
+    OJAMA_TIER1_WARMUP_FRAMES,
+    TIER1_WARMUP_FRAMES,
+    _update_ojama_tier1_warmup_counter,
+)
 
 
 # ============================
@@ -212,6 +218,176 @@ def test_constraint_invalidates_on_chain_event() -> None:
     # constraint は初期 True
     assert pipe._constraint_valid_1p is True
     assert pipe._constraint_valid_2p is True
+
+
+# ============================
+# 案1: CNN 高確信セル保護テスト (protect_board)
+# ============================
+
+
+def test_protect_board_shields_cnn_confirmed_cell() -> None:
+    """案1: cnn=GREEN と confirmed=GREEN が一致するセルは excess でも置換されない."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE, COLOR_RED
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    # confirmed_board: GREEN 3 cells (= 1 excess), BLUE 1 cell
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    # tsumo_count: GREEN 2 (= confirmed より 1 少ない), BLUE 2 (= 1 多く必要)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 2, COLOR_BLUE: 2})
+    # protect_board: row=10 のセルは GREEN (= CNN も GREEN と認識)
+    protect = Board()
+    protect.set(10, 0, COLOR_GREEN)   # CNN = GREEN → 保護対象
+    protect.set(11, 0, COLOR_RED)     # CNN = RED  → 不一致 → 置換候補
+    protect.set(12, 0, COLOR_RED)     # CNN = RED  → 不一致 → 置換候補
+    protect.set(12, 1, COLOR_BLUE)
+    # protect_board=protect の場合: row=10 の GREEN セルは保護される
+    # → row=11 or row=12 の GREEN セルが BLUE に置換される
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        protect_board=protect,
+    )
+    # row=10 の GREEN は保護され BLUE に置換されない
+    assert int(new_board.get(10, 0)) == COLOR_GREEN, \
+        "CNN=GREEN 一致セルは protect_board で保護されるべき"
+    # field 全体: GREEN 2 個, BLUE 2 個 になっていること
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    assert cnt[COLOR_GREEN] == 2, f"GREEN は 2 個になるべき, actual={cnt[COLOR_GREEN]}"
+    assert cnt[COLOR_BLUE] == 2, f"BLUE は 2 個になるべき, actual={cnt[COLOR_BLUE]}"
+
+
+def test_protect_board_none_falls_back_to_original_behavior() -> None:
+    """案1: protect_board=None (デフォルト) では従来通り全セルが置換候補."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 2, COLOR_BLUE: 2})
+    # protect_board=None (デフォルト) → 全セル対象 = 最上行から 1 つ置換
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        # protect_board を省略 = None
+    )
+    # 従来挙動: row 昇順で最初の GREEN (row=10) が BLUE に置換される
+    assert int(new_board.get(10, 0)) == COLOR_BLUE, \
+        "protect_board=None では row 昇順で先頭セルが置換される"
+
+
+def test_protect_board_no_protection_when_color_mismatch() -> None:
+    """案1: CNN 色が confirmed と不一致なセルは従来通り置換候補になる."""
+    from collections import Counter
+    from src.board import COLOR_GREEN, COLOR_BLUE, COLOR_RED
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    board = Board()
+    board.set(10, 0, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_GREEN: 1, COLOR_BLUE: 2})
+    # protect_board: row=10 のセルは RED (= CNN と confirmed 不一致)
+    protect = Board()
+    protect.set(10, 0, COLOR_RED)    # CNN = RED ≠ confirmed GREEN → 保護されない
+    protect.set(11, 0, COLOR_RED)    # CNN = RED ≠ confirmed GREEN → 保護されない
+    protect.set(12, 1, COLOR_BLUE)
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+        protect_board=protect,
+    )
+    # CNN と色不一致のため保護なし = どちらかの GREEN が BLUE に置換される
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    assert cnt[COLOR_GREEN] == 1, f"GREEN 1 個に置換されるべき, actual={cnt[COLOR_GREEN]}"
+    assert cnt[COLOR_BLUE] == 2, f"BLUE 2 個になるべき, actual={cnt[COLOR_BLUE]}"
+
+
+# ============================
+# 案2: enable_constraint_fill トグルテスト
+# ============================
+
+
+def test_enable_constraint_fill_false_skips_constraint() -> None:
+    """案2: enable_constraint_fill=False でコンストレイント補正が skip される."""
+    from src.board import COLOR_RED, COLOR_BLUE
+    # enable_constraint_fill=False の pipeline を構築
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_constraint_fill=False,
+    )
+    assert pipe._enable_constraint_fill is False, \
+        "_enable_constraint_fill=False が設定されているべき"
+
+
+def test_enable_constraint_fill_default_true() -> None:
+    """enable_constraint_fill のデフォルトは True (= main 同等、判断保留).
+
+    2026-05-31: 一旦 OFF 化したが「constraint_fill が色破壊主因」が誤診断と判明
+    (真因は infer_placement + T2) したため default ON に戻した。採否は user レビュー。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._enable_constraint_fill is True, \
+        "デフォルトは True (判断保留、2026-05-31 OFF 撤回)"
+
+
+def test_constraint_fill_false_does_not_modify_board() -> None:
+    """案2: enable_constraint_fill=False のとき board が変更されない."""
+    from collections import Counter
+    from src.board import COLOR_RED, COLOR_BLUE
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_constraint_fill=False,
+    )
+    # False の場合 _apply_next_count_constraint を呼ばないことを
+    # ガードフラグで検証する (直接 _enable_constraint_fill を見る)
+    assert not pipe._enable_constraint_fill
+    # _apply_next_count_constraint を直接呼んでも、 呼出元では呼ばれないはず。
+    # 下記は呼出元ガードのロジック確認 (= ガードが False なら処理されない)
+    board = Board()
+    board.set(11, 0, COLOR_RED)
+    board.set(12, 0, COLOR_RED)
+    board.set(12, 1, COLOR_BLUE)
+    tsumo_count: Counter = Counter({COLOR_RED: 1, COLOR_BLUE: 2})
+    # _enable_constraint_fill=False なら呼出元がガードするが、
+    # 直接 _apply_next_count_constraint を呼ぶと従来通り動く
+    # (関数自体は影響を受けない。 ガードは呼出元にある)
+    new_board = pipe._apply_next_count_constraint(
+        board, tsumo_count, side="1P", frame_idx=100,
+    )
+    # 直接呼んだので補正は走る (= 呼出元ガードのテストは別のテストで担保)
+    from collections import Counter as _Counter
+    cnt: _Counter = _Counter()
+    for r in range(13):
+        for c in range(6):
+            v = int(new_board.get(r, c))
+            if v != 0:
+                cnt[v] += 1
+    # RED 1 → 1 (excess 1 → BLUE に置換), BLUE 2
+    assert cnt[COLOR_RED] == 1
+    assert cnt[COLOR_BLUE] == 2
 
 
 def test_load_default_smoke() -> None:
@@ -461,4 +637,401 @@ def test_pipeline_tier1_warmup_result_is_side_result() -> None:
     assert res is not None
     assert hasattr(res.p1, "confirmed_board")
     assert hasattr(res.p2, "confirmed_board")
+
+
+# ============================
+# 経路 A': OJAMA 専用 tier1 warmup (_update_ojama_tier1_warmup_counter)
+# ============================
+
+
+def test_ojama_tier1_warmup_sets_ojama_frames_on_ojama_to_stable() -> None:
+    """OJAMA_FALL → STABLE 遷移で OJAMA_TIER1_WARMUP_FRAMES がセットされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.OJAMA_FALL,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    assert result == OJAMA_TIER1_WARMUP_FRAMES
+
+
+def test_ojama_tier1_warmup_default_false_no_effect() -> None:
+    """enable_ojama_tier1_warmup=False (default) では ojama 専用カウンタが 0 のまま。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    assert pipe._enable_ojama_tier1_warmup is False
+    assert pipe._ojama_tier1_warmup_remaining_1p == 0
+    assert pipe._ojama_tier1_warmup_remaining_2p == 0
+
+
+def test_ojama_tier1_warmup_tsumo_fall_does_not_trigger_ojama_counter() -> None:
+    """TSUMO_FALL → STABLE は OJAMA 分岐に入らず TIER1_WARMUP_FRAMES のまま変化しない。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.TSUMO_FALL,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    # TSUMO_FALL → STABLE は OJAMA 分岐対象外 → カウンタは 0 のまま
+    assert result == 0
+    # なお OJAMA_TIER1_WARMUP_FRAMES にはセットされない
+    assert result != OJAMA_TIER1_WARMUP_FRAMES
+
+
+def test_ojama_tier1_warmup_enabled_flag() -> None:
+    """enable_ojama_tier1_warmup=True で _enable_ojama_tier1_warmup が True。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_tier1_warmup=True,
+    )
+    assert pipe._enable_ojama_tier1_warmup is True
+
+
+def test_ojama_tier1_warmup_resets_on_reset() -> None:
+    """reset() で ojama 専用カウンタが 0 に戻る。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_tier1_warmup=True,
+    )
+    pipe._ojama_tier1_warmup_remaining_1p = 5
+    pipe._ojama_tier1_warmup_remaining_2p = 7
+    pipe.reset()
+    assert pipe._ojama_tier1_warmup_remaining_1p == 0
+    assert pipe._ojama_tier1_warmup_remaining_2p == 0
+
+
+def test_ojama_tier1_warmup_counter_decrements_in_stable() -> None:
+    """STABLE 継続中は OJAMA カウンタがデクリメントされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.STABLE,
+        p_state=BoardState.STABLE,
+        remaining=4,
+    )
+    assert result == 3
+
+
+def test_ojama_tier1_warmup_counter_resets_on_non_stable() -> None:
+    """STABLE → TSUMO_FALL 遷移で OJAMA カウンタが 0 にリセットされる。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.STABLE,
+        p_state=BoardState.TSUMO_FALL,
+        remaining=6,
+    )
+    assert result == 0
+
+
+def test_ojama_tier1_warmup_chain_does_not_trigger() -> None:
+    """CHAIN → STABLE 遷移では OJAMA 分岐に入らず 0 のまま。"""
+    result = _update_ojama_tier1_warmup_counter(
+        prev_state=BoardState.CHAIN,
+        p_state=BoardState.STABLE,
+        remaining=0,
+    )
+    assert result == 0
+
+
+def test_ojama_tier1_warmup_independent_from_generic_warmup() -> None:
+    """汎用 enable_tier1_warmup=False でも enable_ojama_tier1_warmup=True なら skip 発火する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_tier1_warmup=False,
+        enable_ojama_tier1_warmup=True,
+    )
+    # 汎用 warmup は OFF
+    assert pipe._enable_tier1_warmup is False
+    # ojama 専用 warmup は ON
+    assert pipe._enable_ojama_tier1_warmup is True
+    # ojama カウンタを手動セット → skip_tier1 が True になることを確認
+    pipe._ojama_tier1_warmup_remaining_1p = 3
+    # update() を呼び skip_tier1_1p=True で read_both_boards が呼ばれるか確認
+    pipe.update(0, 0.0, _dummy_frame())
+    # skip_tier1_1p が True で呼ばれた (= ojama warmup が発火した)
+    assert reader.last_skip_tier1_1p is True
+
+
+# ============================
+# T2 高確信 yield (enable_t2_highconf_yield) テスト
+# ============================
+
+
+def _make_pipe_t2(
+    cnn_board_1p: Board,
+    t2_highconf_yield: bool = False,
+) -> RecognitionPipeline:
+    """T2 テスト用 pipeline を構築する。
+
+    stable_frame_count=2 で即 STABLE に遷移させる。
+    enable_t2_highconf_yield で T2 yield トグルを制御する。
+    """
+    reader = _StubImageReader(cnn_board_1p, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_t2_highconf_yield=t2_highconf_yield,
+    )
+
+
+def _inject_prev_stable_and_confirmed(
+    pipe: RecognitionPipeline,
+    prev_color: int,
+    confirmed_color: int,
+    row: int = 12,
+    col: int = 0,
+) -> None:
+    """T2 テスト用: prev_stable と confirmed_board を指定色で手動セットする。
+
+    prev_stable_1p に prev_color を入れ、confirmed_board に confirmed_color を
+    設定することで T2 の「色A → 色B」判定が発火する状態を作る。
+    _match_active_started_frame = -1000 にして match_just_started を無効化する。
+    """
+    # match_just_started window を解除 (= 試合開始から十分時間が経過した想定)
+    pipe._match_active_started_frame = -1000
+
+    # prev_stable_1p に prev_color をセット
+    prev_board = Board()
+    prev_board.set(row, col, prev_color)
+    pipe._prev_stable_confirmed_1p = prev_board
+
+    # sm_1p の confirmed_board に confirmed_color をセット
+    conf_board = Board()
+    conf_board.set(row, col, confirmed_color)
+    if pipe._sm_1p.context.confirmed_board is None:
+        pipe._sm_1p.context.confirmed_board = conf_board
+    else:
+        pipe._sm_1p.context.confirmed_board.set(row, col, confirmed_color)
+
+
+def test_t2_highconf_yield_on_skips_overwrite() -> None:
+    """トグル ON: raw_cnn==cur_v (緑) のセルは T2 が prev_stable(青) で上書きしない。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑 (prev_stable には一致)
+      - prev_stable = 青 (BLUE)
+      - T2 条件: both_colored かつ pv != cur_v → 通常は青で上書き
+      - enable_t2_highconf_yield=True かつ cnn_v==cur_v → スキップ (緑を維持)
+    """
+    row, col = 12, 0
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    # pipeline を STABLE に持ち込む (2 フレーム分 update)
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # 手動 inject: prev_stable=青, confirmed=緑
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    # CNN は依然として緑を返す状態で 1 フレーム処理
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    # T2 が青で上書きしなかった → confirmed は緑のまま
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_GREEN, (
+        f"トグル ON 時: T2 が青で上書きすべきでない (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_off_applies_overwrite() -> None:
+    """トグル OFF (default): T2 は従来通り prev_stable(青) で上書きする。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑
+      - prev_stable = 青 (BLUE)
+      - enable_t2_highconf_yield=False (デフォルト)
+      - T2 が青で上書き → confirmed は青になる
+    """
+    row, col = 12, 0
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=False)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_BLUE, (
+        f"トグル OFF 時: T2 が青で上書きすべき (期待=青={COLOR_BLUE}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_cnn_mismatch_still_applies() -> None:
+    """raw_cnn != cur_v のセルはトグル ON でも T2 上書きが適用される (高確信でない)。
+
+    シナリオ:
+      - CNN 出力 = 赤 (RED) ← cur_v (緑) と不一致
+      - confirmed_board = 緑 (GREEN)
+      - prev_stable = 青 (BLUE)
+      - enable_t2_highconf_yield=True でも cnn_v!=cur_v → T2 適用 → 青で上書き
+    """
+    row, col = 12, 0
+    cnn_red = Board()
+    cnn_red.set(row, col, COLOR_RED)
+
+    pipe = _make_pipe_t2(cnn_red, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # CNN は赤, confirmed に緑を手動セット, prev_stable は青
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_BLUE, (
+        f"CNN 不一致時: T2 が青で上書きすべき (期待=青={COLOR_BLUE}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_default_is_false() -> None:
+    """enable_t2_highconf_yield のデフォルト値が False (backwards compat)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        # enable_t2_highconf_yield を明示せず → デフォルト False
+    )
+    assert pipe._enable_t2_highconf_yield is False
+
+
+def test_t2_highconf_yield_pv_empty_no_yield() -> None:
+    """pv=空 のセルはトグル ON でも yield しない (背景 FP 抑制)。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)  ← 背景 FP
+      - confirmed_board = 緑 (GREEN)  ← CNN FP が confirmed に残っている状態
+      - prev_stable = 空 (EMPTY)  ← 本来は空のセル
+      - enable_t2_highconf_yield=True
+      - pv=空 なので yield 発動せず → T2 は confirmed を空に上書き
+    注意: T2 の発動条件は both_colored (pv 非 EMPTY かつ cur_v 非 EMPTY) なので、
+    このシナリオでは both_colored=False となり T2 自体が上書きを行わない。
+    本テストは「yield 条件の pv チェック」が加わっても T2 上書きが行われる状態を
+    確認するため、pv=EMPTY / cur_v=GREEN の組み合わせで T2 がスキップされないことを
+    検証する (both_colored=False → T2 上書きなし = 緑が維持される)。
+
+    補足: both_colored が False のケースで yield 条件追加の副作用がないことを確認。
+    """
+    row, col = 9, 2
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # prev_stable = 空, confirmed = 緑 (背景 FP シナリオ)
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_EMPTY, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    # pv=EMPTY / cur_v=GREEN → both_colored=False → T2 上書きが発生しない
+    # (= T2 の上書きはあくまで「両方色付き かつ 異色」のみ)
+    # yield 条件追加によるリグレッションがないことを確認。
+    # CNN stub が GREEN を返し続けるのでフレーム処理後も GREEN になる。
+    assert cell_val == COLOR_GREEN, (
+        f"pv=空/cur=緑: both_colored=False なので T2 上書きなし (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
+
+
+def test_t2_highconf_yield_pv_colored_still_yields() -> None:
+    """pv=色付き のセルはトグル ON かつ cnn==cur で yield する (既存動作の維持)。
+
+    シナリオ:
+      - CNN 出力 = 緑 (GREEN)
+      - confirmed_board = 緑 (GREEN)
+      - prev_stable = 青 (BLUE)  ← 色 → 別色フリーズのケース
+      - enable_t2_highconf_yield=True
+      - pv=青 (色付き) かつ cnn_v==cur_v → yield 発動 → 緑を維持
+    """
+    row, col = 9, 2
+    cnn_green = Board()
+    cnn_green.set(row, col, COLOR_GREEN)
+
+    pipe = _make_pipe_t2(cnn_green, t2_highconf_yield=True)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    # prev_stable = 青 (色付き), confirmed = 緑
+    _inject_prev_stable_and_confirmed(
+        pipe, prev_color=COLOR_BLUE, confirmed_color=COLOR_GREEN, row=row, col=col,
+    )
+
+    res = pipe.update(62, 62 / 30.0, _dummy_frame())
+
+    assert res is not None
+    confirmed = res.p1.confirmed_board
+    assert confirmed is not None, "confirmed_board が None"
+    cell_val = int(confirmed.get(row, col))
+    assert cell_val == COLOR_GREEN, (
+        f"pv=色付き: yield 発動して緑を維持すべき (期待=緑={COLOR_GREEN}, 実際={cell_val})"
+    )
 

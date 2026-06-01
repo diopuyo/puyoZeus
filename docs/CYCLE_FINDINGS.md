@@ -194,6 +194,32 @@ cycle を採用する前に以下の全てが NG でないことを確認する�
 - AUTO_REJECT 条件: avg_puyo_ratio < 0.85 OR p_to_e +20% 超 OR critical +10% 超
 - テスト: `tests/test_recognition_evaluator.py` に新規 TestJudgeCycle / TestComputeAvgPuyoCount 等追加
 
+### 4.2-quinquies postprocess_corruption ゲート (2026-05-31 確定 = fail-silent 再発防止)
+
+**背景**: constraint_fill OFF を採用しかけたが、3者合意 cell-acc (99.86%) が後処理(constraint_fill)による正解破壊を埋もれさせ、main Claude が数値を信じて PR 化に向かった。user viz 目視 (1P→緑/2P→赤 バイアス) のみが発見。再発防止メモリ `feedback_consensus_eval_fail_silent.md`。
+
+**D1: `postprocess_corruption`** — 後処理が CNN/HSV 一致の正解を破壊した検知。
+- 実装: `scripts/measure_stable_cell_acc.py` の `_check_postprocess_corruption()`
+- 条件: STABLE で `raw_cnn_val == raw_hsv_val and confirmed_val != raw_cnn_val` (UNKNOWN除く)
+- 出力: count / rate / by_side / color_pairs / side_bias / corruption_ratio / log (結果 JSON `postprocess_corruption` セクション)
+- **rate >= 0.001 (0.1%) → REJECT**、**片側 side_bias (書換先1色 >=50% & >=3セル) → REJECT**
+- 定数: `POSTPROCESS_CORRUPTION_REJECT_RATE=0.001`, `POSTPROCESS_SIDE_BIAS_THRESHOLD=0.50`
+- 破壊率正規化: `corruption_ratio = corruption/(corruption+physics_fix)` (>0.5 でネット負)
+- テスト: `tests/test_postprocess_corruption.py` (合成ボード、false green 防止)
+
+**重要 blind spot (D1 で検知できない)**:
+- `raw_cnn==raw_hsv==誤り` の全列崩壊型 (未知動画 HSV ズレ等) は D1 で検知不可 → `per_col_midgame_empty_rate`(I1) + `avg_puyo_count`(C1) + **viz 目視**で補完必須。
+- `enable_constraint_fill=False` 時は D1 が常時 0 (false green) → 結果 JSON に WARNING note 出力。constraint ON 条件で検証すること。
+
+**採否チェックリスト (cycle 採用前に全確認)**:
+1. measure_stable_cell_acc を実行 (constraint 評価時は ON 条件で corruption を見る)
+2. `postprocess_corruption.rate >= 0.1%` or `side_bias.detected` → 数値が良くても REJECT
+3. `corruption.log` のセル座標を viz で目視
+4. **corruption=0 でも viz 目視は必須** (全列崩壊型は D1 で検知不可)
+5. `avg_puyo_count >= baseline×0.85` (C1) 確認
+6. 全 OK → user に viz 提示 → **user 承認後に PR 化**
+7. 数値改善のみで PR 化は禁止 (`feedback_viz_eval_required.md` / `feedback_consensus_eval_fail_silent.md`)
+
 ### 4.3 動画品質依存度を見る
 - 高画質 (v97) と低画質 (v89m3) の `constraint_replaced` 比 = 動画品質依存度
 - cycle_5: 189 / 19 = 10 倍格差
