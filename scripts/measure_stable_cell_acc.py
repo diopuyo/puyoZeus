@@ -293,6 +293,7 @@ def _make_pipeline_cnn(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -314,6 +315,9 @@ def _make_pipeline_cnn(
         enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
             falling_pair を _landing_pending (消費済みツモ色) に切り替える。
             backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) + 短連鎖 game-event exit 抑止。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -322,6 +326,7 @@ def _make_pipeline_cnn(
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -473,6 +478,7 @@ def _process_video(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -492,6 +498,8 @@ def _process_video(
         enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
             falling_pair を _landing_pending (消費済みツモ色) に切り替える。
             backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -507,6 +515,7 @@ def _process_video(
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -536,6 +545,7 @@ def _process_video_worker(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -563,6 +573,7 @@ def _process_video_worker(
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1429,6 +1440,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--chain-min-display",
+        action="store_true",
+        default=False,
+        dest="enable_chain_min_display",
+        help=(
+            "X1/X4 短連鎖ちらつき対策を有効化する。 "
+            f"CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC={RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s) + "
+            f"短連鎖 game-event exit 抑止 (chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT})。 "
+            "enable_game_event_chain_exit と独立フラグ (効果分解のため)。 "
+            "省略時は従来挙動 (game-event exit 無補正)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1463,6 +1487,7 @@ def _collect_results(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1480,6 +1505,8 @@ def _collect_results(
             有効化する。backwards compat: デフォルト False = 従来挙動。
         enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
             falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
             backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
@@ -1504,6 +1531,7 @@ def _collect_results(
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1513,6 +1541,7 @@ def _collect_results(
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
     )
 
 
@@ -1527,6 +1556,7 @@ def _collect_serial(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1543,6 +1573,7 @@ def _collect_serial(
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
             enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1560,6 +1591,7 @@ def _collect_parallel(
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
     enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1590,6 +1622,7 @@ def _collect_parallel(
                 enable_infer_empty_guard,
                 enable_game_event_chain_exit,
                 enable_landing_color_fix,
+                enable_chain_min_display,
             )
             futures[fut] = vid
 
@@ -1725,6 +1758,10 @@ def main() -> int:
     enable_landing_color_fix: bool = bool(
         getattr(args, "enable_landing_color_fix", False)
     )
+    # chain_min_display フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_chain_min_display: bool = bool(
+        getattr(args, "enable_chain_min_display", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -1744,6 +1781,12 @@ def main() -> int:
             "[measure] landing_color_fix ENABLED "
             "(--landing-color-fix 指定: 着地色修正 案1 / falling_pair を _landing_pending に切り替え)"
         )
+    if enable_chain_min_display:
+        print(
+            "[measure] chain_min_display ENABLED "
+            f"(--chain-min-display 指定: X1 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s + "
+            f"X4 短連鎖 count<{RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} exit 抑止)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1754,6 +1797,7 @@ def main() -> int:
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
         enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1796,6 +1840,8 @@ def main() -> int:
             "enable_game_event_chain_exit": enable_game_event_chain_exit,
             # landing_color_fix の on/off を記録 (後日比較用)
             "enable_landing_color_fix": enable_landing_color_fix,
+            # chain_min_display の on/off を記録 (後日比較用)
+            "enable_chain_min_display": enable_chain_min_display,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
         },
