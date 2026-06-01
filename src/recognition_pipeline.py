@@ -135,6 +135,14 @@ class SideResult:
     # [(frame_idx, t_sec, prev_count, curr_count, drop), ...] の形式。
     # backwards compat のため default None。
     transition_drop_alerts: list[tuple] | None = None
+    # 着地色診断フィールド (2026-06-01 infer_placement 調査用)。
+    # TSUMO_FALL→STABLE 着地フレームのみ非 None。非着地フレームは None。
+    # dict キー:
+    #   falling_pair_old: prev_next_queue[-2] 由来の (color1, color2) (従来ロジック)
+    #   falling_pair_new: _landing_pending[1] 由来の (color1, color2) (修正ロジック)
+    #   source: "landing_pending" | "next_queue_2" | "next_queue_1" | "none"
+    # backwards compat のため default None。フラグ ON/OFF 問わず常に記録する。
+    landing_diag: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -314,6 +322,11 @@ class RecognitionPipeline:
         # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
         # を検知するまで維持する。デフォルト False = 従来挙動維持 (backwards compat)。
         enable_game_event_chain_exit: bool = False,
+        # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
+        # prev_next_queue[-2] から _landing_pending (消費済みツモ色) に切り替える。
+        # slide_motion(R-7) 経由で「1 つ前のツモ」を指してしまう誤色問題の修正。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_color_fix: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -556,6 +569,10 @@ class RecognitionPipeline:
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
         self._enable_game_event_chain_exit: bool = bool(enable_game_event_chain_exit)
+        # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
+        # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
+        # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_color_fix: bool = bool(enable_landing_color_fix)
         # game-event モード用: CHAIN 発火時刻の上限 (安全弁)。
         # CHAIN 発火 time_sec + CHAIN_MAX_HOLD_SEC を超えたら強制終了。
         # 1P/2P 別に管理 (float: 未発火時は 0.0)。
@@ -726,6 +743,7 @@ class RecognitionPipeline:
         enable_t2_highconf_yield: bool = False,
         enable_infer_empty_guard: bool = False,
         enable_game_event_chain_exit: bool = False,
+        enable_landing_color_fix: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -857,6 +875,7 @@ class RecognitionPipeline:
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
         )
 
     # ------------------------------------------------------------------
@@ -2019,6 +2038,9 @@ class RecognitionPipeline:
         score_d_for_self: int = 0,  # cycle 71n 案 ε
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
+        # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
+        # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
+        _landing_diag: dict | None = None
         # Phase I R-1: 自己整合性チェック (TSUMO_FALL 中のみ意味あり)。
         # baseline (= 直前 STABLE 確定盤面) と current cnn_board の
         # 色 count delta が、落下中ツモ (next_queue[-2]) と整合しているか。
@@ -2124,11 +2146,41 @@ class RecognitionPipeline:
             and prev_confirmed is not None
         ):
             # 落下中ツモ色 = TSUMO 開始時の next (= 直前の next、現 next の 1 つ前)
+            # 診断: 従来ロジック (prev_next_queue[-2]) と
+            #        修正ロジック (_landing_pending 消費色) の両者を計算し比較する。
+            # enable_landing_color_fix=True の場合は修正ロジックを優先する。
             falling_pair: tuple[int, int] | None = None
+            falling_pair_old: tuple[int, int] | None = None
+            falling_pair_new: tuple[int, int] | None = None
+            _diag_source: str = "none"
+            # 従来ロジック: prev_next_queue[-2]
             if len(prev_next_queue) >= 2:
-                falling_pair = prev_next_queue[-2]
+                falling_pair_old = prev_next_queue[-2]
             elif prev_next_queue:
-                falling_pair = prev_next_queue[-1]
+                falling_pair_old = prev_next_queue[-1]
+            # 修正ロジック: _landing_pending から消費済みツモ色を取得
+            _lp = (
+                self._landing_pending_1p if side == "1P"
+                else self._landing_pending_2p
+            )
+            if _lp is not None:
+                falling_pair_new = _lp[1]
+            # フラグに応じて falling_pair を決定
+            if self._enable_landing_color_fix and falling_pair_new is not None:
+                falling_pair = falling_pair_new
+                _diag_source = "landing_pending"
+            elif falling_pair_old is not None:
+                falling_pair = falling_pair_old
+                _diag_source = (
+                    "next_queue_2" if len(prev_next_queue) >= 2 else "next_queue_1"
+                )
+            # 診断フィールド: TSUMO_FALL→STABLE 着地フレームで両者の差を記録。
+            # 冒頭で None 初期化済のため再アノテーションなし。
+            _landing_diag = {
+                "falling_pair_old": list(falling_pair_old) if falling_pair_old else None,
+                "falling_pair_new": list(falling_pair_new) if falling_pair_new else None,
+                "source": _diag_source,
+            }
             # Phase 1a: 物理推論で着地後盤面を確定.
             # cycle 71b: chain_sim を渡して連鎖整合性で候補絞り込み (案 A).
             # 着地 frame では自 side の score_delta はまだ確定していない
@@ -2835,6 +2887,7 @@ class RecognitionPipeline:
             dnext_pair=dnext_pair,
             erasure_alerts=recent_alerts if recent_alerts else None,
             transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
+            landing_diag=_landing_diag,
         )
 
 

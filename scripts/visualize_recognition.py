@@ -525,6 +525,13 @@ def _build_detailed_log_entry(
         # physics_fix で変更された cell: [row, col, prev_confirmed_color, new_confirmed_color]
         "p1_physics_fix_changed_cells": p1_physics_diff,
         "p2_physics_fix_changed_cells": p2_physics_diff,
+        # 着地色診断 (2026-06-01 infer_placement 調査用)。
+        # TSUMO_FALL→STABLE 着地フレームのみ非 null。
+        # falling_pair_old: prev_next_queue[-2] 由来 (従来ロジック)
+        # falling_pair_new: _landing_pending[1] 由来 (修正ロジック)
+        # source: "landing_pending" | "next_queue_2" | "next_queue_1" | "none"
+        "p1_landing_diag": getattr(result.p1, "landing_diag", None),
+        "p2_landing_diag": getattr(result.p2, "landing_diag", None),
     }
 
 
@@ -681,6 +688,17 @@ def main() -> int:
              "連鎖中 state ちらつき (早期終了→再発火振動) の根治修正。 "
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
+    parser.add_argument(
+        "--landing-color-fix",
+        action="store_true",
+        default=False,
+        dest="enable_landing_color_fix",
+        help="着地色修正 案1: TSUMO_FALL→STABLE 着地時の falling_pair を "
+             "prev_next_queue[-2] から _landing_pending (消費済みツモ色) に切り替える。 "
+             "slide_motion(R-7) 経由で 1 つ前のツモ色を指してしまう誤色問題の修正。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。 "
+             "フラグ OFF でも --dump-board-log-detailed に landing_diag フィールドが記録される。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -749,6 +767,8 @@ def main() -> int:
         enable_infer_empty_guard=args.enable_infer_empty_guard,
         # game-event ベース連鎖終了 (2026-06-01): --game-event-chain-exit で有効化
         enable_game_event_chain_exit=args.enable_game_event_chain_exit,
+        # 着地色修正 案1 (2026-06-01): --landing-color-fix で有効化
+        enable_landing_color_fix=args.enable_landing_color_fix,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -791,6 +811,12 @@ def main() -> int:
             "[viz] game_event_chain_exit=ON "
             "(game-event ベース連鎖終了: 次ツモ変化 / お邪魔降下で CHAIN 終了 / "
             f"安全弁 max={RecognitionPipeline.CHAIN_MAX_HOLD_SEC}s)"
+        )
+    if args.enable_landing_color_fix:
+        print(
+            "[viz] landing_color_fix=ON "
+            "(着地色修正 案1: falling_pair を _landing_pending 消費色に切り替え / "
+            "slide_motion 経由の 1 つ前ツモ色誤書き修正)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
