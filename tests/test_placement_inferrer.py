@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 
 from src.board import (
-    BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_RED,
-    COLOR_UNKNOWN, COLOR_YELLOW, Board,
+    BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_OJAMA,
+    COLOR_PURPLE, COLOR_RED, COLOR_UNKNOWN, COLOR_YELLOW, Board,
 )
 from src.placement_inferrer import (
     LARGE_ADD_GUARD_CELLS,
@@ -15,6 +15,8 @@ from src.placement_inferrer import (
     LandingPattern,
     _classify_next_pair_by_hsv,
     _is_hsv_classify_confident,
+    _VALID_PUYO_COLORS,
+    correct_landing_cells_by_observed_color,
     enumerate_color_assignments,
     enumerate_landing_patterns,
     infer_placement,
@@ -592,3 +594,263 @@ class TestInferPlacementHsvClassifyFallback:
             # frame_bgr=None → use_hsv_classification=False → fallback 不発動
         )
         assert result is not None
+
+
+class TestCorrectLandingCellsByObservedColor:
+    """correct_landing_cells_by_observed_color の単体テスト (真因 A 対処)."""
+
+    def _make_dummy_pattern(
+        self, cells: tuple[tuple[int, int], tuple[int, int]],
+    ) -> LandingPattern:
+        """テスト用 LandingPattern を生成する。"""
+        (r1, c1), (r2, c2) = cells
+        orientation = "vertical" if c1 == c2 else "horizontal"
+        return LandingPattern(cells=cells, orientation=orientation)
+
+    def test_cnn_equals_hsv_valid_color_overwrite(self):
+        """CNN == HSV かつ有効色 → inferred の着地セルを観測色で上書きする."""
+        import numpy as np
+        from src.board import COLOR_YELLOW
+        from src.placement_inferrer import correct_landing_cells_by_observed_color
+
+        # inferred_landing: 着地セルが falling_pair 由来の誤色 (青) になっている
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_BLUE)   # 本来は黄のはずだが infer_placement が青を書いた
+        inferred.set(12, 2, COLOR_RED)
+
+        # cnn_board: CNN は黄と認識している
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_YELLOW)
+        cnn_board.set(12, 2, COLOR_RED)
+
+        class _TwoColorClassifier:
+            """(11,2) と (12,2) で HSV が黄を返すスタブ。"""
+            def classify(self, patch: object) -> int:  # type: ignore[override]
+                return COLOR_YELLOW
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row: int, col: int) -> tuple:
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _TwoColorClassifier(), frame, _StubRegion(),
+        )
+        # セル (11,2): CNN=黄, HSV=黄 → 一致 → 黄に上書き (inferred の青が消える)
+        assert int(result.get(11, 2)) == COLOR_YELLOW
+        # セル (12,2): CNN=赤, HSV=黄 → 不一致 → inferred のままの赤
+        assert int(result.get(12, 2)) == COLOR_RED
+
+    def test_cnn_not_equal_hsv_no_overwrite(self):
+        """CNN != HSV → 上書きしない (inferred のまま保持)."""
+        import numpy as np
+        from src.placement_inferrer import correct_landing_cells_by_observed_color
+
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_BLUE)
+        inferred.set(12, 2, COLOR_RED)
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_YELLOW)
+        cnn_board.set(12, 2, COLOR_GREEN)
+
+        class _HsvReturnsRed:
+            """HSV は常に赤を返すスタブ。"""
+            def classify(self, patch: object) -> int:  # type: ignore[override]
+                return COLOR_RED
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row: int, col: int) -> tuple:
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _HsvReturnsRed(), frame, _StubRegion(),
+        )
+        # CNN != HSV → 上書きなし → inferred の色をそのまま返す
+        assert int(result.get(11, 2)) == COLOR_BLUE
+        assert int(result.get(12, 2)) == COLOR_RED
+
+    def test_cnn_invalid_color_no_overwrite(self):
+        """CNN が無効色 (お邪魔) → 上書きしない."""
+        import numpy as np
+        from src.board import COLOR_OJAMA
+        from src.placement_inferrer import correct_landing_cells_by_observed_color
+
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_GREEN)
+
+        # CNN がお邪魔 (= 有効 puyo 色でない) を返す
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_OJAMA)
+
+        class _HsvOjama:
+            """HSV もお邪魔を返すスタブ。"""
+            def classify(self, patch: object) -> int:  # type: ignore[override]
+                return COLOR_OJAMA
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row: int, col: int) -> tuple:
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _HsvOjama(), frame, _StubRegion(),
+        )
+        # CNN がお邪魔 (無効色) → _VALID_PUYO_COLORS 外 → 上書きしない
+        assert int(result.get(11, 2)) == COLOR_GREEN
+
+class TestCorrectLandingCellsByObservedColor:
+    """correct_landing_cells_by_observed_color の単体テスト (真因 A 対処)."""
+
+    def _make_stub_hsv_classifier(self, return_color: int):
+        """指定した色を常に返す HSV-only 分類器スタブ."""
+        class _StubClassifier:
+            def classify(self, patch):  # noqa: ANN001
+                return return_color
+        return _StubClassifier()
+
+    def _make_dummy_pattern(
+        self, cells: tuple[tuple[int, int], tuple[int, int]],
+    ) -> LandingPattern:
+        (r1, c1), (r2, c2) = cells
+        orientation = "vertical" if c1 == c2 else "horizontal"
+        return LandingPattern(cells=cells, orientation=orientation)
+
+    def _make_small_patch(self) -> "import numpy as np; np.ndarray":
+        """4x4 赤色 BGR パッチを返す。"""
+        import numpy as np
+        # OpenCV BGR 形式 (実際の色は classify で無視される)
+        return np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def test_cnn_equals_hsv_valid_color_overwrite(self):
+        """CNN == HSV かつ有効色 → inferred の着地セルを観測色で上書きする."""
+        import numpy as np
+
+        # inferred_landing: 着地セルが falling_pair 由来の誤色 (赤→青の誤書き)
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_BLUE)   # 本来は黄のはずだが infer_placement が青を書いた
+        inferred.set(12, 2, COLOR_RED)
+
+        # cnn_board: CNN は黄と認識している
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_YELLOW)
+        cnn_board.set(12, 2, COLOR_RED)
+
+        # HSV 分類器: セル (11,2) で黄を返す、(12,2) で赤を返す
+        class _TwoColorClassifier:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_YELLOW  # 両セルで黄返し (テスト簡略化)
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+
+        # ダミーフレームと region
+        import numpy as np
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _TwoColorClassifier(), frame, _StubRegion(),
+        )
+        # セル (11,2): CNN=黄, HSV=黄 → 一致 → 黄に上書き (inferred の青が消える)
+        assert int(result.get(11, 2)) == COLOR_YELLOW
+        # セル (12,2): CNN=赤, HSV=黄 → 不一致 → inferred のままの赤
+        assert int(result.get(12, 2)) == COLOR_RED
+
+    def test_cnn_not_equal_hsv_no_overwrite(self):
+        """CNN != HSV → 上書きしない (inferred のまま保持)."""
+        import numpy as np
+
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_BLUE)
+        inferred.set(12, 2, COLOR_RED)
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_YELLOW)  # CNN=黄
+        cnn_board.set(12, 2, COLOR_GREEN)   # CNN=緑
+
+        class _HsvReturnsRed:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_RED  # HSV は赤 (CNNの黄・緑と不一致)
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _HsvReturnsRed(), frame, _StubRegion(),
+        )
+        # CNN != HSV → 上書きなし → inferred の色をそのまま返す
+        assert int(result.get(11, 2)) == COLOR_BLUE
+        assert int(result.get(12, 2)) == COLOR_RED
+
+    def test_cnn_invalid_color_no_overwrite(self):
+        """CNN が無効色 (空/UNKNOWN/お邪魔) → 上書きしない."""
+        import numpy as np
+        from src.board import COLOR_OJAMA, COLOR_UNKNOWN
+
+        inferred = _empty_board()
+        inferred.set(11, 2, COLOR_GREEN)
+
+        # CNN がお邪魔 (= 有効 puyo 色でない) を返す
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_OJAMA)
+
+        class _HsvOjama:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_OJAMA  # HSV も同じお邪魔
+
+        pattern = self._make_dummy_pattern(((11, 2), (12, 2)))
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _HsvOjama(), frame, _StubRegion(),
+        )
+        # CNN がお邪魔 (無効色) → _VALID_PUYO_COLORS 外 → 上書きしない
+        assert int(result.get(11, 2)) == COLOR_GREEN
+
+    def test_inferred_unchanged_when_no_landing_cells(self):
+        """pattern の cells が空の場合は inferred をそのまま返す (no crash)."""
+        import numpy as np
+
+        inferred = _empty_board()
+        inferred.set(5, 3, COLOR_PURPLE)
+
+        cnn_board = _empty_board()
+        cnn_board.set(5, 3, COLOR_PURPLE)
+
+        # 空パターン (cells が inferred に存在しない位置)
+        pattern = self._make_dummy_pattern(((10, 0), (11, 0)))
+
+        class _HsvPurple:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_PURPLE
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        class _StubRegion:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                return (0, 0, 4, 4)
+
+        result = correct_landing_cells_by_observed_color(
+            inferred, pattern, cnn_board, _HsvPurple(), frame, _StubRegion(),
+        )
+        # パターン位置 (10,0), (11,0) のCNN色はEMPTY → 上書きしない
+        # 無関係な (5,3) は inferred のままの紫
+        assert int(result.get(5, 3)) == COLOR_PURPLE

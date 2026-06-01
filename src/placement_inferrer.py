@@ -731,6 +731,74 @@ def resolve_after_placement(
     return final, int(result.chain_count)
 
 
+# -----------------------------------------------------------------------
+# 真因 A 対処 (fix/v70-zeropatch-redyellow, 2026-06-01):
+# falling_pair のタイミングずれ補正。
+# TSUMO_FALL→STABLE 着地確定後に、着地 2 cell の CNN 観測色と
+# HSV-only 観測色が一致する場合はその色を採用し、
+# falling_pair 由来の誤色を上流で断つ。
+# -----------------------------------------------------------------------
+
+# 有効な puyo 色セット (空/UNKNOWN/お邪魔は信頼できないため除外)
+_VALID_PUYO_COLORS: frozenset[int] = frozenset([
+    COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE,
+])
+
+
+def correct_landing_cells_by_observed_color(
+    inferred: Board,
+    pattern: "LandingPattern",
+    cnn_board: Board,
+    hsv_classifier: "object",
+    frame_bgr: np.ndarray,
+    region: "object",
+) -> Board:
+    """着地 2 cell で CNN 観測色 == HSV-only 観測色 なら観測色を採用して返す.
+
+    真因 A 対処: falling_pair のタイミングずれで infer_placement が誤色を
+    書き込んでも、2 つの独立認識器が一致した着地色があればそちらを優先する。
+
+    条件:
+      - 着地 cell (r, c) の cnn_board 色が有効 puyo 色 (_VALID_PUYO_COLORS)
+      - HSV-only 分類 (hsv_classifier.classify(patch)) が同じ有効 puyo 色
+      - cnn_board 色 == HSV 色 (一致)
+    条件を満たさない cell は inferred の色をそのまま保持する (保守的)。
+
+    連鎖中エフェクト / お邪魔 / 背景 FP の干渉を避けるため、
+    有効 puyo 色以外は一切上書きしない設計。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (上書き元)。
+        pattern: 今回の着地パターン (= 着地 2 cell の座標)。
+        cnn_board: HybridClassifier (CNN+HSV 融合) が返す raw 観測盤面。
+        hsv_classifier: ColorClassifier インスタンス (HSV-only 分類器)。
+        frame_bgr: 着地後の BGR フレーム画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+
+    Returns:
+        補正後の確定盤面 (観測一致 cell のみ上書き、他は inferred のまま)。
+    """
+    result = inferred.copy()
+    for (r, c) in pattern.cells:
+        # CNN 観測色が有効 puyo 色でなければスキップ
+        cnn_color = int(cnn_board.get(r, c))
+        if cnn_color not in _VALID_PUYO_COLORS:
+            continue
+        # フレームからパッチを抽出
+        patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+        if patch is None or patch.size == 0:
+            continue
+        # HSV-only 分類
+        try:
+            hsv_color = int(hsv_classifier.classify(patch))
+        except Exception:
+            continue
+        # 有効色かつ CNN == HSV の場合のみ上書き
+        if hsv_color in _VALID_PUYO_COLORS and cnn_color == hsv_color:
+            result.set(r, c, hsv_color)
+    return result
+
+
 __all__ = [
     "LandingPattern",
     "enumerate_landing_patterns",
@@ -738,6 +806,7 @@ __all__ = [
     "enumerate_color_assignments",
     "infer_placement",
     "resolve_after_placement",
+    "correct_landing_cells_by_observed_color",
     # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback 定数
     "HSV_CLASSIFY_REJECT_RATIO",
     "HSV_CLASSIFY_MAX_DISTANCE",

@@ -86,6 +86,7 @@ from src.next_slide_detector import (
 )
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
+    correct_landing_cells_by_observed_color,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
 from src.state_detectors import (
@@ -157,6 +158,107 @@ class PipelineResult:
     is_match_active: bool
     p1: SideResult
     p2: SideResult
+
+
+# ============================
+# 真因 A 対処: 着地補正ヘルパー
+# ============================
+
+
+def _apply_landing_observed_color_correction(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+    reader: object,
+    frame_bgr: "np.ndarray",
+    region: object,
+) -> "Board":
+    """着地確定盤面の 2 cell を CNN==HSV 一致色で補正する.
+
+    真因 A 対処 (fix/v70-zeropatch-redyellow, 2026-06-01):
+    infer_placement は falling_pair に盲従するが、 falling_pair のタイミングずれで
+    誤色が選ばれる (v89 54/72 不一致)。 着地 2 cell で CNN と HSV-only が
+    一致する有効 puyo 色があれば、 2 つの独立認識器の合意を信頼して採用する。
+
+    動作:
+      1. inferred と prev_confirmed の差分 2 cell (= 着地セル) を抽出する。
+      2. 各セルで cnn_board の色と hsv_classifier の観測色が一致し
+         かつ有効 puyo 色 (空/UNKNOWN/お邪魔 以外) であれば inferred のその cell を上書き。
+      3. 一致しない cell は inferred の色をそのまま保持する (保守的)。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (上書き元)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (= 差分取得用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面 (HybridClassifier 出力)。
+        reader: ImageReader インスタンス。_classifier._hsv で ColorClassifier にアクセス。
+        frame_bgr: 着地後の BGR フレーム画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+
+    Returns:
+        補正後の確定盤面。
+    """
+    from src.board import (
+        BOARD_ROWS, BOARD_COLS, COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
+        COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE,
+    )
+    from src.placement_inferrer import (
+        _extract_cell_patch_from_frame, _VALID_PUYO_COLORS,
+    )
+
+    # HSV-only 分類器を取得 (HybridClassifier._hsv or ColorClassifier 直接)
+    classifier = getattr(reader, "_classifier", None)
+    hsv_clf = getattr(classifier, "_hsv", classifier)
+    if hsv_clf is None or not hasattr(hsv_clf, "classify"):
+        return inferred  # 取得できなければ補正スキップ
+
+    # 着地 2 cell を差分から抽出 (prev→inferred で新規に色が入ったセル)
+    landing_cells: list[tuple[int, int]] = []
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                landing_cells.append((r, c))
+
+    if not landing_cells:
+        return inferred
+
+    from src.placement_inferrer import correct_landing_cells_by_observed_color
+    from src.placement_inferrer import LandingPattern
+
+    # LandingPattern を差分 2 cell から再構築 (補正関数に渡すため)
+    if len(landing_cells) == 2:
+        cells_tuple = (
+            (landing_cells[0][0], landing_cells[0][1]),
+            (landing_cells[1][0], landing_cells[1][1]),
+        )
+        # orientation は補正関数では参照しないが型合わせで設定
+        (r1, c1), (r2, c2) = cells_tuple
+        orientation = "vertical" if c1 == c2 else "horizontal"
+        dummy_pattern = LandingPattern(cells=cells_tuple, orientation=orientation)
+        return correct_landing_cells_by_observed_color(
+            inferred, dummy_pattern, cnn_board, hsv_clf, frame_bgr, region,
+        )
+
+    # 着地 cell が 1 cell または 3+ cell の場合は個別に補正 (保守的)
+    result = inferred.copy()
+    for (r, c) in landing_cells:
+        cnn_color = int(cnn_board.get(r, c))
+        if cnn_color not in _VALID_PUYO_COLORS:
+            continue
+        patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+        if patch is None or patch.size == 0:
+            continue
+        try:
+            hsv_color = int(hsv_clf.classify(patch))
+        except Exception:
+            continue
+        if hsv_color in _VALID_PUYO_COLORS and cnn_color == hsv_color:
+            result.set(r, c, hsv_color)
+    return result
 
 
 # ============================
@@ -354,6 +456,11 @@ class RecognitionPipeline:
         # 黄(H26)→赤(H7) 誤分類 (H 差 19) の発火点対策。
         # デフォルト False = 従来の 2 択強制確定 (完全不変、 backwards compat)。
         enable_hsv_classify_fallback: bool = False,
+        # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
+        # True にすると TSUMO_FALL→STABLE 着地時に着地 2 cell の CNN 観測色と
+        # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_observed_color: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -616,6 +723,10 @@ class RecognitionPipeline:
         # True で _classify_next_pair_by_hsv の 2 択強制確定を回避。
         # 黄→赤誤分類 (~900 件) 発火点対策。default False = 従来挙動完全維持。
         self._enable_hsv_classify_fallback: bool = bool(enable_hsv_classify_fallback)
+        # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
+        # True で infer_placement 出力に post-correction を適用。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -790,6 +901,7 @@ class RecognitionPipeline:
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
+        enable_landing_observed_color: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -924,6 +1036,7 @@ class RecognitionPipeline:
             enable_landing_color_fix=enable_landing_color_fix,
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
         )
 
     # ------------------------------------------------------------------
@@ -2291,6 +2404,28 @@ class RecognitionPipeline:
                 enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
             )
             if inferred_landing is not None:
+                # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
+                # falling_pair タイミングずれで infer_placement が誤色を書いても
+                # 2 つの独立認識器 (CNN/HSV) が一致した色があれば優先採用する。
+                # フラグ OFF 時は完全にスキップし、挙動不変を保証する。
+                if (
+                    self._enable_landing_observed_color
+                    and frame_bgr is not None
+                    and falling_pair is not None
+                    and prev_confirmed is not None
+                ):
+                    # 直前の惑星パターンを特定するため、着地 2 cell の差分から
+                    # 着地 pattern を再現する (pattern は infer_placement 内で選択済み)。
+                    # 最小コストで pattern を得るには diff_cells から再構築するより、
+                    # prev_confirmed と inferred_landing の差分 2 cell を使う。
+                    inferred_landing = _apply_landing_observed_color_correction(
+                        inferred_landing,
+                        prev_confirmed,
+                        cnn_board,
+                        self._reader,
+                        frame_bgr,
+                        region_for_side,
+                    )
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
                 # next_pair (= 今消費された NEXT) が明示されていれば整合性チェック。
                 # alert のみ (= 棄却はしない。 現時点は fail-silent 検知用)。
