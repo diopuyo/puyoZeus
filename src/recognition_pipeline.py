@@ -308,6 +308,7 @@ class RecognitionPipeline:
         # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
         enable_constraint_fill: bool = True,
         enable_t2_highconf_yield: bool = False,
+        enable_t2_cnn_hsv_agree_yield: bool = False,
         enable_infer_empty_guard: bool = False,
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True にすると CHAIN 状態を timing hold だけでなく、
@@ -546,6 +547,13 @@ class RecognitionPipeline:
         # B1 禁忌 (= 色→空 変化を無差別保護) とは逆方向: prev_stable の古い色による
         # 上書きを「CNN が正色を支持している箇所でのみ」解除する (保護を弱める方向)。
         self._enable_t2_highconf_yield: bool = bool(enable_t2_highconf_yield)
+        # T2 CNN+HSV 合意 yield トグル (= True で CNN と HSV 両者が prev_stable と
+        # 異なる「同じ色」で一致するセルは T2 の prev_stable 上書きを解除)。
+        # 2026-06-01: yellow→red 97% の T2 フリーズ残存対策。
+        # enable_t2_highconf_yield (CNN=confirmed 一致時解除) の自然な拡張。
+        # デフォルト False = 従来挙動維持 (backwards compat)。
+        # 両フラグ独立 (効果分解のため); 両方 ON にすることも可能。
+        self._enable_t2_cnn_hsv_agree_yield: bool = bool(enable_t2_cnn_hsv_agree_yield)
         # 案 B1: infer_placement 空セル hallucination ガード。
         # True にすると、 pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補を
         # スキップし、 CNN が確信して空なセルへの NEXT 色書込を防ぐ。
@@ -724,6 +732,7 @@ class RecognitionPipeline:
         enable_ojama_tier1_warmup: bool = False,
         enable_constraint_fill: bool = True,
         enable_t2_highconf_yield: bool = False,
+        enable_t2_cnn_hsv_agree_yield: bool = False,
         enable_infer_empty_guard: bool = False,
         enable_game_event_chain_exit: bool = False,
     ) -> "RecognitionPipeline":
@@ -855,6 +864,7 @@ class RecognitionPipeline:
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
+            enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
         )
@@ -1141,6 +1151,15 @@ class RecognitionPipeline:
             skip_tier1_1p=_skip_t1_1p,
             skip_tier1_2p=_skip_t1_2p,
         )
+        # T2 CNN+HSV 合意 yield 用: HSV-only 盤面を取得。
+        # enable_t2_cnn_hsv_agree_yield=False の場合はスキップ (既存挙動影響ゼロ)。
+        # _reader が read_both_boards_hsv を持たない場合 (スタブ等) は None のまま。
+        hsv_1p_raw: "Board | None" = None
+        hsv_2p_raw: "Board | None" = None
+        if self._enable_t2_cnn_hsv_agree_yield and hasattr(
+            self._reader, "read_both_boards_hsv"
+        ):
+            hsv_1p_raw, hsv_2p_raw = self._reader.read_both_boards_hsv(frame)
 
         # 背景 FP 自動採取 (Phase C-5: robust 化):
         # 試合 active 開始から 5 frame 経過後、CNN 盤面が puyo 0 個 (= 真の空盤面)
@@ -1489,6 +1508,7 @@ class RecognitionPipeline:
             slide_motion=slide_1p,
             frame_bgr=frame,  # cycle 71l β2' = HSV 距離による NEXT 色順序確定
             score_d_for_self=score_d_1p,  # cycle 71n 案 ε
+            hsv_board=hsv_1p_raw,  # T2 CNN+HSV 合意 yield 用
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -1500,6 +1520,7 @@ class RecognitionPipeline:
             slide_motion=slide_2p,
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
+            hsv_board=hsv_2p_raw,  # T2 CNN+HSV 合意 yield 用
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -2017,6 +2038,7 @@ class RecognitionPipeline:
         slide_motion: bool = False,
         frame_bgr: np.ndarray | None = None,  # cycle 71l β2'
         score_d_for_self: int = 0,  # cycle 71n 案 ε
+        hsv_board: "Board | None" = None,  # T2 CNN+HSV 合意 yield 用 (2026-06-01)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # Phase I R-1: 自己整合性チェック (TSUMO_FALL 中のみ意味あり)。
@@ -2732,6 +2754,30 @@ class RecognitionPipeline:
                                     and pv not in (COLOR_EMPTY, COLOR_UNKNOWN)
                                 ):
                                     # CNN が cur_v を支持 かつ pv も色付き → T2 上書きをスキップ
+                                    continue
+                            # T2 CNN+HSV 合意 yield:
+                            # CNN と HSV の両者が prev_stable と「異なる同じ色」を主張する
+                            # セルは T2 の prev_stable 上書きを解除する。
+                            # 根拠: 2独立認識器が揃って新色を支持 = prev_stable を優先する
+                            # 根拠が薄い (yellow→red 97% T2フリーズ残存対策、2026-06-01)。
+                            # hsv_board が None = HSV 取得不可 → 安全側 (T2 保護維持)。
+                            if (
+                                self._enable_t2_cnn_hsv_agree_yield
+                                and hsv_board is not None
+                            ):
+                                cnn_v2 = int(cnn_board.get(r, c))
+                                hsv_v = int(hsv_board.get(r, c))
+                                if (
+                                    # CNN と HSV が同色で合意
+                                    cnn_v2 == hsv_v
+                                    # 合意色が有色 (空・不明でない)
+                                    and cnn_v2 not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                    # 合意色が prev_stable と異なる (= 別色フリーズ条件)
+                                    and cnn_v2 != pv
+                                    # pv も有色 (背景 FP による空→色 FP は T2 で戻す)
+                                    and pv not in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                ):
+                                    # CNN+HSV 両者一致で prev_stable と異色 → T2 解除
                                     continue
                             # 前 STABLE 値で上書き (= 認識誤り棄却)
                             ctx.confirmed_board.set(r, c, pv)
