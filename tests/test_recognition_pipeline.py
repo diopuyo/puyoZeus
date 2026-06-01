@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from src.board import COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_RED, COLOR_YELLOW, Board
+from src.board import COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN, COLOR_RED, Board
 from src.board_state_machine import BoardState
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.match_state import MatchState, MatchStateDetector
@@ -49,18 +49,9 @@ class _StubMatchDetector:
 class _StubImageReader:
     """指定した固定 board を返す ImageReader スタブ."""
 
-    def __init__(
-        self,
-        p1: Board,
-        p2: Board,
-        hsv_p1: Board | None = None,
-        hsv_p2: Board | None = None,
-    ) -> None:
+    def __init__(self, p1: Board, p2: Board) -> None:
         self._p1 = p1
         self._p2 = p2
-        # HSV-only board (T2 CNN+HSV 合意 yield テスト用)。None の場合は空 Board。
-        self._hsv_p1: Board = hsv_p1 if hsv_p1 is not None else Board()
-        self._hsv_p2: Board = hsv_p2 if hsv_p2 is not None else Board()
         # skip_tier1 呼び出し記録 (テスト検証用)
         self.last_skip_tier1_1p: bool = False
         self.last_skip_tier1_2p: bool = False
@@ -75,12 +66,6 @@ class _StubImageReader:
         self.last_skip_tier1_1p = skip_tier1_1p
         self.last_skip_tier1_2p = skip_tier1_2p
         return self._p1.copy(), self._p2.copy()
-
-    def read_both_boards_hsv(
-        self, frame: np.ndarray,
-    ) -> tuple[Board, Board]:
-        """T2 CNN+HSV 合意 yield テスト用: HSV-only board を返す。"""
-        return self._hsv_p1.copy(), self._hsv_p2.copy()
 
 
 def _empty_board() -> Board:
@@ -1153,189 +1138,4 @@ def test_game_event_chain_exit_flag_off_is_backward_compat() -> None:
     assert pipe._chain_event_max_until_2p == 0.0
     assert pipe._chain_start_next_1p is None
     assert pipe._chain_start_next_2p is None
-
-
-# ============================
-# T2 CNN+HSV 合意 yield (enable_t2_cnn_hsv_agree_yield) テスト
-# ============================
-
-
-def _make_pipe_t2_agree(
-    cnn_board_1p: Board,
-    hsv_board_1p: Board,
-    t2_cnn_hsv_agree_yield: bool = False,
-) -> RecognitionPipeline:
-    """T2 CNN+HSV 合意 yield テスト用 pipeline を構築する。
-
-    stable_frame_count=2 で即 STABLE に遷移させる。
-    enable_t2_cnn_hsv_agree_yield で T2 CNN+HSV 合意 yield トグルを制御する。
-    スタブの read_both_boards_hsv が hsv_board_1p を返す。
-    """
-    reader = _StubImageReader(
-        cnn_board_1p, _empty_board(),
-        hsv_p1=hsv_board_1p, hsv_p2=_empty_board(),
-    )
-    detector = _StubMatchDetector(in_match=True)
-    return RecognitionPipeline(
-        image_reader=reader,  # type: ignore[arg-type]
-        match_state_detector=detector,  # type: ignore[arg-type]
-        score_ocr=None,
-        chain_tracker_1p=None,
-        chain_tracker_2p=None,
-        stable_frame_count=2,
-        enable_t2_cnn_hsv_agree_yield=t2_cnn_hsv_agree_yield,
-    )
-
-
-def test_t2_cnn_hsv_agree_yield_default_is_false() -> None:
-    """enable_t2_cnn_hsv_agree_yield のデフォルト値が False (backwards compat)。"""
-    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
-    assert pipe._enable_t2_cnn_hsv_agree_yield is False
-
-
-def test_t2_cnn_hsv_agree_yield_on_releases_freeze() -> None:
-    """ON 時: CNN=HSV=yellow かつ prev_stable=red のセルは T2 上書きをスキップし yellow を維持。
-
-    シナリオ:
-      - CNN 出力 = 黄 (YELLOW)
-      - HSV 出力 = 黄 (YELLOW)
-      - confirmed_board = 黄 (prev_stable には不一致)
-      - prev_stable = 赤 (RED)
-      - enable_t2_cnn_hsv_agree_yield=True → T2 解除 → 黄を維持
-    """
-    row, col = 12, 0
-    cnn_yellow = Board()
-    cnn_yellow.set(row, col, COLOR_YELLOW)
-    hsv_yellow = Board()
-    hsv_yellow.set(row, col, COLOR_YELLOW)
-
-    pipe = _make_pipe_t2_agree(cnn_yellow, hsv_yellow, t2_cnn_hsv_agree_yield=True)
-
-    # pipeline を STABLE に持ち込む
-    pipe.update(0, 0.0, _dummy_frame())
-    pipe.update(1, 0.033, _dummy_frame())
-
-    # 手動 inject: prev_stable=赤, confirmed=黄
-    _inject_prev_stable_and_confirmed(
-        pipe, prev_color=COLOR_RED, confirmed_color=COLOR_YELLOW, row=row, col=col,
-    )
-
-    # CNN=yellow, HSV=yellow で 1 フレーム処理
-    res = pipe.update(62, 62 / 30.0, _dummy_frame())
-
-    assert res is not None
-    confirmed = res.p1.confirmed_board
-    assert confirmed is not None, "confirmed_board が None"
-    cell_val = int(confirmed.get(row, col))
-    assert cell_val == COLOR_YELLOW, (
-        f"CNN+HSV 合意 ON 時: T2 が赤で上書きすべきでない "
-        f"(期待=黄={COLOR_YELLOW}, 実際={cell_val})"
-    )
-
-
-def test_t2_cnn_hsv_agree_yield_off_applies_overwrite() -> None:
-    """OFF 時 (default): T2 は従来通り prev_stable(赤) で上書きする。
-
-    シナリオ:
-      - CNN 出力 = 黄, HSV 出力 = 黄
-      - confirmed_board = 黄, prev_stable = 赤
-      - enable_t2_cnn_hsv_agree_yield=False (デフォルト) → T2 適用 → 赤で上書き
-    """
-    row, col = 12, 0
-    cnn_yellow = Board()
-    cnn_yellow.set(row, col, COLOR_YELLOW)
-    hsv_yellow = Board()
-    hsv_yellow.set(row, col, COLOR_YELLOW)
-
-    pipe = _make_pipe_t2_agree(cnn_yellow, hsv_yellow, t2_cnn_hsv_agree_yield=False)
-
-    pipe.update(0, 0.0, _dummy_frame())
-    pipe.update(1, 0.033, _dummy_frame())
-
-    _inject_prev_stable_and_confirmed(
-        pipe, prev_color=COLOR_RED, confirmed_color=COLOR_YELLOW, row=row, col=col,
-    )
-
-    res = pipe.update(62, 62 / 30.0, _dummy_frame())
-
-    assert res is not None
-    confirmed = res.p1.confirmed_board
-    assert confirmed is not None, "confirmed_board が None"
-    cell_val = int(confirmed.get(row, col))
-    assert cell_val == COLOR_RED, (
-        f"CNN+HSV 合意 OFF 時: T2 が赤で上書きすべき "
-        f"(期待=赤={COLOR_RED}, 実際={cell_val})"
-    )
-
-
-def test_t2_cnn_hsv_agree_yield_cnn_hsv_disagree_no_release() -> None:
-    """CNN と HSV が不一致のセルは ON でも T2 上書きが適用される (片方だけでは解除しない)。
-
-    シナリオ:
-      - CNN 出力 = 黄, HSV 出力 = 緑 (不一致!)
-      - confirmed_board = 黄, prev_stable = 赤
-      - enable_t2_cnn_hsv_agree_yield=True でも CNN≠HSV → T2 適用 → 赤で上書き
-    """
-    row, col = 12, 0
-    cnn_yellow = Board()
-    cnn_yellow.set(row, col, COLOR_YELLOW)
-    # HSV は緑 (CNN と不一致)
-    hsv_green = Board()
-    hsv_green.set(row, col, COLOR_GREEN)
-
-    pipe = _make_pipe_t2_agree(cnn_yellow, hsv_green, t2_cnn_hsv_agree_yield=True)
-
-    pipe.update(0, 0.0, _dummy_frame())
-    pipe.update(1, 0.033, _dummy_frame())
-
-    _inject_prev_stable_and_confirmed(
-        pipe, prev_color=COLOR_RED, confirmed_color=COLOR_YELLOW, row=row, col=col,
-    )
-
-    res = pipe.update(62, 62 / 30.0, _dummy_frame())
-
-    assert res is not None
-    confirmed = res.p1.confirmed_board
-    assert confirmed is not None, "confirmed_board が None"
-    cell_val = int(confirmed.get(row, col))
-    assert cell_val == COLOR_RED, (
-        f"CNN≠HSV 時: T2 が赤で上書きすべき "
-        f"(期待=赤={COLOR_RED}, 実際={cell_val})"
-    )
-
-
-def test_t2_cnn_hsv_agree_yield_same_as_prev_no_change() -> None:
-    """CNN=HSV=prev_stable と同色の場合は T2 条件 (pv != cur_v) 不成立でスキップ。
-
-    シナリオ:
-      - CNN = 赤, HSV = 赤, prev_stable = 赤, confirmed = 赤
-      - both_colored かつ pv == cur_v → T2 条件不成立 → 上書きもスキップも発生しない
-    """
-    row, col = 12, 0
-    cnn_red = Board()
-    cnn_red.set(row, col, COLOR_RED)
-    hsv_red = Board()
-    hsv_red.set(row, col, COLOR_RED)
-
-    pipe = _make_pipe_t2_agree(cnn_red, hsv_red, t2_cnn_hsv_agree_yield=True)
-
-    pipe.update(0, 0.0, _dummy_frame())
-    pipe.update(1, 0.033, _dummy_frame())
-
-    # prev_stable=赤, confirmed=赤 (同色 → T2 条件不成立)
-    _inject_prev_stable_and_confirmed(
-        pipe, prev_color=COLOR_RED, confirmed_color=COLOR_RED, row=row, col=col,
-    )
-
-    res = pipe.update(62, 62 / 30.0, _dummy_frame())
-
-    assert res is not None
-    confirmed = res.p1.confirmed_board
-    assert confirmed is not None, "confirmed_board が None"
-    cell_val = int(confirmed.get(row, col))
-    # T2 条件不成立 (pv == cur_v) のため上書きなし → 赤のまま
-    assert cell_val == COLOR_RED, (
-        f"CNN=HSV=prev 同色時: T2 条件不成立で赤維持すべき "
-        f"(期待=赤={COLOR_RED}, 実際={cell_val})"
-    )
 

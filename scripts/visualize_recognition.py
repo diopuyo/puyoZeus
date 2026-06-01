@@ -659,17 +659,6 @@ def main() -> int:
              "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
     )
     parser.add_argument(
-        "--t2-cnn-hsv-agree-yield",
-        action="store_true",
-        default=False,
-        dest="enable_t2_cnn_hsv_agree_yield",
-        help="T2 CNN+HSV 合意 yield を有効化。 "
-             "CNN と HSV の両者が prev_stable と異なる「同じ色」で一致するセルは "
-             "T2 の prev_stable 上書きを解除する。 "
-             "yellow→red 97%% の T2 フリーズ残存対策 (2026-06-01)。 "
-             "デフォルト OFF = 従来挙動不変。",
-    )
-    parser.add_argument(
         "--infer-empty-guard",
         action="store_true",
         default=False,
@@ -756,8 +745,6 @@ def main() -> int:
         enable_constraint_fill=not args.no_constraint_fill,
         # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
         enable_t2_highconf_yield=args.enable_t2_highconf_yield,
-        # T2 CNN+HSV 合意 yield (2026-06-01): --t2-cnn-hsv-agree-yield で有効化
-        enable_t2_cnn_hsv_agree_yield=args.enable_t2_cnn_hsv_agree_yield,
         # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
         enable_infer_empty_guard=args.enable_infer_empty_guard,
         # game-event ベース連鎖終了 (2026-06-01): --game-event-chain-exit で有効化
@@ -793,12 +780,6 @@ def main() -> int:
             "[viz] t2_highconf_yield=ON "
             "(T2 高確信 yield: CNN 支持セルは prev_stable 上書きスキップ / "
             "infer_placement 誤推論 + T2 自己強化フリーズ修正)"
-        )
-    if args.enable_t2_cnn_hsv_agree_yield:
-        print(
-            "[viz] t2_cnn_hsv_agree_yield=ON "
-            "(T2 CNN+HSV 合意 yield: CNN+HSV 両者一致セルは prev_stable 上書きスキップ / "
-            "yellow→red 97%% T2 フリーズ残存対策)"
         )
     if args.enable_infer_empty_guard:
         print(
