@@ -290,7 +290,6 @@ def _make_pipeline_cnn(
     video_id: str,
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> RecognitionPipeline:
@@ -305,10 +304,6 @@ def _make_pipeline_cnn(
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
             backwards compat: デフォルト False = 従来挙動。
-        enable_t2_cnn_hsv_agree_yield: True にすると CNN と HSV の両者が
-            prev_stable と異なる同じ色で一致するセルの T2 上書きを解除する。
-            yellow→red 97%% の T2 フリーズ残存対策 (2026-06-01)。
-            backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement の空セル
             hallucination ガードを有効化する。
             backwards compat: デフォルト False = 従来挙動。
@@ -320,7 +315,6 @@ def _make_pipeline_cnn(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
-        enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
@@ -471,7 +465,6 @@ def _process_video(
     disagreements: list[dict],
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> VideoStats:
@@ -483,9 +476,6 @@ def _process_video(
             backwards compat: デフォルト True = 従来挙動。
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする (infer_placement 誤推論 + T2 フリーズ修正)。
-            backwards compat: デフォルト False = 従来挙動。
-        enable_t2_cnn_hsv_agree_yield: True にすると CNN と HSV の両者が
-            prev_stable と異なる同じ色で一致するセルの T2 上書きを解除する。
             backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。
@@ -505,7 +495,6 @@ def _process_video(
         video_id,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
-        enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
@@ -534,7 +523,6 @@ def _process_video_worker(
     sample_interval_sec: float,
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> VideoStats:
@@ -561,7 +549,6 @@ def _process_video_worker(
         disagreements=local_disagrees,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
-        enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
@@ -1392,19 +1379,6 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--t2-cnn-hsv-agree-yield",
-        action="store_true",
-        default=False,
-        dest="enable_t2_cnn_hsv_agree_yield",
-        help=(
-            "T2 CNN+HSV 合意 yield を有効化する。 "
-            "CNN と HSV の両者が prev_stable と異なる「同じ色」で一致するセルは "
-            "T2 の prev_stable 上書きを解除する。 "
-            "yellow→red 97%% の T2 フリーズ残存対策。 "
-            "省略時は従来挙動 (T2 yield 無効)。"
-        ),
-    )
-    p.add_argument(
         "--infer-empty-guard",
         action="store_true",
         default=False,
@@ -1462,7 +1436,6 @@ def _collect_results(
     enable_constraint_fill: bool = True,
     workers: int = 1,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
@@ -1476,9 +1449,6 @@ def _collect_results(
             2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
-        enable_t2_cnn_hsv_agree_yield: True にすると CNN と HSV の両者が
-            prev_stable と異なる同じ色で一致するセルの T2 上書きを解除する。
-            backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
         enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
@@ -1503,7 +1473,6 @@ def _collect_results(
             video_tasks, holdout_ids, max_frames,
             sample_interval_sec, disagreements, enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
-            enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
         )
@@ -1512,7 +1481,6 @@ def _collect_results(
         sample_interval_sec, disagreements, enable_constraint_fill,
         effective_workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
-        enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
@@ -1526,7 +1494,6 @@ def _collect_serial(
     disagreements: list[dict],
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
@@ -1542,7 +1509,6 @@ def _collect_serial(
             disagreements=disagreements,
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
-            enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
             enable_game_event_chain_exit=enable_game_event_chain_exit,
         )
@@ -1559,7 +1525,6 @@ def _collect_parallel(
     enable_constraint_fill: bool,
     workers: int,
     enable_t2_highconf_yield: bool = False,
-    enable_t2_cnn_hsv_agree_yield: bool = False,
     enable_infer_empty_guard: bool = False,
     enable_game_event_chain_exit: bool = False,
 ) -> list[VideoStats]:
@@ -1589,7 +1554,6 @@ def _collect_parallel(
                 sample_interval_sec,
                 enable_constraint_fill,
                 enable_t2_highconf_yield,
-                enable_t2_cnn_hsv_agree_yield,
                 enable_infer_empty_guard,
                 enable_game_event_chain_exit,
             )
@@ -1715,10 +1679,6 @@ def main() -> int:
     enable_t2_highconf_yield: bool = bool(
         getattr(args, "enable_t2_highconf_yield", False)
     )
-    # t2_cnn_hsv_agree_yield フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_t2_cnn_hsv_agree_yield: bool = bool(
-        getattr(args, "enable_t2_cnn_hsv_agree_yield", False)
-    )
     # infer_empty_guard フラグの確定 (backwards compat: デフォルト False = 従来挙動)
     enable_infer_empty_guard: bool = bool(
         getattr(args, "enable_infer_empty_guard", False)
@@ -1734,11 +1694,6 @@ def main() -> int:
         print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
     if enable_t2_highconf_yield:
         print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
-    if enable_t2_cnn_hsv_agree_yield:
-        print(
-            "[measure] t2_cnn_hsv_agree_yield ENABLED "
-            "(--t2-cnn-hsv-agree-yield 指定: CNN+HSV 合意セル T2 フリーズ解除)"
-        )
     if enable_infer_empty_guard:
         print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
     if enable_game_event_chain_exit:
@@ -1753,7 +1708,6 @@ def main() -> int:
         enable_constraint_fill=enable_constraint_fill,
         workers=workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
-        enable_t2_cnn_hsv_agree_yield=enable_t2_cnn_hsv_agree_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
         enable_game_event_chain_exit=enable_game_event_chain_exit,
     )
