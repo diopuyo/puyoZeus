@@ -139,8 +139,11 @@ class SideResult:
     # TSUMO_FALL→STABLE 着地フレームのみ非 None。非着地フレームは None。
     # dict キー:
     #   falling_pair_old: prev_next_queue[-2] 由来の (color1, color2) (従来ロジック)
-    #   falling_pair_new: _landing_pending[1] 由来の (color1, color2) (修正ロジック)
-    #   source: "landing_pending" | "next_queue_2" | "next_queue_1" | "none"
+    #   falling_pair_new: _last_consumed_color 由来の (color1, color2) (修正ロジック)
+    #     ※ 案1初版は _landing_pending[1] を使用していたが、_landing_pending は
+    #        NEXT変化フレームのgrace処理でクリアされるため着地フレームでは常にNone。
+    #        修正版では _last_consumed_color (grace独立保持) を使用する。
+    #   source: "last_consumed_color" | "next_queue_2" | "next_queue_1" | "none"
     # backwards compat のため default None。フラグ ON/OFF 問わず常に記録する。
     landing_diag: dict | None = None
 
@@ -436,6 +439,14 @@ class RecognitionPipeline:
         # landing_vote を起動 (= state machine 詰まりを救済)。
         self._landing_pending_1p: tuple[int, tuple[int, int]] | None = None
         self._landing_pending_2p: tuple[int, tuple[int, int]] | None = None
+        # 着地色修正 案1 修正版 (2026-06-01):
+        # _landing_pending はNEXT変化フレームのgrace処理でクリアされるため
+        # 実際の着地フレーム(TSUMO_FALL→STABLE)まで持続しない。
+        # _last_consumed_color_Xp = 最後にNEXTで消費されたツモ色を保持し
+        # TSUMO_FALL→STABLE 着地時の falling_pair 取得に使用する。
+        # セット: NEXT変化検知時 / クリア: TSUMO_FALL→STABLE着地infer完了後。
+        self._last_consumed_color_1p: tuple[int, int] | None = None
+        self._last_consumed_color_2p: tuple[int, int] | None = None
         # cycle 31 (2026-05-18, B 軸): baseline 整合性 check + 自己修復。
         # STABLE 中に baseline と CNN 出力の diff が連続異常なら baseline 壊れ
         # 判定 → state reset (= 試合 active 再起動 + bg_fp 再採取)。
@@ -1161,6 +1172,9 @@ class RecognitionPipeline:
             # cycle 29: landing_pending も試合切替でリセット
             self._landing_pending_1p = None
             self._landing_pending_2p = None
+            # 着地色修正 案1 修正版 (2026-06-01): last_consumed も試合切替でリセット
+            self._last_consumed_color_1p = None
+            self._last_consumed_color_2p = None
             # cycle 71v-B: ever_seen も試合切り替えでリセット
             self._ever_seen_colors_1p.clear()
             self._ever_seen_colors_2p.clear()
@@ -1470,6 +1484,10 @@ class RecognitionPipeline:
                         # cycle 29 (2026-05-18): NEXT 変化 = 着地確定 signal
                         # _step_side で grace + landing_vote を起動
                         self._landing_pending_1p = (frame_idx, consumed)
+                        # 着地色修正 案1 修正版 (2026-06-01):
+                        # _last_consumed_color はgraceクリアと独立して保持し
+                        # 次の TSUMO_FALL→STABLE 着地フレームで falling_pair に使用する
+                        self._last_consumed_color_1p = consumed
                 self._last_seen_next_1p = (top_v, bot_v)
         if is_active and next_pair_2p is not None:
             top_v, bot_v = int(next_pair_2p[0]), int(next_pair_2p[1])
@@ -1482,6 +1500,8 @@ class RecognitionPipeline:
                         self._pending_tsumo_2p.append(consumed)
                         # cycle 29: NEXT 変化 = 着地確定 signal
                         self._landing_pending_2p = (frame_idx, consumed)
+                        # 着地色修正 案1 修正版 (2026-06-01): 同上
+                        self._last_consumed_color_2p = consumed
                 self._last_seen_next_2p = (top_v, bot_v)
         # game-event ベース連鎖終了チェック (C-1/C-2 plan, 2026-06-01)。
         # enable_game_event_chain_exit=True の場合のみ実行。
@@ -2192,8 +2212,14 @@ class RecognitionPipeline:
         ):
             # 落下中ツモ色 = TSUMO 開始時の next (= 直前の next、現 next の 1 つ前)
             # 診断: 従来ロジック (prev_next_queue[-2]) と
-            #        修正ロジック (_landing_pending 消費色) の両者を計算し比較する。
+            #        修正ロジック (_last_consumed_color) の両者を計算し比較する。
             # enable_landing_color_fix=True の場合は修正ロジックを優先する。
+            #
+            # 【案1 修正版 (2026-06-01) の根拠】
+            # _landing_pending は NEXT変化フレームの grace処理 (landing_pending[0] == frame_idx)
+            # でクリアされるため、実際の着地フレーム (TSUMO_FALL→STABLE) では常にNone。
+            # _last_consumed_color はグレース処理から独立して保持し、
+            # 着地フレームでも正しく参照できる変数として新設した。
             falling_pair: tuple[int, int] | None = None
             falling_pair_old: tuple[int, int] | None = None
             falling_pair_new: tuple[int, int] | None = None
@@ -2203,17 +2229,16 @@ class RecognitionPipeline:
                 falling_pair_old = prev_next_queue[-2]
             elif prev_next_queue:
                 falling_pair_old = prev_next_queue[-1]
-            # 修正ロジック: _landing_pending から消費済みツモ色を取得
-            _lp = (
-                self._landing_pending_1p if side == "1P"
-                else self._landing_pending_2p
+            # 修正ロジック: _last_consumed_color から消費済みツモ色を取得
+            # (_landing_pending と異なりgraceクリアされないため着地フレームで有効)
+            falling_pair_new = (
+                self._last_consumed_color_1p if side == "1P"
+                else self._last_consumed_color_2p
             )
-            if _lp is not None:
-                falling_pair_new = _lp[1]
             # フラグに応じて falling_pair を決定
             if self._enable_landing_color_fix and falling_pair_new is not None:
                 falling_pair = falling_pair_new
-                _diag_source = "landing_pending"
+                _diag_source = "last_consumed_color"
             elif falling_pair_old is not None:
                 falling_pair = falling_pair_old
                 _diag_source = (
@@ -2362,6 +2387,14 @@ class RecognitionPipeline:
                 # 移動検知ベース (= _step_side 末尾の landing_pending 経路) に
                 # 統一。 ここでは final_board の確定だけ行う (= ctx.confirmed_board
                 # は既に上書き済)。 NEXT 経路は次の frame で発火する。
+
+            # 着地色修正 案1 修正版 (2026-06-01):
+            # infer_placement 完了後 (success/failどちらでも) _last_consumed_color をクリア。
+            # 1ツモ分のみ使用し次ツモと混同しないようにする。
+            if side == "1P":
+                self._last_consumed_color_1p = None
+            else:
+                self._last_consumed_color_2p = None
 
         # 2026-05-11 サイクル65: NEXT 履歴ベース placement 検証 (補強)
         # 「NEXT のぷよは必ずフィールドに置かれる」 前提を継続的に活用する.
