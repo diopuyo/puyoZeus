@@ -88,6 +88,37 @@ BG_LEFT_UPPER_COL_MAX: int = 1  # 列 0-1 (= 最左 2 列)
 BG_EXTREME_THRESHOLD_PRE_CAPTURE: float = 0.0
 
 # ============================
+# 赤色相折り返し補正 定数 (fix/v70-zeropatch-redyellow)
+# ============================
+# OpenCV HSV で赤は H 軸両端に折り返す (0-4 と 166-179 が同じ赤)。
+# H がこの値以上のピクセルを「負方向」に折り返して median を計算することで
+# 2 峰 (0 付近と 180 付近) を 1 峰に collapse し median を安定させる。
+RED_HUE_WRAP_THRESHOLD: int = 140
+# 折り返し後の H median がこの値以下なら「赤近傍」とみなして補正を適用する。
+# 折り返し後の 0 付近域 (例: -14 〜 +13) が対象。正値に変換した後の最大値。
+RED_HUE_WRAP_CORRECTED_MAX: int = 13
+
+# ============================
+# 光沢ハイライト除外 彩度計算 定数 (案D: specular highlight 対処)
+# ============================
+# ぷよ表面の白い光沢 (鏡面反射) 画素はV高・S低で、彩度 median を押し下げて
+# 色/空判定閾値 S_min 未達を引き起こす (真因: 白ハイライト球が約30%混入)。
+# これらを彩度統計から除外し、ぷよ本体画素の彩度で判定することで誤EMPTY化を防ぐ。
+#
+# 実測根拠 (memory: project_specular_highlight_empty_misread.md):
+#   赤ぷよ: 本体画素 S=160〜220、ハイライト画素 V>=220 かつ S<=60 が約30%混入
+#   → 全画素 median S=94/102 (S_min=160 未達) → EMPTY 誤判定
+#   ハイライト除外後 median S>160 → RED 正判定
+#
+# SPECULAR_V_MIN: ハイライト画素の輝度下限 (これ以上が「明るすぎる」画素)
+SPECULAR_V_MIN: int = 210
+# SPECULAR_S_MAX: ハイライト画素の彩度上限 (これ以下が「白っぽい」画素)
+SPECULAR_S_MAX: int = 60
+# SPECULAR_FALLBACK_MIN_RATIO: 除外後に残る有効画素の最小比率
+# この比率未満なら全面ハイライト等の異常とみなしてfallback (全画素統計を使用)
+SPECULAR_FALLBACK_MIN_RATIO: float = 0.20
+
+# ============================
 # データクラス
 # ============================
 
@@ -229,6 +260,8 @@ class ColorClassifier:
     def __init__(
         self, color_ranges: dict[int, list[HsvRange]] | None = None,
         vote_mode: bool = False,
+        enable_red_hue_wrap_fix: bool = True,
+        enable_specular_robust_saturation: bool = False,
     ) -> None:
         """
         Args:
@@ -237,6 +270,17 @@ class ColorClassifier:
             vote_mode: True なら per-pixel 投票方式で分類 (サイクル71).
                        False (default) は HSV 中央値 + cycle 69-B サブ region vote
                        (= 後方互換). 投票方式は混合色 cell や半分埋まり cell に強い.
+            enable_red_hue_wrap_fix: True (default) なら赤色相折り返し補正を有効化
+                (fix/v70-zeropatch-redyellow、user viz 採用済)。
+                赤の H 画素が 0-4 と 166-179 に分布する 2 峰構造で median が
+                赤/黄境界 (H=13/14) に乗りちらつく問題を修正する。
+                False = 従来の単純 median (後方互換が必要な場合のみ指定)。
+            enable_specular_robust_saturation: True なら光沢ハイライト除外彩度計算を有効化
+                (案D: fix/v70-zeropatch-redyellow)。
+                白ハイライト画素 (V>=SPECULAR_V_MIN かつ S<=SPECULAR_S_MAX) を
+                彩度 median 計算から除外することで、ぷよ表面の光沢球混入による
+                EMPTY 誤判定を防ぐ。
+                False (default) = 従来の全画素 median (完全不変、後方互換)。
         """
         self._ranges: dict[int, list[HsvRange]] = (
             color_ranges if color_ranges is not None else DEFAULT_COLOR_RANGES
@@ -247,6 +291,93 @@ class ColorClassifier:
         self._s_min_scale: float = 1.0
         # 2026-05-11 サイクル71: per-pixel 投票分類モード.
         self._vote_mode: bool = bool(vote_mode)
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正フラグ.
+        self._enable_red_hue_wrap_fix: bool = bool(enable_red_hue_wrap_fix)
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算フラグ.
+        # default False = 従来の全画素 median (完全後方互換).
+        self._enable_specular_robust_saturation: bool = bool(
+            enable_specular_robust_saturation
+        )
+
+    def _compute_stable_h_median(self, h_channel: np.ndarray) -> int:
+        """赤色相折り返しを考慮した安定 H median を計算する。
+
+        fix/v70-zeropatch-redyellow: enable_red_hue_wrap_fix=True の場合のみ補正を適用。
+        OFF 時は従来の単純 median (int(np.median(h_channel))) と完全同一。
+
+        補正アルゴリズム:
+            1. H >= RED_HUE_WRAP_THRESHOLD のピクセルを (h - 180) に変換
+               (例: H=170 → -10)。これで 0-4 と 166-179 の 2 峰が
+               -14 〜 +13 の 1 峰に collapse する。
+            2. 変換後の median を計算。
+            3. median が RED_HUE_WRAP_CORRECTED_MAX (=13) 以下、かつ
+               元の h_channel に HIGH 値 (>=RED_HUE_WRAP_THRESHOLD) が
+               十分存在する 2 峰ケースでのみ補正を採用する。
+               2 峰でない場合は従来 median をそのまま返す。
+
+        Args:
+            h_channel: H チャンネルの 2D または 1D numpy 配列 (uint8, 0–180)。
+
+        Returns:
+            安定化後の H median 値 (int, 0–180)。
+        """
+        h_flat = h_channel.ravel().astype(np.int16)
+        if not self._enable_red_hue_wrap_fix:
+            return int(np.median(h_flat))
+        # 2 峰ケース判定: LOW 側 (H < 30) と HIGH 側 (H >= 閾値) の両方が存在するか。
+        # 紫 (H=130-165) や高 H 単峰の場合は両条件を満たさないため補正対象外。
+        # RED_HUE_WRAP_THRESHOLD (=140) 未満の範囲が赤の低端 (0-30) と紫 (70-165) を分ける。
+        # 赤 2 峰 = LOW 比率 >= 15% かつ HIGH 比率 >= 15% の共存ケース。
+        RED_HUE_LOW_MAX: int = 30  # 赤低端の上限 H 値
+        n_total = max(1, len(h_flat))
+        low_ratio = float(np.sum(h_flat <= RED_HUE_LOW_MAX)) / n_total
+        high_ratio = float(np.sum(h_flat >= RED_HUE_WRAP_THRESHOLD)) / n_total
+        if low_ratio >= 0.15 and high_ratio >= 0.15:
+            # 赤 2 峰確定: 折り返し補正を適用
+            h_wrapped = np.where(
+                h_flat >= RED_HUE_WRAP_THRESHOLD,
+                h_flat - 180,
+                h_flat,
+            )
+            med_wrapped = float(np.median(h_wrapped))
+            if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
+                # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
+                return int(max(0, med_wrapped))
+        # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
+        return int(np.median(h_flat))
+
+    def _compute_specular_robust_s(self, s_channel: np.ndarray, v_channel: np.ndarray) -> int:
+        """光沢ハイライト画素を除外した彩度 median を計算する (案D)。
+
+        enable_specular_robust_saturation=False の場合は従来の全画素 median と完全同一。
+
+        アルゴリズム:
+            1. ハイライト画素マスク = V >= SPECULAR_V_MIN かつ S <= SPECULAR_S_MAX
+               (白い光沢球: 明るく・彩度が低い画素群)
+            2. 有効画素 (ハイライトでない画素) の比率が SPECULAR_FALLBACK_MIN_RATIO 以上
+               なら有効画素のみの median を返す (ぷよ本体色)。
+            3. 有効画素が極少 (全面ハイライト等の異常) ならば全画素 median に fallback。
+
+        Args:
+            s_channel: S チャンネルの 2D numpy 配列 (uint8, 0–255)。
+            v_channel: V チャンネルの 2D numpy 配列 (uint8, 0–255)。
+
+        Returns:
+            彩度 median 値 (int, 0–255)。
+        """
+        s_flat = s_channel.ravel().astype(np.int32)
+        if not self._enable_specular_robust_saturation:
+            # OFF 時: 従来の全画素 median と完全同一
+            return int(np.median(s_flat))
+        v_flat = v_channel.ravel().astype(np.int32)
+        n_total = max(1, len(s_flat))
+        # ハイライト画素マスク: 明るく(V高)かつ白っぽい(S低)画素
+        specular_mask = (v_flat >= SPECULAR_V_MIN) & (s_flat <= SPECULAR_S_MAX)
+        valid_s = s_flat[~specular_mask]
+        # 有効画素が最小比率を下回る場合は fallback (全面ハイライト等の異常)
+        if len(valid_s) < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
+            return int(np.median(s_flat))
+        return int(np.median(valid_s))
 
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
@@ -268,8 +399,10 @@ class ColorClassifier:
             return self._classify_by_vote(bgr_patch)
 
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
-        h = int(np.median(hsv_patch[:, :, 0]))
-        s = int(np.median(hsv_patch[:, :, 1]))
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
         v = int(np.median(hsv_patch[:, :, 2]))
 
         if v < EMPTY_V_THRESHOLD:
@@ -338,8 +471,10 @@ class ColorClassifier:
         if bgr_patch.size == 0:
             return COLOR_EMPTY
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
-        h = int(np.median(hsv_patch[:, :, 0]))
-        s = int(np.median(hsv_patch[:, :, 1]))
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
         v = int(np.median(hsv_patch[:, :, 2]))
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY
@@ -1257,6 +1392,76 @@ class ImageReader:
             hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full, skip_tier1=skip_tier1_1p)
         board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
+        return board_1p, board_2p
+
+    def _get_hsv_classifier(self) -> "ColorClassifier | None":
+        """内部の HSV-only 分類器を取得する。
+
+        HybridClassifier を使用している場合は _hsv (= ColorClassifier) を返す。
+        ColorClassifier 直接の場合はそのまま返す。
+        どちらでもなければ None を返す (= 復旧ゲートは発火しない)。
+        """
+        clf = self._classifier
+        # HybridClassifier は _hsv 属性に ColorClassifier を保持する
+        if hasattr(clf, "_hsv"):
+            return clf._hsv  # type: ignore[return-value]
+        if isinstance(clf, ColorClassifier):
+            return clf
+        return None
+
+    def read_board_hsv_only(
+        self,
+        frame: np.ndarray,
+        region: "BoardRegion",
+    ) -> "Board":
+        """HSV-only 分類器のみで盤面を読み取る (設計C 事後復旧ゲート用)。
+
+        CNN を使わず HSV ColorClassifier だけで判定する簡易版。
+        bg_fp / tier1 / telop マスクは適用しない。
+        目的: CNN と独立した2番目の認識器として HSV 盤面を提供し、
+        CNN==HSV 持続合意チェックに使う。
+
+        Returns:
+            Board: HSV-only 判定盤面。HSV 分類器が取得できない場合は空 Board。
+        """
+        hsv_clf = self._get_hsv_classifier()
+        if hsv_clf is None:
+            return Board()
+        h, w = frame.shape[:2]
+        if (h, w) != (1080, 1920):
+            interp = cv2.INTER_LANCZOS4 if h < 1080 else cv2.INTER_AREA
+            frame = cv2.resize(frame, (1920, 1080), interpolation=interp)
+        board = Board()
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            for col in range(BOARD_COLS):
+                x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+                x1 = max(0, min(int(x1), w - 1))
+                x2 = max(x1 + 1, min(int(x2), w))
+                y1 = max(0, min(int(y1), h - 1))
+                y2 = max(y1 + 1, min(int(y2), h))
+                patch = frame[y1:y2, x1:x2]
+                if patch.size == 0:
+                    board.set(row, col, COLOR_EMPTY)
+                    continue
+                board.set(row, col, int(hsv_clf.classify(patch)))
+        # 隠し段を物理推論で確定 or UNKNOWN にする
+        self._infer_hidden_rows(board)
+        return board
+
+    def read_both_boards_hsv(
+        self,
+        frame: np.ndarray,
+    ) -> "tuple[Board, Board]":
+        """1P/2P 両方の HSV-only 盤面を返す (設計C 事後復旧ゲート用)。
+
+        Returns:
+            (1P HSV-only 盤面, 2P HSV-only 盤面)。
+            HSV 分類器が取得できない場合は (空 Board, 空 Board)。
+        """
+        if self._get_hsv_classifier() is None:
+            return Board(), Board()
+        board_1p = self.read_board_hsv_only(frame, self._p1_region)
+        board_2p = self.read_board_hsv_only(frame, self._p2_region)
         return board_1p, board_2p
 
     def debug_frame(

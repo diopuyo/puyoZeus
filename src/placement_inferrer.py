@@ -44,6 +44,23 @@ COLOR_HSV_CENTERS: dict[int, tuple[int, int, int]] = {
     COLOR_PURPLE: (147, 200, 180),  # H=130-165
 }
 
+# HSV 分類 fallback 定数 (enable_hsv_classify_fallback=True 時に有効)。
+# std/rev 両候補の距離比が小さい (= 両方とも近い or 両方とも遠い・曖昧) 場合は
+# 強制確定せず next_pair をそのまま返す (= 誤確定防止)。
+# board_log 実証値: 黄→赤誤確定時 d_std=43/d_rev=46 (比=0.93 < 1.5)、
+# 正常な確定は d_std=18/d_rev=86 (比=4.8 >> 1.5) 等で分離可能。
+HSV_CLASSIFY_REJECT_RATIO: float = 1.5
+
+# 最小距離がこの値を超えると「両候補とも遠い → どちらとも判断できない」として
+# 強制確定を回避する。board_log: 正常確定の最小距離は 18-30 程度、
+# 誤確定時は 40-50 台でもどちらかを選んでいた。
+HSV_CLASSIFY_MAX_DISTANCE: float = 60.0
+
+# patch の S (彩度) 中央値がこの値未満なら色判断不能として next_pair 素返し。
+# 横置きで片 cell が背景・空に被っている場合の誤確定を防ぐ。
+# 通常のぷよは S >= 80 程度、背景は S < 40 程度が典型。
+HSV_MIN_SATURATION_FOR_CLASSIFY: int = 60
+
 
 def _hsv_distance(
     h: int, s: int, v: int, target: tuple[int, int, int],
@@ -57,10 +74,22 @@ def _hsv_distance(
     return float(dh * 2.0 + abs(s - ts) * 0.05 + abs(v - tv) * 0.05)
 
 
+def _is_patch_low_saturation(
+    patch_hsv: np.ndarray,
+    min_saturation: int = HSV_MIN_SATURATION_FOR_CLASSIFY,
+) -> bool:
+    """patch の S (彩度) 中央値が min_saturation 未満なら True を返す.
+
+    enable_hsv_classify_fallback=True 時に低彩度 patch を色判断不能として扱うため。
+    """
+    return int(np.median(patch_hsv[:, :, 1])) < min_saturation
+
+
 def _classify_next_pair_by_hsv(
     cell_a_patch: np.ndarray,
     cell_b_patch: np.ndarray,
     next_pair: tuple[int, int],
+    enable_hsv_classify_fallback: bool = False,
 ) -> tuple[int, int]:
     """着地 2 cell の HSV と NEXT 色 2 種類への距離で色順序を確定する.
 
@@ -69,10 +98,21 @@ def _classify_next_pair_by_hsv(
     なので、 「2 cell に NEXT 色 2 種類のどちらかが入る」 は確定. 順序のみを
     HSV 距離で判定.
 
+    fix/v70-zeropatch-redyellow (2026-06-01): enable_hsv_classify_fallback=True 時に
+    2 択強制確定を回避する。黄(H26)と赤(H7)の H 差 19 で falling_pair が (青,赤) 等の
+    時に黄セルが赤に誤分類される発火点対策。
+
     Args:
         cell_a_patch: 縦置きなら上 cell、 横置きなら左 cell の BGR patch.
         cell_b_patch: 縦置きなら下 cell、 横置きなら右 cell の BGR patch.
         next_pair: (NEXT[0], NEXT[1]) 色コード.
+        enable_hsv_classify_fallback: True にすると下記の fallback を有効化:
+            (1) どちらかの patch の S 中央値が HSV_MIN_SATURATION_FOR_CLASSIFY 未満
+                → 色判断不能として next_pair 素返し.
+            (2) d_std と d_rev の比が HSV_CLASSIFY_REJECT_RATIO 未満 (= 両候補が拮抗)
+                または最小距離が HSV_CLASSIFY_MAX_DISTANCE 超 (= 両候補とも遠い)
+                → 確定不能として next_pair 素返し.
+            False (default) = 従来の 2 択強制確定 (完全不変、 backwards compat).
 
     Returns:
         (cell_a_color, cell_b_color) 確定色. 同色 NEXT or HSV center 不在は
@@ -88,6 +128,15 @@ def _classify_next_pair_by_hsv(
 
     hsv_a = cv2.cvtColor(cell_a_patch, cv2.COLOR_BGR2HSV)
     hsv_b = cv2.cvtColor(cell_b_patch, cv2.COLOR_BGR2HSV)
+
+    # fallback (1): 低彩度 patch は色判断不能
+    if enable_hsv_classify_fallback:
+        if (
+            _is_patch_low_saturation(hsv_a)
+            or _is_patch_low_saturation(hsv_b)
+        ):
+            return next_pair
+
     ha = int(np.median(hsv_a[:, :, 0]))
     sa = int(np.median(hsv_a[:, :, 1]))
     va = int(np.median(hsv_a[:, :, 2]))
@@ -107,9 +156,33 @@ def _classify_next_pair_by_hsv(
         _hsv_distance(ha, sa, va, center_1)
         + _hsv_distance(hb, sb, vb, center_0)
     )
+
+    # fallback (2): 両候補が拮抗 / 両候補とも遠い場合は強制確定を回避
+    if enable_hsv_classify_fallback:
+        if not _is_hsv_classify_confident(d_std, d_rev):
+            return next_pair
+
     if d_rev < d_std:
         return (c1, c0)
     return (c0, c1)
+
+
+def _is_hsv_classify_confident(d_std: float, d_rev: float) -> bool:
+    """HSV 距離比から確定を信頼できるかを判定する.
+
+    Returns:
+        True = 十分に一方の候補が近い → 確定可能.
+        False = 両候補が拮抗 or 両方とも遠い → fallback 推奨.
+    """
+    d_min = min(d_std, d_rev)
+    d_max = max(d_std, d_rev)
+    # 両候補とも遠すぎる場合
+    if d_min > HSV_CLASSIFY_MAX_DISTANCE:
+        return False
+    # 距離比が閾値未満 (= 拮抗) の場合
+    if d_max < 1e-6:
+        return False
+    return (d_max / d_min) >= HSV_CLASSIFY_REJECT_RATIO
 
 
 def _extract_cell_patch_from_frame(
@@ -429,6 +502,7 @@ def infer_placement(
     bg_fp: "object | None" = None,
     bg_threshold: float | None = None,
     guard_empty_hallucination: bool = False,
+    enable_hsv_classify_fallback: bool = False,
 ) -> Board | None:
     """物理推論主軸の置き判定 (= Phase 1 主 API, cycle 71 + 71b).
 
@@ -452,6 +526,11 @@ def infer_placement(
             hallucination を防ぎつつ commit refuse しない。
             非 diff かつ COLOR_UNKNOWN セルは NEXT 色で物理補完 (従来通り)。
             default False = 従来挙動維持 (backwards compat)。
+        enable_hsv_classify_fallback: True にすると、 _classify_next_pair_by_hsv で
+            2 択強制確定を回避する fallback を有効化する。
+            低彩度 patch / 両候補拮抗 / 両候補とも遠い場合は next_pair 素返し。
+            黄(H26)→赤(H7)誤分類 (H 差 19) の発火点対策。
+            default False = 従来の 2 択強制確定 (完全不変、 backwards compat)。
 
     Returns:
         着地後の確定盤面. 物理パターン 0 件 / next_pair 不明等で None.
@@ -523,6 +602,7 @@ def infer_placement(
             if patch_a is not None and patch_b is not None:
                 color_a, color_b = _classify_next_pair_by_hsv(
                     patch_a, patch_b, next_pair,
+                    enable_hsv_classify_fallback=enable_hsv_classify_fallback,
                 )
                 # guard_empty_hallucination 案 B: 観測セルは NEXT 色、
                 # 非観測 EMPTY セルは COLOR_UNKNOWN 留保にして materialize。
@@ -651,6 +731,74 @@ def resolve_after_placement(
     return final, int(result.chain_count)
 
 
+# -----------------------------------------------------------------------
+# 真因 A 対処 (fix/v70-zeropatch-redyellow, 2026-06-01):
+# falling_pair のタイミングずれ補正。
+# TSUMO_FALL→STABLE 着地確定後に、着地 2 cell の CNN 観測色と
+# HSV-only 観測色が一致する場合はその色を採用し、
+# falling_pair 由来の誤色を上流で断つ。
+# -----------------------------------------------------------------------
+
+# 有効な puyo 色セット (空/UNKNOWN/お邪魔は信頼できないため除外)
+_VALID_PUYO_COLORS: frozenset[int] = frozenset([
+    COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE,
+])
+
+
+def correct_landing_cells_by_observed_color(
+    inferred: Board,
+    pattern: "LandingPattern",
+    cnn_board: Board,
+    hsv_classifier: "object",
+    frame_bgr: np.ndarray,
+    region: "object",
+) -> Board:
+    """着地 2 cell で CNN 観測色 == HSV-only 観測色 なら観測色を採用して返す.
+
+    真因 A 対処: falling_pair のタイミングずれで infer_placement が誤色を
+    書き込んでも、2 つの独立認識器が一致した着地色があればそちらを優先する。
+
+    条件:
+      - 着地 cell (r, c) の cnn_board 色が有効 puyo 色 (_VALID_PUYO_COLORS)
+      - HSV-only 分類 (hsv_classifier.classify(patch)) が同じ有効 puyo 色
+      - cnn_board 色 == HSV 色 (一致)
+    条件を満たさない cell は inferred の色をそのまま保持する (保守的)。
+
+    連鎖中エフェクト / お邪魔 / 背景 FP の干渉を避けるため、
+    有効 puyo 色以外は一切上書きしない設計。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (上書き元)。
+        pattern: 今回の着地パターン (= 着地 2 cell の座標)。
+        cnn_board: HybridClassifier (CNN+HSV 融合) が返す raw 観測盤面。
+        hsv_classifier: ColorClassifier インスタンス (HSV-only 分類器)。
+        frame_bgr: 着地後の BGR フレーム画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+
+    Returns:
+        補正後の確定盤面 (観測一致 cell のみ上書き、他は inferred のまま)。
+    """
+    result = inferred.copy()
+    for (r, c) in pattern.cells:
+        # CNN 観測色が有効 puyo 色でなければスキップ
+        cnn_color = int(cnn_board.get(r, c))
+        if cnn_color not in _VALID_PUYO_COLORS:
+            continue
+        # フレームからパッチを抽出
+        patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+        if patch is None or patch.size == 0:
+            continue
+        # HSV-only 分類
+        try:
+            hsv_color = int(hsv_classifier.classify(patch))
+        except Exception:
+            continue
+        # 有効色かつ CNN == HSV の場合のみ上書き
+        if hsv_color in _VALID_PUYO_COLORS and cnn_color == hsv_color:
+            result.set(r, c, hsv_color)
+    return result
+
+
 __all__ = [
     "LandingPattern",
     "enumerate_landing_patterns",
@@ -658,4 +806,9 @@ __all__ = [
     "enumerate_color_assignments",
     "infer_placement",
     "resolve_after_placement",
+    "correct_landing_cells_by_observed_color",
+    # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback 定数
+    "HSV_CLASSIFY_REJECT_RATIO",
+    "HSV_CLASSIFY_MAX_DISTANCE",
+    "HSV_MIN_SATURATION_FOR_CLASSIFY",
 ]

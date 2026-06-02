@@ -525,6 +525,13 @@ def _build_detailed_log_entry(
         # physics_fix で変更された cell: [row, col, prev_confirmed_color, new_confirmed_color]
         "p1_physics_fix_changed_cells": p1_physics_diff,
         "p2_physics_fix_changed_cells": p2_physics_diff,
+        # 着地色診断 (2026-06-01 infer_placement 調査用)。
+        # TSUMO_FALL→STABLE 着地フレームのみ非 null。
+        # falling_pair_old: prev_next_queue[-2] 由来 (従来ロジック)
+        # falling_pair_new: _landing_pending[1] 由来 (修正ロジック)
+        # source: "landing_pending" | "next_queue_2" | "next_queue_1" | "none"
+        "p1_landing_diag": getattr(result.p1, "landing_diag", None),
+        "p2_landing_diag": getattr(result.p2, "landing_diag", None),
     }
 
 
@@ -631,43 +638,183 @@ def main() -> int:
     )
     parser.add_argument(
         "--ojama-tier1-warmup",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_tier1_warmup",
-        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を有効化。"
+        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を制御する。"
              f" OJAMA_TIER1_WARMUP_FRAMES={8} frame 間 tier1 を skip し、"
              "お邪魔消滅後のセル背景化による誤 EMPTY 化 → 列崩壊を防ぐ (v70 対策)。"
-             " 汎用 --enable-tier1-warmup (v51m2 退行あり) と独立して有効化できる。",
+             " ライブラリ default=True (有効)。 --no-ojama-tier1-warmup で無効化。",
     )
     parser.add_argument(
-        "--no-constraint-fill",
-        action="store_true",
+        "--constraint-fill",
+        action=argparse.BooleanOptionalAction,
         default=False,
-        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を無効化。 "
-             "CNN/HSV 高確信セルが誤置換される問題をトグルで完全回避したい場合に使用。 "
-             "デフォルト OFF = 従来挙動 (constraint_fill 有効)。",
+        dest="enable_constraint_fill",
+        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を制御する。 "
+             "--constraint-fill で有効化、 --no-constraint-fill で無効化。 "
+             "ライブラリ default=False (無効)。 "
+             "--constraint-fill で有効化して比較 (constraint_fill の net 効果測定用)。",
     )
     parser.add_argument(
         "--t2-highconf-yield",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_t2_highconf_yield",
-        help="T2 高確信 yield を有効化。 "
+        help="T2 高確信 yield を制御する。 "
              "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
              "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
-             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊 (16 動画 77K 件) の修正。 "
-             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正。 "
+             "ライブラリ default=True (有効)。 --no-t2-highconf-yield で無効化。",
     )
     parser.add_argument(
         "--infer-empty-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_infer_empty_guard",
-        help="infer_placement 空セル hallucination ガードを有効化。 "
+        help="infer_placement 空セル hallucination ガードを制御する。 "
              "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
              "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
-             "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
-             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+             "ライブラリ default=True (有効)。 --no-infer-empty-guard で無効化。",
+    )
+    parser.add_argument(
+        "--game-event-chain-exit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_game_event_chain_exit",
+        help="game-event ベース連鎖終了を制御する。 "
+             "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
+             "「連鎖側お邪魔降下」を検知するまで維持する。 "
+             "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
+             "ライブラリ default=True (有効)。 --no-game-event-chain-exit で無効化。",
+    )
+    parser.add_argument(
+        "--landing-color-fix",
+        action="store_true",
+        default=False,
+        dest="enable_landing_color_fix",
+        help="着地色修正 案1: TSUMO_FALL→STABLE 着地時の falling_pair を "
+             "prev_next_queue[-2] から _landing_pending (消費済みツモ色) に切り替える。 "
+             "slide_motion(R-7) 経由で 1 つ前のツモ色を指してしまう誤色問題の修正。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。 "
+             "フラグ OFF でも --dump-board-log-detailed に landing_diag フィールドが記録される。",
+    )
+    parser.add_argument(
+        "--chain-min-display",
+        action="store_true",
+        default=False,
+        dest="enable_chain_min_display",
+        help="X1/X4 短連鎖ちらつき対策を有効化。 "
+             f"CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC={RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s) + "
+             f"短連鎖 game-event exit 抑止 (chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT})。 "
+             "enable_game_event_chain_exit と独立フラグ (効果分解のため)。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    parser.add_argument(
+        "--hsv-classify-fallback",
+        action="store_true",
+        default=False,
+        dest="enable_hsv_classify_fallback",
+        help="HSV 分類 fallback を有効化。 "
+             "_classify_next_pair_by_hsv の 2 択強制確定を回避し、 "
+             "両候補が拮抗・両候補とも遠い・低彩度 patch の場合は next_pair 素返しにする。 "
+             "黄(H26)→赤(H7) 誤分類 (~900 件、 H 差 19) 発火点対策。 "
+             "デフォルト OFF = 従来挙動不変 (2 択強制確定、 backwards compat)。",
+    )
+    parser.add_argument(
+        "--landing-observed-color",
+        action="store_true",
+        default=False,
+        dest="enable_landing_observed_color",
+        help="真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化。 "
+             "TSUMO_FALL→STABLE 着地時に 2 つの独立認識器 (CNN/HSV) が "
+             "一致した着地色を優先し、 falling_pair タイミングずれによる誤色を断つ。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    parser.add_argument(
+        "--red-hue-wrap-fix",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_red_hue_wrap_fix",
+        help="赤色相折り返し補正を制御する。 "
+             "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
+             "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
+             "ライブラリ default=True (有効)。 --no-red-hue-wrap-fix で無効化。",
+    )
+    parser.add_argument(
+        "--specular-robust-saturation",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_specular_robust_saturation",
+        help="案D: 光沢ハイライト除外彩度計算を制御する。 "
+             "ぷよ表面の白ハイライト画素 (V>=210 かつ S<=60) を彩度 median 計算から除外し、 "
+             "光沢球混入による EMPTY 誤判定を防ぐ。 "
+             "ライブラリ default=True (有効)。 --no-specular-robust-saturation で無効化。",
+    )
+    parser.add_argument(
+        "--stable-recovery-gate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_stable_recovery_gate",
+        help="設計C 事後復旧ゲートを制御する。 "
+             "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
+             "8 フレーム継続したセルを confirmed に復旧する。 "
+             "ライブラリ default=True (有効)。 --no-stable-recovery-gate で無効化。",
+    )
+    # フェーズ A4 (2026-06-02): お邪魔ぷよ視覚的検出・連鎖終了・推論ガード・着地検出
+    parser.add_argument(
+        "--enable-ojama-visual-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_visual_detection",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-visual-detection で無効化。",
+    )
+    parser.add_argument(
+        "--enable-ojama-visual-chain-exit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_visual_chain_exit",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出による連鎖終了判定を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-visual-chain-exit で無効化。",
+    )
+    parser.add_argument(
+        "--enable-ojama-infer-guard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_infer_guard",
+        help="フェーズ A4: お邪魔ぷよ推論ガードを制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-infer-guard で無効化。",
+    )
+    parser.add_argument(
+        "--enable-ojama-settle-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_settle_detection",
+        help="フェーズ A4: お邪魔ぷよ着地検出を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-settle-detection で無効化。",
+    )
+    parser.add_argument(
+        "--chain-score-early-fire",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_score_early_fire",
+        help="機能B: score 急増 CHAIN 早期発火を制御する。 "
+             f"True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA={80} "
+             "の frame で VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。 "
+             "OCR 失敗 / score 取得不可時は従来の VideoChainTracker 経路を維持 (OR 追加)。 "
+             "ライブラリ default=False (無効)。 --chain-score-early-fire で有効化。",
+    )
+    parser.add_argument(
+        "--chain-exit-warmup",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_exit_warmup",
+        help="機能C: CHAIN → STABLE 遷移直後の confirmed 凍結を制御する。 "
+             f"True にすると CHAIN→STABLE 復帰から CHAIN_EXIT_WARMUP_SEC={0.1}s 間 confirmed "
+             "更新を凍結しエフェクト残光色の混入を防ぐ。 "
+             "時間ベース実装のため fps 非依存。 "
+             "ライブラリ default=False (無効)。 --chain-exit-warmup で有効化。",
     )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
@@ -729,12 +876,41 @@ def main() -> int:
         enable_tier1_warmup=args.enable_tier1_warmup,
         # 経路 A' (2026-05-30): --ojama-tier1-warmup で OJAMA 専用 warmup 有効化
         enable_ojama_tier1_warmup=args.enable_ojama_tier1_warmup,
-        # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
-        enable_constraint_fill=not args.no_constraint_fill,
+        # 案2 (2026-05-30 / BooleanOptionalAction 整合 2026-06-02):
+        # --constraint-fill / --no-constraint-fill で直接制御、反転ロジック除去済み
+        enable_constraint_fill=args.enable_constraint_fill,
         # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
         enable_t2_highconf_yield=args.enable_t2_highconf_yield,
         # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
         enable_infer_empty_guard=args.enable_infer_empty_guard,
+        # game-event ベース連鎖終了 (2026-06-01): --game-event-chain-exit で有効化
+        enable_game_event_chain_exit=args.enable_game_event_chain_exit,
+        # 着地色修正 案1 (2026-06-01): --landing-color-fix で有効化
+        enable_landing_color_fix=args.enable_landing_color_fix,
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01): --chain-min-display で有効化
+        enable_chain_min_display=args.enable_chain_min_display,
+        # HSV 分類 fallback (fix/v70-zeropatch-redyellow, 2026-06-01): --hsv-classify-fallback で有効化
+        enable_hsv_classify_fallback=args.enable_hsv_classify_fallback,
+        # 真因 A 対処 (2026-06-01): --landing-observed-color で有効化
+        enable_landing_observed_color=args.enable_landing_observed_color,
+        # 赤色相折り返し補正 (fix/v70-zeropatch-redyellow, 2026-06-02): --red-hue-wrap-fix で有効化
+        enable_red_hue_wrap_fix=args.enable_red_hue_wrap_fix,
+        # 案D 光沢ハイライト除外彩度計算 (fix/v70-zeropatch-redyellow): --specular-robust-saturation で有効化
+        enable_specular_robust_saturation=args.enable_specular_robust_saturation,
+        # 設計C 事後復旧ゲート (2026-06-02): --stable-recovery-gate で有効化
+        enable_stable_recovery_gate=args.enable_stable_recovery_gate,
+        # フェーズ A4 (2026-06-02): --enable-ojama-visual-detection で有効化
+        enable_ojama_visual_detection=args.enable_ojama_visual_detection,
+        # フェーズ A4 (2026-06-02): --enable-ojama-visual-chain-exit で有効化
+        enable_ojama_visual_chain_exit=args.enable_ojama_visual_chain_exit,
+        # フェーズ A4 (2026-06-02): --enable-ojama-infer-guard で有効化
+        enable_ojama_infer_guard=args.enable_ojama_infer_guard,
+        # フェーズ A4 (2026-06-02): --enable-ojama-settle-detection で有効化
+        enable_ojama_settle_detection=args.enable_ojama_settle_detection,
+        # 機能B (2026-06-02): --chain-score-early-fire で有効化
+        enable_chain_score_early_fire=args.enable_chain_score_early_fire,
+        # 機能C (2026-06-02): --chain-exit-warmup で有効化
+        enable_chain_exit_warmup=args.enable_chain_exit_warmup,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -759,8 +935,10 @@ def main() -> int:
             "[viz] enable_ojama_tier1_warmup=ON "
             "(経路 A': OJAMA_FALL→STABLE 遷移直後 8 frame tier1 skip / v70 列崩壊対策)"
         )
-    if args.no_constraint_fill:
-        print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    if not args.enable_constraint_fill:
+        print("[viz] constraint_fill=OFF (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    elif args.enable_constraint_fill:
+        print("[viz] constraint_fill=ON (明示指定: constraint_fill 有効化)")
     if args.enable_t2_highconf_yield:
         print(
             "[viz] t2_highconf_yield=ON "
@@ -771,6 +949,54 @@ def main() -> int:
         print(
             "[viz] infer_empty_guard=ON "
             "(空セル hallucination ガード: 非 diff セルが CNN EMPTY なら候補スキップ)"
+        )
+    if args.enable_game_event_chain_exit:
+        print(
+            "[viz] game_event_chain_exit=ON "
+            "(game-event ベース連鎖終了: 次ツモ変化 / お邪魔降下で CHAIN 終了 / "
+            f"安全弁 max={RecognitionPipeline.CHAIN_MAX_HOLD_SEC}s)"
+        )
+    if args.enable_landing_color_fix:
+        print(
+            "[viz] landing_color_fix=ON "
+            "(着地色修正 案1: falling_pair を _landing_pending 消費色に切り替え / "
+            "slide_motion 経由の 1 つ前ツモ色誤書き修正)"
+        )
+    if args.enable_chain_min_display:
+        print(
+            "[viz] chain_min_display=ON "
+            f"(X1: 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s 表示保証 / "
+            f"X4: chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} で exit 抑止)"
+        )
+    if args.enable_hsv_classify_fallback:
+        print(
+            "[viz] hsv_classify_fallback=ON "
+            "(2 択強制確定回避: 両候補拮抗/遠い/低彩度で next_pair 素返し / "
+            "黄→赤誤分類 ~900 件発火点対策)"
+        )
+    if args.enable_landing_observed_color:
+        print(
+            "[viz] landing_observed_color=ON "
+            "(真因 A 対処: 着地 2 cell の CNN==HSV 一致色で falling_pair ズレを補正)"
+        )
+    # フェーズ A4 (2026-06-02): お邪魔ぷよ視覚的検出関連ログ
+    if args.enable_ojama_visual_detection:
+        print("[viz] enable_ojama_visual_detection=ON (フェーズ A4: お邪魔ぷよ視覚的検出)")
+    if args.enable_ojama_visual_chain_exit:
+        print("[viz] enable_ojama_visual_chain_exit=ON (フェーズ A4: お邪魔ぷよ視覚的連鎖終了判定)")
+    if args.enable_ojama_infer_guard:
+        print("[viz] enable_ojama_infer_guard=ON (フェーズ A4: お邪魔ぷよ推論ガード)")
+    if args.enable_ojama_settle_detection:
+        print("[viz] enable_ojama_settle_detection=ON (フェーズ A4: お邪魔ぷよ着地検出)")
+    if args.enable_chain_score_early_fire:
+        print(
+            "[viz] chain_score_early_fire=ON "
+            f"(機能B: score >= {80} で即 CHAIN 突入 / VideoChainTracker フォールバック維持)"
+        )
+    if args.enable_chain_exit_warmup:
+        print(
+            "[viz] chain_exit_warmup=ON "
+            f"(機能C: CHAIN→STABLE 後 {0.1}s confirmed 凍結 / エフェクト残光混入防止)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

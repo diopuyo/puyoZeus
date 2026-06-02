@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.board import BOARD_COLS, BOARD_ROWS, COLOR_RED, Board
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_RED, Board
 from src.board_state_machine import (
     BoardState,
     BoardStateMachine,
     DetectorSignals,
     NON_STABLE_STATES,
     NullDetector,
+    STABLE_RECOVERY_MIN_FRAMES,
     StateContext,
     StateTransitionDetector,
 )
@@ -37,12 +38,14 @@ def _board_with_red(row: int, col: int) -> Board:
 def _signal(
     t: float, board: Board, *, match: bool = True,
     next_pair: tuple[int, int] | None = None,
+    hsv_board: "Board | None" = None,
 ) -> DetectorSignals:
     return DetectorSignals(
         time_sec=t,
         cnn_board=board,
         is_match_active=match,
         next_pair=next_pair,
+        hsv_board=hsv_board,
     )
 
 
@@ -431,5 +434,339 @@ def test_stable_resume_gate_disabled_via_constructor() -> None:
     sm.update(6, _signal(0.30, _board_with_red(12, 0)))
     # ガード無効 → 従来挙動 = 赤が confirmed に乗る (= ただし gravity filter で 浮きぷよ check は通る)
     # (12, 0) は最下段なので gravity filter は通過、 赤が記録される
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+# ============================
+# 設計C 事後復旧ゲート テスト (2026-06-02)
+# ============================
+
+
+def _make_recovery_sm(min_frames: int = 3) -> BoardStateMachine:
+    """復旧ゲート有効 state machine を生成するヘルパー。
+    テスト用に min_frames を小さく設定できる。
+    """
+    return BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=min_frames,
+    )
+
+
+def _stable_signal_with_hsv(
+    t: float,
+    cnn: Board,
+    hsv: Board,
+) -> DetectorSignals:
+    """STABLE 用に CNN/HSV 両盤面を乗せたシグナルを生成する。"""
+    return DetectorSignals(
+        time_sec=t,
+        cnn_board=cnn,
+        is_match_active=True,
+        hsv_board=hsv,
+    )
+
+
+def test_recovery_gate_fires_after_n_frames() -> None:
+    """設計C ②: N フレーム連続 CNN==HSV==有効色 かつ confirmed==EMPTY → 復旧される."""
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    # STABLE 確定 (確定盤面は空)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    # N-1 フレーム: まだ発火しない
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    for i in range(n - 1):
+        sm.update(
+            i, _stable_signal_with_hsv(0.05 * i, cnn, hsv),
+        )
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ空
+
+    # N フレーム目: 発火して復旧
+    sm.update(n - 1, _stable_signal_with_hsv(0.05 * (n - 1), cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # 復旧された
+
+
+def test_recovery_gate_does_not_fire_before_n_frames() -> None:
+    """設計C ①: N-1 フレームでは発火しない."""
+    n = 4
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    for i in range(n - 1):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ空
+
+
+def test_recovery_gate_no_fire_when_cnn_hsv_differ() -> None:
+    """設計C ③: CNN≠HSV の場合は発火しない (安全弁A)."""
+    from src.board import COLOR_BLUE
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv_diff = Board()
+    hsv_diff.set(12, 0, COLOR_BLUE)  # CNN と異なる色
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv_diff))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # 発火しない
+
+
+def test_recovery_gate_no_fire_when_floating_puyo() -> None:
+    """設計C ④: 下が空の浮きぷよになる場合は発火しない (安全弁C)."""
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # row=10, col=0 は confirmed==EMPTY
+    # row=11, col=0 も confirmed==EMPTY (= 下が空 → 浮きぷよ)
+    # row=12, col=0 は confirmed==EMPTY
+    sm._ctx.confirmed_board = _empty_board()
+
+    # (row=10, col=0) に赤を CNN/HSV で継続観測するが、
+    # 下の (row=11, col=0) が EMPTY なので浮きぷよ → 発火しない
+    cnn = Board()
+    cnn.set(10, 0, COLOR_RED)
+    hsv = Board()
+    hsv.set(10, 0, COLOR_RED)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 浮きぷよで却下
+
+
+def test_recovery_gate_resets_on_non_stable_transition() -> None:
+    """設計C ⑤: NON-STABLE 遷移でカウンタと recovery_cells がクリアされる."""
+    n = 2
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # N-1 フレーム蓄積 (カウンタに 1 が入る)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) >= 1
+
+    # CHAIN に強制遷移
+    det = _ForceState(BoardState.CHAIN, fire_at_frame=1)
+    sm._detectors.append(det)
+    sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
+
+    # カウンタと recovery_cells がクリアされている
+    assert sm.context.stable_recovery_counters == {}
+    assert sm.context.recovery_cells == set()
+
+
+def test_recovery_gate_off_explicit() -> None:
+    """設計C ⑥: フラグ OFF を明示すると従来挙動と完全同一 (発火しない) 回帰防止。
+
+    2026-06-02: BoardStateMachine のデフォルトは enable_stable_recovery_gate=True に変更。
+    このテストは False を明示して OFF 時の挙動が維持されることを回帰防止する。
+    """
+    sm = BoardStateMachine(enable_stable_recovery_gate=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # STABLE_RECOVERY_MIN_FRAMES + 余裕 分 observations
+    for i in range(STABLE_RECOVERY_MIN_FRAMES + 5):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # フラグ OFF → confirmed は EMPTY のまま
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+
+
+# ============================
+# 設計C 双方向拡張テスト (2026-06-02)
+# ============================
+
+
+def _board_with_color(row: int, col: int, color: int) -> Board:
+    """指定 row/col に任意の色をセットした Board を返す。"""
+    b = Board()
+    b.set(row, col, color)
+    return b
+
+
+def test_recovery_gate_color_to_empty_ghost_removal() -> None:
+    """双方向①: confirmed=色 だが CNN==HSV==EMPTY が N 連続 → 空に修正 (幽霊除去)。
+
+    col5 お邪魔幽霊シナリオ: confirmed=赤 だが CNN/HSV は空継続。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤が焼き付いている (幽霊)
+    confirmed_init = Board()
+    confirmed_init.set(12, 5, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # CNN==HSV==EMPTY を N 連続
+    cnn = _empty_board()
+    hsv = _empty_board()
+    for i in range(n):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # 幽霊が除去されて EMPTY になっている
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 5) == COLOR_EMPTY
+
+
+def test_recovery_gate_color_to_different_color_correction() -> None:
+    """双方向②: confirmed=色A だが CNN==HSV==色B が N 連続 → 色B に訂正 (誤色修正)。
+
+    黄→赤 誤色固定シナリオ: confirmed=赤 だが CNN/HSV は黄継続。
+    """
+    from src.board import COLOR_YELLOW
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤が焼き付いている (誤色)
+    confirmed_init = Board()
+    confirmed_init.set(12, 4, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # CNN==HSV==黄 を N 連続
+    cnn = _board_with_color(12, 4, COLOR_YELLOW)
+    hsv = _board_with_color(12, 4, COLOR_YELLOW)
+    for i in range(n):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # 誤色が訂正されて黄になっている
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 4) == COLOR_YELLOW
+
+
+def test_recovery_gate_ojama_ghost_removal() -> None:
+    """双方向③: confirmed=お邪魔(9) だが CNN==HSV==EMPTY が N 連続 → 空に除去。
+
+    col5 お邪魔幽霊シナリオ: 通過済みお邪魔が confirmed に残留。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed にお邪魔幽霊
+    confirmed_init = Board()
+    confirmed_init.set(12, 5, COLOR_OJAMA)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # CNN==HSV==EMPTY を N 連続
+    cnn = _empty_board()
+    hsv = _empty_board()
+    for i in range(n):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # お邪魔幽霊が除去されて EMPTY になっている
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 5) == COLOR_EMPTY
+
+
+def test_recovery_gate_no_fire_when_cnn_hsv_disagree_bidirectional() -> None:
+    """双方向④: CNN≠HSV の場合は方向2/3でも発火しない (安全弁A)。"""
+    from src.board import COLOR_YELLOW
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤が焼き付いている
+    confirmed_init = Board()
+    confirmed_init.set(12, 0, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # CNN=EMPTY, HSV=黄 (不一致)
+    cnn = _empty_board()
+    hsv = _board_with_color(12, 0, COLOR_YELLOW)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # CNN≠HSV → 発火しない → confirmed=赤のまま
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_recovery_gate_no_fire_at_n_minus_1_bidirectional() -> None:
+    """双方向⑤: N-1 フレームでは方向2も発火しない。"""
+    n = 5
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤
+    confirmed_init = Board()
+    confirmed_init.set(12, 0, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # CNN==HSV==EMPTY を N-1 連続
+    cnn = _empty_board()
+    hsv = _empty_board()
+    for i in range(n - 1):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # N-1 では発火しない → まだ赤のまま
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_recovery_gate_no_fire_when_hsv_board_none_bidirectional() -> None:
+    """双方向⑥: hsv_board=None の場合は方向2でも発火しない (安全弁A)。"""
+    n = 3
+    sm = _make_recovery_sm(min_frames=n)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤が焼き付いている
+    confirmed_init = Board()
+    confirmed_init.set(12, 0, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    # hsv_board なし
+    cnn = _empty_board()
+    for i in range(n + 2):
+        sig = DetectorSignals(
+            time_sec=0.05 * i,
+            cnn_board=cnn,
+            is_match_active=True,
+            hsv_board=None,  # None → 発火しない
+        )
+        sm.update(i, sig)
+
+    # hsv_board=None → confirmed=赤のまま
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_recovery_gate_off_does_not_fix_ghost() -> None:
+    """双方向⑦: フラグ OFF を明示すると方向2も従来挙動と完全同一 (発火しない) 回帰防止。
+
+    2026-06-02: デフォルト True 変更後も enable_stable_recovery_gate=False 明示で
+    OFF 時の従来挙動が維持されることを保証する。
+    """
+    sm = BoardStateMachine(enable_stable_recovery_gate=False)
+    sm._ctx.state = BoardState.STABLE
+    # confirmed に赤が焼き付いている
+    confirmed_init = Board()
+    confirmed_init.set(12, 0, COLOR_RED)
+    sm._ctx.confirmed_board = confirmed_init
+
+    cnn = _empty_board()
+    hsv = _empty_board()
+    for i in range(STABLE_RECOVERY_MIN_FRAMES + 5):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    # フラグ OFF → confirmed=赤のまま
     assert sm.context.confirmed_board is not None
     assert sm.context.confirmed_board.get(12, 0) == COLOR_RED

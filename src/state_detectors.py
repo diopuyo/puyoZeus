@@ -24,6 +24,10 @@ from src.board_state_machine import (
     DetectorSignals,
     StateContext,
 )
+# フェーズ A 精緻化: OjamaVisualDetector を同一モジュールから利用可能にする。
+# 個別 import でも動作するが、 state_detectors パッケージとして一括参照できるよう
+# re-export する (既存 import パターン `from src.state_detectors import ...` 維持)。
+from src.ojama_visual_detector import OjamaVisualDetector as OjamaVisualDetector  # noqa: F401
 
 
 # ============================
@@ -41,6 +45,8 @@ class ChainPhaseDetector:
     出力:
         - signals.chain_event != None → CHAIN
         - signals.chain_event == None かつ 現 state == CHAIN → STABLE 復帰
+          (ただし enable_chain_ojama_exit=True かつ ojama_top_positive=True なら
+           STABLE に戻さず OjamaVisualDetector に OJAMA_FALL 委譲 → None 返し)
         - それ以外 → None (state 維持)
 
     時刻範囲の制御は RecognitionPipeline 側で行う (CHAIN_HOLD_PER_STEP_SEC ×
@@ -49,6 +55,11 @@ class ChainPhaseDetector:
     """
 
     chain_sim: object | None = None  # cycle 49: optional ChainSimulator 注入
+    # フェーズ A 精緻化: True にすると CHAIN → STABLE 復帰をお邪魔視覚検知に委譲する。
+    # OjamaVisualDetector が OJAMA_FALL を返す経路を開くため、 本 detector は
+    # ojama_top_positive=True なら None を返して state 遷移を保留する。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_chain_ojama_exit: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -74,6 +85,13 @@ class ChainPhaseDetector:
                         return None  # state 維持
             return BoardState.CHAIN
         if ctx.state == BoardState.CHAIN:
+            # フェーズ A 精緻化: ojama_top_positive かつ chain_ojama_exit ON なら
+            # STABLE に戻さず OjamaVisualDetector に OJAMA_FALL 判定を委譲する。
+            if (
+                self.enable_chain_ojama_exit
+                and signals.ojama_top_positive
+            ):
+                return None  # state 遷移を保留 → OjamaVisualDetector に委譲
             return BoardState.STABLE
         return None
 
@@ -128,6 +146,11 @@ class TsumoPhaseDetector:
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
     ) -> BoardState | None:
+        # フェーズ A 精緻化: OJAMA_FALL 中は TSUMO_FALL を返さない。
+        # お邪魔降下中に CNN がぷよ増加を誤検出しても TSUMO に遷移しないようにする。
+        # フラグ非依存で常時有効 (= OJAMA_FALL 中に TSUMO を返すのは設計上常に誤り)。
+        if ctx.state == BoardState.OJAMA_FALL:
+            return None
         baseline = ctx.confirmed_board
         if baseline is None:
             return None  # 初回 STABLE 確定前は判定不能
@@ -276,5 +299,6 @@ __all__ = [
     "ChainPhaseDetector",
     "EffectPhaseDetector",
     "OjamaPhaseDetector",
+    "OjamaVisualDetector",
     "TsumoPhaseDetector",
 ]

@@ -37,6 +37,8 @@ from scripts.measure_stable_cell_acc import (
     MIDGAME_START_SEC,
     MIDGAME_COL_EMPTY_CRITICAL,
     MIDGAME_COL_MIN_FRAMES,
+    MIDGAME_TRAIL_EXCLUDE_SEC,
+    _is_midgame_frame,
     BOARD_ROWS,
     BOARD_COLS,
     # サブカテゴリ関連
@@ -46,6 +48,14 @@ from scripts.measure_stable_cell_acc import (
     _judge_corruption_metrics,
     CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE,
     POSTPROCESS_CORRUPTION_REJECT_RATE,
+    # 改修1: confirmed_majority_agree_rate
+    _build_confirmed_agree_rate,
+    # 改修2: per-side avg_puyo
+    _collect_puyo_count,
+    _build_avg_puyo_by_side,
+    AVG_PUYO_COUNT_CRITICAL,
+    # 改修3: non_stable chain 除外
+    NON_STABLE_CHAIN_EXCLUDE,
 )
 from src.board import (
     COLOR_EMPTY, COLOR_RED, COLOR_BLUE, COLOR_GREEN,
@@ -628,3 +638,471 @@ def test_video_stats_subcategory_fields_default_zero():
     assert stats.corruption_empty_to_color_count == 0
     assert stats.corruption_color_to_color_count == 0
     assert stats.corruption_color_to_empty_count == 0
+
+
+# ============================
+# _is_midgame_frame / 短クリップ偽陽性対策 テスト (v70_match01 問題)
+# ============================
+
+
+def test_is_midgame_frame_before_start():
+    """MIDGAME_START_SEC 未満のフレームは中盤でないこと。"""
+    assert _is_midgame_frame(MIDGAME_START_SEC - 1.0, 60.0) is False
+
+
+def test_is_midgame_frame_at_start_long_clip():
+    """十分長いクリップで MIDGAME_START_SEC ちょうどのフレームは中盤に含まれること。"""
+    # clip_duration=60s → trail_cutoff=50s → 30s < 50s なので True
+    assert _is_midgame_frame(MIDGAME_START_SEC, 60.0) is True
+
+
+def test_is_midgame_frame_trail_excluded():
+    """クリップ末尾 MIDGAME_TRAIL_EXCLUDE_SEC 以内のフレームは除外されること。"""
+    clip_dur = 60.0
+    # trail_cutoff = 60 - 10 = 50s
+    # t=50.0 は < 50.0 でないので False
+    assert _is_midgame_frame(50.0, clip_dur) is False
+    # t=49.9 は < 50.0 なので True
+    assert _is_midgame_frame(49.9, clip_dur) is True
+
+
+def test_is_midgame_frame_short_clip_v70_match01():
+    """v70_match01 相当 (30.5s) で MIDGAME_START_SEC=30.0 直後のフレームが除外されること。
+
+    30.5s クリップで末尾 10s を除外すると有効中盤区間は [30.0, 20.5) となる。
+    t=30.1 は trail_cutoff=20.5 以上なので False になるべき。
+    これが修正の核心: 修正前は True → CRITICAL 誤発火していた。
+    """
+    clip_dur = 30.5
+    trail_cutoff = clip_dur - MIDGAME_TRAIL_EXCLUDE_SEC  # = 20.5
+    # t_sec=30.1 >= MIDGAME_START_SEC=30.0 だが t_sec >= trail_cutoff=20.5 なので除外
+    assert _is_midgame_frame(30.1, clip_dur) is False
+
+
+def test_is_midgame_frame_short_clip_31s():
+    """31s クリップ (v51_match02 相当) でも同様に末尾が除外されること。"""
+    clip_dur = 31.0
+    # trail_cutoff = 31 - 10 = 21s
+    # t=30.5 >= 21s なので除外
+    assert _is_midgame_frame(30.5, clip_dur) is False
+
+
+def test_is_midgame_frame_unknown_clip_duration_backward_compat():
+    """clip_duration_sec=0.0 (不明) のとき末尾除外を適用せず従来挙動になること (後方互換)。"""
+    # clip_duration_sec=0.0 → trail_cutoff 計算せず t_sec >= MIDGAME_START_SEC のみ
+    assert _is_midgame_frame(30.1, 0.0) is True
+    assert _is_midgame_frame(29.9, 0.0) is False
+
+
+def test_is_midgame_frame_negative_trail_cutoff():
+    """trail_cutoff が負になる超短クリップ (<= MIDGAME_TRAIL_EXCLUDE_SEC) では全フレーム除外。"""
+    # clip_duration=8s → trail_cutoff=-2s → t_sec=30s >= -2 なので除外
+    # (ただし t_sec=30 < MIDGAME_START_SEC=30 は False で先にはじかれる)
+    # t_sec=31s の場合: trail_cutoff=-2s → t_sec < trail_cutoff は False → 除外
+    assert _is_midgame_frame(31.0, 8.0) is False
+
+
+def test_video_stats_clip_duration_default_zero():
+    """VideoStats の clip_duration_sec がデフォルト 0.0 であること (後方互換)。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    assert stats.clip_duration_sec == 0.0
+
+
+def test_collect_col_metrics_short_clip_no_midgame():
+    """短クリップ (30.5s) でクリップ末尾フレームが midgame に集計されないこと。
+
+    これが v70_match01 偽陽性の直接修正検証。
+    修正前: t_sec=30.1 で is_midgame=True → per_col_midgame_cells に積算。
+    修正後: t_sec=30.1, clip_duration=30.5s → is_midgame=False → 積算なし。
+    """
+    stats = VideoStats(video_id="v70_match01", is_holdout=False)
+    stats.clip_duration_sec = 30.5  # v70_match01 の実クリップ長
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.1s フレームを処理 (修正前は midgame と判定されていた)
+    _collect_col_metrics(fi=0, t_sec=30.1, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame セル数は 0 のままであること
+    for col in range(BOARD_COLS):
+        assert stats.per_col_midgame_cells.get(col, 0) == 0, (
+            f"col={col} が midgame として集計されてしまった (短クリップ偽陽性)"
+        )
+
+
+def test_collect_col_metrics_long_clip_midgame_counted():
+    """長クリップ (60s) で中盤区間 (30s) のフレームが midgame に集計されること。
+
+    真の中盤列崩壊検知 (v40_match01 相当) が引き続き機能することの確認。
+    """
+    stats = VideoStats(video_id="v40_match01", is_holdout=False)
+    stats.clip_duration_sec = 60.0  # 十分長いクリップ
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.0s = MIDGAME_START_SEC ちょうど、trail_cutoff=50s なので midgame に含まれる
+    _collect_col_metrics(fi=0, t_sec=30.0, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame セル数が積算されていること
+    for col in range(BOARD_COLS):
+        assert stats.per_col_midgame_cells.get(col, 0) == BOARD_ROWS, (
+            f"col={col} が midgame に集計されなかった (長クリップで本来検知すべき)"
+        )
+
+
+def test_judge_i1_midgame_short_clip_not_critical():
+    """短クリップ (30.5s) で全列 EMPTY でも midgame CRITICAL にならないこと。
+
+    clip_duration_sec を設定したとき、per_col_midgame_cells < MIDGAME_COL_MIN_FRAMES
+    となるため CRITICAL 判定を回避できることを検証する。
+    """
+    stats = VideoStats(video_id="v70_match01", is_holdout=False)
+    stats.clip_duration_sec = 30.5
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 末尾 0.5 秒分のフレームをすべて処理 (30.0s〜30.5s を 30fps で約 15 フレーム)
+    for i in range(15):
+        t_sec = 30.0 + i * (1.0 / 30.0)
+        _collect_col_metrics(fi=i, t_sec=t_sec, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # midgame cells が MIDGAME_COL_MIN_FRAMES 未満なので CRITICAL が出ないこと
+    failures = _judge_i1_metrics([stats])
+    midgame_failures = [f for f in failures if "中盤 col=" in f and "EMPTY率" in f]
+    assert midgame_failures == [], (
+        f"短クリップで偽 CRITICAL が発生: {midgame_failures}"
+    )
+
+
+def test_judge_i1_midgame_long_clip_all_empty_critical():
+    """長クリップ (60s) で中盤 MIDGAME_COL_MIN_FRAMES 以上全列 EMPTY なら CRITICAL になること。
+
+    真の中盤列崩壊 (v40_match01 パターン) が引き続き検知できることの確認。
+    """
+    stats = VideoStats(video_id="v40_match01", is_holdout=False)
+    stats.clip_duration_sec = 60.0
+
+    class _EmptyBoard:
+        def get(self, row: int, col: int) -> int:
+            return COLOR_EMPTY
+
+    # 30.0s〜45.0s を 30fps で 450 フレーム処理 (MIDGAME_COL_MIN_FRAMES=30 を大幅超過)
+    for i in range(MIDGAME_COL_MIN_FRAMES + 10):
+        t_sec = 30.0 + i * (1.0 / 30.0)
+        _collect_col_metrics(fi=i, t_sec=t_sec, confirmed_board=_EmptyBoard(), stats=stats)
+
+    # 全列が MIDGAME_COL_EMPTY_CRITICAL 以上の EMPTY 率なので CRITICAL が出ること
+    failures = _judge_i1_metrics([stats])
+    midgame_failures = [f for f in failures if "中盤 col=" in f and "EMPTY率" in f]
+    assert len(midgame_failures) > 0, (
+        "長クリップで全 EMPTY 列が CRITICAL 検知されなかった (真の崩壊を見逃す)"
+    )
+
+
+# ============================
+# 改修1: confirmed_majority_agree_rate テスト
+# ============================
+
+
+def test_confirmed_agree_rate_all_agree():
+    """3 者全員一致のとき confirmed_majority_agree_rate.overall == 1.0 になること。"""
+    stats = _make_empty_stats()
+    disags: list[dict] = []
+    # raw_cnn == raw_hsv == confirmed == RED → 全員一致
+    _record_cell("v99", 0, 0.0, "1P", 5, 2,
+                 COLOR_RED, COLOR_RED, COLOR_RED, stats, disags)
+    result = _build_confirmed_agree_rate(stats)
+    assert result["overall"] == 1.0
+
+
+def test_confirmed_agree_rate_confirmed_disagrees():
+    """confirmed が多数決ラベルと異なるとき overall < 1.0 になること。
+
+    パターン: raw_cnn=RED, raw_hsv=RED, confirmed=BLUE
+    多数決 = RED (raw_cnn + raw_hsv), confirmed != label
+    → confirmed_agree = 0/1 = 0.0
+    """
+    stats = _make_empty_stats()
+    disags: list[dict] = []
+    _record_cell("v99", 0, 0.0, "1P", 5, 2,
+                 COLOR_RED, COLOR_RED, COLOR_BLUE, stats, disags)
+    result = _build_confirmed_agree_rate(stats)
+    assert result["overall"] == 0.0
+
+
+def test_confirmed_agree_rate_partial():
+    """3 セルのうち 2 セルが confirmed 一致のとき overall == 2/3 になること。"""
+    stats = _make_empty_stats()
+    disags: list[dict] = []
+    # セル1: 全員一致 → confirmed agree
+    _record_cell("v99", 0, 0.0, "1P", 5, 2,
+                 COLOR_RED, COLOR_RED, COLOR_RED, stats, disags)
+    # セル2: 全員一致 → confirmed agree
+    _record_cell("v99", 0, 0.0, "1P", 5, 3,
+                 COLOR_BLUE, COLOR_BLUE, COLOR_BLUE, stats, disags)
+    # セル3: confirmed が不一致 → confirmed disagree
+    _record_cell("v99", 0, 0.0, "1P", 5, 4,
+                 COLOR_RED, COLOR_RED, COLOR_BLUE, stats, disags)
+    result = _build_confirmed_agree_rate(stats)
+    assert abs(result["overall"] - 2.0 / 3.0) < 1e-9
+
+
+def test_confirmed_agree_rate_includes_disagreement_cells():
+    """raw_cnn != majority_label (= disagreement) のセルも confirmed 集計に含まれること。
+
+    パターン: raw_cnn=RED, raw_hsv=BLUE, confirmed=BLUE
+    多数決 = BLUE (raw_hsv + confirmed), raw_cnn != label → disagreement
+    → confirmed_agree += 1 (confirmed == label) の計算は行われること
+    """
+    stats = _make_empty_stats()
+    disags: list[dict] = []
+    _record_cell("v99", 0, 0.0, "1P", 5, 2,
+                 COLOR_RED, COLOR_BLUE, COLOR_BLUE, stats, disags)
+    result = _build_confirmed_agree_rate(stats)
+    # confirmed == BLUE == majority_label → agree = 1/1 = 1.0
+    assert result["overall"] == 1.0
+
+
+def test_confirmed_agree_rate_per_color_structure():
+    """confirmed_majority_agree_rate.per_color に全 EVAL_COLOR が含まれること。"""
+    stats = _make_empty_stats()
+    result = _build_confirmed_agree_rate(stats)
+    assert "per_color" in result
+    # データなし色は None が入ること
+    for cname in COLOR_NAMES.values():
+        if cname != "unknown":
+            assert cname in result["per_color"]
+
+
+def test_confirmed_agree_rate_zero_cells_returns_none():
+    """セルが 0 件のとき overall == None になること (ゼロ除算しないこと)。"""
+    stats = _make_empty_stats()
+    result = _build_confirmed_agree_rate(stats)
+    assert result["overall"] is None
+
+
+def test_aggregate_stats_has_confirmed_agree_rate():
+    """_aggregate_stats の per_video に confirmed_majority_agree_rate が含まれること。"""
+    stats = [_make_stats(video_id="v99")]
+    result = _aggregate_stats(stats)
+    assert "confirmed_majority_agree_rate" in result["per_video"]["v99"]
+
+
+# ============================
+# 改修2: avg_puyo per-side テスト
+# ============================
+
+
+def test_collect_puyo_count_per_side_1p():
+    """1P の _collect_puyo_count 呼び出しで _puyo_count_sum_by_side['1P'] が増えること。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    board = _FakeBoard(COLOR_RED)  # 全 78 cell が RED (非 EMPTY)
+    _collect_puyo_count(board, stats, side="1P")
+    assert stats._puyo_count_n_stable_by_side["1P"] == 1
+    assert stats._puyo_count_sum_by_side["1P"] == BOARD_ROWS * BOARD_COLS
+    # 従来の合算フィールドも更新されること (後方互換)
+    assert stats._puyo_count_n_stable == 1
+    assert stats._puyo_count_sum == BOARD_ROWS * BOARD_COLS
+
+
+def test_collect_puyo_count_per_side_2p_separate():
+    """1P と 2P を別々に呼んだとき各サイドが独立に集計されること。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    board_red = _FakeBoard(COLOR_RED)
+    board_empty = _FakeBoard(COLOR_EMPTY)
+    _collect_puyo_count(board_red, stats, side="1P")    # 1P: 78 cell
+    _collect_puyo_count(board_empty, stats, side="2P")  # 2P: 0 cell (全 EMPTY)
+    assert stats._puyo_count_sum_by_side["1P"] == BOARD_ROWS * BOARD_COLS
+    assert stats._puyo_count_sum_by_side["2P"] == 0
+    # 合算は 78 + 0 = 78
+    assert stats._puyo_count_sum == BOARD_ROWS * BOARD_COLS
+
+
+def test_collect_puyo_count_backward_compat_no_side():
+    """side=None (旧挙動) でも per-side フィールドが更新されないこと (後方互換)。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    board = _FakeBoard(COLOR_RED)
+    _collect_puyo_count(board, stats)  # side 引数なし (後方互換)
+    # per-side フィールドは更新されない
+    assert len(stats._puyo_count_sum_by_side) == 0
+    assert len(stats._puyo_count_n_stable_by_side) == 0
+    # 従来フィールドは更新される
+    assert stats._puyo_count_n_stable == 1
+
+
+def test_build_avg_puyo_by_side_normal():
+    """1P/2P に正常値が入っているとき avg が計算されること。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    stats._puyo_count_sum_by_side["1P"] = 180  # 2 frame × 90 cell avg
+    stats._puyo_count_n_stable_by_side["1P"] = 2
+    stats._puyo_count_sum_by_side["2P"] = 60
+    stats._puyo_count_n_stable_by_side["2P"] = 3
+    result = _build_avg_puyo_by_side(stats)
+    assert abs(result["1P"] - 90.0) < 1e-9
+    assert abs(result["2P"] - 20.0) < 1e-9
+
+
+def test_build_avg_puyo_by_side_no_data_returns_none():
+    """データがない side は None が返ること。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    result = _build_avg_puyo_by_side(stats)
+    assert result["1P"] is None
+    assert result["2P"] is None
+
+
+def test_judge_i1_metrics_avg_puyo_critical():
+    """avg_puyo が AVG_PUYO_COUNT_CRITICAL 未満のとき failures に追加されること。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    # 1P は正常 (20 puyo/frame × 5 frame)
+    stats._puyo_count_sum_by_side["1P"] = 100
+    stats._puyo_count_n_stable_by_side["1P"] = 5
+    # 2P は崩壊 (1 puyo/frame × 5 frame = avg 1.0 < critical 5.0)
+    stats._puyo_count_sum_by_side["2P"] = 5
+    stats._puyo_count_n_stable_by_side["2P"] = 5
+    failures = _judge_i1_metrics([stats])
+    puyo_failures = [f for f in failures if "avg_puyo_count" in f]
+    assert len(puyo_failures) == 1
+    assert "2P" in puyo_failures[0]
+
+
+def test_judge_i1_metrics_avg_puyo_ok_no_failure():
+    """avg_puyo が AVG_PUYO_COUNT_CRITICAL 以上のとき failures に追加されないこと。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    stats._puyo_count_sum_by_side["1P"] = 200
+    stats._puyo_count_n_stable_by_side["1P"] = 10
+    stats._puyo_count_sum_by_side["2P"] = 300
+    stats._puyo_count_n_stable_by_side["2P"] = 10
+    failures = _judge_i1_metrics([stats])
+    puyo_failures = [f for f in failures if "avg_puyo_count" in f]
+    assert len(puyo_failures) == 0
+
+
+def test_aggregate_stats_has_avg_puyo_by_side():
+    """_aggregate_stats の per_video に avg_puyo_count_per_side が含まれること。"""
+    s = _make_stats(video_id="v99")
+    result = _aggregate_stats([s])
+    vid_data = result["per_video"]["v99"]
+    assert "avg_puyo_count_per_side" in vid_data
+    assert "1P" in vid_data["avg_puyo_count_per_side"]
+    assert "2P" in vid_data["avg_puyo_count_per_side"]
+
+
+# ============================
+# 改修3: non_stable chain 除外テスト
+# ============================
+
+from src.board_state_machine import BoardState
+
+
+def test_non_stable_chain_exclude_constant_is_true():
+    """NON_STABLE_CHAIN_EXCLUDE がデフォルト True であること (改修3 有効確認)。"""
+    assert NON_STABLE_CHAIN_EXCLUDE is True
+
+
+def test_eval_one_frame_chain_state_resets_counter():
+    """CHAIN state フレームで non_stable カウンタがリセットされること。
+
+    CHAIN state の non-stable は大連鎖の正常動作であるため、
+    連続カウントを中断して検知対象外にする。
+    """
+    import numpy as np
+    from scripts.measure_stable_cell_acc import _eval_one_frame
+
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    # warmup 後から開始
+    t_sec_base = NON_STABLE_WARMUP_SEC + 1.0
+    fps = 30.0
+    interval_frames = 1
+    # _eval_one_frame は frame.shape[:2] を参照するため shape を持つ配列を渡す
+    dummy_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    class _FakeChainResult:
+        """CHAIN state を返す SideResult モック。"""
+        state = BoardState.CHAIN
+        confirmed_board = None
+        cnn_board = None
+
+    class _FakeStableResult:
+        """STABLE state を返す SideResult モック。"""
+        state = BoardState.STABLE
+        confirmed_board = None
+        cnn_board = None
+
+    class _FakePipelineCnn:
+        """pipeline モック: 1P=CHAIN, 2P=STABLE。"""
+        def update(self, fi, t_sec, frame):
+            class R:
+                p1 = _FakeChainResult()
+                p2 = _FakeStableResult()
+            return R()
+
+    class _FakePipelineHsv:
+        """HSV pipeline モック。"""
+        def update(self, fi, t_sec, frame):
+            class R:
+                p1 = _FakeChainResult()
+                p2 = _FakeStableResult()
+            return R()
+
+    # 事前にカウンタを 10 に設定 (CHAIN 前に non-stable が蓄積された状態)
+    stats._non_stable_current_by_side["1P"] = 10
+
+    fi = int(t_sec_base * fps)
+    _eval_one_frame(
+        "v99", fi, fps, interval_frames, dummy_frame,
+        _FakePipelineCnn(), _FakePipelineHsv(), stats, [],
+    )
+
+    # CHAIN state なのでカウンタは 0 にリセットされること
+    assert stats._non_stable_current_by_side.get("1P", 0) == 0
+
+
+def test_eval_one_frame_non_chain_nonst_increments_counter():
+    """CHAIN 以外の non-stable (TSUMO_FALL) ではカウンタが増えること。
+
+    CHAIN 除外機能が CHAIN state 限定で動作し、他の non-stable は検知継続。
+    """
+    import numpy as np
+    from scripts.measure_stable_cell_acc import _eval_one_frame
+
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    t_sec_base = NON_STABLE_WARMUP_SEC + 1.0
+    fps = 30.0
+    interval_frames = 1
+    dummy_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    class _FakeTsumoResult:
+        """TSUMO_FALL state を返す SideResult モック。"""
+        state = BoardState.TSUMO_FALL
+        confirmed_board = None
+        cnn_board = None
+
+    class _FakePipelineCnn:
+        def update(self, fi, t_sec, frame):
+            class R:
+                p1 = _FakeTsumoResult()
+                p2 = _FakeTsumoResult()
+            return R()
+
+    class _FakePipelineHsv:
+        def update(self, fi, t_sec, frame):
+            class R:
+                p1 = _FakeTsumoResult()
+                p2 = _FakeTsumoResult()
+            return R()
+
+    fi = int(t_sec_base * fps)
+    _eval_one_frame(
+        "v99", fi, fps, interval_frames, dummy_frame,
+        _FakePipelineCnn(), _FakePipelineHsv(), stats, [],
+    )
+
+    # TSUMO_FALL なのでカウンタは 1 になること
+    assert stats._non_stable_current_by_side.get("1P", 0) == 1
+    assert stats._non_stable_current_by_side.get("2P", 0) == 1
