@@ -477,6 +477,16 @@ class RecognitionPipeline:
         # B1 禁忌隣接のため default False。viz 検証後に判断する。
         # backwards compat: False で既存挙動と完全同一。
         enable_stable_recovery_gate: bool = False,
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # enable_ojama_visual_detection: 親フラグ。True で全子フラグを有効化。
+        # enable_ojama_visual_chain_exit: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲。
+        # enable_ojama_infer_guard: OJAMA_FALL → STABLE 直後に infer_placement を抑止。
+        # enable_ojama_settle_detection: OJAMA_FALL 中お邪魔 count 不変で STABLE 復帰。
+        # 全 default False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_visual_detection: bool = False,
+        enable_ojama_visual_chain_exit: bool = False,
+        enable_ojama_infer_guard: bool = False,
+        enable_ojama_settle_detection: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -660,15 +670,37 @@ class RecognitionPipeline:
         self._recent_scores_2p: list[int | None] = []
         # 設計C 事後復旧ゲート: フラグを保持し _build_state_machine / _step_side に伝播。
         self._enable_stable_recovery_gate: bool = bool(enable_stable_recovery_gate)
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # enable_ojama_visual_detection = 親フラグ (True で子フラグも有効化)。
+        # 個別フラグは親フラグ OFF でも True 指定可能 (細粒度制御用)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        _ovd_parent = bool(enable_ojama_visual_detection)
+        self._enable_ojama_visual_detection: bool = _ovd_parent
+        self._enable_ojama_visual_chain_exit: bool = (
+            _ovd_parent or bool(enable_ojama_visual_chain_exit)
+        )
+        self._enable_ojama_infer_guard: bool = (
+            _ovd_parent or bool(enable_ojama_infer_guard)
+        )
+        self._enable_ojama_settle_detection: bool = (
+            _ovd_parent or bool(enable_ojama_settle_detection)
+        )
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
+        # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
         self._sm_1p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=self._enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
+            enable_ojama_settle_detection=self._enable_ojama_settle_detection,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=self._enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
+            enable_ojama_settle_detection=self._enable_ojama_settle_detection,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -882,21 +914,39 @@ class RecognitionPipeline:
         *,
         enable_warmup_guard: bool = False,
         enable_stable_recovery_gate: bool = False,
+        enable_ojama_visual_detection: bool = False,
+        enable_ojama_visual_chain_exit: bool = False,
+        enable_ojama_settle_detection: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame
         # confirmed 更新を凍結する (A/B 対照実験用 optional 機能)。
         # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
+        # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
+        # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
+        # ChainPhaseDetector に chain_ojama_exit フラグを伝播する
+        chain_det = ChainPhaseDetector(
+            chain_sim=ChainSimulator(),
+            enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
+        )
+        detectors: list = [
+            chain_det,
+            EffectPhaseDetector(),
+        ]
+        if enable_ojama_visual_detection:
+            from src.ojama_visual_detector import OjamaVisualDetector
+            ovd = OjamaVisualDetector(
+                enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+                enable_ojama_settle_detection=enable_ojama_settle_detection,
+            )
+            detectors.append(ovd)
+        detectors.append(OjamaPhaseDetector())
+        detectors.append(TsumoPhaseDetector())
         return BoardStateMachine(
-            detectors=[
-                ChainPhaseDetector(chain_sim=ChainSimulator()),
-                EffectPhaseDetector(),
-                OjamaPhaseDetector(),
-                TsumoPhaseDetector(),
-            ],
+            detectors=detectors,
             stable_frame_count=stable_n,
             enable_warmup_guard=enable_warmup_guard,
             warmup_frames=STABLE_WARMUP_FRAMES,
@@ -947,6 +997,12 @@ class RecognitionPipeline:
         enable_specular_robust_saturation: bool = False,
         # 設計C 事後復旧ゲート (2026-06-02): default False = 従来挙動完全維持。
         enable_stable_recovery_gate: bool = False,
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # 全 default False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_visual_detection: bool = False,
+        enable_ojama_visual_chain_exit: bool = False,
+        enable_ojama_infer_guard: bool = False,
+        enable_ojama_settle_detection: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1088,6 +1144,10 @@ class RecognitionPipeline:
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
         )
 
     # ------------------------------------------------------------------
@@ -2346,6 +2406,13 @@ class RecognitionPipeline:
                 )
             except Exception:
                 _hsv_board_for_signals = None
+        # フェーズ A 精緻化 (2026-06-02): OjamaVisualDetector の内部 state 更新前に
+        # 一次判定 (ROI お邪魔 count) を計算し、 signals に ojama_top_positive をセット。
+        # OjamaVisualDetector はこれを受けて内部カウンタを進める。
+        _ojama_top_positive: bool = False
+        if self._enable_ojama_visual_detection:
+            from src.ojama_visual_detector import _count_top_ojama as _cnt_oj
+            _ojama_top_positive = _cnt_oj(cnn_board, _hsv_board_for_signals) > 0
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -2358,6 +2425,7 @@ class RecognitionPipeline:
             effect_visible=effect_vis,
             match_just_started=match_just_started,
             hsv_board=_hsv_board_for_signals,
+            ojama_top_positive=_ojama_top_positive,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -2399,10 +2467,22 @@ class RecognitionPipeline:
         # placement_inferrer.infer_placement (= 物理パターン全列挙 + NEXT 色固定
         # + CNN 一致度で候補絞り込み) に置換. 連鎖即時判定も resolve_after_placement
         # で実行し、 仮説 B (= 連鎖検出 1 秒遅延) を解消する.
+        # フェーズ A 精緻化: ojama_infer_guard かつ ojama_tier1_warmup 中なら
+        # infer_placement をスキップする。OJAMA_FALL 直後の warmup 期間に
+        # ツモが存在しないのに幽霊配置が走るのを防ぐ。
+        _ojama_warmup_remaining = (
+            self._ojama_tier1_warmup_remaining_1p if side == "1P"
+            else self._ojama_tier1_warmup_remaining_2p
+        )
+        _skip_infer_by_ojama_guard = (
+            self._enable_ojama_infer_guard
+            and _ojama_warmup_remaining > 0
+        )
         if (
             prev_state == BoardState.TSUMO_FALL
             and ctx.state == BoardState.STABLE
             and prev_confirmed is not None
+            and not _skip_infer_by_ojama_guard
         ):
             # 落下中ツモ色 = TSUMO 開始時の next (= 直前の next、現 next の 1 つ前)
             # 診断: 従来ロジック (prev_next_queue[-2]) と
@@ -2625,6 +2705,9 @@ class RecognitionPipeline:
         if (
             prev_state != BoardState.TSUMO_FALL
             and prev_state != BoardState.CHAIN
+            # フェーズ A 精緻化: OJAMA_FALL → STABLE 復帰時は infer 発火禁止。
+            # お邪魔降下中の幽霊配置を根絶するための常時ガード。フラグ非依存。
+            and prev_state != BoardState.OJAMA_FALL
             and ctx.state == BoardState.STABLE
             and prev_confirmed is not None
             and ctx.confirmed_board is not None

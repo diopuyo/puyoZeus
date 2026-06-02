@@ -193,6 +193,11 @@ class DetectorSignals:
     # 開始フィールド corruption を防ぐ。 ぷよぷよ eスポーツの物理ルール:
     # 「試合開始時のフィールドは必ず空」 を構造的に取り込んだ防御層。
     match_just_started: bool = False
+    # フェーズ A 精緻化: 可視最上段付近の ROI にお邪魔が存在するか (一次判定)。
+    # OjamaVisualDetector の内部カウンタ更新前に RecognitionPipeline 側で
+    # _count_top_ojama() を呼び出してセットする。default False で既存挙動不変。
+    # backwards compat: default False で既存動作と完全同一。
+    ojama_top_positive: bool = False
 
 
 class StateTransitionDetector(Protocol):
