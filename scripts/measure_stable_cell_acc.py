@@ -102,12 +102,30 @@ PER_COL_UNKNOWN_CRITICAL: float = 0.30  # 30% 超 = CRITICAL
 NON_STABLE_CRITICAL_FRAMES: int = 180  # 180 sample frame = ~3 秒 @ 60fps
 NON_STABLE_WARMUP_SEC: float = 15.0  # 試合開始から 15 秒は計測除外
 
+# 改修3: non_stable chain中除外
+# CHAIN 中の non-stable は大連鎖の正常動作であるため連続カウント対象外にする。
+# MENU / TSUMO_FALL / EFFECT 等 CHAIN 以外の連続 non-stable のみ検知する。
+NON_STABLE_CHAIN_EXCLUDE: bool = True  # True = CHAIN state を連続 non-stable 除外
+
 # I1 メトリクス: per_col_empty_rate_by_game_phase 閾値
 # 中盤 (= 30 秒以降) で特定 col が全 STABLE フレーム中 100% EMPTY なら CRITICAL
 # v40_match01「1P col=1 全 EMPTY 誤判定」 を捕捉する
 MIDGAME_START_SEC: float = 30.0  # 中盤開始時刻 (秒)
 MIDGAME_COL_EMPTY_CRITICAL: float = 0.99  # 99% 以上 EMPTY = CRITICAL
 MIDGAME_COL_MIN_FRAMES: int = 30  # 最低 30 STABLE frame が必要
+# 改修2: avg_puyo per-side + CRITICAL閾値
+# STABLE フレームの 1P / 2P 各サイド平均ぷよ数が本定数未満の場合は列崩壊疑いとして
+# failures に WARNING を追加する (FAIL 化する)。
+# 実測最小値 18 以上を前提に保守的閾値を設定する (誤発報防止)。
+AVG_PUYO_COUNT_CRITICAL: float = 5.0  # 5.0 未満 = 列崩壊疑い WARNING
+
+# クリップ末尾 N 秒を中盤評価から除外する (短クリップ偽陽性対策)
+# 問題: v70_match01 (30.5s) は末尾 0.5 秒だけが中盤判定区間に入り、
+# 連鎖後の正当な列空きを「中盤列崩壊」と誤 FAIL していた。
+# 対策: クリップ末尾 MIDGAME_TRAIL_EXCLUDE_SEC を中盤評価から除外する。
+# 真の中盤列崩壊 (v40_match01 等の 60s クリップ中盤) は影響を受けない。
+# 後方互換のため既存定数は変更せず新定数として追加する。
+MIDGAME_TRAIL_EXCLUDE_SEC: float = 10.0  # 末尾 10 秒は中盤評価から除外
 
 # HSV DB ルート
 _HSV_DB_ROOT = Path("data/per_video_hsv_ranges")
@@ -177,6 +195,9 @@ class VideoStats:
     per_col_midgame_empty_cells: dict = field(default_factory=lambda: defaultdict(int))
     # per_col_midgame_cells[col]: 中盤 STABLE フレームで確認した cell 数 (col 別、分母)
     per_col_midgame_cells: dict = field(default_factory=lambda: defaultdict(int))
+    # クリップ総時間 (秒)。0.0 = 不明 (末尾除外を適用しない)
+    # 後方互換のため default=0.0。_open_capture で設定される。
+    clip_duration_sec: float = 0.0
     # _non_stable_current_by_side: side 別 non-stable 連続カウンタ (内部、init 時 {}).
     # non_stable_max_consecutive の更新用。直接参照禁止。
     _non_stable_current_by_side: dict = field(default_factory=dict, repr=False, compare=False)
@@ -184,6 +205,17 @@ class VideoStats:
     # STABLE フレームの 1P+2P 合算ぷよ数合計と frame 数
     _puyo_count_sum: int = 0
     _puyo_count_n_stable: int = 0
+    # 改修2: per-side 別 puyo count (後方互換のため default 付き)
+    # side → (count_sum, n_stable_frames) を保持する
+    _puyo_count_sum_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    _puyo_count_n_stable_by_side: dict = field(default_factory=lambda: defaultdict(int))
+    # 改修1: confirmed_majority_agree (後方互換のため default 付き)
+    # STABLE セルで confirmed_val == majority_label(多数決) が一致した数と総 cell 数
+    _confirmed_agree_cells: int = 0
+    _confirmed_total_cells: int = 0
+    # per_color 別 confirmed agree (後方互換のため default 付き)
+    _confirmed_agree_by_color: dict = field(default_factory=lambda: defaultdict(int))
+    _confirmed_total_by_color: dict = field(default_factory=lambda: defaultdict(int))
     # 並列ワーカが収集した不一致 cell リスト (後方互換のため default=[])
     # 逐次モードでは空リスト。並列モードではワーカ内で収集した値が入り、
     # 親プロセスで各動画分を統合する。pickle 可能な plain dict リスト。
@@ -281,6 +313,21 @@ def _make_pipeline_cnn(
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -296,12 +343,59 @@ def _make_pipeline_cnn(
         enable_infer_empty_guard: True にすると infer_placement の空セル
             hallucination ガードを有効化する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) + 短連鎖 game-event exit 抑止。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避し、
+            黄→赤誤分類 (~900 件) 発火点を修正する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化。
+            HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_visual_detection: True にするとおじゃま視覚検知 (親フラグ) を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_visual_chain_exit: True にすると CHAIN→STABLE 復帰をお邪魔視覚に委譲。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_infer_guard: True にすると OJAMA_FALL 直後の infer_placement を抑止。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_settle_detection: True にすると OJAMA_FALL 中 count 不変で STABLE 復帰。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_tier1_warmup: True にすると OJAMA 専用 tier1 warmup を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -332,7 +426,13 @@ def _open_capture(
     max_frames: int,
     sample_interval_sec: float,
 ) -> tuple:
-    """動画キャプチャを開き (cap, fps, n_target, interval_frames) を返す。"""
+    """動画キャプチャを開き (cap, fps, n_target, interval_frames, clip_duration_sec) を返す。
+
+    clip_duration_sec: クリップ全体の時間 (秒)。中盤末尾除外判定に使う。
+    戻り値: (cap, fps, n_target, interval_frames, clip_duration_sec) または None。
+    backwards compat: 既存呼出元は 4 要素 tuple を期待しているため、
+    5 要素 tuple に拡張。呼出元 (_process_video) も同時に更新する。
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -340,7 +440,9 @@ def _open_capture(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     n_target = total_frames if max_frames <= 0 else min(total_frames, max_frames)
     interval_frames = max(1, int(round(sample_interval_sec * fps)))
-    return cap, fps, n_target, interval_frames
+    # クリップ全体の秒数 (= 実総フレーム数を使う。max_frames 制限前の値)
+    clip_duration_sec = total_frames / fps if fps > 0 else 0.0
+    return cap, fps, n_target, interval_frames, clip_duration_sec
 
 
 
@@ -374,8 +476,18 @@ def _eval_one_frame(
         ("2P", res_cnn.p2, res_hsv.p2),
     ]:
         if sr_cnn.state != BoardState.STABLE or sr_cnn.confirmed_board is None:
-            # non-stable フレームをカウント (warmup 後のみ)
-            if t_sec >= NON_STABLE_WARMUP_SEC:
+            # 改修3: CHAIN state は大連鎖の正常 non-stable のためカウント対象外にする。
+            # MENU / TSUMO_FALL / EFFECT 等の異常系 non-stable のみを連続カウントする。
+            # NON_STABLE_CHAIN_EXCLUDE=False で旧挙動 (chain もカウント) に戻せる。
+            is_chain_state = (
+                NON_STABLE_CHAIN_EXCLUDE
+                and sr_cnn.state == BoardState.CHAIN
+            )
+            if is_chain_state:
+                # 連鎖中はカウンタをリセットして連続検知を中断する
+                stats._non_stable_current_by_side[side] = 0
+            elif t_sec >= NON_STABLE_WARMUP_SEC:
+                # warmup 後のみカウント (chain 以外の non-stable)
                 stats._non_stable_current_by_side[side] = (
                     stats._non_stable_current_by_side.get(side, 0) + 1
                 )
@@ -387,7 +499,8 @@ def _eval_one_frame(
         stats._non_stable_current_by_side[side] = 0
         stats.stable_frame_count += 1
         # C1: STABLE confirmed_board のぷよ数を集計 (= avg_puyo_count 計算用)
-        _collect_puyo_count(sr_cnn.confirmed_board, stats)
+        # 改修2: side を渡して per-side 集計も有効化する
+        _collect_puyo_count(sr_cnn.confirmed_board, stats, side=side)
         _eval_side_frame(
             side, fi, t_sec, video_id,
             raw_cnn_board=sr_cnn.cnn_board,
@@ -408,9 +521,15 @@ def _run_frame_loop(
     pipe_cnn: RecognitionPipeline,
     pipe_hsv: RecognitionPipeline,
     disagreements: list[dict],
+    clip_duration_sec: float = 0.0,
 ) -> VideoStats:
-    """動画 frame ループを走らせ VideoStats を返す。"""
+    """動画 frame ループを走らせ VideoStats を返す。
+
+    clip_duration_sec: クリップ全体の秒数 (中盤末尾除外に使用)。
+    0.0 = 不明 → 末尾除外を適用しない (後方互換)。
+    """
     stats = VideoStats(video_id=video_id, is_holdout=is_holdout)
+    stats.clip_duration_sec = clip_duration_sec
     for fi in range(n_target):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -437,6 +556,21 @@ def _process_video(
     enable_constraint_fill: bool = True,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -450,12 +584,33 @@ def _process_video(
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する (次ツモ変化 / お邪魔降下で CHAIN 終了)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避し、
+            黄→赤誤分類 (~900 件) 発火点を修正する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
+            HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
         print(f"[measure] 動画を開けません: {video_path}", file=sys.stderr)
         return VideoStats(video_id=video_id, is_holdout=is_holdout)
-    cap, fps, n_target, interval_frames = cap_info
+    cap, fps, n_target, interval_frames, clip_duration_sec = cap_info
     # confirmed 経路 (CNN+物理推論) のみ各フラグを制御する。
     # raw_hsv 経路は constraint_fill を通らないため変更不要。
     pipe_cnn = _make_pipeline_cnn(
@@ -463,12 +618,31 @@ def _process_video(
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
-    print(f"[measure] {video_id}: fps={fps:.1f} target={n_target} holdout={is_holdout}")
+    print(
+        f"[measure] {video_id}: fps={fps:.1f} target={n_target} "
+        f"holdout={is_holdout} clip_duration={clip_duration_sec:.1f}s"
+    )
     stats = _run_frame_loop(
         video_id, cap, fps, n_target, interval_frames,
         is_holdout, pipe_cnn, pipe_hsv, disagreements,
+        clip_duration_sec=clip_duration_sec,
     )
     cap.release()
     rate = stats.agreed_cells / stats.total_cells if stats.total_cells > 0 else 0.0
@@ -486,6 +660,21 @@ def _process_video_worker(
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -511,6 +700,21 @@ def _process_video_worker(
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -630,6 +834,17 @@ def _record_cell(
     if all_agree:
         stats.all_three_agree_count += 1
 
+    # 改修1: confirmed_majority_agree_rate 集計
+    # STABLE セルで confirmed_val == majority_label(多数決) の一致率を計算する。
+    # agreed / disagreement 両ケースを含む全 STABLE セルで集計する。
+    # 1.0 に近いほど confirmed が多数決と整合 (confirmed 精度の代理指標)。
+    # FAIL 判定には使わず情報提示のみ。
+    stats._confirmed_total_cells += 1
+    stats._confirmed_total_by_color[label] += 1
+    if confirmed_val == label:
+        stats._confirmed_agree_cells += 1
+        stats._confirmed_agree_by_color[label] += 1
+
     if raw_cnn_val == label:
         stats.agreed_cells += 1
         stats.correct_by_color[label] += 1
@@ -703,11 +918,21 @@ def _eval_side_frame(
         _collect_col_metrics(fi, t_sec, confirmed_board, stats)
 
 
-def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
+def _collect_puyo_count(
+    confirmed_board: object,
+    stats: VideoStats,
+    side: Optional[str] = None,
+) -> None:
     """STABLE confirmed_board の非 EMPTY・非 UNKNOWN cell 数を stats に加算する。
 
     C1 avg_puyo_count_per_stable_frame 計算用。
     1 サイド分のカウントを加算する (= frame ごとに 1P / 2P 別に呼ばれる)。
+
+    Args:
+        confirmed_board: STABLE 確定盤面。None なら何もしない。
+        stats: 集計先の VideoStats インスタンス。
+        side: "1P" or "2P"。改修2 per-side 集計用。None の場合は per-side 集計を行わない
+              (backwards compat: 既存呼出元は side=None のまま動作)。
     """
     if confirmed_board is None:
         return
@@ -717,8 +942,36 @@ def _collect_puyo_count(confirmed_board: object, stats: VideoStats) -> None:
             val = int(confirmed_board.get(row, col))
             if val not in (COLOR_EMPTY, COLOR_UNKNOWN):
                 count += 1
+    # 従来の 1P+2P 合算集計 (後方互換維持)
     stats._puyo_count_sum += count
     stats._puyo_count_n_stable += 1
+    # 改修2: per-side 別集計 (side が指定された場合のみ)
+    if side is not None:
+        stats._puyo_count_sum_by_side[side] += count
+        stats._puyo_count_n_stable_by_side[side] += 1
+
+
+def _is_midgame_frame(t_sec: float, clip_duration_sec: float) -> bool:
+    """フレームが中盤評価区間に属するかを返す。
+
+    中盤評価区間の定義:
+      [MIDGAME_START_SEC, clip_duration_sec - MIDGAME_TRAIL_EXCLUDE_SEC)
+
+    clip_duration_sec=0.0 (不明) の場合は末尾除外を適用せず、
+    従来通り t_sec >= MIDGAME_START_SEC のみで判定する (後方互換)。
+
+    短クリップ偽陽性対策 (v70_match01 問題):
+      30.5s クリップでは末尾 10s を除外すると有効中盤区間が
+      [30.0, 20.5) となりフレームが含まれなくなる。
+      MIDGAME_COL_MIN_FRAMES (=30) に満たないため CRITICAL 判定されない。
+    """
+    if t_sec < MIDGAME_START_SEC:
+        return False
+    if clip_duration_sec <= 0.0:
+        # clip 長が不明のときは末尾除外を適用しない (後方互換)
+        return True
+    trail_cutoff = clip_duration_sec - MIDGAME_TRAIL_EXCLUDE_SEC
+    return t_sec < trail_cutoff
 
 
 def _collect_col_metrics(
@@ -731,8 +984,9 @@ def _collect_col_metrics(
 
     col 別 UNKNOWN 率が高い = STABLE 中の認識崩壊 (v89 27-30s 相当) を捕捉。
     中盤 EMPTY 率が 100% = col=1 全 EMPTY 誤判定 (v40_match01 相当) を捕捉。
+    clip_duration_sec は stats.clip_duration_sec から取得する。
     """
-    is_midgame = t_sec >= MIDGAME_START_SEC
+    is_midgame = _is_midgame_frame(t_sec, stats.clip_duration_sec)
     for col in range(BOARD_COLS):
         col_unknown = 0
         col_cells = 0
@@ -787,6 +1041,40 @@ def _build_row_acc(stats_list: list[VideoStats]) -> dict[str, float]:
     }
 
 
+def _build_avg_puyo_by_side(s: VideoStats) -> dict[str, object]:
+    """VideoStats から per-side avg_puyo_count を計算して返す。
+
+    改修2: 1P / 2P 別の STABLE フレーム平均ぷよ数を集計する。
+    データがない side は None を返す (後方互換)。
+    Returns: {"1P": float|None, "2P": float|None}
+    """
+    result: dict[str, object] = {}
+    for side in ("1P", "2P"):
+        n = s._puyo_count_n_stable_by_side.get(side, 0)
+        total = s._puyo_count_sum_by_side.get(side, 0)
+        result[side] = total / n if n > 0 else None
+    return result
+
+
+def _build_confirmed_agree_rate(s: VideoStats) -> dict[str, object]:
+    """VideoStats から confirmed_majority_agree_rate を計算して返す。
+
+    改修1: confirmed_val == majority_label(多数決) の STABLE 全セル一致率。
+    overall + per_color を返す。FAIL 判定には使わず情報提示のみ。
+    Returns: {"overall": float|None, "per_color": {color_name: float|None}}
+    """
+    overall = (
+        s._confirmed_agree_cells / s._confirmed_total_cells
+        if s._confirmed_total_cells > 0 else None
+    )
+    per_color: dict[str, object] = {}
+    for c in EVAL_COLORS:
+        total = s._confirmed_total_by_color.get(c, 0)
+        agree = s._confirmed_agree_by_color.get(c, 0)
+        per_color[COLOR_NAMES[c]] = agree / total if total > 0 else None
+    return {"overall": overall, "per_color": per_color}
+
+
 def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
     """動画別集計 dict を生成する。"""
     return {
@@ -823,6 +1111,14 @@ def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
                 if s._puyo_count_n_stable > 0 else None
             ),
             "n_stable_frames_puyo": s._puyo_count_n_stable,
+            # 改修2: per-side 別 avg_puyo_count
+            # 1P / 2P 各サイドの STABLE フレーム平均ぷよ数。
+            # 一方のサイドのみ極端に低い場合は片側列崩壊を示す。
+            "avg_puyo_count_per_side": _build_avg_puyo_by_side(s),
+            # 改修1: confirmed_majority_agree_rate (confirmed 精度代理指標)
+            # confirmed_val == majority_label の全 STABLE セル一致率。
+            # FAIL 判定には使わず情報提示のみ。1.0 = confirmed が多数決と完全整合。
+            "confirmed_majority_agree_rate": _build_confirmed_agree_rate(s),
         }
         for s in stats_list
     }
@@ -876,6 +1172,10 @@ def _build_i1_summary(stats_list: list[VideoStats]) -> dict:
             "per_col_unknown_critical": PER_COL_UNKNOWN_CRITICAL,
             "non_stable_critical_frames": NON_STABLE_CRITICAL_FRAMES,
             "midgame_col_empty_critical": MIDGAME_COL_EMPTY_CRITICAL,
+            # 改修2: per-side avg_puyo CRITICAL 閾値を記録 (後方互換追加)
+            "avg_puyo_count_critical": AVG_PUYO_COUNT_CRITICAL,
+            # 改修3: chain 中 non-stable 除外フラグを記録 (後方互換追加)
+            "non_stable_chain_exclude": NON_STABLE_CHAIN_EXCLUDE,
         },
     }
 
@@ -1038,6 +1338,19 @@ def _judge_i1_metrics(stats_list: list) -> list[str]:
                 failures.append(
                     f"[{s.video_id}] 中盤 col={col} EMPTY率 {empty_rate:.1%} >= CRITICAL閾値 {MIDGAME_COL_EMPTY_CRITICAL:.0%}"
                     f" (v40_match01 全EMPTY誤判定パターン)"
+                )
+        # 改修2: per-side avg_puyo_count CRITICAL 閾値チェック
+        # AVG_PUYO_COUNT_CRITICAL 未満 = 列崩壊疑い (実測最小 18 以上が正常)
+        for side in ("1P", "2P"):
+            n = s._puyo_count_n_stable_by_side.get(side, 0)
+            if n <= 0:
+                continue
+            avg = s._puyo_count_sum_by_side.get(side, 0) / n
+            if avg < AVG_PUYO_COUNT_CRITICAL:
+                failures.append(
+                    f"[{s.video_id}] {side} avg_puyo_count {avg:.2f} < "
+                    f"CRITICAL閾値 {AVG_PUYO_COUNT_CRITICAL:.1f}"
+                    f" (列崩壊疑い: STABLE フレームのぷよ数が異常に少ない)"
                 )
     return failures
 
@@ -1291,40 +1604,235 @@ def _parse_args() -> argparse.Namespace:
         help="認識処理間隔 (秒)。",
     )
     p.add_argument(
-        "--no-constraint-fill",
-        action="store_true",
+        "--constraint-fill",
+        action=argparse.BooleanOptionalAction,
         default=False,
+        dest="enable_constraint_fill",
         help=(
-            "NEXT 累積制約による色 count 補正 (constraint_fill) を無効化する。 "
-            "constraint_fill の net 効果測定用。 "
-            "confirmed 経路 (CNN+物理推論 post-process) に効く。 "
-            "省略時は従来挙動 (constraint_fill 有効)。"
+            "NEXT 累積制約による色 count 補正 (constraint_fill) を制御する。 "
+            "--constraint-fill で有効化、 --no-constraint-fill で無効化。 "
+            "ライブラリ default=False (無効) に整合。 "
+            "constraint_fill の net 効果測定: --constraint-fill で有効化して比較。 "
+            "confirmed 経路 (CNN+物理推論 post-process) に効く。"
         ),
     )
     p.add_argument(
         "--t2-highconf-yield",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_t2_highconf_yield",
         help=(
-            "T2 高確信 yield を有効化する。 "
+            "T2 高確信 yield を制御する。 "
             "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
             "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
-            "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正の "
-            "net 効果測定用。省略時は従来挙動 (T2 yield 無効)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-t2-highconf-yield で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--infer-empty-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_infer_empty_guard",
         help=(
-            "infer_placement 空セル hallucination ガードを有効化する。 "
+            "infer_placement 空セル hallucination ガードを制御する。 "
             "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
             "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
-            "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
-            "省略時は従来挙動 (guard 無効)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-infer-empty-guard で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--game-event-chain-exit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_game_event_chain_exit",
+        help=(
+            "game-event ベース連鎖終了を制御する。 "
+            "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
+            "「連鎖側お邪魔降下」を検知するまで維持する。 "
+            "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-game-event-chain-exit で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--landing-color-fix",
+        action="store_true",
+        default=False,
+        dest="enable_landing_color_fix",
+        help=(
+            "着地色修正 案1: TSUMO_FALL→STABLE 着地時の falling_pair を "
+            "_landing_pending (消費済みツモ色) に切り替える。 "
+            "slide_motion(R-7) 経由で 1 つ前のツモ色を指してしまう誤色問題の修正。 "
+            "省略時は従来挙動 (prev_next_queue[-2] を使用)。"
+        ),
+    )
+    p.add_argument(
+        "--chain-min-display",
+        action="store_true",
+        default=False,
+        dest="enable_chain_min_display",
+        help=(
+            "X1/X4 短連鎖ちらつき対策を有効化する。 "
+            f"CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC={RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s) + "
+            f"短連鎖 game-event exit 抑止 (chain_count < {RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT})。 "
+            "enable_game_event_chain_exit と独立フラグ (効果分解のため)。 "
+            "省略時は従来挙動 (game-event exit 無補正)。"
+        ),
+    )
+    p.add_argument(
+        "--hsv-classify-fallback",
+        action="store_true",
+        default=False,
+        dest="enable_hsv_classify_fallback",
+        help=(
+            "HSV 分類 fallback を有効化する。 "
+            "_classify_next_pair_by_hsv の 2 択強制確定を回避し、 "
+            "両候補が拮抗・両候補とも遠い・低彩度 patch の場合は next_pair 素返しにする。 "
+            "黄(H26)→赤(H7) 誤分類 (~900 件、 H 差 19) 発火点対策。 "
+            "省略時は従来挙動 (2 択強制確定)。"
+        ),
+    )
+    p.add_argument(
+        "--landing-observed-color",
+        action="store_true",
+        default=False,
+        dest="enable_landing_observed_color",
+        help=(
+            "真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化する。 "
+            "TSUMO_FALL→STABLE 着地時に infer_placement 後の着地 2 cell で "
+            "CNN 観測色と HSV-only 観測色が一致する場合は観測色を採用し、 "
+            "falling_pair タイミングずれによる yellow→red 等の誤色を上流で断つ。 "
+            "省略時は従来挙動 (infer_placement の結果をそのまま使用)。"
+        ),
+    )
+    p.add_argument(
+        "--red-hue-wrap-fix",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_red_hue_wrap_fix",
+        help=(
+            "赤色相折り返し補正を制御する。 "
+            "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
+            "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-red-hue-wrap-fix で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--specular-robust-saturation",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_specular_robust_saturation",
+        help=(
+            "案D: 光沢ハイライト除外彩度計算を制御する。 "
+            "ぷよ表面の白ハイライト画素 (V>=" + str(210) + " かつ S<=" + str(60) + ") を "
+            "彩度 median 計算から除外し、光沢球混入による EMPTY 誤判定を防ぐ。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-specular-robust-saturation で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--stable-recovery-gate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_stable_recovery_gate",
+        help=(
+            "設計C 事後復旧ゲートを制御する。 "
+            "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
+            f"{8} フレーム継続したセルを confirmed に復旧する。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-stable-recovery-gate で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-visual-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_visual_detection",
+        help=(
+            "フェーズA: おじゃま視覚検知 (親フラグ) を制御する。 "
+            "True にすると OjamaVisualDetector が BoardStateMachine に挿入され、 "
+            "子フラグ (--enable-ojama-visual-chain-exit / --enable-ojama-settle-detection) も有効化。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-visual-detection で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-visual-chain-exit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_visual_chain_exit",
+        help=(
+            "フェーズA: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲する。 "
+            "OjamaVisualDetector がお邪魔降下終了を検知したタイミングで CHAIN 終了判定する。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-visual-chain-exit で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-infer-guard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_infer_guard",
+        help=(
+            "フェーズA: OJAMA_FALL → STABLE 直後の infer_placement を制御する。 "
+            "ojama_tier1_warmup 期間中にツモが存在しないのに幽霊配置が走るのを防ぐ。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-infer-guard で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-settle-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_settle_detection",
+        help=(
+            "フェーズA: OJAMA_FALL 中にお邪魔 count 不変フレームが続いたら STABLE 復帰する。 "
+            "お邪魔落下完了後の長期 non-stable を短縮する。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-settle-detection で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--ojama-tier1-warmup",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_ojama_tier1_warmup",
+        help=(
+            "OJAMA 専用 tier1 warmup を制御する。 "
+            "OJAMA_FALL → STABLE 遷移時に BG_FP tier1 を OJAMA_TIER1_WARMUP_FRAMES 間スキップし、 "
+            "お邪魔消滅後の BG 距離による列崩壊 (v70 真因) を防ぐ。 "
+            "ライブラリ default=True (有効)。 "
+            "--no-ojama-tier1-warmup で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--chain-score-early-fire",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_score_early_fire",
+        help=(
+            "機能B: score 急増 CHAIN 早期発火を制御する。 "
+            f"True にすると自 side の score_delta >= {80} の frame で "
+            "VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。 "
+            "OCR 失敗 / score 取得不可時は従来の VideoChainTracker 経路を維持 (OR 追加)。 "
+            "ライブラリ default=False (無効)。 "
+            "--chain-score-early-fire で有効化、 --no-chain-score-early-fire で無効化。"
+        ),
+    )
+    p.add_argument(
+        "--chain-exit-warmup",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_exit_warmup",
+        help=(
+            "機能C: CHAIN → STABLE 遷移直後の confirmed 凍結を制御する。 "
+            f"True にすると CHAIN→STABLE 復帰から {0.1}s 間 confirmed 更新を凍結し "
+            "エフェクト残光色の混入を防ぐ。 時間ベース実装で fps 非依存。 "
+            "ライブラリ default=False (無効)。 "
+            "--chain-exit-warmup で有効化、 --no-chain-exit-warmup で無効化。"
         ),
     )
     p.add_argument(
@@ -1360,6 +1868,21 @@ def _collect_results(
     workers: int = 1,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1373,6 +1896,22 @@ def _collect_results(
             CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
             hallucination ガードを有効化する。backwards compat: デフォルト False = 従来挙動。
+        enable_game_event_chain_exit: True にすると game-event ベース連鎖終了を
+            有効化する。backwards compat: デフォルト False = 従来挙動。
+        enable_landing_color_fix: True にすると TSUMO_FALL→STABLE 着地時の
+            falling_pair を _landing_pending (消費済みツモ色) に切り替える。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_chain_min_display: True にすると X1/X4 短連鎖ちらつき対策を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_hsv_classify_fallback: True にすると HSV 分類 fallback を有効化。
+            _classify_next_pair_by_hsv の 2 択強制確定を回避する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1394,6 +1933,21 @@ def _collect_results(
             sample_interval_sec, disagreements, enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
+            enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1401,6 +1955,21 @@ def _collect_results(
         effective_workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
 
 
@@ -1413,6 +1982,21 @@ def _collect_serial(
     enable_constraint_fill: bool,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1427,6 +2011,21 @@ def _collect_serial(
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
+            enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1442,6 +2041,21 @@ def _collect_parallel(
     workers: int,
     enable_t2_highconf_yield: bool = False,
     enable_infer_empty_guard: bool = False,
+    enable_game_event_chain_exit: bool = False,
+    enable_landing_color_fix: bool = False,
+    enable_chain_min_display: bool = False,
+    enable_hsv_classify_fallback: bool = False,
+    enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
+    enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1470,6 +2084,21 @@ def _collect_parallel(
                 enable_constraint_fill,
                 enable_t2_highconf_yield,
                 enable_infer_empty_guard,
+                enable_game_event_chain_exit,
+                enable_landing_color_fix,
+                enable_chain_min_display,
+                enable_hsv_classify_fallback,
+                enable_landing_observed_color,
+                enable_red_hue_wrap_fix,
+                enable_specular_robust_saturation,
+                enable_stable_recovery_gate,
+                enable_ojama_visual_detection,
+                enable_ojama_visual_chain_exit,
+                enable_ojama_infer_guard,
+                enable_ojama_settle_detection,
+                enable_ojama_tier1_warmup,
+                enable_chain_score_early_fire,
+                enable_chain_exit_warmup,
             )
             futures[fut] = vid
 
@@ -1571,6 +2200,31 @@ def _print_summary(
             n_st = vid_data.get("n_stable_frames_puyo", 0)
             if avg is not None:
                 print(f"  [{vid_id}] avg={avg:.2f} (n_stable={n_st})")
+                # 改修2: per-side avg_puyo 表示 (CRITICAL 閾値以下は [CRITICAL] 表示)
+                per_side = vid_data.get("avg_puyo_count_per_side", {})
+                for side_key, side_avg in sorted(per_side.items()):
+                    if side_avg is None:
+                        continue
+                    mark = (
+                        "CRITICAL"
+                        if side_avg < AVG_PUYO_COUNT_CRITICAL
+                        else "ok"
+                    )
+                    print(f"    {side_key}: avg={side_avg:.2f}  [{mark}]")
+    # 改修1: confirmed_majority_agree_rate 表示 (情報提示のみ)
+    has_cmar = any(
+        "confirmed_majority_agree_rate" in v for v in per_vid.values()
+    )
+    if has_cmar:
+        print(
+            "[confirmed_majority_agree_rate "
+            "(confirmed vs 多数決 一致率: 1.0=完全整合、情報提示のみ)]"
+        )
+        for vid_id, vid_data in per_vid.items():
+            cmar = vid_data.get("confirmed_majority_agree_rate", {})
+            overall_cmar = cmar.get("overall") if isinstance(cmar, dict) else None
+            if overall_cmar is not None:
+                print(f"  [{vid_id}] overall={overall_cmar:.4f}")
     if failures:
         print("[FAIL 理由]")
         for reason in failures:
@@ -1587,25 +2241,76 @@ def main() -> int:
     )
     output_path = _resolve_output_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
-    enable_constraint_fill: bool = not args.no_constraint_fill
-    # t2_highconf_yield フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_t2_highconf_yield: bool = bool(
-        getattr(args, "enable_t2_highconf_yield", False)
+    # 各フラグを args から直接取得する (BooleanOptionalAction で default=ライブラリ default と整合済)
+    enable_constraint_fill: bool = bool(args.enable_constraint_fill)
+    enable_t2_highconf_yield: bool = bool(args.enable_t2_highconf_yield)
+    enable_infer_empty_guard: bool = bool(args.enable_infer_empty_guard)
+    enable_game_event_chain_exit: bool = bool(args.enable_game_event_chain_exit)
+    # landing_color_fix / chain_min_display / hsv_classify_fallback /
+    # landing_observed_color はライブラリ default=False のまま (store_true 維持)
+    enable_landing_color_fix: bool = bool(
+        getattr(args, "enable_landing_color_fix", False)
     )
-    # infer_empty_guard フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_infer_empty_guard: bool = bool(
-        getattr(args, "enable_infer_empty_guard", False)
+    enable_chain_min_display: bool = bool(
+        getattr(args, "enable_chain_min_display", False)
+    )
+    enable_hsv_classify_fallback: bool = bool(
+        getattr(args, "enable_hsv_classify_fallback", False)
+    )
+    enable_landing_observed_color: bool = bool(
+        getattr(args, "enable_landing_observed_color", False)
+    )
+    enable_red_hue_wrap_fix: bool = bool(args.enable_red_hue_wrap_fix)
+    enable_specular_robust_saturation: bool = bool(args.enable_specular_robust_saturation)
+    enable_stable_recovery_gate: bool = bool(args.enable_stable_recovery_gate)
+    enable_ojama_visual_detection: bool = bool(args.enable_ojama_visual_detection)
+    enable_ojama_visual_chain_exit: bool = bool(args.enable_ojama_visual_chain_exit)
+    enable_ojama_infer_guard: bool = bool(args.enable_ojama_infer_guard)
+    enable_ojama_settle_detection: bool = bool(args.enable_ojama_settle_detection)
+    enable_ojama_tier1_warmup: bool = bool(args.enable_ojama_tier1_warmup)
+    enable_chain_score_early_fire: bool = bool(
+        getattr(args, "enable_chain_score_early_fire", False)
+    )
+    enable_chain_exit_warmup: bool = bool(
+        getattr(args, "enable_chain_exit_warmup", False)
     )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
-    if not enable_constraint_fill:
-        print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
-    if enable_t2_highconf_yield:
-        print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
-    if enable_infer_empty_guard:
-        print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
+    print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
+    print(f"[measure] t2_highconf_yield={'ENABLED' if enable_t2_highconf_yield else 'DISABLED'}")
+    print(f"[measure] infer_empty_guard={'ENABLED' if enable_infer_empty_guard else 'DISABLED'}")
+    print(f"[measure] red_hue_wrap_fix={'ENABLED' if enable_red_hue_wrap_fix else 'DISABLED'}")
+    print(f"[measure] specular_robust_saturation={'ENABLED' if enable_specular_robust_saturation else 'DISABLED'}")
+    print(f"[measure] stable_recovery_gate={'ENABLED' if enable_stable_recovery_gate else 'DISABLED'}")
+    print(f"[measure] ojama_visual_detection={'ENABLED' if enable_ojama_visual_detection else 'DISABLED'}")
+    print(f"[measure] ojama_tier1_warmup={'ENABLED' if enable_ojama_tier1_warmup else 'DISABLED'}")
+    if enable_game_event_chain_exit:
+        print(
+            "[measure] game_event_chain_exit ENABLED "
+            "(--game-event-chain-exit 指定: game-event ベース連鎖終了)"
+        )
+    if enable_landing_color_fix:
+        print(
+            "[measure] landing_color_fix ENABLED "
+            "(--landing-color-fix 指定: 着地色修正 案1 / falling_pair を _landing_pending に切り替え)"
+        )
+    if enable_chain_min_display:
+        print(
+            "[measure] chain_min_display ENABLED "
+            f"(--chain-min-display 指定: X1 最小{RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC}s + "
+            f"X4 短連鎖 count<{RecognitionPipeline.CHAIN_GAME_EVENT_MIN_COUNT} exit 抑止)"
+        )
+    if enable_hsv_classify_fallback:
+        print(
+            "[measure] hsv_classify_fallback ENABLED "
+            "(--hsv-classify-fallback 指定: 2 択強制確定回避 / 黄→赤誤分類発火点対策)"
+        )
+    if enable_landing_observed_color:
+        print(
+            "[measure] landing_observed_color ENABLED "
+            "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -1614,6 +2319,21 @@ def main() -> int:
         workers=workers,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_landing_color_fix=enable_landing_color_fix,
+        enable_chain_min_display=enable_chain_min_display,
+        enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -1652,8 +2372,24 @@ def main() -> int:
             "enable_constraint_fill": enable_constraint_fill,
             # t2_highconf_yield の on/off を記録 (後日比較用)
             "enable_t2_highconf_yield": enable_t2_highconf_yield,
+            # game_event_chain_exit の on/off を記録 (後日比較用)
+            "enable_game_event_chain_exit": enable_game_event_chain_exit,
+            # landing_color_fix の on/off を記録 (後日比較用)
+            "enable_landing_color_fix": enable_landing_color_fix,
+            # chain_min_display の on/off を記録 (後日比較用)
+            "enable_chain_min_display": enable_chain_min_display,
+            # landing_observed_color の on/off を記録 (後日比較用)
+            "enable_landing_observed_color": enable_landing_observed_color,
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
+            # 改修3: non_stable chain 除外フラグ (後日比較用)
+            "non_stable_chain_exclude": NON_STABLE_CHAIN_EXCLUDE,
+            # フェーズA おじゃま視覚検知フラグ群 (後日比較用)
+            "enable_ojama_visual_detection": enable_ojama_visual_detection,
+            "enable_ojama_visual_chain_exit": enable_ojama_visual_chain_exit,
+            "enable_ojama_infer_guard": enable_ojama_infer_guard,
+            "enable_ojama_settle_detection": enable_ojama_settle_detection,
+            "enable_ojama_tier1_warmup": enable_ojama_tier1_warmup,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

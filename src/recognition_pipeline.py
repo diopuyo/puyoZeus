@@ -63,6 +63,17 @@ TIER1_WARMUP_FRAMES: int = 3
 # → 列崩壊が固定されるのを防ぐ。TSUMO_FALL 用 (3 frame) より長め。
 # v70 frame=1674 分析: col=0,1,2 row7-12 が崩壊。
 OJAMA_TIER1_WARMUP_FRAMES: int = 8
+
+# 機能B: score 急増で即 CHAIN 突入する閾値 (enable_chain_score_early_fire 用)。
+# ChainPhaseDetector.SCORE_DELTA_FIRE (=80) と同値に合わせる。
+# 1 連鎖最小スコア≒40点、複数連鎖/ボーナスで 80+ が信頼できる発火閾値。
+CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
+
+# 機能C: CHAIN → STABLE 遷移直後の confirmed 凍結時間 (enable_chain_exit_warmup 用)。
+# エフェクト残光 (~0.1s) を吸収し、その間 _merge_diff_only による誤色混入を防ぐ。
+# 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
+CHAIN_EXIT_WARMUP_SEC: float = 0.1
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -86,6 +97,7 @@ from src.next_slide_detector import (
 )
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
+    correct_landing_cells_by_observed_color,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
 from src.state_detectors import (
@@ -135,6 +147,17 @@ class SideResult:
     # [(frame_idx, t_sec, prev_count, curr_count, drop), ...] の形式。
     # backwards compat のため default None。
     transition_drop_alerts: list[tuple] | None = None
+    # 着地色診断フィールド (2026-06-01 infer_placement 調査用)。
+    # TSUMO_FALL→STABLE 着地フレームのみ非 None。非着地フレームは None。
+    # dict キー:
+    #   falling_pair_old: prev_next_queue[-2] 由来の (color1, color2) (従来ロジック)
+    #   falling_pair_new: _last_consumed_color 由来の (color1, color2) (修正ロジック)
+    #     ※ 案1初版は _landing_pending[1] を使用していたが、_landing_pending は
+    #        NEXT変化フレームのgrace処理でクリアされるため着地フレームでは常にNone。
+    #        修正版では _last_consumed_color (grace独立保持) を使用する。
+    #   source: "last_consumed_color" | "next_queue_2" | "next_queue_1" | "none"
+    # backwards compat のため default None。フラグ ON/OFF 問わず常に記録する。
+    landing_diag: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +169,107 @@ class PipelineResult:
     is_match_active: bool
     p1: SideResult
     p2: SideResult
+
+
+# ============================
+# 真因 A 対処: 着地補正ヘルパー
+# ============================
+
+
+def _apply_landing_observed_color_correction(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+    reader: object,
+    frame_bgr: "np.ndarray",
+    region: object,
+) -> "Board":
+    """着地確定盤面の 2 cell を CNN==HSV 一致色で補正する.
+
+    真因 A 対処 (fix/v70-zeropatch-redyellow, 2026-06-01):
+    infer_placement は falling_pair に盲従するが、 falling_pair のタイミングずれで
+    誤色が選ばれる (v89 54/72 不一致)。 着地 2 cell で CNN と HSV-only が
+    一致する有効 puyo 色があれば、 2 つの独立認識器の合意を信頼して採用する。
+
+    動作:
+      1. inferred と prev_confirmed の差分 2 cell (= 着地セル) を抽出する。
+      2. 各セルで cnn_board の色と hsv_classifier の観測色が一致し
+         かつ有効 puyo 色 (空/UNKNOWN/お邪魔 以外) であれば inferred のその cell を上書き。
+      3. 一致しない cell は inferred の色をそのまま保持する (保守的)。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (上書き元)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (= 差分取得用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面 (HybridClassifier 出力)。
+        reader: ImageReader インスタンス。_classifier._hsv で ColorClassifier にアクセス。
+        frame_bgr: 着地後の BGR フレーム画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+
+    Returns:
+        補正後の確定盤面。
+    """
+    from src.board import (
+        BOARD_ROWS, BOARD_COLS, COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
+        COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE,
+    )
+    from src.placement_inferrer import (
+        _extract_cell_patch_from_frame, _VALID_PUYO_COLORS,
+    )
+
+    # HSV-only 分類器を取得 (HybridClassifier._hsv or ColorClassifier 直接)
+    classifier = getattr(reader, "_classifier", None)
+    hsv_clf = getattr(classifier, "_hsv", classifier)
+    if hsv_clf is None or not hasattr(hsv_clf, "classify"):
+        return inferred  # 取得できなければ補正スキップ
+
+    # 着地 2 cell を差分から抽出 (prev→inferred で新規に色が入ったセル)
+    landing_cells: list[tuple[int, int]] = []
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                landing_cells.append((r, c))
+
+    if not landing_cells:
+        return inferred
+
+    from src.placement_inferrer import correct_landing_cells_by_observed_color
+    from src.placement_inferrer import LandingPattern
+
+    # LandingPattern を差分 2 cell から再構築 (補正関数に渡すため)
+    if len(landing_cells) == 2:
+        cells_tuple = (
+            (landing_cells[0][0], landing_cells[0][1]),
+            (landing_cells[1][0], landing_cells[1][1]),
+        )
+        # orientation は補正関数では参照しないが型合わせで設定
+        (r1, c1), (r2, c2) = cells_tuple
+        orientation = "vertical" if c1 == c2 else "horizontal"
+        dummy_pattern = LandingPattern(cells=cells_tuple, orientation=orientation)
+        return correct_landing_cells_by_observed_color(
+            inferred, dummy_pattern, cnn_board, hsv_clf, frame_bgr, region,
+        )
+
+    # 着地 cell が 1 cell または 3+ cell の場合は個別に補正 (保守的)
+    result = inferred.copy()
+    for (r, c) in landing_cells:
+        cnn_color = int(cnn_board.get(r, c))
+        if cnn_color not in _VALID_PUYO_COLORS:
+            continue
+        patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+        if patch is None or patch.size == 0:
+            continue
+        try:
+            hsv_color = int(hsv_clf.classify(patch))
+        except Exception:
+            continue
+        if hsv_color in _VALID_PUYO_COLORS and cnn_color == hsv_color:
+            result.set(r, c, hsv_color)
+    return result
 
 
 # ============================
@@ -169,6 +293,24 @@ class RecognitionPipeline:
     # VideoChainTracker は drop 観測 1 frame だけ event を返すため、
     # pipeline 側で post-hoc に有効期間を伸ばす。
     CHAIN_HOLD_PER_STEP_SEC: float = 0.3
+
+    # game-event ベース連鎖終了: CHAIN 状態を timing hold だけでなく
+    # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
+    # を検知するまで維持する。安全弁として以下の秒数を上限とする。
+    # 60fps × 5.0s = 300 frame。通常の長い連鎖 (= 11 連鎖 × 0.3s = 3.3s) を
+    # 十分にカバーし、かつ異常時 (event 永続不達) での CHAIN 永続化を防ぐ。
+    CHAIN_MAX_HOLD_SEC: float = 5.0
+
+    # X1: CHAIN 最小表示時間 (enable_chain_min_display=True 時に有効)。
+    # 一度 CHAIN に入ったら最低この秒数は game-event 終了を抑止する。
+    # 短連鎖 (1-2 連鎖 × 0.3s = 0.3-0.6s) がお邪魔信号で 0.1-0.2s で即終了し
+    # 「一瞬表示/ちらつき」になる問題を防ぐ。
+    CHAIN_MIN_DISPLAY_SEC: float = 0.8
+
+    # X4: game-event 終了を発動する最小連鎖数。
+    # chain_count < この値の連鎖は game-event 終了を発動せず timing hold のみ。
+    # 短連鎖 (1-2 連鎖) では chainexit がノイズになるため除外する。
+    CHAIN_GAME_EVENT_MIN_COUNT: int = 3
 
     # 全消し演出 overlay の chain_until 延長秒数 (2026-05-14, cycle 71v).
     # is_all_clear=True の ChainEvent では、 通常の chain hold に加えて
@@ -293,15 +435,82 @@ class RecognitionPipeline:
         bg_fp_force_max_puyo: int | None = None,
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
-        enable_ojama_tier1_warmup: bool = False,
-        # 2026-05-31: 一旦 OFF にしたが撤回し default ON 維持 (= main と同じ、判断保留)。
-        # 理由: 当初「constraint_fill が色破壊の主因」としたが誤診断 (16動画で corruption は
-        # ON 77279/OFF 76610 とほぼ不変)。真因は infer_placement 誤推論 + T2 自己強化フリーズ
-        # (project_color_corruption_infer_placement_t2)。constraint OFF 効果は red +0.26% 程度の僅少で
-        # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
-        enable_constraint_fill: bool = True,
-        enable_t2_highconf_yield: bool = False,
-        enable_infer_empty_guard: bool = False,
+        enable_ojama_tier1_warmup: bool = True,
+        # 2026-06-02: user viz 採用承認により default False (OFF) に変更。
+        # 旧 default True から変更: constraint_fill は色破壊の主因でなく
+        # (ON/OFF で corruption ほぼ不変)、採用スタックでは OFF が承認された。
+        # --no-constraint-fill CLI フラグは既存互換のため維持 (冗長だが無害)。
+        # True に戻すには enable_constraint_fill=True を明示する。
+        enable_constraint_fill: bool = False,
+        enable_t2_highconf_yield: bool = True,
+        enable_infer_empty_guard: bool = True,
+        # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
+        # True にすると CHAIN 状態を timing hold だけでなく、
+        # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
+        # を検知するまで維持する。True = default ON (2026-06-01 user 採用承認)。
+        # False を明示すると従来 timing hold のみの挙動に戻る (backwards compat)。
+        enable_game_event_chain_exit: bool = True,
+        # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
+        # prev_next_queue[-2] から _landing_pending (消費済みツモ色) に切り替える。
+        # slide_motion(R-7) 経由で「1 つ前のツモ」を指してしまう誤色問題の修正。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_color_fix: bool = False,
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01):
+        # True で CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) および
+        # 短連鎖 game-event exit 抑止 (CHAIN_GAME_EVENT_MIN_COUNT) を有効化。
+        # enable_game_event_chain_exit と独立フラグ (効果分解のため)。
+        # 実質 enable_game_event_chain_exit=True と併用される前提。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_min_display: bool = False,
+        # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback。
+        # True にすると _classify_next_pair_by_hsv の 2 択強制確定を回避する。
+        # 黄(H26)→赤(H7) 誤分類 (H 差 19) の発火点対策。
+        # デフォルト False = 従来の 2 択強制確定 (完全不変、 backwards compat)。
+        enable_hsv_classify_fallback: bool = False,
+        # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
+        # True にすると TSUMO_FALL→STABLE 着地時に着地 2 cell の CNN 観測色と
+        # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_observed_color: bool = False,
+        # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
+        # True (default) にすると HSV 経路の median 計算で赤 2 峰を collapse し
+        # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
+        # user viz 採用承認済 (2026-06-02)。False = 従来の単純 median (後方互換が必要な場合のみ)。
+        enable_red_hue_wrap_fix: bool = True,
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
+        # True にすると白ハイライト画素を彩度 median 計算から除外し、
+        # ぷよ表面の光沢球混入による EMPTY 誤判定を防ぐ。
+        # ColorClassifier に enable_specular_robust_saturation を伝播。
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        enable_specular_robust_saturation: bool = True,
+        # 設計C 事後復旧ゲート (2026-06-02):
+        # True で STABLE 中の confirmed==EMPTY かつ CNN==HSV 持続合意セルを復旧する。
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        # False に戻すには enable_stable_recovery_gate=False を明示する。
+        enable_stable_recovery_gate: bool = True,
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # enable_ojama_visual_detection: 親フラグ。True で全子フラグを有効化。
+        # enable_ojama_visual_chain_exit: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲。
+        # enable_ojama_infer_guard: OJAMA_FALL → STABLE 直後に infer_placement を抑止。
+        # enable_ojama_settle_detection: OJAMA_FALL 中お邪魔 count 不変で STABLE 復帰。
+        # 2026-06-02: user viz 採用承認により全フラグ default True に変更。
+        # 親フラグ=True により子フラグも全て有効になる (子個別は後方互換で True を明示)。
+        enable_ojama_visual_detection: bool = True,
+        enable_ojama_visual_chain_exit: bool = True,
+        enable_ojama_infer_guard: bool = True,
+        enable_ojama_settle_detection: bool = True,
+        # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
+        # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
+        # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
+        # score が取れない / OCR 失敗フレームでは従来の VideoChainTracker 経路が維持される
+        # (OR 追加のため退行ゼロ)。 デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_score_early_fire: bool = False,
+        # 機能C: CHAIN → STABLE 遷移直後の confirmed 凍結 (2026-06-02)。
+        # True にすると CHAIN→STABLE 復帰から CHAIN_EXIT_WARMUP_SEC 秒間 confirmed 更新を
+        # 凍結し、エフェクト残光色が _merge_diff_only 経由で confirmed に混入するのを防ぐ。
+        # 既存 enable_warmup_guard の CHAIN→STABLE 特化版。時間ベースで fps 非依存に実装。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_warmup: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -311,6 +520,22 @@ class RecognitionPipeline:
             else self.BG_FP_FORCE_MAX_PUYO
         )
         self._reader = image_reader
+        # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正を
+        # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
+        if enable_red_hue_wrap_fix:
+            clf = getattr(image_reader, "_classifier", None)
+            hsv_clf = getattr(clf, "_hsv", clf)
+            if hsv_clf is not None and hasattr(hsv_clf, "_enable_red_hue_wrap_fix"):
+                hsv_clf._enable_red_hue_wrap_fix = True
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算を
+        # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
+        if enable_specular_robust_saturation:
+            clf = getattr(image_reader, "_classifier", None)
+            hsv_clf = getattr(clf, "_hsv", clf)
+            if hsv_clf is not None and hasattr(
+                hsv_clf, "_enable_specular_robust_saturation"
+            ):
+                hsv_clf._enable_specular_robust_saturation = True
         self._match_detector = match_state_detector
         # A: 試合境界補強 detector 群 (memory: 試合判定甘さ対策)。
         # 既存単独動作との backward compat 維持のため全て optional。
@@ -393,6 +618,14 @@ class RecognitionPipeline:
         # landing_vote を起動 (= state machine 詰まりを救済)。
         self._landing_pending_1p: tuple[int, tuple[int, int]] | None = None
         self._landing_pending_2p: tuple[int, tuple[int, int]] | None = None
+        # 着地色修正 案1 修正版 (2026-06-01):
+        # _landing_pending はNEXT変化フレームのgrace処理でクリアされるため
+        # 実際の着地フレーム(TSUMO_FALL→STABLE)まで持続しない。
+        # _last_consumed_color_Xp = 最後にNEXTで消費されたツモ色を保持し
+        # TSUMO_FALL→STABLE 着地時の falling_pair 取得に使用する。
+        # セット: NEXT変化検知時 / クリア: TSUMO_FALL→STABLE着地infer完了後。
+        self._last_consumed_color_1p: tuple[int, int] | None = None
+        self._last_consumed_color_2p: tuple[int, int] | None = None
         # cycle 31 (2026-05-18, B 軸): baseline 整合性 check + 自己修復。
         # STABLE 中に baseline と CNN 出力の diff が連続異常なら baseline 壊れ
         # 判定 → state reset (= 試合 active 再起動 + bg_fp 再採取)。
@@ -459,13 +692,39 @@ class RecognitionPipeline:
         # 動いていれば「試合中」 を強制復帰させる. 60 frame = 1 秒分.
         self._recent_scores_1p: list[int | None] = []
         self._recent_scores_2p: list[int | None] = []
+        # 設計C 事後復旧ゲート: フラグを保持し _build_state_machine / _step_side に伝播。
+        self._enable_stable_recovery_gate: bool = bool(enable_stable_recovery_gate)
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # enable_ojama_visual_detection = 親フラグ (True で子フラグも有効化)。
+        # 個別フラグは親フラグ OFF でも True 指定可能 (細粒度制御用)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        _ovd_parent = bool(enable_ojama_visual_detection)
+        self._enable_ojama_visual_detection: bool = _ovd_parent
+        self._enable_ojama_visual_chain_exit: bool = (
+            _ovd_parent or bool(enable_ojama_visual_chain_exit)
+        )
+        self._enable_ojama_infer_guard: bool = (
+            _ovd_parent or bool(enable_ojama_infer_guard)
+        )
+        self._enable_ojama_settle_detection: bool = (
+            _ovd_parent or bool(enable_ojama_settle_detection)
+        )
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
+        # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
         self._sm_1p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=self._enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
+            enable_ojama_settle_detection=self._enable_ojama_settle_detection,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=self._enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
+            enable_ojama_settle_detection=self._enable_ojama_settle_detection,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -540,6 +799,47 @@ class RecognitionPipeline:
         # 非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容 (= 物理的に自然)。
         # デフォルト False = 従来挙動維持 (backwards compat)。
         self._enable_infer_empty_guard: bool = bool(enable_infer_empty_guard)
+        # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
+        # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
+        # False = 従来 timing hold のみ (backwards compat)。
+        self._enable_game_event_chain_exit: bool = bool(enable_game_event_chain_exit)
+        # 機能B: score 急増 CHAIN 早期発火フラグ。
+        self._enable_chain_score_early_fire: bool = bool(enable_chain_score_early_fire)
+        # 機能C: CHAIN → STABLE warmup フラグ + 遷移時刻 (1P/2P 別)。
+        # float: CHAIN→STABLE 遷移 time_sec。凍結中は time_sec < _chain_exit_until_* 。
+        self._enable_chain_exit_warmup: bool = bool(enable_chain_exit_warmup)
+        self._chain_exit_until_1p: float = 0.0  # CHAIN→STABLE 後の凍結終了 time_sec
+        self._chain_exit_until_2p: float = 0.0
+        # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
+        # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
+        # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_color_fix: bool = bool(enable_landing_color_fix)
+        # X1/X4 短連鎖ちらつき対策 (2026-06-01):
+        # True で CHAIN 最小表示時間 (CHAIN_MIN_DISPLAY_SEC) / 短連鎖 game-event exit 抑止を有効化。
+        # False = 従来挙動完全維持 (backwards compat)。
+        self._enable_chain_min_display: bool = bool(enable_chain_min_display)
+        # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback トグル。
+        # True で _classify_next_pair_by_hsv の 2 択強制確定を回避。
+        # 黄→赤誤分類 (~900 件) 発火点対策。default False = 従来挙動完全維持。
+        self._enable_hsv_classify_fallback: bool = bool(enable_hsv_classify_fallback)
+        # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
+        # True で infer_placement 出力に post-correction を適用。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
+        # CHAIN 発火時に代入し、_on_match_end でリセット。
+        self._chain_entry_t_1p: float = 0.0
+        self._chain_entry_t_2p: float = 0.0
+        # game-event モード用: CHAIN 発火時刻の上限 (安全弁)。
+        # CHAIN 発火 time_sec + CHAIN_MAX_HOLD_SEC を超えたら強制終了。
+        # 1P/2P 別に管理 (float: 未発火時は 0.0)。
+        self._chain_event_max_until_1p: float = 0.0
+        self._chain_event_max_until_2p: float = 0.0
+        # game-event モード: CHAIN 発火時の連鎖側 prev_next_pair (next 変化検知用)。
+        # 連鎖が始まった瞬間の next_pair をスナップショットし、変化したら終了する。
+        # ※②お邪魔信号撤去 (2026-06-01): board snapshot (_chain_start_board_*) は不要。
+        self._chain_start_next_1p: tuple[int, int] | None = None
+        self._chain_start_next_2p: tuple[int, int] | None = None
 
     @staticmethod
     def _build_hybrid_reader(
@@ -644,23 +944,44 @@ class RecognitionPipeline:
         stable_n: int,
         *,
         enable_warmup_guard: bool = False,
+        enable_stable_recovery_gate: bool = False,
+        enable_ojama_visual_detection: bool = False,
+        enable_ojama_visual_chain_exit: bool = False,
+        enable_ojama_settle_detection: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame
         # confirmed 更新を凍結する (A/B 対照実験用 optional 機能)。
+        # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
+        # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
+        # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
+        # ChainPhaseDetector に chain_ojama_exit フラグを伝播する
+        chain_det = ChainPhaseDetector(
+            chain_sim=ChainSimulator(),
+            enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
+        )
+        detectors: list = [
+            chain_det,
+            EffectPhaseDetector(),
+        ]
+        if enable_ojama_visual_detection:
+            from src.ojama_visual_detector import OjamaVisualDetector
+            ovd = OjamaVisualDetector(
+                enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+                enable_ojama_settle_detection=enable_ojama_settle_detection,
+            )
+            detectors.append(ovd)
+        detectors.append(OjamaPhaseDetector())
+        detectors.append(TsumoPhaseDetector())
         return BoardStateMachine(
-            detectors=[
-                ChainPhaseDetector(chain_sim=ChainSimulator()),
-                EffectPhaseDetector(),
-                OjamaPhaseDetector(),
-                TsumoPhaseDetector(),
-            ],
+            detectors=detectors,
             stable_frame_count=stable_n,
             enable_warmup_guard=enable_warmup_guard,
             warmup_frames=STABLE_WARMUP_FRAMES,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -692,10 +1013,33 @@ class RecognitionPipeline:
         # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
-        enable_ojama_tier1_warmup: bool = False,
-        enable_constraint_fill: bool = True,
-        enable_t2_highconf_yield: bool = False,
-        enable_infer_empty_guard: bool = False,
+        enable_ojama_tier1_warmup: bool = True,
+        enable_constraint_fill: bool = False,
+        enable_t2_highconf_yield: bool = True,
+        enable_infer_empty_guard: bool = True,
+        enable_game_event_chain_exit: bool = True,
+        enable_landing_color_fix: bool = False,
+        enable_chain_min_display: bool = False,
+        enable_hsv_classify_fallback: bool = False,
+        enable_landing_observed_color: bool = False,
+        enable_red_hue_wrap_fix: bool = True,
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        enable_specular_robust_saturation: bool = True,
+        # 設計C 事後復旧ゲート (2026-06-02): user viz 採用承認により default True に変更。
+        enable_stable_recovery_gate: bool = True,
+        # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
+        # user viz 採用承認により全フラグ default True に変更。
+        enable_ojama_visual_detection: bool = True,
+        enable_ojama_visual_chain_exit: bool = True,
+        enable_ojama_infer_guard: bool = True,
+        enable_ojama_settle_detection: bool = True,
+        # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_score_early_fire: bool = False,
+        # 機能C: CHAIN → STABLE warmup (2026-06-02)。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_warmup: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -713,6 +1057,9 @@ class RecognitionPipeline:
             cnn_override_prob: HybridClassifier の CNN 採用閾値. None なら
                 DEFAULT_CNN_OVERRIDE_PROB=0.70 (= cycle 71 CNN メイン化).
                 0.5 で CNN 強信頼、 0.9 で CNN 慎重 (旧挙動互換).
+            enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+                白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+                backwards compat: デフォルト False = 従来挙動。
         """
         from src.image_reader import ColorClassifier
         # cycle 71v: None なら DEFAULT_CNN_MODEL_PATH に解決 (存在する場合のみ).
@@ -826,6 +1173,20 @@ class RecognitionPipeline:
             enable_constraint_fill=enable_constraint_fill,
             enable_t2_highconf_yield=enable_t2_highconf_yield,
             enable_infer_empty_guard=enable_infer_empty_guard,
+            enable_game_event_chain_exit=enable_game_event_chain_exit,
+            enable_landing_color_fix=enable_landing_color_fix,
+            enable_chain_min_display=enable_chain_min_display,
+            enable_hsv_classify_fallback=enable_hsv_classify_fallback,
+            enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
 
     # ------------------------------------------------------------------
@@ -915,6 +1276,18 @@ class RecognitionPipeline:
         # 経路 A': OJAMA 専用 tier1 warmup guard リセット
         self._ojama_tier1_warmup_remaining_1p = 0
         self._ojama_tier1_warmup_remaining_2p = 0
+        # game-event ベース連鎖終了 (C-1/C-2) リセット
+        self._chain_event_max_until_1p = 0.0
+        self._chain_event_max_until_2p = 0.0
+        self._chain_start_next_1p = None
+        self._chain_start_next_2p = None
+        # ※②お邪魔信号撤去 (2026-06-01): _chain_start_board_* は削除済。
+        # X1: CHAIN 突入時刻リセット
+        self._chain_entry_t_1p = 0.0
+        self._chain_entry_t_2p = 0.0
+        # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
+        self._chain_exit_until_1p = 0.0
+        self._chain_exit_until_2p = 0.0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1077,6 +1450,9 @@ class RecognitionPipeline:
             # cycle 29: landing_pending も試合切替でリセット
             self._landing_pending_1p = None
             self._landing_pending_2p = None
+            # 着地色修正 案1 修正版 (2026-06-01): last_consumed も試合切替でリセット
+            self._last_consumed_color_1p = None
+            self._last_consumed_color_2p = None
             # cycle 71v-B: ever_seen も試合切り替えでリセット
             self._ever_seen_colors_1p.clear()
             self._ever_seen_colors_2p.clear()
@@ -1236,6 +1612,17 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
+                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
+                # enable_game_event_chain_exit=False 時も安全弁は無害 (使われない)。
+                # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
+                if self._enable_game_event_chain_exit:
+                    self._chain_event_max_until_1p = (
+                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                    )
+                    self._chain_start_next_1p = self._last_seen_next_1p
+                # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
+                # enable_game_event_chain_exit 非依存で常に更新。
+                self._chain_entry_t_1p = time_sec
         if is_active and self._chain_tracker_2p is not None:
             ev = self._chain_tracker_2p.update(time_sec, board_for_tracker_2p)
             if ev is not None and not chain_banned:
@@ -1248,28 +1635,93 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
+                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
+                # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
+                if self._enable_game_event_chain_exit:
+                    self._chain_event_max_until_2p = (
+                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                    )
+                    self._chain_start_next_2p = self._last_seen_next_2p
+                # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
+                # enable_game_event_chain_exit 非依存で常に更新。
+                self._chain_entry_t_2p = time_sec
 
         # 有効期限内の chain_event を signals に乗せる
+        # game-event モード (enable_game_event_chain_exit=True) の場合、
+        # timing hold だけでは終了させず「最大 CHAIN_MAX_HOLD_SEC」まで維持する。
+        # 実際の終了は 4b. next_pair 計算後に game-event チェックで行う。
         chain_ev_1p: ChainEvent | None = None
         chain_ev_2p: ChainEvent | None = None
-        if (
-            self._active_chain_1p is not None
-            and time_sec < self._chain_until_1p
-        ):
-            chain_ev_1p = self._active_chain_1p
-        elif self._active_chain_1p is not None:
-            self._active_chain_1p = None
-        if (
-            self._active_chain_2p is not None
-            and time_sec < self._chain_until_2p
-        ):
-            chain_ev_2p = self._active_chain_2p
-        elif self._active_chain_2p is not None:
-            self._active_chain_2p = None
+        if self._active_chain_1p is not None:
+            # game-event モード: timing holdを超えても max_until まで維持
+            eff_until_1p = (
+                self._chain_event_max_until_1p
+                if (
+                    self._enable_game_event_chain_exit
+                    and self._chain_event_max_until_1p > self._chain_until_1p
+                )
+                else self._chain_until_1p
+            )
+            if time_sec < eff_until_1p:
+                chain_ev_1p = self._active_chain_1p
+            else:
+                self._active_chain_1p = None
+        if self._active_chain_2p is not None:
+            eff_until_2p = (
+                self._chain_event_max_until_2p
+                if (
+                    self._enable_game_event_chain_exit
+                    and self._chain_event_max_until_2p > self._chain_until_2p
+                )
+                else self._chain_until_2p
+            )
+            if time_sec < eff_until_2p:
+                chain_ev_2p = self._active_chain_2p
+            else:
+                self._active_chain_2p = None
 
         # 4. score 差分
         score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
         score_d_2p = self._update_score_tracker(self._score_tracker_2p, frame)
+
+        # 4a. 機能B: score 急増 CHAIN 早期発火 (enable_chain_score_early_fire=True 時のみ)。
+        # VideoChainTracker の puyo 減少検知を待たずに、自 side score_delta が
+        # CHAIN_SCORE_EARLY_FIRE_DELTA 以上急増した frame で即 CHAIN state に突入させる。
+        # 既存 VideoChainTracker 経路との OR 追加 (フォールバック完全維持)。
+        # score 取得失敗 (score_d == 0) 時は発火しない → OCR 失敗時は従来経路が継続。
+        # chain_banned / STABLE 状態以外 (既に CHAIN 中) は発火をスキップ。
+        if self._enable_chain_score_early_fire and is_active and not chain_banned:
+            self._apply_chain_score_early_fire(
+                side="1P", score_delta=score_d_1p, time_sec=time_sec,
+                prev_confirmed=self._prev_confirmed_1p,
+            )
+            self._apply_chain_score_early_fire(
+                side="2P", score_delta=score_d_2p, time_sec=time_sec,
+                prev_confirmed=self._prev_confirmed_2p,
+            )
+            # 早期発火後の chain_ev を再評価 (timing hold / game-event hold に従う)
+            if self._active_chain_1p is not None and chain_ev_1p is None:
+                eff_until_1p = (
+                    self._chain_event_max_until_1p
+                    if (
+                        self._enable_game_event_chain_exit
+                        and self._chain_event_max_until_1p > self._chain_until_1p
+                    )
+                    else self._chain_until_1p
+                )
+                if time_sec < eff_until_1p:
+                    chain_ev_1p = self._active_chain_1p
+            if self._active_chain_2p is not None and chain_ev_2p is None:
+                eff_until_2p = (
+                    self._chain_event_max_until_2p
+                    if (
+                        self._enable_game_event_chain_exit
+                        and self._chain_event_max_until_2p > self._chain_until_2p
+                    )
+                    else self._chain_until_2p
+                )
+                if time_sec < eff_until_2p:
+                    chain_ev_2p = self._active_chain_2p
 
         # 4b. next_pair 検出 (1P/2P 両方、共通色なので detect_both で OK)
         # 2026-05-10: slide motion 中は ネクスト puyo が画面で動いており認識結果が
@@ -1349,6 +1801,10 @@ class RecognitionPipeline:
                         # cycle 29 (2026-05-18): NEXT 変化 = 着地確定 signal
                         # _step_side で grace + landing_vote を起動
                         self._landing_pending_1p = (frame_idx, consumed)
+                        # 着地色修正 案1 修正版 (2026-06-01):
+                        # _last_consumed_color はgraceクリアと独立して保持し
+                        # 次の TSUMO_FALL→STABLE 着地フレームで falling_pair に使用する
+                        self._last_consumed_color_1p = consumed
                 self._last_seen_next_1p = (top_v, bot_v)
         if is_active and next_pair_2p is not None:
             top_v, bot_v = int(next_pair_2p[0]), int(next_pair_2p[1])
@@ -1361,7 +1817,53 @@ class RecognitionPipeline:
                         self._pending_tsumo_2p.append(consumed)
                         # cycle 29: NEXT 変化 = 着地確定 signal
                         self._landing_pending_2p = (frame_idx, consumed)
+                        # 着地色修正 案1 修正版 (2026-06-01): 同上
+                        self._last_consumed_color_2p = consumed
                 self._last_seen_next_2p = (top_v, bot_v)
+        # game-event ベース連鎖終了チェック (C-1/C-2 plan, 2026-06-01)。
+        # enable_game_event_chain_exit=True の場合のみ実行。
+        # next_pair が確定した直後に「終了 game-event」を確認する。
+        # 終了 game-event:
+        #   ① 次ツモ変化: 連鎖した side の next_pair が chain 開始時から変化
+        #   ② 連鎖側お邪魔降下: 連鎖した side の盤面に新規 COLOR_OJAMA 出現
+        # どちらかを検知したら chain_ev を None に倒し _active_chain を解放する。
+        if self._enable_game_event_chain_exit and chain_ev_1p is not None:
+            # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
+            _suppress_1p = (
+                self._enable_chain_min_display
+                and _should_suppress_game_event_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_1p,
+                    chain_count=chain_ev_1p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                )
+            )
+            if not _suppress_1p and _is_game_event_chain_exit(
+                current_next=self._last_seen_next_1p,
+                start_next=self._chain_start_next_1p,
+            ):
+                chain_ev_1p = None
+                self._active_chain_1p = None
+        if self._enable_game_event_chain_exit and chain_ev_2p is not None:
+            # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
+            _suppress_2p = (
+                self._enable_chain_min_display
+                and _should_suppress_game_event_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_2p,
+                    chain_count=chain_ev_2p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                )
+            )
+            if not _suppress_2p and _is_game_event_chain_exit(
+                current_next=self._last_seen_next_2p,
+                start_next=self._chain_start_next_2p,
+            ):
+                chain_ev_2p = None
+                self._active_chain_2p = None
+
         # 連鎖発火で constraint invalidate (= 連鎖中は puyo 消える + ojama 落下)
         # 注: score_d > 0 だけでは invalidate しない (通常 placement で score 増加するため).
         # chain_event があれば連鎖確定 → invalidate 両 side.
@@ -1897,6 +2399,67 @@ class RecognitionPipeline:
         d = tracker.update(frame)
         return max(0, d.delta) if d.is_valid else 0
 
+    def _apply_chain_score_early_fire(
+        self,
+        side: str,
+        score_delta: int,
+        time_sec: float,
+        prev_confirmed: "Board | None",
+    ) -> None:
+        """機能B: score 急増を検知して即 CHAIN 突入シグナルを設定する。
+
+        VideoChainTracker の puyo 減少検知より先に CHAIN state に入るための
+        早期発火経路。 score_delta が CHAIN_SCORE_EARLY_FIRE_DELTA 未満または
+        既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        Args:
+            side: "1P" or "2P"
+            score_delta: 自 side の今フレーム score 増分。
+            time_sec: 現フレームの時刻。
+            prev_confirmed: 連鎖前確定盤面 (before_board 用)。
+        """
+        if score_delta < CHAIN_SCORE_EARLY_FIRE_DELTA:
+            return
+        # 既に active_chain が有効 → 従来経路で管理中、早期発火は不要
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                return
+        else:
+            if self._active_chain_2p is not None:
+                return
+        # prev_confirmed が空の場合は before_board を空 Board() で代替
+        before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        # 疑似 ChainEvent を生成 (chain_count=1 の最小ガード)
+        pseudo = ChainEvent(
+            trigger_sec=time_sec,
+            end_sec=time_sec + self._chain_hold_per_step_sec,
+            before_board=before,
+            chain_count=1,
+            total_erased=0, total_score=score_delta, base_score=score_delta,
+            all_clear_bonus_applied=0,
+            ojama_sent=0, leftover_score=0,
+            is_all_clear=False,
+        )
+        chain_until = time_sec + self._chain_hold_per_step_sec
+        if side == "1P":
+            self._active_chain_1p = pseudo
+            self._chain_until_1p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_1p = (
+                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                )
+                self._chain_start_next_1p = self._last_seen_next_1p
+            self._chain_entry_t_1p = time_sec
+        else:
+            self._active_chain_2p = pseudo
+            self._chain_until_2p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_2p = (
+                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                )
+                self._chain_start_next_2p = self._last_seen_next_2p
+            self._chain_entry_t_2p = time_sec
+
     def _step_side(
         self,
         side: str,
@@ -1918,6 +2481,9 @@ class RecognitionPipeline:
         score_d_for_self: int = 0,  # cycle 71n 案 ε
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
+        # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
+        # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
+        _landing_diag: dict | None = None
         # Phase I R-1: 自己整合性チェック (TSUMO_FALL 中のみ意味あり)。
         # baseline (= 直前 STABLE 確定盤面) と current cnn_board の
         # 色 count delta が、落下中ツモ (next_queue[-2]) と整合しているか。
@@ -1965,6 +2531,30 @@ class RecognitionPipeline:
             and (frame_idx - self._match_active_started_frame)
             < self.MATCH_JUST_STARTED_WINDOW_FRAMES
         )
+        # 設計C 事後復旧ゲート用 HSV-only 盤面を取得する。
+        # フラグ OFF または frame_bgr なし の場合は None (安全弁A により発火しない)。
+        _hsv_board_for_signals: "Board | None" = None
+        if (
+            self._enable_stable_recovery_gate
+            and frame_bgr is not None
+            and sm.context.state == BoardState.STABLE
+        ):
+            region_for_hsv = (
+                DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+            )
+            try:
+                _hsv_board_for_signals = self._reader.read_board_hsv_only(
+                    frame_bgr, region_for_hsv,
+                )
+            except Exception:
+                _hsv_board_for_signals = None
+        # フェーズ A 精緻化 (2026-06-02): OjamaVisualDetector の内部 state 更新前に
+        # 一次判定 (ROI お邪魔 count) を計算し、 signals に ojama_top_positive をセット。
+        # OjamaVisualDetector はこれを受けて内部カウンタを進める。
+        _ojama_top_positive: bool = False
+        if self._enable_ojama_visual_detection:
+            from src.ojama_visual_detector import _count_top_ojama as _cnt_oj
+            _ojama_top_positive = _cnt_oj(cnn_board, _hsv_board_for_signals) > 0
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -1976,6 +2566,8 @@ class RecognitionPipeline:
             placement_validated=placement_validated,
             effect_visible=effect_vis,
             match_just_started=match_just_started,
+            hsv_board=_hsv_board_for_signals,
+            ojama_top_positive=_ojama_top_positive,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -2017,17 +2609,64 @@ class RecognitionPipeline:
         # placement_inferrer.infer_placement (= 物理パターン全列挙 + NEXT 色固定
         # + CNN 一致度で候補絞り込み) に置換. 連鎖即時判定も resolve_after_placement
         # で実行し、 仮説 B (= 連鎖検出 1 秒遅延) を解消する.
+        # フェーズ A 精緻化: ojama_infer_guard かつ ojama_tier1_warmup 中なら
+        # infer_placement をスキップする。OJAMA_FALL 直後の warmup 期間に
+        # ツモが存在しないのに幽霊配置が走るのを防ぐ。
+        _ojama_warmup_remaining = (
+            self._ojama_tier1_warmup_remaining_1p if side == "1P"
+            else self._ojama_tier1_warmup_remaining_2p
+        )
+        _skip_infer_by_ojama_guard = (
+            self._enable_ojama_infer_guard
+            and _ojama_warmup_remaining > 0
+        )
         if (
             prev_state == BoardState.TSUMO_FALL
             and ctx.state == BoardState.STABLE
             and prev_confirmed is not None
+            and not _skip_infer_by_ojama_guard
         ):
             # 落下中ツモ色 = TSUMO 開始時の next (= 直前の next、現 next の 1 つ前)
+            # 診断: 従来ロジック (prev_next_queue[-2]) と
+            #        修正ロジック (_last_consumed_color) の両者を計算し比較する。
+            # enable_landing_color_fix=True の場合は修正ロジックを優先する。
+            #
+            # 【案1 修正版 (2026-06-01) の根拠】
+            # _landing_pending は NEXT変化フレームの grace処理 (landing_pending[0] == frame_idx)
+            # でクリアされるため、実際の着地フレーム (TSUMO_FALL→STABLE) では常にNone。
+            # _last_consumed_color はグレース処理から独立して保持し、
+            # 着地フレームでも正しく参照できる変数として新設した。
             falling_pair: tuple[int, int] | None = None
+            falling_pair_old: tuple[int, int] | None = None
+            falling_pair_new: tuple[int, int] | None = None
+            _diag_source: str = "none"
+            # 従来ロジック: prev_next_queue[-2]
             if len(prev_next_queue) >= 2:
-                falling_pair = prev_next_queue[-2]
+                falling_pair_old = prev_next_queue[-2]
             elif prev_next_queue:
-                falling_pair = prev_next_queue[-1]
+                falling_pair_old = prev_next_queue[-1]
+            # 修正ロジック: _last_consumed_color から消費済みツモ色を取得
+            # (_landing_pending と異なりgraceクリアされないため着地フレームで有効)
+            falling_pair_new = (
+                self._last_consumed_color_1p if side == "1P"
+                else self._last_consumed_color_2p
+            )
+            # フラグに応じて falling_pair を決定
+            if self._enable_landing_color_fix and falling_pair_new is not None:
+                falling_pair = falling_pair_new
+                _diag_source = "last_consumed_color"
+            elif falling_pair_old is not None:
+                falling_pair = falling_pair_old
+                _diag_source = (
+                    "next_queue_2" if len(prev_next_queue) >= 2 else "next_queue_1"
+                )
+            # 診断フィールド: TSUMO_FALL→STABLE 着地フレームで両者の差を記録。
+            # 冒頭で None 初期化済のため再アノテーションなし。
+            _landing_diag = {
+                "falling_pair_old": list(falling_pair_old) if falling_pair_old else None,
+                "falling_pair_new": list(falling_pair_new) if falling_pair_new else None,
+                "source": _diag_source,
+            }
             # Phase 1a: 物理推論で着地後盤面を確定.
             # cycle 71b: chain_sim を渡して連鎖整合性で候補絞り込み (案 A).
             # 着地 frame では自 side の score_delta はまだ確定していない
@@ -2053,8 +2692,31 @@ class RecognitionPipeline:
                 region=region_for_side,
                 bg_fp=bg_fp_for_side,
                 guard_empty_hallucination=self._enable_infer_empty_guard,
+                enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
             )
             if inferred_landing is not None:
+                # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
+                # falling_pair タイミングずれで infer_placement が誤色を書いても
+                # 2 つの独立認識器 (CNN/HSV) が一致した色があれば優先採用する。
+                # フラグ OFF 時は完全にスキップし、挙動不変を保証する。
+                if (
+                    self._enable_landing_observed_color
+                    and frame_bgr is not None
+                    and falling_pair is not None
+                    and prev_confirmed is not None
+                ):
+                    # 直前の惑星パターンを特定するため、着地 2 cell の差分から
+                    # 着地 pattern を再現する (pattern は infer_placement 内で選択済み)。
+                    # 最小コストで pattern を得るには diff_cells から再構築するより、
+                    # prev_confirmed と inferred_landing の差分 2 cell を使う。
+                    inferred_landing = _apply_landing_observed_color_correction(
+                        inferred_landing,
+                        prev_confirmed,
+                        cnn_board,
+                        self._reader,
+                        frame_bgr,
+                        region_for_side,
+                    )
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
                 # next_pair (= 今消費された NEXT) が明示されていれば整合性チェック。
                 # alert のみ (= 棄却はしない。 現時点は fail-silent 検知用)。
@@ -2165,6 +2827,14 @@ class RecognitionPipeline:
                 # 統一。 ここでは final_board の確定だけ行う (= ctx.confirmed_board
                 # は既に上書き済)。 NEXT 経路は次の frame で発火する。
 
+            # 着地色修正 案1 修正版 (2026-06-01):
+            # infer_placement 完了後 (success/failどちらでも) _last_consumed_color をクリア。
+            # 1ツモ分のみ使用し次ツモと混同しないようにする。
+            if side == "1P":
+                self._last_consumed_color_1p = None
+            else:
+                self._last_consumed_color_2p = None
+
         # 2026-05-11 サイクル65: NEXT 履歴ベース placement 検証 (補強)
         # 「NEXT のぷよは必ずフィールドに置かれる」 前提を継続的に活用する.
         # STABLE 内で confirmed_board に 2 cell 新規追加 (= placement) が発生し、
@@ -2177,6 +2847,9 @@ class RecognitionPipeline:
         if (
             prev_state != BoardState.TSUMO_FALL
             and prev_state != BoardState.CHAIN
+            # フェーズ A 精緻化: OJAMA_FALL → STABLE 復帰時は infer 発火禁止。
+            # お邪魔降下中の幽霊配置を根絶するための常時ガード。フラグ非依存。
+            and prev_state != BoardState.OJAMA_FALL
             and ctx.state == BoardState.STABLE
             and prev_confirmed is not None
             and ctx.confirmed_board is not None
@@ -2228,6 +2901,7 @@ class RecognitionPipeline:
                             region=region_for_side_b,
                             bg_fp=bg_fp_for_side_b,
                             guard_empty_hallucination=self._enable_infer_empty_guard,
+                            enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
                         )
                         if inferred_b is not None:
                             # 即時連鎖判定 (= 短い TSUMO_FALL 取りこぼし時も適用)
@@ -2301,6 +2975,21 @@ class RecognitionPipeline:
                         self._constraint_valid_2p = True
             except Exception:
                 pass
+
+        # 機能C: CHAIN → STABLE 遷移直後 CHAIN_EXIT_WARMUP_SEC 秒間の confirmed 凍結。
+        # enable_chain_exit_warmup=True の場合のみ有効。
+        # エフェクト残光色が _merge_diff_only 経由で confirmed に混入するのを防ぐ。
+        # 凍結終了時刻 (_chain_exit_until_*) を更新し、下流の confirmed 更新をスキップさせる。
+        if (
+            self._enable_chain_exit_warmup
+            and prev_state == BoardState.CHAIN
+            and ctx.state == BoardState.STABLE
+        ):
+            warmup_until = time_sec + CHAIN_EXIT_WARMUP_SEC
+            if side == "1P":
+                self._chain_exit_until_1p = warmup_until
+            else:
+                self._chain_exit_until_2p = warmup_until
 
         # cycle 29 (2026-05-18): NEXT 移動検知ベースで grace + landing_vote 起動。
         # 既存の TSUMO_FALL → STABLE 経路は placement_inferrer で confirmed を
@@ -2482,14 +3171,28 @@ class RecognitionPipeline:
         # LANDING_VOTE_FRAMES 経過時に最頻値で confirmed_board の cell 色を更新.
         # 1 秒経過後の正しい色判別 (= ユーザー要件) を実現.
         # cycle 71m (β2''): frame_bgr を渡して HSV 距離分類 vote も並行蓄積.
+        # 機能C: CHAIN → STABLE warmup 中は confirmed 更新をスキップ。
+        # CHAIN_EXIT_WARMUP_SEC 秒経過後に通常更新を再開する。
+        # in_grace と独立して管理する (着地 grace とは別のシグナル)。
+        _chain_exit_until = (
+            self._chain_exit_until_1p if side == "1P"
+            else self._chain_exit_until_2p
+        )
+        in_chain_exit_warmup = (
+            self._enable_chain_exit_warmup
+            and ctx.state == BoardState.STABLE
+            and time_sec < _chain_exit_until
+        )
+
         # cycle 26 (A1): grace 中は updated 反映を skip (蓄積は継続)。
         # grace 終了後の vote 完了で正しく反映される。
+        # 機能C: chain exit warmup 中も skip (残光色混入防止)。
         if ctx.confirmed_board is not None:
             vote_updated = self._update_landing_votes(
                 side, frame_idx, cnn_board, ctx.confirmed_board,
                 frame_bgr=frame_bgr,
             )
-            if vote_updated is not None and not in_grace:
+            if vote_updated is not None and not in_grace and not in_chain_exit_warmup:
                 ctx.confirmed_board = vote_updated
 
         # cycle 71n (案 θ): STABLE 中の長期不一致 vote.
@@ -2537,7 +3240,8 @@ class RecognitionPipeline:
                                         continue
                             # cycle 26 (A1): grace 中は override skip
                             # (history append は続行、grace 終了後に発火)
-                            if in_grace:
+                            # 機能C: chain exit warmup 中も override skip
+                            if in_grace or in_chain_exit_warmup:
                                 continue
                             ctx.confirmed_board.set(r, c, most_common)
                             h_list.clear()
@@ -2734,6 +3438,7 @@ class RecognitionPipeline:
             dnext_pair=dnext_pair,
             erasure_alerts=recent_alerts if recent_alerts else None,
             transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
+            landing_diag=_landing_diag,
         )
 
 
@@ -3072,3 +3777,67 @@ def _apply_piece_persistence_guard(
         guard.on_stable_confirmed(published_confirmed)
         return guard.guard(published_confirmed)
     return published_confirmed
+
+
+def _is_game_event_chain_exit(
+    current_next: "tuple[int, int] | None",
+    start_next: "tuple[int, int] | None",
+) -> bool:
+    """game-event ベース連鎖終了条件を判定する (stateless)。
+
+    連鎖終了を示す game-event を検知したら True を返す:
+      ① 次ツモ変化: current_next != start_next (どちらも有効色の場合のみ)
+
+    ※②お邪魔信号は撤去済 (2026-06-01):
+      confirmed 凍結が連鎖終了後に「既存お邪魔に追いつく」だけで新規落下と
+      誤認し、短連鎖を 0.1 秒で早期終了させていた問題を解消。
+      NextDetector は精度 100% が確認済であり、①のみで十分。
+
+    Args:
+        current_next: 現在の next_pair (None = 未検知)
+        start_next: CHAIN 開始時の next_pair スナップショット (None = 未記録)
+
+    Returns:
+        True = 連鎖終了 game-event 検知、 False = 維持
+    """
+    # ① 次ツモ変化検知: start_next が記録済 かつ current_next が変化した場合のみ。
+    # slide_motion や None の場合は誤検知防止のためスキップ。
+    if (
+        start_next is not None
+        and current_next is not None
+        and current_next != start_next
+    ):
+        return True
+
+    return False
+
+
+def _should_suppress_game_event_exit(
+    time_sec: float,
+    chain_entry_t: float,
+    chain_count: int,
+    chain_min_display_sec: float,
+    chain_game_event_min_count: int,
+) -> bool:
+    """X1/X4 ガード: game-event exit を抑止すべきか判定する (stateless)。
+
+    X1: CHAIN 突入から chain_min_display_sec 以内は exit 抑止。
+    X4: chain_count < chain_game_event_min_count の短連鎖は exit 抑止 (timing hold のみ)。
+
+    Args:
+        time_sec: 現在の動画内時刻 (秒)。
+        chain_entry_t: CHAIN 突入時の time_sec (= ChainEvent 受信時刻)。
+        chain_count: 連鎖数。
+        chain_min_display_sec: X1 の最小表示時間 (秒)。
+        chain_game_event_min_count: X4 の最小連鎖数 (この数未満は exit 抑止)。
+
+    Returns:
+        True = exit 抑止 (= CHAIN 状態維持)、 False = exit 許可。
+    """
+    # X1: 最小表示時間以内は exit を抑止する
+    if time_sec - chain_entry_t < chain_min_display_sec:
+        return True
+    # X4: 短連鎖 (chain_count < min_count) は game-event exit を発動しない
+    if chain_count < chain_game_event_min_count:
+        return True
+    return False
