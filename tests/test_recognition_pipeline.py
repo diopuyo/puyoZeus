@@ -338,15 +338,15 @@ def test_enable_constraint_fill_false_skips_constraint() -> None:
         "_enable_constraint_fill=False が設定されているべき"
 
 
-def test_enable_constraint_fill_default_true() -> None:
-    """enable_constraint_fill のデフォルトは True (= main 同等、判断保留).
+def test_enable_constraint_fill_default_false() -> None:
+    """enable_constraint_fill のデフォルトは False (2026-06-02 user viz 採用承認によりOFF化).
 
-    2026-05-31: 一旦 OFF 化したが「constraint_fill が色破壊主因」が誤診断と判明
-    (真因は infer_placement + T2) したため default ON に戻した。採否は user レビュー。
+    採用スタックでは constraint_fill を OFF とすることが承認されたため
+    デフォルトを False に変更した。ON に戻すには enable_constraint_fill=True を明示する。
     """
     pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
-    assert pipe._enable_constraint_fill is True, \
-        "デフォルトは True (判断保留、2026-05-31 OFF 撤回)"
+    assert pipe._enable_constraint_fill is False, \
+        "デフォルトは False (2026-06-02 user viz 採用承認)"
 
 
 def test_constraint_fill_false_does_not_modify_board() -> None:
@@ -654,8 +654,8 @@ def test_ojama_tier1_warmup_sets_ojama_frames_on_ojama_to_stable() -> None:
     assert result == OJAMA_TIER1_WARMUP_FRAMES
 
 
-def test_ojama_tier1_warmup_default_false_no_effect() -> None:
-    """enable_ojama_tier1_warmup=False (default) では ojama 専用カウンタが 0 のまま。"""
+def test_ojama_tier1_warmup_default_true() -> None:
+    """enable_ojama_tier1_warmup のデフォルトは True (2026-06-02 user viz 採用承認)。"""
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     pipe = RecognitionPipeline(
@@ -665,6 +665,22 @@ def test_ojama_tier1_warmup_default_false_no_effect() -> None:
         chain_tracker_1p=None,
         chain_tracker_2p=None,
         stable_frame_count=2,
+    )
+    assert pipe._enable_ojama_tier1_warmup is True
+
+
+def test_ojama_tier1_warmup_explicit_false_no_effect() -> None:
+    """enable_ojama_tier1_warmup=False を明示すると ojama 専用カウンタが 0 のまま (回帰防止)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_tier1_warmup=False,
     )
     assert pipe._enable_ojama_tier1_warmup is False
     assert pipe._ojama_tier1_warmup_remaining_1p == 0
@@ -939,8 +955,8 @@ def test_t2_highconf_yield_cnn_mismatch_still_applies() -> None:
     )
 
 
-def test_t2_highconf_yield_default_is_false() -> None:
-    """enable_t2_highconf_yield のデフォルト値が False (backwards compat)。"""
+def test_t2_highconf_yield_default_is_true() -> None:
+    """enable_t2_highconf_yield のデフォルト値が True (2026-06-02 user viz 採用承認)。"""
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     pipe = RecognitionPipeline(
@@ -950,9 +966,9 @@ def test_t2_highconf_yield_default_is_false() -> None:
         chain_tracker_1p=None,
         chain_tracker_2p=None,
         stable_frame_count=2,
-        # enable_t2_highconf_yield を明示せず → デフォルト False
+        # enable_t2_highconf_yield を明示せず → デフォルト True
     )
-    assert pipe._enable_t2_highconf_yield is False
+    assert pipe._enable_t2_highconf_yield is True
 
 
 def test_t2_highconf_yield_pv_empty_no_yield() -> None:

@@ -573,10 +573,13 @@ def test_recovery_gate_resets_on_non_stable_transition() -> None:
     assert sm.context.recovery_cells == set()
 
 
-def test_recovery_gate_off_by_default() -> None:
-    """設計C ⑥: フラグ OFF (default) では従来挙動と完全同一 (発火しない)."""
-    # デフォルト構築 → enable_stable_recovery_gate=False
-    sm = BoardStateMachine()
+def test_recovery_gate_off_explicit() -> None:
+    """設計C ⑥: フラグ OFF を明示すると従来挙動と完全同一 (発火しない) 回帰防止。
+
+    2026-06-02: BoardStateMachine のデフォルトは enable_stable_recovery_gate=True に変更。
+    このテストは False を明示して OFF 時の挙動が維持されることを回帰防止する。
+    """
+    sm = BoardStateMachine(enable_stable_recovery_gate=False)
     sm._ctx.state = BoardState.STABLE
     sm._ctx.confirmed_board = _empty_board()
 
@@ -747,9 +750,12 @@ def test_recovery_gate_no_fire_when_hsv_board_none_bidirectional() -> None:
 
 
 def test_recovery_gate_off_does_not_fix_ghost() -> None:
-    """双方向⑦: フラグ OFF では方向2も従来挙動と完全同一 (発火しない)。"""
-    # デフォルト構築 → enable_stable_recovery_gate=False
-    sm = BoardStateMachine()
+    """双方向⑦: フラグ OFF を明示すると方向2も従来挙動と完全同一 (発火しない) 回帰防止。
+
+    2026-06-02: デフォルト True 変更後も enable_stable_recovery_gate=False 明示で
+    OFF 時の従来挙動が維持されることを保証する。
+    """
+    sm = BoardStateMachine(enable_stable_recovery_gate=False)
     sm._ctx.state = BoardState.STABLE
     # confirmed に赤が焼き付いている
     confirmed_init = Board()
