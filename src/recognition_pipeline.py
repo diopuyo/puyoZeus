@@ -63,6 +63,17 @@ TIER1_WARMUP_FRAMES: int = 3
 # → 列崩壊が固定されるのを防ぐ。TSUMO_FALL 用 (3 frame) より長め。
 # v70 frame=1674 分析: col=0,1,2 row7-12 が崩壊。
 OJAMA_TIER1_WARMUP_FRAMES: int = 8
+
+# 機能B: score 急増で即 CHAIN 突入する閾値 (enable_chain_score_early_fire 用)。
+# ChainPhaseDetector.SCORE_DELTA_FIRE (=80) と同値に合わせる。
+# 1 連鎖最小スコア≒40点、複数連鎖/ボーナスで 80+ が信頼できる発火閾値。
+CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
+
+# 機能C: CHAIN → STABLE 遷移直後の confirmed 凍結時間 (enable_chain_exit_warmup 用)。
+# エフェクト残光 (~0.1s) を吸収し、その間 _merge_diff_only による誤色混入を防ぐ。
+# 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
+CHAIN_EXIT_WARMUP_SEC: float = 0.1
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -488,6 +499,18 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
+        # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
+        # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
+        # score が取れない / OCR 失敗フレームでは従来の VideoChainTracker 経路が維持される
+        # (OR 追加のため退行ゼロ)。 デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_score_early_fire: bool = False,
+        # 機能C: CHAIN → STABLE 遷移直後の confirmed 凍結 (2026-06-02)。
+        # True にすると CHAIN→STABLE 復帰から CHAIN_EXIT_WARMUP_SEC 秒間 confirmed 更新を
+        # 凍結し、エフェクト残光色が _merge_diff_only 経由で confirmed に混入するのを防ぐ。
+        # 既存 enable_warmup_guard の CHAIN→STABLE 特化版。時間ベースで fps 非依存に実装。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_warmup: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -780,6 +803,13 @@ class RecognitionPipeline:
         # True で次ツモ変化 / お邪魔出現をトリガーとして CHAIN 終了する。
         # False = 従来 timing hold のみ (backwards compat)。
         self._enable_game_event_chain_exit: bool = bool(enable_game_event_chain_exit)
+        # 機能B: score 急増 CHAIN 早期発火フラグ。
+        self._enable_chain_score_early_fire: bool = bool(enable_chain_score_early_fire)
+        # 機能C: CHAIN → STABLE warmup フラグ + 遷移時刻 (1P/2P 別)。
+        # float: CHAIN→STABLE 遷移 time_sec。凍結中は time_sec < _chain_exit_until_* 。
+        self._enable_chain_exit_warmup: bool = bool(enable_chain_exit_warmup)
+        self._chain_exit_until_1p: float = 0.0  # CHAIN→STABLE 後の凍結終了 time_sec
+        self._chain_exit_until_2p: float = 0.0
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -1004,6 +1034,12 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_score_early_fire: bool = False,
+        # 機能C: CHAIN → STABLE warmup (2026-06-02)。
+        # デフォルト False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_warmup: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1149,6 +1185,8 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
 
     # ------------------------------------------------------------------
@@ -1247,6 +1285,9 @@ class RecognitionPipeline:
         # X1: CHAIN 突入時刻リセット
         self._chain_entry_t_1p = 0.0
         self._chain_entry_t_2p = 0.0
+        # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
+        self._chain_exit_until_1p = 0.0
+        self._chain_exit_until_2p = 0.0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1642,6 +1683,45 @@ class RecognitionPipeline:
         # 4. score 差分
         score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
         score_d_2p = self._update_score_tracker(self._score_tracker_2p, frame)
+
+        # 4a. 機能B: score 急増 CHAIN 早期発火 (enable_chain_score_early_fire=True 時のみ)。
+        # VideoChainTracker の puyo 減少検知を待たずに、自 side score_delta が
+        # CHAIN_SCORE_EARLY_FIRE_DELTA 以上急増した frame で即 CHAIN state に突入させる。
+        # 既存 VideoChainTracker 経路との OR 追加 (フォールバック完全維持)。
+        # score 取得失敗 (score_d == 0) 時は発火しない → OCR 失敗時は従来経路が継続。
+        # chain_banned / STABLE 状態以外 (既に CHAIN 中) は発火をスキップ。
+        if self._enable_chain_score_early_fire and is_active and not chain_banned:
+            self._apply_chain_score_early_fire(
+                side="1P", score_delta=score_d_1p, time_sec=time_sec,
+                prev_confirmed=self._prev_confirmed_1p,
+            )
+            self._apply_chain_score_early_fire(
+                side="2P", score_delta=score_d_2p, time_sec=time_sec,
+                prev_confirmed=self._prev_confirmed_2p,
+            )
+            # 早期発火後の chain_ev を再評価 (timing hold / game-event hold に従う)
+            if self._active_chain_1p is not None and chain_ev_1p is None:
+                eff_until_1p = (
+                    self._chain_event_max_until_1p
+                    if (
+                        self._enable_game_event_chain_exit
+                        and self._chain_event_max_until_1p > self._chain_until_1p
+                    )
+                    else self._chain_until_1p
+                )
+                if time_sec < eff_until_1p:
+                    chain_ev_1p = self._active_chain_1p
+            if self._active_chain_2p is not None and chain_ev_2p is None:
+                eff_until_2p = (
+                    self._chain_event_max_until_2p
+                    if (
+                        self._enable_game_event_chain_exit
+                        and self._chain_event_max_until_2p > self._chain_until_2p
+                    )
+                    else self._chain_until_2p
+                )
+                if time_sec < eff_until_2p:
+                    chain_ev_2p = self._active_chain_2p
 
         # 4b. next_pair 検出 (1P/2P 両方、共通色なので detect_both で OK)
         # 2026-05-10: slide motion 中は ネクスト puyo が画面で動いており認識結果が
@@ -2319,6 +2399,67 @@ class RecognitionPipeline:
         d = tracker.update(frame)
         return max(0, d.delta) if d.is_valid else 0
 
+    def _apply_chain_score_early_fire(
+        self,
+        side: str,
+        score_delta: int,
+        time_sec: float,
+        prev_confirmed: "Board | None",
+    ) -> None:
+        """機能B: score 急増を検知して即 CHAIN 突入シグナルを設定する。
+
+        VideoChainTracker の puyo 減少検知より先に CHAIN state に入るための
+        早期発火経路。 score_delta が CHAIN_SCORE_EARLY_FIRE_DELTA 未満または
+        既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        Args:
+            side: "1P" or "2P"
+            score_delta: 自 side の今フレーム score 増分。
+            time_sec: 現フレームの時刻。
+            prev_confirmed: 連鎖前確定盤面 (before_board 用)。
+        """
+        if score_delta < CHAIN_SCORE_EARLY_FIRE_DELTA:
+            return
+        # 既に active_chain が有効 → 従来経路で管理中、早期発火は不要
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                return
+        else:
+            if self._active_chain_2p is not None:
+                return
+        # prev_confirmed が空の場合は before_board を空 Board() で代替
+        before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        # 疑似 ChainEvent を生成 (chain_count=1 の最小ガード)
+        pseudo = ChainEvent(
+            trigger_sec=time_sec,
+            end_sec=time_sec + self._chain_hold_per_step_sec,
+            before_board=before,
+            chain_count=1,
+            total_erased=0, total_score=score_delta, base_score=score_delta,
+            all_clear_bonus_applied=0,
+            ojama_sent=0, leftover_score=0,
+            is_all_clear=False,
+        )
+        chain_until = time_sec + self._chain_hold_per_step_sec
+        if side == "1P":
+            self._active_chain_1p = pseudo
+            self._chain_until_1p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_1p = (
+                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                )
+                self._chain_start_next_1p = self._last_seen_next_1p
+            self._chain_entry_t_1p = time_sec
+        else:
+            self._active_chain_2p = pseudo
+            self._chain_until_2p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_2p = (
+                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                )
+                self._chain_start_next_2p = self._last_seen_next_2p
+            self._chain_entry_t_2p = time_sec
+
     def _step_side(
         self,
         side: str,
@@ -2835,6 +2976,21 @@ class RecognitionPipeline:
             except Exception:
                 pass
 
+        # 機能C: CHAIN → STABLE 遷移直後 CHAIN_EXIT_WARMUP_SEC 秒間の confirmed 凍結。
+        # enable_chain_exit_warmup=True の場合のみ有効。
+        # エフェクト残光色が _merge_diff_only 経由で confirmed に混入するのを防ぐ。
+        # 凍結終了時刻 (_chain_exit_until_*) を更新し、下流の confirmed 更新をスキップさせる。
+        if (
+            self._enable_chain_exit_warmup
+            and prev_state == BoardState.CHAIN
+            and ctx.state == BoardState.STABLE
+        ):
+            warmup_until = time_sec + CHAIN_EXIT_WARMUP_SEC
+            if side == "1P":
+                self._chain_exit_until_1p = warmup_until
+            else:
+                self._chain_exit_until_2p = warmup_until
+
         # cycle 29 (2026-05-18): NEXT 移動検知ベースで grace + landing_vote 起動。
         # 既存の TSUMO_FALL → STABLE 経路は placement_inferrer で confirmed を
         # 物理推論済 (= ctx.confirmed_board 更新済)。 NEXT 検知 frame で
@@ -3015,14 +3171,28 @@ class RecognitionPipeline:
         # LANDING_VOTE_FRAMES 経過時に最頻値で confirmed_board の cell 色を更新.
         # 1 秒経過後の正しい色判別 (= ユーザー要件) を実現.
         # cycle 71m (β2''): frame_bgr を渡して HSV 距離分類 vote も並行蓄積.
+        # 機能C: CHAIN → STABLE warmup 中は confirmed 更新をスキップ。
+        # CHAIN_EXIT_WARMUP_SEC 秒経過後に通常更新を再開する。
+        # in_grace と独立して管理する (着地 grace とは別のシグナル)。
+        _chain_exit_until = (
+            self._chain_exit_until_1p if side == "1P"
+            else self._chain_exit_until_2p
+        )
+        in_chain_exit_warmup = (
+            self._enable_chain_exit_warmup
+            and ctx.state == BoardState.STABLE
+            and time_sec < _chain_exit_until
+        )
+
         # cycle 26 (A1): grace 中は updated 反映を skip (蓄積は継続)。
         # grace 終了後の vote 完了で正しく反映される。
+        # 機能C: chain exit warmup 中も skip (残光色混入防止)。
         if ctx.confirmed_board is not None:
             vote_updated = self._update_landing_votes(
                 side, frame_idx, cnn_board, ctx.confirmed_board,
                 frame_bgr=frame_bgr,
             )
-            if vote_updated is not None and not in_grace:
+            if vote_updated is not None and not in_grace and not in_chain_exit_warmup:
                 ctx.confirmed_board = vote_updated
 
         # cycle 71n (案 θ): STABLE 中の長期不一致 vote.
@@ -3070,7 +3240,8 @@ class RecognitionPipeline:
                                         continue
                             # cycle 26 (A1): grace 中は override skip
                             # (history append は続行、grace 終了後に発火)
-                            if in_grace:
+                            # 機能C: chain exit warmup 中も override skip
+                            if in_grace or in_chain_exit_warmup:
                                 continue
                             ctx.confirmed_board.set(r, c, most_common)
                             h_list.clear()
