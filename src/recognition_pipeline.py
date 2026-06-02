@@ -424,15 +424,15 @@ class RecognitionPipeline:
         bg_fp_force_max_puyo: int | None = None,
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
-        enable_ojama_tier1_warmup: bool = False,
-        # 2026-05-31: 一旦 OFF にしたが撤回し default ON 維持 (= main と同じ、判断保留)。
-        # 理由: 当初「constraint_fill が色破壊の主因」としたが誤診断 (16動画で corruption は
-        # ON 77279/OFF 76610 とほぼ不変)。真因は infer_placement 誤推論 + T2 自己強化フリーズ
-        # (project_color_corruption_infer_placement_t2)。constraint OFF 効果は red +0.26% 程度の僅少で
-        # 色破壊の本丸ではないため、採否は user レビューで判断。トグルは評価用に維持。
-        enable_constraint_fill: bool = True,
-        enable_t2_highconf_yield: bool = False,
-        enable_infer_empty_guard: bool = False,
+        enable_ojama_tier1_warmup: bool = True,
+        # 2026-06-02: user viz 採用承認により default False (OFF) に変更。
+        # 旧 default True から変更: constraint_fill は色破壊の主因でなく
+        # (ON/OFF で corruption ほぼ不変)、採用スタックでは OFF が承認された。
+        # --no-constraint-fill CLI フラグは既存互換のため維持 (冗長だが無害)。
+        # True に戻すには enable_constraint_fill=True を明示する。
+        enable_constraint_fill: bool = False,
+        enable_t2_highconf_yield: bool = True,
+        enable_infer_empty_guard: bool = True,
         # game-event ベース連鎖終了 (C-1/C-2 plan, 2026-06-01)。
         # True にすると CHAIN 状態を timing hold だけでなく、
         # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
@@ -470,23 +470,24 @@ class RecognitionPipeline:
         # True にすると白ハイライト画素を彩度 median 計算から除外し、
         # ぷよ表面の光沢球混入による EMPTY 誤判定を防ぐ。
         # ColorClassifier に enable_specular_robust_saturation を伝播。
-        # default False = 従来の全画素 median (完全不変、後方互換)。
-        enable_specular_robust_saturation: bool = False,
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        enable_specular_robust_saturation: bool = True,
         # 設計C 事後復旧ゲート (2026-06-02):
         # True で STABLE 中の confirmed==EMPTY かつ CNN==HSV 持続合意セルを復旧する。
-        # B1 禁忌隣接のため default False。viz 検証後に判断する。
-        # backwards compat: False で既存挙動と完全同一。
-        enable_stable_recovery_gate: bool = False,
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        # False に戻すには enable_stable_recovery_gate=False を明示する。
+        enable_stable_recovery_gate: bool = True,
         # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
         # enable_ojama_visual_detection: 親フラグ。True で全子フラグを有効化。
         # enable_ojama_visual_chain_exit: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲。
         # enable_ojama_infer_guard: OJAMA_FALL → STABLE 直後に infer_placement を抑止。
         # enable_ojama_settle_detection: OJAMA_FALL 中お邪魔 count 不変で STABLE 復帰。
-        # 全 default False = 従来挙動完全維持 (backwards compat)。
-        enable_ojama_visual_detection: bool = False,
-        enable_ojama_visual_chain_exit: bool = False,
-        enable_ojama_infer_guard: bool = False,
-        enable_ojama_settle_detection: bool = False,
+        # 2026-06-02: user viz 採用承認により全フラグ default True に変更。
+        # 親フラグ=True により子フラグも全て有効になる (子個別は後方互換で True を明示)。
+        enable_ojama_visual_detection: bool = True,
+        enable_ojama_visual_chain_exit: bool = True,
+        enable_ojama_infer_guard: bool = True,
+        enable_ojama_settle_detection: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -982,10 +983,10 @@ class RecognitionPipeline:
         # 連鎖中エフェクト誤認 / ojama 消失 / 序盤誤認が確認された。
         enable_piece_persistence: bool = False,
         enable_tier1_warmup: bool = False,
-        enable_ojama_tier1_warmup: bool = False,
-        enable_constraint_fill: bool = True,
-        enable_t2_highconf_yield: bool = False,
-        enable_infer_empty_guard: bool = False,
+        enable_ojama_tier1_warmup: bool = True,
+        enable_constraint_fill: bool = False,
+        enable_t2_highconf_yield: bool = True,
+        enable_infer_empty_guard: bool = True,
         enable_game_event_chain_exit: bool = True,
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
@@ -993,16 +994,16 @@ class RecognitionPipeline:
         enable_landing_observed_color: bool = False,
         enable_red_hue_wrap_fix: bool = True,
         # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
-        # default False = 従来の全画素 median (完全不変、後方互換)。
-        enable_specular_robust_saturation: bool = False,
-        # 設計C 事後復旧ゲート (2026-06-02): default False = 従来挙動完全維持。
-        enable_stable_recovery_gate: bool = False,
+        # 2026-06-02: user viz 採用承認により default True に変更。
+        enable_specular_robust_saturation: bool = True,
+        # 設計C 事後復旧ゲート (2026-06-02): user viz 採用承認により default True に変更。
+        enable_stable_recovery_gate: bool = True,
         # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
-        # 全 default False = 従来挙動完全維持 (backwards compat)。
-        enable_ojama_visual_detection: bool = False,
-        enable_ojama_visual_chain_exit: bool = False,
-        enable_ojama_infer_guard: bool = False,
-        enable_ojama_settle_detection: bool = False,
+        # user viz 採用承認により全フラグ default True に変更。
+        enable_ojama_visual_detection: bool = True,
+        enable_ojama_visual_chain_exit: bool = True,
+        enable_ojama_infer_guard: bool = True,
+        enable_ojama_settle_detection: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
