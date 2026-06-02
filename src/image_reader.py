@@ -240,7 +240,7 @@ class ColorClassifier:
     def __init__(
         self, color_ranges: dict[int, list[HsvRange]] | None = None,
         vote_mode: bool = False,
-        enable_red_hue_wrap_fix: bool = False,
+        enable_red_hue_wrap_fix: bool = True,
     ) -> None:
         """
         Args:
@@ -249,11 +249,11 @@ class ColorClassifier:
             vote_mode: True なら per-pixel 投票方式で分類 (サイクル71).
                        False (default) は HSV 中央値 + cycle 69-B サブ region vote
                        (= 後方互換). 投票方式は混合色 cell や半分埋まり cell に強い.
-            enable_red_hue_wrap_fix: True なら赤色相折り返し補正を有効化
-                (fix/v70-zeropatch-redyellow)。
+            enable_red_hue_wrap_fix: True (default) なら赤色相折り返し補正を有効化
+                (fix/v70-zeropatch-redyellow、user viz 採用済)。
                 赤の H 画素が 0-4 と 166-179 に分布する 2 峰構造で median が
                 赤/黄境界 (H=13/14) に乗りちらつく問題を修正する。
-                False (default) は従来の単純 median (完全不変、 後方互換)。
+                False = 従来の単純 median (後方互換が必要な場合のみ指定)。
         """
         self._ranges: dict[int, list[HsvRange]] = (
             color_ranges if color_ranges is not None else DEFAULT_COLOR_RANGES

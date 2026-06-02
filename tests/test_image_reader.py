@@ -653,11 +653,19 @@ class TestRedHueWrapFix:
         return patch
 
     def test_off_mode_unchanged(self) -> None:
-        """OFF 時 (default): 単純 median と完全同一の挙動。"""
+        """OFF 時 (明示的 False): 単純 median と完全同一の挙動。
+
+        default は True (ON) に変更済 (user viz 採用承認 2026-06-02)。
+        OFF の後方互換性を回帰防止として保持。
+        """
         clf_off = ColorClassifier(enable_red_hue_wrap_fix=False)
-        clf_default = ColorClassifier()
-        patch = self._make_bimodal_red_patch()
-        assert clf_off.classify(patch) == clf_default.classify(patch)
+        # 2 峰分布 (H=2 と H=173 が半々)
+        h_arr = np.array([2, 2, 2, 2, 2, 173, 173, 173, 173, 173], dtype=np.uint8)
+        result_off = clf_off._compute_stable_h_median(h_arr)
+        expected = int(np.median(h_arr))
+        assert result_off == expected, (
+            f"OFF 時に単純 median と一致しない: {result_off} != {expected}"
+        )
 
     def test_on_bimodal_red_classified_as_red(self) -> None:
         """ON 時: 2 峰赤 (H=2 と H=173 半々) が安定して RED 判定される。
