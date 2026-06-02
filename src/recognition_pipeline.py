@@ -466,6 +466,11 @@ class RecognitionPipeline:
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
         # user viz 採用承認済 (2026-06-02)。False = 従来の単純 median (後方互換が必要な場合のみ)。
         enable_red_hue_wrap_fix: bool = True,
+        # 設計C 事後復旧ゲート (2026-06-02):
+        # True で STABLE 中の confirmed==EMPTY かつ CNN==HSV 持続合意セルを復旧する。
+        # B1 禁忌隣接のため default False。viz 検証後に判断する。
+        # backwards compat: False で既存挙動と完全同一。
+        enable_stable_recovery_gate: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -638,13 +643,17 @@ class RecognitionPipeline:
         # 動いていれば「試合中」 を強制復帰させる. 60 frame = 1 秒分.
         self._recent_scores_1p: list[int | None] = []
         self._recent_scores_2p: list[int | None] = []
+        # 設計C 事後復旧ゲート: フラグを保持し _build_state_machine / _step_side に伝播。
+        self._enable_stable_recovery_gate: bool = bool(enable_stable_recovery_gate)
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         self._sm_1p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -857,11 +866,13 @@ class RecognitionPipeline:
         stable_n: int,
         *,
         enable_warmup_guard: bool = False,
+        enable_stable_recovery_gate: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame
         # confirmed 更新を凍結する (A/B 対照実験用 optional 機能)。
+        # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
         return BoardStateMachine(
@@ -874,6 +885,7 @@ class RecognitionPipeline:
             stable_frame_count=stable_n,
             enable_warmup_guard=enable_warmup_guard,
             warmup_frames=STABLE_WARMUP_FRAMES,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -915,6 +927,8 @@ class RecognitionPipeline:
         enable_hsv_classify_fallback: bool = False,
         enable_landing_observed_color: bool = False,
         enable_red_hue_wrap_fix: bool = True,
+        # 設計C 事後復旧ゲート (2026-06-02): default False = 従来挙動完全維持。
+        enable_stable_recovery_gate: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1051,6 +1065,7 @@ class RecognitionPipeline:
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
 
     # ------------------------------------------------------------------
@@ -2292,6 +2307,23 @@ class RecognitionPipeline:
             and (frame_idx - self._match_active_started_frame)
             < self.MATCH_JUST_STARTED_WINDOW_FRAMES
         )
+        # 設計C 事後復旧ゲート用 HSV-only 盤面を取得する。
+        # フラグ OFF または frame_bgr なし の場合は None (安全弁A により発火しない)。
+        _hsv_board_for_signals: "Board | None" = None
+        if (
+            self._enable_stable_recovery_gate
+            and frame_bgr is not None
+            and sm.context.state == BoardState.STABLE
+        ):
+            region_for_hsv = (
+                DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+            )
+            try:
+                _hsv_board_for_signals = self._reader.read_board_hsv_only(
+                    frame_bgr, region_for_hsv,
+                )
+            except Exception:
+                _hsv_board_for_signals = None
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -2303,6 +2335,7 @@ class RecognitionPipeline:
             placement_validated=placement_validated,
             effect_visible=effect_vis,
             match_just_started=match_just_started,
+            hsv_board=_hsv_board_for_signals,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、

@@ -1327,6 +1327,76 @@ class ImageReader:
         board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
         return board_1p, board_2p
 
+    def _get_hsv_classifier(self) -> "ColorClassifier | None":
+        """内部の HSV-only 分類器を取得する。
+
+        HybridClassifier を使用している場合は _hsv (= ColorClassifier) を返す。
+        ColorClassifier 直接の場合はそのまま返す。
+        どちらでもなければ None を返す (= 復旧ゲートは発火しない)。
+        """
+        clf = self._classifier
+        # HybridClassifier は _hsv 属性に ColorClassifier を保持する
+        if hasattr(clf, "_hsv"):
+            return clf._hsv  # type: ignore[return-value]
+        if isinstance(clf, ColorClassifier):
+            return clf
+        return None
+
+    def read_board_hsv_only(
+        self,
+        frame: np.ndarray,
+        region: "BoardRegion",
+    ) -> "Board":
+        """HSV-only 分類器のみで盤面を読み取る (設計C 事後復旧ゲート用)。
+
+        CNN を使わず HSV ColorClassifier だけで判定する簡易版。
+        bg_fp / tier1 / telop マスクは適用しない。
+        目的: CNN と独立した2番目の認識器として HSV 盤面を提供し、
+        CNN==HSV 持続合意チェックに使う。
+
+        Returns:
+            Board: HSV-only 判定盤面。HSV 分類器が取得できない場合は空 Board。
+        """
+        hsv_clf = self._get_hsv_classifier()
+        if hsv_clf is None:
+            return Board()
+        h, w = frame.shape[:2]
+        if (h, w) != (1080, 1920):
+            interp = cv2.INTER_LANCZOS4 if h < 1080 else cv2.INTER_AREA
+            frame = cv2.resize(frame, (1920, 1080), interpolation=interp)
+        board = Board()
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            for col in range(BOARD_COLS):
+                x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+                x1 = max(0, min(int(x1), w - 1))
+                x2 = max(x1 + 1, min(int(x2), w))
+                y1 = max(0, min(int(y1), h - 1))
+                y2 = max(y1 + 1, min(int(y2), h))
+                patch = frame[y1:y2, x1:x2]
+                if patch.size == 0:
+                    board.set(row, col, COLOR_EMPTY)
+                    continue
+                board.set(row, col, int(hsv_clf.classify(patch)))
+        # 隠し段を物理推論で確定 or UNKNOWN にする
+        self._infer_hidden_rows(board)
+        return board
+
+    def read_both_boards_hsv(
+        self,
+        frame: np.ndarray,
+    ) -> "tuple[Board, Board]":
+        """1P/2P 両方の HSV-only 盤面を返す (設計C 事後復旧ゲート用)。
+
+        Returns:
+            (1P HSV-only 盤面, 2P HSV-only 盤面)。
+            HSV 分類器が取得できない場合は (空 Board, 空 Board)。
+        """
+        if self._get_hsv_classifier() is None:
+            return Board(), Board()
+        board_1p = self.read_board_hsv_only(frame, self._p1_region)
+        board_2p = self.read_board_hsv_only(frame, self._p2_region)
+        return board_1p, board_2p
+
     def debug_frame(
         self, frame: np.ndarray, region: BoardRegion
     ) -> np.ndarray:
