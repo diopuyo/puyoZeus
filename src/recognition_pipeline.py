@@ -462,10 +462,10 @@ class RecognitionPipeline:
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_landing_observed_color: bool = False,
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
-        # True にすると HSV 経路の median 計算で赤 2 峰を collapse し
+        # True (default) にすると HSV 経路の median 計算で赤 2 峰を collapse し
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
-        # デフォルト False = 従来の単純 median (完全不変、 backwards compat)。
-        enable_red_hue_wrap_fix: bool = False,
+        # user viz 採用承認済 (2026-06-02)。False = 従来の単純 median (後方互換が必要な場合のみ)。
+        enable_red_hue_wrap_fix: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -914,7 +914,7 @@ class RecognitionPipeline:
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
         enable_landing_observed_color: bool = False,
-        enable_red_hue_wrap_fix: bool = False,
+        enable_red_hue_wrap_fix: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
