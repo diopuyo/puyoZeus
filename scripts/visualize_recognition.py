@@ -794,6 +794,28 @@ def main() -> int:
         help="フェーズ A4: お邪魔ぷよ着地検出を制御する。 "
              "ライブラリ default=True (有効)。 --no-enable-ojama-settle-detection で無効化。",
     )
+    parser.add_argument(
+        "--chain-score-early-fire",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_score_early_fire",
+        help="機能B: score 急増 CHAIN 早期発火を制御する。 "
+             f"True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA={80} "
+             "の frame で VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。 "
+             "OCR 失敗 / score 取得不可時は従来の VideoChainTracker 経路を維持 (OR 追加)。 "
+             "ライブラリ default=False (無効)。 --chain-score-early-fire で有効化。",
+    )
+    parser.add_argument(
+        "--chain-exit-warmup",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_exit_warmup",
+        help="機能C: CHAIN → STABLE 遷移直後の confirmed 凍結を制御する。 "
+             f"True にすると CHAIN→STABLE 復帰から CHAIN_EXIT_WARMUP_SEC={0.1}s 間 confirmed "
+             "更新を凍結しエフェクト残光色の混入を防ぐ。 "
+             "時間ベース実装のため fps 非依存。 "
+             "ライブラリ default=False (無効)。 --chain-exit-warmup で有効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -885,6 +907,10 @@ def main() -> int:
         enable_ojama_infer_guard=args.enable_ojama_infer_guard,
         # フェーズ A4 (2026-06-02): --enable-ojama-settle-detection で有効化
         enable_ojama_settle_detection=args.enable_ojama_settle_detection,
+        # 機能B (2026-06-02): --chain-score-early-fire で有効化
+        enable_chain_score_early_fire=args.enable_chain_score_early_fire,
+        # 機能C (2026-06-02): --chain-exit-warmup で有効化
+        enable_chain_exit_warmup=args.enable_chain_exit_warmup,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -962,6 +988,16 @@ def main() -> int:
         print("[viz] enable_ojama_infer_guard=ON (フェーズ A4: お邪魔ぷよ推論ガード)")
     if args.enable_ojama_settle_detection:
         print("[viz] enable_ojama_settle_detection=ON (フェーズ A4: お邪魔ぷよ着地検出)")
+    if args.enable_chain_score_early_fire:
+        print(
+            "[viz] chain_score_early_fire=ON "
+            f"(機能B: score >= {80} で即 CHAIN 突入 / VideoChainTracker フォールバック維持)"
+        )
+    if args.enable_chain_exit_warmup:
+        print(
+            "[viz] chain_exit_warmup=ON "
+            f"(機能C: CHAIN→STABLE 後 {0.1}s confirmed 凍結 / エフェクト残光混入防止)"
+        )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化

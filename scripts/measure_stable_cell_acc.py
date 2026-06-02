@@ -326,6 +326,8 @@ def _make_pipeline_cnn(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -392,6 +394,8 @@ def _make_pipeline_cnn(
         enable_ojama_infer_guard=enable_ojama_infer_guard,
         enable_ojama_settle_detection=enable_ojama_settle_detection,
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -565,6 +569,8 @@ def _process_video(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -625,6 +631,8 @@ def _process_video(
         enable_ojama_infer_guard=enable_ojama_infer_guard,
         enable_ojama_settle_detection=enable_ojama_settle_detection,
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -665,6 +673,8 @@ def _process_video_worker(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -703,6 +713,8 @@ def _process_video_worker(
         enable_ojama_infer_guard=enable_ojama_infer_guard,
         enable_ojama_settle_detection=enable_ojama_settle_detection,
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1797,6 +1809,33 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--chain-score-early-fire",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_score_early_fire",
+        help=(
+            "機能B: score 急増 CHAIN 早期発火を制御する。 "
+            f"True にすると自 side の score_delta >= {80} の frame で "
+            "VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。 "
+            "OCR 失敗 / score 取得不可時は従来の VideoChainTracker 経路を維持 (OR 追加)。 "
+            "ライブラリ default=False (無効)。 "
+            "--chain-score-early-fire で有効化、 --no-chain-score-early-fire で無効化。"
+        ),
+    )
+    p.add_argument(
+        "--chain-exit-warmup",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_exit_warmup",
+        help=(
+            "機能C: CHAIN → STABLE 遷移直後の confirmed 凍結を制御する。 "
+            f"True にすると CHAIN→STABLE 復帰から {0.1}s 間 confirmed 更新を凍結し "
+            "エフェクト残光色の混入を防ぐ。 時間ベース実装で fps 非依存。 "
+            "ライブラリ default=False (無効)。 "
+            "--chain-exit-warmup で有効化、 --no-chain-exit-warmup で無効化。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1842,6 +1881,8 @@ def _collect_results(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1905,6 +1946,8 @@ def _collect_results(
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1925,6 +1968,8 @@ def _collect_results(
         enable_ojama_infer_guard=enable_ojama_infer_guard,
         enable_ojama_settle_detection=enable_ojama_settle_detection,
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
 
 
@@ -1950,6 +1995,8 @@ def _collect_serial(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1977,6 +2024,8 @@ def _collect_serial(
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+            enable_chain_score_early_fire=enable_chain_score_early_fire,
+            enable_chain_exit_warmup=enable_chain_exit_warmup,
         )
         stats_list.append(vstats)
     return stats_list
@@ -2005,6 +2054,8 @@ def _collect_parallel(
     enable_ojama_infer_guard: bool = False,
     enable_ojama_settle_detection: bool = False,
     enable_ojama_tier1_warmup: bool = False,
+    enable_chain_score_early_fire: bool = False,
+    enable_chain_exit_warmup: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -2046,6 +2097,8 @@ def _collect_parallel(
                 enable_ojama_infer_guard,
                 enable_ojama_settle_detection,
                 enable_ojama_tier1_warmup,
+                enable_chain_score_early_fire,
+                enable_chain_exit_warmup,
             )
             futures[fut] = vid
 
@@ -2215,6 +2268,12 @@ def main() -> int:
     enable_ojama_infer_guard: bool = bool(args.enable_ojama_infer_guard)
     enable_ojama_settle_detection: bool = bool(args.enable_ojama_settle_detection)
     enable_ojama_tier1_warmup: bool = bool(args.enable_ojama_tier1_warmup)
+    enable_chain_score_early_fire: bool = bool(
+        getattr(args, "enable_chain_score_early_fire", False)
+    )
+    enable_chain_exit_warmup: bool = bool(
+        getattr(args, "enable_chain_exit_warmup", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -2273,6 +2332,8 @@ def main() -> int:
         enable_ojama_infer_guard=enable_ojama_infer_guard,
         enable_ojama_settle_detection=enable_ojama_settle_detection,
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)

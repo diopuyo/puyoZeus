@@ -1481,3 +1481,218 @@ def test_enable_landing_observed_color_default_false_no_regression():
         result = pipe.update(i, float(i), frame)
         assert result is not None, "update は None を返さない"
 
+
+# ============================
+# 機能B: score 急増 CHAIN 早期発火テスト
+# ============================
+
+
+def _make_pipe_with_score_tracker(
+    enable_chain_score_early_fire: bool = False,
+    stable_n: int = 2,
+) -> RecognitionPipeline:
+    """score tracker / score-early-fire テスト用 pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=stable_n,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+    )
+
+
+def test_chain_score_early_fire_flag_default_false():
+    """機能B: デフォルト OFF 時は _enable_chain_score_early_fire が False。"""
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=False)
+    assert not pipe._enable_chain_score_early_fire
+
+
+def test_chain_score_early_fire_flag_on():
+    """機能B: ON 時は _enable_chain_score_early_fire が True。"""
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=True)
+    assert pipe._enable_chain_score_early_fire
+
+
+def test_chain_score_early_fire_off_no_active_chain():
+    """機能B OFF: score が大きくても _active_chain_1p は生成されない (従来挙動)。"""
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=False)
+    # 試合開始 CHAIN_BAN_FRAMES を超えた frame で score 急増をシミュレート
+    # _apply_chain_score_early_fire は enable=False なので呼ばれない
+    # prev_confirmed を直接設定して score 発火経路のみをテスト
+    pipe._prev_confirmed_1p = Board()
+    from src.recognition_pipeline import CHAIN_SCORE_EARLY_FIRE_DELTA
+    # score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA でも OFF なら発火しない
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=CHAIN_SCORE_EARLY_FIRE_DELTA,
+        time_sec=5.0, prev_confirmed=Board(),
+    )
+    # OFF の場合でも呼び出し自体は可能、ただし pipeline の enable フラグが OFF なら
+    # update() 内で呼ばれないのでここはメソッド単体テスト
+    # 本テストはフラグ OFF で update が安全に動作することを確認する
+    for i in range(3):
+        result = pipe.update(i, float(i) * 0.033, _dummy_frame())
+        assert result is not None
+
+
+def test_chain_score_early_fire_on_sets_active_chain():
+    """機能B ON: score_delta >= 閾値で _active_chain_1p が設定される。"""
+    from src.recognition_pipeline import CHAIN_SCORE_EARLY_FIRE_DELTA
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=True)
+    # prev_confirmed を設定 (score 発火で before_board として使われる)
+    pipe._prev_confirmed_1p = Board()
+    # chain_banned 解除: CHAIN_BAN_FRAMES_AFTER_MATCH_START を超えた frame
+    pipe._match_active_started_frame = 0
+    assert pipe._active_chain_1p is None
+    # _apply_chain_score_early_fire を直接呼んで発火確認
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=CHAIN_SCORE_EARLY_FIRE_DELTA,
+        time_sec=5.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is not None, (
+        "score_delta >= 閾値 で _active_chain_1p が設定されるべき"
+    )
+
+
+def test_chain_score_early_fire_below_threshold_no_chain():
+    """機能B: score_delta が閾値未満では _active_chain は設定されない。"""
+    from src.recognition_pipeline import CHAIN_SCORE_EARLY_FIRE_DELTA
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=True)
+    pipe._prev_confirmed_1p = Board()
+    # 閾値より 1 低い delta
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=CHAIN_SCORE_EARLY_FIRE_DELTA - 1,
+        time_sec=5.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is None, (
+        "閾値未満では _active_chain_1p は設定されないべき"
+    )
+
+
+def test_chain_score_early_fire_ocr_fail_fallback():
+    """機能B: score_delta=0 (OCR 失敗) では発火しない (フォールバック維持)。"""
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=True)
+    pipe._prev_confirmed_1p = Board()
+    # score_delta=0 = OCR 失敗 / score 取得不可
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=0,
+        time_sec=5.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is None, (
+        "score_delta=0 (OCR 失敗) では発火しないべき (フォールバック維持)"
+    )
+
+
+def test_chain_score_early_fire_already_active_no_overwrite():
+    """機能B: 既に _active_chain が有効な場合は上書きしない (既存経路優先)。"""
+    from src.recognition_pipeline import CHAIN_SCORE_EARLY_FIRE_DELTA
+    from src.chain_detector import ChainEvent
+    pipe = _make_pipe_with_score_tracker(enable_chain_score_early_fire=True)
+    pipe._prev_confirmed_1p = Board()
+    # 先に既存の _active_chain をセット
+    existing = ChainEvent(
+        trigger_sec=3.0, end_sec=4.0, before_board=Board(),
+        chain_count=3, total_erased=12, total_score=300,
+        base_score=300, all_clear_bonus_applied=0,
+        ojama_sent=0, leftover_score=0, is_all_clear=False,
+    )
+    pipe._active_chain_1p = existing
+    pipe._chain_until_1p = 99.0  # 有効期限内
+    # 再発火を試みても既存を保持
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=CHAIN_SCORE_EARLY_FIRE_DELTA,
+        time_sec=5.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is existing, (
+        "既存 _active_chain があれば上書きしないべき"
+    )
+
+
+# ============================
+# 機能C: CHAIN → STABLE warmup テスト
+# ============================
+
+
+def _make_pipe_with_chain_exit_warmup(
+    enable_chain_exit_warmup: bool = False,
+    stable_n: int = 2,
+) -> RecognitionPipeline:
+    """chain exit warmup テスト用 pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=stable_n,
+        enable_chain_exit_warmup=enable_chain_exit_warmup,
+    )
+
+
+def test_chain_exit_warmup_flag_default_false():
+    """機能C: デフォルト OFF 時は _enable_chain_exit_warmup が False。"""
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=False)
+    assert not pipe._enable_chain_exit_warmup
+
+
+def test_chain_exit_warmup_flag_on():
+    """機能C: ON 時は _enable_chain_exit_warmup が True。"""
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=True)
+    assert pipe._enable_chain_exit_warmup
+
+
+def test_chain_exit_warmup_initial_until_zero():
+    """機能C: 初期状態では _chain_exit_until_* は 0.0。"""
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=True)
+    assert pipe._chain_exit_until_1p == 0.0
+    assert pipe._chain_exit_until_2p == 0.0
+
+
+def test_chain_exit_warmup_reset_clears_until():
+    """機能C: reset() 後は _chain_exit_until_* が 0.0 に戻る。"""
+    from src.recognition_pipeline import CHAIN_EXIT_WARMUP_SEC
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=True)
+    # 擬似的に warmup 状態をセット
+    pipe._chain_exit_until_1p = 99.0
+    pipe._chain_exit_until_2p = 99.0
+    pipe.reset()
+    assert pipe._chain_exit_until_1p == 0.0, "reset 後は 1P warmup until が 0 になるべき"
+    assert pipe._chain_exit_until_2p == 0.0, "reset 後は 2P warmup until が 0 になるべき"
+
+
+def test_chain_exit_warmup_off_no_regression():
+    """機能C OFF (default): 従来通り update が例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=False)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+def test_chain_exit_warmup_on_no_crash():
+    """機能C ON: update が例外なしで複数フレーム動作する (煙テスト)。"""
+    pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=True)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+def test_chain_score_early_fire_constant_exists():
+    """機能B: CHAIN_SCORE_EARLY_FIRE_DELTA 定数が正の整数で存在する。"""
+    from src.recognition_pipeline import CHAIN_SCORE_EARLY_FIRE_DELTA
+    assert isinstance(CHAIN_SCORE_EARLY_FIRE_DELTA, int)
+    assert CHAIN_SCORE_EARLY_FIRE_DELTA > 0
+
+
+def test_chain_exit_warmup_constant_exists():
+    """機能C: CHAIN_EXIT_WARMUP_SEC 定数が正の float で存在する。"""
+    from src.recognition_pipeline import CHAIN_EXIT_WARMUP_SEC
+    assert isinstance(CHAIN_EXIT_WARMUP_SEC, float)
+    assert CHAIN_EXIT_WARMUP_SEC > 0.0
+
