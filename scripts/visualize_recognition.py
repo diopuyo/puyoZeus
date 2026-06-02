@@ -742,6 +742,16 @@ def main() -> int:
              "H>=140 を負方向に折り返してから median を取ることで 2 峰を 1 峰に collapse。 "
              "デフォルト OFF = 従来の単純 median (後方互換)。",
     )
+    parser.add_argument(
+        "--stable-recovery-gate",
+        action="store_true",
+        default=False,
+        dest="enable_stable_recovery_gate",
+        help="設計C 事後復旧ゲートを有効化。 "
+             "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
+             "8 フレーム継続したセルを confirmed に復旧する。 "
+             "B1 禁忌隣接のためデフォルト OFF。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -820,6 +830,8 @@ def main() -> int:
         enable_landing_observed_color=args.enable_landing_observed_color,
         # 赤色相折り返し補正 (fix/v70-zeropatch-redyellow, 2026-06-02): --red-hue-wrap-fix で有効化
         enable_red_hue_wrap_fix=args.enable_red_hue_wrap_fix,
+        # 設計C 事後復旧ゲート (2026-06-02): --stable-recovery-gate で有効化
+        enable_stable_recovery_gate=args.enable_stable_recovery_gate,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")

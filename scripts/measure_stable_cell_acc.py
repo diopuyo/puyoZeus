@@ -319,6 +319,7 @@ def _make_pipeline_cnn(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -365,6 +366,7 @@ def _make_pipeline_cnn(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -531,6 +533,7 @@ def _process_video(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -581,6 +584,7 @@ def _process_video(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -614,6 +618,7 @@ def _process_video_worker(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -645,6 +650,7 @@ def _process_video_worker(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1647,6 +1653,19 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--stable-recovery-gate",
+        action="store_true",
+        default=False,
+        dest="enable_stable_recovery_gate",
+        help=(
+            "設計C 事後復旧ゲートを有効化する。 "
+            "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
+            f"{8} フレーム継続したセルを confirmed に復旧する。 "
+            "F ガードによる空固定欠陥への根本対処。 "
+            "B1 禁忌隣接のため省略時は無効 (default OFF)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1685,6 +1704,7 @@ def _collect_results(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1739,6 +1759,7 @@ def _collect_results(
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1752,6 +1773,7 @@ def _collect_results(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
 
 
@@ -1770,6 +1792,7 @@ def _collect_serial(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1790,6 +1813,7 @@ def _collect_serial(
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1811,6 +1835,7 @@ def _collect_parallel(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1845,6 +1870,7 @@ def _collect_parallel(
                 enable_hsv_classify_fallback,
                 enable_landing_observed_color,
                 enable_red_hue_wrap_fix,
+                enable_stable_recovery_gate,
             )
             futures[fut] = vid
 
@@ -2021,6 +2047,10 @@ def main() -> int:
     enable_red_hue_wrap_fix: bool = bool(
         getattr(args, "enable_red_hue_wrap_fix", False)
     )
+    # stable_recovery_gate フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_stable_recovery_gate: bool = bool(
+        getattr(args, "enable_stable_recovery_gate", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -2061,6 +2091,11 @@ def main() -> int:
             "[measure] red_hue_wrap_fix ENABLED "
             "(--red-hue-wrap-fix 指定: 赤 2 峰 collapse / 黄↔赤ちらつき対策)"
         )
+    if enable_stable_recovery_gate:
+        print(
+            "[measure] stable_recovery_gate ENABLED "
+            "(--stable-recovery-gate 指定: 設計C 事後復旧ゲート)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -2075,6 +2110,7 @@ def main() -> int:
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
-from src.board import BOARD_COLS, BOARD_ROWS, Board
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, Board
 
 # ============================
 # 定数
@@ -50,6 +50,16 @@ STABLE_WARMUP_FRAMES: int = 12
 
 # 推論優先 (NON-STABLE) state の集合
 NON_STABLE_STATES: frozenset["BoardState"] = frozenset()  # 後で初期化
+
+# 設計C 事後復旧ゲート (fix/v70-zeropatch-redyellow, 2026-06-02):
+# STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で N フレーム継続した
+# セルを confirmed に復旧する。F ガードが10秒以上「ぷよあり」のCNN/HSV を
+# 拒否し空を固定する欠陥への根本対処。
+# N フレーム = 8 frame (約 0.27s @ 30fps) で実質的な持続合意と判断。
+STABLE_RECOVERY_MIN_FRAMES: int = 8
+
+# 復旧対象外の色 = EMPTY(0) / OJAMA(9) / UNKNOWN(10)
+RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({0, 9, 10})
 
 
 class BoardState(Enum):
@@ -111,6 +121,20 @@ class StateContext:
     # 0 = warmup なし (通常 STABLE)。0 より大きければ confirmed 更新をスキップ。
     # backwards compat: default=0 で既存動作と同一。
     stable_warmup_remaining: int = 0
+    # 設計C 事後復旧ゲート (2026-06-02):
+    # STABLE 中に confirmed==EMPTY かつ CNN==HSV が同一有効色で連続している
+    # フレーム数を (row, col) → int で管理するカウンタ。
+    # STABLE→NON-STABLE 遷移時にクリアする。
+    # backwards compat: default=empty dict で既存動作と完全同一。
+    stable_recovery_counters: "dict[tuple[int,int],int]" = field(
+        default_factory=dict,
+    )
+    # 設計C: 復旧済みセルの集合。STABLE→NON-STABLE 遷移時にクリア。
+    # 復旧したセルは non_stable_cnn_history へ復旧色を強制投入し
+    # 次の NON-STABLE→STABLE 多数決で再崩壊しにくくする。
+    recovery_cells: "set[tuple[int,int]]" = field(
+        default_factory=set,
+    )
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -155,6 +179,11 @@ class DetectorSignals:
     next_pair: tuple[int, int] | None = None
     slide_motion: bool = False
     placement_validated: bool = False
+    # 設計C 事後復旧ゲート用 HSV-only 盤面 (2026-06-02)。
+    # ImageReader の HSV 単独分類結果を渡し、CNN との独立二重合意チェックに使う。
+    # None なら復旧ゲートの「CNN==HSV 一致」要件が満たせないため発火しない。
+    # backwards compat: default None で既存挙動と完全同一。
+    hsv_board: "Board | None" = None
     # 演出中フラグ (telop/match_end/all_clear/win_panel/chain_animation の OR)。
     # True なら EffectPhaseDetector が EFFECT state に遷移し、 CNN 出力を
     # 信用せず直前 STABLE 盤面を hold する (memory `feedback_chain_phase_physics_only`)。
@@ -348,6 +377,8 @@ class BoardStateMachine:
         enable_stable_resume_gate: bool = True,
         enable_warmup_guard: bool = False,
         warmup_frames: int = STABLE_WARMUP_FRAMES,
+        enable_stable_recovery_gate: bool = False,
+        recovery_min_frames: int = STABLE_RECOVERY_MIN_FRAMES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -356,6 +387,11 @@ class BoardStateMachine:
         # backwards compat: default False で既存動作と同一。
         self._enable_warmup_guard = bool(enable_warmup_guard)
         self._warmup_frames = max(0, int(warmup_frames))
+        # 設計C 事後復旧ゲート (2026-06-02):
+        # True で STABLE 中の confirmed==EMPTY かつ CNN==HSV 継続セルを復旧する。
+        # default False = B1 禁忌隣接のため OFF。viz 検証後に判断する。
+        self._enable_stable_recovery_gate = bool(enable_stable_recovery_gate)
+        self._recovery_min_frames = max(1, int(recovery_min_frames))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -477,6 +513,11 @@ class BoardStateMachine:
             self._ctx.chain_count = 0
         if new_state != BoardState.OJAMA_FALL:
             self._ctx.ojama_pending = 0
+        # 設計C: STABLE → NON-STABLE 遷移時に復旧カウンタ・復旧済みセル集合をクリア。
+        # 次の STABLE 期間は新規状態から積み上げ直す。
+        if new_state in NON_STABLE_STATES:
+            self._ctx.stable_recovery_counters.clear()
+            self._ctx.recovery_cells.clear()
 
     def _update_within_current_state(
         self, signals: DetectorSignals,
@@ -536,6 +577,167 @@ class BoardStateMachine:
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.state = BoardState.STABLE
 
+        # 設計C 事後復旧ゲート: STABLE 確定後に実行。
+        # warmup 期間中は発火させない (背景誤認残光期間を避けるため)。
+        if (
+            self._enable_stable_recovery_gate
+            and self._ctx.state == BoardState.STABLE
+            and self._ctx.confirmed_board is not None
+            and self._ctx.stable_warmup_remaining == 0
+        ):
+            _apply_stable_recovery_gate(
+                self._ctx, signals, self._recovery_min_frames,
+            )
+
+
+# ============================
+# 設計C 事後復旧ゲート ヘルパー
+# ============================
+
+
+def _check_recovery_column(
+    confirmed: "Board", col: int, candidates: list[tuple[int, int, int]],
+) -> list[tuple[int, int, int]]:
+    """列の重力整合チェック: 下から連続するブロックのみ復旧候補として残す.
+
+    浮きぷよ防止 (安全弁C): 復旧候補セルの下に空 confirmed があれば浮きぷよに
+    なるため除外する。列を下段から走査し、confirmed が空でない連続区間のみ許可。
+
+    Args:
+        confirmed: 現在の confirmed_board。
+        col: 対象列番号 (0-5)。
+        candidates: [(row, col, recovery_color), ...] — 復旧候補リスト。
+
+    Returns:
+        重力整合チェック通過後の復旧候補リスト。
+    """
+    # 対象列の既存 confirmed 色マップ (row → color)
+    col_confirmed: dict[int, int] = {}
+    for r in range(BOARD_ROWS):
+        col_confirmed[r] = int(confirmed.get(r, col))
+
+    # 候補を row の降順 (最下段優先) にソート
+    col_candidates = sorted(
+        [(r, c_col, color) for (r, c_col, color) in candidates if c_col == col],
+        key=lambda x: -x[0],
+    )
+    if not col_candidates:
+        return []
+
+    # 最下段から連続して confirmed が空か候補セル (= 仮に復旧した場合) か確認
+    # 合格した候補 (下から連続ブロック) のみを返す
+    result: list[tuple[int, int, int]] = []
+    # まず候補 row の集合を得る
+    cand_rows = {r for (r, _, _) in col_candidates}
+
+    for r_desc, c_col, color in col_candidates:
+        # このセルの下 (r+1..12) に、確定 EMPTY かつ候補でもないセルがあれば浮き
+        floating = False
+        for below in range(r_desc + 1, BOARD_ROWS):
+            below_v = col_confirmed[below]
+            if below_v == COLOR_EMPTY and below not in cand_rows:
+                floating = True
+                break
+        if not floating:
+            result.append((r_desc, c_col, color))
+    return result
+
+
+def _apply_stable_recovery_gate(
+    ctx: "StateContext",
+    signals: "DetectorSignals",
+    min_frames: int,
+) -> None:
+    """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
+
+    発火条件:
+        - STABLE state
+        - confirmed[r,c] == COLOR_EMPTY
+        - cnn_board[r,c] が有効色 (RECOVERY_EXCLUDED_COLORS 以外)
+        - signals.hsv_board が None でない かつ hsv_board[r,c] == cnn_board[r,c]
+        - 上記が min_frames フレーム連続
+
+    安全弁A: hsv_board が None のとき (= CNN 単独) は発火しない。
+    安全弁C: 列単位の重力整合チェック (_check_recovery_column) を通過したセルのみ。
+
+    振動抑制: 復旧したセルを recovery_cells に記録し、
+    non_stable_cnn_history が次の NON-STABLE 期間に
+    復旧色を強制票として持つよう追記する (STABLE→NON-STABLE でクリア)。
+
+    Args:
+        ctx: StateContext (in-place 更新)。
+        signals: 現フレームのシグナル (cnn_board, hsv_board を参照)。
+        min_frames: 発火に必要な連続フレーム数。
+    """
+    if ctx.confirmed_board is None:
+        return
+    # 安全弁A: hsv_board が None なら CNN 単独 → 発火しない
+    hsv_board = signals.hsv_board
+    if hsv_board is None:
+        return
+
+    cnn_board = signals.cnn_board
+    recovery_counters = ctx.stable_recovery_counters
+
+    # パス1: カウンタ更新
+    candidates: list[tuple[int, int, int]] = []  # (row, col, color)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            confirmed_v = int(ctx.confirmed_board.get(r, c))
+            if confirmed_v != COLOR_EMPTY:
+                # confirmed に既に色がある → カウンタリセット
+                recovery_counters.pop((r, c), None)
+                continue
+            cnn_v = int(cnn_board.get(r, c))
+            if cnn_v in RECOVERY_EXCLUDED_COLORS:
+                recovery_counters.pop((r, c), None)
+                continue
+            hsv_v = int(hsv_board.get(r, c))
+            if hsv_v != cnn_v:
+                # CNN≠HSV → リセット
+                recovery_counters.pop((r, c), None)
+                continue
+            # CNN==HSV==有効色かつ confirmed==EMPTY → カウント継続
+            prev_count = recovery_counters.get((r, c), 0)
+            new_count = prev_count + 1
+            recovery_counters[(r, c)] = new_count
+            if new_count >= min_frames:
+                candidates.append((r, c, cnn_v))
+
+    if not candidates:
+        return
+
+    # パス2: 列ごとに重力整合チェック (安全弁C)
+    passed: list[tuple[int, int, int]] = []
+    cols_with_candidates = {c for (_, c, _) in candidates}
+    for col in cols_with_candidates:
+        passed.extend(
+            _check_recovery_column(ctx.confirmed_board, col, candidates),
+        )
+
+    if not passed:
+        return
+
+    # パス3: confirmed 復旧 + 振動抑制
+    for r, c, color in passed:
+        ctx.confirmed_board.set(r, c, color)
+        ctx.recovery_cells.add((r, c))
+        # カウンタをリセット (再発火しないよう)
+        recovery_counters.pop((r, c), None)
+
+    # 重力整合最終確認
+    _apply_gravity_filter(ctx.confirmed_board)
+
+    # 振動抑制: non_stable_cnn_history に復旧色を強制投入。
+    # 次の NON-STABLE→STABLE 遷移の F ガード多数決で復旧色が票を持ち
+    # 再崩壊しにくくなる。history が空でも後続で append される仕組みなので
+    # 別途 Board を 1 枚作って先頭に挿入する (最大 N frame 上限外)。
+    if passed:
+        reinforce = ctx.confirmed_board.copy()
+        ctx.non_stable_cnn_history.insert(0, reinforce)
+        if len(ctx.non_stable_cnn_history) > DEFAULT_NON_STABLE_HISTORY_SIZE:
+            ctx.non_stable_cnn_history.pop(-1)
+
 
 # ============================
 # 補助 detector (テスト + デバッグ用)
@@ -561,11 +763,15 @@ __all__ = [
     "NON_STABLE_STATES",
     "NullDetector",
     "_apply_gravity_filter",
+    "_apply_stable_recovery_gate",
+    "_check_recovery_column",
     "_merge_diff_only",
     "_vote_majority_board",
     "DEFAULT_NON_STABLE_HISTORY_SIZE",
     "DEFAULT_EMPTY_TO_COLOR_MIN_VOTES",
     "STABLE_WARMUP_FRAMES",
+    "STABLE_RECOVERY_MIN_FRAMES",
+    "RECOVERY_EXCLUDED_COLORS",
     "StateContext",
     "StateTransitionDetector",
 ]
