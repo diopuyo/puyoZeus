@@ -1592,53 +1592,56 @@ def _parse_args() -> argparse.Namespace:
         help="認識処理間隔 (秒)。",
     )
     p.add_argument(
-        "--no-constraint-fill",
-        action="store_true",
+        "--constraint-fill",
+        action=argparse.BooleanOptionalAction,
         default=False,
+        dest="enable_constraint_fill",
         help=(
-            "NEXT 累積制約による色 count 補正 (constraint_fill) を無効化する。 "
-            "constraint_fill の net 効果測定用。 "
-            "confirmed 経路 (CNN+物理推論 post-process) に効く。 "
-            "省略時は従来挙動 (constraint_fill 有効)。"
+            "NEXT 累積制約による色 count 補正 (constraint_fill) を制御する。 "
+            "--constraint-fill で有効化、 --no-constraint-fill で無効化。 "
+            "ライブラリ default=False (無効) に整合。 "
+            "constraint_fill の net 効果測定: --constraint-fill で有効化して比較。 "
+            "confirmed 経路 (CNN+物理推論 post-process) に効く。"
         ),
     )
     p.add_argument(
         "--t2-highconf-yield",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_t2_highconf_yield",
         help=(
-            "T2 高確信 yield を有効化する。 "
+            "T2 高確信 yield を制御する。 "
             "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
             "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
-            "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正の "
-            "net 効果測定用。省略時は従来挙動 (T2 yield 無効)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-t2-highconf-yield で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--infer-empty-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_infer_empty_guard",
         help=(
-            "infer_placement 空セル hallucination ガードを有効化する。 "
+            "infer_placement 空セル hallucination ガードを制御する。 "
             "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
             "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
-            "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
-            "省略時は従来挙動 (guard 無効)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-infer-empty-guard で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--game-event-chain-exit",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_game_event_chain_exit",
         help=(
-            "game-event ベース連鎖終了を有効化する。 "
+            "game-event ベース連鎖終了を制御する。 "
             "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
             "「連鎖側お邪魔降下」を検知するまで維持する。 "
             "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
-            "省略時は従来挙動 (timing hold のみ)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-game-event-chain-exit で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
@@ -1694,96 +1697,103 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--red-hue-wrap-fix",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_red_hue_wrap_fix",
         help=(
-            "赤色相折り返し補正を有効化する。 "
+            "赤色相折り返し補正を制御する。 "
             "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
             "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
-            "省略時は従来の単純 median (後方互換)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-red-hue-wrap-fix で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--specular-robust-saturation",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_specular_robust_saturation",
         help=(
-            "案D: 光沢ハイライト除外彩度計算を有効化する。 "
+            "案D: 光沢ハイライト除外彩度計算を制御する。 "
             "ぷよ表面の白ハイライト画素 (V>=" + str(210) + " かつ S<=" + str(60) + ") を "
             "彩度 median 計算から除外し、光沢球混入による EMPTY 誤判定を防ぐ。 "
-            "省略時は従来の全画素 median (後方互換)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-specular-robust-saturation で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--stable-recovery-gate",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_stable_recovery_gate",
         help=(
-            "設計C 事後復旧ゲートを有効化する。 "
+            "設計C 事後復旧ゲートを制御する。 "
             "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
             f"{8} フレーム継続したセルを confirmed に復旧する。 "
-            "F ガードによる空固定欠陥への根本対処。 "
-            "B1 禁忌隣接のため省略時は無効 (default OFF)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-stable-recovery-gate で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--enable-ojama-visual-detection",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_visual_detection",
         help=(
-            "フェーズA: おじゃま視覚検知 (親フラグ) を有効化する。 "
+            "フェーズA: おじゃま視覚検知 (親フラグ) を制御する。 "
             "True にすると OjamaVisualDetector が BoardStateMachine に挿入され、 "
             "子フラグ (--enable-ojama-visual-chain-exit / --enable-ojama-settle-detection) も有効化。 "
-            "省略時は従来挙動 (無効)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-visual-detection で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--enable-ojama-visual-chain-exit",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_visual_chain_exit",
         help=(
             "フェーズA: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲する。 "
             "OjamaVisualDetector がお邪魔降下終了を検知したタイミングで CHAIN 終了判定する。 "
-            "省略時は従来挙動 (timing hold のみ)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-visual-chain-exit で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--enable-ojama-infer-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_infer_guard",
         help=(
-            "フェーズA: OJAMA_FALL → STABLE 直後の infer_placement を抑止する。 "
+            "フェーズA: OJAMA_FALL → STABLE 直後の infer_placement を制御する。 "
             "ojama_tier1_warmup 期間中にツモが存在しないのに幽霊配置が走るのを防ぐ。 "
-            "省略時は従来挙動 (infer_placement 常時実行)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-infer-guard で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--enable-ojama-settle-detection",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_settle_detection",
         help=(
             "フェーズA: OJAMA_FALL 中にお邪魔 count 不変フレームが続いたら STABLE 復帰する。 "
             "お邪魔落下完了後の長期 non-stable を短縮する。 "
-            "省略時は従来挙動 (タイムアウト待ち)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-enable-ojama-settle-detection で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
         "--ojama-tier1-warmup",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_tier1_warmup",
         help=(
-            "OJAMA 専用 tier1 warmup を有効化する。 "
+            "OJAMA 専用 tier1 warmup を制御する。 "
             "OJAMA_FALL → STABLE 遷移時に BG_FP tier1 を OJAMA_TIER1_WARMUP_FRAMES 間スキップし、 "
             "お邪魔消滅後の BG 距離による列崩壊 (v70 真因) を防ぐ。 "
-            "省略時は従来挙動 (warmup なし)。"
+            "ライブラリ default=True (有効)。 "
+            "--no-ojama-tier1-warmup で無効化 (旧挙動比較用)。"
         ),
     )
     p.add_argument(
@@ -2178,73 +2188,44 @@ def main() -> int:
     )
     output_path = _resolve_output_path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # constraint_fill フラグの確定 (backwards compat: デフォルト True = 従来挙動)
-    enable_constraint_fill: bool = not args.no_constraint_fill
-    # t2_highconf_yield フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_t2_highconf_yield: bool = bool(
-        getattr(args, "enable_t2_highconf_yield", False)
-    )
-    # infer_empty_guard フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_infer_empty_guard: bool = bool(
-        getattr(args, "enable_infer_empty_guard", False)
-    )
-    # game_event_chain_exit フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_game_event_chain_exit: bool = bool(
-        getattr(args, "enable_game_event_chain_exit", False)
-    )
-    # landing_color_fix フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    # 各フラグを args から直接取得する (BooleanOptionalAction で default=ライブラリ default と整合済)
+    enable_constraint_fill: bool = bool(args.enable_constraint_fill)
+    enable_t2_highconf_yield: bool = bool(args.enable_t2_highconf_yield)
+    enable_infer_empty_guard: bool = bool(args.enable_infer_empty_guard)
+    enable_game_event_chain_exit: bool = bool(args.enable_game_event_chain_exit)
+    # landing_color_fix / chain_min_display / hsv_classify_fallback /
+    # landing_observed_color はライブラリ default=False のまま (store_true 維持)
     enable_landing_color_fix: bool = bool(
         getattr(args, "enable_landing_color_fix", False)
     )
-    # chain_min_display フラグの確定 (backwards compat: デフォルト False = 従来挙動)
     enable_chain_min_display: bool = bool(
         getattr(args, "enable_chain_min_display", False)
     )
-    # hsv_classify_fallback フラグの確定 (backwards compat: デフォルト False = 従来挙動)
     enable_hsv_classify_fallback: bool = bool(
         getattr(args, "enable_hsv_classify_fallback", False)
     )
-    # landing_observed_color フラグの確定 (backwards compat: デフォルト False = 従来挙動)
     enable_landing_observed_color: bool = bool(
         getattr(args, "enable_landing_observed_color", False)
     )
-    # red_hue_wrap_fix フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_red_hue_wrap_fix: bool = bool(
-        getattr(args, "enable_red_hue_wrap_fix", False)
-    )
-    # specular_robust_saturation フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_specular_robust_saturation: bool = bool(
-        getattr(args, "enable_specular_robust_saturation", False)
-    )
-    # stable_recovery_gate フラグの確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_stable_recovery_gate: bool = bool(
-        getattr(args, "enable_stable_recovery_gate", False)
-    )
-    # フェーズA おじゃま視覚検知フラグ群の確定 (backwards compat: デフォルト False = 従来挙動)
-    enable_ojama_visual_detection: bool = bool(
-        getattr(args, "enable_ojama_visual_detection", False)
-    )
-    enable_ojama_visual_chain_exit: bool = bool(
-        getattr(args, "enable_ojama_visual_chain_exit", False)
-    )
-    enable_ojama_infer_guard: bool = bool(
-        getattr(args, "enable_ojama_infer_guard", False)
-    )
-    enable_ojama_settle_detection: bool = bool(
-        getattr(args, "enable_ojama_settle_detection", False)
-    )
-    enable_ojama_tier1_warmup: bool = bool(
-        getattr(args, "enable_ojama_tier1_warmup", False)
-    )
+    enable_red_hue_wrap_fix: bool = bool(args.enable_red_hue_wrap_fix)
+    enable_specular_robust_saturation: bool = bool(args.enable_specular_robust_saturation)
+    enable_stable_recovery_gate: bool = bool(args.enable_stable_recovery_gate)
+    enable_ojama_visual_detection: bool = bool(args.enable_ojama_visual_detection)
+    enable_ojama_visual_chain_exit: bool = bool(args.enable_ojama_visual_chain_exit)
+    enable_ojama_infer_guard: bool = bool(args.enable_ojama_infer_guard)
+    enable_ojama_settle_detection: bool = bool(args.enable_ojama_settle_detection)
+    enable_ojama_tier1_warmup: bool = bool(args.enable_ojama_tier1_warmup)
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
-    if not enable_constraint_fill:
-        print("[measure] constraint_fill DISABLED (--no-constraint-fill 指定)")
-    if enable_t2_highconf_yield:
-        print("[measure] t2_highconf_yield ENABLED (--t2-highconf-yield 指定: T2 フリーズ修正)")
-    if enable_infer_empty_guard:
-        print("[measure] infer_empty_guard ENABLED (--infer-empty-guard 指定: 空セル hallucination 防止)")
+    print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
+    print(f"[measure] t2_highconf_yield={'ENABLED' if enable_t2_highconf_yield else 'DISABLED'}")
+    print(f"[measure] infer_empty_guard={'ENABLED' if enable_infer_empty_guard else 'DISABLED'}")
+    print(f"[measure] red_hue_wrap_fix={'ENABLED' if enable_red_hue_wrap_fix else 'DISABLED'}")
+    print(f"[measure] specular_robust_saturation={'ENABLED' if enable_specular_robust_saturation else 'DISABLED'}")
+    print(f"[measure] stable_recovery_gate={'ENABLED' if enable_stable_recovery_gate else 'DISABLED'}")
+    print(f"[measure] ojama_visual_detection={'ENABLED' if enable_ojama_visual_detection else 'DISABLED'}")
+    print(f"[measure] ojama_tier1_warmup={'ENABLED' if enable_ojama_tier1_warmup else 'DISABLED'}")
     if enable_game_event_chain_exit:
         print(
             "[measure] game_event_chain_exit ENABLED "
@@ -2270,46 +2251,6 @@ def main() -> int:
         print(
             "[measure] landing_observed_color ENABLED "
             "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
-        )
-    if enable_red_hue_wrap_fix:
-        print(
-            "[measure] red_hue_wrap_fix ENABLED "
-            "(--red-hue-wrap-fix 指定: 赤 2 峰 collapse / 黄↔赤ちらつき対策)"
-        )
-    if enable_specular_robust_saturation:
-        print(
-            "[measure] specular_robust_saturation ENABLED "
-            "(--specular-robust-saturation 指定: 案D 光沢ハイライト除外彩度 / EMPTY 誤判定対策)"
-        )
-    if enable_stable_recovery_gate:
-        print(
-            "[measure] stable_recovery_gate ENABLED "
-            "(--stable-recovery-gate 指定: 設計C 事後復旧ゲート)"
-        )
-    if enable_ojama_visual_detection:
-        print(
-            "[measure] ojama_visual_detection ENABLED "
-            "(--enable-ojama-visual-detection 指定: おじゃま視覚検知 親フラグ)"
-        )
-    if enable_ojama_visual_chain_exit:
-        print(
-            "[measure] ojama_visual_chain_exit ENABLED "
-            "(--enable-ojama-visual-chain-exit 指定: CHAIN→STABLE 復帰をお邪魔視覚に委譲)"
-        )
-    if enable_ojama_infer_guard:
-        print(
-            "[measure] ojama_infer_guard ENABLED "
-            "(--enable-ojama-infer-guard 指定: OJAMA_FALL 直後 infer_placement 抑止)"
-        )
-    if enable_ojama_settle_detection:
-        print(
-            "[measure] ojama_settle_detection ENABLED "
-            "(--enable-ojama-settle-detection 指定: OJAMA_FALL 中 count 不変で STABLE 復帰)"
-        )
-    if enable_ojama_tier1_warmup:
-        print(
-            "[measure] ojama_tier1_warmup ENABLED "
-            "(--ojama-tier1-warmup 指定: OJAMA 専用 tier1 warmup / v70 列崩壊対策)"
         )
     disagreements: list[dict] = []
     stats_list = _collect_results(

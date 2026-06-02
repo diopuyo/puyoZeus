@@ -638,55 +638,55 @@ def main() -> int:
     )
     parser.add_argument(
         "--ojama-tier1-warmup",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_tier1_warmup",
-        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を有効化。"
+        help="経路 A': OJAMA_FALL → STABLE 遷移専用の tier1 warmup を制御する。"
              f" OJAMA_TIER1_WARMUP_FRAMES={8} frame 間 tier1 を skip し、"
              "お邪魔消滅後のセル背景化による誤 EMPTY 化 → 列崩壊を防ぐ (v70 対策)。"
-             " 汎用 --enable-tier1-warmup (v51m2 退行あり) と独立して有効化できる。",
+             " ライブラリ default=True (有効)。 --no-ojama-tier1-warmup で無効化。",
     )
     parser.add_argument(
-        "--no-constraint-fill",
-        action="store_true",
+        "--constraint-fill",
+        action=argparse.BooleanOptionalAction,
         default=False,
-        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を無効化。 "
-             "CNN/HSV 高確信セルが誤置換される問題をトグルで完全回避したい場合に使用。 "
-             "デフォルト OFF = 従来挙動 (constraint_fill 有効)。",
+        dest="enable_constraint_fill",
+        help="案2: NEXT 累積制約による色 count 補正 (constraint_fill) を制御する。 "
+             "--constraint-fill で有効化、 --no-constraint-fill で無効化。 "
+             "ライブラリ default=False (無効)。 "
+             "--constraint-fill で有効化して比較 (constraint_fill の net 効果測定用)。",
     )
     parser.add_argument(
         "--t2-highconf-yield",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_t2_highconf_yield",
-        help="T2 高確信 yield を有効化。 "
+        help="T2 高確信 yield を制御する。 "
              "STABLE → STABLE 遷移時の prev_stable 上書き (T2) において、 "
              "CNN が現在の confirmed 色を支持しているセルはスキップする。 "
-             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊 (16 動画 77K 件) の修正。 "
-             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+             "infer_placement 誤推論 + T2 自己強化フリーズによる色破壊修正。 "
+             "ライブラリ default=True (有効)。 --no-t2-highconf-yield で無効化。",
     )
     parser.add_argument(
         "--infer-empty-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_infer_empty_guard",
-        help="infer_placement 空セル hallucination ガードを有効化。 "
+        help="infer_placement 空セル hallucination ガードを制御する。 "
              "pattern の非 diff セルが cnn_after で COLOR_EMPTY な候補をスキップし、 "
              "CNN が確信して空なセルへの NEXT 色書込 (hallucination) を防ぐ。 "
-             "非 diff セルが COLOR_UNKNOWN なら従来通り補完を許容。 "
-             "デフォルト OFF = 従来挙動不変。 評価後に採否判定。",
+             "ライブラリ default=True (有効)。 --no-infer-empty-guard で無効化。",
     )
     parser.add_argument(
         "--game-event-chain-exit",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_game_event_chain_exit",
-        help="game-event ベース連鎖終了を有効化。 "
+        help="game-event ベース連鎖終了を制御する。 "
              "CHAIN 状態を timing hold だけでなく「次ツモ変化」または"
              "「連鎖側お邪魔降下」を検知するまで維持する。 "
              "安全弁として CHAIN_MAX_HOLD_SEC (5.0s) 超過で強制終了。 "
-             "連鎖中 state ちらつき (早期終了→再発火振動) の根治修正。 "
-             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+             "ライブラリ default=True (有効)。 --no-game-event-chain-exit で無効化。",
     )
     parser.add_argument(
         "--landing-color-fix",
@@ -733,67 +733,66 @@ def main() -> int:
     )
     parser.add_argument(
         "--red-hue-wrap-fix",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_red_hue_wrap_fix",
-        help="赤色相折り返し補正を有効化。 "
+        help="赤色相折り返し補正を制御する。 "
              "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
              "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
-             "H>=140 を負方向に折り返してから median を取ることで 2 峰を 1 峰に collapse。 "
-             "デフォルト OFF = 従来の単純 median (後方互換)。",
+             "ライブラリ default=True (有効)。 --no-red-hue-wrap-fix で無効化。",
     )
     parser.add_argument(
         "--specular-robust-saturation",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_specular_robust_saturation",
-        help="案D: 光沢ハイライト除外彩度計算を有効化。 "
+        help="案D: 光沢ハイライト除外彩度計算を制御する。 "
              "ぷよ表面の白ハイライト画素 (V>=210 かつ S<=60) を彩度 median 計算から除外し、 "
              "光沢球混入による EMPTY 誤判定を防ぐ。 "
-             "デフォルト OFF = 従来の全画素 median (後方互換)。",
+             "ライブラリ default=True (有効)。 --no-specular-robust-saturation で無効化。",
     )
     parser.add_argument(
         "--stable-recovery-gate",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_stable_recovery_gate",
-        help="設計C 事後復旧ゲートを有効化。 "
+        help="設計C 事後復旧ゲートを制御する。 "
              "STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で "
              "8 フレーム継続したセルを confirmed に復旧する。 "
-             "B1 禁忌隣接のためデフォルト OFF。",
+             "ライブラリ default=True (有効)。 --no-stable-recovery-gate で無効化。",
     )
     # フェーズ A4 (2026-06-02): お邪魔ぷよ視覚的検出・連鎖終了・推論ガード・着地検出
     parser.add_argument(
         "--enable-ojama-visual-detection",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_visual_detection",
-        help="フェーズ A4: お邪魔ぷよ視覚的検出を有効化。 "
-             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-visual-detection で無効化。",
     )
     parser.add_argument(
         "--enable-ojama-visual-chain-exit",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_visual_chain_exit",
-        help="フェーズ A4: お邪魔ぷよ視覚的検出による連鎖終了判定を有効化。 "
-             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出による連鎖終了判定を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-visual-chain-exit で無効化。",
     )
     parser.add_argument(
         "--enable-ojama-infer-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_infer_guard",
-        help="フェーズ A4: お邪魔ぷよ推論ガードを有効化。 "
-             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+        help="フェーズ A4: お邪魔ぷよ推論ガードを制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-infer-guard で無効化。",
     )
     parser.add_argument(
         "--enable-ojama-settle-detection",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_settle_detection",
-        help="フェーズ A4: お邪魔ぷよ着地検出を有効化。 "
-             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+        help="フェーズ A4: お邪魔ぷよ着地検出を制御する。 "
+             "ライブラリ default=True (有効)。 --no-enable-ojama-settle-detection で無効化。",
     )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
@@ -855,8 +854,9 @@ def main() -> int:
         enable_tier1_warmup=args.enable_tier1_warmup,
         # 経路 A' (2026-05-30): --ojama-tier1-warmup で OJAMA 専用 warmup 有効化
         enable_ojama_tier1_warmup=args.enable_ojama_tier1_warmup,
-        # 案2 (2026-05-30): --no-constraint-fill で constraint_fill を無効化
-        enable_constraint_fill=not args.no_constraint_fill,
+        # 案2 (2026-05-30 / BooleanOptionalAction 整合 2026-06-02):
+        # --constraint-fill / --no-constraint-fill で直接制御、反転ロジック除去済み
+        enable_constraint_fill=args.enable_constraint_fill,
         # T2 高確信 yield (2026-05-31): --t2-highconf-yield で T2 フリーズ修正を有効化
         enable_t2_highconf_yield=args.enable_t2_highconf_yield,
         # 空セル hallucination ガード (2026-06-01): --infer-empty-guard で有効化
@@ -909,8 +909,10 @@ def main() -> int:
             "[viz] enable_ojama_tier1_warmup=ON "
             "(経路 A': OJAMA_FALL→STABLE 遷移直後 8 frame tier1 skip / v70 列崩壊対策)"
         )
-    if args.no_constraint_fill:
-        print("[viz] no_constraint_fill=ON (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    if not args.enable_constraint_fill:
+        print("[viz] constraint_fill=OFF (案2: constraint_fill 無効 / CNN 高確信セル保護)")
+    elif args.enable_constraint_fill:
+        print("[viz] constraint_fill=ON (明示指定: constraint_fill 有効化)")
     if args.enable_t2_highconf_yield:
         print(
             "[viz] t2_highconf_yield=ON "
