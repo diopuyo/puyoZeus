@@ -52,14 +52,17 @@ STABLE_WARMUP_FRAMES: int = 12
 NON_STABLE_STATES: frozenset["BoardState"] = frozenset()  # 後で初期化
 
 # 設計C 事後復旧ゲート (fix/v70-zeropatch-redyellow, 2026-06-02):
-# STABLE 中に confirmed==EMPTY なのに CNN==HSV が同一有効色で N フレーム継続した
-# セルを confirmed に復旧する。F ガードが10秒以上「ぷよあり」のCNN/HSV を
-# 拒否し空を固定する欠陥への根本対処。
+# STABLE 中に confirmed != (CNN==HSV の合意値) が N フレーム継続したセルを
+# confirmed に追従させる双方向ゲート。
+#   方向1 (空→色): confirmed=EMPTY, CNN==HSV=有効色 → 色に復活 (幽霊ぷよ追加)
+#   方向2 (色→空): confirmed=色,   CNN==HSV=EMPTY   → 空に修正 (幽霊ぷよ除去)
+#   方向3 (色→色): confirmed=色A,  CNN==HSV=色B     → 色Bに訂正 (誤色修正)
 # N フレーム = 8 frame (約 0.27s @ 30fps) で実質的な持続合意と判断。
 STABLE_RECOVERY_MIN_FRAMES: int = 8
 
-# 復旧対象外の色 = EMPTY(0) / OJAMA(9) / UNKNOWN(10)
-RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({0, 9, 10})
+# 復旧ゲートの「合意値」として無効な色 = UNKNOWN(10) のみ。
+# EMPTY(0) / OJAMA(9) は方向2の除去ターゲットなので含めない。
+RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({10})
 
 
 class BoardState(Enum):
@@ -648,6 +651,74 @@ def _check_recovery_column(
     return result
 
 
+def _collect_recovery_candidates(
+    ctx: "StateContext",
+    cnn_board: "Board",
+    hsv_board: "Board",
+    min_frames: int,
+) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
+    """各セルの合意値チェックとカウンタ更新を行い、候補を方向別に返す.
+
+    双方向の発火候補を収集する:
+        - add_candidates: 方向1 (空→色) — 重力整合チェックが必要
+        - fix_candidates: 方向2/3 (色→空/色→別色) — 重力整合チェック不要
+
+    安全弁: UNKNOWN(10) は合意値として無効 (RECOVERY_EXCLUDED_COLORS)。
+
+    Args:
+        ctx: StateContext (stable_recovery_counters を in-place 更新)。
+        cnn_board: CNN 認識盤面。
+        hsv_board: HSV 認識盤面。
+        min_frames: 発火に必要な連続フレーム数。
+
+    Returns:
+        (add_candidates, fix_candidates) のタプル。
+        各要素は [(row, col, target_color), ...] 形式。
+    """
+    recovery_counters = ctx.stable_recovery_counters
+    confirmed = ctx.confirmed_board
+    assert confirmed is not None
+
+    add_candidates: list[tuple[int, int, int]] = []
+    fix_candidates: list[tuple[int, int, int]] = []
+
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            confirmed_v = int(confirmed.get(r, c))
+            cnn_v = int(cnn_board.get(r, c))
+            hsv_v = int(hsv_board.get(r, c))
+
+            # UNKNOWN は合意値として無効 → カウンタリセット
+            if cnn_v in RECOVERY_EXCLUDED_COLORS or hsv_v in RECOVERY_EXCLUDED_COLORS:
+                recovery_counters.pop((r, c), None)
+                continue
+            # CNN≠HSV → 独立二重合意なし → カウンタリセット
+            if cnn_v != hsv_v:
+                recovery_counters.pop((r, c), None)
+                continue
+            # confirmed == 合意値 → 差分なし → カウンタリセット
+            if confirmed_v == cnn_v:
+                recovery_counters.pop((r, c), None)
+                continue
+
+            # CNN==HSV (=合意値) かつ confirmed != 合意値 → カウント継続
+            prev_count = recovery_counters.get((r, c), 0)
+            new_count = prev_count + 1
+            recovery_counters[(r, c)] = new_count
+            if new_count < min_frames:
+                continue
+
+            # 発火: 方向別に振り分け
+            if confirmed_v == COLOR_EMPTY:
+                # 方向1: 空→色 (重力整合チェック必要)
+                add_candidates.append((r, c, cnn_v))
+            else:
+                # 方向2: 色→空 / 方向3: 色→別色 (重力整合チェック不要)
+                fix_candidates.append((r, c, cnn_v))
+
+    return add_candidates, fix_candidates
+
+
 def _apply_stable_recovery_gate(
     ctx: "StateContext",
     signals: "DetectorSignals",
@@ -655,19 +726,18 @@ def _apply_stable_recovery_gate(
 ) -> None:
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
-    発火条件:
-        - STABLE state
-        - confirmed[r,c] == COLOR_EMPTY
-        - cnn_board[r,c] が有効色 (RECOVERY_EXCLUDED_COLORS 以外)
-        - signals.hsv_board が None でない かつ hsv_board[r,c] == cnn_board[r,c]
-        - 上記が min_frames フレーム連続
+    双方向発火条件 (STABLE state、hsv_board!=None、warmup 外):
+        方向1 (空→色): confirmed=EMPTY, CNN==HSV=有効色 が min_frames 連続
+        方向2 (色→空): confirmed=色,   CNN==HSV=EMPTY  が min_frames 連続
+        方向3 (色→色): confirmed=色A,  CNN==HSV=色B    が min_frames 連続
 
-    安全弁A: hsv_board が None のとき (= CNN 単独) は発火しない。
-    安全弁C: 列単位の重力整合チェック (_check_recovery_column) を通過したセルのみ。
+    安全弁A: hsv_board が None (= CNN 単独) のとき発火しない。
+    安全弁B: UNKNOWN(10) は合意値として無効 (RECOVERY_EXCLUDED_COLORS)。
+    安全弁C: 方向1のみ列単位の重力整合チェック (_check_recovery_column)。
+             方向2/3 は除去・上書き方向なので適用しない。
 
-    振動抑制: 復旧したセルを recovery_cells に記録し、
-    non_stable_cnn_history が次の NON-STABLE 期間に
-    復旧色を強制票として持つよう追記する (STABLE→NON-STABLE でクリア)。
+    振動抑制: 復旧済みセルを recovery_cells に記録し、
+    non_stable_cnn_history に復旧後盤面を強制投入する。
 
     Args:
         ctx: StateContext (in-place 更新)。
@@ -676,72 +746,48 @@ def _apply_stable_recovery_gate(
     """
     if ctx.confirmed_board is None:
         return
-    # 安全弁A: hsv_board が None なら CNN 単独 → 発火しない
+    # 安全弁A: hsv_board が None → 発火しない
     hsv_board = signals.hsv_board
     if hsv_board is None:
         return
 
-    cnn_board = signals.cnn_board
-    recovery_counters = ctx.stable_recovery_counters
+    # パス1: 候補収集 + カウンタ更新
+    add_candidates, fix_candidates = _collect_recovery_candidates(
+        ctx, signals.cnn_board, hsv_board, min_frames,
+    )
 
-    # パス1: カウンタ更新
-    candidates: list[tuple[int, int, int]] = []  # (row, col, color)
-    for r in range(BOARD_ROWS):
-        for c in range(BOARD_COLS):
-            confirmed_v = int(ctx.confirmed_board.get(r, c))
-            if confirmed_v != COLOR_EMPTY:
-                # confirmed に既に色がある → カウンタリセット
-                recovery_counters.pop((r, c), None)
-                continue
-            cnn_v = int(cnn_board.get(r, c))
-            if cnn_v in RECOVERY_EXCLUDED_COLORS:
-                recovery_counters.pop((r, c), None)
-                continue
-            hsv_v = int(hsv_board.get(r, c))
-            if hsv_v != cnn_v:
-                # CNN≠HSV → リセット
-                recovery_counters.pop((r, c), None)
-                continue
-            # CNN==HSV==有効色かつ confirmed==EMPTY → カウント継続
-            prev_count = recovery_counters.get((r, c), 0)
-            new_count = prev_count + 1
-            recovery_counters[(r, c)] = new_count
-            if new_count >= min_frames:
-                candidates.append((r, c, cnn_v))
-
-    if not candidates:
+    if not add_candidates and not fix_candidates:
         return
 
-    # パス2: 列ごとに重力整合チェック (安全弁C)
-    passed: list[tuple[int, int, int]] = []
-    cols_with_candidates = {c for (_, c, _) in candidates}
-    for col in cols_with_candidates:
-        passed.extend(
-            _check_recovery_column(ctx.confirmed_board, col, candidates),
+    # パス2 (方向1のみ): 列ごとに重力整合チェック (安全弁C)
+    passed_add: list[tuple[int, int, int]] = []
+    cols_with_add = {c for (_, c, _) in add_candidates}
+    for col in cols_with_add:
+        passed_add.extend(
+            _check_recovery_column(ctx.confirmed_board, col, add_candidates),
         )
 
-    if not passed:
+    # パス3: confirmed 更新 (方向1/2/3 合算)
+    all_passed = passed_add + fix_candidates
+    if not all_passed:
         return
 
-    # パス3: confirmed 復旧 + 振動抑制
-    for r, c, color in passed:
-        ctx.confirmed_board.set(r, c, color)
+    for r, c, target in all_passed:
+        ctx.confirmed_board.set(r, c, target)
         ctx.recovery_cells.add((r, c))
-        # カウンタをリセット (再発火しないよう)
-        recovery_counters.pop((r, c), None)
+        # カウンタリセット (発火済み)
+        ctx.stable_recovery_counters.pop((r, c), None)
 
-    # 重力整合最終確認
-    _apply_gravity_filter(ctx.confirmed_board)
+    # 方向1に対しのみ重力整合最終確認 (方向2/3は浮きぷよを生じさせない)
+    if passed_add:
+        _apply_gravity_filter(ctx.confirmed_board)
 
-    # 振動抑制: non_stable_cnn_history に復旧色を強制投入。
-    # 次の NON-STABLE→STABLE 遷移の F ガード多数決で復旧色が票を持ち
-    # 再崩壊しにくくなる。history が空でも後続で append される仕組みなので
-    # 別途 Board を 1 枚作って先頭に挿入する (最大 N frame 上限外)。
-    if passed:
-        reinforce = ctx.confirmed_board.copy()
-        ctx.non_stable_cnn_history.insert(0, reinforce)
-        if len(ctx.non_stable_cnn_history) > DEFAULT_NON_STABLE_HISTORY_SIZE:
-            ctx.non_stable_cnn_history.pop(-1)
+    # 振動抑制: non_stable_cnn_history に復旧後盤面を強制投入。
+    # 次の NON-STABLE→STABLE 遷移の F ガード多数決で復旧色が票を持ち再崩壊防止。
+    reinforce = ctx.confirmed_board.copy()
+    ctx.non_stable_cnn_history.insert(0, reinforce)
+    if len(ctx.non_stable_cnn_history) > DEFAULT_NON_STABLE_HISTORY_SIZE:
+        ctx.non_stable_cnn_history.pop(-1)
 
 
 # ============================
@@ -770,6 +816,7 @@ __all__ = [
     "_apply_gravity_filter",
     "_apply_stable_recovery_gate",
     "_check_recovery_column",
+    "_collect_recovery_candidates",
     "_merge_diff_only",
     "_vote_majority_board",
     "DEFAULT_NON_STABLE_HISTORY_SIZE",
