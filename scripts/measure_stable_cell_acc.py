@@ -328,6 +328,7 @@ def _make_pipeline_cnn(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -375,6 +376,8 @@ def _make_pipeline_cnn(
             backwards compat: デフォルト False = 従来挙動。
         enable_ojama_tier1_warmup: True にすると OJAMA 専用 tier1 warmup を有効化。
             backwards compat: デフォルト False = 従来挙動。
+        enable_chain_formula_detection: True にすると掛け算式検知 CHAIN 早期発火を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -396,6 +399,7 @@ def _make_pipeline_cnn(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -571,6 +575,7 @@ def _process_video(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -633,6 +638,7 @@ def _process_video(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -675,6 +681,7 @@ def _process_video_worker(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -715,6 +722,7 @@ def _process_video_worker(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1836,6 +1844,21 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--chain-formula-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_chain_formula_detection",
+        help=(
+            "機能D: 連鎖開始 掛け算式 検知を制御する。 "
+            "True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ "
+            "ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が "
+            "CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。 "
+            "機能B (score 急増経路) と独立フラグ。 "
+            "ライブラリ default=True (有効、 2026-06-03 採用)。 "
+            "--no-chain-formula-detection で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1883,6 +1906,7 @@ def _collect_results(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1948,6 +1972,7 @@ def _collect_results(
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1970,6 +1995,7 @@ def _collect_results(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
     )
 
 
@@ -1997,6 +2023,7 @@ def _collect_serial(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2026,6 +2053,7 @@ def _collect_serial(
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
         )
         stats_list.append(vstats)
     return stats_list
@@ -2056,6 +2084,7 @@ def _collect_parallel(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -2099,6 +2128,7 @@ def _collect_parallel(
                 enable_ojama_tier1_warmup,
                 enable_chain_score_early_fire,
                 enable_chain_exit_warmup,
+                enable_chain_formula_detection,
             )
             futures[fut] = vid
 
@@ -2274,6 +2304,9 @@ def main() -> int:
     enable_chain_exit_warmup: bool = bool(
         getattr(args, "enable_chain_exit_warmup", False)
     )
+    enable_chain_formula_detection: bool = bool(
+        getattr(args, "enable_chain_formula_detection", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -2334,6 +2367,7 @@ def main() -> int:
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)

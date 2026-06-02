@@ -74,6 +74,16 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
+# 機能D: 連鎖開始 掛け算式 検知 (enable_chain_formula_detection 用)。
+# score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ ink_ratio が
+# CHAIN_FORMULA_INK_RATIO_MIN より高い場合に連鎖開始とみなす。
+# ink_ratio ガードはメニュー/試合外の真黒 ROI (ink_ratio≈0) を除外するためのもの。
+# 実測: formula=0.975-1.000、通常スコア=1.000、真黒=0.000。
+from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN  # noqa: E402
+# 連続フレーム要件: 単発 OCR ノイズを除去するため N frame 連続で条件成立を要求する。
+# 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
+CHAIN_FORMULA_CONSEC_FRAMES: int = 2
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -511,6 +521,17 @@ class RecognitionPipeline:
         # 既存 enable_warmup_guard の CHAIN→STABLE 特化版。時間ベースで fps 非依存に実装。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_warmup: bool = False,
+        # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02)。
+        # True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ
+        # ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が
+        # CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。
+        # 機能B (score 急増経路) と独立フラグ。どちらか一方だけ有効にすることも可能。
+        # 誤発火ガード: ink_ratio (黒 ROI 除外) + 連続 2frame + last_score>0 の AND 条件。
+        # 2026-06-03 採用 (default ON): v70 等 16 動画 A/B で連鎖突入 0.2-2.5s 早期化 +
+        # baseline 黙過の小連鎖検知、non_stable最大 62→46 / corruption 1.57%→1.35% /
+        # 空→色FP 0.27%→0.10% と全軸改善 (user viz 承認)。
+        # False に戻すには enable_chain_formula_detection=False を明示する。
+        enable_chain_formula_detection: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -810,6 +831,12 @@ class RecognitionPipeline:
         self._enable_chain_exit_warmup: bool = bool(enable_chain_exit_warmup)
         self._chain_exit_until_1p: float = 0.0  # CHAIN→STABLE 後の凍結終了 time_sec
         self._chain_exit_until_2p: float = 0.0
+        # 機能D: 掛け算式検知フラグ + 連続フレームカウンタ (1P/2P 別 state-holding wrapper)。
+        # カウンタは update 呼出毎に条件成立なら +1、不成立でリセット。
+        # CHAIN_FORMULA_CONSEC_FRAMES 達した時点で _apply_chain_score_early_fire を呼ぶ。
+        self._enable_chain_formula_detection: bool = bool(enable_chain_formula_detection)
+        self._formula_consec_1p: int = 0  # 掛け算式 連続フレームカウンタ 1P
+        self._formula_consec_2p: int = 0  # 掛け算式 連続フレームカウンタ 2P
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -1040,6 +1067,9 @@ class RecognitionPipeline:
         # 機能C: CHAIN → STABLE warmup (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_warmup: bool = False,
+        # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02 実装, 2026-06-03 採用 default ON)。
+        # 全軸改善 + user viz 承認。False に戻すには明示指定する。
+        enable_chain_formula_detection: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1187,6 +1217,7 @@ class RecognitionPipeline:
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
         )
 
     # ------------------------------------------------------------------
@@ -1456,6 +1487,9 @@ class RecognitionPipeline:
             # cycle 71v-B: ever_seen も試合切り替えでリセット
             self._ever_seen_colors_1p.clear()
             self._ever_seen_colors_2p.clear()
+            # 機能D: 試合切替で掛け算式 連続フレームカウンタをリセット
+            self._formula_consec_1p = 0
+            self._formula_consec_2p = 0
 
         # 2. CNN raw board 取得 (BG FP 採取より先に必要)
         # I1 対応 A: bg_fp 採取前は pre_capture_mode を on にして tier 1 を無効化
@@ -1722,6 +1756,69 @@ class RecognitionPipeline:
                 )
                 if time_sec < eff_until_2p:
                     chain_ev_2p = self._active_chain_2p
+
+        # 4c. 機能D: 掛け算式検知 CHAIN 早期発火 (enable_chain_formula_detection=True 時のみ)。
+        # score ROI の OCR が None (掛け算式表示) かつ ink_ratio > MIN かつ last_score > 0 が
+        # CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入させる。
+        # 連続カウンタは pipeline 側で管理 (state-holding wrapper)、検出本体は stateless。
+        # chain_banned / 既に CHAIN 中の場合は発火をスキップ。
+        if self._enable_chain_formula_detection and is_active and not chain_banned:
+            _last_1p = (
+                self._score_tracker_1p.last_score
+                if self._score_tracker_1p is not None else None
+            )
+            _last_2p = (
+                self._score_tracker_2p.last_score
+                if self._score_tracker_2p is not None else None
+            )
+            _formula_1p = self._check_formula_detected(
+                frame, self._score_ocr, "1P", _last_1p,
+            )
+            _formula_2p = self._check_formula_detected(
+                frame, self._score_ocr, "2P", _last_2p,
+            )
+            # 連続カウンタ更新
+            self._formula_consec_1p = (
+                self._formula_consec_1p + 1 if _formula_1p else 0
+            )
+            self._formula_consec_2p = (
+                self._formula_consec_2p + 1 if _formula_2p else 0
+            )
+            # 連続フレーム数を満たしたら発火
+            if self._formula_consec_1p >= CHAIN_FORMULA_CONSEC_FRAMES:
+                self._apply_chain_formula_early_fire(
+                    side="1P", time_sec=time_sec,
+                    prev_confirmed=self._prev_confirmed_1p,
+                )
+                self._formula_consec_1p = 0  # 発火後リセット
+                if self._active_chain_1p is not None and chain_ev_1p is None:
+                    eff_until_1p = (
+                        self._chain_event_max_until_1p
+                        if (
+                            self._enable_game_event_chain_exit
+                            and self._chain_event_max_until_1p > self._chain_until_1p
+                        )
+                        else self._chain_until_1p
+                    )
+                    if time_sec < eff_until_1p:
+                        chain_ev_1p = self._active_chain_1p
+            if self._formula_consec_2p >= CHAIN_FORMULA_CONSEC_FRAMES:
+                self._apply_chain_formula_early_fire(
+                    side="2P", time_sec=time_sec,
+                    prev_confirmed=self._prev_confirmed_2p,
+                )
+                self._formula_consec_2p = 0  # 発火後リセット
+                if self._active_chain_2p is not None and chain_ev_2p is None:
+                    eff_until_2p = (
+                        self._chain_event_max_until_2p
+                        if (
+                            self._enable_game_event_chain_exit
+                            and self._chain_event_max_until_2p > self._chain_until_2p
+                        )
+                        else self._chain_until_2p
+                    )
+                    if time_sec < eff_until_2p:
+                        chain_ev_2p = self._active_chain_2p
 
         # 4b. next_pair 検出 (1P/2P 両方、共通色なので detect_both で OK)
         # 2026-05-10: slide motion 中は ネクスト puyo が画面で動いており認識結果が
@@ -2457,6 +2554,96 @@ class RecognitionPipeline:
                 self._chain_event_max_until_2p = (
                     time_sec + self.CHAIN_MAX_HOLD_SEC
                 )
+                self._chain_start_next_2p = self._last_seen_next_2p
+            self._chain_entry_t_2p = time_sec
+
+    @staticmethod
+    def _check_formula_detected(
+        frame: "np.ndarray",
+        score_ocr: "ScoreOcr | None",
+        side: str,
+        last_score: "int | None",
+    ) -> bool:
+        """機能D: 掛け算式表示を stateless に判定する。
+
+        AND 条件:
+          1. score_ocr が None でなく OCR 結果が None (NCC conf 低下で読めない)
+          2. score ROI の ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN (黒 ROI 除外)
+          3. last_score > 0 (試合進行中の担保)
+
+        Args:
+            frame: 1920x1080 BGR フレーム。
+            score_ocr: ScoreOcr インスタンス。None なら常に False。
+            side: "1P" or "2P"
+            last_score: 直前に読めた score 値。None または 0 なら試合外とみなす。
+
+        Returns:
+            True = 掛け算式検知条件成立。
+        """
+        from src.score_ocr import (
+            _crop_score_roi, _ensure_1080p, compute_score_roi_ink_ratio,
+        )
+        if score_ocr is None:
+            return False
+        if last_score is None or last_score <= 0:
+            return False
+        f = _ensure_1080p(frame)
+        if f is None:
+            return False
+        score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
+        if score_val is not None:
+            return False  # OCR 成功 = 通常スコア表示
+        roi = _crop_score_roi(f, side)  # type: ignore[arg-type]
+        ir = compute_score_roi_ink_ratio(roi)
+        return ir > CHAIN_FORMULA_INK_RATIO_MIN
+
+    def _apply_chain_formula_early_fire(
+        self,
+        side: str,
+        time_sec: float,
+        prev_confirmed: "Board | None",
+    ) -> None:
+        """機能D: 掛け算式検知で即 CHAIN 突入シグナルを設定する。
+
+        _apply_chain_score_early_fire と同パターン。
+        既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        Args:
+            side: "1P" or "2P"
+            time_sec: 現フレームの時刻。
+            prev_confirmed: 連鎖前確定盤面 (before_board 用)。
+        """
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                return
+        else:
+            if self._active_chain_2p is not None:
+                return
+        before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        # 疑似 ChainEvent を生成 (score は不明なため 0)
+        pseudo = ChainEvent(
+            trigger_sec=time_sec,
+            end_sec=time_sec + self._chain_hold_per_step_sec,
+            before_board=before,
+            chain_count=1,
+            total_erased=0, total_score=0, base_score=0,
+            all_clear_bonus_applied=0,
+            ojama_sent=0, leftover_score=0,
+            is_all_clear=False,
+        )
+        chain_until = time_sec + self._chain_hold_per_step_sec
+        if side == "1P":
+            self._active_chain_1p = pseudo
+            self._chain_until_1p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_1p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_start_next_1p = self._last_seen_next_1p
+            self._chain_entry_t_1p = time_sec
+        else:
+            self._active_chain_2p = pseudo
+            self._chain_until_2p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_2p = time_sec + self.CHAIN_MAX_HOLD_SEC
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
 
