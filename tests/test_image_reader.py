@@ -29,6 +29,8 @@ from src.image_reader import (
     CELL_SAMPLE_RATIO,
     BG_EXTREME_THRESHOLD_DEFAULT,
     BG_EXTREME_THRESHOLD_PRE_CAPTURE,
+    RED_HUE_WRAP_THRESHOLD,
+    RED_HUE_WRAP_CORRECTED_MAX,
     BoardRegion,
     ColorClassifier,
     HsvRange,
@@ -616,4 +618,103 @@ class TestSkipTier1:
         )
         assert isinstance(result, tuple)
         assert len(result) == 2
+
+
+# ============================
+# 赤色相折り返し補正テスト (fix/v70-zeropatch-redyellow)
+# ============================
+
+class TestRedHueWrapFix:
+    """enable_red_hue_wrap_fix の動作確認テスト。"""
+
+    def _make_patch_from_hsv(
+        self, h: int, s: int, v: int, size: int = 20,
+    ) -> np.ndarray:
+        """HSV 値から BGR パッチを生成する。"""
+        hsv = np.full((size, size, 3), [h, s, v], dtype=np.uint8)
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+    def _make_bimodal_red_patch(
+        self, size: int = 20, high_h: int = 173, low_h: int = 2,
+        s: int = 200, v: int = 200,
+    ) -> np.ndarray:
+        """赤の 2 峰 (H=2 と H=173) を半々に混ぜた BGRパッチを生成する。
+
+        実際の赤ぷよのように明部 (H=0-4) と暗部 (H=166-179) が混在する状況を模擬。
+        """
+        half = size // 2
+        patch = np.zeros((size, size, 3), dtype=np.uint8)
+        # 上半分: H=low_h (明部赤)
+        hsv_lo = np.full((half, size, 3), [low_h, s, v], dtype=np.uint8)
+        patch[:half, :] = cv2.cvtColor(hsv_lo, cv2.COLOR_HSV2BGR)
+        # 下半分: H=high_h (暗部赤)
+        hsv_hi = np.full((size - half, size, 3), [high_h, s, v], dtype=np.uint8)
+        patch[half:, :] = cv2.cvtColor(hsv_hi, cv2.COLOR_HSV2BGR)
+        return patch
+
+    def test_off_mode_unchanged(self) -> None:
+        """OFF 時 (default): 単純 median と完全同一の挙動。"""
+        clf_off = ColorClassifier(enable_red_hue_wrap_fix=False)
+        clf_default = ColorClassifier()
+        patch = self._make_bimodal_red_patch()
+        assert clf_off.classify(patch) == clf_default.classify(patch)
+
+    def test_on_bimodal_red_classified_as_red(self) -> None:
+        """ON 時: 2 峰赤 (H=2 と H=173 半々) が安定して RED 判定される。
+
+        真因: 単純 median が H=13/14 付近に乗り赤/黄ちらつきが起きる。
+        修正後: 折り返し補正で median が H=0 付近に collapse → RED 判定。
+        """
+        clf = ColorClassifier(enable_red_hue_wrap_fix=True)
+        patch = self._make_bimodal_red_patch()
+        result = clf.classify(patch)
+        assert result == COLOR_RED, (
+            f"2 峰赤パッチが RED にならず {result} になった (折り返し補正が機能していない)"
+        )
+
+    def test_on_pure_yellow_unchanged(self) -> None:
+        """ON 時: 純黄 (H=26, R≒G) は YELLOW のまま変わらない。"""
+        clf = ColorClassifier(enable_red_hue_wrap_fix=True)
+        # H=26 は黄のコア域、折り返し補正対象外
+        patch = self._make_patch_from_hsv(h=26, s=220, v=200)
+        assert clf.classify(patch) == COLOR_YELLOW, (
+            "黄パッチが折り返し補正で誤 RED 判定された"
+        )
+
+    def test_on_purple_unchanged(self) -> None:
+        """ON 時: 紫 (H=145) は PURPLE のまま変わらない。"""
+        clf = ColorClassifier(enable_red_hue_wrap_fix=True)
+        patch = self._make_patch_from_hsv(h=145, s=180, v=180)
+        assert clf.classify(patch) == COLOR_PURPLE, (
+            "紫パッチが折り返し補正で誤判定された"
+        )
+
+    def test_on_pure_high_h_red_classified_as_red(self) -> None:
+        """ON 時: 純粋 H=170 (高 H 赤) は RED に分類される。"""
+        clf = ColorClassifier(enable_red_hue_wrap_fix=True)
+        patch = self._make_patch_from_hsv(h=170, s=200, v=200)
+        assert clf.classify(patch) == COLOR_RED, (
+            "高 H 赤パッチが RED にならなかった"
+        )
+
+    def test_compute_stable_h_median_off_equals_np_median(self) -> None:
+        """OFF 時: _compute_stable_h_median は int(np.median) と完全一致。"""
+        clf = ColorClassifier(enable_red_hue_wrap_fix=False)
+        # 典型的な 2 峰分布 (H=2 と H=173 が半々)
+        h_arr = np.array([2, 2, 2, 2, 2, 173, 173, 173, 173, 173], dtype=np.uint8)
+        result = clf._compute_stable_h_median(h_arr)
+        expected = int(np.median(h_arr))
+        assert result == expected, (
+            f"OFF 時に単純 median と一致しない: {result} != {expected}"
+        )
+
+    def test_compute_stable_h_median_on_collapses_bimodal(self) -> None:
+        """ON 時: 2 峰 H (0-4 と 166-179 が半々) の median が赤域 (0-13) に入る。"""
+        clf = ColorClassifier(enable_red_hue_wrap_fix=True)
+        # H=2 (低端) と H=173 (高端) が半々 → 補正後 median は 0 付近になるはず
+        h_arr = np.array([2, 2, 2, 2, 2, 173, 173, 173, 173, 173], dtype=np.uint8)
+        result = clf._compute_stable_h_median(h_arr)
+        assert 0 <= result <= 13, (
+            f"折り返し補正後の median が赤域 (0-13) に入らない: {result}"
+        )
 

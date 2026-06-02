@@ -318,6 +318,7 @@ def _make_pipeline_cnn(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -349,6 +350,9 @@ def _make_pipeline_cnn(
         enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
             falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化。
+            HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -360,6 +364,7 @@ def _make_pipeline_cnn(
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -525,6 +530,7 @@ def _process_video(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -553,6 +559,9 @@ def _process_video(
         enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
             falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
+            HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -571,6 +580,7 @@ def _process_video(
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -603,6 +613,7 @@ def _process_video_worker(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -633,6 +644,7 @@ def _process_video_worker(
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1623,6 +1635,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--red-hue-wrap-fix",
+        action="store_true",
+        default=False,
+        dest="enable_red_hue_wrap_fix",
+        help=(
+            "赤色相折り返し補正を有効化する。 "
+            "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
+            "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
+            "省略時は従来の単純 median (後方互換)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1660,6 +1684,7 @@ def _collect_results(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1684,6 +1709,8 @@ def _collect_results(
             _classify_next_pair_by_hsv の 2 択強制確定を回避する。
             backwards compat: デフォルト False = 従来挙動。
         enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
             backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
@@ -1711,6 +1738,7 @@ def _collect_results(
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1723,6 +1751,7 @@ def _collect_results(
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
     )
 
 
@@ -1740,6 +1769,7 @@ def _collect_serial(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1759,6 +1789,7 @@ def _collect_serial(
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1779,6 +1810,7 @@ def _collect_parallel(
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
+    enable_red_hue_wrap_fix: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1812,6 +1844,7 @@ def _collect_parallel(
                 enable_chain_min_display,
                 enable_hsv_classify_fallback,
                 enable_landing_observed_color,
+                enable_red_hue_wrap_fix,
             )
             futures[fut] = vid
 
@@ -1984,6 +2017,10 @@ def main() -> int:
     enable_landing_observed_color: bool = bool(
         getattr(args, "enable_landing_observed_color", False)
     )
+    # red_hue_wrap_fix フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_red_hue_wrap_fix: bool = bool(
+        getattr(args, "enable_red_hue_wrap_fix", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -2019,6 +2056,11 @@ def main() -> int:
             "[measure] landing_observed_color ENABLED "
             "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
         )
+    if enable_red_hue_wrap_fix:
+        print(
+            "[measure] red_hue_wrap_fix ENABLED "
+            "(--red-hue-wrap-fix 指定: 赤 2 峰 collapse / 黄↔赤ちらつき対策)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -2032,6 +2074,7 @@ def main() -> int:
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)

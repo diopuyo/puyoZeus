@@ -731,6 +731,17 @@ def main() -> int:
              "一致した着地色を優先し、 falling_pair タイミングずれによる誤色を断つ。 "
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
+    parser.add_argument(
+        "--red-hue-wrap-fix",
+        action="store_true",
+        default=False,
+        dest="enable_red_hue_wrap_fix",
+        help="赤色相折り返し補正を有効化。 "
+             "赤ぷよの H 画素が 0-4 と 166-179 に 2 峰分布するため単純 median が "
+             "赤/黄境界 (H=13/14) に乗り毎フレームちらつく問題を修正する。 "
+             "H>=140 を負方向に折り返してから median を取ることで 2 峰を 1 峰に collapse。 "
+             "デフォルト OFF = 従来の単純 median (後方互換)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -807,6 +818,8 @@ def main() -> int:
         enable_hsv_classify_fallback=args.enable_hsv_classify_fallback,
         # 真因 A 対処 (2026-06-01): --landing-observed-color で有効化
         enable_landing_observed_color=args.enable_landing_observed_color,
+        # 赤色相折り返し補正 (fix/v70-zeropatch-redyellow, 2026-06-02): --red-hue-wrap-fix で有効化
+        enable_red_hue_wrap_fix=args.enable_red_hue_wrap_fix,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
