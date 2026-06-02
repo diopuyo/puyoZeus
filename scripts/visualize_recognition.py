@@ -762,6 +762,39 @@ def main() -> int:
              "8 フレーム継続したセルを confirmed に復旧する。 "
              "B1 禁忌隣接のためデフォルト OFF。",
     )
+    # フェーズ A4 (2026-06-02): お邪魔ぷよ視覚的検出・連鎖終了・推論ガード・着地検出
+    parser.add_argument(
+        "--enable-ojama-visual-detection",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_visual_detection",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出を有効化。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    parser.add_argument(
+        "--enable-ojama-visual-chain-exit",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_visual_chain_exit",
+        help="フェーズ A4: お邪魔ぷよ視覚的検出による連鎖終了判定を有効化。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    parser.add_argument(
+        "--enable-ojama-infer-guard",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_infer_guard",
+        help="フェーズ A4: お邪魔ぷよ推論ガードを有効化。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    parser.add_argument(
+        "--enable-ojama-settle-detection",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_settle_detection",
+        help="フェーズ A4: お邪魔ぷよ着地検出を有効化。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -844,6 +877,14 @@ def main() -> int:
         enable_specular_robust_saturation=args.enable_specular_robust_saturation,
         # 設計C 事後復旧ゲート (2026-06-02): --stable-recovery-gate で有効化
         enable_stable_recovery_gate=args.enable_stable_recovery_gate,
+        # フェーズ A4 (2026-06-02): --enable-ojama-visual-detection で有効化
+        enable_ojama_visual_detection=args.enable_ojama_visual_detection,
+        # フェーズ A4 (2026-06-02): --enable-ojama-visual-chain-exit で有効化
+        enable_ojama_visual_chain_exit=args.enable_ojama_visual_chain_exit,
+        # フェーズ A4 (2026-06-02): --enable-ojama-infer-guard で有効化
+        enable_ojama_infer_guard=args.enable_ojama_infer_guard,
+        # フェーズ A4 (2026-06-02): --enable-ojama-settle-detection で有効化
+        enable_ojama_settle_detection=args.enable_ojama_settle_detection,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -910,6 +951,15 @@ def main() -> int:
             "[viz] landing_observed_color=ON "
             "(真因 A 対処: 着地 2 cell の CNN==HSV 一致色で falling_pair ズレを補正)"
         )
+    # フェーズ A4 (2026-06-02): お邪魔ぷよ視覚的検出関連ログ
+    if args.enable_ojama_visual_detection:
+        print("[viz] enable_ojama_visual_detection=ON (フェーズ A4: お邪魔ぷよ視覚的検出)")
+    if args.enable_ojama_visual_chain_exit:
+        print("[viz] enable_ojama_visual_chain_exit=ON (フェーズ A4: お邪魔ぷよ視覚的連鎖終了判定)")
+    if args.enable_ojama_infer_guard:
+        print("[viz] enable_ojama_infer_guard=ON (フェーズ A4: お邪魔ぷよ推論ガード)")
+    if args.enable_ojama_settle_detection:
+        print("[viz] enable_ojama_settle_detection=ON (フェーズ A4: お邪魔ぷよ着地検出)")
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化
