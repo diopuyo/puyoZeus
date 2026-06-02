@@ -321,6 +321,11 @@ def _make_pipeline_cnn(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -358,6 +363,16 @@ def _make_pipeline_cnn(
         enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
             白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
             backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_visual_detection: True にするとおじゃま視覚検知 (親フラグ) を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_visual_chain_exit: True にすると CHAIN→STABLE 復帰をお邪魔視覚に委譲。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_infer_guard: True にすると OJAMA_FALL 直後の infer_placement を抑止。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_settle_detection: True にすると OJAMA_FALL 中 count 不変で STABLE 復帰。
+            backwards compat: デフォルト False = 従来挙動。
+        enable_ojama_tier1_warmup: True にすると OJAMA 専用 tier1 warmup を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -372,6 +387,11 @@ def _make_pipeline_cnn(
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
@@ -540,6 +560,11 @@ def _process_video(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -595,6 +620,11 @@ def _process_video(
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
     print(
@@ -630,6 +660,11 @@ def _process_video_worker(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -663,6 +698,11 @@ def _process_video_worker(
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1690,6 +1730,63 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--enable-ojama-visual-detection",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_visual_detection",
+        help=(
+            "フェーズA: おじゃま視覚検知 (親フラグ) を有効化する。 "
+            "True にすると OjamaVisualDetector が BoardStateMachine に挿入され、 "
+            "子フラグ (--enable-ojama-visual-chain-exit / --enable-ojama-settle-detection) も有効化。 "
+            "省略時は従来挙動 (無効)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-visual-chain-exit",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_visual_chain_exit",
+        help=(
+            "フェーズA: CHAIN → STABLE 復帰をお邪魔視覚検知に委譲する。 "
+            "OjamaVisualDetector がお邪魔降下終了を検知したタイミングで CHAIN 終了判定する。 "
+            "省略時は従来挙動 (timing hold のみ)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-infer-guard",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_infer_guard",
+        help=(
+            "フェーズA: OJAMA_FALL → STABLE 直後の infer_placement を抑止する。 "
+            "ojama_tier1_warmup 期間中にツモが存在しないのに幽霊配置が走るのを防ぐ。 "
+            "省略時は従来挙動 (infer_placement 常時実行)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-settle-detection",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_settle_detection",
+        help=(
+            "フェーズA: OJAMA_FALL 中にお邪魔 count 不変フレームが続いたら STABLE 復帰する。 "
+            "お邪魔落下完了後の長期 non-stable を短縮する。 "
+            "省略時は従来挙動 (タイムアウト待ち)。"
+        ),
+    )
+    p.add_argument(
+        "--ojama-tier1-warmup",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_tier1_warmup",
+        help=(
+            "OJAMA 専用 tier1 warmup を有効化する。 "
+            "OJAMA_FALL → STABLE 遷移時に BG_FP tier1 を OJAMA_TIER1_WARMUP_FRAMES 間スキップし、 "
+            "お邪魔消滅後の BG 距離による列崩壊 (v70 真因) を防ぐ。 "
+            "省略時は従来挙動 (warmup なし)。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1730,6 +1827,11 @@ def _collect_results(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1788,6 +1890,11 @@ def _collect_results(
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1803,6 +1910,11 @@ def _collect_results(
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
     )
 
 
@@ -1823,6 +1935,11 @@ def _collect_serial(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -1845,6 +1962,11 @@ def _collect_serial(
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+            enable_ojama_infer_guard=enable_ojama_infer_guard,
+            enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         )
         stats_list.append(vstats)
     return stats_list
@@ -1868,6 +1990,11 @@ def _collect_parallel(
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
+    enable_ojama_visual_detection: bool = False,
+    enable_ojama_visual_chain_exit: bool = False,
+    enable_ojama_infer_guard: bool = False,
+    enable_ojama_settle_detection: bool = False,
+    enable_ojama_tier1_warmup: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -1904,6 +2031,11 @@ def _collect_parallel(
                 enable_red_hue_wrap_fix,
                 enable_specular_robust_saturation,
                 enable_stable_recovery_gate,
+                enable_ojama_visual_detection,
+                enable_ojama_visual_chain_exit,
+                enable_ojama_infer_guard,
+                enable_ojama_settle_detection,
+                enable_ojama_tier1_warmup,
             )
             futures[fut] = vid
 
@@ -2088,6 +2220,22 @@ def main() -> int:
     enable_stable_recovery_gate: bool = bool(
         getattr(args, "enable_stable_recovery_gate", False)
     )
+    # フェーズA おじゃま視覚検知フラグ群の確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_ojama_visual_detection: bool = bool(
+        getattr(args, "enable_ojama_visual_detection", False)
+    )
+    enable_ojama_visual_chain_exit: bool = bool(
+        getattr(args, "enable_ojama_visual_chain_exit", False)
+    )
+    enable_ojama_infer_guard: bool = bool(
+        getattr(args, "enable_ojama_infer_guard", False)
+    )
+    enable_ojama_settle_detection: bool = bool(
+        getattr(args, "enable_ojama_settle_detection", False)
+    )
+    enable_ojama_tier1_warmup: bool = bool(
+        getattr(args, "enable_ojama_tier1_warmup", False)
+    )
     workers: int = max(1, args.workers)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -2138,6 +2286,31 @@ def main() -> int:
             "[measure] stable_recovery_gate ENABLED "
             "(--stable-recovery-gate 指定: 設計C 事後復旧ゲート)"
         )
+    if enable_ojama_visual_detection:
+        print(
+            "[measure] ojama_visual_detection ENABLED "
+            "(--enable-ojama-visual-detection 指定: おじゃま視覚検知 親フラグ)"
+        )
+    if enable_ojama_visual_chain_exit:
+        print(
+            "[measure] ojama_visual_chain_exit ENABLED "
+            "(--enable-ojama-visual-chain-exit 指定: CHAIN→STABLE 復帰をお邪魔視覚に委譲)"
+        )
+    if enable_ojama_infer_guard:
+        print(
+            "[measure] ojama_infer_guard ENABLED "
+            "(--enable-ojama-infer-guard 指定: OJAMA_FALL 直後 infer_placement 抑止)"
+        )
+    if enable_ojama_settle_detection:
+        print(
+            "[measure] ojama_settle_detection ENABLED "
+            "(--enable-ojama-settle-detection 指定: OJAMA_FALL 中 count 不変で STABLE 復帰)"
+        )
+    if enable_ojama_tier1_warmup:
+        print(
+            "[measure] ojama_tier1_warmup ENABLED "
+            "(--ojama-tier1-warmup 指定: OJAMA 専用 tier1 warmup / v70 列崩壊対策)"
+        )
     disagreements: list[dict] = []
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -2154,6 +2327,11 @@ def main() -> int:
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
+        enable_ojama_visual_detection=enable_ojama_visual_detection,
+        enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
+        enable_ojama_infer_guard=enable_ojama_infer_guard,
+        enable_ojama_settle_detection=enable_ojama_settle_detection,
+        enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -2204,6 +2382,12 @@ def main() -> int:
             "workers": workers,
             # 改修3: non_stable chain 除外フラグ (後日比較用)
             "non_stable_chain_exclude": NON_STABLE_CHAIN_EXCLUDE,
+            # フェーズA おじゃま視覚検知フラグ群 (後日比較用)
+            "enable_ojama_visual_detection": enable_ojama_visual_detection,
+            "enable_ojama_visual_chain_exit": enable_ojama_visual_chain_exit,
+            "enable_ojama_infer_guard": enable_ojama_infer_guard,
+            "enable_ojama_settle_detection": enable_ojama_settle_detection,
+            "enable_ojama_tier1_warmup": enable_ojama_tier1_warmup,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加
