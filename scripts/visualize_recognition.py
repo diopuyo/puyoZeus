@@ -743,6 +743,16 @@ def main() -> int:
              "デフォルト OFF = 従来の単純 median (後方互換)。",
     )
     parser.add_argument(
+        "--specular-robust-saturation",
+        action="store_true",
+        default=False,
+        dest="enable_specular_robust_saturation",
+        help="案D: 光沢ハイライト除外彩度計算を有効化。 "
+             "ぷよ表面の白ハイライト画素 (V>=210 かつ S<=60) を彩度 median 計算から除外し、 "
+             "光沢球混入による EMPTY 誤判定を防ぐ。 "
+             "デフォルト OFF = 従来の全画素 median (後方互換)。",
+    )
+    parser.add_argument(
         "--stable-recovery-gate",
         action="store_true",
         default=False,
@@ -830,6 +840,8 @@ def main() -> int:
         enable_landing_observed_color=args.enable_landing_observed_color,
         # 赤色相折り返し補正 (fix/v70-zeropatch-redyellow, 2026-06-02): --red-hue-wrap-fix で有効化
         enable_red_hue_wrap_fix=args.enable_red_hue_wrap_fix,
+        # 案D 光沢ハイライト除外彩度計算 (fix/v70-zeropatch-redyellow): --specular-robust-saturation で有効化
+        enable_specular_robust_saturation=args.enable_specular_robust_saturation,
         # 設計C 事後復旧ゲート (2026-06-02): --stable-recovery-gate で有効化
         enable_stable_recovery_gate=args.enable_stable_recovery_gate,
     )

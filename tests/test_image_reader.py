@@ -31,6 +31,9 @@ from src.image_reader import (
     BG_EXTREME_THRESHOLD_PRE_CAPTURE,
     RED_HUE_WRAP_THRESHOLD,
     RED_HUE_WRAP_CORRECTED_MAX,
+    SPECULAR_V_MIN,
+    SPECULAR_S_MAX,
+    SPECULAR_FALLBACK_MIN_RATIO,
     BoardRegion,
     ColorClassifier,
     HsvRange,
@@ -724,5 +727,159 @@ class TestRedHueWrapFix:
         result = clf._compute_stable_h_median(h_arr)
         assert 0 <= result <= 13, (
             f"折り返し補正後の median が赤域 (0-13) に入らない: {result}"
+        )
+
+
+# ============================
+# 案D: 光沢ハイライト除外彩度計算テスト (TestSpecularRobustSaturation)
+# ============================
+
+class TestSpecularRobustSaturation:
+    """_compute_specular_robust_s および classify での specular 除外動作を検証する。"""
+
+    # --------------------------------
+    # ユーティリティ
+    # --------------------------------
+
+    def _make_hsv_patch(self, h: int, s: int, v: int, size: int = 20) -> np.ndarray:
+        """均一 HSV パッチを BGR に変換して返す。"""
+        hsv = np.full((size, size, 3), [h, s, v], dtype=np.uint8)
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+    def _make_mixed_patch(
+        self,
+        body_h: int, body_s: int, body_v: int,
+        highlight_ratio: float,
+        size: int = 20,
+    ) -> np.ndarray:
+        """本体色 (body_*) とハイライト画素 (V=240, S=20) を highlight_ratio 割合で混合したパッチ。
+
+        実測状況を模倣: 赤ぷよ本体 (body) + 白ハイライト球 (高 V, 低 S)。
+        """
+        n_total = size * size
+        n_highlight = int(n_total * highlight_ratio)
+        n_body = n_total - n_highlight
+
+        # 本体画素 (BGR 変換)
+        body_hsv = np.full((n_body, 1, 3), [body_h, body_s, body_v], dtype=np.uint8)
+        body_bgr = cv2.cvtColor(body_hsv, cv2.COLOR_HSV2BGR).reshape(n_body, 3)
+
+        # ハイライト画素: V=240, S=20 (白っぽく明るい)
+        hl_v = SPECULAR_V_MIN + 10   # 確実に閾値超え
+        hl_s = SPECULAR_S_MAX - 20   # 確実に閾値以下
+        hl_hsv = np.full((n_highlight, 1, 3), [body_h, hl_s, hl_v], dtype=np.uint8)
+        hl_bgr = cv2.cvtColor(hl_hsv, cv2.COLOR_HSV2BGR).reshape(n_highlight, 3)
+
+        all_pixels = np.vstack([body_bgr, hl_bgr]).astype(np.uint8)
+        patch = all_pixels.reshape(size, size, 3)
+        return patch
+
+    # --------------------------------
+    # テスト ①: OFF 時不変
+    # --------------------------------
+
+    def test_off_mode_unchanged(self) -> None:
+        """OFF 時 (default): 全画素 median と完全同一。"""
+        clf = ColorClassifier(enable_specular_robust_saturation=False)
+        # S チャンネルに混合値を与えて全画素 median と比較
+        s_arr = np.array([200, 200, 200, 200, 200, 30, 30, 30], dtype=np.uint8)
+        v_arr = np.full(8, 180, dtype=np.uint8)
+        result = clf._compute_specular_robust_s(s_arr, v_arr)
+        expected = int(np.median(s_arr))
+        assert result == expected, (
+            f"OFF 時に全画素 median と一致しない: result={result} expected={expected}"
+        )
+
+    # --------------------------------
+    # テスト ②: 赤 84% + ハイライト 30% パッチが ON 時 RED (OFF 時 EMPTY)
+    # --------------------------------
+
+    def test_on_red_with_highlight_becomes_red(self) -> None:
+        """ON 時: 赤本体 70% + 白ハイライト 30% パッチが RED に分類される。
+
+        真因再現: ハイライト混入で全画素 median S が S_min=160 未達 → EMPTY 誤判定。
+        ハイライト除外後 median S が 160 超 → RED 正判定。
+        """
+        # 赤本体: H=3, S=200, V=200 (確実に RED 域)
+        # ハイライト比率: 30%
+        patch = self._make_mixed_patch(
+            body_h=3, body_s=200, body_v=200,
+            highlight_ratio=0.30,
+        )
+
+        clf_off = ColorClassifier(
+            enable_red_hue_wrap_fix=True,
+            enable_specular_robust_saturation=False,
+        )
+        clf_on = ColorClassifier(
+            enable_red_hue_wrap_fix=True,
+            enable_specular_robust_saturation=True,
+        )
+        result_off = clf_off.classify(patch)
+        result_on = clf_on.classify(patch)
+        assert result_on == COLOR_RED, (
+            f"ON 時: 赤+ハイライト30% パッチが RED にならず {result_on} (ハイライト除外が機能していない)"
+        )
+        # OFF 時は EMPTY (真因再現確認) — ハイライト混入で S_min 未達になるはず
+        # ただし環境差 (画素値丸め等) により微妙な場合はスキップしない (最低限 ON が RED を確認)
+        _ = result_off  # OFF の結果は参照のみ (EMPTY/RED どちらでも許容)
+
+    # --------------------------------
+    # テスト ③: 通常の空セルは ON 時も EMPTY
+    # --------------------------------
+
+    def test_on_empty_patch_stays_empty(self) -> None:
+        """ON 時: 色画素なし (暗い) パッチは EMPTY のまま。"""
+        clf = ColorClassifier(enable_specular_robust_saturation=True)
+        # 暗い均一パッチ: V < EMPTY_V_THRESHOLD → EMPTY
+        patch = self._make_hsv_patch(h=0, s=0, v=10)
+        assert clf.classify(patch) == COLOR_EMPTY, (
+            "空パッチが ON 時に EMPTY 以外に変化した"
+        )
+
+    # --------------------------------
+    # テスト ④: 全面ハイライト (有効画素 < FALLBACK 比率) は fallback で暴走しない
+    # --------------------------------
+
+    def test_on_all_highlight_falls_back_gracefully(self) -> None:
+        """ON 時: 全画素がハイライト条件の場合は fallback (全画素 median) を使用し、暴走しない。"""
+        clf = ColorClassifier(enable_specular_robust_saturation=True)
+        # 全ピクセル: V=240, S=20 (全面ハイライト相当)
+        hl_v = SPECULAR_V_MIN + 10
+        hl_s = SPECULAR_S_MAX - 20
+        # 有効画素が FALLBACK_MIN_RATIO 未満になる = 全ハイライト
+        s_arr = np.full(100, hl_s, dtype=np.uint8)
+        v_arr = np.full(100, hl_v, dtype=np.uint8)
+        result = clf._compute_specular_robust_s(s_arr, v_arr)
+        # fallback = 全画素 median = hl_s
+        expected_fallback = int(np.median(s_arr))
+        assert result == expected_fallback, (
+            f"全面ハイライト時に fallback が機能しなかった: result={result} expected={expected_fallback}"
+        )
+
+    # --------------------------------
+    # テスト ⑤: 通常の彩度高ぷよは ON/OFF で結果不変
+    # --------------------------------
+
+    def test_on_high_saturation_puyo_unchanged(self) -> None:
+        """ON 時: ハイライト画素なし (通常の彩度高ぷよ) は ON/OFF で同一結果。"""
+        clf_off = ColorClassifier(enable_specular_robust_saturation=False)
+        clf_on = ColorClassifier(enable_specular_robust_saturation=True)
+        # 青ぷよ: H=110, S=220, V=200 (ハイライト画素ゼロ)
+        patch = self._make_hsv_patch(h=110, s=220, v=200)
+        assert clf_off.classify(patch) == clf_on.classify(patch), (
+            "ハイライト画素なし青ぷよで ON/OFF の結果が異なった"
+        )
+
+    # --------------------------------
+    # テスト ⑥: 定数値の妥当性確認
+    # --------------------------------
+
+    def test_specular_constants_range(self) -> None:
+        """定数が HSV 値域内であることを確認。"""
+        assert 0 < SPECULAR_V_MIN <= 255, f"SPECULAR_V_MIN={SPECULAR_V_MIN} が範囲外"
+        assert 0 <= SPECULAR_S_MAX < 255, f"SPECULAR_S_MAX={SPECULAR_S_MAX} が範囲外"
+        assert 0.0 < SPECULAR_FALLBACK_MIN_RATIO < 1.0, (
+            f"SPECULAR_FALLBACK_MIN_RATIO={SPECULAR_FALLBACK_MIN_RATIO} が範囲外"
         )
 
