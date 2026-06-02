@@ -88,6 +88,17 @@ BG_LEFT_UPPER_COL_MAX: int = 1  # 列 0-1 (= 最左 2 列)
 BG_EXTREME_THRESHOLD_PRE_CAPTURE: float = 0.0
 
 # ============================
+# 赤色相折り返し補正 定数 (fix/v70-zeropatch-redyellow)
+# ============================
+# OpenCV HSV で赤は H 軸両端に折り返す (0-4 と 166-179 が同じ赤)。
+# H がこの値以上のピクセルを「負方向」に折り返して median を計算することで
+# 2 峰 (0 付近と 180 付近) を 1 峰に collapse し median を安定させる。
+RED_HUE_WRAP_THRESHOLD: int = 140
+# 折り返し後の H median がこの値以下なら「赤近傍」とみなして補正を適用する。
+# 折り返し後の 0 付近域 (例: -14 〜 +13) が対象。正値に変換した後の最大値。
+RED_HUE_WRAP_CORRECTED_MAX: int = 13
+
+# ============================
 # データクラス
 # ============================
 
@@ -229,6 +240,7 @@ class ColorClassifier:
     def __init__(
         self, color_ranges: dict[int, list[HsvRange]] | None = None,
         vote_mode: bool = False,
+        enable_red_hue_wrap_fix: bool = False,
     ) -> None:
         """
         Args:
@@ -237,6 +249,11 @@ class ColorClassifier:
             vote_mode: True なら per-pixel 投票方式で分類 (サイクル71).
                        False (default) は HSV 中央値 + cycle 69-B サブ region vote
                        (= 後方互換). 投票方式は混合色 cell や半分埋まり cell に強い.
+            enable_red_hue_wrap_fix: True なら赤色相折り返し補正を有効化
+                (fix/v70-zeropatch-redyellow)。
+                赤の H 画素が 0-4 と 166-179 に分布する 2 峰構造で median が
+                赤/黄境界 (H=13/14) に乗りちらつく問題を修正する。
+                False (default) は従来の単純 median (完全不変、 後方互換)。
         """
         self._ranges: dict[int, list[HsvRange]] = (
             color_ranges if color_ranges is not None else DEFAULT_COLOR_RANGES
@@ -247,6 +264,55 @@ class ColorClassifier:
         self._s_min_scale: float = 1.0
         # 2026-05-11 サイクル71: per-pixel 投票分類モード.
         self._vote_mode: bool = bool(vote_mode)
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正フラグ.
+        self._enable_red_hue_wrap_fix: bool = bool(enable_red_hue_wrap_fix)
+
+    def _compute_stable_h_median(self, h_channel: np.ndarray) -> int:
+        """赤色相折り返しを考慮した安定 H median を計算する。
+
+        fix/v70-zeropatch-redyellow: enable_red_hue_wrap_fix=True の場合のみ補正を適用。
+        OFF 時は従来の単純 median (int(np.median(h_channel))) と完全同一。
+
+        補正アルゴリズム:
+            1. H >= RED_HUE_WRAP_THRESHOLD のピクセルを (h - 180) に変換
+               (例: H=170 → -10)。これで 0-4 と 166-179 の 2 峰が
+               -14 〜 +13 の 1 峰に collapse する。
+            2. 変換後の median を計算。
+            3. median が RED_HUE_WRAP_CORRECTED_MAX (=13) 以下、かつ
+               元の h_channel に HIGH 値 (>=RED_HUE_WRAP_THRESHOLD) が
+               十分存在する 2 峰ケースでのみ補正を採用する。
+               2 峰でない場合は従来 median をそのまま返す。
+
+        Args:
+            h_channel: H チャンネルの 2D または 1D numpy 配列 (uint8, 0–180)。
+
+        Returns:
+            安定化後の H median 値 (int, 0–180)。
+        """
+        h_flat = h_channel.ravel().astype(np.int16)
+        if not self._enable_red_hue_wrap_fix:
+            return int(np.median(h_flat))
+        # 2 峰ケース判定: LOW 側 (H < 30) と HIGH 側 (H >= 閾値) の両方が存在するか。
+        # 紫 (H=130-165) や高 H 単峰の場合は両条件を満たさないため補正対象外。
+        # RED_HUE_WRAP_THRESHOLD (=140) 未満の範囲が赤の低端 (0-30) と紫 (70-165) を分ける。
+        # 赤 2 峰 = LOW 比率 >= 15% かつ HIGH 比率 >= 15% の共存ケース。
+        RED_HUE_LOW_MAX: int = 30  # 赤低端の上限 H 値
+        n_total = max(1, len(h_flat))
+        low_ratio = float(np.sum(h_flat <= RED_HUE_LOW_MAX)) / n_total
+        high_ratio = float(np.sum(h_flat >= RED_HUE_WRAP_THRESHOLD)) / n_total
+        if low_ratio >= 0.15 and high_ratio >= 0.15:
+            # 赤 2 峰確定: 折り返し補正を適用
+            h_wrapped = np.where(
+                h_flat >= RED_HUE_WRAP_THRESHOLD,
+                h_flat - 180,
+                h_flat,
+            )
+            med_wrapped = float(np.median(h_wrapped))
+            if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
+                # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
+                return int(max(0, med_wrapped))
+        # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
+        return int(np.median(h_flat))
 
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
@@ -268,7 +334,8 @@ class ColorClassifier:
             return self._classify_by_vote(bgr_patch)
 
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
-        h = int(np.median(hsv_patch[:, :, 0]))
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         s = int(np.median(hsv_patch[:, :, 1]))
         v = int(np.median(hsv_patch[:, :, 2]))
 
@@ -338,7 +405,8 @@ class ColorClassifier:
         if bgr_patch.size == 0:
             return COLOR_EMPTY
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
-        h = int(np.median(hsv_patch[:, :, 0]))
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         s = int(np.median(hsv_patch[:, :, 1]))
         v = int(np.median(hsv_patch[:, :, 2]))
         if v < EMPTY_V_THRESHOLD:

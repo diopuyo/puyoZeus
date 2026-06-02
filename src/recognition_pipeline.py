@@ -461,6 +461,11 @@ class RecognitionPipeline:
         # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_landing_observed_color: bool = False,
+        # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
+        # True にすると HSV 経路の median 計算で赤 2 峰を collapse し
+        # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
+        # デフォルト False = 従来の単純 median (完全不変、 backwards compat)。
+        enable_red_hue_wrap_fix: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -470,6 +475,13 @@ class RecognitionPipeline:
             else self.BG_FP_FORCE_MAX_PUYO
         )
         self._reader = image_reader
+        # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正を
+        # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
+        if enable_red_hue_wrap_fix:
+            clf = getattr(image_reader, "_classifier", None)
+            hsv_clf = getattr(clf, "_hsv", clf)
+            if hsv_clf is not None and hasattr(hsv_clf, "_enable_red_hue_wrap_fix"):
+                hsv_clf._enable_red_hue_wrap_fix = True
         self._match_detector = match_state_detector
         # A: 試合境界補強 detector 群 (memory: 試合判定甘さ対策)。
         # 既存単独動作との backward compat 維持のため全て optional。
@@ -902,6 +914,7 @@ class RecognitionPipeline:
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
         enable_landing_observed_color: bool = False,
+        enable_red_hue_wrap_fix: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1037,6 +1050,7 @@ class RecognitionPipeline:
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         )
 
     # ------------------------------------------------------------------
