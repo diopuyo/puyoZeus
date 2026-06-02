@@ -466,6 +466,12 @@ class RecognitionPipeline:
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
         # user viz 採用承認済 (2026-06-02)。False = 従来の単純 median (後方互換が必要な場合のみ)。
         enable_red_hue_wrap_fix: bool = True,
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
+        # True にすると白ハイライト画素を彩度 median 計算から除外し、
+        # ぷよ表面の光沢球混入による EMPTY 誤判定を防ぐ。
+        # ColorClassifier に enable_specular_robust_saturation を伝播。
+        # default False = 従来の全画素 median (完全不変、後方互換)。
+        enable_specular_robust_saturation: bool = False,
         # 設計C 事後復旧ゲート (2026-06-02):
         # True で STABLE 中の confirmed==EMPTY かつ CNN==HSV 持続合意セルを復旧する。
         # B1 禁忌隣接のため default False。viz 検証後に判断する。
@@ -487,6 +493,15 @@ class RecognitionPipeline:
             hsv_clf = getattr(clf, "_hsv", clf)
             if hsv_clf is not None and hasattr(hsv_clf, "_enable_red_hue_wrap_fix"):
                 hsv_clf._enable_red_hue_wrap_fix = True
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算を
+        # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
+        if enable_specular_robust_saturation:
+            clf = getattr(image_reader, "_classifier", None)
+            hsv_clf = getattr(clf, "_hsv", clf)
+            if hsv_clf is not None and hasattr(
+                hsv_clf, "_enable_specular_robust_saturation"
+            ):
+                hsv_clf._enable_specular_robust_saturation = True
         self._match_detector = match_state_detector
         # A: 試合境界補強 detector 群 (memory: 試合判定甘さ対策)。
         # 既存単独動作との backward compat 維持のため全て optional。
@@ -927,6 +942,9 @@ class RecognitionPipeline:
         enable_hsv_classify_fallback: bool = False,
         enable_landing_observed_color: bool = False,
         enable_red_hue_wrap_fix: bool = True,
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
+        # default False = 従来の全画素 median (完全不変、後方互換)。
+        enable_specular_robust_saturation: bool = False,
         # 設計C 事後復旧ゲート (2026-06-02): default False = 従来挙動完全維持。
         enable_stable_recovery_gate: bool = False,
     ) -> "RecognitionPipeline":
@@ -946,6 +964,9 @@ class RecognitionPipeline:
             cnn_override_prob: HybridClassifier の CNN 採用閾値. None なら
                 DEFAULT_CNN_OVERRIDE_PROB=0.70 (= cycle 71 CNN メイン化).
                 0.5 で CNN 強信頼、 0.9 で CNN 慎重 (旧挙動互換).
+            enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+                白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+                backwards compat: デフォルト False = 従来挙動。
         """
         from src.image_reader import ColorClassifier
         # cycle 71v: None なら DEFAULT_CNN_MODEL_PATH に解決 (存在する場合のみ).
@@ -1065,6 +1086,7 @@ class RecognitionPipeline:
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
 

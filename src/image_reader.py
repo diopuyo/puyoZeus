@@ -99,6 +99,26 @@ RED_HUE_WRAP_THRESHOLD: int = 140
 RED_HUE_WRAP_CORRECTED_MAX: int = 13
 
 # ============================
+# 光沢ハイライト除外 彩度計算 定数 (案D: specular highlight 対処)
+# ============================
+# ぷよ表面の白い光沢 (鏡面反射) 画素はV高・S低で、彩度 median を押し下げて
+# 色/空判定閾値 S_min 未達を引き起こす (真因: 白ハイライト球が約30%混入)。
+# これらを彩度統計から除外し、ぷよ本体画素の彩度で判定することで誤EMPTY化を防ぐ。
+#
+# 実測根拠 (memory: project_specular_highlight_empty_misread.md):
+#   赤ぷよ: 本体画素 S=160〜220、ハイライト画素 V>=220 かつ S<=60 が約30%混入
+#   → 全画素 median S=94/102 (S_min=160 未達) → EMPTY 誤判定
+#   ハイライト除外後 median S>160 → RED 正判定
+#
+# SPECULAR_V_MIN: ハイライト画素の輝度下限 (これ以上が「明るすぎる」画素)
+SPECULAR_V_MIN: int = 210
+# SPECULAR_S_MAX: ハイライト画素の彩度上限 (これ以下が「白っぽい」画素)
+SPECULAR_S_MAX: int = 60
+# SPECULAR_FALLBACK_MIN_RATIO: 除外後に残る有効画素の最小比率
+# この比率未満なら全面ハイライト等の異常とみなしてfallback (全画素統計を使用)
+SPECULAR_FALLBACK_MIN_RATIO: float = 0.20
+
+# ============================
 # データクラス
 # ============================
 
@@ -241,6 +261,7 @@ class ColorClassifier:
         self, color_ranges: dict[int, list[HsvRange]] | None = None,
         vote_mode: bool = False,
         enable_red_hue_wrap_fix: bool = True,
+        enable_specular_robust_saturation: bool = False,
     ) -> None:
         """
         Args:
@@ -254,6 +275,12 @@ class ColorClassifier:
                 赤の H 画素が 0-4 と 166-179 に分布する 2 峰構造で median が
                 赤/黄境界 (H=13/14) に乗りちらつく問題を修正する。
                 False = 従来の単純 median (後方互換が必要な場合のみ指定)。
+            enable_specular_robust_saturation: True なら光沢ハイライト除外彩度計算を有効化
+                (案D: fix/v70-zeropatch-redyellow)。
+                白ハイライト画素 (V>=SPECULAR_V_MIN かつ S<=SPECULAR_S_MAX) を
+                彩度 median 計算から除外することで、ぷよ表面の光沢球混入による
+                EMPTY 誤判定を防ぐ。
+                False (default) = 従来の全画素 median (完全不変、後方互換)。
         """
         self._ranges: dict[int, list[HsvRange]] = (
             color_ranges if color_ranges is not None else DEFAULT_COLOR_RANGES
@@ -266,6 +293,11 @@ class ColorClassifier:
         self._vote_mode: bool = bool(vote_mode)
         # fix/v70-zeropatch-redyellow: 赤色相折り返し補正フラグ.
         self._enable_red_hue_wrap_fix: bool = bool(enable_red_hue_wrap_fix)
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算フラグ.
+        # default False = 従来の全画素 median (完全後方互換).
+        self._enable_specular_robust_saturation: bool = bool(
+            enable_specular_robust_saturation
+        )
 
     def _compute_stable_h_median(self, h_channel: np.ndarray) -> int:
         """赤色相折り返しを考慮した安定 H median を計算する。
@@ -314,6 +346,39 @@ class ColorClassifier:
         # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
         return int(np.median(h_flat))
 
+    def _compute_specular_robust_s(self, s_channel: np.ndarray, v_channel: np.ndarray) -> int:
+        """光沢ハイライト画素を除外した彩度 median を計算する (案D)。
+
+        enable_specular_robust_saturation=False の場合は従来の全画素 median と完全同一。
+
+        アルゴリズム:
+            1. ハイライト画素マスク = V >= SPECULAR_V_MIN かつ S <= SPECULAR_S_MAX
+               (白い光沢球: 明るく・彩度が低い画素群)
+            2. 有効画素 (ハイライトでない画素) の比率が SPECULAR_FALLBACK_MIN_RATIO 以上
+               なら有効画素のみの median を返す (ぷよ本体色)。
+            3. 有効画素が極少 (全面ハイライト等の異常) ならば全画素 median に fallback。
+
+        Args:
+            s_channel: S チャンネルの 2D numpy 配列 (uint8, 0–255)。
+            v_channel: V チャンネルの 2D numpy 配列 (uint8, 0–255)。
+
+        Returns:
+            彩度 median 値 (int, 0–255)。
+        """
+        s_flat = s_channel.ravel().astype(np.int32)
+        if not self._enable_specular_robust_saturation:
+            # OFF 時: 従来の全画素 median と完全同一
+            return int(np.median(s_flat))
+        v_flat = v_channel.ravel().astype(np.int32)
+        n_total = max(1, len(s_flat))
+        # ハイライト画素マスク: 明るく(V高)かつ白っぽい(S低)画素
+        specular_mask = (v_flat >= SPECULAR_V_MIN) & (s_flat <= SPECULAR_S_MAX)
+        valid_s = s_flat[~specular_mask]
+        # 有効画素が最小比率を下回る場合は fallback (全面ハイライト等の異常)
+        if len(valid_s) < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
+            return int(np.median(s_flat))
+        return int(np.median(valid_s))
+
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
         BGRパッチの色を分類して色コードを返す。
@@ -336,7 +401,8 @@ class ColorClassifier:
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
         # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
-        s = int(np.median(hsv_patch[:, :, 1]))
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
         v = int(np.median(hsv_patch[:, :, 2]))
 
         if v < EMPTY_V_THRESHOLD:
@@ -407,7 +473,8 @@ class ColorClassifier:
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
         # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
-        s = int(np.median(hsv_patch[:, :, 1]))
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
         v = int(np.median(hsv_patch[:, :, 2]))
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY

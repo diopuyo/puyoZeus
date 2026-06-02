@@ -319,6 +319,7 @@ def _make_pipeline_cnn(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -354,6 +355,9 @@ def _make_pipeline_cnn(
         enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化。
             HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -366,6 +370,7 @@ def _make_pipeline_cnn(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     _inject_hsv(pipe, _resolve_hsv_path(video_id))
@@ -533,6 +538,7 @@ def _process_video(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
@@ -565,6 +571,9 @@ def _process_video(
         enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
             HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
+            backwards compat: デフォルト False = 従来挙動。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -584,6 +593,7 @@ def _process_video(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     pipe_hsv = _make_pipeline_hsv_only(video_id)
@@ -618,6 +628,7 @@ def _process_video_worker(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
@@ -650,6 +661,7 @@ def _process_video_worker(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     stats._local_disagreements = local_disagrees
@@ -1653,6 +1665,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--specular-robust-saturation",
+        action="store_true",
+        default=False,
+        dest="enable_specular_robust_saturation",
+        help=(
+            "案D: 光沢ハイライト除外彩度計算を有効化する。 "
+            "ぷよ表面の白ハイライト画素 (V>=" + str(210) + " かつ S<=" + str(60) + ") を "
+            "彩度 median 計算から除外し、光沢球混入による EMPTY 誤判定を防ぐ。 "
+            "省略時は従来の全画素 median (後方互換)。"
+        ),
+    )
+    p.add_argument(
         "--stable-recovery-gate",
         action="store_true",
         default=False,
@@ -1704,6 +1728,7 @@ def _collect_results(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
@@ -1732,6 +1757,8 @@ def _collect_results(
             backwards compat: デフォルト False = 従来挙動。
         enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化する。
             backwards compat: デフォルト False = 従来挙動。
+        enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
+            backwards compat: デフォルト False = 従来挙動。
     """
     # 動画パスを事前解決 (並列化前に行うことでワーカに Path str を渡せる)
     video_tasks: list[tuple[str, Path]] = []
@@ -1759,6 +1786,7 @@ def _collect_results(
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
     return _collect_parallel(
@@ -1773,6 +1801,7 @@ def _collect_results(
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
 
@@ -1792,6 +1821,7 @@ def _collect_serial(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
@@ -1813,6 +1843,7 @@ def _collect_serial(
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+            enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
         )
         stats_list.append(vstats)
@@ -1835,6 +1866,7 @@ def _collect_parallel(
     enable_hsv_classify_fallback: bool = False,
     enable_landing_observed_color: bool = False,
     enable_red_hue_wrap_fix: bool = False,
+    enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
@@ -1870,6 +1902,7 @@ def _collect_parallel(
                 enable_hsv_classify_fallback,
                 enable_landing_observed_color,
                 enable_red_hue_wrap_fix,
+                enable_specular_robust_saturation,
                 enable_stable_recovery_gate,
             )
             futures[fut] = vid
@@ -2047,6 +2080,10 @@ def main() -> int:
     enable_red_hue_wrap_fix: bool = bool(
         getattr(args, "enable_red_hue_wrap_fix", False)
     )
+    # specular_robust_saturation フラグの確定 (backwards compat: デフォルト False = 従来挙動)
+    enable_specular_robust_saturation: bool = bool(
+        getattr(args, "enable_specular_robust_saturation", False)
+    )
     # stable_recovery_gate フラグの確定 (backwards compat: デフォルト False = 従来挙動)
     enable_stable_recovery_gate: bool = bool(
         getattr(args, "enable_stable_recovery_gate", False)
@@ -2091,6 +2128,11 @@ def main() -> int:
             "[measure] red_hue_wrap_fix ENABLED "
             "(--red-hue-wrap-fix 指定: 赤 2 峰 collapse / 黄↔赤ちらつき対策)"
         )
+    if enable_specular_robust_saturation:
+        print(
+            "[measure] specular_robust_saturation ENABLED "
+            "(--specular-robust-saturation 指定: 案D 光沢ハイライト除外彩度 / EMPTY 誤判定対策)"
+        )
     if enable_stable_recovery_gate:
         print(
             "[measure] stable_recovery_gate ENABLED "
@@ -2110,6 +2152,7 @@ def main() -> int:
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
+        enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
     )
     if not stats_list:
