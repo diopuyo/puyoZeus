@@ -816,6 +816,18 @@ def main() -> int:
              "時間ベース実装のため fps 非依存。 "
              "ライブラリ default=False (無効)。 --chain-exit-warmup で有効化。",
     )
+    parser.add_argument(
+        "--chain-formula-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_chain_formula_detection",
+        help="機能D: 連鎖開始 掛け算式 検知を制御する。 "
+             "True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ "
+             "ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が "
+             "CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。 "
+             "機能B (score 急増経路) と独立フラグ。 "
+             "ライブラリ default=True (有効、 2026-06-03 採用)。 --no-chain-formula-detection で無効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -911,6 +923,8 @@ def main() -> int:
         enable_chain_score_early_fire=args.enable_chain_score_early_fire,
         # 機能C (2026-06-02): --chain-exit-warmup で有効化
         enable_chain_exit_warmup=args.enable_chain_exit_warmup,
+        # 機能D (2026-06-02): --chain-formula-detection で有効化
+        enable_chain_formula_detection=args.enable_chain_formula_detection,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
