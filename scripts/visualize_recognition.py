@@ -577,6 +577,15 @@ def main() -> int:
              "Step 0 OnlineHsv 効果定量評価用 (2026-05-24)。",
     )
     parser.add_argument(
+        "--no-per-video-hsv",
+        action="store_true",
+        default=False,
+        dest="disable_per_video_hsv",
+        help="per-video 手調整 HSV inject をスキップする (汎用精度目視確認用)。 "
+             "OnlineHsvCalibrator は引き続き動作するため自動 HSV 学習は生きる。 "
+             "デフォルト False = 従来挙動完全一致 (backwards compat)。",
+    )
+    parser.add_argument(
         "--use-puyo-gate", action="store_true",
         help="cycle 32e: PuyoPresenceGate を HybridClassifier 前段に挟む。 "
              "gate=False の patch は HSV-only 経路に倒す (= 背景誤認対策)。",
@@ -816,11 +825,54 @@ def main() -> int:
              "時間ベース実装のため fps 非依存。 "
              "ライブラリ default=False (無効)。 --chain-exit-warmup で有効化。",
     )
+    parser.add_argument(
+        "--chain-formula-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_chain_formula_detection",
+        help="機能D: 連鎖開始 掛け算式 検知を制御する。 "
+             "True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ "
+             "ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が "
+             "CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。 "
+             "機能B (score 急増経路) と独立フラグ。 "
+             "ライブラリ default=True (有効、 2026-06-03 採用)。 --no-chain-formula-detection で無効化。",
+    )
+    parser.add_argument(
+        "--hsv-deferred-consensus",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_hsv_deferred_consensus",
+        help="案 Y-4: HSV-first commit + deferred consensus を制御する。 "
+             "True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、 "
+             "後続フレームの CNN==HSV consensus 投票で確定させる (corruption 65% 起源対策)。 "
+             "ライブラリ default=False (無効)。 --hsv-deferred-consensus で有効化。",
+    )
+    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    parser.add_argument(
+        "--ojama-warning-glow-guard",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_warning_glow_guard",
+        help="不具合B 対処: 予告おじゃま発光ガードを有効化する。 "
+             "相手連鎖の予告おじゃま演出による盤面上部多色発光を V_high_ratio で検知し、 "
+             "STABLE 中の confirmed_board を frozen_board で保護する。 "
+             "黄ぷよに発光が重なる黄(4)→おじゃま(9)誤認を防ぐ。 "
+             "ライブラリ default=False (無効)。 --ojama-warning-glow-guard で有効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
         args.hsv_state = resolve_hsv_path(args.video)
         print(f"[viz] HSV auto-resolve: {args.hsv_state} (from {args.video.name})")
+    # --no-per-video-hsv: per-video 手調整 HSV inject をスキップする (汎用精度目視確認用)
+    # None にすることで下流の inject ブロックを無効化する
+    if getattr(args, "disable_per_video_hsv", False):
+        args.hsv_state = None
+        print(
+            "[viz] disable_per_video_hsv=ON "
+            "(手調整 per-video HSV inject スキップ: 自動 HSV + merged レンジのみで動作)"
+        )
     # cycle 32g: 円形マスクを推論前に有効化
     if args.use_circle_mask:
         from src.patch_classifier import set_circle_mask_enabled
@@ -911,6 +963,12 @@ def main() -> int:
         enable_chain_score_early_fire=args.enable_chain_score_early_fire,
         # 機能C (2026-06-02): --chain-exit-warmup で有効化
         enable_chain_exit_warmup=args.enable_chain_exit_warmup,
+        # 機能D (2026-06-02): --chain-formula-detection で有効化
+        enable_chain_formula_detection=args.enable_chain_formula_detection,
+        # 案 Y-4 (2026-06-03): --hsv-deferred-consensus で有効化
+        enable_hsv_deferred_consensus=args.enable_hsv_deferred_consensus,
+        # 不具合B 対処 (2026-06-04): --ojama-warning-glow-guard で有効化
+        enable_ojama_warning_glow_guard=args.enable_ojama_warning_glow_guard,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")

@@ -448,6 +448,43 @@ class ScoreOcr:
 # ============================
 
 # ============================
+# 機能D: 連鎖開始 掛け算式 検知ヘルパ
+# ============================
+
+# ink_ratio 輝度閾値: この値より高い輝度ピクセルを「描画あり」とみなす。
+# メニュー/試合外の真黒 ROI (輝度≈0) を除外するための下限。
+# 通常スコア表示・掛け算式表示はいずれも ink_ratio が高いため、
+# ink_ratio は「黒 ROI 除外」専用で formula vs 通常数字の区別は score=None が担う。
+# 実測: formula(ink=0.98-1.00), 通常(ink=1.00), 真黒(ink=0.00)。
+# 閾値 10 で真黒(輝度≤5)のみ 0 になり、それ以外は全て 1.0 付近になる。
+SCORE_ROI_INK_THRESHOLD: int = 10
+
+# ink_ratio の最低値。これ未満 = ROI が真黒 = メニュー/試合外と判定し発火除外。
+# 実データ: formula=0.975-1.000、通常=1.000、真黒=0.000。
+# 0.1 は保守的な下限として設定 (十分なマージンを確保)。
+SCORE_ROI_INK_RATIO_MIN: float = 0.1
+
+
+def compute_score_roi_ink_ratio(roi: np.ndarray) -> float:
+    """score ROI の ink_ratio (描画ピクセル割合) を計算する。
+
+    ink_ratio = 輝度 > SCORE_ROI_INK_THRESHOLD のピクセル数 / 全ピクセル数。
+    メニュー/試合外の真黒 ROI (ink_ratio≈0) を連鎖発火から除外するための
+    ガード信号。formula 表示・通常スコア表示はいずれも高い値 (≈1.0) になる。
+
+    Args:
+        roi: score ROI の BGR or grayscale 画像。
+
+    Returns:
+        0.0〜1.0 の ink_ratio。ROI が None/空の場合は 0.0。
+    """
+    if roi is None or roi.size == 0:
+        return 0.0
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if roi.ndim == 3 else roi
+    return float((gray > SCORE_ROI_INK_THRESHOLD).sum()) / max(1, gray.size)
+
+
+# ============================
 # 連続 frame 用 Tracker (Phase B-4)
 # ============================
 
@@ -548,8 +585,11 @@ __all__ = [
     "NCC_MIN_CONFIDENCE",
     "SCORE_1P_REGION",
     "SCORE_2P_REGION",
+    "SCORE_ROI_INK_RATIO_MIN",
+    "SCORE_ROI_INK_THRESHOLD",
     "ScoreDelta",
     "ScoreOcr",
     "ScoreReadResult",
     "ScoreTracker",
+    "compute_score_roi_ink_ratio",
 ]
