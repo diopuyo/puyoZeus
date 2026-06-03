@@ -663,3 +663,219 @@ class TestJudgeCycle:
         cand = self._make_stats(critical=105, avg_puyo=19.5)
         result = judge_cycle(base, cand)
         assert result == "NEEDS_REVIEW"
+
+
+# ============================
+# THREE_WAY_SUDDEN_DROP (2026-06-03): fail-silent 盲点炙り出し
+# ============================
+
+
+def _make_raw_grid(color: int, count: int) -> list[list[int]]:
+    """下段から count 個 cell を color で埋めた raw grid (CNN / HSV 用)."""
+    return _make_grid_with_color(color, count)
+
+
+def _make_frame_entry_with_raw(
+    fi: int,
+    p1_confirmed: list[list[int]],
+    p1_raw_cnn: list[list[int]] | None,
+    p1_raw_hsv: list[list[int]] | None,
+    p1_state: str = "stable",
+) -> FrameEntry:
+    """raw_cnn / raw_hsv 付きの FrameEntry を生成する (1P 専用ヘルパー)."""
+    return FrameEntry(
+        frame_idx=fi,
+        t_sec=fi / 60.0,
+        p1_state=p1_state,
+        p2_state="stable",
+        p1_confirmed=p1_confirmed,
+        p2_confirmed=_make_empty_grid(),
+        p1_raw_cnn_board=p1_raw_cnn,
+        p1_raw_hsv_board=p1_raw_hsv,
+    )
+
+
+class TestThreeWaySuddenDrop:
+    """check_three_way_sudden_drop のユニットテスト."""
+
+    # --- 発火ケース ---
+
+    def test_drop_gte_threshold_fires_critical(self) -> None:
+        """3 者一致ぷよ数が -8 以上減少したとき CRITICAL を発火."""
+        # frame 0: 3 者一致 20 個 (RED で統一)
+        grid_20 = _make_raw_grid(COLOR_RED, 20)
+        # frame 60: 3 者一致 10 個 (diff = -10)
+        grid_10 = _make_raw_grid(COLOR_RED, 10)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_20, grid_20, grid_20),
+            _make_frame_entry_with_raw(60, grid_10, grid_10, grid_10),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 1
+        assert vs[0].metric == "three_way_sudden_drop"
+        assert vs[0].severity == SEVERITY_CRITICAL
+        assert vs[0].extra["diff"] == -10
+        assert vs[0].extra["chain_intervened"] is False
+
+    def test_drop_exactly_threshold_fires(self) -> None:
+        """diff == -THREE_WAY_DROP_THRESHOLD (= -8) ちょうどでも発火する."""
+        from src.recognition_evaluator import THREE_WAY_DROP_THRESHOLD
+        grid_a = _make_raw_grid(COLOR_RED, 20)
+        grid_b = _make_raw_grid(COLOR_RED, 20 - THREE_WAY_DROP_THRESHOLD)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_a, grid_a, grid_a),
+            _make_frame_entry_with_raw(60, grid_b, grid_b, grid_b),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 1
+        assert vs[0].extra["diff"] == -THREE_WAY_DROP_THRESHOLD
+
+    # --- 非発火ケース: chain 介在 ---
+
+    def test_chain_intervened_no_fire(self) -> None:
+        """prev_stable → cur_stable の間に chain が介在する場合は発火しない."""
+        grid_20 = _make_raw_grid(COLOR_RED, 20)
+        grid_10 = _make_raw_grid(COLOR_RED, 10)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            # frame 0: stable (20 個)
+            _make_frame_entry_with_raw(0, grid_20, grid_20, grid_20),
+            # frame 1: chain が介在
+            FrameEntry(
+                frame_idx=1, t_sec=1 / 60.0,
+                p1_state="chain", p2_state="stable",
+                p1_confirmed=grid_20, p2_confirmed=_make_empty_grid(),
+                p1_raw_cnn_board=grid_20, p1_raw_hsv_board=grid_20,
+            ),
+            # frame 60: stable (10 個)
+            _make_frame_entry_with_raw(60, grid_10, grid_10, grid_10),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0, "chain 介在時は発火しないはず"
+
+    # --- 非発火ケース: ojama_fall 介在 ---
+
+    def test_ojama_fall_intervened_no_fire(self) -> None:
+        """prev_stable → cur_stable の間に ojama_fall が介在する場合は発火しない."""
+        grid_20 = _make_raw_grid(COLOR_RED, 20)
+        grid_10 = _make_raw_grid(COLOR_RED, 10)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_20, grid_20, grid_20),
+            FrameEntry(
+                frame_idx=1, t_sec=1 / 60.0,
+                p1_state="ojama_fall", p2_state="stable",
+                p1_confirmed=grid_20, p2_confirmed=_make_empty_grid(),
+                p1_raw_cnn_board=grid_20, p1_raw_hsv_board=grid_20,
+            ),
+            _make_frame_entry_with_raw(60, grid_10, grid_10, grid_10),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0, "ojama_fall 介在時は発火しないはず"
+
+    # --- 非発火ケース: tsumo_fall 介在 ---
+
+    def test_tsumo_fall_intervened_no_fire(self) -> None:
+        """prev_stable → cur_stable の間に tsumo_fall が介在する場合は発火しない."""
+        grid_20 = _make_raw_grid(COLOR_RED, 20)
+        grid_10 = _make_raw_grid(COLOR_RED, 10)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_20, grid_20, grid_20),
+            FrameEntry(
+                frame_idx=1, t_sec=1 / 60.0,
+                p1_state="tsumo_fall", p2_state="stable",
+                p1_confirmed=grid_20, p2_confirmed=_make_empty_grid(),
+                p1_raw_cnn_board=grid_20, p1_raw_hsv_board=grid_20,
+            ),
+            _make_frame_entry_with_raw(60, grid_10, grid_10, grid_10),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0, "tsumo_fall 介在時は発火しないはず"
+
+    # --- 非発火ケース: 3 者不一致 ---
+
+    def test_three_way_mismatch_no_fire(self) -> None:
+        """raw_cnn / raw_hsv / confirmed が一致しない cell が多い場合は発火しない.
+
+        3 者一致数が少なければ diff も -8 未満になるため発火しない。
+        """
+        grid_red = _make_raw_grid(COLOR_RED, 20)
+        grid_blue = _make_raw_grid(COLOR_BLUE, 20)  # CNN は BLUE
+        # confirmed = RED 20 個、 CNN = BLUE (3 者不一致) → 3 者一致数 = 0
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_red, grid_blue, grid_red),
+            _make_frame_entry_with_raw(60, grid_red, grid_blue, grid_red),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0, "3 者不一致では 3 者一致数 = 0 で発火しないはず"
+
+    # --- 非発火ケース: raw が None (古い board_log) ---
+
+    def test_raw_none_no_fire(self) -> None:
+        """raw_cnn / raw_hsv が None の場合 (古い board_log) は評価不能で発火しない."""
+        grid = _make_raw_grid(COLOR_RED, 20)
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            # raw は None (= 古い board_log 形式)
+            _make_frame_entry_with_raw(0, grid, None, None),
+            _make_frame_entry_with_raw(60, _make_empty_grid(), None, None),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0, "raw = None のときは評価不能で発火しないはず"
+
+    # --- 非発火ケース: 閾値未満の減少 ---
+
+    def test_small_drop_below_threshold_no_fire(self) -> None:
+        """diff = -7 (< THREE_WAY_DROP_THRESHOLD = -8) は発火しない."""
+        from src.recognition_evaluator import THREE_WAY_DROP_THRESHOLD
+        grid_a = _make_raw_grid(COLOR_RED, 20)
+        grid_b = _make_raw_grid(COLOR_RED, 20 - (THREE_WAY_DROP_THRESHOLD - 1))
+        ev = RecognitionEvaluator()
+        ev.entries = [
+            _make_frame_entry_with_raw(0, grid_a, grid_a, grid_a),
+            _make_frame_entry_with_raw(60, grid_b, grid_b, grid_b),
+        ]
+        vs = ev.check_three_way_sudden_drop("1P")
+        assert len(vs) == 0
+
+    # --- backwards compat: from_jsonable で raw フィールドが読み込まれる ---
+
+    def test_from_jsonable_reads_raw_boards(self) -> None:
+        """from_jsonable() が p1_raw_cnn_board / p1_raw_hsv_board を正しく読む."""
+        raw_grid = _make_raw_grid(COLOR_RED, 5)
+        obj = {
+            "frame_idx": 10,
+            "t_sec": 0.17,
+            "p1_state": "stable",
+            "p2_state": "stable",
+            "p1_confirmed": raw_grid,
+            "p2_confirmed": None,
+            "p1_raw_cnn_board": raw_grid,
+            "p2_raw_cnn_board": None,
+            "p1_raw_hsv_board": raw_grid,
+            "p2_raw_hsv_board": None,
+        }
+        entry = FrameEntry.from_jsonable(obj)
+        assert entry.p1_raw_cnn_board == raw_grid
+        assert entry.p1_raw_hsv_board == raw_grid
+        assert entry.p2_raw_cnn_board is None
+
+    def test_from_jsonable_no_raw_fields_backward_compat(self) -> None:
+        """古い board_log (raw フィールドなし) では None が入る (backwards compat)."""
+        obj = {
+            "frame_idx": 50,
+            "t_sec": 0.83,
+            "p1_state": "stable",
+            "p2_state": "stable",
+            "p1_confirmed": None,
+            "p2_confirmed": None,
+        }
+        entry = FrameEntry.from_jsonable(obj)
+        assert entry.p1_raw_cnn_board is None
+        assert entry.p1_raw_hsv_board is None
+        assert entry.p2_raw_cnn_board is None
+        assert entry.p2_raw_hsv_board is None

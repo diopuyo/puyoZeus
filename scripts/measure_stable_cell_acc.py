@@ -153,6 +153,14 @@ POSTPROCESS_SIDE_BIAS_MIN_CELLS: int = 3
 # サブカテゴリ: empty_to_color の WARNING 閾値 (FAIL にはしない、情報提示のみ)
 # raw_cnn==raw_hsv==EMPTY なのに confirmed が色になっているケース (空→色FP)
 CORRUPTION_EMPTY_TO_COLOR_WARNING_RATE: float = 0.001  # 0.1% 超で WARNING
+
+# ============================
+# 持続 corruption 集計 (postprocess_corruption_persistent) 定数
+# ============================
+# N サンプルフレーム以上連続した corruption run のみを「持続」として計上する。
+# 診断結果: 1-2fr が 67.5% (1fr 点滅が 49.7%) のため 3fr 以上で点滅を除外できる。
+# --corruption-persist-frames N CLI 引数で上書き可能 (後方互換: default=3)。
+CORRUPTION_PERSIST_MIN_FRAMES: int = 3
 # ============================
 # データクラス
 # ============================
@@ -241,6 +249,25 @@ class VideoStats:
     # color_to_empty: raw_cnn==raw_hsv==色 なのに confirmed が EMPTY (色→空 消失)
     corruption_color_to_empty_count: int = 0
 
+    # ------------------------------------------------
+    # 持続 corruption 集計 (postprocess_corruption_persistent) フィールド
+    # N サンプルフレーム以上連続した corruption run のみを別計上する。
+    # 1fr 点滅 (49.7%) を除外し、真の持続誤認を可視化する。
+    # 後方互換のため全て default 付き。
+    # ------------------------------------------------
+    # 持続 corruption セル-フレーム 総数 (run 長 >= CORRUPTION_PERSIST_MIN_FRAMES の frame)
+    postprocess_corruption_persistent_count: int = 0
+    # サブカテゴリ別 持続 count (後方互換のため全て default=0)
+    corruption_persistent_empty_to_color_count: int = 0
+    corruption_persistent_color_to_color_count: int = 0
+    corruption_persistent_color_to_empty_count: int = 0
+    # 内部: per-cell の進行中 corruption run を追跡する dict
+    # キー: (side, row, col)  値: {"raw_val": int, "confirmed_val": int, "length": int, "subcategory": str}
+    # 直接参照禁止 (repr=False でデバッグ出力肥大化防止)。
+    _persist_run_state: dict = field(
+        default_factory=dict, repr=False, compare=False,
+    )
+
 
 # ============================
 # ユーティリティ
@@ -328,6 +355,10 @@ def _make_pipeline_cnn(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -375,6 +406,12 @@ def _make_pipeline_cnn(
             backwards compat: デフォルト False = 従来挙動。
         enable_ojama_tier1_warmup: True にすると OJAMA 専用 tier1 warmup を有効化。
             backwards compat: デフォルト False = 従来挙動。
+        enable_chain_formula_detection: True にすると掛け算式検知 CHAIN 早期発火を有効化。
+            backwards compat: デフォルト False = 従来挙動。
+        disable_per_video_hsv: True にすると per-video 手調整 HSV inject をスキップする。
+            OnlineHsvCalibrator は load_default で生成されるため自動 HSV 学習は継続する。
+            「自動 HSV + 既定 merged レンジのみ」の汎用精度測定用。
+            backwards compat: デフォルト False = 従来挙動と完全一致。
     """
     pipe = RecognitionPipeline.load_default(
         force_in_match=True,
@@ -396,23 +433,48 @@ def _make_pipeline_cnn(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+        enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
     )
-    _inject_hsv(pipe, _resolve_hsv_path(video_id))
+    # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
+    # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
+    if not disable_per_video_hsv:
+        _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
 
 
-def _make_pipeline_hsv_only(video_id: str) -> RecognitionPipeline:
+def _make_pipeline_hsv_only(
+    video_id: str,
+    disable_per_video_hsv: bool = False,
+) -> RecognitionPipeline:
     """HSV-only pipeline を構築する。
 
     cnn_override_prob=2.0 で CNN 採用閾値を 1.0 超にし、
     HybridClassifier が常に HSV 側を採用するよう強制する。
-    backwards compat: load_default の既存シグネチャに optional 引数追加のみ。
+
+    Args:
+        video_id: 動画 ID (per-video HSV 解決に使用)。
+        disable_per_video_hsv: True のとき per-video 手調整 HSV inject をスキップする。
+            OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
+            「自動 HSV + 既定 merged レンジのみ」の全 3 軸整合測定用。
+            backwards compat: デフォルト False = 従来挙動と完全一致。
+
+    Note:
+        disable_per_video_hsv=True 時は raw_cnn / raw_hsv / confirmed の全 3 軸が
+        手調整 HSV なしの自動 HSV のみで動作する。これにより 3 者合意 metric が
+        「完全自動条件での内部整合率」を測定する。
+        ただし CNN==HSV 両方が同じ誤りに合意した場合 corruption に出ず acc が
+        見かけ上保たれる fail-silent リスクが上がるため、viz 目視で補完すること。
     """
     pipe = RecognitionPipeline.load_default(
         cnn_override_prob=2.0,
         force_in_match=True,
     )
-    _inject_hsv(pipe, _resolve_hsv_path(video_id))
+    # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
+    # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
+    if not disable_per_video_hsv:
+        _inject_hsv(pipe, _resolve_hsv_path(video_id))
     return pipe
 
 
@@ -456,6 +518,7 @@ def _eval_one_frame(
     pipe_hsv: RecognitionPipeline,
     stats: VideoStats,
     disagreements: list[dict],
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
 ) -> None:
     """1 frame の認識・合意判定を行い stats を更新する。
 
@@ -463,6 +526,11 @@ def _eval_one_frame(
       raw_cnn   = res_cnn.pX.cnn_board  (ImageReader 直出力、物理推論 post-process 前)
       raw_hsv   = res_hsv.pX.cnn_board  (HSV-only pipeline の ImageReader 直出力)
       confirmed = res_cnn.pX.confirmed_board (CNN+物理推論 post-process 後の確定盤面)
+
+    Args:
+        persist_min_frames: 持続 corruption と見なす最小連続サンプルフレーム数。
+            デフォルト = CORRUPTION_PERSIST_MIN_FRAMES (= 3)。
+            後方互換: オプション引数のため既存呼出元は変更不要。
     """
     t_sec = fi / fps
     if fi % interval_frames != 0:
@@ -494,6 +562,9 @@ def _eval_one_frame(
                 cur = stats._non_stable_current_by_side[side]
                 if cur > stats.non_stable_max_consecutive:
                     stats.non_stable_max_consecutive = cur
+            # non-STABLE に遷移した = 進行中の corruption run を確定してリセット
+            # non-STABLE を挟んだら「連続サンプルフレームの継続性」が途切れる
+            _flush_corruption_persist_runs_for_side(side, persist_min_frames, stats)
             continue
         # STABLE フレームで non-stable カウントをリセット
         stats._non_stable_current_by_side[side] = 0
@@ -508,6 +579,7 @@ def _eval_one_frame(
             confirmed_board=sr_cnn.confirmed_board,
             stats=stats,
             disagreements=disagreements,
+            persist_min_frames=persist_min_frames,
         )
 
 
@@ -522,11 +594,14 @@ def _run_frame_loop(
     pipe_hsv: RecognitionPipeline,
     disagreements: list[dict],
     clip_duration_sec: float = 0.0,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
 ) -> VideoStats:
     """動画 frame ループを走らせ VideoStats を返す。
 
     clip_duration_sec: クリップ全体の秒数 (中盤末尾除外に使用)。
     0.0 = 不明 → 末尾除外を適用しない (後方互換)。
+    persist_min_frames: 持続 corruption と見なす最小連続サンプルフレーム数。
+        デフォルト = CORRUPTION_PERSIST_MIN_FRAMES (= 3)。後方互換: optional。
     """
     stats = VideoStats(video_id=video_id, is_holdout=is_holdout)
     stats.clip_duration_sec = clip_duration_sec
@@ -537,12 +612,15 @@ def _run_frame_loop(
         _eval_one_frame(
             video_id, fi, fps, interval_frames, frame,
             pipe_cnn, pipe_hsv, stats, disagreements,
+            persist_min_frames=persist_min_frames,
         )
         if fi % 300 == 0 and fi > 0:
             print(
                 f"  [progress] {fi}/{n_target} ({fi*100/max(n_target,1):.0f}%) "
                 f"agreed={stats.agreed_cells} total={stats.total_cells}"
             )
+    # 動画末端 (eof): 残存する全 active run を確定する
+    _flush_all_corruption_persist_runs(persist_min_frames, stats)
     return stats
 
 
@@ -571,6 +649,11 @@ def _process_video(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
+    disable_per_video_hsv: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -633,16 +716,24 @@ def _process_video(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+        enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        disable_per_video_hsv=disable_per_video_hsv,
     )
-    pipe_hsv = _make_pipeline_hsv_only(video_id)
+    # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
+    # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
+    pipe_hsv = _make_pipeline_hsv_only(video_id, disable_per_video_hsv=disable_per_video_hsv)
     print(
         f"[measure] {video_id}: fps={fps:.1f} target={n_target} "
         f"holdout={is_holdout} clip_duration={clip_duration_sec:.1f}s"
+        + (" [disable_per_video_hsv=ON: 全3軸自動HSVのみ]" if disable_per_video_hsv else "")
     )
     stats = _run_frame_loop(
         video_id, cap, fps, n_target, interval_frames,
         is_holdout, pipe_cnn, pipe_hsv, disagreements,
         clip_duration_sec=clip_duration_sec,
+        persist_min_frames=persist_min_frames,
     )
     cap.release()
     rate = stats.agreed_cells / stats.total_cells if stats.total_cells > 0 else 0.0
@@ -675,6 +766,11 @@ def _process_video_worker(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
+    disable_per_video_hsv: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -715,6 +811,11 @@ def _process_video_worker(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+        enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        persist_min_frames=persist_min_frames,
+        disable_per_video_hsv=disable_per_video_hsv,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -810,6 +911,120 @@ def _check_postprocess_corruption(
             })
 
 
+def _get_persist_subcategory(raw_val: int, confirmed_val: int) -> str:
+    """corruption の方向文字列を返す (持続 run 分類用)。
+
+    戻り値: "empty_to_color" / "color_to_color" / "color_to_empty"
+    """
+    if raw_val == COLOR_EMPTY and confirmed_val != COLOR_EMPTY:
+        return "empty_to_color"
+    if raw_val != COLOR_EMPTY and confirmed_val == COLOR_EMPTY:
+        return "color_to_empty"
+    return "color_to_color"
+
+
+def _update_corruption_persist_run(
+    side: str,
+    row: int,
+    col: int,
+    raw_val: int,
+    confirmed_val: int,
+    is_corruption: bool,
+    stats: "VideoStats",
+    persist_min_frames: int,
+) -> None:
+    """1 STABLE フレームの持続 corruption run を更新する。
+
+    corruption が継続中なら run length を +1 する。
+    run が終了した (corruption 解消 or 値変化) 場合は run を確定し、
+    run 長 >= persist_min_frames なら postprocess_corruption_persistent_count に計上する。
+    non-STABLE フレームは _flush_corruption_persist_runs_for_side で処理する。
+
+    Args:
+        is_corruption: 現フレームで raw==confirmed 違反か。
+        persist_min_frames: 持続と見なす最小フレーム数。
+    """
+    key = (side, row, col)
+    run = stats._persist_run_state.get(key)
+
+    if is_corruption:
+        subcat = _get_persist_subcategory(raw_val, confirmed_val)
+        if run is None:
+            # 新規 run 開始
+            stats._persist_run_state[key] = {
+                "raw_val": raw_val,
+                "confirmed_val": confirmed_val,
+                "length": 1,
+                "subcategory": subcat,
+            }
+        elif run["raw_val"] == raw_val and run["confirmed_val"] == confirmed_val:
+            # 同一 corruption が継続
+            run["length"] += 1
+        else:
+            # 値が変化した = 前の run を確定してから新規開始
+            _commit_persist_run(run, persist_min_frames, stats)
+            stats._persist_run_state[key] = {
+                "raw_val": raw_val,
+                "confirmed_val": confirmed_val,
+                "length": 1,
+                "subcategory": subcat,
+            }
+    else:
+        # corruption が解消された = run を確定
+        if run is not None:
+            _commit_persist_run(run, persist_min_frames, stats)
+            del stats._persist_run_state[key]
+
+
+def _commit_persist_run(
+    run: dict,
+    persist_min_frames: int,
+    stats: "VideoStats",
+) -> None:
+    """run を確定して持続 corruption に計上する (run 長 >= persist_min_frames 時のみ)。
+
+    1 run に含まれる全フレームを計上するのではなく、
+    run 長が閾値以上かどうかのみで判定して run 長分を加算する。
+    この方式により「N fr 以上連続した corruption のみ」を集計できる。
+    """
+    if run["length"] < persist_min_frames:
+        return
+    stats.postprocess_corruption_persistent_count += run["length"]
+    subcat = run["subcategory"]
+    if subcat == "empty_to_color":
+        stats.corruption_persistent_empty_to_color_count += run["length"]
+    elif subcat == "color_to_color":
+        stats.corruption_persistent_color_to_color_count += run["length"]
+    elif subcat == "color_to_empty":
+        stats.corruption_persistent_color_to_empty_count += run["length"]
+
+
+def _flush_corruption_persist_runs_for_side(
+    side: str,
+    persist_min_frames: int,
+    stats: "VideoStats",
+) -> None:
+    """指定 side の全 active run を確定する (non-STABLE 遷移 or eof 時に呼ぶ)。
+
+    non-STABLE フレームを挟んだ場合は run をリセットする。
+    これにより「連続サンプルフレームでの持続」を保証する。
+    """
+    keys_to_remove = [k for k in stats._persist_run_state if k[0] == side]
+    for key in keys_to_remove:
+        run = stats._persist_run_state.pop(key)
+        _commit_persist_run(run, persist_min_frames, stats)
+
+
+def _flush_all_corruption_persist_runs(
+    persist_min_frames: int,
+    stats: "VideoStats",
+) -> None:
+    """全 side の全 active run を確定する (動画 eof 時に呼ぶ)。"""
+    for run in list(stats._persist_run_state.values()):
+        _commit_persist_run(run, persist_min_frames, stats)
+    stats._persist_run_state.clear()
+
+
 def _record_cell(
     video_id: str, fi: int, t_sec: float, side: str,
     row: int, col: int,
@@ -879,6 +1094,7 @@ def _eval_side_frame(
     confirmed_board: object,
     stats: VideoStats,
     disagreements: list[dict],
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
 ) -> None:
     """1 サイド × 1 frame の cell ごとに 3 者独立合意判定し stats を更新する。
 
@@ -886,6 +1102,9 @@ def _eval_side_frame(
         raw_cnn_board: CNN+HSV hybrid ImageReader 直出力 (物理推論 post-process 前)。
         raw_hsv_board: HSV-only pipeline の ImageReader 直出力 (CNN 無効化済)。
         confirmed_board: CNN+物理推論 post-process 後の確定盤面 (STABLE 時のみ非 None)。
+        persist_min_frames: 持続 corruption と見なす最小連続サンプルフレーム数。
+            デフォルト = CORRUPTION_PERSIST_MIN_FRAMES (= 3)。
+            後方互換: オプション引数のため既存呼出元は変更不要。
     """
     for row in range(BOARD_ROWS):
         for col in range(BOARD_COLS):
@@ -908,10 +1127,21 @@ def _eval_side_frame(
                 stats, disagreements,
             )
             # 後処理破壊検知: raw_cnn==raw_hsv なのに confirmed が異なるセルを検知
+            is_corruption = (
+                raw_cnn_val == raw_hsv_val
+                and confirmed_val != raw_cnn_val
+                and raw_cnn_val not in (COLOR_UNKNOWN,)
+                and confirmed_val not in (COLOR_UNKNOWN,)
+            )
             _check_postprocess_corruption(
                 video_id, fi, t_sec, side, row, col,
                 raw_cnn_val, raw_hsv_val, confirmed_val,
                 stats,
+            )
+            # 持続 corruption run 追跡: is_corruption を用いて run を更新する
+            _update_corruption_persist_run(
+                side, row, col, raw_cnn_val, confirmed_val,
+                is_corruption, stats, persist_min_frames,
             )
     # I1 メトリクス集計: confirmed_board の col 別 UNKNOWN 率 + 中盤 EMPTY 率
     if confirmed_board is not None:
@@ -1399,6 +1629,46 @@ def _aggregate_corruption_subcategory(
     }
 
 
+def _aggregate_persistent_corruption(
+    stats_list: list["VideoStats"],
+    total_stable_cells: int,
+) -> dict:
+    """持続 corruption (N fr 以上連続) を集計して返す。
+
+    per-frame 全件集計 (postprocess_corruption) とは独立した別集計で、
+    1fr 点滅ノイズを除外した「真の持続誤認」のみを可視化する。
+    既存フィールドには一切影響しない (後方互換追加)。
+
+    Returns:
+        count, rate, subcategory, persist_min_frames を含む dict。
+    """
+    total_persist = sum(s.postprocess_corruption_persistent_count for s in stats_list)
+    denom = total_stable_cells if total_stable_cells > 0 else 1
+    rate = total_persist / denom
+
+    e2c = sum(s.corruption_persistent_empty_to_color_count for s in stats_list)
+    c2c = sum(s.corruption_persistent_color_to_color_count for s in stats_list)
+    c2e = sum(s.corruption_persistent_color_to_empty_count for s in stats_list)
+
+    def _r(n: int) -> float:
+        return n / denom
+
+    return {
+        "count": total_persist,
+        "rate": rate,
+        "persist_min_frames": CORRUPTION_PERSIST_MIN_FRAMES,
+        "subcategory": {
+            "empty_to_color": {"count": e2c, "rate": _r(e2c)},
+            "color_to_color": {"count": c2c, "rate": _r(c2c)},
+            "color_to_empty": {"count": c2e, "rate": _r(c2e)},
+        },
+        "note": (
+            f"N>={CORRUPTION_PERSIST_MIN_FRAMES} fr 連続の corruption run のみ集計。"
+            "1fr 点滅 (49.7%) 等の短期ノイズを除外した真の持続誤認を示す。"
+        ),
+    }
+
+
 def _aggregate_corruption(
     stats_list: list["VideoStats"],
     total_stable_cells: int,
@@ -1448,6 +1718,11 @@ def _aggregate_corruption(
     # サブカテゴリ別集計 (後方互換: 既存フィールドに追加)
     subcategory = _aggregate_corruption_subcategory(stats_list, total_stable_cells)
 
+    # 持続 corruption 集計 (postprocess_corruption_persistent)
+    # N サンプルフレーム以上連続した corruption run のみを別集計する。
+    # 1fr 点滅 (49.7%) を除外して真の持続誤認を可視化する。
+    persistent_section = _aggregate_persistent_corruption(stats_list, total_stable_cells)
+
     return {
         "count": total_corruption,
         "rate": rate,
@@ -1458,6 +1733,8 @@ def _aggregate_corruption(
         "log": log,
         # サブカテゴリ別 count / rate (後方互換: 追加フィールド)
         "subcategory": subcategory,
+        # 持続 corruption 集計 (後方互換: 追加フィールド)
+        "postprocess_corruption_persistent": persistent_section,
         # fail-silent 罠注記: raw_cnn==raw_hsv==誤りの全列崩壊型は本指標で検知不可
         "blind_spot_note": (
             "raw_cnn==raw_hsv==誤り の全列崩壊型は本指標では検知不可。"
@@ -1836,6 +2113,49 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--chain-formula-detection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_chain_formula_detection",
+        help=(
+            "機能D: 連鎖開始 掛け算式 検知を制御する。 "
+            "True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ "
+            "ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が "
+            "CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。 "
+            "機能B (score 急増経路) と独立フラグ。 "
+            "ライブラリ default=True (有効、 2026-06-03 採用)。 "
+            "--no-chain-formula-detection で無効化 (旧挙動比較用)。"
+        ),
+    )
+    p.add_argument(
+        "--hsv-deferred-consensus",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_hsv_deferred_consensus",
+        help=(
+            "案 Y-4: HSV-first commit + deferred consensus を制御する。 "
+            "True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、 "
+            "後続 DEFERRED_MAX_FRAMES 内の CNN==HSV consensus 投票で確定させる。 "
+            "ライブラリ default=False (無効)。 "
+            "--hsv-deferred-consensus で有効化、 --no-hsv-deferred-consensus で無効化。"
+        ),
+    )
+    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    p.add_argument(
+        "--ojama-warning-glow-guard",
+        action="store_true",
+        default=False,
+        dest="enable_ojama_warning_glow_guard",
+        help=(
+            "不具合B 対処: 予告おじゃま発光ガードを有効化する。 "
+            "相手連鎖の予告おじゃま演出による盤面上部多色発光を V_high_ratio で検知し、 "
+            "STABLE 中の confirmed_board を frozen_board で保護する。 "
+            "黄ぷよに発光が重なる黄(4)→おじゃま(9)誤認を防ぐ。 "
+            "ライブラリ default=False (無効)。 --ojama-warning-glow-guard で有効化。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -1843,6 +2163,35 @@ def _parse_args() -> argparse.Namespace:
             "動画単位の並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。 "
             "2 以上で ProcessPoolExecutor (spawn) による並列処理を有効化。 "
             "推奨上限は CPU コア数 (GPU 使用率が低い場合に有効)。"
+        ),
+    )
+    p.add_argument(
+        "--corruption-persist-frames",
+        type=int,
+        default=CORRUPTION_PERSIST_MIN_FRAMES,
+        dest="corruption_persist_frames",
+        help=(
+            "持続 corruption と見なす最小連続サンプルフレーム数。 "
+            f"N フレーム以上連続した corruption run のみを postprocess_corruption_persistent に計上する。 "
+            f"デフォルト {CORRUPTION_PERSIST_MIN_FRAMES} (1-2fr が 67.5%% のため 3fr 以上で点滅除外)。 "
+            "既存 postprocess_corruption (per-frame 全件) は一切変更しない (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--no-per-video-hsv",
+        action="store_true",
+        default=False,
+        dest="disable_per_video_hsv",
+        help=(
+            "per-video 手調整 HSV inject をスキップする (完全自動 HSV 精度測定用)。 "
+            "--no-per-video-hsv で inject を無効化し raw_cnn / raw_hsv / confirmed の "
+            "全 3 軸を自動 HSV (OnlineHsvCalibrator) + 既定 merged レンジのみで動作させる。 "
+            "3 者合意 metric が完全自動条件での内部整合率を測定する。 "
+            "acc の手調整あり (99.87%%) との delta が手調整 HSV の寄与量を示す。 "
+            "注意: CNN==HSV 両軸が同じ誤りに合意した場合 corruption に出ず "
+            "acc が見かけ上保たれる fail-silent リスクが上がる。 "
+            "viz 目視 + check_three_way_sudden_drop で補完すること。 "
+            "デフォルト False = 従来挙動完全一致 (backwards compat)。"
         ),
     )
     return p.parse_args()
@@ -1883,6 +2232,11 @@ def _collect_results(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
+    disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -1942,12 +2296,17 @@ def _collect_results(
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
             enable_ojama_visual_detection=enable_ojama_visual_detection,
+            enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            persist_min_frames=persist_min_frames,
+            disable_per_video_hsv=disable_per_video_hsv,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -1970,6 +2329,11 @@ def _collect_results(
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+        enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        persist_min_frames=persist_min_frames,
+        disable_per_video_hsv=disable_per_video_hsv,
     )
 
 
@@ -1997,6 +2361,11 @@ def _collect_serial(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
+    disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2026,6 +2395,11 @@ def _collect_serial(
             enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+            enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            persist_min_frames=persist_min_frames,
+            disable_per_video_hsv=disable_per_video_hsv,
         )
         stats_list.append(vstats)
     return stats_list
@@ -2056,6 +2430,11 @@ def _collect_parallel(
     enable_ojama_tier1_warmup: bool = False,
     enable_chain_score_early_fire: bool = False,
     enable_chain_exit_warmup: bool = False,
+    enable_chain_formula_detection: bool = False,
+    enable_hsv_deferred_consensus: bool = False,
+    enable_ojama_warning_glow_guard: bool = False,
+    persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
+    disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -2099,6 +2478,11 @@ def _collect_parallel(
                 enable_ojama_tier1_warmup,
                 enable_chain_score_early_fire,
                 enable_chain_exit_warmup,
+                enable_chain_formula_detection,
+                enable_hsv_deferred_consensus,
+                enable_ojama_warning_glow_guard,
+                persist_min_frames,
+                disable_per_video_hsv,
             )
             futures[fut] = vid
 
@@ -2274,7 +2658,20 @@ def main() -> int:
     enable_chain_exit_warmup: bool = bool(
         getattr(args, "enable_chain_exit_warmup", False)
     )
+    enable_chain_formula_detection: bool = bool(
+        getattr(args, "enable_chain_formula_detection", False)
+    )
+    enable_hsv_deferred_consensus: bool = bool(
+        getattr(args, "enable_hsv_deferred_consensus", False)
+    )
+    enable_ojama_warning_glow_guard: bool = bool(
+        getattr(args, "enable_ojama_warning_glow_guard", False)
+    )
     workers: int = max(1, args.workers)
+    # --corruption-persist-frames: 1 以上であることを保証する
+    persist_min_frames: int = max(1, int(getattr(args, "corruption_persist_frames", CORRUPTION_PERSIST_MIN_FRAMES)))
+    # per-video 手調整 HSV inject 無効化フラグ (汎用精度測定用)
+    disable_per_video_hsv: bool = bool(getattr(args, "disable_per_video_hsv", False))
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
@@ -2312,6 +2709,13 @@ def main() -> int:
             "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
         )
     disagreements: list[dict] = []
+    print(f"[measure] corruption_persist_frames={persist_min_frames} (persistent corruption 集計閾値)")
+    # per-video HSV inject の状態をログ表示
+    if disable_per_video_hsv:
+        print(
+            "[measure] disable_per_video_hsv=ON "
+            "(手調整 per-video HSV inject スキップ: 自動 HSV + merged レンジのみで評価)"
+        )
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
         args.max_frames, args.sample_interval, disagreements,
@@ -2334,6 +2738,11 @@ def main() -> int:
         enable_ojama_tier1_warmup=enable_ojama_tier1_warmup,
         enable_chain_score_early_fire=enable_chain_score_early_fire,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+        enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        persist_min_frames=persist_min_frames,
+        disable_per_video_hsv=disable_per_video_hsv,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -2390,6 +2799,12 @@ def main() -> int:
             "enable_ojama_infer_guard": enable_ojama_infer_guard,
             "enable_ojama_settle_detection": enable_ojama_settle_detection,
             "enable_ojama_tier1_warmup": enable_ojama_tier1_warmup,
+            # 持続 corruption 集計閾値 (後日比較用)
+            "corruption_persist_frames": persist_min_frames,
+            # per-video 手調整 HSV inject 無効化フラグ (汎用精度測定用)
+            # True = inject スキップ = 「自動 HSV + merged レンジのみ」での評価
+            # False = inject 有効 = 従来挙動と完全一致 (backwards compat)
+            "disable_per_video_hsv": disable_per_video_hsv,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加
