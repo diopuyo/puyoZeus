@@ -22,8 +22,8 @@ if str(_PROJ) not in sys.path:
     sys.path.insert(0, str(_PROJ))
 
 from src.board import (
-    BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_OJAMA,
-    COLOR_UNKNOWN, COLOR_YELLOW, Board,
+    BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN,
+    COLOR_OJAMA, COLOR_PURPLE, COLOR_UNKNOWN, COLOR_YELLOW, Board,
 )
 from src.image_reader import BoardRegion, VISIBLE_ROWS
 from src.ojama_warning_glow_guard import (
@@ -220,17 +220,21 @@ class TestApplyGlowGuard:
         # frozen の YELLOW で保護される
         assert int(result.get(5, 2)) == COLOR_YELLOW
 
-    def test_on_new_puyo_becomes_unknown(self) -> None:
-        """glow_active=True かつ frozen が空 かつ confirmed に有色 → UNKNOWN 留保。"""
+    def test_on_new_puyo_not_touched(self) -> None:
+        """v2: glow_active=True かつ frozen が空 かつ confirmed に有色 → 不触 (confirmed のまま).
+
+        v1 では UNKNOWN 留保だったが、v2 では新規ぷよは触らない。
+        「confirmed=おじゃま かつ frozen=有色」の条件を満たさないためスキップされる。
+        """
         state = GlowGuardState()
         state.glow_active = True
         # frozen は空 (発光前に置かれたぷよがない)
         state.frozen_board = _make_board()
-        # 発光中に新しく「色」が見えた
+        # 発光中に新しく「色」が見えた (confirmed に青ぷよ)
         confirmed = _make_board({(3, 1): COLOR_BLUE})
         result = apply_glow_guard(confirmed, state, is_glow_active=True)
-        # 新規出現ぷよは UNKNOWN 留保
-        assert int(result.get(3, 1)) == COLOR_UNKNOWN
+        # v2: 新規ぷよは不触 → confirmed の BLUE がそのまま残る
+        assert int(result.get(3, 1)) == COLOR_BLUE
 
     def test_on_no_frozen_board_returns_confirmed(self) -> None:
         """frozen_board=None の場合は confirmed をそのまま返す (安全弁)。"""
@@ -251,6 +255,71 @@ class TestApplyGlowGuard:
         for r in range(BOARD_ROWS):
             for c in range(BOARD_COLS):
                 assert int(result.get(r, c)) == COLOR_EMPTY
+
+    # ---- v2 ターゲット型 固有テスト ----------------------------------------
+
+    def test_v2_ojama_misrecognition_restored(self) -> None:
+        """v2: confirmed=おじゃま かつ frozen=有色 → frozen 色に復元する (主目的).
+
+        発光で黄(4)→おじゃま(9)に誤認されたセルを frozen の黄に戻す。
+        これが v2 の唯一の介入対象。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # 発光前は黄ぷよがあった
+        state.frozen_board = _make_board({(2, 3): COLOR_YELLOW})
+        # 発光中に誤認でおじゃまになった
+        confirmed = _make_board({(2, 3): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # frozen の YELLOW に復元される
+        assert int(result.get(2, 3)) == COLOR_YELLOW
+
+    def test_v2_correct_color_cell_not_touched(self) -> None:
+        """v2: confirmed に正常な色(おじゃまでない)があるセルは一切触れない.
+
+        frozen にも色があっても、confirmed がおじゃまでなければ不触。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen は緑
+        state.frozen_board = _make_board({(5, 0): COLOR_GREEN})
+        # confirmed も正常に緑 (誤認なし)
+        confirmed = _make_board({(5, 0): COLOR_GREEN})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # confirmed の GREEN がそのまま (frozen と同じ値でも介入しない)
+        assert int(result.get(5, 0)) == COLOR_GREEN
+
+    def test_v2_originally_ojama_cell_not_touched(self) -> None:
+        """v2: frozen もおじゃまで confirmed もおじゃまのセルは不触.
+
+        frozen=おじゃまの場合は「frozen_is_colored」が False になるため復元しない。
+        元々おじゃまだったセルを誤って色ぷよに戻さないことを保証する。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen からおじゃまがあった (正常なおじゃまセル)
+        state.frozen_board = _make_board({(1, 2): COLOR_OJAMA})
+        # confirmed もおじゃままま
+        confirmed = _make_board({(1, 2): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # おじゃまのまま (不触)
+        assert int(result.get(1, 2)) == COLOR_OJAMA
+
+    def test_v2_empty_cell_not_touched(self) -> None:
+        """v2: frozen が有色でも confirmed が空のセルは不触.
+
+        「confirmed=空 かつ frozen=有色」は復元対象外。
+        ぷよが消えた正当な空を誤って色で埋めない。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen に紫があった
+        state.frozen_board = _make_board({(4, 5): COLOR_PURPLE})
+        # confirmed は空 (連鎖消去後など正当な空)
+        confirmed = _make_board()
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # 空のまま (不触)
+        assert int(result.get(4, 5)) == COLOR_EMPTY
 
 
 # ============================

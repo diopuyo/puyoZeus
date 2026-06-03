@@ -191,13 +191,19 @@ def apply_glow_guard(
     state: GlowGuardState,
     is_glow_active: bool,
 ) -> Board:
-    """発光保護を適用した confirmed_board を返す.
+    """発光保護を適用した confirmed_board を返す (v2: ターゲット型).
 
-    発光中 (is_glow_active=True) かつ frozen_board が存在する場合:
-      - frozen に有色セル → frozen 色を維持 (予告おじゃまによる誤認を抑制)
-      - frozen が空 かつ confirmed に有色 → COLOR_UNKNOWN に留保
-        (新規出現ぷよ: stable_recovery_gate が自然復旧させる)
-      - それ以外 (両方空など) → confirmed をそのまま使用
+    v2 の適用ルール (正常セルには一切触れない):
+      発光中 (is_glow_active=True) かつ frozen_board が存在する場合:
+        - confirmed が おじゃま(COLOR_OJAMA=9) かつ
+          frozen が有色 (非空・非おじゃま・非UNKNOWN) のセルのみ → frozen 色に復元。
+          (= 発光演出が色ぷよをおじゃまに誤らせた場合のみピンポイント修正)
+        - それ以外のセルは confirmed をそのまま使用 (不触)。
+
+    v1 との差分:
+      - 「frozen 有色なら全部上書き」を廃止。おじゃま誤認セルのみ復元する。
+      - 「frozen 空 + confirmed 有色 → UNKNOWN 留保」を廃止。
+        過剰発火による corruption 増を防ぐ。
 
     発光 OFF 中: confirmed をそのまま返す (変更なし)。
 
@@ -207,7 +213,7 @@ def apply_glow_guard(
         is_glow_active: update_glow_state の戻り値。
 
     Returns:
-        保護を適用した Board (発光 OFF 時は confirmed と同一オブジェクト)。
+        保護を適用した Board (変更なし or おじゃま誤認セルのみ復元済み)。
     """
     if not is_glow_active or state.frozen_board is None:
         return confirmed
@@ -218,14 +224,11 @@ def apply_glow_guard(
         for c in range(BOARD_COLS):
             frozen_v = int(frozen.get(r, c))
             conf_v = int(confirmed.get(r, c))
-            frozen_has_color = frozen_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
-            conf_has_color = conf_v not in (COLOR_EMPTY, COLOR_UNKNOWN)
-            if frozen_has_color:
-                # frozen に色がある → 発光演出による誤変更を frozen で上書き
+            # 「confirmed=おじゃま かつ frozen=有色(非空・非おじゃま・非UNKNOWN)」のみ復元
+            # = 発光で色ぷよがおじゃまに誤認された場合だけをピンポイントで打ち消す
+            conf_is_ojama = conf_v == COLOR_OJAMA
+            frozen_is_colored = frozen_v not in (COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN)
+            if conf_is_ojama and frozen_is_colored:
                 result.set(r, c, frozen_v)
-            elif not frozen_has_color and conf_has_color:
-                # frozen は空だが confirmed に色 → 新規ぷよ: UNKNOWN 留保
-                # stable_recovery_gate が CNN==HSV 合意で自然復旧させる
-                result.set(r, c, COLOR_UNKNOWN)
-            # 両方空 or その他: confirmed のまま (result は copy 済み)
+            # それ以外 (正常色・空・元々おじゃま・新規ぷよ): 不触 (confirmed のまま)
     return result
