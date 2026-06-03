@@ -74,6 +74,16 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
+# 機能D: 連鎖開始 掛け算式 検知 (enable_chain_formula_detection 用)。
+# score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ ink_ratio が
+# CHAIN_FORMULA_INK_RATIO_MIN より高い場合に連鎖開始とみなす。
+# ink_ratio ガードはメニュー/試合外の真黒 ROI (ink_ratio≈0) を除外するためのもの。
+# 実測: formula=0.975-1.000、通常スコア=1.000、真黒=0.000。
+from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN  # noqa: E402
+# 連続フレーム要件: 単発 OCR ノイズを除去するため N frame 連続で条件成立を要求する。
+# 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
+CHAIN_FORMULA_CONSEC_FRAMES: int = 2
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -98,6 +108,7 @@ from src.next_slide_detector import (
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
     correct_landing_cells_by_observed_color,
+    DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
 from src.state_detectors import (
@@ -511,6 +522,28 @@ class RecognitionPipeline:
         # 既存 enable_warmup_guard の CHAIN→STABLE 特化版。時間ベースで fps 非依存に実装。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_warmup: bool = False,
+        # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02)。
+        # True にすると score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ
+        # ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN かつ last_score > 0 が
+        # CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入する。
+        # 機能B (score 急増経路) と独立フラグ。どちらか一方だけ有効にすることも可能。
+        # 誤発火ガード: ink_ratio (黒 ROI 除外) + 連続 2frame + last_score>0 の AND 条件。
+        # 2026-06-03 採用 (default ON): v70 等 16 動画 A/B で連鎖突入 0.2-2.5s 早期化 +
+        # baseline 黙過の小連鎖検知、non_stable最大 62→46 / corruption 1.57%→1.35% /
+        # 空→色FP 0.27%→0.10% と全軸改善 (user viz 承認)。
+        # False に戻すには enable_chain_formula_detection=False を明示する。
+        enable_chain_formula_detection: bool = True,
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
+        # 後続フレームの CNN==HSV consensus 投票で確定させる。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_hsv_deferred_consensus: bool = False,
+        # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
+        # True にすると相手連鎖の予告おじゃま演出による盤面上部多色発光を検知し、
+        # STABLE 中の confirmed_board を frozen_board で保護する。
+        # 黄ぷよに発光が重なり黄(4)→おじゃま(9)誤認→連鎖誤消去を防ぐ。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_warning_glow_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -810,6 +843,12 @@ class RecognitionPipeline:
         self._enable_chain_exit_warmup: bool = bool(enable_chain_exit_warmup)
         self._chain_exit_until_1p: float = 0.0  # CHAIN→STABLE 後の凍結終了 time_sec
         self._chain_exit_until_2p: float = 0.0
+        # 機能D: 掛け算式検知フラグ + 連続フレームカウンタ (1P/2P 別 state-holding wrapper)。
+        # カウンタは update 呼出毎に条件成立なら +1、不成立でリセット。
+        # CHAIN_FORMULA_CONSEC_FRAMES 達した時点で _apply_chain_score_early_fire を呼ぶ。
+        self._enable_chain_formula_detection: bool = bool(enable_chain_formula_detection)
+        self._formula_consec_1p: int = 0  # 掛け算式 連続フレームカウンタ 1P
+        self._formula_consec_2p: int = 0  # 掛け算式 連続フレームカウンタ 2P
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -826,6 +865,36 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # True で infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
+        # 後続フレームの CNN==HSV consensus 投票で確定させる。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_hsv_deferred_consensus: bool = bool(enable_hsv_deferred_consensus)
+        # deferred landing state: 1P/2P 独立。None = pending なし。
+        # dict keys:
+        #   board_std: Board (HSV 素返し候補 = 安全 fallback, 既に confirmed に書込済)
+        #   board_rev: Board (逆順候補)
+        #   base_cells: list[(r, c)] (着地 2 cell 座標)
+        #   votes_std: int (board_std の累積合意票)
+        #   votes_rev: int (board_rev の累積合意票)
+        #   frames_left: int (残り保留フレーム数)
+        self._deferred_landing_1p: dict | None = None
+        self._deferred_landing_2p: dict | None = None
+        # _set_deferred_confirmed 直後の T2 スキップ用フラグ (1P/2P 別)。
+        # deferred 確定した frame で T2 が旧 prev_stable で上書きするのを防ぐ。
+        self._deferred_just_committed_1p: bool = False
+        self._deferred_just_committed_2p: bool = False
+        # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
+        # True で GlowGuardState を 1P/2P 別に保持し、発光中は confirmed 保護。
+        # False (default) なら None のままで全処理をスキップ (完全挙動不変)。
+        self._enable_ojama_warning_glow_guard: bool = bool(enable_ojama_warning_glow_guard)
+        if self._enable_ojama_warning_glow_guard:
+            from src.ojama_warning_glow_guard import GlowGuardState as _GGS
+            self._glow_guard_1p: "_GGS | None" = _GGS()
+            self._glow_guard_2p: "_GGS | None" = _GGS()
+        else:
+            self._glow_guard_1p = None
+            self._glow_guard_2p = None
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -1040,6 +1109,15 @@ class RecognitionPipeline:
         # 機能C: CHAIN → STABLE warmup (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_warmup: bool = False,
+        # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02 実装, 2026-06-03 採用 default ON)。
+        # 全軸改善 + user viz 承認。False に戻すには明示指定する。
+        enable_chain_formula_detection: bool = True,
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_hsv_deferred_consensus: bool = False,
+        # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_warning_glow_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1187,6 +1265,9 @@ class RecognitionPipeline:
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
+            enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
+            enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         )
 
     # ------------------------------------------------------------------
@@ -1288,6 +1369,18 @@ class RecognitionPipeline:
         # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
         self._chain_exit_until_1p = 0.0
         self._chain_exit_until_2p = 0.0
+        # 案 Y-4 deferred landing state リセット
+        self._deferred_landing_1p = None
+        self._deferred_landing_2p = None
+        self._deferred_just_committed_1p = False
+        self._deferred_just_committed_2p = False
+        # 不具合B 対処: 予告おじゃま発光ガード state リセット (試合切替時)
+        if self._glow_guard_1p is not None:
+            from src.ojama_warning_glow_guard import GlowGuardState as _GGS
+            self._glow_guard_1p = _GGS()
+        if self._glow_guard_2p is not None:
+            from src.ojama_warning_glow_guard import GlowGuardState as _GGS
+            self._glow_guard_2p = _GGS()
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1456,6 +1549,9 @@ class RecognitionPipeline:
             # cycle 71v-B: ever_seen も試合切り替えでリセット
             self._ever_seen_colors_1p.clear()
             self._ever_seen_colors_2p.clear()
+            # 機能D: 試合切替で掛け算式 連続フレームカウンタをリセット
+            self._formula_consec_1p = 0
+            self._formula_consec_2p = 0
 
         # 2. CNN raw board 取得 (BG FP 採取より先に必要)
         # I1 対応 A: bg_fp 採取前は pre_capture_mode を on にして tier 1 を無効化
@@ -1722,6 +1818,69 @@ class RecognitionPipeline:
                 )
                 if time_sec < eff_until_2p:
                     chain_ev_2p = self._active_chain_2p
+
+        # 4c. 機能D: 掛け算式検知 CHAIN 早期発火 (enable_chain_formula_detection=True 時のみ)。
+        # score ROI の OCR が None (掛け算式表示) かつ ink_ratio > MIN かつ last_score > 0 が
+        # CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入させる。
+        # 連続カウンタは pipeline 側で管理 (state-holding wrapper)、検出本体は stateless。
+        # chain_banned / 既に CHAIN 中の場合は発火をスキップ。
+        if self._enable_chain_formula_detection and is_active and not chain_banned:
+            _last_1p = (
+                self._score_tracker_1p.last_score
+                if self._score_tracker_1p is not None else None
+            )
+            _last_2p = (
+                self._score_tracker_2p.last_score
+                if self._score_tracker_2p is not None else None
+            )
+            _formula_1p = self._check_formula_detected(
+                frame, self._score_ocr, "1P", _last_1p,
+            )
+            _formula_2p = self._check_formula_detected(
+                frame, self._score_ocr, "2P", _last_2p,
+            )
+            # 連続カウンタ更新
+            self._formula_consec_1p = (
+                self._formula_consec_1p + 1 if _formula_1p else 0
+            )
+            self._formula_consec_2p = (
+                self._formula_consec_2p + 1 if _formula_2p else 0
+            )
+            # 連続フレーム数を満たしたら発火
+            if self._formula_consec_1p >= CHAIN_FORMULA_CONSEC_FRAMES:
+                self._apply_chain_formula_early_fire(
+                    side="1P", time_sec=time_sec,
+                    prev_confirmed=self._prev_confirmed_1p,
+                )
+                self._formula_consec_1p = 0  # 発火後リセット
+                if self._active_chain_1p is not None and chain_ev_1p is None:
+                    eff_until_1p = (
+                        self._chain_event_max_until_1p
+                        if (
+                            self._enable_game_event_chain_exit
+                            and self._chain_event_max_until_1p > self._chain_until_1p
+                        )
+                        else self._chain_until_1p
+                    )
+                    if time_sec < eff_until_1p:
+                        chain_ev_1p = self._active_chain_1p
+            if self._formula_consec_2p >= CHAIN_FORMULA_CONSEC_FRAMES:
+                self._apply_chain_formula_early_fire(
+                    side="2P", time_sec=time_sec,
+                    prev_confirmed=self._prev_confirmed_2p,
+                )
+                self._formula_consec_2p = 0  # 発火後リセット
+                if self._active_chain_2p is not None and chain_ev_2p is None:
+                    eff_until_2p = (
+                        self._chain_event_max_until_2p
+                        if (
+                            self._enable_game_event_chain_exit
+                            and self._chain_event_max_until_2p > self._chain_until_2p
+                        )
+                        else self._chain_until_2p
+                    )
+                    if time_sec < eff_until_2p:
+                        chain_ev_2p = self._active_chain_2p
 
         # 4b. next_pair 検出 (1P/2P 両方、共通色なので detect_both で OK)
         # 2026-05-10: slide motion 中は ネクスト puyo が画面で動いており認識結果が
@@ -2460,6 +2619,96 @@ class RecognitionPipeline:
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
 
+    @staticmethod
+    def _check_formula_detected(
+        frame: "np.ndarray",
+        score_ocr: "ScoreOcr | None",
+        side: str,
+        last_score: "int | None",
+    ) -> bool:
+        """機能D: 掛け算式表示を stateless に判定する。
+
+        AND 条件:
+          1. score_ocr が None でなく OCR 結果が None (NCC conf 低下で読めない)
+          2. score ROI の ink_ratio > CHAIN_FORMULA_INK_RATIO_MIN (黒 ROI 除外)
+          3. last_score > 0 (試合進行中の担保)
+
+        Args:
+            frame: 1920x1080 BGR フレーム。
+            score_ocr: ScoreOcr インスタンス。None なら常に False。
+            side: "1P" or "2P"
+            last_score: 直前に読めた score 値。None または 0 なら試合外とみなす。
+
+        Returns:
+            True = 掛け算式検知条件成立。
+        """
+        from src.score_ocr import (
+            _crop_score_roi, _ensure_1080p, compute_score_roi_ink_ratio,
+        )
+        if score_ocr is None:
+            return False
+        if last_score is None or last_score <= 0:
+            return False
+        f = _ensure_1080p(frame)
+        if f is None:
+            return False
+        score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
+        if score_val is not None:
+            return False  # OCR 成功 = 通常スコア表示
+        roi = _crop_score_roi(f, side)  # type: ignore[arg-type]
+        ir = compute_score_roi_ink_ratio(roi)
+        return ir > CHAIN_FORMULA_INK_RATIO_MIN
+
+    def _apply_chain_formula_early_fire(
+        self,
+        side: str,
+        time_sec: float,
+        prev_confirmed: "Board | None",
+    ) -> None:
+        """機能D: 掛け算式検知で即 CHAIN 突入シグナルを設定する。
+
+        _apply_chain_score_early_fire と同パターン。
+        既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        Args:
+            side: "1P" or "2P"
+            time_sec: 現フレームの時刻。
+            prev_confirmed: 連鎖前確定盤面 (before_board 用)。
+        """
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                return
+        else:
+            if self._active_chain_2p is not None:
+                return
+        before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        # 疑似 ChainEvent を生成 (score は不明なため 0)
+        pseudo = ChainEvent(
+            trigger_sec=time_sec,
+            end_sec=time_sec + self._chain_hold_per_step_sec,
+            before_board=before,
+            chain_count=1,
+            total_erased=0, total_score=0, base_score=0,
+            all_clear_bonus_applied=0,
+            ojama_sent=0, leftover_score=0,
+            is_all_clear=False,
+        )
+        chain_until = time_sec + self._chain_hold_per_step_sec
+        if side == "1P":
+            self._active_chain_1p = pseudo
+            self._chain_until_1p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_1p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_start_next_1p = self._last_seen_next_1p
+            self._chain_entry_t_1p = time_sec
+        else:
+            self._active_chain_2p = pseudo
+            self._chain_until_2p = chain_until
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_2p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_start_next_2p = self._last_seen_next_2p
+            self._chain_entry_t_2p = time_sec
+
     def _step_side(
         self,
         side: str,
@@ -2684,6 +2933,8 @@ class RecognitionPipeline:
                 "_bg_fp_p1" if side == "1P" else "_bg_fp_p2",
                 None,
             )
+            # 案 Y-4: deferred_out リストを用意し、拮抗時に候補を受け取る。
+            _deferred_buf: list = []
             inferred_landing = infer_placement(
                 prev_confirmed, cnn_board, falling_pair,
                 chain_sim=self._chain_sim,
@@ -2693,6 +2944,8 @@ class RecognitionPipeline:
                 bg_fp=bg_fp_for_side,
                 guard_empty_hallucination=self._enable_infer_empty_guard,
                 enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
+                enable_hsv_deferred_consensus=self._enable_hsv_deferred_consensus,
+                deferred_out=_deferred_buf if self._enable_hsv_deferred_consensus else None,
             )
             if inferred_landing is not None:
                 # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
@@ -2827,6 +3080,26 @@ class RecognitionPipeline:
                 # 統一。 ここでは final_board の確定だけ行う (= ctx.confirmed_board
                 # は既に上書き済)。 NEXT 経路は次の frame で発火する。
 
+            # 案 Y-4: deferred_buf に候補が入っていれば deferred state を開始する。
+            # inferred_landing は board_std (安全 fallback) として既に ctx に書込済。
+            if (
+                self._enable_hsv_deferred_consensus
+                and _deferred_buf
+                and inferred_landing is not None
+            ):
+                board_std_d, board_rev_d, base_cells_d = _deferred_buf[0]
+                _deferred_state: dict = {
+                    "board_std": board_std_d,
+                    "board_rev": board_rev_d,
+                    "base_cells": base_cells_d,
+                    "votes_std": 0,
+                    "votes_rev": 0,
+                    "frames_left": DEFERRED_MAX_FRAMES,
+                }
+                if side == "1P":
+                    self._deferred_landing_1p = _deferred_state
+                else:
+                    self._deferred_landing_2p = _deferred_state
             # 着地色修正 案1 修正版 (2026-06-01):
             # infer_placement 完了後 (success/failどちらでも) _last_consumed_color をクリア。
             # 1ツモ分のみ使用し次ツモと混同しないようにする。
@@ -3290,6 +3563,12 @@ class RecognitionPipeline:
                         cnn_v = int(cnn_board.get(r, c))
                         if cnn_v not in (COLOR_UNKNOWN,):
                             ctx.confirmed_board.set(r, c, cnn_v)
+            # 案 Y-4: deferred landing の consensus 投票を進める (T2 の前に実行)。
+            # 拮抗ケースで着地直後から DEFERRED_MAX_FRAMES 内に投票が集まれば確定する。
+            if self._enable_hsv_deferred_consensus:
+                self._update_deferred_landing(
+                    side, frame_bgr, cnn_board, ctx, ctx.state,
+                )
             # T2: STABLE → STABLE 遷移時の色変化検証。
             # 前 STABLE と現 STABLE で「色A → 色B」(異色間変化) かつ
             # 間に CHAIN signal がなければ認識誤りと判断し前値で上書き。
@@ -3298,10 +3577,22 @@ class RecognitionPipeline:
                 self._prev_stable_confirmed_1p if side == "1P"
                 else self._prev_stable_confirmed_2p
             )
+            # 案 Y-4: deferred 確定直後の frame は T2 をスキップして旧色フリーズを防ぐ。
+            _deferred_committed_this_frame = (
+                self._deferred_just_committed_1p if side == "1P"
+                else self._deferred_just_committed_2p
+            )
+            # deferred commit フラグをリセット (1 frame 限定)
+            if _deferred_committed_this_frame:
+                if side == "1P":
+                    self._deferred_just_committed_1p = False
+                else:
+                    self._deferred_just_committed_2p = False
             if (
                 prev_stable is not None
                 and chain_event is None
                 and not in_grace
+                and not _deferred_committed_this_frame  # 案 Y-4: deferred 確定 frame は T2 スキップ
             ):
                 for r in range(BOARD_ROWS):
                     for c in range(BOARD_COLS):
@@ -3423,6 +3714,34 @@ class RecognitionPipeline:
             curr_state=ctx.state,
             published_confirmed=published_confirmed,
         )
+        # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
+        # STABLE 中のみ適用。CHAIN 中は既存凍結機構で保護済みのためスキップ。
+        # 発光 OFF 中は frozen_board を現 confirmed で更新し次の発光に備える。
+        # 発光 ON 中は frozen_board の色で confirmed を保護する。
+        if self._enable_ojama_warning_glow_guard and frame_bgr is not None:
+            glow_state = (
+                self._glow_guard_1p if side == "1P" else self._glow_guard_2p
+            )
+            if glow_state is not None:
+                from src.ojama_warning_glow_guard import (
+                    compute_glow_score,
+                    update_glow_state,
+                    apply_glow_guard,
+                )
+                region_for_glow = (
+                    DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+                )
+                glow_score = compute_glow_score(frame_bgr, region_for_glow)
+                is_glow = update_glow_state(glow_state, glow_score, frame_idx)
+                if ctx.state == BoardState.STABLE and published_confirmed is not None:
+                    if is_glow:
+                        # 発光中: frozen で confirmed を保護する
+                        published_confirmed = apply_glow_guard(
+                            published_confirmed, glow_state, is_glow,
+                        )
+                    else:
+                        # 発光 OFF 中 (STABLE 確定時のみ): frozen を更新する
+                        glow_state.frozen_board = published_confirmed.copy()
         return SideResult(
             side=side,
             state=ctx.state,
@@ -3441,6 +3760,109 @@ class RecognitionPipeline:
             landing_diag=_landing_diag,
         )
 
+
+    def _set_deferred_confirmed(
+        self,
+        side: str,
+        winner_board: "Board",
+        ctx: "StateContext",
+    ) -> None:
+        """deferred 確定時に confirmed_board と prev_stable を winner で上書きする.
+
+        案 Y-4 (2026-06-03): consensus 投票で勝者が確定したとき呼ばれる。
+        T2 が直後に旧 prev_stable で干渉しないよう _deferred_just_committed フラグを立てる。
+
+        Args:
+            side: "1P" or "2P"。
+            winner_board: 着地後の確定盤面 (多数票候補)。
+            ctx: BoardStateMachine が管理する StateContext (confirmed_board を上書き)。
+        """
+        ctx.confirmed_board = winner_board.copy()
+        if ctx.pending_board is not None:
+            ctx.pending_board = winner_board.copy()
+        # prev_stable も勝者で更新し、 T2 が旧色を再フリーズするのを防ぐ。
+        if side == "1P":
+            self._prev_stable_confirmed_1p = winner_board.copy()
+            self._deferred_just_committed_1p = True
+            self._deferred_landing_1p = None
+        else:
+            self._prev_stable_confirmed_2p = winner_board.copy()
+            self._deferred_just_committed_2p = True
+            self._deferred_landing_2p = None
+
+    def _update_deferred_landing(
+        self,
+        side: str,
+        frame_bgr: "np.ndarray",
+        cnn_board: "Board",
+        ctx: "StateContext",
+        state: "BoardState",
+    ) -> None:
+        """deferred 保留中に consensus 投票を進め、確定条件を満たせば確定させる.
+
+        案 Y-4 (2026-06-03): STABLE 毎 frame、T2 の前に呼ぶ。
+        連鎖遷移 (STABLE 外) / 新 TSUMO_FALL 発生で deferred state をクリアする。
+
+        Args:
+            side: "1P" or "2P"。
+            frame_bgr: 現 frame の BGR 画像。
+            cnn_board: 現 frame の CNN+HSV 融合観測盤面。
+            ctx: BoardStateMachine StateContext (confirmed_board 上書き用)。
+            state: 現在の BoardState。
+        """
+        from src.board_state_machine import BoardState as _BS
+        from src.placement_inferrer import (
+            _score_consensus_for_candidate,
+            DEFERRED_CONSENSUS_THRESHOLD, DEFERRED_MAX_FRAMES,
+        )
+        deferred = (
+            self._deferred_landing_1p if side == "1P"
+            else self._deferred_landing_2p
+        )
+        if deferred is None:
+            return
+        # STABLE 外 (連鎖/TSUMO_FALL 等) に遷移したら即クリア (物理シミュ優先)
+        if state != _BS.STABLE:
+            if side == "1P":
+                self._deferred_landing_1p = None
+            else:
+                self._deferred_landing_2p = None
+            return
+        # HSV-only 分類器を取得
+        classifier = getattr(self._reader, "_classifier", None)
+        hsv_clf = getattr(classifier, "_hsv", classifier)
+        region = (
+            DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+        )
+        base_cells: list[tuple[int, int]] = deferred["base_cells"]
+        # 各候補に CNN/HSV 票を加算
+        votes_std = deferred["votes_std"] + _score_consensus_for_candidate(
+            deferred["board_std"], cnn_board, frame_bgr, region, base_cells,
+            hsv_classifier=hsv_clf,
+        )
+        votes_rev = deferred["votes_rev"] + _score_consensus_for_candidate(
+            deferred["board_rev"], cnn_board, frame_bgr, region, base_cells,
+            hsv_classifier=hsv_clf,
+        )
+        frames_left = deferred["frames_left"] - 1
+        deferred["votes_std"] = votes_std
+        deferred["votes_rev"] = votes_rev
+        deferred["frames_left"] = frames_left
+        # 確定条件: 閾値到達 or frames_left 消化
+        should_commit = (
+            votes_std >= DEFERRED_CONSENSUS_THRESHOLD
+            or votes_rev >= DEFERRED_CONSENSUS_THRESHOLD
+            or frames_left <= 0
+        )
+        if not should_commit:
+            return
+        # 勝者は票数多い方。同票 or frames_left 超過は board_std (安全 fallback) を採用。
+        winner = (
+            deferred["board_rev"]
+            if votes_rev > votes_std
+            else deferred["board_std"]
+        )
+        self._set_deferred_confirmed(side, winner, ctx)
 
     @staticmethod
     def _validate_next_history(
