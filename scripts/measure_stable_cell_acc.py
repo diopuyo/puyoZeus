@@ -2805,6 +2805,10 @@ def main() -> int:
             # True = inject スキップ = 「自動 HSV + merged レンジのみ」での評価
             # False = inject 有効 = 従来挙動と完全一致 (backwards compat)
             "disable_per_video_hsv": disable_per_video_hsv,
+            # 不具合B 対処: 予告おじゃま発光ガード v2 (後日比較用)
+            # True = ターゲット型ガード有効 (おじゃま誤認セルのみ復元)
+            # False = 従来挙動完全維持 (backwards compat)
+            "enable_ojama_warning_glow_guard": enable_ojama_warning_glow_guard,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加
