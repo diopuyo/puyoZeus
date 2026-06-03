@@ -61,6 +61,14 @@ HSV_CLASSIFY_MAX_DISTANCE: float = 60.0
 # 通常のぷよは S >= 80 程度、背景は S < 40 程度が典型。
 HSV_MIN_SATURATION_FOR_CLASSIFY: int = 60
 
+# 案 Y-4 HSV-first commit + deferred consensus 定数。
+# deferred 保留中に CNN==HSV 一致票を集計し、この票数に達したら勝者確定。
+# 実測: 着地後 2-3 frame で安定した色が 3 票以上得られることが多い。
+DEFERRED_CONSENSUS_THRESHOLD: int = 3
+# deferred 保留の最大フレーム数。この frame を超えたら過半数票の候補を強制確定。
+# 0.25 秒 @ 30fps 相当。拮抗ケースが長引いても凍結しないための安全弁。
+DEFERRED_MAX_FRAMES: int = 8
+
 
 def _hsv_distance(
     h: int, s: int, v: int, target: tuple[int, int, int],
@@ -491,6 +499,57 @@ def _apply_empty_hallucination_guard(
     return result
 
 
+def _score_consensus_for_candidate(
+    candidate: Board,
+    cnn_after: Board,
+    frame_bgr: np.ndarray,
+    region: "object",
+    base_cells: list[tuple[int, int]],
+    hsv_classifier: "object | None" = None,
+) -> int:
+    """着地 2 cell の CNN/HSV 観測を candidate と照合して合意票を返す (stateless).
+
+    案 Y-4 deferred consensus 投票関数。各 call ごとに 1 frame 分の票を集計する。
+
+    ticket 計算ルール:
+      - 各 base_cell について:
+        - cnn_after の観測色 == candidate の色 → CNN 票 +1
+        - hsv_classifier が観測した色 == candidate の色 → HSV 票 +1
+    合計を返す (2 cell × 最大 2 票/cell = 最大 4 票)。
+
+    Args:
+        candidate: 着地後の候補盤面 (board_std または board_rev)。
+        cnn_after: 現 frame の CNN+HSV 融合観測盤面。
+        frame_bgr: 現 frame の BGR 画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+        base_cells: 着地 2 cell の座標 [(r, c), ...]。
+        hsv_classifier: ColorClassifier インスタンス (optional)。None なら HSV 票は 0。
+
+    Returns:
+        合意票数 (int)。
+    """
+    votes: int = 0
+    for (r, c) in base_cells:
+        cand_color = int(candidate.get(r, c))
+        if cand_color not in _VALID_PUYO_COLORS:
+            continue
+        # CNN 観測票
+        cnn_color = int(cnn_after.get(r, c))
+        if cnn_color == cand_color:
+            votes += 1
+        # HSV 観測票
+        if hsv_classifier is not None:
+            patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+            if patch is not None and patch.size > 0:
+                try:
+                    hsv_color = int(hsv_classifier.classify(patch))
+                    if hsv_color == cand_color:
+                        votes += 1
+                except Exception:
+                    pass
+    return votes
+
+
 def infer_placement(
     confirmed_before: Board,
     cnn_after: Board | None,
@@ -503,7 +562,9 @@ def infer_placement(
     bg_threshold: float | None = None,
     guard_empty_hallucination: bool = False,
     enable_hsv_classify_fallback: bool = False,
-) -> Board | None:
+    enable_hsv_deferred_consensus: bool = False,
+    deferred_out: "list | None" = None,
+) -> "Board | None":
     """物理推論主軸の置き判定 (= Phase 1 主 API, cycle 71 + 71b).
 
     cycle 71b: 案 A (= 連鎖整合性) + 案 B (= 縦/横幾何判定) を統合.
@@ -531,9 +592,17 @@ def infer_placement(
             低彩度 patch / 両候補拮抗 / 両候補とも遠い場合は next_pair 素返し。
             黄(H26)→赤(H7)誤分類 (H 差 19) の発火点対策。
             default False = 従来の 2 択強制確定 (完全不変、 backwards compat)。
+        enable_hsv_deferred_consensus: True にすると、 HSV 分類が拮抗して next_pair
+            素返しになった 2 候補を deferred_out に格納し、 後続 frame での
+            CNN==HSV consensus 投票で確定させる (案 Y-4)。
+            default False = 従来挙動完全維持 (backwards compat)。
+        deferred_out: enable_hsv_deferred_consensus=True 時、 拮抗ケースで
+            [(board_std, board_rev, base_cells)] を格納するリスト (out-param)。
+            None なら deferred 情報を捨てる (backwards compat)。
 
     Returns:
         着地後の確定盤面. 物理パターン 0 件 / next_pair 不明等で None.
+        deferred 判断中は board_std (HSV 素返し候補) を安全 fallback として返す。
     """
     if next_pair is None:
         return None
@@ -590,6 +659,10 @@ def infer_placement(
     # guard_empty_hallucination: 候補生成前にパターン単位でスキップ判定。
     # cnn_after が None の場合は diff_cells が空リストのため guard は実質無効。
     # diff_cells は上記 if cnn_after is not None ブロックで設定済み。
+    # 案 Y-4 deferred consensus: 拮抗パターンの base_cells (= 着地 2 cell) を記録。
+    # 拮抗ケースを検出した最初の pattern の cells を使う。
+    _deferred_pattern_cells: list[tuple[int, int]] | None = None
+    _deferred_board_rev: Board | None = None  # color 入替候補
     for p in patterns:
         if use_hsv_classification:
             (r1, c1_pos), (r2, c2_pos) = p.cells
@@ -600,6 +673,45 @@ def infer_placement(
                 frame_bgr, region, r2, c2_pos,
             )
             if patch_a is not None and patch_b is not None:
+                # 案 Y-4: 拮抗判定のために HSV 距離を直接取得する。
+                # _classify_next_pair_by_hsv を呼ぶ前に距離計算を再現する。
+                _is_deferred = False
+                if (
+                    enable_hsv_deferred_consensus
+                    and deferred_out is not None
+                    and enable_hsv_classify_fallback
+                    and next_pair[0] != next_pair[1]
+                    and next_pair[0] in COLOR_HSV_CENTERS
+                    and next_pair[1] in COLOR_HSV_CENTERS
+                ):
+                    import cv2 as _cv2
+                    hsv_a = _cv2.cvtColor(patch_a, _cv2.COLOR_BGR2HSV)
+                    hsv_b = _cv2.cvtColor(patch_b, _cv2.COLOR_BGR2HSV)
+                    ha = int(np.median(hsv_a[:, :, 0]))
+                    sa_med = int(np.median(hsv_a[:, :, 1]))
+                    va = int(np.median(hsv_a[:, :, 2]))
+                    hb = int(np.median(hsv_b[:, :, 0]))
+                    sb_med = int(np.median(hsv_b[:, :, 1]))
+                    vb = int(np.median(hsv_b[:, :, 2]))
+                    c0, c1 = next_pair
+                    d_std = (
+                        _hsv_distance(ha, sa_med, va, COLOR_HSV_CENTERS[c0])
+                        + _hsv_distance(hb, sb_med, vb, COLOR_HSV_CENTERS[c1])
+                    )
+                    d_rev = (
+                        _hsv_distance(ha, sa_med, va, COLOR_HSV_CENTERS[c1])
+                        + _hsv_distance(hb, sb_med, vb, COLOR_HSV_CENTERS[c0])
+                    )
+                    # 低彩度チェック (fallback (1))
+                    _low_sat = (
+                        sa_med < HSV_MIN_SATURATION_FOR_CLASSIFY
+                        or sb_med < HSV_MIN_SATURATION_FOR_CLASSIFY
+                    )
+                    # 拮抗チェック (fallback (2))
+                    _not_confident = not _is_hsv_classify_confident(d_std, d_rev)
+                    if _low_sat or _not_confident:
+                        # 拮抗ケース: deferred 候補として記録し、両候補を生成する
+                        _is_deferred = True
                 color_a, color_b = _classify_next_pair_by_hsv(
                     patch_a, patch_b, next_pair,
                     enable_hsv_classify_fallback=enable_hsv_classify_fallback,
@@ -616,6 +728,20 @@ def infer_placement(
                         confirmed_before, p, color_a, color_b,
                     )
                 candidates.append((board, p))
+                # 案 Y-4: 拮抗ケースでは逆順候補も deferred_out に格納する。
+                if _is_deferred and _deferred_pattern_cells is None:
+                    rev_a, rev_b = next_pair[1], next_pair[0]
+                    if guard_empty_hallucination and cnn_after is not None:
+                        board_rev = _apply_empty_hallucination_guard(
+                            confirmed_before, p, diff_cells,
+                            cnn_after, rev_a, rev_b,
+                        )
+                    else:
+                        board_rev = materialize_pattern(
+                            confirmed_before, p, rev_a, rev_b,
+                        )
+                    _deferred_pattern_cells = list(p.cells)
+                    _deferred_board_rev = board_rev
                 continue
             # HSV patch 取得失敗時は fallback (= 2 通り全 enumerate)
         for (c_a, c_b) in enumerate_color_assignments(p, next_pair):
@@ -654,6 +780,17 @@ def infer_placement(
         if s > best_score:
             best_score = s
             best_board = cand_board
+    # 案 Y-4: 拮抗ケースで deferred_out が指定されていれば格納する。
+    # best_board (= board_std 相当) を安全 fallback として返しつつ、
+    # 逆順候補 (board_rev) も deferred_out に乗せて後続 frame で確定させる。
+    if (
+        enable_hsv_deferred_consensus
+        and deferred_out is not None
+        and _deferred_pattern_cells is not None
+        and _deferred_board_rev is not None
+        and best_board is not None
+    ):
+        deferred_out.append((best_board, _deferred_board_rev, _deferred_pattern_cells))
     return best_board
 
 
@@ -811,4 +948,8 @@ __all__ = [
     "HSV_CLASSIFY_REJECT_RATIO",
     "HSV_CLASSIFY_MAX_DISTANCE",
     "HSV_MIN_SATURATION_FOR_CLASSIFY",
+    # 案 Y-4 HSV-first commit + deferred consensus
+    "DEFERRED_CONSENSUS_THRESHOLD",
+    "DEFERRED_MAX_FRAMES",
+    "_score_consensus_for_candidate",
 ]

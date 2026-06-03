@@ -129,6 +129,19 @@ STATIC_COLOR_FLICKER_WARNING_THRESHOLD: int = 50  # 動画全体で 50 件以上
 STATIC_COLOR_FLICKER_CRITICAL_THRESHOLD: int = 200  # 動画全体で 200 件以上 = CRITICAL
 STATIC_COLOR_FLICKER_MIN_FRAMES: int = 30  # 最低 30 STABLE frame で発火
 
+# THREE_WAY_SUDDEN_DROP (2026-06-03): 3者一致ぷよの突然消失検知。
+# raw_cnn == raw_hsv == confirmed かつ非 EMPTY・非 UNKNOWN の cell (= 3者合意ぷよ) が
+# STABLE 間で大幅に減少しているのに chain / ojama_fall が介在しないケースは
+# 「全員同じ誤り値」の fail-silent 盲点。 既存 sudden_drop は confirmed のみ対象で
+# この全員誤りパターンを catch できない。
+#
+# 条件:
+#   1. 両 STABLE frame で raw_cnn / raw_hsv / confirmed の 3 者が利用可能
+#   2. prev_stable → cur_stable の間に chain も ojama_fall も介在しない
+#   3. tsumo_fall が介在する場合も除外 (= physics_fix 大量書換えを誤検知防止)
+#   4. 3者一致ぷよ数の差分が -THREE_WAY_DROP_THRESHOLD 以下
+THREE_WAY_DROP_THRESHOLD: int = 8  # -8 個以上の減少で CRITICAL
+
 # C1 (Phase 1 = 2026-05-28): avg_puyo_count_per_stable_frame baseline 比閾値.
 # STABLE 確定盤面の平均ぷよ数 (1P+2P 合算) が baseline 比 85% 未満なら
 # 「ぷよを消す経路の fail-silent」 (= puyo→empty 大量誤認) を検知して REJECT。
@@ -162,6 +175,12 @@ class FrameEntry:
     # backwards compat: 古い board_log は本フィールドを持たないため default []。
     p1_erasure_alerts: list[list[int]] = field(default_factory=list)
     p2_erasure_alerts: list[list[int]] = field(default_factory=list)
+    # 3 者一致 DROP 検知用 raw 盤面 (= Phase I 以降の board_log に含まれる)。
+    # backwards compat: 古い board_log はこれらフィールドを持たないため default None。
+    p1_raw_cnn_board: list[list[int]] | None = None
+    p2_raw_cnn_board: list[list[int]] | None = None
+    p1_raw_hsv_board: list[list[int]] | None = None
+    p2_raw_hsv_board: list[list[int]] | None = None
 
     @classmethod
     def from_jsonable(cls, obj: dict[str, Any]) -> "FrameEntry":
@@ -175,6 +194,11 @@ class FrameEntry:
             # backwards compat: キーなし (古い board_log) は空リストで処理継続。
             p1_erasure_alerts=obj.get("p1_erasure_alerts", []),
             p2_erasure_alerts=obj.get("p2_erasure_alerts", []),
+            # 3 者一致 DROP 検知用 raw 盤面 (= 古い board_log では None 維持)。
+            p1_raw_cnn_board=obj.get("p1_raw_cnn_board"),
+            p2_raw_cnn_board=obj.get("p2_raw_cnn_board"),
+            p1_raw_hsv_board=obj.get("p1_raw_hsv_board"),
+            p2_raw_hsv_board=obj.get("p2_raw_hsv_board"),
         )
 
 
@@ -893,6 +917,108 @@ class RecognitionEvaluator:
         ))
         return violations
 
+    def _count_three_way_agree(
+        self,
+        cnn: list[list[int]] | None,
+        hsv: list[list[int]] | None,
+        conf: list[list[int]] | None,
+    ) -> int | None:
+        """3 者 (raw_cnn / raw_hsv / confirmed) が一致する非 EMPTY・非 UNKNOWN cell 数を返す。
+
+        いずれかが None の場合は None を返す (= raw 情報なし = 評価不能)。
+        """
+        if cnn is None or hsv is None or conf is None:
+            return None
+        count = 0
+        for r in range(BOARD_ROWS):
+            for c in range(BOARD_COLS):
+                a = cnn[r][c]
+                b = hsv[r][c]
+                x = conf[r][c]
+                if a == b == x and a not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                    count += 1
+        return count
+
+    @staticmethod
+    def _make_three_way_drop_violation(
+        entry_frame_idx: int,
+        entry_t_sec: float,
+        side: str,
+        prev_n: int,
+        cur_n: int,
+        prev_frame: int,
+    ) -> Violation:
+        """check_three_way_sudden_drop の Violation オブジェクトを生成するヘルパー."""
+        diff = cur_n - prev_n
+        return Violation(
+            frame_idx=entry_frame_idx, t_sec=entry_t_sec, side=side,
+            metric="three_way_sudden_drop",
+            severity=SEVERITY_CRITICAL,
+            detail=(
+                f"3 者一致ぷよ数 {prev_n}→{cur_n} ({diff:+d}) "
+                f"連鎖・お邪魔・ツモ落下介在なし "
+                f"(= fail-silent 盲点誤認 signal)"
+            ),
+            extra={
+                "prev_3way_n": prev_n,
+                "cur_3way_n": cur_n,
+                "diff": diff,
+                "prev_frame": prev_frame,
+                "chain_intervened": False,
+            },
+        )
+
+    def check_three_way_sudden_drop(self, side: str) -> list[Violation]:
+        """3 者一致ぷよの突然消失検知 (= fail-silent 盲点炙り出し).
+
+        raw_cnn == raw_hsv == confirmed が全員同じ誤り値の場合、 既存 sudden_drop は
+        confirmed のみ対象のため検知できない。 本 metric は 3 者一致ぷよ数を追跡し、
+        連鎖・お邪魔・ツモ落下が介在しない STABLE 間で大幅減少した場合を CRITICAL。
+
+        除外条件 (= 誤検知防止):
+            1. chain / ojama_fall が介在する → 正当な消去なので除外
+            2. tsumo_fall が介在する → physics_fix 大量書換えの可能性があるので除外
+            3. raw_cnn / raw_hsv / confirmed のいずれかが None → 評価不能なので skip
+        """
+        violations: list[Violation] = []
+        prefix = "p1" if side == "1P" else "p2"
+        attr_cnn = f"{prefix}_raw_cnn_board"
+        attr_hsv = f"{prefix}_raw_hsv_board"
+        attr_conf = f"{prefix}_confirmed"
+        attr_state = f"{prefix}_state"
+        prev_stable_frame: int | None = None
+        prev_stable_n: int | None = None
+        intervene_states: set[str] = set()
+
+        for e in self.entries:
+            state = getattr(e, attr_state)
+            if state != "stable":
+                intervene_states.add(state)
+                continue
+            # STABLE フレーム: 3 者一致数を計算
+            cur_n = self._count_three_way_agree(
+                getattr(e, attr_cnn),
+                getattr(e, attr_hsv),
+                getattr(e, attr_conf),
+            )
+            if cur_n is not None and prev_stable_n is not None:
+                diff = cur_n - prev_stable_n
+                # chain / ojama_fall / tsumo_fall が介在しない大幅減少を CRITICAL
+                chain_intervened = bool(
+                    intervene_states & {"chain", "ojama_fall", "tsumo_fall"}
+                )
+                if not chain_intervened and diff <= -THREE_WAY_DROP_THRESHOLD:
+                    violations.append(self._make_three_way_drop_violation(
+                        e.frame_idx, e.t_sec, side,
+                        prev_stable_n, cur_n, prev_stable_frame,  # type: ignore[arg-type]
+                    ))
+            # 現 STABLE を prev として更新、 介在 state をリセット
+            if cur_n is not None:
+                prev_stable_frame = e.frame_idx
+                prev_stable_n = cur_n
+            intervene_states = set()
+        return violations
+
     # ========================
     # 統合実行
     # ========================
@@ -918,6 +1044,8 @@ class RecognitionEvaluator:
             all_violations.extend(self.check_ojama_global_scarcity(side))
             # KC (cycle 56 G): 静止中の色ブレ集計 (= 5 色相互誤認)
             all_violations.extend(self.check_static_color_flicker(side))
+            # 3 者一致 DROP (2026-06-03): fail-silent 盲点炙り出し
+            all_violations.extend(self.check_three_way_sudden_drop(side))
         all_violations.sort(key=lambda v: (v.frame_idx, v.side, v.metric))
         return all_violations
 
