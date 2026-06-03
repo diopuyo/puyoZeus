@@ -108,6 +108,7 @@ from src.next_slide_detector import (
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
     correct_landing_cells_by_observed_color,
+    DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
 from src.state_detectors import (
@@ -532,6 +533,11 @@ class RecognitionPipeline:
         # 空→色FP 0.27%→0.10% と全軸改善 (user viz 承認)。
         # False に戻すには enable_chain_formula_detection=False を明示する。
         enable_chain_formula_detection: bool = True,
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
+        # 後続フレームの CNN==HSV consensus 投票で確定させる。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_hsv_deferred_consensus: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -853,6 +859,25 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # True で infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
+        # 後続フレームの CNN==HSV consensus 投票で確定させる。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_hsv_deferred_consensus: bool = bool(enable_hsv_deferred_consensus)
+        # deferred landing state: 1P/2P 独立。None = pending なし。
+        # dict keys:
+        #   board_std: Board (HSV 素返し候補 = 安全 fallback, 既に confirmed に書込済)
+        #   board_rev: Board (逆順候補)
+        #   base_cells: list[(r, c)] (着地 2 cell 座標)
+        #   votes_std: int (board_std の累積合意票)
+        #   votes_rev: int (board_rev の累積合意票)
+        #   frames_left: int (残り保留フレーム数)
+        self._deferred_landing_1p: dict | None = None
+        self._deferred_landing_2p: dict | None = None
+        # _set_deferred_confirmed 直後の T2 スキップ用フラグ (1P/2P 別)。
+        # deferred 確定した frame で T2 が旧 prev_stable で上書きするのを防ぐ。
+        self._deferred_just_committed_1p: bool = False
+        self._deferred_just_committed_2p: bool = False
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -1070,6 +1095,9 @@ class RecognitionPipeline:
         # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02 実装, 2026-06-03 採用 default ON)。
         # 全軸改善 + user viz 承認。False に戻すには明示指定する。
         enable_chain_formula_detection: bool = True,
+        # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_hsv_deferred_consensus: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1218,6 +1246,7 @@ class RecognitionPipeline:
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         )
 
     # ------------------------------------------------------------------
@@ -1319,6 +1348,11 @@ class RecognitionPipeline:
         # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
         self._chain_exit_until_1p = 0.0
         self._chain_exit_until_2p = 0.0
+        # 案 Y-4 deferred landing state リセット
+        self._deferred_landing_1p = None
+        self._deferred_landing_2p = None
+        self._deferred_just_committed_1p = False
+        self._deferred_just_committed_2p = False
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -2871,6 +2905,8 @@ class RecognitionPipeline:
                 "_bg_fp_p1" if side == "1P" else "_bg_fp_p2",
                 None,
             )
+            # 案 Y-4: deferred_out リストを用意し、拮抗時に候補を受け取る。
+            _deferred_buf: list = []
             inferred_landing = infer_placement(
                 prev_confirmed, cnn_board, falling_pair,
                 chain_sim=self._chain_sim,
@@ -2880,6 +2916,8 @@ class RecognitionPipeline:
                 bg_fp=bg_fp_for_side,
                 guard_empty_hallucination=self._enable_infer_empty_guard,
                 enable_hsv_classify_fallback=self._enable_hsv_classify_fallback,
+                enable_hsv_deferred_consensus=self._enable_hsv_deferred_consensus,
+                deferred_out=_deferred_buf if self._enable_hsv_deferred_consensus else None,
             )
             if inferred_landing is not None:
                 # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
@@ -3014,6 +3052,26 @@ class RecognitionPipeline:
                 # 統一。 ここでは final_board の確定だけ行う (= ctx.confirmed_board
                 # は既に上書き済)。 NEXT 経路は次の frame で発火する。
 
+            # 案 Y-4: deferred_buf に候補が入っていれば deferred state を開始する。
+            # inferred_landing は board_std (安全 fallback) として既に ctx に書込済。
+            if (
+                self._enable_hsv_deferred_consensus
+                and _deferred_buf
+                and inferred_landing is not None
+            ):
+                board_std_d, board_rev_d, base_cells_d = _deferred_buf[0]
+                _deferred_state: dict = {
+                    "board_std": board_std_d,
+                    "board_rev": board_rev_d,
+                    "base_cells": base_cells_d,
+                    "votes_std": 0,
+                    "votes_rev": 0,
+                    "frames_left": DEFERRED_MAX_FRAMES,
+                }
+                if side == "1P":
+                    self._deferred_landing_1p = _deferred_state
+                else:
+                    self._deferred_landing_2p = _deferred_state
             # 着地色修正 案1 修正版 (2026-06-01):
             # infer_placement 完了後 (success/failどちらでも) _last_consumed_color をクリア。
             # 1ツモ分のみ使用し次ツモと混同しないようにする。
@@ -3477,6 +3535,12 @@ class RecognitionPipeline:
                         cnn_v = int(cnn_board.get(r, c))
                         if cnn_v not in (COLOR_UNKNOWN,):
                             ctx.confirmed_board.set(r, c, cnn_v)
+            # 案 Y-4: deferred landing の consensus 投票を進める (T2 の前に実行)。
+            # 拮抗ケースで着地直後から DEFERRED_MAX_FRAMES 内に投票が集まれば確定する。
+            if self._enable_hsv_deferred_consensus:
+                self._update_deferred_landing(
+                    side, frame_bgr, cnn_board, ctx, ctx.state,
+                )
             # T2: STABLE → STABLE 遷移時の色変化検証。
             # 前 STABLE と現 STABLE で「色A → 色B」(異色間変化) かつ
             # 間に CHAIN signal がなければ認識誤りと判断し前値で上書き。
@@ -3485,10 +3549,22 @@ class RecognitionPipeline:
                 self._prev_stable_confirmed_1p if side == "1P"
                 else self._prev_stable_confirmed_2p
             )
+            # 案 Y-4: deferred 確定直後の frame は T2 をスキップして旧色フリーズを防ぐ。
+            _deferred_committed_this_frame = (
+                self._deferred_just_committed_1p if side == "1P"
+                else self._deferred_just_committed_2p
+            )
+            # deferred commit フラグをリセット (1 frame 限定)
+            if _deferred_committed_this_frame:
+                if side == "1P":
+                    self._deferred_just_committed_1p = False
+                else:
+                    self._deferred_just_committed_2p = False
             if (
                 prev_stable is not None
                 and chain_event is None
                 and not in_grace
+                and not _deferred_committed_this_frame  # 案 Y-4: deferred 確定 frame は T2 スキップ
             ):
                 for r in range(BOARD_ROWS):
                     for c in range(BOARD_COLS):
@@ -3628,6 +3704,109 @@ class RecognitionPipeline:
             landing_diag=_landing_diag,
         )
 
+
+    def _set_deferred_confirmed(
+        self,
+        side: str,
+        winner_board: "Board",
+        ctx: "StateContext",
+    ) -> None:
+        """deferred 確定時に confirmed_board と prev_stable を winner で上書きする.
+
+        案 Y-4 (2026-06-03): consensus 投票で勝者が確定したとき呼ばれる。
+        T2 が直後に旧 prev_stable で干渉しないよう _deferred_just_committed フラグを立てる。
+
+        Args:
+            side: "1P" or "2P"。
+            winner_board: 着地後の確定盤面 (多数票候補)。
+            ctx: BoardStateMachine が管理する StateContext (confirmed_board を上書き)。
+        """
+        ctx.confirmed_board = winner_board.copy()
+        if ctx.pending_board is not None:
+            ctx.pending_board = winner_board.copy()
+        # prev_stable も勝者で更新し、 T2 が旧色を再フリーズするのを防ぐ。
+        if side == "1P":
+            self._prev_stable_confirmed_1p = winner_board.copy()
+            self._deferred_just_committed_1p = True
+            self._deferred_landing_1p = None
+        else:
+            self._prev_stable_confirmed_2p = winner_board.copy()
+            self._deferred_just_committed_2p = True
+            self._deferred_landing_2p = None
+
+    def _update_deferred_landing(
+        self,
+        side: str,
+        frame_bgr: "np.ndarray",
+        cnn_board: "Board",
+        ctx: "StateContext",
+        state: "BoardState",
+    ) -> None:
+        """deferred 保留中に consensus 投票を進め、確定条件を満たせば確定させる.
+
+        案 Y-4 (2026-06-03): STABLE 毎 frame、T2 の前に呼ぶ。
+        連鎖遷移 (STABLE 外) / 新 TSUMO_FALL 発生で deferred state をクリアする。
+
+        Args:
+            side: "1P" or "2P"。
+            frame_bgr: 現 frame の BGR 画像。
+            cnn_board: 現 frame の CNN+HSV 融合観測盤面。
+            ctx: BoardStateMachine StateContext (confirmed_board 上書き用)。
+            state: 現在の BoardState。
+        """
+        from src.board_state_machine import BoardState as _BS
+        from src.placement_inferrer import (
+            _score_consensus_for_candidate,
+            DEFERRED_CONSENSUS_THRESHOLD, DEFERRED_MAX_FRAMES,
+        )
+        deferred = (
+            self._deferred_landing_1p if side == "1P"
+            else self._deferred_landing_2p
+        )
+        if deferred is None:
+            return
+        # STABLE 外 (連鎖/TSUMO_FALL 等) に遷移したら即クリア (物理シミュ優先)
+        if state != _BS.STABLE:
+            if side == "1P":
+                self._deferred_landing_1p = None
+            else:
+                self._deferred_landing_2p = None
+            return
+        # HSV-only 分類器を取得
+        classifier = getattr(self._reader, "_classifier", None)
+        hsv_clf = getattr(classifier, "_hsv", classifier)
+        region = (
+            DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+        )
+        base_cells: list[tuple[int, int]] = deferred["base_cells"]
+        # 各候補に CNN/HSV 票を加算
+        votes_std = deferred["votes_std"] + _score_consensus_for_candidate(
+            deferred["board_std"], cnn_board, frame_bgr, region, base_cells,
+            hsv_classifier=hsv_clf,
+        )
+        votes_rev = deferred["votes_rev"] + _score_consensus_for_candidate(
+            deferred["board_rev"], cnn_board, frame_bgr, region, base_cells,
+            hsv_classifier=hsv_clf,
+        )
+        frames_left = deferred["frames_left"] - 1
+        deferred["votes_std"] = votes_std
+        deferred["votes_rev"] = votes_rev
+        deferred["frames_left"] = frames_left
+        # 確定条件: 閾値到達 or frames_left 消化
+        should_commit = (
+            votes_std >= DEFERRED_CONSENSUS_THRESHOLD
+            or votes_rev >= DEFERRED_CONSENSUS_THRESHOLD
+            or frames_left <= 0
+        )
+        if not should_commit:
+            return
+        # 勝者は票数多い方。同票 or frames_left 超過は board_std (安全 fallback) を採用。
+        winner = (
+            deferred["board_rev"]
+            if votes_rev > votes_std
+            else deferred["board_std"]
+        )
+        self._set_deferred_confirmed(side, winner, ctx)
 
     @staticmethod
     def _validate_next_history(
