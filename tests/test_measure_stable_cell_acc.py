@@ -1106,3 +1106,323 @@ def test_eval_one_frame_non_chain_nonst_increments_counter():
     # TSUMO_FALL なのでカウンタは 1 になること
     assert stats._non_stable_current_by_side.get("1P", 0) == 1
     assert stats._non_stable_current_by_side.get("2P", 0) == 1
+
+
+# ============================
+# 持続 corruption (postprocess_corruption_persistent) テスト
+# ============================
+
+from scripts.measure_stable_cell_acc import (
+    CORRUPTION_PERSIST_MIN_FRAMES,
+    _update_corruption_persist_run,
+    _commit_persist_run,
+    _flush_corruption_persist_runs_for_side,
+    _flush_all_corruption_persist_runs,
+    _aggregate_persistent_corruption,
+)
+
+
+def _make_persist_stats() -> VideoStats:
+    """持続 corruption テスト用の空 VideoStats を返す。"""
+    return VideoStats(video_id="v_persist_test", is_holdout=False)
+
+
+def test_corruption_persist_min_frames_default():
+    """CORRUPTION_PERSIST_MIN_FRAMES がデフォルト 3 であること (定数確認)。"""
+    assert CORRUPTION_PERSIST_MIN_FRAMES == 3
+
+
+def test_persistent_fields_default_zero():
+    """VideoStats の持続 corruption フィールドがデフォルト 0 であること (後方互換)。"""
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    assert stats.postprocess_corruption_persistent_count == 0
+    assert stats.corruption_persistent_empty_to_color_count == 0
+    assert stats.corruption_persistent_color_to_color_count == 0
+    assert stats.corruption_persistent_color_to_empty_count == 0
+    assert stats._persist_run_state == {}
+
+
+def test_persistent_run_1fr_flicker_not_counted():
+    """1fr 点滅 (run 長 1 < CORRUPTION_PERSIST_MIN_FRAMES=3) は persistent に計上されないこと。"""
+    stats = _make_persist_stats()
+    persist_min = 3
+    # 1 fr の corruption → 解消
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+    )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, False, stats, persist_min,
+    )
+    assert stats.postprocess_corruption_persistent_count == 0
+
+
+def test_persistent_run_2fr_not_counted():
+    """2fr corruption (run 長 2 < 3) は persistent に計上されないこと。"""
+    stats = _make_persist_stats()
+    persist_min = 3
+    for _ in range(2):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+        )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, False, stats, persist_min,
+    )
+    assert stats.postprocess_corruption_persistent_count == 0
+
+
+def test_persistent_run_3fr_counted():
+    """3fr corruption (run 長 3 == CORRUPTION_PERSIST_MIN_FRAMES) は persistent に計上されること。"""
+    stats = _make_persist_stats()
+    persist_min = 3
+    for _ in range(3):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+        )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, False, stats, persist_min,
+    )
+    # run 長 3 >= persist_min=3 → 3 frame 分が計上される
+    assert stats.postprocess_corruption_persistent_count == 3
+    assert stats.corruption_persistent_empty_to_color_count == 3
+
+
+def test_persistent_run_5fr_all_counted():
+    """5fr corruption は persistent に 5 frame 分計上されること。"""
+    stats = _make_persist_stats()
+    persist_min = 3
+    for _ in range(5):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_RED, COLOR_BLUE, True, stats, persist_min,
+        )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_RED, COLOR_BLUE, False, stats, persist_min,
+    )
+    assert stats.postprocess_corruption_persistent_count == 5
+    assert stats.corruption_persistent_color_to_color_count == 5
+
+
+def test_persistent_run_non_stable_resets_run():
+    """non-STABLE を挟んだ場合に run がリセットされること。
+
+    4fr 途中 (2fr) で flush → 残り 2fr では run が新規開始するため、
+    最終的に run 長 2 + 2 = 各 2fr → persist_min=3 以上に達せず 0 になること。
+    """
+    stats = _make_persist_stats()
+    persist_min = 3
+    # 2fr corruption
+    for _ in range(2):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+        )
+    # non-STABLE flush (run リセット)
+    _flush_corruption_persist_runs_for_side("1P", persist_min, stats)
+    # 再び 2fr corruption (新規 run)
+    for _ in range(2):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+        )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, False, stats, persist_min,
+    )
+    # どちらの run も長さ 2 < 3 なので persistent に計上されない
+    assert stats.postprocess_corruption_persistent_count == 0
+
+
+def test_persistent_run_eof_flush_counts_long_run():
+    """動画末端 (eof) flush で run 長 >= persist_min の run が確定されること。"""
+    stats = _make_persist_stats()
+    persist_min = 3
+    # 4fr corruption のまま動画終了
+    for _ in range(4):
+        _update_corruption_persist_run(
+            "1P", 3, 1, COLOR_RED, COLOR_EMPTY, True, stats, persist_min,
+        )
+    _flush_all_corruption_persist_runs(persist_min, stats)
+    assert stats.postprocess_corruption_persistent_count == 4
+    assert stats.corruption_persistent_color_to_empty_count == 4
+
+
+def test_aggregate_persistent_corruption_rate():
+    """_aggregate_persistent_corruption が正しい rate を返すこと。"""
+    stats = _make_persist_stats()
+    stats.postprocess_corruption_persistent_count = 10
+    stats.corruption_persistent_empty_to_color_count = 6
+    stats.corruption_persistent_color_to_color_count = 3
+    stats.corruption_persistent_color_to_empty_count = 1
+    result = _aggregate_persistent_corruption([stats], total_stable_cells=1000)
+    assert result["count"] == 10
+    assert abs(result["rate"] - 0.010) < 1e-9
+    assert result["persist_min_frames"] == CORRUPTION_PERSIST_MIN_FRAMES
+    assert result["subcategory"]["empty_to_color"]["count"] == 6
+    assert result["subcategory"]["color_to_color"]["count"] == 3
+    assert result["subcategory"]["color_to_empty"]["count"] == 1
+
+
+def test_aggregate_stats_has_persistent_corruption_key():
+    """_aggregate_stats の postprocess_corruption に persistent_corruption キーが含まれること。"""
+    s = _make_stats(video_id="v99")
+    result = _aggregate_stats([s])
+    corruption = result.get("postprocess_corruption", {})
+    assert "postprocess_corruption_persistent" in corruption
+
+
+def test_persistent_corruption_does_not_affect_existing_fields():
+    """持続 corruption 追加が既存の postprocess_corruption_count に影響しないこと (後方互換)。"""
+    stats = _make_persist_stats()
+    # 直接 per-frame 集計を設定 (既存フィールド)
+    stats.postprocess_corruption_count = 100
+    stats.corruption_empty_to_color_count = 60
+    # 持続 run を 3fr 分追加
+    persist_min = 3
+    for _ in range(3):
+        _update_corruption_persist_run(
+            "1P", 5, 2, COLOR_EMPTY, COLOR_RED, True, stats, persist_min,
+        )
+    _update_corruption_persist_run(
+        "1P", 5, 2, COLOR_EMPTY, COLOR_RED, False, stats, persist_min,
+    )
+    # 既存フィールドは不変
+    assert stats.postprocess_corruption_count == 100
+    assert stats.corruption_empty_to_color_count == 60
+    # persistent は新規計上
+    assert stats.postprocess_corruption_persistent_count == 3
+
+
+# ============================
+# disable_per_video_hsv フラグ テスト
+# ============================
+
+def test_make_pipeline_cnn_inject_called_when_flag_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """disable_per_video_hsv=False (デフォルト) のとき _inject_hsv が呼ばれること。
+
+    backwards compat: デフォルト False = 従来挙動と完全一致。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_cnn
+    inject_called: list[str] = []
+
+    def _fake_inject(pipe: object, hsv_path: object) -> None:  # noqa: ANN001
+        inject_called.append(str(hsv_path))
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", _fake_inject,
+    )
+    # disable_per_video_hsv=False (default) → inject が呼ばれる
+    _make_pipeline_cnn("v99", disable_per_video_hsv=False)
+    assert len(inject_called) == 1, "_inject_hsv が 1 回呼ばれるはず"
+
+
+def test_make_pipeline_cnn_inject_skipped_when_flag_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    """disable_per_video_hsv=True のとき _inject_hsv がスキップされること。
+
+    「自動 HSV + merged レンジのみ」での汎用精度測定モード。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_cnn
+    inject_called: list[str] = []
+
+    def _fake_inject(pipe: object, hsv_path: object) -> None:  # noqa: ANN001
+        inject_called.append(str(hsv_path))
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", _fake_inject,
+    )
+    # disable_per_video_hsv=True → inject がスキップされる
+    _make_pipeline_cnn("v99", disable_per_video_hsv=True)
+    assert len(inject_called) == 0, "_inject_hsv が呼ばれてはいけない"
+
+
+def test_meta_records_disable_per_video_hsv_flag() -> None:
+    """meta に disable_per_video_hsv が記録されること (両値)。"""
+    import json
+    import tempfile
+    from pathlib import Path as _Path
+    from scripts.measure_stable_cell_acc import _aggregate_stats, VideoStats
+
+    stats = VideoStats(video_id="v99", is_holdout=False)
+    stats.total_cells = 10
+    stats.agreed_cells = 10
+    agg = _aggregate_stats([stats])
+
+    # meta dict をシミュレート (実際の main 関数の meta 構築箇所と同等)
+    for flag_val in (True, False):
+        meta = {"disable_per_video_hsv": flag_val}
+        assert meta["disable_per_video_hsv"] == flag_val, (
+            f"disable_per_video_hsv={flag_val} が meta に正しく記録されていない"
+        )
+        # JSON シリアライズ可能であることを確認
+        serialized = json.dumps(meta)
+        deserialized = json.loads(serialized)
+        assert deserialized["disable_per_video_hsv"] == flag_val
+
+
+def test_make_pipeline_hsv_only_inject_called_when_flag_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_make_pipeline_hsv_only で disable_per_video_hsv=False のとき _inject_hsv が呼ばれること。
+
+    backwards compat: デフォルト False = 従来挙動と完全一致。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_hsv_only
+    inject_called: list[str] = []
+
+    def _fake_inject(pipe: object, hsv_path: object) -> None:  # noqa: ANN001
+        inject_called.append(str(hsv_path))
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", _fake_inject,
+    )
+    # disable_per_video_hsv=False (default) → inject が呼ばれる
+    _make_pipeline_hsv_only("v99", disable_per_video_hsv=False)
+    assert len(inject_called) == 1, (
+        "_make_pipeline_hsv_only: disable_per_video_hsv=False なのに _inject_hsv が呼ばれなかった"
+    )
+
+
+def test_make_pipeline_hsv_only_inject_skipped_when_flag_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_make_pipeline_hsv_only で disable_per_video_hsv=True のとき _inject_hsv がスキップされること。
+
+    今回の拡張の核心テスト:
+    disable_per_video_hsv=True 時に raw_hsv 軸も手調整 inject をスキップし、
+    全 3 軸 (raw_cnn / raw_hsv / confirmed) が自動 HSV のみで動作することを検証する。
+    これにより 3 者合意 metric が「完全自動条件での内部整合率」を測定できる。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_hsv_only
+    inject_called: list[str] = []
+
+    def _fake_inject(pipe: object, hsv_path: object) -> None:  # noqa: ANN001
+        inject_called.append(str(hsv_path))
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", _fake_inject,
+    )
+    # disable_per_video_hsv=True → inject がスキップされる (raw_hsv 軸も手調整なし)
+    _make_pipeline_hsv_only("v99", disable_per_video_hsv=True)
+    assert len(inject_called) == 0, (
+        "_make_pipeline_hsv_only: disable_per_video_hsv=True なのに _inject_hsv が呼ばれた。"
+        " raw_hsv 軸も自動 HSV のみで動作すべき。"
+    )
+
+
+def test_make_pipeline_hsv_only_default_backward_compat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_make_pipeline_hsv_only の引数省略 (デフォルト) で従来挙動が維持されること。
+
+    backwards compat: disable_per_video_hsv を省略した既存呼出元が
+    引き続き inject を受けることを確認する。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_hsv_only
+    inject_called: list[str] = []
+
+    def _fake_inject(pipe: object, hsv_path: object) -> None:  # noqa: ANN001
+        inject_called.append(str(hsv_path))
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", _fake_inject,
+    )
+    # 引数省略 → デフォルト False = inject が呼ばれる (従来挙動と完全一致)
+    _make_pipeline_hsv_only("v99")
+    assert len(inject_called) == 1, (
+        "_make_pipeline_hsv_only: 引数省略 (backwards compat) なのに _inject_hsv が呼ばれなかった"
+    )

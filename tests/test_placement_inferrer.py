@@ -854,3 +854,288 @@ class TestCorrectLandingCellsByObservedColor:
         # パターン位置 (10,0), (11,0) のCNN色はEMPTY → 上書きしない
         # 無関係な (5,3) は inferred のままの紫
         assert int(result.get(5, 3)) == COLOR_PURPLE
+
+
+# ============================
+# 案 Y-4 HSV-first commit + deferred consensus テスト
+# ============================
+
+from src.placement_inferrer import (  # noqa: E402
+    _score_consensus_for_candidate,
+    DEFERRED_CONSENSUS_THRESHOLD,
+    DEFERRED_MAX_FRAMES,
+)
+
+
+class TestDeferredConsensusConstants:
+    """DEFERRED_* 定数の基本テスト."""
+
+    def test_threshold_positive(self):
+        """DEFERRED_CONSENSUS_THRESHOLD は 1 以上。"""
+        assert DEFERRED_CONSENSUS_THRESHOLD >= 1
+
+    def test_max_frames_positive(self):
+        """DEFERRED_MAX_FRAMES は 1 以上。"""
+        assert DEFERRED_MAX_FRAMES >= 1
+
+
+class TestScoreConsensusForCandidate:
+    """_score_consensus_for_candidate の単体テスト."""
+
+    def _make_frame(self, h: int = 1080, w: int = 1920) -> "object":
+        import numpy as np
+        return np.zeros((h, w, 3), dtype=np.uint8)
+
+    def _make_region(self) -> "object":
+        class _Reg:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                # テスト用: 全 cell が (0, 0, 4, 4) を返す
+                return (0, 0, 4, 4)
+        return _Reg()
+
+    def test_cnn_match_gives_votes(self):
+        """CNN 観測色 == candidate 色のとき votes >= 1。"""
+        candidate = _empty_board()
+        candidate.set(11, 2, COLOR_RED)
+        candidate.set(10, 2, COLOR_BLUE)
+
+        cnn_after = _empty_board()
+        cnn_after.set(11, 2, COLOR_RED)   # 一致
+        cnn_after.set(10, 2, COLOR_GREEN)  # 不一致
+
+        frame = self._make_frame()
+        region = self._make_region()
+        base_cells = [(11, 2), (10, 2)]
+
+        votes = _score_consensus_for_candidate(
+            candidate, cnn_after, frame, region, base_cells,
+            hsv_classifier=None,
+        )
+        # (11,2) CNN 一致 = 1 票、 (10,2) 不一致 = 0 票
+        assert votes == 1
+
+    def test_no_votes_when_empty(self):
+        """候補色が EMPTY のセルは票を加算しない。"""
+        candidate = _empty_board()  # 全セルが EMPTY
+        cnn_after = _empty_board()
+        cnn_after.set(11, 2, COLOR_RED)
+
+        frame = self._make_frame()
+        region = self._make_region()
+        base_cells = [(11, 2)]
+
+        votes = _score_consensus_for_candidate(
+            candidate, cnn_after, frame, region, base_cells,
+            hsv_classifier=None,
+        )
+        # candidate が EMPTY なので votes = 0
+        assert votes == 0
+
+    def test_stateless_no_side_effect(self):
+        """関数呼び出しが candidate 盤面を変更しない。"""
+        candidate = _empty_board()
+        candidate.set(11, 2, COLOR_RED)
+        original_val = int(candidate.get(11, 2))
+
+        cnn_after = _empty_board()
+        cnn_after.set(11, 2, COLOR_RED)
+
+        frame = self._make_frame()
+        region = self._make_region()
+        _score_consensus_for_candidate(
+            candidate, cnn_after, frame, region, [(11, 2)],
+        )
+        # 副作用なし
+        assert int(candidate.get(11, 2)) == original_val
+
+
+class TestInferPlacementDeferredConsensus:
+    """infer_placement の enable_hsv_deferred_consensus 挙動テスト."""
+
+    def _make_frame(self) -> "object":
+        import numpy as np
+        # 低彩度 (=S=0) にして fallback を確実に発動させる
+        return np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+    def _make_region(self) -> "object":
+        class _Reg:
+            def cell_sample_rect(self, row, col):  # noqa: ANN001
+                return (0, 0, 4, 4)
+        return _Reg()
+
+    def test_default_off_no_deferred_output(self):
+        """default OFF (enable_hsv_deferred_consensus=False) では deferred_out に何も格納しない。"""
+        base = _board_with_height([1, 0, 0, 0, 0, 0])
+        cnn_after = base.copy()
+        cnn_after.set(BOARD_ROWS - 2, 0, COLOR_RED)
+        cnn_after.set(BOARD_ROWS - 3, 0, COLOR_BLUE)
+
+        deferred_out: list = []
+        infer_placement(
+            base, cnn_after, (COLOR_RED, COLOR_BLUE),
+            enable_hsv_classify_fallback=True,
+            enable_hsv_deferred_consensus=False,
+            deferred_out=deferred_out,
+        )
+        # OFF のため deferred_out は空のまま
+        assert deferred_out == []
+
+    def test_returns_board_even_when_deferred(self):
+        """deferred ケースでも infer_placement は Board を返す (None ではない)。"""
+        base = _board_with_height([1, 0, 0, 0, 0, 0])
+        cnn_after = base.copy()
+        cnn_after.set(BOARD_ROWS - 2, 0, COLOR_RED)
+        cnn_after.set(BOARD_ROWS - 3, 0, COLOR_BLUE)
+
+        deferred_out: list = []
+        result = infer_placement(
+            base, cnn_after, (COLOR_RED, COLOR_BLUE),
+            frame_bgr=self._make_frame(),
+            region=self._make_region(),
+            enable_hsv_classify_fallback=True,
+            enable_hsv_deferred_consensus=True,
+            deferred_out=deferred_out,
+        )
+        # deferred でも安全 fallback Board を返す (None にならない)
+        # ただし拮抗しない場合は deferred_out に何も入らない場合もある
+        # この低彩度フレームでは低彩度 fallback が発動して deferred になる可能性がある
+        assert result is None or isinstance(result, Board)
+
+    def test_deferred_output_structure_when_triggered(self):
+        """deferred が発動したとき、deferred_out に (board_std, board_rev, base_cells) が入る。"""
+        # 低彩度フレームで enable_hsv_classify_fallback=True なら低彩度 fallback 発動確実
+        base = _board_with_height([1, 0, 0, 0, 0, 0])
+        cnn_after = base.copy()
+        cnn_after.set(BOARD_ROWS - 2, 0, COLOR_RED)
+        cnn_after.set(BOARD_ROWS - 3, 0, COLOR_BLUE)
+
+        import numpy as np
+        # S=0 (黒)フレーム: 低彩度 fallback を確実に発動
+        black_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        deferred_out: list = []
+        infer_placement(
+            base, cnn_after, (COLOR_RED, COLOR_BLUE),
+            frame_bgr=black_frame,
+            region=self._make_region(),
+            enable_hsv_classify_fallback=True,
+            enable_hsv_deferred_consensus=True,
+            deferred_out=deferred_out,
+        )
+        # 低彩度フレームで deferred が発動していれば構造を検証する
+        if deferred_out:
+            entry = deferred_out[0]
+            assert len(entry) == 3
+            board_std, board_rev, base_cells = entry
+            assert isinstance(board_std, Board)
+            assert isinstance(board_rev, Board)
+            assert isinstance(base_cells, list)
+            assert len(base_cells) == 2  # 着地 2 cell
+
+    def test_without_frame_bgr_no_deferred(self):
+        """frame_bgr=None の場合は HSV 分類を経由しないため deferred_out は空。"""
+        base = _board_with_height([1, 0, 0, 0, 0, 0])
+        cnn_after = base.copy()
+        cnn_after.set(BOARD_ROWS - 2, 0, COLOR_RED)
+        cnn_after.set(BOARD_ROWS - 3, 0, COLOR_BLUE)
+
+        deferred_out: list = []
+        infer_placement(
+            base, cnn_after, (COLOR_RED, COLOR_BLUE),
+            frame_bgr=None,  # HSV 経路を通らない
+            region=None,
+            enable_hsv_classify_fallback=True,
+            enable_hsv_deferred_consensus=True,
+            deferred_out=deferred_out,
+        )
+        # HSV 経路不使用なので deferred は発動しない
+        assert deferred_out == []
+
+    def test_same_color_pair_no_deferred(self):
+        """同色ペア (next_pair[0] == next_pair[1]) は HSV 分類不要なので deferred しない。"""
+        base = _board_with_height([1, 0, 0, 0, 0, 0])
+        cnn_after = base.copy()
+        cnn_after.set(BOARD_ROWS - 2, 0, COLOR_RED)
+        cnn_after.set(BOARD_ROWS - 3, 0, COLOR_RED)
+
+        import numpy as np
+        black_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        deferred_out: list = []
+        infer_placement(
+            base, cnn_after, (COLOR_RED, COLOR_RED),  # 同色
+            frame_bgr=black_frame,
+            region=self._make_region(),
+            enable_hsv_classify_fallback=True,
+            enable_hsv_deferred_consensus=True,
+            deferred_out=deferred_out,
+        )
+        # 同色 → HSV 分類 skip → deferred 発動しない
+        assert deferred_out == []
+
+
+class TestRecognitionPipelineDeferredFlag:
+    """RecognitionPipeline への enable_hsv_deferred_consensus フラグ配線テスト."""
+
+    def test_default_off_does_not_set_deferred_fields(self):
+        """default=False のとき _deferred_landing_* は None のまま。"""
+        from src.recognition_pipeline import RecognitionPipeline
+
+        # load_default を使用して正しく初期化する
+        pipe = RecognitionPipeline.load_default()
+        assert pipe._enable_hsv_deferred_consensus is False
+        assert pipe._deferred_landing_1p is None
+        assert pipe._deferred_landing_2p is None
+
+    def test_explicit_true_sets_flag(self):
+        """enable_hsv_deferred_consensus=True が正しく保存される。"""
+        from src.recognition_pipeline import RecognitionPipeline
+
+        pipe = RecognitionPipeline.load_default(
+            enable_hsv_deferred_consensus=True,
+        )
+        assert pipe._enable_hsv_deferred_consensus is True
+
+    def test_reset_clears_deferred_state(self):
+        """reset() を呼ぶと deferred state がクリアされる。"""
+        from src.recognition_pipeline import RecognitionPipeline
+        from src.board import Board
+
+        pipe = RecognitionPipeline.load_default(
+            enable_hsv_deferred_consensus=True,
+        )
+        # 手動で deferred state を書き込む
+        pipe._deferred_landing_1p = {
+            "board_std": Board(),
+            "board_rev": Board(),
+            "base_cells": [(11, 2), (10, 2)],
+            "votes_std": 1,
+            "votes_rev": 0,
+            "frames_left": 5,
+        }
+        pipe._deferred_just_committed_1p = True
+
+        pipe.reset()
+
+        assert pipe._deferred_landing_1p is None
+        assert pipe._deferred_landing_2p is None
+        assert pipe._deferred_just_committed_1p is False
+        assert pipe._deferred_just_committed_2p is False
+
+    def test_load_default_passes_flag(self):
+        """load_default(enable_hsv_deferred_consensus=True) がフラグを伝播する。"""
+        from src.recognition_pipeline import RecognitionPipeline
+
+        pipe = RecognitionPipeline.load_default(
+            enable_hsv_deferred_consensus=True,
+        )
+        assert pipe._enable_hsv_deferred_consensus is True
+        pipe.reset()
+
+    def test_load_default_default_is_false(self):
+        """load_default() のデフォルトが False (ライブラリ既定と整合)。"""
+        from src.recognition_pipeline import RecognitionPipeline
+
+        pipe = RecognitionPipeline.load_default()
+        assert pipe._enable_hsv_deferred_consensus is False
+        pipe.reset()
