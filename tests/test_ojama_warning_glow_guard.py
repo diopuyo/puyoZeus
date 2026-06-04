@@ -3,8 +3,9 @@
 テスト方針:
   - stateless 関数 (compute_glow_score, update_glow_state, apply_glow_guard) を独立に検証
   - GlowGuardState の ON/OFF 遷移・上限解除を網羅
-  - default OFF (enable_ojama_warning_glow_guard=False) で現挙動不変を確認
-  - CLI フラグが store_true で正しく動くことを argparse 直接テストで確認
+  - glow_active=False で現挙動不変を確認 (フラグ OFF 時の安全弁)
+  - CLI フラグが BooleanOptionalAction で正しく動くことを argparse 直接テストで確認
+    (2026-06-05 採用確定: default=True、--no-ojama-warning-glow-guard で無効化)
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ if str(_PROJ) not in sys.path:
 
 from src.board import (
     BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_GREEN,
-    COLOR_OJAMA, COLOR_PURPLE, COLOR_UNKNOWN, COLOR_YELLOW, Board,
+    COLOR_OJAMA, COLOR_PURPLE, COLOR_RED, COLOR_UNKNOWN, COLOR_YELLOW, Board,
 )
 from src.image_reader import BoardRegion, VISIBLE_ROWS
 from src.ojama_warning_glow_guard import (
@@ -36,6 +37,7 @@ from src.ojama_warning_glow_guard import (
     GLOW_ROI_ROW_COUNT,
     V_HIGH_THRESHOLD,
     GlowGuardState,
+    _is_consensus_colored,
     apply_glow_guard,
     compute_glow_score,
     update_glow_state,
@@ -323,17 +325,19 @@ class TestApplyGlowGuard:
 
 
 # ============================
-# default OFF で現挙動不変のテスト
+# glow_active=False (フラグ OFF 時の安全弁) のテスト
 # ============================
 
 
 class TestDefaultOff:
-    """enable_ojama_warning_glow_guard=False (default) で挙動が変わらないことを確認。"""
+    """glow_active=False のとき apply_glow_guard が何もしないことを確認。
 
-    def test_pipeline_default_off_no_glow_state(self) -> None:
-        """default OFF のとき pipeline は _glow_guard_1p/_2p が None になる。"""
-        # pipeline のインポートは重いのでモジュール import レベルでは避け、
-        # GlowGuardState の存在チェックで代替する (CI が短い環境向け)
+    2026-06-05: enable_ojama_warning_glow_guard の default は True に変更済み。
+    このクラスは「フラグ OFF 時の安全弁」として is_glow_active=False の挙動を検証する。
+    """
+
+    def test_glow_inactive_returns_confirmed_unchanged(self) -> None:
+        """is_glow_active=False のとき apply_glow_guard は confirmed をそのまま返す。"""
         state = GlowGuardState()
         # glow_active=False の場合は apply_glow_guard が何もしないことを確認
         confirmed = _make_board({(5, 2): COLOR_OJAMA})
@@ -352,41 +356,51 @@ class TestDefaultOff:
 
 
 # ============================
-# CLI フラグ (store_true) のテスト
+# CLI フラグ (BooleanOptionalAction, default=True) のテスト
+# (2026-06-05 採用確定: store_true/default=False から変更)
 # ============================
 
 
 class TestCliFlag:
-    """--ojama-warning-glow-guard が store_true で正しく動くことを argparse で確認。"""
+    """--ojama-warning-glow-guard が BooleanOptionalAction / default=True で正しく動くことを確認。
+
+    採用確定 (2026-06-05) により:
+      - フラグ未指定 → True (ライブラリ default と同一)
+      - --ojama-warning-glow-guard → True (明示 ON)
+      - --no-ojama-warning-glow-guard → False (明示 OFF)
+    オプション名 "--ojama-warning-glow-guard" は先頭が "--no-" でないため
+    BooleanOptionalAction の反転バグ (argparse が "--no-no-..." を生成) は発生しない。
+    """
 
     @staticmethod
     def _build_parser() -> argparse.ArgumentParser:
+        """2026-06-05 採用構成: BooleanOptionalAction / default=True。"""
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--ojama-warning-glow-guard",
-            action="store_true",
-            default=False,
+            action=argparse.BooleanOptionalAction,
+            default=True,
             dest="enable_ojama_warning_glow_guard",
         )
         return parser
 
-    def test_flag_absent_is_false(self) -> None:
-        """フラグなしなら enable_ojama_warning_glow_guard=False。"""
+    def test_flag_absent_is_true(self) -> None:
+        """フラグ未指定のとき enable_ojama_warning_glow_guard=True (採用 default ON)。"""
         parser = self._build_parser()
         args = parser.parse_args([])
-        assert args.enable_ojama_warning_glow_guard is False
+        assert args.enable_ojama_warning_glow_guard is True
 
     def test_flag_present_is_true(self) -> None:
-        """--ojama-warning-glow-guard 指定で enable_ojama_warning_glow_guard=True。"""
+        """--ojama-warning-glow-guard 指定でも enable_ojama_warning_glow_guard=True。"""
         parser = self._build_parser()
         args = parser.parse_args(["--ojama-warning-glow-guard"])
         assert args.enable_ojama_warning_glow_guard is True
 
-    def test_no_prefix_not_recognized(self) -> None:
-        """store_true のため --no- 接頭辞は認識されない (BooleanOptionalAction と異なる)。"""
+    def test_no_prefix_is_false(self) -> None:
+        """--no-ojama-warning-glow-guard 指定で enable_ojama_warning_glow_guard=False (無効化)。"""
         parser = self._build_parser()
-        with pytest.raises(SystemExit):
-            parser.parse_args(["--no-ojama-warning-glow-guard"])
+        args = parser.parse_args(["--no-ojama-warning-glow-guard"])
+        assert args.enable_ojama_warning_glow_guard is False
 
 
 # ============================
@@ -524,3 +538,409 @@ class TestV3NonStableGuard:
         stable_confirmed = _make_board({(10, 2): COLOR_GREEN})
         state.frozen_board = stable_confirmed.copy()  # pipeline が STABLE 時に実行
         assert int(state.frozen_board.get(10, 2)) == COLOR_GREEN
+
+
+# ============================
+# v4: _is_consensus_colored のテスト
+# ============================
+
+
+class TestIsConsensusColored:
+    """_is_consensus_colored: CNN と HSV の合意判定を検証する。"""
+
+    def test_both_agree_colored_returns_true(self) -> None:
+        """CNN と HSV が同一有色で合意 → (True, その色) を返す。"""
+        cnn = _make_board({(3, 2): COLOR_YELLOW})
+        hsv = _make_board({(3, 2): COLOR_YELLOW})
+        is_cons, color = _is_consensus_colored(cnn, hsv, 3, 2)
+        assert is_cons is True
+        assert color == COLOR_YELLOW
+
+    def test_both_agree_ojama_returns_false(self) -> None:
+        """両者ともおじゃまで合意しても (False, 0) を返す (有色の合意のみ対象)。"""
+        cnn = _make_board({(1, 0): COLOR_OJAMA})
+        hsv = _make_board({(1, 0): COLOR_OJAMA})
+        is_cons, color = _is_consensus_colored(cnn, hsv, 1, 0)
+        assert is_cons is False
+        assert color == 0
+
+    def test_both_agree_empty_returns_false(self) -> None:
+        """両者とも空で合意しても (False, 0) を返す。"""
+        cnn = _make_board()
+        hsv = _make_board()
+        is_cons, color = _is_consensus_colored(cnn, hsv, 5, 3)
+        assert is_cons is False
+        assert color == 0
+
+    def test_disagree_returns_false(self) -> None:
+        """CNN と HSV が異なる色を示す場合は (False, 0) を返す。"""
+        cnn = _make_board({(2, 1): COLOR_RED})
+        hsv = _make_board({(2, 1): COLOR_BLUE})
+        is_cons, color = _is_consensus_colored(cnn, hsv, 2, 1)
+        assert is_cons is False
+        assert color == 0
+
+    def test_none_cnn_returns_false(self) -> None:
+        """cnn_board が None の場合は (False, 0) を返す。"""
+        hsv = _make_board({(0, 0): COLOR_GREEN})
+        is_cons, color = _is_consensus_colored(None, hsv, 0, 0)
+        assert is_cons is False
+        assert color == 0
+
+    def test_none_hsv_returns_false(self) -> None:
+        """hsv_board が None の場合は (False, 0) を返す。"""
+        cnn = _make_board({(4, 4): COLOR_PURPLE})
+        is_cons, color = _is_consensus_colored(cnn, None, 4, 4)
+        assert is_cons is False
+        assert color == 0
+
+    def test_both_none_returns_false(self) -> None:
+        """両方 None の場合は (False, 0) を返す。"""
+        is_cons, color = _is_consensus_colored(None, None, 7, 2)
+        assert is_cons is False
+        assert color == 0
+
+    def test_unknown_agreement_returns_false(self) -> None:
+        """両者とも UNKNOWN で合意しても (False, 0) を返す。"""
+        cnn = _make_board({(6, 5): COLOR_UNKNOWN})
+        hsv = _make_board({(6, 5): COLOR_UNKNOWN})
+        is_cons, color = _is_consensus_colored(cnn, hsv, 6, 5)
+        assert is_cons is False
+        assert color == 0
+
+
+# ============================
+# v4: apply_glow_guard の consensus 優先復元テスト
+# ============================
+
+
+class TestV4ConsensusRestoration:
+    """v4: apply_glow_guard の consensus 優先復元ロジックを検証する。"""
+
+    def test_consensus_color_used_over_frozen(self) -> None:
+        """consensus が frozen と異なる色を示す場合 → consensus 色で復元する (c2c 退行解消).
+
+        シナリオ: frozen=黄(消去前の盤面)、実際は連鎖消去後に青が配置済み。
+        raw_cnn=青、raw_hsv=青 → consensus=青 → 青で復元 (frozen の黄ではなく)。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen は消去前の盤面 (古い黄)
+        state.frozen_board = _make_board({(5, 2): COLOR_YELLOW})
+        # confirmed は発光でおじゃまに誤認
+        confirmed = _make_board({(5, 2): COLOR_OJAMA})
+        # CNN・HSV ともに新色 (青) で合意
+        raw_cnn = _make_board({(5, 2): COLOR_BLUE})
+        raw_hsv = _make_board({(5, 2): COLOR_BLUE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # frozen の黄ではなく consensus の青で復元される
+        assert int(result.get(5, 2)) == COLOR_BLUE
+
+    def test_no_consensus_falls_back_to_frozen(self) -> None:
+        """CNN と HSV が不一致 → frozen 色にフォールバックする (v3 互換挙動)。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(3, 1): COLOR_YELLOW})
+        confirmed = _make_board({(3, 1): COLOR_OJAMA})
+        # CNN と HSV が異なる色を示す (consensus なし)
+        raw_cnn = _make_board({(3, 1): COLOR_RED})
+        raw_hsv = _make_board({(3, 1): COLOR_BLUE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # frozen の黄にフォールバック
+        assert int(result.get(3, 1)) == COLOR_YELLOW
+
+    def test_consensus_ojama_falls_back_to_frozen(self) -> None:
+        """CNN・HSV ともおじゃまで合意しても → frozen 色にフォールバックする。
+
+        発光中に両者ともおじゃまを示す = 発光誤認と判断し frozen 色で保護する。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(2, 4): COLOR_GREEN})
+        confirmed = _make_board({(2, 4): COLOR_OJAMA})
+        # 両者ともおじゃまで合意 (= 発光誤認の典型パターン)
+        raw_cnn = _make_board({(2, 4): COLOR_OJAMA})
+        raw_hsv = _make_board({(2, 4): COLOR_OJAMA})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # frozen の緑にフォールバック
+        assert int(result.get(2, 4)) == COLOR_GREEN
+
+    def test_none_boards_falls_back_to_frozen(self) -> None:
+        """raw_cnn / raw_hsv が None → frozen 色にフォールバック (v3 完全互換)。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(1, 0): COLOR_PURPLE})
+        confirmed = _make_board({(1, 0): COLOR_OJAMA})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=None, raw_hsv_board=None,
+        )
+        assert int(result.get(1, 0)) == COLOR_PURPLE
+
+    def test_backward_compat_no_args(self) -> None:
+        """引数省略 (v3 互換呼び出し) でも frozen 色で正常に復元される。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(8, 3): COLOR_RED})
+        confirmed = _make_board({(8, 3): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        assert int(result.get(8, 3)) == COLOR_RED
+
+    def test_unrelated_cell_not_touched(self) -> None:
+        """consensus がある場合でも対象外セル (confirmed=有色) は不触。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen は黄、対象外セルに青
+        state.frozen_board = _make_board({(4, 2): COLOR_YELLOW, (4, 3): COLOR_GREEN})
+        # (4,2) はおじゃま誤認、(4,3) は正常に緑
+        confirmed = _make_board({(4, 2): COLOR_OJAMA, (4, 3): COLOR_GREEN})
+        raw_cnn = _make_board({(4, 2): COLOR_BLUE, (4, 3): COLOR_RED})
+        raw_hsv = _make_board({(4, 2): COLOR_BLUE, (4, 3): COLOR_RED})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # (4,2): consensus=青 で復元
+        assert int(result.get(4, 2)) == COLOR_BLUE
+        # (4,3): confirmed が有色 (おじゃまでない) → 不触のまま緑
+        assert int(result.get(4, 3)) == COLOR_GREEN
+
+
+# ============================
+# v4: CHAIN 状態を guard 対象に追加したことの確認テスト
+# ============================
+
+
+class TestV4ChainStateGuard:
+    """v4: CHAIN 状態でも apply_glow_guard が O 誤認を復元することを確認する。
+
+    pipeline 内部の状態分岐 (BoardState.CHAIN 追加) は直接呼べないため、
+    apply_glow_guard 本体が CHAIN 中相当の引数で正しく復元することを示す。
+    安全性: 「confirmed=おじゃま かつ frozen=有色」ルールは CHAIN 中も成立する
+    (連鎖消去は色→空であり、色→おじゃまへの変化は全て誤認)。
+    正当な消去 (色→空) は confirmed=空 で条件を満たさず不触のため安全。
+    """
+
+    def test_chain_state_ojama_misrecognition_restored(self) -> None:
+        """CHAIN 中に発光で色→おじゃまに誤認されたセルが復元される。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        # 発光前 (最終 STABLE 時) の frozen
+        state.frozen_board = _make_board({(0, 1): COLOR_YELLOW, (0, 4): COLOR_RED})
+        # CHAIN 中: 発光で黄→O、赤→O に誤認された confirmed
+        confirmed = _make_board({(0, 1): COLOR_OJAMA, (0, 4): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # 両セルとも frozen 色に復元される
+        assert int(result.get(0, 1)) == COLOR_YELLOW
+        assert int(result.get(0, 4)) == COLOR_RED
+
+    def test_chain_legitimate_erasure_not_touched(self) -> None:
+        """CHAIN 中の正当な消去 (色→空) は不触のまま残る。
+
+        ルールは「confirmed=おじゃま かつ frozen=有色」のみ対象。
+        confirmed=空 (正当消去) は条件を満たさず空のまま保持される。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # 連鎖前の盤面: (7,2) に緑があった
+        state.frozen_board = _make_board({(7, 2): COLOR_GREEN})
+        # CHAIN 中: (7,2) が正当に消去されて空になった confirmed
+        confirmed = _make_board()  # 全空 (消去後)
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # (7,2): 空のまま (正当消去を保護ルールが上書きしない)
+        assert int(result.get(7, 2)) == COLOR_EMPTY
+
+    def test_chain_consensus_used_for_restoration(self) -> None:
+        """CHAIN 中に consensus 優先復元が機能する (発光+再配置同時のエッジケース)。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen は古い黄 (消去前)
+        state.frozen_board = _make_board({(1, 3): COLOR_YELLOW})
+        # CHAIN 中: confirmed はおじゃまに誤認
+        confirmed = _make_board({(1, 3): COLOR_OJAMA})
+        # CNN・HSV ともに新色 (紫) で合意 = 連鎖後に紫が配置済み
+        raw_cnn = _make_board({(1, 3): COLOR_PURPLE})
+        raw_hsv = _make_board({(1, 3): COLOR_PURPLE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # consensus の紫で復元 (古い frozen の黄ではない)
+        assert int(result.get(1, 3)) == COLOR_PURPLE
+
+
+# ============================
+# v5: frozen 非有色でも consensus 復元のテスト
+# ============================
+
+
+class TestV5FrozenNonColoredConsensusRestore:
+    """v5 追加ルール: frozen が非有色(O/空/UNKNOWN)でも CNN==HSV=明確な色なら復元する。
+
+    主な検証シナリオ:
+      1. frozen=空 かつ CNN==HSV=黄 → consensus 黄で復元 (v89 t≈71 cell(2,3) 相当)。
+      2. frozen=おじゃま かつ CNN==HSV=赤 → consensus 赤で復元。
+      3. frozen=UNKNOWN かつ CNN==HSV=青 → consensus 青で復元。
+      4. frozen=空 かつ CNN==HSV=おじゃま (真おじゃま) → 不触 (confirmed=O 保持)。
+      5. frozen=空 かつ CNN≠HSV (不一致) → 不触 (confirmed=O 保持)。
+      6. frozen=空 かつ raw_cnn=None → 不触 (consensus 判定不能)。
+      7. frozen=有色 の v4 挙動は v5 でも変わらない (後退ゼロ確認)。
+    """
+
+    def test_frozen_empty_consensus_yellow_restores(self) -> None:
+        """frozen=空 かつ CNN==HSV=黄 → 黄で復元 (v89 t≈71 cell(2,3) 残差パターン)。
+
+        v4 では frozen=空のため frozen_is_colored=False → 復元ゲートを通らず O 誤認が残った。
+        v5 では CNN==HSV=黄の consensus が有効になり O→黄に復元される。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # frozen は空 (v4 で復元できなかった原因)
+        state.frozen_board = _make_board()
+        # confirmed は発光でおじゃまに誤認
+        confirmed = _make_board({(2, 3): COLOR_OJAMA})
+        # CNN・HSV ともに黄で合意
+        raw_cnn = _make_board({(2, 3): COLOR_YELLOW})
+        raw_hsv = _make_board({(2, 3): COLOR_YELLOW})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # v5: consensus 黄で復元される
+        assert int(result.get(2, 3)) == COLOR_YELLOW
+
+    def test_frozen_ojama_consensus_red_restores(self) -> None:
+        """frozen=おじゃま かつ CNN==HSV=赤 → 赤で復元 (frozen=O は非有色扱い)。
+
+        frozen がおじゃまの場合、v4 では frozen_is_colored=False で不触だった。
+        v5 では CNN==HSV=赤の consensus で O→赤に復元される。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(0, 0): COLOR_OJAMA})
+        confirmed = _make_board({(0, 0): COLOR_OJAMA})
+        raw_cnn = _make_board({(0, 0): COLOR_RED})
+        raw_hsv = _make_board({(0, 0): COLOR_RED})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        assert int(result.get(0, 0)) == COLOR_RED
+
+    def test_frozen_unknown_consensus_blue_restores(self) -> None:
+        """frozen=UNKNOWN かつ CNN==HSV=青 → 青で復元。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(3, 5): COLOR_UNKNOWN})
+        confirmed = _make_board({(3, 5): COLOR_OJAMA})
+        raw_cnn = _make_board({(3, 5): COLOR_BLUE})
+        raw_hsv = _make_board({(3, 5): COLOR_BLUE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        assert int(result.get(3, 5)) == COLOR_BLUE
+
+    def test_frozen_empty_consensus_ojama_not_restored(self) -> None:
+        """frozen=空 かつ CNN==HSV=おじゃま → 不触 (真おじゃまは保持).
+
+        真おじゃまが降った場合: CNN・HSV ともおじゃまを示す。
+        consensus=おじゃまは非O色の合意条件を満たさないため復元されない。
+        confirmed=O がそのまま保持されることで真おじゃまを誤って色に書き換えない。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board()
+        confirmed = _make_board({(1, 2): COLOR_OJAMA})
+        # 真おじゃま: CNN・HSV ともおじゃまで合意
+        raw_cnn = _make_board({(1, 2): COLOR_OJAMA})
+        raw_hsv = _make_board({(1, 2): COLOR_OJAMA})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # 真おじゃまは復元されない (confirmed=O のまま保持)
+        assert int(result.get(1, 2)) == COLOR_OJAMA
+
+    def test_frozen_empty_consensus_mismatch_not_restored(self) -> None:
+        """frozen=空 かつ CNN≠HSV (不一致) → 不触 (consensus なし)。"""
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board()
+        confirmed = _make_board({(4, 1): COLOR_OJAMA})
+        # CNN と HSV が異なる色を示す
+        raw_cnn = _make_board({(4, 1): COLOR_GREEN})
+        raw_hsv = _make_board({(4, 1): COLOR_PURPLE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # consensus なし → 不触 (confirmed=O 保持)
+        assert int(result.get(4, 1)) == COLOR_OJAMA
+
+    def test_frozen_empty_no_raw_boards_not_restored(self) -> None:
+        """frozen=空 かつ raw_cnn=None → 不触 (consensus 判定不能)。
+
+        raw_cnn/raw_hsv が None の場合は _is_consensus_colored が (False, 0) を返すため
+        v5 の consensus ブランチに入らず confirmed=O がそのまま保持される。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board()
+        confirmed = _make_board({(6, 2): COLOR_OJAMA})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=None, raw_hsv_board=None,
+        )
+        # raw_boards なし → 不触
+        assert int(result.get(6, 2)) == COLOR_OJAMA
+
+    def test_v4_frozen_colored_behavior_unchanged(self) -> None:
+        """v5 で frozen=有色のケースは v4 と全く同じ挙動を保つ (後退ゼロ確認)。
+
+        frozen=有色 かつ consensus=新色 → consensus 色で復元 (v4 と同じ)。
+        frozen=有色 かつ consensus なし → frozen 色にフォールバック (v4 と同じ)。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board({(5, 3): COLOR_YELLOW, (5, 4): COLOR_GREEN})
+        confirmed = _make_board({(5, 3): COLOR_OJAMA, (5, 4): COLOR_OJAMA})
+        # (5,3): consensus=青 (v4 と同様 consensus 優先)
+        # (5,4): CNN≠HSV → frozen=緑にフォールバック
+        raw_cnn = _make_board({(5, 3): COLOR_BLUE, (5, 4): COLOR_RED})
+        raw_hsv = _make_board({(5, 3): COLOR_BLUE, (5, 4): COLOR_PURPLE})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # (5,3): consensus 青で復元 (v4 と同じ)
+        assert int(result.get(5, 3)) == COLOR_BLUE
+        # (5,4): frozen 緑にフォールバック (v4 と同じ)
+        assert int(result.get(5, 4)) == COLOR_GREEN
+
+    def test_non_ojama_confirmed_not_touched_regardless(self) -> None:
+        """confirmed=有色 のセルは frozen/consensus に関わらず常に不触。
+
+        v5 で分岐を追加したが、confirmed=おじゃま でない限り一切介入しない。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        state.frozen_board = _make_board()  # 全空
+        confirmed = _make_board({(7, 0): COLOR_RED})
+        raw_cnn = _make_board({(7, 0): COLOR_YELLOW})
+        raw_hsv = _make_board({(7, 0): COLOR_YELLOW})
+        result = apply_glow_guard(
+            confirmed, state, is_glow_active=True,
+            raw_cnn_board=raw_cnn, raw_hsv_board=raw_hsv,
+        )
+        # confirmed=赤のまま (介入なし)
+        assert int(result.get(7, 0)) == COLOR_RED

@@ -847,18 +847,33 @@ def main() -> int:
              "後続フレームの CNN==HSV consensus 投票で確定させる (corruption 65% 起源対策)。 "
              "ライブラリ default=False (無効)。 --hsv-deferred-consensus で有効化。",
     )
-    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)
-    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-05 採用確定、default ON)
+    # BooleanOptionalAction: --ojama-warning-glow-guard=有効 / --no-ojama-warning-glow-guard=無効
+    # オプション名は "--ojama-warning-glow-guard" (先頭が "--no-" でないため反転バグなし)
     parser.add_argument(
         "--ojama-warning-glow-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_warning_glow_guard",
-        help="不具合B 対処: 予告おじゃま発光ガードを有効化する。 "
+        help="不具合B 対処: 予告おじゃま発光ガード (2026-06-05 採用確定)。 "
              "相手連鎖の予告おじゃま演出による盤面上部多色発光を V_high_ratio で検知し、 "
              "STABLE 中の confirmed_board を frozen_board で保護する。 "
              "黄ぷよに発光が重なる黄(4)→おじゃま(9)誤認を防ぐ。 "
-             "ライブラリ default=False (無効)。 --ojama-warning-glow-guard で有効化。",
+             "default=True (有効、2026-06-05 採用)。 --no-ojama-warning-glow-guard で無効化。",
+    )
+    # 不具合A 対処: 連鎖再発火クールダウン (2026-06-04)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    parser.add_argument(
+        "--chain-refire-cooldown",
+        action="store_true",
+        default=False,
+        dest="enable_chain_refire_cooldown",
+        help="不具合A 対処: 連鎖タイムアウト後の再発火クールダウンを有効化する。 "
+             "タイムアウトで連鎖終了した直後から CHAIN_REFIRE_COOLDOWN_SEC 秒だけ "
+             "機能B/D (score 急増 / 掛け算式) の再発火を抑制する。 "
+             "連鎖アニメ残光中の掛け算式再検知による連鎖状態巨大化 (不具合A) を防ぐ。 "
+             f"クールダウン時間 = {0.5}s。 "
+             "ライブラリ default=False (無効)。 --chain-refire-cooldown で有効化。",
     )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
@@ -969,6 +984,8 @@ def main() -> int:
         enable_hsv_deferred_consensus=args.enable_hsv_deferred_consensus,
         # 不具合B 対処 (2026-06-04): --ojama-warning-glow-guard で有効化
         enable_ojama_warning_glow_guard=args.enable_ojama_warning_glow_guard,
+        # 不具合A 対処 (2026-06-04): --chain-refire-cooldown で有効化
+        enable_chain_refire_cooldown=args.enable_chain_refire_cooldown,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1055,6 +1072,13 @@ def main() -> int:
         print(
             "[viz] chain_exit_warmup=ON "
             f"(機能C: CHAIN→STABLE 後 {0.1}s confirmed 凍結 / エフェクト残光混入防止)"
+        )
+    if args.enable_chain_refire_cooldown:
+        from src.recognition_pipeline import CHAIN_REFIRE_COOLDOWN_SEC
+        print(
+            "[viz] chain_refire_cooldown=ON "
+            f"(不具合A 対処: タイムアウト後 {CHAIN_REFIRE_COOLDOWN_SEC}s 機能B/D 再発火抑制 / "
+            "連鎖状態巨大化防止)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

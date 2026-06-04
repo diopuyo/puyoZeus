@@ -74,6 +74,14 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
+# 不具合A 対処: 連鎖再発火クールダウン時間 (enable_chain_refire_cooldown 用)。
+# タイムアウトで連鎖終了した後、この秒数だけ機能B/D の再発火を抑制する。
+# 連鎖アニメ残光中 (~0.3s) に掛け算式が消えるまでの猶予を吸収しつつ、
+# 本物の次連鎖 (通常タイムアウトから数百 ms 以上後) を許容する値として 0.5s を採用。
+# 実測根拠: v89m1 t=38.77 タイムアウト後、次ツモ出現 (連鎖終了確認) まで約 0.2-0.4s。
+# 機能D の掛け算式は連鎖アニメ終了後 1-2 frame で消えるため、0.5s で安全に吸収できる。
+CHAIN_REFIRE_COOLDOWN_SEC: float = 0.5
+
 # 機能D: 連鎖開始 掛け算式 検知 (enable_chain_formula_detection 用)。
 # score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ ink_ratio が
 # CHAIN_FORMULA_INK_RATIO_MIN より高い場合に連鎖開始とみなす。
@@ -542,8 +550,15 @@ class RecognitionPipeline:
         # True にすると相手連鎖の予告おじゃま演出による盤面上部多色発光を検知し、
         # STABLE 中の confirmed_board を frozen_board で保護する。
         # 黄ぷよに発光が重なり黄(4)→おじゃま(9)誤認→連鎖誤消去を防ぐ。
-        # default False = 従来挙動完全維持 (backwards compat)。
-        enable_ojama_warning_glow_guard: bool = False,
+        # 2026-06-05 採用確定: v5 consensus 駆動復元、acc/corr 改善 + v89 おじゃま誤認解消。
+        # default True = 採用 ON (無効化したい場合は False を渡す)。
+        enable_ojama_warning_glow_guard: bool = True,
+        # 不具合A 対処: 連鎖タイムアウト後の再発火クールダウン (2026-06-04)。
+        # True にすると _active_chain_* が None になった直後から
+        # CHAIN_REFIRE_COOLDOWN_SEC 秒だけ機能B/D の再発火を抑制する。
+        # 連鎖アニメ残光中の掛け算式検知による連鎖状態再延長 (巨大化不具合A) を防ぐ。
+        # default False = 従来挙動完全維持 (backwards compat, A/B 検証用フラグ)。
+        enable_chain_refire_cooldown: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -895,6 +910,13 @@ class RecognitionPipeline:
         else:
             self._glow_guard_1p = None
             self._glow_guard_2p = None
+        # 不具合A 対処: 連鎖再発火クールダウン (enable_chain_refire_cooldown 用)。
+        # タイムアウト連鎖終了後 CHAIN_REFIRE_COOLDOWN_SEC 秒だけ機能B/D 再発火を抑制。
+        # 1P/2P 別に管理。0.0 = クールダウン未設定 (発火許可)。
+        # フラグ OFF 時は参照されない (完全挙動不変)。
+        self._enable_chain_refire_cooldown: bool = bool(enable_chain_refire_cooldown)
+        self._chain_refire_cooldown_until_1p: float = 0.0
+        self._chain_refire_cooldown_until_2p: float = 0.0
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -1116,8 +1138,12 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_hsv_deferred_consensus: bool = False,
         # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
-        # default False = 従来挙動完全維持 (backwards compat)。
-        enable_ojama_warning_glow_guard: bool = False,
+        # 2026-06-05 採用確定: v5 consensus 駆動復元、acc/corr 改善 + v89 おじゃま誤認解消。
+        # default True = 採用 ON (無効化したい場合は False を渡す)。
+        enable_ojama_warning_glow_guard: bool = True,
+        # 不具合A 対処: 連鎖再発火クールダウン (2026-06-04)。
+        # default False = 従来挙動完全維持 (backwards compat, A/B 検証用フラグ)。
+        enable_chain_refire_cooldown: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1268,6 +1294,7 @@ class RecognitionPipeline:
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_refire_cooldown=enable_chain_refire_cooldown,
         )
 
     # ------------------------------------------------------------------
@@ -1381,6 +1408,9 @@ class RecognitionPipeline:
         if self._glow_guard_2p is not None:
             from src.ojama_warning_glow_guard import GlowGuardState as _GGS
             self._glow_guard_2p = _GGS()
+        # 不具合A 対処: 連鎖再発火クールダウン リセット (試合切替時)
+        self._chain_refire_cooldown_until_1p = 0.0
+        self._chain_refire_cooldown_until_2p = 0.0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1761,7 +1791,12 @@ class RecognitionPipeline:
             if time_sec < eff_until_1p:
                 chain_ev_1p = self._active_chain_1p
             else:
+                # タイムアウトで連鎖終了 → クールダウンを設定 (フラグ ON 時のみ)
                 self._active_chain_1p = None
+                if self._enable_chain_refire_cooldown:
+                    self._chain_refire_cooldown_until_1p = (
+                        time_sec + CHAIN_REFIRE_COOLDOWN_SEC
+                    )
         if self._active_chain_2p is not None:
             eff_until_2p = (
                 self._chain_event_max_until_2p
@@ -1774,7 +1809,12 @@ class RecognitionPipeline:
             if time_sec < eff_until_2p:
                 chain_ev_2p = self._active_chain_2p
             else:
+                # タイムアウトで連鎖終了 → クールダウンを設定 (フラグ ON 時のみ)
                 self._active_chain_2p = None
+                if self._enable_chain_refire_cooldown:
+                    self._chain_refire_cooldown_until_2p = (
+                        time_sec + CHAIN_REFIRE_COOLDOWN_SEC
+                    )
 
         # 4. score 差分
         score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
@@ -2586,6 +2626,15 @@ class RecognitionPipeline:
         else:
             if self._active_chain_2p is not None:
                 return
+        # 不具合A 対処: クールダウン中は再発火を抑制 (フラグ ON 時のみ)
+        if self._enable_chain_refire_cooldown:
+            cooldown_until = (
+                self._chain_refire_cooldown_until_1p
+                if side == "1P"
+                else self._chain_refire_cooldown_until_2p
+            )
+            if time_sec <= cooldown_until:
+                return
         # prev_confirmed が空の場合は before_board を空 Board() で代替
         before = prev_confirmed.copy() if prev_confirmed is not None else Board()
         # 疑似 ChainEvent を生成 (chain_count=1 の最小ガード)
@@ -2680,6 +2729,15 @@ class RecognitionPipeline:
                 return
         else:
             if self._active_chain_2p is not None:
+                return
+        # 不具合A 対処: クールダウン中は再発火を抑制 (フラグ ON 時のみ)
+        if self._enable_chain_refire_cooldown:
+            cooldown_until = (
+                self._chain_refire_cooldown_until_1p
+                if side == "1P"
+                else self._chain_refire_cooldown_until_2p
+            )
+            if time_sec <= cooldown_until:
                 return
         before = prev_confirmed.copy() if prev_confirmed is not None else Board()
         # 疑似 ChainEvent を生成 (score は不明なため 0)
@@ -3714,16 +3772,16 @@ class RecognitionPipeline:
             curr_state=ctx.state,
             published_confirmed=published_confirmed,
         )
-        # 不具合B 対処: 予告おじゃま発光ガード v3 (2026-06-04)。
-        # v2 は STABLE 中のみ適用していたため、発火直前の ojama_fall / tsumo_fall
-        # 中の O 誤認が残り連鎖シミュに混入していた (実証: v89 t≈70 残存7フレーム)。
-        # v3: apply_glow_guard を STABLE + OJAMA_FALL + TSUMO_FALL でも有効化。
-        # 安全根拠: v2 ルール「frozen=有色 かつ confirmed=おじゃま → 復元」は、
-        #   ぷよぷよの物理上「既に有色ぷよがあるセルにおじゃまが降ることは絶対ない」
-        #   ため、非 STABLE 状態でも誤認復元として安全である。
-        # frozen 更新は引き続き「発光 OFF 中の STABLE 確定時のみ」に限定する
-        # (非 STABLE 中・発光中は直前 STABLE の色を凍結保持する)。
-        # CHAIN は既存凍結機構で保護済みのためスキップ。
+        # 不具合B 対処: 予告おじゃま発光ガード v4 (2026-06-04)。
+        # v3 からの変更点:
+        #   1) CHAIN 状態も guard 対象に追加 (発火フレーム保護漏れ解消)。
+        #      安全根拠: ルール「frozen=有色 かつ confirmed=おじゃま → 復元」は
+        #      CHAIN 中も成立 (連鎖消去は色→空であり、おじゃまへの誤変化は誤認)。
+        #      CHAIN 中の正当な「色→空」消去は confirmed=空 で条件を満たさず不触。
+        #   2) apply_glow_guard に raw_cnn_board / raw_hsv_board を渡して
+        #      consensus 優先復元 (v4) を有効化 (c2c corruption 退行解消)。
+        #      CHAIN 状態では HSV-only 盤面を新規取得して渡す。
+        # frozen 更新は引き続き「発光 OFF 中の STABLE 確定時のみ」に限定する。
         if self._enable_ojama_warning_glow_guard and frame_bgr is not None:
             glow_state = (
                 self._glow_guard_1p if side == "1P" else self._glow_guard_2p
@@ -3739,21 +3797,37 @@ class RecognitionPipeline:
                 )
                 glow_score = compute_glow_score(frame_bgr, region_for_glow)
                 is_glow = update_glow_state(glow_state, glow_score, frame_idx)
-                # v3: ガード適用対象状態 = STABLE + OJAMA_FALL + TSUMO_FALL
+                # v4: ガード適用対象状態 = STABLE + OJAMA_FALL + TSUMO_FALL + CHAIN
                 _glow_guard_states = frozenset({
                     BoardState.STABLE,
                     BoardState.OJAMA_FALL,
                     BoardState.TSUMO_FALL,
+                    BoardState.CHAIN,
                 })
                 if ctx.state in _glow_guard_states and published_confirmed is not None:
                     if is_glow:
-                        # 発光中: frozen で confirmed のO誤認セルを保護する
+                        # v4: consensus 優先復元のため raw_cnn / raw_hsv を準備する。
+                        # raw_hsv は CHAIN 状態でも read_board_hsv_only で取得する。
+                        # _hsv_board_for_signals は STABLE+recovery_gate ON 時のみ存在
+                        # するため、glow_guard 用に独立して取得する。
+                        _raw_hsv_for_glow: "Board | None" = None
+                        try:
+                            _raw_hsv_for_glow = self._reader.read_board_hsv_only(
+                                frame_bgr, region_for_glow,
+                            )
+                        except Exception:
+                            _raw_hsv_for_glow = None
+                        # 発光中: consensus 優先で confirmed のO誤認セルを保護する
                         published_confirmed = apply_glow_guard(
-                            published_confirmed, glow_state, is_glow,
+                            published_confirmed,
+                            glow_state,
+                            is_glow,
+                            raw_cnn_board=cnn_board,
+                            raw_hsv_board=_raw_hsv_for_glow,
                         )
                     elif ctx.state == BoardState.STABLE:
                         # 発光 OFF 中かつ STABLE 確定時のみ: frozen を更新する
-                        # (ojama_fall / tsumo_fall 中は直前 STABLE の色を保持)
+                        # (ojama_fall / tsumo_fall / chain 中は直前 STABLE の色を保持)
                         glow_state.frozen_board = published_confirmed.copy()
         return SideResult(
             side=side,
