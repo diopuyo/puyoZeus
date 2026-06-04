@@ -358,6 +358,7 @@ def _make_pipeline_cnn(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -436,6 +437,7 @@ def _make_pipeline_cnn(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
     )
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
@@ -652,6 +654,7 @@ def _process_video(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -719,6 +722,7 @@ def _process_video(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
         disable_per_video_hsv=disable_per_video_hsv,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
@@ -769,6 +773,7 @@ def _process_video_worker(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -814,6 +819,7 @@ def _process_video_worker(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2140,19 +2146,35 @@ def _parse_args() -> argparse.Namespace:
             "--hsv-deferred-consensus で有効化、 --no-hsv-deferred-consensus で無効化。"
         ),
     )
-    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)
-    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    # 不具合B 対処: 予告おじゃま発光ガード (2026-06-05 採用確定、default ON)
+    # BooleanOptionalAction: --ojama-warning-glow-guard=有効 / --no-ojama-warning-glow-guard=無効
+    # オプション名は "--ojama-warning-glow-guard" (先頭が "--no-" でないため反転バグなし)
     p.add_argument(
         "--ojama-warning-glow-guard",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         dest="enable_ojama_warning_glow_guard",
         help=(
-            "不具合B 対処: 予告おじゃま発光ガードを有効化する。 "
+            "不具合B 対処: 予告おじゃま発光ガード (2026-06-05 採用確定)。 "
             "相手連鎖の予告おじゃま演出による盤面上部多色発光を V_high_ratio で検知し、 "
             "STABLE 中の confirmed_board を frozen_board で保護する。 "
             "黄ぷよに発光が重なる黄(4)→おじゃま(9)誤認を防ぐ。 "
-            "ライブラリ default=False (無効)。 --ojama-warning-glow-guard で有効化。"
+            "default=True (有効、2026-06-05 採用)。 --no-ojama-warning-glow-guard で無効化。"
+        ),
+    )
+    # 不具合A 対処: 連鎖再発火クールダウン (2026-06-04)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    p.add_argument(
+        "--chain-refire-cooldown",
+        action="store_true",
+        default=False,
+        dest="enable_chain_refire_cooldown",
+        help=(
+            "不具合A 対処: 連鎖タイムアウト後の再発火クールダウンを有効化する。 "
+            "タイムアウトで連鎖終了した直後から CHAIN_REFIRE_COOLDOWN_SEC 秒だけ "
+            "機能B/D (score 急増 / 掛け算式) の再発火を抑制する。 "
+            "連鎖アニメ残光中の掛け算式再検知による連鎖状態巨大化 (不具合A) を防ぐ。 "
+            "ライブラリ default=False (無効)。 --chain-refire-cooldown で有効化。"
         ),
     )
     p.add_argument(
@@ -2235,6 +2257,7 @@ def _collect_results(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2305,6 +2328,7 @@ def _collect_results(
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_refire_cooldown=enable_chain_refire_cooldown,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2332,6 +2356,7 @@ def _collect_results(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2364,6 +2389,7 @@ def _collect_serial(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2398,6 +2424,7 @@ def _collect_serial(
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_refire_cooldown=enable_chain_refire_cooldown,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2433,6 +2460,7 @@ def _collect_parallel(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_refire_cooldown: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2481,6 +2509,7 @@ def _collect_parallel(
                 enable_chain_formula_detection,
                 enable_hsv_deferred_consensus,
                 enable_ojama_warning_glow_guard,
+                enable_chain_refire_cooldown,
                 persist_min_frames,
                 disable_per_video_hsv,
             )
@@ -2664,8 +2693,12 @@ def main() -> int:
     enable_hsv_deferred_consensus: bool = bool(
         getattr(args, "enable_hsv_deferred_consensus", False)
     )
+    # 2026-06-05 採用確定: fallback も True (ライブラリ default と整合)
     enable_ojama_warning_glow_guard: bool = bool(
-        getattr(args, "enable_ojama_warning_glow_guard", False)
+        getattr(args, "enable_ojama_warning_glow_guard", True)
+    )
+    enable_chain_refire_cooldown: bool = bool(
+        getattr(args, "enable_chain_refire_cooldown", False)
     )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する
@@ -2741,6 +2774,7 @@ def main() -> int:
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2809,6 +2843,10 @@ def main() -> int:
             # True = ターゲット型ガード有効 (おじゃま誤認セルのみ復元)
             # False = 従来挙動完全維持 (backwards compat)
             "enable_ojama_warning_glow_guard": enable_ojama_warning_glow_guard,
+            # 不具合A 対処: 連鎖再発火クールダウン (後日比較用)
+            # True = タイムアウト後 CHAIN_REFIRE_COOLDOWN_SEC 秒間 機能B/D 再発火抑制
+            # False = 従来挙動完全維持 (backwards compat)
+            "enable_chain_refire_cooldown": enable_chain_refire_cooldown,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

@@ -341,3 +341,178 @@ def test_chain_formula_consec_frames_is_two() -> None:
 def test_chain_formula_ink_ratio_min_matches_score_ocr() -> None:
     """CHAIN_FORMULA_INK_RATIO_MIN が score_ocr の SCORE_ROI_INK_RATIO_MIN と一致する。"""
     assert CHAIN_FORMULA_INK_RATIO_MIN == SCORE_ROI_INK_RATIO_MIN
+
+
+# ===========================================================================
+# 不具合A 対処: 連鎖再発火クールダウン テスト
+# ===========================================================================
+
+
+from src.recognition_pipeline import CHAIN_REFIRE_COOLDOWN_SEC
+
+
+def _make_pipe_for_cooldown(
+    enable_chain_refire_cooldown: bool = True,
+    enable_chain_formula_detection: bool = True,
+    enable_chain_score_early_fire: bool = True,
+) -> RecognitionPipeline:
+    """クールダウンテスト用の最小構成 pipeline を返す。"""
+    from src.image_reader import ImageReader
+    from src.match_state import MatchStateDetector
+
+    reader = MagicMock(spec=ImageReader)
+    from src.board import Board
+    reader.read_both_boards.return_value = (Board(), Board())
+    reader._classifier = None
+    reader.set_pre_capture_mode = MagicMock()
+    reader.set_background_fingerprints = MagicMock()
+
+    match_det = MagicMock(spec=MatchStateDetector)
+    from src.match_state import MatchState
+    match_det.detect.return_value = MatchState.IN_MATCH
+
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=match_det,
+        enable_chain_refire_cooldown=enable_chain_refire_cooldown,
+        enable_chain_formula_detection=enable_chain_formula_detection,
+        enable_chain_score_early_fire=enable_chain_score_early_fire,
+        force_in_match=True,
+    )
+
+
+def test_chain_refire_cooldown_default_is_false() -> None:
+    """enable_chain_refire_cooldown のデフォルト値は False (backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    default = sig.parameters["enable_chain_refire_cooldown"].default
+    assert default is False, f"デフォルト False 期待 (backwards compat): {default}"
+
+
+def test_load_default_chain_refire_cooldown_default_is_false() -> None:
+    """load_default の enable_chain_refire_cooldown デフォルト値は False。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    default = sig.parameters["enable_chain_refire_cooldown"].default
+    assert default is False, f"load_default デフォルト False 期待: {default}"
+
+
+def test_chain_refire_cooldown_flag_stored() -> None:
+    """enable_chain_refire_cooldown フラグが _enable_chain_refire_cooldown に格納される。"""
+    pipe_on = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    pipe_off = _make_pipe_for_cooldown(enable_chain_refire_cooldown=False)
+    assert pipe_on._enable_chain_refire_cooldown is True
+    assert pipe_off._enable_chain_refire_cooldown is False
+
+
+def test_chain_refire_cooldown_initial_zero() -> None:
+    """初期状態では _chain_refire_cooldown_until_* = 0.0。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    assert pipe._chain_refire_cooldown_until_1p == 0.0
+    assert pipe._chain_refire_cooldown_until_2p == 0.0
+
+
+def test_chain_refire_cooldown_reset_clears_state() -> None:
+    """reset() でクールダウン状態がクリアされる。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    # 手動でクールダウンを設定
+    pipe._chain_refire_cooldown_until_1p = 99.0
+    pipe._chain_refire_cooldown_until_2p = 99.0
+    pipe.reset()
+    assert pipe._chain_refire_cooldown_until_1p == 0.0, "reset 後は 0.0"
+    assert pipe._chain_refire_cooldown_until_2p == 0.0, "reset 後は 0.0"
+
+
+def test_apply_chain_formula_early_fire_blocked_during_cooldown() -> None:
+    """クールダウン中は _apply_chain_formula_early_fire が発火しない。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    # クールダウン期間中に設定 (t=10.0 に対し cooldown_until=10.4)
+    time_sec = 10.0
+    pipe._chain_refire_cooldown_until_1p = time_sec + 0.4
+    # active_chain は None (タイムアウト後の状態)
+    pipe._active_chain_1p = None
+
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=time_sec, prev_confirmed=None,
+    )
+    # クールダウン中なので発火しない
+    assert pipe._active_chain_1p is None, (
+        "クールダウン中は _apply_chain_formula_early_fire が発火しない"
+    )
+
+
+def test_apply_chain_formula_early_fire_allowed_after_cooldown() -> None:
+    """クールダウン経過後は _apply_chain_formula_early_fire が発火する。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    # クールダウン終了済み (t=10.0 に対し cooldown_until=9.5)
+    time_sec = 10.0
+    pipe._chain_refire_cooldown_until_1p = 9.5
+    pipe._active_chain_1p = None
+
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=time_sec, prev_confirmed=None,
+    )
+    # クールダウン終了後は発火する
+    assert pipe._active_chain_1p is not None, (
+        "クールダウン終了後は _apply_chain_formula_early_fire が発火する"
+    )
+
+
+def test_apply_chain_score_early_fire_blocked_during_cooldown() -> None:
+    """クールダウン中は _apply_chain_score_early_fire が発火しない (機能B)。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    time_sec = 10.0
+    pipe._chain_refire_cooldown_until_2p = time_sec + 0.3
+    pipe._active_chain_2p = None
+
+    pipe._apply_chain_score_early_fire(
+        side="2P",
+        score_delta=200,  # CHAIN_SCORE_EARLY_FIRE_DELTA=80 を超える値
+        time_sec=time_sec,
+        prev_confirmed=None,
+    )
+    assert pipe._active_chain_2p is None, (
+        "クールダウン中は _apply_chain_score_early_fire が発火しない"
+    )
+
+
+def test_apply_chain_score_early_fire_allowed_after_cooldown() -> None:
+    """クールダウン経過後は _apply_chain_score_early_fire が発火する (機能B)。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=True)
+    time_sec = 10.0
+    pipe._chain_refire_cooldown_until_2p = 9.0  # クールダウン終了済み
+    pipe._active_chain_2p = None
+
+    pipe._apply_chain_score_early_fire(
+        side="2P",
+        score_delta=200,
+        time_sec=time_sec,
+        prev_confirmed=None,
+    )
+    assert pipe._active_chain_2p is not None, (
+        "クールダウン終了後は _apply_chain_score_early_fire が発火する"
+    )
+
+
+def test_cooldown_off_does_not_block_refire() -> None:
+    """enable_chain_refire_cooldown=False では現挙動完全不変 (クールダウンガードなし)。"""
+    pipe = _make_pipe_for_cooldown(enable_chain_refire_cooldown=False)
+    time_sec = 10.0
+    # フラグ OFF 時はクールダウン変数があっても参照されない
+    pipe._chain_refire_cooldown_until_1p = time_sec + 99.0  # 長いクールダウン設定
+    pipe._active_chain_1p = None
+
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=time_sec, prev_confirmed=None,
+    )
+    # フラグ OFF → クールダウンガードは無効 → 発火する
+    assert pipe._active_chain_1p is not None, (
+        "enable_chain_refire_cooldown=False では現挙動不変 (ガードなし)"
+    )
+
+
+def test_cooldown_constant_is_half_second() -> None:
+    """CHAIN_REFIRE_COOLDOWN_SEC は 0.5 秒 (実測根拠に基づく設定値)。"""
+    assert CHAIN_REFIRE_COOLDOWN_SEC == 0.5, (
+        f"クールダウン定数 0.5s 期待: {CHAIN_REFIRE_COOLDOWN_SEC}"
+    )
