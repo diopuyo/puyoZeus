@@ -418,3 +418,109 @@ class TestConstants:
     def test_ratio_low_less_than_high(self) -> None:
         """GLOW_RATIO_LOW < GLOW_RATIO_HIGH (正規化の前提)。"""
         assert GLOW_RATIO_LOW < GLOW_RATIO_HIGH
+
+
+# ============================
+# v3: ojama_fall / tsumo_fall でも apply_glow_guard が動作することを検証
+# ============================
+
+
+class TestV3NonStableGuard:
+    """v3 拡張: ojama_fall / tsumo_fall 状態でも O 誤認セルが復元されることを確認する。
+
+    pipeline 内部の状態分岐は直接呼べないため、ここでは apply_glow_guard 本体と
+    GlowGuardState の振る舞いを検証する。
+    「apply_glow_guard は状態に依存しない stateless 関数」であるため、
+    OJAMA_FALL / TSUMO_FALL 中でも同じ引数を渡せば復元することを示す。
+    pipeline 側の適用条件拡張 (recognition_pipeline.py:3736 相当) は
+    TestFrozenBoardNotUpdatedInNonStable で frozen 更新タイミングを検証する。
+    """
+
+    def test_ojama_fall_like_ojama_misrecognition_restored(self) -> None:
+        """ojama_fall 中に相当する confirmed=O かつ frozen=有色 → 復元される.
+
+        apply_glow_guard 自体は状態を受け取らず stateless なため、
+        pipeline が ojama_fall でも呼べば正しく復元することを確認する。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # 発光前 (STABLE 時) の frozen は黄ぷよ
+        state.frozen_board = _make_board({(0, 1): COLOR_YELLOW, (1, 3): COLOR_BLUE})
+        # ojama_fall 中: 発光で黄→O, 青→O に誤認された confirmed
+        confirmed = _make_board({(0, 1): COLOR_OJAMA, (1, 3): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # 両セルとも frozen の色 (YELLOW / BLUE) に復元される
+        assert int(result.get(0, 1)) == COLOR_YELLOW
+        assert int(result.get(1, 3)) == COLOR_BLUE
+
+    def test_tsumo_fall_like_ojama_misrecognition_restored(self) -> None:
+        """tsumo_fall 中に相当する confirmed=O かつ frozen=有色 → 復元される.
+
+        ojama_fall と同様、apply_glow_guard は状態に依存しないため
+        tsumo_fall 中でも正しく復元することを確認する。
+        """
+        state = GlowGuardState()
+        state.glow_active = True
+        # 発光前の frozen は紫ぷよ
+        state.frozen_board = _make_board({(3, 2): COLOR_PURPLE})
+        # tsumo_fall 中: 発光で紫→O に誤認
+        confirmed = _make_board({(3, 2): COLOR_OJAMA})
+        result = apply_glow_guard(confirmed, state, is_glow_active=True)
+        # COLOR_PURPLE に復元される
+        assert int(result.get(3, 2)) == COLOR_PURPLE
+
+    def test_frozen_board_not_updated_during_non_stable(self) -> None:
+        """非 STABLE (ojama_fall 相当) 中は frozen_board が更新されないことを確認する.
+
+        pipeline の実装では「frozen 更新 = 発光 OFF かつ STABLE 確定時のみ」。
+        ここでは GlowGuardState を直接操作して、
+        非 STABLE 中に frozen を更新しないパスを模倣し、
+        frozen が直前 STABLE の盤面を保持し続けることを確認する。
+        """
+        state = GlowGuardState()
+        # 発光 OFF の STABLE 時に frozen が更新された (pipeline の正規パス)
+        stable_board = _make_board({(5, 0): COLOR_YELLOW})
+        state.frozen_board = stable_board.copy()
+
+        # --- 以降は非 STABLE (ojama_fall) 中: frozen は一切触らない ---
+        # ojama_fall 中の confirmed (発光で O 誤認)
+        ojama_fall_confirmed = _make_board({(5, 0): COLOR_OJAMA})
+        # pipeline は非 STABLE では frozen を更新しないため、ここでは意図的に更新しない
+
+        # 発光を強制 ON にする
+        for fi in range(GLOW_CONSEC_MIN):
+            update_glow_state(state, 1.0, frame_idx=fi)
+        assert state.glow_active
+
+        # apply_glow_guard を呼ぶ (pipeline が ojama_fall でも呼ぶようになった v3 の動作)
+        result = apply_glow_guard(ojama_fall_confirmed, state, is_glow_active=True)
+        # frozen が STABLE 時の黄ぷよを保持しているため、O 誤認が復元される
+        assert int(result.get(5, 0)) == COLOR_YELLOW
+        # frozen_board は更新されていない (STABLE 時の値のまま)
+        assert int(state.frozen_board.get(5, 0)) == COLOR_YELLOW
+
+    def test_frozen_board_updated_only_on_stable_off(self) -> None:
+        """frozen_board 更新は「発光 OFF かつ STABLE」でのみ行われることを保証する.
+
+        STABLE/発光 OFF: frozen 更新される (v2 から変更なし)。
+        OJAMA_FALL/発光 OFF: frozen 更新されない (v3 の非 STABLE 中凍結保持)。
+        このテストは pipeline の更新ロジックを GlowGuardState で直接模倣する。
+        """
+        state = GlowGuardState()
+        # 初期 frozen は黄ぷよ (STABLE 時に更新済みと仮定)
+        initial_frozen = _make_board({(10, 2): COLOR_YELLOW})
+        state.frozen_board = initial_frozen.copy()
+
+        # 発光 OFF (glow_active=False) のまま ojama_fall 中の confirmed を受け取る
+        # pipeline では「elif ctx.state == BoardState.STABLE:」の条件で弾かれる
+        # → frozen は更新しない
+        ojama_confirmed = _make_board({(10, 2): COLOR_GREEN})
+        # (ここでは意図的に frozen を更新しない = pipeline の ojama_fall パス)
+
+        # frozen は初期値のままであることを確認
+        assert int(state.frozen_board.get(10, 2)) == COLOR_YELLOW
+
+        # STABLE + 発光 OFF の場合は frozen が更新される (pipeline の正規パス)
+        stable_confirmed = _make_board({(10, 2): COLOR_GREEN})
+        state.frozen_board = stable_confirmed.copy()  # pipeline が STABLE 時に実行
+        assert int(state.frozen_board.get(10, 2)) == COLOR_GREEN

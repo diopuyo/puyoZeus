@@ -3714,10 +3714,16 @@ class RecognitionPipeline:
             curr_state=ctx.state,
             published_confirmed=published_confirmed,
         )
-        # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
-        # STABLE 中のみ適用。CHAIN 中は既存凍結機構で保護済みのためスキップ。
-        # 発光 OFF 中は frozen_board を現 confirmed で更新し次の発光に備える。
-        # 発光 ON 中は frozen_board の色で confirmed を保護する。
+        # 不具合B 対処: 予告おじゃま発光ガード v3 (2026-06-04)。
+        # v2 は STABLE 中のみ適用していたため、発火直前の ojama_fall / tsumo_fall
+        # 中の O 誤認が残り連鎖シミュに混入していた (実証: v89 t≈70 残存7フレーム)。
+        # v3: apply_glow_guard を STABLE + OJAMA_FALL + TSUMO_FALL でも有効化。
+        # 安全根拠: v2 ルール「frozen=有色 かつ confirmed=おじゃま → 復元」は、
+        #   ぷよぷよの物理上「既に有色ぷよがあるセルにおじゃまが降ることは絶対ない」
+        #   ため、非 STABLE 状態でも誤認復元として安全である。
+        # frozen 更新は引き続き「発光 OFF 中の STABLE 確定時のみ」に限定する
+        # (非 STABLE 中・発光中は直前 STABLE の色を凍結保持する)。
+        # CHAIN は既存凍結機構で保護済みのためスキップ。
         if self._enable_ojama_warning_glow_guard and frame_bgr is not None:
             glow_state = (
                 self._glow_guard_1p if side == "1P" else self._glow_guard_2p
@@ -3733,14 +3739,21 @@ class RecognitionPipeline:
                 )
                 glow_score = compute_glow_score(frame_bgr, region_for_glow)
                 is_glow = update_glow_state(glow_state, glow_score, frame_idx)
-                if ctx.state == BoardState.STABLE and published_confirmed is not None:
+                # v3: ガード適用対象状態 = STABLE + OJAMA_FALL + TSUMO_FALL
+                _glow_guard_states = frozenset({
+                    BoardState.STABLE,
+                    BoardState.OJAMA_FALL,
+                    BoardState.TSUMO_FALL,
+                })
+                if ctx.state in _glow_guard_states and published_confirmed is not None:
                     if is_glow:
-                        # 発光中: frozen で confirmed を保護する
+                        # 発光中: frozen で confirmed のO誤認セルを保護する
                         published_confirmed = apply_glow_guard(
                             published_confirmed, glow_state, is_glow,
                         )
-                    else:
-                        # 発光 OFF 中 (STABLE 確定時のみ): frozen を更新する
+                    elif ctx.state == BoardState.STABLE:
+                        # 発光 OFF 中かつ STABLE 確定時のみ: frozen を更新する
+                        # (ojama_fall / tsumo_fall 中は直前 STABLE の色を保持)
                         glow_state.frozen_board = published_confirmed.copy()
         return SideResult(
             side=side,
