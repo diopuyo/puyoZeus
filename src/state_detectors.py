@@ -23,6 +23,10 @@ from src.board_state_machine import (
     BoardState,
     DetectorSignals,
     StateContext,
+    GRAVITY_SETTLE_MIN_FRAMES,
+    GRAVITY_SETTLE_MAX_SEC,
+    GRAVITY_SETTLE_PHYSICS_CLEAR_MIN,
+    GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
 )
 # フェーズ A 精緻化: OjamaVisualDetector を同一モジュールから利用可能にする。
 # 個別 import でも動作するが、 state_detectors パッケージとして一括参照できるよう
@@ -65,6 +69,13 @@ class ChainPhaseDetector:
     # よる保留をスキップして強制 STABLE に戻す。安全弁を本来機能させる修正。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_chain_max_hold_override: bool = False
+    # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 状態を有効化するか。
+    # True にすると CHAIN → STABLE の代わりに CHAIN → GRAVITY_SETTLE に遷移する。
+    # enable_chain_exit_next_signal との組み合わせが前提 (連鎖が正確に終わらないと
+    # GRAVITY_SETTLE に入れないため)。本フラグは enable_chain_exit_next_signal が
+    # 有効化された上位レイヤーで ON にされる想定。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_gravity_settle_state: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -103,6 +114,11 @@ class ChainPhaseDetector:
                 )
             ):
                 return None  # state 遷移を保留 → OjamaVisualDetector に委譲
+            # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 有効時は
+            # CHAIN → GRAVITY_SETTLE に遷移 (STABLE に直行しない)。
+            # GravitySettleDetector が GRAVITY_SETTLE → STABLE への最終判断を行う。
+            if self.enable_gravity_settle_state:
+                return BoardState.GRAVITY_SETTLE
             return BoardState.STABLE
         return None
 
@@ -306,9 +322,127 @@ class EffectPhaseDetector:
         return None
 
 
+# ============================
+# GravitySettle detector — CHAIN 終了後の重力 settle 待機
+# ============================
+
+
+@dataclass
+class GravitySettleDetector:
+    """GRAVITY_SETTLE state の開始・終了を管理する detector.
+
+    役割:
+        CHAIN 終了直後、盤面は重力 settle (落下ぷよの着地中) で動作中。
+        即 STABLE 採点すると physics_fix 由来の誤認が増える。
+        本 detector は GRAVITY_SETTLE 中に以下の条件を監視し、
+        条件成立で STABLE に遷移させる (または STABLE を継続保留する)。
+
+    STABLE 復帰条件 (AND):
+        1. GRAVITY_SETTLE に入ってから GRAVITY_SETTLE_PHYSICS_CLEAR_MIN フレーム以上経過。
+        2. raw CNN ぷよ数が直前フレームとの差分 < GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD
+           の状態が GRAVITY_SETTLE_MIN_FRAMES フレーム連続。
+        または:
+        タイムアウト: GRAVITY_SETTLE_MAX_SEC 秒を超えたら強制 STABLE 復帰。
+
+    多段連鎖対応:
+        GRAVITY_SETTLE 中に chain_event != None を検知したら CHAIN に復帰。
+        ChainPhaseDetector が最高優先 (BoardStateMachine の登録順で先)
+        なので、本 detector が CHAIN 判定する必要はない。
+        本 detector は GRAVITY_SETTLE 状態のみに応答する (CHAIN 中は None)。
+
+    stateless 原則:
+        内部 state は instance 変数で保持。GRAVITY_SETTLE 開始時に
+        reset される。試合切替時は reset() で明示クリアする。
+
+    backwards compat:
+        enable_gravity_settle_state=False (pipeline 側) の場合、
+        本 detector は GRAVITY_SETTLE state を返さないため遷移は起きない。
+        本 detector が登録されていても GRAVITY_SETTLE state に入らなければ
+        detect は常に None を返し、既存挙動に影響なし。
+    """
+
+    # 内部 state (init から除外)
+    _settle_start_time: float = field(default=0.0, init=False, repr=False)
+    _settle_start_frame: int = field(default=-1, init=False, repr=False)
+    _stable_consec: int = field(default=0, init=False, repr=False)
+    _prev_puyo_count: int = field(default=-1, init=False, repr=False)
+
+    def reset(self) -> None:
+        """settle 内部 state をリセット (試合切替・sm.reset() 呼び出し時)。"""
+        self._settle_start_time = 0.0
+        self._settle_start_frame = -1
+        self._stable_consec = 0
+        self._prev_puyo_count = -1
+
+    def detect(
+        self, ctx: StateContext, signals: DetectorSignals,
+    ) -> BoardState | None:
+        """GRAVITY_SETTLE → STABLE 遷移 or GRAVITY_SETTLE 継続 or None を返す.
+
+        GRAVITY_SETTLE 以外の state では None を返す (透過)。
+        """
+        if ctx.state != BoardState.GRAVITY_SETTLE:
+            # GRAVITY_SETTLE state に入った瞬間 (prev != GRAVITY_SETTLE) は
+            # reset して計測開始する。
+            # ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返した翌 frame
+            # で ctx.state == GRAVITY_SETTLE になる。
+            # ここでは GRAVITY_SETTLE 以外のときリセットは不要 (state 管理は reset() 担当)。
+            return None
+
+        # GRAVITY_SETTLE state に初めて入ったフレームを記録
+        if self._settle_start_frame < 0:
+            self._settle_start_time = signals.time_sec
+            self._settle_start_frame = ctx.frame_idx
+            self._stable_consec = 0
+            self._prev_puyo_count = signals.cnn_board.count_puyos()
+            return None  # 最初のフレームは必ず継続
+
+        # タイムアウト: 最大保持時間を超えたら強制 STABLE 復帰
+        elapsed = signals.time_sec - self._settle_start_time
+        if elapsed >= GRAVITY_SETTLE_MAX_SEC:
+            self._reset_settle()
+            return BoardState.STABLE
+
+        # 最低待機フレーム数を満たさない間は継続
+        frames_in_settle = ctx.frame_idx - self._settle_start_frame
+        if frames_in_settle < GRAVITY_SETTLE_PHYSICS_CLEAR_MIN:
+            self._update_puyo_count(signals)
+            return None
+
+        # ぷよ数変化の安定性チェック
+        cur_count = signals.cnn_board.count_puyos()
+        diff = abs(cur_count - self._prev_puyo_count)
+        self._prev_puyo_count = cur_count
+
+        if diff < GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD:
+            self._stable_consec += 1
+        else:
+            self._stable_consec = 0
+
+        # 安定フレーム数到達 → STABLE 復帰
+        if self._stable_consec >= GRAVITY_SETTLE_MIN_FRAMES:
+            self._reset_settle()
+            return BoardState.STABLE
+
+        return None  # 継続
+
+    def _update_puyo_count(self, signals: DetectorSignals) -> None:
+        """最低待機中のぷよ数更新 (安定カウンタはリセット)."""
+        self._prev_puyo_count = signals.cnn_board.count_puyos()
+        self._stable_consec = 0
+
+    def _reset_settle(self) -> None:
+        """settle 内部 state をクリア (STABLE 復帰確定時)."""
+        self._settle_start_frame = -1
+        self._settle_start_time = 0.0
+        self._stable_consec = 0
+        self._prev_puyo_count = -1
+
+
 __all__ = [
     "ChainPhaseDetector",
     "EffectPhaseDetector",
+    "GravitySettleDetector",
     "OjamaPhaseDetector",
     "OjamaVisualDetector",
     "TsumoPhaseDetector",

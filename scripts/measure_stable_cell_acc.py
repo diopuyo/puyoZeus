@@ -362,6 +362,9 @@ def _make_pipeline_cnn(
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_gravity_settle_state: bool = False,
     disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -442,6 +445,7 @@ def _make_pipeline_cnn(
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_gravity_settle_state=enable_gravity_settle_state,
     )
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
@@ -661,6 +665,8 @@ def _process_video(
     enable_chain_max_hold_override: bool = False,
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    enable_gravity_settle_state: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -730,6 +736,7 @@ def _process_video(
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_gravity_settle_state=enable_gravity_settle_state,
         disable_per_video_hsv=disable_per_video_hsv,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
@@ -783,6 +790,8 @@ def _process_video_worker(
     enable_chain_max_hold_override: bool = False,
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    enable_gravity_settle_state: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -830,6 +839,7 @@ def _process_video_worker(
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_gravity_settle_state=enable_gravity_settle_state,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2201,6 +2211,21 @@ def _parse_args() -> argparse.Namespace:
             "ライブラリ default=False (無効)。 --chain-exit-next-signal で有効化。"
         ),
     )
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化
+    # 2026-06-06 採用: default=True。--no-gravity-settle-state で無効化可。
+    p.add_argument(
+        "--gravity-settle-state",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_gravity_settle_state",
+        help=(
+            "GRAVITY_SETTLE 状態を有効化する (feat/gravity-settle-2026-06-05)。 "
+            "連鎖終了直後の重力 settle/着地中を採点外・confirmed 凍結として扱う。 "
+            "CHAIN → GRAVITY_SETTLE → STABLE の遷移経路を有効化。 "
+            "案X (--chain-exit-next-signal) との組み合わせを推奨 (内部で自動 ON)。 "
+            "default=True (有効、2026-06-06 採用)。 --no-gravity-settle-state で無効化。"
+        ),
+    )
     p.add_argument(
         "--workers",
         type=int,
@@ -2284,6 +2309,8 @@ def _collect_results(
     enable_chain_max_hold_override: bool = False,
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    enable_gravity_settle_state: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2356,6 +2383,7 @@ def _collect_results(
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+            enable_gravity_settle_state=enable_gravity_settle_state,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2385,6 +2413,7 @@ def _collect_results(
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_gravity_settle_state=enable_gravity_settle_state,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2420,6 +2449,8 @@ def _collect_serial(
     enable_chain_max_hold_override: bool = False,
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    enable_gravity_settle_state: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2456,6 +2487,7 @@ def _collect_serial(
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+            enable_gravity_settle_state=enable_gravity_settle_state,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2494,6 +2526,8 @@ def _collect_parallel(
     enable_chain_max_hold_override: bool = False,
     # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
     enable_chain_exit_next_signal: bool = False,
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+    enable_gravity_settle_state: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2544,6 +2578,7 @@ def _collect_parallel(
                 enable_ojama_warning_glow_guard,
                 enable_chain_max_hold_override,
                 enable_chain_exit_next_signal,
+                enable_gravity_settle_state,
                 persist_min_frames,
                 disable_per_video_hsv,
             )
@@ -2735,6 +2770,10 @@ def main() -> int:
     )
     enable_chain_exit_next_signal: bool = bool(
         getattr(args, "enable_chain_exit_next_signal", False)
+    )
+    # feat/gravity-settle-2026-06-05 (2026-06-06 採用: default=True)
+    enable_gravity_settle_state: bool = bool(
+        getattr(args, "enable_gravity_settle_state", True)
     )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する

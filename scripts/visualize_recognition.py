@@ -887,6 +887,19 @@ def main() -> int:
              "真因: ojama_top_positive 保留 + 機能D 再点火による 6.87 秒過剰保持 (v89 1P) を解消。 "
              "ライブラリ default=False (無効)。 --chain-exit-next-signal で有効化。",
     )
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化
+    # 2026-06-06 採用: default=True。--no-gravity-settle-state で無効化可。
+    parser.add_argument(
+        "--gravity-settle-state",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_gravity_settle_state",
+        help="GRAVITY_SETTLE 状態を有効化する (feat/gravity-settle-2026-06-05)。 "
+             "連鎖終了直後の重力 settle/着地中を採点外・confirmed 凍結として扱う。 "
+             "CHAIN → GRAVITY_SETTLE → STABLE の遷移経路を有効化する。 "
+             "案X (--chain-exit-next-signal) との組み合わせを推奨 (内部で自動 ON)。 "
+             "default=True (有効、2026-06-06 採用)。 --no-gravity-settle-state で無効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -1000,6 +1013,8 @@ def main() -> int:
         enable_chain_max_hold_override=args.enable_chain_max_hold_override,
         # 案X*(A)(B)+warmup (2026-06-05): --chain-exit-next-signal で有効化
         enable_chain_exit_next_signal=args.enable_chain_exit_next_signal,
+        # feat/gravity-settle-2026-06-05: --gravity-settle-state で有効化
+        enable_gravity_settle_state=args.enable_gravity_settle_state,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1098,6 +1113,17 @@ def main() -> int:
             "[viz] chain_exit_next_signal=ON "
             "(案X*: (A) 機能D CHAIN 中再点火抑制 + (B) NextSlide で CHAIN 即終了 "
             f"+ warmup {0.1}s confirmed 凍結 / v89 1P 6.87s 過剰保持根本修正)"
+        )
+    if args.enable_gravity_settle_state:
+        from src.board_state_machine import (
+            GRAVITY_SETTLE_MIN_FRAMES, GRAVITY_SETTLE_MAX_SEC,
+            GRAVITY_SETTLE_PHYSICS_CLEAR_MIN,
+        )
+        print(
+            "[viz] gravity_settle_state=ON "
+            f"(CHAIN → GRAVITY_SETTLE → STABLE: "
+            f"min={GRAVITY_SETTLE_MIN_FRAMES}f physics_clear={GRAVITY_SETTLE_PHYSICS_CLEAR_MIN}f "
+            f"timeout={GRAVITY_SETTLE_MAX_SEC}s / 連鎖後 settle 採点外)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")

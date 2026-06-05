@@ -127,6 +127,7 @@ from src.score_ocr import ScoreOcr, ScoreTracker
 from src.state_detectors import (
     ChainPhaseDetector,
     EffectPhaseDetector,
+    GravitySettleDetector,
     OjamaPhaseDetector,
     TsumoPhaseDetector,
 )
@@ -577,6 +578,15 @@ class RecognitionPipeline:
         # NextDetector 精度 100% 確認済 (memory: project_next_detector_perfect_accuracy.md)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_next_signal: bool = False,
+        # feat/gravity-settle-2026-06-05: 連鎖終了直後の GRAVITY_SETTLE 状態を有効化。
+        # True にすると CHAIN → GRAVITY_SETTLE → STABLE の遷移経路を有効化し、
+        # 連鎖終了直後の重力 settle/着地中を採点外 (confirmed 凍結) として扱う。
+        # 案X (enable_chain_exit_next_signal) と組み合わせて使う前提。
+        # 本フラグ ON 時は内部で enable_chain_exit_next_signal も強制 ON にする
+        # (連鎖が正確に終わらないと GRAVITY_SETTLE に入れないため)。
+        # 2026-06-06 採用: 連鎖過剰保持の本質修正 = settle 状態。退行ゼロ + 連鎖境界正確化。
+        # default True = 採用済み。False で無効化可 (backwards compat)。
+        enable_gravity_settle_state: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -778,6 +788,14 @@ class RecognitionPipeline:
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
+        # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 状態フラグ。
+        # _build_state_machine 呼び出し前に設定が必要 (引数として渡すため)。
+        # gravity_settle=True の場合は chain_exit_next_signal も強制 ON にする
+        # (連鎖が正確に終わらないと GRAVITY_SETTLE に入れないため)。
+        _gs = bool(enable_gravity_settle_state)
+        if _gs:
+            enable_chain_exit_next_signal = True  # 内部強制 ON
+        self._enable_gravity_settle_state: bool = _gs
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -788,6 +806,7 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
+            enable_gravity_settle_state=self._enable_gravity_settle_state,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -796,6 +815,7 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
+            enable_gravity_settle_state=self._enable_gravity_settle_state,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -949,6 +969,10 @@ class RecognitionPipeline:
         # フラグ OFF の場合は enable_chain_exit_warmup の指定をそのまま使う。
         if self._enable_chain_exit_next_signal:
             self._enable_chain_exit_warmup = True
+        # feat/gravity-settle-2026-06-05: gravity_settle=True なら warmup も ON にする。
+        # _enable_chain_exit_next_signal は上記 warmup 連動で設定済み。
+        if self._enable_gravity_settle_state:
+            self._enable_chain_exit_warmup = True
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -1072,6 +1096,7 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = False,
         enable_ojama_settle_detection: bool = False,
         enable_chain_max_hold_override: bool = False,
+        enable_gravity_settle_state: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1081,13 +1106,17 @@ class RecognitionPipeline:
         # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
         # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
         # 案P3: enable_chain_max_hold_override=True で ChainPhaseDetector に伝播。
+        # feat/gravity-settle-2026-06-05: enable_gravity_settle_state=True で
+        #   ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返し、
+        #   GravitySettleDetector が GRAVITY_SETTLE → STABLE を担当する。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
-        # ChainPhaseDetector に chain_ojama_exit + 案P3 フラグを伝播する
+        # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE フラグを伝播する
         chain_det = ChainPhaseDetector(
             chain_sim=ChainSimulator(),
             enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
+            enable_gravity_settle_state=enable_gravity_settle_state,
         )
         detectors: list = [
             chain_det,
@@ -1102,6 +1131,11 @@ class RecognitionPipeline:
             detectors.append(ovd)
         detectors.append(OjamaPhaseDetector())
         detectors.append(TsumoPhaseDetector())
+        # feat/gravity-settle-2026-06-05: GravitySettleDetector を最低優先 (末尾) で登録。
+        # CHAIN より低優先 → settle 中に次連鎖 drop 検知で CHAIN detector が優先発火し
+        # 多段連鎖に対応する。
+        if enable_gravity_settle_state:
+            detectors.append(GravitySettleDetector())
         return BoardStateMachine(
             detectors=detectors,
             stable_frame_count=stable_n,
@@ -1181,6 +1215,9 @@ class RecognitionPipeline:
         # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_next_signal: bool = False,
+        # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
+        # 2026-06-06 採用: 退行ゼロ + 連鎖境界正確化。False で無効化可。
+        enable_gravity_settle_state: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1333,6 +1370,7 @@ class RecognitionPipeline:
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+            enable_gravity_settle_state=enable_gravity_settle_state,
         )
 
     # ------------------------------------------------------------------
@@ -1449,6 +1487,10 @@ class RecognitionPipeline:
         # 案P3: MAX_HOLD 超過 expired フラグをリセット (試合切替時)
         self._chain_max_hold_expired_1p = False
         self._chain_max_hold_expired_2p = False
+        # feat/gravity-settle-2026-06-05: GravitySettleDetector 内部 state をリセット。
+        # BoardStateMachine.detectors から GravitySettleDetector を探してリセットする。
+        if self._enable_gravity_settle_state:
+            self._reset_gravity_settle_detectors()
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1567,10 +1609,12 @@ class RecognitionPipeline:
             self._sm_1p.context.state in (
                 BoardState.STABLE, BoardState.TSUMO_FALL,
                 BoardState.CHAIN, BoardState.OJAMA_FALL, BoardState.EFFECT,
+                BoardState.GRAVITY_SETTLE,  # feat/gravity-settle-2026-06-05
             )
             or self._sm_2p.context.state in (
                 BoardState.STABLE, BoardState.TSUMO_FALL,
                 BoardState.CHAIN, BoardState.OJAMA_FALL, BoardState.EFFECT,
+                BoardState.GRAVITY_SETTLE,  # feat/gravity-settle-2026-06-05
             )
         )
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
@@ -2644,7 +2688,19 @@ class RecognitionPipeline:
             self._pending_landing_vote_2p = next_pending
         return updated_board
 
-    @classmethod
+    def _reset_gravity_settle_detectors(self) -> None:
+        """1P/2P の BoardStateMachine から GravitySettleDetector を探しリセットする.
+
+        feat/gravity-settle-2026-06-05: reset() が呼ばれた際に
+        GravitySettleDetector の内部 settle state をクリアする。
+        BoardStateMachine が detector list を外部公開しないため、
+        _detectors 属性を直接参照する。
+        """
+        for sm in (self._sm_1p, self._sm_2p):
+            for det in getattr(sm, "_detectors", []):
+                if isinstance(det, GravitySettleDetector):
+                    det.reset()
+
     def _is_score_actively_moving(
         cls, recent_scores: list[int | None],
     ) -> bool:
