@@ -84,6 +84,19 @@ from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN
 # 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
 CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 
+# 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (enable_chain_exit_next_signal 用)。
+# CHAIN_EXIT_NEXT_WARMUP_SEC: 案X 専用の warmup 凍結時間。
+# 機能C の CHAIN_EXIT_WARMUP_SEC=0.1s はエフェクト残光のみを吸収する最小設定だが、
+# 案X は連鎖を早く終わらせるため「置き直後・エフェクト残光」が STABLE 露出し誤認する。
+# 0.5s に延長して遷移フレームをスキップし、連鎖終了直後の corruption を防ぐ。
+# 機能C の CHAIN_EXIT_WARMUP_SEC=0.1 は不変 (backwards compat)。
+CHAIN_EXIT_NEXT_WARMUP_SEC: float = 0.5
+# (A) 機能D 再点火抑制: 既に CHAIN 中 (active_chain 有効) なら 機能D の発火をスキップ。
+# (B) NextSlide signal での CHAIN 即終了: slide_motion=True が 1P/2P いずれかで確認
+#     されたとき、その side の active_chain を即クリアして CHAIN 状態を解放する。
+# warmup 連動: フラグ ON 時は enable_chain_exit_warmup を内部で自動有効化し、
+#     凍結時間は CHAIN_EXIT_NEXT_WARMUP_SEC を使用 (CHAIN_EXIT_WARMUP_SEC より長い)。
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -544,6 +557,26 @@ class RecognitionPipeline:
         # 黄ぷよに発光が重なり黄(4)→おじゃま(9)誤認→連鎖誤消去を防ぐ。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_ojama_warning_glow_guard: bool = False,
+        # 案P3: CHAIN_MAX_HOLD_SEC 超過後の ojama 保留を無効化 (2026-06-05)。
+        # True にすると active_chain が CHAIN_MAX_HOLD_SEC 超過で強制クリアされた frame で
+        # chain_max_hold_expired=True を DetectorSignals に乗せ、ChainPhaseDetector が
+        # ojama_top_positive による STABLE 復帰保留をスキップして強制 STABLE に遷移する。
+        # 安全弁 (CHAIN_MAX_HOLD_SEC) を本来機能させ「連鎖 6.87 秒過剰保持」 を解消する。
+        # default False = 従来挙動完全維持 (backwards compat)。A/B 対照実験はフラグで行う。
+        enable_chain_max_hold_override: bool = False,
+        # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)。
+        # True にすると以下を一括有効化する:
+        #   (A) 機能D (掛け算式) 再点火抑制: 既に CHAIN 中 (active_chain 有効) なら
+        #       機能D の発火をスキップし、max_until の延長を止める。
+        #   (B) NextSlide signal で CHAIN 即終了: slide_motion=True が確認された
+        #       side の active_chain を即クリアし、timing hold や max_until に
+        #       関係なく CHAIN 状態を解放する。次ツモスライド = 連鎖確実終了の証拠。
+        #   warmup 連動: 内部で enable_chain_exit_warmup を自動有効化し、
+        #       早期終了直後 CHAIN_EXIT_WARMUP_SEC 秒間 confirmed 凍結を適用して
+        #       エフェクト残光色の混入を防ぐ。
+        # NextDetector 精度 100% 確認済 (memory: project_next_detector_perfect_accuracy.md)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_next_signal: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -742,6 +775,9 @@ class RecognitionPipeline:
         self._enable_ojama_settle_detection: bool = (
             _ovd_parent or bool(enable_ojama_settle_detection)
         )
+        # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
+        # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
+        self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -751,6 +787,7 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_chain_max_hold_override=self._enable_chain_max_hold_override,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -758,6 +795,7 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_chain_max_hold_override=self._enable_chain_max_hold_override,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -895,6 +933,22 @@ class RecognitionPipeline:
         else:
             self._glow_guard_1p = None
             self._glow_guard_2p = None
+        # 案P3: active_chain が CHAIN_MAX_HOLD_SEC 超過で強制クリアされた直後の 1 frame フラグ。
+        # _step_side に渡す DetectorSignals に chain_max_hold_expired として反映される。
+        # active_chain が None にクリアされた frame だけ True、翌 frame は False にリセット。
+        self._chain_max_hold_expired_1p: bool = False
+        self._chain_max_hold_expired_2p: bool = False
+        # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了フラグ (2026-06-05)。
+        # True で以下が有効になる:
+        #   (A) 機能D 再点火抑制 (CHAIN 中は掛け算式発火でmax_until延長しない)
+        #   (B) slide_motion=True → その side の active_chain を即クリア
+        #   warmup 連動: enable_chain_exit_warmup を内部で自動 ON
+        # default False = 従来挙動完全維持。
+        self._enable_chain_exit_next_signal: bool = bool(enable_chain_exit_next_signal)
+        # warmup 連動: フラグ ON 時は enable_chain_exit_warmup も強制 ON にする。
+        # フラグ OFF の場合は enable_chain_exit_warmup の指定をそのまま使う。
+        if self._enable_chain_exit_next_signal:
+            self._enable_chain_exit_warmup = True
         # X1 用: CHAIN 突入時刻 (time_sec) を記録する (1P/2P 別)。
         # CHAIN 発火時に代入し、_on_match_end でリセット。
         self._chain_entry_t_1p: float = 0.0
@@ -1017,6 +1071,7 @@ class RecognitionPipeline:
         enable_ojama_visual_detection: bool = False,
         enable_ojama_visual_chain_exit: bool = False,
         enable_ojama_settle_detection: bool = False,
+        enable_chain_max_hold_override: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1025,12 +1080,14 @@ class RecognitionPipeline:
         # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
         # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
         # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
+        # 案P3: enable_chain_max_hold_override=True で ChainPhaseDetector に伝播。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
-        # ChainPhaseDetector に chain_ojama_exit フラグを伝播する
+        # ChainPhaseDetector に chain_ojama_exit + 案P3 フラグを伝播する
         chain_det = ChainPhaseDetector(
             chain_sim=ChainSimulator(),
             enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
+            enable_chain_max_hold_override=enable_chain_max_hold_override,
         )
         detectors: list = [
             chain_det,
@@ -1118,6 +1175,12 @@ class RecognitionPipeline:
         # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_ojama_warning_glow_guard: bool = False,
+        # 案P3: CHAIN_MAX_HOLD_SEC 超過後の ojama 保留を無効化 (2026-06-05)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_max_hold_override: bool = False,
+        # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_chain_exit_next_signal: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1268,6 +1331,8 @@ class RecognitionPipeline:
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_max_hold_override=enable_chain_max_hold_override,
+            enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         )
 
     # ------------------------------------------------------------------
@@ -1381,6 +1446,9 @@ class RecognitionPipeline:
         if self._glow_guard_2p is not None:
             from src.ojama_warning_glow_guard import GlowGuardState as _GGS
             self._glow_guard_2p = _GGS()
+        # 案P3: MAX_HOLD 超過 expired フラグをリセット (試合切替時)
+        self._chain_max_hold_expired_1p = False
+        self._chain_max_hold_expired_2p = False
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1746,6 +1814,9 @@ class RecognitionPipeline:
         # game-event モード (enable_game_event_chain_exit=True) の場合、
         # timing hold だけでは終了させず「最大 CHAIN_MAX_HOLD_SEC」まで維持する。
         # 実際の終了は 4b. next_pair 計算後に game-event チェックで行う。
+        # 案P3: 直前 frame の expired フラグをリセットしてから再評価する。
+        self._chain_max_hold_expired_1p = False
+        self._chain_max_hold_expired_2p = False
         chain_ev_1p: ChainEvent | None = None
         chain_ev_2p: ChainEvent | None = None
         if self._active_chain_1p is not None:
@@ -1761,6 +1832,9 @@ class RecognitionPipeline:
             if time_sec < eff_until_1p:
                 chain_ev_1p = self._active_chain_1p
             else:
+                # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
+                if self._enable_chain_max_hold_override:
+                    self._chain_max_hold_expired_1p = True
                 self._active_chain_1p = None
         if self._active_chain_2p is not None:
             eff_until_2p = (
@@ -1774,6 +1848,9 @@ class RecognitionPipeline:
             if time_sec < eff_until_2p:
                 chain_ev_2p = self._active_chain_2p
             else:
+                # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
+                if self._enable_chain_max_hold_override:
+                    self._chain_max_hold_expired_2p = True
                 self._active_chain_2p = None
 
         # 4. score 差分
@@ -1824,6 +1901,10 @@ class RecognitionPipeline:
         # CHAIN_FORMULA_CONSEC_FRAMES 連続で成立した frame で即 CHAIN state に突入させる。
         # 連続カウンタは pipeline 側で管理 (state-holding wrapper)、検出本体は stateless。
         # chain_banned / 既に CHAIN 中の場合は発火をスキップ。
+        # 案X*(A): enable_chain_exit_next_signal=True の場合、既に CHAIN 中
+        #   (active_chain 有効) なら機能D の発火 (_apply_chain_formula_early_fire 呼び出し)
+        #   をスキップして _chain_event_max_until の延長を止める。
+        #   連鎖開始検知 (active=None 時の初回発火) は引き続き有効。
         if self._enable_chain_formula_detection and is_active and not chain_banned:
             _last_1p = (
                 self._score_tracker_1p.last_score
@@ -1847,7 +1928,15 @@ class RecognitionPipeline:
                 self._formula_consec_2p + 1 if _formula_2p else 0
             )
             # 連続フレーム数を満たしたら発火
-            if self._formula_consec_1p >= CHAIN_FORMULA_CONSEC_FRAMES:
+            # 案X*(A): フラグ ON かつ既に CHAIN 中 (active_chain 有効) なら発火をスキップ
+            _formula_skip_1p = (
+                self._enable_chain_exit_next_signal
+                and self._active_chain_1p is not None
+            )
+            if (
+                self._formula_consec_1p >= CHAIN_FORMULA_CONSEC_FRAMES
+                and not _formula_skip_1p
+            ):
                 self._apply_chain_formula_early_fire(
                     side="1P", time_sec=time_sec,
                     prev_confirmed=self._prev_confirmed_1p,
@@ -1864,7 +1953,14 @@ class RecognitionPipeline:
                     )
                     if time_sec < eff_until_1p:
                         chain_ev_1p = self._active_chain_1p
-            if self._formula_consec_2p >= CHAIN_FORMULA_CONSEC_FRAMES:
+            _formula_skip_2p = (
+                self._enable_chain_exit_next_signal
+                and self._active_chain_2p is not None
+            )
+            if (
+                self._formula_consec_2p >= CHAIN_FORMULA_CONSEC_FRAMES
+                and not _formula_skip_2p
+            ):
                 self._apply_chain_formula_early_fire(
                     side="2P", time_sec=time_sec,
                     prev_confirmed=self._prev_confirmed_2p,
@@ -2023,6 +2119,24 @@ class RecognitionPipeline:
                 chain_ev_2p = None
                 self._active_chain_2p = None
 
+        # 案X*(B): NextSlide signal で CHAIN 即終了 (enable_chain_exit_next_signal=True 時)。
+        # slide_motion=True が確認された side の active_chain を即クリアする。
+        # 次ツモがスライドした = 連鎖は確実に終わった、という物理的証拠を活用する。
+        # enable_game_event_chain_exit の状態・max_until の延長に関係なく即終了する。
+        # warmup 連動: _enable_chain_exit_warmup は __init__ で True に設定済。
+        if self._enable_chain_exit_next_signal and is_active:
+            # slide_1p / slide_2p は 4c (l.2035-2036) で定義済みのローカル変数
+            _slide_1p_now: bool = bool(slide_1p)
+            _slide_2p_now: bool = bool(slide_2p)
+            if _slide_1p_now and self._active_chain_1p is not None:
+                # 1P 側: slide 検知 → CHAIN 即終了
+                self._active_chain_1p = None
+                chain_ev_1p = None
+            if _slide_2p_now and self._active_chain_2p is not None:
+                # 2P 側: slide 検知 → CHAIN 即終了
+                self._active_chain_2p = None
+                chain_ev_2p = None
+
         # 連鎖発火で constraint invalidate (= 連鎖中は puyo 消える + ojama 落下)
         # 注: score_d > 0 だけでは invalidate しない (通常 placement で score 増加するため).
         # chain_event があれば連鎖確定 → invalidate 両 side.
@@ -2049,6 +2163,7 @@ class RecognitionPipeline:
             slide_motion=slide_1p,
             frame_bgr=frame,  # cycle 71l β2' = HSV 距離による NEXT 色順序確定
             score_d_for_self=score_d_1p,  # cycle 71n 案 ε
+            chain_max_hold_expired=self._chain_max_hold_expired_1p,  # 案P3
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -2060,6 +2175,7 @@ class RecognitionPipeline:
             slide_motion=slide_2p,
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
+            chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -2728,6 +2844,7 @@ class RecognitionPipeline:
         slide_motion: bool = False,
         frame_bgr: np.ndarray | None = None,  # cycle 71l β2'
         score_d_for_self: int = 0,  # cycle 71n 案 ε
+        chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
@@ -2817,6 +2934,7 @@ class RecognitionPipeline:
             match_just_started=match_just_started,
             hsv_board=_hsv_board_for_signals,
             ojama_top_positive=_ojama_top_positive,
+            chain_max_hold_expired=chain_max_hold_expired,  # 案P3
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -3249,16 +3367,25 @@ class RecognitionPipeline:
             except Exception:
                 pass
 
-        # 機能C: CHAIN → STABLE 遷移直後 CHAIN_EXIT_WARMUP_SEC 秒間の confirmed 凍結。
+        # 機能C: CHAIN → STABLE 遷移直後の confirmed 凍結。
         # enable_chain_exit_warmup=True の場合のみ有効。
         # エフェクト残光色が _merge_diff_only 経由で confirmed に混入するのを防ぐ。
         # 凍結終了時刻 (_chain_exit_until_*) を更新し、下流の confirmed 更新をスキップさせる。
+        # 案X 連動: enable_chain_exit_next_signal=True 時は CHAIN_EXIT_NEXT_WARMUP_SEC(0.5s) を使用。
+        # 案X が連鎖を早く終わらせると置き直後・エフェクト残光が STABLE 露出するため
+        # 通常の CHAIN_EXIT_WARMUP_SEC(0.1s) より長い凍結時間が必要。
         if (
             self._enable_chain_exit_warmup
             and prev_state == BoardState.CHAIN
             and ctx.state == BoardState.STABLE
         ):
-            warmup_until = time_sec + CHAIN_EXIT_WARMUP_SEC
+            # 案X 時は専用の長い凍結時間を使用、それ以外は機能C の短い凍結時間を使用
+            _warmup_sec = (
+                CHAIN_EXIT_NEXT_WARMUP_SEC
+                if self._enable_chain_exit_next_signal
+                else CHAIN_EXIT_WARMUP_SEC
+            )
+            warmup_until = time_sec + _warmup_sec
             if side == "1P":
                 self._chain_exit_until_1p = warmup_until
             else:
