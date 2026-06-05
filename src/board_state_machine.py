@@ -201,6 +201,13 @@ class DetectorSignals:
     # _count_top_ojama() を呼び出してセットする。default False で既存挙動不変。
     # backwards compat: default False で既存動作と完全同一。
     ojama_top_positive: bool = False
+    # 案P3: CHAIN_MAX_HOLD_SEC を超過して active_chain が強制クリアされたか。
+    # True のとき ChainPhaseDetector は ojama_top_positive による STABLE 復帰保留を
+    # 無視して強制 STABLE に遷移させる。これにより安全弁が本来機能する。
+    # pipeline 側で active_chain が None にクリアされた瞬間の 1 frame だけ True になり、
+    # 翌 frame 以降は False に戻る (新連鎖発火時 / STABLE 復帰確定時もリセット)。
+    # backwards compat: default False で既存動作と完全同一。
+    chain_max_hold_expired: bool = False
 
 
 class StateTransitionDetector(Protocol):

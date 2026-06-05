@@ -860,6 +860,33 @@ def main() -> int:
              "黄ぷよに発光が重なる黄(4)→おじゃま(9)誤認を防ぐ。 "
              "ライブラリ default=False (無効)。 --ojama-warning-glow-guard で有効化。",
     )
+    parser.add_argument(
+        "--chain-max-hold-override",
+        action="store_true",
+        default=False,
+        dest="enable_chain_max_hold_override",
+        help="案P3: CHAIN_MAX_HOLD_SEC 超過後の ojama 保留を無効化する。 "
+             f"active_chain が CHAIN_MAX_HOLD_SEC={RecognitionPipeline.CHAIN_MAX_HOLD_SEC}s "
+             "超過で強制クリアされた frame では ojama_top_positive による STABLE 復帰保留を "
+             "スキップして強制 STABLE に遷移させる (安全弁を本来機能させる)。 "
+             "enable_ojama_visual_chain_exit=True と組み合わせて使用する。 "
+             "ライブラリ default=False (無効)。 --chain-max-hold-override で有効化。",
+    )
+    # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    parser.add_argument(
+        "--chain-exit-next-signal",
+        action="store_true",
+        default=False,
+        dest="enable_chain_exit_next_signal",
+        help="案X*: NextSlide signal による CHAIN 即終了を有効化する。 "
+             "(A) 機能D 再点火抑制: 既に CHAIN 中なら 機能D (掛け算式) の発火をスキップし "
+             "max_until 延長を止める。 "
+             "(B) NextSlide signal (次ツモスライド) 検知で CHAIN を即終了させる。 "
+             "warmup 連動: CHAIN_EXIT_WARMUP_SEC 秒間 confirmed 凍結を自動適用。 "
+             "真因: ojama_top_positive 保留 + 機能D 再点火による 6.87 秒過剰保持 (v89 1P) を解消。 "
+             "ライブラリ default=False (無効)。 --chain-exit-next-signal で有効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -969,6 +996,10 @@ def main() -> int:
         enable_hsv_deferred_consensus=args.enable_hsv_deferred_consensus,
         # 不具合B 対処 (2026-06-04): --ojama-warning-glow-guard で有効化
         enable_ojama_warning_glow_guard=args.enable_ojama_warning_glow_guard,
+        # 案P3 (2026-06-05): --chain-max-hold-override で有効化
+        enable_chain_max_hold_override=args.enable_chain_max_hold_override,
+        # 案X*(A)(B)+warmup (2026-06-05): --chain-exit-next-signal で有効化
+        enable_chain_exit_next_signal=args.enable_chain_exit_next_signal,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1055,6 +1086,18 @@ def main() -> int:
         print(
             "[viz] chain_exit_warmup=ON "
             f"(機能C: CHAIN→STABLE 後 {0.1}s confirmed 凍結 / エフェクト残光混入防止)"
+        )
+    if args.enable_chain_max_hold_override:
+        print(
+            "[viz] chain_max_hold_override=ON "
+            f"(案P3: CHAIN_MAX_HOLD_SEC={RecognitionPipeline.CHAIN_MAX_HOLD_SEC}s 超過後 "
+            "ojama 保留を強制解除 / 連鎖過剰保持 v89 t34-40.87 修正)"
+        )
+    if args.enable_chain_exit_next_signal:
+        print(
+            "[viz] chain_exit_next_signal=ON "
+            "(案X*: (A) 機能D CHAIN 中再点火抑制 + (B) NextSlide で CHAIN 即終了 "
+            f"+ warmup {0.1}s confirmed 凍結 / v89 1P 6.87s 過剰保持根本修正)"
         )
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
