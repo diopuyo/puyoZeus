@@ -60,6 +60,11 @@ class ChainPhaseDetector:
     # ojama_top_positive=True なら None を返して state 遷移を保留する。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_chain_ojama_exit: bool = False
+    # 案P3: CHAIN_MAX_HOLD_SEC 超過を ojama 保留よりも優先して強制 STABLE へ遷移させる。
+    # True にすると chain_max_hold_expired=True の frame では ojama_top_positive に
+    # よる保留をスキップして強制 STABLE に戻す。安全弁を本来機能させる修正。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_chain_max_hold_override: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -87,9 +92,15 @@ class ChainPhaseDetector:
         if ctx.state == BoardState.CHAIN:
             # フェーズ A 精緻化: ojama_top_positive かつ chain_ojama_exit ON なら
             # STABLE に戻さず OjamaVisualDetector に OJAMA_FALL 判定を委譲する。
+            # 案P3: chain_max_hold_expired=True (= CHAIN_MAX_HOLD_SEC 超過) の場合は
+            # ojama 保留を無効化して強制 STABLE に遷移させる (安全弁を本来機能させる)。
             if (
                 self.enable_chain_ojama_exit
                 and signals.ojama_top_positive
+                and not (
+                    self.enable_chain_max_hold_override
+                    and signals.chain_max_hold_expired
+                )
             ):
                 return None  # state 遷移を保留 → OjamaVisualDetector に委譲
             return BoardState.STABLE

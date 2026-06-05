@@ -358,6 +358,10 @@ def _make_pipeline_cnn(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_chain_exit_next_signal: bool = False,
     disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -436,6 +440,8 @@ def _make_pipeline_cnn(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_max_hold_override=enable_chain_max_hold_override,
+        enable_chain_exit_next_signal=enable_chain_exit_next_signal,
     )
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
@@ -652,6 +658,9 @@ def _process_video(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    enable_chain_exit_next_signal: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -719,6 +728,8 @@ def _process_video(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_max_hold_override=enable_chain_max_hold_override,
+        enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         disable_per_video_hsv=disable_per_video_hsv,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
@@ -769,6 +780,9 @@ def _process_video_worker(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    enable_chain_exit_next_signal: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -814,6 +828,8 @@ def _process_video_worker(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_max_hold_override=enable_chain_max_hold_override,
+        enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2156,6 +2172,36 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--chain-max-hold-override",
+        action="store_true",
+        default=False,
+        dest="enable_chain_max_hold_override",
+        help=(
+            "案P3: CHAIN_MAX_HOLD_SEC 超過後の ojama 保留を無効化する。 "
+            "active_chain が CHAIN_MAX_HOLD_SEC 超過で強制クリアされた frame では "
+            "ojama_top_positive による STABLE 復帰保留をスキップして強制 STABLE に遷移させる。 "
+            "安全弁を本来機能させ連鎖過剰保持を解消する (v89 t34-40.87 の 6.87 秒超保持修正)。 "
+            "ライブラリ default=False (無効)。 --chain-max-hold-override で有効化。"
+        ),
+    )
+    # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避)
+    p.add_argument(
+        "--chain-exit-next-signal",
+        action="store_true",
+        default=False,
+        dest="enable_chain_exit_next_signal",
+        help=(
+            "案X*: NextSlide signal による CHAIN 即終了を有効化する。 "
+            "(A) 機能D 再点火抑制: 既に CHAIN 中なら 機能D (掛け算式) の発火をスキップし "
+            "max_until 延長を止める。 "
+            "(B) NextSlide signal (次ツモスライド) 検知で CHAIN を即終了させる。 "
+            "warmup 連動: CHAIN_EXIT_WARMUP_SEC 秒間 confirmed 凍結を自動適用。 "
+            "真因: ojama_top_positive 保留 + 機能D 再点火による 6.87 秒過剰保持 (v89 1P) を解消。 "
+            "ライブラリ default=False (無効)。 --chain-exit-next-signal で有効化。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -2235,6 +2281,9 @@ def _collect_results(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    enable_chain_exit_next_signal: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2305,6 +2354,8 @@ def _collect_results(
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_max_hold_override=enable_chain_max_hold_override,
+            enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2332,6 +2383,8 @@ def _collect_results(
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_max_hold_override=enable_chain_max_hold_override,
+        enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2364,6 +2417,9 @@ def _collect_serial(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    enable_chain_exit_next_signal: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2398,6 +2454,8 @@ def _collect_serial(
             enable_chain_formula_detection=enable_chain_formula_detection,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+            enable_chain_max_hold_override=enable_chain_max_hold_override,
+            enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2433,6 +2491,9 @@ def _collect_parallel(
     enable_chain_formula_detection: bool = False,
     enable_hsv_deferred_consensus: bool = False,
     enable_ojama_warning_glow_guard: bool = False,
+    enable_chain_max_hold_override: bool = False,
+    # 案X*(A)(B)+warmup (2026-06-05): NextSlide signal による CHAIN 即終了。
+    enable_chain_exit_next_signal: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2481,6 +2542,8 @@ def _collect_parallel(
                 enable_chain_formula_detection,
                 enable_hsv_deferred_consensus,
                 enable_ojama_warning_glow_guard,
+                enable_chain_max_hold_override,
+                enable_chain_exit_next_signal,
                 persist_min_frames,
                 disable_per_video_hsv,
             )
@@ -2667,6 +2730,12 @@ def main() -> int:
     enable_ojama_warning_glow_guard: bool = bool(
         getattr(args, "enable_ojama_warning_glow_guard", False)
     )
+    enable_chain_max_hold_override: bool = bool(
+        getattr(args, "enable_chain_max_hold_override", False)
+    )
+    enable_chain_exit_next_signal: bool = bool(
+        getattr(args, "enable_chain_exit_next_signal", False)
+    )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する
     persist_min_frames: int = max(1, int(getattr(args, "corruption_persist_frames", CORRUPTION_PERSIST_MIN_FRAMES)))
@@ -2741,6 +2810,8 @@ def main() -> int:
         enable_chain_formula_detection=enable_chain_formula_detection,
         enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
+        enable_chain_max_hold_override=enable_chain_max_hold_override,
+        enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
