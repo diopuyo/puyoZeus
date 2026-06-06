@@ -1620,7 +1620,11 @@ def _make_pipe_with_chain_exit_warmup(
     enable_chain_exit_warmup: bool = False,
     stable_n: int = 2,
 ) -> RecognitionPipeline:
-    """chain exit warmup テスト用 pipeline を構築する。"""
+    """chain exit warmup テスト用 pipeline を構築する。
+
+    enable_gravity_settle_state=False を明示して gsettle による
+    enable_chain_exit_warmup 強制 ON を排除し、機能C フラグ単体を検証する。
+    """
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     return RecognitionPipeline(
@@ -1631,11 +1635,18 @@ def _make_pipe_with_chain_exit_warmup(
         chain_tracker_2p=None,
         stable_frame_count=stable_n,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
+        # 2026-06-06 採用: gsettle が default=True になったため明示 OFF で
+        # warmup 連動を排除し、機能C フラグ単体をテストする。
+        enable_gravity_settle_state=False,
     )
 
 
 def test_chain_exit_warmup_flag_default_false():
-    """機能C: デフォルト OFF 時は _enable_chain_exit_warmup が False。"""
+    """機能C: enable_chain_exit_warmup=False を明示した場合 _enable_chain_exit_warmup が False。
+
+    2026-06-06: gsettle が default=True になったが、ファクトリ側で
+    enable_gravity_settle_state=False を明示して gsettle 連動を排除している。
+    """
     pipe = _make_pipe_with_chain_exit_warmup(enable_chain_exit_warmup=False)
     assert not pipe._enable_chain_exit_warmup
 
@@ -1760,6 +1771,8 @@ def test_chain_exit_next_signal_uses_longer_warmup():
     assert BASE_T + _warmup_sec_x == expected_x
 
     # --- 案X OFF + 機能C ON (regression) ---
+    # 2026-06-06: gsettle が default=True になったため enable_gravity_settle_state=False を
+    # 明示して enable_chain_exit_next_signal 強制 ON を排除し、機能C 単体を検証する。
     pipe_c = RecognitionPipeline(
         image_reader=reader,
         match_state_detector=detector,
@@ -1768,6 +1781,7 @@ def test_chain_exit_next_signal_uses_longer_warmup():
         chain_tracker_2p=None,
         enable_chain_exit_warmup=True,
         enable_chain_exit_next_signal=False,
+        enable_gravity_settle_state=False,
         force_in_match=True,
     )
     _warmup_sec_c = (

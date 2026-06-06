@@ -352,7 +352,11 @@ def _make_pipe_with_next_signal(
     enable_next_signal: bool = False,
     enable_formula: bool = True,
 ) -> RecognitionPipeline:
-    """案X* テスト用の最小構成 pipeline を返す。"""
+    """案X* テスト用の最小構成 pipeline を返す。
+
+    enable_gravity_settle_state=False を明示して gsettle による
+    enable_chain_exit_next_signal 強制 ON を排除する。
+    """
     from src.image_reader import ImageReader
     from src.match_state import MatchStateDetector
 
@@ -369,6 +373,9 @@ def _make_pipe_with_next_signal(
         match_state_detector=match_det,
         enable_chain_formula_detection=enable_formula,
         enable_chain_exit_next_signal=enable_next_signal,
+        # 2026-06-06 採用: gsettle が default=True になったため明示 OFF で
+        # enable_chain_exit_next_signal 強制 ON を排除し、フラグ単体を検証する。
+        enable_gravity_settle_state=False,
         force_in_match=True,
     )
     return pipe

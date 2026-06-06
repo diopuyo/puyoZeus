@@ -50,6 +50,9 @@ def _signal(
     score_delta: int = 0,
     next_pair: tuple[int, int] | None = None,
     match: bool = True,
+    slide_motion: bool = False,
+    ojama_top_positive: bool = False,
+    chain_max_hold_expired: bool = False,
 ) -> DetectorSignals:
     return DetectorSignals(
         time_sec=t,
@@ -58,6 +61,9 @@ def _signal(
         chain_event=chain_event,
         score_delta=score_delta,
         next_pair=next_pair,
+        slide_motion=slide_motion,
+        ojama_top_positive=ojama_top_positive,
+        chain_max_hold_expired=chain_max_hold_expired,
     )
 
 
@@ -314,6 +320,92 @@ def test_state_machine_uses_chain_detector_first() -> None:
         _signal(0.15, new_board, chain_event=ev, score_delta=999),
     )
     assert ctx.state == BoardState.CHAIN
+
+
+# ============================
+# ChainPhaseDetector 案γ: slide_motion による ojama-hold 上書き
+# ============================
+
+
+def test_chain_detector_gamma_slide_overrides_ojama_hold() -> None:
+    """案γ ON + slide_motion=True + ojama_top_positive=True → CHAIN 終了 (ojama-hold 無効化)."""
+    det = ChainPhaseDetector(
+        enable_chain_ojama_exit=True,
+        enable_slide_override_ojama_hold=True,
+    )
+    ctx = StateContext(state=BoardState.CHAIN)
+    res = det.detect(
+        ctx,
+        _signal(
+            39.0, _empty_board(),
+            chain_event=None,       # chain_event=None → CHAIN 終了処理へ
+            ojama_top_positive=True,  # ojama-hold ガードが発動する条件
+            slide_motion=True,       # 案γ: slide が ojama-hold を上書き
+        ),
+    )
+    # ojama-hold は発動せず STABLE に戻る (enable_gravity_settle_state=False なので STABLE)
+    assert res == BoardState.STABLE
+
+
+def test_chain_detector_gamma_no_slide_ojama_hold_still_active() -> None:
+    """案γ ON でも slide_motion=False なら従来通り ojama-hold が保留 (None 返し)."""
+    det = ChainPhaseDetector(
+        enable_chain_ojama_exit=True,
+        enable_slide_override_ojama_hold=True,
+    )
+    ctx = StateContext(state=BoardState.CHAIN)
+    res = det.detect(
+        ctx,
+        _signal(
+            38.0, _empty_board(),
+            chain_event=None,
+            ojama_top_positive=True,
+            slide_motion=False,  # slide なし → ojama-hold が依然有効
+        ),
+    )
+    # 従来通り None (OjamaVisualDetector に委譲)
+    assert res is None
+
+
+def test_chain_detector_gamma_flag_off_slide_ignored() -> None:
+    """enable_slide_override_ojama_hold=False (明示 OFF) なら slide_motion は無視。"""
+    det = ChainPhaseDetector(
+        enable_chain_ojama_exit=True,
+        enable_slide_override_ojama_hold=False,  # 明示 OFF (pipeline default=True とは独立)
+    )
+    ctx = StateContext(state=BoardState.CHAIN)
+    res = det.detect(
+        ctx,
+        _signal(
+            38.0, _empty_board(),
+            chain_event=None,
+            ojama_top_positive=True,
+            slide_motion=True,  # フラグ OFF なので無視される
+        ),
+    )
+    # フラグ OFF → ojama-hold が従来通り有効 → None
+    assert res is None
+
+
+def test_chain_detector_gamma_with_gravity_settle() -> None:
+    """案γ + GRAVITY_SETTLE 有効時: slide が ojama-hold を上書きして GRAVITY_SETTLE に遷移。"""
+    det = ChainPhaseDetector(
+        enable_chain_ojama_exit=True,
+        enable_slide_override_ojama_hold=True,
+        enable_gravity_settle_state=True,
+    )
+    ctx = StateContext(state=BoardState.CHAIN)
+    res = det.detect(
+        ctx,
+        _signal(
+            39.0, _empty_board(),
+            chain_event=None,
+            ojama_top_positive=True,
+            slide_motion=True,
+        ),
+    )
+    # ojama-hold 無効化 → CHAIN 終了 → GRAVITY_SETTLE (gsettle ON)
+    assert res == BoardState.GRAVITY_SETTLE
 
 
 def test_tsumo_then_back_to_stable_via_state_machine() -> None:

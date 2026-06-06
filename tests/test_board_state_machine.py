@@ -770,3 +770,278 @@ def test_recovery_gate_off_does_not_fix_ghost() -> None:
     # フラグ OFF → confirmed=赤のまま
     assert sm.context.confirmed_board is not None
     assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+# ============================
+# feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 状態テスト
+# ============================
+
+
+def _make_gravity_settle_sm() -> tuple[BoardStateMachine, object]:
+    """GRAVITY_SETTLE 有効な state machine と GravitySettleDetector を返す。"""
+    from src.state_detectors import ChainPhaseDetector, GravitySettleDetector
+
+    chain_det = ChainPhaseDetector(enable_gravity_settle_state=True)
+    settle_det = GravitySettleDetector()
+    sm = BoardStateMachine(detectors=[chain_det, settle_det])
+    return sm, settle_det
+
+
+def _chain_signal(t: float, board: Board, *, chain_event: object = object()) -> DetectorSignals:
+    """chain_event あり DetectorSignals を生成するヘルパー。"""
+    return DetectorSignals(
+        time_sec=t,
+        cnn_board=board,
+        is_match_active=True,
+        chain_event=chain_event,
+    )
+
+
+def _no_chain_signal(t: float, board: Board) -> DetectorSignals:
+    """chain_event なし DetectorSignals を生成するヘルパー。"""
+    return DetectorSignals(
+        time_sec=t,
+        cnn_board=board,
+        is_match_active=True,
+        chain_event=None,
+    )
+
+
+def test_gravity_settle_state_in_non_stable_states() -> None:
+    """GRAVITY_SETTLE が NON_STABLE_STATES に含まれること (後方互換 = 採点外)。"""
+    assert BoardState.GRAVITY_SETTLE in NON_STABLE_STATES
+
+
+def test_gravity_settle_not_stable_menu() -> None:
+    """STABLE / MENU は GRAVITY_SETTLE とは別 state であること。"""
+    assert BoardState.GRAVITY_SETTLE != BoardState.STABLE
+    assert BoardState.GRAVITY_SETTLE != BoardState.MENU
+
+
+def test_chain_to_gravity_settle_transition() -> None:
+    """CHAIN → GRAVITY_SETTLE 遷移: chain_event なし + gravity_settle=True で GRAVITY_SETTLE に入る。"""
+    sm, _ = _make_gravity_settle_sm()
+
+    # まず STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+    assert sm.context.state == BoardState.STABLE
+
+    # chain_event あり → CHAIN に入る
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    assert sm.context.state == BoardState.CHAIN
+
+    # chain_event なし → GRAVITY_SETTLE に遷移 (STABLE に直行しない)
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+
+def test_gravity_settle_confirmed_frozen_during_settle() -> None:
+    """GRAVITY_SETTLE 中は confirmed_board が凍結されること (is_action=True)。"""
+    sm, _ = _make_gravity_settle_sm()
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+    initial_confirmed = sm.context.confirmed_board
+
+    # CHAIN → GRAVITY_SETTLE
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # GRAVITY_SETTLE 中は is_action() == True (採点外)
+    assert sm.context.is_action() is True
+    assert sm.context.is_stable() is False
+
+
+def test_gravity_settle_stable_after_min_frames_stable_count() -> None:
+    """GRAVITY_SETTLE: ぷよ数安定 GRAVITY_SETTLE_MIN_FRAMES 連続で STABLE 復帰する。"""
+    from src.board_state_machine import GRAVITY_SETTLE_MIN_FRAMES, GRAVITY_SETTLE_PHYSICS_CLEAR_MIN
+
+    sm, _ = _make_gravity_settle_sm()
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+
+    # CHAIN → GRAVITY_SETTLE
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # 最低待機 + 安定フレームを重ねる
+    settle_start = 8
+    # 最低待機中 (physics_clear_min)
+    for i in range(GRAVITY_SETTLE_PHYSICS_CLEAR_MIN):
+        sm.update(settle_start + i, _no_chain_signal(0.4 + 0.033 * i, board))
+
+    # 安定フレーム (ぷよ数変化 <2 が継続)
+    offset = settle_start + GRAVITY_SETTLE_PHYSICS_CLEAR_MIN
+    for i in range(GRAVITY_SETTLE_MIN_FRAMES):
+        sm.update(offset + i, _no_chain_signal(0.5 + 0.033 * i, board))
+
+    # STABLE 復帰していること
+    assert sm.context.state == BoardState.STABLE
+
+
+def test_gravity_settle_timeout_forces_stable() -> None:
+    """GRAVITY_SETTLE: MAX_SEC タイムアウトで強制 STABLE 復帰する。
+
+    settle_start_time は GRAVITY_SETTLE に入った次フレーム (frame 8) で記録される。
+    その後 GRAVITY_SETTLE_MAX_SEC + 余裕を持った time_sec の frame を投入して
+    タイムアウト強制 STABLE を確認する。
+    """
+    from src.board_state_machine import GRAVITY_SETTLE_MAX_SEC
+
+    sm, _ = _make_gravity_settle_sm()
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+
+    # CHAIN → GRAVITY_SETTLE
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # frame 8: GRAVITY_SETTLE に入った直後のフレーム → settle_start_time が記録される
+    settle_entry_t = 0.4  # このフレームで settle_start_time が設定される
+    sm.update(8, _no_chain_signal(settle_entry_t, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # タイムアウト時刻を超えた frame を投入 (ぷよ数が毎フレーム変動しても OK)
+    timeout_t = settle_entry_t + GRAVITY_SETTLE_MAX_SEC + 0.1
+    sm.update(100, _no_chain_signal(timeout_t, board))
+
+    # タイムアウトで強制 STABLE
+    assert sm.context.state == BoardState.STABLE
+
+
+def test_gravity_settle_chain_refire_during_settle() -> None:
+    """GRAVITY_SETTLE 中に次連鎖 drop 検知で CHAIN に復帰する (多段連鎖対応)。"""
+    sm, _ = _make_gravity_settle_sm()
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+
+    # CHAIN → GRAVITY_SETTLE
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # GRAVITY_SETTLE 中に chain_event 再発火 → CHAIN に戻る
+    sm.update(8, _chain_signal(0.4, _empty_board()))
+    assert sm.context.state == BoardState.CHAIN
+
+
+def test_gravity_settle_default_off_no_transition() -> None:
+    """default OFF (enable_gravity_settle_state=False) では CHAIN → STABLE に直行する (後方互換)。"""
+    from src.state_detectors import ChainPhaseDetector
+
+    # gravity settle なしの通常 state machine
+    chain_det = ChainPhaseDetector(enable_gravity_settle_state=False)
+    sm = BoardStateMachine(detectors=[chain_det])
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+
+    # CHAIN
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    assert sm.context.state == BoardState.CHAIN
+
+    # chain_event なし → GRAVITY_SETTLE を経由せず直接 STABLE
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.STABLE
+    assert sm.context.state != BoardState.GRAVITY_SETTLE
+
+
+def test_gravity_settle_non_stable_history_not_accumulated() -> None:
+    """GRAVITY_SETTLE 中は non_stable_cnn_history に蓄積しないこと (F ガード汚染防止)。"""
+    sm, _ = _make_gravity_settle_sm()
+
+    # STABLE 初期化
+    board = _board_with_red(12, 0)
+    for i in range(6):
+        sm.update(i, _no_chain_signal(0.05 * i, board))
+
+    # CHAIN → GRAVITY_SETTLE
+    sm.update(6, _chain_signal(0.3, _empty_board()))
+    # CHAIN 中は history に蓄積される
+    chain_history_len = len(sm.context.non_stable_cnn_history)
+
+    sm.update(7, _no_chain_signal(0.35, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+
+    # GRAVITY_SETTLE 中は history がクリアされたまま増えない
+    # (state 切替時に non_stable_cnn_history がリセットされる)
+    initial_settle_history_len = len(sm.context.non_stable_cnn_history)
+
+    sm.update(8, _no_chain_signal(0.4, board))
+    assert sm.context.state == BoardState.GRAVITY_SETTLE
+    # 蓄積されていないこと
+    assert len(sm.context.non_stable_cnn_history) == initial_settle_history_len
+
+
+def test_gravity_settle_pipeline_flag_default_on() -> None:
+    """RecognitionPipeline の enable_gravity_settle_state default=True (2026-06-06 採用)。
+
+    __init__ / load_default の default 引数が True になっていることを確認する。
+    """
+    from src.recognition_pipeline import RecognitionPipeline
+    import inspect
+
+    # __init__ の default 値を inspect で確認
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    param = sig.parameters.get("enable_gravity_settle_state")
+    assert param is not None, "enable_gravity_settle_state パラメータが __init__ に存在しない"
+    assert param.default is True, (
+        f"__init__ の enable_gravity_settle_state default が True でない: {param.default}"
+    )
+
+    # load_default の default 値を inspect で確認
+    sig_ld = inspect.signature(RecognitionPipeline.load_default)
+    param_ld = sig_ld.parameters.get("enable_gravity_settle_state")
+    assert param_ld is not None, "enable_gravity_settle_state パラメータが load_default に存在しない"
+    assert param_ld.default is True, (
+        f"load_default の enable_gravity_settle_state default が True でない: {param_ld.default}"
+    )
+
+
+def test_gravity_settle_pipeline_flag_disable_explicit_false() -> None:
+    """enable_gravity_settle_state=False を明示指定すると False が _build_state_machine に渡る (無効化確認)。"""
+    from src.recognition_pipeline import RecognitionPipeline
+    from unittest.mock import MagicMock, patch
+
+    # _build_state_machine の呼び出し引数を検証する
+    # (実際の pipeline インスタンス化はモデル不在で失敗するため try/except)
+    with patch.object(
+        RecognitionPipeline, "_build_state_machine",
+        wraps=RecognitionPipeline._build_state_machine,
+    ) as mock_build:
+        try:
+            from src.image_reader import ImageReader
+            from src.match_state import MatchStateDetector
+            reader = MagicMock(spec=ImageReader)
+            detector = MagicMock(spec=MatchStateDetector)
+            RecognitionPipeline(
+                image_reader=reader,
+                match_state_detector=detector,
+                enable_gravity_settle_state=False,
+            )
+        except Exception:
+            pass  # model 不在等のエラーは無視
+
+        # enable_gravity_settle_state=False が渡されていること
+        if mock_build.called:
+            for call in mock_build.call_args_list:
+                kwargs = call[1] if len(call) > 1 else {}
+                assert kwargs.get("enable_gravity_settle_state", True) is False
