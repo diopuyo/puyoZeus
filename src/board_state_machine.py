@@ -51,6 +51,30 @@ STABLE_WARMUP_FRAMES: int = 12
 # 推論優先 (NON-STABLE) state の集合
 NON_STABLE_STATES: frozenset["BoardState"] = frozenset()  # 後で初期化
 
+# GRAVITY_SETTLE 状態定数 (feat/gravity-settle-2026-06-05)
+# -------------------------------------------------------
+# 連鎖終了直後の重力settle/着地中 window 用定数。
+# GravitySettleDetector はこれらを参照して STABLE 復帰タイミングを制御する。
+# -------------------------------------------------------
+
+# ぷよ数変化が「ほぼ静止」と判定するための最小連続フレーム数。
+# @30fps: 8f ≈ 0.27s。連鎖終了直後の board_log 分析で physics_fix が
+# 遷移+0fに10-13件集中するため、それが収まるまで待つ設計。
+GRAVITY_SETTLE_MIN_FRAMES: int = 8
+
+# GRAVITY_SETTLE の最大保持時間 (秒)。タイムアウトで強制 STABLE 復帰。
+# 最長連鎖でも settle は 0.5-1.0s 程度。1.5s は十分な安全マージン。
+GRAVITY_SETTLE_MAX_SEC: float = 1.5
+
+# 最低待機フレーム数 (physics_fix 解消確認用)。
+# GRAVITY_SETTLE_MIN_FRAMES より小さい値を設定できる下限ガード。
+# 連鎖エフェクト残光が消えるまでの最小保護時間。
+GRAVITY_SETTLE_PHYSICS_CLEAR_MIN: int = 3
+
+# settle 中に「ぷよ数変化が安定」と見なすフレーム間差分の上限。
+# raw CNN ぷよ数が連続フレームで ±N 以内なら静止とみなす。
+GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD: int = 2
+
 # 設計C 事後復旧ゲート (fix/v70-zeropatch-redyellow, 2026-06-02):
 # STABLE 中に confirmed != (CNN==HSV の合意値) が N フレーム継続したセルを
 # confirmed に追従させる双方向ゲート。
@@ -74,6 +98,13 @@ class BoardState(Enum):
     CHAIN = "chain"          # 連鎖中 (消去 + 重力)
     OJAMA_FALL = "ojama_fall"  # おじゃま落下中
     EFFECT = "effect"        # 全消し演出 / 連鎖カットイン等
+    # feat/gravity-settle-2026-06-05: 連鎖終了直後の重力 settle/着地中。
+    # CHAIN 終了後から board が物理的に静止するまでの window。
+    # NON_STABLE_STATES に含まれるため採点外・confirmed 凍結対象。
+    # backwards compat: 既存コードは GRAVITY_SETTLE を認識しないが、
+    # NON_STABLE_STATES に加えることで「採点外」として既存の is_action() が True を返し、
+    # 挙動上は他の NON-STABLE state と同等に扱われる。
+    GRAVITY_SETTLE = "gravity_settle"
 
 
 # 推論優先 state (= 認識結果を盤面確定に使わない state)
@@ -82,6 +113,10 @@ NON_STABLE_STATES = frozenset({
     BoardState.CHAIN,
     BoardState.OJAMA_FALL,
     BoardState.EFFECT,
+    # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE は採点外 (confirmed 凍結)。
+    # backwards compat: default OFF (enable_gravity_settle_state=False) なら
+    # この state に遷移しないため挙動は完全不変。
+    BoardState.GRAVITY_SETTLE,
 })
 
 
@@ -539,6 +574,15 @@ class BoardStateMachine:
     ) -> None:
         """現 state を維持したまま内部メトリクスのみ更新。"""
         if self._ctx.state in NON_STABLE_STATES:
+            # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 中は
+            # non_stable_cnn_history に蓄積しない (連鎖後エフェクト残光・
+            # 落下中ぷよの混入による F ガード汚染を防ぐ)。
+            # GRAVITY_SETTLE → STABLE 遷移時の _merge_diff_only には
+            # empty_guard として None が渡されるため F ガードは発火しない
+            # (保守的: 連鎖後は全 cell を新規 STABLE で直接評価)。
+            if self._ctx.state == BoardState.GRAVITY_SETTLE:
+                # アクション中: 認識結果は盤面確定に使わない
+                return
             # F (cycle 56): NON-STABLE 中の cnn_board 履歴を保持。
             # STABLE 復帰時の多数決ガードに使う。 最大 N frame 保持。
             self._ctx.non_stable_cnn_history.append(
@@ -833,4 +877,9 @@ __all__ = [
     "RECOVERY_EXCLUDED_COLORS",
     "StateContext",
     "StateTransitionDetector",
+    # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 関連定数
+    "GRAVITY_SETTLE_MIN_FRAMES",
+    "GRAVITY_SETTLE_MAX_SEC",
+    "GRAVITY_SETTLE_PHYSICS_CLEAR_MIN",
+    "GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD",
 ]
