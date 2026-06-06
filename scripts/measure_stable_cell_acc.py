@@ -365,6 +365,9 @@ def _make_pipeline_cnn(
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_slide_override_ojama_hold: bool = False,
     disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -446,6 +449,7 @@ def _make_pipeline_cnn(
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
+        enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
     )
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
@@ -667,6 +671,8 @@ def _process_video(
     enable_chain_exit_next_signal: bool = False,
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    enable_slide_override_ojama_hold: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -737,6 +743,7 @@ def _process_video(
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
+        enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         disable_per_video_hsv=disable_per_video_hsv,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
@@ -792,6 +799,8 @@ def _process_video_worker(
     enable_chain_exit_next_signal: bool = False,
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    enable_slide_override_ojama_hold: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -840,6 +849,7 @@ def _process_video_worker(
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
+        enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2227,6 +2237,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--slide-override-ojama-hold",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_slide_override_ojama_hold",
+        help=(
+            "案γ: CHAIN 中 slide_motion=True (次ツモスライド) が来た場合に "
+            "ojama_top_positive による CHAIN 過剰保持 (ojama-hold ガード) を上書きして終了。 "
+            "v89 t35.2-39.67 の連鎖過剰保持修正。 "
+            "default=True (有効、2026-06-06 採用)。 --no-slide-override-ojama-hold で無効化。"
+        ),
+    )
+    p.add_argument(
         "--workers",
         type=int,
         default=1,
@@ -2311,6 +2333,8 @@ def _collect_results(
     enable_chain_exit_next_signal: bool = False,
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    enable_slide_override_ojama_hold: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2384,6 +2408,7 @@ def _collect_results(
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2414,6 +2439,7 @@ def _collect_results(
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
+        enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2451,6 +2477,8 @@ def _collect_serial(
     enable_chain_exit_next_signal: bool = False,
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    enable_slide_override_ojama_hold: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2488,6 +2516,7 @@ def _collect_serial(
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2528,6 +2557,8 @@ def _collect_parallel(
     enable_chain_exit_next_signal: bool = False,
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
     enable_gravity_settle_state: bool = False,
+    # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+    enable_slide_override_ojama_hold: bool = False,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2579,6 +2610,7 @@ def _collect_parallel(
                 enable_chain_max_hold_override,
                 enable_chain_exit_next_signal,
                 enable_gravity_settle_state,
+                enable_slide_override_ojama_hold,
                 persist_min_frames,
                 disable_per_video_hsv,
             )
@@ -2775,6 +2807,10 @@ def main() -> int:
     enable_gravity_settle_state: bool = bool(
         getattr(args, "enable_gravity_settle_state", True)
     )
+    # 案γ (2026-06-06 採用): default=True。--no-slide-override-ojama-hold で無効化。
+    enable_slide_override_ojama_hold: bool = bool(
+        getattr(args, "enable_slide_override_ojama_hold", True)
+    )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する
     persist_min_frames: int = max(1, int(getattr(args, "corruption_persist_frames", CORRUPTION_PERSIST_MIN_FRAMES)))
@@ -2851,6 +2887,7 @@ def main() -> int:
         enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )

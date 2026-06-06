@@ -76,6 +76,15 @@ class ChainPhaseDetector:
     # 有効化された上位レイヤーで ON にされる想定。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_gravity_settle_state: bool = False
+    # 案γ: CHAIN 中に slide_motion=True (次ツモスライド検出) が来た場合、
+    # ojama_top_positive による STABLE 復帰保留を上書きして CHAIN を終了させる。
+    # 次ツモのスライド = 連鎖確実終了の物理的証拠であり、
+    # ojama-hold ガードが誤って CHAIN を過剰保持するのを防ぐ。
+    # True にすると: CHAIN 中 ojama_top_positive=True かつ slide_motion=True の場合
+    # ojama-hold を無効化し通常 CHAIN 終了 (GRAVITY_SETTLE or STABLE) に遷移する。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    # A/B 対照実験用フラグ; gsettle 統合判断後に恒常化予定。
+    enable_slide_override_ojama_hold: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -111,6 +120,13 @@ class ChainPhaseDetector:
                 and not (
                     self.enable_chain_max_hold_override
                     and signals.chain_max_hold_expired
+                )
+                and not (
+                    # 案γ: slide_motion=True (次ツモスライド=連鎖確実終了) のとき
+                    # ojama-hold を上書きして CHAIN を終了させる。
+                    # 次ツモが動いた = 連鎖は物理的に終わっている強証拠。
+                    self.enable_slide_override_ojama_hold
+                    and signals.slide_motion
                 )
             ):
                 return None  # state 遷移を保留 → OjamaVisualDetector に委譲

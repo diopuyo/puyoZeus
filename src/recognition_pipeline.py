@@ -587,6 +587,13 @@ class RecognitionPipeline:
         # 2026-06-06 採用: 連鎖過剰保持の本質修正 = settle 状態。退行ゼロ + 連鎖境界正確化。
         # default True = 採用済み。False で無効化可 (backwards compat)。
         enable_gravity_settle_state: bool = True,
+        # 案γ: CHAIN 中 slide_motion=True (次ツモスライド) が来た場合、
+        # ojama_top_positive による CHAIN 過剰保持 (ojama-hold ガード) を上書きして終了。
+        # enable_chain_ojama_exit=True かつ ojama_top_positive=True のときに slide が
+        # None 返しを貫通する問題 (v89 t35.2-39.67 連鎖過剰保持) を解消する。
+        # 2026-06-06 採用: corr +0.004% 誤差・v89 連鎖過剰保持完全解消・置き認識復活で
+        # user 目視 OK + 退行なし → default True に昇格。False で無効化可。
+        enable_slide_override_ojama_hold: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -788,6 +795,11 @@ class RecognitionPipeline:
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
+        # 案γ: slide_motion で ojama-hold を上書きするフラグ。
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_slide_override_ojama_hold: bool = bool(
+            enable_slide_override_ojama_hold
+        )
         # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 状態フラグ。
         # _build_state_machine 呼び出し前に設定が必要 (引数として渡すため)。
         # gravity_settle=True の場合は chain_exit_next_signal も強制 ON にする
@@ -807,6 +819,7 @@ class RecognitionPipeline:
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -816,6 +829,7 @@ class RecognitionPipeline:
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1097,6 +1111,7 @@ class RecognitionPipeline:
         enable_ojama_settle_detection: bool = False,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
+        enable_slide_override_ojama_hold: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1109,14 +1124,17 @@ class RecognitionPipeline:
         # feat/gravity-settle-2026-06-05: enable_gravity_settle_state=True で
         #   ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返し、
         #   GravitySettleDetector が GRAVITY_SETTLE → STABLE を担当する。
+        # 案γ: enable_slide_override_ojama_hold=True で ChainPhaseDetector に伝播。
+        #   CHAIN 中 slide_motion=True が来た場合 ojama-hold 保留を上書きして終了する。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
-        # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE フラグを伝播する
+        # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE + 案γ フラグを伝播する
         chain_det = ChainPhaseDetector(
             chain_sim=ChainSimulator(),
             enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_gravity_settle_state=enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         )
         detectors: list = [
             chain_det,
@@ -1218,6 +1236,10 @@ class RecognitionPipeline:
         # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
         # 2026-06-06 採用: 退行ゼロ + 連鎖境界正確化。False で無効化可。
         enable_gravity_settle_state: bool = True,
+        # 案γ (2026-06-06 採用): CHAIN 中 slide_motion=True が ojama-hold を上書き。
+        # user 目視 OK + 退行なし (corr +0.004% 誤差) で採用確定 → default True。
+        # False を渡すと無効化できる (backwards compat のため optional 引数として維持)。
+        enable_slide_override_ojama_hold: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1371,6 +1393,7 @@ class RecognitionPipeline:
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
+            enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
         )
 
     # ------------------------------------------------------------------

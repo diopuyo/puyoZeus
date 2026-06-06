@@ -900,6 +900,16 @@ def main() -> int:
              "案X (--chain-exit-next-signal) との組み合わせを推奨 (内部で自動 ON)。 "
              "default=True (有効、2026-06-06 採用)。 --no-gravity-settle-state で無効化。",
     )
+    parser.add_argument(
+        "--slide-override-ojama-hold",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="enable_slide_override_ojama_hold",
+        help="案γ: CHAIN 中 slide_motion=True (次ツモスライド) が来た場合に "
+             "ojama_top_positive による CHAIN 過剰保持 (ojama-hold ガード) を上書きして終了。 "
+             "v89 t35.2-39.67 の連鎖過剰保持修正。 "
+             "default=True (有効、2026-06-06 採用)。 --no-slide-override-ojama-hold で無効化。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -1015,6 +1025,8 @@ def main() -> int:
         enable_chain_exit_next_signal=args.enable_chain_exit_next_signal,
         # feat/gravity-settle-2026-06-05: --gravity-settle-state で有効化
         enable_gravity_settle_state=args.enable_gravity_settle_state,
+        # 案γ (2026-06-06): --slide-override-ojama-hold で有効化
+        enable_slide_override_ojama_hold=args.enable_slide_override_ojama_hold,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1125,6 +1137,14 @@ def main() -> int:
             f"min={GRAVITY_SETTLE_MIN_FRAMES}f physics_clear={GRAVITY_SETTLE_PHYSICS_CLEAR_MIN}f "
             f"timeout={GRAVITY_SETTLE_MAX_SEC}s / 連鎖後 settle 採点外)"
         )
+    if args.enable_slide_override_ojama_hold:
+        print(
+            "[viz] slide_override_ojama_hold=ON "
+            "(案γ: CHAIN 中 slide_motion=True が ojama-hold ガードを上書きして CHAIN 終了 "
+            "/ v89 t35.2-39.67 連鎖過剰保持修正、2026-06-06 採用)"
+        )
+    else:
+        print("[viz] slide_override_ojama_hold=OFF (--no-slide-override-ojama-hold 指定)")
     if args.bg_fp_force_max_puyo is not None:
         print(f"[viz] bg_fp_force_max_puyo={args.bg_fp_force_max_puyo} (B2: FP 採取制限)")
     # Step 0 (2026-05-24): --no-online-hsv で OnlineHsvCalibrator を無効化
