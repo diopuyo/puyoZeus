@@ -30,6 +30,8 @@ from src.board import (  # noqa: E402
     COLOR_PURPLE, COLOR_RED, COLOR_UNKNOWN, COLOR_YELLOW, HIDDEN_ROWS, Board,
 )
 from src.board_state_machine import BoardState  # noqa: E402
+from src.ojama_accounting import OjamaAccountingTracker, OjamaAccountSnapshot  # noqa: E402
+from src.probabilistic_board import ProbabilisticBoard  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
 # ============================
@@ -71,12 +73,13 @@ COLOR_BGR = {
 
 # State machine state ごとの枠色
 STATE_COLOR = {
-    BoardState.STABLE: (0, 255, 0),         # green = OK
-    BoardState.TSUMO_FALL: (0, 200, 255),   # orange
-    BoardState.CHAIN: (200, 100, 255),      # pink/purple
-    BoardState.OJAMA_FALL: (255, 200, 0),   # cyan
-    BoardState.MENU: (128, 128, 128),       # gray
-    BoardState.EFFECT: (255, 0, 255),       # magenta (全消し等)
+    BoardState.STABLE: (0, 255, 0),              # green = OK
+    BoardState.TSUMO_FALL: (0, 200, 255),        # orange
+    BoardState.CHAIN: (200, 100, 255),           # pink/purple
+    BoardState.OJAMA_FALL: (255, 200, 0),        # cyan
+    BoardState.MENU: (128, 128, 128),            # gray
+    BoardState.EFFECT: (255, 0, 255),            # magenta (全消し等)
+    BoardState.GRAVITY_SETTLE: (0, 165, 255),    # orange-yellow (重力 settle)
 }
 
 # 描画フォント
@@ -132,18 +135,23 @@ def draw_state_label(
     frame: np.ndarray, state: BoardState, roi_x: int, roi_y: int,
     score: int = 0, label_prefix: str = "",
 ) -> None:
-    """ROI 上方に state ラベルを描画する."""
+    """ROI 上方に state ラベルを描画する.
+
+    隠し段帯 (HIDDEN_BAND_HEIGHT) の上方に配置し帯と被らないようオフセットを取る。
+    """
     color = STATE_COLOR.get(state, (255, 255, 255))
     text = f"{label_prefix}{state.value}"
     if score > 0:
         text += f" score={score}"
+    # 隠し段帯より上にラベルを配置
+    label_y = roi_y - STATE_LABEL_OFFSET_Y
     # 影
     cv2.putText(
-        frame, text, (roi_x + 4, roi_y - 12), FONT,
+        frame, text, (roi_x + 4, label_y), FONT,
         FONT_SCALE_STATE, (0, 0, 0), FONT_THICKNESS + 2, cv2.LINE_AA,
     )
     cv2.putText(
-        frame, text, (roi_x + 3, roi_y - 13), FONT,
+        frame, text, (roi_x + 3, label_y - 1), FONT,
         FONT_SCALE_STATE, color, FONT_THICKNESS, cv2.LINE_AA,
     )
     # ROI 枠
@@ -153,12 +161,291 @@ def draw_state_label(
     )
 
 
+def draw_next_overlay(
+    frame: np.ndarray, next_pair: tuple[int, int] | None,
+    dnext_pair: tuple[int, int] | None,
+    roi_x: int, roi_y: int, label_prefix: str = "",
+) -> None:
+    """ネクスト / ダブルネクストの色を ROI 下部に描画する.
+
+    next_pair = (上ぷよ色, 下ぷよ色)、dnext_pair = 同上。
+    EMPTY (0) は "-" で表示し、None 全体は "next:?" で表示する。
+
+    Args:
+        frame: 描画対象フレーム。
+        next_pair: (color_top, color_bot) または None。
+        dnext_pair: (color_top, color_bot) または None。
+        roi_x: 盤面 ROI 左端 X 座標。
+        roi_y: 盤面 ROI 上端 Y 座標。
+        label_prefix: 先頭に付けるラベル ("1P:" 等)。
+    """
+    def _pair_str(pair: tuple[int, int] | None) -> str:
+        """ペアを記号 2 文字に変換する."""
+        if pair is None:
+            return "??"
+        t, b = pair
+        return f"{COLOR_SYMBOLS.get(t, '?') or '-'}{COLOR_SYMBOLS.get(b, '?') or '-'}"
+
+    text = f"N:{_pair_str(next_pair)} D:{_pair_str(dnext_pair)}"
+    # ROI 下端より少し下に描画
+    tx = roi_x + 2
+    ty = roi_y + ROI_H + 18
+    cv2.putText(frame, text, (tx + 1, ty + 1), FONT,
+                0.65, (0, 0, 0), FONT_THICKNESS + 2, cv2.LINE_AA)
+    cv2.putText(frame, text, (tx, ty), FONT,
+                0.65, (200, 255, 200), FONT_THICKNESS, cv2.LINE_AA)
+
+
+def draw_ojama_overlay(
+    frame: np.ndarray, ojama_sent: int, recent_event_sec: float,
+    roi_x: int, roi_y: int,
+) -> None:
+    """score OCR 差分由来の送出お邪魔数を ROI 下部 (next の下) に描画する.
+
+    後方互換のため残す。新実装は draw_ojama_accounting_overlay を使うこと。
+
+    Args:
+        frame: 描画対象フレーム。
+        ojama_sent: 最新の連鎖イベントで送出したお邪魔数 (score 差分由来)。
+        recent_event_sec: 最後のイベントから経過した秒数 (表示フェードアウト用)。
+                          負値 = イベント未発生。
+        roi_x: 盤面 ROI 左端 X 座標。
+        roi_y: 盤面 ROI 上端 Y 座標。
+    """
+    # 表示フェードアウト: 最後のイベントから OJAMA_DISPLAY_FADE_SEC 秒以上経過したら薄く
+    OJAMA_DISPLAY_FADE_SEC: float = 3.0
+    if ojama_sent <= 0 or recent_event_sec < 0:
+        # イベント未発生または送出なし: 薄グレーで "OJ_sent:--" と表示
+        count_label = "OJ_sent:--"
+        color_bgr: tuple[int, int, int] = (80, 80, 80)
+    else:
+        count_label = f"OJ_sent:{ojama_sent}"
+        # フェードアウト: 経過時間に応じて輝度を下げる
+        fade = max(0.0, 1.0 - recent_event_sec / max(OJAMA_DISPLAY_FADE_SEC, 1e-9))
+        r = int(80 + 175 * fade)
+        g = int(80)
+        b = int(80)
+        color_bgr = (b, g, r)
+    tx = roi_x + 2
+    ty = roi_y + ROI_H + 36
+    cv2.putText(frame, count_label, (tx + 1, ty + 1), FONT,
+                0.60, (0, 0, 0), FONT_THICKNESS + 2, cv2.LINE_AA)
+    cv2.putText(frame, count_label, (tx, ty), FONT,
+                0.60, color_bgr, FONT_THICKNESS, cv2.LINE_AA)
+
+
+# 会計 overlay の縦オフセット定数 (ROI 下端からの px)
+_ACCT_LINE1_OFFSET_Y: int = 36   # pending 行 (next の下)
+_ACCT_LINE2_OFFSET_Y: int = 54   # drop/net 行
+_ACCT_FONT_SCALE: float = 0.55
+
+
+def draw_ojama_accounting_overlay(
+    frame: np.ndarray,
+    snap: OjamaAccountSnapshot | None,
+    side: str,
+    roi_x: int,
+    roi_y: int,
+) -> None:
+    """OjamaAccountSnapshot の会計値を ROI 下部 2 行に描画する.
+
+    表示内容 (2 行):
+        行1: pending→自分:N  net:±K  conf:0.xx
+        行2: drop 自分:x 相手:y  [AC] (全消し持越しあり時)
+
+    side="1P" なら snap.pending_p1 / total_dropped_to_p1 等を使う。
+    side="2P" なら snap.pending_p2 / total_dropped_to_p2 等を使う。
+
+    net_ojama_balance の符号: 正→1P有利(青), 負→2P有利(赤)。
+
+    Args:
+        frame: 描画対象フレーム。
+        snap: OjamaAccountSnapshot (None 時はグレー "--" 表示)。
+        side: "1P" または "2P"。
+        roi_x: 盤面 ROI 左端 X 座標。
+        roi_y: 盤面 ROI 上端 Y 座標。
+    """
+    tx = roi_x + 2
+    ty1 = roi_y + ROI_H + _ACCT_LINE1_OFFSET_Y
+    ty2 = roi_y + ROI_H + _ACCT_LINE2_OFFSET_Y
+
+    if snap is None:
+        # 未初期化: グレー "--" 表示
+        _put_shadow(frame, "acct:--", tx, ty1, (70, 70, 70), _ACCT_FONT_SCALE)
+        return
+
+    # 1P/2P ごとに適切なフィールドを選択 (有界 capped 値を overlay 表示に使用)
+    if side == "1P":
+        pending_recv = snap.pending_p1_capped    # 自分が受ける pending (2P→1P、有界)
+        dropped = snap.total_dropped_to_p1
+        ac_flag = snap.all_clear_pending_p1
+    else:
+        pending_recv = snap.pending_p2_capped    # 自分が受ける pending (1P→2P、有界)
+        dropped = snap.total_dropped_to_p2
+        ac_flag = snap.all_clear_pending_p2
+
+    net = snap.net_balance_capped         # 正→1P有利 (有界 -72..+72)
+    conf = snap.confidence
+
+    # net の色: 正なら青(1P有利)、負なら赤(2P有利)、0 なら白
+    if net > 0:
+        net_bgr: tuple[int, int, int] = (220, 120, 40)   # 青寄り (1P有利)
+    elif net < 0:
+        net_bgr = (60, 60, 220)                           # 赤寄り (2P有利)
+    else:
+        net_bgr = (180, 180, 180)                         # 白 (均衡)
+
+    # pending の色: 受け取りが多いほど赤く
+    if pending_recv >= 6:
+        pend_bgr: tuple[int, int, int] = (40, 40, 220)   # 赤 (危険)
+    elif pending_recv >= 3:
+        pend_bgr = (40, 160, 240)                         # オレンジ (注意)
+    else:
+        pend_bgr = (180, 220, 180)                        # 緑 (安全)
+
+    # 行1: pending / net / conf
+    net_sign = "+" if net >= 0 else ""
+    line1 = f"pend:{pending_recv}  net:{net_sign}{net}  c:{conf:.2f}"
+    ac_tag = " [AC]" if ac_flag else ""
+    line2 = f"drop:{dropped}{ac_tag}"
+
+    # 行1 描画 (pending 部分のみ色付け、残りは白)
+    _put_shadow(frame, f"pend:{pending_recv}", tx, ty1, pend_bgr, _ACCT_FONT_SCALE)
+    (w1, _), _ = cv2.getTextSize(f"pend:{pending_recv}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS)
+    _put_shadow(frame, f"  net:{net_sign}{net}", tx + w1, ty1, net_bgr, _ACCT_FONT_SCALE)
+    (w2, _), _ = cv2.getTextSize(f"  net:{net_sign}{net}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS)
+    _put_shadow(frame, f"  c:{conf:.2f}", tx + w1 + w2, ty1, (160, 160, 160), _ACCT_FONT_SCALE)
+
+    # 行2 描画 (drop / AC)
+    drop_bgr: tuple[int, int, int] = (200, 200, 200)
+    _put_shadow(frame, line2, tx, ty2, drop_bgr, _ACCT_FONT_SCALE)
+
+
+def _put_shadow(
+    frame: np.ndarray,
+    text: str,
+    tx: int,
+    ty: int,
+    color: tuple[int, int, int],
+    scale: float,
+) -> None:
+    """黒縁付きテキストを描画するヘルパー関数 (影→本文の2パス)."""
+    cv2.putText(frame, text, (tx + 1, ty + 1), FONT,
+                scale, (0, 0, 0), FONT_THICKNESS + 2, cv2.LINE_AA)
+    cv2.putText(frame, text, (tx, ty), FONT,
+                scale, color, FONT_THICKNESS, cv2.LINE_AA)
+
+
+# 隠し段 overlay: 確率閾値 (この値未満のセルは描画しない)
+HIDDEN_ROW_MIN_PROB: float = 0.10
+# 隠し段 overlay: 確率に応じた文字サイズ (最小・最大)
+HIDDEN_ROW_FONT_SCALE_MIN: float = 0.50
+HIDDEN_ROW_FONT_SCALE_MAX: float = 0.75
+# 隠し段帯の高さ (ROI 上端より上の専用領域)
+HIDDEN_BAND_HEIGHT: int = 52  # px; ROI_Y=160 で上方余白 160px 内に収まる
+
+# 状態ラベルは ROI 上端 -HIDDEN_BAND_HEIGHT-18 に上げる (帯と被らないため)
+STATE_LABEL_OFFSET_Y: int = HIDDEN_BAND_HEIGHT + 18
+
+
+def draw_hidden_row_overlay(
+    frame: np.ndarray,
+    prob_board: ProbabilisticBoard | None,
+    roi_x: int, roi_y: int,
+    offboard_ojama: int = 0,
+) -> None:
+    """隠し段 (row 0) の各セルの色別確率を ROI 上端より上の専用帯に描画する.
+
+    改善点 (2026-06-09):
+    - state ラベルと被らないよう専用帯 (HIDDEN_BAND_HEIGHT px) を確保
+    - 有効セルがある間は帯を半透明で強調
+    - offboard_ojama > 0 のとき O個数を帯右端に赤で追記
+    - O と通常ぷよを区別しやすいフォントサイズに拡大
+
+    prob_board が None の場合も offboard_ojama があれば O個数は表示する。
+
+    Args:
+        frame: 描画対象フレーム (1920x1080 BGR)。
+        prob_board: ProbabilisticBoard (SideResult.prob_board)。None 可。
+        roi_x: 盤面 ROI 左端 X 座標。
+        roi_y: 盤面 ROI 上端 Y 座標 (隠し段はこの上に描画)。
+        offboard_ojama: 画面外 (隠し段以上) に積まれた推定 O 個数。
+    """
+    # 帯の Y 範囲: roi_y-HIDDEN_BAND_HEIGHT ~ roi_y
+    band_y1 = roi_y - HIDDEN_BAND_HEIGHT
+    band_y2 = roi_y
+    has_content = False
+
+    # prob_board から非 EMPTY セルの情報を収集
+    cell_infos: list[tuple[int, int, int, float]] = []  # (col, cx, color, prob)
+    if prob_board is not None:
+        for col in range(BOARD_COLS):
+            cell = prob_board.cell(0, col)
+            color, prob = cell.most_likely()
+            if color == COLOR_EMPTY or prob < HIDDEN_ROW_MIN_PROB:
+                continue
+            cx = roi_x + col * CELL_W + CELL_W // 2
+            cell_infos.append((col, cx, color, prob))
+        has_content = len(cell_infos) > 0
+
+    # offboard_ojama があれば必ず帯を表示
+    if offboard_ojama > 0:
+        has_content = True
+
+    # 帯を半透明で描画 (有効セルまたは O がある場合のみ)
+    if has_content and band_y1 >= 0:
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (roi_x, band_y1), (roi_x + ROI_W, band_y2),
+                      (40, 40, 40), -1)
+        cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+        # 帯の枠線
+        cv2.rectangle(frame, (roi_x, band_y1), (roi_x + ROI_W, band_y2),
+                      (120, 120, 120), 1)
+
+    # 各セルのぷよ確率表示
+    for _col, cx, color, prob in cell_infos:
+        symbol = COLOR_SYMBOLS.get(color, "?")
+        if not symbol:
+            continue
+        t = (prob - HIDDEN_ROW_MIN_PROB) / max(1.0 - HIDDEN_ROW_MIN_PROB, 1e-9)
+        t = max(0.0, min(1.0, t))
+        fscale = HIDDEN_ROW_FONT_SCALE_MIN + t * (
+            HIDDEN_ROW_FONT_SCALE_MAX - HIDDEN_ROW_FONT_SCALE_MIN
+        )
+        pct_text = f"{symbol}{int(prob * 100)}%"
+        bgr = COLOR_BGR.get(color, (200, 200, 200))
+        (tw, th), _ = cv2.getTextSize(pct_text, FONT, fscale, FONT_THICKNESS)
+        tx = cx - tw // 2
+        ty = band_y1 + (HIDDEN_BAND_HEIGHT + th) // 2
+        cv2.putText(frame, pct_text, (tx, ty), FONT,
+                    fscale, (0, 0, 0), FONT_THICKNESS + 3, cv2.LINE_AA)
+        cv2.putText(frame, pct_text, (tx, ty), FONT,
+                    fscale, bgr, FONT_THICKNESS, cv2.LINE_AA)
+
+    # 画面外お邪魔 (O) 個数: 帯の右端に赤字で描画
+    if offboard_ojama > 0:
+        oj_text = f"O+{offboard_ojama}"
+        (ow, oh), _ = cv2.getTextSize(oj_text, FONT, 0.65, FONT_THICKNESS)
+        ox = roi_x + ROI_W - ow - 4
+        oy = band_y1 + (HIDDEN_BAND_HEIGHT + oh) // 2
+        cv2.putText(frame, oj_text, (ox, oy), FONT,
+                    0.65, (0, 0, 0), FONT_THICKNESS + 3, cv2.LINE_AA)
+        cv2.putText(frame, oj_text, (ox, oy), FONT,
+                    0.65, (60, 60, 255), FONT_THICKNESS, cv2.LINE_AA)
+
+
 def draw_global_info(
     frame: np.ndarray, frame_idx: int, t_sec: float,
     p1_state: BoardState, p2_state: BoardState,
+    p1_score: int | None = None, p2_score: int | None = None,
 ) -> None:
-    """画面上部に時刻 + 状態を描画."""
-    text = f"frame={frame_idx} t={t_sec:.2f}s 1P={p1_state.value} 2P={p2_state.value}"
+    """画面上部に時刻 + 状態 + スコアを描画."""
+    s1 = f"{p1_score}" if p1_score is not None else "---"
+    s2 = f"{p2_score}" if p2_score is not None else "---"
+    text = (
+        f"frame={frame_idx} t={t_sec:.2f}s "
+        f"1P={p1_state.value}({s1}) 2P={p2_state.value}({s2})"
+    )
     cv2.putText(
         frame, text, (20, 30), FONT, 0.8,
         (0, 0, 0), 5, cv2.LINE_AA,
@@ -910,6 +1197,15 @@ def main() -> int:
              "v89 t35.2-39.67 の連鎖過剰保持修正。 "
              "default=True (有効、2026-06-06 採用)。 --no-slide-override-ojama-hold で無効化。",
     )
+    parser.add_argument(
+        "--dump-ojama-accounting",
+        type=Path,
+        default=None,
+        dest="dump_ojama_accounting",
+        help="OjamaAccountingTracker の各フレーム snapshot を JSONL で保存。 "
+             "t_sec / p1_state / p2_state / score_p1/p2 / pending / net_balance / "
+             "total_dropped / confidence を記録。 省略時は保存しない。",
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -1206,6 +1502,28 @@ def main() -> int:
         except Exception as _e:
             print(f"[viz] HSV pre-inject failed: {_e}", file=sys.stderr)
 
+    # 総合 overlay 用: score OCR 差分由来の ojama トラッカー (視覚検出器は使用しない)
+    # OjamaWarningDetector は誤読するため overlay から外す (video_124 t=55s,95s 誤検出確認済)
+    print("[viz] ojama overlay: OjamaAccountingTracker (会計モデル) ベース")
+    print("[viz] OjamaWarningDetector は使用しない (誤読源として排除)")
+
+    # OjamaAccountingTracker: 新会計モデルによるお邪魔管理 (2026-06-09 統合)
+    _ojama_tracker = OjamaAccountingTracker()
+    _ojama_tracker.reset()
+    _last_snap: OjamaAccountSnapshot | None = None
+    # MENU リセット検知用: 両者 MENU で連続 N フレーム続いたらリセット
+    _MENU_RESET_CONSEC: int = 10   # MENU 連続フレーム数 = 試合切り替え判定
+    _menu_consec: int = 0
+    # 理論落下 drain 用: 前フレームの state (stable 復帰エッジ検知)
+    _prev_acct_state_p1: BoardState = BoardState.MENU
+    _prev_acct_state_p2: BoardState = BoardState.MENU
+    # ojama_accounting JSONL 出力
+    _ojama_accounting_fp = None
+    if args.dump_ojama_accounting is not None:
+        args.dump_ojama_accounting.parent.mkdir(parents=True, exist_ok=True)
+        _ojama_accounting_fp = open(args.dump_ojama_accounting, "w", encoding="utf-8")
+        print(f"[viz] ojama_accounting log → {args.dump_ojama_accounting}")
+
     sample_interval_frames = max(1, int(round(args.sample_interval * fps)))
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
@@ -1213,6 +1531,36 @@ def main() -> int:
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
     last_p2_eval_board: Board | None = None
+    # 総合 overlay 用: score / next の最新値を保持
+    last_p1_score: int | None = None
+    last_p2_score: int | None = None
+    last_p1_next: tuple[int, int] | None = None
+    last_p2_next: tuple[int, int] | None = None
+    last_p1_dnext: tuple[int, int] | None = None
+    last_p2_dnext: tuple[int, int] | None = None
+    # score OCR 差分由来の ojama 送出量トラッカー
+    # SideResult.score_delta = 「相手 side の score delta」(= 自分に向けて送られるOJAMAの原因)
+    # score_to_ojama() で累積 score → ojama 個数換算する (rate=70、leftover を carry-over)
+    # ChainEvent.ojama_sent はシミュレーション由来で score OCR と異なる経路。
+    # score OCR 差分が確認済み信頼できるため (memory: score_ocr_reliability_confirmed)
+    # こちらを採用する。
+    last_p1_ojama_sent: int = 0   # 1P が受けるojama累積 (2P score delta 由来)
+    last_p2_ojama_sent: int = 0   # 2P が受けるojama累積 (1P score delta 由来)
+    last_p1_ojama_event_sec: float = -1.0   # 1P の最後のojama受け取り時刻
+    last_p2_ojama_event_sec: float = -1.0   # 2P の最後のojama受け取り時刻
+    # score_to_ojama() の leftover carry-over (ゲームの実際の繰越余りと一致させる)
+    _p1_leftover_score: int = 0   # 1P 受け取り側の余り (2P scoreから計算)
+    _p2_leftover_score: int = 0   # 2P 受け取り側の余り (1P scoreから計算)
+    # 画面外 (隠し段) お邪魔累積トラッカー (score 差分由来)
+    # 「score差分から換算した total 送出」 - 「画面内 O の増分」 = offboard 推定
+    _p1_total_ojama_sent: int = 0   # 累積送出総数 (1P が受けた)
+    _p2_total_ojama_sent: int = 0
+    last_p1_offboard_ojama: int = 0  # 現在の画面外 O 推定個数
+    last_p2_offboard_ojama: int = 0
+    # 隠し段確率 overlay 用: 最新の prob_board を保持 (STABLE 時のみ更新)
+    last_p1_prob_board: ProbabilisticBoard | None = None
+    last_p2_prob_board: ProbabilisticBoard | None = None
+    _hidden_row_nonnull_count: int = 0  # smoke 確認用: non-None 取得回数
     # cycle 33: board log JSONL 出力 (= 強化アナリスト用)
     board_log_fp = None
     if args.dump_board_log is not None:
@@ -1301,16 +1649,209 @@ def main() -> int:
                 result.p2.confirmed_board.copy()
                 if result.p2.confirmed_board is not None else prev_p2_confirmed
             )
+            # 総合 overlay 用: score / next / dnext を毎サンプルフレームで更新
+            if result.p1.score is not None:
+                last_p1_score = result.p1.score
+            if result.p2.score is not None:
+                last_p2_score = result.p2.score
+            if result.p1.next_pair is not None:
+                last_p1_next = result.p1.next_pair
+                last_p1_dnext = result.p1.dnext_pair
+            if result.p2.next_pair is not None:
+                last_p2_next = result.p2.next_pair
+                last_p2_dnext = result.p2.dnext_pair
+            # 隠し段確率 overlay: STABLE 時のみ prob_board を更新
+            if result.p1.prob_board is not None:
+                last_p1_prob_board = result.p1.prob_board
+                _hidden_row_nonnull_count += 1
+            if result.p2.prob_board is not None:
+                last_p2_prob_board = result.p2.prob_board
+            # score OCR 差分由来の ojama 送出量を SideResult.score_delta から計算
+            # SideResult.score_delta = 「相手 side の score delta」(= 自分に送られるOJAMAの原因)
+            # score_to_ojama() で累積 score → ojama 個数換算する
+            # NOTE: score_delta は連鎖中の掛け算式で score OCR が None になるフレームは 0
+            #       なので連鎖後 STABLE になって score が更新されたフレームで一括取得される
+            from src.scoring import score_to_ojama as _score_to_ojama
+            _d1 = result.p1.score_delta  # = 2P の score delta (1P に向けてのOJAMA原因)
+            _d2 = result.p2.score_delta  # = 1P の score delta (2P に向けてのOJAMA原因)
+            if _d1 > 0:
+                # 2P から 1P に向けたojama送出を計算
+                _r1 = _score_to_ojama(_d1, prev_leftover=_p1_leftover_score)
+                _p1_leftover_score = _r1.leftover_score
+                if _r1.ojama_count > 0:
+                    last_p1_ojama_sent = _r1.ojama_count
+                    last_p1_ojama_event_sec = t_sec
+                    _p1_total_ojama_sent += _r1.ojama_count
+                    print(
+                        f"  [ojama_score] t={t_sec:.2f}s 2P→1P OJ={_r1.ojama_count} "
+                        f"(score_d={_d1} total={_p1_total_ojama_sent})"
+                    )
+            if _d2 > 0:
+                # 1P から 2P に向けたojama送出を計算
+                _r2 = _score_to_ojama(_d2, prev_leftover=_p2_leftover_score)
+                _p2_leftover_score = _r2.leftover_score
+                if _r2.ojama_count > 0:
+                    last_p2_ojama_sent = _r2.ojama_count
+                    last_p2_ojama_event_sec = t_sec
+                    _p2_total_ojama_sent += _r2.ojama_count
+                    print(
+                        f"  [ojama_score] t={t_sec:.2f}s 1P→2P OJ={_r2.ojama_count} "
+                        f"(score_d={_d2} total={_p2_total_ojama_sent})"
+                    )
+            # 画面外 (隠し段) お邪魔の推定: 累積送出 - 画面内に観測された O の合計
+            # 「2P が送出 → 1P フィールドに落下」なので 2P の送出が 1P offboard の原因
+            if last_p1_eval_board is not None:
+                _visible_p1_ojama = sum(
+                    1 for r in range(1, 13) for c in range(6)
+                    if int(last_p1_eval_board.get(r, c)) == COLOR_OJAMA
+                )
+                last_p1_offboard_ojama = max(0, _p1_total_ojama_sent - _visible_p1_ojama)
+            if last_p2_eval_board is not None:
+                _visible_p2_ojama = sum(
+                    1 for r in range(1, 13) for c in range(6)
+                    if int(last_p2_eval_board.get(r, c)) == COLOR_OJAMA
+                )
+                last_p2_offboard_ojama = max(0, _p2_total_ojama_sent - _visible_p2_ojama)
+
+            # =============================================
+            # OjamaAccountingTracker 駆動 (2026-06-09 統合)
+            # =============================================
+            # MENU リセット検知: 両者 MENU で連続 _MENU_RESET_CONSEC フレーム → tracker.reset()
+            _both_menu = (
+                result.p1.state == BoardState.MENU
+                and result.p2.state == BoardState.MENU
+            )
+            if _both_menu:
+                _menu_consec += 1
+                if _menu_consec == _MENU_RESET_CONSEC:
+                    _ojama_tracker.reset()
+                    _last_snap = None
+                    print(f"  [acct] t={t_sec:.2f}s MENU reset (試合切り替え検知)")
+            else:
+                _menu_consec = 0
+
+            # 連鎖フラグ (CHAIN 状態のみ True)
+            _chain_p1 = (result.p1.state == BoardState.CHAIN)
+            _chain_p2 = (result.p2.state == BoardState.CHAIN)
+
+            # 理論落下 drain 用: stable 復帰エッジ検知 (修正B)
+            # 前フレーム非STABLE → 今フレーム STABLE の立ち上がりを 1 ターン消費とみなす
+            _tsumo_settled_p1 = (
+                _prev_acct_state_p1 != BoardState.STABLE
+                and result.p1.state == BoardState.STABLE
+            )
+            _tsumo_settled_p2 = (
+                _prev_acct_state_p2 != BoardState.STABLE
+                and result.p2.state == BoardState.STABLE
+            )
+            _prev_acct_state_p1 = result.p1.state
+            _prev_acct_state_p2 = result.p2.state
+
+            # update_from_score: score 差分 → 境界reset + 生成量計算 + 理論落下drain
+            _ojama_tracker.update_from_score(
+                score_p1=result.p1.score,
+                score_p2=result.p2.score,
+                t_sec=t_sec,
+                chain_p1=_chain_p1,
+                chain_p2=_chain_p2,
+                tsumo_settled_p1=_tsumo_settled_p1,
+                tsumo_settled_p2=_tsumo_settled_p2,
+            )
+
+            # update_from_boards: 盤面内おじゃま増分 → 落下計上・全消し検出
+            # STABLE 以外は全て skip (連鎖/TSUMO_FALL/OJAMA_FALL/GRAVITY_SETTLE)
+            _is_nonstable_p1 = (result.p1.state != BoardState.STABLE)
+            _is_nonstable_p2 = (result.p2.state != BoardState.STABLE)
+            if (result.p1.confirmed_board is not None
+                    and result.p2.confirmed_board is not None):
+                _ojama_tracker.update_from_boards(
+                    board_p1=result.p1.confirmed_board,
+                    board_p2=result.p2.confirmed_board,
+                    score_p1=result.p1.score,
+                    score_p2=result.p2.score,
+                    is_chain_p1=_is_nonstable_p1,
+                    is_chain_p2=_is_nonstable_p2,
+                )
+
+            # update_accounting_with_chain: 相殺反映 + snapshot 取得
+            _last_snap = _ojama_tracker.update_accounting_with_chain(
+                t_sec=t_sec,
+                chain_p1=_chain_p1,
+                chain_p2=_chain_p2,
+            )
+
+            # 会計 JSONL 出力
+            if _ojama_accounting_fp is not None:
+                import json as _jacct
+                _acct_entry = {
+                    "t_sec": t_sec,
+                    "p1_state": result.p1.state.value,
+                    "p2_state": result.p2.state.value,
+                    "score_p1": result.p1.score,
+                    "score_p2": result.p2.score,
+                    "pending_p1": _last_snap.pending_p1,
+                    "pending_p2": _last_snap.pending_p2,
+                    "pending_p1_capped": _last_snap.pending_p1_capped,
+                    "pending_p2_capped": _last_snap.pending_p2_capped,
+                    "net_balance": _last_snap.net_ojama_balance,
+                    "net_balance_capped": _last_snap.net_balance_capped,
+                    "total_dropped_p1": _last_snap.total_dropped_to_p1,
+                    "total_dropped_p2": _last_snap.total_dropped_to_p2,
+                    "total_generated_p1": _last_snap.total_generated_by_p1,
+                    "total_generated_p2": _last_snap.total_generated_by_p2,
+                    "total_offset_p1": _last_snap.total_offset_by_p1,
+                    "total_offset_p2": _last_snap.total_offset_by_p2,
+                    "confidence": _last_snap.confidence,
+                    "all_clear_p1": _last_snap.all_clear_pending_p1,
+                    "all_clear_p2": _last_snap.all_clear_pending_p2,
+                    "tsumo_settled_p1": _tsumo_settled_p1,
+                    "tsumo_settled_p2": _tsumo_settled_p2,
+                }
+                _ojama_accounting_fp.write(
+                    _jacct.dumps(_acct_entry, ensure_ascii=False) + "\n"
+                )
+
         # 描画用エイリアス
         last_p1_board = last_p1_eval_board
         last_p2_board = last_p2_eval_board
 
-        # 描画
+        # 描画: 6 要素 (フィールド状態・ぷよ色・score・next・OJ送出・隠し段)
         draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
         draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
-        draw_state_label(frame, last_p1_state, P1_ROI_X, P1_ROI_Y, label_prefix="1P:")
-        draw_state_label(frame, last_p2_state, P2_ROI_X, P2_ROI_Y, label_prefix="2P:")
-        draw_global_info(frame, fi, t_sec, last_p1_state, last_p2_state)
+        draw_state_label(
+            frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
+            score=last_p1_score or 0, label_prefix="1P:",
+        )
+        draw_state_label(
+            frame, last_p2_state, P2_ROI_X, P2_ROI_Y,
+            score=last_p2_score or 0, label_prefix="2P:",
+        )
+        draw_next_overlay(
+            frame, last_p1_next, last_p1_dnext, P1_ROI_X, P1_ROI_Y, label_prefix="1P:",
+        )
+        draw_next_overlay(
+            frame, last_p2_next, last_p2_dnext, P2_ROI_X, P2_ROI_Y, label_prefix="2P:",
+        )
+        # 会計モデル overlay (OjamaAccountingTracker ベース、2026-06-09 統合)
+        draw_ojama_accounting_overlay(
+            frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
+        )
+        draw_ojama_accounting_overlay(
+            frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
+        )
+        # 第6要素: 隠し段 (row 0) 確率 overlay + 画面外 O 個数
+        draw_hidden_row_overlay(
+            frame, last_p1_prob_board, P1_ROI_X, P1_ROI_Y,
+            offboard_ojama=last_p1_offboard_ojama,
+        )
+        draw_hidden_row_overlay(
+            frame, last_p2_prob_board, P2_ROI_X, P2_ROI_Y,
+            offboard_ojama=last_p2_offboard_ojama,
+        )
+        draw_global_info(
+            frame, fi, t_sec, last_p1_state, last_p2_state,
+            p1_score=last_p1_score, p2_score=last_p2_score,
+        )
 
         writer.write(frame)
         if fi % 100 == 0:
@@ -1319,12 +1860,45 @@ def main() -> int:
 
     cap.release()
     writer.release()
+    # 隠し段確率 overlay: 発火回数をログ出力 (smoke 確認用)
+    print(
+        f"[hidden_row] prob_board non-None 取得回数: {_hidden_row_nonnull_count} frames "
+        f"({'発火あり' if _hidden_row_nonnull_count > 0 else '発火なし (隠し段推論が起動しなかった)'})"
+    )
+    # ojama_sent サマリ (score OCR 差分由来)
+    print(
+        f"[ojama_score] 1P が受けた OJ累積={_p1_total_ojama_sent}個 "
+        f"(最終 event={last_p1_ojama_sent}個, t={last_p1_ojama_event_sec:.2f}s)"
+    )
+    print(
+        f"[ojama_score] 2P が受けた OJ累積={_p2_total_ojama_sent}個 "
+        f"(最終 event={last_p2_ojama_sent}個, t={last_p2_ojama_event_sec:.2f}s)"
+    )
     if board_log_fp is not None:
         board_log_fp.close()
         print(f"[done] board log saved")
     if board_log_detail_fp is not None:
         board_log_detail_fp.close()
         print(f"[done] detailed board log saved → {args.dump_board_log_detailed}")
+    if _ojama_accounting_fp is not None:
+        _ojama_accounting_fp.close()
+        print(f"[done] ojama_accounting log saved → {args.dump_ojama_accounting}")
+    # 会計最終 snapshot サマリ
+    if _last_snap is not None:
+        print(
+            f"[acct_final] pending 1P={_last_snap.pending_p1} 2P={_last_snap.pending_p2} "
+            f"net={_last_snap.net_ojama_balance:+d} conf={_last_snap.confidence:.2f}"
+        )
+        print(
+            f"[acct_final] capped  1P={_last_snap.pending_p1_capped} "
+            f"2P={_last_snap.pending_p2_capped} "
+            f"net_capped={_last_snap.net_balance_capped:+d}"
+        )
+        print(
+            f"[acct_final] generated 1P={_last_snap.total_generated_by_p1} "
+            f"2P={_last_snap.total_generated_by_p2} "
+            f"drop 1P={_last_snap.total_dropped_to_p1} 2P={_last_snap.total_dropped_to_p2}"
+        )
     print(f"[done] {args.output}")
     return 0
 
