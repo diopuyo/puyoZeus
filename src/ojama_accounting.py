@@ -1,5 +1,15 @@
 """お邪魔ぷよ会計モジュール (Ojama Accounting) — アーキ案A 全面差し替え版。
 
+2026-06-10 マージンタイム試合相対修正:
+    - _elapsed() が _match_start_sec=None のとき t_sec をクリップ先頭からの経過秒として
+      返していた。viz は reset(match_start_sec=...) を呼ばないため常に None のまま →
+      クリップ全体経過秒(最大168秒)がマージンタイム計算に渡り過剰計上の原因になっていた。
+    - 修正: 試合境界(score大幅減少 or MENU)検知時に _match_start_sec = t_sec を設定。
+      最初の試合は「最初に score を観測した時刻」を match_start とみなす。
+    - _elapsed() は _match_start_sec=None を「初期化前」として扱い、
+      初期化済みの場合のみ t_sec - _match_start_sec を返す。
+      未初期化の場合は 0.0 を返す(マージンタイム非適用 = 安全側)。
+
 2026-06-09 設計方針:
     - 生成は連鎖終了時に一括: chain_total_score // rate, 繰越 leftover を各 side 独立で管理。
     - 相殺の正しい向き: 自分が連鎖を撃ったとき、自分に向かってくる予告(incoming)を打ち消す。
@@ -71,6 +81,15 @@ CHAIN_END_PENDING_TIMEOUT_FRAMES: int = 30
 # MENU 状態の連続フレーム数でリセット
 MENU_RESET_CONSEC_FRAMES: int = 3
 
+# 連鎖合体ウィンドウ (秒): finalize 完了後この時間以内に再び CHAIN 遷移が来ても
+# 同一連鎖の state 明滅とみなし score_at_chain_start を上書きしない(< で比較)。
+# 実機観測:
+#   - 連鎖中 CHAIN↔STABLE↔GRAVITY_SETTLE の state 明滅は 0.1〜2.0 秒以内に収まる
+#   - 実際に次の連鎖を撃つには STABLE で TSUMO 着地 (≥1 ターン) が必要
+#   - TSUMO_FALL 時間 + 次 CHAIN 開始まで最低 2-3 秒かかる (@ 30fps, 実機タイミング)
+# 2.5 秒: state 明滅 (最大 2.0 秒) を捕捉しつつ、次の本物の連鎖 (≥ 3 秒後) を区別。
+CHAIN_COALESCE_WINDOW_SEC: float = 2.5
+
 
 # ============================
 # スナップショット (stateless)
@@ -140,14 +159,20 @@ class _SideState:
     forecast_incoming: int = 0          # 自分に向かう予告お邪魔個数
     # --- 連鎖終了検知 ---
     chain_active: bool = False           # 連鎖中フラグ
-    score_at_chain_start: int | None = None  # 連鎖開始直前の score
+    score_at_chain_start: int | None = None  # 連鎖開始直前の score (last_valid_score から設定)
     chain_end_pending: bool = False      # score None 時の遅延確定待ち
     pending_since_frame: int = 0        # chain_end_pending 開始フレーム番号
+    # --- 最後に読めた有効 score ---
+    last_valid_score: int | None = None  # 毎フレーム非 None score を更新(連鎖開始前に使用)
     # --- snapshot 検証用 ---
     last_chain_total_score: int = 0     # 最後の連鎖合計得点
     chain_end_triggered: bool = False   # 今フレームで連鎖終了イベントが立ったか
     # --- MENU state 管理 ---
     menu_consec_frames: int = 0         # MENU 連続フレーム数
+    # --- state 明滅デバウンス ---
+    # finalize 完了時刻 (秒)。CHAIN_COALESCE_WINDOW_SEC 以内の再 chain_start は
+    # score_at_chain_start を上書きせず 1 連鎖 = 1 finalize を保証する。
+    chain_finalized_at_sec: float | None = None  # 最後に finalize した時刻
 
 
 # ============================
@@ -226,18 +251,26 @@ class OjamaAccountingTracker:
         other = self._other(side)
         self._frame_idx += 1
         # -- 試合境界: MENU 遷移でリセット --
+        # MENU 遷移後は実際のゲーム開始タイミングが不明なため _match_start_sec を None に戻す。
+        # 次の score 受信時に _initialize_match_start() が呼ばれて再設定される。
         if curr_state == BoardState.MENU:
-            self._reset_side_boundary(s, side, score)
+            self._reset_side_boundary(s, side, score, t_sec)
+            self._match_start_sec = None  # MENU後は次score受信まで待つ
             return
         # -- 試合境界: score 大幅減少 --
         if score is not None and self._prev_score(side) is not None:
             prev_score = self._prev_score(side)
             assert prev_score is not None
             if prev_score - score >= SCORE_RESET_THRESHOLD:
-                self._reset_side_boundary(s, side, score)
+                self._reset_side_boundary(s, side, score, t_sec)
                 self._set_prev_score(side, score)
                 return
         self._set_prev_score(side, score)
+        # -- 最後に読めた有効 score を更新(連鎖開始前の STABLE score をキャッシュ) --
+        if score is not None:
+            s.last_valid_score = score
+            # 試合開始時刻が未設定の場合、最初の score 受信時刻を試合開始とみなす
+            self._initialize_match_start(t_sec)
         # -- 連鎖終了待ちの遅延確定 (score None 継続時タイムアウト) --
         if s.chain_end_pending and score is not None:
             self._finalize_chain_end(s, other, score, side, t_sec)
@@ -259,11 +292,39 @@ class OjamaAccountingTracker:
         )
         if _is_chain_start:
             s.chain_active = True
-            s.score_at_chain_start = score  # 連鎖開始直前 score スナップ
             s.chain_end_triggered = False
-            logger.debug(
-                "chain_start[%s]: score_at_start=%s t=%.2f", side, score, t_sec,
+            # --- デバウンス判定 ---
+            # chain_end_pending 中 or finalize 完了直後 (CHAIN_COALESCE_WINDOW_SEC 以内) の
+            # 非CHAIN→CHAIN は state 明滅 (同一連鎖の継続) とみなし
+            # score_at_chain_start を上書きしない。
+            # これにより「1 連鎖 = 1 finalize」を保証し、
+            # state 明滅 (CHAIN→STABLE→CHAIN→GRAVITY_SETTLE→STABLE) での
+            # 複数 finalize による過剰計上を根絶する。
+            _in_coalesce_window = (
+                s.chain_finalized_at_sec is not None
+                and (t_sec - s.chain_finalized_at_sec) < CHAIN_COALESCE_WINDOW_SEC
             )
+            if s.chain_end_pending or _in_coalesce_window:
+                logger.info(
+                    "chain_start[%s]: coalesce skip (pending=%s, finalized_at=%.2f, "
+                    "window=%.1fs) — score_at_start=%s maintained t=%.2f",
+                    side, s.chain_end_pending,
+                    s.chain_finalized_at_sec if s.chain_finalized_at_sec is not None else -1.0,
+                    CHAIN_COALESCE_WINDOW_SEC,
+                    s.score_at_chain_start, t_sec,
+                )
+            else:
+                # 新規連鎖: score_at_chain_start を確定
+                # 連鎖開始直前 score スナップ:
+                # 遷移フレームの score は掛け算式表示で None になりがちなため、
+                # 最後に読めた有効 score (last_valid_score) を優先使用する。
+                # last_valid_score も None の場合は score_at_chain_start=None のまま
+                # → _finalize_chain_end で警告+破棄(過剰計上防止)。
+                s.score_at_chain_start = s.last_valid_score
+                logger.debug(
+                    "chain_start[%s]: score_at_start=%s (last_valid=%s, frame_score=%s) t=%.2f",
+                    side, s.score_at_chain_start, s.last_valid_score, score, t_sec,
+                )
         # -- 連鎖終了: (CHAIN or GRAVITY_SETTLE) → STABLE --
         _chain_or_settle = {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}
         _is_chain_end = (
@@ -398,34 +459,41 @@ class OjamaAccountingTracker:
         # --- 連鎖合計スコア計算 ---
         if s.score_at_chain_start is None:
             # 連鎖開始時 score が不明: 破棄
-            logger.warning("chain_end[%s]: score_at_chain_start=None, discarding", side)
+            logger.warning("chain_end[%s]: score_at_chain_start=None, discarding t=%.2f", side, t_sec)
             s.chain_active = False
+            s.chain_finalized_at_sec = t_sec  # 破棄でも coalesce window を開く
             return
-        chain_total = score_after - s.score_at_chain_start
+        score_start = s.score_at_chain_start
+        chain_total = score_after - score_start
         # --- sanity check ---
         if chain_total <= 0:
             # score が増えていない = 試合境界 or OCR 異常
             logger.info(
                 "chain_end[%s]: chain_total=%d <= 0 (trial reset or OCR error?), "
-                "score_after=%d start=%d",
-                side, chain_total, score_after, s.score_at_chain_start,
+                "score_after=%d start=%d t=%.2f",
+                side, chain_total, score_after, score_start, t_sec,
             )
             s.chain_active = False
             s.score_at_chain_start = None
+            s.chain_finalized_at_sec = t_sec
             return
         if chain_total > CHAIN_TOTAL_SANITY_MAX:
             logger.warning(
-                "chain_end[%s]: chain_total=%d > sanity_max=%d, discarding",
-                side, chain_total, CHAIN_TOTAL_SANITY_MAX,
+                "chain_end[%s]: chain_total=%d > sanity_max=%d, discarding t=%.2f",
+                side, chain_total, CHAIN_TOTAL_SANITY_MAX, t_sec,
             )
             s.chain_active = False
             s.score_at_chain_start = None
+            s.chain_finalized_at_sec = t_sec
             return
         # --- お邪魔生成量計算 ---
         elapsed = self._elapsed(t_sec)
+        leftover_before = s.leftover
+        forecast_before = s.forecast_incoming
+        other_forecast_before = other.forecast_incoming
         result = score_to_ojama(
             score=chain_total,
-            prev_leftover=s.leftover,
+            prev_leftover=leftover_before,
             elapsed_sec=elapsed,
             rate_base=self._rate_base,
         )
@@ -433,9 +501,14 @@ class OjamaAccountingTracker:
         gen = result.ojama_count
         s.total_generated += gen
         s.last_chain_total_score = chain_total
+        # --- 詳細デバッグログ (過剰計上診断用) ---
         logger.info(
-            "chain_end[%s]: total=%d -> %d ojama (leftover=%d) t=%.2f",
-            side, chain_total, gen, s.leftover, t_sec,
+            "finalize[%s]: score_start=%d score_after=%d chain_total=%d "
+            "leftover_before=%d -> gen=%d leftover_after=%d "
+            "self.forecast_before=%d other.forecast_before=%d t=%.2f",
+            side, score_start, score_after, chain_total,
+            leftover_before, gen, s.leftover,
+            forecast_before, other_forecast_before, t_sec,
         )
         # --- 相殺(正しい向き) ---
         # 1. gen で自分の incoming を相殺
@@ -445,11 +518,11 @@ class OjamaAccountingTracker:
         surplus = gen - canceled
         # 2. 余剰を相手の incoming に追加
         other.forecast_incoming += surplus
-        logger.debug(
+        logger.info(
             "offset[%s]: gen=%d canceled=%d surplus=%d "
-            "self.incoming=%d other.incoming=%d",
+            "self.forecast=%d other.forecast=%d t=%.2f",
             side, gen, canceled, surplus,
-            s.forecast_incoming, other.forecast_incoming,
+            s.forecast_incoming, other.forecast_incoming, t_sec,
         )
         # --- pending cap ---
         if s.forecast_incoming > PENDING_ABS_CAP:
@@ -468,6 +541,9 @@ class OjamaAccountingTracker:
         # --- 後処理 ---
         s.chain_active = False
         s.score_at_chain_start = None
+        # coalesce window を開く: この時刻から CHAIN_COALESCE_WINDOW_SEC 以内の
+        # 再 chain_start は同一連鎖の state 明滅とみなし score_at_chain_start を守る。
+        s.chain_finalized_at_sec = t_sec
 
     # ============================
     # 後方互換 API の内部処理
@@ -493,7 +569,7 @@ class OjamaAccountingTracker:
         # 試合境界: score 大幅減少
         if score is not None and prev_score is not None:
             if prev_score - score >= SCORE_RESET_THRESHOLD:
-                self._reset_side_boundary(s, side, score)
+                self._reset_side_boundary(s, side, score, t_sec)
                 self._set_prev_score(side, score)
                 return
         self._set_prev_score(side, score)
@@ -521,18 +597,35 @@ class OjamaAccountingTracker:
     # ============================
 
     def _reset_side_boundary(
-        self, s: _SideState, label: str, new_score: int | None,
+        self, s: _SideState, label: str, new_score: int | None, t_sec: float,
     ) -> None:
-        """試合境界(score大幅減少 or MENU)でそのサイドの帳簿をリセット。"""
+        """試合境界(score大幅減少 or MENU)でそのサイドの帳簿をリセット。
+
+        試合境界時に _match_start_sec を t_sec に更新し、次試合のマージンタイムを
+        試合相対経過秒で計算できるようにする。
+        同一試合境界で p1/p2 両側から呼ばれた場合、ほぼ同時刻で二重設定になるが無害。
+
+        MENU 遷移の場合は t_sec を None にリセットし、次の score 観測時に再設定する。
+        (MENU 後の実際のゲーム開始タイミングは MENU 遷移時刻より後のため。)
+        """
         logger.info(
-            "match_boundary[%s]: forecast=%d leftover=%d -> reset",
-            label, s.forecast_incoming, s.leftover,
+            "match_boundary[%s]: forecast=%d leftover=%d -> reset t=%.2f",
+            label, s.forecast_incoming, s.leftover, t_sec,
         )
         s.forecast_incoming = 0
         s.leftover = 0
         s.chain_active = False
         s.score_at_chain_start = None
         s.chain_end_pending = False
+        # 試合境界では last_valid_score もクリア(前試合の値が次試合冒頭に使われないよう)
+        s.last_valid_score = None
+        # coalesce window もクリア(前試合の window が次試合に引き継がれないよう)
+        s.chain_finalized_at_sec = None
+        # --- マージンタイム基準を試合相対に更新 ---
+        # score 大幅減少 = 次試合開始とみなし、この時刻を新しい試合開始とする。
+        # MENU 遷移 (label で "menu" を区別するのではなく呼出元が判断して渡す) の場合は
+        # None をセットし、最初の score 受信時に再設定する。
+        self._match_start_sec = t_sec
 
     # ============================
     # 内部: ヘルパー
@@ -553,10 +646,29 @@ class OjamaAccountingTracker:
         else:
             self._prev_score_p2 = score
 
-    def _elapsed(self, t_sec: float) -> float:
-        """試合開始からの経過秒を返す(マージンタイム計算用)。"""
+    def _initialize_match_start(self, t_sec: float) -> None:
+        """試合開始時刻が未設定の場合のみ t_sec を試合開始とみなして設定する。
+
+        - reset() 直後で _match_start_sec=None の場合: 最初の score 受信時刻を設定。
+        - MENU 遷移後で _match_start_sec=None の場合: MENU 後の最初の score 受信時刻を設定。
+        - _match_start_sec が既に設定済みの場合: 何もしない(上書き禁止)。
+        """
         if self._match_start_sec is None:
-            return max(0.0, float(t_sec))
+            self._match_start_sec = float(t_sec)
+            logger.info(
+                "match_start initialized: t=%.2f (first score observed)", t_sec,
+            )
+
+    def _elapsed(self, t_sec: float) -> float:
+        """試合開始からの経過秒を返す(マージンタイム計算用)。
+
+        _match_start_sec が None の場合は「試合開始前 or 初期化前」とみなし
+        0.0 を返す(マージンタイム非適用 = 安全側)。
+        クリップ先頭からの経過秒をそのまま返す旧実装はマージンタイム過剰適用の原因
+        であったため廃止(2026-06-10 修正)。
+        """
+        if self._match_start_sec is None:
+            return 0.0
         return max(0.0, float(t_sec) - self._match_start_sec)
 
     @staticmethod
@@ -635,6 +747,7 @@ __all__ = [
     "ON_FIELD_CAP",
     "PENDING_HARD_CAP",
     "PENDING_ABS_CAP",
+    "CHAIN_COALESCE_WINDOW_SEC",
     "OjamaAccountSnapshot",
     "OjamaAccountingTracker",
 ]
