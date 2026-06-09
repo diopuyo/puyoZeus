@@ -354,13 +354,10 @@ class StatePipeline:
 
     def _init_ojama(self, rate_base: int) -> None:
         from src.ojama_score_inferrer import OjamaScoreInferrer
-        from src.ojama_accounting import OjamaAccountingTracker
         # 既存 OjamaScoreInferrer は後方互換のため保持
+        # OjamaAccountingTracker はここでは初期化しない。
+        # (GameState.ojama_snapshot=None 固定、新 API は recognition_pipeline 側で統合)
         self._ojama_inferrer = OjamaScoreInferrer(rate=rate_base)
-        # Ojama Accounting MVP: 5 帳簿 tracker
-        self._ojama_accounting = OjamaAccountingTracker(
-            ojama_rate_base=rate_base,
-        )
 
     def _init_trackers(self, use_enhanced_tracker: bool) -> None:
         if use_enhanced_tracker:
@@ -529,8 +526,9 @@ class StatePipeline:
             score_p2 if conf_p2 >= self._score_conf_threshold else None
         )
         if not match_end_locked:
-            # Step1.5-③: score 差分処理のみを先に実行 (相殺は chain 確定後に分離呼出)
-            # chain フラグは chain_phase 確定後に update_accounting_with_chain() で渡す
+            # ojama pending 計算 (旧 OjamaScoreInferrer 系の既存ロジック維持)
+            # 新 OjamaAccountingTracker はここでは呼ばない。
+            # GameState.ojama_snapshot の再統合は recognition_pipeline 経由で行う (申し送り)。
             self._update_ojama_pending(
                 score_p1_filtered, score_p2_filtered, t_sec,
             )
@@ -629,28 +627,10 @@ class StatePipeline:
             )
             is_chain_p1 = chain_res.is_chain_p1
             is_chain_p2 = chain_res.is_chain_p2
-        # Step1.5-③: chain 確定後に相殺処理を実行 (遅延解消)
-        # update_from_boards() で visible_ojama・全消しも更新してからまとめて相殺
-        if not match_end_locked and hasattr(self, "_ojama_accounting"):
-            # STABLE ガード: 連鎖中フレームは落下計上をスキップし
-            # prev_visible_ojama ベースラインを保持する。
-            # STABLE 復帰時に正味増分のみが 1 回計上される設計。
-            # ※ TSUMO_FALL / OJAMA_FALL / GRAVITY_SETTLE は
-            #   state_pipeline 層では BoardStateMachine にアクセスできないため
-            #   判別不能。is_chain ガードのみ適用し、残 limitation は
-            #   認識 pipeline 層での拡張で対応する (申し送り参照)。
-            self._ojama_accounting.update_from_boards(
-                board_p1, board_p2,
-                score_p1=score_p1_filtered,
-                score_p2=score_p2_filtered,
-                is_chain_p1=is_chain_p1,
-                is_chain_p2=is_chain_p2,
-            )
-            self._ojama_snapshot = self._ojama_accounting.update_accounting_with_chain(
-                t_sec=t_sec,
-                chain_p1=is_chain_p1,
-                chain_p2=is_chain_p2,
-            )
+        # NOTE: OjamaAccountingTracker の新 API (on_state_transition 等) は
+        # state_pipeline 層では BoardStateMachine に per-side アクセスできないため
+        # ここからは呼ばない。GameState.ojama_snapshot は None のまま。
+        # 新 API の統合は recognition_pipeline.py 経由で行う (申し送り参照)。
         # chain フラグを保存 (次フレーム用)
         self._last_is_chain_p1: bool = is_chain_p1
         self._last_is_chain_p2: bool = is_chain_p2
@@ -988,18 +968,8 @@ class StatePipeline:
         if score_p2 is not None:
             self._prev_score_p2 = score_p2
 
-        # Ojama Accounting: 生成処理のみ実行 (chain 相殺は後段の update_accounting_with_chain)
-        if hasattr(self, "_ojama_accounting"):
-            # chain フラグを渡さず score 差分処理のみ (chain=False で相殺エッジ発火させない)
-            self._ojama_accounting.update_from_score(
-                score_p1=score_p1,
-                score_p2=score_p2,
-                t_sec=t_sec,
-                chain_p1=False,
-                chain_p2=False,
-            )
-        if not hasattr(self, "_ojama_snapshot"):
-            self._ojama_snapshot: "OjamaAccountSnapshot | None" = None
+        # NOTE: OjamaAccountingTracker の旧 API (update_from_score) はここから呼ばない。
+        # GameState.ojama_snapshot = None 固定。新 API は recognition_pipeline 側で統合。
 
     def _elapsed_sec(self, t_sec: float) -> float:
         if self._match_start_sec is None:

@@ -1524,19 +1524,15 @@ def main() -> int:
         except Exception as _e:
             print(f"[viz] HSV pre-inject failed: {_e}", file=sys.stderr)
 
-    # 総合 overlay 用: score OCR 差分由来の ojama トラッカー (視覚検出器は使用しない)
-    # OjamaWarningDetector は誤読するため overlay から外す (video_124 t=55s,95s 誤検出確認済)
-    print("[viz] ojama overlay: OjamaAccountingTracker (会計モデル) ベース")
+    # OjamaAccountingTracker: アーキ案A (連鎖終了イベント駆動) でお邪魔管理
+    # on_state_transition + on_tsumo_settled + get_snapshot が新 API
+    print("[viz] ojama overlay: OjamaAccountingTracker アーキ案A (on_state_transition 駆動)")
     print("[viz] OjamaWarningDetector は使用しない (誤読源として排除)")
 
-    # OjamaAccountingTracker: 新会計モデルによるお邪魔管理 (2026-06-09 統合)
     _ojama_tracker = OjamaAccountingTracker()
     _ojama_tracker.reset()
     _last_snap: OjamaAccountSnapshot | None = None
-    # MENU リセット検知用: 両者 MENU で連続 N フレーム続いたらリセット
-    _MENU_RESET_CONSEC: int = 10   # MENU 連続フレーム数 = 試合切り替え判定
-    _menu_consec: int = 0
-    # 理論落下 drain 用: 前フレームの state (stable 復帰エッジ検知)
+    # 前フレームの state: on_state_transition の prev 引数用
     _prev_acct_state_p1: BoardState = BoardState.MENU
     _prev_acct_state_p2: BoardState = BoardState.MENU
     # ojama_accounting JSONL 出力
@@ -1676,73 +1672,45 @@ def main() -> int:
             if result.p2.prob_board is not None:
                 last_p2_prob_board = result.p2.prob_board
             # =============================================
-            # OjamaAccountingTracker 駆動 (2026-06-09 統合)
+            # OjamaAccountingTracker 駆動 (アーキ案A: on_state_transition)
             # =============================================
-            # MENU リセット検知: 両者 MENU で連続 _MENU_RESET_CONSEC フレーム → tracker.reset()
-            _both_menu = (
-                result.p1.state == BoardState.MENU
-                and result.p2.state == BoardState.MENU
-            )
-            if _both_menu:
-                _menu_consec += 1
-                if _menu_consec == _MENU_RESET_CONSEC:
-                    _ojama_tracker.reset()
-                    _last_snap = None
-                    print(f"  [acct] t={t_sec:.2f}s MENU reset (試合切り替え検知)")
-            else:
-                _menu_consec = 0
-
-            # 連鎖フラグ (CHAIN 状態のみ True)
-            _chain_p1 = (result.p1.state == BoardState.CHAIN)
-            _chain_p2 = (result.p2.state == BoardState.CHAIN)
-
-            # 理論落下 drain 用: stable 復帰エッジ検知 (修正B)
-            # 前フレーム非STABLE → 今フレーム STABLE の立ち上がりを 1 ターン消費とみなす
+            # on_state_transition: state 遷移を通知。
+            #   連鎖開始(STABLE→CHAIN): score スナップ
+            #   連鎖終了(CHAIN/GRAVITY_SETTLE→STABLE): 一括換算 + 相殺
+            #   MENU 遷移 / score 大幅減少: 自動 reset
+            _curr_p1_state = result.p1.state
+            _curr_p2_state = result.p2.state
+            # 連鎖終了 drain 用: 非STABLE → STABLE 立ち上がりエッジ
             _tsumo_settled_p1 = (
                 _prev_acct_state_p1 != BoardState.STABLE
-                and result.p1.state == BoardState.STABLE
+                and _curr_p1_state == BoardState.STABLE
+                and _prev_acct_state_p1 == BoardState.TSUMO_FALL
             )
             _tsumo_settled_p2 = (
                 _prev_acct_state_p2 != BoardState.STABLE
-                and result.p2.state == BoardState.STABLE
+                and _curr_p2_state == BoardState.STABLE
+                and _prev_acct_state_p2 == BoardState.TSUMO_FALL
             )
-            _prev_acct_state_p1 = result.p1.state
-            _prev_acct_state_p2 = result.p2.state
-
-            # update_from_score: score 差分 → 境界reset + 生成量計算 + 理論落下drain
-            _ojama_tracker.update_from_score(
-                score_p1=result.p1.score,
-                score_p2=result.p2.score,
-                t_sec=t_sec,
-                chain_p1=_chain_p1,
-                chain_p2=_chain_p2,
-                tsumo_settled_p1=_tsumo_settled_p1,
-                tsumo_settled_p2=_tsumo_settled_p2,
+            # on_state_transition で 1P/2P それぞれ通知
+            _ojama_tracker.on_state_transition(
+                "p1", _prev_acct_state_p1, _curr_p1_state,
+                result.p1.score, t_sec,
             )
-
-            # update_from_boards: 盤面内おじゃま増分 → 落下計上・全消し検出
-            # STABLE 以外は全て skip (連鎖/TSUMO_FALL/OJAMA_FALL/GRAVITY_SETTLE)
-            _is_nonstable_p1 = (result.p1.state != BoardState.STABLE)
-            _is_nonstable_p2 = (result.p2.state != BoardState.STABLE)
-            if (result.p1.confirmed_board is not None
-                    and result.p2.confirmed_board is not None):
-                _ojama_tracker.update_from_boards(
-                    board_p1=result.p1.confirmed_board,
-                    board_p2=result.p2.confirmed_board,
-                    score_p1=result.p1.score,
-                    score_p2=result.p2.score,
-                    is_chain_p1=_is_nonstable_p1,
-                    is_chain_p2=_is_nonstable_p2,
-                )
-
-            # update_accounting_with_chain: 相殺反映 + snapshot 取得
-            _last_snap = _ojama_tracker.update_accounting_with_chain(
-                t_sec=t_sec,
-                chain_p1=_chain_p1,
-                chain_p2=_chain_p2,
+            _ojama_tracker.on_state_transition(
+                "p2", _prev_acct_state_p2, _curr_p2_state,
+                result.p2.score, t_sec,
             )
+            # TSUMO_FALL → STABLE で予告 drain
+            if _tsumo_settled_p1:
+                _ojama_tracker.on_tsumo_settled("p1", t_sec)
+            if _tsumo_settled_p2:
+                _ojama_tracker.on_tsumo_settled("p2", t_sec)
+            _prev_acct_state_p1 = _curr_p1_state
+            _prev_acct_state_p2 = _curr_p2_state
+            # スナップショット取得
+            _last_snap = _ojama_tracker.get_snapshot(t_sec)
 
-            # 会計 JSONL 出力
+            # 会計 JSONL 出力 (アーキ案A 検証フィールド追加)
             if _ojama_accounting_fp is not None:
                 import json as _jacct
                 _acct_entry = {
@@ -1751,6 +1719,10 @@ def main() -> int:
                     "p2_state": result.p2.state.value,
                     "score_p1": result.p1.score,
                     "score_p2": result.p2.score,
+                    # 予告個数(画面と一致させる目標値)
+                    "forecast_p1": _last_snap.forecast_p1,
+                    "forecast_p2": _last_snap.forecast_p2,
+                    # 後方互換フィールド(= forecast と同値)
                     "pending_p1": _last_snap.pending_p1,
                     "pending_p2": _last_snap.pending_p2,
                     "pending_p1_capped": _last_snap.pending_p1_capped,
@@ -1766,8 +1738,13 @@ def main() -> int:
                     "total_offset_p1": _last_snap.total_offset_by_p1,
                     "total_offset_p2": _last_snap.total_offset_by_p2,
                     "confidence": _last_snap.confidence,
-                    "all_clear_p1": _last_snap.all_clear_pending_p1,
-                    "all_clear_p2": _last_snap.all_clear_pending_p2,
+                    # 検証フィールド (アーキ案A)
+                    "chain_total_score_p1": _last_snap.chain_total_score_p1,
+                    "chain_total_score_p2": _last_snap.chain_total_score_p2,
+                    "chain_end_triggered_p1": _last_snap.chain_end_triggered_p1,
+                    "chain_end_triggered_p2": _last_snap.chain_end_triggered_p2,
+                    "score_at_chain_start_p1": _last_snap.score_at_chain_start_p1,
+                    "score_at_chain_start_p2": _last_snap.score_at_chain_start_p2,
                     "tsumo_settled_p1": _tsumo_settled_p1,
                     "tsumo_settled_p2": _tsumo_settled_p2,
                 }
