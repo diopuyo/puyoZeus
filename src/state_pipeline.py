@@ -25,6 +25,7 @@ import cv2
 import numpy as np
 
 from src.board import Board
+from src.ojama_accounting import OjamaAccountSnapshot
 from src.probabilistic_board import ProbabilisticBoard
 
 
@@ -54,6 +55,8 @@ class GameState:
     # W3.0: 量子的盤面 (隠し段+お邪魔の確率分布込み)。None なら未推論。
     pboard_p1: ProbabilisticBoard | None = None
     pboard_p2: ProbabilisticBoard | None = None
+    # Ojama Accounting MVP: 5 帳簿スナップショット (optional、backwards compat)
+    ojama_snapshot: OjamaAccountSnapshot | None = None
 
 
 class StatePipeline:
@@ -351,6 +354,9 @@ class StatePipeline:
 
     def _init_ojama(self, rate_base: int) -> None:
         from src.ojama_score_inferrer import OjamaScoreInferrer
+        # 既存 OjamaScoreInferrer は後方互換のため保持
+        # OjamaAccountingTracker はここでは初期化しない。
+        # (GameState.ojama_snapshot=None 固定、新 API は recognition_pipeline 側で統合)
         self._ojama_inferrer = OjamaScoreInferrer(rate=rate_base)
 
     def _init_trackers(self, use_enhanced_tracker: bool) -> None:
@@ -437,6 +443,9 @@ class StatePipeline:
         self._pending_ojama_p1: int = 0
         self._pending_ojama_p2: int = 0
         self._match_start_sec: float | None = match_start_sec
+        # Ojama Accounting MVP: tracker リセット
+        if hasattr(self, "_ojama_accounting"):
+            self._ojama_accounting.reset(match_start_sec=match_start_sec)
         if self._tracker_p1 is not None:
             self._tracker_p1.reset()
         if self._tracker_p2 is not None:
@@ -517,6 +526,9 @@ class StatePipeline:
             score_p2 if conf_p2 >= self._score_conf_threshold else None
         )
         if not match_end_locked:
+            # ojama pending 計算 (旧 OjamaScoreInferrer 系の既存ロジック維持)
+            # 新 OjamaAccountingTracker はここでは呼ばない。
+            # GameState.ojama_snapshot の再統合は recognition_pipeline 経由で行う (申し送り)。
             self._update_ojama_pending(
                 score_p1_filtered, score_p2_filtered, t_sec,
             )
@@ -615,6 +627,13 @@ class StatePipeline:
             )
             is_chain_p1 = chain_res.is_chain_p1
             is_chain_p2 = chain_res.is_chain_p2
+        # NOTE: OjamaAccountingTracker の新 API (on_state_transition 等) は
+        # state_pipeline 層では BoardStateMachine に per-side アクセスできないため
+        # ここからは呼ばない。GameState.ojama_snapshot は None のまま。
+        # 新 API の統合は recognition_pipeline.py 経由で行う (申し送り参照)。
+        # chain フラグを保存 (次フレーム用)
+        self._last_is_chain_p1: bool = is_chain_p1
+        self._last_is_chain_p2: bool = is_chain_p2
 
         # Z-2: CellRecoveryRefiner で最終的な検出漏れ・色誤認補正
         # 他補正レイヤー全部の後に適用 (tracker 等の影響を受けないよう最後に)
@@ -762,6 +781,7 @@ class StatePipeline:
             is_telop_visible=is_telop,
             pboard_p1=pboard_p1,
             pboard_p2=pboard_p2,
+            ojama_snapshot=getattr(self, "_ojama_snapshot", None),
         )
 
     @staticmethod
@@ -910,12 +930,11 @@ class StatePipeline:
         score_p2: int | None,
         t_sec: float,
     ) -> None:
-        """score 差分から「相手側に発生する予告 ojama」を累積。
+        """score 差分から予告 ojama を累積し、Ojama Accounting tracker の生成処理も実行する。
 
-        簡易ロジック (v1):
-            - 1P score 増 → 2P pending に加算
-            - 2P score 増 → 1P pending に加算
-            - 相殺は未対応 (Phase W2 で追加)
+        Step1.5-③: chain 相殺は extract() 末尾で update_accounting_with_chain() が担う。
+        既存の _pending_ojama_p1/p2 は後方互換のため維持しつつ、
+        OjamaAccountingTracker でも並行して 5 帳簿管理 (生成のみ) を行う。
         """
         elapsed = self._elapsed_sec(t_sec)
         if score_p1 is not None and self._prev_score_p1 is not None:
@@ -928,7 +947,7 @@ class StatePipeline:
                     match_elapsed_sec=elapsed,
                     prev_leftover_sender=self._leftover_p1,
                 )
-                # 1P が fire → 2P pending に加算
+                # 1P が fire → 2P pending に加算 (既存ロジック維持)
                 self._pending_ojama_p2 += pred.pending
                 self._leftover_p1 = leftover
         if score_p2 is not None and self._prev_score_p2 is not None:
@@ -948,6 +967,9 @@ class StatePipeline:
             self._prev_score_p1 = score_p1
         if score_p2 is not None:
             self._prev_score_p2 = score_p2
+
+        # NOTE: OjamaAccountingTracker の旧 API (update_from_score) はここから呼ばない。
+        # GameState.ojama_snapshot = None 固定。新 API は recognition_pipeline 側で統合。
 
     def _elapsed_sec(self, t_sec: float) -> float:
         if self._match_start_sec is None:
