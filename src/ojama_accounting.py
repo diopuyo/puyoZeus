@@ -81,9 +81,19 @@ SCORE_RESET_THRESHOLD: int = 500
 # OJAMA_MAX_DROP_PER_TURN(=30) と同値
 THEORY_DROP_PER_TURN: int = OJAMA_MAX_DROP_PER_TURN
 
-# 修正C: pending hard cap (盤面全セル数 6×12=72)
-# この値を超える pending は物理的にありえず、score OCR 誤積みを防ぐ
-PENDING_HARD_CAP: int = 72
+# オンフィールド容量: 可視フィールド (12行×6列) の全セル数
+# pending がこの値を超えた分は「画面外(隠し段以上)あふれ」として offboard にカウントする
+ON_FIELD_CAP: int = 72
+
+# 修正C: pending capped 値の上限 (オンフィールド分)
+# pending_capped = min(pending, ON_FIELD_CAP) として有界±72を維持する (指標用)
+PENDING_HARD_CAP: int = ON_FIELD_CAP
+
+# pending の絶対サニティ上限 (= 約3画面分、3×72=216)
+# 根拠: 1試合でのお邪魔送出量の実測上限は概ね1~2画面分(72~144個)。
+#       3画面分(216)を超えると score OCR 誤積みが疑われるため、それ以上は clamp+warning する。
+#       pending はこの上限まで蓄積可とし、超過分のみclamp (真の発散防止)。
+PENDING_ABS_CAP: int = ON_FIELD_CAP * 3
 
 
 # ============================
@@ -116,6 +126,13 @@ class OjamaAccountSnapshot:
         pending_p2_capped: min(pending_p2, PENDING_HARD_CAP)。指標用有界値。
         net_balance_capped: pending_p2_capped - pending_p1_capped。有界 -72..+72。
             (net_balance_capped + 72) / 144 で 0-1 正規化可能。
+        offboard_p1: max(0, pending_p1 - ON_FIELD_CAP)。
+            1P フィールドに向かう pending のうちオンフィールド容量(72)を超えた分。
+            「画面外(隠し段以上)あふれ」の空フィールド近似値。
+            ※注意: 実際の画面外あふれは盤面の埋まり具合に依存するが、ここでは
+            空フィールド近似(全72セルが空である前提)として計算している。
+            pending と同様に理論落下drainで減り、試合境界でresetされる(pending派生)。
+        offboard_p2: max(0, pending_p2 - ON_FIELD_CAP)。2P 側の同上。
     """
     t_sec: float
     pending_p1: int
@@ -138,6 +155,11 @@ class OjamaAccountSnapshot:
     pending_p1_capped: int = 0
     pending_p2_capped: int = 0
     net_balance_capped: int = 0
+    # --- offboard フィールド (backwards compat: 末尾追加) ---
+    # 空フィールド近似: pending - ON_FIELD_CAP(72) の超過分
+    # pending派生のため、理論落下drainおよび試合境界resetで自動的に0になる
+    offboard_p1: int = 0
+    offboard_p2: int = 0
 
 
 # ============================
@@ -398,20 +420,25 @@ class OjamaAccountingTracker:
     # ============================
 
     def _apply_pending_cap(self, side: _SideState, label: str) -> None:
-        """pending が PENDING_HARD_CAP を超えた場合に clamp する。
+        """pending が PENDING_ABS_CAP を超えた場合に clamp する (真の発散防止)。
 
-        超過分は total_generated に計上済のまま (pending 発散のみ防ぐ)。
+        pending は ON_FIELD_CAP(72) を超えて蓄積できる (offboard 表現のため)。
+        PENDING_ABS_CAP(216 = 約3画面分) を超えたら score OCR 誤積みを疑い
+        clamp + warning を出す。
+
+        pending_capped (= min(pending, ON_FIELD_CAP)) はスナップショット構築時に計算する。
 
         Args:
             side: 片側お邪魔会計内部状態。
             label: ログ用 "1P"/"2P"。
         """
-        if side.pending > PENDING_HARD_CAP:
+        if side.pending > PENDING_ABS_CAP:
             logger.warning(
-                "pending_cap[%s]: pending=%d > cap=%d, clamping",
-                label, side.pending, PENDING_HARD_CAP,
+                "pending_abs_cap[%s]: pending=%d > abs_cap=%d, clamping "
+                "(score OCR 誤積み疑い)",
+                label, side.pending, PENDING_ABS_CAP,
             )
-            side.pending = PENDING_HARD_CAP
+            side.pending = PENDING_ABS_CAP
 
     # ============================
     # 内部: confirmed_board からの落下・全消し検出
@@ -722,8 +749,13 @@ class OjamaAccountingTracker:
         """現在の内部状態から OjamaAccountSnapshot を生成する。"""
         net_balance = self._p2.pending - self._p1.pending
         # 修正C: capped フィールド (有界値、指標用)
-        p1_capped = min(self._p1.pending, PENDING_HARD_CAP)
-        p2_capped = min(self._p2.pending, PENDING_HARD_CAP)
+        # pending は ON_FIELD_CAP を超えて蓄積されるが、指標用には ON_FIELD_CAP でクランプ
+        p1_capped = min(self._p1.pending, ON_FIELD_CAP)
+        p2_capped = min(self._p2.pending, ON_FIELD_CAP)
+        # offboard: オンフィールド容量(72)を超えた分 (空フィールド近似)
+        # pending派生のため理論落下drainおよび試合境界resetで自動的に減少/0になる
+        p1_offboard = max(0, self._p1.pending - ON_FIELD_CAP)
+        p2_offboard = max(0, self._p2.pending - ON_FIELD_CAP)
         return OjamaAccountSnapshot(
             t_sec=t_sec,
             pending_p1=self._p1.pending,
@@ -746,6 +778,9 @@ class OjamaAccountingTracker:
             pending_p1_capped=p1_capped,
             pending_p2_capped=p2_capped,
             net_balance_capped=p2_capped - p1_capped,
+            # offboard フィールド (末尾、空フィールド近似)
+            offboard_p1=p1_offboard,
+            offboard_p2=p2_offboard,
         )
 
     def _elapsed(self, t_sec: float) -> float:
@@ -764,7 +799,9 @@ __all__ = [
     "DROP_SANITY_CLAMP",
     "SCORE_RESET_THRESHOLD",
     "THEORY_DROP_PER_TURN",
+    "ON_FIELD_CAP",
     "PENDING_HARD_CAP",
+    "PENDING_ABS_CAP",
     "OjamaAccountSnapshot",
     "OjamaAccountingTracker",
 ]

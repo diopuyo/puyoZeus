@@ -43,6 +43,8 @@ from src.ojama_accounting import (
     CONFIDENCE_VISUAL_AGREE,
     CONFIDENCE_VISUAL_MISMATCH_PENALTY,
     DROP_SANITY_CLAMP,
+    ON_FIELD_CAP,
+    PENDING_ABS_CAP,
     PENDING_HARD_CAP,
     SCORE_RESET_THRESHOLD,
     THEORY_DROP_PER_TURN,
@@ -1350,25 +1352,25 @@ def test_theory_drop_multiple_turns_drain_incrementally() -> None:
     """修正B: 複数ターン連続で drain されるごとに pending が 30 ずつ減る。
 
     シナリオ:
-        90 ojama を 2P へ送る (pending_p2=90 → cap で 72 になる)
-        3 ターン tsumo_settled_p2=True → 72 - 30 = 42 → 42 - 30 = 12 → 12 - 12 = 0
+        90 ojama を 2P へ送る (pending_p2=90 → PENDING_ABS_CAP(216) 未満なのでそのまま蓄積)
+        3 ターン tsumo_settled_p2=True → 90 - 30 = 60 → 60 - 30 = 30 → 30 - 30 = 0
+        ※ ON_FIELD_CAP(72) を超えた分は offboard として表現されるが drain は pending 全体に適用
     """
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
-    # 90 ojama 相当: 2100*3 = 6300 点
+    # 90 ojama 相当: 2100*3 = 6300 点 (PENDING_ABS_CAP=216 未満なのでそのまま蓄積)
     large_score = 2100 * 3  # 90 ojama
     tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
     tracker.update_from_score(score_p1=large_score, score_p2=0, t_sec=2.0)
 
     snap0 = tracker.get_snapshot(t_sec=2.0)
-    # cap により pending_p2 <= PENDING_HARD_CAP
-    # (まだ cap 前なので pending_p2=90 だが、update_from_score 内で cap される)
-    assert snap0.pending_p2 <= PENDING_HARD_CAP, (
-        f"cap 適用前: pending_p2={snap0.pending_p2} > cap={PENDING_HARD_CAP}"
+    # pending は PENDING_ABS_CAP 以内 (90 < 216)
+    assert snap0.pending_p2 <= PENDING_ABS_CAP, (
+        f"abs_cap 超過: pending_p2={snap0.pending_p2} > PENDING_ABS_CAP={PENDING_ABS_CAP}"
     )
 
-    pending_after_cap = snap0.pending_p2  # cap 後の値
+    pending_after_cap = snap0.pending_p2  # この時点の pending 値
 
     # ターン1
     snap1 = tracker.update_from_score(
@@ -1403,37 +1405,66 @@ def test_theory_drop_multiple_turns_drain_incrementally() -> None:
 # ============================
 
 def test_pending_hard_cap_prevents_overflow() -> None:
-    """修正C: 生成過多でも pending は PENDING_HARD_CAP (72) を超えない。"""
+    """修正C: pending は PENDING_ABS_CAP (216) を超えない (絶対サニティ上限)。
+
+    ON_FIELD_CAP(72) は超えてよい (offboard として表現される)。
+    PENDING_ABS_CAP(216) = 絶対上限であり、これを超えたらclampされる。
+    pending_capped = min(pending, ON_FIELD_CAP) は有界 (指標用)。
+    offboard = max(0, pending - ON_FIELD_CAP) が正になることを確認。
+    """
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
-    # 大量生成: cap * 2 = 144 個相当の score
-    huge_score = PENDING_HARD_CAP * 2 * OJAMA_RATE_STANDARD  # = 10080
+    # ON_FIELD_CAP を超えるが PENDING_ABS_CAP 未満の量: 100個相当
+    score_for_100 = 100 * OJAMA_RATE_STANDARD  # = 7000
     tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
-    snap = tracker.update_from_score(score_p1=huge_score, score_p2=0, t_sec=2.0)
+    snap = tracker.update_from_score(score_p1=score_for_100, score_p2=0, t_sec=2.0)
 
-    assert snap.pending_p2 <= PENDING_HARD_CAP, (
-        f"cap 超過: pending_p2={snap.pending_p2} > cap={PENDING_HARD_CAP}"
+    expected_ojama, _ = _score_to_ojama_count(score_for_100)
+    # pending は ON_FIELD_CAP を超えられる
+    assert snap.pending_p2 > ON_FIELD_CAP, (
+        f"100個分の pending={snap.pending_p2} が ON_FIELD_CAP={ON_FIELD_CAP} を超えるべき"
+    )
+    # pending は PENDING_ABS_CAP 以下に収まる
+    assert snap.pending_p2 <= PENDING_ABS_CAP, (
+        f"abs_cap 超過: pending_p2={snap.pending_p2} > PENDING_ABS_CAP={PENDING_ABS_CAP}"
+    )
+    # pending_capped は ON_FIELD_CAP で有界
+    assert snap.pending_p2_capped <= PENDING_HARD_CAP, (
+        f"capped 超過: pending_p2_capped={snap.pending_p2_capped} > cap={PENDING_HARD_CAP}"
+    )
+    assert snap.pending_p2_capped == ON_FIELD_CAP, (
+        f"capped 値={snap.pending_p2_capped} は ON_FIELD_CAP={ON_FIELD_CAP} になるべき"
+    )
+    # offboard は pending - ON_FIELD_CAP の超過分
+    expected_offboard = snap.pending_p2 - ON_FIELD_CAP
+    assert snap.offboard_p2 == expected_offboard, (
+        f"offboard_p2={snap.offboard_p2} != expected={expected_offboard}"
     )
 
 
 def test_pending_hard_cap_total_generated_preserved() -> None:
-    """修正C: cap で pending は抑えられるが total_generated は元の値を保持する。"""
+    """修正C: pending は PENDING_ABS_CAP で抑えられるが total_generated は元の値を保持する。
+
+    ON_FIELD_CAP(72) を超えた分は offboard として表現され、pending 自体は蓄積される。
+    """
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
-    # cap を確実に超える量 (10000点 / 70 = 142 個)
+    # ON_FIELD_CAP を確実に超える量 (10000点 / 70 ≈ 142 個)
     huge_score = 10000
     expected_generated, _ = _score_to_ojama_count(huge_score)
-    assert expected_generated > PENDING_HARD_CAP, (
-        f"テスト前提: expected_generated={expected_generated} > cap={PENDING_HARD_CAP} が必要"
+    assert expected_generated > ON_FIELD_CAP, (
+        f"テスト前提: expected_generated={expected_generated} > ON_FIELD_CAP={ON_FIELD_CAP} が必要"
     )
 
     tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
     snap = tracker.update_from_score(score_p1=huge_score, score_p2=0, t_sec=2.0)
 
-    # pending は cap
-    assert snap.pending_p2 <= PENDING_HARD_CAP
+    # pending は PENDING_ABS_CAP 以内 (絶対上限)
+    assert snap.pending_p2 <= PENDING_ABS_CAP
+    # pending_capped は ON_FIELD_CAP で有界 (指標用)
+    assert snap.pending_p2_capped <= ON_FIELD_CAP
     # total_generated は cap されない (元値保持)
     assert snap.total_generated_by_p1 == expected_generated, (
         f"total_generated が cap で削られている: {snap.total_generated_by_p1} != {expected_generated}"
@@ -1456,7 +1487,7 @@ def test_capped_fields_in_snapshot() -> None:
 
 
 def test_capped_fields_bounded_range() -> None:
-    """修正C: capped フィールドは -72..+72 の範囲に収まる。"""
+    """修正C: capped フィールドは -72..+72 の範囲に収まる (ON_FIELD_CAP 有界)。"""
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
@@ -1465,8 +1496,8 @@ def test_capped_fields_bounded_range() -> None:
     tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
     snap = tracker.update_from_score(score_p1=huge_score, score_p2=0, t_sec=2.0)
 
-    assert 0 <= snap.pending_p2_capped <= PENDING_HARD_CAP
-    assert -PENDING_HARD_CAP <= snap.net_balance_capped <= PENDING_HARD_CAP
+    assert 0 <= snap.pending_p2_capped <= ON_FIELD_CAP
+    assert -ON_FIELD_CAP <= snap.net_balance_capped <= ON_FIELD_CAP
 
 
 def test_capped_net_balance_normalization() -> None:
@@ -1481,7 +1512,7 @@ def test_capped_net_balance_normalization() -> None:
     tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
     snap = tracker.update_from_score(score_p1=huge_score, score_p2=0, t_sec=2.0)
 
-    normalized = (snap.net_balance_capped + PENDING_HARD_CAP) / (2 * PENDING_HARD_CAP)
+    normalized = (snap.net_balance_capped + ON_FIELD_CAP) / (2 * ON_FIELD_CAP)
     assert 0.0 <= normalized <= 1.0, (
         f"正規化値が範囲外: {normalized} (net_balance_capped={snap.net_balance_capped})"
     )
@@ -1557,6 +1588,222 @@ def test_snapshot_all_fields_present_with_new_fields() -> None:
         "all_clear_pending_p1", "all_clear_pending_p2",
         # 修正C 追加
         "pending_p1_capped", "pending_p2_capped", "net_balance_capped",
+        # offboard フィールド追加
+        "offboard_p1", "offboard_p2",
     ]
     for field in required_fields:
         assert hasattr(snap, field), f"フィールド {field!r} が存在しない"
+
+
+# ============================
+# (a) offboard: pending > ON_FIELD_CAP で offboard > 0、pending_capped == ON_FIELD_CAP
+# ============================
+
+def test_offboard_positive_when_pending_exceeds_on_field_cap() -> None:
+    """(a) pending > ON_FIELD_CAP で offboard_p2 > 0 かつ pending_capped == ON_FIELD_CAP。
+
+    ON_FIELD_CAP(72) を超える pending は offboard として表現される。
+    pending_capped は有界(≤ ON_FIELD_CAP)、offboard = pending - ON_FIELD_CAP。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 100個相当 (ON_FIELD_CAP=72 を超える)
+    score_for_100 = 100 * OJAMA_RATE_STANDARD
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    snap = tracker.update_from_score(score_p1=score_for_100, score_p2=0, t_sec=2.0)
+
+    assert snap.pending_p2 > ON_FIELD_CAP, (
+        f"テスト前提: pending_p2={snap.pending_p2} が ON_FIELD_CAP={ON_FIELD_CAP} を超えるべき"
+    )
+    assert snap.offboard_p2 > 0, (
+        f"offboard_p2={snap.offboard_p2} は pending({snap.pending_p2}) > "
+        f"ON_FIELD_CAP({ON_FIELD_CAP}) なので正になるべき"
+    )
+    assert snap.pending_p2_capped == ON_FIELD_CAP, (
+        f"pending_p2_capped={snap.pending_p2_capped} == ON_FIELD_CAP={ON_FIELD_CAP} になるべき"
+    )
+    # offboard = pending - ON_FIELD_CAP
+    assert snap.offboard_p2 == snap.pending_p2 - ON_FIELD_CAP, (
+        f"offboard_p2={snap.offboard_p2} != pending({snap.pending_p2}) - "
+        f"ON_FIELD_CAP({ON_FIELD_CAP})"
+    )
+    # 1P の offboard は 0 (何も送られていない)
+    assert snap.offboard_p1 == 0
+
+
+def test_offboard_zero_when_pending_within_on_field_cap() -> None:
+    """(a) pending <= ON_FIELD_CAP では offboard_p2 == 0。"""
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 30個相当 (ON_FIELD_CAP=72 以内)
+    score_for_30 = 30 * OJAMA_RATE_STANDARD
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    snap = tracker.update_from_score(score_p1=score_for_30, score_p2=0, t_sec=2.0)
+
+    assert snap.pending_p2 <= ON_FIELD_CAP, (
+        f"テスト前提: pending_p2={snap.pending_p2} <= ON_FIELD_CAP={ON_FIELD_CAP} のはず"
+    )
+    assert snap.offboard_p2 == 0, (
+        f"offboard_p2={snap.offboard_p2} は pending <= ON_FIELD_CAP なので 0 になるべき"
+    )
+
+
+# ============================
+# (b) offboard が理論落下 drain で減る
+# ============================
+
+def test_offboard_reduces_with_theory_drain() -> None:
+    """(b) offboard が tsumo_settled=True の理論落下 drain で減少する。
+
+    pending 派生のため、pending が drain されれば offboard も連動して減少する。
+    シナリオ: 100個送信 → pending=100, offboard=28
+              1ターン drain(30) → pending=70, offboard=max(0, 70-72)=0
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    score_for_100 = 100 * OJAMA_RATE_STANDARD
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    snap_before = tracker.update_from_score(
+        score_p1=score_for_100, score_p2=0, t_sec=2.0,
+    )
+    assert snap_before.offboard_p2 > 0, "テスト前提: offboard > 0 が必要"
+
+    # 1ターン理論落下 drain (THEORY_DROP_PER_TURN=30)
+    snap_after = tracker.update_from_score(
+        score_p1=score_for_100, score_p2=0, t_sec=3.0,
+        tsumo_settled_p2=True,
+    )
+    # pending が 30 drain されれば offboard も連動して変わる (または 0 になる)
+    expected_offboard = max(0, snap_before.pending_p2 - THEORY_DROP_PER_TURN - ON_FIELD_CAP)
+    assert snap_after.offboard_p2 == expected_offboard, (
+        f"drain後 offboard_p2={snap_after.offboard_p2} != expected={expected_offboard} "
+        f"(pending_before={snap_before.pending_p2})"
+    )
+
+
+# ============================
+# (c) 試合境界 (score 減少) で pending/offboard が 0 にreset (回帰防止テスト)
+# ============================
+
+def test_offboard_resets_to_zero_on_match_boundary() -> None:
+    """(c) 試合境界 (score 大幅減少) で pending/offboard が 0 にreset される。
+
+    ユーザー問題の回帰防止: 「試合終わっても O+60 がリセットされず続く」。
+    pending が reset されれば offboard (pending 派生) も自動的に 0 になる。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # ON_FIELD_CAP を超える量を 2P に送る
+    score_for_100 = 100 * OJAMA_RATE_STANDARD
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    snap_before = tracker.update_from_score(
+        score_p1=score_for_100, score_p2=0, t_sec=2.0,
+    )
+    assert snap_before.pending_p2 > ON_FIELD_CAP, "テスト前提: pending > ON_FIELD_CAP が必要"
+    assert snap_before.offboard_p2 > 0, "テスト前提: offboard > 0 が必要"
+
+    # 2P score が大幅減少 (試合切り替え: 高スコア → 0 相当)
+    # まず 2P に score を積む
+    tracker.update_from_score(
+        score_p1=score_for_100, score_p2=20000, t_sec=3.0,
+    )
+    # 次フレームで 2P score が激減 (試合境界)
+    snap_reset = tracker.update_from_score(
+        score_p1=score_for_100,
+        score_p2=100,  # 20000 → 100 = SCORE_RESET_THRESHOLD(500) 超え
+        t_sec=4.0,
+    )
+    # 2P 側の pending が 0 にリセットされる
+    assert snap_reset.pending_p2 == 0, (
+        f"試合境界後 pending_p2={snap_reset.pending_p2} should be 0 "
+        f"(ユーザー問題: O+N がリセットされない)"
+    )
+    # offboard も 0 になる (pending 派生)
+    assert snap_reset.offboard_p2 == 0, (
+        f"試合境界後 offboard_p2={snap_reset.offboard_p2} should be 0 "
+        f"(ユーザー問題の回帰防止)"
+    )
+
+
+# ============================
+# (d) pending は PENDING_ABS_CAP で有界
+# ============================
+
+def test_pending_bounded_by_pending_abs_cap() -> None:
+    """(d) pending は PENDING_ABS_CAP(216) で有界。
+
+    PENDING_ABS_CAP を大きく超えようとしても clamp される。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # PENDING_ABS_CAP * 2 = 432 個相当の score
+    huge_score = PENDING_ABS_CAP * 2 * OJAMA_RATE_STANDARD
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    snap = tracker.update_from_score(score_p1=huge_score, score_p2=0, t_sec=2.0)
+
+    assert snap.pending_p2 <= PENDING_ABS_CAP, (
+        f"PENDING_ABS_CAP 超過: pending_p2={snap.pending_p2} > {PENDING_ABS_CAP}"
+    )
+
+
+def test_pending_abs_cap_greater_than_on_field_cap() -> None:
+    """(d) 定数の関係: ON_FIELD_CAP == PENDING_HARD_CAP < PENDING_ABS_CAP。"""
+    assert ON_FIELD_CAP == PENDING_HARD_CAP, (
+        f"ON_FIELD_CAP={ON_FIELD_CAP} == PENDING_HARD_CAP={PENDING_HARD_CAP} が前提"
+    )
+    assert PENDING_ABS_CAP > ON_FIELD_CAP, (
+        f"PENDING_ABS_CAP={PENDING_ABS_CAP} > ON_FIELD_CAP={ON_FIELD_CAP} が前提"
+    )
+    assert PENDING_ABS_CAP == ON_FIELD_CAP * 3, (
+        f"PENDING_ABS_CAP={PENDING_ABS_CAP} == ON_FIELD_CAP*3={ON_FIELD_CAP * 3} が前提"
+    )
+
+
+# ============================
+# (e) total_offset がスナップショットに出る
+# ============================
+
+def test_offset_appears_in_snapshot() -> None:
+    """(e) 相殺発生後に total_offset_by_p* がスナップショットに反映される。
+
+    1P が相殺すると total_offset_by_p1 が増加する。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 2P が先に 30 ojama を 1P に送る
+    chain_score = 2100  # 30 ojama
+    expected_ojama, _ = _score_to_ojama_count(chain_score)
+
+    tracker.update_from_score(score_p1=0, score_p2=0, t_sec=1.0)
+    tracker.update_from_score(score_p1=0, score_p2=chain_score, t_sec=2.0)
+    snap_before_offset = tracker.get_snapshot(t_sec=2.0)
+    assert snap_before_offset.total_offset_by_p1 == 0, "相殺前は offset=0"
+
+    # 1P が同量生成して chain 完了 → 相殺発生
+    tracker.update_from_score(
+        score_p1=chain_score, score_p2=chain_score, t_sec=3.0,
+        chain_p1=True,
+    )
+    snap_after_offset = tracker.update_from_score(
+        score_p1=chain_score, score_p2=chain_score, t_sec=3.1,
+        chain_p1=False,
+    )
+    # total_offset_by_p1 が増加している
+    assert snap_after_offset.total_offset_by_p1 > 0, (
+        f"相殺後 total_offset_by_p1={snap_after_offset.total_offset_by_p1} > 0 になるべき"
+    )
+    expected_offset_val = min(expected_ojama, expected_ojama)  # 同量なら全相殺
+    assert snap_after_offset.total_offset_by_p1 == expected_offset_val, (
+        f"total_offset_by_p1={snap_after_offset.total_offset_by_p1} "
+        f"!= expected={expected_offset_val}"
+    )
+    # offboard_p1 は 0 (pending が 0 になっているはず)
+    assert snap_after_offset.offboard_p1 == 0, (
+        f"相殺後 offboard_p1={snap_after_offset.offboard_p1} should be 0"
+    )

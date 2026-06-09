@@ -240,6 +240,10 @@ _ACCT_LINE2_OFFSET_Y: int = 54   # drop/net 行
 _ACCT_FONT_SCALE: float = 0.55
 
 
+# 会計 overlay の3行目 Y オフセット (相殺表示用)
+_ACCT_LINE3_OFFSET_Y: int = 72
+
+
 def draw_ojama_accounting_overlay(
     frame: np.ndarray,
     snap: OjamaAccountSnapshot | None,
@@ -247,16 +251,18 @@ def draw_ojama_accounting_overlay(
     roi_x: int,
     roi_y: int,
 ) -> None:
-    """OjamaAccountSnapshot の会計値を ROI 下部 2 行に描画する.
+    """OjamaAccountSnapshot の会計値を ROI 下部 3 行に描画する.
 
-    表示内容 (2 行):
-        行1: pending→自分:N  net:±K  conf:0.xx
-        行2: drop 自分:x 相手:y  [AC] (全消し持越しあり時)
+    表示内容 (3 行):
+        行1: pend:N  net(相殺後収支):±K  c:0.xx
+        行2: drop:x  off:Y (累積相殺) [AC]
+        行3: off-board:Z (画面外あふれ推定、空フィールド近似)
 
     side="1P" なら snap.pending_p1 / total_dropped_to_p1 等を使う。
     side="2P" なら snap.pending_p2 / total_dropped_to_p2 等を使う。
 
-    net_ojama_balance の符号: 正→1P有利(青), 負→2P有利(赤)。
+    net_balance_capped の符号: 正→1P有利(青), 負→2P有利(赤)。
+    net は相殺後収支であることをラベルで明示する。
 
     Args:
         frame: 描画対象フレーム。
@@ -268,6 +274,7 @@ def draw_ojama_accounting_overlay(
     tx = roi_x + 2
     ty1 = roi_y + ROI_H + _ACCT_LINE1_OFFSET_Y
     ty2 = roi_y + ROI_H + _ACCT_LINE2_OFFSET_Y
+    ty3 = roi_y + ROI_H + _ACCT_LINE3_OFFSET_Y
 
     if snap is None:
         # 未初期化: グレー "--" 表示
@@ -279,12 +286,17 @@ def draw_ojama_accounting_overlay(
         pending_recv = snap.pending_p1_capped    # 自分が受ける pending (2P→1P、有界)
         dropped = snap.total_dropped_to_p1
         ac_flag = snap.all_clear_pending_p1
+        # 相殺: 1P が相殺した分 (= 自分に向かう pending を自分の連鎖で消した量)
+        offset_total = snap.total_offset_by_p1
+        offboard = snap.offboard_p1              # 画面外あふれ推定 (空フィールド近似)
     else:
         pending_recv = snap.pending_p2_capped    # 自分が受ける pending (1P→2P、有界)
         dropped = snap.total_dropped_to_p2
         ac_flag = snap.all_clear_pending_p2
+        offset_total = snap.total_offset_by_p2
+        offboard = snap.offboard_p2
 
-    net = snap.net_balance_capped         # 正→1P有利 (有界 -72..+72)
+    net = snap.net_balance_capped         # 正→1P有利 (有界 -72..+72、相殺後収支)
     conf = snap.confidence
 
     # net の色: 正なら青(1P有利)、負なら赤(2P有利)、0 なら白
@@ -303,22 +315,32 @@ def draw_ojama_accounting_overlay(
     else:
         pend_bgr = (180, 220, 180)                        # 緑 (安全)
 
-    # 行1: pending / net / conf
+    # 行1: pending / net(相殺後収支) / conf
     net_sign = "+" if net >= 0 else ""
-    line1 = f"pend:{pending_recv}  net:{net_sign}{net}  c:{conf:.2f}"
-    ac_tag = " [AC]" if ac_flag else ""
-    line2 = f"drop:{dropped}{ac_tag}"
 
-    # 行1 描画 (pending 部分のみ色付け、残りは白)
+    # 行1 描画 (pending 部分のみ色付け、net はラベル付き)
     _put_shadow(frame, f"pend:{pending_recv}", tx, ty1, pend_bgr, _ACCT_FONT_SCALE)
     (w1, _), _ = cv2.getTextSize(f"pend:{pending_recv}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS)
-    _put_shadow(frame, f"  net:{net_sign}{net}", tx + w1, ty1, net_bgr, _ACCT_FONT_SCALE)
-    (w2, _), _ = cv2.getTextSize(f"  net:{net_sign}{net}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS)
+    _put_shadow(frame, f"  net(off後):{net_sign}{net}", tx + w1, ty1, net_bgr, _ACCT_FONT_SCALE)
+    (w2, _), _ = cv2.getTextSize(
+        f"  net(off後):{net_sign}{net}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS,
+    )
     _put_shadow(frame, f"  c:{conf:.2f}", tx + w1 + w2, ty1, (160, 160, 160), _ACCT_FONT_SCALE)
 
-    # 行2 描画 (drop / AC)
+    # 行2: drop / 累積相殺(off) / AC
+    ac_tag = " [AC]" if ac_flag else ""
     drop_bgr: tuple[int, int, int] = (200, 200, 200)
-    _put_shadow(frame, line2, tx, ty2, drop_bgr, _ACCT_FONT_SCALE)
+    off_bgr: tuple[int, int, int] = (160, 200, 255)   # 薄い黄色 (相殺は好材料)
+    _put_shadow(frame, f"drop:{dropped}", tx, ty2, drop_bgr, _ACCT_FONT_SCALE)
+    (wd, _), _ = cv2.getTextSize(f"drop:{dropped}", FONT, _ACCT_FONT_SCALE, FONT_THICKNESS)
+    _put_shadow(frame, f"  off:{offset_total}{ac_tag}", tx + wd, ty2, off_bgr, _ACCT_FONT_SCALE)
+
+    # 行3: 画面外あふれ推定 (off-board、空フィールド近似)
+    if offboard > 0:
+        ob_bgr: tuple[int, int, int] = (0, 80, 255)   # 橙色 (危険: 画面外あふれ)
+        _put_shadow(frame, f"OB+{offboard}(approx)", tx, ty3, ob_bgr, _ACCT_FONT_SCALE)
+    else:
+        _put_shadow(frame, "OB:0", tx, ty3, (100, 100, 100), _ACCT_FONT_SCALE)
 
 
 def _put_shadow(
@@ -1538,25 +1560,12 @@ def main() -> int:
     last_p2_next: tuple[int, int] | None = None
     last_p1_dnext: tuple[int, int] | None = None
     last_p2_dnext: tuple[int, int] | None = None
-    # score OCR 差分由来の ojama 送出量トラッカー
-    # SideResult.score_delta = 「相手 side の score delta」(= 自分に向けて送られるOJAMAの原因)
-    # score_to_ojama() で累積 score → ojama 個数換算する (rate=70、leftover を carry-over)
-    # ChainEvent.ojama_sent はシミュレーション由来で score OCR と異なる経路。
-    # score OCR 差分が確認済み信頼できるため (memory: score_ocr_reliability_confirmed)
-    # こちらを採用する。
-    last_p1_ojama_sent: int = 0   # 1P が受けるojama累積 (2P score delta 由来)
-    last_p2_ojama_sent: int = 0   # 2P が受けるojama累積 (1P score delta 由来)
+    # score OCR 差分由来の ojama 送出量トラッカー (サマリ出力用・フェード表示用)
+    # OjamaAccountingTracker が本体。last_p*_ojama_sent はイベント単位のサマリ用に残す。
+    last_p1_ojama_sent: int = 0   # 1P が受けたojama (最新イベント)
+    last_p2_ojama_sent: int = 0   # 2P が受けたojama (最新イベント)
     last_p1_ojama_event_sec: float = -1.0   # 1P の最後のojama受け取り時刻
     last_p2_ojama_event_sec: float = -1.0   # 2P の最後のojama受け取り時刻
-    # score_to_ojama() の leftover carry-over (ゲームの実際の繰越余りと一致させる)
-    _p1_leftover_score: int = 0   # 1P 受け取り側の余り (2P scoreから計算)
-    _p2_leftover_score: int = 0   # 2P 受け取り側の余り (1P scoreから計算)
-    # 画面外 (隠し段) お邪魔累積トラッカー (score 差分由来)
-    # 「score差分から換算した total 送出」 - 「画面内 O の増分」 = offboard 推定
-    _p1_total_ojama_sent: int = 0   # 累積送出総数 (1P が受けた)
-    _p2_total_ojama_sent: int = 0
-    last_p1_offboard_ojama: int = 0  # 現在の画面外 O 推定個数
-    last_p2_offboard_ojama: int = 0
     # 隠し段確率 overlay 用: 最新の prob_board を保持 (STABLE 時のみ更新)
     last_p1_prob_board: ProbabilisticBoard | None = None
     last_p2_prob_board: ProbabilisticBoard | None = None
@@ -1666,53 +1675,6 @@ def main() -> int:
                 _hidden_row_nonnull_count += 1
             if result.p2.prob_board is not None:
                 last_p2_prob_board = result.p2.prob_board
-            # score OCR 差分由来の ojama 送出量を SideResult.score_delta から計算
-            # SideResult.score_delta = 「相手 side の score delta」(= 自分に送られるOJAMAの原因)
-            # score_to_ojama() で累積 score → ojama 個数換算する
-            # NOTE: score_delta は連鎖中の掛け算式で score OCR が None になるフレームは 0
-            #       なので連鎖後 STABLE になって score が更新されたフレームで一括取得される
-            from src.scoring import score_to_ojama as _score_to_ojama
-            _d1 = result.p1.score_delta  # = 2P の score delta (1P に向けてのOJAMA原因)
-            _d2 = result.p2.score_delta  # = 1P の score delta (2P に向けてのOJAMA原因)
-            if _d1 > 0:
-                # 2P から 1P に向けたojama送出を計算
-                _r1 = _score_to_ojama(_d1, prev_leftover=_p1_leftover_score)
-                _p1_leftover_score = _r1.leftover_score
-                if _r1.ojama_count > 0:
-                    last_p1_ojama_sent = _r1.ojama_count
-                    last_p1_ojama_event_sec = t_sec
-                    _p1_total_ojama_sent += _r1.ojama_count
-                    print(
-                        f"  [ojama_score] t={t_sec:.2f}s 2P→1P OJ={_r1.ojama_count} "
-                        f"(score_d={_d1} total={_p1_total_ojama_sent})"
-                    )
-            if _d2 > 0:
-                # 1P から 2P に向けたojama送出を計算
-                _r2 = _score_to_ojama(_d2, prev_leftover=_p2_leftover_score)
-                _p2_leftover_score = _r2.leftover_score
-                if _r2.ojama_count > 0:
-                    last_p2_ojama_sent = _r2.ojama_count
-                    last_p2_ojama_event_sec = t_sec
-                    _p2_total_ojama_sent += _r2.ojama_count
-                    print(
-                        f"  [ojama_score] t={t_sec:.2f}s 1P→2P OJ={_r2.ojama_count} "
-                        f"(score_d={_d2} total={_p2_total_ojama_sent})"
-                    )
-            # 画面外 (隠し段) お邪魔の推定: 累積送出 - 画面内に観測された O の合計
-            # 「2P が送出 → 1P フィールドに落下」なので 2P の送出が 1P offboard の原因
-            if last_p1_eval_board is not None:
-                _visible_p1_ojama = sum(
-                    1 for r in range(1, 13) for c in range(6)
-                    if int(last_p1_eval_board.get(r, c)) == COLOR_OJAMA
-                )
-                last_p1_offboard_ojama = max(0, _p1_total_ojama_sent - _visible_p1_ojama)
-            if last_p2_eval_board is not None:
-                _visible_p2_ojama = sum(
-                    1 for r in range(1, 13) for c in range(6)
-                    if int(last_p2_eval_board.get(r, c)) == COLOR_OJAMA
-                )
-                last_p2_offboard_ojama = max(0, _p2_total_ojama_sent - _visible_p2_ojama)
-
             # =============================================
             # OjamaAccountingTracker 駆動 (2026-06-09 統合)
             # =============================================
@@ -1793,6 +1755,8 @@ def main() -> int:
                     "pending_p2": _last_snap.pending_p2,
                     "pending_p1_capped": _last_snap.pending_p1_capped,
                     "pending_p2_capped": _last_snap.pending_p2_capped,
+                    "offboard_p1": _last_snap.offboard_p1,
+                    "offboard_p2": _last_snap.offboard_p2,
                     "net_balance": _last_snap.net_ojama_balance,
                     "net_balance_capped": _last_snap.net_balance_capped,
                     "total_dropped_p1": _last_snap.total_dropped_to_p1,
@@ -1840,13 +1804,17 @@ def main() -> int:
             frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
         )
         # 第6要素: 隠し段 (row 0) 確率 overlay + 画面外 O 個数
+        # offboard は OjamaAccountingTracker の会計値 (pending - 72) から取得
+        # 試合境界で pending がresetされるため O 表示も自動的に 0 に戻る
+        _offboard_p1 = _last_snap.offboard_p1 if _last_snap is not None else 0
+        _offboard_p2 = _last_snap.offboard_p2 if _last_snap is not None else 0
         draw_hidden_row_overlay(
             frame, last_p1_prob_board, P1_ROI_X, P1_ROI_Y,
-            offboard_ojama=last_p1_offboard_ojama,
+            offboard_ojama=_offboard_p1,
         )
         draw_hidden_row_overlay(
             frame, last_p2_prob_board, P2_ROI_X, P2_ROI_Y,
-            offboard_ojama=last_p2_offboard_ojama,
+            offboard_ojama=_offboard_p2,
         )
         draw_global_info(
             frame, fi, t_sec, last_p1_state, last_p2_state,
@@ -1865,15 +1833,25 @@ def main() -> int:
         f"[hidden_row] prob_board non-None 取得回数: {_hidden_row_nonnull_count} frames "
         f"({'発火あり' if _hidden_row_nonnull_count > 0 else '発火なし (隠し段推論が起動しなかった)'})"
     )
-    # ojama_sent サマリ (score OCR 差分由来)
-    print(
-        f"[ojama_score] 1P が受けた OJ累積={_p1_total_ojama_sent}個 "
-        f"(最終 event={last_p1_ojama_sent}個, t={last_p1_ojama_event_sec:.2f}s)"
-    )
-    print(
-        f"[ojama_score] 2P が受けた OJ累積={_p2_total_ojama_sent}個 "
-        f"(最終 event={last_p2_ojama_sent}個, t={last_p2_ojama_event_sec:.2f}s)"
-    )
+    # ojama_sent サマリ (OjamaAccountingTracker 由来)
+    if _last_snap is not None:
+        print(
+            f"[ojama_score] 1P が受けた OJ累積(generated by 2P)={_last_snap.total_generated_by_p2}個 "
+            f"(最終 event={last_p1_ojama_sent}個, t={last_p1_ojama_event_sec:.2f}s)"
+        )
+        print(
+            f"[ojama_score] 2P が受けた OJ累積(generated by 1P)={_last_snap.total_generated_by_p1}個 "
+            f"(最終 event={last_p2_ojama_sent}個, t={last_p2_ojama_event_sec:.2f}s)"
+        )
+    else:
+        print(
+            f"[ojama_score] 1P が受けた OJ: 最終 event={last_p1_ojama_sent}個, "
+            f"t={last_p1_ojama_event_sec:.2f}s"
+        )
+        print(
+            f"[ojama_score] 2P が受けた OJ: 最終 event={last_p2_ojama_sent}個, "
+            f"t={last_p2_ojama_event_sec:.2f}s"
+        )
     if board_log_fp is not None:
         board_log_fp.close()
         print(f"[done] board log saved")
