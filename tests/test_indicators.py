@@ -20,7 +20,7 @@ from src.board import (
     Board,
 )
 from src.chain import ChainSimulator
-from src.indicators import (
+from src.old.indicators import (
     ALL_INDICATOR_NAMES,
     INDICATOR_DEATH_RISK,
     INDICATOR_EXTENSION,
@@ -500,7 +500,7 @@ class TestIncomingOjamaPressureIndicator:
 
     def test_zero_incoming_zero_score(self):
         """incoming_ojama=0 はスコア 0.0 を返す。"""
-        from src.indicators import (
+        from src.old.indicators import (
             INDICATOR_INCOMING_OJAMA,
             IncomingOjamaPressureIndicator,
         )
@@ -512,7 +512,7 @@ class TestIncomingOjamaPressureIndicator:
 
     def test_full_offset_clamps_to_one(self):
         """incoming_ojama=72 (=MAX_OJAMA_OFFSET) でスコア 1.0、超過時もクランプ。"""
-        from src.indicators import (
+        from src.old.indicators import (
             MAX_OJAMA_OFFSET,
             IncomingOjamaPressureIndicator,
         )
@@ -524,21 +524,21 @@ class TestIncomingOjamaPressureIndicator:
 
     def test_negative_input_treated_as_zero(self):
         """負値の incoming_ojama は 0 として扱う。"""
-        from src.indicators import IncomingOjamaPressureIndicator
+        from src.old.indicators import IncomingOjamaPressureIndicator
         ind = IncomingOjamaPressureIndicator()
         result = ind.compute(make_empty_board(), incoming_ojama=-10)
         assert result.score == 0.0
 
     def test_partial_score_proportional(self):
         """incoming_ojama=36 (=72/2) はスコア 0.5。"""
-        from src.indicators import IncomingOjamaPressureIndicator
+        from src.old.indicators import IncomingOjamaPressureIndicator
         ind = IncomingOjamaPressureIndicator()
         result = ind.compute(make_empty_board(), incoming_ojama=36)
         assert result.score == pytest.approx(0.5, abs=0.01)
 
     def test_calculator_includes_incoming_ojama(self):
         """compute_all() が incoming_ojama 引数を受け取り、結果に反映する。"""
-        from src.indicators import INDICATOR_INCOMING_OJAMA
+        from src.old.indicators import INDICATOR_INCOMING_OJAMA
         calc = IndicatorCalculator()
         result = calc.compute_all(
             make_empty_board(), incoming_ojama=72,

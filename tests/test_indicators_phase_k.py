@@ -10,7 +10,7 @@ import pytest
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_RED, Board
 from src.chain import ChainSimulator
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_ISOLATED_PUYO,
     INDICATOR_OPPONENT_OFFSET,
     INDICATOR_POST_OJAMA_HEALTH,

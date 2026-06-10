@@ -19,7 +19,7 @@ from src.board import (
     COLOR_YELLOW,
     Board,
 )
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_NEXT_ACCEPTANCE,
     NEXT_ACCEPTANCE_NEUTRAL,
     IndicatorCalculator,
@@ -130,7 +130,7 @@ class TestComputeAllNext:
 
     def test_compute_all_preserves_existing_indicators(self):
         """既存 8 指標 + 拡張 4 指標が同時に計算される (互換性確認)。"""
-        from src.indicators import ALL_INDICATOR_NAMES
+        from src.old.indicators import ALL_INDICATOR_NAMES
         calc = IndicatorCalculator()
         result = calc.compute_all(
             make_almost_chain_board(),
@@ -238,13 +238,13 @@ class TestPlacePair:
 class TestScorerIntegration:
     def test_default_weights_includes_next_acceptance(self):
         """Scorer の DEFAULT_WEIGHTS に next_acceptance が含まれる。"""
-        from src.scorer import DEFAULT_WEIGHTS
+        from src.old.scorer import DEFAULT_WEIGHTS
         assert INDICATOR_NEXT_ACCEPTANCE in DEFAULT_WEIGHTS
         assert DEFAULT_WEIGHTS[INDICATOR_NEXT_ACCEPTANCE] == 0.6
 
     def test_scorer_handles_next_acceptance(self):
         """Scorer は next_acceptance の差分を total_score に反映する。"""
-        from src.scorer import Scorer
+        from src.old.scorer import Scorer
         s = Scorer()
         # 1P が next_acceptance 高、2P が低
         p1 = IndicatorSet(results={}, next_acceptance=1.0)
@@ -255,8 +255,8 @@ class TestScorerIntegration:
 
     def test_scorer_breakdown_excludes_next_acceptance(self):
         """next_acceptance は breakdown には含まれない (互換性確保)。"""
-        from src.indicators import ALL_INDICATOR_NAMES
-        from src.scorer import Scorer
+        from src.old.indicators import ALL_INDICATOR_NAMES
+        from src.old.scorer import Scorer
         s = Scorer()
         p1 = IndicatorSet(results={}, next_acceptance=0.5)
         p2 = IndicatorSet(results={}, next_acceptance=0.5)

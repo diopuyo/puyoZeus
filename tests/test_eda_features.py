@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from scripts.eda_features import (
+from scripts.old.eda_features import (
     REDUNDANCY_THRESHOLD,
     correlations_per_phase,
     find_redundant_pairs,
@@ -24,7 +24,7 @@ from scripts.eda_features import (
     plot_pairwise_heatmap,
     write_report,
 )
-from scripts.generate_training_dataset import (
+from scripts.old.generate_training_dataset import (
     DEFAULT_TIME_PHASES,
     FEATURE_NAMES,
 )

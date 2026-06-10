@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.tune_weights import (
+from scripts.old.tune_weights import (
     GRID_SEARCH_TARGETS,
     WEIGHT_GRID,
     MatchSample,
@@ -21,8 +21,8 @@ from scripts.tune_weights import (
     load_winners,
     per_indicator_accuracy,
 )
-from src.indicators import ALL_INDICATOR_NAMES
-from src.scorer import DEFAULT_WEIGHTS
+from src.old.indicators import ALL_INDICATOR_NAMES
+from src.old.scorer import DEFAULT_WEIGHTS
 
 
 # ============================

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def main() -> int:
-    from scripts.generate_training_dataset import (
+    from scripts.old.generate_training_dataset import (
         extract_one_sample,
         extract_video_rows,
         _detect_next_pairs,

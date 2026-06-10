@@ -16,8 +16,8 @@ from src.board import (
     COLOR_RED,
     Board,
 )
-from src.form_templates import GTR_TEMPLATE
-from src.indicators import (
+from src.old.form_templates import GTR_TEMPLATE
+from src.old.indicators import (
     GTR_ORIENTATION_BACK,
     GTR_ORIENTATION_FREE,
     GTR_ORIENTATION_FRONT,
@@ -45,7 +45,7 @@ def _build_gtr_template_board(mirror: bool = False) -> Board:
 
     mirror=True で _mirror_template_cells と一致するレイアウト。
     """
-    from src.form_templates import _mirror_template_cells
+    from src.old.form_templates import _mirror_template_cells
     color_map = {"A": COLOR_RED, "B": COLOR_BLUE, "C": COLOR_GREEN}
     grid = [[COLOR_EMPTY] * BOARD_COLS for _ in range(BOARD_ROWS)]
     cells = GTR_TEMPLATE.cells

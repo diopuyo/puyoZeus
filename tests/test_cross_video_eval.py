@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.cross_video_eval import (
+from scripts.old.cross_video_eval import (
     SAMPLE_MODE,
     VIDEO_IDS,
     build_summary,
@@ -19,9 +19,9 @@ from scripts.cross_video_eval import (
     grid_search_per_video,
     video_paths,
 )
-from scripts.tune_weights import MatchSample
-from src.indicators import ALL_INDICATOR_NAMES
-from src.scorer import DEFAULT_WEIGHTS
+from scripts.old.tune_weights import MatchSample
+from src.old.indicators import ALL_INDICATOR_NAMES
+from src.old.scorer import DEFAULT_WEIGHTS
 
 
 def _empty_scores() -> dict[str, float]:

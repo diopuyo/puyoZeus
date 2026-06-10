@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import torch
 
-from scripts.phase_h4_1_train import (
+from scripts.old.phase_h4_1_train import (
     BACKBONE_DIMS,
     DeepTabularMLP,
     EMBEDDING_DIM,

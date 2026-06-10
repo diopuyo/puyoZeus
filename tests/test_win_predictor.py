@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.state_features import TOTAL_FEATURE_DIM
-from src.win_predictor import WinPredictorMLP
+from src.old.state_features import TOTAL_FEATURE_DIM
+from src.old.win_predictor import WinPredictorMLP
 
 
 def test_predictor_construction() -> None:
