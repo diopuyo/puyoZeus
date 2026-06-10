@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.indicators import (
+from src.old.indicators import (
     ALL_INDICATOR_NAMES,
     INDICATOR_DEATH_RISK,
     INDICATOR_MAIN_CHAIN,
     IndicatorResult,
     IndicatorSet,
 )
-from src.scorer import (
+from src.old.scorer import (
     ADVANTAGE_EVEN,
     DEFAULT_WEIGHTS,
     EVEN_THRESHOLD,
@@ -267,14 +267,14 @@ class TestLearnedWeightSets:
 
     def test_default_weight_set_matches_default_weights(self):
         """weight_set='DEFAULT' と weights 未指定が等価。"""
-        from src.scorer import WEIGHT_SET_DEFAULT
+        from src.old.scorer import WEIGHT_SET_DEFAULT
         s_default = Scorer()
         s_named = Scorer(weight_set=WEIGHT_SET_DEFAULT)
         assert s_default._weights == s_named._weights
 
     def test_learned_global_weight_set_loads(self):
         """LEARNED_GLOBAL を指定して Scorer を作れる。"""
-        from src.scorer import (
+        from src.old.scorer import (
             LEARNED_WEIGHTS_GLOBAL,
             WEIGHT_SET_LEARNED_GLOBAL,
         )
@@ -283,7 +283,7 @@ class TestLearnedWeightSets:
             assert s._weights[name] == val
 
     def test_learned_midpoint_weight_set_loads(self):
-        from src.scorer import (
+        from src.old.scorer import (
             LEARNED_WEIGHTS_MIDPOINT,
             WEIGHT_SET_LEARNED_MIDPOINT,
         )
@@ -297,7 +297,7 @@ class TestLearnedWeightSets:
 
     def test_weights_argument_overrides_weight_set(self):
         """weights 引数を渡せば weight_set より優先される。"""
-        from src.scorer import WEIGHT_SET_LEARNED_GLOBAL
+        from src.old.scorer import WEIGHT_SET_LEARNED_GLOBAL
         custom = {INDICATOR_MAIN_CHAIN: 99.0}
         s = Scorer(
             weights=custom, weight_set=WEIGHT_SET_LEARNED_GLOBAL,
@@ -306,14 +306,14 @@ class TestLearnedWeightSets:
 
     def test_learned_global_score_runs(self):
         """LEARNED_GLOBAL でも score() がエラーなく動く。"""
-        from src.scorer import WEIGHT_SET_LEARNED_GLOBAL
+        from src.old.scorer import WEIGHT_SET_LEARNED_GLOBAL
         s = Scorer(weight_set=WEIGHT_SET_LEARNED_GLOBAL)
         r = s.score(ones(), zeros())
         assert SCORE_RANGE_MIN <= r.total_score <= SCORE_RANGE_MAX
 
     def test_registry_contains_all_learned_sets(self):
         """WEIGHT_SET_REGISTRY に主要セットが登録されている。"""
-        from src.scorer import WEIGHT_SET_REGISTRY
+        from src.old.scorer import WEIGHT_SET_REGISTRY
         assert "DEFAULT" in WEIGHT_SET_REGISTRY
         assert "LEARNED_GLOBAL" in WEIGHT_SET_REGISTRY
         assert "LEARNED_MIDPOINT" in WEIGHT_SET_REGISTRY
@@ -328,7 +328,7 @@ class TestRecommendedWeights:
 
     def test_recommended_loads(self):
         """weight_set='RECOMMENDED' で Scorer を構築できる。"""
-        from src.scorer import (
+        from src.old.scorer import (
             LEARNED_WEIGHTS_RECOMMENDED,
             WEIGHT_SET_RECOMMENDED,
         )
@@ -338,7 +338,7 @@ class TestRecommendedWeights:
 
     def test_recommended_redundant_zeroed(self):
         """ablation で冗長と判定された指標は重み 0 に固定。"""
-        from src.scorer import LEARNED_WEIGHTS_RECOMMENDED
+        from src.old.scorer import LEARNED_WEIGHTS_RECOMMENDED
         zero_features = (
             "next_acceptance", "offset_power", "touching_density",
             "tail_height", "second_chain_potential", "key_flexibility",
@@ -349,13 +349,13 @@ class TestRecommendedWeights:
 
     def test_recommended_non_zero_count(self):
         """非ゼロ特徴は 7 個 (RECOMMENDED の最小構成)。"""
-        from src.scorer import LEARNED_WEIGHTS_RECOMMENDED
+        from src.old.scorer import LEARNED_WEIGHTS_RECOMMENDED
         non_zero = sum(1 for v in LEARNED_WEIGHTS_RECOMMENDED.values() if v != 0.0)
         assert non_zero == 7
 
     def test_recommended_score_runs(self):
         """RECOMMENDED でも score() がエラーなく動く。"""
-        from src.scorer import WEIGHT_SET_RECOMMENDED
+        from src.old.scorer import WEIGHT_SET_RECOMMENDED
         s = Scorer(weight_set=WEIGHT_SET_RECOMMENDED)
         r = s.score(ones(), zeros())
         assert SCORE_RANGE_MIN <= r.total_score <= SCORE_RANGE_MAX

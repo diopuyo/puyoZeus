@@ -17,13 +17,13 @@ from src.board import (
     COLOR_YELLOW,
     Board,
 )
-from src.form_templates import (
+from src.old.form_templates import (
     FRON_TEMPLATE,
     SULLEN_GTR_TEMPLATE,
     best_template_score,
     template_score,
 )
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_FORM_FRON,
     INDICATOR_FORM_SULLEN_GTR,
     EXTRA_INDICATOR_NAMES,
@@ -307,7 +307,7 @@ def test_existing_learned_weights_unchanged_after_form_addition() -> None:
     backwards compat: dict 形式の既存重みは新指標キーが無いことを前提とし、
     Scorer._extra_diff は self._weights に存在しないキーを skip する。
     """
-    from src.scorer import LEARNED_WEIGHTS_GLOBAL, Scorer
+    from src.old.scorer import LEARNED_WEIGHTS_GLOBAL, Scorer
     # 新指標は LEARNED_WEIGHTS_GLOBAL に含まれない
     assert INDICATOR_FORM_SULLEN_GTR not in LEARNED_WEIGHTS_GLOBAL
     assert INDICATOR_FORM_FRON not in LEARNED_WEIGHTS_GLOBAL

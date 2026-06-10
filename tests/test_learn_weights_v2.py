@@ -14,12 +14,12 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from scripts.eda_features import Dataset, load_dataset  # noqa: E402
-from scripts.generate_training_dataset import (  # noqa: E402
+from scripts.old.eda_features import Dataset, load_dataset  # noqa: E402
+from scripts.old.generate_training_dataset import (  # noqa: E402
     DEFAULT_TIME_PHASES,
     FEATURE_NAMES,
 )
-from scripts.learn_weights_v2 import (  # noqa: E402
+from scripts.old.learn_weights_v2 import (  # noqa: E402
     accuracy,
     best_by_test_acc,
     default_weights_vector,

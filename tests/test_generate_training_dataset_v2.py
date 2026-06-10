@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.generate_training_dataset import MatchMeta
-from scripts.generate_training_dataset_v2 import (
+from scripts.old.generate_training_dataset import MatchMeta
+from scripts.old.generate_training_dataset_v2 import (
     DEFAULT_TIME_PHASES_V2,
     PHASE_DEFINITIONS,
     TIME_PHASE_END_M5,

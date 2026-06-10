@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from scripts.learn_weights_lr import (  # noqa: E402
+from scripts.old.learn_weights_lr import (  # noqa: E402
     DEFAULT_REGULARIZATION,
     LR_FEATURE_NAMES,
     FeatureMatrix,
@@ -22,8 +22,8 @@ from scripts.learn_weights_lr import (  # noqa: E402
     predict_with_weights,
     run_holdout_lr,
 )
-from scripts.tune_weights import MatchSample  # noqa: E402
-from src.indicators import ALL_INDICATOR_NAMES  # noqa: E402
+from scripts.old.tune_weights import MatchSample  # noqa: E402
+from src.old.indicators import ALL_INDICATOR_NAMES  # noqa: E402
 
 
 # ============================

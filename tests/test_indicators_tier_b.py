@@ -16,7 +16,7 @@ from src.board import (
     Board,
 )
 from src.chain import ChainSimulator
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_BASE_FLATNESS,
     INDICATOR_PLANNING_ENTROPY,
     INDICATOR_STRUCTURE_SOLIDITY,
@@ -253,7 +253,7 @@ def test_calc_compute_all_tier_b() -> None:
 
 def test_calc_extra_indicator_names_includes_tier_b() -> None:
     """EXTRA_INDICATOR_NAMES に Tier B 3 指標が含まれる。"""
-    from src.indicators import EXTRA_INDICATOR_NAMES
+    from src.old.indicators import EXTRA_INDICATOR_NAMES
     assert INDICATOR_PLANNING_ENTROPY in EXTRA_INDICATOR_NAMES
     assert INDICATOR_STRUCTURE_SOLIDITY in EXTRA_INDICATOR_NAMES
     assert INDICATOR_BASE_FLATNESS in EXTRA_INDICATOR_NAMES

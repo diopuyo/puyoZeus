@@ -16,7 +16,7 @@ from src.board import (
     COLOR_RED,
     Board,
 )
-from src.indicators import (
+from src.old.indicators import (
     EXTRA_INDICATOR_NAMES,
     INDICATOR_NEXT_ACCEPTANCE,
     INDICATOR_ROTATION_SKILL,

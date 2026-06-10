@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from src.sampling_config import EVAL_INTERVAL_SEC
-from src.timeline_analyzer import (
+from src.old.timeline_analyzer import (
     ChainEventSummary,
     MatchSegment,
     ScorePoint,

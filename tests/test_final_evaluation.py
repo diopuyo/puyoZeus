@@ -19,7 +19,7 @@ _PROJ_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJ_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJ_ROOT))
 
-from scripts.final_evaluation import (  # noqa: E402
+from scripts.old.final_evaluation import (  # noqa: E402
     FeatureRow,
     build_predictors,
     compute_diff_with_weights,
@@ -29,11 +29,11 @@ from scripts.final_evaluation import (  # noqa: E402
     make_static_predictor,
     phase_to_elapsed,
 )
-from src.indicators import (  # noqa: E402
+from src.old.indicators import (  # noqa: E402
     INDICATOR_DEATH_RISK,
     INDICATOR_MAIN_CHAIN,
 )
-from src.scorer import (  # noqa: E402
+from src.old.scorer import (  # noqa: E402
     DEFAULT_WEIGHTS,
     LEARNED_WEIGHTS_GLOBAL,
     WEIGHT_MODE_LEARNED,

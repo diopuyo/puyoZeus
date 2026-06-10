@@ -287,7 +287,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
 
 def _cmd_timeline(args: argparse.Namespace) -> int:
     """動画を時系列解析する (timeline_analyzer 連携)。"""
-    from src.timeline_analyzer import TimelineAnalyzer, to_json
+    from src.old.timeline_analyzer import TimelineAnalyzer, to_json
 
     input_path = Path(args.input)
     if not input_path.exists():

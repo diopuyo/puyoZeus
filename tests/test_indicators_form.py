@@ -14,7 +14,7 @@ from src.board import (
     COLOR_RED,
     Board,
 )
-from src.indicators import (
+from src.old.indicators import (
     FORM_TEMPLATE_INDICATOR_NAMES,
     INDICATOR_FORM_GTR,
     INDICATOR_FORM_LLR,
@@ -136,13 +136,13 @@ def test_form_template_indicator_names_count() -> None:
     assert INDICATOR_FORM_STAIRCASE in FORM_TEMPLATE_INDICATOR_NAMES
     assert INDICATOR_FORM_ZABUTON in FORM_TEMPLATE_INDICATOR_NAMES
     # B-1.b 追加 (2026-05-09)
-    from src.indicators import INDICATOR_FORM_FRON, INDICATOR_FORM_SULLEN_GTR
+    from src.old.indicators import INDICATOR_FORM_FRON, INDICATOR_FORM_SULLEN_GTR
     assert INDICATOR_FORM_SULLEN_GTR in FORM_TEMPLATE_INDICATOR_NAMES
     assert INDICATOR_FORM_FRON in FORM_TEMPLATE_INDICATOR_NAMES
 
 
 def test_extra_indicator_names_includes_form() -> None:
     """EXTRA_INDICATOR_NAMES に 4 形テンプレ指標が含まれる."""
-    from src.indicators import EXTRA_INDICATOR_NAMES
+    from src.old.indicators import EXTRA_INDICATOR_NAMES
     for name in FORM_TEMPLATE_INDICATOR_NAMES:
         assert name in EXTRA_INDICATOR_NAMES, f"{name} が EXTRA に含まれない"

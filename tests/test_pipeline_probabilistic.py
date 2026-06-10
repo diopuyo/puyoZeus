@@ -20,7 +20,7 @@ from src.board import (
 )
 from src.board_state_machine import BoardState
 from src.hidden_row_inferrer import infer_hidden_row
-from src.indicators import IndicatorCalculator
+from src.old.indicators import IndicatorCalculator
 from src.match_state import MatchState
 from src.probabilistic_board import ProbabilisticBoard
 from src.recognition_pipeline import RecognitionPipeline

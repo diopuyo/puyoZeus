@@ -144,7 +144,7 @@ class TestRenderTransparent:
 
 class TestLabels:
     def test_all_indicators_have_japanese_labels(self):
-        from src.indicators import ALL_INDICATOR_NAMES
+        from src.old.indicators import ALL_INDICATOR_NAMES
 
         for name in ALL_INDICATOR_NAMES:
             assert name in INDICATOR_LABELS_JA

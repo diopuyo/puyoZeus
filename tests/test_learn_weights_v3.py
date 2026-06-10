@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from scripts.eda_features import Dataset
-from scripts.learn_weights_v3 import (
+from scripts.old.eda_features import Dataset
+from scripts.old.learn_weights_v3 import (
     DROPPED_FEATURES,
     PHYSICALLY_NEGATIVE_FEATURES,
     PHYSICALLY_POSITIVE_FEATURES,
@@ -18,7 +18,7 @@ from scripts.learn_weights_v3 import (
     reduce_features,
     reduced_to_dataset,
 )
-from scripts.learn_weights_v2 import Split, fit_lr_eval
+from scripts.old.learn_weights_v2 import Split, fit_lr_eval
 
 
 def _make_full_dataset(seed: int = 0) -> Dataset:
@@ -29,7 +29,7 @@ def _make_full_dataset(seed: int = 0) -> Dataset:
     スモークなので、十分な信号 (label = main_chain > 0) を与えれば
     Ridge / ElasticNet で test_acc > 0.5 を達成可能。
     """
-    from scripts.generate_training_dataset import FEATURE_NAMES
+    from scripts.old.generate_training_dataset import FEATURE_NAMES
     rng = np.random.default_rng(seed)
     n = 400
     X = rng.standard_normal((n, len(FEATURE_NAMES)))

@@ -27,7 +27,7 @@ from src.board import (
     Board,
 )
 from src.chain import ChainSimulator
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_CHAIN_TIMING,
     INDICATOR_KEY_FLEXIBILITY,
     INDICATOR_SUB_CHAIN_INDEP,

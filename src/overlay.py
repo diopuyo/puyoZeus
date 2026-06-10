@@ -15,8 +15,8 @@ import cv2
 import numpy as np
 
 from src.analyzer import AnalysisResult
-from src.indicators import ALL_INDICATOR_NAMES
-from src.scorer import (
+from src.old.indicators import ALL_INDICATOR_NAMES
+from src.old.scorer import (
     ADVANTAGE_EVEN,
     PLAYER_1P,
     SCORE_RANGE_MAX,

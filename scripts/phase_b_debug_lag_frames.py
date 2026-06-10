@@ -40,7 +40,7 @@ from src.image_reader import (  # noqa: E402
     DEFAULT_P1_REGION, DEFAULT_P2_REGION, BoardRegion,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
-from scripts.phase_b_render_review_video import (  # noqa: E402
+from scripts.old.phase_b_render_review_video import (  # noqa: E402
     COLOR_BGR, STATE_LABEL, draw_top_hud,
 )
 

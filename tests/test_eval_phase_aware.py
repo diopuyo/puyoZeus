@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.eval_ensemble import (
+from scripts.old.eval_ensemble import (
     evaluate_alpha,
     grid_search_alpha,
     weighted_diff,
 )
-from scripts.eval_phase_aware import (
+from scripts.old.eval_phase_aware import (
     FeatureRow,
     evaluate_strategy,
     load_feature_rows,
@@ -24,7 +24,7 @@ from scripts.eval_phase_aware import (
     predict_with_weights,
     run_all_strategies,
 )
-from src.scorer import (
+from src.old.scorer import (
     DEFAULT_WEIGHTS,
     LEARNED_WEIGHTS_GLOBAL,
     PhaseAwareScorer,

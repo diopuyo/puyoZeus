@@ -23,7 +23,7 @@ from src.board import (
     COLOR_YELLOW,
     Board,
 )
-from src.indicators import (
+from src.old.indicators import (
     INDICATOR_COLOR_VARIANCE,
     INDICATOR_SHAPE_SCORE,
     INDICATOR_TAIL_HEIGHT,

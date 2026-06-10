@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from scripts.eda_features import Dataset
-from scripts.multicollinearity_analysis import (
+from scripts.old.eda_features import Dataset
+from scripts.old.multicollinearity_analysis import (
     CORR_CLUSTER_THRESHOLD,
     PCA_VAR_THRESHOLD,
     cluster_by_correlation,

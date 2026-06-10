@@ -22,7 +22,7 @@ import numpy as np
 
 from src.patch_classifier import CnnPatchClassifier
 from src.tta import TTAClassifier
-from scripts.e2e_validate import _pick_holdout_npz
+from scripts.old.e2e_validate import _pick_holdout_npz
 
 NAME_MAP = {0: "空", 1: "赤", 2: "青", 3: "緑", 4: "黄", 5: "紫", 9: "お邪魔"}
 

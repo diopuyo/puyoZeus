@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.generate_training_dataset import (
+from scripts.old.generate_training_dataset import (
     DEFAULT_TIME_PHASES,
     FEATURE_NAMES,
     MIN_MATCH_DURATION_SEC,

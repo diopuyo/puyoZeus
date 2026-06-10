@@ -30,7 +30,7 @@ from src.image_reader import (  # noqa: E402
     DEFAULT_P1_REGION, DEFAULT_P2_REGION,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
-from scripts.phase_b_render_review_video import (  # noqa: E402
+from scripts.old.phase_b_render_review_video import (  # noqa: E402
     draw_board_overlay, draw_top_hud, get_match1, select_cnn_model,
 )
 

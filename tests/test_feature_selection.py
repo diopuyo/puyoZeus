@@ -12,8 +12,8 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from scripts.eda_features import Dataset, load_dataset  # noqa: E402
-from scripts.feature_selection import (  # noqa: E402
+from scripts.old.eda_features import Dataset, load_dataset  # noqa: E402
+from scripts.old.feature_selection import (  # noqa: E402
     FEATURE_COUNT_GRID,
     L1_C_GRID,
     L1SelectionResult,
@@ -27,11 +27,11 @@ from scripts.feature_selection import (  # noqa: E402
     select_via_l1,
     sweep_pareto,
 )
-from scripts.generate_training_dataset import (  # noqa: E402
+from scripts.old.generate_training_dataset import (  # noqa: E402
     DEFAULT_TIME_PHASES,
     FEATURE_NAMES,
 )
-from scripts.learn_weights_v2 import random_split  # noqa: E402
+from scripts.old.learn_weights_v2 import random_split  # noqa: E402
 
 
 def _make_csv(tmp_path: Path, n: int = 150) -> Path:

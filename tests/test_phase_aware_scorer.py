@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.indicators import (
+from src.old.indicators import (
     ALL_INDICATOR_NAMES,
     INDICATOR_DEATH_RISK,
     INDICATOR_MAIN_CHAIN,
     IndicatorResult,
     IndicatorSet,
 )
-from src.scorer import (
+from src.old.scorer import (
     DEFAULT_WEIGHTS,
     LEARNED_WEIGHTS_END,
     LEARNED_WEIGHTS_GLOBAL,
