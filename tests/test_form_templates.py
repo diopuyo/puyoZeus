@@ -11,7 +11,7 @@ from src.board import (
     COLOR_YELLOW,
     Board,
 )
-from src.form_templates import (
+from src.old.form_templates import (
     ALL_FORM_TEMPLATES,
     FRON_TEMPLATE,
     GTR_TEMPLATE,

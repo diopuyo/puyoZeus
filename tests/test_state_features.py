@@ -10,7 +10,7 @@ from src.board import (
     COLOR_UNKNOWN,
     Board,
 )
-from src.state_features import (
+from src.old.state_features import (
     BOARD_FEATURE_DIM,
     NUM_COLOR_CLASSES,
     OJAMA_MAX,

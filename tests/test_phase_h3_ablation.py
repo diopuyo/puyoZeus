@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from scripts.phase_h3_ablation import (
+from scripts.old.phase_h3_ablation import (
     TIER_A_END,
     TIER_B_END,
     TIER_C_END,

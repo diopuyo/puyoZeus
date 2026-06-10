@@ -12,19 +12,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from src.indicators import (
+from src.old.indicators import (
     ALL_INDICATOR_NAMES,
     IndicatorResult,
     IndicatorSet,
 )
-from src.scorer import (
+from src.old.scorer import (
     DEFAULT_WEIGHTS,
     SCORE_RANGE_MAX,
     SCORE_RANGE_MIN,
     ScoreResult,
     Scorer,
 )
-from src.model import (
+from src.old.model import (
     DEFAULT_EPOCHS,
     FEATURE_DIM,
     LinearScorerModel,

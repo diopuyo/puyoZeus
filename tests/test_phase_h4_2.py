@@ -164,7 +164,7 @@ def test_siamese_gradient_flows_to_both_heads() -> None:
 # ============================
 def test_boards_to_onehot_batch_shape() -> None:
     """(N, ROWS, COLS) → (N, N_COLOR_CHANNELS, ROWS, COLS)."""
-    from scripts.phase_h4_2_train import boards_to_onehot_batch
+    from scripts.old.phase_h4_2_train import boards_to_onehot_batch
     n = 5
     boards = np.zeros((n, BOARD_ROWS, BOARD_COLS), dtype=np.uint8)
     boards[0, 12, 0] = 1  # 1 セル赤
@@ -176,7 +176,7 @@ def test_boards_to_onehot_batch_shape() -> None:
 
 def test_video_holdout_split_no_leak() -> None:
     """train/test に同一動画 ID が混ざらない."""
-    from scripts.phase_h4_2_train import video_holdout_split
+    from scripts.old.phase_h4_2_train import video_holdout_split
     video_ids = np.array([f"v{i % 8:02d}" for i in range(160)])
     tr, te = video_holdout_split(video_ids, n_test=3, seed=0)
     assert (tr & te).sum() == 0
@@ -188,7 +188,7 @@ def test_video_holdout_split_no_leak() -> None:
 
 def test_multi_task_loss_returns_scalar() -> None:
     """合成 batch で loss が scalar tensor + 内訳 dict."""
-    from scripts.phase_h4_2_train import multi_task_loss
+    from scripts.old.phase_h4_2_train import multi_task_loss
     bs = 6
     wl = torch.randn(bs, requires_grad=True)
     yb = torch.randint(0, 2, (bs,)).float()
@@ -202,7 +202,7 @@ def test_multi_task_loss_returns_scalar() -> None:
 
 def test_multi_task_loss_weights_apply_zero() -> None:
     """α=β=0 で total loss = 0."""
-    from scripts.phase_h4_2_train import multi_task_loss
+    from scripts.old.phase_h4_2_train import multi_task_loss
     bs = 4
     wl = torch.zeros(bs)
     yb = torch.zeros(bs)
@@ -214,7 +214,7 @@ def test_multi_task_loss_weights_apply_zero() -> None:
 
 def test_standardize_train_mean_zero_std_one() -> None:
     """train で fit すると train の平均≈0、標準偏差≈1."""
-    from scripts.phase_h4_2_train import standardize
+    from scripts.old.phase_h4_2_train import standardize
     rng = np.random.RandomState(0)
     X_tr = rng.randn(80, 5).astype(np.float32) * 3 + 7
     X_te = rng.randn(20, 5).astype(np.float32)
@@ -229,7 +229,7 @@ def test_standardize_train_mean_zero_std_one() -> None:
 # ============================
 def test_save_board_npz_roundtrip(tmp_path) -> None:
     """save_board_npz で書いた NPZ が想定 key を含み、形状が正しい."""
-    from scripts.phase_h2_collect_board import save_board_npz, BOARD_GRID_ROWS, BOARD_GRID_COLS
+    from scripts.old.phase_h2_collect_board import save_board_npz, BOARD_GRID_ROWS, BOARD_GRID_COLS
     rows = [
         {"video_id": "01", "match_idx": 1, "frame_idx": 0,
          "timestamp": 1.0, "label": 1},
@@ -254,7 +254,7 @@ def test_save_board_npz_roundtrip(tmp_path) -> None:
 
 def test_grid_or_zero_handles_none() -> None:
     """_grid_or_zero(None) は zero ndarray を返す."""
-    from scripts.phase_h2_collect_board import _grid_or_zero, BOARD_GRID_ROWS, BOARD_GRID_COLS
+    from scripts.old.phase_h2_collect_board import _grid_or_zero, BOARD_GRID_ROWS, BOARD_GRID_COLS
     out = _grid_or_zero(None)
     assert out.shape == (BOARD_GRID_ROWS, BOARD_GRID_COLS)
     assert out.dtype == np.uint8

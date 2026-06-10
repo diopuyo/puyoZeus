@@ -15,14 +15,14 @@ from __future__ import annotations
 import pytest
 
 from src.board import COLOR_RED, Board
-from src.indicators import (
+from src.old.indicators import (
     ALL_INDICATOR_NAMES,
     EXTRA_INDICATOR_NAMES,
     IndicatorCalculator,
     IndicatorResult,
     IndicatorSet,
 )
-from src.timeseries_indicator_wrapper import (
+from src.old.timeseries_indicator_wrapper import (
     ALL_AXES,
     AXIS_ACCEL,
     AXIS_DELTA,

@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from scripts.eda_features import Dataset
-from scripts.per_match_prediction import (
+from scripts.old.eda_features import Dataset
+from scripts.old.per_match_prediction import (
     EVAL_PHASE_END,
     EVAL_PHASE_MID,
     Strategy,
@@ -23,7 +23,7 @@ from scripts.per_match_prediction import (
 
 def _make_dataset() -> Dataset:
     """midpoint と end_minus_5 を含む簡単なデータ。"""
-    from scripts.generate_training_dataset import FEATURE_NAMES
+    from scripts.old.generate_training_dataset import FEATURE_NAMES
     rng = np.random.default_rng(0)
     n = 60
     X = rng.standard_normal((n, len(FEATURE_NAMES)))

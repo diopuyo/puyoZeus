@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scripts.ablation_study import (
+from scripts.old.ablation_study import (
     IMPORTANT_DROP_THRESHOLD,
     NEGLIGIBLE_DROP_THRESHOLD,
     V3_DROPPED_FEATURES,
@@ -19,8 +19,8 @@ from scripts.ablation_study import (
     run_ablation,
     video_holdout_split,
 )
-from scripts.eda_features import Dataset
-from scripts.generate_training_dataset import FEATURE_NAMES
+from scripts.old.eda_features import Dataset
+from scripts.old.generate_training_dataset import FEATURE_NAMES
 
 
 # ============================

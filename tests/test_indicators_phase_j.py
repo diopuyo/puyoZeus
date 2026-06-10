@@ -11,7 +11,7 @@ import pytest
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_RED, Board
 from src.chain import ChainSimulator
-from src.indicators import (
+from src.old.indicators import (
     AdjacentHeightDiffIndicator,
     HighConnectionCountIndicator,
     INDICATOR_HEIGHT_DIFF,

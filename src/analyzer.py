@@ -18,8 +18,8 @@ import numpy as np
 from src.board import Board
 from src.chain import ChainResult, ChainSimulator
 from src.image_reader import ImageReader
-from src.indicators import IndicatorCalculator, IndicatorSet
-from src.scorer import ScoreResult, Scorer
+from src.old.indicators import IndicatorCalculator, IndicatorSet
+from src.old.scorer import ScoreResult, Scorer
 
 
 # ============================

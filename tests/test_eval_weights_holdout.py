@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.eval_weights_holdout import (
+from scripts.old.eval_weights_holdout import (
     DEFAULT_KFOLD_K,
     DEFAULT_TRAIN_RATIO,
     OVERFIT_GAP_THRESHOLD,
@@ -25,9 +25,9 @@ from scripts.eval_weights_holdout import (
     load_samples_from_cache,
     random_split,
 )
-from scripts.tune_weights import MatchSample, evaluate_weights, grid_search
-from src.indicators import ALL_INDICATOR_NAMES
-from src.scorer import DEFAULT_WEIGHTS
+from scripts.old.tune_weights import MatchSample, evaluate_weights, grid_search
+from src.old.indicators import ALL_INDICATOR_NAMES
+from src.old.scorer import DEFAULT_WEIGHTS
 
 
 # ============================

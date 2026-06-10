@@ -18,8 +18,8 @@ from src.board import (
     Board,
 )
 from src.chain import ChainSimulator
-from src.indicators import ROTATION_TRACKER_MAX_HISTORY
-from src.rotation_tracker import RotationTracker
+from src.old.indicators import ROTATION_TRACKER_MAX_HISTORY
+from src.old.rotation_tracker import RotationTracker
 
 
 # ============================
