@@ -32,6 +32,7 @@ from src.board import (  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.ojama_accounting import OjamaAccountingTracker, OjamaAccountSnapshot  # noqa: E402
 from src.probabilistic_board import ProbabilisticBoard  # noqa: E402
+from src.scoring import ojama_count_to_icons  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
 # ============================
@@ -356,6 +357,187 @@ def _put_shadow(
                 scale, (0, 0, 0), FONT_THICKNESS + 2, cv2.LINE_AA)
     cv2.putText(frame, text, (tx, ty), FONT,
                 scale, color, FONT_THICKNESS, cv2.LINE_AA)
+
+
+# ============================
+# 予告お邪魔 直感UI (2026-06-10 刷新)
+# ============================
+#
+# 目的: 算出した予告お邪魔個数を「人が一目で量を把握でき、画面の予告アイコン列と
+#       見比べて検証できる」UI にする。小さいテキストではなく大きな数字 + ゲームと
+#       同じお邪魔単位アイコン分解 (岩/連/小 等) + 左右優勢バーで表示する。
+
+# 予告パネルの配置オフセット (ROI 下端からの px)
+# 2026-06-10 大幅拡大: 旧デバッグ会計テキストを抑止し、盤面下の余白
+# (ROI 下端 Y=880 〜 画面下端 Y=1080、約 200px) を専有して一目で読める大きさに。
+_FC_PANEL_TOP_OFFSET_Y: int = 10       # パネル上端 (ROI 下端のすぐ下)
+_FC_PANEL_HEIGHT: int = 188            # パネル高さ (拡大)
+_FC_BIG_NUM_SCALE: float = 3.6         # 大きな予告数字のフォントスケール (拡大)
+_FC_LABEL_SCALE: float = 1.1           # "OJAMA" ラベルのフォントスケール
+_FC_ICON_SCALE: float = 1.05           # アイコン分解ラベルのフォントスケール (拡大)
+# パネル内レイアウト (px、パネル左上 px/py 基準)
+_FC_LABEL_DX: int = 14                 # "OJAMA" ラベル X オフセット
+_FC_LABEL_DY: int = 42                 # "OJAMA" ラベル Y オフセット
+_FC_NUM_DX: int = 12                   # 大きな数字 X オフセット
+_FC_NUM_DY: int = 138                  # 大きな数字 ベースライン Y オフセット
+_FC_ICON_DX: int = 160                 # アイコン分解 X オフセット (数字の右)
+_FC_ICON_DY: int = 92                  # アイコン分解 ベースライン Y オフセット
+_FC_OFF_DY: int = 138                  # 画面外あふれ ベースライン Y オフセット
+
+# アイコン名 → ASCII 短縮ラベル (ゲーム表示と対応: 王冠/月/星/岩/連(line)/小)
+# 注意: cv2 の FONT_HERSHEY は日本語グリフ非対応 (??? 化) のため ASCII 記号を使う。
+#   CR=crown(王冠/720) MN=moon(月/360) ST=star(星/180)
+#   RK=rock(岩/30) LN=line(連結/6) sm=small(小/1)
+_OJAMA_ICON_LABELS: dict[str, str] = {
+    "crown": "CR",   # 720 個 (王冠)
+    "moon": "MN",    # 360 個 (月)
+    "star": "ST",    # 180 個 (星)
+    "rock": "RK",    # 30 個 (岩)
+    "large": "LN",   # 6 個 (連結 line)
+    "small": "sm",   # 1 個 (小)
+}
+
+
+def _format_ojama_icons(count: int) -> str:
+    """forecast 個数をゲームと同じお邪魔単位に貪欲分解した文字列を返す.
+
+    scoring.ojama_count_to_icons (2026-04-27 ユーザ確定仕様) を流用。
+    例: 38 → "RKx1 LNx1 smx2" (= 岩x1 連x1 小x2)。0 のときは "-"。
+    cv2 が日本語非対応のため ASCII ラベル (RK/LN/sm 等) を使う。
+
+    Args:
+        count: 予告お邪魔個数 (>= 0)。
+
+    Returns:
+        "RKx1 LNx1 smx2" 形式の文字列 (アイコン無しなら "-")。
+    """
+    icons = ojama_count_to_icons(int(count))
+    if not icons:
+        return "-"
+    parts = [f"{_OJAMA_ICON_LABELS.get(name, name)}x{n}" for name, n in icons]
+    return " ".join(parts)
+
+
+def draw_ojama_forecast_panel(
+    frame: np.ndarray,
+    snap: OjamaAccountSnapshot | None,
+    side: str,
+    roi_x: int,
+    roi_y: int,
+) -> None:
+    """予告お邪魔個数を大きな数字 + 単位アイコン分解で盤面下に描画する.
+
+    構成 (盤面 ROI 下の専用パネル):
+        - 半透明黒背景パネル (視認性確保)
+        - 左: 大きな数字「予告 N」(危険度で色変化: 多いほど赤)
+        - 下段: ゲーム同単位アイコン分解「岩x1 連x1 小x2」(画面の予告列と直接照合)
+        - 画面外あふれ (offboard) があれば「画面外 +M」を赤で追記
+
+    Args:
+        frame: 描画対象フレーム (1920x1080 BGR)。
+        snap: OjamaAccountSnapshot (None 時はグレー "予告 --")。
+        side: "1P" または "2P"。
+        roi_x: 盤面 ROI 左端 X 座標。
+        roi_y: 盤面 ROI 上端 Y 座標。
+    """
+    px = roi_x
+    py = roi_y + ROI_H + _FC_PANEL_TOP_OFFSET_Y
+    # 半透明背景パネル
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (px, py), (px + ROI_W, py + _FC_PANEL_HEIGHT),
+                  (30, 30, 30), -1)
+    cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
+    cv2.rectangle(frame, (px, py), (px + ROI_W, py + _FC_PANEL_HEIGHT),
+                  (110, 110, 110), 1)
+
+    if snap is None:
+        _put_shadow(frame, "OJAMA --", px + _FC_LABEL_DX, py + _FC_NUM_DY,
+                    (120, 120, 120), _FC_BIG_NUM_SCALE)
+        return
+
+    forecast = snap.forecast_p1 if side == "1P" else snap.forecast_p2
+    offboard = snap.offboard_p1 if side == "1P" else snap.offboard_p2
+
+    # 危険度で大きな数字の色を変える (多いほど赤): 0=緑, 1-5=黄, 6-29=橙, 30+=赤
+    if forecast >= 30:
+        num_bgr: tuple[int, int, int] = (40, 40, 240)    # 赤 (致命)
+    elif forecast >= 6:
+        num_bgr = (40, 130, 250)                          # 橙 (危険)
+    elif forecast >= 1:
+        num_bgr = (40, 210, 240)                          # 黄 (注意)
+    else:
+        num_bgr = (150, 230, 150)                         # 緑 (安全)
+
+    # 大きな数字「予告(OJAMA) N」(ラベルは小さめ、数字は大きく)
+    _put_shadow(frame, f"OJAMA {side}", px + _FC_LABEL_DX, py + _FC_LABEL_DY,
+                (210, 210, 210), _FC_LABEL_SCALE)
+    _put_shadow(frame, str(int(forecast)), px + _FC_NUM_DX, py + _FC_NUM_DY,
+                num_bgr, _FC_BIG_NUM_SCALE)
+
+    # アイコン分解 (ゲーム表示と直接照合できるよう右側に)
+    icon_text = _format_ojama_icons(forecast)
+    _put_shadow(frame, icon_text, px + _FC_ICON_DX, py + _FC_ICON_DY,
+                (230, 230, 255), _FC_ICON_SCALE)
+
+    # 画面外あふれ
+    if offboard > 0:
+        _put_shadow(frame, f"OFF-FIELD +{offboard}", px + _FC_ICON_DX,
+                    py + _FC_OFF_DY, (40, 80, 255), _FC_ICON_SCALE)
+
+
+# 中央優勢バーの配置定数 (1920x1080)
+# 2026-06-10 大幅拡大: 左右盤面の間 (X=666〜1258 の中央余白) に大きく配置。
+_ADV_BAR_CX: int = 960          # 画面中央 X
+_ADV_BAR_CY: int = 970          # バー中心 Y (盤面下部の余白帯)
+_ADV_BAR_HALF_W: int = 290      # バー半幅 (px、拡大)
+_ADV_BAR_H: int = 64            # バー高さ (拡大)
+_ADV_BAR_FULL_NET: int = 30     # この net 差でバー満杯 (= 岩1個分)
+_ADV_BAR_LABEL_SCALE: float = 1.6   # 優勢ラベルのフォントスケール (拡大)
+_ADV_BAR_LABEL_GAP: int = 16        # ラベルをバー上端から離す px
+
+
+def draw_ojama_advantage_bar(
+    frame: np.ndarray,
+    snap: OjamaAccountSnapshot | None,
+) -> None:
+    """画面中央下部に「どちらが何個多く送っているか」を左右バーで描画する.
+
+    net_balance_capped > 0 = 1P有利 (相手2Pへ多く送出) → 青を左方向に伸ばす。
+    net < 0 = 2P有利 (相手1Pへ多く送出) → 赤を右方向に伸ばす。
+    中央に「1P有利 +N」等のラベルを大きく表示する。
+
+    Args:
+        frame: 描画対象フレーム。
+        snap: OjamaAccountSnapshot (None 時は描画しない)。
+    """
+    if snap is None:
+        return
+    net = snap.net_balance_capped  # 正=1P有利
+    cx, cy = _ADV_BAR_CX, _ADV_BAR_CY
+    hw, h = _ADV_BAR_HALF_W, _ADV_BAR_H
+    # バー枠 (グレー背景)
+    cv2.rectangle(frame, (cx - hw, cy - h // 2), (cx + hw, cy + h // 2),
+                  (50, 50, 50), -1)
+    cv2.rectangle(frame, (cx - hw, cy - h // 2), (cx + hw, cy + h // 2),
+                  (130, 130, 130), 1)
+    cv2.line(frame, (cx, cy - h // 2), (cx, cy + h // 2), (200, 200, 200), 2)
+    # 塗り幅 (net を正規化)
+    ratio = min(1.0, abs(net) / max(_ADV_BAR_FULL_NET, 1))
+    fill = int(hw * ratio)
+    if net > 0:  # 1P有利 → 左半分を青で
+        cv2.rectangle(frame, (cx - fill, cy - h // 2), (cx, cy + h // 2),
+                      (230, 140, 40), -1)
+        label, lab_bgr = f"1P LEAD +{net}", (240, 170, 80)
+    elif net < 0:  # 2P有利 → 右半分を赤で
+        cv2.rectangle(frame, (cx, cy - h // 2), (cx + fill, cy + h // 2),
+                      (60, 60, 230), -1)
+        label, lab_bgr = f"2P LEAD +{abs(net)}", (90, 90, 240)
+    else:
+        label, lab_bgr = "EVEN", (200, 200, 200)
+    # ラベルをバー上に大きく (中央寄せ)
+    (tw, _), _ = cv2.getTextSize(label, FONT, _ADV_BAR_LABEL_SCALE, FONT_THICKNESS)
+    _put_shadow(frame, label, cx - tw // 2, cy - h // 2 - _ADV_BAR_LABEL_GAP,
+                lab_bgr, _ADV_BAR_LABEL_SCALE)
 
 
 # 隠し段 overlay: 確率閾値 (この値未満のセルは描画しない)
@@ -1773,13 +1955,17 @@ def main() -> int:
         draw_next_overlay(
             frame, last_p2_next, last_p2_dnext, P2_ROI_X, P2_ROI_Y, label_prefix="2P:",
         )
-        # 会計モデル overlay (OjamaAccountingTracker ベース、2026-06-09 統合)
-        draw_ojama_accounting_overlay(
+        # 会計モデルの小さなデバッグテキスト (pend/net/drop/OB) は 2026-06-10 で
+        # 本番 overlay から除去 (日本語?化・雑然) し、下の大きな新パネルに一本化。
+        # 関数 draw_ojama_accounting_overlay は後方互換のため定義のみ残置。
+        # 予告お邪魔 直感UI (2026-06-10 刷新・拡大): 大きな数字 + 単位アイコン分解 + 優勢バー
+        draw_ojama_forecast_panel(
             frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
         )
-        draw_ojama_accounting_overlay(
+        draw_ojama_forecast_panel(
             frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
         )
+        draw_ojama_advantage_bar(frame, _last_snap)
         # 第6要素: 隠し段 (row 0) 確率 overlay + 画面外 O 個数
         # offboard は OjamaAccountingTracker の会計値 (pending - 72) から取得
         # 試合境界で pending がresetされるため O 表示も自動的に 0 に戻る
