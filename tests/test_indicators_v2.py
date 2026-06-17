@@ -1,0 +1,315 @@
+"""指標 v2 (第1バッチ) のユニットテスト。
+
+既知盤面で各指標が妥当な値・0-1 範囲・例外なしを検証する。
+仕様: docs/INDICATOR_V2_MEASUREMENT_SPEC_2026-06-17.md
+"""
+from __future__ import annotations
+
+import pytest
+
+from src.board import (
+    BOARD_COLS,
+    BOARD_ROWS,
+    COLOR_BLUE,
+    COLOR_GREEN,
+    COLOR_OJAMA,
+    COLOR_RED,
+    COLOR_YELLOW,
+    Board,
+)
+import src.indicators_v2 as iv
+
+
+# ============================
+# 盤面ビルダー
+# ============================
+
+
+def _empty_grid() -> list[list[int]]:
+    return [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+
+
+def _empty_board() -> Board:
+    return Board.from_list(_empty_grid())
+
+
+def _four_chain_board() -> Board:
+    """4 連結 1 つ (2x2 赤) を最下段に置いた発火可能盤面。"""
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    return Board.from_list(g)
+
+
+def _two_chain_board() -> Board:
+    """2 連鎖を起こす盤面 (赤4消し → 重力で青4連結 → 青消し)。"""
+    g = _empty_grid()
+    # 赤 4 連結 (col0 縦3 + col1 下1)
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[10][0] = COLOR_RED
+    # 青: 赤消去後の重力で 4 連結になる配置
+    g[12][2] = COLOR_BLUE
+    g[11][1] = COLOR_BLUE
+    g[10][1] = COLOR_BLUE
+    g[9][0] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+def _ojama_board() -> Board:
+    """可視領域にお邪魔を含む盤面。"""
+    g = _empty_grid()
+    for col in range(BOARD_COLS):
+        g[12][col] = COLOR_OJAMA
+    g[11][0] = COLOR_OJAMA
+    return Board.from_list(g)
+
+
+# ============================
+# 共通: 全指標の 0-1 範囲・例外なし
+# ============================
+
+_BOARDS = [
+    _empty_board(),
+    _four_chain_board(),
+    _two_chain_board(),
+    _ojama_board(),
+]
+
+
+@pytest.mark.parametrize("board", _BOARDS)
+def test_all_scalar_indicators_in_range(board: Board) -> None:
+    """スカラー指標が全て 0-1 範囲・例外なしで算出されること。"""
+    values = [
+        iv.board_puyo_total(board),
+        iv.board_color_puyo_total(board),
+        iv.max_column_height(board),
+        iv.column_bumpiness(board),
+        iv.death_margin(board),
+        iv.death_margin_neighbor(board),
+        iv.current_max_chain(board),
+        iv.immediate_fire_power(board),
+        iv.chain_efficiency(board),
+        iv.min_puyos_to_ignite(board),
+        iv.second_chain_potential(board),
+        iv.board_ojama_count(board),
+        iv.dig_resistance(board),
+        iv.absorption_capacity(board),
+    ]
+    for v in values:
+        assert 0.0 <= v.score <= 1.0
+        assert v.raw == v.raw  # NaN なし
+
+
+# ============================
+# ① 進行度
+# ============================
+
+
+def test_tsumo_count_rate() -> None:
+    assert iv.tsumo_count_rate(0).score == 0.0
+    assert iv.tsumo_count_rate(50).score == pytest.approx(0.5)
+    # 上限クランプ
+    assert iv.tsumo_count_rate(200).score == 1.0
+    # 負値は 0 にクランプ
+    assert iv.tsumo_count_rate(-5).raw == 0.0
+
+
+def test_board_puyo_total() -> None:
+    assert iv.board_puyo_total(_empty_board()).raw == 0.0
+    v = iv.board_puyo_total(_four_chain_board())
+    assert v.raw == 4.0
+    assert v.score == pytest.approx(4.0 / 72.0)
+
+
+def test_color_puyo_excludes_ojama() -> None:
+    v = iv.board_color_puyo_total(_ojama_board())
+    # お邪魔のみの盤面 → 色ぷよ 0
+    assert v.raw == 0.0
+
+
+def test_margin_time_rate_monotonic() -> None:
+    early = iv.margin_time_rate(0.0)
+    late = iv.margin_time_rate(200.0)
+    assert early.score == 0.0  # 序盤は減衰なし
+    assert late.score > early.score  # マージン進行で増加
+    assert 0.0 <= late.score <= 1.0
+
+
+# ============================
+# ② 占有・危険
+# ============================
+
+
+def test_max_column_height_empty() -> None:
+    assert iv.max_column_height(_empty_board()).raw == 0.0
+
+
+def test_bumpiness_flat_is_zero() -> None:
+    """全列同高なら凸凹 0。"""
+    g = _empty_grid()
+    for col in range(BOARD_COLS):
+        g[12][col] = COLOR_RED
+    assert iv.column_bumpiness(Board.from_list(g)).raw == 0.0
+
+
+def test_death_margin_full_when_empty() -> None:
+    assert iv.death_margin(_empty_board()).score == 1.0
+    assert iv.death_margin_neighbor(_empty_board()).score == 1.0
+
+
+def test_death_margin_decreases_with_height() -> None:
+    g = _empty_grid()
+    from src.board import DEATH_COL
+    for row in range(BOARD_ROWS - 1, BOARD_ROWS - 5, -1):
+        g[row][DEATH_COL] = COLOR_RED
+    v = iv.death_margin(Board.from_list(g))
+    assert v.raw == 8.0  # 12 - 4
+    assert v.score < 1.0
+
+
+# ============================
+# ③ 火力・潜在
+# ============================
+
+
+def test_current_max_chain_two_chain() -> None:
+    v = iv.current_max_chain(_two_chain_board())
+    assert v.raw == 2.0
+    assert 0.0 < v.score < 1.0
+
+
+def test_immediate_fire_power_nonzero_for_chain() -> None:
+    v = iv.immediate_fire_power(_two_chain_board())
+    assert v.raw >= 0.0
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_chain_efficiency_zero_when_no_color() -> None:
+    assert iv.chain_efficiency(_empty_board()).raw == 0.0
+    assert iv.chain_efficiency(_ojama_board()).raw == 0.0
+
+
+def test_min_puyos_to_ignite_range() -> None:
+    v = iv.min_puyos_to_ignite(_empty_board())
+    # 空盤面は発火不能 → N = trial_limit+1 = 3
+    assert v.raw == 3.0
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_connectivity_observation_total_and_per_color() -> None:
+    total, per_color = iv.connectivity_observation(_four_chain_board())
+    # 2x2 赤 = 1 グループ size 4
+    assert total.max_group_size == 4
+    assert total.pair_count == 0
+    assert COLOR_RED in per_color
+    assert per_color[COLOR_RED].max_group_size == 4
+
+
+def test_connectivity_counts_pairs_and_triples() -> None:
+    g = _empty_grid()
+    # 赤 2 連結 (縦)
+    g[12][0] = COLOR_RED
+    g[11][0] = COLOR_RED
+    # 青 3 連結 (横)
+    g[12][2] = COLOR_BLUE
+    g[12][3] = COLOR_BLUE
+    g[12][4] = COLOR_BLUE
+    total, per_color = iv.connectivity_observation(Board.from_list(g))
+    assert total.pair_count == 1
+    assert total.triple_count == 1
+    assert per_color[COLOR_RED].pair_count == 1
+    assert per_color[COLOR_BLUE].triple_count == 1
+
+
+def test_second_chain_potential_range() -> None:
+    v = iv.second_chain_potential(_two_chain_board())
+    assert 0.0 <= v.score <= 1.0
+
+
+# ============================
+# ④ お邪魔
+# ============================
+
+
+def test_ojama_net_balance_center() -> None:
+    assert iv.ojama_net_balance(0).score == pytest.approx(0.5)
+    assert iv.ojama_net_balance(72).score == 1.0
+    assert iv.ojama_net_balance(-72).score == 0.0
+
+
+def test_ojama_forecast_range() -> None:
+    assert iv.ojama_forecast(0).score == 0.0
+    assert iv.ojama_forecast(36).score == pytest.approx(0.5)
+    assert iv.ojama_forecast(100).score == 1.0
+
+
+def test_board_ojama_count() -> None:
+    v = iv.board_ojama_count(_ojama_board())
+    assert v.raw == 7.0  # 6 (下段) + 1
+    assert v.score == pytest.approx(7.0 / 72.0)
+
+
+# ============================
+# ⑤ テンポ
+# ============================
+
+
+def test_chain_duration_observed() -> None:
+    v = iv.chain_duration_observed(1.0, 3.0)
+    assert v is not None
+    assert v.raw == 2.0
+    assert v.score == pytest.approx(2.0 / 14.0)
+
+
+def test_chain_duration_observed_none() -> None:
+    assert iv.chain_duration_observed(None, None) is None
+    assert iv.chain_duration_observed(None, 3.0) is None
+    # 負の所要時間 (異常) も None
+    assert iv.chain_duration_observed(5.0, 3.0) is None
+
+
+def test_chain_duration_estimated() -> None:
+    # 5 連鎖 × 84 / 60 = 7.0 秒
+    v = iv.chain_duration_estimated(5)
+    assert v.raw == pytest.approx(7.0)
+    assert v.score == pytest.approx(7.0 / 14.0)
+    assert iv.chain_duration_estimated(0).raw == 0.0
+
+
+# ============================
+# ⑥ 受け力
+# ============================
+
+
+def test_dig_resistance_range() -> None:
+    v = iv.dig_resistance(_two_chain_board())
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_dig_resistance_dead_board() -> None:
+    g = _empty_grid()
+    from src.board import DEATH_COL
+    g[0][DEATH_COL] = COLOR_RED  # 窒息
+    v = iv.dig_resistance(Board.from_list(g))
+    assert v.score == 0.0
+
+
+def test_absorption_capacity_empty_is_full() -> None:
+    assert iv.absorption_capacity(_empty_board()).score == 1.0
+    v = iv.absorption_capacity(_four_chain_board())
+    assert v.raw == 68.0  # 72 - 4
+
+
+# ============================
+# 値オブジェクト
+# ============================
+
+
+def test_indicator_value_dataclass() -> None:
+    v = iv.IndicatorV2Value(score=0.5, raw=10.0)
+    assert v.score == 0.5
+    assert v.raw == 10.0
