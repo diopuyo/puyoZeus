@@ -177,9 +177,12 @@ def test_death_margin_decreases_with_height() -> None:
 
 
 def test_current_max_chain_two_chain() -> None:
+    """takapt 定石: 1 個追加で発火できる最大連鎖数が 2 以上であること。"""
     v = iv.current_max_chain(_two_chain_board())
-    assert v.raw == 2.0
-    assert 0.0 < v.score < 1.0
+    # _two_chain_board は静止盤面で 2 連鎖が成立する盤面。
+    # takapt 定石 (1 個追加) では >= 2 が保証される (元の 2 連鎖以上を発見)。
+    assert v.raw >= 2.0
+    assert 0.0 < v.score <= 1.0
 
 
 def test_immediate_fire_power_nonzero_for_chain() -> None:
@@ -223,6 +226,40 @@ def test_connectivity_counts_pairs_and_triples() -> None:
     assert total.triple_count == 1
     assert per_color[COLOR_RED].pair_count == 1
     assert per_color[COLOR_BLUE].triple_count == 1
+
+
+def test_current_max_chain_empty_board_is_zero() -> None:
+    """takapt 定石: 空盤面に 1 個追加しても連鎖なし → 0。"""
+    v = iv.current_max_chain(_empty_board())
+    assert v.raw == 0.0
+    assert v.score == 0.0
+
+
+def test_immediate_fire_power_takapt_nonzero() -> None:
+    """takapt 定石: 連鎖が組める盤面では即発火火力が非ゼロ。"""
+    v = iv.immediate_fire_power(_two_chain_board())
+    assert v.raw > 0.0
+    assert 0.0 < v.score <= 1.0
+
+
+def test_chain_efficiency_takapt_nonzero() -> None:
+    """takapt 定石: 連鎖が組める盤面では連鎖効率が非ゼロ。"""
+    v = iv.chain_efficiency(_two_chain_board())
+    assert v.raw > 0.0
+    assert 0.0 < v.score <= 1.0
+
+
+def test_takapt_ordering_chain_ge_static() -> None:
+    """takapt 版 (1 個追加) の連鎖数は静止盤面 simulate 以上 (下界性)。"""
+    from src.chain import ChainSimulator
+    sim = ChainSimulator()
+    for board in _BOARDS:
+        static_chain = sim.simulate(board).chain_count
+        takapt_chain = iv.current_max_chain(board, sim).raw
+        assert takapt_chain >= static_chain, (
+            f"takapt={takapt_chain} < static={static_chain} (board has "
+            f"{board.count_puyos()} puyos)"
+        )
 
 
 def test_second_chain_potential_range() -> None:
