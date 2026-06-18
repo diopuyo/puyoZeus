@@ -1,5 +1,13 @@
 """指標 v2 を日本語ラベルで盤面横に並べる目視照合用レビュー動画を生成する。
 
+モード (--mode):
+    - indicator (既定): 計算指標 21 項目をカテゴリ別に表示 (従来挙動)。
+    - raw: 原観測量 (画面から直接読める生データ) のみ表示。計算指標は出さない。
+      項目 = 状態 / score / 手数 / 試合内経過秒 / 色別個数(赤青緑黄紫)+色ぷよ総数 /
+      お邪魔数 / 列高さ×6 / next / dnext / 予告お邪魔(score会計推定)。
+      認識が生データを正しく読めているかを人が盤面と照合するためのビュー。
+      フォントは大きめ・色別個数は該当色の文字色で表示。
+
 目的:
     `src/indicators_v2.py` の各指標が「画面の盤面と合っているか」を人が目視で
     照合できる動画を作る。各 STABLE snapshot で算出した指標値を、カテゴリ
@@ -49,7 +57,15 @@ from src.console_init import init_console  # noqa: E402
 
 init_console()
 
-from src.board import Board  # noqa: E402
+from src.board import (  # noqa: E402
+    BOARD_COLS,
+    COLOR_BLUE,
+    COLOR_GREEN,
+    COLOR_PURPLE,
+    COLOR_RED,
+    COLOR_YELLOW,
+    Board,
+)
 from src.board_state_machine import BoardState  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
@@ -118,6 +134,39 @@ _COL_KEY: tuple[int, int, int] = (255, 240, 160)        # 黄系 (重要指標)
 _COL_VALUE: tuple[int, int, int] = (220, 220, 220)      # 薄白
 _COL_FROZEN: tuple[int, int, int] = (160, 160, 160)     # 凍結中 (グレー)
 _COL_NOTE: tuple[int, int, int] = (200, 160, 160)       # 注記 (未実装等)
+
+# ============================
+# raw モード (原観測量) 専用定数
+# ============================
+
+# raw モードは項目が少ないのでフォントを大きめにして視認性を上げる。
+_RAW_FS_TITLE: int = 30        # side タイトル (1P / 2P + 状態)
+_RAW_FS_LABEL: int = 24        # 項目ラベル + 値
+_RAW_LINE_GAP: int = 7         # 行間 (追加)
+_RAW_PANEL_W: int = 360        # raw パネル幅 (項目が長いので広め)
+_RAW_INDENT: int = 10          # ラベルのインデント
+
+# 色別個数を該当色の文字色で表示するための RGB (PIL)。盤面照合しやすく。
+_PUYO_TEXT_RGB: dict[int, tuple[int, int, int]] = {
+    COLOR_RED:    (255, 90, 90),
+    COLOR_BLUE:   (90, 150, 255),
+    COLOR_GREEN:  (90, 230, 110),
+    COLOR_YELLOW: (255, 225, 70),
+    COLOR_PURPLE: (215, 130, 255),
+}
+# 色別個数の表示順 (赤青緑黄紫) と日本語ラベル。
+_PUYO_ORDER: tuple[tuple[int, str], ...] = (
+    (COLOR_RED, "赤"),
+    (COLOR_BLUE, "青"),
+    (COLOR_GREEN, "緑"),
+    (COLOR_YELLOW, "黄"),
+    (COLOR_PURPLE, "紫"),
+)
+# next / dnext を日本語色名で出すための色記号 (お邪魔会計と非依存)。
+_COLOR_NAME_JA: dict[int, str] = {
+    COLOR_RED: "赤", COLOR_BLUE: "青", COLOR_GREEN: "緑",
+    COLOR_YELLOW: "黄", COLOR_PURPLE: "紫",
+}
 
 
 # ============================
@@ -281,6 +330,125 @@ def _build_indicator_lines(
 
 
 # ============================
+# raw モード: 原観測量の表示行構築
+# ============================
+
+# raw 行の型: (label, value, rgb)。色別個数のみ rgb で該当色を指定。
+_RawLine = tuple[str, str, tuple[int, int, int]]
+
+
+def _pair_color_names(pair: tuple[int, int] | None) -> str:
+    """next/dnext ペア (2 色) を日本語色名 2 文字で返す (不明は「?」)。"""
+    if pair is None:
+        return "--"
+    a = _COLOR_NAME_JA.get(int(pair[0]), "?")
+    b = _COLOR_NAME_JA.get(int(pair[1]), "?")
+    return f"{a}{b}"
+
+
+def _count_color(board: Board, color: int) -> int:
+    """盤面の可視+隠し領域で指定色のセル数を数える (生データ照合用)。"""
+    return int((board._grid == color).sum())
+
+
+def _build_raw_lines(
+    board: Board,
+    state: BoardState,
+    score: int | None,
+    tsumo: int,
+    elapsed_sec: float,
+    forecast: int,
+    visible_ojama: int,
+    side: SideResult,
+) -> list[_RawLine]:
+    """1 side の原観測量 (生データ) 表示行を構築する。
+
+    計算指標 (連鎖数/火力/効率 等) は一切含めない。画面から直接読める量のみ。
+    """
+    lines: list[_RawLine] = []
+    # score / 手数 / 経過秒
+    score_s = "--" if score is None else f"{score:,}"
+    lines.append(("score", score_s, _COL_VALUE))
+    lines.append(("手数(ツモ)", f"{tsumo}", _COL_VALUE))
+    lines.append(("試合内経過", f"{elapsed_sec:.1f} 秒", _COL_VALUE))
+    # 色別個数 (該当色の文字色で) + 色ぷよ総数
+    color_total = 0
+    for color, name in _PUYO_ORDER:
+        n = _count_color(board, color)
+        color_total += n
+        lines.append((f"  {name}", f"{n}", _PUYO_TEXT_RGB[color]))
+    lines.append(("色ぷよ総数", f"{color_total}", _COL_KEY))
+    # お邪魔数 (盤面可視)
+    lines.append(("お邪魔数(盤面)", f"{visible_ojama}", _COL_VALUE))
+    # 列高さ ×6
+    heights = [board.height_of(c) for c in range(BOARD_COLS)]
+    lines.append(("列高さ[0-5]", str(heights), _COL_VALUE))
+    # next / dnext (色ペア)
+    lines.append(("next", _pair_color_names(side.next_pair), _COL_VALUE))
+    lines.append(("dnext", _pair_color_names(side.dnext_pair), _COL_VALUE))
+    # 予告お邪魔 (会計モデル出力。生認識でない旨を明記)
+    lines.append(("予告お邪魔", f"{forecast}", _COL_KEY))
+    lines.append(("  (score会計推定)", "", _COL_NOTE))
+    return lines
+
+
+def draw_raw_panel(
+    frame: np.ndarray,
+    fonts: _FontSet,
+    panel_x: int,
+    side_label: str,
+    state: BoardState,
+    is_frozen: bool,
+    lines: list[_RawLine],
+) -> None:
+    """1 side の原観測量パネルを frame (BGR) に描画する (大きめフォント)。"""
+    line_h = _RAW_FS_LABEL + _RAW_LINE_GAP
+    title_h = _RAW_FS_TITLE + _RAW_LINE_GAP + 8
+    panel_h = title_h + line_h * len(lines) + 14
+    py0 = _PANEL_TOP_Y
+    py1 = min(OUT_H - _PANEL_BOT_MARGIN, py0 + panel_h)
+    px0 = panel_x
+    px1 = panel_x + _RAW_PANEL_W
+
+    # 半透明背景 (cv2)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (px0, py0), (px1, py1), _PANEL_BG_BGR, -1)
+    cv2.addWeighted(overlay, _PANEL_ALPHA, frame, 1.0 - _PANEL_ALPHA, 0, frame)
+    cv2.rectangle(frame, (px0, py0), (px1, py1), (110, 110, 110), 1)
+
+    # PIL でテキスト重畳
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(rgb)
+    draw = ImageDraw.Draw(pil_img)
+
+    tx = px0 + _RAW_INDENT
+    ty = py0 + 6
+    state_ja = _STATE_JA.get(state, state.value)
+    frozen_tag = " [凍結]" if is_frozen else ""
+    if not fonts.has_japanese:
+        state_ja = state.value
+        frozen_tag = " [FROZEN]" if is_frozen else ""
+    title = f"{side_label}  {state_ja}{frozen_tag}"
+    title_col = _COL_FROZEN if is_frozen else _COL_TITLE
+    _draw_text_with_outline(draw, (tx, ty), title, fonts.font(_RAW_FS_TITLE), title_col)
+    ty += title_h
+
+    label_font = fonts.font(_RAW_FS_LABEL)
+    for label, value, col in lines:
+        if not fonts.has_japanese:
+            col = _COL_VALUE if col not in (_COL_KEY, _COL_NOTE) else col
+        text = f"{label}: {value}" if value != "" else label
+        draw_col = _COL_FROZEN if is_frozen else col
+        _draw_text_with_outline(draw, (tx, ty), text, label_font, draw_col)
+        ty += line_h
+        if ty > OUT_H - _PANEL_BOT_MARGIN:
+            break
+
+    out = cv2.cvtColor(np.asarray(pil_img), cv2.COLOR_RGB2BGR)
+    frame[:, :, :] = out
+
+
+# ============================
 # パネル描画 (PIL)
 # ============================
 
@@ -440,6 +608,39 @@ def _side_lines_or_frozen(
     return [("note", "指標", "STABLE 待ち")], True
 
 
+def _side_raw_or_frozen(
+    side: SideResult,
+    pipeline: RecognitionPipeline,
+    side_label: str,
+    ojama_tracker: OjamaAccountingTracker,
+    t_sec: float,
+    snap: OjamaAccountSnapshot,
+    cache: dict[str, list[_RawLine]],
+) -> tuple[list[_RawLine], bool]:
+    """raw モード: STABLE なら原観測量を算出し cache 更新、非 STABLE は凍結返却。"""
+    board = side.confirmed_board
+    is_stable = (
+        side.state == BoardState.STABLE
+        and board is not None
+        and board.count_puyos() > 0
+    )
+    if is_stable:
+        elapsed = ojama_tracker._elapsed(t_sec)
+        tsumo = pipeline.tsumo_count(side_label)
+        is_p1 = side_label == "1P"
+        forecast = snap.forecast_p1 if is_p1 else snap.forecast_p2
+        visible_ojama = ojama_tracker._count_visible_ojama(board)
+        lines = _build_raw_lines(
+            board, side.state, side.score, tsumo, elapsed,
+            forecast, visible_ojama, side,
+        )
+        cache[side_label] = lines
+        return lines, False
+    if side_label in cache:
+        return cache[side_label], True
+    return [("原観測量", "STABLE 待ち", _COL_NOTE)], True
+
+
 def generate(
     video_path: Path,
     out_path: Path,
@@ -447,6 +648,7 @@ def generate(
     sample_interval: float = DEFAULT_SAMPLE_INTERVAL,
     dump_png_dir: Path | None = None,
     png_interval_sec: float = 5.0,
+    mode: str = "indicator",
 ) -> int:
     """指標 v2 レビュー動画を生成する。
 
@@ -498,16 +700,21 @@ def generate(
     tracker_p1 = _SideTracker()
     tracker_p2 = _SideTracker()
 
-    # 凍結表示用の最新 STABLE 結果キャッシュ
-    line_cache: dict[str, list[tuple[str, str, str]]] = {}
+    is_raw = mode == "raw"
+    # 凍結表示用の最新 STABLE 結果キャッシュ (indicator/raw で行型が異なる)
+    line_cache: dict[str, list] = {}
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
     last_p1_board: Board | None = None
     last_p2_board: Board | None = None
     last_p1_score: int | None = None
     last_p2_score: int | None = None
-    last_p1_lines: list[tuple[str, str, str]] = [("note", "指標", "STABLE 待ち")]
-    last_p2_lines: list[tuple[str, str, str]] = [("note", "指標", "STABLE 待ち")]
+    _init_line = (
+        [("原観測量", "STABLE 待ち", _COL_NOTE)] if is_raw
+        else [("note", "指標", "STABLE 待ち")]
+    )
+    last_p1_lines: list = list(_init_line)
+    last_p2_lines: list = list(_init_line)
     last_p1_frozen = True
     last_p2_frozen = True
     last_snap: OjamaAccountSnapshot | None = None
@@ -553,15 +760,26 @@ def generate(
             last_snap = snap
             offboard_p1 = snap.offboard_p1
             offboard_p2 = snap.offboard_p2
-            # 指標算出 (STABLE) / 凍結 (非 STABLE)
-            last_p1_lines, last_p1_frozen = _side_lines_or_frozen(
-                result.p1, pipeline, "1P", tracker_p1, ojama_tracker,
-                t_sec, snap, line_cache, offboard_p1,
-            )
-            last_p2_lines, last_p2_frozen = _side_lines_or_frozen(
-                result.p2, pipeline, "2P", tracker_p2, ojama_tracker,
-                t_sec, snap, line_cache, offboard_p2,
-            )
+            if is_raw:
+                # raw モード: 原観測量を算出 (STABLE) / 凍結 (非 STABLE)
+                last_p1_lines, last_p1_frozen = _side_raw_or_frozen(
+                    result.p1, pipeline, "1P", ojama_tracker,
+                    t_sec, snap, line_cache,
+                )
+                last_p2_lines, last_p2_frozen = _side_raw_or_frozen(
+                    result.p2, pipeline, "2P", ojama_tracker,
+                    t_sec, snap, line_cache,
+                )
+            else:
+                # 指標算出 (STABLE) / 凍結 (非 STABLE)
+                last_p1_lines, last_p1_frozen = _side_lines_or_frozen(
+                    result.p1, pipeline, "1P", tracker_p1, ojama_tracker,
+                    t_sec, snap, line_cache, offboard_p1,
+                )
+                last_p2_lines, last_p2_frozen = _side_lines_or_frozen(
+                    result.p2, pipeline, "2P", tracker_p2, ojama_tracker,
+                    t_sec, snap, line_cache, offboard_p2,
+                )
 
         # --- 認識 overlay (盤面ぷよ色 + state 枠) ---
         draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
@@ -578,15 +796,26 @@ def generate(
             frame, fi, t_sec, last_p1_state, last_p2_state,
             p1_score=last_p1_score, p2_score=last_p2_score,
         )
-        # --- 指標パネル (日本語, PIL) ---
-        draw_indicator_panel(
-            frame, fonts, _P1_PANEL_X, "1P", last_p1_state,
-            last_p1_frozen, last_p1_lines,
-        )
-        draw_indicator_panel(
-            frame, fonts, _P2_PANEL_X, "2P", last_p2_state,
-            last_p2_frozen, last_p2_lines,
-        )
+        # --- パネル (日本語, PIL) ---
+        if is_raw:
+            raw_p2_x = OUT_W - _RAW_PANEL_W - 4
+            draw_raw_panel(
+                frame, fonts, _P1_PANEL_X, "1P", last_p1_state,
+                last_p1_frozen, last_p1_lines,
+            )
+            draw_raw_panel(
+                frame, fonts, raw_p2_x, "2P", last_p2_state,
+                last_p2_frozen, last_p2_lines,
+            )
+        else:
+            draw_indicator_panel(
+                frame, fonts, _P1_PANEL_X, "1P", last_p1_state,
+                last_p1_frozen, last_p1_lines,
+            )
+            draw_indicator_panel(
+                frame, fonts, _P2_PANEL_X, "2P", last_p2_state,
+                last_p2_frozen, last_p2_lines,
+            )
 
         writer.write(frame)
         written += 1
@@ -638,10 +867,14 @@ def main() -> int:
         "--png-interval", type=float, default=5.0,
         help="PNG 保存間隔秒 (--dump-png-dir 指定時のみ有効)。",
     )
+    parser.add_argument(
+        "--mode", choices=("indicator", "raw"), default="indicator",
+        help="indicator=計算指標21項目(既定) / raw=原観測量(生データ)のみ。",
+    )
     args = parser.parse_args()
     n = generate(
         args.video, args.output, args.max_sec, args.sample_interval,
-        args.dump_png_dir, args.png_interval,
+        args.dump_png_dir, args.png_interval, args.mode,
     )
     return 0 if n > 0 else 1
 
