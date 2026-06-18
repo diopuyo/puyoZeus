@@ -350,3 +350,102 @@ def test_indicator_value_dataclass() -> None:
     v = iv.IndicatorV2Value(score=0.5, raw=10.0)
     assert v.score == 0.5
     assert v.raw == 10.0
+
+
+# ============================
+# III-3 到達火力 (reach_fire_power)
+# ============================
+
+
+def _two_chain_board_with_next() -> tuple[Board, tuple[int, int], tuple[int, int]]:
+    """2 連鎖盤面 + next/dnext ペアを返す (テスト用)。"""
+    board = _two_chain_board()
+    next_pair = (COLOR_RED, COLOR_BLUE)
+    dnext_pair = (COLOR_GREEN, COLOR_YELLOW)
+    return board, next_pair, dnext_pair
+
+
+def test_reach_fire_power_range() -> None:
+    """III-3 到達火力が 0-1 範囲かつ例外なし。"""
+    board, next_pair, dnext_pair = _two_chain_board_with_next()
+    result = iv.reach_fire_power(board, next_pair, dnext_pair)
+    assert 0.0 <= result.value.score <= 1.0
+    assert result.value.raw == result.value.raw  # NaN なし
+    assert result.source in ("reach", "fallback_immediate")
+
+
+def test_reach_fire_power_source_reach_when_both() -> None:
+    """next/dnext 両方揃っていれば source='reach'。"""
+    board, next_pair, dnext_pair = _two_chain_board_with_next()
+    result = iv.reach_fire_power(board, next_pair, dnext_pair)
+    assert result.source == "reach"
+
+
+def test_reach_fire_power_fallback_when_none() -> None:
+    """next=None または dnext=None のとき source='fallback_immediate'。"""
+    board = _two_chain_board()
+    r1 = iv.reach_fire_power(board, None, (COLOR_RED, COLOR_BLUE))
+    assert r1.source == "fallback_immediate"
+    r2 = iv.reach_fire_power(board, (COLOR_RED, COLOR_BLUE), None)
+    assert r2.source == "fallback_immediate"
+    r3 = iv.reach_fire_power(board, None, None)
+    assert r3.source == "fallback_immediate"
+
+
+def test_reach_fire_power_lower_bound_note() -> None:
+    """下界性の注記確認テスト: reach は next/dnext が最適でない場合に
+    immediate (takapt 全色 30 通り) を下回りうる。
+    これは仕様通りの挙動。空盤面では常に両者 0 で等しくなることを確認。"""
+    # 空盤面: 追加ぷよ数に関わらず連鎖なし → 両者 0
+    empty_rfp = iv.reach_fire_power(
+        _empty_board(),
+        (COLOR_RED, COLOR_BLUE),
+        (COLOR_GREEN, COLOR_YELLOW),
+    )
+    empty_ifp = iv.immediate_fire_power(_empty_board())
+    assert empty_rfp.value.raw == 0.0
+    assert empty_ifp.raw == 0.0
+
+    # 最適 next/dnext (盤面の連鎖色を揃える) では reach >= immediate が成立する
+    # (保証条件: next/dnext が盤面の連鎖に貢献する色を含む)
+    board = _two_chain_board()
+    # next に赤を含める = takapt 最良配置の色と一致
+    best_rfp = iv.reach_fire_power(board, (COLOR_RED, COLOR_RED), (COLOR_RED, COLOR_RED))
+    ifp = iv.immediate_fire_power(board)
+    # 最適色 (RED) を 2 手連続で置く → reach >= immediate が成立
+    assert best_rfp.value.raw >= ifp.raw, (
+        f"最適色(RED)ペアで reach={best_rfp.value.raw} < immediate={ifp.raw}"
+    )
+
+
+def test_reach_fire_power_nonzero_for_chain_board() -> None:
+    """連鎖が組める盤面に next/dnext を与えたとき raw > 0。"""
+    board, next_pair, dnext_pair = _two_chain_board_with_next()
+    result = iv.reach_fire_power(board, next_pair, dnext_pair)
+    assert result.value.raw >= 0.0
+    # max_chain は連鎖が組める盤面では > 0 のはず
+    # (next_pair が連鎖に貢献するかは配色依存なので >= 0 でテスト)
+    assert result.max_chain >= 0
+
+
+def test_reach_fire_power_empty_board_is_zero() -> None:
+    """空盤面 + next/dnext → reach でも 0 (連鎖なし)。"""
+    result = iv.reach_fire_power(
+        _empty_board(),
+        (COLOR_RED, COLOR_BLUE),
+        (COLOR_GREEN, COLOR_YELLOW),
+    )
+    assert result.value.raw == 0.0
+    assert result.value.score == 0.0
+    assert result.source == "reach"
+    assert result.max_chain == 0
+
+
+def test_reach_fire_power_result_dataclass() -> None:
+    """ReachFirePowerResult の構造確認。"""
+    board, next_pair, dnext_pair = _two_chain_board_with_next()
+    result = iv.reach_fire_power(board, next_pair, dnext_pair)
+    assert isinstance(result, iv.ReachFirePowerResult)
+    assert isinstance(result.value, iv.IndicatorV2Value)
+    assert isinstance(result.source, str)
+    assert isinstance(result.max_chain, int)

@@ -74,6 +74,8 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # ③ 火力・潜在
     "current_max_chain", "current_max_chain_raw",
     "immediate_fire_power", "immediate_fire_power_raw",
+    "reach_fire_power", "reach_fire_power_raw", "reach_fire_power_source",
+    "reach_fire_power_max_chain",
     "chain_efficiency", "chain_efficiency_raw",
     "min_puyos_to_ignite", "min_puyos_to_ignite_raw",
     "conn_pair_count", "conn_triple_count", "conn_max_group_size",
@@ -124,7 +126,10 @@ def _compute_row(
         "frame": frame_idx,
         "tsumo": tsumo,
     }
-    _fill_indicator_columns(row, board, tsumo, elapsed_sec, net, forecast, total_conn)
+    _fill_indicator_columns(
+        row, board, tsumo, elapsed_sec, net, forecast, total_conn,
+        side.next_pair, side.dnext_pair,
+    )
     row["chain_duration_sec"] = round(dur.raw, 3) if dur is not None else 0.0
     row["chain_duration_source"] = dur_src
     return row
@@ -138,6 +143,8 @@ def _fill_indicator_columns(
     net: int,
     forecast: int,
     total_conn: iv.GroupObservation,
+    next_pair: "tuple[int, int] | None" = None,
+    dnext_pair: "tuple[int, int] | None" = None,
 ) -> None:
     """指標値を row dict に書き込む (chain_duration を除く)。"""
     tc = iv.tsumo_count_rate(tsumo)
@@ -150,6 +157,7 @@ def _fill_indicator_columns(
     dn = iv.death_margin_neighbor(board)
     cm = iv.current_max_chain(board)
     ifp = iv.immediate_fire_power(board, elapsed_sec)
+    rfp = iv.reach_fire_power(board, next_pair, dnext_pair, elapsed_sec)
     ce = iv.chain_efficiency(board, elapsed_sec)
     mi = iv.min_puyos_to_ignite(board)
     sc = iv.second_chain_potential(board)
@@ -169,6 +177,9 @@ def _fill_indicator_columns(
         "death_margin_neighbor": dn.score, "death_margin_neighbor_raw": dn.raw,
         "current_max_chain": cm.score, "current_max_chain_raw": cm.raw,
         "immediate_fire_power": ifp.score, "immediate_fire_power_raw": ifp.raw,
+        "reach_fire_power": rfp.value.score, "reach_fire_power_raw": rfp.value.raw,
+        "reach_fire_power_source": rfp.source,
+        "reach_fire_power_max_chain": rfp.max_chain,
         "chain_efficiency": ce.score, "chain_efficiency_raw": ce.raw,
         "min_puyos_to_ignite": mi.score, "min_puyos_to_ignite_raw": mi.raw,
         "conn_pair_count": total_conn.pair_count,
