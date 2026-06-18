@@ -96,6 +96,12 @@ FRAMES_PER_CHAIN: float = 84.0
 # V-2 推定 FPS (60fps 想定)。
 ASSUMED_FPS: float = 60.0
 
+# III-3 到達火力: early pruning の 1 手目上位選択数。
+# 最大 22 配置のうちスコア上位 k のみ 2 手目展開 → 最大 k×22 sim。
+REACH_FIRE_POWER_BEST_K: int = 5
+# III-3 到達火力: 正規化分母 (お邪魔個数上限 = 72)。
+REACH_FIRE_POWER_NORM: int = ON_FIELD_CAP  # = 72
+
 # VI-1 掘り耐性: 仮想お邪魔テスト個数。
 OJAMA_DEFENSE_TEST_COUNTS: tuple[int, ...] = (10, 20, 30)
 # VI-1 掘り耐性: 掘削可能と判定する最小連鎖数。
@@ -648,9 +654,220 @@ def _dig_resistance_one(
     return OJAMA_DEFENSE_SURVIVAL_WEIGHT * survival + OJAMA_DEFENSE_DIG_WEIGHT * dig
 
 
+# ============================
+# III-3 到達火力 ヘルパー
+# ============================
+
+
+def _drop_one_inplace(board: Board, col: int, color: int) -> bool:
+    """board に color を col 列の最下空セルに落下 (in-place)。
+
+    Returns:
+        True = 置けた、False = 列満杯。
+    """
+    row = _drop_row(board, col)
+    if row is None:
+        return False
+    board.set(row, col, color)
+    return True
+
+
+def _drop_two_in_column(board: Board, col: int, upper: int, lower: int) -> bool:
+    """同一列に 2 puyo を積む (lower が下・upper が上、in-place)。
+
+    Returns:
+        True = 両方置けた、False = 不可。
+    """
+    if board.height_of(col) > BOARD_ROWS - 2:
+        return False
+    if not _drop_one_inplace(board, col, lower):
+        return False
+    return _drop_one_inplace(board, col, upper)
+
+
+def _place_pair_to_board(
+    board: Board,
+    pair: tuple[int, int],
+    col: int,
+    rotation: int,
+) -> "Board | None":
+    """指定列・回転で puyo ペアを盤面に配置し新しい Board を返す (板面を破壊しない)。
+
+    22 配置の対応:
+        縦: rotation=0 (TOP上/BOT下) col=0-5 → 6通り
+            rotation=2 (BOT上/TOP下) col=0-5 → 6通り  = 計12通り
+        横: rotation=1 (TOP左/BOT右) col=0-4 → 5通り
+            rotation=3 (BOT左/TOP右) col=0-4 → 5通り  = 計10通り
+    合計 22 通り。col の上限は回転に依存。
+
+    Args:
+        board: 元盤面 (破壊しない)。
+        pair: (TOP色, BOT色) の組。
+        col: 縦配置では落下列、横配置では左 puyo の列。
+        rotation: 0=縦TOP上, 1=横TOP左, 2=縦BOT上, 3=横BOT左。
+
+    Returns:
+        Board | None: 不可なら None。
+    """
+    top, bot = pair
+    if top == COLOR_EMPTY or bot == COLOR_EMPTY:
+        return None
+    work = board.copy()
+    if rotation in (0, 2):
+        # 縦配置 (同列に 2 puyo)
+        if not (0 <= col < BOARD_COLS):
+            return None
+        upper, lower = (top, bot) if rotation == 0 else (bot, top)
+        if not _drop_two_in_column(work, col, upper, lower):
+            return None
+        return work
+    # 横配置: col と col+1 に各 1 puyo
+    if not (0 <= col < BOARD_COLS - 1):
+        return None
+    left, right = (top, bot) if rotation == 1 else (bot, top)
+    if not _drop_one_inplace(work, col, left):
+        return None
+    if not _drop_one_inplace(work, col + 1, right):
+        return None
+    return work
+
+
+def _enumerate_placements(
+    board: Board,
+    pair: tuple[int, int],
+    sim: ChainSimulator,
+) -> "list[tuple[int, Board]]":
+    """22 配置すべてを試し (chain_count, 配置後盤面) リストを返す。
+
+    置けない組み合わせは除外 (空盤面なら最大 22 要素)。
+    重複盤面はキャッシュによるシミュレーションで自動吸収。
+
+    Returns:
+        list[(chain_count, placed_board)] — chain_count 降順でソート済み。
+    """
+    results: list[tuple[int, Board]] = []
+    for rotation in range(4):
+        max_col = BOARD_COLS if rotation in (0, 2) else BOARD_COLS - 1
+        for col in range(max_col):
+            placed = _place_pair_to_board(board, pair, col, rotation)
+            if placed is None:
+                continue
+            chain_result = sim.simulate(placed)
+            results.append((chain_result.chain_count, placed))
+    results.sort(key=lambda x: x[0], reverse=True)
+    return results
+
+
+@dataclass(frozen=True)
+class ReachFirePowerResult:
+    """III-3 到達火力の算出結果。
+
+    Attributes:
+        value: 正規化済み IndicatorV2Value (score=/72, raw=お邪魔数)。
+        source: "reach" (next+dnext 両方) または "fallback_immediate" (片方 None)。
+        max_chain: 到達できた最大連鎖数 (デバッグ/verify 用)。
+    """
+    value: IndicatorV2Value
+    source: str
+    max_chain: int
+
+
+def reach_fire_power(
+    board: Board,
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    best_k: int = REACH_FIRE_POWER_BEST_K,
+) -> ReachFirePowerResult:
+    """III-3 到達火力 (2 手先読み)。
+
+    実 next/dnext ペアを 22 配置ずつ探索し、最大スコアをお邪魔換算する。
+    early pruning: 1 手目の chain_count 上位 best_k (デフォルト 5) のみ 2 手目展開。
+    最大 sim 数 = 22 (1 手目) + 5 × 22 (2 手目) = 132 sim/STABLE。
+
+    next/dnext のいずれか None → immediate_fire_power (III-2) にフォールバック。
+    source フィールドで区別可能。
+
+    下界性 (検証): next+dnext 揃い時 raw >= III-2 の raw (>=III-1)。
+
+    Args:
+        board: STABLE 確定盤面。
+        next_pair: (TOP色, BOT色) または None (未検知)。
+        dnext_pair: (TOP色, BOT色) または None (未検知)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用)。
+        simulator: ChainSimulator インスタンス (省略時は共有)。
+        best_k: early pruning の 1 手目保留数 (デフォルト 5)。
+
+    Returns:
+        ReachFirePowerResult: value(score/raw) + source + max_chain。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # next/dnext 片方でも None → フォールバック
+    if next_pair is None or dnext_pair is None:
+        fb = immediate_fire_power(board, elapsed_sec, sim)
+        return ReachFirePowerResult(
+            value=fb, source="fallback_immediate", max_chain=0,
+        )
+    return _reach_fire_power_core(board, next_pair, dnext_pair, elapsed_sec, sim, best_k)
+
+
+def _reach_fire_power_core(
+    board: Board,
+    next_pair: "tuple[int, int]",
+    dnext_pair: "tuple[int, int]",
+    elapsed_sec: float,
+    sim: "ChainSimulator",
+    best_k: int,
+) -> ReachFirePowerResult:
+    """reach_fire_power の本体 (next/dnext 確定時のみ呼ばれる)。
+
+    1 手目 next_pair 22 配置 → chain_count 上位 best_k 選択 →
+    2 手目 dnext_pair 22 配置 → max chain_score。
+    """
+    # 1 手目: 22 配置 (chain_count 降順ソート済み)
+    first_candidates = _enumerate_placements(board, next_pair, sim)
+    if not first_candidates:
+        # 1 手目配置が 0 = 全列満杯 → フォールバック
+        fb = immediate_fire_power(board, elapsed_sec, sim)
+        return ReachFirePowerResult(
+            value=fb, source="fallback_immediate", max_chain=0,
+        )
+    # early pruning: 上位 best_k のみ残す
+    pruned = first_candidates[:best_k]
+
+    best_ojama = 0
+    best_max_chain = 0
+
+    for _, board_after_first in pruned:
+        # 2 手目: 22 配置
+        second_candidates = _enumerate_placements(board_after_first, dnext_pair, sim)
+        for chain_count, board_after_second in second_candidates:
+            # 2 手目配置後の連鎖スコアを計算
+            result2 = sim.simulate(board_after_second)
+            score2 = calculate_chain_score(result2).total_score
+            ojama2 = score_to_ojama(
+                score=score2, prev_leftover=0,
+                elapsed_sec=elapsed_sec, rate_base=OJAMA_RATE_STANDARD,
+            )
+            ojama_count = int(ojama2.ojama_count)
+            if ojama_count > best_ojama:
+                best_ojama = ojama_count
+                best_max_chain = result2.chain_count
+
+    value = IndicatorV2Value(
+        score=_clamp01(float(best_ojama) / REACH_FIRE_POWER_NORM),
+        raw=float(best_ojama),
+    )
+    return ReachFirePowerResult(
+        value=value, source="reach", max_chain=best_max_chain,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
+    "ReachFirePowerResult",
     # ①
     "tsumo_count_rate",
     "board_puyo_total",
@@ -668,6 +885,7 @@ __all__ = [
     "min_puyos_to_ignite",
     "connectivity_observation",
     "second_chain_potential",
+    "reach_fire_power",
     # ④
     "ojama_net_balance",
     "ojama_forecast",
