@@ -1,6 +1,6 @@
 """第1バッチ 有利不利判定指標 (指標 v2) — チャンク1。
 
-`docs/INDICATOR_V2_MEASUREMENT_SPEC_2026-06-17.md` の実装仕様に従う。
+`docs/INDICATOR_V2_MEASUREMENT_SPEC_2026-06-18_ESTABLISHED.md` の実装仕様に従う。
 セイバー流ボトムアップ方針: 単純な観測指標を多数提供し、重要度・閾値は学習で発見する。
 
 設計方針 (CLAUDE.md 準拠):
@@ -221,12 +221,20 @@ def death_margin_neighbor(board: Board) -> IndicatorV2Value:
 def current_max_chain(
     board: Board, simulator: ChainSimulator | None = None,
 ) -> IndicatorV2Value:
-    """III-1 現在の最大連鎖数。simulate(board).chain_count/19。
+    """III-1 現在の最大連鎖数 (takapt 定石)。
 
-    1 セル誤認で連鎖変動の限界あり (火力系共通の認識誤差リスク)。
+    各列×各色 最大 30 通り 1 個落として simulate し、最大連鎖数を返す。
+    `simulate(静止盤面)` 直接呼び出しは消せる 4 連結が無くほぼ 0 のため
+    (takapt 定石: 各列に 1 色 1 個落とした時の最大連鎖) に変更。
+    正規化: best_chain / NORM_MAX_CHAIN (暫定 19)。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
     """
     sim = simulator or _SHARED_SIMULATOR
-    raw = float(sim.simulate(board).chain_count)
+    best_chain, _ = _takapt_best_drop(board, sim)
+    raw = float(best_chain)
     return IndicatorV2Value(score=_clamp01(raw / NORM_MAX_CHAIN), raw=raw)
 
 
@@ -235,11 +243,22 @@ def immediate_fire_power(
     elapsed_sec: float = 0.0,
     simulator: ChainSimulator | None = None,
 ) -> IndicatorV2Value:
-    """III-2 即発火火力。今この盤面を発火したときの送出お邪魔数/72。
+    """III-2 即発火火力 (takapt 定石)。
 
-    score_to_ojama(calculate_chain_score(simulate(board)), elapsed) のお邪魔数。
+    III-1 の takapt 探索で得た最良配置盤面に calculate_chain_score を適用し
+    score_to_ojama でお邪魔換算する。/72 正規化。
+    best_board が None (全列満杯 等) の場合は 0。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
     """
-    ojama = _immediate_fire_ojama(board, elapsed_sec, simulator)
+    sim = simulator or _SHARED_SIMULATOR
+    _, best_board = _takapt_best_drop(board, sim)
+    if best_board is None:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    ojama = _board_fire_ojama(best_board, elapsed_sec, sim)
     return IndicatorV2Value(
         score=_clamp01(float(ojama) / ON_FIELD_CAP), raw=float(ojama),
     )
@@ -250,11 +269,23 @@ def chain_efficiency(
     elapsed_sec: float = 0.0,
     simulator: ChainSimulator | None = None,
 ) -> IndicatorV2Value:
-    """III-4 連鎖効率 = 即発火お邪魔 ÷ 色ぷよ総数 (密度)。/CHAIN_EFF_MAX。
+    """III-4 連鎖効率 (takapt 定石の副産物)。
 
+    即発火お邪魔 (III-2 相当) ÷ 色ぷよ総数 (密度)。/CHAIN_EFF_MAX 正規化。
+    III-2 と同じ takapt 探索結果を再利用するため追加コスト < キャッシュヒット。
     色ぷよが 0 個なら 0。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
     """
-    ojama = _immediate_fire_ojama(board, elapsed_sec, simulator)
+    sim = simulator or _SHARED_SIMULATOR
+    _, best_board = _takapt_best_drop(board, sim)
+    if best_board is None:
+        ojama = 0
+    else:
+        ojama = _board_fire_ojama(best_board, elapsed_sec, sim)
     color_count = _count_color_puyos(board)
     if color_count <= 0:
         raw = 0.0
@@ -485,12 +516,15 @@ def _count_visible_ojama(board: Board) -> int:
     return count
 
 
-def _immediate_fire_ojama(
+def _board_fire_ojama(
     board: Board,
     elapsed_sec: float,
     simulator: ChainSimulator | None,
 ) -> int:
-    """即発火時の送出お邪魔数を計算する (III-2/III-4 共通)。"""
+    """指定盤面を発火した場合の送出お邪魔数を計算する (III-2/III-4 共通)。
+
+    旧名 `_immediate_fire_ojama` を汎用化 (任意 board を渡せる版)。
+    """
     sim = simulator or _SHARED_SIMULATOR
     result = sim.simulate(board)
     score = calculate_chain_score(result).total_score
@@ -499,6 +533,50 @@ def _immediate_fire_ojama(
         rate_base=OJAMA_RATE_STANDARD,
     )
     return int(ojama.ojama_count)
+
+
+def _takapt_best_drop(
+    board: Board, sim: ChainSimulator,
+) -> tuple[int, Board | None]:
+    """takapt 定石: 各列×各色 (最大 30 通り) 1 個落として simulate し最良を返す。
+
+    Args:
+        board: 評価対象の盤面 (破壊しない)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        (best_chain_count, best_board_after_drop)
+        best_chain_count: 1 個追加で達成できる最大連鎖数。0 = 全列満杯 or 連鎖なし。
+        best_board_after_drop: 最大連鎖を達成した 1 個追加後の盤面。
+            全列満杯 等で 1 個も置けない場合は None。
+    """
+    best_chain: int = 0
+    best_board: Board | None = None
+    for col in range(BOARD_COLS):
+        for color in IGNITION_TRIAL_COLORS:
+            dropped = _drop_one_color(board, col, color)
+            if dropped is None:
+                continue  # 列満杯
+            result = sim.simulate(dropped)
+            if result.chain_count > best_chain:
+                best_chain = result.chain_count
+                best_board = dropped
+    return best_chain, best_board
+
+
+def _drop_one_color(board: Board, col: int, color: int) -> Board | None:
+    """col 列の積み上がり最上段に color を 1 個置いた新 Board を返す。
+
+    列が満杯 (height >= BOARD_ROWS) なら None を返す。
+    board は破壊しない (copy を返す)。
+    takapt 定石の基本操作。
+    """
+    row = _drop_row(board, col)
+    if row is None:
+        return None
+    work = board.copy()
+    work.set(row, col, color)
+    return work
 
 
 def _drop_row(board: Board, col: int) -> int | None:
@@ -511,26 +589,16 @@ def _drop_row(board: Board, col: int) -> int | None:
 
 def _simulate_with_one(
     sim: ChainSimulator, board: Board, col: int, color: int,
-) -> ChainResult | None:
-    """1 ぷよを col に落とした盤面で連鎖シミュレーション (置けなければ None)。"""
-    row = _drop_row(board, col)
-    if row is None:
-        return None
-    work = board.copy()
-    work.set(row, col, color)
-    return sim.simulate(work)
+) -> "ChainResult | None":
+    """1 ぷよを col に落とした盤面で連鎖シミュレーション (置けなければ None)。
 
-
-def _try_drop_one(
-    board: Board, col: int, color: int,
-) -> Board | None:
-    """1 ぷよを col に落とした新盤面 (置けなければ None)。"""
-    row = _drop_row(board, col)
-    if row is None:
+    _drop_one_color + sim.simulate の組み合わせ。
+    _search_min_ignite から利用 (シミュレータをキャッシュ経由で呼ぶ)。
+    """
+    dropped = _drop_one_color(board, col, color)
+    if dropped is None:
         return None
-    work = board.copy()
-    work.set(row, col, color)
-    return work
+    return sim.simulate(dropped)
 
 
 def _search_min_ignite(
@@ -550,7 +618,7 @@ def _search_min_ignite(
     if trial_limit >= 2:
         for color1 in IGNITION_TRIAL_COLORS:
             for col1 in range(BOARD_COLS):
-                board1 = _try_drop_one(board, col1, color1)
+                board1 = _drop_one_color(board, col1, color1)
                 if board1 is None or board1.is_dead():
                     continue
                 for color2 in IGNITION_TRIAL_COLORS:
