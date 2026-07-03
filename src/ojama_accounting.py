@@ -71,6 +71,13 @@ PENDING_HARD_CAP: int = ON_FIELD_CAP
 # forecast の絶対サニティ上限(約3画面分)
 PENDING_ABS_CAP: int = ON_FIELD_CAP * 3
 
+# chain_total の下限ガード: score OCR 端数誤読による幻の連鎖を弾く
+# 根拠: 1連鎖最小スコア ≈ 4ぷよ×10×(連鎖ボーナス0) = 40 点
+# 40点未満の chain_total は正当な連鎖でなく OCR 誤読の可能性が極めて高い。
+# お邪魔1個=70点未満のノイズのみ対象。正当な小連鎖(1-2連鎖=数十~数百点)は
+# chain_total=40点以上になるため弾かれない。
+CHAIN_TOTAL_MIN_SCORE: int = CHAIN_FIRE_MIN_SCORE  # = 40
+
 # chain_total_score のサニティ上限: 1試合の最大スコアを超えたら OCR 異常
 # 実測: ぷよぷよeスポーツ上級者試合で最大でも約 200,000 点以内
 CHAIN_TOTAL_SANITY_MAX: int = 200_000
@@ -477,6 +484,19 @@ class OjamaAccountingTracker:
             s.score_at_chain_start = None
             s.chain_finalized_at_sec = t_sec
             return
+        if chain_total < CHAIN_TOTAL_MIN_SCORE:
+            # 極小 chain_total = score OCR 端数誤読の疑い
+            # leftover への誤累積を防ぐため破棄する。
+            # 正当な小連鎖(1-2連鎖)は chain_total >= 40 になるため弾かれない。
+            logger.info(
+                "chain_end[%s]: chain_total=%d < min=%d (OCR端数誤読の疑い), "
+                "discarding t=%.2f",
+                side, chain_total, CHAIN_TOTAL_MIN_SCORE, t_sec,
+            )
+            s.chain_active = False
+            s.score_at_chain_start = None
+            s.chain_finalized_at_sec = t_sec
+            return
         if chain_total > CHAIN_TOTAL_SANITY_MAX:
             logger.warning(
                 "chain_end[%s]: chain_total=%d > sanity_max=%d, discarding t=%.2f",
@@ -617,6 +637,10 @@ class OjamaAccountingTracker:
         s.chain_active = False
         s.score_at_chain_start = None
         s.chain_end_pending = False
+        # 試合境界では chain_end_triggered もクリア。
+        # クリアしないと前試合の triggered=True が次試合に持ち越されて
+        # overlay の誤表示 (最大30秒以上) を引き起こす。
+        s.chain_end_triggered = False
         # 試合境界では last_valid_score もクリア(前試合の値が次試合冒頭に使われないよう)
         s.last_valid_score = None
         # coalesce window もクリア(前試合の window が次試合に引き継がれないよう)
@@ -737,6 +761,7 @@ class OjamaAccountingTracker:
 
 __all__ = [
     "CHAIN_FIRE_MIN_SCORE",
+    "CHAIN_TOTAL_MIN_SCORE",
     "CONFIDENCE_SCORE_OCR_ONLY",
     "CONFIDENCE_VISUAL_AGREE",
     "CONFIDENCE_VISUAL_MISMATCH_PENALTY",
