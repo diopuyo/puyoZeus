@@ -1550,3 +1550,192 @@ def test_margin_time_resets_at_match_boundary() -> None:
         f"次試合冒頭(試合相対12秒)ではマージンタイム非適用 → G=8 のはず。"
         f"forecast_p2={snap.forecast_p2} (旧実装では前試合継続elapsed=112sで過剰)"
     )
+
+
+# ============================
+# 23. バグ修正 回帰テスト (Phase 1a: 2026-07-03)
+# ============================
+
+def test_chain_end_triggered_reset_at_score_boundary() -> None:
+    """試合境界(score大幅減少)で chain_end_triggered が False にリセットされる。
+
+    修正前: _reset_side_boundary に chain_end_triggered=False がなかった。
+    そのため前試合の triggered=True が次試合に持ち越され、
+    overlay で「連鎖終了」が最大 30 秒以上誤表示される。
+
+    シナリオ:
+        1P が連鎖を撃つ → chain_end_triggered_p1=True
+        試合境界: score 大幅減少
+        次試合では chain_end_triggered_p1=False になるべき
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 1P が連鎖を撃つ → triggered=True になる
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=0, t_sec=5.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
+    )
+    snap_after_chain = tracker.get_snapshot(t_sec=7.0)
+    assert snap_after_chain.chain_end_triggered_p1 is True, "前提: 連鎖後 triggered=True"
+
+    # 試合境界: score 大幅減少
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=2100, t_sec=8.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=100, t_sec=9.0,
+        # 2100→100: SCORE_RESET_THRESHOLD(500)超え → _reset_side_boundary
+    )
+    snap_after_boundary = tracker.get_snapshot(t_sec=9.0)
+
+    assert snap_after_boundary.chain_end_triggered_p1 is False, (
+        f"試合境界後 chain_end_triggered_p1={snap_after_boundary.chain_end_triggered_p1} "
+        "should be False (修正前は True が持ち越されていた)"
+    )
+
+
+def test_chain_end_triggered_reset_at_menu_transition() -> None:
+    """MENU 遷移で chain_end_triggered が False にリセットされる。
+
+    MENU 遷移の _reset_side_boundary でも同様に chain_end_triggered をリセットする。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 1P が連鎖 → triggered=True
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=0, t_sec=5.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
+    )
+    snap_chain = tracker.get_snapshot(t_sec=7.0)
+    assert snap_chain.chain_end_triggered_p1 is True
+
+    # MENU 遷移 → _reset_side_boundary が呼ばれる
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.MENU, score=2100, t_sec=10.0,
+    )
+    snap_menu = tracker.get_snapshot(t_sec=10.0)
+
+    assert snap_menu.chain_end_triggered_p1 is False, (
+        f"MENU遷移後 chain_end_triggered_p1={snap_menu.chain_end_triggered_p1} "
+        "should be False"
+    )
+
+
+def test_chain_total_min_score_guard_discards_tiny_chain() -> None:
+    """chain_total < CHAIN_TOTAL_MIN_SCORE (=40) の極小連鎖は破棄される。
+
+    score OCR の端数誤読(例: score差=1~39)が幻のお邪魔を生成しないよう
+    下限ガードで破棄し、leftover の誤累積も防ぐ。
+    """
+    from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # STABLE で score=1000 を受信 (last_valid_score=1000)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=1000, t_sec=5.0,
+    )
+    # STABLE→CHAIN (start=1000)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    # 連鎖終了: score=1001 → chain_total=1 < CHAIN_TOTAL_MIN_SCORE(=40) → 破棄
+    chain_total_tiny = 1
+    assert chain_total_tiny < CHAIN_TOTAL_MIN_SCORE, "前提確認"
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=1000 + chain_total_tiny, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    assert snap.forecast_p2 == 0, (
+        f"極小chain_total={chain_total_tiny}は破棄: forecast_p2={snap.forecast_p2} (0になるべき)"
+    )
+    # leftover も汚染されていないこと
+    assert snap.leftover_p1 == 0, (
+        f"極小chain破棄でleftover汚染なし: leftover_p1={snap.leftover_p1} (0になるべき)"
+    )
+    # total_generated も増えていないこと
+    assert snap.total_generated_by_p1 == 0, (
+        f"極小chain破棄でtotal_generated汚染なし: {snap.total_generated_by_p1}"
+    )
+
+
+def test_chain_total_min_score_guard_allows_small_valid_chain() -> None:
+    """chain_total >= CHAIN_TOTAL_MIN_SCORE の正当な小連鎖は破棄されない。
+
+    1連鎖最小スコア = CHAIN_TOTAL_MIN_SCORE(=40) 以上は正常に処理される。
+    """
+    from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 正当な小連鎖: chain_total = CHAIN_TOTAL_MIN_SCORE(=40) ちょうど
+    chain_total = CHAIN_TOTAL_MIN_SCORE
+    expected_g, expected_leftover = _score_to_ojama_count(chain_total)
+
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=5.0,
+    )
+    snap = _fire_chain(tracker, "p1", chain_score=chain_total, score_before=0, t_sec=5.5)
+
+    # chain_total=40 → score_to_ojama(40) = ojama=0, leftover=40
+    assert expected_g == 0  # 40点はお邪魔1個(70点)未満なのでお邪魔生成なし
+    assert expected_leftover == 40
+
+    # 破棄されず leftover に正しく積まれる (お邪魔は生成されないが leftover は増える)
+    assert snap.forecast_p2 == 0, (
+        f"chain_total=40: forecast_p2={snap.forecast_p2} (0が正しい: 40<70でお邪魔なし)"
+    )
+    assert snap.leftover_p1 == expected_leftover, (
+        f"chain_total=40: leftover_p1={snap.leftover_p1} != {expected_leftover} (正当な小連鎖は破棄されない)"
+    )
+
+
+def test_tiny_score_diff_leftover_no_contamination() -> None:
+    """score差=1 の極小連鎖が leftover を汚染しないことを確認。
+
+    score OCR 端数誤読の典型ケース(差=1)で leftover が 0 のまま維持されるか。
+    その後の正常連鎖の計算が正しいことも確認。
+    """
+    from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 極小連鎖1回目 (score差=1, 破棄される)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=500, t_sec=5.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=501, t_sec=7.0,
+    )
+    snap_tiny = tracker.get_snapshot(t_sec=7.0)
+    assert snap_tiny.leftover_p1 == 0, "極小連鎖後の leftover は 0 のまま"
+    assert snap_tiny.forecast_p2 == 0, "極小連鎖後の forecast は 0 のまま"
+
+    # 正常連鎖 (chain_total=700, 10個)
+    expected_g, expected_leftover = _score_to_ojama_count(700)
+    assert expected_g == 10
+    assert expected_leftover == 0
+
+    # coalesce window を超えるため3秒後に発火
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=501, t_sec=10.0,
+    )
+    snap = _fire_chain(tracker, "p1", chain_score=700, score_before=501, t_sec=10.5)
+
+    assert snap.forecast_p2 == expected_g, (
+        f"正常連鎖後 forecast_p2={snap.forecast_p2} != {expected_g} "
+        "(leftover汚染があると +1 余分になる可能性)"
+    )
+    assert snap.leftover_p1 == expected_leftover, (
+        f"正常連鎖後 leftover_p1={snap.leftover_p1} != {expected_leftover}"
+    )
