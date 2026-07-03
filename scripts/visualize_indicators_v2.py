@@ -146,6 +146,22 @@ _RAW_LINE_GAP: int = 7         # 行間 (追加)
 _RAW_PANEL_W: int = 360        # raw パネル幅 (項目が長いので広め)
 _RAW_INDENT: int = 10          # ラベルのインデント
 
+# ============================
+# verify モード (選択指標の生値のみ) 専用定数
+# ============================
+
+# verify モードは10行程度なのでフォントをさらに大きくして目視照合しやすくする。
+_VFY_FS_TITLE: int = 32        # side タイトル
+_VFY_FS_LABEL: int = 26        # 項目ラベル + 値
+_VFY_LINE_GAP: int = 8         # 行間 (追加)
+_VFY_PANEL_W: int = 380        # パネル幅 (生値+ラベルが入る幅)
+_VFY_INDENT: int = 10          # ラベルのインデント
+
+# verify: net収支の符号説明をサブ行として色付き表示。
+_COL_VERIFY_POS: tuple[int, int, int] = (100, 230, 100)   # 正値 (緑: 自分優勢)
+_COL_VERIFY_NEG: tuple[int, int, int] = (255, 100, 100)   # 負値 (赤: 相手優勢)
+_COL_VERIFY_ZERO: tuple[int, int, int] = (200, 200, 200)  # ゼロ
+
 # 色別個数を該当色の文字色で表示するための RGB (PIL)。盤面照合しやすく。
 _PUYO_TEXT_RGB: dict[int, tuple[int, int, int]] = {
     COLOR_RED:    (255, 90, 90),
@@ -390,6 +406,128 @@ def _build_raw_lines(
     lines.append(("予告お邪魔", f"{forecast}", _COL_KEY))
     lines.append(("  (score会計推定)", "", _COL_NOTE))
     return lines
+
+
+# ============================
+# verify モード: 選択指標の生値のみ表示行構築
+# ============================
+
+
+def _net_balance_color(net: int) -> tuple[int, int, int]:
+    """net収支の符号で文字色を返す (正=自分優勢=緑、負=赤)。"""
+    if net > 0:
+        return _COL_VERIFY_POS
+    if net < 0:
+        return _COL_VERIFY_NEG
+    return _COL_VERIFY_ZERO
+
+
+def _build_verify_lines(
+    board: Board,
+    net: int,
+    forecast: int,
+) -> list[_RawLine]:
+    """verify モード: 選択10指標の生値のみで表示行を構築する。
+
+    正規化スコアは表示しない。生値(整数/浮動小数)を主役に配置。
+    照合ポイント: 「盤面ぷよ総数 = 色ぷよ総数 + お邪魔数」「最大連結が盤面と一致」。
+    """
+    # 盤面ぷよ総数 (お邪魔込み)
+    bp = iv.board_puyo_total(board)
+    bp_total = int(bp.raw)
+    # 色ぷよ総数 (お邪魔除く)
+    bc = iv.board_color_puyo_total(board)
+    bc_total = int(bc.raw)
+    # 盤面お邪魔数
+    bo = iv.board_ojama_count(board)
+    bo_total = int(bo.raw)
+    # 連結観測
+    total_conn, _ = iv.connectivity_observation(board)
+    pair_cnt = total_conn.pair_count
+    triple_cnt = total_conn.triple_count
+    max_group = total_conn.max_group_size
+    # 現在の最大連鎖数 (takapt 方式)
+    cm = iv.current_max_chain(board)
+    cm_raw = int(cm.raw)
+    # 吸収余地 (空きセル数)
+    ab = iv.absorption_capacity(board)
+    ab_raw = int(ab.raw)
+
+    # 盤面ぷよ数の照合サブ行: total = color + ojama
+    detail = f"(色{bc_total} + お邪魔{bo_total})"
+    net_col = _net_balance_color(net)
+
+    lines: list[_RawLine] = []
+    lines.append(("盤面ぷよ総数", f"{bp_total}", _COL_KEY))
+    lines.append(("  内訳", detail, _COL_NOTE))
+    lines.append(("色ぷよ総数", f"{bc_total}", _COL_VALUE))
+    lines.append(("2連結数", f"{pair_cnt}", _COL_VALUE))
+    lines.append(("3連結数", f"{triple_cnt}", _COL_VALUE))
+    lines.append(("最大連結", f"{max_group}", _COL_KEY))
+    lines.append(("最大連鎖数", f"{cm_raw} 連鎖", _COL_KEY))
+    lines.append(("net収支", f"{net:+d}", net_col))
+    lines.append(("  (+自分送過剰/-受超過)", "", _COL_NOTE))
+    lines.append(("予告お邪魔(forecast)", f"{forecast}", _COL_KEY))
+    lines.append(("盤面お邪魔数", f"{bo_total}", _COL_VALUE))
+    lines.append(("吸収余地(空き)", f"{ab_raw}", _COL_VALUE))
+    return lines
+
+
+def draw_verify_panel(
+    frame: np.ndarray,
+    fonts: _FontSet,
+    panel_x: int,
+    side_label: str,
+    state: BoardState,
+    is_frozen: bool,
+    lines: list[_RawLine],
+) -> None:
+    """1 side の verify パネルを frame (BGR) に描画する (大きめフォント)。
+
+    draw_raw_panel と同パターン。_VFY_* 定数で大きめフォントを使用。
+    """
+    line_h = _VFY_FS_LABEL + _VFY_LINE_GAP
+    title_h = _VFY_FS_TITLE + _VFY_LINE_GAP + 8
+    panel_h = title_h + line_h * len(lines) + 14
+    py0 = _PANEL_TOP_Y
+    py1 = min(OUT_H - _PANEL_BOT_MARGIN, py0 + panel_h)
+    px0 = panel_x
+    px1 = panel_x + _VFY_PANEL_W
+
+    # 半透明背景 (cv2)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (px0, py0), (px1, py1), _PANEL_BG_BGR, -1)
+    cv2.addWeighted(overlay, _PANEL_ALPHA, frame, 1.0 - _PANEL_ALPHA, 0, frame)
+    cv2.rectangle(frame, (px0, py0), (px1, py1), (110, 110, 110), 1)
+
+    # PIL でテキスト重畳
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(rgb)
+    draw = ImageDraw.Draw(pil_img)
+
+    tx = px0 + _VFY_INDENT
+    ty = py0 + 6
+    state_ja = _STATE_JA.get(state, state.value)
+    frozen_tag = " [凍結]" if is_frozen else ""
+    if not fonts.has_japanese:
+        state_ja = state.value
+        frozen_tag = " [FROZEN]" if is_frozen else ""
+    title = f"{side_label}  {state_ja}{frozen_tag}"
+    title_col = _COL_FROZEN if is_frozen else _COL_TITLE
+    _draw_text_with_outline(draw, (tx, ty), title, fonts.font(_VFY_FS_TITLE), title_col)
+    ty += title_h
+
+    label_font = fonts.font(_VFY_FS_LABEL)
+    for label, value, col in lines:
+        text = f"{label}: {value}" if value != "" else label
+        draw_col = _COL_FROZEN if is_frozen else col
+        _draw_text_with_outline(draw, (tx, ty), text, label_font, draw_col)
+        ty += line_h
+        if ty > OUT_H - _PANEL_BOT_MARGIN:
+            break
+
+    out = cv2.cvtColor(np.asarray(pil_img), cv2.COLOR_RGB2BGR)
+    frame[:, :, :] = out
 
 
 def draw_raw_panel(
@@ -641,6 +779,36 @@ def _side_raw_or_frozen(
     return [("原観測量", "STABLE 待ち", _COL_NOTE)], True
 
 
+def _side_verify_or_frozen(
+    side: SideResult,
+    side_label: str,
+    ojama_tracker: OjamaAccountingTracker,
+    t_sec: float,
+    snap: OjamaAccountSnapshot,
+    cache: dict[str, list[_RawLine]],
+) -> tuple[list[_RawLine], bool]:
+    """verify モード: STABLE なら選択指標の生値を算出し cache 更新、非 STABLE は凍結返却。
+
+    net収支の符号: 1P は snap.net_balance_capped のまま、2P は符号反転 (既存 indicator 方式踏襲)。
+    """
+    board = side.confirmed_board
+    is_stable = (
+        side.state == BoardState.STABLE
+        and board is not None
+        and board.count_puyos() > 0
+    )
+    if is_stable:
+        is_p1 = side_label == "1P"
+        net = snap.net_balance_capped if is_p1 else -snap.net_balance_capped
+        forecast = snap.forecast_p1 if is_p1 else snap.forecast_p2
+        lines = _build_verify_lines(board, net, forecast)
+        cache[side_label] = lines
+        return lines, False
+    if side_label in cache:
+        return cache[side_label], True
+    return [("選択指標", "STABLE 待ち", _COL_NOTE)], True
+
+
 def generate(
     video_path: Path,
     out_path: Path,
@@ -701,7 +869,8 @@ def generate(
     tracker_p2 = _SideTracker()
 
     is_raw = mode == "raw"
-    # 凍結表示用の最新 STABLE 結果キャッシュ (indicator/raw で行型が異なる)
+    is_verify = mode == "verify"
+    # 凍結表示用の最新 STABLE 結果キャッシュ (indicator/raw/verify で行型が異なる)
     line_cache: dict[str, list] = {}
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
@@ -709,10 +878,12 @@ def generate(
     last_p2_board: Board | None = None
     last_p1_score: int | None = None
     last_p2_score: int | None = None
-    _init_line = (
-        [("原観測量", "STABLE 待ち", _COL_NOTE)] if is_raw
-        else [("note", "指標", "STABLE 待ち")]
-    )
+    if is_raw:
+        _init_line: list = [("原観測量", "STABLE 待ち", _COL_NOTE)]
+    elif is_verify:
+        _init_line = [("選択指標", "STABLE 待ち", _COL_NOTE)]
+    else:
+        _init_line = [("note", "指標", "STABLE 待ち")]
     last_p1_lines: list = list(_init_line)
     last_p2_lines: list = list(_init_line)
     last_p1_frozen = True
@@ -770,6 +941,14 @@ def generate(
                     result.p2, pipeline, "2P", ojama_tracker,
                     t_sec, snap, line_cache,
                 )
+            elif is_verify:
+                # verify モード: 選択指標の生値のみ (STABLE) / 凍結 (非 STABLE)
+                last_p1_lines, last_p1_frozen = _side_verify_or_frozen(
+                    result.p1, "1P", ojama_tracker, t_sec, snap, line_cache,
+                )
+                last_p2_lines, last_p2_frozen = _side_verify_or_frozen(
+                    result.p2, "2P", ojama_tracker, t_sec, snap, line_cache,
+                )
             else:
                 # 指標算出 (STABLE) / 凍結 (非 STABLE)
                 last_p1_lines, last_p1_frozen = _side_lines_or_frozen(
@@ -805,6 +984,16 @@ def generate(
             )
             draw_raw_panel(
                 frame, fonts, raw_p2_x, "2P", last_p2_state,
+                last_p2_frozen, last_p2_lines,
+            )
+        elif is_verify:
+            vfy_p2_x = OUT_W - _VFY_PANEL_W - 4
+            draw_verify_panel(
+                frame, fonts, _P1_PANEL_X, "1P", last_p1_state,
+                last_p1_frozen, last_p1_lines,
+            )
+            draw_verify_panel(
+                frame, fonts, vfy_p2_x, "2P", last_p2_state,
                 last_p2_frozen, last_p2_lines,
             )
         else:
@@ -868,8 +1057,12 @@ def main() -> int:
         help="PNG 保存間隔秒 (--dump-png-dir 指定時のみ有効)。",
     )
     parser.add_argument(
-        "--mode", choices=("indicator", "raw"), default="indicator",
-        help="indicator=計算指標21項目(既定) / raw=原観測量(生データ)のみ。",
+        "--mode", choices=("indicator", "raw", "verify"), default="indicator",
+        help=(
+            "indicator=計算指標21項目(既定) / "
+            "raw=原観測量(生データ)のみ / "
+            "verify=選択10指標の生値(目視照合用、大きめ表示)。"
+        ),
     )
     args = parser.parse_args()
     n = generate(
