@@ -134,6 +134,15 @@ _COL_KEY: tuple[int, int, int] = (255, 240, 160)        # 黄系 (重要指標)
 _COL_VALUE: tuple[int, int, int] = (220, 220, 220)      # 薄白
 _COL_FROZEN: tuple[int, int, int] = (160, 160, 160)     # 凍結中 (グレー)
 _COL_NOTE: tuple[int, int, int] = (200, 160, 160)       # 注記 (未実装等)
+_COL_CHAIN_NOTE: tuple[int, int, int] = (140, 140, 140)  # 連鎖中注記 (やや暗いグレー)
+
+# verify モードで「連鎖中=予告確定待ち」注記を表示する state 集合。
+# CHAIN / EFFECT / GRAVITY_SETTLE は盤面が非確定なため予告値が凍結されることを明示する。
+_CHAIN_PENDING_STATES: frozenset[BoardState] = frozenset({
+    BoardState.CHAIN,
+    BoardState.EFFECT,
+    BoardState.GRAVITY_SETTLE,
+})
 
 # ============================
 # raw モード (原観測量) 専用定数
@@ -509,10 +518,13 @@ def draw_verify_panel(
     ty = py0 + 6
     state_ja = _STATE_JA.get(state, state.value)
     frozen_tag = " [凍結]" if is_frozen else ""
+    # 連鎖中は「(予告は確定待ち)」をタイトルに付加して誤解を防ぐ
+    chain_tag = " (予告は確定待ち)" if state in _CHAIN_PENDING_STATES else ""
     if not fonts.has_japanese:
         state_ja = state.value
         frozen_tag = " [FROZEN]" if is_frozen else ""
-    title = f"{side_label}  {state_ja}{frozen_tag}"
+        chain_tag = " (forecast pending)" if state in _CHAIN_PENDING_STATES else ""
+    title = f"{side_label}  {state_ja}{frozen_tag}{chain_tag}"
     title_col = _COL_FROZEN if is_frozen else _COL_TITLE
     _draw_text_with_outline(draw, (tx, ty), title, fonts.font(_VFY_FS_TITLE), title_col)
     ty += title_h
@@ -779,6 +791,25 @@ def _side_raw_or_frozen(
     return [("原観測量", "STABLE 待ち", _COL_NOTE)], True
 
 
+def _inject_chain_pending_note(
+    lines: list[_RawLine],
+) -> list[_RawLine]:
+    """verify 行リストの「予告お邪魔(forecast)」行の直後に連鎖中注記を差し込む。
+
+    キャッシュを破壊しないようコピーで返す。注記が既に存在する場合は重複挿入しない。
+    """
+    _FORECAST_LABEL = "予告お邪魔(forecast)"
+    _CHAIN_NOTE_LABEL = "  (連鎖中・確定待ち)"
+    result: list[_RawLine] = []
+    for entry in lines:
+        result.append(entry)
+        label = entry[0]
+        if label == _FORECAST_LABEL:
+            # 直後に注記行を差し込む (重複チェック: 次の行がすでに注記なら追加しない)
+            result.append((_CHAIN_NOTE_LABEL, "", _COL_CHAIN_NOTE))
+    return result
+
+
 def _side_verify_or_frozen(
     side: SideResult,
     side_label: str,
@@ -790,6 +821,8 @@ def _side_verify_or_frozen(
     """verify モード: STABLE なら選択指標の生値を算出し cache 更新、非 STABLE は凍結返却。
 
     net収支の符号: 1P は snap.net_balance_capped のまま、2P は符号反転 (既存 indicator 方式踏襲)。
+    連鎖中 (_CHAIN_PENDING_STATES) のとき: 凍結 cache の「予告お邪魔」行直後に
+    「(連鎖中・確定待ち)」注記を差し込んでグレー表示させる (cache は破壊しない)。
     """
     board = side.confirmed_board
     is_stable = (
@@ -805,7 +838,11 @@ def _side_verify_or_frozen(
         cache[side_label] = lines
         return lines, False
     if side_label in cache:
-        return cache[side_label], True
+        cached = cache[side_label]
+        if side.state in _CHAIN_PENDING_STATES:
+            # 連鎖中: 予告お邪魔行に注記を差し込んだコピーを返す (cache は変更しない)
+            return _inject_chain_pending_note(cached), True
+        return cached, True
     return [("選択指標", "STABLE 待ち", _COL_NOTE)], True
 
 
