@@ -64,14 +64,23 @@ ICON_BIG_CROWN: str = "big_crown"
 ICON_SUPERCROWN: str = "supercrown"
 
 # 各種類のおじゃま個数換算
+# 通ルール標準 (scoring.py の OJAMA_ICON_VALUES と整合):
+#   small=1 / line(大)=6 / rock(岩)=30 / big_crown(星)=180 / moon(月)=360 / crown(王冠)=720
+# ※ テンプレ名と通ルール名称の対応:
+#   ICON_LINE     ↔ 大(large)  = 6
+#   ICON_ROCK     ↔ 岩(rock)   = 30
+#   ICON_BIG_CROWN↔ 星(star)   = 180  (旧値 360 は誤り: NCC 照合で star=180 と確認)
+#   ICON_MOON     ↔ 月(moon)   = 360  (旧値 60 は誤り)
+#   ICON_CROWN    ↔ 王冠(crown)= 720  (旧値 180 は誤り)
+#   ICON_SUPERCROWN             = 720  (テンプレ未配置、将来対応)
 COUNT_TABLE: dict[str, int] = {
     ICON_EMPTY: 0,
     ICON_SMALL: 1,
     ICON_LINE: 6,
     ICON_ROCK: 30,
-    ICON_MOON: 60,
-    ICON_CROWN: 180,
-    ICON_BIG_CROWN: 360,
+    ICON_BIG_CROWN: 180,
+    ICON_MOON: 360,
+    ICON_CROWN: 720,
     ICON_SUPERCROWN: 720,
 }
 

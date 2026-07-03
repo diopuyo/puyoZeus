@@ -78,14 +78,22 @@ def _load_real_template(name: str) -> np.ndarray | None:
 
 
 def test_count_table_values() -> None:
-    """COUNT_TABLE の各種類が仕様通りの個数換算であること。"""
+    """COUNT_TABLE の各種類が通ルール標準の個数換算であること。
+
+    通ルール標準: small=1 / line(大)=6 / rock(岩)=30 /
+                  big_crown(星)=180 / moon(月)=360 / crown(王冠)=720
+    テンプレ名↔通ルール対応:
+        ICON_BIG_CROWN ↔ 星(star)=180 (旧値360は誤り: NCC照合で確認)
+        ICON_MOON      ↔ 月(moon)=360 (旧値60は誤り)
+        ICON_CROWN     ↔ 王冠(crown)=720 (旧値180は誤り)
+    """
     assert COUNT_TABLE[ICON_EMPTY] == 0
     assert COUNT_TABLE[ICON_SMALL] == 1
     assert COUNT_TABLE["line"] == 6
     assert COUNT_TABLE[ICON_ROCK] == 30
-    assert COUNT_TABLE[ICON_MOON] == 60
-    assert COUNT_TABLE["crown"] == 180
-    assert COUNT_TABLE["big_crown"] == 360
+    assert COUNT_TABLE["big_crown"] == 180
+    assert COUNT_TABLE[ICON_MOON] == 360
+    assert COUNT_TABLE["crown"] == 720
     assert COUNT_TABLE["supercrown"] == 720
 
 
