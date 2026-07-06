@@ -257,12 +257,16 @@ class OjamaAccountingTracker:
         s = self._side(side)
         other = self._other(side)
         self._frame_idx += 1
-        # -- 試合境界: MENU 遷移でリセット --
-        # MENU 遷移後は実際のゲーム開始タイミングが不明なため _match_start_sec を None に戻す。
-        # 次の score 受信時に _initialize_match_start() が呼ばれて再設定される。
+        # -- 試合境界: MENU 遷移でリセット (エッジトリガ) --
+        # MENU 継続中(prev も MENU)は毎フレーム呼ばれるため、
+        # prev_state != MENU のときだけ(=MENU 入場の最初の 1 回だけ)リセットする。
+        # これにより「1試合境界 = 1回リセット」を保証し、
+        # MENU 継続中の多重発火(video_124 で 22 回 → 6 回相当)を防止する。
         if curr_state == BoardState.MENU:
-            self._reset_side_boundary(s, side, score, t_sec)
-            self._match_start_sec = None  # MENU後は次score受信まで待つ
+            if prev_state != BoardState.MENU:
+                # MENU 入場エッジ: 1 回だけリセット
+                self._reset_side_boundary(s, side, score, t_sec)
+                self._match_start_sec = None  # MENU後は次score受信まで待つ
             return
         # -- 試合境界: score 大幅減少 --
         if score is not None and self._prev_score(side) is not None:
