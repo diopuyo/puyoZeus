@@ -1910,3 +1910,126 @@ def test_mid_chain_ojama_fall_to_chain_does_not_overwrite_score_at_start() -> No
     assert snap.forecast_p2 == expected_g, (
         f"forecast_p2={snap.forecast_p2} != {expected_g}"
     )
+
+
+# ============================
+# 25. MENU 多重発火防止 回帰テスト (2026-07-06 エッジトリガ化修正)
+# ============================
+
+def test_menu_edge_trigger_resets_only_once() -> None:
+    """MENU 継続中は _reset_side_boundary が 1 回だけ呼ばれる (多重発火防止)。
+
+    修正前: curr_state==MENU の毎フレームでリセットが発火 (video_124 で 22 回)。
+    修正後: prev_state != MENU のエッジでのみ 1 回だけリセット。
+
+    検証: MENU に入る前に forecast を積み、MENU 継続フレームを複数流した後も
+    forecast は 0 に 1 回だけリセットされ、それ以降はゼロ維持のまま。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 2P が G=30 を 1P へ送る (forecast_p1=30)
+    _fire_chain(tracker, "p2", chain_score=2100, score_before=0, t_sec=5.0)
+    snap_before = tracker.get_snapshot(t_sec=7.0)
+    assert snap_before.forecast_p1 == 30, "前提: forecast_p1=30"
+
+    # MENU 入場エッジ (prev=STABLE, curr=MENU) → 1 回目リセット
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.MENU, score=5000, t_sec=10.0,
+    )
+    snap_edge = tracker.get_snapshot(t_sec=10.0)
+    assert snap_edge.forecast_p1 == 0, (
+        f"MENU入場エッジでリセット: forecast_p1={snap_edge.forecast_p1} (0になるべき)"
+    )
+
+    # MENU 継続 (prev=MENU, curr=MENU) × 30 フレーム: 追加リセット発火なし
+    # (リセット済みのため 0 維持が期待値)
+    for i in range(30):
+        tracker.on_state_transition(
+            "p1", BoardState.MENU, BoardState.MENU, score=None, t_sec=10.1 + i * 0.033,
+        )
+    snap_after_menu = tracker.get_snapshot(t_sec=11.1)
+    assert snap_after_menu.forecast_p1 == 0, (
+        f"MENU継続後も forecast_p1=0 維持: {snap_after_menu.forecast_p1}"
+    )
+
+
+def test_menu_edge_trigger_fires_on_entry_not_continuation() -> None:
+    """MENU→MENU (継続) はリセットを発火しない。非MENU→MENU (入場) のみ発火。
+
+    2試合: 試合1でforecast積む → MENU → MENU継続 → 次試合開始
+    次試合冒頭でforecastが正しく0であることを確認 (リセット1回で十分)。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 試合1: 2P が G=10 を 1P へ送る
+    _fire_chain(tracker, "p2", chain_score=700, score_before=0, t_sec=5.0)
+    snap_trial1 = tracker.get_snapshot(t_sec=7.0)
+    g10, _ = _score_to_ojama_count(700)
+    assert snap_trial1.forecast_p1 == g10, f"前提: forecast_p1={g10}"
+
+    # MENU 入場 (非MENU→MENU)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.MENU, score=None, t_sec=20.0,
+    )
+    # MENU 継続 5 フレーム
+    for i in range(5):
+        tracker.on_state_transition(
+            "p1", BoardState.MENU, BoardState.MENU, score=None, t_sec=20.1 + i * 0.033,
+        )
+
+    # 試合2 開始 (MENU→STABLE)
+    tracker.on_state_transition(
+        "p1", BoardState.MENU, BoardState.STABLE, score=0, t_sec=22.0,
+    )
+    snap_trial2 = tracker.get_snapshot(t_sec=22.0)
+
+    # MENU 入場時に 1 回リセットされているので forecast=0
+    assert snap_trial2.forecast_p1 == 0, (
+        f"試合2冒頭 forecast_p1={snap_trial2.forecast_p1} (0になるべき, 前試合forecast漏れなし)"
+    )
+    # leftover もリセット済み
+    assert snap_trial2.leftover_p1 == 0, (
+        f"試合2冒頭 leftover_p1={snap_trial2.leftover_p1} (0になるべき)"
+    )
+
+
+def test_menu_forecast_zero_at_next_match_start() -> None:
+    """MENU 経由で試合境界をまたいでも前試合の forecast が次試合に漏れない。
+
+    video_124 で観測された多重発火ケースの縮約再現:
+        試合終了 → MENU (30フレーム) → 次試合開始
+        次試合冒頭で forecast = 0 (前試合予告の漏れなし)
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 前試合: 1P に G=50 相当の予告が溜まっている
+    _fire_chain(tracker, "p2", chain_score=3500, score_before=0, t_sec=10.0)
+    snap_pre = tracker.get_snapshot(t_sec=12.0)
+    expected_g, _ = _score_to_ojama_count(3500)
+    assert snap_pre.forecast_p1 == expected_g, f"前提: forecast_p1={expected_g}"
+
+    # 試合境界 → MENU 入場
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.MENU, score=10000, t_sec=50.0,
+    )
+    # MENU 継続 30 フレーム (約 1 秒 @ 30fps)
+    for i in range(30):
+        tracker.on_state_transition(
+            "p1", BoardState.MENU, BoardState.MENU, score=None, t_sec=50.1 + i * 0.033,
+        )
+
+    # 次試合 STABLE 開始
+    tracker.on_state_transition(
+        "p1", BoardState.MENU, BoardState.STABLE, score=0, t_sec=52.0,
+    )
+    snap_next = tracker.get_snapshot(t_sec=52.0)
+
+    assert snap_next.forecast_p1 == 0, (
+        f"次試合冒頭 forecast_p1={snap_next.forecast_p1} (前試合予告漏れなし, 0になるべき)"
+    )
+    assert snap_next.leftover_p1 == 0, (
+        f"次試合冒頭 leftover_p1={snap_next.leftover_p1} (0になるべき)"
+    )
