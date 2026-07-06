@@ -171,6 +171,12 @@ class _SideState:
     pending_since_frame: int = 0        # chain_end_pending 開始フレーム番号
     # --- 最後に読めた有効 score ---
     last_valid_score: int | None = None  # 毎フレーム非 None score を更新(連鎖開始前に使用)
+    # --- 連鎖間基準スコア (新方針: 連鎖間 stable スコア差分で chain_total を算出) ---
+    # 連鎖中でない STABLE フレームで score を読めたときに更新する。
+    # 「前の連鎖終了直後の落ち着いた score」を基準(0)とし、
+    # 次の finalize 時に score_after との差分を chain_total とする。
+    # これにより連鎖開始検知(score_at_chain_start)への依存を最小化する。
+    last_stable_score: int | None = None  # 連鎖間の落ち着いた STABLE score 基準値
     # --- snapshot 検証用 ---
     last_chain_total_score: int = 0     # 最後の連鎖合計得点
     chain_end_triggered: bool = False   # 今フレームで連鎖終了イベントが立ったか
@@ -282,6 +288,12 @@ class OjamaAccountingTracker:
             s.last_valid_score = score
             # 試合開始時刻が未設定の場合、最初の score 受信時刻を試合開始とみなす
             self._initialize_match_start(t_sec)
+        # -- 連鎖間基準スコア (last_stable_score) を更新 --
+        # 条件: STABLE 状態 かつ score が読める かつ 連鎖中でない かつ 遅延確定待ちでない
+        # CHAIN/GRAVITY_SETTLE 中・掛け算式 None 中は更新しない (途中値で汚さない)。
+        _is_stable_state = (curr_state == BoardState.STABLE)
+        if _is_stable_state and score is not None and not s.chain_active and not s.chain_end_pending:
+            s.last_stable_score = score
         # -- 連鎖終了待ちの遅延確定 (score None 継続時タイムアウト) --
         if s.chain_end_pending and score is not None:
             self._finalize_chain_end(s, other, score, side, t_sec)
@@ -473,13 +485,37 @@ class OjamaAccountingTracker:
         """
         s.chain_end_pending = False
         # --- 連鎖合計スコア計算 ---
+        # 新方針: last_stable_score (連鎖間の落ち着いた STABLE score) を基準に優先使用する。
+        # score_at_chain_start は coalesce/dedup の有効性チェックにのみ使用する:
+        #   - score_at_chain_start=None = coalesce skip で連鎖開始が認識されていない
+        #     → 偽連鎖(state 明滅)として破棄する(過剰計上防止)
+        #   - score_at_chain_start=設定済み = 正規の連鎖開始あり
+        #     → last_stable_score を優先して差分計算する
+        # これにより、score_at_chain_start の取り違えによる計算誤差を排除しつつ、
+        # coalesce window 保護も維持する。
         if s.score_at_chain_start is None:
-            # 連鎖開始時 score が不明: 破棄
+            # 連鎖開始が認識されていない = coalesce skip で保護された偽連鎖
+            # → 過剰計上防止のため破棄する
             logger.warning("chain_end[%s]: score_at_chain_start=None, discarding t=%.2f", side, t_sec)
             s.chain_active = False
             s.chain_finalized_at_sec = t_sec  # 破棄でも coalesce window を開く
             return
-        score_start = s.score_at_chain_start
+        # score_at_chain_start が設定されている = 正規の連鎖。
+        # last_stable_score を優先して差分計算する(フォールバック: score_at_chain_start)。
+        if s.last_stable_score is not None:
+            score_start = s.last_stable_score
+            logger.debug(
+                "chain_end[%s]: using last_stable_score=%d "
+                "(score_at_chain_start=%d) t=%.2f",
+                side, score_start, s.score_at_chain_start, t_sec,
+            )
+        else:
+            # last_stable_score が未設定(試合最初の連鎖など): score_at_chain_start でフォールバック
+            score_start = s.score_at_chain_start
+            logger.info(
+                "chain_end[%s]: last_stable_score=None, fallback to score_at_chain_start=%d t=%.2f",
+                side, score_start, t_sec,
+            )
         chain_total = score_after - score_start
         # --- sanity check ---
         if chain_total <= 0:
@@ -570,6 +606,9 @@ class OjamaAccountingTracker:
         # --- 後処理 ---
         s.chain_active = False
         s.score_at_chain_start = None
+        # finalize 後は score_after を新しい last_stable_score として設定する。
+        # これにより次の連鎖の chain_total が正確に「この連鎖終了直後から」計算される。
+        s.last_stable_score = score_after
         # coalesce window を開く: この時刻から CHAIN_COALESCE_WINDOW_SEC 以内の
         # 再 chain_start は同一連鎖の state 明滅とみなし score_at_chain_start を守る。
         s.chain_finalized_at_sec = t_sec
@@ -652,6 +691,8 @@ class OjamaAccountingTracker:
         s.chain_end_triggered = False
         # 試合境界では last_valid_score もクリア(前試合の値が次試合冒頭に使われないよう)
         s.last_valid_score = None
+        # 試合境界では last_stable_score もクリア(前試合のスコアが次試合の基準に使われないよう)
+        s.last_stable_score = None
         # coalesce window もクリア(前試合の window が次試合に引き継がれないよう)
         s.chain_finalized_at_sec = None
         # --- マージンタイム基準を試合相対に更新 ---

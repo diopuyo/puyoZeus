@@ -2033,3 +2033,279 @@ def test_menu_forecast_zero_at_next_match_start() -> None:
     assert snap_next.leftover_p1 == 0, (
         f"次試合冒頭 leftover_p1={snap_next.leftover_p1} (0になるべき)"
     )
+
+
+# ============================
+# 26. last_stable_score 差分方式 回帰テスト (2026-07-06 新方針)
+# ============================
+
+def test_last_stable_score_used_as_chain_total_base() -> None:
+    """last_stable_score (連鎖間の落ち着いた STABLE score) を基準に chain_total が算出される。
+
+    新方針:
+        - 連鎖間の STABLE フレームで score を読んだとき last_stable_score を更新する。
+        - finalize 時は last_stable_score を score_start として使用する。
+        - これにより score_at_chain_start の取り違えによる計算誤差を排除する。
+
+    シナリオ:
+        t=5.0: STABLE score=100 → last_stable_score=100
+        t=5.5: STABLE→CHAIN (score_at_chain_start=100)
+        t=7.0: CHAIN→STABLE score=3100 → chain_total=3100-100=3000 → G=42, leftover=60
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # STABLE フレームで score=100 → last_stable_score=100 に設定
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=100, t_sec=5.0,
+    )
+    # 連鎖開始
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    # 連鎖終了
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=3100, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    expected_chain_total = 3000  # 3100 - 100
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 42
+    assert expected_leftover == 60  # 3000 = 42*70 + 60
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"chain_total_score_p1={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+    assert snap.leftover_p1 == expected_leftover, (
+        f"leftover_p1={snap.leftover_p1} != {expected_leftover}"
+    )
+
+
+def test_last_stable_score_not_updated_during_chain() -> None:
+    """連鎖中 (chain_active=True) は last_stable_score が更新されない。
+
+    連鎖中に score が読めても last_stable_score を汚さないことを確認する。
+    GRAVITY_SETTLE→STABLE で score が来たときに last_stable_score が
+    連鎖前の基準値のまま維持されることが重要。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 STABLE: score=200 → last_stable_score=200
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=200, t_sec=5.0,
+    )
+    # 連鎖開始
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    # 連鎖途中: CHAIN→GRAVITY_SETTLE (score=800) → 連鎖中なので last_stable_score は更新されない
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score=800, t_sec=6.0,
+    )
+    # 連鎖終了: GRAVITY_SETTLE→STABLE (score=2200)
+    # chain_total = 2200 - 200(last_stable_score) = 2000 となるべき
+    # もし last_stable_score が 800 に上書きされていたら chain_total=1400 になる
+    tracker.on_state_transition(
+        "p1", BoardState.GRAVITY_SETTLE, BoardState.STABLE, score=2200, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    expected_chain_total = 2000  # 2200 - 200 (not 800)
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 28
+    assert expected_leftover == 40  # 2000 = 28*70 + 40
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"chain_total_score_p1={snap.chain_total_score_p1} != {expected_chain_total} "
+        f"(連鎖中 score=800 で last_stable_score が汚染された可能性)"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+def test_last_stable_score_updated_after_finalize() -> None:
+    """finalize 後に last_stable_score=score_after に更新され次連鎖の基準になる。
+
+    2連鎖シナリオ:
+        1連鎖目: score=0→2100 → finalize → last_stable_score=2100
+        2連鎖目: score=2100→5600 → chain_total=5600-2100=3500
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 試合開始: score=0 (last_stable_score=0)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=1.0,
+    )
+
+    # 1連鎖目
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
+    )
+    snap_1st = tracker.get_snapshot(t_sec=7.0)
+    g1, _ = _score_to_ojama_count(2100)
+    assert snap_1st.chain_total_score_p1 == 2100, (
+        f"1連鎖目 chain_total={snap_1st.chain_total_score_p1} != 2100"
+    )
+
+    # 1連鎖目終了直後: STABLE で score を確認して last_stable_score を安定させる
+    # (finalize 後に last_stable_score=2100 が設定済みなので追加 STABLE フレームは不要)
+
+    # 2連鎖目: coalesce window (2.5s) を超えてから発火
+    t_2nd = 7.0 + 3.0  # =10.0s
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=5600, t_sec=t_2nd + 2.0,
+    )
+    snap_2nd = tracker.get_snapshot(t_sec=t_2nd + 2.0)
+
+    expected_chain_total_2nd = 3500  # 5600 - 2100 (last_stable_score=finalize後の2100)
+    expected_g2, _ = _score_to_ojama_count(expected_chain_total_2nd)
+    assert expected_g2 == 50
+
+    assert snap_2nd.chain_total_score_p1 == expected_chain_total_2nd, (
+        f"2連鎖目 chain_total={snap_2nd.chain_total_score_p1} != {expected_chain_total_2nd} "
+        f"(last_stable_score がfinalize後のscore_afterに更新されていることを確認)"
+    )
+    assert snap_2nd.total_generated_by_p1 == g1 + expected_g2, (
+        f"total_generated={snap_2nd.total_generated_by_p1} != {g1 + expected_g2}"
+    )
+
+
+def test_last_stable_score_cleared_at_match_boundary() -> None:
+    """試合境界(score大幅減少)で last_stable_score がリセットされる。
+
+    前試合の last_stable_score が次試合の基準に使われると誤計算が起きる。
+    試合境界で None にクリアされ、フォールバック(score_at_chain_start)が使われることを確認。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 前試合: score=50000 まで到達
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=50000, t_sec=200.0,
+    )
+    # 試合境界: score 大幅減少 → last_stable_score リセット
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=100, t_sec=201.0,
+    )
+    # 次試合: score=100 で STABLE を受信 → last_stable_score=100 に設定
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=100, t_sec=202.0,
+    )
+    # 連鎖開始 (score_at_chain_start=100)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=203.0,
+    )
+    # 連鎖終了: score=2200 → chain_total=2200-100=2100 (前試合の50000が使われないことを確認)
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2200, t_sec=205.0,
+    )
+    snap = tracker.get_snapshot(t_sec=205.0)
+
+    expected_chain_total = 2100  # 2200 - 100 (last_stable_scoreが100にリセット済み)
+    expected_g, _ = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 30
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"次試合chain_total={snap.chain_total_score_p1} != {expected_chain_total} "
+        f"(前試合のlast_stable_score=50000が漏れていたらchain_totalが負になる)"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+def test_last_stable_score_fallback_to_score_at_chain_start() -> None:
+    """last_stable_score が None のとき score_at_chain_start にフォールバックする。
+
+    試合開始直後 (last_stable_score 未設定) で連鎖が起きた場合、
+    score_at_chain_start (last_valid_score から設定) を使って正常に計算できることを確認。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # STABLE 中 score=500 を受信 (last_valid_score=500, last_stable_score=500 も更新)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=500, t_sec=5.0,
+    )
+    # 連鎖開始: STABLE→CHAIN, score=None
+    # この時点で last_stable_score=500 (STABLE フレームで更新済み)
+    # → chain_total = score_after - 500 となることを確認
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    # 連鎖終了
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2800, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    expected_chain_total = 2300  # 2800 - 500
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 32
+    assert expected_leftover == 60  # 2300 = 32*70 + 60
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+def test_last_stable_score_not_updated_while_chain_end_pending() -> None:
+    """chain_end_pending 中 (score None 遅延確定待ち) は last_stable_score が更新されない。
+
+    CHAIN→STABLE 後 score=None で pending になった後、
+    STABLE 状態で score が来ても pending 中は last_stable_score を汚さない。
+    遅延確定時に正しい chain_total が計算されることを確認する。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 STABLE: score=300 → last_stable_score=300
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=300, t_sec=5.0,
+    )
+    # 連鎖開始
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    # 連鎖終了 score=None → pending 開始
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=None, t_sec=7.0,
+    )
+    # pending 中: STABLE で score=999 が来ても last_stable_score=300 を維持
+    # (chain_end_pending=True なので更新しない)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=999, t_sec=7.1,
+        # pending フレームに STABLE→STABLE で score=999 が来た
+        # → chain_total は 999-300 = 699 になるべき (last_stable_score は更新されていないはず)
+        # しかし: score=999 は pending の遅延確定に使われる!
+        # finalize: chain_total = 999 - last_stable_score(300) = 699 → G=9, leftover=69
+    )
+    snap = tracker.get_snapshot(t_sec=7.1)
+
+    expected_chain_total = 699  # 999 - 300
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 9
+    assert expected_leftover == 69  # 699 = 9*70 + 69
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"遅延確定 chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"遅延確定後 forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
