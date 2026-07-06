@@ -958,10 +958,13 @@ def generate(
                 last_p1_score = result.p1.score
             if result.p2.score is not None:
                 last_p2_score = result.p2.score
-            # お邪魔会計駆動 (collect_indicators_v2._drive_ojama 流用)
+            # お邪魔会計駆動: tsumo_count 増分で drain
             snap = _drive_ojama(
                 ojama_tracker, result.p1, result.p2,
                 prev_state_p1, prev_state_p2, t_sec,
+                tracker_p1=tracker_p1,
+                tracker_p2=tracker_p2,
+                pipeline=pipeline,
             )
             prev_state_p1 = result.p1.state
             prev_state_p2 = result.p2.state

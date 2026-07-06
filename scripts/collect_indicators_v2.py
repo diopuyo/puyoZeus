@@ -99,6 +99,7 @@ class _SideTracker:
     game_idx: int = 0
     prev_score: int | None = None
     last_emitted_grid: bytes | None = None  # 直前に出力した盤面 (間引き)
+    prev_tsumo: int = 0  # tsumo_count 駆動 drain 用: 前回の手数
 
 
 def _compute_row(
@@ -319,10 +320,13 @@ def collect(
         if fi % sample_interval_frames != 0:
             continue
         result = pipeline.update(fi, t_sec, frame)
-        # --- お邪魔会計駆動 (viz 統合と同様) ---
+        # --- お邪魔会計駆動: tsumo_count 増分で drain ---
         snap = _drive_ojama(
             ojama_tracker, result.p1, result.p2,
             prev_state_p1, prev_state_p2, t_sec,
+            tracker_p1=tracker_p1,
+            tracker_p2=tracker_p2,
+            pipeline=pipeline,
         )
         prev_state_p1 = result.p1.state
         prev_state_p2 = result.p2.state
@@ -353,21 +357,74 @@ def _drive_ojama(
     prev_p1: BoardState,
     prev_p2: BoardState,
     t_sec: float,
+    tracker_p1: "_SideTracker | None" = None,
+    tracker_p2: "_SideTracker | None" = None,
+    pipeline: "RecognitionPipeline | None" = None,
 ) -> OjamaAccountSnapshot:
-    """OjamaAccountingTracker を on_state_transition / on_tsumo_settled で駆動。"""
-    tsumo_settled_p1 = (
-        prev_p1 == BoardState.TSUMO_FALL and p1.state == BoardState.STABLE
-    )
-    tsumo_settled_p2 = (
-        prev_p2 == BoardState.TSUMO_FALL and p2.state == BoardState.STABLE
-    )
+    """OjamaAccountingTracker を on_state_transition / on_tsumo_settled で駆動。
+
+    drain トリガーは tsumo_count 増分駆動 (手数ベース) を優先する。
+    pipeline / tracker_Xp が渡された場合は tsumo_count の増分 delta 回
+    on_tsumo_settled を呼ぶ。渡されない場合は旧トリガー (TSUMO_FALL→STABLE)
+    で動作し後方互換を維持する (内部テスト等の呼出元を壊さない)。
+
+    Args:
+        tracker: お邪魔会計追跡器。
+        p1, p2: 各 side の認識結果。
+        prev_p1, prev_p2: 前フレームの各 side の状態。
+        t_sec: 現在時刻 (秒)。
+        tracker_p1, tracker_p2: 手数 prev_tsumo を保持する _SideTracker。
+            None の場合は旧 TSUMO_FALL→STABLE トリガーにフォールバック。
+        pipeline: tsumo_count(side) を提供する RecognitionPipeline。
+            None の場合は旧 TSUMO_FALL→STABLE トリガーにフォールバック。
+    """
     tracker.on_state_transition("p1", prev_p1, p1.state, p1.score, t_sec)
     tracker.on_state_transition("p2", prev_p2, p2.state, p2.score, t_sec)
-    if tsumo_settled_p1:
-        tracker.on_tsumo_settled("p1", t_sec)
-    if tsumo_settled_p2:
-        tracker.on_tsumo_settled("p2", t_sec)
+
+    if pipeline is not None and tracker_p1 is not None and tracker_p2 is not None:
+        # tsumo_count 増分駆動: delta 回 on_tsumo_settled を呼ぶ
+        _drain_by_tsumo_delta(tracker, pipeline, tracker_p1, "p1", "1P", t_sec)
+        _drain_by_tsumo_delta(tracker, pipeline, tracker_p2, "p2", "2P", t_sec)
+    else:
+        # フォールバック: 旧 TSUMO_FALL→STABLE トリガー (後方互換)
+        if prev_p1 == BoardState.TSUMO_FALL and p1.state == BoardState.STABLE:
+            tracker.on_tsumo_settled("p1", t_sec)
+        if prev_p2 == BoardState.TSUMO_FALL and p2.state == BoardState.STABLE:
+            tracker.on_tsumo_settled("p2", t_sec)
+
     return tracker.get_snapshot(t_sec)
+
+
+# tsumo_count 増分 drain に使うサイドラベル対応定数
+_SIDE_LABEL_TO_OJAMA_KEY: dict[str, str] = {"1P": "p1", "2P": "p2"}
+
+
+def _drain_by_tsumo_delta(
+    tracker: OjamaAccountingTracker,
+    pipeline: RecognitionPipeline,
+    side_tracker: "_SideTracker",
+    ojama_key: str,
+    pipeline_key: str,
+    t_sec: float,
+) -> None:
+    """tsumo_count の増分 delta 回 on_tsumo_settled を呼ぶ。
+
+    Args:
+        tracker: お邪魔会計追跡器。
+        pipeline: tsumo_count(side) を提供する RecognitionPipeline。
+        side_tracker: prev_tsumo を保持する _SideTracker。
+        ojama_key: "p1" または "p2" (OjamaAccountingTracker への key)。
+        pipeline_key: "1P" または "2P" (pipeline.tsumo_count への key)。
+        t_sec: 現在時刻 (秒)。
+    """
+    curr_tsumo = pipeline.tsumo_count(pipeline_key)
+    delta = curr_tsumo - side_tracker.prev_tsumo
+    # 試合境界 (手数リセット) では delta < 0 になるため skip (会計は
+    # on_state_transition の MENU/score減少検知で既にリセット済み)
+    if delta > 0:
+        for _ in range(delta):
+            tracker.on_tsumo_settled(ojama_key, t_sec)
+    side_tracker.prev_tsumo = curr_tsumo
 
 
 def main() -> int:
