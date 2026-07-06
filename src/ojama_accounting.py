@@ -311,14 +311,19 @@ class OjamaAccountingTracker:
                 s.chain_finalized_at_sec is not None
                 and (t_sec - s.chain_finalized_at_sec) < CHAIN_COALESCE_WINDOW_SEC
             )
-            if s.chain_end_pending or _in_coalesce_window:
+            # 連鎖途中フリッカー判定:
+            # score_at_chain_start が既に設定済み(≠None)の場合は「連鎖継続中の
+            # state 明滅(GRAVITY_SETTLE→CHAIN, OJAMA_FALL→CHAIN 等)」とみなし
+            # score_at_chain_start を上書きしない。
+            # 根拠: finalize/_reset_side_boundary/timeout の各パスで必ず
+            # score_at_chain_start=None に戻すため、「None でないなら連鎖中」が保証される。
+            _already_started = s.score_at_chain_start is not None
+            if s.chain_end_pending or _in_coalesce_window or _already_started:
                 logger.info(
-                    "chain_start[%s]: coalesce skip (pending=%s, finalized_at=%.2f, "
-                    "window=%.1fs) — score_at_start=%s maintained t=%.2f",
-                    side, s.chain_end_pending,
-                    s.chain_finalized_at_sec if s.chain_finalized_at_sec is not None else -1.0,
-                    CHAIN_COALESCE_WINDOW_SEC,
-                    s.score_at_chain_start, t_sec,
+                    "chain_start[%s]: skip (pending=%s, in_coalesce=%s, "
+                    "already_started=%s score_at_start=%s) t=%.2f",
+                    side, s.chain_end_pending, _in_coalesce_window,
+                    _already_started, s.score_at_chain_start, t_sec,
                 )
             else:
                 # 新規連鎖: score_at_chain_start を確定

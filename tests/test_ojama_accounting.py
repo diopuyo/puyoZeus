@@ -1739,3 +1739,174 @@ def test_tiny_score_diff_leftover_no_contamination() -> None:
     assert snap.leftover_p1 == expected_leftover, (
         f"正常連鎖後 leftover_p1={snap.leftover_p1} != {expected_leftover}"
     )
+
+
+# ============================
+# 24. 連鎖中フリッカー score_at_chain_start 上書きバグ 回帰テスト (2026-07-06 修正)
+# ============================
+
+def test_mid_chain_gravity_settle_to_chain_does_not_overwrite_score_at_start() -> None:
+    """連鎖途中の GRAVITY_SETTLE→CHAIN フリッカーで score_at_chain_start が上書きされない。
+
+    診断済み実例(t=142連鎖, 1P):
+        スコア段階上昇: 465→505→825→1465→3565
+        STABLE→CHAIN(start=465) → 連鎖中 GRAVITY_SETTLE→CHAIN フリッカー(score=1465)
+        修正前: score_at_chain_start=1465 に上書き → chain_total=3565-1465=2100(30個) 過少
+        修正後: score_at_chain_start=465 維持 → chain_total=3565-465=3100(44個) 正確
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 score=465 (last_valid_score=465)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=465, t_sec=5.0,
+    )
+    # 連鎖開始: STABLE→CHAIN (score_at_chain_start=465 に設定)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    snap_start = tracker.get_snapshot(t_sec=5.5)
+    assert snap_start.score_at_chain_start_p1 == 465, (
+        f"前提: score_at_chain_start={snap_start.score_at_chain_start_p1} (465 であるべき)"
+    )
+
+    # 連鎖途中: CHAIN→GRAVITY_SETTLE
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score=1465, t_sec=6.0,
+    )
+    # 連鎖途中フリッカー: GRAVITY_SETTLE→CHAIN (score=1465)
+    # 修正前: score_at_chain_start=1465 に上書きされていた
+    # 修正後: score_at_chain_start=465 のまま維持されるべき
+    tracker.on_state_transition(
+        "p1", BoardState.GRAVITY_SETTLE, BoardState.CHAIN, score=1465, t_sec=6.2,
+    )
+    snap_mid = tracker.get_snapshot(t_sec=6.2)
+    assert snap_mid.score_at_chain_start_p1 == 465, (
+        f"連鎖中GRAVITY_SETTLE→CHAINフリッカー後 score_at_chain_start="
+        f"{snap_mid.score_at_chain_start_p1} (465 のまま維持されるべき、修正前は1465に上書き)"
+    )
+
+    # 連鎖終了: CHAIN→STABLE (score=3565)
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=3565, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    # chain_total = 3565 - 465 = 3100 → G=44, leftover=20
+    expected_chain_total = 3100
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 44
+    assert expected_leftover == 20  # 3100 = 44*70 + 20
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"chain_total_score_p1={snap.chain_total_score_p1} != {expected_chain_total} "
+        f"(修正前は1465で上書きされ chain_total=2100になっていた)"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g} "
+        f"(修正前はG=30、修正後はG=44)"
+    )
+
+
+def test_mid_chain_flicker_new_chain_after_finalize_resets_normally() -> None:
+    """finalize 後に score_at_chain_start=None に戻り、次の本物の連鎖で再設定される。
+
+    finalize → score_at_chain_start=None → coalesce window 経過 → 次連鎖で再設定。
+    エッジケース: 今回の修正が「次連鎖の開始スコア設定」を妨げないことを確認。
+    """
+    from src.ojama_accounting import CHAIN_COALESCE_WINDOW_SEC
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 1連鎖目: score_before=200, chain_total=700
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=200, t_sec=5.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=900, t_sec=6.5)
+    snap_1st = tracker.get_snapshot(t_sec=6.5)
+
+    # finalize 後は score_at_chain_start=None に戻る
+    assert snap_1st.score_at_chain_start_p1 is None, (
+        f"finalize後 score_at_chain_start={snap_1st.score_at_chain_start_p1} (None であるべき)"
+    )
+
+    # coalesce window (2.5s) + 余裕 を経過させてから 2連鎖目
+    t_2nd = 6.5 + CHAIN_COALESCE_WINDOW_SEC + 0.5  # =9.5s
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=900, t_sec=t_2nd)
+    # 2連鎖目開始: score_at_chain_start=900 が設定されるべき
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd + 0.5)
+    snap_2nd_start = tracker.get_snapshot(t_sec=t_2nd + 0.5)
+
+    assert snap_2nd_start.score_at_chain_start_p1 == 900, (
+        f"2連鎖目開始時 score_at_chain_start={snap_2nd_start.score_at_chain_start_p1} "
+        f"(900 に設定されるべき — 今回修正が次連鎖を妨げないことを確認)"
+    )
+
+    # 2連鎖目終了
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=1600, t_sec=t_2nd + 2.0)
+    snap_2nd = tracker.get_snapshot(t_sec=t_2nd + 2.0)
+
+    # chain_total = 1600 - 900 = 700 → 1連鎖目と同じG
+    g1, _ = _score_to_ojama_count(700)
+    g2, _ = _score_to_ojama_count(700)
+    assert snap_2nd.total_generated_by_p1 == g1 + g2, (
+        f"total_generated={snap_2nd.total_generated_by_p1} != {g1 + g2}"
+    )
+
+
+def test_mid_chain_ojama_fall_to_chain_does_not_overwrite_score_at_start() -> None:
+    """連鎖途中の OJAMA_FALL→CHAIN フリッカーでも score_at_chain_start が上書きされない。
+
+    GRAVITY_SETTLE 以外の非CHAIN state からの CHAIN 遷移フリッカーもケアされることを確認。
+    OJAMA_FALL は _chain_states に含まれないため _is_chain_start=True になるが、
+    _already_started=True でスキップされるべき。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 score=300
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE, score=300, t_sec=5.0,
+    )
+    # 連鎖開始 (score_at_chain_start=300)
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
+    )
+    snap_start = tracker.get_snapshot(t_sec=5.5)
+    assert snap_start.score_at_chain_start_p1 == 300
+
+    # 連鎖途中: 任意の非CHAIN state (OJAMA_FALL に相当するシミュレーション)
+    # BoardState.OJAMA_FALL が存在すれば使うが、ここでは GRAVITY_SETTLE で代用
+    # 重要なのは「非CHAIN→CHAIN の _is_chain_start=True になるケース全般」
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score=800, t_sec=6.0,
+    )
+    tracker.on_state_transition(
+        "p1", BoardState.GRAVITY_SETTLE, BoardState.CHAIN, score=800, t_sec=6.1,
+    )
+    snap_mid = tracker.get_snapshot(t_sec=6.1)
+
+    # score_at_chain_start は 300 のまま維持されるべき
+    assert snap_mid.score_at_chain_start_p1 == 300, (
+        f"GRAVITY_SETTLE→CHAINフリッカー後 score_at_chain_start="
+        f"{snap_mid.score_at_chain_start_p1} (300 維持されるべき)"
+    )
+
+    # 連鎖終了 (score=2100)
+    tracker.on_state_transition(
+        "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
+    )
+    snap = tracker.get_snapshot(t_sec=7.0)
+
+    # chain_total = 2100 - 300 = 1800 → G=25, leftover=50
+    expected_chain_total = 1800
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 25
+    assert expected_leftover == 50  # 1800 = 25*70 + 50
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"chain_total_score_p1={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
