@@ -32,6 +32,7 @@ from src.board import (
 )
 from src.board_state_machine import BoardState
 from src.ojama_accounting import (
+    CHAIN_COALESCE_WINDOW_SEC,
     CHAIN_FIRE_MIN_SCORE,
     CONFIDENCE_SCORE_OCR_ONLY,
     ON_FIELD_CAP,
@@ -80,6 +81,31 @@ def _make_board_with_ojama(ojama_count: int) -> Board:
     return Board.from_list(data)
 
 
+def _settle_score(
+    tracker: OjamaAccountingTracker,
+    side: str,
+    score: int,
+    t_start: float,
+    dt: float = 0.001,
+) -> float:
+    """settle 待ちを確定させるため K_SETTLE_FRAMES フレーム分の STABLE→STABLE を流す。
+
+    連鎖終了直後に呼び出すことで finalize を確定させる。
+    dt はデフォルト 0.001秒(テスト高速化 + coalesce window への干渉回避)。
+
+    Returns:
+        最後のフレームの t_sec。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    for i in range(K_SETTLE_FRAMES):
+        tracker.on_state_transition(
+            side, BoardState.STABLE, BoardState.STABLE,
+            score, t_start + (i + 1) * dt,
+        )
+    return t_start + K_SETTLE_FRAMES * dt
+
+
 def _fire_chain(
     tracker: OjamaAccountingTracker,
     side: str,
@@ -87,23 +113,37 @@ def _fire_chain(
     score_before: int = 0,
     t_sec: float = 5.0,
 ) -> OjamaAccountSnapshot:
-    """連鎖開始 → 連鎖終了 の状態遷移を一連でシミュレートする。
+    """連鎖開始 → 連鎖終了 → score settle の状態遷移を一連でシミュレートする。
+
+    score settle 待ち (K_SETTLE_FRAMES 連続不変) が入ったため、
+    連鎖終了後に K_SETTLE_FRAMES フレーム分の STABLE→STABLE を同一スコアで流す。
+    これにより finalize が確定し、呼出元が即座に forecast を確認できる。
 
     Returns:
-        連鎖終了直後のスナップショット。
+        settle 確定後のスナップショット。
     """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
     score_after = score_before + chain_score
     # 連鎖開始: STABLE → CHAIN
     tracker.on_state_transition(
         side, BoardState.STABLE, BoardState.CHAIN,
         score_before, t_sec,
     )
-    # 連鎖終了: CHAIN → STABLE
+    # 連鎖終了: CHAIN → STABLE (settle 待ち開始)
     tracker.on_state_transition(
         side, BoardState.CHAIN, BoardState.STABLE,
         score_after, t_sec + 2.0,
     )
-    return tracker.get_snapshot(t_sec + 2.0)
+    # settle 確定: K_SETTLE_FRAMES フレーム連続で同一スコアを通知
+    # dt=0.001 でテスト高速化 + coalesce window (2.5s) への干渉回避
+    _dt = 0.001
+    for i in range(K_SETTLE_FRAMES):
+        tracker.on_state_transition(
+            side, BoardState.STABLE, BoardState.STABLE,
+            score_after, t_sec + 2.0 + (i + 1) * _dt,
+        )
+    return tracker.get_snapshot(t_sec + 2.0 + K_SETTLE_FRAMES * _dt)
 
 
 # ============================
@@ -208,11 +248,13 @@ def test_gravity_settle_to_stable_triggers_chain_end() -> None:
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score_after, t_sec=6.0,
     )
-    # GRAVITY_SETTLE → STABLE (連鎖終了)
+    # GRAVITY_SETTLE → STABLE (連鎖終了 → settle 待ち開始)
     tracker.on_state_transition(
         "p1", BoardState.GRAVITY_SETTLE, BoardState.STABLE, score_after, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定: K_SETTLE_FRAMES フレーム流す
+    t_end = _settle_score(tracker, "p1", score_after, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     assert snap.forecast_p2 == expected_ojama, (
         f"GRAVITY_SETTLE経由: forecast_p2={snap.forecast_p2} != {expected_ojama}"
@@ -532,7 +574,10 @@ def test_boundary_no_reset_on_small_decrease() -> None:
 # ============================
 
 def test_chain_end_deferred_when_score_none() -> None:
-    """CHAIN→STABLE 遷移時 score=None なら待機し、次フレームで確定。"""
+    """CHAIN→STABLE 遷移時 score=None なら待機し、settle 後に確定。
+
+    新仕様: score が来ても即確定せず K_SETTLE_FRAMES 連続不変後に確定。
+    """
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
@@ -543,7 +588,7 @@ def test_chain_end_deferred_when_score_none() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=0, t_sec=5.0,
     )
-    # 連鎖終了 score=None (OCR 失敗)
+    # 連鎖終了 score=None (OCR 失敗) → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=None, t_sec=7.0,
     )
@@ -551,14 +596,20 @@ def test_chain_end_deferred_when_score_none() -> None:
     # まだ確定していない
     assert snap_pending.forecast_p2 == 0
 
-    # 次フレームで score が来る
+    # 次フレームで score が来る → settle 待ちに候補が入るが確定はまだ
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.STABLE, score=chain_total, t_sec=7.1,
     )
-    snap_confirmed = tracker.get_snapshot(t_sec=7.1)
+    snap_one_frame = tracker.get_snapshot(t_sec=7.1)
+    # まだ settle 完了していない(1フレームのみ)
+    assert snap_one_frame.forecast_p2 == 0
+
+    # K_SETTLE_FRAMES 連続不変で settle 確定
+    t_end = _settle_score(tracker, "p1", chain_total, t_start=7.1)
+    snap_confirmed = tracker.get_snapshot(t_end)
 
     assert snap_confirmed.forecast_p2 == expected_ojama, (
-        f"遅延確定後 forecast_p2={snap_confirmed.forecast_p2} != {expected_ojama}"
+        f"settle確定後 forecast_p2={snap_confirmed.forecast_p2} != {expected_ojama}"
     )
 
 
@@ -891,11 +942,18 @@ def test_score_at_chain_start_appears_in_snapshot() -> None:
         f"score_at_chain_start_p1={snap_chain.score_at_chain_start_p1} != 1000"
     )
 
-    # 連鎖終了後は None に戻る
+    # 連鎖終了後 settle 確定で None に戻る
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=3100, t_sec=7.0,
     )
-    snap_end = tracker.get_snapshot(t_sec=7.0)
+    # settle 前はまだ score_at_chain_start が残っている(settle 待ち中)
+    snap_settle_pending = tracker.get_snapshot(t_sec=7.0)
+    assert snap_settle_pending.score_at_chain_start_p1 is not None, (
+        "settle待ち中は score_at_chain_start が残っているべき"
+    )
+    # settle 確定後に None に戻る
+    t_end = _settle_score(tracker, "p1", 3100, t_start=7.0)
+    snap_end = tracker.get_snapshot(t_end)
     assert snap_end.score_at_chain_start_p1 is None
 
 
@@ -965,11 +1023,13 @@ def test_chain_start_uses_last_valid_score_when_frame_score_none() -> None:
         f"遅延確定前 forecast_p2={snap_pending.forecast_p2} (まだ 0 であるべき)"
     )
 
-    # score が来て遅延確定
+    # score が来て settle 待ちに候補が入る
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.STABLE, score=3500, t_sec=7.1,
     )
-    snap = tracker.get_snapshot(t_sec=7.1)
+    # settle 確定: K_SETTLE_FRAMES 連続不変
+    t_end = _settle_score(tracker, "p1", 3500, t_start=7.1)
+    snap = tracker.get_snapshot(t_end)
 
     assert snap.forecast_p2 == expected_g, (
         f"forecast_p2={snap.forecast_p2} != {expected_g} "
@@ -1009,11 +1069,13 @@ def test_chain_start_uses_last_valid_score_when_frame_score_present() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=score_before, t_sec=5.5,
     )
-    # 連鎖終了
+    # 連鎖終了 → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=score_after, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", score_after, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     assert snap.forecast_p2 == expected_g, (
         f"forecast_p2={snap.forecast_p2} != {expected_g}"
@@ -1110,11 +1172,13 @@ def test_forecast_physical_consistency_within_match_score() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=11.0,
     )
-    # 連鎖終了: score=803 (195 + 608)
+    # 連鎖終了 → settle 待ち開始: score=803 (195 + 608)
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=13.0,
     )
-    snap = tracker.get_snapshot(t_sec=13.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 803, t_start=13.0)
+    snap = tracker.get_snapshot(t_end)
 
     # chain_total = 803 - 195 = 608 → G=8, leftover=48
     expected_g, expected_leftover = _score_to_ojama_count(608)
@@ -1202,16 +1266,18 @@ def test_state_flicker_chain_stable_chain_counts_once() -> None:
         f"連鎖開始時 score_at_chain_start={snap_start.score_at_chain_start_p1} != 195"
     )
 
-    # 1回目 連鎖終了: CHAIN→STABLE, score=803 → finalize: chain_total=608→G=8
+    # 1回目 連鎖終了: CHAIN→STABLE, score=803 → settle 待ち開始
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=6.5)
-    snap_after_1st = tracker.get_snapshot(t_sec=6.5)
+    # settle 確定(dt=0.001 で finalized_at ≒ 6.52)
+    t_after_1st = _settle_score(tracker, "p1", 803, t_start=6.5)
+    snap_after_1st = tracker.get_snapshot(t_after_1st)
     expected_g1, _ = _score_to_ojama_count(608)
     assert expected_g1 == 8
     assert snap_after_1st.total_generated_by_p1 == 8, (
-        f"1回目 finalize 後 total_generated={snap_after_1st.total_generated_by_p1} != 8"
+        f"1回目 settle 確定後 total_generated={snap_after_1st.total_generated_by_p1} != 8"
     )
 
-    # state 明滅: STABLE→CHAIN (coalesce window 内: finalized_at=6.5, t=6.8 → 差0.3s < 2.5s)
+    # state 明滅: STABLE→CHAIN (coalesce window 内: finalized_at≒6.52, t=6.8 → 差0.28s < 2.5s)
     # → score_at_chain_start は上書きされないはず (coalesce skip)
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=6.8)
     snap_flicker = tracker.get_snapshot(t_sec=6.8)
@@ -1221,10 +1287,11 @@ def test_state_flicker_chain_stable_chain_counts_once() -> None:
         "(None のはず — 上書き禁止)"
     )
 
-    # state 明滅 2回目終了: CHAIN→STABLE, score=803 (連鎖後の正常 score)
-    # score_at_chain_start=None → _finalize_chain_end で破棄
+    # state 明滅 2回目終了: CHAIN→STABLE, score=803
+    # score_at_chain_start=None → settle 後に破棄
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=7.0)
-    snap_after_2nd = tracker.get_snapshot(t_sec=7.0)
+    t_after_2nd = _settle_score(tracker, "p1", 803, t_start=7.0)
+    snap_after_2nd = tracker.get_snapshot(t_after_2nd)
 
     # total_generated は 8 のまま (2回目は破棄される)
     assert snap_after_2nd.total_generated_by_p1 == 8, (
@@ -1265,23 +1332,25 @@ def test_state_flicker_with_gravity_settle_counts_once() -> None:
     # CHAIN→GRAVITY_SETTLE
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score=None, t_sec=6.0)
 
-    # GRAVITY_SETTLE→STABLE (score=803, finalize: chain_total=608→G=8)
+    # GRAVITY_SETTLE→STABLE (score=803) → settle 待ち開始
     tracker.on_state_transition("p1", BoardState.GRAVITY_SETTLE, BoardState.STABLE, score=803, t_sec=6.5)
-    snap_1st = tracker.get_snapshot(t_sec=6.5)
+    # settle 確定(finalized_at ≒ 6.52)
+    t_after_1st = _settle_score(tracker, "p1", 803, t_start=6.5)
+    snap_1st = tracker.get_snapshot(t_after_1st)
     expected_g, _ = _score_to_ojama_count(608)
     assert expected_g == 8
     assert snap_1st.total_generated_by_p1 == 8, (
-        f"1回目 G={snap_1st.total_generated_by_p1} != 8"
+        f"1回目 settle 確定後 G={snap_1st.total_generated_by_p1} != 8"
     )
 
     # state 明滅 (coalesce window 内 < 2.5s): STABLE→CHAIN
-    # t=7.0 - finalized_at=6.5 = 0.5s < 2.5s → coalesce skip
+    # finalized_at≒6.52, t=7.0 → 差0.48s < 2.5s → coalesce skip
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=7.0)
 
-    # CHAIN→STABLE (score=2855, もし score_at_chain_start=803 で計算されたら
-    # chain_total=2052→G=29 過剰。修正後は score_at_chain_start=None で破棄)
+    # CHAIN→STABLE (score=2855) → settle 待ち → score_at_chain_start=None で破棄
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2855, t_sec=7.5)
-    snap_2nd = tracker.get_snapshot(t_sec=7.5)
+    t_after_2nd = _settle_score(tracker, "p1", 2855, t_start=7.5)
+    snap_2nd = tracker.get_snapshot(t_after_2nd)
 
     assert snap_2nd.total_generated_by_p1 == 8, (
         f"state明滅後 G={snap_2nd.total_generated_by_p1} != 8 "
@@ -1304,16 +1373,20 @@ def test_new_chain_after_coalesce_window_fires_normally() -> None:
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=5.0)
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=700, t_sec=6.0)
-    snap_1st = tracker.get_snapshot(t_sec=6.0)
+    # settle 確定(finalized_at ≒ 6.02)
+    t_1st_end = _settle_score(tracker, "p1", 700, t_start=6.0)
+    snap_1st = tracker.get_snapshot(t_1st_end)
     g1, _ = _score_to_ojama_count(700)
     assert snap_1st.total_generated_by_p1 == g1
 
     # coalesce window (2.5s) + 余裕 を経過してから 2連鎖目
-    t_2nd_start = 6.0 + CHAIN_COALESCE_WINDOW_SEC + 0.5  # 9.0s
+    # finalized_at ≒ 6.02 + CHAIN_COALESCE_WINDOW_SEC + 0.5 = 9.02 以降で開始
+    t_2nd_start = t_1st_end + CHAIN_COALESCE_WINDOW_SEC + 0.5
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=700, t_sec=t_2nd_start)
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd_start + 0.5)
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=1400, t_sec=t_2nd_start + 1.5)
-    snap_2nd = tracker.get_snapshot(t_sec=t_2nd_start + 1.5)
+    t_2nd_end = _settle_score(tracker, "p1", 1400, t_start=t_2nd_start + 1.5)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
 
     # 2連鎖目も正常に加算: chain_total=1400-700=700 → G=g1
     g2, _ = _score_to_ojama_count(700)
@@ -1347,9 +1420,11 @@ def test_chain_end_pending_during_flicker_coalesces() -> None:
 
     # pending 中に state 明滅: STABLE→CHAIN
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=6.6)
-    # score=803 が来る → pending finalize (chain_total=803-195=608→G=8)
+    # score=803 が来る → settle 待ちに候補 803 が入る
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=7.0)
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 803, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     expected_g, _ = _score_to_ojama_count(608)
     assert expected_g == 8
@@ -1393,13 +1468,15 @@ def test_margin_time_uses_match_relative_not_clip_relative() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=168.0,
     )
-    # t=169.0 で連鎖終了: score=803 (195+608)
+    # t=169.0 で連鎖終了 → settle 待ち開始: score=803 (195+608)
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=169.0,
     )
-    snap = tracker.get_snapshot(t_sec=169.0)
+    # settle 確定(elapsed は settle 確定時刻で計算。dt=0.001 で差は無視できる)
+    t_end = _settle_score(tracker, "p1", 803, t_start=169.0)
+    snap = tracker.get_snapshot(t_end)
 
-    # chain_total=608、elapsed=169-148=21秒 → マージンタイム非適用 → rate=70 → G=8
+    # chain_total=608、elapsed≒(169-148)=21秒 → マージンタイム非適用 → rate=70 → G=8
     expected_g, expected_leftover = _score_to_ojama_count(608)
     assert expected_g == 8, f"前提確認: score_to_ojama(608)={expected_g} (8であるべき)"
     assert expected_leftover == 48
@@ -1475,14 +1552,16 @@ def test_margin_time_activates_after_96s_within_single_match() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=100.0,
     )
-    # t=101.0 で連鎖終了: score=803 (195+608)
+    # t=101.0 で連鎖終了 → settle 待ち開始: score=803 (195+608)
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=101.0,
     )
-    snap = tracker.get_snapshot(t_sec=101.0)
+    # settle 確定(dt=0.001 で elapsed ≒ 101.02s。マージンタイム区域なので問題なし)
+    t_end = _settle_score(tracker, "p1", 803, t_start=101.0)
+    snap = tracker.get_snapshot(t_end)
 
-    # elapsed = 101 - 1 = 100秒 > 96秒 → マージンタイム適用
-    elapsed = 101.0 - 1.0  # 100秒
+    # elapsed = t_end - 1 ≒ 101.02 - 1 = 100.02秒 > 96秒 → マージンタイム適用
+    elapsed = t_end - 1.0
     rate = compute_effective_rate(elapsed)
     assert rate < 70, f"elapsed={elapsed}s でマージンタイム適用後 rate={rate}<70 のはず"
 
@@ -1536,13 +1615,15 @@ def test_margin_time_resets_at_match_boundary() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=110.0,
     )
-    # t=112 で連鎖終了: score=803 (195+608)
+    # t=112 で連鎖終了 → settle 待ち開始: score=803 (195+608)
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=803, t_sec=112.0,
     )
-    snap = tracker.get_snapshot(t_sec=112.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 803, t_start=112.0)
+    snap = tracker.get_snapshot(t_end)
 
-    # 次試合の elapsed = 112 - 100 = 12秒 → マージンタイム非適用 → G=8
+    # 次試合の elapsed ≒ t_end - 100 ≒ 12.02秒 → マージンタイム非適用 → G=8
     expected_g, _ = _score_to_ojama_count(608)
     assert expected_g == 8
 
@@ -1707,7 +1788,7 @@ def test_tiny_score_diff_leftover_no_contamination() -> None:
     tracker = OjamaAccountingTracker()
     tracker.reset()
 
-    # 極小連鎖1回目 (score差=1, 破棄される)
+    # 極小連鎖1回目 (score差=1, settle後に破棄される)
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.STABLE, score=500, t_sec=5.0,
     )
@@ -1717,7 +1798,9 @@ def test_tiny_score_diff_leftover_no_contamination() -> None:
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=501, t_sec=7.0,
     )
-    snap_tiny = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定(chain_total=1 < CHAIN_TOTAL_MIN_SCORE=40 → 破棄)
+    t_tiny_end = _settle_score(tracker, "p1", 501, t_start=7.0)
+    snap_tiny = tracker.get_snapshot(t_tiny_end)
     assert snap_tiny.leftover_p1 == 0, "極小連鎖後の leftover は 0 のまま"
     assert snap_tiny.forecast_p2 == 0, "極小連鎖後の forecast は 0 のまま"
 
@@ -1726,7 +1809,8 @@ def test_tiny_score_diff_leftover_no_contamination() -> None:
     assert expected_g == 10
     assert expected_leftover == 0
 
-    # coalesce window を超えるため3秒後に発火
+    # coalesce window を超えるため十分時間を空けて発火
+    # t_tiny_end ≒ 7.02。coalesce window(2.5s) + α = 10.0s で安全
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.STABLE, score=501, t_sec=10.0,
     )
@@ -1786,11 +1870,13 @@ def test_mid_chain_gravity_settle_to_chain_does_not_overwrite_score_at_start() -
         f"{snap_mid.score_at_chain_start_p1} (465 のまま維持されるべき、修正前は1465に上書き)"
     )
 
-    # 連鎖終了: CHAIN→STABLE (score=3565)
+    # 連鎖終了: CHAIN→STABLE (score=3565) → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=3565, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 3565, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     # chain_total = 3565 - 465 = 3100 → G=44, leftover=20
     expected_chain_total = 3100
@@ -1823,15 +1909,18 @@ def test_mid_chain_flicker_new_chain_after_finalize_resets_normally() -> None:
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=200, t_sec=5.0)
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=900, t_sec=6.5)
-    snap_1st = tracker.get_snapshot(t_sec=6.5)
+    # settle 確定後は score_at_chain_start=None に戻る
+    t_1st_end = _settle_score(tracker, "p1", 900, t_start=6.5)
+    snap_1st = tracker.get_snapshot(t_1st_end)
 
-    # finalize 後は score_at_chain_start=None に戻る
+    # finalize(settle確定)後は score_at_chain_start=None に戻る
     assert snap_1st.score_at_chain_start_p1 is None, (
         f"finalize後 score_at_chain_start={snap_1st.score_at_chain_start_p1} (None であるべき)"
     )
 
     # coalesce window (2.5s) + 余裕 を経過させてから 2連鎖目
-    t_2nd = 6.5 + CHAIN_COALESCE_WINDOW_SEC + 0.5  # =9.5s
+    # t_1st_end ≒ 6.52。coalesce window(2.5s) + 0.5 = t_2nd ≒ 9.52
+    t_2nd = t_1st_end + CHAIN_COALESCE_WINDOW_SEC + 0.5
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=900, t_sec=t_2nd)
     # 2連鎖目開始: score_at_chain_start=900 が設定されるべき
     tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd + 0.5)
@@ -1844,7 +1933,8 @@ def test_mid_chain_flicker_new_chain_after_finalize_resets_normally() -> None:
 
     # 2連鎖目終了
     tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=1600, t_sec=t_2nd + 2.0)
-    snap_2nd = tracker.get_snapshot(t_sec=t_2nd + 2.0)
+    t_2nd_end = _settle_score(tracker, "p1", 1600, t_start=t_2nd + 2.0)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
 
     # chain_total = 1600 - 900 = 700 → 1連鎖目と同じG
     g1, _ = _score_to_ojama_count(700)
@@ -1892,11 +1982,13 @@ def test_mid_chain_ojama_fall_to_chain_does_not_overwrite_score_at_start() -> No
         f"{snap_mid.score_at_chain_start_p1} (300 維持されるべき)"
     )
 
-    # 連鎖終了 (score=2100)
+    # 連鎖終了 (score=2100) → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 2100, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     # chain_total = 2100 - 300 = 1800 → G=25, leftover=50
     expected_chain_total = 1800
@@ -2063,11 +2155,13 @@ def test_last_stable_score_used_as_chain_total_base() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
     )
-    # 連鎖終了
+    # 連鎖終了 → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=3100, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 3100, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     expected_chain_total = 3000  # 3100 - 100
     expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
@@ -2107,13 +2201,15 @@ def test_last_stable_score_not_updated_during_chain() -> None:
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.GRAVITY_SETTLE, score=800, t_sec=6.0,
     )
-    # 連鎖終了: GRAVITY_SETTLE→STABLE (score=2200)
+    # 連鎖終了: GRAVITY_SETTLE→STABLE (score=2200) → settle 待ち開始
     # chain_total = 2200 - 200(last_stable_score) = 2000 となるべき
     # もし last_stable_score が 800 に上書きされていたら chain_total=1400 になる
     tracker.on_state_transition(
         "p1", BoardState.GRAVITY_SETTLE, BoardState.STABLE, score=2200, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 2200, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     expected_chain_total = 2000  # 2200 - 200 (not 800)
     expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
@@ -2151,24 +2247,25 @@ def test_last_stable_score_updated_after_finalize() -> None:
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0,
     )
-    snap_1st = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定(finalized_at ≒ 7.02)
+    t_1st_end = _settle_score(tracker, "p1", 2100, t_start=7.0)
+    snap_1st = tracker.get_snapshot(t_1st_end)
     g1, _ = _score_to_ojama_count(2100)
     assert snap_1st.chain_total_score_p1 == 2100, (
         f"1連鎖目 chain_total={snap_1st.chain_total_score_p1} != 2100"
     )
 
-    # 1連鎖目終了直後: STABLE で score を確認して last_stable_score を安定させる
-    # (finalize 後に last_stable_score=2100 が設定済みなので追加 STABLE フレームは不要)
-
-    # 2連鎖目: coalesce window (2.5s) を超えてから発火
-    t_2nd = 7.0 + 3.0  # =10.0s
+    # finalize 後 last_stable_score=2100 が設定済み。
+    # 2連鎖目: coalesce window (2.5s) + α を超えてから発火
+    t_2nd = t_1st_end + CHAIN_COALESCE_WINDOW_SEC + 0.5
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd,
     )
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=5600, t_sec=t_2nd + 2.0,
     )
-    snap_2nd = tracker.get_snapshot(t_sec=t_2nd + 2.0)
+    t_2nd_end = _settle_score(tracker, "p1", 5600, t_start=t_2nd + 2.0)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
 
     expected_chain_total_2nd = 3500  # 5600 - 2100 (last_stable_score=finalize後の2100)
     expected_g2, _ = _score_to_ojama_count(expected_chain_total_2nd)
@@ -2208,11 +2305,13 @@ def test_last_stable_score_cleared_at_match_boundary() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=203.0,
     )
-    # 連鎖終了: score=2200 → chain_total=2200-100=2100 (前試合の50000が使われないことを確認)
+    # 連鎖終了 → settle 待ち開始: score=2200 → chain_total=2200-100=2100
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=2200, t_sec=205.0,
     )
-    snap = tracker.get_snapshot(t_sec=205.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 2200, t_start=205.0)
+    snap = tracker.get_snapshot(t_end)
 
     expected_chain_total = 2100  # 2200 - 100 (last_stable_scoreが100にリセット済み)
     expected_g, _ = _score_to_ojama_count(expected_chain_total)
@@ -2246,11 +2345,13 @@ def test_last_stable_score_fallback_to_score_at_chain_start() -> None:
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5,
     )
-    # 連鎖終了
+    # 連鎖終了 → settle 待ち開始
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=2800, t_sec=7.0,
     )
-    snap = tracker.get_snapshot(t_sec=7.0)
+    # settle 確定
+    t_end = _settle_score(tracker, "p1", 2800, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
 
     expected_chain_total = 2300  # 2800 - 500
     expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
@@ -2287,16 +2388,15 @@ def test_last_stable_score_not_updated_while_chain_end_pending() -> None:
     tracker.on_state_transition(
         "p1", BoardState.CHAIN, BoardState.STABLE, score=None, t_sec=7.0,
     )
-    # pending 中: STABLE で score=999 が来ても last_stable_score=300 を維持
-    # (chain_end_pending=True なので更新しない)
+    # settle 待ち中: STABLE で score=999 が来る
+    # → settle 候補=999。last_stable_score は score_settle_pending 中なので更新されない。
+    # settle 確定後: chain_total = 999 - last_stable_score(300) = 699 → G=9, leftover=69
     tracker.on_state_transition(
         "p1", BoardState.STABLE, BoardState.STABLE, score=999, t_sec=7.1,
-        # pending フレームに STABLE→STABLE で score=999 が来た
-        # → chain_total は 999-300 = 699 になるべき (last_stable_score は更新されていないはず)
-        # しかし: score=999 は pending の遅延確定に使われる!
-        # finalize: chain_total = 999 - last_stable_score(300) = 699 → G=9, leftover=69
     )
-    snap = tracker.get_snapshot(t_sec=7.1)
+    # settle 確定(K_SETTLE_FRAMES 連続不変)
+    t_end = _settle_score(tracker, "p1", 999, t_start=7.1)
+    snap = tracker.get_snapshot(t_end)
 
     expected_chain_total = 699  # 999 - 300
     expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
@@ -2304,8 +2404,222 @@ def test_last_stable_score_not_updated_while_chain_end_pending() -> None:
     assert expected_leftover == 69  # 699 = 9*70 + 69
 
     assert snap.chain_total_score_p1 == expected_chain_total, (
-        f"遅延確定 chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
+        f"settle確定 chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
     )
     assert snap.forecast_p2 == expected_g, (
-        f"遅延確定後 forecast_p2={snap.forecast_p2} != {expected_g}"
+        f"settle確定後 forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+# ============================
+# 27. score settle 待ち 回帰テスト (2026-07-07 新機能)
+# ============================
+
+def test_score_settle_not_finalized_before_k_settle_frames() -> None:
+    """K_SETTLE_FRAMES フレーム未満では finalize されない(途中スコア確定バグ回帰防止)。
+
+    問題の根本: 旧実装では CHAIN→STABLE で即 finalize していた。
+    このため大連鎖の途中スコアで確定し、残りの連鎖が取りこぼされた。
+    新実装: K_SETTLE_FRAMES-1 フレーム連続不変でも finalize しない。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=1.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.0)
+    # 連鎖終了: settle 待ち開始(score=2100)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0)
+
+    # K_SETTLE_FRAMES-1 フレームだけ同一スコアを流す → まだ finalize しない
+    _dt = 0.001
+    for i in range(K_SETTLE_FRAMES - 1):
+        tracker.on_state_transition(
+            "p1", BoardState.STABLE, BoardState.STABLE,
+            score=2100, t_sec=7.0 + (i + 1) * _dt,
+        )
+    snap_early = tracker.get_snapshot(t_sec=7.0 + (K_SETTLE_FRAMES - 1) * _dt)
+    assert snap_early.forecast_p2 == 0, (
+        f"K_SETTLE_FRAMES-1 フレームでは finalize しない: forecast_p2={snap_early.forecast_p2} "
+        f"(0 であるべき、途中確定バグなら非ゼロ)"
+    )
+
+    # K_SETTLE_FRAMES フレーム目で finalize
+    tracker.on_state_transition(
+        "p1", BoardState.STABLE, BoardState.STABLE,
+        score=2100, t_sec=7.0 + K_SETTLE_FRAMES * _dt,
+    )
+    snap_settled = tracker.get_snapshot(t_sec=7.0 + K_SETTLE_FRAMES * _dt)
+    expected_g, _ = _score_to_ojama_count(2100)
+    assert expected_g == 30
+    assert snap_settled.forecast_p2 == expected_g, (
+        f"K_SETTLE_FRAMES フレームで finalize: forecast_p2={snap_settled.forecast_p2} != {expected_g}"
+    )
+
+
+def test_score_settle_resets_on_score_rise() -> None:
+    """settle 待ち中にスコアが上昇したらカウンタリセット(連鎖継続認識)。
+
+    大連鎖のスコア段階上昇シナリオ:
+        CHAIN→STABLE で settle 待ち(候補=500)
+        K_SETTLE_FRAMES/2 フレーム後: score=800(上昇) → カウントリセット
+        その後 K_SETTLE_FRAMES フレーム score=800 不変 → finalize(chain_total=800-0=800)
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 score=0
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=1.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.0)
+    # 連鎖終了: settle 待ち開始(候補=500)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=500, t_sec=7.0)
+
+    _dt = 0.001
+    # K_SETTLE_FRAMES/2 フレーム: score=500 不変
+    half = K_SETTLE_FRAMES // 2
+    for i in range(half):
+        tracker.on_state_transition(
+            "p1", BoardState.STABLE, BoardState.STABLE,
+            score=500, t_sec=7.0 + (i + 1) * _dt,
+        )
+    # スコア上昇: score=800 → カウントリセット
+    t_rise = 7.0 + (half + 1) * _dt
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=800, t_sec=t_rise)
+    snap_after_rise = tracker.get_snapshot(t_rise)
+    # まだ finalize していない
+    assert snap_after_rise.forecast_p2 == 0, (
+        f"スコア上昇後はまだ未確定: forecast_p2={snap_after_rise.forecast_p2}"
+    )
+
+    # K_SETTLE_FRAMES フレーム: score=800 不変 → finalize
+    t_end = _settle_score(tracker, "p1", 800, t_start=t_rise)
+    snap = tracker.get_snapshot(t_end)
+    expected_g, _ = _score_to_ojama_count(800)  # 800-0=800
+    assert snap.forecast_p2 == expected_g, (
+        f"スコア上昇後 settle: forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+    assert snap.chain_total_score_p1 == 800, (
+        f"chain_total={snap.chain_total_score_p1} != 800 (上昇後のスコアで確定)"
+    )
+
+
+def test_score_settle_aborted_at_match_boundary() -> None:
+    """settle 待ち中に試合境界(score大幅減少)が来たら settle を破棄する。"""
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=1.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.0)
+    # 連鎖終了: settle 待ち開始
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0)
+
+    # 試合境界: score 大幅減少 → settle 破棄 + forecast=0 にリセット
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=2100, t_sec=7.5)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=50, t_sec=8.0)
+    snap = tracker.get_snapshot(t_sec=8.0)
+
+    assert snap.forecast_p2 == 0, (
+        f"試合境界後 forecast_p2={snap.forecast_p2} (settle破棄で0になるべき)"
+    )
+    assert snap.chain_total_score_p1 == 0, (
+        f"試合境界後 chain_total={snap.chain_total_score_p1} (破棄で0のまま)"
+    )
+
+
+def test_score_settle_with_none_frames_in_between() -> None:
+    """settle 待ち中に score=None フレームが挟まっても K_SETTLE_FRAMES カウントは止まる。
+
+    score=None は「まだ掛け算式中かもしれない」とみなしカウントしない。
+    None フレームの後に同じスコアが来てもカウントは継続。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=1.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.0)
+    # 連鎖終了: settle 待ち(候補=2100)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0)
+
+    _dt = 0.001
+    # K_SETTLE_FRAMES/2 フレーム: score=2100 不変でカウント進む
+    half = K_SETTLE_FRAMES // 2
+    for i in range(half):
+        tracker.on_state_transition(
+            "p1", BoardState.STABLE, BoardState.STABLE,
+            score=2100, t_sec=7.0 + (i + 1) * _dt,
+        )
+    # score=None フレーム挿入: カウントは進まない
+    t_none = 7.0 + (half + 1) * _dt
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=None, t_sec=t_none)
+    snap_none = tracker.get_snapshot(t_none)
+    assert snap_none.forecast_p2 == 0, "score=None フレームでは finalize しない"
+
+    # score=2100 再開: カウント継続(None で止まっていた分)
+    # 残り (K_SETTLE_FRAMES - half) フレームで settle 確定
+    remaining = K_SETTLE_FRAMES - half
+    t_resume = t_none + _dt
+    for i in range(remaining):
+        tracker.on_state_transition(
+            "p1", BoardState.STABLE, BoardState.STABLE,
+            score=2100, t_sec=t_resume + i * _dt,
+        )
+    snap = tracker.get_snapshot(t_resume + (remaining - 1) * _dt)
+
+    expected_g, _ = _score_to_ojama_count(2100)
+    assert expected_g == 30
+    assert snap.forecast_p2 == expected_g, (
+        f"None挿入後も settle 確定: forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+def test_score_settle_video124_scenario() -> None:
+    """video_124 t=142 の実例シナリオ: 2P 連鎖が settle で正しく計上される。
+
+    問題:
+        旧実装: (CHAIN|GRAVITY_SETTLE)→STABLE の最初の遷移で即 finalize。
+                2P score が 246→286(+40) で確定。gen=0 → 相殺なし → forecast_p2=45(過多)。
+    期待:
+        新実装: score settle (K_SETTLE_FRAMES 連続不変) まで待つ。
+                2P score が最終値(287→389+)で確定 → gen>0 → 相殺成立 → forecast_p2 減少。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 2P 連鎖開始前スコア: 246
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=246, t_sec=136.0)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=137.0)
+
+    # 連鎖途中: 旧実装はここで即確定していた(score=286)
+    tracker.on_state_transition("p2", BoardState.CHAIN, BoardState.STABLE, score=286, t_sec=138.0)
+    snap_mid = tracker.get_snapshot(t_sec=138.0)
+    # 新実装: settle 待ち中なのでまだ finalize していない
+    assert snap_mid.total_generated_by_p2 == 0, (
+        f"settle待ち中(score=286)では finalize しない: gen={snap_mid.total_generated_by_p2}"
+    )
+
+    # スコアが継続上昇(連鎖継続)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=350, t_sec=138.5)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=389, t_sec=139.0)
+
+    # score=389 が K_SETTLE_FRAMES フレーム連続不変 → finalize
+    t_end = _settle_score(tracker, "p2", 389, t_start=139.0)
+    snap = tracker.get_snapshot(t_end)
+
+    # chain_total = 389 - 246 = 143 → G=2, leftover=3
+    expected_chain_total = 143  # 389 - 246
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 2  # 143 // 70 = 2
+    assert snap.total_generated_by_p2 == expected_g, (
+        f"settle後 gen={snap.total_generated_by_p2} != {expected_g} "
+        f"(旧実装は286-246=40<70でgen=0。新実装は389-246=143でgen=2)"
+    )
+    assert snap.chain_total_score_p2 == expected_chain_total, (
+        f"chain_total_p2={snap.chain_total_score_p2} != {expected_chain_total}"
     )
