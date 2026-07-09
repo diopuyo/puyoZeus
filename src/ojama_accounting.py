@@ -209,6 +209,12 @@ class _SideState:
     # finalize 完了時刻 (秒)。CHAIN_COALESCE_WINDOW_SEC 以内の再 chain_start は
     # score_at_chain_start を上書きせず 1 連鎖 = 1 finalize を保証する。
     chain_finalized_at_sec: float | None = None  # 最後に finalize した時刻
+    # 最後に finalize した時点の score_after (本物の2本目連鎖判定用)。
+    # coalesce window 内で last_valid_score > last_finalized_score であれば
+    # スコアが前回 finalize から増加しており、本物の新規連鎖と判断できる。
+    # last_stable_score は finalize 後も STABLE フレームで更新されてしまうため
+    # 使えない(直後の STABLE スコアで上書きされると差分がゼロになる)。
+    last_finalized_score: int | None = None  # 最後に finalize した時の score_after
 
 
 # ============================
@@ -363,13 +369,43 @@ class OjamaAccountingTracker:
             # 根拠: finalize/_reset_side_boundary/timeout の各パスで必ず
             # score_at_chain_start=None に戻すため、「None でないなら連鎖中」が保証される。
             _already_started = s.score_at_chain_start is not None
-            if s.score_settle_pending or _in_coalesce_window or _already_started:
+            if s.score_settle_pending or _already_started:
                 logger.info(
-                    "chain_start[%s]: skip (settle_pending=%s, in_coalesce=%s, "
+                    "chain_start[%s]: skip (settle_pending=%s, "
                     "already_started=%s score_at_start=%s) t=%.2f",
-                    side, s.score_settle_pending, _in_coalesce_window,
+                    side, s.score_settle_pending,
                     _already_started, s.score_at_chain_start, t_sec,
                 )
+            elif _in_coalesce_window:
+                # coalesce window 内: state 明滅(flicker)か本物の2本目連鎖かを区別する。
+                # 判定基準: last_valid_score が前回 finalize 時の score_after(last_finalized_score)
+                # より増加しているか。
+                #   - 明滅 = スコアが増えていない → score_at_chain_start を設定しない(破棄)。
+                #   - 本物の2本目連鎖 = スコアが増加している → score_at_chain_start を設定する。
+                # 注: last_stable_score ではなく last_finalized_score を使う理由:
+                #   last_stable_score は finalize 後の STABLE フレームで更新されてしまい、
+                #   2本目連鎖の直前 STABLE score と同じ値になって差分がゼロになる場合がある。
+                #   last_finalized_score は finalize 時点でのみ更新するため安定した基準になる。
+                _score_rose = (
+                    s.last_finalized_score is not None
+                    and s.last_valid_score is not None
+                    and s.last_valid_score > s.last_finalized_score
+                )
+                if _score_rose:
+                    # 本物の2本目連鎖: coalesce window 内でもスコア増加があるので計上する
+                    s.score_at_chain_start = s.last_valid_score
+                    logger.info(
+                        "chain_start[%s]: in_coalesce but score_rose "
+                        "(last_valid=%s > last_finalized=%s) → treating as new chain t=%.2f",
+                        side, s.last_valid_score, s.last_finalized_score, t_sec,
+                    )
+                else:
+                    # 明滅: スコアが増えていない → score_at_chain_start を設定しない
+                    logger.info(
+                        "chain_start[%s]: skip (in_coalesce=True, score_not_rose "
+                        "last_valid=%s last_finalized=%s) t=%.2f",
+                        side, s.last_valid_score, s.last_finalized_score, t_sec,
+                    )
             else:
                 # 新規連鎖: score_at_chain_start を確定
                 # 連鎖開始直前 score スナップ:
@@ -632,6 +668,11 @@ class OjamaAccountingTracker:
         # finalize 後は score_after を新しい last_stable_score として設定する。
         # これにより次の連鎖の chain_total が正確に「この連鎖終了直後から」計算される。
         s.last_stable_score = score_after
+        # last_finalized_score: この finalize の score_after を記録する。
+        # coalesce window 内の本物の2本目連鎖判定 (last_valid_score > last_finalized_score)
+        # に使用する。last_stable_score は finalize 後も STABLE フレームで更新されるため
+        # 代わりに last_finalized_score を使う(更新タイミングが finalize のみ)。
+        s.last_finalized_score = score_after
         # coalesce window を開く: この時刻から CHAIN_COALESCE_WINDOW_SEC 以内の
         # 再 chain_start は同一連鎖の state 明滅とみなし score_at_chain_start を守る。
         s.chain_finalized_at_sec = t_sec
@@ -841,6 +882,8 @@ class OjamaAccountingTracker:
         s.last_stable_score = None
         # coalesce window もクリア(前試合の window が次試合に引き継がれないよう)
         s.chain_finalized_at_sec = None
+        # last_finalized_score もクリア(前試合の finalize score が次試合に引き継がれないよう)
+        s.last_finalized_score = None
         # settle 待ちもクリア(試合境界をまたいだ settle は破棄)
         s.score_settle_pending = False
         s.score_settle_candidate = None
