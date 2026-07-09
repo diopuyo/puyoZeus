@@ -449,3 +449,82 @@ def test_reach_fire_power_result_dataclass() -> None:
     assert isinstance(result.value, iv.IndicatorV2Value)
     assert isinstance(result.source, str)
     assert isinstance(result.max_chain, int)
+
+
+# ============================
+# margin_time_rate 回帰テスト
+# (修正1: elapsed>96 で score>0 になることを保証)
+# ============================
+
+
+def test_margin_time_rate_zero_before_margin_start() -> None:
+    """試合開始〜96秒以内は score=0.0 (マージンタイム未到達)。"""
+    from src.scoring import MARGIN_TIME_START_SEC
+    # 0秒
+    assert iv.margin_time_rate(0.0).score == 0.0
+    assert iv.margin_time_rate(0.0).raw == 70.0
+    # 96秒ちょうど (境界値: まだ減衰ステップ未到達)
+    assert iv.margin_time_rate(MARGIN_TIME_START_SEC).score == 0.0
+    assert iv.margin_time_rate(MARGIN_TIME_START_SEC).raw == 70.0
+
+
+def test_margin_time_rate_positive_after_margin_start() -> None:
+    """elapsed > 96秒 (1 decay ステップ後) で score > 0.0。"""
+    from src.scoring import MARGIN_TIME_START_SEC, MARGIN_TIME_DECAY_INTERVAL_SEC
+    elapsed_one_step = MARGIN_TIME_START_SEC + MARGIN_TIME_DECAY_INTERVAL_SEC
+    v = iv.margin_time_rate(elapsed_one_step)
+    # rate = 70 * 0.75 = 52 → score = 1 - 52/70 ≈ 0.257
+    assert v.score > 0.0
+    assert v.raw < 70.0
+
+
+def test_margin_time_rate_monotone_increasing() -> None:
+    """経過秒が増加するにつれ score も単調増加する (マージンタイム進行)。"""
+    elapsed_values = [0.0, 50.0, 100.0, 150.0, 200.0]
+    scores = [iv.margin_time_rate(e).score for e in elapsed_values]
+    for i in range(len(scores) - 1):
+        assert scores[i] <= scores[i + 1], (
+            f"単調増加違反: elapsed={elapsed_values[i]}->{elapsed_values[i+1]}, "
+            f"score={scores[i]}->{scores[i+1]}"
+        )
+
+
+def test_margin_time_rate_raw_equals_effective_rate() -> None:
+    """raw は compute_effective_rate と一致する。"""
+    from src.scoring import compute_effective_rate
+    for elapsed in [0.0, 96.0, 112.0, 200.0]:
+        v = iv.margin_time_rate(elapsed)
+        expected_rate = compute_effective_rate(elapsed)
+        assert v.raw == float(expected_rate), (
+            f"elapsed={elapsed}: raw={v.raw} != compute_effective_rate={expected_rate}"
+        )
+
+
+# ============================
+# collect 関数の start_sec パラメータ テスト
+# (修正2: --start-sec 引数の後方互換確認)
+# ============================
+
+
+def test_collect_start_sec_default_is_zero() -> None:
+    """collect 関数の start_sec デフォルト値は 0 (後方互換)。"""
+    import inspect
+    from scripts.collect_indicators_v2 import collect
+    sig = inspect.signature(collect)
+    assert "start_sec" in sig.parameters
+    assert sig.parameters["start_sec"].default == 0.0
+
+
+def test_collect_function_signature_backward_compat() -> None:
+    """collect の既存引数シグネチャが破壊されていないこと。"""
+    import inspect
+    from scripts.collect_indicators_v2 import collect
+    sig = inspect.signature(collect)
+    params = list(sig.parameters.keys())
+    # 既存 3 引数は先頭に維持
+    assert params[0] == "video_path"
+    assert params[1] == "out_path"
+    assert params[2] == "max_sec"
+    assert params[3] == "sample_interval_sec"
+    # 新引数 start_sec は末尾追加
+    assert params[4] == "start_sec"
