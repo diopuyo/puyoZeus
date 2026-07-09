@@ -270,8 +270,21 @@ def collect(
     out_path: Path,
     max_sec: float = 0.0,
     sample_interval_sec: float = 0.0,
+    start_sec: float = 0.0,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
+
+    Args:
+        video_path: 入力動画パス。
+        out_path: 出力 CSV パス。
+        max_sec: 処理する最大秒数 (0 = 全長)。start_sec との組み合わせで
+            start_sec 〜 start_sec+max_sec の区間を処理する。
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        start_sec: 処理開始オフセット秒 (デフォルト 0)。0 より大きい場合は
+            cap.set で該当フレームにシークしてから処理を開始する。
+            状態機械は連続フレームが要るため、シーク直後の数秒は MENU/非STABLE
+            として扱われ既存の warmup バッファで吸収される。
+            start_sec=0 のときの挙動は従来と完全に同一 (後方互換)。
 
     Returns:
         出力した行数。
@@ -281,9 +294,20 @@ def collect(
         print(f"[ERROR] cannot open: {video_path}", file=sys.stderr)
         return 0
     fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
-    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # 開始フレーム計算 + シーク
+    start_frame = int(start_sec * fps) if start_sec > 0.0 else 0
+    if start_frame > 0:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
+
+    # 処理フレーム数 = max_sec 相当に限定 (0 = 残り全体)
     if max_sec > 0:
-        n_frames = min(n_frames, int(max_sec * fps))
+        end_frame = min(total_frames, start_frame + int(max_sec * fps))
+    else:
+        end_frame = total_frames
+    n_frames_to_process = max(0, end_frame - start_frame)
+
     video_id = video_path.stem
 
     # visualize_recognition と同じ load_default 経路 (自動 HSV のみ = per-video inject なし)
@@ -308,7 +332,7 @@ def collect(
     rows: list[dict[str, object]] = []
     sample_interval_frames = max(1, int(round(sample_interval_sec * fps)))
 
-    for fi in range(n_frames):
+    for local_i in range(n_frames_to_process):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
@@ -316,8 +340,10 @@ def collect(
             frame = cv2.resize(
                 frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA,
             )
+        # fi はビデオ全体での絶対フレーム番号。t_sec は絶対時刻
+        fi = start_frame + local_i
         t_sec = fi / fps
-        if fi % sample_interval_frames != 0:
+        if local_i % sample_interval_frames != 0:
             continue
         result = pipeline.update(fi, t_sec, frame)
         # --- お邪魔会計駆動: tsumo_count 増分で drain ---
@@ -433,15 +459,28 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True, help="出力 CSV パス")
     parser.add_argument(
         "--max-sec", type=float, default=0.0,
-        help="処理する最大秒数 (0 = 全長)",
+        help="処理する最大秒数 (0 = 全長)。--start-sec と組み合わせて区間指定可能",
+    )
+    parser.add_argument(
+        "--start-sec", type=float, default=0.0,
+        help="処理開始オフセット秒 (デフォルト 0)。"
+             "--start-sec S --max-sec D で S秒〜S+D秒を処理する。"
+             "シーク後は状態機械 warmup のため序盤数秒は non-STABLE として扱われる",
     )
     parser.add_argument(
         "--sample-interval", type=float, default=0.0,
         help="認識サンプル間隔秒 (0 = 全フレーム)",
     )
     args = parser.parse_args()
-    n = collect(args.video, args.out, args.max_sec, args.sample_interval)
+    n = collect(
+        args.video, args.out,
+        max_sec=args.max_sec,
+        sample_interval_sec=args.sample_interval,
+        start_sec=args.start_sec,
+    )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
+    if args.start_sec > 0.0:
+        print(f"[collect] start_sec={args.start_sec:.1f} max_sec={args.max_sec:.1f}")
     return 0
 
 
