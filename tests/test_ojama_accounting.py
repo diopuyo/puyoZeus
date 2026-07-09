@@ -2623,3 +2623,191 @@ def test_score_settle_video124_scenario() -> None:
     assert snap.chain_total_score_p2 == expected_chain_total, (
         f"chain_total_p2={snap.chain_total_score_p2} != {expected_chain_total}"
     )
+
+
+# ============================
+# 28. coalesce window 内の本物の2本目連鎖 回帰テスト (2026-07-09 修正)
+# ============================
+
+def test_real_second_chain_within_coalesce_window_is_counted() -> None:
+    """coalesce window(2.5s)内でもスコアが増加していれば本物の2本目連鎖として計上される。
+
+    修正前バグ: 短時間に2連鎖撃つと2本目が coalesce window で skip され
+                score_at_chain_start=None のまま _finalize_chain_end で破棄されていた。
+                例: video_124 t=142 2P: chain1(246→286) → chain2(287→391)
+                    2本目が未計上 → 相殺なし → forecast_p2 過多。
+
+    修正後: coalesce window 内でも last_valid_score > last_stable_score なら
+            本物の2本目連鎖として score_at_chain_start を設定し、計上する。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 1本目連鎖: score 246→286 (chain_total=40<70, gen=0, leftover=40)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=246, t_sec=136.0)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=137.0)
+    tracker.on_state_transition("p2", BoardState.CHAIN, BoardState.STABLE, score=286, t_sec=138.0)
+    # settle 確定 (finalized_at ≒ 138.02, last_stable_score=286)
+    t_1st_end = _settle_score(tracker, "p2", 286, t_start=138.0)
+    snap_1st = tracker.get_snapshot(t_1st_end)
+    # chain_total=40 < 70 → gen=0, leftover=40
+    assert snap_1st.chain_total_score_p2 == 40, (
+        f"1本目 chain_total={snap_1st.chain_total_score_p2} (40 であるべき)"
+    )
+    assert snap_1st.total_generated_by_p2 == 0, (
+        f"1本目 gen={snap_1st.total_generated_by_p2} (40<70 で gen=0)"
+    )
+    assert snap_1st.leftover_p2 == 40, (
+        f"1本目 leftover={snap_1st.leftover_p2} (40 であるべき)"
+    )
+
+    # 2本目連鎖: coalesce window(2.5s)内に開始 (t=139.33 ≒ 1.3s後 < 2.5s)
+    # → last_stable_score=286, last_valid_score=287 > 286 → score_rose=True → 計上
+    t_2nd_chain_start = t_1st_end + 1.3  # ≒ 139.32: coalesce window 内
+    assert t_2nd_chain_start - t_1st_end < CHAIN_COALESCE_WINDOW_SEC, (
+        "前提: 2本目の連鎖開始は coalesce window(2.5s)内"
+    )
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=287, t_sec=t_2nd_chain_start - 0.1)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd_chain_start)
+    # 連鎖終了: score=391
+    tracker.on_state_transition("p2", BoardState.CHAIN, BoardState.STABLE, score=391, t_sec=t_2nd_chain_start + 2.0)
+    # settle 確定
+    t_2nd_end = _settle_score(tracker, "p2", 391, t_start=t_2nd_chain_start + 2.0)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
+
+    # 2本目連鎖の基準スコアは以下のとおり:
+    #   - score_at_chain_start = 287 (last_valid_score。直前 STABLE score=287 で設定)
+    #   - last_stable_score = 287 (STABLE score=287 のフレームで更新済み)
+    #   - finalize時 score_start = last_stable_score = 287
+    #   - chain_total = 391 - 287 = 104
+    #   - leftover=40 引き継ぎ: score_to_ojama(104, prev_leftover=40) → (144//70=2, 144%70=4)
+    r_2nd = score_to_ojama(104, prev_leftover=40)
+    expected_gen_2nd = r_2nd.ojama_count  # (104+40)=144, 144//70=2
+    assert expected_gen_2nd == 2, f"前提確認: 2本目 gen={expected_gen_2nd} (2 であるべき)"
+    expected_leftover_2nd = r_2nd.leftover_score  # 144 % 70 = 4
+
+    assert snap_2nd.chain_total_score_p2 == 104, (
+        f"2本目 chain_total={snap_2nd.chain_total_score_p2} != 104 "
+        "(修正前は score_at_chain_start=None で破棄)"
+    )
+    assert snap_2nd.total_generated_by_p2 == expected_gen_2nd, (
+        f"2本目 total_gen={snap_2nd.total_generated_by_p2} != {expected_gen_2nd} "
+        "(修正前は skip で 0 のまま)"
+    )
+    assert snap_2nd.leftover_p2 == expected_leftover_2nd, (
+        f"2本目 leftover={snap_2nd.leftover_p2} != {expected_leftover_2nd}"
+    )
+    # 送り先 (1P) に gen が届いている
+    assert snap_2nd.forecast_p1 == expected_gen_2nd, (
+        f"forecast_p1={snap_2nd.forecast_p1} != {expected_gen_2nd} "
+        "(2本目の surplus が 1P に届くべき)"
+    )
+
+
+def test_real_second_chain_within_coalesce_score_not_rose_skipped() -> None:
+    """coalesce window 内でもスコアが増加していない場合は明滅として skip される。
+
+    state 明滅: 同一連鎖が CHAIN→STABLE→CHAIN と明滅するだけ。
+    スコアは finalize 後の last_stable_score と同じ → _score_rose=False → skip。
+    これが既存の「二重 finalize 防止」テストと同じ動作であることを確認。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖: score 0→2100
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=5.0)
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=6.5)
+    # settle 確定 (finalized_at ≒ 6.52, last_stable_score=2100)
+    t_1st_end = _settle_score(tracker, "p1", 2100, t_start=6.5)
+    snap_1st = tracker.get_snapshot(t_1st_end)
+    g1, _ = _score_to_ojama_count(2100)
+    assert snap_1st.total_generated_by_p1 == g1
+
+    # state 明滅: coalesce window 内 (t=6.8: 差0.28s < 2.5s)
+    # last_valid_score=2100 (明滅なのでスコア変化なし)
+    # → last_valid_score(2100) > last_stable_score(2100) は False → skip
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=6.8)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.STABLE, score=2100, t_sec=7.0)
+    t_2nd_end = _settle_score(tracker, "p1", 2100, t_start=7.0)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
+
+    # 明滅なので total_generated は変わらない
+    assert snap_2nd.total_generated_by_p1 == g1, (
+        f"明滅(score不変)後 total_gen={snap_2nd.total_generated_by_p1} != {g1} "
+        "(明滅は skip されるべき)"
+    )
+    assert snap_2nd.forecast_p2 == g1, (
+        f"明滅後 forecast_p2={snap_2nd.forecast_p2} != {g1}"
+    )
+
+
+def test_real_second_chain_coalesce_window_offset_cancels_properly() -> None:
+    """coalesce window 内の本物の2本目連鎖の相殺が正しく計算される。
+
+    video_124 t=142 のシナリオ縮約:
+        1P が forecast_p2=44 を持っている。
+        2P が2本目連鎖(score 287→391, chain_total=391-287=104)を撃つ
+        → leftover=40引継ぎ: score_to_ojama(104,40)=gen=2
+        → surplus=2 → 1P forecast が 44→42 に減少。
+
+    注: 修正前は2本目が計上されず gen=0 → canceled=0 → forecast_p1=44 のまま。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # まず 2P に forecast_incoming=44 を積む。
+    # 1P が G=44 を 2P に送る: t=128 前後 (マージンタイム非適用: elapsed < 96s)。
+    # _match_start_sec を試合相対短時間に保つため 1P 連鎖を t=128 台に配置する。
+    # これにより 2P 連鎖(t=136)の elapsed = 136-128 = 8s < 96s → rate=70 → マージンタイム非適用。
+    score_for_44 = 44 * OJAMA_RATE_STANDARD  # 3080点
+    _fire_chain(tracker, "p1", chain_score=score_for_44, score_before=0, t_sec=128.0)
+    snap_before = tracker.get_snapshot(t_sec=130.0)
+    assert snap_before.forecast_p2 == 44, (
+        f"前提: forecast_p2={snap_before.forecast_p2} (44 であるべき)"
+    )
+
+    # 2P の1本目連鎖: score 246→286 (chain_total=40, gen=0, leftover=40)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=246, t_sec=136.0)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=137.0)
+    tracker.on_state_transition("p2", BoardState.CHAIN, BoardState.STABLE, score=286, t_sec=138.0)
+    t_1st_end = _settle_score(tracker, "p2", 286, t_start=138.0)
+    snap_after_1st = tracker.get_snapshot(t_1st_end)
+    # 1本目: gen=0 → 1P側の forecast_incoming(=forecast_p1)は変化なし=0のまま。
+    # 1Pが送った予告 (forecast_p2=2Pへの予告) は44のまま変わらない。
+    assert snap_after_1st.forecast_p2 == 44, (
+        f"1本目連鎖後 forecast_p2={snap_after_1st.forecast_p2} (gen=0で変化なし, 44のまま)"
+    )
+    assert snap_after_1st.forecast_p1 == 0, (
+        f"1本目連鎖後 forecast_p1={snap_after_1st.forecast_p1} (2Pからの予告はまだ0)"
+    )
+
+    # 2P の2本目連鎖: coalesce window 内 (1.3s後), score 287→391
+    t_2nd = t_1st_end + 1.3
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.STABLE, score=287, t_sec=t_2nd - 0.1)
+    tracker.on_state_transition("p2", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=t_2nd)
+    tracker.on_state_transition("p2", BoardState.CHAIN, BoardState.STABLE, score=391, t_sec=t_2nd + 2.0)
+    t_2nd_end = _settle_score(tracker, "p2", 391, t_start=t_2nd + 2.0)
+    snap_2nd = tracker.get_snapshot(t_2nd_end)
+
+    # 2本目 chain_total=391-287=104(last_stable_score=287), leftover=40引継ぎ
+    # score_to_ojama(104,40): (104+40)=144, 144//70=2, leftover=4
+    r_2nd = score_to_ojama(104, prev_leftover=40)
+    gen_2nd = r_2nd.ojama_count  # 2
+    assert gen_2nd == 2
+
+    # 2P が gen=2 を撃つ:
+    #   - 2P 自身の forecast_incoming (=p2が受け取る予告, 1Pからの44個) から相殺
+    #   - canceled = min(gen=2, p2.forecast_incoming=44) = 2
+    #   - p2.forecast_incoming = 44 - 2 = 42 → forecast_p2 = 42
+    #   - surplus = 2 - 2 = 0 → 1P の forecast_incoming は変化なし=0
+    expected_forecast_p2 = 44 - gen_2nd  # 42
+    expected_forecast_p1 = 0  # surplus=0 なので 1P 側に追加なし
+    assert snap_2nd.forecast_p2 == expected_forecast_p2, (
+        f"2本目連鎖後 forecast_p2={snap_2nd.forecast_p2} != {expected_forecast_p2} "
+        f"(修正前は gen=0 で相殺なし → forecast_p2=44 のまま)"
+    )
+    assert snap_2nd.forecast_p1 == expected_forecast_p1, (
+        f"2本目連鎖後 forecast_p1={snap_2nd.forecast_p1} != {expected_forecast_p1} "
+        f"(surplus=0 なので 1P 側への追加なし)"
+    )
