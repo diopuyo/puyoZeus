@@ -2811,3 +2811,147 @@ def test_real_second_chain_coalesce_window_offset_cancels_properly() -> None:
         f"2本目連鎖後 forecast_p1={snap_2nd.forecast_p1} != {expected_forecast_p1} "
         f"(surplus=0 なので 1P 側への追加なし)"
     )
+
+
+# ============================
+# 29. 物理イベント基準 finalize (TSUMO_FALL/OJAMA_FALL トリガー) 回帰テスト (2026-07-09)
+# ============================
+
+def test_tsumo_fall_triggers_settle_during_chain() -> None:
+    """chain_active 中に TSUMO_FALL 遷移が来たとき settle 待ちが開始される。
+
+    新基準: 「次ツモ出現 (TSUMO_FALL) = 連鎖の得点計算完了の可能性」として
+    settle 待ちを開始し、K_SETTLE_FRAMES 連続不変で finalize する。
+
+    注: TSUMO_FALL→STABLE でも既存の補完トリガーが動くため、
+    ここでは TSUMO_FALL → TSUMO_FALL (継続) → 不変スコアで settle を確認する。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖開始前 score=465
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=465, t_sec=5.0)
+    # 連鎖開始: STABLE→CHAIN
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
+    # 連鎖中 → TSUMO_FALL (新トリガー: settle 待ち開始)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.TSUMO_FALL, score=3565, t_sec=6.5)
+    snap_tsumo = tracker.get_snapshot(t_sec=6.5)
+    # settle 待ち開始直後はまだ finalize していない (consec=1 < K_SETTLE_FRAMES)
+    assert snap_tsumo.forecast_p2 == 0, (
+        f"TSUMO_FALL直後: settle待ち中 forecast_p2={snap_tsumo.forecast_p2} (0 であるべき)"
+    )
+    # K_SETTLE_FRAMES 連続不変 → finalize
+    t_end = _settle_score(tracker, "p1", 3565, t_start=6.5)
+    snap = tracker.get_snapshot(t_end)
+
+    # chain_total = 3565 - 465 = 3100 → G=44, leftover=20
+    expected_chain_total = 3100
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 44
+    assert expected_leftover == 20  # 3100 = 44*70 + 20
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"TSUMO_FALLトリガー: chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"TSUMO_FALLトリガー: forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+    assert snap.leftover_p1 == expected_leftover, (
+        f"TSUMO_FALLトリガー: leftover_p1={snap.leftover_p1} != {expected_leftover}"
+    )
+
+
+def test_ojama_fall_triggers_settle_during_chain() -> None:
+    """chain_active 中に OJAMA_FALL 遷移が来たとき settle 待ちが開始される。
+
+    OJAMA_FALL 基準: お邪魔落下 = 連鎖の得点計算が完了したことを示す物理イベント。
+    settle 待ちを開始し、score 上昇停止後に finalize する。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖開始前 score=200
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=200, t_sec=5.0)
+    # 連鎖開始: STABLE→CHAIN
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
+    # 連鎖中スコア上昇
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.CHAIN, score=1200, t_sec=6.0)
+    # OJAMA_FALL に遷移 (新トリガー: settle 待ち開始)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.OJAMA_FALL, score=2100, t_sec=6.5)
+    snap_oj = tracker.get_snapshot(t_sec=6.5)
+    # settle 待ち中はまだ finalize していない
+    assert snap_oj.forecast_p2 == 0, (
+        f"OJAMA_FALL直後: settle待ち中 forecast_p2={snap_oj.forecast_p2} (0 であるべき)"
+    )
+    # K_SETTLE_FRAMES 連続不変 → finalize
+    t_end = _settle_score(tracker, "p1", 2100, t_start=6.5)
+    snap = tracker.get_snapshot(t_end)
+
+    # chain_total = 2100 - 200 = 1900 → G=27, leftover=10
+    expected_chain_total = 1900
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 27
+    assert expected_leftover == 10  # 1900 = 27*70 + 10
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"OJAMA_FALLトリガー: chain_total={snap.chain_total_score_p1} != {expected_chain_total}"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"OJAMA_FALLトリガー: forecast_p2={snap.forecast_p2} != {expected_g}"
+    )
+
+
+def test_tsumo_fall_score_still_rising_does_not_finalize() -> None:
+    """TSUMO_FALL が来ても score が上昇中(得点計算中)は finalize しない。
+
+    1P の大連鎖シナリオ (受け入れ基準B):
+        score が 465 → 825 と上昇中に OJAMA_FALL が来る。
+        settle 待ちは開始されるが score 上昇中なのでカウントがリセットされ、
+        最終スコア(3571)が確定するまで finalize しない。
+    """
+    from src.ojama_accounting import K_SETTLE_FRAMES
+
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+
+    # 連鎖前 score=465
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.STABLE, score=465, t_sec=5.0)
+    # 連鎖開始
+    tracker.on_state_transition("p1", BoardState.STABLE, BoardState.CHAIN, score=None, t_sec=5.5)
+    # 連鎖途中: score 上昇
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.CHAIN, score=825, t_sec=6.0)
+    # OJAMA_FALL に遷移(settle 待ち開始: 候補=825)
+    tracker.on_state_transition("p1", BoardState.CHAIN, BoardState.OJAMA_FALL, score=825, t_sec=6.3)
+    snap_oj = tracker.get_snapshot(t_sec=6.3)
+    # まだ finalize していない
+    assert snap_oj.forecast_p2 == 0
+
+    # score が 825 → 1465 → 3571 と継続上昇 (settle カウントがリセットされ続ける)
+    tracker.on_state_transition("p1", BoardState.OJAMA_FALL, BoardState.OJAMA_FALL, score=1465, t_sec=6.6)
+    tracker.on_state_transition("p1", BoardState.OJAMA_FALL, BoardState.OJAMA_FALL, score=3571, t_sec=7.0)
+    # この時点でカウント=1 → まだ finalize せず
+    snap_rising = tracker.get_snapshot(t_sec=7.0)
+    assert snap_rising.forecast_p2 == 0, (
+        f"score上昇中(3571): まだ finalize しない: forecast_p2={snap_rising.forecast_p2}"
+    )
+
+    # score=3571 が K_SETTLE_FRAMES 連続不変 → finalize
+    t_end = _settle_score(tracker, "p1", 3571, t_start=7.0)
+    snap = tracker.get_snapshot(t_end)
+
+    # chain_total = 3571 - 465 = 3106 → G=44, leftover=26
+    expected_chain_total = 3106
+    expected_g, expected_leftover = _score_to_ojama_count(expected_chain_total)
+    assert expected_g == 44
+    assert expected_leftover == 26  # 3106 = 44*70 + 26
+
+    assert snap.chain_total_score_p1 == expected_chain_total, (
+        f"score上昇停止後 finalize: chain_total={snap.chain_total_score_p1} != {expected_chain_total} "
+        f"(途中 825 or 1465 で誤分割されていたら chain_total が過少になる)"
+    )
+    assert snap.forecast_p2 == expected_g, (
+        f"forecast_p2={snap.forecast_p2} != {expected_g} "
+        f"(1P大連鎖 score上昇中に OJAMA_FALL が来ても誤分割しない)"
+    )

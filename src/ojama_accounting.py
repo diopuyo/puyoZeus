@@ -10,6 +10,14 @@
       初期化済みの場合のみ t_sec - _match_start_sec を返す。
       未初期化の場合は 0.0 を返す(マージンタイム非適用 = 安全側)。
 
+2026-07-09 物理イベント基準 finalize:
+    - 連鎖終了検知を「物理イベント基準」に強化。
+    - 新トリガー: chain_active 中に TSUMO_FALL/OJAMA_FALL への遷移を検知したとき
+      score 上昇停止ゲート付きで settle 待ちを開始 → K_SETTLE_FRAMES 後に finalize。
+    - 補完トリガー: (CHAIN|GRAVITY_SETTLE)→STABLE は取りこぼし補完として併存。
+    - 二重 finalize 防止: coalesce window + _already_started 判定で既存通り保護。
+    - 狙い: 撃ち合い時の 2P 副連鎖(TSUMO_FALL で区切り)を正確に捕捉。
+
 2026-06-09 設計方針:
     - 生成は連鎖終了時に一括: chain_total_score // rate, 繰越 leftover を各 side 独立で管理。
     - 相殺の正しい向き: 自分が連鎖を撃ったとき、自分に向かってくる予告(incoming)を打ち消す。
@@ -329,7 +337,7 @@ class OjamaAccountingTracker:
         # スコアが K_SETTLE_FRAMES 連続不変 → 連鎖の真の終了 → finalize。
         # score=None は「掛け算式(連鎖継続の可能性)」とみなしカウントしない。
         if s.score_settle_pending:
-            self._process_score_settle(s, other, score, side, t_sec)
+            self._process_score_settle(s, other, score, side, t_sec, curr_state)
         # -- 連鎖終了待ちの遅延確定 (score None 継続時タイムアウト) --
         # score_settle_pending 中に settle 開始フレームからの経過を監視し
         # CHAIN_END_PENDING_TIMEOUT_FRAMES を超えたら timeout 破棄する。
@@ -418,7 +426,32 @@ class OjamaAccountingTracker:
                     "chain_start[%s]: score_at_start=%s (last_valid=%s, frame_score=%s) t=%.2f",
                     side, s.score_at_chain_start, s.last_valid_score, score, t_sec,
                 )
-        # -- 連鎖終了候補: (CHAIN or GRAVITY_SETTLE) → STABLE --
+        # -- 連鎖終了候補 [新基準]: TSUMO_FALL / OJAMA_FALL への遷移 + score 上昇停止 --
+        # 物理的根拠: 次ツモ出現またはお邪魔落下が来た = 「盤面が次の局面に移った」
+        # = 連鎖の得点計算が完了している可能性が高い。
+        # ただし score がまだ上昇中(=連鎖得点計算中)の場合は finalize しない。
+        # score 上昇停止ゲートは既存 settle 機構(_process_score_settle)に委ねる:
+        #   - _begin_score_settle を呼んで settle 待ちを開始する。
+        #   - score が K_SETTLE_FRAMES 連続不変になった時点で finalize が発火する。
+        # これにより「1P の大連鎖中に OJAMA_FALL が来ても score 上昇中は finalize しない」
+        # (1P 誤分割防止) と「2P の小連鎖直後の TSUMO_FALL で正しく分離」が両立する。
+        _phys_end_states = {BoardState.TSUMO_FALL, BoardState.OJAMA_FALL}
+        _is_phys_chain_end = (
+            s.chain_active
+            and not s.score_settle_pending  # 既に settle 待ち中は重複開始しない
+            and curr_state in _phys_end_states
+        )
+        if _is_phys_chain_end:
+            s.chain_end_triggered = True
+            logger.info(
+                "chain_end_phys[%s]: %s→%s score=%s → settle待ち開始 t=%.2f",
+                side, prev_state, curr_state, score, t_sec,
+            )
+            self._begin_score_settle(s, score, side, t_sec)
+        # -- 連鎖終了候補 [補完]: (CHAIN or GRAVITY_SETTLE) → STABLE --
+        # 新基準 (TSUMO_FALL/OJAMA_FALL) で取りこぼした場合の補完トリガー。
+        # 例: OJAMA_FALL の後そのまま STABLE に遷移するシナリオ等。
+        # 二重 finalize は coalesce window (_already_started 判定) で防止済み。
         # 即 finalize せず score_settle_pending に入り、スコアが settle するまで待機する。
         # settle 判定は _process_score_settle() が担う。
         _chain_or_settle = {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}
@@ -733,16 +766,36 @@ class OjamaAccountingTracker:
         score: int | None,
         side: str,
         t_sec: float,
+        curr_state: object = None,
     ) -> None:
         """settle 待ち中のフレームごと処理。
 
         score=None は「まだ掛け算式表示中 = 連鎖継続の可能性」とみなしカウントしない。
+        curr_state が CHAIN/GRAVITY_SETTLE の場合は「連鎖継続中」とみなしカウントをリセット。
         score が前フレームから上昇した場合は candidate を更新してカウントをリセット。
         score が K_SETTLE_FRAMES フレーム連続不変なら finalize を発火する。
         """
         if score is None:
             # None は連鎖継続の可能性としてスキップ(カウント進めない)
             return
+        # CHAIN / GRAVITY_SETTLE 状態は「まだ連鎖得点計算中」とみなす。
+        # score が一時停止していても state が CHAIN 系なら settle させない。
+        # 物理的根拠: 連鎖中の score 一時停止はステップ間ポーズであり、
+        # 連鎖が完全に終了した「真の停止」ではない。
+        # 例: 1P 大連鎖で score=825 → 20 フレーム不変(連鎖途中ポーズ)→ → 1465 と続く。
+        # この場合 CHAIN state が継続しているため settle させない。
+        if curr_state is not None:
+            from src.board_state_machine import BoardState
+            _still_chaining = curr_state in {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}
+            if _still_chaining:
+                # 連鎖継続中: score 不変カウントをリセット(但し candidate は更新しない)
+                if s.score_settle_consec > 0:
+                    logger.debug(
+                        "score_settle[%s]: state=%s (chaining), reset consec=%d→0 t=%.2f",
+                        side, curr_state, s.score_settle_consec, t_sec,
+                    )
+                    s.score_settle_consec = 0
+                return
         # score が読めた: chain_end_pending は解除(None 待ち解消)
         s.chain_end_pending = False
         if s.score_settle_candidate is None:
