@@ -10,6 +10,14 @@
       初期化済みの場合のみ t_sec - _match_start_sec を返す。
       未初期化の場合は 0.0 を返す(マージンタイム非適用 = 安全側)。
 
+2026-07-09 物理イベント基準 finalize:
+    - 連鎖終了検知を「物理イベント基準」に強化。
+    - 新トリガー: chain_active 中に TSUMO_FALL/OJAMA_FALL への遷移を検知したとき
+      score 上昇停止ゲート付きで settle 待ちを開始 → K_SETTLE_FRAMES 後に finalize。
+    - 補完トリガー: (CHAIN|GRAVITY_SETTLE)→STABLE は取りこぼし補完として併存。
+    - 二重 finalize 防止: coalesce window + _already_started 判定で既存通り保護。
+    - 狙い: 撃ち合い時の 2P 副連鎖(TSUMO_FALL で区切り)を正確に捕捉。
+
 2026-06-09 設計方針:
     - 生成は連鎖終了時に一括: chain_total_score // rate, 繰越 leftover を各 side 独立で管理。
     - 相殺の正しい向き: 自分が連鎖を撃ったとき、自分に向かってくる予告(incoming)を打ち消す。
@@ -71,12 +79,33 @@ PENDING_HARD_CAP: int = ON_FIELD_CAP
 # forecast の絶対サニティ上限(約3画面分)
 PENDING_ABS_CAP: int = ON_FIELD_CAP * 3
 
+# chain_total の下限ガード: score OCR 端数誤読による幻の連鎖を弾く
+# 根拠: 1連鎖最小スコア ≈ 4ぷよ×10×(連鎖ボーナス0) = 40 点
+# 40点未満の chain_total は正当な連鎖でなく OCR 誤読の可能性が極めて高い。
+# お邪魔1個=70点未満のノイズのみ対象。正当な小連鎖(1-2連鎖=数十~数百点)は
+# chain_total=40点以上になるため弾かれない。
+CHAIN_TOTAL_MIN_SCORE: int = CHAIN_FIRE_MIN_SCORE  # = 40
+
 # chain_total_score のサニティ上限: 1試合の最大スコアを超えたら OCR 異常
 # 実測: ぷよぷよeスポーツ上級者試合で最大でも約 200,000 点以内
 CHAIN_TOTAL_SANITY_MAX: int = 200_000
 
 # 連鎖終了後 score None が続いた場合のタイムアウトフレーム数(≒ 1秒 @ 30fps)
 CHAIN_END_PENDING_TIMEOUT_FRAMES: int = 30
+
+# ===== score settle 待ち =====
+# 連鎖の真の終了(スコアが上昇を止めて落ち着いた)を検知するための連続不変フレーム数閾値。
+#
+# 設計根拠:
+#   - 実機観測: 連鎖内のスコア表示ステップ間の「止まっているように見えるポーズ」は
+#     最大 ~0.4秒 ≒ 12フレーム (@30fps)。大連鎖(4連鎖以上)でも各ステップは
+#     ~0.1〜0.3秒で進行し、最終ステップ後のポーズが最も長い。
+#   - 安全側として 12フレームの 1.67倍 = 20フレーム (≒0.67秒) を採用。
+#     → 連鎖内ポーズ(最大12f)を誤 settle 判定しない十分なマージン。
+#   - 次連鎖との混合は起こらない:
+#     次の連鎖を撃つには STABLE で TSUMO 着地(≥2〜3秒)が必要なため、
+#     settle 待ち20フレーム中に次連鎖のスコア上昇が始まることはない。
+K_SETTLE_FRAMES: int = 20
 
 # MENU 状態の連続フレーム数でリセット
 MENU_RESET_CONSEC_FRAMES: int = 3
@@ -164,6 +193,21 @@ class _SideState:
     pending_since_frame: int = 0        # chain_end_pending 開始フレーム番号
     # --- 最後に読めた有効 score ---
     last_valid_score: int | None = None  # 毎フレーム非 None score を更新(連鎖開始前に使用)
+    # --- score settle 待ち (連鎖の真の終了検知) ---
+    # 既存 chain_end_pending (score None 遅延確定) を内包した上位状態。
+    # (CHAIN or GRAVITY_SETTLE)→STABLE の遷移後、スコアが K_SETTLE_FRAMES フレーム
+    # 連続で変化しなくなった時点を「連鎖の真の終了」として finalize する。
+    # score None フレームはカウントせず「まだ上昇中の可能性」として待機継続。
+    score_settle_pending: bool = False    # settle 待ち中フラグ
+    score_settle_candidate: int | None = None  # settle 待ち中の score 候補(現在の最大値)
+    score_settle_consec: int = 0          # score が変化しなかった連続フレーム数
+    score_settle_since_frame: int = 0     # settle 待ち開始フレーム番号
+    # --- 連鎖間基準スコア (新方針: 連鎖間 stable スコア差分で chain_total を算出) ---
+    # 連鎖中でない STABLE フレームで score を読めたときに更新する。
+    # 「前の連鎖終了直後の落ち着いた score」を基準(0)とし、
+    # 次の finalize 時に score_after との差分を chain_total とする。
+    # これにより連鎖開始検知(score_at_chain_start)への依存を最小化する。
+    last_stable_score: int | None = None  # 連鎖間の落ち着いた STABLE score 基準値
     # --- snapshot 検証用 ---
     last_chain_total_score: int = 0     # 最後の連鎖合計得点
     chain_end_triggered: bool = False   # 今フレームで連鎖終了イベントが立ったか
@@ -173,6 +217,12 @@ class _SideState:
     # finalize 完了時刻 (秒)。CHAIN_COALESCE_WINDOW_SEC 以内の再 chain_start は
     # score_at_chain_start を上書きせず 1 連鎖 = 1 finalize を保証する。
     chain_finalized_at_sec: float | None = None  # 最後に finalize した時刻
+    # 最後に finalize した時点の score_after (本物の2本目連鎖判定用)。
+    # coalesce window 内で last_valid_score > last_finalized_score であれば
+    # スコアが前回 finalize から増加しており、本物の新規連鎖と判断できる。
+    # last_stable_score は finalize 後も STABLE フレームで更新されてしまうため
+    # 使えない(直後の STABLE スコアで上書きされると差分がゼロになる)。
+    last_finalized_score: int | None = None  # 最後に finalize した時の score_after
 
 
 # ============================
@@ -250,12 +300,16 @@ class OjamaAccountingTracker:
         s = self._side(side)
         other = self._other(side)
         self._frame_idx += 1
-        # -- 試合境界: MENU 遷移でリセット --
-        # MENU 遷移後は実際のゲーム開始タイミングが不明なため _match_start_sec を None に戻す。
-        # 次の score 受信時に _initialize_match_start() が呼ばれて再設定される。
+        # -- 試合境界: MENU 遷移でリセット (エッジトリガ) --
+        # MENU 継続中(prev も MENU)は毎フレーム呼ばれるため、
+        # prev_state != MENU のときだけ(=MENU 入場の最初の 1 回だけ)リセットする。
+        # これにより「1試合境界 = 1回リセット」を保証し、
+        # MENU 継続中の多重発火(video_124 で 22 回 → 6 回相当)を防止する。
         if curr_state == BoardState.MENU:
-            self._reset_side_boundary(s, side, score, t_sec)
-            self._match_start_sec = None  # MENU後は次score受信まで待つ
+            if prev_state != BoardState.MENU:
+                # MENU 入場エッジ: 1 回だけリセット
+                self._reset_side_boundary(s, side, score, t_sec)
+                self._match_start_sec = None  # MENU後は次score受信まで待つ
             return
         # -- 試合境界: score 大幅減少 --
         if score is not None and self._prev_score(side) is not None:
@@ -271,19 +325,31 @@ class OjamaAccountingTracker:
             s.last_valid_score = score
             # 試合開始時刻が未設定の場合、最初の score 受信時刻を試合開始とみなす
             self._initialize_match_start(t_sec)
+        # -- 連鎖間基準スコア (last_stable_score) を更新 --
+        # 条件: STABLE 状態 かつ score が読める かつ 連鎖中でない かつ settle 待ちでない
+        # CHAIN/GRAVITY_SETTLE 中・掛け算式 None 中は更新しない (途中値で汚さない)。
+        _is_stable_state = (curr_state == BoardState.STABLE)
+        if (_is_stable_state and score is not None
+                and not s.chain_active and not s.score_settle_pending):
+            s.last_stable_score = score
+        # -- score settle 待ち処理 --
+        # settle 待ち中は score 観測ごとに候補更新 or 連続不変カウントを進める。
+        # スコアが K_SETTLE_FRAMES 連続不変 → 連鎖の真の終了 → finalize。
+        # score=None は「掛け算式(連鎖継続の可能性)」とみなしカウントしない。
+        if s.score_settle_pending:
+            self._process_score_settle(s, other, score, side, t_sec, curr_state)
         # -- 連鎖終了待ちの遅延確定 (score None 継続時タイムアウト) --
-        if s.chain_end_pending and score is not None:
-            self._finalize_chain_end(s, other, score, side, t_sec)
-        elif s.chain_end_pending:
+        # score_settle_pending 中に settle 開始フレームからの経過を監視し
+        # CHAIN_END_PENDING_TIMEOUT_FRAMES を超えたら timeout 破棄する。
+        # これにより score None が long 続いた場合の無限待ちを防ぐ。
+        if s.chain_end_pending:
             frames_waited = self._frame_idx - s.pending_since_frame
             if frames_waited >= CHAIN_END_PENDING_TIMEOUT_FRAMES:
                 logger.warning(
                     "chain_end_pending timeout[%s]: %d frames waited, discarding",
                     side, frames_waited,
                 )
-                s.chain_end_pending = False
-                s.chain_active = False
-                s.score_at_chain_start = None
+                self._abort_settle(s, side, t_sec)
         # -- 連鎖開始: 非CHAIN → CHAIN --
         _chain_states = {BoardState.CHAIN}
         _is_chain_start = (
@@ -294,7 +360,7 @@ class OjamaAccountingTracker:
             s.chain_active = True
             s.chain_end_triggered = False
             # --- デバウンス判定 ---
-            # chain_end_pending 中 or finalize 完了直後 (CHAIN_COALESCE_WINDOW_SEC 以内) の
+            # settle 待ち中 or finalize 完了直後 (CHAIN_COALESCE_WINDOW_SEC 以内) の
             # 非CHAIN→CHAIN は state 明滅 (同一連鎖の継続) とみなし
             # score_at_chain_start を上書きしない。
             # これにより「1 連鎖 = 1 finalize」を保証し、
@@ -304,15 +370,50 @@ class OjamaAccountingTracker:
                 s.chain_finalized_at_sec is not None
                 and (t_sec - s.chain_finalized_at_sec) < CHAIN_COALESCE_WINDOW_SEC
             )
-            if s.chain_end_pending or _in_coalesce_window:
+            # 連鎖途中フリッカー判定:
+            # score_at_chain_start が既に設定済み(≠None)の場合は「連鎖継続中の
+            # state 明滅(GRAVITY_SETTLE→CHAIN, OJAMA_FALL→CHAIN 等)」とみなし
+            # score_at_chain_start を上書きしない。
+            # 根拠: finalize/_reset_side_boundary/timeout の各パスで必ず
+            # score_at_chain_start=None に戻すため、「None でないなら連鎖中」が保証される。
+            _already_started = s.score_at_chain_start is not None
+            if s.score_settle_pending or _already_started:
                 logger.info(
-                    "chain_start[%s]: coalesce skip (pending=%s, finalized_at=%.2f, "
-                    "window=%.1fs) — score_at_start=%s maintained t=%.2f",
-                    side, s.chain_end_pending,
-                    s.chain_finalized_at_sec if s.chain_finalized_at_sec is not None else -1.0,
-                    CHAIN_COALESCE_WINDOW_SEC,
-                    s.score_at_chain_start, t_sec,
+                    "chain_start[%s]: skip (settle_pending=%s, "
+                    "already_started=%s score_at_start=%s) t=%.2f",
+                    side, s.score_settle_pending,
+                    _already_started, s.score_at_chain_start, t_sec,
                 )
+            elif _in_coalesce_window:
+                # coalesce window 内: state 明滅(flicker)か本物の2本目連鎖かを区別する。
+                # 判定基準: last_valid_score が前回 finalize 時の score_after(last_finalized_score)
+                # より増加しているか。
+                #   - 明滅 = スコアが増えていない → score_at_chain_start を設定しない(破棄)。
+                #   - 本物の2本目連鎖 = スコアが増加している → score_at_chain_start を設定する。
+                # 注: last_stable_score ではなく last_finalized_score を使う理由:
+                #   last_stable_score は finalize 後の STABLE フレームで更新されてしまい、
+                #   2本目連鎖の直前 STABLE score と同じ値になって差分がゼロになる場合がある。
+                #   last_finalized_score は finalize 時点でのみ更新するため安定した基準になる。
+                _score_rose = (
+                    s.last_finalized_score is not None
+                    and s.last_valid_score is not None
+                    and s.last_valid_score > s.last_finalized_score
+                )
+                if _score_rose:
+                    # 本物の2本目連鎖: coalesce window 内でもスコア増加があるので計上する
+                    s.score_at_chain_start = s.last_valid_score
+                    logger.info(
+                        "chain_start[%s]: in_coalesce but score_rose "
+                        "(last_valid=%s > last_finalized=%s) → treating as new chain t=%.2f",
+                        side, s.last_valid_score, s.last_finalized_score, t_sec,
+                    )
+                else:
+                    # 明滅: スコアが増えていない → score_at_chain_start を設定しない
+                    logger.info(
+                        "chain_start[%s]: skip (in_coalesce=True, score_not_rose "
+                        "last_valid=%s last_finalized=%s) t=%.2f",
+                        side, s.last_valid_score, s.last_finalized_score, t_sec,
+                    )
             else:
                 # 新規連鎖: score_at_chain_start を確定
                 # 連鎖開始直前 score スナップ:
@@ -325,7 +426,34 @@ class OjamaAccountingTracker:
                     "chain_start[%s]: score_at_start=%s (last_valid=%s, frame_score=%s) t=%.2f",
                     side, s.score_at_chain_start, s.last_valid_score, score, t_sec,
                 )
-        # -- 連鎖終了: (CHAIN or GRAVITY_SETTLE) → STABLE --
+        # -- 連鎖終了候補 [新基準]: TSUMO_FALL / OJAMA_FALL への遷移 + score 上昇停止 --
+        # 物理的根拠: 次ツモ出現またはお邪魔落下が来た = 「盤面が次の局面に移った」
+        # = 連鎖の得点計算が完了している可能性が高い。
+        # ただし score がまだ上昇中(=連鎖得点計算中)の場合は finalize しない。
+        # score 上昇停止ゲートは既存 settle 機構(_process_score_settle)に委ねる:
+        #   - _begin_score_settle を呼んで settle 待ちを開始する。
+        #   - score が K_SETTLE_FRAMES 連続不変になった時点で finalize が発火する。
+        # これにより「1P の大連鎖中に OJAMA_FALL が来ても score 上昇中は finalize しない」
+        # (1P 誤分割防止) と「2P の小連鎖直後の TSUMO_FALL で正しく分離」が両立する。
+        _phys_end_states = {BoardState.TSUMO_FALL, BoardState.OJAMA_FALL}
+        _is_phys_chain_end = (
+            s.chain_active
+            and not s.score_settle_pending  # 既に settle 待ち中は重複開始しない
+            and curr_state in _phys_end_states
+        )
+        if _is_phys_chain_end:
+            s.chain_end_triggered = True
+            logger.info(
+                "chain_end_phys[%s]: %s→%s score=%s → settle待ち開始 t=%.2f",
+                side, prev_state, curr_state, score, t_sec,
+            )
+            self._begin_score_settle(s, score, side, t_sec)
+        # -- 連鎖終了候補 [補完]: (CHAIN or GRAVITY_SETTLE) → STABLE --
+        # 新基準 (TSUMO_FALL/OJAMA_FALL) で取りこぼした場合の補完トリガー。
+        # 例: OJAMA_FALL の後そのまま STABLE に遷移するシナリオ等。
+        # 二重 finalize は coalesce window (_already_started 判定) で防止済み。
+        # 即 finalize せず score_settle_pending に入り、スコアが settle するまで待機する。
+        # settle 判定は _process_score_settle() が担う。
         _chain_or_settle = {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}
         _is_chain_end = (
             s.chain_active
@@ -334,15 +462,7 @@ class OjamaAccountingTracker:
         )
         if _is_chain_end:
             s.chain_end_triggered = True
-            if score is not None:
-                self._finalize_chain_end(s, other, score, side, t_sec)
-            else:
-                # score None: 遅延確定待ち
-                s.chain_end_pending = True
-                s.pending_since_frame = self._frame_idx
-                logger.debug(
-                    "chain_end_pending[%s]: score=None, waiting t=%.2f", side, t_sec,
-                )
+            self._begin_score_settle(s, score, side, t_sec)
 
     def on_tsumo_settled(self, side: str, t_sec: float) -> None:
         """TSUMO_FALL → STABLE 遷移時に相手から受けた予告を 1 ターン分 drain する。
@@ -457,13 +577,37 @@ class OjamaAccountingTracker:
         """
         s.chain_end_pending = False
         # --- 連鎖合計スコア計算 ---
+        # 新方針: last_stable_score (連鎖間の落ち着いた STABLE score) を基準に優先使用する。
+        # score_at_chain_start は coalesce/dedup の有効性チェックにのみ使用する:
+        #   - score_at_chain_start=None = coalesce skip で連鎖開始が認識されていない
+        #     → 偽連鎖(state 明滅)として破棄する(過剰計上防止)
+        #   - score_at_chain_start=設定済み = 正規の連鎖開始あり
+        #     → last_stable_score を優先して差分計算する
+        # これにより、score_at_chain_start の取り違えによる計算誤差を排除しつつ、
+        # coalesce window 保護も維持する。
         if s.score_at_chain_start is None:
-            # 連鎖開始時 score が不明: 破棄
+            # 連鎖開始が認識されていない = coalesce skip で保護された偽連鎖
+            # → 過剰計上防止のため破棄する
             logger.warning("chain_end[%s]: score_at_chain_start=None, discarding t=%.2f", side, t_sec)
             s.chain_active = False
             s.chain_finalized_at_sec = t_sec  # 破棄でも coalesce window を開く
             return
-        score_start = s.score_at_chain_start
+        # score_at_chain_start が設定されている = 正規の連鎖。
+        # last_stable_score を優先して差分計算する(フォールバック: score_at_chain_start)。
+        if s.last_stable_score is not None:
+            score_start = s.last_stable_score
+            logger.debug(
+                "chain_end[%s]: using last_stable_score=%d "
+                "(score_at_chain_start=%d) t=%.2f",
+                side, score_start, s.score_at_chain_start, t_sec,
+            )
+        else:
+            # last_stable_score が未設定(試合最初の連鎖など): score_at_chain_start でフォールバック
+            score_start = s.score_at_chain_start
+            logger.info(
+                "chain_end[%s]: last_stable_score=None, fallback to score_at_chain_start=%d t=%.2f",
+                side, score_start, t_sec,
+            )
         chain_total = score_after - score_start
         # --- sanity check ---
         if chain_total <= 0:
@@ -472,6 +616,19 @@ class OjamaAccountingTracker:
                 "chain_end[%s]: chain_total=%d <= 0 (trial reset or OCR error?), "
                 "score_after=%d start=%d t=%.2f",
                 side, chain_total, score_after, score_start, t_sec,
+            )
+            s.chain_active = False
+            s.score_at_chain_start = None
+            s.chain_finalized_at_sec = t_sec
+            return
+        if chain_total < CHAIN_TOTAL_MIN_SCORE:
+            # 極小 chain_total = score OCR 端数誤読の疑い
+            # leftover への誤累積を防ぐため破棄する。
+            # 正当な小連鎖(1-2連鎖)は chain_total >= 40 になるため弾かれない。
+            logger.info(
+                "chain_end[%s]: chain_total=%d < min=%d (OCR端数誤読の疑い), "
+                "discarding t=%.2f",
+                side, chain_total, CHAIN_TOTAL_MIN_SCORE, t_sec,
             )
             s.chain_active = False
             s.score_at_chain_start = None
@@ -541,9 +698,160 @@ class OjamaAccountingTracker:
         # --- 後処理 ---
         s.chain_active = False
         s.score_at_chain_start = None
+        # finalize 後は score_after を新しい last_stable_score として設定する。
+        # これにより次の連鎖の chain_total が正確に「この連鎖終了直後から」計算される。
+        s.last_stable_score = score_after
+        # last_finalized_score: この finalize の score_after を記録する。
+        # coalesce window 内の本物の2本目連鎖判定 (last_valid_score > last_finalized_score)
+        # に使用する。last_stable_score は finalize 後も STABLE フレームで更新されるため
+        # 代わりに last_finalized_score を使う(更新タイミングが finalize のみ)。
+        s.last_finalized_score = score_after
         # coalesce window を開く: この時刻から CHAIN_COALESCE_WINDOW_SEC 以内の
         # 再 chain_start は同一連鎖の state 明滅とみなし score_at_chain_start を守る。
         s.chain_finalized_at_sec = t_sec
+
+    # ============================
+    # 内部: score settle 待ち
+    # ============================
+
+    def _begin_score_settle(
+        self,
+        s: _SideState,
+        score: int | None,
+        side: str,
+        t_sec: float,
+    ) -> None:
+        """連鎖終了候補を検知したとき settle 待ちを開始する。
+
+        score が None の場合は候補を None のまま保持し、
+        既存 chain_end_pending タイムアウトを起動する。
+
+        すでに settle 待ち中(score_settle_pending=True)の場合は、
+        state 明滅 (STABLE→CHAIN→STABLE) による再 begin を防ぐため
+        候補スコアの上限更新のみ行う(カウンタリセットせず継続)。
+        これにより連鎖途中の明滅で settle が中断されない。
+        """
+        if s.score_settle_pending:
+            # すでに settle 待ち中: 候補を最大値に更新するだけ(カウンタ維持)
+            if score is not None:
+                if s.score_settle_candidate is None or score > s.score_settle_candidate:
+                    logger.debug(
+                        "score_settle_begin[%s]: already pending, update candidate %s→%d t=%.2f",
+                        side, s.score_settle_candidate, score, t_sec,
+                    )
+                    s.score_settle_candidate = score
+                    s.score_settle_consec = 0  # 上昇があったのでリセット
+            return
+        s.score_settle_pending = True
+        s.score_settle_candidate = score  # None の場合もそのまま保持
+        s.score_settle_consec = 0
+        s.score_settle_since_frame = self._frame_idx
+        # score None の場合は既存タイムアウト機構(chain_end_pending)も起動する
+        if score is None:
+            s.chain_end_pending = True
+            s.pending_since_frame = self._frame_idx
+            logger.debug(
+                "score_settle_begin[%s]: score=None, pending started t=%.2f", side, t_sec,
+            )
+        else:
+            s.chain_end_pending = False
+            logger.debug(
+                "score_settle_begin[%s]: candidate=%d t=%.2f", side, score, t_sec,
+            )
+
+    def _process_score_settle(
+        self,
+        s: _SideState,
+        other: _SideState,
+        score: int | None,
+        side: str,
+        t_sec: float,
+        curr_state: object = None,
+    ) -> None:
+        """settle 待ち中のフレームごと処理。
+
+        score=None は「まだ掛け算式表示中 = 連鎖継続の可能性」とみなしカウントしない。
+        curr_state が CHAIN/GRAVITY_SETTLE の場合は「連鎖継続中」とみなしカウントをリセット。
+        score が前フレームから上昇した場合は candidate を更新してカウントをリセット。
+        score が K_SETTLE_FRAMES フレーム連続不変なら finalize を発火する。
+        """
+        if score is None:
+            # None は連鎖継続の可能性としてスキップ(カウント進めない)
+            return
+        # CHAIN / GRAVITY_SETTLE 状態は「まだ連鎖得点計算中」とみなす。
+        # score が一時停止していても state が CHAIN 系なら settle させない。
+        # 物理的根拠: 連鎖中の score 一時停止はステップ間ポーズであり、
+        # 連鎖が完全に終了した「真の停止」ではない。
+        # 例: 1P 大連鎖で score=825 → 20 フレーム不変(連鎖途中ポーズ)→ → 1465 と続く。
+        # この場合 CHAIN state が継続しているため settle させない。
+        if curr_state is not None:
+            from src.board_state_machine import BoardState
+            _still_chaining = curr_state in {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}
+            if _still_chaining:
+                # 連鎖継続中: score 不変カウントをリセット(但し candidate は更新しない)
+                if s.score_settle_consec > 0:
+                    logger.debug(
+                        "score_settle[%s]: state=%s (chaining), reset consec=%d→0 t=%.2f",
+                        side, curr_state, s.score_settle_consec, t_sec,
+                    )
+                    s.score_settle_consec = 0
+                return
+        # score が読めた: chain_end_pending は解除(None 待ち解消)
+        s.chain_end_pending = False
+        if s.score_settle_candidate is None:
+            # 初回 score 受信
+            s.score_settle_candidate = score
+            s.score_settle_consec = 1
+            logger.debug(
+                "score_settle[%s]: first score=%d t=%.2f", side, score, t_sec,
+            )
+            return
+        if score > s.score_settle_candidate:
+            # スコア上昇 = 連鎖継続中 → candidate 更新・カウントリセット
+            logger.debug(
+                "score_settle[%s]: score rose %d→%d, reset counter t=%.2f",
+                side, s.score_settle_candidate, score, t_sec,
+            )
+            s.score_settle_candidate = score
+            s.score_settle_consec = 1
+        elif score == s.score_settle_candidate:
+            # スコア不変 → カウントアップ
+            s.score_settle_consec += 1
+            logger.debug(
+                "score_settle[%s]: consec=%d/%d score=%d t=%.2f",
+                side, s.score_settle_consec, K_SETTLE_FRAMES, score, t_sec,
+            )
+            if s.score_settle_consec >= K_SETTLE_FRAMES:
+                # settle 確定 → finalize 発火
+                logger.info(
+                    "score_settle[%s]: settled at score=%d (consec=%d) t=%.2f",
+                    side, score, s.score_settle_consec, t_sec,
+                )
+                s.score_settle_pending = False
+                self._finalize_chain_end(s, other, score, side, t_sec)
+        else:
+            # score が減少 = 試合境界 or OCR 誤読 → settle 破棄
+            # (試合境界の場合は on_state_transition の score 大幅減少検知が先に走る想定。
+            #  ここでは score_settle_pending=False にしてお邪魔を出さないよう破棄する)
+            logger.info(
+                "score_settle[%s]: score dropped %d→%d, aborting t=%.2f",
+                side, s.score_settle_candidate, score, t_sec,
+            )
+            self._abort_settle(s, side, t_sec)
+
+    def _abort_settle(self, s: _SideState, side: str, t_sec: float) -> None:
+        """settle 待ちを破棄して連鎖状態をリセットする(タイムアウト・境界・スコア減少時)。"""
+        logger.info(
+            "score_settle_abort[%s]: settle破棄 candidate=%s consec=%d t=%.2f",
+            side, s.score_settle_candidate, s.score_settle_consec, t_sec,
+        )
+        s.score_settle_pending = False
+        s.score_settle_candidate = None
+        s.score_settle_consec = 0
+        s.chain_end_pending = False
+        s.chain_active = False
+        s.score_at_chain_start = None
+        s.chain_finalized_at_sec = t_sec  # coalesce window を開いて二重 finalize を防ぐ
 
     # ============================
     # 後方互換 API の内部処理
@@ -617,10 +925,23 @@ class OjamaAccountingTracker:
         s.chain_active = False
         s.score_at_chain_start = None
         s.chain_end_pending = False
+        # 試合境界では chain_end_triggered もクリア。
+        # クリアしないと前試合の triggered=True が次試合に持ち越されて
+        # overlay の誤表示 (最大30秒以上) を引き起こす。
+        s.chain_end_triggered = False
         # 試合境界では last_valid_score もクリア(前試合の値が次試合冒頭に使われないよう)
         s.last_valid_score = None
+        # 試合境界では last_stable_score もクリア(前試合のスコアが次試合の基準に使われないよう)
+        s.last_stable_score = None
         # coalesce window もクリア(前試合の window が次試合に引き継がれないよう)
         s.chain_finalized_at_sec = None
+        # last_finalized_score もクリア(前試合の finalize score が次試合に引き継がれないよう)
+        s.last_finalized_score = None
+        # settle 待ちもクリア(試合境界をまたいだ settle は破棄)
+        s.score_settle_pending = False
+        s.score_settle_candidate = None
+        s.score_settle_consec = 0
+        s.score_settle_since_frame = 0
         # --- マージンタイム基準を試合相対に更新 ---
         # score 大幅減少 = 次試合開始とみなし、この時刻を新しい試合開始とする。
         # MENU 遷移 (label で "menu" を区別するのではなく呼出元が判断して渡す) の場合は
@@ -737,6 +1058,7 @@ class OjamaAccountingTracker:
 
 __all__ = [
     "CHAIN_FIRE_MIN_SCORE",
+    "CHAIN_TOTAL_MIN_SCORE",
     "CONFIDENCE_SCORE_OCR_ONLY",
     "CONFIDENCE_VISUAL_AGREE",
     "CONFIDENCE_VISUAL_MISMATCH_PENALTY",
@@ -748,6 +1070,7 @@ __all__ = [
     "PENDING_HARD_CAP",
     "PENDING_ABS_CAP",
     "CHAIN_COALESCE_WINDOW_SEC",
+    "K_SETTLE_FRAMES",
     "OjamaAccountSnapshot",
     "OjamaAccountingTracker",
 ]

@@ -1411,6 +1411,24 @@ class RecognitionPipeline:
         """
         self._video_id = video_id
 
+    def tsumo_count(self, side: str) -> int:
+        """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
+
+        内部の `_tsumo_count_Xp` Counter は TSUMO_FALL→STABLE 着地ごとに
+        ペアの 2 色を各 +1 する (= 1 ツモで合計 +2)。本 getter は
+        Counter の総和を 2 で割り「設置したツモ数 (手数)」を返す。
+        試合境界 (score 大幅減少 / MENU) で Counter は自動 clear されるため、
+        この値は現在の試合開始からの相対手数となる。
+
+        Args:
+            side: "1P" または "2P"。
+
+        Returns:
+            int: 現在の試合での確定ツモ設置数 (手数)。
+        """
+        counter = self._tsumo_count_1p if side == "1P" else self._tsumo_count_2p
+        return int(sum(counter.values()) // 2)
+
     def reset(self) -> None:
         """全 state を初期化 (試合切替時など)。"""
         self._sm_1p.reset()
