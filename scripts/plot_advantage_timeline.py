@@ -30,7 +30,8 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import src.indicators_v2 as iv  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    _train_model, _score_advantage, EMA_ALPHA, PressureTracker, PRESSURE_BLEND_W,
+    _train_model, _score_advantage, EMA_ALPHA, PressureTracker,
+    _threat, W_PRESSURE, W_MODEL, W_THREAT,
 )
 
 FONT_PATH = "/mnt/c/Windows/Fonts/meiryo.ttc"
@@ -85,7 +86,8 @@ def _collect_timeline(
             continue
         adv, p1, _ = _score_advantage(model, b1, b2, snap)
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        adv = PRESSURE_BLEND_W * pres + (1 - PRESSURE_BLEND_W) * adv  # (B) 圧力ブレンド
+        threat = _threat(b1, b2, tracker._elapsed(t))  # (3) 仕込んだ火力
+        adv = W_PRESSURE * pres + W_MODEL * adv + W_THREAT * threat  # 3成分ブレンド
         p1 = 0.5 + adv / 200.0
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         p1_ema = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_ema
