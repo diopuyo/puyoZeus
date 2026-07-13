@@ -155,15 +155,17 @@ def _score_advantage(
     return adv, p1, drivers
 
 
-def _threat(b1: Board, b2: Board, elapsed: float) -> float:
-    """(3) build中threat = 期待火力差(潜在火力 × 発火準備度) 1P−2P を [-100,100] で返す。
+def _threat(b1: Board, b2: Board, sp1, sp2, elapsed: float) -> float:
+    """(3/M1) 火力threat = 到達火力差 1P−2P を [-100,100] で返す。
 
-    潜在火力(ツモ非依存の盤面最大連鎖)を、発火準備度(min_puyos_to_ignite.score,
-    近いほど1)で割引く。「撃てる見込みのある大連鎖」ほど脅威として重い。
+    reach_fire_power(実 next/dnext ペアで2手先読み)を使う。潜在火力
+    (potential_fire_power)は greedy 探索が大連鎖を過小評価するバグがあり
+    (2026-07-14 Phase1: あん実816に対し potential=360 だが reach=956 と的中)、
+    「実際に撃てる火力」を測る reach の方が有利不利に正確なため置換。
     """
-    ef1 = iv.potential_fire_power(b1, elapsed).raw * iv.min_puyos_to_ignite(b1).score
-    ef2 = iv.potential_fire_power(b2, elapsed).raw * iv.min_puyos_to_ignite(b2).score
-    return float(max(-100.0, min(100.0, (ef1 - ef2) * THREAT_SCALE)))
+    r1 = iv.reach_fire_power(b1, sp1.next_pair, sp1.dnext_pair, elapsed).value.raw
+    r2 = iv.reach_fire_power(b2, sp2.next_pair, sp2.dnext_pair, elapsed).value.raw
+    return float(max(-100.0, min(100.0, (r1 - r2) * THREAT_SCALE)))
 
 
 def _draw_graph(
@@ -301,7 +303,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # (B) 圧力(着弾ダメージ)を主軸に現モデルをブレンド
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
-            threat = _threat(b1, b2, tracker._elapsed(t))  # (3) 仕込んだ火力
+            threat = _threat(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1) 到達火力
             adv = W_PRESSURE * pres + W_MODEL * adv + W_THREAT * threat
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
