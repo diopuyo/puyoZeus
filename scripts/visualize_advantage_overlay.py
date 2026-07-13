@@ -45,11 +45,14 @@ EMA_ALPHA = 0.25      # 有利不利の時間平滑
 PRESSURE_DECAY = 0.985    # 毎フレーム減衰 (半減期 ~1.5s @30fps)
 PRESSURE_SCALE = 6.0      # 圧力 → 有利不利[-100,100] 換算
 PRESSURE_BLEND_W = 0.6    # (旧2成分) 有利不利 = W×圧力 + (1-W)×現モデル
-# (3) 3成分ブレンド: 圧力(着弾) + 現モデル(位置) + threat(仕込んだ火力)
-W_PRESSURE = 0.5
-W_MODEL = 0.3
-W_THREAT = 0.2
-THREAT_SCALE = 0.22       # 期待火力差(お邪魔個) → 有利不利換算
+# (M2) 得点リード信号: 各side の現在スコア差(=どちらが多く攻撃を通したか)
+SCORE_LEAD_SCALE = 0.4    # お邪魔換算スコア差 → 有利不利
+# 4成分ブレンド: 圧力(着弾) + 得点リード(累積攻撃) + 現モデル(位置) + threat(仕込み火力)
+W_PRESSURE = 0.35
+W_CHAIN = 0.30
+W_MODEL = 0.20
+W_THREAT = 0.15
+THREAT_SCALE = 0.22       # 到達火力差(お邪魔個) → 有利不利換算
 
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)
 FEATURES: tuple[str, ...] = (
@@ -118,6 +121,30 @@ class PressureTracker:
         self.pressure += max(0.0, ojama_2p - self._prev2) - max(0.0, ojama_1p - self._prev1)
         self._prev1, self._prev2 = ojama_1p, ojama_2p
         return float(max(-100.0, min(100.0, self.pressure * PRESSURE_SCALE)))
+
+
+class ScoreLeadTracker:
+    """(M2) 得点リード: 各side の現在スコア差(=どちらが多く攻撃を通したか)を追う。
+
+    連鎖を撃った側のスコアが伸びる。累積差なので「今実行中の側」だけでなく
+    「既により多く撃った側」を正しく評価する。velocity版は2番目に撃つ小連鎖側を
+    誤って有利にしたため、累積リードへ変更(2026-07-14 M2改)。
+    スコアは試合開始で0にリセットされるため試合内相対で機能する。
+    """
+
+    def __init__(self) -> None:
+        self._s1 = 0
+        self._s2 = 0
+
+    def update(self, score1: int | None, score2: int | None,
+               rate: float = 70.0) -> float:
+        """毎フレーム。1P視点の得点リードを [-100,100] で返す(正=1Pが多く攻撃)。"""
+        if score1 is not None:
+            self._s1 = score1
+        if score2 is not None:
+            self._s2 = score2
+        lead = (self._s1 - self._s2) / rate  # お邪魔換算のスコア差
+        return float(max(-100.0, min(100.0, lead * SCORE_LEAD_SCALE)))
 
 
 def _side_feats(board: Board, net: int, forecast: int) -> dict[str, float]:
@@ -278,6 +305,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     p1_last = 0.5
     drivers: list[tuple[str, float]] = []
     ptracker = PressureTracker()
+    svtracker = ScoreLeadTracker()
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
     step = max(1, int(round(sample_interval * fps)))
@@ -303,8 +331,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # (B) 圧力(着弾ダメージ)を主軸に現モデルをブレンド
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
+            cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 発火実行中
             threat = _threat(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1) 到達火力
-            adv = W_PRESSURE * pres + W_MODEL * adv + W_THREAT * threat
+            adv = (W_PRESSURE * pres + W_CHAIN * cvel
+                   + W_MODEL * adv + W_THREAT * threat)
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
