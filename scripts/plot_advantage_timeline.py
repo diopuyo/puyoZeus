@@ -86,7 +86,7 @@ def _collect_timeline(
             continue
         adv, p1, _ = _score_advantage(model, b1, b2, snap)
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        threat = _threat(b1, b2, tracker._elapsed(t))  # (3) 仕込んだ火力
+        threat = _threat(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1) 到達火力
         adv = W_PRESSURE * pres + W_MODEL * adv + W_THREAT * threat  # 3成分ブレンド
         p1 = 0.5 + adv / 200.0
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
