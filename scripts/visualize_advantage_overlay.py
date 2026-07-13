@@ -44,7 +44,12 @@ EMA_ALPHA = 0.25      # 有利不利の時間平滑
 # (B) 持続圧力信号: board_ojama の増加を減衰累積 (着弾ダメージの記憶)
 PRESSURE_DECAY = 0.985    # 毎フレーム減衰 (半減期 ~1.5s @30fps)
 PRESSURE_SCALE = 6.0      # 圧力 → 有利不利[-100,100] 換算
-PRESSURE_BLEND_W = 0.6    # 有利不利 = W×圧力 + (1-W)×現モデル
+PRESSURE_BLEND_W = 0.6    # (旧2成分) 有利不利 = W×圧力 + (1-W)×現モデル
+# (3) 3成分ブレンド: 圧力(着弾) + 現モデル(位置) + threat(仕込んだ火力)
+W_PRESSURE = 0.5
+W_MODEL = 0.3
+W_THREAT = 0.2
+THREAT_SCALE = 0.22       # 期待火力差(お邪魔個) → 有利不利換算
 
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)
 FEATURES: tuple[str, ...] = (
@@ -148,6 +153,17 @@ def _score_advantage(
         ((c, diff[c]) for c in JP_LABEL if c in diff),
         key=lambda kv: -abs(kv[1]))[:3]
     return adv, p1, drivers
+
+
+def _threat(b1: Board, b2: Board, elapsed: float) -> float:
+    """(3) build中threat = 期待火力差(潜在火力 × 発火準備度) 1P−2P を [-100,100] で返す。
+
+    潜在火力(ツモ非依存の盤面最大連鎖)を、発火準備度(min_puyos_to_ignite.score,
+    近いほど1)で割引く。「撃てる見込みのある大連鎖」ほど脅威として重い。
+    """
+    ef1 = iv.potential_fire_power(b1, elapsed).raw * iv.min_puyos_to_ignite(b1).score
+    ef2 = iv.potential_fire_power(b2, elapsed).raw * iv.min_puyos_to_ignite(b2).score
+    return float(max(-100.0, min(100.0, (ef1 - ef2) * THREAT_SCALE)))
 
 
 def _draw_graph(
@@ -285,7 +301,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # (B) 圧力(着弾ダメージ)を主軸に現モデルをブレンド
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
-            adv = PRESSURE_BLEND_W * pres + (1 - PRESSURE_BLEND_W) * adv
+            threat = _threat(b1, b2, tracker._elapsed(t))  # (3) 仕込んだ火力
+            adv = W_PRESSURE * pres + W_MODEL * adv + W_THREAT * threat
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
