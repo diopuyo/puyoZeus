@@ -215,6 +215,32 @@ class ThreatTracker:
         return self._last
 
 
+class HeavyAdvCache:
+    """重い盤面由来計算(_score_advantage の current_max_chain 等 + threat の reach)を
+    ~0.3s 毎に計算してキャッシュ。盤面は STABLE 時しか変わらないため精度低下は最小。
+
+    毎フレーム呼んでも重い simulate 群は 1/every に削減(オーバーレイ実用速度の要)。
+    圧力(board_ojama)・得点リード(score)・会計は安価なので呼出側で毎フレーム更新のまま。
+    """
+
+    def __init__(self, model, every: int = 9) -> None:  # ~0.3s @30fps
+        self._model = model
+        self._every = max(1, every)
+        self._n = 0
+        self._adv = 0.0
+        self._threat = 0.0
+        self._drivers: list[tuple[str, float]] = []
+
+    def update(self, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
+               sp1, sp2, elapsed: float) -> tuple[float, float, list[tuple[str, float]]]:
+        """(モデル有利不利, threat, 主要ドライバ) を返す(間引きキャッシュ)。"""
+        if self._n % self._every == 0:
+            self._adv, _, self._drivers = _score_advantage(self._model, b1, b2, snap)
+            self._threat = _threat(b1, b2, sp1, sp2, elapsed)
+        self._n += 1
+        return self._adv, self._threat, self._drivers
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
@@ -326,7 +352,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     drivers: list[tuple[str, float]] = []
     ptracker = PressureTracker()
     svtracker = ScoreLeadTracker()
-    ttracker = ThreatTracker()
+    hcache = HeavyAdvCache(model)
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
     step = max(1, int(round(sample_interval * fps)))
@@ -348,14 +374,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
         if b1 is not None and b2 is not None:
-            adv, p1, drivers = _score_advantage(model, b1, b2, snap)
-            # (B) 圧力(着弾ダメージ)を主軸に現モデルをブレンド
+            # 重い盤面由来(モデルadv/threat)はキャッシュ間引き、安価な圧力/リードは毎フレーム
+            model_adv, threat, drivers = hcache.update(
+                b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
             cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 得点リード
-            threat = ttracker.update(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1)到達火力(間引き)
             adv = (W_PRESSURE * pres + W_CHAIN * cvel
-                   + W_MODEL * adv + W_THREAT * threat)
+                   + W_MODEL * model_adv + W_THREAT * threat)
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
