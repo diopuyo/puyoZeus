@@ -102,6 +102,14 @@ REACH_FIRE_POWER_BEST_K: int = 5
 # III-3 到達火力: 正規化分母 (お邪魔個数上限 = 72)。
 REACH_FIRE_POWER_NORM: int = ON_FIELD_CAP  # = 72
 
+# III-8 潜在火力: greedy ビームの 1 手目保持数。
+# 1 手目 = 5×6=30 通り → 上位 K のみ 2 手目展開。最大 sim = 30 + K×30 = 180。
+POTENTIAL_FIRE_POWER_BEAM_K: int = 5
+# III-8 潜在火力: 最大追加ぷよ数 (デフォルト 2)。
+POTENTIAL_FIRE_POWER_MAX_ADD: int = 2
+# III-8 潜在火力: 正規化分母 (REACH_FIRE_POWER_NORM と統一)。
+POTENTIAL_FIRE_POWER_NORM: int = ON_FIELD_CAP  # = 72
+
 # VI-1 掘り耐性: 仮想お邪魔テスト個数。
 OJAMA_DEFENSE_TEST_COUNTS: tuple[int, ...] = (10, 20, 30)
 # VI-1 掘り耐性: 掘削可能と判定する最小連鎖数。
@@ -864,6 +872,115 @@ def _reach_fire_power_core(
     )
 
 
+# ============================
+# III-8 潜在火力
+# ============================
+
+
+def _pfp_first_pass(
+    board: Board,
+    sim: ChainSimulator,
+    beam_k: int,
+) -> "list[tuple[int, Board]]":
+    """潜在火力 1 手目 greedy: 5色×6列=30通り simulate → chain 上位 beam_k を返す。
+
+    Args:
+        board: 評価対象の確定盤面。
+        sim: ChainSimulator インスタンス。
+        beam_k: 保持する上位候補数。
+
+    Returns:
+        (chain_count, dropped_board) を chain_count 降順に最大 beam_k 個。
+    """
+    candidates: list[tuple[int, Board]] = []
+    for col in range(BOARD_COLS):
+        for color in IGNITION_TRIAL_COLORS:
+            dropped = _drop_one_color(board, col, color)
+            if dropped is None:
+                continue
+            chain = sim.simulate(dropped).chain_count
+            candidates.append((chain, dropped))
+    # chain_count 降順で上位 beam_k を返す
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[:beam_k]
+
+
+def _pfp_second_pass(
+    candidates: "list[tuple[int, Board]]",
+    sim: ChainSimulator,
+    elapsed_sec: float,
+) -> int:
+    """潜在火力 2 手目: 各候補盤面から再度 30 通り探索し最大お邪魔数を返す。
+
+    Args:
+        candidates: 1 手目 top-K の (chain_count, board) リスト。
+        sim: ChainSimulator インスタンス。
+        elapsed_sec: マージンタイム計算用経過秒。
+
+    Returns:
+        2 手まで追加した場合の最大お邪魔数 (int)。
+    """
+    best_ojama: int = 0
+    for _, board1 in candidates:
+        for col in range(BOARD_COLS):
+            for color in IGNITION_TRIAL_COLORS:
+                board2 = _drop_one_color(board1, col, color)
+                if board2 is None:
+                    continue
+                ojama = _board_fire_ojama(board2, elapsed_sec, sim)
+                if ojama > best_ojama:
+                    best_ojama = ojama
+    return best_ojama
+
+
+def potential_fire_power(
+    board: Board,
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    max_add: int = POTENTIAL_FIRE_POWER_MAX_ADD,
+) -> IndicatorV2Value:
+    """III-8 潜在火力 (ツモ依存なし)。
+
+    実ツモに依存せず「この盤面に仕込まれている最大連鎖ポテンシャル」を測る。
+    任意色ぷよを最大 max_add 個・任意列に greedy ビーム探索で追加し、
+    simulate して得られる最大お邪魔数を返す。
+
+    探索 (max_add=2 デフォルト):
+        1 手目: 5色×6列=30 通り simulate → chain 上位 BEAM_K=5 を保持。
+        2 手目: top-K 各盤面から再度 30 通り → 最大お邪魔数。
+        最大 sim 数 = 30 + 5×30 = 180 (全探索 900 の 1/5)。
+
+    正規化: raw / POTENTIAL_FIRE_POWER_NORM (=72 =ON_FIELD_CAP)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        max_add: 最大追加ぷよ数 (デフォルト 2。1 なら 30 sim のみ)。
+
+    Returns:
+        IndicatorV2Value: score=raw/72 (0〜1), raw=最大お邪魔数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 1 手目: 30 通り探索 (chain_count 基準で top-K 候補を選択)
+    top_k = _pfp_first_pass(board, sim, POTENTIAL_FIRE_POWER_BEAM_K)
+    if not top_k:
+        # 全列満杯 → 0
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    if max_add == 1:
+        # 1 手のみ: top_k から直接お邪魔数を計算
+        best_ojama = max(
+            _board_fire_ojama(b, elapsed_sec, sim) for _, b in top_k
+        )
+    else:
+        # 2 手目 (max_add >= 2): top-K 各盤面を起点に再度 30 通り
+        best_ojama = _pfp_second_pass(top_k, sim, elapsed_sec)
+    raw = float(best_ojama)
+    return IndicatorV2Value(
+        score=_clamp01(raw / POTENTIAL_FIRE_POWER_NORM), raw=raw,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -886,6 +1003,7 @@ __all__ = [
     "connectivity_observation",
     "second_chain_potential",
     "reach_fire_power",
+    "potential_fire_power",
     # ④
     "ojama_net_balance",
     "ojama_forecast",
