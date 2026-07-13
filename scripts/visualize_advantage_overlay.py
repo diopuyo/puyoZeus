@@ -195,6 +195,26 @@ def _threat(b1: Board, b2: Board, sp1, sp2, elapsed: float) -> float:
     return float(max(-100.0, min(100.0, (r1 - r2) * THREAT_SCALE)))
 
 
+class ThreatTracker:
+    """threat(reach火力=重い)の計算を間引くキャッシュ。
+
+    reach_fire_power は満杯盤面で高コスト。threat は連鎖ビルドに従い緩やかに
+    変化するため、every フレームに1回だけ再計算し間は前回値を再利用する。
+    毎フレーム呼んでも reach 実計算は 1/every に削減。
+    """
+
+    def __init__(self, every: int = 9) -> None:  # ~0.3s @30fps
+        self._every = max(1, every)
+        self._last = 0.0
+        self._n = 0
+
+    def update(self, b1: Board, b2: Board, sp1, sp2, elapsed: float) -> float:
+        if self._n % self._every == 0:
+            self._last = _threat(b1, b2, sp1, sp2, elapsed)
+        self._n += 1
+        return self._last
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
@@ -306,6 +326,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     drivers: list[tuple[str, float]] = []
     ptracker = PressureTracker()
     svtracker = ScoreLeadTracker()
+    ttracker = ThreatTracker()
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
     step = max(1, int(round(sample_interval * fps)))
@@ -331,8 +352,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # (B) 圧力(着弾ダメージ)を主軸に現モデルをブレンド
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
-            cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 発火実行中
-            threat = _threat(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1) 到達火力
+            cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 得点リード
+            threat = ttracker.update(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1)到達火力(間引き)
             adv = (W_PRESSURE * pres + W_CHAIN * cvel
                    + W_MODEL * adv + W_THREAT * threat)
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
