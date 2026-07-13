@@ -26,7 +26,7 @@ from src.ojama_accounting import OjamaAccountingTracker  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    _train_model, _score_advantage, PressureTracker, ScoreLeadTracker, _threat,
+    _train_model, _score_advantage, PressureTracker, ScoreLeadTracker, ThreatTracker,
     EMA_ALPHA, W_PRESSURE, W_CHAIN, W_MODEL, W_THREAT,
 )
 
@@ -74,7 +74,7 @@ def main() -> None:
     pipe.set_video_id(a.video_id)
     tr = OjamaAccountingTracker(); tr.reset()
     tp1, tp2 = _SideTracker(), _SideTracker()
-    pt = PressureTracker(); lt = ScoreLeadTracker()
+    pt = PressureTracker(); lt = ScoreLeadTracker(); tt = ThreatTracker()
     ps1 = ps2 = BoardState.MENU
     b1 = b2 = None
     adv_ema = 0.0
@@ -98,7 +98,8 @@ def main() -> None:
         # ゲーム境界検知(いずれかのスコアが大幅減)
         for s, last in ((r.p1.score, g.last_s1), (r.p2.score, g.last_s2)):
             if s is not None and last - s >= SCORE_RESET_DROP and t - g.t0 >= MIN_GAME_SEC:
-                pt = PressureTracker(); lt = ScoreLeadTracker(); adv_ema = 0.0
+                pt = PressureTracker(); lt = ScoreLeadTracker(); tt = ThreatTracker()
+                adv_ema = 0.0
                 games.append(_GameAgg(t))
                 g = games[-1]
                 break
@@ -111,7 +112,7 @@ def main() -> None:
         m, _, _ = _score_advantage(model, b1, b2, snap)
         pres = pt.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
         lead = lt.update(r.p1.score, r.p2.score)
-        thr = _threat(b1, b2, r.p1, r.p2, tr._elapsed(t))
+        thr = tt.update(b1, b2, r.p1, r.p2, tr._elapsed(t))
         adv = W_PRESSURE * pres + W_CHAIN * lead + W_MODEL * m + W_THREAT * thr
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         g.last_adv = adv_ema
