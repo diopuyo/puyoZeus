@@ -30,8 +30,8 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import src.indicators_v2 as iv  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    _train_model, _score_advantage, EMA_ALPHA, PressureTracker, ScoreLeadTracker,
-    ThreatTracker, W_PRESSURE, W_CHAIN, W_MODEL, W_THREAT,
+    _train_model, EMA_ALPHA, PressureTracker, ScoreLeadTracker,
+    HeavyAdvCache, W_PRESSURE, W_CHAIN, W_MODEL, W_THREAT,
 )
 
 FONT_PATH = "/mnt/c/Windows/Fonts/meiryo.ttc"
@@ -66,7 +66,7 @@ def _collect_timeline(
     adv_ema = 0.0; p1_ema = 0.5
     ptracker = PressureTracker()
     svtracker = ScoreLeadTracker()
-    ttracker = ThreatTracker()
+    hcache = HeavyAdvCache(model)
     step = max(1, int(round(sample_interval * fps)))
     ts: list[float] = []; advs: list[float] = []; p1s: list[float] = []
     for fi in range(proc_frame, end_frame):
@@ -86,12 +86,11 @@ def _collect_timeline(
         ps1, ps2 = r.p1.state, r.p2.state
         if b1 is None or b2 is None:
             continue
-        adv, p1, _ = _score_advantage(model, b1, b2, snap)
+        model_adv, threat, _ = hcache.update(b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
         cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 得点リード
-        threat = ttracker.update(b1, b2, r.p1, r.p2, tracker._elapsed(t))  # (M1)到達火力(間引き)
         adv = (W_PRESSURE * pres + W_CHAIN * cvel
-               + W_MODEL * adv + W_THREAT * threat)  # 4成分ブレンド
+               + W_MODEL * model_adv + W_THREAT * threat)  # 4成分ブレンド
         p1 = 0.5 + adv / 200.0
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         p1_ema = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_ema
