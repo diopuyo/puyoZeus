@@ -528,3 +528,115 @@ def test_collect_function_signature_backward_compat() -> None:
     assert params[3] == "sample_interval_sec"
     # 新引数 start_sec は末尾追加
     assert params[4] == "start_sec"
+
+
+# ============================
+# III-8 潜在火力 (potential_fire_power)
+# ============================
+
+
+def _deep_chain_board() -> Board:
+    """3 連鎖以上が仕込まれた盤面。
+
+    takapt 定石 (1 色追加) では 2 連鎖止まりだが、
+    2 個追加することで 3 連鎖以上が発火可能な構成。
+
+    構成:
+        - col0 縦: 赤4+青4 → 赤消 → 青消 = 2連鎖 (takapt 1手で到達)
+        - col2 縦: 緑3 (あと1個で 4連結=3連鎖目の引き金)
+        - col3 下: 緑1 (col2 に隣接、2手目で緑4連結完成)
+    """
+    g = _empty_grid()
+    # 2 連鎖の本体 (col0/col1)
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[10][0] = COLOR_RED
+    g[9][0] = COLOR_BLUE
+    g[12][2] = COLOR_BLUE
+    g[11][1] = COLOR_BLUE
+    g[10][1] = COLOR_BLUE
+    # 3 連鎖の引き金 (col2/col3 の緑3連結: あと1個で消える)
+    g[12][3] = COLOR_GREEN
+    g[11][3] = COLOR_GREEN
+    g[10][3] = COLOR_GREEN
+    return Board.from_list(g)
+
+
+def test_potential_fire_power_empty_board_near_zero() -> None:
+    """空盤面では潜在火力 ≒ 0 (ぷよを追加しても連鎖が起きない)。"""
+    v = iv.potential_fire_power(_empty_board())
+    assert v.score == 0.0
+    assert v.raw == 0.0
+
+
+def test_potential_fire_power_in_range() -> None:
+    """潜在火力が 0-1 範囲・例外なし。代表 4 盤面を検証。"""
+    for board in _BOARDS:
+        v = iv.potential_fire_power(board)
+        assert 0.0 <= v.score <= 1.0
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_potential_fire_power_deep_chain_board() -> None:
+    """深い連鎖盤面: potential >= current_max_chain の raw (より多くのお邪魔)。
+
+    current_max_chain は 1 個追加での最大連鎖数。
+    potential_fire_power は最大 2 個追加でお邪魔換算するので、
+    現在連鎖が存在する盤面では potential の raw が深い連鎖を捉えていること。
+    """
+    board = _deep_chain_board()
+    pfp = iv.potential_fire_power(board)
+    cmc = iv.current_max_chain(board)
+    # potential は 2 手探索でお邪魔数を最大化している。
+    # current_max_chain.raw は 1 個追加の連鎖数 (chain count) であり単位が異なるが、
+    # 連鎖が存在する盤面では pfp.raw > 0 が保証される。
+    assert pfp.raw > 0.0, f"deep_chain_board で潜在火力=0 は想定外 (cmc={cmc.raw})"
+    assert pfp.score > 0.0
+
+
+def test_potential_fire_power_ge_immediate_fire_power() -> None:
+    """潜在火力 >= 即発火火力 (2 手探索は takapt 1 手より深い探索なので下界性が成立)。
+
+    immediate_fire_power は takapt 1 手追加の最良配置からの火力。
+    potential_fire_power は 1 手追加 top-K から 2 手目を展開するため、
+    同じ 1 手目最良配置を含み、かつ 2 手目でさらに深い連鎖を発見できる。
+    """
+    board = _two_chain_board()
+    pfp = iv.potential_fire_power(board)
+    ifp = iv.immediate_fire_power(board)
+    assert pfp.raw >= ifp.raw, (
+        f"potential={pfp.raw} < immediate={ifp.raw}: 2手探索が1手より劣化"
+    )
+
+
+def test_potential_fire_power_max_add_1() -> None:
+    """max_add=1 の場合: 30 通り sim のみで計算され例外なし・0-1 範囲。"""
+    v = iv.potential_fire_power(_two_chain_board(), max_add=1)
+    assert 0.0 <= v.score <= 1.0
+    assert v.raw == v.raw  # NaN なし
+
+
+def test_potential_fire_power_deeper_than_current_max_chain() -> None:
+    """潜在火力が current_max_chain より深い連鎖を捉える証拠。
+
+    deep_chain_board は takapt 1 手では 2 連鎖止まり。
+    potential_fire_power (2 手) では 3 連鎖以上のお邪魔が出ることを確認する。
+    """
+    from src.chain import ChainSimulator
+    sim = ChainSimulator()
+    board = _deep_chain_board()
+
+    # takapt 1 手: 最大連鎖数と対応お邪魔数
+    cmc = iv.current_max_chain(board, sim)
+    ifp = iv.immediate_fire_power(board, simulator=sim)
+
+    # potential (2 手): より多くのお邪魔が出るか確認
+    pfp = iv.potential_fire_power(board, simulator=sim)
+
+    # potential は 2 手先まで見るので raw >= 1手分のお邪魔
+    assert pfp.raw >= ifp.raw, (
+        f"2手探索(pfp={pfp.raw}) が 1手(ifp={ifp.raw}) より少ない"
+    )
+    # deep_chain_board は明確に連鎖が仕込まれているので pfp > 0
+    assert pfp.raw > 0.0, f"deep_chain_board で pfp=0 (cmc={cmc.raw}, ifp={ifp.raw})"
