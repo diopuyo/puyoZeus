@@ -16,34 +16,55 @@ from scripts.visualize_advantage_overlay import (  # noqa: E402
 
 
 def test_forecast_opponent_attack_negative() -> None:
-    """2P が発火(score増)→ 1Pへの incoming 増 → 信号は負(2P有利)。"""
+    """2P が発火(score増)→ 1Pへの pending 増 → 信号は負(2P有利)。"""
     ft = RealtimeForecastTracker()
-    ft.update(0, 0)
-    assert ft.update(0, 8000) < 0.0
+    ft.update(0, 0, 0, 0)
+    assert ft.update(0, 8000, 0, 0) < 0.0
 
 
 def test_forecast_self_attack_positive() -> None:
-    """1P が発火(score増)→ 2Pへの incoming 増 → 信号は正(1P有利)。"""
+    """1P が発火(score増)→ 2Pへの pending 増 → 信号は正(1P有利)。"""
     ft = RealtimeForecastTracker()
-    ft.update(0, 0)
-    assert ft.update(8000, 0) > 0.0
+    ft.update(0, 0, 0, 0)
+    assert ft.update(8000, 0, 0, 0) > 0.0
 
 
 def test_forecast_game_reset_clears() -> None:
-    """スコア大幅減(試合境界)で incoming がクリアされ信号がほぼ0に戻る。"""
+    """スコア大幅減(試合境界)で pending がクリアされ信号がほぼ0に戻る。"""
     ft = RealtimeForecastTracker()
-    ft.update(0, 0)
-    ft.update(0, 8000)  # 2P攻撃で偏り
-    v = ft.update(0, 0)  # score 8000→0 のリセット
+    ft.update(0, 0, 0, 0)
+    ft.update(0, 8000, 0, 0)  # 2P攻撃で偏り
+    v = ft.update(0, 0, 0, 0)  # score 8000→0 のリセット
     assert abs(v) < 1.0
 
 
 def test_forecast_clamped_range() -> None:
     """予告信号は [-100, 100] に収まる。"""
     ft = RealtimeForecastTracker()
-    ft.update(0, 0)
-    v = ft.update(0, 999999)
+    ft.update(0, 0, 0, 0)
+    v = ft.update(0, 999999, 0, 0)
     assert -100.0 <= v <= 100.0
+
+
+def test_forecast_delivery_drains_pending() -> None:
+    """1Pが発火→2Pへ pending。2Pがツモを重ねる(配送)と pending が減り信号が0へ寄る。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0, 0, 0)
+    v0 = ft.update(700, 0, 0, 0)  # 1P発火 → 2Pに pending ~10個 → 正
+    assert v0 > 0.0
+    v1 = v0
+    for k in range(1, 6):  # 2Pがツモを置く=30個/ターン配送で pending が捌ける
+        v1 = ft.update(700, 0, 0, k)
+    assert abs(v1) < abs(v0)  # 配送で pending 減 → 信号が0へ
+
+
+def test_forecast_offset_by_counter() -> None:
+    """2P発火で1Pに pending。1Pが同等以上を発火(相殺)すると 1P pending が減る。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0, 0, 0)
+    neg = ft.update(0, 7000, 0, 0)  # 2P発火 → 1Pに pending ~100 → 強い負
+    after = ft.update(7000, 7000, 0, 0)  # 1Pも同等発火で相殺
+    assert after > neg  # 相殺で 1P pending 減 → 信号が負から回復
 
 
 def test_pressure_zero_when_no_ojama() -> None:

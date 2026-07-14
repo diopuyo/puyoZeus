@@ -80,7 +80,8 @@ def _collect(a) -> dict[str, list[float]]:
             continue
         m, _, _ = _score_advantage(model, b1, b2, snap)
         pres = pt.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        lead = fct.update(r.p1.score, r.p2.score)
+        lead = fct.update(r.p1.score, r.p2.score,
+                          pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))
         thr = _threat(b1, b2, r.p1, r.p2, tr._elapsed(t))
         if fi % step or t < a.start_sec:
             continue
