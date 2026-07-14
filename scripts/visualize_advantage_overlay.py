@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import sys
 from pathlib import Path
 
@@ -59,6 +61,28 @@ W_FORECAST = 0.30
 W_MODEL = 0.20
 W_THREAT = 0.15
 THREAT_SCALE = 0.22       # 到達火力差(お邪魔個) → 有利不利換算
+# 勝率較正: 有利不利→勝率。scripts.calibrate_winprob が実データで学習した
+#   sigmoid(k×有利不利) を使う。ファイルが無ければ直線 0.5+adv/200 にフォールバック。
+WINPROB_CALIB_PATH = Path("data/indicators_v2/winprob_calib.json")
+
+
+def _load_winprob_k() -> float | None:
+    """較正の傾き k を読む。無ければ None(直線フォールバック)。"""
+    try:
+        d = json.loads(WINPROB_CALIB_PATH.read_text(encoding="utf-8"))
+        return float(d["k"]) if d.get("kind") == "logistic_symmetric" else None
+    except Exception:
+        return None
+
+
+_WINPROB_K = _load_winprob_k()
+
+
+def adv_to_winprob(adv: float) -> float:
+    """有利不利[-100,100] → 1P勝率[0,1]。較正があればsigmoid、無ければ直線。"""
+    if _WINPROB_K is not None:
+        return 1.0 / (1.0 + math.exp(-_WINPROB_K * adv))
+    return max(0.0, min(1.0, 0.5 + adv / 200.0))
 
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)
 FEATURES: tuple[str, ...] = (
@@ -450,7 +474,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv = (W_PRESSURE * pres + W_FORECAST * fc
                    + W_MODEL * model_adv + W_THREAT * threat) + sl_bias
             adv = max(-100.0, min(100.0, adv))
-            p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
+            p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
             if fi >= write_frame and fi % step == 0:
