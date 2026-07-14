@@ -45,11 +45,14 @@ EMA_ALPHA = 0.25      # 有利不利の時間平滑
 PRESSURE_DECAY = 0.985    # 毎フレーム減衰 (半減期 ~1.5s @30fps)
 PRESSURE_SCALE = 6.0      # 圧力 → 有利不利[-100,100] 換算
 PRESSURE_BLEND_W = 0.6    # (旧2成分) 有利不利 = W×圧力 + (1-W)×現モデル
-# (M2) 得点リード信号: 各side の現在スコア差(=どちらが多く攻撃を通したか)
-SCORE_LEAD_SCALE = 0.4    # お邪魔換算スコア差 → 有利不利
-# 4成分ブレンド: 圧力(着弾) + 得点リード(累積攻撃) + 現モデル(位置) + threat(仕込み火力)
+# (M3) お邪魔予告(incoming)信号: 相手に降る予告が多い=相手が埋まる=有利。
+#   得点リード(結果)を廃し、予告(位置=これから相手が埋まる)へ置換(2026-07-14 user方針)。
+FORECAST_SCALE = 0.7      # リアルタイム予告(incoming)差 お邪魔個 → 有利不利
+FORECAST_DECAY = 0.999    # incoming の減衰(半減期~11.5s@30fps。大連鎖が後続小連鎖より長く残るよう遅め)
+SCORE_LEAD_SCALE = 0.4    # (旧・未使用) 得点リード換算
+# 4成分ブレンド: 圧力(着弾) + 予告(incoming) + 現モデル(位置) + threat(仕込み火力)
 W_PRESSURE = 0.35
-W_CHAIN = 0.30
+W_FORECAST = 0.30
 W_MODEL = 0.20
 W_THREAT = 0.15
 THREAT_SCALE = 0.22       # 到達火力差(お邪魔個) → 有利不利換算
@@ -193,6 +196,48 @@ def _threat(b1: Board, b2: Board, sp1, sp2, elapsed: float) -> float:
     r1 = iv.reach_fire_power(b1, sp1.next_pair, sp1.dnext_pair, elapsed).value.raw
     r2 = iv.reach_fire_power(b2, sp2.next_pair, sp2.dnext_pair, elapsed).value.raw
     return float(max(-100.0, min(100.0, (r1 - r2) * THREAT_SCALE)))
+
+
+def _forecast_signal(snap: OjamaAccountSnapshot) -> float:
+    """(旧M3) 会計の確定予告(連鎖終了時生成)差。ラグがあるため RealtimeForecastTracker を使う。"""
+    diff = float(snap.forecast_p2 - snap.forecast_p1)  # 2P incoming - 1P incoming
+    return float(max(-100.0, min(100.0, diff * FORECAST_SCALE)))
+
+
+class RealtimeForecastTracker:
+    """(M3改=A) 実行中連鎖の規模から incoming お邪魔をリアルタイム推定する位置信号。
+
+    相手の score 増加(=攻撃を実行中の連鎖規模)を自分の incoming に加算し、緩やかに
+    減衰(吸収・時間経過で threat が薄れる)。連鎖終了を待つ確定予告のラグを回避する。
+    「累積スコア(結果)」ではなく「今まさに受けつつある(受けた)ダメージ」= 位置ベース。
+    大きい連鎖を撃った側の incoming が大きく残るため、後から小連鎖で返しても順位が保たれる。
+    """
+
+    def __init__(self) -> None:
+        self.inc1 = 0.0  # 1P に降る incoming(2Pの攻撃由来)
+        self.inc2 = 0.0  # 2P に降る incoming(1Pの攻撃由来)
+        self._s1: int | None = None
+        self._s2: int | None = None
+
+    def update(self, score1: int | None, score2: int | None,
+               rate: float = 70.0) -> float:
+        """1P視点の予告信号 [-100,100](正=2Pに多く降る=1P有利)。"""
+        # 試合境界(スコア大幅減=リセット)で incoming をクリア(前ゲーム残留を防ぐ)
+        if ((score1 is not None and self._s1 is not None and self._s1 - score1 >= 1000)
+                or (score2 is not None and self._s2 is not None and self._s2 - score2 >= 1000)):
+            self.inc1 = 0.0
+            self.inc2 = 0.0
+        self.inc1 *= FORECAST_DECAY
+        self.inc2 *= FORECAST_DECAY
+        if score1 is not None:
+            if self._s1 is not None and score1 > self._s1:
+                self.inc2 += (score1 - self._s1) / rate  # 1P攻撃 → 2Pへ incoming
+            self._s1 = score1
+        if score2 is not None:
+            if self._s2 is not None and score2 > self._s2:
+                self.inc1 += (score2 - self._s2) / rate  # 2P攻撃 → 1Pへ incoming
+            self._s2 = score2
+        return float(max(-100.0, min(100.0, (self.inc2 - self.inc1) * FORECAST_SCALE)))
 
 
 class ThreatTracker:
@@ -351,7 +396,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     p1_last = 0.5
     drivers: list[tuple[str, float]] = []
     ptracker = PressureTracker()
-    svtracker = ScoreLeadTracker()
+    fctracker = RealtimeForecastTracker()
     hcache = HeavyAdvCache(model)
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
@@ -379,8 +424,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
-            cvel = svtracker.update(r.p1.score, r.p2.score)  # (M2) 得点リード
-            adv = (W_PRESSURE * pres + W_CHAIN * cvel
+            fc = fctracker.update(r.p1.score, r.p2.score)  # (M3改=A) リアルタイム予告=位置ベース
+            adv = (W_PRESSURE * pres + W_FORECAST * fc
                    + W_MODEL * model_adv + W_THREAT * threat)
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
