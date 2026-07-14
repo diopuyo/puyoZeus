@@ -1,4 +1,4 @@
-"""有利不利の成分分解プロット — どの成分(圧力/得点リード/モデル/火力threat)が
+"""有利不利の成分分解プロット — どの成分(圧力/予告/モデル/火力threat)が
 有利不利を動かしているかを可視化(ユーザーの「なぜ」に答える解析ツール)。
 
 各成分の重み付き寄与(W×成分)を積み上げ的に描き、合計(=有利不利)を重ねる。
@@ -29,8 +29,8 @@ from src.ojama_accounting import OjamaAccountingTracker  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    _train_model, _score_advantage, PressureTracker, ScoreLeadTracker, _threat,
-    W_PRESSURE, W_CHAIN, W_MODEL, W_THREAT,
+    _train_model, _score_advantage, PressureTracker, RealtimeForecastTracker, _threat,
+    W_PRESSURE, W_FORECAST, W_MODEL, W_THREAT,
 )
 
 FONT = "/mnt/c/Windows/Fonts/meiryo.ttc"
@@ -55,12 +55,12 @@ def _collect(a) -> dict[str, list[float]]:
     pipe.set_video_id(a.video_id)
     tr = OjamaAccountingTracker(); tr.reset()
     tp1, tp2 = _SideTracker(), _SideTracker()
-    pt = PressureTracker(); lt = ScoreLeadTracker()
+    pt = PressureTracker(); fct = RealtimeForecastTracker()
     ps1 = ps2 = BoardState.MENU
     b1 = b2 = None
     step = int(0.5 * fps)
     out: dict[str, list[float]] = {k: [] for k in
-                                   ("t", "圧力", "得点リード", "現モデル", "火力threat", "合計")}
+                                   ("t", "圧力", "予告", "現モデル", "火力threat", "合計")}
     for fi in range(int((a.start_sec - a.warmup_sec) * fps), end):
         ok, f = cap.read()
         if not ok:
@@ -80,14 +80,14 @@ def _collect(a) -> dict[str, list[float]]:
             continue
         m, _, _ = _score_advantage(model, b1, b2, snap)
         pres = pt.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        lead = lt.update(r.p1.score, r.p2.score)
+        lead = fct.update(r.p1.score, r.p2.score)
         thr = _threat(b1, b2, r.p1, r.p2, tr._elapsed(t))
         if fi % step or t < a.start_sec:
             continue
-        cp = W_PRESSURE * pres; cl = W_CHAIN * lead
+        cp = W_PRESSURE * pres; cl = W_FORECAST * lead
         cm = W_MODEL * m; ct = W_THREAT * thr
         out["t"].append(t - a.start_sec)
-        out["圧力"].append(cp); out["得点リード"].append(cl)
+        out["圧力"].append(cp); out["予告"].append(cl)
         out["現モデル"].append(cm); out["火力threat"].append(ct)
         out["合計"].append(cp + cl + cm + ct)
     cap.release()
@@ -99,7 +99,7 @@ def _plot(d: dict[str, list[float]], title: str, out: Path) -> None:
     t = d["t"]
     fig, ax = plt.subplots(figsize=(13, 6))
     ax.axhline(0, color="black", lw=0.8)
-    colors = {"圧力": "#2050c0", "得点リード": "#20a060",
+    colors = {"圧力": "#2050c0", "予告": "#20a060",
               "現モデル": "#a0a0a0", "火力threat": "#e08020"}
     for k, c in colors.items():
         ax.plot(t, d[k], color=c, lw=1.4, label=f"{k}(寄与)")

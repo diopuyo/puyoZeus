@@ -11,8 +11,39 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    PressureTracker, ScoreLeadTracker,
+    PressureTracker, ScoreLeadTracker, RealtimeForecastTracker,
 )
+
+
+def test_forecast_opponent_attack_negative() -> None:
+    """2P が発火(score増)→ 1Pへの incoming 増 → 信号は負(2P有利)。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0)
+    assert ft.update(0, 8000) < 0.0
+
+
+def test_forecast_self_attack_positive() -> None:
+    """1P が発火(score増)→ 2Pへの incoming 増 → 信号は正(1P有利)。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0)
+    assert ft.update(8000, 0) > 0.0
+
+
+def test_forecast_game_reset_clears() -> None:
+    """スコア大幅減(試合境界)で incoming がクリアされ信号がほぼ0に戻る。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0)
+    ft.update(0, 8000)  # 2P攻撃で偏り
+    v = ft.update(0, 0)  # score 8000→0 のリセット
+    assert abs(v) < 1.0
+
+
+def test_forecast_clamped_range() -> None:
+    """予告信号は [-100, 100] に収まる。"""
+    ft = RealtimeForecastTracker()
+    ft.update(0, 0)
+    v = ft.update(0, 999999)
+    assert -100.0 <= v <= 100.0
 
 
 def test_pressure_zero_when_no_ojama() -> None:
