@@ -11,8 +11,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    PressureTracker, ScoreLeadTracker, RealtimeForecastTracker,
+    PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
 )
+
+
+def test_winprob_even_is_half() -> None:
+    """有利不利0 → 勝率50%(較正sigmoid・直線どちらも対称で成立)。"""
+    assert abs(adv_to_winprob(0.0) - 0.5) < 1e-6
+
+
+def test_winprob_monotonic() -> None:
+    """有利不利が上がるほど1P勝率も上がる(単調増加)。"""
+    assert adv_to_winprob(-80) < adv_to_winprob(-20) < adv_to_winprob(20) < adv_to_winprob(80)
+
+
+def test_winprob_range() -> None:
+    """勝率は [0,1] に収まる。"""
+    for a in (-100.0, -50.0, 0.0, 50.0, 100.0):
+        assert 0.0 <= adv_to_winprob(a) <= 1.0
 
 
 def test_forecast_opponent_attack_negative() -> None:
