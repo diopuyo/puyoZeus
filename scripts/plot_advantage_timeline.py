@@ -88,7 +88,8 @@ def _collect_timeline(
             continue
         model_adv, threat, _ = hcache.update(b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        fc = fctracker.update(r.p1.score, r.p2.score)  # (M3改=A) リアルタイム予告=位置ベース
+        fc = fctracker.update(r.p1.score, r.p2.score,
+                              pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))  # (M3改B)配送予告
         adv = (W_PRESSURE * pres + W_FORECAST * fc
                + W_MODEL * model_adv + W_THREAT * threat)  # 4成分ブレンド
         p1 = 0.5 + adv / 200.0

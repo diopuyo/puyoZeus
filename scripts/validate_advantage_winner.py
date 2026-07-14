@@ -111,7 +111,8 @@ def main() -> None:
             continue
         m, thr, _ = hcache.update(b1, b2, snap, r.p1, r.p2, tr._elapsed(t))
         pres = pt.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
-        fc = fct.update(r.p1.score, r.p2.score)
+        fc = fct.update(r.p1.score, r.p2.score,
+                        pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))
         adv = W_PRESSURE * pres + W_FORECAST * fc + W_MODEL * m + W_THREAT * thr
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         g.last_adv = adv_ema
