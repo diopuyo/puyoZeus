@@ -49,7 +49,10 @@ PRESSURE_BLEND_W = 0.6    # (旧2成分) 有利不利 = W×圧力 + (1-W)×現�
 #   得点リード(結果)を廃し、予告(位置=これから相手が埋まる)へ置換(2026-07-14 user方針)。
 FORECAST_SCALE = 1.4      # pending(まだ降る)お邪魔差 → 有利不利(72個≒満杯で±100)
 FORECAST_DROP_PER_TURN = 30  # =OJAMA_MAX_DROP_PER_TURN(5段×6列)。ツモ1回で降る上限
-SCORE_LEAD_SCALE = 0.4    # (旧・未使用) 得点リード換算
+# (b)ハイブリッド: 位置ブレンドに少量の得点リードを"タイブレーク"として加算。
+#   ±SL_BIAS_CAP で頭打ち → 僅差局面のみ勝者側へ傾け、決着局面(位置が大)は支配しない。
+SCORE_LEAD_SCALE = 1.2    # 得点差(お邪魔換算)→ バイアス値
+SL_BIAS_CAP = 15.0        # 得点タイブレークの上限(±15。位置主・結果従)
 # 4成分ブレンド: 圧力(着弾) + 予告(incoming) + 現モデル(位置) + threat(仕込み火力)
 W_PRESSURE = 0.35
 W_FORECAST = 0.30
@@ -412,6 +415,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     drivers: list[tuple[str, float]] = []
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
+    svtracker = ScoreLeadTracker()
     hcache = HeavyAdvCache(model)
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
@@ -441,8 +445,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                                    iv.board_ojama_count(b2).raw)
             fc = fctracker.update(r.p1.score, r.p2.score,
                                   pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))  # (M3改B)配送予告
+            sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP,  # (b)得点タイブレーク(±15頭打ち)
+                                            svtracker.update(r.p1.score, r.p2.score)))
             adv = (W_PRESSURE * pres + W_FORECAST * fc
-                   + W_MODEL * model_adv + W_THREAT * threat)
+                   + W_MODEL * model_adv + W_THREAT * threat) + sl_bias
+            adv = max(-100.0, min(100.0, adv))
             p1 = 0.5 + adv / 200.0  # 表示用勝率もブレンド後に整合
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last

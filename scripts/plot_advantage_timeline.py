@@ -30,8 +30,8 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import src.indicators_v2 as iv  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    _train_model, EMA_ALPHA, PressureTracker, RealtimeForecastTracker,
-    HeavyAdvCache, W_PRESSURE, W_FORECAST, W_MODEL, W_THREAT,
+    _train_model, EMA_ALPHA, PressureTracker, RealtimeForecastTracker, ScoreLeadTracker,
+    HeavyAdvCache, W_PRESSURE, W_FORECAST, W_MODEL, W_THREAT, SL_BIAS_CAP,
 )
 
 FONT_PATH = "/mnt/c/Windows/Fonts/meiryo.ttc"
@@ -66,6 +66,7 @@ def _collect_timeline(
     adv_ema = 0.0; p1_ema = 0.5
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
+    svtracker = ScoreLeadTracker()
     hcache = HeavyAdvCache(model)
     step = max(1, int(round(sample_interval * fps)))
     ts: list[float] = []; advs: list[float] = []; p1s: list[float] = []
@@ -90,8 +91,11 @@ def _collect_timeline(
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
         fc = fctracker.update(r.p1.score, r.p2.score,
                               pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))  # (M3改B)配送予告
+        sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP,  # (b)得点タイブレーク(±15頭打ち)
+                                        svtracker.update(r.p1.score, r.p2.score)))
         adv = (W_PRESSURE * pres + W_FORECAST * fc
-               + W_MODEL * model_adv + W_THREAT * threat)  # 4成分ブレンド
+               + W_MODEL * model_adv + W_THREAT * threat) + sl_bias  # 4成分+タイブレーク
+        adv = max(-100.0, min(100.0, adv))
         p1 = 0.5 + adv / 200.0
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         p1_ema = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_ema
