@@ -28,6 +28,7 @@ from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E4
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     _train_model, PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
     EMA_ALPHA, W_PRESSURE, W_FORECAST, W_MODEL, W_THREAT, SL_BIAS_CAP,
+    kill_override, board_room,
 )
 
 SCORE_RESET_DROP = 1000   # スコアがこれ以上減少=ゲーム境界
@@ -118,6 +119,7 @@ def main() -> None:
         sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP, svt.update(r.p1.score, r.p2.score)))
         adv = W_PRESSURE * pres + W_FORECAST * fc + W_MODEL * m + W_THREAT * thr + sl_bias
         adv = max(-100.0, min(100.0, adv))
+        adv = kill_override(adv, fct.inc1, fct.inc2, board_room(b1), board_room(b2))
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         g.last_adv = adv_ema
     cap.release()

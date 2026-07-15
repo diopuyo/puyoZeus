@@ -84,6 +84,42 @@ def adv_to_winprob(adv: float) -> float:
         return 1.0 / (1.0 + math.exp(-_WINPROB_K * adv))
     return max(0.0, min(1.0, 0.5 + adv / 200.0))
 
+
+# (B) キル判定(near-future): 「降るお邪魔量 > 受け容量」なら死=生存側の勝ち。
+#   静止指標(threat/モデル)は「装填中の連鎖」を強みと誤読し、返しが足りず死ぬ寸前でも
+#   有利側に出す。着弾を待たず pending と盤面空きから致死を検知し有利不利を生存側へ上書きする。
+PLAYABLE_CELLS = 72       # 6列×12行(row0=隠し段は除く)
+KILL_ROOM_FLOOR = 4       # 受け容量の下限(0除算/過敏回避。実質ほぼ窒息)
+KILL_RATIO_MIN = 0.6      # 致死度差がこれ未満は上書きなし(通常の攻めは血流のまま)
+KILL_RATIO_FULL = 1.5     # これ以上で完全上書き(g=1 → 生存側±100)
+KILL_MIN_PENDING = 40     # pending がこれ未満は致死扱いしない(1ターン配送30個超=受け側が凌げない量)
+
+
+def board_room(board) -> int:
+    """受け側が窒息までに受けられるお邪魔のおおよその空き容量(セル数)。"""
+    if board is None:
+        return PLAYABLE_CELLS
+    return max(0, PLAYABLE_CELLS - int(np.count_nonzero(board._grid[1:])))
+
+
+def kill_override(adv: float, inc1: float, inc2: float,
+                  room1: int, room2: int) -> float:
+    """致死量を受ける側があれば有利不利を生存側へ寄せる(非致死なら不変)。
+
+    inc1/inc2 = これから 1P/2P に降る pending お邪魔。room1/room2 = 各盤面の空き容量。
+    致死度 = pending / 空き。致死度差 |l1-l2| に応じ g∈[0,1] で adv を±100側へブレンド。
+    """
+    # 小さな攻め(1ターン配送で捌ける量)は返し/掘りで凌げるので致死扱いしない
+    l1 = inc1 / max(KILL_ROOM_FLOOR, room1) if inc1 >= KILL_MIN_PENDING else 0.0
+    l2 = inc2 / max(KILL_ROOM_FLOOR, room2) if inc2 >= KILL_MIN_PENDING else 0.0
+    lead = l1 - l2
+    mag = abs(lead)
+    if mag < KILL_RATIO_MIN:
+        return adv
+    g = min(1.0, (mag - KILL_RATIO_MIN) / (KILL_RATIO_FULL - KILL_RATIO_MIN))
+    target = -100.0 if lead > 0 else 100.0  # 死ぬ側の逆へ
+    return (1.0 - g) * adv + g * target
+
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)
 FEATURES: tuple[str, ...] = (
     "board_color_puyo_total", "max_column_height", "column_bumpiness",
@@ -474,6 +510,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv = (W_PRESSURE * pres + W_FORECAST * fc
                    + W_MODEL * model_adv + W_THREAT * threat) + sl_bias
             adv = max(-100.0, min(100.0, adv))
+            adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
+                                board_room(b1), board_room(b2))
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
