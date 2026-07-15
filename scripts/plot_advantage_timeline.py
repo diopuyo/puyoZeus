@@ -32,6 +32,7 @@ import src.indicators_v2 as iv  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     _train_model, EMA_ALPHA, PressureTracker, RealtimeForecastTracker, ScoreLeadTracker,
     HeavyAdvCache, W_PRESSURE, W_FORECAST, W_MODEL, W_THREAT, SL_BIAS_CAP, adv_to_winprob,
+    kill_override, board_room,
 )
 
 FONT_PATH = "/mnt/c/Windows/Fonts/meiryo.ttc"
@@ -96,6 +97,8 @@ def _collect_timeline(
         adv = (W_PRESSURE * pres + W_FORECAST * fc
                + W_MODEL * model_adv + W_THREAT * threat) + sl_bias  # 4成分+タイブレーク
         adv = max(-100.0, min(100.0, adv))
+        adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定
+                            board_room(b1), board_room(b2))
         p1 = adv_to_winprob(adv)  # 勝率(較正sigmoid or 直線)
         adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
         p1_ema = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_ema

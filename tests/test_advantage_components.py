@@ -10,9 +10,50 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import types
+
+import numpy as np
+
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
+    kill_override, board_room,
 )
+
+
+def test_kill_no_effect_when_survivable() -> None:
+    """降る量が受け容量に対し小さければ有利不利は不変(通常の攻めは上書きしない)。"""
+    assert kill_override(20.0, inc1=10.0, inc2=0.0, room1=60, room2=60) == 20.0
+
+
+def test_kill_pushes_to_survivor_when_1p_lethal() -> None:
+    """1Pに致死量(pending≫空き)が降る → 有利不利は2P側(負)へ強制。"""
+    v = kill_override(30.0, inc1=200.0, inc2=0.0, room1=8, room2=60)
+    assert v <= -90.0  # ほぼ完全上書き(2P勝ち)
+
+
+def test_kill_pushes_to_survivor_when_2p_lethal() -> None:
+    """2Pに致死量 → 1P側(正)へ。"""
+    v = kill_override(-30.0, inc1=0.0, inc2=200.0, room1=60, room2=8)
+    assert v >= 90.0
+
+
+def test_kill_ignores_small_attack() -> None:
+    """1ターンで捌ける小さな攻め(pending<40)は空きを超えても致死扱いしない。"""
+    assert kill_override(15.0, inc1=25.0, inc2=0.0, room1=12, room2=40) == 15.0
+
+
+def test_kill_symmetric_mutual_no_override() -> None:
+    """双方が同程度に致死(相打ち)なら致死度差が小さく上書きしない。"""
+    assert kill_override(5.0, inc1=200.0, inc2=200.0, room1=8, room2=8) == 5.0
+
+
+def test_board_room_full_and_empty() -> None:
+    """空盤面は容量72、埋まった盤面は容量0(row0=隠し段は除外)。"""
+    empty = types.SimpleNamespace(_grid=np.zeros((13, 6), dtype=np.uint8))
+    full = types.SimpleNamespace(_grid=np.ones((13, 6), dtype=np.uint8))
+    assert board_room(empty) == 72
+    assert board_room(full) == 0
+    assert board_room(None) == 72
 
 
 def test_winprob_even_is_half() -> None:
