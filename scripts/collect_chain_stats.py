@@ -442,12 +442,18 @@ def _plot_curve_a(
 
     unique_chains = sorted(set(chain_counts.tolist()))
     stats: list[dict[str, float]] = []
-    print("\n=== 曲線 A: 連鎖数 → 時間 ===", file=sys.stderr)
+    # 頑健化: 1フレーム潰れ(≈0.033s)の spurious 重複行を除外してから集計。
+    # _ChainTimer が STABLE 復帰を取りこぼした行が median を 0.03s に張り付かせるため。
+    spurious = 0.05
+    print("\n=== 曲線 A: 連鎖数 → 時間 (spurious<=%.2fs除外) ===" % spurious, file=sys.stderr)
     print(f"{'chain':>6} {'n':>5} {'median':>8} {'mean':>8}", file=sys.stderr)
     for c in unique_chains:
         mask = chain_counts == c
         vals = durations[mask]
-        n = int(mask.sum())
+        vals = vals[vals > spurious]
+        n = int(vals.size)
+        if n == 0:
+            continue
         med = float(np.median(vals))
         mean = float(np.mean(vals))
         stats.append({"chain": float(c), "n": float(n), "median": med, "mean": mean})
