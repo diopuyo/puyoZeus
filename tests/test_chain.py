@@ -420,26 +420,53 @@ class TestDropOjama:
             assert result.get(BOARD_ROWS - 1, col) == COLOR_OJAMA
 
     def test_drop_7_fills_6_plus_1(self, sim: ChainSimulator):
-        """7個 = 6個 (全列の最下段) + 1個 (col 0 の2段目)。"""
+        """7個 = 6個 (全列の最下段) + 端数1個 (ランダム列の2段目)。
+
+        旧実装は端数を「左から (col 0)」固定で置いていたが、
+        user 伝授の正仕様は「端数はランダム列」のため仕様変更済。
+        不変条件:
+          - 合計お邪魔数 = 7 個
+          - 全 6 列の最下段 (row 12) に各 1 個以上
+          - ちょうど 1 列だけ row 11 にも 1 個 (端数列)
+        再現性確認: seed=0 で結果が安定すること。
+        """
         board = Board()
-        result = sim.drop_ojama(board, 7)
-        # col 0 は2個 (row 12, 11)
-        assert result.get(BOARD_ROWS - 1, 0) == COLOR_OJAMA
-        assert result.get(BOARD_ROWS - 2, 0) == COLOR_OJAMA
-        # col 1-5 は1個 (row 12)
-        for col in range(1, BOARD_COLS):
+        result = sim.drop_ojama(board, 7, seed=0)
+        # 合計 7 個
+        assert result.count_puyos() == 7
+        # 全列最下段にお邪魔が 1 個以上
+        for col in range(BOARD_COLS):
             assert result.get(BOARD_ROWS - 1, col) == COLOR_OJAMA
-            assert result.get(BOARD_ROWS - 2, col) == COLOR_EMPTY
+        # ちょうど 1 列だけ 2 段目にもお邪魔 (端数列)
+        second_row_ojama = sum(
+            1 for col in range(BOARD_COLS)
+            if result.get(BOARD_ROWS - 2, col) == COLOR_OJAMA
+        )
+        assert second_row_ojama == 1
+        # seed=0 での結果が安定すること (再現性)
+        result2 = sim.drop_ojama(board, 7, seed=0)
+        assert result == result2
 
     def test_drop_on_existing_puyos(self, sim: ChainSimulator):
-        """ぷよが積まれた盤面にはその上に落ちる。"""
+        """ぷよが積まれた盤面にはその上に落ちる。
+
+        ojama_n=1 はランダムな 1 列に落ちるため、seed を固定して再現性を確保する。
+        seed=0 で col=0 に落ちることを確認 (seed 固定で決定論的)。
+        元のぷよが変化しない、合計 1 個のお邪魔が増える点も検証。
+        """
         grid = empty_grid()
         grid[12][0] = COLOR_RED  # col 0 の最下段に赤
         board = board_from_grid(grid)
-        result = sim.drop_ojama(board, 1)
-        # col 0 の最上段の空きは row 11
-        assert result.get(11, 0) == COLOR_OJAMA
+        result = sim.drop_ojama(board, 1, seed=0)
+        # お邪魔が 1 個増えること (元の赤1個 + 新規お邪魔1個 = 2個)
+        assert result.count_puyos() == 2
         assert result.get(12, 0) == COLOR_RED  # 元のぷよは残る
+        # お邪魔 1 個がどこか 1 列に落ちていること
+        ojama_count = sum(
+            1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+            if result.get(r, c) == COLOR_OJAMA
+        )
+        assert ojama_count == 1
 
     def test_original_board_not_mutated(self, sim: ChainSimulator):
         """drop_ojama 後、引数の board が変更されない。"""

@@ -1142,6 +1142,69 @@ def honsen_tempo_output(
     )
 
 
+# ============================
+# VIII 催促耐性: ojama_disruption (条件2「潰し」)
+# ============================
+
+# 催促量の代表値 (≒2段 = 12個)。実際の催促量は可変だが観測代表値として固定。
+# データ後決定で変更可能。
+OJAMA_DISRUPTION_DEFAULT_N: int = 12
+# Monte Carlo サンプル数 (軽量化のため小さく設定)。
+OJAMA_DISRUPTION_DEFAULT_SAMPLES: int = 8
+
+
+def ojama_disruption(
+    board: Board,
+    ojama_n: int = OJAMA_DISRUPTION_DEFAULT_N,
+    n_samples: int = OJAMA_DISRUPTION_DEFAULT_SAMPLES,
+    simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """VIII 催促潰し度 (disruptability): お邪魔 ojama_n 個着弾で連鎖が壊れる割合。
+
+    設計意図:
+        「相手のこの盤面は催促で潰されやすいか (disruptability)」を表す。
+        相手側に対して高い = こちらが催促を通せる = 有利 の文脈で使用する。
+        符号の扱い (1P視点/2P視点の反転) は eval/collect 側の責務。
+
+    計算手順:
+        1. before = simulate(board).chain_count  (現在の到達連鎖)。
+        2. n_samples 回、drop_ojama(board, ojama_n, seed=i) で端数列をランダム化して
+           落下後盤面の after_i を計算。
+        3. reduction = mean_i( max(0, (before - after_i)) / max(1, before) )
+           = 連鎖が壊れた割合 (0=無傷, 1=全壊)。
+        4. before <= 0 (そもそも連鎖なし) は 0.0 を返す。
+
+    潰し成立の定義: 到達連鎖の低下割合 (別定義が必要な場合は関数を差し替え可)。
+
+    正規化: reduction は 0〜1 に自然に収まるため clamp のみ適用。
+
+    Args:
+        board: 評価対象の盤面 (STABLE 確定盤面想定)。
+        ojama_n: 代表催促量 (個数)。既定 12 (≒2段)。
+        n_samples: Monte Carlo サンプル数。既定 8。
+        simulator: ChainSimulator インスタンス (None = 共有 _SHARED_SIMULATOR)。
+
+    Returns:
+        IndicatorV2Value: score=reduction (0〜1), raw=reduction。
+    """
+    sim = simulator if simulator is not None else _SHARED_SIMULATOR
+    before_result = sim.simulate(board)
+    before = before_result.chain_count
+    if before <= 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    total_reduction = 0.0
+    for i in range(n_samples):
+        try:
+            ojama_board = sim.drop_ojama(board, ojama_n, seed=i)
+        except Exception:
+            continue
+        after_result = sim.simulate(ojama_board)
+        after = after_result.chain_count
+        total_reduction += max(0.0, (before - after)) / max(1, before)
+    raw = total_reduction / max(1, n_samples)
+    return IndicatorV2Value(score=_clamp01(raw), raw=raw)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1183,8 +1246,12 @@ __all__ = [
     "CHAIN_OJAMA_B",
     "TIME_PER_CHAIN_SEC",
     "HONSEN_OUTPUT_NORM",
-    # VII-2 テンポ核 (時間窓つき打ち合い収支) — EXTRA_INDICATOR_NAMES 末尾
+    # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
     "HANDS_PER_CHAIN_GAP",
+    # VIII 催促潰し度 — EXTRA_INDICATOR_NAMES 末尾
+    "ojama_disruption",
+    "OJAMA_DISRUPTION_DEFAULT_N",
+    "OJAMA_DISRUPTION_DEFAULT_SAMPLES",
 ]
