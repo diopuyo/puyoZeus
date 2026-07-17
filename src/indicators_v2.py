@@ -981,6 +981,167 @@ def potential_fire_power(
     )
 
 
+# ============================
+# VII 打ち合い収支 (条件1)
+# ============================
+
+# 11 本対戦較正: 連鎖数 → 生成お邪魔数 ≈ CHAIN_OJAMA_A * exp(CHAIN_OJAMA_B * n)。
+CHAIN_OJAMA_A: float = 30.13
+CHAIN_OJAMA_B: float = 0.297
+
+# 時間推定: 1 連鎖あたりの目安秒数 (~0.30 秒/連鎖、ノイジーなので平均フィット値使用)。
+TIME_PER_CHAIN_SEC: float = 0.30
+
+# honsen_output 正規化分母: お邪魔換算が 72 (盤面容量) を超えることも多いため
+# 余裕を持たせて 144 (=ON_FIELD_CAP * 2) を上限とする。
+HONSEN_OUTPUT_NORM: float = float(ON_FIELD_CAP * 2)  # = 144.0
+
+# ---- テンポ核 (時間窓つき打ち合い収支) ----
+# 1手あたりの秒数: labeled_win.csv 40112行の手入れイベント間隔中央値 (実測)。
+# tsumo_count_raw 増加タイミングの差分を計算。中央値=0.733秒/手。
+SEC_PER_HAND: float = 0.733  # 実測中央値 (データ後決定済)
+
+# current→achievable の連鎖数差 1 あたりに要する手数の概算。
+# reach_fire_power_max_chain の gap 分布: 中央値=0, 75%=1, 90%=3。
+# 1連鎖の伸びに 2 手程度かかる (ぷよ 2 個 = 1 組) という直感と整合。
+HANDS_PER_CHAIN_GAP: float = 2.0  # データ後決定済 (gap×2手で到達を概算)
+
+
+def chain_to_ojama(n: float) -> float:
+    """連鎖数 n から生成されるお邪魔個数を較正カーブで推定する。
+
+    カーブ: CHAIN_OJAMA_A * exp(CHAIN_OJAMA_B * n)  (11 本較正済)。
+    n <= 0 の場合は 0.0 を返す。
+
+    Args:
+        n: 連鎖数 (0 以下で 0.0)。
+
+    Returns:
+        推定お邪魔個数 (float)。
+    """
+    import math
+    if n <= 0.0:
+        return 0.0
+    return CHAIN_OJAMA_A * math.exp(CHAIN_OJAMA_B * n)
+
+
+def chain_to_time(n: float) -> float:
+    """連鎖数 n の発火に要する推定秒数を返す。
+
+    推定: TIME_PER_CHAIN_SEC * n (時間はノイジーなので平均フィット使用)。
+    n <= 0 は 0.0 を返す。
+
+    Args:
+        n: 連鎖数 (0 以下で 0.0)。
+
+    Returns:
+        推定所要秒数 (float, >= 0)。
+    """
+    return max(0.0, TIME_PER_CHAIN_SEC * n)
+
+
+def honsen_output(
+    board: Board,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """VII-1 打ち合い出力 (本線 + セカンド合算お邪魔量)。
+
+    片側の「打ち合い出力」を測る。相対指標(収支)は eval 側で
+    「1P.honsen_output.raw - 2P.honsen_output.raw」の差として使う想定。
+
+    算出方法:
+        chain_to_ojama(current_max_chain.raw) を本線出力として使用。
+
+        ⚠️ second_chain_potential.raw は「本線非参加の色ぷよ数」であり
+        連鎖数ではない。副砲の連鎖数を直接観測できる指標が現時点で存在しないため、
+        本実装では current_max_chain 単体で打ち合い出力を推定する。
+        副砲連鎖数が取得可能になった段階で「chain_to_ojama(副砲連鎖数)」を加算する
+        拡張が容易な設計にしている (コメント参照)。
+
+    正規化: raw / HONSEN_OUTPUT_NORM (=144=ON_FIELD_CAP*2)。
+    上限クランプあり (19連鎖想定上限 ≒ 1170個、1.0 にクランプ)。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/144 (0〜1), raw=推定お邪魔数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 本線の連鎖数 (III-1 current_max_chain と同じロジック)
+    main_chain_result = sim.simulate(board)
+    main_chains = float(main_chain_result.chain_count)
+    # 本線お邪魔量
+    main_ojama = chain_to_ojama(main_chains)
+    # ── 副砲加算 (拡張ポイント) ──
+    # 副砲の連鎖数が得られる場合は以下を有効化:
+    #   sub_chains = <副砲連鎖数を観測する関数>
+    #   sub_ojama = chain_to_ojama(sub_chains)
+    # 現状は 0.0 (= current_max_chain 単体)。
+    sub_ojama = 0.0
+    raw = main_ojama + sub_ojama
+    return IndicatorV2Value(
+        score=_clamp01(raw / HONSEN_OUTPUT_NORM),
+        raw=raw,
+    )
+
+
+def honsen_tempo_output(
+    current_chain: float,
+    achievable_chain: float,
+    opp_chain: float,
+) -> IndicatorV2Value:
+    """VII-2 テンポ核: 相手本線の窓内で自分が伸ばせる打ち合い出力。
+
+    モデル:
+        window = chain_to_time(opp_chain)  ... 相手本線の所要秒数
+        hands  = window / SEC_PER_HAND      ... その窓で自分が置ける手数
+        frac   = min(1.0, hands / (chain_gap * HANDS_PER_CHAIN_GAP))
+                   ... achievable まで伸ばすのに要する手数の達成率
+        my_built = current_chain + frac * (achievable_chain - current_chain)
+        raw    = chain_to_ojama(my_built)  ... 自分の打ち合い出力
+
+    achievable_chain: reach_fire_power_max_chain が有効なら使用。
+        0 (無効) の場合は current_chain + 2 で近似 (フォールバック)。
+    opp_chain が 0 の場合: window=0 → hands=0 → frac=0 → raw=chain_to_ojama(current) と等価。
+
+    テンポ核の意図: 相手本線が大きい(長い)ほど窓が広がり自分の my_built が増える。
+        → 大連鎖ビルド中の優位性が反映される。
+
+    正規化: raw / HONSEN_OUTPUT_NORM (=144)。
+
+    Args:
+        current_chain: 自分の現在最大連鎖数 (current_max_chain_raw)。
+        achievable_chain: 到達目標連鎖数 (reach_fire_power_max_chain 等)。
+                          0 以下の場合は current_chain + 2 にフォールバック。
+        opp_chain: 相手の現在最大連鎖数 (current_max_chain_raw)。
+
+    Returns:
+        IndicatorV2Value: score=raw/144 (0〜1), raw=推定お邪魔数。
+    """
+    import math
+    # achievable が無効 (0 以下 or 不明) の場合のフォールバック: current + 2
+    _FALLBACK_CHAIN_ADD: float = 2.0
+    ach = achievable_chain if achievable_chain > 0.0 else (current_chain + _FALLBACK_CHAIN_ADD)
+    # 相手本線の窓
+    window = chain_to_time(opp_chain)
+    # 窓内で自分が置ける手数
+    hands = window / SEC_PER_HAND
+    # current → achievable に要する総手数
+    chain_gap = max(0.0, ach - current_chain)
+    hands_needed = chain_gap * HANDS_PER_CHAIN_GAP
+    # 達成率 (window が短ければ部分的にしか伸ばせない)
+    frac = min(1.0, hands / hands_needed) if hands_needed > 0.0 else 1.0
+    # 窓内で到達できる連鎖数
+    my_built = current_chain + frac * chain_gap
+    raw = chain_to_ojama(my_built)
+    return IndicatorV2Value(
+        score=_clamp01(raw / HONSEN_OUTPUT_NORM),
+        raw=raw,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1014,4 +1175,16 @@ __all__ = [
     # ⑥
     "dig_resistance",
     "absorption_capacity",
+    # VII 打ち合い収支 (条件1)
+    "chain_to_ojama",
+    "chain_to_time",
+    "honsen_output",
+    "CHAIN_OJAMA_A",
+    "CHAIN_OJAMA_B",
+    "TIME_PER_CHAIN_SEC",
+    "HONSEN_OUTPUT_NORM",
+    # VII-2 テンポ核 (時間窓つき打ち合い収支) — EXTRA_INDICATOR_NAMES 末尾
+    "honsen_tempo_output",
+    "SEC_PER_HAND",
+    "HANDS_PER_CHAIN_GAP",
 ]
