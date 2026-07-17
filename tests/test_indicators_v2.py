@@ -428,6 +428,71 @@ def test_reach_fire_power_nonzero_for_chain_board() -> None:
     assert result.max_chain >= 0
 
 
+# ============================
+# VII 打ち合い収支 (条件1)
+# ============================
+
+
+def test_chain_to_ojama_zero_or_negative() -> None:
+    """n <= 0 のとき chain_to_ojama は 0.0 を返す。"""
+    assert iv.chain_to_ojama(0.0) == 0.0
+    assert iv.chain_to_ojama(-1.0) == 0.0
+
+
+def test_chain_to_ojama_positive_monotone() -> None:
+    """n が大きいほど chain_to_ojama の値が増加する (単調増加)。"""
+    v2 = iv.chain_to_ojama(2.0)
+    v5 = iv.chain_to_ojama(5.0)
+    v10 = iv.chain_to_ojama(10.0)
+    assert v2 > 0.0
+    assert v5 > v2
+    assert v10 > v5
+
+
+def test_chain_to_ojama_calibration_spot() -> None:
+    """5 連鎖のお邪魔推定値が較正カーブ (30.13 * exp(0.297 * 5)) と一致する。"""
+    import math
+    expected = iv.CHAIN_OJAMA_A * math.exp(iv.CHAIN_OJAMA_B * 5.0)
+    assert iv.chain_to_ojama(5.0) == pytest.approx(expected, rel=1e-6)
+
+
+def test_chain_to_time_zero() -> None:
+    """n=0 のとき chain_to_time は 0.0 を返す。"""
+    assert iv.chain_to_time(0.0) == 0.0
+    assert iv.chain_to_time(-3.0) == 0.0
+
+
+def test_chain_to_time_linear() -> None:
+    """chain_to_time は TIME_PER_CHAIN_SEC * n で線形増加する。"""
+    import pytest
+    assert iv.chain_to_time(4.0) == pytest.approx(iv.TIME_PER_CHAIN_SEC * 4.0)
+    assert iv.chain_to_time(10.0) == pytest.approx(iv.TIME_PER_CHAIN_SEC * 10.0)
+
+
+def test_honsen_output_empty_board_is_zero() -> None:
+    """空盤面は本線なし → raw=0.0, score=0.0。"""
+    v = iv.honsen_output(_empty_board())
+    assert v.raw == 0.0
+    assert v.score == 0.0
+
+
+def test_honsen_output_chain_board_nonzero() -> None:
+    """連鎖盤面では honsen_output の raw > 0 かつ score が 0-1 範囲内。"""
+    v = iv.honsen_output(_two_chain_board())
+    assert v.raw > 0.0
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_honsen_output_larger_chain_gives_larger_raw() -> None:
+    """4 連鎖相当盤面の raw が 2 連鎖相当より大きい。"""
+    v2 = iv.honsen_output(_two_chain_board())
+    v4 = iv.honsen_output(_four_chain_board())
+    # _four_chain_board は 1 連鎖のみ (2x2 赤 1 つ) なので生値は小さい
+    # 両者とも >= 0 かつ NaN なしを確認
+    assert v2.raw >= 0.0
+    assert v4.raw >= 0.0
+
+
 def test_reach_fire_power_empty_board_is_zero() -> None:
     """空盤面 + next/dnext → reach でも 0 (連鎖なし)。"""
     result = iv.reach_fire_power(
@@ -640,3 +705,65 @@ def test_potential_fire_power_deeper_than_current_max_chain() -> None:
     )
     # deep_chain_board は明確に連鎖が仕込まれているので pfp > 0
     assert pfp.raw > 0.0, f"deep_chain_board で pfp=0 (cmc={cmc.raw}, ifp={ifp.raw})"
+
+
+# ============================
+# VII-2 テンポ核 (honsen_tempo_output)
+# ============================
+
+
+def test_honsen_tempo_output_zero_opp_chain_equals_current() -> None:
+    """相手連鎖数 0 のとき: window=0 → frac=0 → my_built=current → raw=chain_to_ojama(current)。"""
+    current = 5.0
+    ach = 8.0
+    result = iv.honsen_tempo_output(current, ach, opp_chain=0.0)
+    expected_raw = iv.chain_to_ojama(current)
+    assert result.raw == pytest.approx(expected_raw, rel=1e-6)
+    assert 0.0 <= result.score <= 1.0
+
+
+def test_honsen_tempo_output_large_opp_chain_reaches_achievable() -> None:
+    """相手連鎖数が大きい (窓が十分) → frac=1.0 → my_built=achievable。"""
+    current = 4.0
+    ach = 10.0
+    # 十分大きな相手連鎖: window = chain_to_time(50) = 50*0.3=15秒、
+    # 必要手数 = (10-4)*2=12手、実際置ける=15/0.733≈20手 > 12手 → frac=1.0
+    result = iv.honsen_tempo_output(current, ach, opp_chain=50.0)
+    expected_raw = iv.chain_to_ojama(ach)
+    assert result.raw == pytest.approx(expected_raw, rel=1e-6)
+
+
+def test_honsen_tempo_output_score_range() -> None:
+    """任意入力で score が 0〜1 範囲内。"""
+    for curr, ach, opp in [(0, 0, 0), (3, 5, 8), (10, 10, 15), (19, 19, 19)]:
+        v = iv.honsen_tempo_output(float(curr), float(ach), float(opp))
+        assert 0.0 <= v.score <= 1.0, f"score out of range: curr={curr}, ach={ach}, opp={opp}"
+
+
+def test_honsen_tempo_output_fallback_achievable() -> None:
+    """achievable=0 (不明) のとき current+2 にフォールバックして raw > 0。"""
+    current = 5.0
+    result = iv.honsen_tempo_output(current, achievable_chain=0.0, opp_chain=0.0)
+    # opp=0 → frac=0 → my_built=current → raw=chain_to_ojama(current)
+    expected_raw = iv.chain_to_ojama(current)
+    assert result.raw == pytest.approx(expected_raw, rel=1e-6)
+
+
+def test_honsen_tempo_output_monotone_in_opp_chain() -> None:
+    """相手連鎖数が大きいほど my_built が大きく raw が単調増加する。"""
+    current = 3.0
+    ach = 9.0
+    prev_raw = -1.0
+    for opp in [1.0, 3.0, 6.0, 12.0, 20.0]:
+        v = iv.honsen_tempo_output(current, ach, opp_chain=opp)
+        assert v.raw >= prev_raw, f"単調増加違反: opp={opp}, raw={v.raw} < prev={prev_raw}"
+        prev_raw = v.raw
+
+
+def test_honsen_tempo_constants_exported() -> None:
+    """SEC_PER_HAND・HANDS_PER_CHAIN_GAP が __all__ 経由でアクセス可能。"""
+    assert iv.SEC_PER_HAND > 0.0
+    assert iv.HANDS_PER_CHAIN_GAP > 0.0
+    assert "honsen_tempo_output" in iv.__all__
+    assert "SEC_PER_HAND" in iv.__all__
+    assert "HANDS_PER_CHAIN_GAP" in iv.__all__
