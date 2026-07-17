@@ -914,3 +914,146 @@ def test_drop_ojama_remainder_random_varies() -> None:
                 break
     # 100 回で少なくとも 2 列以上に端数が分散することを確認 (偏り検知)
     assert len(seen_cols) >= 2, f"端数が 1 列にしか出なかった: {seen_cols}"
+
+
+# ============================
+# IX 形・組み品質 (connected_pair_quality)
+# ============================
+
+
+def _main_linked_board() -> Board:
+    """主連鎖隣接2連結を持つ盤面。
+
+    ※ 同色の size=2 グループが同色 size>=3 グループに隣接する場合、
+    find_groups は両者を1グループに統合する。そのため本指標では
+    「任意色の size>=3 グループに1マス隣接する2連結」を main_linked と定義する。
+
+    - 赤 size=4 グループ (主連鎖候補): col0 下4段
+    - 青 size=2 グループ (2連結): col1 下2段 → col0 の赤(size=4)に左隣接
+      → main_linked_pair_count >= 1 が期待される。
+    - 緑 size=2 グループ (孤立): col4 下2段 → 近くに size>=3 なし
+      → isolated_pair_count >= 1 が期待される。
+    """
+    g = _empty_grid()
+    # 赤 size=4 (col0 縦4段) — 主連鎖候補グループ
+    for row in range(9, 13):
+        g[row][0] = COLOR_RED
+    # 青 size=2 (col1 縦2段, col0 の赤 size=4 グループに右隣接)
+    g[12][1] = COLOR_BLUE
+    g[11][1] = COLOR_BLUE
+    # 緑 size=2 (col4 縦2段, 近くに size>=3 グループなし = 孤立)
+    g[12][4] = COLOR_GREEN
+    g[11][4] = COLOR_GREEN
+    return Board.from_list(g)
+
+
+def _isolated_only_board() -> Board:
+    """孤立2連結のみを持つ盤面 (同色 size>=3 グループなし)。
+
+    - 赤 size=2 (col0 縦2段): 同色 size>=3 グループ不在 → 孤立
+    - 青 size=2 (col2 縦2段): 同色 size>=3 グループ不在 → 孤立
+    """
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[12][2] = COLOR_BLUE
+    g[11][2] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+def test_main_linked_pair_count_in_range() -> None:
+    """main_linked_pair_count が 0-1 範囲かつ例外なし (全テスト盤面)。"""
+    for board in _BOARDS + [_main_linked_board(), _isolated_only_board()]:
+        v = iv.main_linked_pair_count(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_isolated_pair_count_in_range() -> None:
+    """isolated_pair_count が 0-1 範囲かつ例外なし (全テスト盤面)。"""
+    for board in _BOARDS + [_main_linked_board(), _isolated_only_board()]:
+        v = iv.isolated_pair_count(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_main_linked_ratio_in_range() -> None:
+    """main_linked_ratio が 0-1 範囲かつ例外なし (全テスト盤面)。"""
+    for board in _BOARDS + [_main_linked_board(), _isolated_only_board()]:
+        v = iv.main_linked_ratio(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_main_linked_pair_count_detects_linked() -> None:
+    """_main_linked_board: 主連鎖隣接2連結が1つ以上検出される。"""
+    v = iv.main_linked_pair_count(_main_linked_board())
+    assert v.raw >= 1.0, f"主連鎖隣接2連結が検出されない: raw={v.raw}"
+
+
+def test_isolated_pair_count_detects_isolated() -> None:
+    """_main_linked_board: 孤立2連結が1つ以上検出される (青2連結)。"""
+    v = iv.isolated_pair_count(_main_linked_board())
+    assert v.raw >= 1.0, f"孤立2連結が検出されない: raw={v.raw}"
+
+
+def test_isolated_only_board_main_linked_is_zero() -> None:
+    """_isolated_only_board: size>=3 グループなし → main_linked=0。"""
+    v = iv.main_linked_pair_count(_isolated_only_board())
+    assert v.raw == 0.0, f"孤立のみ盤面なのに main_linked > 0: raw={v.raw}"
+
+
+def test_isolated_only_board_isolated_count() -> None:
+    """_isolated_only_board: 2連結が2つ (赤+青) → isolated=2。"""
+    v = iv.isolated_pair_count(_isolated_only_board())
+    assert v.raw == 2.0, f"孤立2連結の数が想定と違う: raw={v.raw}"
+
+
+def test_main_linked_ratio_is_zero_when_no_pairs() -> None:
+    """2連結が存在しない盤面 (空盤面) は ratio=0.0。"""
+    v = iv.main_linked_ratio(_empty_board())
+    assert v.raw == 0.0
+    assert v.score == 0.0
+
+
+def test_main_linked_ratio_isolated_only_is_zero() -> None:
+    """孤立2連結のみの盤面: main_linked=0 → ratio=0.0。"""
+    v = iv.main_linked_ratio(_isolated_only_board())
+    assert v.raw == 0.0
+    assert v.score == 0.0
+
+
+def test_main_linked_ratio_with_linked_board() -> None:
+    """_main_linked_board: main_linked>=1, total>=2 → 0 < ratio <= 1。"""
+    v = iv.main_linked_ratio(_main_linked_board())
+    assert 0.0 < v.raw <= 1.0, f"ratio が期待範囲外: raw={v.raw}"
+
+
+def test_pair_counts_sum_equals_conn_pair_count() -> None:
+    """main_linked + isolated の合計は connectivity_observation の pair_count と一致。
+
+    両者ともに find_groups の size==2 グループを数えているため一致する。
+    """
+    for board in [_main_linked_board(), _isolated_only_board(), _two_chain_board()]:
+        total_conn, _ = iv.connectivity_observation(board)
+        mlp = iv.main_linked_pair_count(board)
+        ip = iv.isolated_pair_count(board)
+        assert int(mlp.raw) + int(ip.raw) == total_conn.pair_count, (
+            f"main_linked({mlp.raw}) + isolated({ip.raw}) != "
+            f"conn_pair_count({total_conn.pair_count})"
+        )
+
+
+def test_ix_indicators_exported_in_all() -> None:
+    """IX 指標・定数が __all__ に含まれること。"""
+    assert "main_linked_pair_count" in iv.__all__
+    assert "isolated_pair_count" in iv.__all__
+    assert "main_linked_ratio" in iv.__all__
+    assert "MAIN_GROUP_MIN_SIZE" in iv.__all__
+    assert "NORM_LINKED_PAIR" in iv.__all__
+
+
+def test_ix_constants_values() -> None:
+    """MAIN_GROUP_MIN_SIZE=3, NORM_LINKED_PAIR=10.0 (定数値の確認)。"""
+    assert iv.MAIN_GROUP_MIN_SIZE == 3
+    assert iv.NORM_LINKED_PAIR == pytest.approx(10.0)

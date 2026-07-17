@@ -89,8 +89,12 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # ⑥ 受け力
     "dig_resistance", "dig_resistance_raw",
     "absorption_capacity", "absorption_capacity_raw",
-    # VIII 催促潰し度 (条件2「潰し」) — INDICATOR_COLUMNS 末尾
+    # VIII 催促潰し度 (条件2「潰し」)
     "ojama_disruption", "ojama_disruption_raw",
+    # IX 形・組み品質 — INDICATOR_COLUMNS 末尾
+    "main_linked_pair_count", "main_linked_pair_count_raw",
+    "isolated_pair_count", "isolated_pair_count_raw",
+    "main_linked_ratio", "main_linked_ratio_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -170,6 +174,9 @@ def _fill_indicator_columns(
     dr = iv.dig_resistance(board)
     ab = iv.absorption_capacity(board)
     od = iv.ojama_disruption(board)
+    mlp = iv.main_linked_pair_count(board)
+    ip = iv.isolated_pair_count(board)
+    mlr = iv.main_linked_ratio(board)
     row.update({
         "tsumo_count_rate": tc.score, "tsumo_count_raw": tc.raw,
         "board_puyo_total": bp.score, "board_puyo_total_raw": bp.raw,
@@ -196,6 +203,9 @@ def _fill_indicator_columns(
         "dig_resistance": dr.score, "dig_resistance_raw": dr.raw,
         "absorption_capacity": ab.score, "absorption_capacity_raw": ab.raw,
         "ojama_disruption": od.score, "ojama_disruption_raw": od.raw,
+        "main_linked_pair_count": mlp.score, "main_linked_pair_count_raw": mlp.raw,
+        "isolated_pair_count": ip.score, "isolated_pair_count_raw": ip.raw,
+        "main_linked_ratio": mlr.score, "main_linked_ratio_raw": mlr.raw,
     })
 
 
