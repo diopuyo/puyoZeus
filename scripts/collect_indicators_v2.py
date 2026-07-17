@@ -89,6 +89,8 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # ⑥ 受け力
     "dig_resistance", "dig_resistance_raw",
     "absorption_capacity", "absorption_capacity_raw",
+    # VIII 催促潰し度 (条件2「潰し」) — INDICATOR_COLUMNS 末尾
+    "ojama_disruption", "ojama_disruption_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -167,6 +169,7 @@ def _fill_indicator_columns(
     bo = iv.board_ojama_count(board)
     dr = iv.dig_resistance(board)
     ab = iv.absorption_capacity(board)
+    od = iv.ojama_disruption(board)
     row.update({
         "tsumo_count_rate": tc.score, "tsumo_count_raw": tc.raw,
         "board_puyo_total": bp.score, "board_puyo_total_raw": bp.raw,
@@ -192,6 +195,7 @@ def _fill_indicator_columns(
         "board_ojama_count": bo.score, "board_ojama_count_raw": bo.raw,
         "dig_resistance": dr.score, "dig_resistance_raw": dr.raw,
         "absorption_capacity": ab.score, "absorption_capacity_raw": ab.raw,
+        "ojama_disruption": od.score, "ojama_disruption_raw": od.raw,
     })
 
 

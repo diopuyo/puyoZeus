@@ -13,6 +13,7 @@ from src.board import (
     COLOR_BLUE,
     COLOR_GREEN,
     COLOR_OJAMA,
+    COLOR_PURPLE,
     COLOR_RED,
     COLOR_YELLOW,
     Board,
@@ -767,3 +768,149 @@ def test_honsen_tempo_constants_exported() -> None:
     assert "honsen_tempo_output" in iv.__all__
     assert "SEC_PER_HAND" in iv.__all__
     assert "HANDS_PER_CHAIN_GAP" in iv.__all__
+
+
+# ============================
+# VIII 催促潰し度 (ojama_disruption)
+# ============================
+
+
+def _fragile_board() -> Board:
+    """発火直前盤面: お邪魔が割り込みやすい連鎖構造 (分断されやすい)。
+
+    col1 に縦5赤 (連鎖トリガー直前)、周囲に単色ぷよを配置。
+    お邪魔が落ちると連結が分断→連鎖数が激減する想定。
+    """
+    g = _empty_grid()
+    # col1 縦5赤 → 4連結 (連鎖成立)
+    for row in range(8, 13):
+        g[row][1] = COLOR_RED
+    # col2 縦4青 → 隣接で 2 連鎖になる
+    for row in range(9, 13):
+        g[row][2] = COLOR_BLUE
+    # col3 縦4青 → col2 青と連結して消える
+    for row in range(9, 13):
+        g[row][3] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+def _flat_board() -> Board:
+    """頑健/平坦盤面: 単色の 1 個ずつ散在、そもそも連鎖ゼロ。
+
+    連鎖がゼロなので disruption = 0.0 (before<=0 分岐)。
+    """
+    g = _empty_grid()
+    # 各列に1色1個 (隣接なし、連鎖不可)
+    colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE, COLOR_RED]
+    for col, color in enumerate(colors):
+        g[12][col] = color
+    return Board.from_list(g)
+
+
+def test_ojama_disruption_in_range() -> None:
+    """score は 0〜1 範囲、raw は NaN なし。"""
+    for board in [_fragile_board(), _flat_board(), _empty_board(), _two_chain_board()]:
+        v = iv.ojama_disruption(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_ojama_disruption_flat_board_zero() -> None:
+    """連鎖が組めない平坦盤面は disruption = 0.0 (before<=0 分岐)。"""
+    v = iv.ojama_disruption(_flat_board())
+    assert v.score == 0.0
+    assert v.raw == 0.0
+
+
+def test_ojama_disruption_empty_board_zero() -> None:
+    """空盤面 (連鎖ゼロ) は disruption = 0.0。"""
+    v = iv.ojama_disruption(_empty_board())
+    assert v.score == 0.0
+
+
+def test_ojama_disruption_fragile_vs_stable() -> None:
+    """壊れやすい盤面の disruption > 安定盤面の disruption。
+
+    _fragile_board: 発火直前、お邪魔で連結が分断されやすい。
+    _four_chain_board: 2×2 のコンパクトな連結 (お邪魔で囲まれても最下段は残りやすい)。
+    ※ n_samples=8, seed 固定ではなく統計的な差を見る。
+    """
+    fragile = iv.ojama_disruption(_fragile_board(), n_samples=8)
+    compact = iv.ojama_disruption(_four_chain_board(), n_samples=8)
+    # 壊れやすい盤面の方が disruption が高いはず
+    # (注: _four_chain_board は小さいため一部サンプルで全壊する可能性もある。
+    #  >= で比較することで等しい場合も許容。絶対差より方向性を確認。)
+    assert fragile.score >= compact.score, (
+        f"壊れやすい盤面が期待より低い: fragile={fragile.score:.3f}, compact={compact.score:.3f}"
+    )
+
+
+def test_ojama_disruption_exported() -> None:
+    """ojama_disruption が __all__ に含まれること。"""
+    assert "ojama_disruption" in iv.__all__
+    assert iv.OJAMA_DISRUPTION_DEFAULT_N == 12
+    assert iv.OJAMA_DISRUPTION_DEFAULT_SAMPLES == 8
+
+
+def test_ojama_disruption_custom_n() -> None:
+    """ojama_n=0 ではお邪魔落下がなく reduction=0 になること。"""
+    board = _fragile_board()
+    v = iv.ojama_disruption(board, ojama_n=0, n_samples=4)
+    assert v.score == 0.0
+
+
+# ============================
+# drop_ojama 端数ランダム化不変条件
+# ============================
+
+
+def test_drop_ojama_remainder_distribution() -> None:
+    """端数ランダム化: 合計個数 = ojama_n、各列 >= floor(N/6)、端数分確認。
+
+    ojama_n=7 → floor(7/6)=1 なので全列 >=1、ちょうど 1 列が 2 個。
+    """
+    from src.chain import ChainSimulator
+    sim = ChainSimulator()
+    board = _empty_board()
+
+    # 複数 seed で試して全て不変条件を満たすことを確認
+    for seed in range(10):
+        result = sim.drop_ojama(board, 7, seed=seed)
+        total = result.count_puyos()
+        assert total == 7, f"seed={seed}: total={total} != 7"
+        col_counts = [
+            sum(1 for row in range(BOARD_ROWS) if result.get(row, col) == COLOR_OJAMA)
+            for col in range(BOARD_COLS)
+        ]
+        assert all(c >= 1 for c in col_counts), f"seed={seed}: 列未充足 {col_counts}"
+        double_cols = sum(1 for c in col_counts if c == 2)
+        assert double_cols == 1, f"seed={seed}: 端数列が1列でない {col_counts}"
+
+
+def test_drop_ojama_remainder_seed_reproducible() -> None:
+    """同じ seed では端数列が一致すること (再現性)。"""
+    from src.chain import ChainSimulator
+    sim = ChainSimulator()
+    board = _empty_board()
+    r1 = sim.drop_ojama(board, 7, seed=42)
+    r2 = sim.drop_ojama(board, 7, seed=42)
+    assert r1 == r2
+
+
+def test_drop_ojama_remainder_random_varies() -> None:
+    """seed=None では複数回の端数列が分散すること (常に同一列ではない)。"""
+    from src.chain import ChainSimulator
+    sim = ChainSimulator()
+    board = _empty_board()
+    # 100 回試行して端数列の分散を確認
+    seen_cols: set[int] = set()
+    for _ in range(100):
+        result = sim.drop_ojama(board, 7, seed=None)
+        for col in range(BOARD_COLS):
+            if sum(
+                1 for row in range(BOARD_ROWS) if result.get(row, col) == COLOR_OJAMA
+            ) == 2:
+                seen_cols.add(col)
+                break
+    # 100 回で少なくとも 2 列以上に端数が分散することを確認 (偏り検知)
+    assert len(seen_cols) >= 2, f"端数が 1 列にしか出なかった: {seen_cols}"
