@@ -1158,7 +1158,7 @@ def honsen_tempo_output(
 # データ後決定で変更可能。
 OJAMA_DISRUPTION_DEFAULT_N: int = 12
 # Monte Carlo サンプル数 (軽量化のため小さく設定)。
-OJAMA_DISRUPTION_DEFAULT_SAMPLES: int = 8
+OJAMA_DISRUPTION_DEFAULT_SAMPLES: int = 4
 
 
 def ojama_disruption(

@@ -849,7 +849,9 @@ def test_ojama_disruption_exported() -> None:
     """ojama_disruption が __all__ に含まれること。"""
     assert "ojama_disruption" in iv.__all__
     assert iv.OJAMA_DISRUPTION_DEFAULT_N == 12
-    assert iv.OJAMA_DISRUPTION_DEFAULT_SAMPLES == 8
+    # n_samples は熱対策/コストで調整可(8→4等)。正の整数であることのみ担保。
+    assert isinstance(iv.OJAMA_DISRUPTION_DEFAULT_SAMPLES, int)
+    assert iv.OJAMA_DISRUPTION_DEFAULT_SAMPLES >= 1
 
 
 def test_ojama_disruption_custom_n() -> None:
