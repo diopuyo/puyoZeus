@@ -121,6 +121,14 @@ OJAMA_DEFENSE_DIG_WEIGHT: float = 0.3
 # 連結観測対象の最小サイズ (2連結 / 3連結)。
 GROUP_OBSERVE_MIN_SIZE: int = 2
 
+# IX 形・組み品質 (connected_pair_quality)
+# 「主連鎖に接続された2連結」と「孤立2連結」の閾値。
+# ※隣接判定は静的な上下左右1マス接触で近似 (連鎖伝播とは異なる)。
+# 同色の size >= MAIN_GROUP_MIN_SIZE を「主連鎖グループ候補」と見なす。
+MAIN_GROUP_MIN_SIZE: int = 3
+# 正規化分母: 上級者盤面の同色2連結数は最大でも 10 程度。暫定。データ後決定。
+NORM_LINKED_PAIR: float = 10.0
+
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
 _SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
 
@@ -1205,6 +1213,143 @@ def ojama_disruption(
     return IndicatorV2Value(score=_clamp01(raw), raw=raw)
 
 
+# ============================
+# IX 形・組み品質 (connected_pair_quality) — EXTRA_INDICATOR_NAMES 末尾
+# ============================
+
+
+def _neighbors_of(cells: "frozenset[tuple[int, int]]") -> "set[tuple[int, int]]":
+    """cells の全セルの上下左右1マスを返す (cells 自身は除く)。
+
+    盤面範囲チェックは行わない (範囲外の座標もセットに含まれるが、
+    グループ cells との交差判定には影響なし)。
+    """
+    nbrs: set[tuple[int, int]] = set()
+    for r, c in cells:
+        nbrs.add((r - 1, c))
+        nbrs.add((r + 1, c))
+        nbrs.add((r, c - 1))
+        nbrs.add((r, c + 1))
+    return nbrs - cells
+
+
+def _connected_pairs_classify(
+    board: Board,
+    simulator: "ChainSimulator | None" = None,
+) -> "tuple[int, int]":
+    """2連結を「主連鎖隣接」と「孤立」に分類してカウントする。
+
+    ※ 近似定義: 色を問わず size >= MAIN_GROUP_MIN_SIZE (=3) のグループに
+    静的に1マス隣接しているかどうかで判定する。
+    隣接する「大きな塊の脇にある2連結」=主連鎖構造に組み込まれやすい形、
+    と見なす近似。連鎖伝播の実際の経路とは異なる静的な空間的隣接による近似。
+
+    注: 同色の隣接2連結は find_groups が1つのグループに統合するため
+    「同色 size>=3 に隣接する同色 size=2」は構造上発生しない。
+    本指標では色を問わず大きなグループへの近接を「主連鎖貢献」の代理として扱う。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        (main_linked_count, isolated_count):
+            main_linked_count: (任意色の) size>=3 グループに隣接する2連結の数。
+            isolated_count: どの size>=3 グループにも隣接しない孤立2連結の数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    groups = sim.find_groups(board)
+
+    # 全色を合わせた size >= MAIN_GROUP_MIN_SIZE グループの cells を収集
+    main_cells_all: set[tuple[int, int]] = set()
+    for g in groups:
+        if g.size >= MAIN_GROUP_MIN_SIZE:
+            main_cells_all.update(g.cells)
+
+    main_linked = 0
+    isolated = 0
+    for g in groups:
+        if g.size != 2:
+            continue
+        if _neighbors_of(g.cells) & main_cells_all:
+            main_linked += 1
+        else:
+            isolated += 1
+    return main_linked, isolated
+
+
+def main_linked_pair_count(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-1 主連鎖隣接2連結数。
+
+    同色2連結のうち、同色 size>=MAIN_GROUP_MIN_SIZE(=3) グループに
+    静的に1マス隣接しているものの数。
+    「あと少しで主連鎖に組み込める "生きた" 連結」を近似で数える。
+    正規化: raw / NORM_LINKED_PAIR (暫定 10.0。データ後決定)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/10, raw=主連鎖隣接2連結の個数。
+    """
+    main_linked, _ = _connected_pairs_classify(board, simulator)
+    raw = float(main_linked)
+    return IndicatorV2Value(score=_clamp01(raw / NORM_LINKED_PAIR), raw=raw)
+
+
+def isolated_pair_count(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-2 孤立2連結数。
+
+    同色2連結のうち、どの同色 size>=MAIN_GROUP_MIN_SIZE(=3) グループにも
+    静的に隣接しないもの (= 主連鎖に貢献しにくい"死に連結")。
+    正規化: raw / NORM_LINKED_PAIR (暫定 10.0。データ後決定)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/10, raw=孤立2連結の個数。
+    """
+    _, isolated = _connected_pairs_classify(board, simulator)
+    raw = float(isolated)
+    return IndicatorV2Value(score=_clamp01(raw / NORM_LINKED_PAIR), raw=raw)
+
+
+def main_linked_ratio(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-3 主連鎖隣接2連結率 = main_linked / (main_linked + isolated)。
+
+    2連結がゼロの場合は 0.0 を返す (= 情報なし)。
+    score = raw (すでに 0〜1 に自然に収まる)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=ratio (0〜1), raw=ratio。
+    """
+    main_linked, isolated = _connected_pairs_classify(board, simulator)
+    total = main_linked + isolated
+    if total == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    raw = float(main_linked) / float(total)
+    return IndicatorV2Value(score=_clamp01(raw), raw=raw)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1250,8 +1395,14 @@ __all__ = [
     "honsen_tempo_output",
     "SEC_PER_HAND",
     "HANDS_PER_CHAIN_GAP",
-    # VIII 催促潰し度 — EXTRA_INDICATOR_NAMES 末尾
+    # VIII 催促潰し度 (条件2「潰し」)
     "ojama_disruption",
     "OJAMA_DISRUPTION_DEFAULT_N",
     "OJAMA_DISRUPTION_DEFAULT_SAMPLES",
+    # IX 形・組み品質 — EXTRA_INDICATOR_NAMES 末尾
+    "main_linked_pair_count",
+    "isolated_pair_count",
+    "main_linked_ratio",
+    "MAIN_GROUP_MIN_SIZE",
+    "NORM_LINKED_PAIR",
 ]
