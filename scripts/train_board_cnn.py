@@ -14,10 +14,17 @@
         --epochs 20 \\
         --out models/board_cnn_s3.pt \\
         --device cuda
+
+## 過学習対策 CLI (追加)
+    --patience 5               早期終了 patience (既定 5)
+    --early-stop-metric auc    監視指標: auc または loss (既定 auc)
+    --weight-decay 1e-4        AdamW weight decay (既定 1e-4)
+    --seed 0                   乱数シード (既定 0)
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import sys
 from pathlib import Path
 from typing import Literal
@@ -45,6 +52,9 @@ VAL_RATIO: float = 0.2          # video_id 単位で val に回す割合
 DEFAULT_EPOCHS: int = 20
 DEFAULT_BATCH_SIZE: int = 128
 DEFAULT_LR: float = 1e-3
+DEFAULT_PATIENCE: int = 5       # 早期終了 patience
+DEFAULT_WEIGHT_DECAY: float = 1e-4  # AdamW weight decay
+DEFAULT_SEED: int = 0
 PHASE_LABELS: list[str] = ["序盤", "中盤", "終盤"]
 # 盤面の全セル数 (1P + 2P): 最大値
 MAX_PUYO_COUNT: int = BOARD_ROWS * BOARD_COLS * 2  # 156
@@ -118,7 +128,7 @@ def _load_pairs(pairs_path: Path) -> tuple[
 def _split_video_ids(
     video_id: np.ndarray,
     val_ratio: float = VAL_RATIO,
-    seed: int = 42,
+    seed: int = DEFAULT_SEED,
 ) -> tuple[np.ndarray, np.ndarray]:
     """video_id 単位で train/val を分割する。
 
@@ -222,64 +232,21 @@ def _evaluate(
     return val_loss, y_true, y_score
 
 
-def train(
-    pairs_path: Path,
-    out_path: Path,
-    epochs: int = DEFAULT_EPOCHS,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-    lr: float = DEFAULT_LR,
-    device_str: str = "auto",
+def _print_phase_auc(
+    model: SiameseBoardCNN,
+    val_ds: BoardPairDataset,
+    val_phases: np.ndarray,
+    device: torch.device,
+    batch_size: int,
 ) -> None:
-    """学習のメインロジック。"""
-    # デバイス選択
-    if device_str == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(device_str)
-    print(f"[train_board_cnn] device: {device}")
+    """ベストモデルで位相別 val AUC を計算・出力する。
 
-    # データ読み込み
-    board_1p, board_2p, won, video_id, puyo_count = _load_pairs(pairs_path)
-
-    # train/val 分割 (video_id 単位)
-    train_mask, val_mask = _split_video_ids(video_id)
-
-    def _make_ds(mask: np.ndarray) -> BoardPairDataset:
-        return BoardPairDataset(
-            board_1p[mask], board_2p[mask], won[mask], puyo_count[mask],
-        )
-
-    train_ds = _make_ds(train_mask)
-    val_ds = _make_ds(val_mask)
-    val_puyo = puyo_count[val_mask]
-    val_phases = _phase_label(val_puyo)
-
-    train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=0,
-    )
-
-    # モデル・最適化
-    model = SiameseBoardCNN().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.BCEWithLogitsLoss()
-
-    print(f"[train_board_cnn] 学習開始: epochs={epochs}, batch={batch_size}, lr={lr}")
-    for epoch in range(1, epochs + 1):
-        train_loss = _train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_loss, y_true, y_score = _evaluate(model, val_ds, device, batch_size)
-        auc_all = _compute_auc(y_true, y_score)
-        if epoch % 5 == 0 or epoch == 1 or epoch == epochs:
-            print(
-                f"  epoch {epoch:3d}/{epochs}: "
-                f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, "
-                f"val_AUC={auc_all:.4f}"
-            )
-
-    # 位相別 AUC
-    print("\n[train_board_cnn] --- 位相別 val AUC ---")
+    train() から切り出した補助関数 (1 関数 50 行制約)。
+    """
+    print("\n[train_board_cnn] --- 位相別 val AUC (ベストエポック) ---")
     val_loss, y_true, y_score = _evaluate(model, val_ds, device, batch_size)
     auc_all = _compute_auc(y_true, y_score)
-    print(f"  全体 AUC : {auc_all:.4f}  (n={len(y_true)})")
+    print(f"  全体 AUC : {auc_all:.4f}  (n={len(y_true)}, val_loss={val_loss:.4f})")
     for phase_idx, label in enumerate(PHASE_LABELS):
         mask = val_phases == phase_idx
         if mask.sum() < 10:
@@ -288,10 +255,166 @@ def train(
         auc = _compute_auc(y_true[mask], y_score[mask])
         print(f"  {label} AUC: {auc:.4f}  (n={int(mask.sum())})")
 
-    # 保存
+
+def _is_improved(
+    metric: str,
+    auc: float,
+    val_loss: float,
+    best_score: float,
+) -> tuple[bool, float]:
+    """改善判定を行い (improved, 新ベストスコア) を返す補助関数。
+
+    metric == "auc"  → val AUC 最大化。
+    metric == "loss" → val loss 最小化。
+    """
+    if metric == "auc":
+        if auc > best_score:
+            return True, auc
+        return False, best_score
+    else:  # "loss"
+        if val_loss < best_score:
+            return True, val_loss
+        return False, best_score
+
+
+def _run_training_loop(
+    model: SiameseBoardCNN,
+    train_loader: DataLoader,
+    val_ds: BoardPairDataset,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device: torch.device,
+    epochs: int,
+    batch_size: int,
+    patience: int,
+    early_stop_metric: str,
+) -> tuple[SiameseBoardCNN, int]:
+    """早期終了付き学習ループ。ベストエポックのモデルとエポック番号を返す。
+
+    early_stop_metric: "auc" → val AUC 最大化、"loss" → val loss 最小化。
+    patience=0 で早期終了を無効化。
+    """
+    init_score = -float("inf") if early_stop_metric == "auc" else float("inf")
+    best_state = copy.deepcopy(model.state_dict())
+    best_score: float = init_score
+    best_epoch: int = 0
+    no_improve: int = 0
+
+    for epoch in range(1, epochs + 1):
+        train_loss = _train_one_epoch(model, train_loader, optimizer, criterion, device)
+        val_loss, y_true, y_score = _evaluate(model, val_ds, device, batch_size)
+        auc_all = _compute_auc(y_true, y_score)
+
+        improved, best_score = _is_improved(early_stop_metric, auc_all, val_loss, best_score)
+        if improved:
+            best_epoch = epoch
+            best_state = copy.deepcopy(model.state_dict())
+            no_improve = 0
+        else:
+            no_improve += 1
+
+        if epoch % 5 == 0 or epoch == 1 or epoch == epochs or improved:
+            marker = " *best*" if improved else ""
+            print(
+                f"  epoch {epoch:3d}/{epochs}: "
+                f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, "
+                f"val_AUC={auc_all:.4f}{marker}"
+            )
+
+        if patience > 0 and no_improve >= patience:
+            print(f"  [早期終了] {patience} エポック改善なし → epoch {epoch} で停止")
+            break
+
+    metric_name = "AUC" if early_stop_metric == "auc" else "loss"
+    print(f"\n[train_board_cnn] ベストエポック: {best_epoch}  {metric_name}={best_score:.4f}")
+    model.load_state_dict(best_state)
+    return model, best_epoch
+
+
+def _make_dataset(
+    board_1p: np.ndarray,
+    board_2p: np.ndarray,
+    won: np.ndarray,
+    puyo_count: np.ndarray,
+    mask: np.ndarray,
+) -> BoardPairDataset:
+    """mask でフィルタして BoardPairDataset を生成する補助関数。"""
+    return BoardPairDataset(
+        board_1p[mask], board_2p[mask], won[mask], puyo_count[mask],
+    )
+
+
+def train(
+    pairs_path: Path,
+    out_path: Path,
+    epochs: int = DEFAULT_EPOCHS,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    lr: float = DEFAULT_LR,
+    device_str: str = "auto",
+    patience: int = DEFAULT_PATIENCE,
+    early_stop_metric: str = "auc",
+    weight_decay: float = DEFAULT_WEIGHT_DECAY,
+    seed: int = DEFAULT_SEED,
+) -> None:
+    """学習のメインロジック。
+
+    追加引数 (全てデフォルト付き、既存呼び出しへの後方互換維持):
+        patience: 早期終了 patience エポック数 (0 で無効)。
+        early_stop_metric: 監視指標 "auc" または "loss"。
+        weight_decay: AdamW weight decay。
+        seed: 乱数シード。
+    """
+    # 再現性: 乱数シードを固定
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    # dropout 非対応の通知 (SiameseBoardCNN に dropout 引数なし)
+    print(
+        "[train_board_cnn] 注意: SiameseBoardCNN に dropout 引数がないため "
+        "Dropout は適用しません。正則化は weight_decay と early stopping のみ。"
+    )
+
+    # デバイス選択
+    device = (
+        torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device_str == "auto" else torch.device(device_str)
+    )
+    print(f"[train_board_cnn] device: {device}")
+
+    # データ読み込み & 分割
+    board_1p, board_2p, won, video_id, puyo_count = _load_pairs(pairs_path)
+    train_mask, val_mask = _split_video_ids(video_id, seed=seed)
+    train_ds = _make_dataset(board_1p, board_2p, won, puyo_count, train_mask)
+    val_ds = _make_dataset(board_1p, board_2p, won, puyo_count, val_mask)
+    val_phases = _phase_label(puyo_count[val_mask])
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
+
+    # モデル・最適化 (Adam → AdamW で weight_decay を適切に適用)
+    model = SiameseBoardCNN().to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    criterion = nn.BCEWithLogitsLoss()
+
+    print(
+        f"[train_board_cnn] 学習開始: epochs={epochs}, batch={batch_size}, "
+        f"lr={lr}, weight_decay={weight_decay}, "
+        f"patience={patience}, early_stop_metric={early_stop_metric}, seed={seed}"
+    )
+
+    # 早期終了付き学習ループ → ベストエポックのモデルを返す
+    model, best_epoch = _run_training_loop(
+        model=model, train_loader=train_loader, val_ds=val_ds,
+        optimizer=optimizer, criterion=criterion, device=device,
+        epochs=epochs, batch_size=batch_size,
+        patience=patience, early_stop_metric=early_stop_metric,
+    )
+
+    # ベストエポックモデルで位相別 AUC を出力
+    _print_phase_auc(model, val_ds, val_phases, device, batch_size)
+
+    # ベストエポックのモデルを保存 (最終エポックでなくベスト)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), str(out_path))
-    print(f"\n[train_board_cnn] モデル保存: {out_path}")
+    print(f"[train_board_cnn] モデル保存 (ベストエポック {best_epoch}): {out_path}")
 
 
 def main() -> int:
@@ -324,6 +447,24 @@ def main() -> int:
         "--device", type=str, default="auto",
         help="cuda / cpu / auto (既定: auto)",
     )
+    # ---- 過学習対策オプション (全て後方互換デフォルト付き) ----
+    parser.add_argument(
+        "--patience", type=int, default=DEFAULT_PATIENCE,
+        help=f"早期終了 patience エポック数 (0 で無効、既定: {DEFAULT_PATIENCE})",
+    )
+    parser.add_argument(
+        "--early-stop-metric", type=str, default="auc",
+        choices=["auc", "loss"],
+        help="早期終了の監視指標: auc (最大化) または loss (最小化) (既定: auc)",
+    )
+    parser.add_argument(
+        "--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY,
+        help=f"AdamW weight decay (既定: {DEFAULT_WEIGHT_DECAY})",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=DEFAULT_SEED,
+        help=f"乱数シード (既定: {DEFAULT_SEED})",
+    )
     args = parser.parse_args()
 
     train(
@@ -333,6 +474,10 @@ def main() -> int:
         batch_size=args.batch_size,
         lr=args.lr,
         device_str=args.device,
+        patience=args.patience,
+        early_stop_metric=args.early_stop_metric,
+        weight_decay=args.weight_decay,
+        seed=args.seed,
     )
     return 0
 
