@@ -11,7 +11,7 @@ collect_indicators_v2 の重い処理(全指標計算・お邪魔会計・ojama_
 - VideoChainTracker (enable_chain_tracker=False)
 
 ## 出力 npz 形式
-collect_indicators_v2 --board-npz と同形式 + won 列を追加:
+collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
   grids      : (N, 13, 6) int8
   video_id   : (N,) str
   side       : (N,) str  "1P" / "2P"
@@ -19,6 +19,7 @@ collect_indicators_v2 --board-npz と同形式 + won 列を追加:
   game_idx   : (N,) int32
   frame_idx  : (N,) int32
   won        : (N,) float32  1P視点の勝敗 (1.0/0.0/NaN)
+  score      : (N,) int32    スコア (-1 = None)
 
 ## 勝敗 won の自己ラベル付け
 score のリセット(前値 - 現値 >= SCORE_RESET_THRESHOLD)でゲーム境界を検知し
@@ -89,6 +90,7 @@ class _LeanNpzAccumulator:
     """board グリッド + won ラベル蓄積バッファ。
 
     confirmed_board と score 情報を蓄積し、動画末尾で won を付与して npz 保存する。
+    score を保存することで、収集後にオフラインで何度でも勝者ラベルを再作成できる。
     """
     grids: list[np.ndarray] = field(default_factory=list)
     video_ids: list[str] = field(default_factory=list)
@@ -98,6 +100,8 @@ class _LeanNpzAccumulator:
     frame_idxs: list[int] = field(default_factory=list)
     # won は後付け (動画末尾で付与する)
     wons: list[float] = field(default_factory=list)
+    # score を保存: オフライン再ラベル付けを可能にする (None は -1 として保存)
+    scores: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -107,8 +111,19 @@ class _LeanNpzAccumulator:
         t_sec: float,
         game_idx: int,
         frame_idx: int,
+        score: int | None = None,
     ) -> None:
-        """1 STABLE snapshot を追加する。won は NaN で仮置き。"""
+        """1 STABLE snapshot を追加する。won は NaN で仮置き。
+
+        Args:
+            grid: 確定盤面グリッド (13, 6)。
+            video_id: 動画 ID 文字列。
+            side: "1P" または "2P"。
+            t_sec: タイムスタンプ (秒)。
+            game_idx: ゲーム境界カウンタ。
+            frame_idx: フレーム絶対番号。
+            score: スコア OCR 値。None は -1 に変換して保存。
+        """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
         self.sides.append(side)
@@ -116,6 +131,7 @@ class _LeanNpzAccumulator:
         self.game_idxs.append(game_idx)
         self.frame_idxs.append(frame_idx)
         self.wons.append(WON_UNKNOWN)
+        self.scores.append(score if score is not None else -1)
 
     def assign_won_labels(
         self,
@@ -123,18 +139,22 @@ class _LeanNpzAccumulator:
     ) -> None:
         """各 game_idx の最終 score から 1P 視点 won を付与する。
 
+        スコア判定を主とし、スコアが同点または欠損の場合のみ
+        _winner_by_survival フォールバックで窒息判定を補助する。
+
         Args:
             game_final_scores: {game_idx: {"1P": score_int|None, "2P": score_int|None}}
         """
-        # game_idx ごとの勝者 side を判定
         winner_by_game: dict[int, str | None] = {}
         for gidx, scores in game_final_scores.items():
             s1 = scores.get("1P")
             s2 = scores.get("2P")
             if s1 is not None and s2 is not None and s1 != s2:
+                # スコアで判定できる場合: 高得点側が勝者
                 winner_by_game[gidx] = "1P" if s1 > s2 else "2P"
             else:
-                winner_by_game[gidx] = None  # 判定不能
+                # スコア同点・欠損時: 窒息フォールバック
+                winner_by_game[gidx] = _winner_by_survival(self, gidx)
 
         for i in range(len(self.wons)):
             gidx = self.game_idxs[i]
@@ -145,7 +165,7 @@ class _LeanNpzAccumulator:
             self.wons[i] = 1.0 if self.sides[i] == winner else 0.0
 
     def save(self, path: Path) -> None:
-        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32。"""
+        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。"""
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             str(path),
@@ -157,7 +177,58 @@ class _LeanNpzAccumulator:
             game_idx=np.array(self.game_idxs, dtype=np.int32),
             frame_idx=np.array(self.frame_idxs, dtype=np.int32),
             won=np.array(self.wons, dtype=np.float32),
+            score=np.array(self.scores, dtype=np.int32),
         )
+
+
+# ============================
+# 窒息フォールバック判定ヘルパ
+# ============================
+
+# 窒息判定: 盤面の3列目(index=2)最上段(row=0)にぷよがあれば窒息
+_DEATH_ROW: int = 0
+_DEATH_COL: int = 2
+
+
+def _winner_by_survival(
+    acc: "_LeanNpzAccumulator",
+    game_idx: int,
+) -> str | None:
+    """スコア判定不能時のフォールバック: 窒息していない側を勝者とする。
+
+    各 game_idx の末尾 snapshot の grid で窒息セル (row=0, col=2 != 0) を確認する。
+    どちらも窒息なし / 両方窒息 / snapshot なしの場合は None を返す。
+
+    Args:
+        acc: スナップショット蓄積バッファ。
+        game_idx: 対象ゲームのインデックス。
+
+    Returns:
+        "1P" / "2P" / None (判定不能)
+    """
+    # game_idx に属するインデックスを side 別に収集
+    idx_by_side: dict[str, list[int]] = {"1P": [], "2P": []}
+    for i, (gidx, side) in enumerate(zip(acc.game_idxs, acc.sides)):
+        if gidx == game_idx and side in idx_by_side:
+            idx_by_side[side].append(i)
+
+    def _is_suffocated(indices: list[int]) -> bool | None:
+        """末尾 snapshot で窒息しているか判定する。"""
+        if not indices:
+            return None
+        last_i = max(indices, key=lambda i: acc.t_secs[i])
+        return bool(acc.grids[last_i][_DEATH_ROW, _DEATH_COL] != 0)
+
+    suf_1p = _is_suffocated(idx_by_side["1P"])
+    suf_2p = _is_suffocated(idx_by_side["2P"])
+
+    if suf_1p is None or suf_2p is None:
+        return None  # どちらかの snapshot がない
+    if suf_1p and not suf_2p:
+        return "2P"  # 1P が窒息 → 2P 勝ち
+    if suf_2p and not suf_1p:
+        return "1P"  # 2P が窒息 → 1P 勝ち
+    return None  # 両方窒息・両方生存は判定不能
 
 
 # ============================
@@ -175,14 +246,26 @@ class _SideState:
 
 
 def _update_game_boundary(state: _SideState, score: int | None) -> None:
-    """score リセット検知で game_idx を進める。"""
-    if score is not None:
-        state.final_scores[state.game_idx] = score
-    if score is not None and state.prev_score is not None:
-        if state.prev_score - score >= SCORE_RESET_THRESHOLD:
-            state.game_idx += 1
-    if score is not None:
-        state.prev_score = score
+    """score リセット検知で game_idx を進める。旧ゲームの最終 score は
+    リセット直前の prev_score (高値) を記録する。
+
+    バグ修正: 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
+    書き込んでから game_idx を進めていたため、旧ゲームの最終スコアが
+    リセット後低値で上書きされ勝者判定が全て None になっていた。
+    """
+    if score is None:
+        return
+    is_reset = (
+        state.prev_score is not None
+        and state.prev_score - score >= SCORE_RESET_THRESHOLD
+    )
+    if is_reset:
+        # 旧ゲームの最終スコア = リセット直前の高値を確定
+        state.final_scores[state.game_idx] = state.prev_score
+        state.game_idx += 1
+    # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
+    state.final_scores[state.game_idx] = score
+    state.prev_score = score
 
 
 def _should_emit(state: _SideState, board: Board, bstate: BoardState) -> bool:
@@ -317,6 +400,7 @@ def _process_side_lean(
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
+        score=score,
     )
     state.last_emitted_grid = board._grid.tobytes()
 

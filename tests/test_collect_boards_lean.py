@@ -86,11 +86,13 @@ class TestLeanNpzAccumulator:
         out = tmp_path / "keys.npz"
         acc.save(out)
         data = np.load(str(out), allow_pickle=True)
-        # collect_indicators_v2 --board-npz との互換キー
+        # collect_indicators_v2 --board-npz との互換キー (後方互換: 既存キーは維持)
         for key in ("grids", "video_id", "side", "t_sec", "game_idx", "frame_idx"):
             assert key in data, f"キー '{key}' が npz に存在しない"
         # lean 追加キー
         assert "won" in data
+        # 修正1追加キー: score (オフライン再ラベル付け用)
+        assert "score" in data
 
     def test_won_initial_nan(self, tmp_path: Path) -> None:
         """append 直後は won=NaN で仮置きされること。"""
@@ -203,17 +205,41 @@ class TestSideState:
         assert state.game_idx == 0
 
     def test_final_scores_tracked(self) -> None:
-        """各 game_idx の最終 score が正しく記録されること。"""
+        """各 game_idx の最終 score が正しく記録されること。
+
+        修正後: リセット発生時に旧ゲームの最終 score = リセット直前の高値(3000)を記録する。
+        旧実装はリセット後低値(0)を記録するバグがあり、勝者判定が全て None になっていた。
+        """
         mod = _import_lean()
         state = mod._SideState()
         mod._update_game_boundary(state, 1000)
         mod._update_game_boundary(state, 3000)
         mod._update_game_boundary(state, 0)    # score リセット → game 1 へ
         mod._update_game_boundary(state, 2000)
-        # game 0 の最終 score は 3000 (リセット直前)
+        # 修正後: game 0 の最終 score = リセット直前の高値 3000
+        assert state.final_scores[0] == 3000
         # game 1 の最終 score は 2000
-        assert state.final_scores[0] == 0      # update は score=0 を記録してからゲーム境界
         assert state.final_scores.get(1) == 2000
+
+    def test_pre_reset_high_value_captured(self) -> None:
+        """リセット検知時に旧ゲームの最終スコアがリセット直前の高値で記録されること。
+
+        バグ修正の核心: 旧実装は final_scores[game_idx] = score (≈0) を書いてから
+        game_idx を進めていた。修正後は prev_score (高値) を記録してから進める。
+        """
+        mod = _import_lean()
+        state = mod._SideState()
+        # ゲーム0 のスコア上昇
+        for s in [100, 500, 1200, 4800, 7500]:
+            mod._update_game_boundary(state, s)
+        # リセット: 7500 → 50 (差 7450 >= 500 threshold)
+        mod._update_game_boundary(state, 50)
+        # ゲーム0 の最終スコアはリセット直前の 7500 (高値) であること
+        assert state.final_scores[0] == 7500
+        # game_idx が 1 に進んでいること
+        assert state.game_idx == 1
+        # ゲーム1 の暫定スコアは 50 で記録されていること
+        assert state.final_scores[1] == 50
 
 
 # ============================
@@ -455,3 +481,158 @@ class TestNpzCompatibility:
         acc.save(out)
         data = np.load(str(out), allow_pickle=True)
         assert data["won"].dtype == np.float32
+
+
+# ============================
+# score 保存・復元テスト (修正1)
+# ============================
+
+class TestScoreColumn:
+    """修正1: score 列の保存・復元を検証する。"""
+
+    def test_score_saved_in_npz(self, tmp_path: Path) -> None:
+        """append した score が npz に int32 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1, score=4800)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v29", "2P", 1.0, 0, 1, score=3200)
+        out = tmp_path / "score_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "score" in data
+        assert data["score"].dtype == np.int32
+        scores = data["score"].tolist()
+        assert scores[0] == 4800
+        assert scores[1] == 3200
+
+    def test_score_none_saved_as_minus1(self, tmp_path: Path) -> None:
+        """score=None は -1 として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=None)
+        out = tmp_path / "score_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == -1
+
+    def test_score_default_none_backward_compat(self, tmp_path: Path) -> None:
+        """score 引数を省略した場合 (後方互換: 既存呼び出し) も -1 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # score 引数なしで呼ぶ (後方互換)
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "score_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == -1
+
+    def test_score_roundtrip_multiple(self, tmp_path: Path) -> None:
+        """複数 snapshot の score が往復 (save → load) で一致すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        expected_scores = [100, 500, 2000, -1, 9999]
+        raw_scores = [100, 500, 2000, None, 9999]
+        for i, s in enumerate(raw_scores):
+            acc.append(_make_board()._grid, "v29", "1P", float(i), 0, i, score=s)
+        out = tmp_path / "score_roundtrip.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert data["score"].tolist() == expected_scores
+
+    def test_existing_npz_keys_unchanged(self, tmp_path: Path) -> None:
+        """score 列追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        # 既存キーが全て存在すること
+        for key in ("grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won"):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        # 新規キーも存在すること
+        assert "score" in data
+
+
+# ============================
+# 窒息フォールバック判定テスト (修正3)
+# ============================
+
+class TestWinnerBySurvival:
+    """修正3: _winner_by_survival の窒息フォールバック判定を検証する。"""
+
+    def _make_suffocated_board(self) -> Board:
+        """3列目最上段(row=0, col=2)にぷよを置いた窒息盤面を返す。"""
+        g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+        g[0][2] = COLOR_RED  # 窒息セル
+        # 下段にも適当にぷよ (count_puyos > 0 にする)
+        for col in range(BOARD_COLS):
+            g[BOARD_ROWS - 1][col] = COLOR_RED
+        return Board.from_list(g)
+
+    def test_1p_suffocated_2p_wins(self) -> None:
+        """1P が窒息していれば _winner_by_survival が 2P を返すこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 1P: 窒息盤面
+        acc.append(self._make_suffocated_board()._grid, "v29", "1P", 5.0, 0, 50)
+        # 2P: 通常盤面 (窒息なし)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v29", "2P", 5.0, 0, 50)
+        result = mod._winner_by_survival(acc, 0)
+        assert result == "2P"
+
+    def test_2p_suffocated_1p_wins(self) -> None:
+        """2P が窒息していれば _winner_by_survival が 1P を返すこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 1P: 通常盤面
+        acc.append(_make_board(COLOR_RED)._grid, "v29", "1P", 5.0, 0, 50)
+        # 2P: 窒息盤面
+        acc.append(self._make_suffocated_board()._grid, "v29", "2P", 5.0, 0, 50)
+        result = mod._winner_by_survival(acc, 0)
+        assert result == "1P"
+
+    def test_neither_suffocated_returns_none(self) -> None:
+        """両者とも窒息なし → None を返すこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board(COLOR_RED)._grid, "v29", "1P", 5.0, 0, 50)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v29", "2P", 5.0, 0, 50)
+        result = mod._winner_by_survival(acc, 0)
+        assert result is None
+
+    def test_no_snapshot_returns_none(self) -> None:
+        """snapshot が存在しない game_idx → None を返すこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # game_idx=99 のスナップショットは追加しない
+        result = mod._winner_by_survival(acc, 99)
+        assert result is None
+
+    def test_assign_won_fallback_to_survival_when_scores_equal(self) -> None:
+        """スコアが同点のとき窒息フォールバックで won が付与されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 1P: 窒息盤面
+        g_suf = self._make_suffocated_board()._grid
+        acc.append(g_suf, "v29", "1P", 5.0, 0, 50)
+        # 2P: 通常盤面
+        acc.append(_make_board(COLOR_BLUE)._grid, "v29", "2P", 5.0, 0, 50)
+        # 両者スコア同一 → スコア判定不能 → 窒息フォールバック
+        acc.assign_won_labels({0: {"1P": 4000, "2P": 4000}})
+        # 1P が窒息 → 2P 勝ち
+        assert float(acc.wons[0]) == 0.0  # 1P 側: 負け
+        assert float(acc.wons[1]) == 1.0  # 2P 側: 勝ち (2P 視点でなく 1P 視点なので 1P は負け=0)
+
+    def test_score_primary_over_survival(self) -> None:
+        """スコアで判定できる場合は窒息に関わらずスコアが優先されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 1P: 窒息盤面だが score が高い
+        g_suf = self._make_suffocated_board()._grid
+        acc.append(g_suf, "v29", "1P", 5.0, 0, 50)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v29", "2P", 5.0, 0, 50)
+        # スコアは 1P が高い → スコア判定優先
+        acc.assign_won_labels({0: {"1P": 8000, "2P": 2000}})
+        assert float(acc.wons[0]) == 1.0  # 1P 勝ち (窒息無視)
+        assert float(acc.wons[1]) == 0.0  # 2P 負け
