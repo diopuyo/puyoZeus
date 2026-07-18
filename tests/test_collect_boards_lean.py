@@ -274,6 +274,103 @@ class TestShouldEmit:
 
 
 # ============================
+# --sample-interval 間引きロジックのテスト
+# ============================
+
+class TestSampleInterval:
+    """collect_lean の sample_interval_sec 引数に関するロジックを検証する。
+
+    動画 I/O は使わず、内部で用いる間引きフレーム数の計算のみを検証する。
+    """
+
+    def test_step_default_zero_means_every_frame(self) -> None:
+        """sample_interval_sec=0.0 のとき step=1 (全フレーム処理) になること。
+
+        collect_lean 内部の計算式:
+          sample_interval_frames = max(1, round(interval * fps)) if interval > 0 else 1
+        を直接再現して検証する。
+        """
+        fps = 30.0
+        sample_interval_sec = 0.0
+        step = max(1, int(round(sample_interval_sec * fps))) \
+            if sample_interval_sec > 0.0 else 1
+        assert step == 1
+
+    def test_step_calculation_matches_v2_formula(self) -> None:
+        """sample_interval_sec=0.1 のとき collect_indicators_v2 と同じ計算結果になること。
+
+        collect_indicators_v2:406 の計算式と同一であることを確認する。
+        """
+        fps = 30.0
+        sample_interval_sec = 0.1
+        # collect_boards_lean の計算式
+        step_lean = max(1, int(round(sample_interval_sec * fps))) \
+            if sample_interval_sec > 0.0 else 1
+        # collect_indicators_v2 の計算式 (sample_interval_sec=0 の場合を除く)
+        step_v2 = max(1, int(round(sample_interval_sec * fps)))
+        assert step_lean == step_v2
+        # 30fps × 0.1s = 3 フレームに 1 回
+        assert step_lean == 3
+
+    def test_step_02_at_30fps(self) -> None:
+        """sample_interval_sec=0.2, fps=30 のとき step=6 になること。"""
+        fps = 30.0
+        sample_interval_sec = 0.2
+        step = max(1, int(round(sample_interval_sec * fps))) \
+            if sample_interval_sec > 0.0 else 1
+        assert step == 6
+
+    def test_step_minimum_is_1(self) -> None:
+        """極端に小さい interval (例: 0.001) でも step が 1 以上になること。"""
+        fps = 30.0
+        sample_interval_sec = 0.001  # round(0.03) = 0 → max(1, 0) = 1
+        step = max(1, int(round(sample_interval_sec * fps))) \
+            if sample_interval_sec > 0.0 else 1
+        assert step >= 1
+
+    def test_collect_lean_accepts_sample_interval_kwarg(self) -> None:
+        """collect_lean が sample_interval_sec キーワード引数を受け付けること。
+
+        inspect でシグネチャを確認し、後方互換 (既定 0.0) を保証する。
+        """
+        import inspect
+        mod = _import_lean()
+        sig = inspect.signature(mod.collect_lean)
+        assert "sample_interval_sec" in sig.parameters
+        default = sig.parameters["sample_interval_sec"].default
+        assert default == 0.0
+
+    def test_won_label_preserved_with_sample_interval(self, tmp_path: Path) -> None:
+        """_LeanNpzAccumulator の won ラベル付与は sample_interval に無関係に機能すること。
+
+        間引きの有無に関わらず acc.append → assign_won_labels の動作が変わらない
+        ことを確認する (collect_lean 本体は動画依存なので内部ロジックのみ検証)。
+        """
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 1P 側 snapshot 3 件 (フレーム間引きで local_i=0, 3, 6 相当を模倣)
+        for frame_idx in [0, 3, 6]:
+            acc.append(
+                _make_board(COLOR_RED)._grid, "v29", "1P",
+                float(frame_idx) / 30.0, 0, frame_idx,
+            )
+        # 2P 側 snapshot 3 件
+        for frame_idx in [0, 3, 6]:
+            acc.append(
+                _make_board(COLOR_BLUE)._grid, "v29", "2P",
+                float(frame_idx) / 30.0, 0, frame_idx,
+            )
+        # 1P 勝ち
+        acc.assign_won_labels({0: {"1P": 8000, "2P": 2000}})
+        # 全 1P 盤面が won=1.0 になること
+        for i, side in enumerate(acc.sides):
+            if side == "1P":
+                assert float(acc.wons[i]) == 1.0
+            else:
+                assert float(acc.wons[i]) == 0.0
+
+
+# ============================
 # _merge_final_scores のテスト
 # ============================
 
