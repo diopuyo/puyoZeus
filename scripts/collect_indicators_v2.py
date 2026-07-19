@@ -93,10 +93,12 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     "absorption_capacity", "absorption_capacity_raw",
     # VIII 催促潰し度 (条件2「潰し」)
     "ojama_disruption", "ojama_disruption_raw",
-    # IX 形・組み品質 — INDICATOR_COLUMNS 末尾
+    # IX 形・組み品質
     "main_linked_pair_count", "main_linked_pair_count_raw",
     "isolated_pair_count", "isolated_pair_count_raw",
     "main_linked_ratio", "main_linked_ratio_raw",
+    # X 受けやすさ — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
+    "ukeyasusa", "ukeyasusa_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -218,6 +220,9 @@ def _fill_indicator_columns(
     mlp = iv.main_linked_pair_count(board)
     ip = iv.isolated_pair_count(board)
     mlr = iv.main_linked_ratio(board)
+    # X 受けやすさ: dig_resistance を内包するため連鎖シミュが走る。
+    #   STABLE snapshot の都度算出で問題なし (毎フレームではない)。
+    uk = iv.ukeyasusa(board)
     row.update({
         "tsumo_count_rate": tc.score, "tsumo_count_raw": tc.raw,
         "board_puyo_total": bp.score, "board_puyo_total_raw": bp.raw,
@@ -247,6 +252,8 @@ def _fill_indicator_columns(
         "main_linked_pair_count": mlp.score, "main_linked_pair_count_raw": mlp.raw,
         "isolated_pair_count": ip.score, "isolated_pair_count_raw": ip.raw,
         "main_linked_ratio": mlr.score, "main_linked_ratio_raw": mlr.raw,
+        # X 受けやすさ (新指標末尾追加)
+        "ukeyasusa": uk.score, "ukeyasusa_raw": uk.raw,
     })
 
 
