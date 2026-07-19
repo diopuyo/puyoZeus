@@ -55,6 +55,9 @@ DEFAULT_LR: float = 1e-3
 DEFAULT_PATIENCE: int = 5       # 早期終了 patience
 DEFAULT_WEIGHT_DECAY: float = 1e-4  # AdamW weight decay
 DEFAULT_SEED: int = 0
+DEFAULT_DROPOUT: float = 0.3    # SiameseBoardCNN dropout (既定 0.3)
+DEFAULT_WIDTH_MULT: float = 0.5  # SiameseBoardCNN width_mult (既定 0.5=容量半減)
+DEFAULT_FLIP_AUG: bool = True    # 左右反転 augment (既定 有効)
 PHASE_LABELS: list[str] = ["序盤", "中盤", "終盤"]
 # 盤面の全セル数 (1P + 2P): 最大値
 MAX_PUYO_COUNT: int = BOARD_ROWS * BOARD_COLS * 2  # 156
@@ -67,26 +70,40 @@ class BoardPairDataset(Dataset):
     """board_pairs npz をラップする Dataset。
 
     won=NaN のサンプルは __getitem__ に含まれないよう事前フィルタ済み前提。
+
+    flip_aug=True の場合、学習時に確率 0.5 で 1P/2P 盤面を同時に列方向反転する。
+    反転は 6 列(幅)方向のみ。won ラベルは対称性により不変。
+    val では flip_aug=False を渡すこと。
     """
 
     def __init__(
         self,
-        board_1p: np.ndarray,   # (N, 13, 6) int8
-        board_2p: np.ndarray,   # (N, 13, 6) int8
-        won: np.ndarray,         # (N,) float32
-        puyo_count: np.ndarray,  # (N,) int  (1P+2P 合計ぷよ数)
+        board_1p: np.ndarray,    # (N, 13, 6) int8
+        board_2p: np.ndarray,    # (N, 13, 6) int8
+        won: np.ndarray,          # (N,) float32
+        puyo_count: np.ndarray,   # (N,) int  (1P+2P 合計ぷよ数)
+        flip_aug: bool = False,   # 左右反転 augment (train 時のみ True)
+        rng_seed: int = 0,        # flip 用乱数シード
     ) -> None:
         self.board_1p = board_1p
         self.board_2p = board_2p
         self.won = won.astype(np.float32)
         self.puyo_count = puyo_count
+        self.flip_aug = flip_aug
+        self._rng = np.random.default_rng(rng_seed)
 
     def __len__(self) -> int:
         return len(self.won)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        x1 = torch.from_numpy(board_to_onehot(self.board_1p[idx]))
-        x2 = torch.from_numpy(board_to_onehot(self.board_2p[idx]))
+        b1 = self.board_1p[idx]  # (13, 6)
+        b2 = self.board_2p[idx]  # (13, 6)
+        # 確率 0.5 で両盤面を列方向(axis=1=幅)に反転 (1P/2P同時・won は不変)
+        if self.flip_aug and self._rng.random() < 0.5:
+            b1 = np.ascontiguousarray(np.flip(b1, axis=1))
+            b2 = np.ascontiguousarray(np.flip(b2, axis=1))
+        x1 = torch.from_numpy(board_to_onehot(b1))
+        x2 = torch.from_numpy(board_to_onehot(b2))
         y = torch.tensor(self.won[idx], dtype=torch.float32)
         return x1, x2, y
 
@@ -337,10 +354,16 @@ def _make_dataset(
     won: np.ndarray,
     puyo_count: np.ndarray,
     mask: np.ndarray,
+    flip_aug: bool = False,
+    rng_seed: int = 0,
 ) -> BoardPairDataset:
-    """mask でフィルタして BoardPairDataset を生成する補助関数。"""
+    """mask でフィルタして BoardPairDataset を生成する補助関数。
+
+    flip_aug=True は train 用のみ渡すこと (val は False)。
+    """
     return BoardPairDataset(
         board_1p[mask], board_2p[mask], won[mask], puyo_count[mask],
+        flip_aug=flip_aug, rng_seed=rng_seed,
     )
 
 
@@ -355,6 +378,9 @@ def train(
     early_stop_metric: str = "auc",
     weight_decay: float = DEFAULT_WEIGHT_DECAY,
     seed: int = DEFAULT_SEED,
+    dropout: float = DEFAULT_DROPOUT,
+    width_mult: float = DEFAULT_WIDTH_MULT,
+    flip_aug: bool = DEFAULT_FLIP_AUG,
 ) -> None:
     """学習のメインロジック。
 
@@ -363,16 +389,13 @@ def train(
         early_stop_metric: 監視指標 "auc" または "loss"。
         weight_decay: AdamW weight decay。
         seed: 乱数シード。
+        dropout: SiameseBoardCNN の Dropout 率 (0.0 = 無効)。
+        width_mult: conv/FC チャンネル倍率 (1.0 = 既存と同一形状)。
+        flip_aug: 学習時の左右反転 augment (True = 有効)。
     """
     # 再現性: 乱数シードを固定
     torch.manual_seed(seed)
     np.random.seed(seed)
-
-    # dropout 非対応の通知 (SiameseBoardCNN に dropout 引数なし)
-    print(
-        "[train_board_cnn] 注意: SiameseBoardCNN に dropout 引数がないため "
-        "Dropout は適用しません。正則化は weight_decay と early stopping のみ。"
-    )
 
     # デバイス選択
     device = (
@@ -380,17 +403,25 @@ def train(
         if device_str == "auto" else torch.device(device_str)
     )
     print(f"[train_board_cnn] device: {device}")
+    print(
+        f"[train_board_cnn] 設定: dropout={dropout}, width_mult={width_mult}, "
+        f"flip_aug={flip_aug}"
+    )
 
     # データ読み込み & 分割
     board_1p, board_2p, won, video_id, puyo_count = _load_pairs(pairs_path)
     train_mask, val_mask = _split_video_ids(video_id, seed=seed)
-    train_ds = _make_dataset(board_1p, board_2p, won, puyo_count, train_mask)
+    # train: flip_aug 有効 / val: flip 適用しない
+    train_ds = _make_dataset(
+        board_1p, board_2p, won, puyo_count, train_mask,
+        flip_aug=flip_aug, rng_seed=seed,
+    )
     val_ds = _make_dataset(board_1p, board_2p, won, puyo_count, val_mask)
     val_phases = _phase_label(puyo_count[val_mask])
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
 
-    # モデル・最適化 (Adam → AdamW で weight_decay を適切に適用)
-    model = SiameseBoardCNN().to(device)
+    # モデル: dropout/width_mult を渡す (後方互換デフォルトは既存形状)
+    model = SiameseBoardCNN(dropout=dropout, width_mult=width_mult).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = nn.BCEWithLogitsLoss()
 
@@ -465,6 +496,20 @@ def main() -> int:
         "--seed", type=int, default=DEFAULT_SEED,
         help=f"乱数シード (既定: {DEFAULT_SEED})",
     )
+    # ---- 過学習対策: モデル容量・augment ----
+    parser.add_argument(
+        "--dropout", type=float, default=DEFAULT_DROPOUT,
+        help=f"SiameseBoardCNN の Dropout 率 (既定: {DEFAULT_DROPOUT}, 0.0=無効)",
+    )
+    parser.add_argument(
+        "--width-mult", type=float, default=DEFAULT_WIDTH_MULT,
+        help=f"conv/FC チャンネル倍率 (既定: {DEFAULT_WIDTH_MULT}, 1.0=既存と同一形状)",
+    )
+    parser.add_argument(
+        "--flip-aug", action=argparse.BooleanOptionalAction,
+        default=DEFAULT_FLIP_AUG,
+        help="学習時の左右反転 augment (--no-flip-aug で無効化、既定: 有効)",
+    )
     args = parser.parse_args()
 
     train(
@@ -478,6 +523,9 @@ def main() -> int:
         early_stop_metric=args.early_stop_metric,
         weight_decay=args.weight_decay,
         seed=args.seed,
+        dropout=args.dropout,
+        width_mult=args.width_mult,
+        flip_aug=args.flip_aug,
     )
     return 0
 
