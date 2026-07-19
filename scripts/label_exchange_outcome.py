@@ -69,6 +69,10 @@ BURIAL_WINDOW_SEC: float = 8.0
 # death_margin スコアが閾値以下 = 危険 (opp_buried)
 DEATH_MARGIN_DANGER_THRESHOLD: float = 0.2
 
+# A-1: returned_competitive の判定係数
+# 返しお邪魔 >= 発火側お邪魔 × RETURN_FACTOR を「同等以上の返し」と定義
+RETURN_FACTOR: float = 0.8
+
 
 class NpzRecord(NamedTuple):
     """1本分の npz データ。"""
@@ -246,6 +250,53 @@ def _compute_returned(
     return 0
 
 
+def _delta_score_to_ojama_count(delta_score: int) -> int:
+    """Δscoreを標準レート固定でお邪魔個数に換算する(マージン補正なし)。
+
+    score_to_ojama(prev_leftover=0, elapsed_sec=0) と等価だが
+    直接 OJAMA_RATE_STANDARD 除算で明示的に補正を排除する。
+    """
+    from src.scoring import OJAMA_RATE_STANDARD
+    return max(0, delta_score) // OJAMA_RATE_STANDARD
+
+
+def _compute_returned_competitive(
+    fire_delta_score: int,
+    fire_t: float,
+    return_window_sec: float,
+    opp_t_sec: np.ndarray,
+    opp_score: np.ndarray,
+) -> int:
+    """A-1: 競合返し判定。
+
+    相手が返し窓 W = chain_to_time(発火側連鎖数) 内に発火し、
+    かつ 返しお邪魔 >= 発火側お邪魔 × RETURN_FACTOR を満たすか。
+
+    - お邪魔換算は標準レート固定(マージン補正バグ回避)。
+    - 発火側の連鎖数は current_max_chain.raw で近似(呼び出し元で渡す)。
+    - return_window_sec = chain_to_time(approx_chains) が呼び出し元で計算済み。
+    """
+    fire_ojama = _delta_score_to_ojama_count(fire_delta_score)
+
+    # 返し窓の直前スコアを基準値として取得
+    pre_mask = (opp_t_sec < fire_t) & (opp_score >= 0)
+    baseline_opp = int(opp_score[pre_mask][-1]) if pre_mask.any() else -1
+
+    # 返し窓内の最大スコア増分 → お邪魔換算
+    in_mask = (opp_t_sec >= fire_t) & (opp_t_sec <= fire_t + return_window_sec)
+    valid_in = opp_score[in_mask]
+    valid_in = valid_in[valid_in >= 0]
+    if len(valid_in) < 1 or baseline_opp < 0:
+        return 0
+
+    opp_delta = max(0, int(valid_in.max()) - baseline_opp)
+    opp_ojama = _delta_score_to_ojama_count(opp_delta)
+
+    # 判定: 返しが発火側の RETURN_FACTOR 倍以上
+    required = fire_ojama * RETURN_FACTOR
+    return 1 if opp_ojama >= required else 0
+
+
 def _compute_opp_buried(
     fire_t: float,
     opp_boards: list[tuple[float, Board]],
@@ -366,6 +417,11 @@ def _process_game(
         returned = _compute_returned(
             t_fire, opp_rec.t_sec, opp_rec.score, return_window,
         )
+        # A-1: 競合返し(同等以上のお邪魔を返したか)
+        returned_competitive = _compute_returned_competitive(
+            delta_score, t_fire, return_window,
+            opp_rec.t_sec, opp_rec.score,
+        )
         opp_buried = _compute_opp_buried(t_fire, opp_boards, sim)
 
         # 盤面ぷよ合計(発火側)
@@ -394,6 +450,10 @@ def _process_game(
             # ラベル
             "net_ojama": net_oj,
             "returned": returned,
+            # A-1: 競合返し / 返し窓メタ情報
+            "returned_competitive": returned_competitive,
+            "return_window_sec": float(return_window),
+            "approx_fire_chains": float(approx_chains),
             "opp_buried": opp_buried,
         }
         rows.append(row)
@@ -477,7 +537,11 @@ def main() -> None:
     print(f"[DONE] {len(df)} 行を {OUTPUT_PATH} に保存しました")
     print(f"  位相別: {df['phase'].value_counts().to_dict()}")
     print(f"  fire_side: {df['fire_side'].value_counts().to_dict()}")
-    print(f"  net_ojama mean={df['net_ojama'].mean():.2f}  returned={df['returned'].mean():.2f}  opp_buried={df['opp_buried'].mean():.2f}")
+    print(f"  net_ojama mean={df['net_ojama'].mean():.2f}  returned={df['returned'].mean():.2f}"
+          f"  returned_competitive={df['returned_competitive'].mean():.3f}"
+          f"  opp_buried={df['opp_buried'].mean():.3f}")
+    print(f"  return_window_sec mean={df['return_window_sec'].mean():.2f}"
+          f"  approx_fire_chains mean={df['approx_fire_chains'].mean():.2f}")
 
 
 if __name__ == "__main__":
