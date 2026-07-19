@@ -508,15 +508,16 @@ M1連結集中度 / M26埋没穴数 / M13雪崩感度 / M22流動性 / M12単一
 # ★最終ナビ: 実装推奨マスター表(全9ラウンド~226候補からの蒸留)
 
 **実データAUCで裏取り済み(中盤won>0.60 or opp_buried>0.65)= エビデンス最強の実装候補:**
-| 指標 | 中盤won | 状態 | 推奨 |
-|---|---|---|---|
-| opp_saturated_chain_count(相手飽和連鎖量) | 0.638 | Round4実装済 | **第1候補**。土台にもなる |
-| death_margin_ratio(窒息距離比) | 0.635 | 既存変換・実装ゼロ | **第1候補**。終盤0.685も |
-| diff_saturated_chain_count | 0.611 | Round4実装済 | 第2候補 |
-| diff_simultaneous_pop_richness | 0.609 | Round4実装済 | 第2候補・新規軸 |
-| opp_sub_chain_count(副砲) | 0.593 | Round4実装済 | 第2候補 |
-| conn_pair_diff(連結数差) | 0.572 | 実装ゼロ | 補助(終盤逆転注意) |
-| diff_multi_color_ignition | opp_buried0.682 | Round4実装済 | 埋め判定に強い |
+| 指標 | 中盤won単変量 | 多変量寄与 | 状態 | 推奨 |
+|---|---|---|---|---|
+| **saturated_chain_count(飽和連鎖量 fire+opp)** | 0.638 | ★**確認**(opp_buried寄与1位/won終盤+0.047) | Round4実装済 | **第1候補**。単変量も多変量も確定。土台にもなる |
+| diff_simultaneous_pop_richness(同時消し差) | 0.609 | +board_simに含まれ寄与 | Round4実装済 | 第2候補・新規軸 |
+| sub_chain_count(副砲) | 0.593 | +board_simに含まれ寄与 | Round4実装済 | 第2候補 |
+| diff_multi_color_ignition(多色発火差) | opp_buried0.682 | opp_buried改善に寄与 | Round4実装済 | 埋め判定に強い |
+| death_margin_ratio/diff(窒息距離比・差) | 0.635 | ✗**多変量で冗長**(baseline未満) | 既存変換 | 単独投入は非推奨(既存death_marginと重複)。単変量が強く見えるだけ |
+| conn_pair_diff(連結数差) | 0.572 | 弱 | 実装ゼロ | 補助(終盤逆転注意) |
+
+※Round7bで確定: **単変量の強さ≠多変量の寄与**。関係化(比/差)は既存に冗長。board sim本命(飽和連鎖量)は単変量・多変量とも本物。opp側board simの被覆率(相手盤面ペアリング)改善が中盤の次の伸びしろ。
 
 **理論有望・未検証だが実装安価(次に実データ検証すべき):** M1連結集中度 / M9色均等度 / M22流動性 / M26埋没穴数(holes) / M30縦空間支配 / N3配置エントロピー / N46被読性。
 
@@ -529,7 +530,18 @@ M1連結集中度 / M26埋没穴数 / M13雪崩感度 / M22流動性 / M12単一
 - **board sim特徴のマッチ率12.4%のみ**(labeled_win.csv=v29-38に対しboard密度が低くNaN→0埋め=ノイズ投入)→ +board_simがゼロ寄与でも「効かない」証拠にならない。
 - 関係化(death_margin_ratio等)の中盤-0.014は**既存death_marginとの冗長性**アーティファクト(単変量0.635は健全・多変量では要「既存を外して差/比のみ」で評価)。
 - baseline自体がmodel_indicator_win(0.458)と0.01ズレ=feature set不一致。
-→ **単変量エビデンス(Round3/4)を正とする**。正しい多変量検証は**board sim計算済のvideo_c*データ(7960行・欠損なし)で実施すべき**(Round7bで再実行)。
+→ **単変量エビデンス(Round3/4)を正とする**。正しい多変量検証はRound7bで実施(下記)。
+
+## ★Round7b 正しい多変量検証(video_c*・board sim欠損解消)= 本命が多変量でも確定
+board sim計算済のvideo_c*(7960行, opp側62%欠損はNaN=-1で欠損フラグ化)でHistGBC OOF:
+| ターゲット | baseline中盤 | +board_sim中盤 | baseline終盤 | +board_sim終盤 |
+|---|---|---|---|---|
+| **won** | 0.645 | 0.655(**+0.009**) | 0.615 | **0.662(+0.047)** |
+| **opp_buried** | 0.850 | **0.894(+0.044)** | 0.899 | 0.929(+0.030) |
+- **permutation importance: opp_saturated_chain_count が opp_buried で imp0.039=断トツ1位(次点の4倍)** → 多変量でも独立寄与を確認。飽和連鎖量は単変量0.638 かつ 多変量寄与1位=**確定した本命**。
+- **関係化(death_margin_ratio/diff, chain_ratio)は多変量で baseline未満**(全位相で-0.005〜-0.002)=既存death_marginと冗長。**単変量0.635は既存両側を使うモデルでは幻**。→ 単独投入は非推奨(正直な結論)。
+- 正直な限界: opp側board sim 62%欠損(相手盤面ペア不足)で中盤wonの改善は+0.009止まり → **opp被覆率改善(相手盤面のペアリング密度向上)が中盤の次の伸びしろ**。
+- **確定採否**: 飽和連鎖量(saturated_chain_count, 特にfire_+opp_)を採用。関係化は見送り。opp被覆率改善を中盤の次投資に。
 
 ## 選び方の最終指針
 1. **すぐ効く確実な一手** → opp_saturated_chain_count + death_margin_ratio(両者ともエビデンスあり)。
