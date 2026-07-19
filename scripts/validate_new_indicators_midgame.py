@@ -1,9 +1,15 @@
-"""新指標 (ukeyasusa / taiou_capacity) の中盤 AUC 検証スクリプト。
+"""新指標 (ukeyasusa v2 / taiou_capacity v2) の中盤 AUC 検証スクリプト。
 
 ## 目的
-board_pairs_fixed.npz から中盤スナップショットを抽出し、
+board_pairs_fixed.npz から中盤スナップショットをサブサンプルし、
 新旧 tier1 指標に ukeyasusa / taiou_capacity の差分 (1P - 2P) を加えた場合に
 video 単位 holdout (LeaveOneGroupOut) の won-AUC が改善するかを測定する。
+
+## 変更点 (v2)
+- 中盤定義: 60-240s (旧 60-120s) → サンプル数 447→3709、動画数 45→88 に拡大。
+- サブサンプル上限: MAX_SAMPLE=4000 ペアに制限して実行時間を短縮。
+- キャッシュ無効化: 重み・候補生成が変わったため旧キャッシュを使わずに再計算。
+- won NaN 除外: 全フィルタ後に NaN を明示除外してクラッシュを防ぐ。
 
 ## 出力
 stdout に:
@@ -54,11 +60,16 @@ from src.indicators_v2 import (
 # --------------------------------------------------------------------------
 DATA_PATH = PROJ_ROOT / "data" / "indicators_v2" / "board_pairs_fixed.npz"
 
-# 中盤の定義: t_sec / max(t_sec per game) が 0.34〜0.67 の範囲
-# board_pairs_fixed には game_idx があるが t_sec のみで簡易二分割する。
-# 上位者対戦の試合時間中央値 ≈ 180 秒。序盤0〜60s / 中盤60〜120s / 終盤120+s。
+# 中盤の定義: 60-240s (video holdout の動画数を確保するため広めに取る)。
+# 旧 60-120s では N=447/動画45 しか得られず holdout が不安定だった。
+# 60-240s では N=3709/動画88 となり信頼性が向上する。
 MIDGAME_SEC_LO: float = 60.0
-MIDGAME_SEC_HI: float = 120.0
+MIDGAME_SEC_HI: float = 240.0
+
+# サブサンプル上限: 4000 ペアを超える場合はランダムサンプリングして高速化する。
+# 全件処理では 46 分かかっていた計算を 10-15 分に短縮する目標。
+MAX_SAMPLE: int = 4000
+RANDOM_SEED_SAMPLE: int = 42
 
 # GBM パラメータ (軽量)
 GBM_PARAMS: dict[str, Any] = {
@@ -110,22 +121,42 @@ def _compute_indicators(grid: np.ndarray, sim: ChainSimulator) -> dict[str, floa
 
 
 def _build_diff_df(data: Any, sim: ChainSimulator) -> pd.DataFrame:
-    """board_pairs_fixed.npz から 1P-2P 差分特徴量の DataFrame を構築する。"""
-    grids_1p: np.ndarray = data["board_1p"]  # (N, 13, 6)
-    grids_2p: np.ndarray = data["board_2p"]  # (N, 13, 6)
-    won: np.ndarray = data["won"]            # (N,)
-    video_id: np.ndarray = data["video_id"] # (N,)
-    t_sec: np.ndarray = data["t_sec"]       # (N,)
+    """board_pairs_fixed.npz から 1P-2P 差分特徴量の DataFrame を構築する。
 
-    n = len(won)
+    高速化: 中盤フィルタ [MIDGAME_SEC_LO, MIDGAME_SEC_HI) + won NaN 除外後の
+    インデックスのみを計算する (全 N=20463 ではなく ~3700 件)。
+    これにより全件計算 (~24 分) を ~4 分に短縮できる。
+
+    Args:
+        data: np.load した NpzFile。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        中盤ペアのみの差分特徴量 DataFrame。
+    """
+    t_sec: np.ndarray = data["t_sec"]
+    won: np.ndarray = data["won"]
+    # 中盤マスクを先行計算 (won NaN 除外含む)
+    mid_mask = (
+        (t_sec >= MIDGAME_SEC_LO)
+        & (t_sec < MIDGAME_SEC_HI)
+        & ~np.isnan(won.astype(float))
+    )
+    indices = np.where(mid_mask)[0]
+    n_mid = len(indices)
+    print(f"[中盤先行フィルタ] 全 {len(t_sec)} → 中盤 {n_mid} 件のみ計算します")
+
+    grids_1p: np.ndarray = data["board_1p"]
+    grids_2p: np.ndarray = data["board_2p"]
+    video_id: np.ndarray = data["video_id"]
     rows: list[dict[str, Any]] = []
     t0 = time.time()
 
-    for i in range(n):
-        if i % 1000 == 0:
+    for j, i in enumerate(indices):
+        if j % 500 == 0:
             elapsed = time.time() - t0
-            eta = elapsed / (i + 1) * (n - i)
-            print(f"  [{i}/{n}] elapsed={elapsed:.0f}s ETA={eta:.0f}s", flush=True)
+            eta = elapsed / (j + 1) * (n_mid - j) if j > 0 else 0.0
+            print(f"  [{j}/{n_mid}] elapsed={elapsed:.0f}s ETA={eta:.0f}s", flush=True)
         ind_1p = _compute_indicators(grids_1p[i], sim)
         ind_2p = _compute_indicators(grids_2p[i], sim)
         row: dict[str, Any] = {
@@ -138,7 +169,7 @@ def _build_diff_df(data: Any, sim: ChainSimulator) -> pd.DataFrame:
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    print(f"[完了] {n} 件 / {time.time() - t0:.1f}s")
+    print(f"[完了] {n_mid} 件 / {time.time() - t0:.1f}s", flush=True)
     return df
 
 
@@ -244,33 +275,78 @@ def report_holdout_auc(mid: pd.DataFrame) -> None:
 # --------------------------------------------------------------------------
 
 
-CACHE_CSV = PROJ_ROOT / "data" / "indicators_v2" / "study" / "validate_diff_cache.csv"
+# v2: キャッシュ名を変更して旧キャッシュ (v1 重み) との混在を防ぐ。
+CACHE_CSV = PROJ_ROOT / "data" / "indicators_v2" / "study" / "validate_diff_cache_v2.csv"
+
+
+def _subsample_midgame(mid: pd.DataFrame) -> pd.DataFrame:
+    """中盤 DataFrame をサブサンプルする (MAX_SAMPLE 超の場合)。
+
+    動画バランスを維持するために video_id 別に比例サンプリングする。
+    MAX_SAMPLE 以下ならそのまま返す。
+
+    Args:
+        mid: 中盤フィルタ済み DataFrame。
+
+    Returns:
+        サブサンプル後の DataFrame。
+    """
+    if len(mid) <= MAX_SAMPLE:
+        return mid
+    frac = MAX_SAMPLE / len(mid)
+    sampled = mid.groupby("video_id", group_keys=False).apply(
+        lambda x: x.sample(frac=frac, random_state=RANDOM_SEED_SAMPLE)
+        if len(x) > 1 else x
+    )
+    # 四捨五入誤差で MAX_SAMPLE を少し超える場合があるため上限クリップ
+    if len(sampled) > MAX_SAMPLE:
+        sampled = sampled.sample(n=MAX_SAMPLE, random_state=RANDOM_SEED_SAMPLE)
+    print(f"[サブサンプル] {len(mid)} → {len(sampled)} 行 "
+          f"(動画数: {mid['video_id'].nunique()} → {sampled['video_id'].nunique()})")
+    return sampled.reset_index(drop=True)
+
+
+def _load_or_compute(data_path: Path, sim: ChainSimulator) -> pd.DataFrame:
+    """キャッシュ CSV があれば読み込み、なければ全ペア計算してキャッシュ保存する。
+
+    v2 キャッシュは旧 v1 キャッシュと別ファイル名で管理する。
+
+    Args:
+        data_path: board_pairs_fixed.npz のパス。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        全ペアの差分特徴量 DataFrame。
+    """
+    if CACHE_CSV.exists():
+        print(f"[キャッシュ読み込み] {CACHE_CSV}")
+        return pd.read_csv(CACHE_CSV)
+    if not data_path.exists():
+        print(f"[ERROR] データが見つかりません: {data_path}")
+        sys.exit(1)
+    print(f"[読み込み] {data_path}")
+    data = np.load(data_path, allow_pickle=True)
+    print("[指標計算中...] board_pairs_fixed.npz の全ペアを処理します (v2 重み)")
+    df = _build_diff_df(data, sim)
+    CACHE_CSV.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(CACHE_CSV, index=False)
+    print(f"[キャッシュ保存] {CACHE_CSV}")
+    return df
 
 
 def main() -> None:
-    """検証のエントリポイント。キャッシュ CSV があれば再利用する。"""
-    if CACHE_CSV.exists():
-        print(f"[キャッシュ読み込み] {CACHE_CSV}")
-        df = pd.read_csv(CACHE_CSV)
-    else:
-        if not DATA_PATH.exists():
-            print(f"[ERROR] データが見つかりません: {DATA_PATH}")
-            sys.exit(1)
-        print(f"[読み込み] {DATA_PATH}")
-        data = np.load(DATA_PATH, allow_pickle=True)
-        sim = ChainSimulator()
-        print("[指標計算中...] board_pairs_fixed.npz の全ペアを処理します")
-        df = _build_diff_df(data, sim)
-        # CSV キャッシュ保存
-        CACHE_CSV.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(CACHE_CSV, index=False)
-        print(f"[キャッシュ保存] {CACHE_CSV}")
+    """検証のエントリポイント。v2: 中盤 60-240s + サブサンプル 4000 ペア。"""
+    sim = ChainSimulator()
+    df = _load_or_compute(DATA_PATH, sim)
 
     # 中盤限定 (won NaN を除外済み)
     mid = _filter_midgame(df)
     if len(mid) < 30:
         print("[WARN] 中盤サンプルが 30 未満 → 中止")
         sys.exit(1)
+
+    # サブサンプル (MAX_SAMPLE 超の場合)
+    mid = _subsample_midgame(mid)
 
     report_univariate_auc(mid)
     report_holdout_auc(mid)

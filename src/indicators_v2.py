@@ -133,11 +133,13 @@ NORM_LINKED_PAIR: float = 10.0
 # X 受けやすさ (ukeyasusa) 定数
 # ============================
 
-# absorption_capacity / dig_resistance / death_margin の合成重み (均等 1/3)。
+# absorption_capacity / dig_resistance / death_margin の合成重み。
 # 実データ学習後に重み更新可能な設計。定数化により変更追跡を容易にする。
-UKEYASUSA_W_ABSORPTION: float = 1.0 / 3.0
-UKEYASUSA_W_DIG: float = 1.0 / 3.0
-UKEYASUSA_W_DEATH: float = 1.0 / 3.0
+# 中盤単変量 AUC: dig_resistance=0.596 が最強、absorption/death は逆相関傾向。
+# v2 重み: dig を主 (0.6)、absorption/death は補助 (各 0.2) に見直し。
+UKEYASUSA_W_ABSORPTION: float = 0.2
+UKEYASUSA_W_DIG: float = 0.6
+UKEYASUSA_W_DEATH: float = 0.2
 
 # ============================
 # XI 対応力 (taiou_capacity) 定数
@@ -150,6 +152,11 @@ REF_OJAMA_TAIOU: int = 30
 # alive=0 なら強制ゼロ。
 TAIOU_W_POTENTIAL: float = 0.6
 TAIOU_W_UKEY: float = 0.4
+
+# v2: 部分発火候補数の上限 (計算爆発を防ぐ)。
+# 各 takapt 最良 board の steps[0..k] から候補を生成するため、
+# 実際の候補数は min(TAIOU_MAX_CANDIDATES, len(steps)+1) 個。
+TAIOU_MAX_CANDIDATES: int = 8
 
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
 _SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
@@ -1433,26 +1440,116 @@ def _taiou_health(
     return _clamp01(TAIOU_W_POTENTIAL * s_pot + TAIOU_W_UKEY * s_ukey)
 
 
+def _partial_fire_ojama(
+    steps: "list",
+    n: int,
+    elapsed_sec: float,
+) -> int:
+    """連鎖 steps の先頭 n ステップ分のお邪魔換算を返す (部分発火用)。
+
+    ChainResult.steps[0..n-1] を偽の ChainResult として score 計算する。
+    引数の steps は ChainResult.steps (list[ChainStep])。
+    n > len(steps) の場合は len(steps) に丸める (全発火)。
+    n <= 0 の場合は 0 を返す。
+
+    Args:
+        steps: simulate() の ChainResult.steps。
+        n: 部分発火の連鎖ステップ数 (1 から始まる)。
+        elapsed_sec: マージンタイム計算用経過秒。
+
+    Returns:
+        n 連鎖分のお邪魔換算数 (int)。
+    """
+    from src.chain import ChainResult
+    if n <= 0 or not steps:
+        return 0
+    n = min(n, len(steps))
+    partial_steps = steps[:n]
+    last_board = partial_steps[-1].board_after
+    # 偽 ChainResult を構築してスコア計算する
+    partial_result = ChainResult(
+        steps=partial_steps,
+        chain_count=n,
+        total_erased=sum(s.erased_count for s in partial_steps),
+        total_ojama=sum(s.erased_ojama for s in partial_steps),
+        final_board=last_board,
+        participating_cells=sum(s.erased_count for s in partial_steps),
+    )
+    score = calculate_chain_score(partial_result).total_score
+    ojama = score_to_ojama(
+        score=score, prev_leftover=0,
+        elapsed_sec=elapsed_sec, rate_base=OJAMA_RATE_STANDARD,
+    )
+    return int(ojama.ojama_count)
+
+
+def _build_taiou_candidates(
+    board: Board,
+    sim: "ChainSimulator",
+    elapsed_sec: float,
+    max_candidates: int,
+) -> "list[tuple[int, Board]]":
+    """対応候補 (offset_ojama, 直後盤面) のリストを返す (部分発火方式)。
+
+    takapt 定石で得た最良 board の steps を 1 〜 k 連鎖で打ち切り、
+    各パターンを候補として列挙する。全発火 (全 steps) も候補に含む。
+    候補数は max_candidates でキャップする。
+
+    Args:
+        board: 評価対象の確定盤面。
+        sim: ChainSimulator インスタンス。
+        elapsed_sec: マージンタイム計算用経過秒。
+        max_candidates: 生成する候補数の上限。
+
+    Returns:
+        [(offset_ojama, 直後盤面)] のリスト。空の場合は候補なし (空盤面等)。
+    """
+    _, dropped = _takapt_best_drop(board, sim)
+    if dropped is None:
+        return []
+    result = sim.simulate(dropped)
+    if not result.steps:
+        return []
+    # 部分発火候補: 1 〜 min(max_candidates, len(steps)) 連鎖
+    n_max = min(max_candidates, len(result.steps))
+    candidates: list[tuple[int, Board]] = []
+    for n in range(1, n_max + 1):
+        ojama = _partial_fire_ojama(result.steps, n, elapsed_sec)
+        final_board = result.steps[n - 1].board_after
+        candidates.append((ojama, final_board))
+    return candidates
+
+
 def taiou_capacity(
     board: Board,
     ref_ojama: int = REF_OJAMA_TAIOU,
+    elapsed_sec: float = 0.0,
     simulator: ChainSimulator | None = None,
 ) -> IndicatorV2Value:
-    """XI-1 対応力: 相手催促を本線を極力崩さず捌けるか。
+    """XI-1 対応力 v2: 最適サイズの対応を選んで温存度を評価する。
 
-    計算手順:
-      1. 即発火相殺量 = immediate_fire_power.raw (お邪魔個数近似)。
-      2. 相殺充足度 offset_ratio = min(1, 即発火相殺量 / ref_ojama)。
-      3. 対応後盤面 = simulate(board).final_board (即発火後の形)。
-      4. 健全度 health = _taiou_health(対応後盤面) → potential + 受け力の合成。
-      5. 対応力 = offset_ratio × health (0〜1)。
+    v1 との違い: 即発火 (丸ごと全発火) 1 候補のみではなく、
+    部分発火 (1 連鎖〜k 連鎖打ち切り) の複数候補を生成し、
+    ref_ojama を相殺できる中で最も盤面健全度 (health) が高い「ちょうど良い対応」を選ぶ。
 
-    温存(小さく対応)できる盤面ほど final_board に本線 potential が残り
-    health が高くなる → 対応力が高い、という設計。
+    計算手順 (v2):
+      1. takapt 定石で最良 dropped_board を取得し simulate。
+      2. steps から 1〜TAIOU_MAX_CANDIDATES 連鎖分の部分発火候補を生成。
+      3. 各候補: offset (部分発火お邪魔) + health (直後盤面の潜在力+受け力)。
+      4. 選択: offset >= ref_ojama の候補のうち health 最大 (ちょうど良いサイズ)。
+               満たす候補がなければ offset 最大の候補を採用し health で減点。
+      5. taiou_capacity = min(1, offset/ref_ojama) × health。
+
+    温存度が主役: 小さく相殺できる盤面 → 直後盤面に本線 potential が残り
+    health 高 → スコア高。本線巻き込み必須な盤面は health が低下。
+
+    backwards compat: elapsed_sec は optional 追加引数 (デフォルト 0.0)。
+    raw の意味は offset_ratio (相殺充足度, 0〜1) を維持する。
 
     Args:
         board: STABLE 確定盤面 (stateless: 破壊しない)。
         ref_ojama: 基準催促量 (個数)。既定 REF_OJAMA_TAIOU (=30)。
+        elapsed_sec: 試合経過秒 (マージンタイム用)。既定 0.0。
         simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
 
     Returns:
@@ -1461,16 +1558,44 @@ def taiou_capacity(
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead():
         return IndicatorV2Value(score=0.0, raw=0.0)
-    # 即発火相殺量 (お邪魔個数)
-    fire_raw = immediate_fire_power(board, simulator=sim).raw
-    # 相殺充足度: ref_ojama=0 は除算ガード (即発火0でも充足率0とする)
-    if ref_ojama <= 0 or fire_raw <= 0.0:
-        offset_ratio = 0.0
+    candidates = _build_taiou_candidates(board, sim, elapsed_sec, TAIOU_MAX_CANDIDATES)
+    if not candidates:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    return _select_best_taiou_candidate(candidates, ref_ojama, sim)
+
+
+def _select_best_taiou_candidate(
+    candidates: "list[tuple[int, Board]]",
+    ref_ojama: int,
+    sim: "ChainSimulator",
+) -> IndicatorV2Value:
+    """候補リストから最適対応を選んで IndicatorV2Value を返す。
+
+    選択ロジック:
+        - offset >= ref_ojama の候補 → health 最大を選択 (ちょうど良いサイズ)。
+        - 充足候補なし → offset 最大の候補を選択 (精一杯の対応)。
+    score = min(1, offset/ref_ojama) × health。
+    raw = min(1, offset/ref_ojama) (相殺充足度)。
+
+    Args:
+        candidates: [(offset_ojama, 直後盤面)] のリスト。空は呼出前に確認済み。
+        ref_ojama: 基準催促量 (個数)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        IndicatorV2Value: score=対応力 (0〜1), raw=offset_ratio (0〜1)。
+    """
+    ref = max(1, ref_ojama)
+    # 相殺充足候補 (offset >= ref_ojama)
+    sufficient = [(oj, fb) for oj, fb in candidates if oj >= ref]
+    if sufficient:
+        # health 最大を選ぶ (ちょうど良いサイズ = 温存度最大)
+        best_oj, best_fb = max(sufficient, key=lambda x: _taiou_health(x[1], sim))
     else:
-        offset_ratio = min(1.0, fire_raw / float(ref_ojama))
-    # 対応後盤面の健全度
-    final_board = sim.simulate(board).final_board
-    health = _taiou_health(final_board, sim)
+        # 充足不能 → offset 最大 (精一杯の対応)
+        best_oj, best_fb = max(candidates, key=lambda x: x[0])
+    offset_ratio = min(1.0, float(best_oj) / float(ref))
+    health = _taiou_health(best_fb, sim)
     score = _clamp01(offset_ratio * health)
     return IndicatorV2Value(score=score, raw=offset_ratio)
 
@@ -1539,4 +1664,5 @@ __all__ = [
     "REF_OJAMA_TAIOU",
     "TAIOU_W_POTENTIAL",
     "TAIOU_W_UKEY",
+    "TAIOU_MAX_CANDIDATES",
 ]

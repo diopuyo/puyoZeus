@@ -1106,10 +1106,14 @@ def test_ukeyasusa_range_all_boards() -> None:
 
 
 def test_ukeyasusa_empty_board_high() -> None:
-    """空盤面は受けやすさ最大に近い (absorption=1, death_margin=1)。"""
+    """空盤面は受けやすさが比較的高い (absorption=1, death_margin=1)。
+
+    v2 重み (dig=0.6 主体) では空盤面の dig_resistance=0 のため
+    スコアは 0.4 程度。満杯盤面 (0.0) よりは有意に高いことを確認する。
+    """
     v = iv.ukeyasusa(_empty_board())
-    # absorption=1, death=1, dig は空盤面なのでやや低め → 合計で 0.5 超を期待
-    assert v.score > 0.5, f"空盤面の受けやすさが低すぎる: {v.score}"
+    # dig が主体の新重みでは 0.35 超を保証 (0.6×0 + 0.2×1 + 0.2×1 = 0.4)
+    assert v.score > 0.35, f"空盤面の受けやすさが低すぎる: {v.score}"
 
 
 def test_ukeyasusa_full_board_low() -> None:
