@@ -1600,6 +1600,207 @@ def _select_best_taiou_candidate(
     return IndicatorV2Value(score=score, raw=offset_ratio)
 
 
+# ============================
+# XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
+# ============================
+
+# 飽和連鎖量の正規化分母 (上級者実用上限 ~19 連鎖)。
+# potential_fire_power と同じ探索(追加sim0)で取得。
+NORM_SATURATED_CHAIN: float = 19.0
+
+# 発火点数の正規化分母 (最大 30 = 5色×6列)。
+NORM_IGNITION_POINT_COUNT: float = 30.0
+
+# 多色発火の正規化分母 (最大 5 色)。
+NORM_MULTI_COLOR_IGNITION: float = float(len(IGNITION_TRIAL_COLORS))
+
+# 副砲連鎖数の正規化分母 (上限 ~12 連鎖。honsen後の残りなのでNORM_MAX_CHAINより小さい)。
+NORM_SUB_CHAIN: float = 12.0
+
+# 同時消しリッチネス: 1ステップ平均グループ数の正規化分母 (経験的上限 ~6)。
+NORM_SIMULTANEOUS_POP: float = 6.0
+
+
+def _takapt_full_scan(
+    board: Board, sim: ChainSimulator,
+) -> "list[tuple[int, int, int, Board, ChainResult]]":
+    """takapt 定石 30 通りを全スキャンし (chain_count, col, color, dropped, result) を返す。
+
+    _takapt_best_drop の拡張版。発火点数・多色発火計算用に
+    全発火試行の結果を保持する(追加simゼロ = _takapt_best_dropと同じ探索を1回で完結)。
+
+    Args:
+        board: 評価対象の確定盤面 (破壊しない)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        [(chain_count, col, color, dropped_board, chain_result)] のリスト。
+        連鎖数 > 0 のもののみ (非発火は除外)。
+    """
+    hits: list[tuple[int, int, int, Board, ChainResult]] = []
+    for col in range(BOARD_COLS):
+        for color in IGNITION_TRIAL_COLORS:
+            dropped = _drop_one_color(board, col, color)
+            if dropped is None:
+                continue
+            result = sim.simulate(dropped)
+            if result.chain_count > 0:
+                hits.append((result.chain_count, col, color, dropped, result))
+    return hits
+
+
+def saturated_chain_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1 飽和連鎖量 (1手追加での最大到達連鎖数)。
+
+    potential_fire_power と同じ探索 (_takapt_best_drop 相当) を流用し、
+    最大 chain_count を返す。追加 sim ゼロ。
+
+    「今の盤面にどれだけ連鎖が仕込まれているか」の直接測定。
+    build進捗・催促価値・相対build差など多くの指標の土台となる。
+
+    正規化: raw / NORM_SATURATED_CHAIN (暫定 19)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=最大到達連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, _ = _takapt_best_drop(board, sim)
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+def ignition_point_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-2 発火点数 (発火可能な (列, 色) の種類数)。
+
+    takapt 探索 30 通りのうち chain_count > 0 となる (列, 色) の数。
+    追加 sim ゼロ (_takapt_full_scan と同じ探索を共有)。
+
+    「何通りの方法で連鎖を起こせるか」= 発火の柔軟性。
+    正規化: raw / NORM_IGNITION_POINT_COUNT (=30)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/30 (0〜1), raw=発火可能な(列,色)数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    hits = _takapt_full_scan(board, sim)
+    raw = float(len(hits))
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_IGNITION_POINT_COUNT), raw=raw,
+    )
+
+
+def multi_color_ignition(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-3 多色発火 (発火可能な色の種類数)。
+
+    takapt 探索で chain_count > 0 となった (列, 色) のうち、色の種類数。
+    発火の色柔軟性 = 読まれにくさ・対応多様性の指標。
+    追加 sim ゼロ (_takapt_full_scan と探索を共有)。
+
+    正規化: raw / NORM_MULTI_COLOR_IGNITION (=5)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/5 (0〜1), raw=発火可能な色数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    hits = _takapt_full_scan(board, sim)
+    colors_hit = {color for _, _, color, _, _ in hits}
+    raw = float(len(colors_hit))
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_MULTI_COLOR_IGNITION), raw=raw,
+    )
+
+
+def sub_chain_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-4 副砲連鎖数 (本線発火後の残り盤面にもう1手落として組める連鎖数)。
+
+    最良 takapt 発火後の final_board に対して再度 takapt 探索 (30通り) を行い、
+    最大 chain_count を副砲連鎖数とする。
+    「本線を打った後にまだ連鎖弾が残っているか」を直接測定。
+
+    追加 sim コスト: 本線 simulate 1 回 + 副砲 takapt 探索 30 通り = 合計31 sim。
+    発火イベント評価 (taiou_capacity 等に比べると軽量)。
+
+    正規化: raw / NORM_SUB_CHAIN (暫定 12)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/12 (0〜1), raw=副砲到達連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 本線発火: best_board (1個追加済み) を simulate
+    main_result = sim.simulate(best_board)
+    if not main_result.steps:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 本線発火後の残り盤面に、もう1手 takapt 探索 (副砲探索)
+    post_board = main_result.final_board
+    sub_best_chain, _ = _takapt_best_drop(post_board, sim)
+    raw = float(sub_best_chain)
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_SUB_CHAIN), raw=raw,
+    )
+
+
+def simultaneous_pop_richness(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-5 同時消しリッチネス (最良発火の各ステップ平均グループ数)。
+
+    takapt 探索の最良発火 ChainResult の steps から、
+    各ステップで同時に消えたグループ数の平均を返す。
+    連鎖数を伸ばさず火力を上げる = 潰し弾の質・得点ボーナス活用の代理指標。
+    追加 sim ゼロ (takapt 探索の副産物)。
+
+    正規化: raw / NORM_SIMULTANEOUS_POP (暫定 6.0)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/6 (0〜1), raw=平均同時消しグループ数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    result = sim.simulate(best_board)
+    if not result.steps:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 各ステップの erased_groups 数の平均
+    avg_groups = sum(len(step.erased_groups) for step in result.steps) / len(result.steps)
+    return IndicatorV2Value(
+        score=_clamp01(avg_groups / NORM_SIMULTANEOUS_POP), raw=avg_groups,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1665,4 +1866,15 @@ __all__ = [
     "TAIOU_W_POTENTIAL",
     "TAIOU_W_UKEY",
     "TAIOU_MAX_CANDIDATES",
+    # XII board sim 本命指標 — EXTRA_INDICATOR_NAMES 末尾 (既存順序保持)
+    "saturated_chain_count",
+    "ignition_point_count",
+    "multi_color_ignition",
+    "sub_chain_count",
+    "simultaneous_pop_richness",
+    "NORM_SATURATED_CHAIN",
+    "NORM_IGNITION_POINT_COUNT",
+    "NORM_MULTI_COLOR_IGNITION",
+    "NORM_SUB_CHAIN",
+    "NORM_SIMULTANEOUS_POP",
 ]
