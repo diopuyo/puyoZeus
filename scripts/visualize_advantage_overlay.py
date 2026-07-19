@@ -344,6 +344,7 @@ class HeavyAdvCache:
 
     毎フレーム呼んでも重い simulate 群は 1/every に削減(オーバーレイ実用速度の要)。
     圧力(board_ojama)・得点リード(score)・会計は安価なので呼出側で毎フレーム更新のまま。
+    ukeyasusa (dig_resistance 含む連鎖シミュ) もここで間引き計算してキャッシュする。
     """
 
     def __init__(self, model, every: int = 9) -> None:  # ~0.3s @30fps
@@ -353,15 +354,26 @@ class HeavyAdvCache:
         self._adv = 0.0
         self._threat = 0.0
         self._drivers: list[tuple[str, float]] = []
+        # 受けやすさキャッシュ (0〜1 正規化済み)
+        self._ukey1: float = 0.0
+        self._ukey2: float = 0.0
 
     def update(self, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
-               sp1, sp2, elapsed: float) -> tuple[float, float, list[tuple[str, float]]]:
-        """(モデル有利不利, threat, 主要ドライバ) を返す(間引きキャッシュ)。"""
+               sp1, sp2, elapsed: float,
+               ) -> tuple[float, float, list[tuple[str, float]], float, float]:
+        """(モデル有利不利, threat, 主要ドライバ, ukey1, ukey2) を返す(間引きキャッシュ)。
+
+        ukey1/ukey2: 受けやすさ (0〜1)。dig_resistance 込みのため毎フレーム計算は高コスト。
+        every 間引きで十分(盤面は STABLE 時しか変わらない)。
+        """
         if self._n % self._every == 0:
             self._adv, _, self._drivers = _score_advantage(self._model, b1, b2, snap)
             self._threat = _threat(b1, b2, sp1, sp2, elapsed)
+            # 受けやすさ: dig_resistance を含むため every と同じタイミングで計算
+            self._ukey1 = iv.ukeyasusa(b1).score
+            self._ukey2 = iv.ukeyasusa(b2).score
         self._n += 1
-        return self._adv, self._threat, self._drivers
+        return self._adv, self._threat, self._drivers, self._ukey1, self._ukey2
 
 
 def _draw_graph(
@@ -391,12 +403,35 @@ def _draw_graph(
     d.rectangle([gx0, gy0, gx1, gy1], outline=(255, 255, 255), width=1)
 
 
+def _draw_ukeyasusa(
+    d: "ImageDraw.ImageDraw", ukey1: float, ukey2: float,
+    x0: int, y_top: int,
+) -> None:
+    """受けやすさ (1P / 2P) を小さく描画するサブ関数。
+
+    ukey1/ukey2: 0〜1 正規化値。差分(1P-2P)を色と数値で表示する。
+    受けやすさはコアの有利不利スコアに混ぜない(表示専用)。
+    """
+    diff = ukey1 - ukey2  # 正=1P有利
+    diff_col = (120, 200, 120) if diff >= 0 else (200, 120, 120)
+    label = (
+        f"受けやすさ  1P {ukey1:.2f} / 2P {ukey2:.2f}"
+        f"  (差 {diff:+.2f})"
+    )
+    d.text((x0, y_top), label, font=_font(15), fill=diff_col)
+
+
 def _draw_overlay(
     frame: np.ndarray, adv: float, p1: float,
     drivers: list[tuple[str, float]], waiting: bool,
     history: list[tuple[float, float]], t_rel: float, total: float,
+    ukey1: float = 0.0, ukey2: float = 0.0,
 ) -> np.ndarray:
-    """有利不利バー + リアルタイムグラフを描画。下部にグラフ専用黒帯を足して返す。"""
+    """有利不利バー + 受けやすさ差 + リアルタイムグラフを描画。
+
+    ukey1/ukey2: optional。HeavyAdvCache が計算した受けやすさ (0〜1)。
+    コアの adv 計算には一切影響しない (表示専用追加)。
+    """
     canvas = Image.new("RGB", (OUT_W, CANVAS_H), (12, 12, 16))
     canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (0, 0))
     img = canvas
@@ -423,6 +458,8 @@ def _draw_overlay(
                font=_font(20), fill=(255, 255, 255))
         dl = "  ".join(f"{JP_LABEL[c]}差 {v:+.2f}" for c, v in drivers)
         d.text((x0, top + bar_h + 34), f"主因: {dl}", font=_font(16), fill=(230, 230, 180))
+        # 受けやすさ差を主因の下に追加 (コアの adv には影響しない表示専用)
+        _draw_ukeyasusa(d, ukey1, ukey2, x0, top + bar_h + 56)
     if history:
         _draw_graph(d, history, t_rel, total)
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -473,6 +510,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     adv_ema = 0.0
     p1_last = 0.5
     drivers: list[tuple[str, float]] = []
+    # 受けやすさキャッシュ初期値 (HeavyAdvCache が更新するまで 0.0)
+    ukey1: float = 0.0
+    ukey2: float = 0.0
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
@@ -498,8 +538,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
         if b1 is not None and b2 is not None:
-            # 重い盤面由来(モデルadv/threat)はキャッシュ間引き、安価な圧力/リードは毎フレーム
-            model_adv, threat, drivers = hcache.update(
+            # 重い盤面由来(モデルadv/threat/ukeyasusa)はキャッシュ間引き、安価な圧力/リードは毎フレーム
+            model_adv, threat, drivers, ukey1, ukey2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
@@ -521,7 +561,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             continue  # ウォームアップ区間は書き出さない
         waiting = b1 is None or b2 is None
         writer.write(_draw_overlay(frame, adv_ema, p1_last, drivers, waiting,
-                                   history, t - start_sec, total_dur))
+                                   history, t - start_sec, total_dur,
+                                   ukey1=ukey1, ukey2=ukey2))
         written += 1
         if written % 300 == 0:
             print(f"  ... {written} frames (t={t:.1f}s adv={adv_ema:+.0f})")
