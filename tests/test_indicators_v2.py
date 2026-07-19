@@ -1059,3 +1059,143 @@ def test_ix_constants_values() -> None:
     """MAIN_GROUP_MIN_SIZE=3, NORM_LINKED_PAIR=10.0 (定数値の確認)。"""
     assert iv.MAIN_GROUP_MIN_SIZE == 3
     assert iv.NORM_LINKED_PAIR == pytest.approx(10.0)
+
+
+# ============================
+# X 受けやすさ (ukeyasusa) テスト
+# ============================
+
+
+def _full_board() -> Board:
+    """盤面ぷよで埋まりきった盤面 (absorption=0, death_margin=0)。"""
+    g = _empty_grid()
+    color_cycle = [COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW]
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            g[r][c] = color_cycle[(r + c) % len(color_cycle)]
+    return Board.from_list(g)
+
+
+def _chain_board_large() -> Board:
+    """大連鎖を仕込んだ盤面 (受け余地あり・掘り耐性高を期待)。
+
+    下段に 赤 / 青 / 緑 / 黄 の 4 連結を積んだ 4 連鎖盤面。
+    """
+    g = _empty_grid()
+    # 赤 (最下段)
+    for c in range(4):
+        g[12][c] = COLOR_RED
+    # 青 (1 段上)
+    for c in range(4):
+        g[11][c] = COLOR_BLUE
+    # 緑 (2 段上)
+    for c in range(4):
+        g[10][c] = COLOR_GREEN
+    # 黄 (3 段上)
+    for c in range(4):
+        g[9][c] = COLOR_YELLOW
+    return Board.from_list(g)
+
+
+def test_ukeyasusa_range_all_boards() -> None:
+    """ukeyasusa が各種盤面で 0〜1 範囲・NaN なしで返ること。"""
+    for board in [_empty_board(), _four_chain_board(), _ojama_board(), _full_board()]:
+        v = iv.ukeyasusa(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+
+
+def test_ukeyasusa_empty_board_high() -> None:
+    """空盤面は受けやすさ最大に近い (absorption=1, death_margin=1)。"""
+    v = iv.ukeyasusa(_empty_board())
+    # absorption=1, death=1, dig は空盤面なのでやや低め → 合計で 0.5 超を期待
+    assert v.score > 0.5, f"空盤面の受けやすさが低すぎる: {v.score}"
+
+
+def test_ukeyasusa_full_board_low() -> None:
+    """満杯盤面は受けやすさが空盤面より低い (absorption=0)。"""
+    empty_score = iv.ukeyasusa(_empty_board()).score
+    full_score = iv.ukeyasusa(_full_board()).score
+    assert full_score < empty_score, (
+        f"満杯({full_score:.3f}) >= 空({empty_score:.3f}) は期待外"
+    )
+
+
+def test_ukeyasusa_dead_board_zero() -> None:
+    """窒息盤面 (col=2 が埋まっている) は absorption/dig_resistance が低下する。
+
+    dig_resistance は is_dead() 確認で 0 を返し、death_margin も 0 に近い
+    → ukeyasusa が低くなることを確認 (厳密ゼロは保証しない)。
+    """
+    g = _empty_grid()
+    # col=2 (窒息列) を最上段まで埋める
+    for r in range(BOARD_ROWS):
+        g[r][2] = COLOR_RED
+    dead_board = Board.from_list(g)
+    v = iv.ukeyasusa(dead_board)
+    assert v.score < 0.5, f"窒息近盤面の受けやすさが高すぎる: {v.score}"
+
+
+def test_ukeyasusa_exported_in_all() -> None:
+    """ukeyasusa が __all__ に含まれること。"""
+    assert "ukeyasusa" in iv.__all__
+    assert "UKEYASUSA_W_ABSORPTION" in iv.__all__
+
+
+# ============================
+# XI 対応力 (taiou_capacity) テスト
+# ============================
+
+
+def test_taiou_capacity_range_all_boards() -> None:
+    """taiou_capacity が各種盤面で 0〜1 範囲・NaN なしで返ること。"""
+    for board in [_empty_board(), _four_chain_board(), _two_chain_board(), _ojama_board()]:
+        v = iv.taiou_capacity(board)
+        assert 0.0 <= v.score <= 1.0, f"score out of range: {v.score}"
+        assert v.raw == v.raw  # NaN なし
+        # raw は offset_ratio (0〜1)
+        assert 0.0 <= v.raw <= 1.0, f"raw(offset_ratio) out of range: {v.raw}"
+
+
+def test_taiou_capacity_dead_board_zero() -> None:
+    """窒息盤面は対応力 0 を返すこと。"""
+    g = _empty_grid()
+    # col=2 を最上段 (row=0) まで埋め is_dead()=True に
+    for r in range(BOARD_ROWS):
+        g[r][2] = COLOR_RED
+    dead_board = Board.from_list(g)
+    v = iv.taiou_capacity(dead_board)
+    assert v.score == pytest.approx(0.0), f"窒息盤面の対応力が 0 でない: {v.score}"
+
+
+def test_taiou_capacity_chain_board_positive() -> None:
+    """大連鎖盤面は即発火で ref_ojama=30 の一部を相殺でき、対応力が正値になること。"""
+    board = _chain_board_large()
+    v = iv.taiou_capacity(board, ref_ojama=30)
+    # 連鎖火力があれば offset_ratio > 0 → score > 0
+    assert v.score > 0.0, f"大連鎖盤面の対応力が 0: {v.score}"
+
+
+def test_taiou_capacity_ref_ojama_effect() -> None:
+    """ref_ojama が大きいほど相殺充足度 (raw) が下がり対応力が減ること。"""
+    board = _chain_board_large()
+    v_small = iv.taiou_capacity(board, ref_ojama=5)
+    v_large = iv.taiou_capacity(board, ref_ojama=200)
+    # ref_ojama 小 → offset_ratio 高 → score 高 (あるいは同等)
+    assert v_small.score >= v_large.score, (
+        f"ref_ojama小({v_small.score:.3f}) < ref_ojama大({v_large.score:.3f}) は期待外"
+    )
+
+
+def test_taiou_capacity_empty_board() -> None:
+    """空盤面は即発火ゼロなので対応力 0 になること。"""
+    v = iv.taiou_capacity(_empty_board())
+    assert v.score == pytest.approx(0.0), f"空盤面の対応力が 0 でない: {v.score}"
+    assert v.raw == pytest.approx(0.0)
+
+
+def test_taiou_capacity_exported_in_all() -> None:
+    """taiou_capacity が __all__ に含まれること。"""
+    assert "taiou_capacity" in iv.__all__
+    assert "REF_OJAMA_TAIOU" in iv.__all__
+    assert "TAIOU_W_POTENTIAL" in iv.__all__

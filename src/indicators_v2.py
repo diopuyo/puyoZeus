@@ -129,6 +129,28 @@ MAIN_GROUP_MIN_SIZE: int = 3
 # 正規化分母: 上級者盤面の同色2連結数は最大でも 10 程度。暫定。データ後決定。
 NORM_LINKED_PAIR: float = 10.0
 
+# ============================
+# X 受けやすさ (ukeyasusa) 定数
+# ============================
+
+# absorption_capacity / dig_resistance / death_margin の合成重み (均等 1/3)。
+# 実データ学習後に重み更新可能な設計。定数化により変更追跡を容易にする。
+UKEYASUSA_W_ABSORPTION: float = 1.0 / 3.0
+UKEYASUSA_W_DIG: float = 1.0 / 3.0
+UKEYASUSA_W_DEATH: float = 1.0 / 3.0
+
+# ============================
+# XI 対応力 (taiou_capacity) 定数
+# ============================
+
+# 基準催促量: 1 回の配送 5 段目安 ≒ 30 個 (上級者対戦実測概算。データ後決定)。
+REF_OJAMA_TAIOU: int = 30
+
+# 対応力 health 計算の加重: alive × (potential × W_POTENTIAL + ukeyasusa × W_UKEY)
+# alive=0 なら強制ゼロ。
+TAIOU_W_POTENTIAL: float = 0.6
+TAIOU_W_UKEY: float = 0.4
+
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
 _SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
 
@@ -1350,6 +1372,109 @@ def main_linked_ratio(
     return IndicatorV2Value(score=_clamp01(raw), raw=raw)
 
 
+# ============================
+# X 受けやすさ (ukeyasusa)
+# ============================
+
+
+def ukeyasusa(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """X-1 受けやすさ: 受動的にお邪魔を受け止められる盤面強度。
+
+    absorption_capacity(吸収余地) + dig_resistance(掘り耐性) + death_margin(窒息余裕)
+    の加重平均 (各 1/3)。値が大きいほど受け力が高い。
+
+    設計根拠: 検証で absorption / dig 差が中盤シグナルとして有効と確認済み。
+    この合成が taiou_capacity (X-2) の health 計算の土台でもある。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=加重平均 (0〜1), raw=absorption_capacity.raw。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 各構成指標を算出 (全て 0〜1 正規化済み)
+    s_abs = absorption_capacity(board).score
+    s_dig = dig_resistance(board, sim).score
+    s_death = death_margin(board).score
+    score = (
+        UKEYASUSA_W_ABSORPTION * s_abs
+        + UKEYASUSA_W_DIG * s_dig
+        + UKEYASUSA_W_DEATH * s_death
+    )
+    # raw は absorption の生値 (空きセル数) を代表値として使用
+    raw_abs = absorption_capacity(board).raw
+    return IndicatorV2Value(score=_clamp01(score), raw=raw_abs)
+
+
+# ============================
+# XI 対応力 (taiou_capacity)
+# ============================
+
+
+def _taiou_health(
+    final_board: Board, sim: ChainSimulator,
+) -> float:
+    """対応後の盤面 final_board の健全度 (0〜1) を返す。
+
+    alive=False (窒息) なら強制ゼロ。
+    健全度 = TAIOU_W_POTENTIAL × potential_fire_power.score
+             + TAIOU_W_UKEY × ukeyasusa.score。
+
+    この関数は taiou_capacity の内部ヘルパー。stateless。
+    """
+    if final_board.is_dead():
+        return 0.0
+    s_pot = potential_fire_power(final_board, simulator=sim).score
+    s_ukey = ukeyasusa(final_board, sim).score
+    return _clamp01(TAIOU_W_POTENTIAL * s_pot + TAIOU_W_UKEY * s_ukey)
+
+
+def taiou_capacity(
+    board: Board,
+    ref_ojama: int = REF_OJAMA_TAIOU,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XI-1 対応力: 相手催促を本線を極力崩さず捌けるか。
+
+    計算手順:
+      1. 即発火相殺量 = immediate_fire_power.raw (お邪魔個数近似)。
+      2. 相殺充足度 offset_ratio = min(1, 即発火相殺量 / ref_ojama)。
+      3. 対応後盤面 = simulate(board).final_board (即発火後の形)。
+      4. 健全度 health = _taiou_health(対応後盤面) → potential + 受け力の合成。
+      5. 対応力 = offset_ratio × health (0〜1)。
+
+    温存(小さく対応)できる盤面ほど final_board に本線 potential が残り
+    health が高くなる → 対応力が高い、という設計。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        ref_ojama: 基準催促量 (個数)。既定 REF_OJAMA_TAIOU (=30)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=対応力 (0〜1), raw=offset_ratio (相殺充足度)。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 即発火相殺量 (お邪魔個数)
+    fire_raw = immediate_fire_power(board, simulator=sim).raw
+    # 相殺充足度: ref_ojama=0 は除算ガード (即発火0でも充足率0とする)
+    if ref_ojama <= 0 or fire_raw <= 0.0:
+        offset_ratio = 0.0
+    else:
+        offset_ratio = min(1.0, fire_raw / float(ref_ojama))
+    # 対応後盤面の健全度
+    final_board = sim.simulate(board).final_board
+    health = _taiou_health(final_board, sim)
+    score = _clamp01(offset_ratio * health)
+    return IndicatorV2Value(score=score, raw=offset_ratio)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1405,4 +1530,13 @@ __all__ = [
     "main_linked_ratio",
     "MAIN_GROUP_MIN_SIZE",
     "NORM_LINKED_PAIR",
+    # X 受けやすさ / XI 対応力 — EXTRA_INDICATOR_NAMES 末尾 (既存順序保持)
+    "ukeyasusa",
+    "taiou_capacity",
+    "UKEYASUSA_W_ABSORPTION",
+    "UKEYASUSA_W_DIG",
+    "UKEYASUSA_W_DEATH",
+    "REF_OJAMA_TAIOU",
+    "TAIOU_W_POTENTIAL",
+    "TAIOU_W_UKEY",
 ]
