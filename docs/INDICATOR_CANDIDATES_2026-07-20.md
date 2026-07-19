@@ -524,6 +524,13 @@ M1連結集中度 / M26埋没穴数 / M13雪崩感度 / M22流動性 / M12単一
 
 **要userドメイン確認:** 催促の純価値(利得−コスト) / N25相手折り返し完成度 / M5陽動 / M8消耗戦 / M34ミス誘発 / カウンター閾値 / 詰み手順。
 
+## ⚠️ Round7 多変量検証(labeled_win.csv版)= セットアップ不良で無効(正直な記録)
+上位候補を既存モデルに足す多変量OOFを試みたが**無効**と判明(数値は採用しない):
+- **board sim特徴のマッチ率12.4%のみ**(labeled_win.csv=v29-38に対しboard密度が低くNaN→0埋め=ノイズ投入)→ +board_simがゼロ寄与でも「効かない」証拠にならない。
+- 関係化(death_margin_ratio等)の中盤-0.014は**既存death_marginとの冗長性**アーティファクト(単変量0.635は健全・多変量では要「既存を外して差/比のみ」で評価)。
+- baseline自体がmodel_indicator_win(0.458)と0.01ズレ=feature set不一致。
+→ **単変量エビデンス(Round3/4)を正とする**。正しい多変量検証は**board sim計算済のvideo_c*データ(7960行・欠損なし)で実施すべき**(Round7bで再実行)。
+
 ## 選び方の最終指針
 1. **すぐ効く確実な一手** → opp_saturated_chain_count + death_margin_ratio(両者ともエビデンスあり)。
 2. **中盤の壁を本気で越える** → 上記 + diff_simultaneous_pop + 副砲、さらに N42-44 what-if sim / N50 CNN潜在。
