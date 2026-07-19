@@ -7,6 +7,11 @@ boards_lean_fixed の npz (95本) から:
   4. 発火後の「打ち合い結果」ラベルを生成
   5. exchange_labels.csv として出力
 
+v2 追加ラベル:
+  - taiou_success: 対応成功(受け手が T_guard 内に発火 かつ 埋まらず生存)
+  - survived: 受け手が T_guard+TAIOU_CHECK_AFTER_SEC 後も生存(単純生存)
+  - net_ojama_after: 攻撃お邪魔 − 受け手の猶予内相殺お邪魔(個数、連続値)
+
 CPU 節度: OMP_NUM_THREADS=3 等はプロセス起動前にセットすること(CLAUDE.md推奨)。
 重い指標(potential_fire_power等)は発火イベント時点だけ計算する。
 """
@@ -72,6 +77,15 @@ DEATH_MARGIN_DANGER_THRESHOLD: float = 0.2
 # A-1: returned_competitive の判定係数
 # 返しお邪魔 >= 発火側お邪魔 × RETURN_FACTOR を「同等以上の返し」と定義
 RETURN_FACTOR: float = 0.8
+
+# taiou_success (対応成功) 判定用定数
+# T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で定義
+# SEC_PER_HAND は indicators_v2 から import するが、念のため本スクリプト内にも定義
+_SEC_PER_HAND_LOCAL: float = 0.733  # indicators_v2.SEC_PER_HAND と同値(実測中央値)
+# T_guard 終端から何秒後まで「埋まっていないか」を確認する窓(秒)
+TAIOU_CHECK_AFTER_SEC: float = 3.0
+# 受け手が「対応を出した」と見なすスコア増分閾値(発火検出閾値と統一)
+TAIOU_RESPONSE_SCORE_THRESHOLD: int = SCORE_DELTA_FIRE
 
 
 class NpzRecord(NamedTuple):
@@ -322,6 +336,137 @@ def _compute_opp_buried(
     return 0
 
 
+def _opp_is_safe_after_tguard(
+    fire_t: float,
+    t_guard: float,
+    opp_boards: list[tuple[float, Board]],
+) -> bool:
+    """T_guard 終端〜+TAIOU_CHECK_AFTER_SEC の受け手盤面が安全か(死んでいないか)。
+
+    安全の条件: is_dead() が False かつ death_margin.score > DEATH_MARGIN_DANGER_THRESHOLD。
+    窓内にフレームがない場合は「安全」とみなす(データ欠損で判定不能 → 保守側)。
+    """
+    check_start = fire_t + t_guard
+    check_end = check_start + TAIOU_CHECK_AFTER_SEC
+    frames_in_window = [
+        (t, b) for (t, b) in opp_boards
+        if check_start <= t <= check_end
+    ]
+    if not frames_in_window:
+        return True  # データ欠損 → 保守的に安全とみなす
+    for _, b in frames_in_window:
+        if b.is_dead():
+            return False
+        dm = death_margin(b)
+        if dm.score <= DEATH_MARGIN_DANGER_THRESHOLD:
+            return False
+    return True
+
+
+def _opp_fired_in_tguard(
+    fire_t: float,
+    t_guard: float,
+    opp_t_sec: np.ndarray,
+    opp_score: np.ndarray,
+) -> bool:
+    """受け手が T_guard 内(fire_t 〜 fire_t+t_guard)に発火したか。
+
+    発火 = スコア増分 >= TAIOU_RESPONSE_SCORE_THRESHOLD。
+    直前の有効スコアからの増分で判定する。
+    """
+    # T_guard 直前の有効スコアを基準として取得
+    pre_mask = (opp_t_sec < fire_t) & (opp_score >= 0)
+    prev_s = int(opp_score[pre_mask][-1]) if pre_mask.any() else -1
+
+    in_window = (opp_t_sec >= fire_t) & (opp_t_sec <= fire_t + t_guard)
+    for idx in np.where(in_window)[0]:
+        s = int(opp_score[idx])
+        if s < 0:
+            continue
+        if prev_s >= 0 and (s - prev_s) >= TAIOU_RESPONSE_SCORE_THRESHOLD:
+            return True
+        if s >= 0:
+            prev_s = s
+    return False
+
+
+def _compute_taiou_success(
+    fire_t: float,
+    approx_chains: float,
+    opp_t_sec: np.ndarray,
+    opp_score: np.ndarray,
+    opp_boards: list[tuple[float, Board]],
+) -> tuple[int, int]:
+    """対応成功(taiou_success)と単純生存(survived)を計算して返す。
+
+    taiou_success=1 の条件(両方満たす):
+      1. 受け手が T_guard 内に発火した
+      2. T_guard 終端後も受け手が埋まっていない
+    survived=1 の条件:
+      T_guard 終端後も受け手が埋まっていない(発火有無問わず)
+
+    Args:
+        fire_t: 攻撃側発火時刻(秒)。
+        approx_chains: 攻撃側の近似連鎖数。
+        opp_t_sec: 受け手の時刻配列。
+        opp_score: 受け手のスコア配列。
+        opp_boards: 受け手の (t, Board) リスト。
+
+    Returns:
+        (taiou_success, survived) の 2値タプル。
+    """
+    from src.indicators_v2 import SEC_PER_HAND
+    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+    fired = _opp_fired_in_tguard(fire_t, t_guard, opp_t_sec, opp_score)
+    safe = _opp_is_safe_after_tguard(fire_t, t_guard, opp_boards)
+    taiou_success = int(fired and safe)
+    survived = int(safe)
+    return taiou_success, survived
+
+
+def _compute_net_ojama_after(
+    fire_delta_score: int,
+    fire_t: float,
+    approx_chains: float,
+    opp_t_sec: np.ndarray,
+    opp_score: np.ndarray,
+) -> float:
+    """攻撃お邪魔 − 受け手の猶予(T_guard)内相殺お邪魔(個数、連続値)。
+
+    net_ojama_sign の代替: 符号でなく量(正値=攻撃側が残る正味お邪魔)。
+    お邪魔換算は標準レート OJAMA_RATE_STANDARD(70点/個)固定。
+
+    Args:
+        fire_delta_score: 攻撃側のΔスコア(点)。
+        fire_t: 攻撃側発火時刻(秒)。
+        approx_chains: 攻撃側の近似連鎖数(T_guard 計算用)。
+        opp_t_sec: 受け手の時刻配列。
+        opp_score: 受け手のスコア配列。
+
+    Returns:
+        正味お邪魔個数(float)。攻撃−相殺。負値=相殺超過。
+    """
+    from src.indicators_v2 import SEC_PER_HAND
+    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+
+    attack_ojama = _delta_to_ojama_standard(fire_delta_score)
+
+    # 受け手の T_guard 内相殺お邪魔を計算
+    pre_mask = (opp_t_sec < fire_t) & (opp_score >= 0)
+    baseline_opp = int(opp_score[pre_mask][-1]) if pre_mask.any() else -1
+
+    in_mask = (opp_t_sec >= fire_t) & (opp_t_sec <= fire_t + t_guard)
+    valid_in = opp_score[in_mask]
+    valid_in = valid_in[valid_in >= 0]
+
+    if len(valid_in) >= 1 and baseline_opp >= 0:
+        opp_delta = max(0, int(valid_in.max()) - baseline_opp)
+    else:
+        opp_delta = 0
+    opp_ojama = _delta_to_ojama_standard(opp_delta)
+    return float(attack_ojama - opp_ojama)
+
+
 def _classify_phase(puyo_total: float, q_low: float, q_high: float) -> str:
     """盤面ぷよ合計を3分位で序/中/終に分類する。"""
     if puyo_total <= q_low:
@@ -424,6 +569,19 @@ def _process_game(
         )
         opp_buried = _compute_opp_buried(t_fire, opp_boards, sim)
 
+        # user 確定定義: taiou_success (対応成功) ラベル
+        # T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で猶予時間を計算
+        taiou_success, survived = _compute_taiou_success(
+            t_fire, approx_chains,
+            opp_rec.t_sec, opp_rec.score,
+            opp_boards,
+        )
+        # net_ojama_after: T_guard 内の相殺後正味お邪魔(個数、連続値)
+        net_ojama_after = _compute_net_ojama_after(
+            delta_score, t_fire, approx_chains,
+            opp_rec.t_sec, opp_rec.score,
+        )
+
         # 盤面ぷよ合計(発火側)
         fire_puyo = fire_board.count_puyos()
         phase = _classify_phase(float(fire_puyo), puyo_q_low, puyo_q_high)
@@ -447,7 +605,7 @@ def _process_game(
             # 差分特徴
             **{f"diff_{k}": fire_feats[k] - opp_feats[k] for k in fire_feats},
             "diff_honsen_tempo_output": hto_fire.raw - hto_opp.raw,
-            # ラベル
+            # 既存ラベル(互換維持)
             "net_ojama": net_oj,
             "returned": returned,
             # A-1: 競合返し / 返し窓メタ情報
@@ -455,6 +613,10 @@ def _process_game(
             "return_window_sec": float(return_window),
             "approx_fire_chains": float(approx_chains),
             "opp_buried": opp_buried,
+            # user 確定定義: taiou_success (v2 新規ラベル)
+            "taiou_success": taiou_success,
+            "survived": survived,
+            "net_ojama_after": net_ojama_after,
         }
         rows.append(row)
     return rows
@@ -542,6 +704,16 @@ def main() -> None:
           f"  opp_buried={df['opp_buried'].mean():.3f}")
     print(f"  return_window_sec mean={df['return_window_sec'].mean():.2f}"
           f"  approx_fire_chains mean={df['approx_fire_chains'].mean():.2f}")
+    # v2 新規ラベル統計
+    print(f"  [v2] taiou_success={df['taiou_success'].mean():.3f}"
+          f"  survived={df['survived'].mean():.3f}"
+          f"  net_ojama_after mean={df['net_ojama_after'].mean():.2f}")
+    # 位相別 taiou_success 発生率
+    for ph in ["序", "中", "終"]:
+        sub = df[df["phase"] == ph]
+        if len(sub) > 0:
+            print(f"    {ph}: taiou_success={sub['taiou_success'].mean():.3f}"
+                  f"  n={len(sub)}")
 
 
 if __name__ == "__main__":
