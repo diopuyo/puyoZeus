@@ -1,12 +1,18 @@
-"""打ち合いラベル予測性能の検証スクリプト (A-2 火力統制版)。
+"""打ち合いラベル予測性能の検証スクリプト (A-3 taiou_success 対応版)。
 
 exchange_labels.csv を読み込み、盤面特徴 → 各ターゲットの予測性能を測る。
 
-A-2 追加機能:
+A-3 追加機能 (user 確定定義):
+  - taiou_success を主ターゲットに追加
+    (T_guard 内発火 かつ T_guard 後も埋まっていない = 対応成功)
+  - net_ojama_after を連続ターゲットに追加(相殺後正味お邪魔個数)
+  - m1(攻撃側火力のみ) vs m2(全特徴) 残差リフトで「対応力が盤面から読めるか」判定
+  - 中盤 taiou_success のリフトが+0.02 超 = 「対応力は盤面位置取りシグナル」と判定
+
+A-2 からの継続機能:
   - m1(火力系のみ) vs m2(全特徴) を比較し「残差リフト = AUC(m2)-AUC(m1)」を算出。
-  - opp_buried など不均衡ターゲットは PR-AUC(average_precision)も併記。
+  - 不均衡ターゲットは PR-AUC(average_precision)も併記。
   - m2 で残差リフト最大のターゲットについて permutation importance Top5 を表示。
-  - ターゲット: returned_competitive, returned, opp_buried, net_ojama_sign, won。
 
 モデル: sklearn HistGradientBoostingClassifier / Regressor
 holdout: video_id 単位の GroupKFold (5-fold)
@@ -51,7 +57,9 @@ FIRE_POWER_FEAT_NAMES: tuple[str, ...] = (
 )
 
 # PR-AUC を追加表示するターゲット(不均衡ターゲット)
-PR_AUC_TARGETS: frozenset[str] = frozenset({"opp_buried", "returned_competitive", "returned"})
+PR_AUC_TARGETS: frozenset[str] = frozenset({
+    "opp_buried", "returned_competitive", "returned", "taiou_success",
+})
 
 # permutation importance: 残差リフト最大のターゲット 1件で出す Top N
 PERM_IMP_TOP_N: int = 5
@@ -59,11 +67,16 @@ PERM_IMP_N_REPEATS: int = 5
 
 
 def _get_feature_cols(df: pd.DataFrame) -> list[str]:
-    """特徴列名を返す。fire_/opp_/diff_ プレフィックスを持つ列。"""
+    """特徴列名を返す。fire_/opp_/diff_ プレフィックスを持つ列。
+
+    メタ列・ラベル列はすべて除外する(v2 新規ラベルも含む)。
+    """
     meta_cols = {
         "video_id", "game_idx", "t_sec", "fire_side", "phase",
         "won", "net_ojama", "returned", "returned_competitive",
         "opp_buried", "return_window_sec", "approx_fire_chains",
+        # v2 新規ラベル(特徴として使わない)
+        "taiou_success", "survived", "net_ojama_after",
     }
     return [c for c in df.columns if c not in meta_cols]
 
@@ -203,11 +216,24 @@ def _evaluate_subset_m1m2(
 
 
 def _make_targets_cfg(df_sub: pd.DataFrame, target_names: list[str]) -> list[dict]:
-    """ターゲット名リストから targets_cfg を生成する。"""
+    """ターゲット名リストから targets_cfg を生成する。
+
+    - net_ojama_sign: 旧 net_ojama 列を回帰ターゲットとして流用
+    - net_ojama_after: v2 新規列(連続値)を回帰ターゲットとして使用
+    - それ以外で列が存在するもの: 2値分類ターゲット
+    """
+    # 回帰ターゲット: 列名 → 実際の列名のマッピング
+    regressor_col_map: dict[str, str] = {
+        "net_ojama_sign": "net_ojama",  # 旧定義(正負二値的に使う)
+        "net_ojama_after": "net_ojama_after",  # v2 新規(個数、連続値)
+    }
     cfg_list: list[dict] = []
     for name in target_names:
-        if name == "net_ojama_sign":
-            y = df_sub["net_ojama"].values.astype(np.float32)
+        if name in regressor_col_map:
+            col = regressor_col_map[name]
+            if col not in df_sub.columns:
+                continue
+            y = df_sub[col].values.astype(np.float32)
             cfg_list.append({"name": name, "y": y, "is_reg": True, "prauc": False})
         elif name in df_sub.columns:
             y = df_sub[name].values.astype(np.int8)
@@ -302,13 +328,26 @@ def main() -> None:
     df = pd.read_csv(INPUT_PATH)
     print(f"[INFO] exchange_labels.csv 読み込み: {len(df)} 行")
     print(f"  位相別: {df['phase'].value_counts().to_dict()}")
-    # returned_competitive が存在しない旧 CSV の互換チェック
+    # 旧 CSV の互換チェック: 列が存在しない場合は再実行を促す
     if "returned_competitive" not in df.columns:
         print("[WARN] returned_competitive 列がありません。label_exchange_outcome.py を再実行してください。")
         df["returned_competitive"] = 0
+    missing_v2 = [c for c in ("taiou_success", "survived", "net_ojama_after") if c not in df.columns]
+    if missing_v2:
+        print(f"[ERROR] v2 ラベル列 {missing_v2} がありません。label_exchange_outcome.py を再実行してください。",
+              file=sys.stderr)
+        sys.exit(1)
     print(f"  returned={df['returned'].mean():.3f}  returned_competitive={df['returned_competitive'].mean():.3f}")
     print(f"  opp_buried={df['opp_buried'].mean():.3f}  won={df['won'].mean():.3f}")
     print(f"  net_ojama: mean={df['net_ojama'].mean():.1f}")
+    print(f"  [v2] taiou_success={df['taiou_success'].mean():.3f}"
+          f"  survived={df['survived'].mean():.3f}"
+          f"  net_ojama_after: mean={df['net_ojama_after'].mean():.2f}")
+    # 位相別 taiou_success 分布を表示
+    for ph in ["序", "中", "終"]:
+        sub = df[df["phase"] == ph]
+        if len(sub) > 0:
+            print(f"    {ph}: taiou_success={sub['taiou_success'].mean():.3f}  n={len(sub)}")
     print()
 
     feat_cols = _get_feature_cols(df)
@@ -318,7 +357,12 @@ def main() -> None:
     print()
 
     target_names: list[str] = [
+        # user 確定定義の主ターゲット(先頭)
+        "taiou_success",
+        # 既存ターゲット(互換維持)
         "returned_competitive", "returned", "opp_buried", "net_ojama_sign", "won",
+        # v2 新規連続ターゲット
+        "net_ojama_after",
     ]
 
     subsets = {
@@ -338,8 +382,9 @@ def main() -> None:
 
     print()
     print("=" * 85)
-    print("  A-2 火力統制: m1(火力系のみ) vs m2(全特徴) AUC 比較表")
+    print("  A-3 火力統制: m1(攻撃側火力のみ) vs m2(全特徴) AUC 比較表")
     print("  残差リフト = m2-m1: 大きいほど火力以外の盤面情報が効いている")
+    print("  主ターゲット: taiou_success (T_guard内発火 かつ T_guard後も生存)")
     print("=" * 85)
     _print_results_table(results_by_phase, target_names)
 
@@ -349,6 +394,7 @@ def main() -> None:
 
     print("=" * 85)
     print("  判定: 中盤で火力統制後に残る戦略シグナル")
+    print("  taiou_success: lift>+0.02 = 対応力は盤面位置取りシグナル(戦略的)")
     print("=" * 85)
     midgame = results_by_phase.get("中", {})
     for tgt in target_names:
@@ -358,24 +404,47 @@ def main() -> None:
             continue
         lift_mark = ""
         if not np.isnan(r["lift"]):
-            if r["lift"] > 0.05:
-                lift_mark = " ← 火力以外の情報が強く効いている"
-            elif r["lift"] > 0.02:
-                lift_mark = " ← 火力以外の情報がやや効いている"
+            if tgt == "taiou_success":
+                # taiou_success 専用の判定閾値
+                if r["lift"] > 0.05:
+                    lift_mark = " ← [対応力] 盤面位置取りが強く効いている=戦略的シグナル"
+                elif r["lift"] > 0.02:
+                    lift_mark = " ← [対応力] 盤面から対応力が予測可能=戦略的シグナル"
+                else:
+                    lift_mark = " ← [対応力] 火力readinessに依存=盤面個性が薄い"
             else:
-                lift_mark = " ← ほぼ火力readinessで説明可能"
+                if r["lift"] > 0.05:
+                    lift_mark = " ← 火力以外の情報が強く効いている"
+                elif r["lift"] > 0.02:
+                    lift_mark = " ← 火力以外の情報がやや効いている"
+                else:
+                    lift_mark = " ← ほぼ火力readinessで説明可能"
         prauc_str = f"  PR-AUC={r['m2_prauc']:.3f}" if not np.isnan(r["m2_prauc"]) else ""
         print(
             f"  中盤 {tgt:<22}: m1={r['m1_auc']:.3f} m2={r['m2_auc']:.3f}"
             f" lift={r['lift']:+.3f}  base={r['base_rate']:.3f}{prauc_str}{lift_mark}"
         )
 
+    # permutation importance: taiou_success 専用(主ターゲット)
+    if "taiou_success" in df.columns and df["taiou_success"].sum() >= 10:
+        print()
+        print("[INFO] permutation importance (全体、taiou_success 主ターゲット)")
+        ranked_ts = _compute_perm_importance(df, feat_cols, "taiou_success", False)
+        if ranked_ts:
+            print(f"  taiou_success に効いた特徴 Top{PERM_IMP_TOP_N}:")
+            for rank, (feat, imp) in enumerate(ranked_ts, 1):
+                is_fire = feat in FIRE_POWER_FEAT_NAMES
+                tag = "[火力]" if is_fire else "[その他]"
+                print(f"    {rank}. {feat:<35} imp={imp:+.4f}  {tag}")
+
     # permutation importance (全体位相、残差リフト最大ターゲット)
-    if max_lift_tgt is not None:
+    if max_lift_tgt is not None and max_lift_tgt != "taiou_success":
         print()
         print(f"[INFO] permutation importance (全体、残差リフト最大ターゲット={max_lift_tgt})")
-        is_reg = max_lift_tgt == "net_ojama_sign"
-        col_name = "net_ojama" if is_reg else max_lift_tgt
+        # 回帰ターゲットの列名マッピング(net_ojama_sign → net_ojama 列を使用)
+        reg_col_map = {"net_ojama_sign": "net_ojama", "net_ojama_after": "net_ojama_after"}
+        is_reg = max_lift_tgt in reg_col_map
+        col_name = reg_col_map.get(max_lift_tgt, max_lift_tgt)
         if col_name in df.columns:
             ranked = _compute_perm_importance(df, feat_cols, col_name, is_reg)
             print(f"  火力以外で効いた特徴 Top{PERM_IMP_TOP_N} (近似):")
