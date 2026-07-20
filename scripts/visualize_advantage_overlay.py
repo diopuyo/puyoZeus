@@ -23,6 +23,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -120,22 +121,32 @@ def kill_override(adv: float, inc1: float, inc2: float,
     target = -100.0 if lead > 0 else 100.0  # 死ぬ側の逆へ
     return (1.0 - g) * adv + g * target
 
-# 学習・推論で共通の安価な差分特徴 (重い火力系は除外)
+# 学習・推論で共通の安価な差分特徴 (重い火力系は除外)。
+# 既存の呼出元 (plot_move_diagnostics.py 等) がこの定数を直接 import して
+# そのままモデル特徴量として使うため、値は変更しない (後方互換維持)。
 FEATURES: tuple[str, ...] = (
     "board_color_puyo_total", "max_column_height", "column_bumpiness",
     "death_margin", "death_margin_neighbor", "current_max_chain",
     "conn_pair_count", "conn_triple_count",
     "ojama_net_balance", "ojama_forecast", "board_ojama_count", "dig_resistance",
 )
+# 特徴量の「候補」一覧。FEATURES に saturated_chain_count (飽和連鎖量、本命候補)
+# を末尾追加したもの。labeled_win.csv に列が無い間は _resolve_features() が
+# 自動的に除外し、本モジュール内の学習・推論は従来通り FEATURES のみで動く。
+# 再収集で列が入れば自動的に有効化される (CLAUDE.md: 新指標は末尾追加)。
+FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + ("saturated_chain_count",)
 # 主要ドライバ表示用の日本語ラベル
 JP_LABEL: dict[str, str] = {
     "board_ojama_count": "盤面お邪魔数", "death_margin": "窒息余裕",
     "max_column_height": "最大列高", "current_max_chain": "現在最大連鎖",
     "board_color_puyo_total": "色ぷよ総数", "ojama_forecast": "お邪魔予告",
+    "saturated_chain_count": "飽和連鎖量",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
 )
+# 飽和連鎖量サブ行の縦オフセット(受けやすさ行から更に下へ何px か)
+SATURATED_ROW_Y_OFFSET_PX = 22
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -146,10 +157,27 @@ def _font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
+def _resolve_features(df: pd.DataFrame) -> list[str]:
+    """FEATURE_CANDIDATES のうち labeled_win.csv に実在する列だけを返す(列存在ガード)。
+
+    saturated_chain_count は再収集中のため現状 CSV に列が無い → 除外され
+    従来と完全に同一の FEATURES(12指標)のみで学習される。再収集後に列が
+    入れば自動的にモデル特徴量へ組み込まれる(このモジュール内の学習・推論
+    経路のみ。FEATURES 定数そのものは変更しないため他スクリプトは無影響)。
+    """
+    missing = [c for c in FEATURE_CANDIDATES if c not in df.columns]
+    if missing:
+        print(f"[train] labeled_win.csv に未収集の列をスキップ(将来自動有効化): {missing}")
+    return [c for c in FEATURE_CANDIDATES if c in df.columns]
+
+
 def _train_model(exclude_video: str | None = None):
     """study データの差分特徴で HistGBC を学習して返す。
 
     exclude_video: 指定動画IDの行を学習から除外 (対象動画のリーク防止)。
+    実際に学習で使った特徴量列は model._puyo_feature_cols に格納する
+    (列存在ガード対応。戻り値の型・呼出シグネチャは変更せず既存呼出元との
+    互換を維持。_score_advantage 側がこの属性を参照して自動整合する)。
     """
     from sklearn.ensemble import HistGradientBoostingClassifier
     df = load_labeled_csv("data/indicators_v2/study/labeled_win.csv")
@@ -157,9 +185,10 @@ def _train_model(exclude_video: str | None = None):
         before = len(df)
         df = df[df["video_id"].astype(str) != exclude_video].reset_index(drop=True)
         print(f"[train] {exclude_video} を学習除外: {before} -> {len(df)} 行")
+    feat_cols = _resolve_features(df)
     paired = pair_sides_for_win(df, max_tdiff=1.0)
-    feat = build_features(paired, list(FEATURES))
-    cols = [f"{c}_diff" for c in FEATURES]
+    feat = build_features(paired, feat_cols)
+    cols = [f"{c}_diff" for c in feat_cols]
     X = feat[cols].fillna(0.0).values
     y = paired["won_1p"].astype(int).values
     # 対称化: 差分を反転しラベルも反転したミラー標本を追加。
@@ -169,6 +198,7 @@ def _train_model(exclude_video: str | None = None):
     y_sym = np.concatenate([y, 1 - y])
     model = HistGradientBoostingClassifier(**GBC_PARAMS)
     model.fit(X_sym, y_sym)
+    model._puyo_feature_cols = feat_cols  # 列存在ガード後の実特徴量 (推論側で参照)
     print(f"[train] 元n={len(y)} (1P勝ち{int(y.sum())}) -> 対称化後 {len(y_sym)}")
     return model
 
@@ -234,12 +264,25 @@ def _side_feats(board: Board, net: int, forecast: int) -> dict[str, float]:
 
 def _score_advantage(
     model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
+    feature_cols: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[float, float, list[tuple[str, float]]]:
-    """両盤面 → (有利不利[-100..100], 1P勝率, 主要ドライバ)。"""
+    """両盤面 → (有利不利[-100..100], 1P勝率, 主要ドライバ)。
+
+    feature_cols: optional。省略時は model._puyo_feature_cols (学習時に
+    _train_model が格納した実特徴量列) を使い、無ければ従来通り FEATURES に
+    フォールバックする。既存呼出元は本引数を渡さないため挙動は変わらない。
+    """
+    cols = list(feature_cols) if feature_cols is not None else list(
+        getattr(model, "_puyo_feature_cols", FEATURES))
     f1 = _side_feats(b1, snap.net_balance_capped, snap.forecast_p1)
     f2 = _side_feats(b2, -snap.net_balance_capped, snap.forecast_p2)
-    diff = {c: f1[c] - f2[c] for c in FEATURES}
-    x = np.array([[diff[c] for c in FEATURES]], dtype=float)
+    # saturated_chain_count は cols に含まれる場合のみ計算 (列存在ガードで
+    # 通常は含まれないため無駄な board sim コストは発生しない)
+    if "saturated_chain_count" in cols and "saturated_chain_count" not in f1:
+        f1["saturated_chain_count"] = iv.saturated_chain_count(b1).score
+        f2["saturated_chain_count"] = iv.saturated_chain_count(b2).score
+    diff = {c: f1[c] - f2[c] for c in cols}
+    x = np.array([[diff[c] for c in cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])
     adv = (p1 - 0.5) * 200.0
     drivers = sorted(
@@ -345,6 +388,7 @@ class HeavyAdvCache:
     毎フレーム呼んでも重い simulate 群は 1/every に削減(オーバーレイ実用速度の要)。
     圧力(board_ojama)・得点リード(score)・会計は安価なので呼出側で毎フレーム更新のまま。
     ukeyasusa (dig_resistance 含む連鎖シミュ) もここで間引き計算してキャッシュする。
+    saturated_chain_count (飽和連鎖量) も同様に表示専用でここに追加 (コア adv 非混入)。
     """
 
     def __init__(self, model, every: int = 9) -> None:  # ~0.3s @30fps
@@ -357,14 +401,18 @@ class HeavyAdvCache:
         # 受けやすさキャッシュ (0〜1 正規化済み)
         self._ukey1: float = 0.0
         self._ukey2: float = 0.0
+        # 飽和連鎖量キャッシュ (0〜1 正規化済み。表示専用・コア adv には混ぜない)
+        self._sat1: float = 0.0
+        self._sat2: float = 0.0
 
     def update(self, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
                sp1, sp2, elapsed: float,
-               ) -> tuple[float, float, list[tuple[str, float]], float, float]:
-        """(モデル有利不利, threat, 主要ドライバ, ukey1, ukey2) を返す(間引きキャッシュ)。
+               ) -> tuple[float, float, list[tuple[str, float]], float, float, float, float]:
+        """(モデル有利不利, threat, 主要ドライバ, ukey1, ukey2, sat1, sat2) を返す(間引きキャッシュ)。
 
         ukey1/ukey2: 受けやすさ (0〜1)。dig_resistance 込みのため毎フレーム計算は高コスト。
-        every 間引きで十分(盤面は STABLE 時しか変わらない)。
+        sat1/sat2: 飽和連鎖量 (0〜1、iv.saturated_chain_count の score)。board sim を
+        伴うため同様に every 間引きで十分(盤面は STABLE 時しか変わらない)。
         """
         if self._n % self._every == 0:
             self._adv, _, self._drivers = _score_advantage(self._model, b1, b2, snap)
@@ -372,8 +420,12 @@ class HeavyAdvCache:
             # 受けやすさ: dig_resistance を含むため every と同じタイミングで計算
             self._ukey1 = iv.ukeyasusa(b1).score
             self._ukey2 = iv.ukeyasusa(b2).score
+            # 飽和連鎖量: 表示専用ライブ計算 (ukeyasusa と同じ間引きキャッシュ)
+            self._sat1 = iv.saturated_chain_count(b1).score
+            self._sat2 = iv.saturated_chain_count(b2).score
         self._n += 1
-        return self._adv, self._threat, self._drivers, self._ukey1, self._ukey2
+        return (self._adv, self._threat, self._drivers,
+                self._ukey1, self._ukey2, self._sat1, self._sat2)
 
 
 def _draw_graph(
@@ -421,16 +473,36 @@ def _draw_ukeyasusa(
     d.text((x0, y_top), label, font=_font(15), fill=diff_col)
 
 
+def _draw_saturated(
+    d: "ImageDraw.ImageDraw", sat1: float, sat2: float,
+    x0: int, y_top: int,
+) -> None:
+    """飽和連鎖量 (1P / 2P) を小さく描画するサブ関数 (ukeyasusa と同一パターン)。
+
+    sat1/sat2: 0〜1 正規化値 (iv.saturated_chain_count の score)。差分(1P-2P)を
+    色と数値で表示する。飽和連鎖量はコアの有利不利スコアに混ぜない(表示専用)。
+    """
+    diff = sat1 - sat2  # 正=1P有利
+    diff_col = (120, 200, 120) if diff >= 0 else (200, 120, 120)
+    label = (
+        f"飽和連鎖  1P {sat1:.2f} / 2P {sat2:.2f}"
+        f"  (差 {diff:+.2f})"
+    )
+    d.text((x0, y_top), label, font=_font(15), fill=diff_col)
+
+
 def _draw_overlay(
     frame: np.ndarray, adv: float, p1: float,
     drivers: list[tuple[str, float]], waiting: bool,
     history: list[tuple[float, float]], t_rel: float, total: float,
     ukey1: float = 0.0, ukey2: float = 0.0,
+    sat1: float = 0.0, sat2: float = 0.0,
 ) -> np.ndarray:
-    """有利不利バー + 受けやすさ差 + リアルタイムグラフを描画。
+    """有利不利バー + 受けやすさ差 + 飽和連鎖差 + リアルタイムグラフを描画。
 
     ukey1/ukey2: optional。HeavyAdvCache が計算した受けやすさ (0〜1)。
-    コアの adv 計算には一切影響しない (表示専用追加)。
+    sat1/sat2: optional。HeavyAdvCache が計算した飽和連鎖量 (0〜1)。
+    どちらもコアの adv 計算には一切影響しない (表示専用追加)。
     """
     canvas = Image.new("RGB", (OUT_W, CANVAS_H), (12, 12, 16))
     canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (0, 0))
@@ -460,6 +532,9 @@ def _draw_overlay(
         d.text((x0, top + bar_h + 34), f"主因: {dl}", font=_font(16), fill=(230, 230, 180))
         # 受けやすさ差を主因の下に追加 (コアの adv には影響しない表示専用)
         _draw_ukeyasusa(d, ukey1, ukey2, x0, top + bar_h + 56)
+        # 飽和連鎖量差を受けやすさの直下に追加 (同じく表示専用)
+        _draw_saturated(d, sat1, sat2, x0,
+                        top + bar_h + 56 + SATURATED_ROW_Y_OFFSET_PX)
     if history:
         _draw_graph(d, history, t_rel, total)
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -510,9 +585,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     adv_ema = 0.0
     p1_last = 0.5
     drivers: list[tuple[str, float]] = []
-    # 受けやすさキャッシュ初期値 (HeavyAdvCache が更新するまで 0.0)
+    # 受けやすさ・飽和連鎖量キャッシュ初期値 (HeavyAdvCache が更新するまで 0.0)
     ukey1: float = 0.0
     ukey2: float = 0.0
+    sat1: float = 0.0
+    sat2: float = 0.0
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
@@ -538,8 +615,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
         if b1 is not None and b2 is not None:
-            # 重い盤面由来(モデルadv/threat/ukeyasusa)はキャッシュ間引き、安価な圧力/リードは毎フレーム
-            model_adv, threat, drivers, ukey1, ukey2 = hcache.update(
+            # 重い盤面由来(モデルadv/threat/ukeyasusa/飽和連鎖)はキャッシュ間引き、安価な圧力/リードは毎フレーム
+            model_adv, threat, drivers, ukey1, ukey2, sat1, sat2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
             pres = ptracker.update(iv.board_ojama_count(b1).raw,
                                    iv.board_ojama_count(b2).raw)
@@ -562,7 +639,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         waiting = b1 is None or b2 is None
         writer.write(_draw_overlay(frame, adv_ema, p1_last, drivers, waiting,
                                    history, t - start_sec, total_dur,
-                                   ukey1=ukey1, ukey2=ukey2))
+                                   ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2))
         written += 1
         if written % 300 == 0:
             print(f"  ... {written} frames (t={t:.1f}s adv={adv_ema:+.0f})")
