@@ -88,7 +88,10 @@ def _collect_timeline(
         ps1, ps2 = r.p1.state, r.p2.state
         if b1 is None or b2 is None:
             continue
-        model_adv, threat, _ = hcache.update(b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
+        # HeavyAdvCache.update() は7要素タプル (adv, threat, drivers, ukey1, ukey2, sat1, sat2)。
+        # 末尾拡張耐性のため先頭2個のみ index 取得する形で受ける。
+        _hres = hcache.update(b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
+        model_adv, threat = _hres[0], _hres[1]
         pres = ptracker.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
         fc = fctracker.update(r.p1.score, r.p2.score,
                               pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))  # (M3改B)配送予告

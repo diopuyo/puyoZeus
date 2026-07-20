@@ -97,8 +97,15 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     "main_linked_pair_count", "main_linked_pair_count_raw",
     "isolated_pair_count", "isolated_pair_count_raw",
     "main_linked_ratio", "main_linked_ratio_raw",
-    # X 受けやすさ — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
+    # X 受けやすさ
     "ukeyasusa", "ukeyasusa_raw",
+    # XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
+    "saturated_chain_count", "saturated_chain_count_raw",
+    "ignition_point_count", "ignition_point_count_raw",
+    "multi_color_ignition", "multi_color_ignition_raw",
+    "sub_chain_count", "sub_chain_count_raw",
+    "simultaneous_pop_richness", "simultaneous_pop_richness_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -223,6 +230,15 @@ def _fill_indicator_columns(
     # X 受けやすさ: dig_resistance を内包するため連鎖シミュが走る。
     #   STABLE snapshot の都度算出で問題なし (毎フレームではない)。
     uk = iv.ukeyasusa(board)
+    # XII board sim 本命指標: micro-benchmark 済み (scripts/_tmp_bench_xii.py)。
+    #   1 snapshot あたり平均 3ms 程度 (200ms 予算比で十分小さい) のため
+    #   共有キャッシュ実装なしのシンプル呼び出しで問題ない
+    #   (ChainSimulator 内蔵の simulate キャッシュが自然に重複を吸収する)。
+    sat = iv.saturated_chain_count(board)
+    igp = iv.ignition_point_count(board)
+    mci = iv.multi_color_ignition(board)
+    sub = iv.sub_chain_count(board)
+    spr = iv.simultaneous_pop_richness(board)
     row.update({
         "tsumo_count_rate": tc.score, "tsumo_count_raw": tc.raw,
         "board_puyo_total": bp.score, "board_puyo_total_raw": bp.raw,
@@ -252,8 +268,15 @@ def _fill_indicator_columns(
         "main_linked_pair_count": mlp.score, "main_linked_pair_count_raw": mlp.raw,
         "isolated_pair_count": ip.score, "isolated_pair_count_raw": ip.raw,
         "main_linked_ratio": mlr.score, "main_linked_ratio_raw": mlr.raw,
-        # X 受けやすさ (新指標末尾追加)
+        # X 受けやすさ
         "ukeyasusa": uk.score, "ukeyasusa_raw": uk.raw,
+        # XII board sim 本命指標 (新指標末尾追加)
+        "saturated_chain_count": sat.score, "saturated_chain_count_raw": sat.raw,
+        "ignition_point_count": igp.score, "ignition_point_count_raw": igp.raw,
+        "multi_color_ignition": mci.score, "multi_color_ignition_raw": mci.raw,
+        "sub_chain_count": sub.score, "sub_chain_count_raw": sub.raw,
+        "simultaneous_pop_richness": spr.score,
+        "simultaneous_pop_richness_raw": spr.raw,
     })
 
 

@@ -16,8 +16,16 @@ boards_lean_fixed/*.npz から引き、以下 5 指標を計算する:
 既存最強 (opp_absorption 相手埋没 0.84 / death_margin_ratio 中 0.63)
 と並べて比較できるよう exchange_labels の既存列も参照する。
 
+opp (受け手) 盤面ペアリング (2026-07-20 修正):
+    発火の瞬間は相手が非STABLEなことが多く、対称±3.0秒窓では
+    opp_* 指標が61.8%欠損していた。修正後は「t_fire 以前の直近
+    STABLE snapshot」(過去方向のみ、OPP_MAX_LOOKBACK_SEC=30.0秒まで)
+    を採用し、未来snapshot経由の情報リーク (発火後の交換結果混入) も
+    同時に回避する。採用した時間差は opp_t_diff_sec 列に出力する。
+
 出力:
     data/indicators_v2/prescreen_boardsim_auc.csv
+    data/indicators_v2/prescreen_boardsim_auc_pre_oppfix.csv (修正前バックアップ)
     logs/prescreen_boardsim.log
 
 使い方:
@@ -46,8 +54,18 @@ LABELS_CSV: Path = Path("data/indicators_v2/exchange_labels.csv")
 # 結果 CSV 出力先
 RESULT_CSV: Path = Path("data/indicators_v2/prescreen_boardsim_auc.csv")
 
-# 盤面照合の最大時刻差 (秒)
+# 盤面照合の最大時刻差 (秒) ※発火側 (fire) 用。NaN 0% で実績良好のため現状維持。
 MAX_T_DIFF_SEC: float = 3.0
+
+# opp (受け手) 盤面照合の最大遡り秒数。
+# 根拠: 発火の瞬間は相手が非STABLE (ツモ移動/連鎖中) であることが多く、
+# ±3.0秒の対称窓では STABLE snapshot が見つからず61.8%がNaN化していた。
+# 一方 t_fire より未来の opp snapshot は「発火後の交換結果」(お邪魔着弾等)を
+# 含みうるため、opp_buried/taiou_success ラベルへ情報リークする懸念がある。
+# → opp は「t_fire 以前の直近 STABLE snapshot」のみを採用し、
+#   staleness (盤面が古すぎて実質無意味になる) を防ぐ上限として
+#   30.0秒 (中盤の平均発火間隔より十分長く、かつ試合単位では短い) を設定する。
+OPP_MAX_LOOKBACK_SEC: float = 30.0
 
 # video 単位 holdout フォールド数
 N_FOLDS_VIDEO: int = 5
@@ -155,6 +173,40 @@ def _find_nearest_grid(
     return grids[min_idx]
 
 
+def _find_nearest_past_grid(
+    vid_data: dict[str, Any],
+    side: str,
+    game_idx: int,
+    t_sec: float,
+) -> tuple[np.ndarray | None, float]:
+    """t_sec 以前 (過去方向) で最も近い STABLE snapshot の grid を返す。
+
+    opp (受け手) 側専用。未来方向の snapshot は発火後の交換結果 (お邪魔着弾等)
+    を含み opp_buried/taiou_success ラベルへの情報リークになるため採用しない。
+    OPP_MAX_LOOKBACK_SEC より古い snapshot しか無い場合は見つからない扱い (NaN) とする。
+
+    Returns:
+        (grid, t_diff_sec) のタプル。見つからなければ (None, nan)。
+        t_diff_sec は t_sec との時間差 (常に 0 以上)。
+    """
+    mask = (vid_data["side"] == side) & (vid_data["game_idx"] == game_idx)
+    if not mask.any():
+        return None, float("nan")
+    t_arr = vid_data["t_sec"][mask]
+    grids = vid_data["grids"][mask]
+    past_mask = t_arr <= t_sec
+    if not past_mask.any():
+        return None, float("nan")
+    past_t = t_arr[past_mask]
+    past_grids = grids[past_mask]
+    diffs = t_sec - past_t
+    min_idx = int(np.argmin(diffs))
+    t_diff = float(diffs[min_idx])
+    if t_diff > OPP_MAX_LOOKBACK_SEC:
+        return None, float("nan")
+    return past_grids[min_idx], t_diff
+
+
 # ============================
 # セクション3: 指標計算
 # ============================
@@ -247,9 +299,12 @@ def build_feature_df(
 
         vid_data = npz_index.get(vid)
         opp_grid = None
+        opp_t_diff = float("nan")
         fire_grid = None
         if vid_data is not None:
-            opp_grid = _find_nearest_grid(vid_data, opp_side_str, game_idx, t_sec)
+            opp_grid, opp_t_diff = _find_nearest_past_grid(
+                vid_data, opp_side_str, game_idx, t_sec
+            )
             fire_grid = _find_nearest_grid(vid_data, fire_side, game_idx, t_sec)
 
         opp_ind = _calc_boardsim_indicators(opp_grid, sim)
@@ -261,6 +316,8 @@ def build_feature_df(
             row_dict[f"opp_{name}"] = opp_ind[name]
             row_dict[f"fire_{name}"] = fire_ind[name]
             row_dict[f"diff_{name}"] = opp_ind[name] - fire_ind[name]
+        # opp 盤面採用時の t_fire との時間差 (秒)。後段の多変量で信頼度/欠損フラグに使える。
+        row_dict["opp_t_diff_sec"] = opp_t_diff
 
         rows_out.append(row_dict)
 

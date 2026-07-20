@@ -115,7 +115,10 @@ def _collect(spec: str, xs: list[float], ys: list[float]) -> None:
             buf.last_s2 = r.p2.score
         if b1 is None or b2 is None:
             continue
-        m, thr, _ = hcache.update(b1, b2, snap, r.p1, r.p2, tr._elapsed(t))
+        # HeavyAdvCache.update() は7要素タプル (adv, threat, drivers, ukey1, ukey2, sat1, sat2)。
+        # 末尾拡張耐性のため先頭2個のみ index 取得する形で受ける。
+        _hres = hcache.update(b1, b2, snap, r.p1, r.p2, tr._elapsed(t))
+        m, thr = _hres[0], _hres[1]
         pres = pt.update(iv.board_ojama_count(b1).raw, iv.board_ojama_count(b2).raw)
         fc = fct.update(r.p1.score, r.p2.score,
                         pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))
