@@ -31,7 +31,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import src.indicators_v2 as iv  # noqa: E402
 from src.board import Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
-from src.ojama_accounting import OjamaAccountingTracker, OjamaAccountSnapshot  # noqa: E402
+from src.ojama_accounting import (  # noqa: E402
+    OjamaAccountingTracker, OjamaAccountSnapshot,
+    SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
+)
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 from scripts.model_indicator_win import (  # noqa: E402
@@ -40,7 +43,8 @@ from scripts.model_indicator_win import (  # noqa: E402
 
 OUT_W, OUT_H = 1280, 720
 GRAPH_H = 150          # 下部に足すグラフ専用の黒帯高さ
-CANVAS_H = OUT_H + GRAPH_H
+TOP_H = 240            # 上部に足す情報パネル専用の黒帯高さ (盤面には一切描画しない)
+CANVAS_H = TOP_H + OUT_H + GRAPH_H
 DEFAULT_FPS = 30.0
 EVEN_THRESHOLD = 5.0  # |有利不利| がこれ未満は「互角」
 EMA_ALPHA = 0.25      # 有利不利の時間平滑
@@ -121,6 +125,34 @@ def kill_override(adv: float, inc1: float, inc2: float,
     target = -100.0 if lead > 0 else 100.0  # 死ぬ側の逆へ
     return (1.0 - g) * adv + g * target
 
+
+# (改修1) スコアリセット検知: 新ゲーム開始/全消し等でスコアが「前フレームから
+#   大幅減少」または「両者ほぼ0」に戻ったら試合境界とみなし、凍結盤面(b1/b2)や
+#   各種持続トラッカーを全て初期化する。空盤面(スコア0)なのに前試合の非空盤面
+#   差分(例: 最大列高差)を表示し続ける「幻の差」バグの根治用。
+#   drop 側の閾値は OjamaAccountingTracker が内部で使う既存定数を流用し重複させない。
+SCORE_NEAR_ZERO_THRESHOLD = 20  # 両者スコアがこれ以下なら「0付近」とみなす(OCRノイズ許容)
+
+
+def _detect_score_reset(
+    score1: int | None, score2: int | None,
+    prev1: int | None, prev2: int | None,
+) -> bool:
+    """スコア推移から試合境界(新ゲーム/全消しリセット)を検知する(純関数・state無し)。
+
+    以下いずれかで True:
+      - 前フレームからどちらかのスコアが SCORE_RESET_THRESHOLD 以上減少(新ゲーム開始等)
+      - 両者のスコアが SCORE_NEAR_ZERO_THRESHOLD 以下(全消し直後/試合最初期)
+    score が None(OCR失敗)の場合は判定不能として False を返す(誤リセット回避)。
+    """
+    if score1 is None or score2 is None:
+        return False
+    if prev1 is not None and prev1 - score1 >= SCORE_RESET_THRESHOLD:
+        return True
+    if prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD:
+        return True
+    return score1 <= SCORE_NEAR_ZERO_THRESHOLD and score2 <= SCORE_NEAR_ZERO_THRESHOLD
+
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)。
 # 既存の呼出元 (plot_move_diagnostics.py 等) がこの定数を直接 import して
 # そのままモデル特徴量として使うため、値は変更しない (後方互換維持)。
@@ -147,6 +179,16 @@ FONT_CANDIDATES = (
 )
 # 飽和連鎖量サブ行の縦オフセット(受けやすさ行から更に下へ何px か)
 SATURATED_ROW_Y_OFFSET_PX = 22
+# 上部情報パネル(TOP_H 内)のレイアウト定数。全て y 座標 (マジックナンバー禁止 → 定数化)。
+# 盤面(ゲーム画面)には一切描画せず、この範囲 y∈[0, TOP_H) にのみ情報を集約する。
+PANEL_TITLE_Y = 8                                         # タイトル行
+PANEL_BAR_TOP = 44                                        # 有利不利バー上端
+PANEL_BAR_H = 34                                          # バー高さ (従来 bar_h を踏襲)
+PANEL_BAR_W = 720                                         # バー幅 (従来 bar_w を踏襲)
+PANEL_WINPROB_Y = PANEL_BAR_TOP + PANEL_BAR_H + 14        # 勝率行
+PANEL_DRIVERS_Y = PANEL_WINPROB_Y + 26                    # 主因行
+PANEL_UKEY_Y = PANEL_DRIVERS_Y + 26                       # 受けやすさ行
+PANEL_SAT_Y = PANEL_UKEY_Y + SATURATED_ROW_Y_OFFSET_PX    # 飽和連鎖行 (既存offset流用)
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -428,12 +470,34 @@ class HeavyAdvCache:
                 self._ukey1, self._ukey2, self._sat1, self._sat2)
 
 
+def _fresh_trackers(
+    model,
+) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
+           PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache]:
+    """スコアリセット検知時に持続トラッカー一式を初期状態で作り直す。
+
+    各トラッカーは内部 state が僅少 (数個の float/Counter) のため、都度
+    再生成するだけで「初期化」と等価であり専用 reset() の追加は不要
+    (OjamaAccountingTracker のみ既存 reset() を呼び互換 API を維持する)。
+    """
+    tracker = OjamaAccountingTracker()
+    tracker.reset()
+    return (tracker, _SideTracker(), _SideTracker(),
+            PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
+            HeavyAdvCache(model))
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
 ) -> None:
-    """リアルタイム評価値グラフ (将棋風) を下部の黒帯に描画。進行に合わせ伸びる。"""
-    gx0, gx1, gy0, gy1 = 40, OUT_W - 40, OUT_H + 26, CANVAS_H - 12
+    """リアルタイム評価値グラフ (将棋風) をゲーム画面の下の黒帯に描画。進行に合わせ伸びる。
+
+    ゲーム画面は y∈[TOP_H, TOP_H+OUT_H) にあるため、グラフ帯はその下端
+    (TOP_H+OUT_H) を基準にオフセットする(盤面に被らない)。
+    """
+    game_bottom = TOP_H + OUT_H  # ゲーム画面の下端 y 座標
+    gx0, gx1, gy0, gy1 = 40, OUT_W - 40, game_bottom + 26, CANVAS_H - 12
     gyc = (gy0 + gy1) // 2
     gw, gh = gx1 - gx0, gy1 - gy0
     d.rectangle([gx0 - 4, gy0 - 20, gx1 + 4, gy1 + 4], fill=(0, 0, 0, 150))
@@ -491,6 +555,30 @@ def _draw_saturated(
     d.text((x0, y_top), label, font=_font(15), fill=diff_col)
 
 
+def _draw_bar(
+    d: "ImageDraw.ImageDraw", adv: float, waiting: bool, cx: int, x0: int,
+) -> None:
+    """有利不利バー本体(色分け矩形 + 判定テキスト + 1P/2Pラベル)を描画するサブ関数。
+
+    _draw_overlay から分離 (1関数50行以内の規約対応)。座標は全て
+    上部情報パネル (y∈[0, TOP_H)) 内の PANEL_BAR_* 定数を使う。
+    """
+    top, bar_w, bar_h = PANEL_BAR_TOP, PANEL_BAR_W, PANEL_BAR_H
+    d.rectangle([x0, top, cx, top + bar_h], fill=(70, 110, 200, 180))   # 1P側(青)
+    d.rectangle([cx, top, x0 + bar_w, top + bar_h], fill=(200, 80, 80, 180))  # 2P側(赤)
+    d.rectangle([x0, top, x0 + bar_w, top + bar_h], outline=(255, 255, 255), width=2)
+    if waiting:
+        d.text((cx - 90, top + 4), "STABLE 待ち", font=_font(22), fill=(255, 255, 255))
+        return
+    mx = int(cx - (max(-100, min(100, adv)) / 100.0) * (bar_w // 2))  # adv>0=1P=左
+    d.rectangle([mx - 3, top - 6, mx + 3, top + bar_h + 6], fill=(255, 255, 255))
+    verdict = ("互角" if abs(adv) < EVEN_THRESHOLD
+               else f"{'1P' if adv > 0 else '2P'} 有利  {abs(adv):.0f}")
+    d.text((cx - 70, top + 4), verdict, font=_font(24), fill=(0, 0, 0))
+    d.text((x0 - 34, top + 4), "1P", font=_font(22), fill=(150, 200, 255))
+    d.text((x0 + bar_w + 6, top + 4), "2P", font=_font(22), fill=(255, 180, 180))
+
+
 def _draw_overlay(
     frame: np.ndarray, adv: float, p1: float,
     drivers: list[tuple[str, float]], waiting: bool,
@@ -498,43 +586,32 @@ def _draw_overlay(
     ukey1: float = 0.0, ukey2: float = 0.0,
     sat1: float = 0.0, sat2: float = 0.0,
 ) -> np.ndarray:
-    """有利不利バー + 受けやすさ差 + 飽和連鎖差 + リアルタイムグラフを描画。
+    """上部情報パネル(黒帯)+ ゲーム画面(無地) + 下部グラフ帯 を合成して1フレーム描画する。
 
-    ukey1/ukey2: optional。HeavyAdvCache が計算した受けやすさ (0〜1)。
-    sat1/sat2: optional。HeavyAdvCache が計算した飽和連鎖量 (0〜1)。
-    どちらもコアの adv 計算には一切影響しない (表示専用追加)。
+    2026-07 改修: 盤面(ゲーム画面 y∈[TOP_H, TOP_H+OUT_H))には一切描画しない
+    (旧版は盤面に重ねて視認性を損なっていた)。有利不利バー/勝率/主因/
+    受けやすさ/飽和連鎖の全情報は上部パネル (y∈[0, TOP_H)) に集約する。
+    ukey1/ukey2/sat1/sat2: optional。HeavyAdvCache 由来の表示専用値
+    (コアの adv 計算には一切影響しない)。
     """
     canvas = Image.new("RGB", (OUT_W, CANVAS_H), (12, 12, 16))
-    canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (0, 0))
+    canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (0, TOP_H))
     img = canvas
     d = ImageDraw.Draw(img, "RGBA")
-    bar_w, bar_h, cx, top = 720, 34, OUT_W // 2, 54
-    x0 = cx - bar_w // 2
-    d.rectangle([x0, top, cx, top + bar_h], fill=(70, 110, 200, 180))   # 1P側(青)
-    d.rectangle([cx, top, x0 + bar_w, top + bar_h], fill=(200, 80, 80, 180))  # 2P側(赤)
-    d.rectangle([x0, top, x0 + bar_w, top + bar_h], outline=(255, 255, 255), width=2)
-    d.text((x0, top - 30), "有利不利オーバーレイ (試作・tier1軽量モデル)",
+    cx = OUT_W // 2
+    x0 = cx - PANEL_BAR_W // 2
+    d.text((x0, PANEL_TITLE_Y), "有利不利オーバーレイ (試作・tier1軽量モデル)",
            font=_font(20), fill=(255, 255, 0))
-    if waiting:
-        d.text((cx - 90, top + 4), "STABLE 待ち", font=_font(22), fill=(255, 255, 255))
-    else:
-        mx = int(cx - (max(-100, min(100, adv)) / 100.0) * (bar_w // 2))  # adv>0=1P=左
-        d.rectangle([mx - 3, top - 6, mx + 3, top + bar_h + 6], fill=(255, 255, 255))
-        verdict = ("互角" if abs(adv) < EVEN_THRESHOLD
-                   else f"{'1P' if adv > 0 else '2P'} 有利  {abs(adv):.0f}")
-        d.text((cx - 70, top + 4), verdict, font=_font(24), fill=(0, 0, 0))
-        d.text((x0 - 34, top + 4), "1P", font=_font(22), fill=(150, 200, 255))
-        d.text((x0 + bar_w + 6, top + 4), "2P", font=_font(22), fill=(255, 180, 180))
-        d.text((x0, top + bar_h + 8),
+    _draw_bar(d, adv, waiting, cx, x0)
+    if not waiting:
+        d.text((x0, PANEL_WINPROB_Y),
                f"勝率  1P {p1 * 100:.0f}%   /   2P {(1 - p1) * 100:.0f}%",
                font=_font(20), fill=(255, 255, 255))
         dl = "  ".join(f"{JP_LABEL[c]}差 {v:+.2f}" for c, v in drivers)
-        d.text((x0, top + bar_h + 34), f"主因: {dl}", font=_font(16), fill=(230, 230, 180))
-        # 受けやすさ差を主因の下に追加 (コアの adv には影響しない表示専用)
-        _draw_ukeyasusa(d, ukey1, ukey2, x0, top + bar_h + 56)
-        # 飽和連鎖量差を受けやすさの直下に追加 (同じく表示専用)
-        _draw_saturated(d, sat1, sat2, x0,
-                        top + bar_h + 56 + SATURATED_ROW_Y_OFFSET_PX)
+        d.text((x0, PANEL_DRIVERS_Y), f"主因: {dl}", font=_font(16), fill=(230, 230, 180))
+        # 受けやすさ差・飽和連鎖差 (コアの adv には影響しない表示専用)
+        _draw_ukeyasusa(d, ukey1, ukey2, x0, PANEL_UKEY_Y)
+        _draw_saturated(d, sat1, sat2, x0, PANEL_SAT_Y)
     if history:
         _draw_graph(d, history, t_rel, total)
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -594,6 +671,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
     hcache = HeavyAdvCache(model)
+    prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
+    prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
     step = max(1, int(round(sample_interval * fps)))
@@ -607,6 +686,16 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         t = fi / fps
         # お邪魔会計は密な駆動が必須のため pipe.update / _drive_ojama は毎フレーム。
         r = pipe.update(fi, t, frame)
+        # (改修1) 試合境界(score大幅減少/両者0付近)を検知したら凍結盤面・持続
+        # トラッカー・表示状態を全て初期化する(前試合の「幻の差」持ち越し防止)。
+        if _detect_score_reset(r.p1.score, r.p2.score, prev_score1, prev_score2):
+            print(f"[reset] t={t:.1f}s score大幅減少/0付近を検知 -> 評価を互角にリセット")
+            b1 = b2 = None
+            adv_ema, p1_last, drivers = 0.0, 0.5, []
+            ukey1 = ukey2 = sat1 = sat2 = 0.0
+            history.clear()
+            tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache = _fresh_trackers(model)
+        prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
         if r.p2.state == BoardState.STABLE and r.p2.confirmed_board is not None:
@@ -614,7 +703,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
-        if b1 is not None and b2 is not None:
+        # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
+        # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
+        # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
+        # _drive_ojama で毎フレーム密に駆動済みのため、ここで止めても会計は失われない。
+        settled = r.p1.state == BoardState.STABLE and r.p2.state == BoardState.STABLE
+        if b1 is not None and b2 is not None and settled:
             # 重い盤面由来(モデルadv/threat/ukeyasusa/飽和連鎖)はキャッシュ間引き、安価な圧力/リードは毎フレーム
             model_adv, threat, drivers, ukey1, ukey2, sat1, sat2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
@@ -632,8 +726,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
-            if fi >= write_frame and fi % step == 0:
-                history.append((t - start_sec, adv_ema))
+        if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
+            # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦を維持
+            history.append((t - start_sec, adv_ema))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         waiting = b1 is None or b2 is None

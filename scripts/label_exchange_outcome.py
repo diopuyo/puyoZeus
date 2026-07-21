@@ -156,15 +156,51 @@ def _board_from_grid(grid: np.ndarray) -> Board:
     return Board.from_list(grid.tolist())
 
 
+def _game_relative_elapsed(t_fire: float, game_start_t: float) -> float:
+    """試合開始からの経過秒を返す(マージンタイム計算用)。
+
+    npz の t_sec は動画絶対時刻 (1動画に複数試合を含む場合、game_idx>=1 の
+    試合では数百〜千秒に達する)。そのまま score_to_ojama 系の elapsed_sec に
+    渡すとマージンタイム減衰 (MARGIN_TIME_START_SEC=96s 以降 16秒毎に×0.75、
+    最大14回) が過剰発火し potential_fire_power / immediate_fire_power の
+    raw が桁違いに膨張するバグがあった (実データ確認済み、修正版)。
+
+    その試合内での最初のフレーム時刻をゼロ点として補正する。
+    ⚠️ game_idx==0 (先頭試合) でも動画によっては録画開始が試合開始より
+    大幅に遅れる (実測で最大 200 秒超) ケースがあり、無条件に「先頭試合は
+    ほぼ0点」とは言えない。よって game_idx の値に関わらず常にこの補正を
+    適用する (特別扱いしない)。
+    数秒のバッファ誤差はマージンタイム閾値96秒に対し軽微なため許容する
+    (scripts/proto_net_threat.py の同名関数と同等ロジック)。
+
+    Args:
+        t_fire: 対象フレームの動画絶対時刻(秒)。
+        game_start_t: その (video_id, game_idx, side) グループの
+            最初のフレーム時刻(秒)。
+
+    Returns:
+        試合開始からの経過秒(0以上)。
+    """
+    return max(0.0, t_fire - game_start_t)
+
+
 def _compute_features(
     board: Board,
-    t_sec: float,
+    elapsed_sec: float,
     sim: ChainSimulator,
 ) -> dict[str, float]:
-    """発火直前盤面から指標を計算して辞書で返す。"""
+    """発火直前盤面から指標を計算して辞書で返す。
+
+    Args:
+        board: 対象盤面。
+        elapsed_sec: 試合開始からの経過秒(マージンタイム計算用)。
+            ⚠️ 動画絶対時刻 (npz の t_sec) をそのまま渡さないこと。
+            呼び出し側で _game_relative_elapsed() を通した値を渡す。
+        sim: ChainSimulator。
+    """
     cmc = current_max_chain(board, sim)
-    pfp = potential_fire_power(board, t_sec, sim)
-    ifp = immediate_fire_power(board, t_sec, sim)
+    pfp = potential_fire_power(board, elapsed_sec, sim)
+    ifp = immediate_fire_power(board, elapsed_sec, sim)
     ho = honsen_output(board, sim)
     # honsen_tempo_output: opp_chain は外部から渡せないのでここでは opp=0 仮置き
     # → 呼び出し側で opp_chain を使って再計算する
@@ -496,6 +532,10 @@ def _process_game(
     if not fire_events:
         return []
 
+    # 試合開始時刻の近似 = この (video_id, game_idx, fire_side) で
+    # 記録された最初のフレーム時刻(マージンタイム計算の基準点、バグ修正)
+    game_start_t = float(fire_rec.t_sec[0])
+
     # 相手盤面を (t, Board) ペアで保持(重い計算は発火時点のみ)
     opp_boards: list[tuple[float, Board]] = []
     for i in range(len(opp_rec.t_sec)):
@@ -530,10 +570,13 @@ def _process_game(
         nearest_opp = int(np.argmin(np.abs(opp_t_arr - t_fire)))
         opp_board = opp_boards[nearest_opp][1]
 
+        # 試合開始からの経過秒(マージンタイム計算用、動画絶対時刻ではない)
+        elapsed_in_game = _game_relative_elapsed(t_fire, game_start_t)
+
         # 発火側指標
-        fire_feats = _compute_features(fire_board, t_fire, sim)
+        fire_feats = _compute_features(fire_board, elapsed_in_game, sim)
         # 相手側指標
-        opp_feats = _compute_features(opp_board, t_fire, sim)
+        opp_feats = _compute_features(opp_board, elapsed_in_game, sim)
 
         # honsen_tempo_output: 両者の current_max_chain で計算
         hto_fire = honsen_tempo_output(
