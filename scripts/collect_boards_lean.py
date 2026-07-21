@@ -7,7 +7,7 @@ collect_indicators_v2 の重い処理(全指標計算・お邪魔会計・ojama_
 - 全指標計算 (indicators_v2 モジュール呼び出しなし)
 - お邪魔会計 (OjamaAccountingTracker 不使用)
 - ojama_disruption (モンテカルロ計算なし)
-- NextDetector (load_next_detector=False)
+- NextDetector (load_next_detector=False。--with-next 指定時のみ有効化)
 - VideoChainTracker (enable_chain_tracker=False)
 
 ## 出力 npz 形式
@@ -20,6 +20,14 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
   frame_idx  : (N,) int32
   won        : (N,) float32  1P視点の勝敗 (1.0/0.0/NaN)
   score      : (N,) int32    スコア (-1 = None)
+  next1_a    : (N,) int8     現ネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  next1_b    : (N,) int8     現ネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_a    : (N,) int8     ダブルネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_b    : (N,) int8     ダブルネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+
+  ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
+  未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
+  既存 boards_lean_fixed の再利用に影響なし)。
 
 ## 勝敗 won の自己ラベル付け
 score のリセット(前値 - 現値 >= SCORE_RESET_THRESHOLD)でゲーム境界を検知し
@@ -80,6 +88,10 @@ SCORE_RESET_THRESHOLD: int = 500
 # 勝敗ラベルが付与できない試合の won 値
 WON_UNKNOWN: float = float("nan")
 
+# next_pair/dnext_pair が None (未検出 / NextDetector 無効) の場合の埋め値。
+# ぷよ色は 1-5 のため -1 は安全な sentinel。
+NEXT_COLOR_UNKNOWN: int = -1
+
 
 # ============================
 # 蓄積バッファ
@@ -102,6 +114,13 @@ class _LeanNpzAccumulator:
     wons: list[float] = field(default_factory=list)
     # score を保存: オフライン再ラベル付けを可能にする (None は -1 として保存)
     scores: list[int] = field(default_factory=list)
+    # ネクスト情報 (指標①本命版検証用、2026-07 追加)。
+    # None は NEXT_COLOR_UNKNOWN (-1) として保存する。既存キー・既存呼び出しの
+    # 後方互換のため append() では末尾の optional 引数として追加する。
+    next1_as: list[int] = field(default_factory=list)
+    next1_bs: list[int] = field(default_factory=list)
+    dnext_as: list[int] = field(default_factory=list)
+    dnext_bs: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -112,6 +131,8 @@ class _LeanNpzAccumulator:
         game_idx: int,
         frame_idx: int,
         score: int | None = None,
+        next_pair: tuple[int, int] | None = None,
+        dnext_pair: tuple[int, int] | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -123,6 +144,9 @@ class _LeanNpzAccumulator:
             game_idx: ゲーム境界カウンタ。
             frame_idx: フレーム絶対番号。
             score: スコア OCR 値。None は -1 に変換して保存。
+            next_pair: (軸ぷよ色, 子ぷよ色)。None は NEXT_COLOR_UNKNOWN で保存
+                (後方互換: 省略時は既存呼び出しと同じ挙動)。
+            dnext_pair: ダブルネクストの (軸ぷよ色, 子ぷよ色)。同上。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -132,6 +156,12 @@ class _LeanNpzAccumulator:
         self.frame_idxs.append(frame_idx)
         self.wons.append(WON_UNKNOWN)
         self.scores.append(score if score is not None else -1)
+        n_a, n_b = next_pair if next_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        d_a, d_b = dnext_pair if dnext_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        self.next1_as.append(int(n_a))
+        self.next1_bs.append(int(n_b))
+        self.dnext_as.append(int(d_a))
+        self.dnext_bs.append(int(d_b))
 
     def assign_won_labels(
         self,
@@ -165,7 +195,11 @@ class _LeanNpzAccumulator:
             self.wons[i] = 1.0 if self.sides[i] == winner else 0.0
 
     def save(self, path: Path) -> None:
-        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。"""
+        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。
+
+        next1_a/next1_b/dnext_a/dnext_b (int8) を追加保存する (既存キーは不変、
+        後方互換)。--with-next 未指定の収集では全て NEXT_COLOR_UNKNOWN (-1)。
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             str(path),
@@ -178,6 +212,10 @@ class _LeanNpzAccumulator:
             frame_idx=np.array(self.frame_idxs, dtype=np.int32),
             won=np.array(self.wons, dtype=np.float32),
             score=np.array(self.scores, dtype=np.int32),
+            next1_a=np.array(self.next1_as, dtype=np.int8),
+            next1_b=np.array(self.next1_bs, dtype=np.int8),
+            dnext_a=np.array(self.dnext_as, dtype=np.int8),
+            dnext_b=np.array(self.dnext_bs, dtype=np.int8),
         )
 
 
@@ -292,6 +330,7 @@ def collect_lean(
     max_sec: float = 0.0,
     start_sec: float = 0.0,
     sample_interval_sec: float = 0.0,
+    capture_next: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -304,6 +343,10 @@ def collect_lean(
             (従来挙動)。collect_indicators_v2 と同じ間引き方式を採用:
             cap.read() は毎フレーム呼び、sample_interval_frames おきに
             pipeline.update を呼ぶ。
+        capture_next: True で NextDetector を有効化し next1_a/next1_b/
+            dnext_a/dnext_b を実値で記録する (指標①本命版検証用)。
+            既定 False = 従来挙動 (NextDetector 無効、全て -1 で保存、
+            後方互換)。
 
     Returns:
         蓄積した snapshot 数。
@@ -333,12 +376,13 @@ def collect_lean(
         if sample_interval_sec > 0.0 else 1
 
     # NextDetector / ChainTracker を OFF にして高速化
+    # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
     pipeline = RecognitionPipeline.load_default(
         stable_frame_count=3,
         load_score_ocr=True,
         enable_chain_tracker=False,
         temporal_smoothing=1,
-        load_next_detector=False,
+        load_next_detector=capture_next,
         force_in_match=True,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
@@ -368,10 +412,12 @@ def collect_lean(
         _process_side_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
+            next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
             result.p2.state, result.p2.score, video_id, t_sec, fi,
+            next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
         )
     cap.release()
 
@@ -392,15 +438,22 @@ def _process_side_lean(
     video_id: str,
     t_sec: float,
     frame_idx: int,
+    next_pair: tuple[int, int] | None = None,
+    dnext_pair: tuple[int, int] | None = None,
 ) -> None:
-    """1 side の STABLE snapshot を蓄積する。指標計算は行わない。"""
+    """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
+
+    next_pair/dnext_pair は capture_next=False (既定) の呼び出しでは常に
+    None (SideResult 既定値) となり、acc.append 側で -1 埋めされる
+    (後方互換)。
+    """
     _update_game_boundary(state, score)
     if board is None or not _should_emit(state, board, bstate):
         return
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
-        score=score,
+        score=score, next_pair=next_pair, dnext_pair=dnext_pair,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
@@ -450,12 +503,20 @@ def main() -> int:
             "STABLE 検出・勝者判定には影響しない。"
         ),
     )
+    parser.add_argument(
+        "--with-next", action="store_true", dest="with_next",
+        help=(
+            "NextDetector を有効化し next1_a/next1_b/dnext_a/dnext_b を"
+            "実値で記録する (指標①本命版検証用)。既定は無効 (-1 埋め、後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     n = collect_lean(
         args.video, args.out_npz,
         max_sec=args.max_sec,
         start_sec=args.start_sec,
         sample_interval_sec=args.sample_interval,
+        capture_next=args.with_next,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

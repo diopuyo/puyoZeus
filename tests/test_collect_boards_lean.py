@@ -555,6 +555,103 @@ class TestScoreColumn:
 
 
 # ============================
+# next_pair / dnext_pair 保存テスト (指標① 本命版検証用、2026-07 追加)
+# ============================
+
+class TestNextPairColumn:
+    """next1_a/next1_b/dnext_a/dnext_b の保存・後方互換を検証する。"""
+
+    def test_next_pair_saved_in_npz(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair を渡すと npz に正しい int8 値で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW),
+        )
+        out = tmp_path / "next_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["next1_a"][0]) == COLOR_RED
+        assert int(data["next1_b"][0]) == COLOR_BLUE
+        assert int(data["dnext_a"][0]) == COLOR_GREEN
+        assert int(data["dnext_b"][0]) == COLOR_YELLOW
+
+    def test_next_pair_none_saved_as_unknown(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair=None は NEXT_COLOR_UNKNOWN (-1) として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "next_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert int(data[key][0]) == mod.NEXT_COLOR_UNKNOWN
+
+    def test_next_pair_backward_compat_omitted_kwarg(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair 引数を省略した既存呼び出しでも -1 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 既存コード同様、next_pair/dnext_pair を渡さない呼び出し
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "next_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert int(data[key][0]) == mod.NEXT_COLOR_UNKNOWN
+
+    def test_next_pair_dtype_int8(self, tmp_path: Path) -> None:
+        """next1_a 等が int8 dtype で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board()._grid, "v29", "1P", 1.0, 0, 1,
+            next_pair=(COLOR_RED, COLOR_BLUE),
+        )
+        out = tmp_path / "next_dtype.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert data[key].dtype == np.int8
+
+    def test_process_side_lean_passes_through_next_pair(self, tmp_path: Path) -> None:
+        """_process_side_lean が next_pair/dnext_pair を acc.append に伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            next_pair=(COLOR_RED, COLOR_GREEN), dnext_pair=(COLOR_BLUE, COLOR_YELLOW),
+        )
+        assert acc.next1_as[0] == COLOR_RED
+        assert acc.next1_bs[0] == COLOR_GREEN
+        assert acc.dnext_as[0] == COLOR_BLUE
+        assert acc.dnext_bs[0] == COLOR_YELLOW
+
+    def test_process_side_lean_default_next_pair_is_unknown(self) -> None:
+        """_process_side_lean で next_pair/dnext_pair を渡さない場合 -1 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert acc.next1_as[0] == mod.NEXT_COLOR_UNKNOWN
+        assert acc.dnext_as[0] == mod.NEXT_COLOR_UNKNOWN
+
+    def test_collect_lean_accepts_capture_next_kwarg(self) -> None:
+        """collect_lean が capture_next キーワード引数を受け付け、既定 False であること。"""
+        import inspect
+        mod = _import_lean()
+        sig = inspect.signature(mod.collect_lean)
+        assert "capture_next" in sig.parameters
+        assert sig.parameters["capture_next"].default is False
+
+
+# ============================
 # 窒息フォールバック判定テスト (修正3)
 # ============================
 
