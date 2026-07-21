@@ -16,7 +16,7 @@ import numpy as np
 
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
-    kill_override, board_room,
+    kill_override, board_room, _detect_score_reset,
 )
 
 
@@ -193,3 +193,28 @@ def test_score_lead_clamped_range() -> None:
     lt = ScoreLeadTracker()
     v = lt.update(999999, 0)
     assert -100.0 <= v <= 100.0
+
+
+def test_score_reset_detects_large_drop() -> None:
+    """前フレーム比で片側スコアが大幅減少(新ゲーム開始等)→ リセット検知。"""
+    assert _detect_score_reset(0, 3000, 12000, 3000) is True
+
+
+def test_score_reset_detects_both_near_zero() -> None:
+    """両者スコアが0付近(全消し直後/試合最初期)→ リセット検知。"""
+    assert _detect_score_reset(0, 5, None, None) is True
+
+
+def test_score_reset_ignores_normal_progress() -> None:
+    """通常の得点増加(大幅減少なし、0付近でもない)→ リセット検知しない。"""
+    assert _detect_score_reset(4200, 3100, 4000, 3000) is False
+
+
+def test_score_reset_ignores_one_sided_near_zero() -> None:
+    """片方だけ0付近(もう片方は進行中)→ リセット検知しない(誤爆防止)。"""
+    assert _detect_score_reset(0, 8000, 0, 6000) is False
+
+
+def test_score_reset_none_score_is_undetectable() -> None:
+    """score が None(OCR失敗)の場合は判定不能として False を返す。"""
+    assert _detect_score_reset(None, 5000, 3000, 5000) is False
