@@ -102,6 +102,14 @@ REACH_FIRE_POWER_BEST_K: int = 5
 # III-3 到達火力: 正規化分母 (お邪魔個数上限 = 72)。
 REACH_FIRE_POWER_NORM: int = ON_FIELD_CAP  # = 72
 
+# III-8 潜在火力: greedy ビームの 1 手目保持数。
+# 1 手目 = 5×6=30 通り → 上位 K のみ 2 手目展開。最大 sim = 30 + K×30 = 180。
+POTENTIAL_FIRE_POWER_BEAM_K: int = 5
+# III-8 潜在火力: 最大追加ぷよ数 (デフォルト 2)。
+POTENTIAL_FIRE_POWER_MAX_ADD: int = 2
+# III-8 潜在火力: 正規化分母 (REACH_FIRE_POWER_NORM と統一)。
+POTENTIAL_FIRE_POWER_NORM: int = ON_FIELD_CAP  # = 72
+
 # VI-1 掘り耐性: 仮想お邪魔テスト個数。
 OJAMA_DEFENSE_TEST_COUNTS: tuple[int, ...] = (10, 20, 30)
 # VI-1 掘り耐性: 掘削可能と判定する最小連鎖数。
@@ -112,6 +120,43 @@ OJAMA_DEFENSE_DIG_WEIGHT: float = 0.3
 
 # 連結観測対象の最小サイズ (2連結 / 3連結)。
 GROUP_OBSERVE_MIN_SIZE: int = 2
+
+# IX 形・組み品質 (connected_pair_quality)
+# 「主連鎖に接続された2連結」と「孤立2連結」の閾値。
+# ※隣接判定は静的な上下左右1マス接触で近似 (連鎖伝播とは異なる)。
+# 同色の size >= MAIN_GROUP_MIN_SIZE を「主連鎖グループ候補」と見なす。
+MAIN_GROUP_MIN_SIZE: int = 3
+# 正規化分母: 上級者盤面の同色2連結数は最大でも 10 程度。暫定。データ後決定。
+NORM_LINKED_PAIR: float = 10.0
+
+# ============================
+# X 受けやすさ (ukeyasusa) 定数
+# ============================
+
+# absorption_capacity / dig_resistance / death_margin の合成重み。
+# 実データ学習後に重み更新可能な設計。定数化により変更追跡を容易にする。
+# 中盤単変量 AUC: dig_resistance=0.596 が最強、absorption/death は逆相関傾向。
+# v2 重み: dig を主 (0.6)、absorption/death は補助 (各 0.2) に見直し。
+UKEYASUSA_W_ABSORPTION: float = 0.2
+UKEYASUSA_W_DIG: float = 0.6
+UKEYASUSA_W_DEATH: float = 0.2
+
+# ============================
+# XI 対応力 (taiou_capacity) 定数
+# ============================
+
+# 基準催促量: 1 回の配送 5 段目安 ≒ 30 個 (上級者対戦実測概算。データ後決定)。
+REF_OJAMA_TAIOU: int = 30
+
+# 対応力 health 計算の加重: alive × (potential × W_POTENTIAL + ukeyasusa × W_UKEY)
+# alive=0 なら強制ゼロ。
+TAIOU_W_POTENTIAL: float = 0.6
+TAIOU_W_UKEY: float = 0.4
+
+# v2: 部分発火候補数の上限 (計算爆発を防ぐ)。
+# 各 takapt 最良 board の steps[0..k] から候補を生成するため、
+# 実際の候補数は min(TAIOU_MAX_CANDIDATES, len(steps)+1) 個。
+TAIOU_MAX_CANDIDATES: int = 8
 
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
 _SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
@@ -864,6 +909,898 @@ def _reach_fire_power_core(
     )
 
 
+# ============================
+# III-8 潜在火力
+# ============================
+
+
+def _pfp_first_pass(
+    board: Board,
+    sim: ChainSimulator,
+    beam_k: int,
+) -> "list[tuple[int, Board]]":
+    """潜在火力 1 手目 greedy: 5色×6列=30通り simulate → chain 上位 beam_k を返す。
+
+    Args:
+        board: 評価対象の確定盤面。
+        sim: ChainSimulator インスタンス。
+        beam_k: 保持する上位候補数。
+
+    Returns:
+        (chain_count, dropped_board) を chain_count 降順に最大 beam_k 個。
+    """
+    candidates: list[tuple[int, Board]] = []
+    for col in range(BOARD_COLS):
+        for color in IGNITION_TRIAL_COLORS:
+            dropped = _drop_one_color(board, col, color)
+            if dropped is None:
+                continue
+            chain = sim.simulate(dropped).chain_count
+            candidates.append((chain, dropped))
+    # chain_count 降順で上位 beam_k を返す
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[:beam_k]
+
+
+def _pfp_second_pass(
+    candidates: "list[tuple[int, Board]]",
+    sim: ChainSimulator,
+    elapsed_sec: float,
+) -> int:
+    """潜在火力 2 手目: 各候補盤面から再度 30 通り探索し最大お邪魔数を返す。
+
+    Args:
+        candidates: 1 手目 top-K の (chain_count, board) リスト。
+        sim: ChainSimulator インスタンス。
+        elapsed_sec: マージンタイム計算用経過秒。
+
+    Returns:
+        2 手まで追加した場合の最大お邪魔数 (int)。
+    """
+    best_ojama: int = 0
+    for _, board1 in candidates:
+        for col in range(BOARD_COLS):
+            for color in IGNITION_TRIAL_COLORS:
+                board2 = _drop_one_color(board1, col, color)
+                if board2 is None:
+                    continue
+                ojama = _board_fire_ojama(board2, elapsed_sec, sim)
+                if ojama > best_ojama:
+                    best_ojama = ojama
+    return best_ojama
+
+
+def potential_fire_power(
+    board: Board,
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    max_add: int = POTENTIAL_FIRE_POWER_MAX_ADD,
+) -> IndicatorV2Value:
+    """III-8 潜在火力 (ツモ依存なし)。
+
+    実ツモに依存せず「この盤面に仕込まれている最大連鎖ポテンシャル」を測る。
+    任意色ぷよを最大 max_add 個・任意列に greedy ビーム探索で追加し、
+    simulate して得られる最大お邪魔数を返す。
+
+    探索 (max_add=2 デフォルト):
+        1 手目: 5色×6列=30 通り simulate → chain 上位 BEAM_K=5 を保持。
+        2 手目: top-K 各盤面から再度 30 通り → 最大お邪魔数。
+        最大 sim 数 = 30 + 5×30 = 180 (全探索 900 の 1/5)。
+
+    正規化: raw / POTENTIAL_FIRE_POWER_NORM (=72 =ON_FIELD_CAP)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        max_add: 最大追加ぷよ数 (デフォルト 2。1 なら 30 sim のみ)。
+
+    Returns:
+        IndicatorV2Value: score=raw/72 (0〜1), raw=最大お邪魔数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 1 手目: 30 通り探索 (chain_count 基準で top-K 候補を選択)
+    top_k = _pfp_first_pass(board, sim, POTENTIAL_FIRE_POWER_BEAM_K)
+    if not top_k:
+        # 全列満杯 → 0
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    if max_add == 1:
+        # 1 手のみ: top_k から直接お邪魔数を計算
+        best_ojama = max(
+            _board_fire_ojama(b, elapsed_sec, sim) for _, b in top_k
+        )
+    else:
+        # 2 手目 (max_add >= 2): top-K 各盤面を起点に再度 30 通り
+        best_ojama = _pfp_second_pass(top_k, sim, elapsed_sec)
+    raw = float(best_ojama)
+    return IndicatorV2Value(
+        score=_clamp01(raw / POTENTIAL_FIRE_POWER_NORM), raw=raw,
+    )
+
+
+# ============================
+# VII 打ち合い収支 (条件1)
+# ============================
+
+# 11 本対戦較正: 連鎖数 → 生成お邪魔数 ≈ CHAIN_OJAMA_A * exp(CHAIN_OJAMA_B * n)。
+CHAIN_OJAMA_A: float = 30.13
+CHAIN_OJAMA_B: float = 0.297
+
+# 時間推定: 1 連鎖あたりの目安秒数 (~0.30 秒/連鎖、ノイジーなので平均フィット値使用)。
+TIME_PER_CHAIN_SEC: float = 0.30
+
+# honsen_output 正規化分母: お邪魔換算が 72 (盤面容量) を超えることも多いため
+# 余裕を持たせて 144 (=ON_FIELD_CAP * 2) を上限とする。
+HONSEN_OUTPUT_NORM: float = float(ON_FIELD_CAP * 2)  # = 144.0
+
+# ---- テンポ核 (時間窓つき打ち合い収支) ----
+# 1手あたりの秒数: labeled_win.csv 40112行の手入れイベント間隔中央値 (実測)。
+# tsumo_count_raw 増加タイミングの差分を計算。中央値=0.733秒/手。
+SEC_PER_HAND: float = 0.733  # 実測中央値 (データ後決定済)
+
+# current→achievable の連鎖数差 1 あたりに要する手数の概算。
+# reach_fire_power_max_chain の gap 分布: 中央値=0, 75%=1, 90%=3。
+# 1連鎖の伸びに 2 手程度かかる (ぷよ 2 個 = 1 組) という直感と整合。
+HANDS_PER_CHAIN_GAP: float = 2.0  # データ後決定済 (gap×2手で到達を概算)
+
+
+def chain_to_ojama(n: float) -> float:
+    """連鎖数 n から生成されるお邪魔個数を較正カーブで推定する。
+
+    カーブ: CHAIN_OJAMA_A * exp(CHAIN_OJAMA_B * n)  (11 本較正済)。
+    n <= 0 の場合は 0.0 を返す。
+
+    Args:
+        n: 連鎖数 (0 以下で 0.0)。
+
+    Returns:
+        推定お邪魔個数 (float)。
+    """
+    import math
+    if n <= 0.0:
+        return 0.0
+    return CHAIN_OJAMA_A * math.exp(CHAIN_OJAMA_B * n)
+
+
+def chain_to_time(n: float) -> float:
+    """連鎖数 n の発火に要する推定秒数を返す。
+
+    推定: TIME_PER_CHAIN_SEC * n (時間はノイジーなので平均フィット使用)。
+    n <= 0 は 0.0 を返す。
+
+    Args:
+        n: 連鎖数 (0 以下で 0.0)。
+
+    Returns:
+        推定所要秒数 (float, >= 0)。
+    """
+    return max(0.0, TIME_PER_CHAIN_SEC * n)
+
+
+def honsen_output(
+    board: Board,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """VII-1 打ち合い出力 (本線 + セカンド合算お邪魔量)。
+
+    片側の「打ち合い出力」を測る。相対指標(収支)は eval 側で
+    「1P.honsen_output.raw - 2P.honsen_output.raw」の差として使う想定。
+
+    算出方法:
+        chain_to_ojama(current_max_chain.raw) を本線出力として使用。
+
+        ⚠️ second_chain_potential.raw は「本線非参加の色ぷよ数」であり
+        連鎖数ではない。副砲の連鎖数を直接観測できる指標が現時点で存在しないため、
+        本実装では current_max_chain 単体で打ち合い出力を推定する。
+        副砲連鎖数が取得可能になった段階で「chain_to_ojama(副砲連鎖数)」を加算する
+        拡張が容易な設計にしている (コメント参照)。
+
+    正規化: raw / HONSEN_OUTPUT_NORM (=144=ON_FIELD_CAP*2)。
+    上限クランプあり (19連鎖想定上限 ≒ 1170個、1.0 にクランプ)。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/144 (0〜1), raw=推定お邪魔数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 本線の連鎖数 (III-1 current_max_chain と同じロジック)
+    main_chain_result = sim.simulate(board)
+    main_chains = float(main_chain_result.chain_count)
+    # 本線お邪魔量
+    main_ojama = chain_to_ojama(main_chains)
+    # ── 副砲加算 (拡張ポイント) ──
+    # 副砲の連鎖数が得られる場合は以下を有効化:
+    #   sub_chains = <副砲連鎖数を観測する関数>
+    #   sub_ojama = chain_to_ojama(sub_chains)
+    # 現状は 0.0 (= current_max_chain 単体)。
+    sub_ojama = 0.0
+    raw = main_ojama + sub_ojama
+    return IndicatorV2Value(
+        score=_clamp01(raw / HONSEN_OUTPUT_NORM),
+        raw=raw,
+    )
+
+
+def honsen_tempo_output(
+    current_chain: float,
+    achievable_chain: float,
+    opp_chain: float,
+) -> IndicatorV2Value:
+    """VII-2 テンポ核: 相手本線の窓内で自分が伸ばせる打ち合い出力。
+
+    モデル:
+        window = chain_to_time(opp_chain)  ... 相手本線の所要秒数
+        hands  = window / SEC_PER_HAND      ... その窓で自分が置ける手数
+        frac   = min(1.0, hands / (chain_gap * HANDS_PER_CHAIN_GAP))
+                   ... achievable まで伸ばすのに要する手数の達成率
+        my_built = current_chain + frac * (achievable_chain - current_chain)
+        raw    = chain_to_ojama(my_built)  ... 自分の打ち合い出力
+
+    achievable_chain: reach_fire_power_max_chain が有効なら使用。
+        0 (無効) の場合は current_chain + 2 で近似 (フォールバック)。
+    opp_chain が 0 の場合: window=0 → hands=0 → frac=0 → raw=chain_to_ojama(current) と等価。
+
+    テンポ核の意図: 相手本線が大きい(長い)ほど窓が広がり自分の my_built が増える。
+        → 大連鎖ビルド中の優位性が反映される。
+
+    正規化: raw / HONSEN_OUTPUT_NORM (=144)。
+
+    Args:
+        current_chain: 自分の現在最大連鎖数 (current_max_chain_raw)。
+        achievable_chain: 到達目標連鎖数 (reach_fire_power_max_chain 等)。
+                          0 以下の場合は current_chain + 2 にフォールバック。
+        opp_chain: 相手の現在最大連鎖数 (current_max_chain_raw)。
+
+    Returns:
+        IndicatorV2Value: score=raw/144 (0〜1), raw=推定お邪魔数。
+    """
+    import math
+    # achievable が無効 (0 以下 or 不明) の場合のフォールバック: current + 2
+    _FALLBACK_CHAIN_ADD: float = 2.0
+    ach = achievable_chain if achievable_chain > 0.0 else (current_chain + _FALLBACK_CHAIN_ADD)
+    # 相手本線の窓
+    window = chain_to_time(opp_chain)
+    # 窓内で自分が置ける手数
+    hands = window / SEC_PER_HAND
+    # current → achievable に要する総手数
+    chain_gap = max(0.0, ach - current_chain)
+    hands_needed = chain_gap * HANDS_PER_CHAIN_GAP
+    # 達成率 (window が短ければ部分的にしか伸ばせない)
+    frac = min(1.0, hands / hands_needed) if hands_needed > 0.0 else 1.0
+    # 窓内で到達できる連鎖数
+    my_built = current_chain + frac * chain_gap
+    raw = chain_to_ojama(my_built)
+    return IndicatorV2Value(
+        score=_clamp01(raw / HONSEN_OUTPUT_NORM),
+        raw=raw,
+    )
+
+
+# ============================
+# VIII 催促耐性: ojama_disruption (条件2「潰し」)
+# ============================
+
+# 催促量の代表値 (≒2段 = 12個)。実際の催促量は可変だが観測代表値として固定。
+# データ後決定で変更可能。
+OJAMA_DISRUPTION_DEFAULT_N: int = 12
+# Monte Carlo サンプル数 (軽量化のため小さく設定)。
+OJAMA_DISRUPTION_DEFAULT_SAMPLES: int = 4
+
+
+def ojama_disruption(
+    board: Board,
+    ojama_n: int = OJAMA_DISRUPTION_DEFAULT_N,
+    n_samples: int = OJAMA_DISRUPTION_DEFAULT_SAMPLES,
+    simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """VIII 催促潰し度 (disruptability): お邪魔 ojama_n 個着弾で連鎖が壊れる割合。
+
+    設計意図:
+        「相手のこの盤面は催促で潰されやすいか (disruptability)」を表す。
+        相手側に対して高い = こちらが催促を通せる = 有利 の文脈で使用する。
+        符号の扱い (1P視点/2P視点の反転) は eval/collect 側の責務。
+
+    計算手順:
+        1. before = simulate(board).chain_count  (現在の到達連鎖)。
+        2. n_samples 回、drop_ojama(board, ojama_n, seed=i) で端数列をランダム化して
+           落下後盤面の after_i を計算。
+        3. reduction = mean_i( max(0, (before - after_i)) / max(1, before) )
+           = 連鎖が壊れた割合 (0=無傷, 1=全壊)。
+        4. before <= 0 (そもそも連鎖なし) は 0.0 を返す。
+
+    潰し成立の定義: 到達連鎖の低下割合 (別定義が必要な場合は関数を差し替え可)。
+
+    正規化: reduction は 0〜1 に自然に収まるため clamp のみ適用。
+
+    Args:
+        board: 評価対象の盤面 (STABLE 確定盤面想定)。
+        ojama_n: 代表催促量 (個数)。既定 12 (≒2段)。
+        n_samples: Monte Carlo サンプル数。既定 8。
+        simulator: ChainSimulator インスタンス (None = 共有 _SHARED_SIMULATOR)。
+
+    Returns:
+        IndicatorV2Value: score=reduction (0〜1), raw=reduction。
+    """
+    sim = simulator if simulator is not None else _SHARED_SIMULATOR
+    before_result = sim.simulate(board)
+    before = before_result.chain_count
+    if before <= 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    total_reduction = 0.0
+    for i in range(n_samples):
+        try:
+            ojama_board = sim.drop_ojama(board, ojama_n, seed=i)
+        except Exception:
+            continue
+        after_result = sim.simulate(ojama_board)
+        after = after_result.chain_count
+        total_reduction += max(0.0, (before - after)) / max(1, before)
+    raw = total_reduction / max(1, n_samples)
+    return IndicatorV2Value(score=_clamp01(raw), raw=raw)
+
+
+# ============================
+# IX 形・組み品質 (connected_pair_quality) — EXTRA_INDICATOR_NAMES 末尾
+# ============================
+
+
+def _neighbors_of(cells: "frozenset[tuple[int, int]]") -> "set[tuple[int, int]]":
+    """cells の全セルの上下左右1マスを返す (cells 自身は除く)。
+
+    盤面範囲チェックは行わない (範囲外の座標もセットに含まれるが、
+    グループ cells との交差判定には影響なし)。
+    """
+    nbrs: set[tuple[int, int]] = set()
+    for r, c in cells:
+        nbrs.add((r - 1, c))
+        nbrs.add((r + 1, c))
+        nbrs.add((r, c - 1))
+        nbrs.add((r, c + 1))
+    return nbrs - cells
+
+
+def _connected_pairs_classify(
+    board: Board,
+    simulator: "ChainSimulator | None" = None,
+) -> "tuple[int, int]":
+    """2連結を「主連鎖隣接」と「孤立」に分類してカウントする。
+
+    ※ 近似定義: 色を問わず size >= MAIN_GROUP_MIN_SIZE (=3) のグループに
+    静的に1マス隣接しているかどうかで判定する。
+    隣接する「大きな塊の脇にある2連結」=主連鎖構造に組み込まれやすい形、
+    と見なす近似。連鎖伝播の実際の経路とは異なる静的な空間的隣接による近似。
+
+    注: 同色の隣接2連結は find_groups が1つのグループに統合するため
+    「同色 size>=3 に隣接する同色 size=2」は構造上発生しない。
+    本指標では色を問わず大きなグループへの近接を「主連鎖貢献」の代理として扱う。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        (main_linked_count, isolated_count):
+            main_linked_count: (任意色の) size>=3 グループに隣接する2連結の数。
+            isolated_count: どの size>=3 グループにも隣接しない孤立2連結の数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    groups = sim.find_groups(board)
+
+    # 全色を合わせた size >= MAIN_GROUP_MIN_SIZE グループの cells を収集
+    main_cells_all: set[tuple[int, int]] = set()
+    for g in groups:
+        if g.size >= MAIN_GROUP_MIN_SIZE:
+            main_cells_all.update(g.cells)
+
+    main_linked = 0
+    isolated = 0
+    for g in groups:
+        if g.size != 2:
+            continue
+        if _neighbors_of(g.cells) & main_cells_all:
+            main_linked += 1
+        else:
+            isolated += 1
+    return main_linked, isolated
+
+
+def main_linked_pair_count(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-1 主連鎖隣接2連結数。
+
+    同色2連結のうち、同色 size>=MAIN_GROUP_MIN_SIZE(=3) グループに
+    静的に1マス隣接しているものの数。
+    「あと少しで主連鎖に組み込める "生きた" 連結」を近似で数える。
+    正規化: raw / NORM_LINKED_PAIR (暫定 10.0。データ後決定)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/10, raw=主連鎖隣接2連結の個数。
+    """
+    main_linked, _ = _connected_pairs_classify(board, simulator)
+    raw = float(main_linked)
+    return IndicatorV2Value(score=_clamp01(raw / NORM_LINKED_PAIR), raw=raw)
+
+
+def isolated_pair_count(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-2 孤立2連結数。
+
+    同色2連結のうち、どの同色 size>=MAIN_GROUP_MIN_SIZE(=3) グループにも
+    静的に隣接しないもの (= 主連鎖に貢献しにくい"死に連結")。
+    正規化: raw / NORM_LINKED_PAIR (暫定 10.0。データ後決定)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/10, raw=孤立2連結の個数。
+    """
+    _, isolated = _connected_pairs_classify(board, simulator)
+    raw = float(isolated)
+    return IndicatorV2Value(score=_clamp01(raw / NORM_LINKED_PAIR), raw=raw)
+
+
+def main_linked_ratio(
+    board: Board, simulator: "ChainSimulator | None" = None,
+) -> IndicatorV2Value:
+    """IX-3 主連鎖隣接2連結率 = main_linked / (main_linked + isolated)。
+
+    2連結がゼロの場合は 0.0 を返す (= 情報なし)。
+    score = raw (すでに 0〜1 に自然に収まる)。
+
+    ※ 近似: 連鎖伝播経路でなく静的空間隣接で判定。
+
+    Args:
+        board: STABLE 確定盤面。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=ratio (0〜1), raw=ratio。
+    """
+    main_linked, isolated = _connected_pairs_classify(board, simulator)
+    total = main_linked + isolated
+    if total == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    raw = float(main_linked) / float(total)
+    return IndicatorV2Value(score=_clamp01(raw), raw=raw)
+
+
+# ============================
+# X 受けやすさ (ukeyasusa)
+# ============================
+
+
+def ukeyasusa(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """X-1 受けやすさ: 受動的にお邪魔を受け止められる盤面強度。
+
+    absorption_capacity(吸収余地) + dig_resistance(掘り耐性) + death_margin(窒息余裕)
+    の加重平均 (各 1/3)。値が大きいほど受け力が高い。
+
+    設計根拠: 検証で absorption / dig 差が中盤シグナルとして有効と確認済み。
+    この合成が taiou_capacity (X-2) の health 計算の土台でもある。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=加重平均 (0〜1), raw=absorption_capacity.raw。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    # 各構成指標を算出 (全て 0〜1 正規化済み)
+    s_abs = absorption_capacity(board).score
+    s_dig = dig_resistance(board, sim).score
+    s_death = death_margin(board).score
+    score = (
+        UKEYASUSA_W_ABSORPTION * s_abs
+        + UKEYASUSA_W_DIG * s_dig
+        + UKEYASUSA_W_DEATH * s_death
+    )
+    # raw は absorption の生値 (空きセル数) を代表値として使用
+    raw_abs = absorption_capacity(board).raw
+    return IndicatorV2Value(score=_clamp01(score), raw=raw_abs)
+
+
+# ============================
+# XI 対応力 (taiou_capacity)
+# ============================
+
+
+def _taiou_health(
+    final_board: Board, sim: ChainSimulator,
+) -> float:
+    """対応後の盤面 final_board の健全度 (0〜1) を返す。
+
+    alive=False (窒息) なら強制ゼロ。
+    健全度 = TAIOU_W_POTENTIAL × potential_fire_power.score
+             + TAIOU_W_UKEY × ukeyasusa.score。
+
+    この関数は taiou_capacity の内部ヘルパー。stateless。
+    """
+    if final_board.is_dead():
+        return 0.0
+    s_pot = potential_fire_power(final_board, simulator=sim).score
+    s_ukey = ukeyasusa(final_board, sim).score
+    return _clamp01(TAIOU_W_POTENTIAL * s_pot + TAIOU_W_UKEY * s_ukey)
+
+
+def _partial_fire_ojama(
+    steps: "list",
+    n: int,
+    elapsed_sec: float,
+) -> int:
+    """連鎖 steps の先頭 n ステップ分のお邪魔換算を返す (部分発火用)。
+
+    ChainResult.steps[0..n-1] を偽の ChainResult として score 計算する。
+    引数の steps は ChainResult.steps (list[ChainStep])。
+    n > len(steps) の場合は len(steps) に丸める (全発火)。
+    n <= 0 の場合は 0 を返す。
+
+    Args:
+        steps: simulate() の ChainResult.steps。
+        n: 部分発火の連鎖ステップ数 (1 から始まる)。
+        elapsed_sec: マージンタイム計算用経過秒。
+
+    Returns:
+        n 連鎖分のお邪魔換算数 (int)。
+    """
+    from src.chain import ChainResult
+    if n <= 0 or not steps:
+        return 0
+    n = min(n, len(steps))
+    partial_steps = steps[:n]
+    last_board = partial_steps[-1].board_after
+    # 偽 ChainResult を構築してスコア計算する
+    partial_result = ChainResult(
+        steps=partial_steps,
+        chain_count=n,
+        total_erased=sum(s.erased_count for s in partial_steps),
+        total_ojama=sum(s.erased_ojama for s in partial_steps),
+        final_board=last_board,
+        participating_cells=sum(s.erased_count for s in partial_steps),
+    )
+    score = calculate_chain_score(partial_result).total_score
+    ojama = score_to_ojama(
+        score=score, prev_leftover=0,
+        elapsed_sec=elapsed_sec, rate_base=OJAMA_RATE_STANDARD,
+    )
+    return int(ojama.ojama_count)
+
+
+def _build_taiou_candidates(
+    board: Board,
+    sim: "ChainSimulator",
+    elapsed_sec: float,
+    max_candidates: int,
+) -> "list[tuple[int, Board]]":
+    """対応候補 (offset_ojama, 直後盤面) のリストを返す (部分発火方式)。
+
+    takapt 定石で得た最良 board の steps を 1 〜 k 連鎖で打ち切り、
+    各パターンを候補として列挙する。全発火 (全 steps) も候補に含む。
+    候補数は max_candidates でキャップする。
+
+    Args:
+        board: 評価対象の確定盤面。
+        sim: ChainSimulator インスタンス。
+        elapsed_sec: マージンタイム計算用経過秒。
+        max_candidates: 生成する候補数の上限。
+
+    Returns:
+        [(offset_ojama, 直後盤面)] のリスト。空の場合は候補なし (空盤面等)。
+    """
+    _, dropped = _takapt_best_drop(board, sim)
+    if dropped is None:
+        return []
+    result = sim.simulate(dropped)
+    if not result.steps:
+        return []
+    # 部分発火候補: 1 〜 min(max_candidates, len(steps)) 連鎖
+    n_max = min(max_candidates, len(result.steps))
+    candidates: list[tuple[int, Board]] = []
+    for n in range(1, n_max + 1):
+        ojama = _partial_fire_ojama(result.steps, n, elapsed_sec)
+        final_board = result.steps[n - 1].board_after
+        candidates.append((ojama, final_board))
+    return candidates
+
+
+def taiou_capacity(
+    board: Board,
+    ref_ojama: int = REF_OJAMA_TAIOU,
+    elapsed_sec: float = 0.0,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XI-1 対応力 v2: 最適サイズの対応を選んで温存度を評価する。
+
+    v1 との違い: 即発火 (丸ごと全発火) 1 候補のみではなく、
+    部分発火 (1 連鎖〜k 連鎖打ち切り) の複数候補を生成し、
+    ref_ojama を相殺できる中で最も盤面健全度 (health) が高い「ちょうど良い対応」を選ぶ。
+
+    計算手順 (v2):
+      1. takapt 定石で最良 dropped_board を取得し simulate。
+      2. steps から 1〜TAIOU_MAX_CANDIDATES 連鎖分の部分発火候補を生成。
+      3. 各候補: offset (部分発火お邪魔) + health (直後盤面の潜在力+受け力)。
+      4. 選択: offset >= ref_ojama の候補のうち health 最大 (ちょうど良いサイズ)。
+               満たす候補がなければ offset 最大の候補を採用し health で減点。
+      5. taiou_capacity = min(1, offset/ref_ojama) × health。
+
+    温存度が主役: 小さく相殺できる盤面 → 直後盤面に本線 potential が残り
+    health 高 → スコア高。本線巻き込み必須な盤面は health が低下。
+
+    backwards compat: elapsed_sec は optional 追加引数 (デフォルト 0.0)。
+    raw の意味は offset_ratio (相殺充足度, 0〜1) を維持する。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        ref_ojama: 基準催促量 (個数)。既定 REF_OJAMA_TAIOU (=30)。
+        elapsed_sec: 試合経過秒 (マージンタイム用)。既定 0.0。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=対応力 (0〜1), raw=offset_ratio (相殺充足度)。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    candidates = _build_taiou_candidates(board, sim, elapsed_sec, TAIOU_MAX_CANDIDATES)
+    if not candidates:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    return _select_best_taiou_candidate(candidates, ref_ojama, sim)
+
+
+def _select_best_taiou_candidate(
+    candidates: "list[tuple[int, Board]]",
+    ref_ojama: int,
+    sim: "ChainSimulator",
+) -> IndicatorV2Value:
+    """候補リストから最適対応を選んで IndicatorV2Value を返す。
+
+    選択ロジック:
+        - offset >= ref_ojama の候補 → health 最大を選択 (ちょうど良いサイズ)。
+        - 充足候補なし → offset 最大の候補を選択 (精一杯の対応)。
+    score = min(1, offset/ref_ojama) × health。
+    raw = min(1, offset/ref_ojama) (相殺充足度)。
+
+    Args:
+        candidates: [(offset_ojama, 直後盤面)] のリスト。空は呼出前に確認済み。
+        ref_ojama: 基準催促量 (個数)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        IndicatorV2Value: score=対応力 (0〜1), raw=offset_ratio (0〜1)。
+    """
+    ref = max(1, ref_ojama)
+    # 相殺充足候補 (offset >= ref_ojama)
+    sufficient = [(oj, fb) for oj, fb in candidates if oj >= ref]
+    if sufficient:
+        # health 最大を選ぶ (ちょうど良いサイズ = 温存度最大)
+        best_oj, best_fb = max(sufficient, key=lambda x: _taiou_health(x[1], sim))
+    else:
+        # 充足不能 → offset 最大 (精一杯の対応)
+        best_oj, best_fb = max(candidates, key=lambda x: x[0])
+    offset_ratio = min(1.0, float(best_oj) / float(ref))
+    health = _taiou_health(best_fb, sim)
+    score = _clamp01(offset_ratio * health)
+    return IndicatorV2Value(score=score, raw=offset_ratio)
+
+
+# ============================
+# XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
+# ============================
+
+# 飽和連鎖量の正規化分母 (上級者実用上限 ~19 連鎖)。
+# potential_fire_power と同じ探索(追加sim0)で取得。
+NORM_SATURATED_CHAIN: float = 19.0
+
+# 発火点数の正規化分母 (最大 30 = 5色×6列)。
+NORM_IGNITION_POINT_COUNT: float = 30.0
+
+# 多色発火の正規化分母 (最大 5 色)。
+NORM_MULTI_COLOR_IGNITION: float = float(len(IGNITION_TRIAL_COLORS))
+
+# 副砲連鎖数の正規化分母 (上限 ~12 連鎖。honsen後の残りなのでNORM_MAX_CHAINより小さい)。
+NORM_SUB_CHAIN: float = 12.0
+
+# 同時消しリッチネス: 1ステップ平均グループ数の正規化分母 (経験的上限 ~6)。
+NORM_SIMULTANEOUS_POP: float = 6.0
+
+
+def _takapt_full_scan(
+    board: Board, sim: ChainSimulator,
+) -> "list[tuple[int, int, int, Board, ChainResult]]":
+    """takapt 定石 30 通りを全スキャンし (chain_count, col, color, dropped, result) を返す。
+
+    _takapt_best_drop の拡張版。発火点数・多色発火計算用に
+    全発火試行の結果を保持する(追加simゼロ = _takapt_best_dropと同じ探索を1回で完結)。
+
+    Args:
+        board: 評価対象の確定盤面 (破壊しない)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        [(chain_count, col, color, dropped_board, chain_result)] のリスト。
+        連鎖数 > 0 のもののみ (非発火は除外)。
+    """
+    hits: list[tuple[int, int, int, Board, ChainResult]] = []
+    for col in range(BOARD_COLS):
+        for color in IGNITION_TRIAL_COLORS:
+            dropped = _drop_one_color(board, col, color)
+            if dropped is None:
+                continue
+            result = sim.simulate(dropped)
+            if result.chain_count > 0:
+                hits.append((result.chain_count, col, color, dropped, result))
+    return hits
+
+
+def saturated_chain_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1 飽和連鎖量 (1手追加での最大到達連鎖数)。
+
+    potential_fire_power と同じ探索 (_takapt_best_drop 相当) を流用し、
+    最大 chain_count を返す。追加 sim ゼロ。
+
+    「今の盤面にどれだけ連鎖が仕込まれているか」の直接測定。
+    build進捗・催促価値・相対build差など多くの指標の土台となる。
+
+    正規化: raw / NORM_SATURATED_CHAIN (暫定 19)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=最大到達連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, _ = _takapt_best_drop(board, sim)
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+def ignition_point_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-2 発火点数 (発火可能な (列, 色) の種類数)。
+
+    takapt 探索 30 通りのうち chain_count > 0 となる (列, 色) の数。
+    追加 sim ゼロ (_takapt_full_scan と同じ探索を共有)。
+
+    「何通りの方法で連鎖を起こせるか」= 発火の柔軟性。
+    正規化: raw / NORM_IGNITION_POINT_COUNT (=30)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/30 (0〜1), raw=発火可能な(列,色)数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    hits = _takapt_full_scan(board, sim)
+    raw = float(len(hits))
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_IGNITION_POINT_COUNT), raw=raw,
+    )
+
+
+def multi_color_ignition(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-3 多色発火 (発火可能な色の種類数)。
+
+    takapt 探索で chain_count > 0 となった (列, 色) のうち、色の種類数。
+    発火の色柔軟性 = 読まれにくさ・対応多様性の指標。
+    追加 sim ゼロ (_takapt_full_scan と探索を共有)。
+
+    正規化: raw / NORM_MULTI_COLOR_IGNITION (=5)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/5 (0〜1), raw=発火可能な色数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    hits = _takapt_full_scan(board, sim)
+    colors_hit = {color for _, _, color, _, _ in hits}
+    raw = float(len(colors_hit))
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_MULTI_COLOR_IGNITION), raw=raw,
+    )
+
+
+def sub_chain_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-4 副砲連鎖数 (本線発火後の残り盤面にもう1手落として組める連鎖数)。
+
+    最良 takapt 発火後の final_board に対して再度 takapt 探索 (30通り) を行い、
+    最大 chain_count を副砲連鎖数とする。
+    「本線を打った後にまだ連鎖弾が残っているか」を直接測定。
+
+    追加 sim コスト: 本線 simulate 1 回 + 副砲 takapt 探索 30 通り = 合計31 sim。
+    発火イベント評価 (taiou_capacity 等に比べると軽量)。
+
+    正規化: raw / NORM_SUB_CHAIN (暫定 12)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/12 (0〜1), raw=副砲到達連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 本線発火: best_board (1個追加済み) を simulate
+    main_result = sim.simulate(best_board)
+    if not main_result.steps:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 本線発火後の残り盤面に、もう1手 takapt 探索 (副砲探索)
+    post_board = main_result.final_board
+    sub_best_chain, _ = _takapt_best_drop(post_board, sim)
+    raw = float(sub_best_chain)
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_SUB_CHAIN), raw=raw,
+    )
+
+
+def simultaneous_pop_richness(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-5 同時消しリッチネス (最良発火の各ステップ平均グループ数)。
+
+    takapt 探索の最良発火 ChainResult の steps から、
+    各ステップで同時に消えたグループ数の平均を返す。
+    連鎖数を伸ばさず火力を上げる = 潰し弾の質・得点ボーナス活用の代理指標。
+    追加 sim ゼロ (takapt 探索の副産物)。
+
+    正規化: raw / NORM_SIMULTANEOUS_POP (暫定 6.0)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/6 (0〜1), raw=平均同時消しグループ数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    result = sim.simulate(best_board)
+    if not result.steps:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    # 各ステップの erased_groups 数の平均
+    avg_groups = sum(len(step.erased_groups) for step in result.steps) / len(result.steps)
+    return IndicatorV2Value(
+        score=_clamp01(avg_groups / NORM_SIMULTANEOUS_POP), raw=avg_groups,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -886,6 +1823,7 @@ __all__ = [
     "connectivity_observation",
     "second_chain_potential",
     "reach_fire_power",
+    "potential_fire_power",
     # ④
     "ojama_net_balance",
     "ojama_forecast",
@@ -896,4 +1834,47 @@ __all__ = [
     # ⑥
     "dig_resistance",
     "absorption_capacity",
+    # VII 打ち合い収支 (条件1)
+    "chain_to_ojama",
+    "chain_to_time",
+    "honsen_output",
+    "CHAIN_OJAMA_A",
+    "CHAIN_OJAMA_B",
+    "TIME_PER_CHAIN_SEC",
+    "HONSEN_OUTPUT_NORM",
+    # VII-2 テンポ核 (時間窓つき打ち合い収支)
+    "honsen_tempo_output",
+    "SEC_PER_HAND",
+    "HANDS_PER_CHAIN_GAP",
+    # VIII 催促潰し度 (条件2「潰し」)
+    "ojama_disruption",
+    "OJAMA_DISRUPTION_DEFAULT_N",
+    "OJAMA_DISRUPTION_DEFAULT_SAMPLES",
+    # IX 形・組み品質 — EXTRA_INDICATOR_NAMES 末尾
+    "main_linked_pair_count",
+    "isolated_pair_count",
+    "main_linked_ratio",
+    "MAIN_GROUP_MIN_SIZE",
+    "NORM_LINKED_PAIR",
+    # X 受けやすさ / XI 対応力 — EXTRA_INDICATOR_NAMES 末尾 (既存順序保持)
+    "ukeyasusa",
+    "taiou_capacity",
+    "UKEYASUSA_W_ABSORPTION",
+    "UKEYASUSA_W_DIG",
+    "UKEYASUSA_W_DEATH",
+    "REF_OJAMA_TAIOU",
+    "TAIOU_W_POTENTIAL",
+    "TAIOU_W_UKEY",
+    "TAIOU_MAX_CANDIDATES",
+    # XII board sim 本命指標 — EXTRA_INDICATOR_NAMES 末尾 (既存順序保持)
+    "saturated_chain_count",
+    "ignition_point_count",
+    "multi_color_ignition",
+    "sub_chain_count",
+    "simultaneous_pop_richness",
+    "NORM_SATURATED_CHAIN",
+    "NORM_IGNITION_POINT_COUNT",
+    "NORM_MULTI_COLOR_IGNITION",
+    "NORM_SUB_CHAIN",
+    "NORM_SIMULTANEOUS_POP",
 ]

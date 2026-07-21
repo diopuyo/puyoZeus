@@ -300,16 +300,20 @@ class ChainSimulator:
             for i, color in enumerate(reversed(puyos)):
                 board.set(end - 1 - i, col, color)
 
-    def drop_ojama(self, board: Board, ojama_count: int) -> Board:
+    def drop_ojama(
+        self, board: Board, ojama_count: int, seed: int | None = None,
+    ) -> Board:
         """
         指定個数のおじゃまを盤面に落とす。
 
-        落下順序: 左端列から右端列へ、1行単位で。
+        均等行分 (floor(N/6) 行) + 端数 (N mod 6) はランダムな列へ 1 個ずつ。
+        再現性が必要な場合は seed を指定すること。
         引数の board は変更しない (内部で copy())。
 
         Args:
             board: おじゃまを落とす前の盤面。
             ojama_count: 落とすおじゃまの数。
+            seed: 端数列選択の乱数シード (None = 毎回ランダム)。後方互換 optional。
 
         Returns:
             Board: おじゃまを落とした後の新しい盤面。
@@ -322,8 +326,8 @@ class ChainSimulator:
 
         work_board = board.copy()
 
-        # 各列に落とすおじゃまの数を計算
-        drop_counts = self._calc_ojama_drop_counts(ojama_count)
+        # 各列に落とすおじゃまの数を計算 (端数はランダム列)
+        drop_counts = self._calc_ojama_drop_counts(ojama_count, seed=seed)
 
         # 各列の下から空きセルを探しておじゃまを配置 (重力で下に落ちる)
         for col in range(BOARD_COLS):
@@ -441,26 +445,38 @@ class ChainSimulator:
                 neighbors.append((nr, nc))
         return neighbors
 
-    def _calc_ojama_drop_counts(self, ojama_count: int) -> list[int]:
+    def _calc_ojama_drop_counts(
+        self, ojama_count: int, seed: int | None = None,
+    ) -> list[int]:
         """
         おじゃま個数から各列への落下数を計算する。
 
-        落下順序: 左端列から右端列へ、OJAMA_ROW_SIZE (=6) 個ずつ。
+        仕様: N 個を 6 列に均等配分 (各 floor(N/6)) + 端数 (N mod 6) は
+        ランダムに選んだ remainder 列へ 1 個ずつ追加する。
+        (user 伝授ルール: 端数はランダム列。旧実装の「左から順」は誤り。)
+
+        dig_resistance 等の精度にも影響するため、呼び出し元が再現性を
+        必要とする場合は seed を指定すること。
 
         Args:
             ojama_count: 落とすおじゃまの総数。
+            seed: 端数列選択の乱数シード (None = 毎回ランダム)。
 
         Returns:
             list[int]: 各列 (index=0〜5) の落下数。
         """
+        import random as _random
         drop_counts = [0] * BOARD_COLS
         full_rows, remainder = divmod(ojama_count, OJAMA_ROW_SIZE)
 
         for col in range(BOARD_COLS):
             drop_counts[col] += full_rows
 
-        for col in range(remainder):
-            drop_counts[col] += 1
+        if remainder > 0:
+            rng = _random.Random(seed)
+            cols_for_remainder = rng.sample(range(BOARD_COLS), remainder)
+            for col in cols_for_remainder:
+                drop_counts[col] += 1
 
         return drop_counts
 
