@@ -78,15 +78,18 @@ kickoff 方針 (メモリ `project_indicator_rebuild_kickoff.md`) のセイバ�
 
 backwards-compat 遵守 (CSV 列は削除しない)。**モデル用の分類**として整理:
 
-### 3.1 コア独立軸 (モデル主入力)
+### 3.1 コア独立軸 (モデル主入力) ※2026-07-11 追検証で改訂 (§6 参照)
 
-| ファミリー | 代表指標 | 備考 |
+**特徴量は「相手との差 (自 − 相手)」を主入力とする** (§6.3)。生の自分値は弱いが
+差分にすると信号が 2〜3 倍になる。
+
+| ファミリー | 代表指標 (差分で使用) | 備考 |
 |---|---|---|
-| 盤面充填度 | `board_puyo_total` | 因子 A の代表 |
-| 危険 | `death_margin` | 窒息距離。充填度と別情報の分を保持 |
+| お邪魔 | `board_ojama_count` / `ojama_net_balance` / `ojama_forecast` | **最強信号 (お邪魔数の差=終盤 −0.35)** |
+| 色土台 | `board_color_puyo_total` | お邪魔と分離 (§6.1)。統合の board_puyo_total は不使用 |
+| 危険 | `death_margin` | 窒息距離 (差=終盤 +0.24) |
 | 連鎖規模 | `current_max_chain` | 因子 B の安価な代表 |
-| お邪魔 | `board_ojama_count` / `ojama_net_balance` / `ojama_forecast` | 最強信号 (終盤 −0.21) |
-| 形 | `conn_pair_count` / `conn_max_group_size` | 連結、比較的独立 |
+| 形 | `conn_pair_count` / `conn_triple_count` | 連結カウント。`conn_max_group_size` は除外 (§6.2) |
 | 受け | `dig_resistance` | |
 | テンポ | `tsumo_count_rate` / `margin_time_rate` | 進行度 |
 
@@ -100,8 +103,9 @@ backwards-compat 遵守 (CSV 列は削除しない)。**モデル用の分類**�
 
 - `absorption_capacity` (= 72 − board_puyo_total、r = −1.000)
 - `chain_efficiency` (≈ immediate_fire_power、r = 0.978)
-- `board_color_puyo_total` / `max_column_height` / `death_margin_neighbor`
-  (因子 A に高度に吸収される)
+- `board_puyo_total` (= board_color_puyo_total + board_ojama_count、§6.1)
+- `max_column_height` / `death_margin_neighbor` (因子 A に高度に吸収される)
+- `conn_max_group_size` (STABLE では実質 2/3 に限定、§6.2)
 
 ---
 
@@ -139,8 +143,50 @@ Phase L の動画追加 (66→100-150) でスケールする前提。
 
 ## 5. 次のステップ
 
-1. (本 PR) tier1 指標セット確定 + 相関/win 分析 + ΔWinProb 設計を記録。
-2. ΔWinProb プロトタイプ実装 (連続 STABLE 間 + イベント基点、現データ + proxy で概念実証)。
-3. Phase L 動画追加でスケール → ΔWinProb を本番規模で学習。
-4. tier2 火力派生指標の設計 (火力計算の高速化が前提: GPU 化 / 盤面ハッシュキャッシュ /
+1. (PR #17) tier1 指標セット確定 + 相関/win 分析 + ΔWinProb 設計を記録。
+2. (本 PR) tier1 追検証 (お邪魔分離 / 最大連結除外 / 差分主入力) + 可視化 + 差分信号分析。
+3. ΔWinProb プロトタイプ実装 (連続 STABLE 間 + イベント基点、現データ + proxy で概念実証)。
+4. Phase L 動画追加でスケール → ΔWinProb を本番規模で学習。
+5. tier2 火力派生指標の設計 (火力計算の高速化が前提: GPU 化 / 盤面ハッシュキャッシュ /
    484 探索の枝刈り)。
+
+---
+
+## 6. 追検証 (2026-07-11、user 指摘に基づく)
+
+`scripts/analyze_diff_signal.py` / `scripts/viz_tier1_results.py` で追検証。
+
+### 6.1 お邪魔の有り無しは分離すべき (統合 board_puyo_total は不使用)
+
+- 実データで `board_puyo_total = board_color_puyo_total + board_ojama_count` が
+  **100.0% の行で厳密成立** (差ゼロ)。統合値は独立情報を持たない。
+- win 相関が**逆符号**: 色ぷよ総数 (終盤 +0.035、多いほど勝ち) と
+  お邪魔数 (終盤 −0.214、多いほど負け)。統合すると打ち消し合い −0.092 に鈍る。
+- → コア軸は統合の `board_puyo_total` を外し、**色ぷよ総数 + お邪魔数の 2 本**に分離。
+
+### 6.2 最大連結は実質 2/3、≥4 は認識誤り
+
+- `conn_max_group_size` の分布: 3=74.8% / 2=10.5% / 1=2.4%。約 88% が 2〜3。
+- STABLE 盤面では 4 連結以上は即消えるはずだが **≥4 が約 12%** (最大 70 まで)。
+  これは色誤読でグループが連結した**認識エラー**。
+- → コア軸から除外 (「3 連結が存在するか」= `conn_triple_count` でほぼ代替)。
+  連結情報は 2 連結数 / 3 連結数のカウントで足りる。
+- **副産物**: 「STABLE なのに最大連結 ≥ 4」は色誤読の疑いフラグとして認識品質監視に転用可。
+
+### 6.3 有利不利に効くのは「相手との差分」(合成ではない)
+
+生の自分値 → 相手との差分 (自 − 相手) で win 相関が 2〜3 倍に:
+
+| 指標 (差) | 生・自分値 (全体) | 差分 (全体) | 差分 (終盤) |
+|---|---|---|---|
+| 盤面お邪魔数 | −0.098 | −0.215 | **−0.350** |
+| 盤面ぷよ総数 | −0.072 | −0.171 | −0.259 |
+| 最大列高 | −0.057 | −0.146 | −0.243 |
+| 窒息余裕 | +0.090 | +0.153 | **+0.238** |
+| 現在最大連鎖 | +0.034 | +0.079 | +0.106 |
+
+- **有利不利の主軸 = 「どちらがより埋まって死に近いか (相手比)」**。お邪魔数の差が終盤 −0.35 で断トツ。
+- **手組みの合成 (標準化和・相互作用) は逆効果** (合成A: お邪魔+連鎖+色土台 = 終盤 +0.184 <
+  お邪魔差単体 +0.350)。強い信号を弱い信号で希釈するため。
+- → 真の "組み合わせ利得" は非線形モデルが差分に重み付けしたとき (HistGBC 終盤 AUC 0.68) に出る。
+  tier1 モデルは**差分特徴 (自 − 相手) を主入力**にする。

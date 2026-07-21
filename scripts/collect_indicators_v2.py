@@ -26,10 +26,12 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 import cv2
+import numpy as np
 
 # プロジェクトルートを import path に追加
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -89,8 +91,62 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # ⑥ 受け力
     "dig_resistance", "dig_resistance_raw",
     "absorption_capacity", "absorption_capacity_raw",
+    # VIII 催促潰し度 (条件2「潰し」)
+    "ojama_disruption", "ojama_disruption_raw",
+    # IX 形・組み品質
+    "main_linked_pair_count", "main_linked_pair_count_raw",
+    "isolated_pair_count", "isolated_pair_count_raw",
+    "main_linked_ratio", "main_linked_ratio_raw",
+    # X 受けやすさ
+    "ukeyasusa", "ukeyasusa_raw",
+    # XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
+    "saturated_chain_count", "saturated_chain_count_raw",
+    "ignition_point_count", "ignition_point_count_raw",
+    "multi_color_ignition", "multi_color_ignition_raw",
+    "sub_chain_count", "sub_chain_count_raw",
+    "simultaneous_pop_richness", "simultaneous_pop_richness_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
+
+
+@dataclass
+class _BoardNpzAccumulator:
+    """盤面グリッド npz ダンプ用の蓄積バッファ。
+
+    CSV の各行と 1 対 1 対応するよう、rows リストと同期して追記する。
+    """
+    grids: list[np.ndarray] = field(default_factory=list)    # (13,6) uint8 のリスト
+    video_ids: list[str] = field(default_factory=list)
+    sides: list[str] = field(default_factory=list)           # "1P" / "2P"
+    t_secs: list[float] = field(default_factory=list)
+    game_idxs: list[int] = field(default_factory=list)
+    frame_idxs: list[int] = field(default_factory=list)
+
+    def append(
+        self, grid: np.ndarray, video_id: str, side: str,
+        t_sec: float, game_idx: int, frame_idx: int,
+    ) -> None:
+        """スナップショット 1 件を追加する。"""
+        self.grids.append(grid.copy())
+        self.video_ids.append(video_id)
+        self.sides.append(side)
+        self.t_secs.append(t_sec)
+        self.game_idxs.append(game_idx)
+        self.frame_idxs.append(frame_idx)
+
+    def save(self, path: Path) -> None:
+        """npz 形式で保存する。grids は (N,13,6) int8。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            str(path),
+            grids=np.array(self.grids, dtype=np.int8),
+            video_id=np.array(self.video_ids),
+            side=np.array(self.sides),
+            t_sec=np.array(self.t_secs, dtype=np.float32),
+            game_idx=np.array(self.game_idxs, dtype=np.int32),
+            frame_idx=np.array(self.frame_idxs, dtype=np.int32),
+        )
 
 
 @dataclass
@@ -167,6 +223,22 @@ def _fill_indicator_columns(
     bo = iv.board_ojama_count(board)
     dr = iv.dig_resistance(board)
     ab = iv.absorption_capacity(board)
+    od = iv.ojama_disruption(board)
+    mlp = iv.main_linked_pair_count(board)
+    ip = iv.isolated_pair_count(board)
+    mlr = iv.main_linked_ratio(board)
+    # X 受けやすさ: dig_resistance を内包するため連鎖シミュが走る。
+    #   STABLE snapshot の都度算出で問題なし (毎フレームではない)。
+    uk = iv.ukeyasusa(board)
+    # XII board sim 本命指標: micro-benchmark 済み (scripts/_tmp_bench_xii.py)。
+    #   1 snapshot あたり平均 3ms 程度 (200ms 予算比で十分小さい) のため
+    #   共有キャッシュ実装なしのシンプル呼び出しで問題ない
+    #   (ChainSimulator 内蔵の simulate キャッシュが自然に重複を吸収する)。
+    sat = iv.saturated_chain_count(board)
+    igp = iv.ignition_point_count(board)
+    mci = iv.multi_color_ignition(board)
+    sub = iv.sub_chain_count(board)
+    spr = iv.simultaneous_pop_richness(board)
     row.update({
         "tsumo_count_rate": tc.score, "tsumo_count_raw": tc.raw,
         "board_puyo_total": bp.score, "board_puyo_total_raw": bp.raw,
@@ -192,6 +264,19 @@ def _fill_indicator_columns(
         "board_ojama_count": bo.score, "board_ojama_count_raw": bo.raw,
         "dig_resistance": dr.score, "dig_resistance_raw": dr.raw,
         "absorption_capacity": ab.score, "absorption_capacity_raw": ab.raw,
+        "ojama_disruption": od.score, "ojama_disruption_raw": od.raw,
+        "main_linked_pair_count": mlp.score, "main_linked_pair_count_raw": mlp.raw,
+        "isolated_pair_count": ip.score, "isolated_pair_count_raw": ip.raw,
+        "main_linked_ratio": mlr.score, "main_linked_ratio_raw": mlr.raw,
+        # X 受けやすさ
+        "ukeyasusa": uk.score, "ukeyasusa_raw": uk.raw,
+        # XII board sim 本命指標 (新指標末尾追加)
+        "saturated_chain_count": sat.score, "saturated_chain_count_raw": sat.raw,
+        "ignition_point_count": igp.score, "ignition_point_count_raw": igp.raw,
+        "multi_color_ignition": mci.score, "multi_color_ignition_raw": mci.raw,
+        "sub_chain_count": sub.score, "sub_chain_count_raw": sub.raw,
+        "simultaneous_pop_richness": spr.score,
+        "simultaneous_pop_richness_raw": spr.raw,
     })
 
 
@@ -248,8 +333,13 @@ def _process_side(
     frame_idx: int,
     snap: OjamaAccountSnapshot,
     rows: list[dict[str, object]],
+    npz_acc: Optional["_BoardNpzAccumulator"] = None,
 ) -> None:
-    """1 side を処理し、出力対象なら rows に行を追加する。"""
+    """1 side を処理し、出力対象なら rows に行を追加する。
+
+    Args:
+        npz_acc: 盤面グリッドダンプ用バッファ (省略時はダンプしない)。
+    """
     _update_game_idx(tracker, side.score)
     board = side.confirmed_board
     if board is None or not _should_emit(tracker, side, board):
@@ -262,6 +352,12 @@ def _process_side(
     )
     row["game_idx"] = tracker.game_idx
     rows.append(row)
+    # 盤面グリッドダンプ: CSV 行と 1 対 1 対応で追加
+    if npz_acc is not None:
+        npz_acc.append(
+            board._grid, video_id, side_label,
+            round(t_sec, 3), tracker.game_idx, frame_idx,
+        )
     tracker.last_emitted_grid = board._grid.tobytes()
 
 
@@ -271,6 +367,7 @@ def collect(
     max_sec: float = 0.0,
     sample_interval_sec: float = 0.0,
     start_sec: float = 0.0,
+    board_npz_path: Optional[Path] = None,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
 
@@ -285,6 +382,8 @@ def collect(
             状態機械は連続フレームが要るため、シーク直後の数秒は MENU/非STABLE
             として扱われ既存の warmup バッファで吸収される。
             start_sec=0 のときの挙動は従来と完全に同一 (後方互換)。
+        board_npz_path: 盤面グリッド npz 出力パス (省略時は保存しない)。
+            grids=(N,13,6) int8 + メタ配列を保存する。CSV 行と 1 対 1 対応。
 
     Returns:
         出力した行数。
@@ -330,6 +429,10 @@ def collect(
     tracker_p1 = _SideTracker()
     tracker_p2 = _SideTracker()
     rows: list[dict[str, object]] = []
+    # 盤面グリッドダンプバッファ (--board-npz 指定時のみ有効)
+    npz_acc: Optional[_BoardNpzAccumulator] = (
+        _BoardNpzAccumulator() if board_npz_path is not None else None
+    )
     sample_interval_frames = max(1, int(round(sample_interval_sec * fps)))
 
     for local_i in range(n_frames_to_process):
@@ -359,11 +462,11 @@ def collect(
         # --- 各 side 処理 ---
         _process_side(
             video_id, "1P", result.p1, tracker_p1, pipeline,
-            ojama_tracker, t_sec, fi, snap, rows,
+            ojama_tracker, t_sec, fi, snap, rows, npz_acc,
         )
         _process_side(
             video_id, "2P", result.p2, tracker_p2, pipeline,
-            ojama_tracker, t_sec, fi, snap, rows,
+            ojama_tracker, t_sec, fi, snap, rows, npz_acc,
         )
     cap.release()
 
@@ -373,6 +476,12 @@ def collect(
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+
+    # 盤面グリッド npz を保存 (--board-npz 指定時のみ)
+    if npz_acc is not None and board_npz_path is not None:
+        npz_acc.save(board_npz_path)
+        print(f"[collect] board npz -> {board_npz_path} : {len(npz_acc.grids)} grids")
+
     return len(rows)
 
 
@@ -471,12 +580,21 @@ def main() -> int:
         "--sample-interval", type=float, default=0.0,
         help="認識サンプル間隔秒 (0 = 全フレーム)",
     )
+    parser.add_argument(
+        "--board-npz", type=Path, default=None,
+        help=(
+            "盤面グリッド npz 出力パス。指定時のみ保存。"
+            "grids=(N,13,6) int8 + video_id/side/t_sec/game_idx/frame_idx を含む。"
+            "CSV 行と 1 対 1 対応 (同順)。"
+        ),
+    )
     args = parser.parse_args()
     n = collect(
         args.video, args.out,
         max_sec=args.max_sec,
         sample_interval_sec=args.sample_interval,
         start_sec=args.start_sec,
+        board_npz_path=args.board_npz,
     )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
     if args.start_sec > 0.0:
