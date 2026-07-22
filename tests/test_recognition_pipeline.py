@@ -1793,3 +1793,234 @@ def test_chain_exit_next_signal_uses_longer_warmup():
         f"案X OFF 時の凍結時間は {CHAIN_EXIT_WARMUP_SEC}s のはず: {_warmup_sec_c}"
     )
 
+
+# ============================
+# 根治 (2026-07-23): 連鎖後残像バグ — GRAVITY_SETTLE 経由 final_board 反映テスト
+# ============================
+#
+# 背景: enable_gravity_settle_state=True (default) では CHAIN は必ず
+# GRAVITY_SETTLE を経由してから STABLE に遷移するため、Phase C-6 の C
+# (final_board 反映) の旧条件 (prev_state==CHAIN) が dead code 化していた。
+# _last_chain_event_for_settle_1p/2p による退避 + GRAVITY_SETTLE も対象に
+# 含める拡張で根治する。
+
+
+def _make_erasable_chain_event(chain_count: int = 1):
+    """4連結の赤ぷよ (row12 col1-4) + その上の緑ぷよ (row11 col0) を持つ
+    ChainEvent を生成する。
+
+    連鎖後、赤4個が消去され緑ぷよが重力で (12,0) に落下する結果になる。
+    CNN は常に空盤面/固定盤面を返すスタブと対比することで、final_board
+    反映の有無を判別できる。
+    """
+    from src.chain_detector import ChainEvent
+    before = Board()
+    before.set(12, 1, COLOR_RED)
+    before.set(12, 2, COLOR_RED)
+    before.set(12, 3, COLOR_RED)
+    before.set(12, 4, COLOR_RED)
+    before.set(11, 0, COLOR_GREEN)
+    return ChainEvent(
+        trigger_sec=1.0,
+        end_sec=1.5,
+        before_board=before,
+        chain_count=chain_count,
+        total_erased=4,
+        total_score=40,
+        base_score=40,
+        all_clear_bonus_applied=0,
+        ojama_sent=0,
+        leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_stash_and_clear_active_chain_saves_event() -> None:
+    """根治: active_chain が非 None のとき、退避してから None クリアする。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._active_chain_1p = ev
+    pipe._stash_and_clear_active_chain("1P")
+    assert pipe._active_chain_1p is None
+    assert pipe._last_chain_event_for_settle_1p is ev
+
+
+def test_stash_and_clear_active_chain_2p_side() -> None:
+    """根治: side="2P" でも同様に動作する。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._active_chain_2p = ev
+    pipe._stash_and_clear_active_chain("2P")
+    assert pipe._active_chain_2p is None
+    assert pipe._last_chain_event_for_settle_2p is ev
+
+
+def test_stash_and_clear_active_chain_noop_when_already_none() -> None:
+    """根治: active_chain が既に None のときは退避値を書き換えない。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._last_chain_event_for_settle_1p = ev
+    pipe._active_chain_1p = None
+    pipe._stash_and_clear_active_chain("1P")
+    assert pipe._last_chain_event_for_settle_1p is ev, (
+        "active_chain が None のときは退避値を書き換えないべき"
+    )
+
+
+def test_last_chain_event_for_settle_init_none() -> None:
+    """根治: 初期状態では退避フィールドは None。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._last_chain_event_for_settle_1p is None
+    assert pipe._last_chain_event_for_settle_2p is None
+
+
+def test_last_chain_event_for_settle_reset_clears() -> None:
+    """根治: reset() 後は退避フィールドが None に戻る。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._last_chain_event_for_settle_1p = ev
+    pipe._last_chain_event_for_settle_2p = ev
+    pipe.reset()
+    assert pipe._last_chain_event_for_settle_1p is None
+    assert pipe._last_chain_event_for_settle_2p is None
+
+
+def _force_confirmed_board(pipe: RecognitionPipeline, side: str, board: Board) -> None:
+    """テスト用: state machine の confirmed_board/pending_board を直接注入する。
+
+    本番では TSUMO_FALL 着地等の正当な経路を経て confirmed が確定するが、
+    その経路を完全再現するのはテストの本旨でないため、「連鎖直前に既に
+    この盤面が confirmed だった」を given 条件として直接注入する
+    (cycle 49 の 4連結ゲートを満たすために必要)。
+    """
+    sm = pipe._sm_1p if side == "1P" else pipe._sm_2p
+    sm.context.confirmed_board = board.copy()
+    sm.context.pending_board = board.copy()
+
+
+def test_gravity_settle_to_stable_applies_final_board_via_stash() -> None:
+    """根治 (統合): CHAIN → GRAVITY_SETTLE → STABLE 経路でも final_board が反映される。
+
+    CNN は常に空盤面を返す (StubImageReader) ため、この経路が機能しなければ
+    confirmed_board は空のまま。 fix が効いていれば ChainSimulator.simulate()
+    の結果 (緑ぷよが (12,0) に落下) が反映される。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    # active_chain クリア (CHAIN_MAX_HOLD_SEC=5.0s) → GRAVITY_SETTLE →
+    # STABLE (GRAVITY_SETTLE_MAX_SEC=1.5s タイムアウト) まで十分に時間を進める。
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "GRAVITY_SETTLE 経由でも ChainSimulator の final_board (緑ぷよ落下) が"
+        "反映されるべき (= 根治の主目的)"
+    )
+    assert final_res.confirmed_board.get(12, 1) == COLOR_EMPTY, (
+        "赤ぷよ4個は連鎖で消去済のはず"
+    )
+
+
+def test_chain_direct_to_stable_unaffected_when_gravity_settle_disabled() -> None:
+    """根治 backward compat: enable_gravity_settle_state=False では退避 stash が
+    使われず、CHAIN → STABLE 直行経路の挙動が変更前と完全に同じ。
+
+    Phase C-6 の C は raw chain_event (この遷移フレームでは常に None) のみ
+    参照し退避 stash を使わないため、final_board 反映は起きない
+    (= 変更前と同じ dead code のままの挙動を維持)。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_gravity_settle_state=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(20):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_EMPTY, (
+        "GS=False の従来経路は変更前と同じ挙動を維持すべき (緑ぷよ落下は起きない)"
+    )
+
+
+def test_gravity_settle_final_board_survives_t2_color_swap_guard() -> None:
+    """根治 (T2 相互作用): 色→別色 swap を伴う final_board 反映が、直後の T2
+    (STABLE→STABLE 誤色棄却) で即座に revert されないことを確認する。
+
+    T2 は「(実効) chain_event が None のときのみ」誤色棄却を行う設計。
+    GRAVITY_SETTLE 経由では素の chain_event 引数は常に None になるため、
+    _effective_chain_event (退避 stash 込み) で判定しないと、T2 が
+    Phase C-6 の C 直後に fresh な final_board を古い prev_stable (青)
+    へ即座に revert してしまう (architect 指摘の cycle 71 系相互作用)。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    # given: 連鎖直前の confirmed (= 4連結ゲート用) と、T2 が参照する
+    # 「直前 STABLE 確定盤面」 (= 青ぷよ、連鎖前の別スナップショット) を
+    # それぞれ独立に注入する。
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    prev_stable_snapshot = Board()
+    prev_stable_snapshot.set(12, 0, COLOR_BLUE)
+    pipe._prev_stable_confirmed_1p = prev_stable_snapshot
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "T2 が Phase C-6 の C 直後に fresh な final_board を古い prev_stable"
+        " (青) へ revert してしまってはいけない"
+    )
+
