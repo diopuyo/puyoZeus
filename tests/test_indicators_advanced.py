@@ -75,9 +75,13 @@ def make_full_red_4_board() -> Board:
 
 
 def make_choking_board() -> Board:
-    """3列目最上段に puyo を置いて窒息状態にする。"""
+    """3列目・可視最上段(row1)に puyo を置いて窒息状態にする。
+
+    user確定ルール (2026-07-22): 窒息判定は隠し段(row0)でなく可視最上段(row1)
+    = board.DEATH_ROW=1。旧 row0 は隠し段で窒息にならない。
+    """
     grid = empty_grid()
-    grid[0][2] = COLOR_RED
+    grid[1][2] = COLOR_RED
     return Board.from_list(grid)
 
 

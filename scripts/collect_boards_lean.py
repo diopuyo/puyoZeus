@@ -223,8 +223,10 @@ class _LeanNpzAccumulator:
 # 窒息フォールバック判定ヘルパ
 # ============================
 
-# 窒息判定: 盤面の3列目(index=2)最上段(row=0)にぷよがあれば窒息
-_DEATH_ROW: int = 0
+# 窒息判定: 3列目(index=2)の画面内最上段(row=1、隠し段row0は除く)にぷよがあれば窒息。
+# 2026-07-22 ルール是正: 旧 row=0(隠し段)は窒息検知漏れ(完全オーバーフローしないと発火せず)。
+# board.py DEATH_ROW と同じ定義に統一。
+_DEATH_ROW: int = 1
 _DEATH_COL: int = 2
 
 
@@ -234,7 +236,7 @@ def _winner_by_survival(
 ) -> str | None:
     """スコア判定不能時のフォールバック: 窒息していない側を勝者とする。
 
-    各 game_idx の末尾 snapshot の grid で窒息セル (row=0, col=2 != 0) を確認する。
+    各 game_idx の末尾 snapshot の grid で窒息セル (row=_DEATH_ROW=1, col=2 != 0) を確認する。
     どちらも窒息なし / 両方窒息 / snapshot なしの場合は None を返す。
 
     Args:

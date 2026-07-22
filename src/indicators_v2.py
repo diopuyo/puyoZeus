@@ -37,7 +37,7 @@ from src.board import (
     Board,
     VISIBLE_ROWS,
 )
-from src.chain import ChainResult, ChainSimulator
+from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
 from src.scoring import (
     OJAMA_RATE_STANDARD,
     calculate_chain_score,
@@ -519,8 +519,10 @@ def dig_resistance(
     src/old/indicators.py の OjamaDefenseCapacityIndicator を流用移植。
     score = 平均 (0.7×survival + 0.3×dig)。0-1 スケール済み。
 
-    限界: drop_ojama は毎ターン「左から6個ずつ均等」でお邪魔落下オフセット
-    未反映 + 載りきらない分サイレントスキップ (窒息寸前の評価が甘い)。
+    限界: drop_ojama は「6列に均等配分 (floor(N/6)) + 端数はランダム列」
+    (chain.py._calc_ojama_drop_counts、user伝授済の実際の着弾仕様) で
+    お邪魔落下オフセット未反映 + 載りきらない分サイレントスキップ
+    (窒息寸前の評価が甘い)。
     """
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead():
@@ -1620,6 +1622,13 @@ NORM_SUB_CHAIN: float = 12.0
 # 同時消しリッチネス: 1ステップ平均グループ数の正規化分母 (経験的上限 ~6)。
 NORM_SIMULTANEOUS_POP: float = 6.0
 
+# XII-1b 本来の飽和 (build天井): ビームサーチの既定深さ・幅。
+# 厳密な「理論最大連鎖」は組合せ爆発で不可能なため、N手先ビームサーチによる
+# 近似値 (= 「N手到達可能連鎖 (build天井)」) として実装する (アーキ承認済設計)。
+# depth=1 は saturated_chain_count (=_takapt_best_drop) と一致する (サニティ)。
+BUILD_CEILING_CHAIN_DEPTH: int = 2
+BUILD_CEILING_CHAIN_BEAM_WIDTH: int = 8
+
 
 def _takapt_full_scan(
     board: Board, sim: ChainSimulator,
@@ -1671,6 +1680,280 @@ def saturated_chain_count(
     """
     sim = simulator or _SHARED_SIMULATOR
     best_chain, _ = _takapt_best_drop(board, sim)
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+def _build_ceiling_expand(
+    frontier: "list[tuple[int, Board]]",
+    sim: ChainSimulator,
+    beam_width: int,
+) -> "list[tuple[int, Board]]":
+    """ビームサーチ 1 手分の展開: frontier の各盤面から takapt 30 通りを試行し、
+
+    chain_count 降順で上位 beam_width 件を返す (potential_fire_power の
+    _pfp_first_pass と同じ探索単位を frontier 複数盤面に一般化したもの)。
+
+    Args:
+        frontier: 直前深さの上位候補 [(chain_count, board)]。
+        sim: ChainSimulator インスタンス。
+        beam_width: 保持する上位候補数。
+
+    Returns:
+        (chain_count, dropped_board) を chain_count 降順で最大 beam_width 個。
+    """
+    candidates: list[tuple[int, Board]] = []
+    for _, base_board in frontier:
+        for col in range(BOARD_COLS):
+            for color in IGNITION_TRIAL_COLORS:
+                dropped = _drop_one_color(base_board, col, color)
+                if dropped is None:
+                    continue
+                chain = sim.simulate(dropped).chain_count
+                candidates.append((chain, dropped))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[:beam_width]
+
+
+def build_ceiling_chain(
+    board: Board,
+    depth: int = BUILD_CEILING_CHAIN_DEPTH,
+    beam_width: int = BUILD_CEILING_CHAIN_BEAM_WIDTH,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1b 本来の飽和 (build天井、N 手先ビームサーチ近似)。
+
+    saturated_chain_count (=1手先の最大到達連鎖) を一般化し、N 手 (depth) 先まで
+    ビームサーチで盤面を「積む」ことで到達しうる最大連鎖数を近似する。
+    「盤面を埋めた理論最大連鎖」の厳密解は組合せ爆発で不可能なため、
+    ここでは正直に「N手到達可能連鎖 (build天井)」の近似値として扱う
+    (アーキ承認済設計。saturated_chain_count とは別名で新設し、既存指標・
+    学習済 weight には一切影響しない)。
+
+    探索: 各手で 5色×6列=30 通りの 1 個落としを試行 → simulate → chain_count
+    上位 beam_width 件のみ次の手へ展開 (potential_fire_power と同じ剪定方式)。
+    全深さを通じて観測された最大 chain_count を返す (= 単調非減少)。
+    depth=1 のときは saturated_chain_count と厳密に一致する (サニティ)。
+
+    最大 sim 数 = 30 + beam_width×30×(depth-1) (depth=2, beam=8 既定で 270)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        depth: 先読み手数 (既定 BUILD_CEILING_CHAIN_DEPTH=2)。
+        beam_width: 各深さで保持する上位候補数 (既定 BUILD_CEILING_CHAIN_BEAM_WIDTH=8)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=N手到達可能な最大連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead() or depth < 1:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    best_chain = 0
+    frontier: "list[tuple[int, Board]]" = [(0, board)]
+    for _ in range(depth):
+        frontier = _build_ceiling_expand(frontier, sim, beam_width)
+        if not frontier:
+            break
+        # frontier は chain_count 降順ソート済み: 先頭がこの深さの最大値。
+        # 深さを跨いだ「単調非減少の最良値」として running max を保持する。
+        best_chain = max(best_chain, frontier[0][0])
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+# ============================
+# XII-1c 忠実な飽和連鎖量 (非発火構築ビーム) — saturation_chain
+# ============================
+
+# user確定定義 (2026-07-22): 盤面を「発火させずに」約93% (範囲88-98%) まで
+# 組み上げ、最後に発火して到達する最大連鎖数 = 本線の完成天井。
+# 色は「都合よく組める前提」(任意色供給可、takapt 5色から自由選択)。
+#
+# アーキ診断 (フェーズ0、scripts/_tmp_diag_ceiling_objective.py で実証):
+# 既存 build_ceiling_chain (XII-1b) の _build_ceiling_expand は各手を
+# chain_count 降順で枝刈りしており「今すぐ発火する盤面」を最優先する
+# = 「発火させず積む」の目的関数と正反対 (実データで frontier top1 の
+# 62.5% が「未消去のまま発火済みグループを保持した盤面」と確認)。
+# saturation_chain は目的関数を「非発火のまま構造的ポテンシャルを育てる」
+# 向きに修正した別名の新規指標として追加する (既存 build_ceiling_chain /
+# 学習済み重みには一切影響しない)。
+
+# 盤面全体の有効セル数 (6列×13行=78、隠し段 row0 含む)。
+# user確定 (2026-07-22訂正): 充填率の分母は可視12行のみ (ON_FIELD_CAP=72) で
+# はなく盤面全体78を「そのまま」使う (窒息セルの特別除外もしない、シンプルに
+# 78フラット)。count_puyos() も全13行を数えるため、この分母と整合する。
+FULL_BOARD_CAP: int = BOARD_ROWS * BOARD_COLS  # = 78
+
+# 目標充填率の既定値 (FULL_BOARD_CAP=78 に対する割合)。範囲 0.88-0.98。
+SATURATION_FILL_RATIO_DEFAULT: float = 0.93
+
+# 非発火構築ビームサーチの各深さで保持する上位候補数。
+SATURATION_BEAM_WIDTH_DEFAULT: int = 6
+
+# 安全弁: 理論上は target_cells - 現在ぷよ数 で収束するが、無限ループ防止に
+# 盤面全体のセル数 (FULL_BOARD_CAP=78) を上限とする。
+SATURATION_MAX_BUILD_STEPS: int = FULL_BOARD_CAP
+
+
+def _sat_group_size_after_drop(
+    board: Board, row: int, col: int, color: int,
+) -> int:
+    """(row, col) に color を置いた後の同色連結グループサイズを返す (早期打切り)。
+
+    1 個のぷよ追加が「発火するか否か」に影響するのは、追加セル自身が属する
+    連結成分のサイズのみ (無関係な既存グループには影響しない)。
+    MIN_ERASE_COUNT (=4) に達したら即座に打ち切るため、
+    全域探索の ChainSimulator.simulate より大幅に軽量 (発火判定専用)。
+
+    Args:
+        board: color を置いた後の盤面。
+        row: 置いたセルの行。
+        col: 置いたセルの列。
+        color: 置いた色。
+
+    Returns:
+        int: 連結グループサイズ (MIN_ERASE_COUNT 以上なら MIN_ERASE_COUNT で打切り)。
+    """
+    visited: "set[tuple[int, int]]" = {(row, col)}
+    stack: "list[tuple[int, int]]" = [(row, col)]
+    size = 0
+    while stack:
+        r, c = stack.pop()
+        size += 1
+        if size >= MIN_ERASE_COUNT:
+            return size
+        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nr, nc = r + dr, c + dc
+            if not (0 <= nr < BOARD_ROWS and 0 <= nc < BOARD_COLS):
+                continue
+            if (nr, nc) in visited:
+                continue
+            if board.get(nr, nc) == color:
+                visited.add((nr, nc))
+                stack.append((nr, nc))
+    return size
+
+
+def _sat_expand_step(
+    frontier: "list[Board]", beam_width: int,
+) -> "list[Board]":
+    """非発火ビーム 1 手分の展開 (saturation_chain 専用、simulate 不要で高速)。
+
+    frontier の各盤面へ 1 個ずつ置き、「発火しない (置いた瞬間に4連結以上に
+    ならない)」候補のみ残す。ランキングは「連結グループサイズ (3>2>1、
+    大きいほど本線完成に近い = あと1個で消える3連結を優先)」を第一キー、
+    「置いた列の結果的な高さ (低いほど窒息リスクが低い)」を第二キーとする
+    軽量ヒューリスティック。
+
+    Args:
+        frontier: 直前深さの候補盤面リスト (非発火のみ)。
+        beam_width: 保持する上位候補数。
+
+    Returns:
+        list[Board]: 次深さの上位候補 (最大 beam_width 件、非発火のみ)。
+    """
+    scored: "list[tuple[int, int, Board]]" = []
+    seen_keys: "set[bytes]" = set()
+    for base_board in frontier:
+        for col in range(BOARD_COLS):
+            row = _drop_row(base_board, col)
+            if row is None:
+                continue
+            for color in IGNITION_TRIAL_COLORS:
+                dropped = _drop_one_color(base_board, col, color)
+                if dropped is None or dropped.is_dead():
+                    continue
+                group_size = _sat_group_size_after_drop(dropped, row, col, color)
+                if group_size >= MIN_ERASE_COUNT:
+                    continue  # 発火してしまう配置は「積む」候補から除外
+                key = dropped._grid.tobytes()
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                scored.append((group_size, dropped.height_of(col), dropped))
+    # group_size 降順 (3連結優先) → 結果的な列高さ昇順 (低いほど良い)。
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [cand_board for _, _, cand_board in scored[:beam_width]]
+
+
+def _sat_measure_terminal_chain(
+    frontier: "list[Board]", sim: ChainSimulator,
+) -> int:
+    """終端 frontier の各候補に対し 1 手発火 (takapt 30 通り) を試し、
+
+    到達できる最大連鎖数を返す (saturation_chain の最終計測ステップ)。
+
+    Args:
+        frontier: 構築ビームの終端候補盤面リスト。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        int: frontier 全候補中の最大到達連鎖数。
+    """
+    best_chain = 0
+    for candidate in frontier:
+        chain, _ = _takapt_best_drop(candidate, sim)
+        best_chain = max(best_chain, chain)
+    return best_chain
+
+
+def saturation_chain(
+    board: Board,
+    fill_ratio: float = SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = SATURATION_BEAM_WIDTH_DEFAULT,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1c 忠実な飽和連鎖量 (user確定定義、非発火構築ビーム)。
+
+    盤面を発火させずに fill_ratio (既定93%、範囲88-98%でスイープ可) まで
+    組み上げ、最後に1手発火させて到達する最大連鎖数 = 本線の完成天井。
+    色は「都合よく組める前提」で任意色供給可 (takapt 5色から自由選択)。
+
+    アルゴリズム:
+        1. target_cells = round(fill_ratio * FULL_BOARD_CAP) まで、
+           「発火しない (置いた瞬間に4連結未満)」1 ぷよ配置のみをビーム
+           サーチで積む (_sat_expand_step: 軽量な局所連結ヒューリスティック
+           で枝刈り、simulate を呼ばないため高速)。
+        2. target 到達、または これ以上非発火で置けない (デッドロック) で終端。
+        3. 終端の各候補 (最大 beam_width 個) について 1 手発火 (takapt 30通り
+           full simulate) を試し、到達できる最大連鎖数を採用する
+           (_sat_measure_terminal_chain)。
+
+    既存 build_ceiling_chain (chain_count 降順で「今すぐ発火する盤面」を優先
+    = 目的関数が逆、フェーズ0診断で実証) とは別実装。stateless・非破壊、
+    既存指標・学習済み重みに一切影響しない。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        fill_ratio: 目標充填率 (既定 SATURATION_FILL_RATIO_DEFAULT=0.93、
+            範囲 0.88-0.98 でスイープ可)。
+        beam_width: 各深さで保持する上位候補数 (既定 SATURATION_BEAM_WIDTH_DEFAULT=6)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=飽和到達可能な最大連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=0.0, raw=0.0)
+
+    target_cells = round(fill_ratio * FULL_BOARD_CAP)
+    frontier: "list[Board]" = [board]
+    steps = min(
+        max(0, target_cells - board.count_puyos()), SATURATION_MAX_BUILD_STEPS,
+    )
+    for _ in range(steps):
+        next_frontier = _sat_expand_step(frontier, beam_width)
+        if not next_frontier:
+            break  # デッドロック (非発火で置ける手が尽きた): 現状で終端
+        frontier = next_frontier
+
+    best_chain = _sat_measure_terminal_chain(frontier, sim)
     return IndicatorV2Value(
         score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
         raw=float(best_chain),
@@ -1877,4 +2160,14 @@ __all__ = [
     "NORM_MULTI_COLOR_IGNITION",
     "NORM_SUB_CHAIN",
     "NORM_SIMULTANEOUS_POP",
+    # XII-1b 本来の飽和 (build天井) — 検証中の新規指標 (末尾追加、既存に非依存)
+    "build_ceiling_chain",
+    "BUILD_CEILING_CHAIN_DEPTH",
+    "BUILD_CEILING_CHAIN_BEAM_WIDTH",
+    # XII-1c 忠実な飽和連鎖量 (非発火構築ビーム) — 検証中の新規指標 (末尾追加、既存に非依存)
+    "saturation_chain",
+    "FULL_BOARD_CAP",
+    "SATURATION_FILL_RATIO_DEFAULT",
+    "SATURATION_BEAM_WIDTH_DEFAULT",
+    "SATURATION_MAX_BUILD_STEPS",
 ]
