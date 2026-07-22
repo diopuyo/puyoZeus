@@ -100,12 +100,18 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # X 受けやすさ
     "ukeyasusa", "ukeyasusa_raw",
     # XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
-    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
     "saturated_chain_count", "saturated_chain_count_raw",
     "ignition_point_count", "ignition_point_count_raw",
     "multi_color_ignition", "multi_color_ignition_raw",
     "sub_chain_count", "sub_chain_count_raw",
     "simultaneous_pop_richness", "simultaneous_pop_richness_raw",
+    # XIV 近未来最大火力 (near_future_fire_power, K=1..5)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    "near_future_fire_k1", "near_future_fire_k1_raw",
+    "near_future_fire_k2", "near_future_fire_k2_raw",
+    "near_future_fire_k3", "near_future_fire_k3_raw",
+    "near_future_fire_k4", "near_future_fire_k4_raw",
+    "near_future_fire_k5", "near_future_fire_k5_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -149,6 +155,70 @@ class _BoardNpzAccumulator:
         )
 
 
+# ============================
+# 試合単位 active_colors トラッカー (2026-07-22, stateless修正)
+# ============================
+# 背景 (正直な記録): near_future_fire_power の初回統合では「試合ごとに
+# 5色中1色除外」というドメイン事実を1盤面のみから近似していたが、
+# win-AUC再検証でプロト (試合全体の色頻度で判定) との乖離が中盤で最大-0.11
+# に達し、原因は約27%の盤面でこの近似がプロトと食い違うことと特定した。
+# CLAUDE.md「観測指標は stateless、state 保持は外部 wrapper」に従い、
+# iv.near_future_fire_power 自体は純関数のまま維持し、試合単位の色頻度計算
+# (プロトの _compute_active_colors_by_game と同じ「頻度上位N色採用」ロジック、
+# scripts/_tmp_ama_builder.py 参照) をこの収集パイプライン側の外部トラッカー
+# _GameColorTracker に移す。
+#
+# ⚠️ プロトとの相違点 (正直な注記): プロトはオフラインの完成済み試合データ
+# 全体 (未来のフレームも含む) から頻度を求めたが、本トラッカーは動画を
+# 1パスで逐次処理するため「その時点までの累積頻度」しか使えない
+# (因果的・先読み無し)。試合序盤は データ不足で GAME_COLOR_MIN_DISTINCT
+# 未満のことがあり、その場合は近似段階を1段落として
+# iv.near_future_fire_power 自身の盤面出現色フォールバックに委ねる
+# (二重フォールバック構成、後方互換)。
+
+# 出現頻度上位何色を active_colors として採用するか (プロトと同じ4)。
+GAME_COLOR_KEEP_COUNT: int = 4
+# 累積で観測できた色の種類数がこれ未満なら None (盤面出現色フォールバックへ)。
+GAME_COLOR_MIN_DISTINCT: int = 4
+
+
+@dataclass
+class _GameColorTracker:
+    """1 (video_id, side, game_idx) 分の色出現頻度を累積するトラッカー。
+
+    near_future_fire_power は stateless 純関数のまま、本クラスが
+    「試合単位 active_colors」という state を外部で保持する
+    (CLAUDE.md 準拠の wrapper)。試合境界 (game_idx 変化) で reset() する。
+    """
+    counts: dict[int, int] = field(default_factory=dict)
+
+    def reset(self) -> None:
+        """試合境界で呼ぶ (新しい試合の頻度をゼロから積み直す)。"""
+        self.counts = {}
+
+    def update(self, board: Board) -> None:
+        """1 盤面分のセル色を累積する (色ぷよ5色のみ対象、お邪魔等は除外)。"""
+        for row in board._grid:
+            for cell in row:
+                c = int(cell)
+                if c in iv.IGNITION_TRIAL_COLORS:
+                    self.counts[c] = self.counts.get(c, 0) + 1
+
+    def active_colors(self) -> "tuple[int, ...] | None":
+        """出現頻度上位 GAME_COLOR_KEEP_COUNT 色を返す (データ不足なら None)。
+
+        観測できた色の種類数が GAME_COLOR_MIN_DISTINCT 未満なら、判別材料
+        不足として None を返し、呼び出し側フォールバック (盤面出現色) に委ねる。
+        """
+        observed = {c for c, n in self.counts.items() if n > 0}
+        if len(observed) < GAME_COLOR_MIN_DISTINCT:
+            return None
+        ranked = sorted(
+            iv.IGNITION_TRIAL_COLORS, key=lambda c: self.counts.get(c, 0), reverse=True,
+        )
+        return tuple(sorted(ranked[:GAME_COLOR_KEEP_COUNT]))
+
+
 @dataclass
 class _SideTracker:
     """1 side の前処理状態 (間引き・全消し検知用)。"""
@@ -156,6 +226,7 @@ class _SideTracker:
     prev_score: int | None = None
     last_emitted_grid: bytes | None = None  # 直前に出力した盤面 (間引き)
     prev_tsumo: int = 0  # tsumo_count 駆動 drain 用: 前回の手数
+    color_tracker: _GameColorTracker = field(default_factory=_GameColorTracker)
 
 
 def _compute_row(
@@ -168,8 +239,15 @@ def _compute_row(
     tsumo: int,
     elapsed_sec: float,
     snap: OjamaAccountSnapshot,
+    active_colors: "tuple[int, ...] | None" = None,
 ) -> dict[str, object]:
-    """1 STABLE snapshot から指標を算出し CSV 行 dict を返す。"""
+    """1 STABLE snapshot から指標を算出し CSV 行 dict を返す。
+
+    Args:
+        active_colors: 試合単位 active_colors (_GameColorTracker 由来)。
+            None なら near_future_fire_power 側の盤面出現色フォールバックに
+            委ねる (後方互換維持、optional 追加のみ)。
+    """
     is_p1 = side_label == "1P"
     net = snap.net_balance_capped if is_p1 else -snap.net_balance_capped
     forecast = snap.forecast_p1 if is_p1 else snap.forecast_p2
@@ -185,7 +263,7 @@ def _compute_row(
     }
     _fill_indicator_columns(
         row, board, tsumo, elapsed_sec, net, forecast, total_conn,
-        side.next_pair, side.dnext_pair,
+        side.next_pair, side.dnext_pair, active_colors,
     )
     row["chain_duration_sec"] = round(dur.raw, 3) if dur is not None else 0.0
     row["chain_duration_source"] = dur_src
@@ -202,8 +280,14 @@ def _fill_indicator_columns(
     total_conn: iv.GroupObservation,
     next_pair: "tuple[int, int] | None" = None,
     dnext_pair: "tuple[int, int] | None" = None,
+    active_colors: "tuple[int, ...] | None" = None,
 ) -> None:
-    """指標値を row dict に書き込む (chain_duration を除く)。"""
+    """指標値を row dict に書き込む (chain_duration を除く)。
+
+    Args:
+        active_colors: near_future_fire_power に渡す試合単位4色
+            (_GameColorTracker 由来、None なら盤面出現色フォールバック)。
+    """
     tc = iv.tsumo_count_rate(tsumo)
     bp = iv.board_puyo_total(board)
     bc = iv.board_color_puyo_total(board)
@@ -278,6 +362,33 @@ def _fill_indicator_columns(
         "simultaneous_pop_richness": spr.score,
         "simultaneous_pop_richness_raw": spr.raw,
     })
+    _fill_near_future_columns(row, board, next_pair, dnext_pair, elapsed_sec, active_colors)
+
+
+def _fill_near_future_columns(
+    row: dict[str, object],
+    board: Board,
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    elapsed_sec: float,
+    active_colors: "tuple[int, ...] | None" = None,
+) -> None:
+    """XIV 近未来最大火力 (near_future_fire_k1..k5) を row dict に書き込む。
+
+    既知ネクスト・ダブルネクスト (next_pair/dnext_pair、SideResult 由来) を
+    使い、無ければ iv.near_future_fire_power 側で理想ツモにフォールバックする。
+    1回のビームサーチで K=1..5 を同時取得する (~40ms/盤面、プロト実測値。
+    XII board sim 本命指標と同水準の予算内)。
+
+    active_colors (_GameColorTracker 由来の試合単位4色) を渡すことで、
+    プロト検証相当の色制限精度を再現する (2026-07-22 stateless修正)。
+    """
+    nf = iv.near_future_fire_power(
+        board, next_pair, dnext_pair, elapsed_sec, active_colors=active_colors,
+    )
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        row[f"near_future_fire_k{k}"] = nf.values[k].score
+        row[f"near_future_fire_k{k}_raw"] = nf.values[k].raw
 
 
 def _chain_duration(side: SideResult) -> tuple[iv.IndicatorV2Value, str]:
@@ -298,10 +409,15 @@ def _chain_duration(side: SideResult) -> tuple[iv.IndicatorV2Value, str]:
 def _update_game_idx(
     tracker: _SideTracker, score: int | None,
 ) -> None:
-    """score 大幅減少で game_idx を進める (試合境界分割)。"""
+    """score 大幅減少で game_idx を進める (試合境界分割)。
+
+    試合境界では _GameColorTracker (試合単位 active_colors 用の色頻度) も
+    reset し、新しい試合の頻度をゼロから積み直す。
+    """
     if score is not None and tracker.prev_score is not None:
         if tracker.prev_score - score >= SCORE_RESET_THRESHOLD:
             tracker.game_idx += 1
+            tracker.color_tracker.reset()
     if score is not None:
         tracker.prev_score = score
 
@@ -344,11 +460,14 @@ def _process_side(
     board = side.confirmed_board
     if board is None or not _should_emit(tracker, side, board):
         return
+    # 試合単位 active_colors 用の色頻度を累積 (この盤面分も含めて確定させてから使う)。
+    tracker.color_tracker.update(board)
+    active_colors = tracker.color_tracker.active_colors()
     elapsed = tsumo_tracker._elapsed(t_sec)  # 試合相対経過秒 (マージンタイム用)
     tsumo = pipeline.tsumo_count(side_label)
     row = _compute_row(
         video_id, side_label, side, board, t_sec, frame_idx,
-        tsumo, elapsed, snap,
+        tsumo, elapsed, snap, active_colors,
     )
     row["game_idx"] = tracker.game_idx
     rows.append(row)

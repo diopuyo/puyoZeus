@@ -659,9 +659,13 @@ class TestWinnerBySurvival:
     """修正3: _winner_by_survival の窒息フォールバック判定を検証する。"""
 
     def _make_suffocated_board(self) -> Board:
-        """3列目最上段(row=0, col=2)にぷよを置いた窒息盤面を返す。"""
+        """3列目の画面内最上段(row=1, col=2)にぷよを置いた窒息盤面を返す。
+
+        2026-07-22 ルール是正: 窒息セルは隠し段(row0)でなく画面内最上段(row1)。
+        _DEATH_ROW=1 に合わせる。
+        """
         g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
-        g[0][2] = COLOR_RED  # 窒息セル
+        g[1][2] = COLOR_RED  # 窒息セル (画面内最上段)
         # 下段にも適当にぷよ (count_puyos > 0 にする)
         for col in range(BOARD_COLS):
             g[BOARD_ROWS - 1][col] = COLOR_RED

@@ -162,17 +162,37 @@ FEATURES: tuple[str, ...] = (
     "conn_pair_count", "conn_triple_count",
     "ojama_net_balance", "ojama_forecast", "board_ojama_count", "dig_resistance",
 )
-# 特徴量の「候補」一覧。FEATURES に saturated_chain_count (飽和連鎖量、本命候補)
-# を末尾追加したもの。labeled_win.csv に列が無い間は _resolve_features() が
-# 自動的に除外し、本モジュール内の学習・推論は従来通り FEATURES のみで動く。
-# 再収集で列が入れば自動的に有効化される (CLAUDE.md: 新指標は末尾追加)。
-FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + ("saturated_chain_count",)
+# 特徴量の「候補」一覧。FEATURES に以下を末尾追加したもの:
+#   - saturated_chain_count (飽和連鎖量、Round7b候補。中盤marginal寄与が未確定のため
+#     まだ「候補」扱い。labeled_win.csv に列があれば _resolve_features() が
+#     自動的に組み込む=現状のCSVには既に列が存在するため実際には有効化済み)
+#   - ukeyasusa (受けやすさ、Round10で中盤 marginal +0.033=最大の中盤寄与と確定
+#     → 2026-07 正式採用。従来は表示専用だったが本採用でモデル特徴量に格上げ)
+#   - sub_chain_count (副砲、Round10で中盤 marginal +0.014・現在最大連鎖との相関
+#     0.115で最も独立と確定 → 2026-07 正式採用)
+#   - near_future_fire_k1..k5 (近未来最大火力、2026-07-22 user採否決定。
+#     win-AUC検証で中盤 current_max_chain 比 +0.12〜+0.17・終盤 +0.04〜+0.08
+#     の強いシグナルを確認、K増加で単調改善。序盤のみ current_max_chain 優位
+#     のため、位相別 blend の要否は別途 viz レビューで検討する
+#     (本追加はモデル特徴量候補としての組み込みのみ、overlay の見た目採否は別途))
+# labeled_win.csv に列が無い間は _resolve_features() が自動的に除外し、本モジュール
+# 内の学習・推論は従来通り FEATURES のみで動く (列存在ガード。後方互換維持)。
+NEAR_FUTURE_FIRE_COLS: tuple[str, ...] = tuple(
+    f"near_future_fire_k{k}" for k in range(1, 6)
+)
+FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + (
+    "saturated_chain_count", "ukeyasusa", "sub_chain_count",
+) + NEAR_FUTURE_FIRE_COLS
 # 主要ドライバ表示用の日本語ラベル
 JP_LABEL: dict[str, str] = {
     "board_ojama_count": "盤面お邪魔数", "death_margin": "窒息余裕",
     "max_column_height": "最大列高", "current_max_chain": "現在最大連鎖",
     "board_color_puyo_total": "色ぷよ総数", "ojama_forecast": "お邪魔予告",
     "saturated_chain_count": "飽和連鎖量",
+    "ukeyasusa": "受けやすさ", "sub_chain_count": "副砲連鎖数",
+    "near_future_fire_k1": "近未来火力K1", "near_future_fire_k2": "近未来火力K2",
+    "near_future_fire_k3": "近未来火力K3", "near_future_fire_k4": "近未来火力K4",
+    "near_future_fire_k5": "近未来火力K5",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
@@ -304,6 +324,31 @@ def _side_feats(board: Board, net: int, forecast: int) -> dict[str, float]:
     }
 
 
+def _fill_near_future_candidate(
+    f1: dict[str, float], f2: dict[str, float], b1: Board, b2: Board,
+    cols: list[str],
+) -> None:
+    """near_future_fire_k1..k5 が cols に含まれる場合のみ計算する (列存在ガード)。
+
+    K=1..5 は1回のビームサーチで同時取得できるため (near_future_fire_power の
+    設計)、5列のうちどれか1つでも使われていれば1回だけ計算する
+    (saturated_chain_count 等と同じ「使われる時だけ計算」方針を踏襲)。
+    next_pair/dnext_pair は overlay のリアルタイム経路では未配線のため省略
+    (理想ツモにフォールバック、iv.near_future_fire_power 側の既定動作。
+    overlay 見た目採否レビュー時に next_pair 配線を検討する)。
+    """
+    if not any(c in cols for c in NEAR_FUTURE_FIRE_COLS):
+        return
+    if NEAR_FUTURE_FIRE_COLS[0] in f1:
+        return
+    nf1 = iv.near_future_fire_power(b1)
+    nf2 = iv.near_future_fire_power(b2)
+    for k in range(1, 6):
+        name = f"near_future_fire_k{k}"
+        f1[name] = nf1.values[k].score
+        f2[name] = nf2.values[k].score
+
+
 def _score_advantage(
     model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
     feature_cols: tuple[str, ...] | list[str] | None = None,
@@ -318,11 +363,19 @@ def _score_advantage(
         getattr(model, "_puyo_feature_cols", FEATURES))
     f1 = _side_feats(b1, snap.net_balance_capped, snap.forecast_p1)
     f2 = _side_feats(b2, -snap.net_balance_capped, snap.forecast_p2)
-    # saturated_chain_count は cols に含まれる場合のみ計算 (列存在ガードで
-    # 通常は含まれないため無駄な board sim コストは発生しない)
-    if "saturated_chain_count" in cols and "saturated_chain_count" not in f1:
-        f1["saturated_chain_count"] = iv.saturated_chain_count(b1).score
-        f2["saturated_chain_count"] = iv.saturated_chain_count(b2).score
+    # 候補指標 (saturated_chain_count/ukeyasusa/sub_chain_count) は cols に
+    # 含まれる場合のみ計算 (列存在ガードで通常は不要な board sim コストが
+    # 発生しない)。呼出元(HeavyAdvCache)は間引き実行のため許容コスト。
+    _candidate_fns = {
+        "saturated_chain_count": iv.saturated_chain_count,
+        "ukeyasusa": iv.ukeyasusa,
+        "sub_chain_count": iv.sub_chain_count,
+    }
+    for name, fn in _candidate_fns.items():
+        if name in cols and name not in f1:
+            f1[name] = fn(b1).score
+            f2[name] = fn(b2).score
+    _fill_near_future_candidate(f1, f2, b1, b2, cols)
     diff = {c: f1[c] - f2[c] for c in cols}
     x = np.array([[diff[c] for c in cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])
@@ -430,7 +483,9 @@ class HeavyAdvCache:
     毎フレーム呼んでも重い simulate 群は 1/every に削減(オーバーレイ実用速度の要)。
     圧力(board_ojama)・得点リード(score)・会計は安価なので呼出側で毎フレーム更新のまま。
     ukeyasusa (dig_resistance 含む連鎖シミュ) もここで間引き計算してキャッシュする。
-    saturated_chain_count (飽和連鎖量) も同様に表示専用でここに追加 (コア adv 非混入)。
+    2026-07 正式採用によりモデル特徴量 (FEATURE_CANDIDATES) としても
+    _score_advantage 側で使われる(こちらは表示専用の重複計算)。
+    saturated_chain_count (飽和連鎖量) は依然コア adv 非混入の表示専用候補。
     """
 
     def __init__(self, model, every: int = 9) -> None:  # ~0.3s @30fps
@@ -526,7 +581,10 @@ def _draw_ukeyasusa(
     """受けやすさ (1P / 2P) を小さく描画するサブ関数。
 
     ukey1/ukey2: 0〜1 正規化値。差分(1P-2P)を色と数値で表示する。
-    受けやすさはコアの有利不利スコアに混ぜない(表示専用)。
+    本関数自体は表示専用(HeavyAdvCache の間引きキャッシュ値を渡すだけ)だが、
+    2026-07 の正式採用により受けやすさは FEATURE_CANDIDATES 経由でモデル特徴量
+    (ukeyasusa_diff) としても使われる。表示値と学習内部の計算は独立(重複計算)
+    だが同じ iv.ukeyasusa() を呼ぶため値は一致する。
     """
     diff = ukey1 - ukey2  # 正=1P有利
     diff_col = (120, 200, 120) if diff >= 0 else (200, 120, 120)
@@ -591,8 +649,11 @@ def _draw_overlay(
     2026-07 改修: 盤面(ゲーム画面 y∈[TOP_H, TOP_H+OUT_H))には一切描画しない
     (旧版は盤面に重ねて視認性を損なっていた)。有利不利バー/勝率/主因/
     受けやすさ/飽和連鎖の全情報は上部パネル (y∈[0, TOP_H)) に集約する。
-    ukey1/ukey2/sat1/sat2: optional。HeavyAdvCache 由来の表示専用値
-    (コアの adv 計算には一切影響しない)。
+    ukey1/ukey2/sat1/sat2: optional。HeavyAdvCache 由来の表示専用値。
+    saturated_chain_count(sat1/sat2)は依然コアの adv 計算に混ぜない候補指標
+    (表示専用)。ukeyasusa(ukey1/ukey2)は2026-07 正式採用によりモデル特徴量
+    (FEATURE_CANDIDATES 経由)としても adv に寄与するが、本関数へ渡す表示値
+    自体は独立計算(値は一致するが adv 計算のパイプラインとは別経路)。
     """
     canvas = Image.new("RGB", (OUT_W, CANVAS_H), (12, 12, 16))
     canvas.paste(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), (0, TOP_H))

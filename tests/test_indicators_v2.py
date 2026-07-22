@@ -1401,3 +1401,279 @@ def test_full_board_cap_is_78() -> None:
     """FULL_BOARD_CAP は盤面全体 (6列×13行、隠し段 row0 含む) = 78。"""
     assert iv.FULL_BOARD_CAP == BOARD_ROWS * BOARD_COLS
     assert iv.FULL_BOARD_CAP == 78
+
+
+# ============================
+# XIII 催促保持 (saisoku_hold)
+# ============================
+#
+# reference_saisoku_exchange_model_2026-07-22 の定義に忠実な盤面設計:
+#   催促 = 消費色ぷよ率 < 60% かつ 送りお邪魔 > 4個
+#   整地 = 消費色ぷよ率 < 60% かつ 送りお邪魔 ≤ 4個 (催促統計から除外)
+
+
+def _saisoku_attack_board() -> Board:
+    """催促候補: 赤4→青4の2連鎖 (erased=8, ojama>4) + 非参加padding 10個。
+
+    padding は縦alt色で 4 連結しない (発火に無関係、消費率の分母のみ増やす)。
+    color_count=18, erased=8 → consume_ratio=0.444<0.6, ojama=5 (>4) → 催促該当。
+    """
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[10][0] = COLOR_RED
+    g[12][2] = COLOR_BLUE
+    g[11][1] = COLOR_BLUE
+    g[10][1] = COLOR_BLUE
+    g[9][0] = COLOR_BLUE
+    g[11][2] = COLOR_GREEN
+    g[10][2] = COLOR_YELLOW
+    g[12][3] = COLOR_PURPLE
+    g[11][3] = COLOR_YELLOW
+    g[10][3] = COLOR_PURPLE
+    g[12][4] = COLOR_GREEN
+    g[11][4] = COLOR_PURPLE
+    g[12][5] = COLOR_YELLOW
+    g[11][5] = COLOR_GREEN
+    g[10][5] = COLOR_YELLOW
+    return Board.from_list(g)
+
+
+def _saisoku_seichi_board() -> Board:
+    """整地候補: 赤4連結のみ (erased=4, ojama=0) + 非参加padding 20個。
+
+    color_count=24, erased=4 → consume_ratio=0.167<0.6 だが ojama=0 (≤4) → 整地扱い
+    (催促条件を満たさない = flag は 0 のまま)。
+    """
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    colors = [COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE]
+    idx = 0
+    for col in range(2, 6):
+        for row in (12, 11, 10, 9, 8):
+            g[row][col] = colors[idx % 3]
+            idx += 1
+            if idx >= 20:
+                break
+        if idx >= 20:
+            break
+    return Board.from_list(g)
+
+
+def test_saisoku_hold_detects_attack() -> None:
+    """催促条件 (消費<60% かつ お邪魔>4) を満たす盤面で flag=1。"""
+    result = iv.saisoku_hold(_saisoku_attack_board())
+    assert result["saisoku_hold_flag"].raw == 1.0
+    assert result["saisoku_hold_max_ojama"].raw > iv.SAISOKU_OJAMA_MIN
+    assert result["saisoku_hold_count"].raw >= 1.0
+
+
+def test_saisoku_hold_seichi_board_is_excluded() -> None:
+    """整地 (お邪魔≤4) は催促条件を満たさず flag=0。"""
+    result = iv.saisoku_hold(_saisoku_seichi_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+    assert result["saisoku_hold_max_ojama"].raw == 0.0
+    assert result["saisoku_hold_count"].raw == 0.0
+
+
+def test_saisoku_hold_honsen_board_is_excluded() -> None:
+    """本線 (消費≥60%) は padding が無い分 consume_ratio=1.0 のため催促から除外。"""
+    result = iv.saisoku_hold(_two_chain_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+
+
+def test_saisoku_hold_empty_board_is_zero() -> None:
+    """空盤面は発火候補が存在せず全て 0。"""
+    result = iv.saisoku_hold(_empty_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+    assert result["saisoku_hold_max_ojama"].raw == 0.0
+    assert result["saisoku_hold_count"].raw == 0.0
+
+
+def test_saisoku_hold_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _saisoku_attack_board()
+    before = board.copy()
+    iv.saisoku_hold(board)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+@pytest.mark.parametrize(
+    "board", [_empty_board(), _saisoku_attack_board(), _saisoku_seichi_board(), _two_chain_board()],
+)
+def test_saisoku_hold_score_in_range(board: Board) -> None:
+    """全出力が 0-1 範囲・NaN なしであること。"""
+    result = iv.saisoku_hold(board)
+    for value in result.values():
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw  # NaN なし
+
+
+def test_saisoku_hold_exported_in_all() -> None:
+    """saisoku_hold が __all__ に含まれること。"""
+    assert "saisoku_hold" in iv.__all__
+    assert "SAISOKU_CONSUME_RATIO" in iv.__all__
+    assert "SAISOKU_OJAMA_MIN" in iv.__all__
+    assert "SAISOKU_HOLD_COUNT_NORM" in iv.__all__
+
+
+def test_saisoku_hold_constants_values() -> None:
+    """定数値が仕様書 (2026-07-22) 通りであること。"""
+    assert iv.SAISOKU_CONSUME_RATIO == pytest.approx(0.6)
+    assert iv.SAISOKU_OJAMA_MIN == 4
+
+
+# ============================
+# XIV 近未来最大火力 (near_future_fire_power, K=1..5)
+# ============================
+# user採否決定 (2026-07-22): win-AUC検証 (中盤+0.12〜+0.17) を受けて本番統合。
+# 「既知ネクスト+ダブルネクスト(色固定・22配置) → K手(1..5)理想ツモ」で
+# 到達する最大得点 (お邪魔換算) を1回のビームサーチで同時取得する。
+
+
+def _near_future_seed_board() -> Board:
+    """4連結1つ (2x2赤) + 未参加の色ぷよを少量持つ盤面 (K手先での伸びしろあり)。"""
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    g[12][3] = COLOR_BLUE
+    g[12][4] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+def test_near_future_fire_power_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw  # NaN なし
+
+
+def test_near_future_fire_power_k_monotonic_non_decreasing() -> None:
+    """K を増やすほど raw (お邪魔換算) が単調非減少であること (running max 性質)。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    raws = [result.values[k].raw for k in sorted(iv.NEAR_FUTURE_K_LEVELS)]
+    for prev, cur in zip(raws, raws[1:]):
+        assert cur >= prev
+    assert result.values[5].raw >= result.values[1].raw
+
+
+def test_near_future_fire_power_empty_board_is_low() -> None:
+    """空盤面は伸びしろが乏しく、K=1 は 0 に近い (即座には発火不能)。"""
+    result = iv.near_future_fire_power(_empty_board())
+    assert result.values[1].raw == 0.0
+
+
+def test_near_future_fire_power_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.near_future_fire_power(board)
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_known_next_path_used() -> None:
+    """next_pair/dnext_pair が有効なら used_real_next=True になること (既知経路)。"""
+    result = iv.near_future_fire_power(
+        _near_future_seed_board(), next_pair=(COLOR_RED, COLOR_BLUE),
+        dnext_pair=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    assert result.used_real_next is True
+
+
+def test_near_future_fire_power_fallback_path_used() -> None:
+    """next_pair/dnext_pair が両方 None なら used_real_next=False (全理想ツモ代用)。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_invalid_next_falls_back() -> None:
+    """next_pair の色が不正 (未検出 -1 等) なら理想ツモにフォールバックする。"""
+    result = iv.near_future_fire_power(_near_future_seed_board(), next_pair=(-1, -1))
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.near_future_fire_power(board, next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW))
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_near_future_fire_power_exported_in_all() -> None:
+    """near_future_fire_power が __all__ に含まれること。"""
+    assert "near_future_fire_power" in iv.__all__
+    assert "NearFutureFireResult" in iv.__all__
+    assert "NEAR_FUTURE_K_LEVELS" in iv.__all__
+    assert "NEAR_FUTURE_BEAM_WIDTH" in iv.__all__
+
+
+def test_near_future_fire_power_constants_values() -> None:
+    """定数値が実装通りであること (K水準1-5・既知スロット2・正規化=ON_FIELD_CAP)。"""
+    assert iv.NEAR_FUTURE_K_LEVELS == (1, 2, 3, 4, 5)
+    assert iv.NEAR_FUTURE_KNOWN_HAND_SLOTS == 2
+    assert iv.NEAR_FUTURE_FIRE_NORM == iv.ON_FIELD_CAP
+
+
+# ============================
+# XIV stateless修正 (2026-07-22): active_colors 引数
+# ============================
+# user指示: near_future_fire_power は active_colors を引数で受け取る純関数の
+# まま維持し (CLAUDE.md「観測指標はstateless、state保持は外部wrapper」)、
+# 試合単位の色計算は呼び出し側 (collect_indicators_v2.py) が担う設計に修正。
+
+
+def test_near_future_fire_power_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    result_omitted = iv.near_future_fire_power(board)
+    result_explicit_none = iv.near_future_fire_power(board, active_colors=None)
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        assert result_omitted.values[k].raw == result_explicit_none.values[k].raw
+
+
+def test_near_future_fire_power_active_colors_explicit_is_used() -> None:
+    """active_colors を明示指定すると、盤面出現色フォールバックより優先されること。
+
+    赤・青のみの盤面に対し、緑・黄限定の active_colors を渡すと理想手が
+    赤・青を使えなくなるため、通常 (フォールバック=赤青自由) より raw が
+    変化する (少なくとも同一にはならない) ことを確認する。
+    """
+    board = _near_future_seed_board()
+    default_result = iv.near_future_fire_power(board)
+    restricted_result = iv.near_future_fire_power(
+        board, active_colors=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    diffs = [
+        default_result.values[k].raw != restricted_result.values[k].raw
+        for k in iv.NEAR_FUTURE_K_LEVELS
+    ]
+    assert any(diffs), "active_colors 指定が探索結果に反映されていない"
+
+
+def test_near_future_fire_power_active_colors_score_in_range() -> None:
+    """active_colors 指定時も score が 0-1 範囲・NaN なしであること。"""
+    board = _near_future_seed_board()
+    result = iv.near_future_fire_power(
+        board, active_colors=(COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW),
+    )
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
