@@ -26,6 +26,8 @@
 """
 from __future__ import annotations
 
+import random
+import zlib
 from dataclasses import dataclass
 
 from src.board import (
@@ -2425,6 +2427,483 @@ def _near_future_finalize(
     return NearFutureFireResult(values=values, chain_refs=chain_refs, used_real_next=used_real_next)
 
 
+# ============================
+# XV 火力の受けの多さ (fire_stability) — 2026-07-22
+# ============================
+# user提案 #30: 検証済み中盤本命「受けやすさ (ukeyasusa)」の火力版。
+# 「最大火力そのもの」ではなく「最大火力に近い配置パターンがどれだけ多いか」
+# を数える (多い=頑健=どんなツモが来ても安定して火力を出せる、1通りのみ=脆い)。
+#
+# near_future_fire_power と同じビーム machinery (_near_future_free_expand /
+# _near_future_known_expand / _near_future_is_valid_pair /
+# _near_future_active_colors、2026-07-22 final_board バグ修正済み) を
+# そのまま再利用する副産物として安価に計算する (追加 sim コストゼロ、
+# 既存ビームの候補スコア分布から数えるだけ)。
+
+# ホライズン K の水準 (「≈6手、数水準」の指示を反映し 2/4/6 の3段で観測)。
+FIRE_STABILITY_K_LEVELS: tuple[int, ...] = (2, 4, 6)
+# 最大火力の何%以内を「近い (=安定して出せる)」とみなすか (win-AUC検証で
+# 0.8/0.9 を比較した結果、0.8 を既定値として採用)。
+FIRE_STABILITY_THRESHOLD_RATIO: float = 0.8
+# 各手で保持する上位候補数 (near_future_fire_power と同じビーム幅を踏襲)。
+FIRE_STABILITY_BEAM_WIDTH: int = NEAR_FUTURE_BEAM_WIDTH
+
+
+@dataclass(frozen=True)
+class FireStabilityResult:
+    """XV 火力の受けの多さの算出結果 (K=2,4,6 を1回のビームサーチで同時取得)。
+
+    Attributes:
+        values: {K: IndicatorV2Value} (score=raw=閾値内パターン数の割合
+            [0-1]、raw フィールドには件数そのものも保持しデバッグに使う)。
+        candidate_counts: {K: その手で列挙された候補総数} (デバッグ/verify用)。
+    """
+    values: "dict[int, IndicatorV2Value]"
+    candidate_counts: "dict[int, int]"
+
+
+def _fire_stability_empty_result(k_levels: "tuple[int, ...]") -> FireStabilityResult:
+    """窒息盤面用の 0 埋め結果。"""
+    zero = IndicatorV2Value(score=0.0, raw=0.0)
+    return FireStabilityResult(
+        values={k: zero for k in k_levels},
+        candidate_counts={k: 0 for k in k_levels},
+    )
+
+
+def fire_stability(
+    board: Board,
+    next_pair: "tuple[int, int] | None" = None,
+    dnext_pair: "tuple[int, int] | None" = None,
+    simulator: "ChainSimulator | None" = None,
+    beam_width: int = FIRE_STABILITY_BEAM_WIDTH,
+    k_levels: "tuple[int, ...]" = FIRE_STABILITY_K_LEVELS,
+    threshold_ratio: float = FIRE_STABILITY_THRESHOLD_RATIO,
+    active_colors: "tuple[int, ...] | None" = None,
+) -> FireStabilityResult:
+    """XV 火力の受けの多さ (fire_stability, K=2,4,6)。
+
+    near_future_fire_power と同じ K 手先ビームサーチを行い、0〜Kホライズン
+    全体で列挙された全配置パターン (各手のビーム幅で絞る前の生リストを
+    累積) のうち、その時点までの最良得点 (near_future_fire_power と同じ
+    running max) の threshold_ratio (既定80%) 以内に入るパターンの割合を
+    返す。多いほど「どんな展開になっても安定して高火力を出せる」頑健な
+    盤面であることを示す (受けやすさの火力版)。
+
+    stateless 設計: near_future_fire_power と同様、active_colors を引数で
+    受け取る純関数 (省略時は現在盤面の出現色フォールバック)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        next_pair: (TOP色, BOT色) または None (未検知、理想ツモで代用)。
+        dnext_pair: 同上。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        beam_width: 各手で保持する上位候補数。
+        k_levels: 出力する K 水準 (既定 2,4,6)。
+        threshold_ratio: 「近い」とみなす閾値比率 (既定0.8=最大の80%以上)。
+        active_colors: 呼び出し側が把握している試合別4色 (省略時は盤面出現色)。
+
+    Returns:
+        FireStabilityResult: K別 IndicatorV2Value (score=raw=割合) + 候補総数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _fire_stability_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+    return _fire_stability_search(
+        board, colors, next_pair, dnext_pair, sim, beam_width, k_levels, threshold_ratio,
+    )
+
+
+def _fire_stability_search(
+    board: Board,
+    colors: "tuple[int, ...]",
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    sim: ChainSimulator,
+    beam_width: int,
+    k_levels: "tuple[int, ...]",
+    threshold_ratio: float,
+) -> FireStabilityResult:
+    """fire_stability の本体探索ループ (near_future_fire_power と同じビーム展開)。
+
+    「Kホライズン全体 (0〜K手目まで) で列挙された全配置パターン」を累積し、
+    その中で近未来最大火力 (running max、near_future_fire_power と同じ基準)
+    の threshold_ratio 以内に入る件数の割合を返す。最終手だけを見る設計では
+    「早い手で大連鎖が1回だけ起きた後、以降どの手も単発では追いつけず常に
+    ゼロになる」不自然な挙動になったため、累積候補群で「その大連鎖に迫る
+    選択肢が経路全体でどれだけ多かったか」を測る設計に修正した。
+    """
+    max_k = max(k_levels)
+    total_hands = NEAR_FUTURE_KNOWN_HAND_SLOTS + max_k
+    frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+    best_score = 0.0
+    cumulative_scores: "list[float]" = []
+    checkpoints: "dict[int, tuple[float, int]]" = {}
+
+    for hand_idx in range(total_hands):
+        if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
+            expanded = _near_future_known_expand(frontier, next_pair, sim)
+        elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
+            expanded = _near_future_known_expand(frontier, dnext_pair, sim)
+        else:
+            expanded = _near_future_free_expand(frontier, colors, sim)
+        if not expanded:
+            break
+        frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+        top_score = expanded[0][0]
+        if top_score > best_score:
+            best_score = top_score
+        cumulative_scores.extend(score for score, _b, _c in expanded)
+
+        k_here = hand_idx + 1 - NEAR_FUTURE_KNOWN_HAND_SLOTS
+        if k_here in k_levels:
+            checkpoints[k_here] = _fire_stability_ratio(
+                cumulative_scores, best_score, threshold_ratio,
+            )
+
+    return _fire_stability_finalize(checkpoints, k_levels)
+
+
+def _fire_stability_ratio(
+    cumulative_scores: "list[float]", reference_max: float, threshold_ratio: float,
+) -> "tuple[float, int]":
+    """累積候補群のうち reference_max の threshold_ratio 以内に入る割合と件数を返す。
+
+    reference_max はホライズン内で観測された running max (_fire_stability_search
+    参照、near_future_fire_power と同じ基準)。
+    """
+    if not cumulative_scores or reference_max <= 0.0:
+        return 0.0, 0
+    cutoff = reference_max * threshold_ratio
+    count = sum(1 for score in cumulative_scores if score >= cutoff)
+    return count / len(cumulative_scores), count
+
+
+def _fire_stability_finalize(
+    checkpoints: "dict[int, tuple[float, int]]", k_levels: "tuple[int, ...]",
+) -> FireStabilityResult:
+    """チェックポイント (割合, 件数) から結果を組み立てる。
+
+    ビームが途中で尽きた場合、未記録の K は直前の値を引き継ぐ
+    (near_future_fire_power と同じ後方フォールバック方針)。
+    """
+    values: "dict[int, IndicatorV2Value]" = {}
+    counts: "dict[int, int]" = {}
+    prev_ratio, prev_count = 0.0, 0
+    for k in sorted(k_levels):
+        ratio, count = checkpoints.get(k, (prev_ratio, prev_count))
+        values[k] = IndicatorV2Value(score=_clamp01(ratio), raw=float(count))
+        counts[k] = count
+        prev_ratio, prev_count = ratio, count
+    return FireStabilityResult(values=values, candidate_counts=counts)
+
+
+# ============================
+# XVI 平均ツモ期待火力 (expected_fire_power) — 2026-07-22
+# ============================
+# user新指標: near_future_fire_power (理想ツモ=色を自由に選べる best case) の逆。
+# 「ランダムな色のツモ (選べない) が来た時に、それを最適配置したら出せる火力」の
+# 期待値 (expected case) を測る。「どんな色が来ても安定して火力が出せるか」
+# = 受けの多さ/安定性の再定義版 (旧 fire_stability=最大近傍パターン数、は
+# 独立の観測軸として残す)。
+#
+# 移植方針 (near_future の候補生成 machinery の再利用、file:line根拠):
+#   near_future_fire_power の「既知ネクスト」経路 _near_future_known_expand
+#   (本ファイル内、pair=(色A,色B) 固定・22配置の位置のみ探索して最良得点を
+#   返す) が、まさに「色固定・位置最適化」という本指標に必要なビルディング
+#   ブロックそのものである。near_future では next_pair/dnext_pair に
+#   「実際に検出されたネクスト」を渡していたが、本指標では代わりに
+#   「試合4色からのツモ色ペア」を渡す。位置探索ロジックには一切手を加えない。
+#
+# K=1〜4、手法を使い分ける (user最終指示、2026-07-22 追加):
+#   K=1,2: 全ツモ色パターンを厳密に列挙して平均する (2個1組=4色×4色=16通り、
+#     K=2は16×16=256通りの色列)。この規模なら乱数もseedの悩みも不要な
+#     厳密期待値が出せる (_expected_fire_exact_k1k2)。
+#   K=3,4: 全列挙は 4096/65536 通りで重すぎるため、モンテカルロ (ランダム
+#     色ペア列を N 回サンプルして平均) で近似する (_expected_fire_mc_k3k4)。
+#     乱数は盤面内容から決定論的に導出したシードを使う (_expected_fire_seed、
+#     stateless: 同一盤面には常に同一結果)。
+
+# 出力する K 水準 (1〜4、user指示)。
+EXPECTED_FIRE_K_LEVELS: tuple[int, ...] = (1, 2, 3, 4)
+# K=1,2 (厳密全列挙) の対象。
+EXPECTED_FIRE_EXACT_LEVELS: tuple[int, ...] = (1, 2)
+# K=3,4 (モンテカルロ) の対象。
+EXPECTED_FIRE_MC_LEVELS: tuple[int, ...] = (3, 4)
+# K=2 の厳密全列挙で、1手目の位置候補のうち何個を2手目へ引き継ぐか。
+# ベンチ結果 (scripts/_tmp_bench_expected_fire.py、正直な記録): 256通り ×
+# この幅ぶんの位置探索が乗算されるため、幅=1で ~350-450ms/盤面、幅=2で
+# ~700-900ms/盤面 (概ね比例)。「重ければ枝刈り」の指示に従い幅=1を既定値
+# とする (1手目は必ず得点最大の1候補のみ2手目へ引き継ぐ)。
+EXPECTED_FIRE_EXACT_BEAM_WIDTH: int = 1
+# K=3,4 モンテカルロのサンプル数 (4手ロールアウトを1回として、この回数だけ
+# 試行し、K=3到達時点・K=4到達時点の両方をチェックポイントとして同時取得する
+# = near_future と同じ「サンプルを使い回す」設計)。
+#
+# ⚠️ ベンチ結果 (正直な記録、scripts/_tmp_bench_expected_fire.py):
+# 当初 mc_beam_width=8 (near_future と同じ幅)・n=48 で試したところ、
+# v29.npz の実盤面10件 (異なる盤面・同一 ChainSimulator 共有キャッシュ、
+# 収集パイプラインと同じ使用条件) で平均 5920ms・最大 10187ms/盤面と
+# 判明し「重すぎない」の範囲を大きく超えた (K=2 厳密256通りではなく
+# K=3,4 モンテカルロの beam_width=8×4手 の分岐爆発が主因)。
+# mc_beam_width=2・n=24 に絞ったところ平均 1665ms・最大 3432ms まで縮小
+# (これでもなお比較的重い。位置ヘッジの幅を落とすため K3,4 の推定値は
+# beam_width=8 版よりやや低めに偏る可能性がある — 正直な注記)。
+# 「検証段階でまだ本体差し替え確定でない」ため、コストと精度のトレードオフ
+# を許容範囲まで軽くした値をここでは既定値とする。
+EXPECTED_FIRE_MC_N_SAMPLES: int = 24
+# モンテカルロ内の各手で保持する上位候補数。near_future_fire_power と同じ
+# 幅=8 だと分岐が4手に渡って乗算し重すぎたため、幅=2 に縮小した (上記ベンチ
+# 参照)。厳密列挙と異なり1系列のみ辿るため、幅を絞ると位置のヘッジ余地が
+# 減り推定値がやや低めに偏りうる。
+EXPECTED_FIRE_MC_BEAM_WIDTH: int = 2
+# 正規化分母 (既存火力系と統一)。
+EXPECTED_FIRE_NORM: int = ON_FIELD_CAP
+
+
+@dataclass(frozen=True)
+class ExpectedFireResult:
+    """XVI 平均ツモ期待火力の算出結果 (K=1..4 を同時取得)。
+
+    Attributes:
+        values: {K: IndicatorV2Value} (score=raw/72お邪魔換算、raw=平均お邪魔換算)。
+        std_raw: {K: 標準偏差} (お邪魔換算スケール、安定性の参考値、デバッグ用)。
+        n_evaluated: {K: 実際に平均に使った件数} (K=1:16, K=2:256, K=3,4:
+            EXPECTED_FIRE_MC_N_SAMPLES。デバッグ/標準誤差計算用)。
+    """
+    values: "dict[int, IndicatorV2Value]"
+    std_raw: "dict[int, float]"
+    n_evaluated: "dict[int, int]"
+
+
+def _expected_fire_empty_result(k_levels: "tuple[int, ...]") -> ExpectedFireResult:
+    """窒息盤面用の 0 埋め結果。"""
+    zero = IndicatorV2Value(score=0.0, raw=0.0)
+    return ExpectedFireResult(
+        values={k: zero for k in k_levels},
+        std_raw={k: 0.0 for k in k_levels},
+        n_evaluated={k: 0 for k in k_levels},
+    )
+
+
+def _expected_fire_seed(board: Board) -> int:
+    """盤面から決定論的な乱数シードを導出する (stateless: 同一盤面→同一結果)。
+
+    組込み hash() は文字列/バイト列に対しプロセスごとにランダム化される
+    (PYTHONHASHSEED) ため使わず、zlib.crc32 (プロセス非依存の決定的ハッシュ)
+    を使う (scripts/_tmp_ama_builder.py で踏んだ落とし穴と同じ回避策)。
+    """
+    return zlib.crc32(board._grid.tobytes())
+
+
+def _expected_fire_all_pairs(colors: "tuple[int, ...]") -> "list[tuple[int, int]]":
+    """試合4色から (main, sub) 順序付き全16通りツモペアを列挙する。
+
+    同色ペア (例: 赤赤) も実際のツモ仕様通り含む (4色×4色=16通り)。
+    """
+    return [(a, b) for a in colors for b in colors]
+
+
+def expected_fire_power(
+    board: Board,
+    simulator: "ChainSimulator | None" = None,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    elapsed_sec: float = 0.0,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> ExpectedFireResult:
+    """XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)。
+
+    現在盤面から、試合の4色 (active_colors) の中の色のツモ (色は選べない、
+    位置のみ最適化) を K 手 (1..4) 積んだ場合に到達できる得点 (お邪魔換算)
+    の期待値を返す。near_future_fire_power (理想ツモ=色も自由に選べる
+    best case) の対極として「どんな色が来ても安定して火力が出せるか」
+    (expected case) を測る。
+
+    K=1,2 は全ツモ色パターン (16通り/256通り) を厳密に列挙した平均値
+    (乱数不使用)。K=3,4 はモンテカルロ近似 (盤面内容から決定論的に導出した
+    シードを使う stateless 設計、同一盤面には常に同一結果)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        exact_beam_width: K=2 厳密列挙で1手目→2手目へ引き継ぐ候補数。
+        mc_beam_width: K=3,4 モンテカルロの各手で保持する上位候補数。
+        mc_n_samples: K=3,4 モンテカルロのサンプル数。
+        k_levels: 出力する K 水準 (既定 1..4)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用お邪魔換算)。
+        active_colors: 試合別4色 (省略時は盤面出現色フォールバック)。
+        rng_seed: K=3,4 用乱数シードの明示指定 (省略時は盤面内容から自動導出)。
+
+    Returns:
+        ExpectedFireResult: K別 IndicatorV2Value (score=raw/72, raw=平均お邪魔
+        換算) + 標準偏差 (参考) + 評価件数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _expected_fire_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    stats: "dict[int, tuple[float, float, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        stats.update(_expected_fire_exact_k1k2(board, colors, sim, exact_beam_width))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        stats.update(
+            _expected_fire_mc_k3k4(board, colors, sim, mc_beam_width, mc_n_samples, rng),
+        )
+    return _expected_fire_finalize(stats, k_levels, elapsed_sec)
+
+
+def _expected_fire_exact_k1k2(
+    board: Board, colors: "tuple[int, ...]", sim: ChainSimulator, beam_width: int,
+) -> "dict[int, tuple[float, float, int]]":
+    """K=1,2 の厳密平均を計算する (全16通り/256通りのツモ色列を列挙)。
+
+    K=1: 16通りのツモペアそれぞれを最適配置した得点の平均。
+    K=2: 1手目16通り × 2手目16通り = 256通りの色列それぞれについて、
+        (1手目の得点, 2手目までの最良得点=running max) の後者を平均する。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+    sums = {1: 0.0, 2: 0.0}
+    sq_sums = {1: 0.0, 2: 0.0}
+    counts = {1: 0, 2: 0}
+
+    for pair1 in pairs:
+        expanded1 = _near_future_known_expand([(0.0, board)], pair1, sim)
+        score_h1 = expanded1[0][0] if expanded1 else 0.0
+        sums[1] += score_h1
+        sq_sums[1] += score_h1 * score_h1
+        counts[1] += 1
+
+        frontier_h1 = [(s, b) for s, b, _c in expanded1[:beam_width]] if expanded1 else []
+        for pair2 in pairs:
+            expanded2 = _near_future_known_expand(frontier_h1, pair2, sim) if frontier_h1 else []
+            top_h2 = expanded2[0][0] if expanded2 else 0.0
+            value_k2 = max(score_h1, top_h2)
+            sums[2] += value_k2
+            sq_sums[2] += value_k2 * value_k2
+            counts[2] += 1
+
+    return {1: (sums[1], sq_sums[1], counts[1]), 2: (sums[2], sq_sums[2], counts[2])}
+
+
+def _expected_fire_mc_k3k4(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+) -> "dict[int, tuple[float, float, int]]":
+    """K=3,4 のモンテカルロ平均を計算する (1回の4手ロールアウトで両方取得)。
+
+    各サンプル: 4手分ランダムな色ペアを引き、_near_future_known_expand
+    (near_future と同じ位置最適化ロジック) で毎手最適配置する running max
+    ロールアウト。K=3到達時点・K=4到達時点の両方をチェックポイントとして
+    記録する (near_future のチェックポイント共有と同じ設計)。
+    """
+    sums = {3: 0.0, 4: 0.0}
+    sq_sums = {3: 0.0, 4: 0.0}
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, 5):
+            if frontier:
+                pair = (rng.choice(colors), rng.choice(colors))
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []
+            if hand in (3, 4):
+                sums[hand] += best_score
+                sq_sums[hand] += best_score * best_score
+    return {3: (sums[3], sq_sums[3], n_samples), 4: (sums[4], sq_sums[4], n_samples)}
+
+
+def _expected_fire_search(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    k_levels: "tuple[int, ...]",
+    n_samples: int,
+    elapsed_sec: float,
+    rng: "random.Random",
+) -> ExpectedFireResult:
+    """expected_fire_power の本体探索ループ (モンテカルロ、K=1,2同時チェックポイント)。
+
+    1サンプル = 「ランダム色ペアを _near_future_known_expand (near_future の
+    既知ペア展開ロジックをそのまま再利用) で最適配置」を K 回繰り返す
+    ロールアウト。max_k (=2) 手分ロールアウトし、K=1 到達時点・K=2 到達時点の
+    両方の running max をチェックポイントとして記録する (near_future と
+    同じ「サンプルを使い回す」設計、モンテカルロを2重に走らせない)。
+    """
+    max_k = max(k_levels)
+    sums = {k: 0.0 for k in k_levels}
+    sq_sums = {k: 0.0 for k in k_levels}
+
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, max_k + 1):
+            if frontier:
+                pair = _expected_fire_sample_pair(rng, colors)
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []  # 以降のホライズンも配置不能 (満杯等)、値を据え置く
+            if hand in k_levels:
+                sums[hand] += best_score
+                sq_sums[hand] += best_score * best_score
+
+    return _expected_fire_finalize(sums, sq_sums, k_levels, n_samples, elapsed_sec)
+
+
+def _expected_fire_finalize(
+    stats: "dict[int, tuple[float, float, int]]",
+    k_levels: "tuple[int, ...]",
+    elapsed_sec: float,
+) -> ExpectedFireResult:
+    """集計 (平均・分散・評価件数) をお邪魔換算+正規化して結果を組み立てる。
+
+    K=1,2 (厳密全列挙) と K=3,4 (モンテカルロ) で評価件数 (n_evaluated) が
+    大きく異なる (16/256 vs mc_n_samples) ため、K ごとに独立して扱う。
+    """
+    values: "dict[int, IndicatorV2Value]" = {}
+    std_raw: "dict[int, float]" = {}
+    n_evaluated: "dict[int, int]" = {}
+    for k in sorted(k_levels):
+        total, total_sq, count = stats.get(k, (0.0, 0.0, 0))
+        mean_score = total / count if count > 0 else 0.0
+        variance = (total_sq / count - mean_score * mean_score) if count > 0 else 0.0
+        std_score = variance ** 0.5 if variance > 0.0 else 0.0
+        ojama = score_to_ojama(
+            score=mean_score, prev_leftover=0, elapsed_sec=elapsed_sec,
+            rate_base=OJAMA_RATE_STANDARD,
+        ).ojama_count
+        values[k] = IndicatorV2Value(
+            score=_clamp01(float(ojama) / EXPECTED_FIRE_NORM), raw=float(ojama),
+        )
+        # 標準偏差も同じレート換算の目安として /rate してお邪魔換算スケールに揃える。
+        std_raw[k] = std_score / float(OJAMA_RATE_STANDARD)
+        n_evaluated[k] = count
+    return ExpectedFireResult(values=values, std_raw=std_raw, n_evaluated=n_evaluated)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -2525,4 +3004,22 @@ __all__ = [
     "NEAR_FUTURE_BEAM_WIDTH",
     "NEAR_FUTURE_MIN_OBSERVED_COLORS",
     "NEAR_FUTURE_FIRE_NORM",
+    # XV 火力の受けの多さ (fire_stability, K=2,4,6)
+    # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
+    "fire_stability",
+    "FireStabilityResult",
+    "FIRE_STABILITY_K_LEVELS",
+    "FIRE_STABILITY_THRESHOLD_RATIO",
+    "FIRE_STABILITY_BEAM_WIDTH",
+    # XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+    # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
+    "expected_fire_power",
+    "ExpectedFireResult",
+    "EXPECTED_FIRE_K_LEVELS",
+    "EXPECTED_FIRE_EXACT_LEVELS",
+    "EXPECTED_FIRE_MC_LEVELS",
+    "EXPECTED_FIRE_EXACT_BEAM_WIDTH",
+    "EXPECTED_FIRE_MC_N_SAMPLES",
+    "EXPECTED_FIRE_MC_BEAM_WIDTH",
+    "EXPECTED_FIRE_NORM",
 ]

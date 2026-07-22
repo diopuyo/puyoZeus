@@ -75,6 +75,29 @@ _XIV_COLUMNS: tuple[str, ...] = (
     "near_future_fire_k5", "near_future_fire_k5_raw",
 )
 
+# CSV 末尾に追加された XV (火力の受けの多さ fire_stability, K=2,4,6) の列名
+# (2026-07-22 本番統合、順序保持で確認)。
+_XV_COLUMNS: tuple[str, ...] = (
+    "fire_stability_k2", "fire_stability_k2_raw",
+    "fire_stability_k4", "fire_stability_k4_raw",
+    "fire_stability_k6", "fire_stability_k6_raw",
+)
+
+# CSV 末尾に追加された XVI (平均ツモ期待火力 expected_fire_power, K=1..4) の列名
+# (2026-07-22 本番統合、順序保持で確認。K=3,4 追加時の列定義更新漏れを是正済み)。
+_XVI_COLUMNS: tuple[str, ...] = (
+    "expected_fire_k1", "expected_fire_k1_raw",
+    "expected_fire_k2", "expected_fire_k2_raw",
+    "expected_fire_k3", "expected_fire_k3_raw",
+    "expected_fire_k4", "expected_fire_k4_raw",
+)
+
+# 新指標追加のたびに末尾へ連結していく既存ブロック群 (退行検知の土台。
+# 新ブロック追加時はこのタプルに1行足すだけで済むようにする)。
+_TAIL_BLOCKS: "tuple[tuple[str, ...], ...]" = (
+    _XII_COLUMNS, _XIV_COLUMNS, _XV_COLUMNS, _XVI_COLUMNS,
+)
+
 
 def test_xii_columns_present_in_all_columns() -> None:
     """XII 5 指標 (score/raw 計 10 列) が ALL_COLUMNS に含まれること。"""
@@ -82,31 +105,44 @@ def test_xii_columns_present_in_all_columns() -> None:
         assert col in collect_mod.ALL_COLUMNS, f"{col} が ALL_COLUMNS に無い"
 
 
-def test_xii_columns_precede_xiv_columns() -> None:
-    """XII 5 指標が XIV (近未来最大火力) 追加前と同じ相対位置を保っていること。
+def test_tail_blocks_are_contiguous_at_end_of_indicator_columns() -> None:
+    """XII→XIV→XV→XVI が INDICATOR_COLUMNS の末尾に連続していること。
 
-    XIV が新たな末尾になったため「XII が末尾10列」という旧アサーションは
-    そのままでは成立しない (これは正当な末尾追加の結果であり退行ではない)。
-    XII ブロックが XIV ブロックの直前に連続していることを確認し、
-    既存列の位置自体は変更していないことを回帰検知する。
+    新指標追加のたびに「旧ブロックが末尾」という旧アサーションは成立しなく
+    なる (正当な末尾追加の結果であり退行ではない) ため、既知の全ブロックを
+    連結した「今の末尾」で確認する回帰テストに一本化する。
     """
-    total = len(_XII_COLUMNS) + len(_XIV_COLUMNS)
-    tail_block = collect_mod.INDICATOR_COLUMNS[-total:]
-    assert tail_block == _XII_COLUMNS + _XIV_COLUMNS
+    expected_tail: "tuple[str, ...]" = ()
+    for block in _TAIL_BLOCKS:
+        expected_tail += block
+    tail_block = collect_mod.INDICATOR_COLUMNS[-len(expected_tail):]
+    assert tail_block == expected_tail
 
 
-def test_xiv_columns_are_tail_of_indicator_columns() -> None:
-    """XIV (近未来最大火力) 5 指標が INDICATOR_COLUMNS の末尾10列であること。
+def test_xvi_columns_are_tail_of_indicator_columns() -> None:
+    """XVI (平均ツモ期待火力) 2 指標が INDICATOR_COLUMNS の末尾4列であること。
 
     2026-07-22 本番統合、新指標は常に末尾追加 (CLAUDE.md 規約)。
     """
-    tail = collect_mod.INDICATOR_COLUMNS[-len(_XIV_COLUMNS):]
-    assert tail == _XIV_COLUMNS
+    tail = collect_mod.INDICATOR_COLUMNS[-len(_XVI_COLUMNS):]
+    assert tail == _XVI_COLUMNS
+
+
+def test_xvi_columns_present_in_all_columns() -> None:
+    """XVI 2 指標 (score/raw 計 4 列) が ALL_COLUMNS に含まれること。"""
+    for col in _XVI_COLUMNS:
+        assert col in collect_mod.ALL_COLUMNS, f"{col} が ALL_COLUMNS に無い"
 
 
 def test_xiv_columns_present_in_all_columns() -> None:
     """XIV 5 指標 (score/raw 計 10 列) が ALL_COLUMNS に含まれること。"""
     for col in _XIV_COLUMNS:
+        assert col in collect_mod.ALL_COLUMNS, f"{col} が ALL_COLUMNS に無い"
+
+
+def test_xv_columns_present_in_all_columns() -> None:
+    """XV 3 指標 (score/raw 計 6 列) が ALL_COLUMNS に含まれること。"""
+    for col in _XV_COLUMNS:
         assert col in collect_mod.ALL_COLUMNS, f"{col} が ALL_COLUMNS に無い"
 
 
@@ -307,3 +343,164 @@ def test_fill_indicator_columns_active_colors_propagates_to_near_future() -> Non
         for k in range(1, 6)
     ]
     assert any(diffs), "active_colors 指定が near_future_fire_k* に反映されていない"
+
+
+# ============================
+# _fill_indicator_columns が XV (火力の受けの多さ) 列を 0-1 範囲で埋めること
+# ============================
+
+
+@pytest.mark.parametrize("board", [_empty_board(), _chain_ready_board()])
+def test_fill_indicator_columns_xv_score_in_range(board: Board) -> None:
+    """XV (fire_stability_k2/4/6) の score が 0-1 範囲・NaN なしで埋まること。"""
+    row = _call_fill(board)
+    for score_col in _XV_COLUMNS[0::2]:  # score 列のみ (偶数 index)
+        val = row[score_col]
+        assert isinstance(val, float)
+        assert 0.0 <= val <= 1.0, f"{score_col}={val} が 0-1 範囲外"
+        assert val == val, f"{score_col} が NaN"
+
+
+@pytest.mark.parametrize("board", [_empty_board(), _chain_ready_board()])
+def test_fill_indicator_columns_xv_raw_present(board: Board) -> None:
+    """XV 3 指標の raw (件数) が非負の数値で埋まること (NaN なし)。"""
+    row = _call_fill(board)
+    for raw_col in _XV_COLUMNS[1::2]:  # raw 列のみ (奇数 index)
+        val = row[raw_col]
+        assert isinstance(val, float)
+        assert val >= 0.0, f"{raw_col}={val} が負値"
+        assert val == val, f"{raw_col} が NaN"
+
+
+def test_fill_indicator_columns_active_colors_propagates_to_fire_stability() -> None:
+    """active_colors を渡すと fire_stability_k* の値が変化しうること (伝播確認)。"""
+    board = _chain_ready_board()
+    total_conn, _ = iv.connectivity_observation(board)
+
+    row_default: dict[str, object] = {}
+    collect_mod._fill_indicator_columns(
+        row_default, board, tsumo=10, elapsed_sec=0.0, net=0, forecast=0,
+        total_conn=total_conn,
+    )
+    row_restricted: dict[str, object] = {}
+    collect_mod._fill_indicator_columns(
+        row_restricted, board, tsumo=10, elapsed_sec=0.0, net=0, forecast=0,
+        total_conn=total_conn,
+        active_colors=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    diffs = [
+        row_default[f"fire_stability_k{k}_raw"] != row_restricted[f"fire_stability_k{k}_raw"]
+        for k in (2, 4, 6)
+    ]
+    assert any(diffs), "active_colors 指定が fire_stability_k* に反映されていない"
+
+
+# ============================
+# _fill_indicator_columns が XVI (平均ツモ期待火力) 列を 0-1 範囲で埋めること
+# ============================
+# ⚠️ 2026-07-22 user判断: expected_fire_power は重い (1.7-3.5秒/盤面) ため
+# collect_indicators_v2.COLLECT_EXPECTED_FIRE は既定 False (opt-in)。
+# 以下の値域・再現性テストは XVI の計算内容自体を検証するものなので、
+# monkeypatch で明示的に True にした上で確認する (既定OFF挙動は
+# 別途 test_collect_expected_fire_opt_in_* 群で確認する)。
+
+
+@pytest.mark.parametrize("board", [_empty_board(), _chain_ready_board()])
+def test_fill_indicator_columns_xvi_score_in_range(
+    board: Board, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """XVI (expected_fire_k1/k2) の score が 0-1 範囲・NaN なしで埋まること。"""
+    monkeypatch.setattr(collect_mod, "COLLECT_EXPECTED_FIRE", True)
+    row = _call_fill(board)
+    for score_col in _XVI_COLUMNS[0::2]:
+        val = row[score_col]
+        assert isinstance(val, float)
+        assert 0.0 <= val <= 1.0, f"{score_col}={val} が 0-1 範囲外"
+        assert val == val, f"{score_col} が NaN"
+
+
+@pytest.mark.parametrize("board", [_empty_board(), _chain_ready_board()])
+def test_fill_indicator_columns_xvi_raw_present(
+    board: Board, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """XVI 2 指標の raw (平均お邪魔換算) が非負の数値で埋まること (NaN なし)。"""
+    monkeypatch.setattr(collect_mod, "COLLECT_EXPECTED_FIRE", True)
+    row = _call_fill(board)
+    for raw_col in _XVI_COLUMNS[1::2]:
+        val = row[raw_col]
+        assert isinstance(val, float)
+        assert val >= 0.0, f"{raw_col}={val} が負値"
+        assert val == val, f"{raw_col} が NaN"
+
+
+def test_fill_indicator_columns_xvi_is_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """同一盤面を2回埋めても expected_fire_k* が同じ値になること (stateless再現性)。"""
+    monkeypatch.setattr(collect_mod, "COLLECT_EXPECTED_FIRE", True)
+    board = _chain_ready_board()
+    row1 = _call_fill(board)
+    row2 = _call_fill(board)
+    for k in (1, 2):
+        assert row1[f"expected_fire_k{k}_raw"] == row2[f"expected_fire_k{k}_raw"]
+
+
+# ============================
+# XVI opt-in ガード (COLLECT_EXPECTED_FIRE、2026-07-22 user判断)
+# ============================
+# expected_fire_power は重い (1.7-3.5秒/盤面) ため既定 OFF。将来の Phase L
+# データ拡充で常時収集すると ~1fps律速の収集パイプラインが破綻するため。
+
+
+def test_collect_expected_fire_default_is_off() -> None:
+    """モジュール既定 COLLECT_EXPECTED_FIRE が False (opt-in) であること。"""
+    assert collect_mod.COLLECT_EXPECTED_FIRE is False
+
+
+def test_collect_expected_fire_default_off_skips_columns_entirely() -> None:
+    """既定 (monkeypatch なし) では expected_fire_k* が row に一切追加されないこと。
+
+    CSV 列は INDICATOR_COLUMNS 定義に残ったまま (csv.DictWriter の
+    restval='' により空欄で出力される)、計算コストはゼロになることを確認する。
+    """
+    row = _call_fill(_chain_ready_board())
+    for col in _XVI_COLUMNS:
+        assert col not in row, f"{col} は既定OFFのはずなのに計算されている"
+
+
+def test_collect_expected_fire_monkeypatch_true_enables_columns() -> None:
+    """COLLECT_EXPECTED_FIRE=True (monkeypatch) にすると expected_fire_k* が
+
+    計算され row に現れること (opt-in が正しく機能する)。
+    """
+    row: dict[str, object] = {}
+    board = _chain_ready_board()
+    total_conn, _ = iv.connectivity_observation(board)
+    collect_mod._fill_expected_fire_columns(row, board, elapsed_sec=0.0, enabled=True)
+    for col in _XVI_COLUMNS:
+        assert col in row
+
+
+def test_collect_expected_fire_explicit_enabled_false_skips_even_if_global_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """enabled=False を明示指定すれば、モジュール既定が True でもスキップされること
+
+    (呼び出し側の明示指定がモジュール既定より優先される)。
+    """
+    monkeypatch.setattr(collect_mod, "COLLECT_EXPECTED_FIRE", True)
+    row: dict[str, object] = {}
+    board = _chain_ready_board()
+    collect_mod._fill_expected_fire_columns(row, board, elapsed_sec=0.0, enabled=False)
+    for col in _XVI_COLUMNS:
+        assert col not in row
+
+
+def test_collect_expected_fire_near_future_and_fire_stability_unaffected_by_opt_in() -> None:
+    """opt-in ガードの追加が near_future/fire_stability の既定収集を壊さないこと
+
+    (既定 COLLECT_EXPECTED_FIRE=False の状態で、XIV/XV 列は引き続き計算される)。
+    """
+    row = _call_fill(_chain_ready_board())
+    for col in _XIV_COLUMNS:
+        assert col in row
+    for col in _XV_COLUMNS:
+        assert col in row
