@@ -674,6 +674,17 @@ class RecognitionPipeline:
         self._chain_until_1p: float = 0.0
         self._active_chain_2p: ChainEvent | None = None
         self._chain_until_2p: float = 0.0
+        # 根治 (2026-07-23): CHAIN → GRAVITY_SETTLE → STABLE 経路でも連鎖後
+        # final_board 反映 (Phase C-6 の C, _step_side 内) を機能させるための退避先。
+        # enable_gravity_settle_state=True (default) では CHAIN は必ず
+        # GRAVITY_SETTLE を経由してから STABLE に遷移するため、その遷移フレーム
+        # では active_chain_* は既に None 化されている (= chain_event 引数も None)。
+        # active_chain を None にする直前にこのフィールドへ退避しておき、
+        # GRAVITY_SETTLE→STABLE 遷移時の fallback 参照元として使う。
+        # enable_gravity_settle_state=False の場合は退避が消費される経路
+        # (GRAVITY_SETTLE 遷移) 自体が発生しないため、既存動作に影響しない。
+        self._last_chain_event_for_settle_1p: ChainEvent | None = None
+        self._last_chain_event_for_settle_2p: ChainEvent | None = None
         # match active hysteresis 用
         self._last_active_frame_idx: int = -1
         self._match_active_started_frame: int = -1
@@ -1441,6 +1452,9 @@ class RecognitionPipeline:
         self._chain_until_1p = 0.0
         self._active_chain_2p = None
         self._chain_until_2p = 0.0
+        # 根治 (2026-07-23): 退避 ChainEvent も reset 時にクリア。
+        self._last_chain_event_for_settle_1p = None
+        self._last_chain_event_for_settle_2p = None
         self._cnn_history_1p.clear()
         self._cnn_history_2p.clear()
         self._last_active_frame_idx = -1
@@ -1920,7 +1934,8 @@ class RecognitionPipeline:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
                 if self._enable_chain_max_hold_override:
                     self._chain_max_hold_expired_1p = True
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
         if self._active_chain_2p is not None:
             eff_until_2p = (
                 self._chain_event_max_until_2p
@@ -1936,7 +1951,8 @@ class RecognitionPipeline:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
                 if self._enable_chain_max_hold_override:
                     self._chain_max_hold_expired_2p = True
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
 
         # 4. score 差分
         score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
@@ -2184,7 +2200,8 @@ class RecognitionPipeline:
                 start_next=self._chain_start_next_1p,
             ):
                 chain_ev_1p = None
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
         if self._enable_game_event_chain_exit and chain_ev_2p is not None:
             # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
             _suppress_2p = (
@@ -2202,7 +2219,8 @@ class RecognitionPipeline:
                 start_next=self._chain_start_next_2p,
             ):
                 chain_ev_2p = None
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
 
         # 案X*(B): NextSlide signal で CHAIN 即終了 (enable_chain_exit_next_signal=True 時)。
         # slide_motion=True が確認された side の active_chain を即クリアする。
@@ -2215,11 +2233,13 @@ class RecognitionPipeline:
             _slide_2p_now: bool = bool(slide_2p)
             if _slide_1p_now and self._active_chain_1p is not None:
                 # 1P 側: slide 検知 → CHAIN 即終了
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
                 chain_ev_1p = None
             if _slide_2p_now and self._active_chain_2p is not None:
                 # 2P 側: slide 検知 → CHAIN 即終了
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
                 chain_ev_2p = None
 
         # 連鎖発火で constraint invalidate (= 連鎖中は puyo 消える + ojama 落下)
@@ -2922,6 +2942,26 @@ class RecognitionPipeline:
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
 
+    def _stash_and_clear_active_chain(self, side: str) -> None:
+        """active_chain_* を None にする前に退避してからクリアする。
+
+        根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰でも連鎖後
+        final_board 反映 (Phase C-6 の C) を機能させるための共通ヘルパー。
+        active_chain が None クリアされる全箇所 (timing hold 超過 /
+        game-event 次ツモ変化 exit / NextSlide 即終了) から呼び出す。
+
+        Args:
+            side: "1P" または "2P"。
+        """
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                self._last_chain_event_for_settle_1p = self._active_chain_1p
+            self._active_chain_1p = None
+        else:
+            if self._active_chain_2p is not None:
+                self._last_chain_event_for_settle_2p = self._active_chain_2p
+            self._active_chain_2p = None
+
     def _step_side(
         self,
         side: str,
@@ -3044,6 +3084,28 @@ class RecognitionPipeline:
         prev_next_queue = list(sm.context.next_queue)
 
         ctx: StateContext = sm.update(frame_idx, signals)
+
+        # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では chain_event
+        # 引数が既に None 化されているため、退避しておいた ChainEvent を
+        # fallback として使う「実効 chain_event」をこの frame の先頭で 1 回だけ
+        # 確定する。Phase C-6 の C (final_board 反映) と T2 (STABLE→STABLE
+        # 誤色棄却の連鎖直後 skip 判定) の両方がこの同一値を参照することで、
+        # T2 が Phase C-6 の C の直後に fresh な final_board を古い
+        # prev_stable で即座に上書きしてしまう相互作用を防ぐ
+        # (cycle 71 系との相性確認: architect 指摘事項)。
+        # backward compat 注記: prev_state==CHAIN (= enable_gravity_settle_state
+        # =False 時の従来経路) では _effective_chain_event は raw chain_event と
+        # 完全に同値にする (= 退避 stash を一切参照しない)。これにより
+        # GRAVITY_SETTLE 未経由の既存経路の挙動を 1 bit も変えない
+        # (退避 stash はフラグに関係なく常時更新されるが、CHAIN 直行経路では
+        # 一切参照されないため無害)。
+        if prev_state == BoardState.GRAVITY_SETTLE:
+            _effective_chain_event = (
+                self._last_chain_event_for_settle_1p if side == "1P"
+                else self._last_chain_event_for_settle_2p
+            )
+        else:
+            _effective_chain_event = chain_event
 
         # W-α (Phase G C-1): TSUMO_FALL → STABLE 復帰時に隠し段推論結果の
         # ProbabilisticBoard を保持して下流に publish する。
@@ -3407,18 +3469,30 @@ class RecognitionPipeline:
         # final_board (= 物理推論で確定した連鎖後盤面) で上書き。
         # 旧実装は CNN 盤面を採用していたが、連鎖アニメ残光・エフェクトで
         # CNN は信頼できないため、物理推論結果を真値として採用する。
+        # 根治 (2026-07-23): enable_gravity_settle_state=True (default) では
+        # CHAIN は必ず GRAVITY_SETTLE を経由してから STABLE に遷移するため、
+        # この遷移フレームでは prev_state==GRAVITY_SETTLE かつ chain_event 引数は
+        # 既に None (active_chain が上流で None 化済) になっており、旧条件
+        # (prev_state==CHAIN) は dead code だった。GRAVITY_SETTLE も許容し、
+        # _effective_chain_event (frame 先頭で確定済、 chain_event None 時は
+        # 退避 ChainEvent を fallback) を使う。
         if (
-            prev_state == BoardState.CHAIN
+            prev_state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
             and ctx.state == BoardState.STABLE
-            and chain_event is not None
+            and _effective_chain_event is not None
         ):
+            # 退避 event は one-shot 消費 (次回以降の誤爆防止のため即クリア)
+            if side == "1P":
+                self._last_chain_event_for_settle_1p = None
+            else:
+                self._last_chain_event_for_settle_2p = None
             try:
                 from src.board_state_machine import _apply_gravity_filter
                 from src.chain import ChainSimulator
                 if not hasattr(self, "_chain_sim"):
                     self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
                 cr = self._chain_sim.simulate(  # type: ignore[attr-defined]
-                    chain_event.before_board,
+                    _effective_chain_event.before_board,
                 )
                 if cr.chain_count > 0 and cr.final_board is not None:
                     final = cr.final_board.copy()
@@ -3471,9 +3545,11 @@ class RecognitionPipeline:
         # 案X 連動: enable_chain_exit_next_signal=True 時は CHAIN_EXIT_NEXT_WARMUP_SEC(0.5s) を使用。
         # 案X が連鎖を早く終わらせると置き直後・エフェクト残光が STABLE 露出するため
         # 通常の CHAIN_EXIT_WARMUP_SEC(0.1s) より長い凍結時間が必要。
+        # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰も同様に凍結対象とする
+        # (enable_gravity_settle_state=True では CHAIN が直接 STABLE に遷移しないため)。
         if (
             self._enable_chain_exit_warmup
-            and prev_state == BoardState.CHAIN
+            and prev_state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
             and ctx.state == BoardState.STABLE
         ):
             # 案X 時は専用の長い凍結時間を使用、それ以外は機能C の短い凍結時間を使用
@@ -3797,6 +3873,12 @@ class RecognitionPipeline:
             # 前 STABLE と現 STABLE で「色A → 色B」(異色間変化) かつ
             # 間に CHAIN signal がなければ認識誤りと判断し前値で上書き。
             # grace 中・chain_event あり・prev_stable なし は skip。
+            # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では、この
+            # frame の chain_event 引数は既に None だが実質は連鎖直後
+            # (Phase C-6 の C が final_board を注入した frame) であるため、
+            # 生の chain_event でなく _effective_chain_event (frame 先頭で
+            # 確定済) で判定する。 でなければ T2 が Phase C-6 の C の直後に
+            # fresh な final_board を古い prev_stable で即座に上書きしてしまう。
             prev_stable_t2 = (
                 self._prev_stable_confirmed_1p if side == "1P"
                 else self._prev_stable_confirmed_2p
@@ -3814,7 +3896,7 @@ class RecognitionPipeline:
                     self._deferred_just_committed_2p = False
             if (
                 prev_stable is not None
-                and chain_event is None
+                and _effective_chain_event is None
                 and not in_grace
                 and not _deferred_committed_this_frame  # 案 Y-4: deferred 確定 frame は T2 スキップ
             ):
