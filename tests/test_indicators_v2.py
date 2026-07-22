@@ -1677,3 +1677,230 @@ def test_near_future_fire_power_active_colors_score_in_range() -> None:
         value = result.values[k]
         assert 0.0 <= value.score <= 1.0
         assert value.raw == value.raw
+
+
+# ============================
+# XV 火力の受けの多さ (fire_stability, K=2,4,6)
+# ============================
+# user提案 #30: 検証済み中盤本命「受けやすさ (ukeyasusa)」の火力版。
+# near_future_fire_power と同じビーム machinery を再利用する副産物として
+# 実装 (最大火力そのものでなく、最大火力近傍のパターン数/割合を測る)。
+
+
+def test_fire_stability_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.fire_stability(_near_future_seed_board())
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
+
+
+def test_fire_stability_empty_board_is_low() -> None:
+    """空盤面 (発火材料なし) は K=2 で raw (件数) が候補総数以下に収まること。"""
+    result = iv.fire_stability(_empty_board())
+    assert result.values[2].raw <= result.candidate_counts[2]
+
+
+def test_fire_stability_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.fire_stability(board)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+
+
+def test_fire_stability_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    result_omitted = iv.fire_stability(board)
+    result_explicit_none = iv.fire_stability(board, active_colors=None)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert result_omitted.values[k].raw == result_explicit_none.values[k].raw
+
+
+def test_fire_stability_active_colors_explicit_is_used() -> None:
+    """active_colors を明示指定すると探索結果 (件数) が変わりうること。"""
+    board = _near_future_seed_board()
+    default_result = iv.fire_stability(board)
+    restricted_result = iv.fire_stability(
+        board, active_colors=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    diffs = [
+        default_result.candidate_counts[k] != restricted_result.candidate_counts[k]
+        or default_result.values[k].raw != restricted_result.values[k].raw
+        for k in iv.FIRE_STABILITY_K_LEVELS
+    ]
+    assert any(diffs), "active_colors 指定が探索結果に反映されていない"
+
+
+def test_fire_stability_threshold_ratio_monotonic() -> None:
+    """閾値を上げる (0.8→0.95) ほど、近傍とみなされる件数が減る (単調非増加) こと。"""
+    board = _near_future_seed_board()
+    loose = iv.fire_stability(board, threshold_ratio=0.5)
+    strict = iv.fire_stability(board, threshold_ratio=0.95)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert strict.candidate_counts[k] <= loose.candidate_counts[k]
+
+
+def test_fire_stability_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.fire_stability(board, next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW))
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_fire_stability_exported_in_all() -> None:
+    """fire_stability が __all__ に含まれること。"""
+    assert "fire_stability" in iv.__all__
+    assert "FireStabilityResult" in iv.__all__
+    assert "FIRE_STABILITY_K_LEVELS" in iv.__all__
+    assert "FIRE_STABILITY_THRESHOLD_RATIO" in iv.__all__
+
+
+def test_fire_stability_constants_values() -> None:
+    """定数値が実装通りであること (K水準2,4,6・既定閾値0.8)。"""
+    assert iv.FIRE_STABILITY_K_LEVELS == (2, 4, 6)
+    assert iv.FIRE_STABILITY_THRESHOLD_RATIO == pytest.approx(0.8)
+
+
+# ============================
+# XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+# ============================
+# user新指標: near_future_fire_power (理想ツモ=best case) の逆。ランダムな
+# 色のツモを最適配置した時の火力の期待値を測る expected case。
+# K=1,2 は全ツモ色パターン (16通り/256通り) を厳密列挙、K=3,4 は
+# モンテカルロ近似 (乱数は盤面内容から決定論的に導出、再現性あり)。
+
+
+def test_expected_fire_power_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.expected_fire_power(_near_future_seed_board(), mc_n_samples=4)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
+
+
+def test_expected_fire_power_exact_k1k2_is_deterministic_no_seed_needed() -> None:
+    """K=1,2 (厳密全列挙) は乱数を使わないため rng_seed 無指定でも常に同一結果。"""
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(board, active_colors=colors, k_levels=(1, 2))
+    r2 = iv.expected_fire_power(board, active_colors=colors, k_levels=(1, 2))
+    assert r1.values[1].raw == r2.values[1].raw
+    assert r1.values[2].raw == r2.values[2].raw
+
+
+def test_expected_fire_power_mc_k3k4_is_deterministic_for_same_board() -> None:
+    """stateless: K=3,4 (モンテカルロ) も同一盤面には常に同一結果を返すこと。
+
+    乱数シードは盤面内容から決定論的に導出するため (_expected_fire_seed)、
+    呼び出しごとに変わってはならない。
+    """
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8)
+    r2 = iv.expected_fire_power(board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8)
+    assert r1.values[3].raw == r2.values[3].raw
+    assert r1.values[4].raw == r2.values[4].raw
+
+
+def test_expected_fire_power_rng_seed_override_is_reproducible() -> None:
+    """rng_seed を明示指定すると、指定した値に応じて完走し評価件数が一致すること。"""
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(
+        board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8, rng_seed=1,
+    )
+    r2 = iv.expected_fire_power(
+        board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8, rng_seed=1,
+    )
+    assert r1.values[3].raw == r2.values[3].raw
+    assert r1.n_evaluated[3] == 8 and r2.n_evaluated[4] == 8
+
+
+def test_expected_fire_power_n_evaluated_matches_exact_and_mc_counts() -> None:
+    """n_evaluated が K=1:16・K=2:256 (4色固定時) ・K=3,4:mc_n_samples になっていること。
+
+    active_colors を明示的に4色指定する (省略時は観測色数次第で5色フォール
+    バックがあり得るため、16/256 の前提が崩れる)。
+    """
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    result = iv.expected_fire_power(board, active_colors=colors, mc_n_samples=10)
+    assert result.n_evaluated[1] == 16
+    assert result.n_evaluated[2] == 256
+    assert result.n_evaluated[3] == 10
+    assert result.n_evaluated[4] == 10
+
+
+def test_expected_fire_power_k_is_monotonic_non_decreasing() -> None:
+    """K を増やすほど raw (平均お邪魔換算) が単調非減少であること (running max 性質)。
+
+    K=1,2 (厳密) → K=3,4 (モンテカルロ) の橋渡しが滑らかであることの確認。
+    """
+    result = iv.expected_fire_power(_near_future_seed_board(), mc_n_samples=16)
+    raws = [result.values[k].raw for k in sorted(iv.EXPECTED_FIRE_K_LEVELS)]
+    for prev, cur in zip(raws, raws[1:]):
+        assert cur >= prev
+
+
+def test_expected_fire_power_empty_board_is_zero() -> None:
+    """空盤面 (発火材料なし) は K=1 で raw=0 になること。"""
+    result = iv.expected_fire_power(_empty_board(), mc_n_samples=4)
+    assert result.values[1].raw == 0.0
+
+
+def test_expected_fire_power_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.expected_fire_power(board, mc_n_samples=4)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+        assert result.n_evaluated[k] == 0
+
+
+def test_expected_fire_power_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    r1 = iv.expected_fire_power(board, mc_n_samples=8, rng_seed=42)
+    r2 = iv.expected_fire_power(board, active_colors=None, mc_n_samples=8, rng_seed=42)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        assert r1.values[k].raw == r2.values[k].raw
+
+
+def test_expected_fire_power_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.expected_fire_power(board, mc_n_samples=4)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_expected_fire_power_exported_in_all() -> None:
+    """expected_fire_power が __all__ に含まれること。"""
+    assert "expected_fire_power" in iv.__all__
+    assert "ExpectedFireResult" in iv.__all__
+    assert "EXPECTED_FIRE_K_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_EXACT_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_MC_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_MC_N_SAMPLES" in iv.__all__
+
+
+def test_expected_fire_power_constants_values() -> None:
+    """定数値が実装通りであること (K水準1-4・厳密1,2・モンテカルロ3,4)。"""
+    assert iv.EXPECTED_FIRE_K_LEVELS == (1, 2, 3, 4)
+    assert iv.EXPECTED_FIRE_EXACT_LEVELS == (1, 2)
+    assert iv.EXPECTED_FIRE_MC_LEVELS == (3, 4)

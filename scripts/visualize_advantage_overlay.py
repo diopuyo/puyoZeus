@@ -175,14 +175,28 @@ FEATURES: tuple[str, ...] = (
 #     の強いシグナルを確認、K増加で単調改善。序盤のみ current_max_chain 優位
 #     のため、位相別 blend の要否は別途 viz レビューで検討する
 #     (本追加はモデル特徴量候補としての組み込みのみ、overlay の見た目採否は別途))
+#   - fire_stability_k2/4/6 (火力の受けの多さ=火力安定性、2026-07-22 user提案#30。
+#     near_future_fire_power と同じビーム machinery の副産物。AUC検証結果は
+#     別途報告 (本追加はモデル特徴量候補としての組み込みのみ、overlay の
+#     見た目・位相別blend採否は別途 viz レビューで検討する))
+#   - expected_fire_k1/k2 (平均ツモ期待火力、2026-07-22 user新指標。ランダム色
+#     ツモを最適配置した時の火力のモンテカルロ平均=near_future(理想ツモ)の
+#     対極。AUC検証結果は別途報告 (本追加はモデル特徴量候補としての組み込み
+#     のみ、overlay の見た目・位相別blend採否は別途 viz レビューで検討する))
 # labeled_win.csv に列が無い間は _resolve_features() が自動的に除外し、本モジュール
 # 内の学習・推論は従来通り FEATURES のみで動く (列存在ガード。後方互換維持)。
 NEAR_FUTURE_FIRE_COLS: tuple[str, ...] = tuple(
     f"near_future_fire_k{k}" for k in range(1, 6)
 )
+FIRE_STABILITY_COLS: tuple[str, ...] = tuple(
+    f"fire_stability_k{k}" for k in (2, 4, 6)
+)
+EXPECTED_FIRE_COLS: tuple[str, ...] = tuple(
+    f"expected_fire_k{k}" for k in (1, 2)
+)
 FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + (
     "saturated_chain_count", "ukeyasusa", "sub_chain_count",
-) + NEAR_FUTURE_FIRE_COLS
+) + NEAR_FUTURE_FIRE_COLS + FIRE_STABILITY_COLS + EXPECTED_FIRE_COLS
 # 主要ドライバ表示用の日本語ラベル
 JP_LABEL: dict[str, str] = {
     "board_ojama_count": "盤面お邪魔数", "death_margin": "窒息余裕",
@@ -193,6 +207,9 @@ JP_LABEL: dict[str, str] = {
     "near_future_fire_k1": "近未来火力K1", "near_future_fire_k2": "近未来火力K2",
     "near_future_fire_k3": "近未来火力K3", "near_future_fire_k4": "近未来火力K4",
     "near_future_fire_k5": "近未来火力K5",
+    "fire_stability_k2": "火力安定K2", "fire_stability_k4": "火力安定K4",
+    "fire_stability_k6": "火力安定K6",
+    "expected_fire_k1": "期待火力K1", "expected_fire_k2": "期待火力K2",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
@@ -349,6 +366,49 @@ def _fill_near_future_candidate(
         f2[name] = nf2.values[k].score
 
 
+def _fill_fire_stability_candidate(
+    f1: dict[str, float], f2: dict[str, float], b1: Board, b2: Board,
+    cols: list[str],
+) -> None:
+    """fire_stability_k2/4/6 が cols に含まれる場合のみ計算する (列存在ガード)。
+
+    _fill_near_future_candidate と同じ方針 (1回のビームサーチで K=2,4,6を
+    同時取得、next_pair/dnext_pair は overlay 未配線のため省略)。
+    """
+    if not any(c in cols for c in FIRE_STABILITY_COLS):
+        return
+    if FIRE_STABILITY_COLS[0] in f1:
+        return
+    fs1 = iv.fire_stability(b1)
+    fs2 = iv.fire_stability(b2)
+    for k in (2, 4, 6):
+        name = f"fire_stability_k{k}"
+        f1[name] = fs1.values[k].score
+        f2[name] = fs2.values[k].score
+
+
+def _fill_expected_fire_candidate(
+    f1: dict[str, float], f2: dict[str, float], b1: Board, b2: Board,
+    cols: list[str],
+) -> None:
+    """expected_fire_k1/k2 が cols に含まれる場合のみ計算する (列存在ガード)。
+
+    _fill_near_future_candidate と同じ方針。モンテカルロ (既定 N=48) のため
+    他の候補指標より重い (~150-300ms/盤面、scripts/_tmp_bench_expected_fire.py
+    実測) 点に留意 (呼出元 HeavyAdvCache は間引き実行のため許容コスト)。
+    """
+    if not any(c in cols for c in EXPECTED_FIRE_COLS):
+        return
+    if EXPECTED_FIRE_COLS[0] in f1:
+        return
+    ef1 = iv.expected_fire_power(b1)
+    ef2 = iv.expected_fire_power(b2)
+    for k in (1, 2):
+        name = f"expected_fire_k{k}"
+        f1[name] = ef1.values[k].score
+        f2[name] = ef2.values[k].score
+
+
 def _score_advantage(
     model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
     feature_cols: tuple[str, ...] | list[str] | None = None,
@@ -376,6 +436,8 @@ def _score_advantage(
             f1[name] = fn(b1).score
             f2[name] = fn(b2).score
     _fill_near_future_candidate(f1, f2, b1, b2, cols)
+    _fill_fire_stability_candidate(f1, f2, b1, b2, cols)
+    _fill_expected_fire_candidate(f1, f2, b1, b2, cols)
     diff = {c: f1[c] - f2[c] for c in cols}
     x = np.array([[diff[c] for c in cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])

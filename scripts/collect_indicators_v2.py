@@ -52,6 +52,16 @@ DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす (会計と同基準)
 SCORE_RESET_THRESHOLD: int = 500
 
+# XVI 平均ツモ期待火力 (expected_fire_power) の収集 opt-in フラグ (2026-07-22)。
+# user判断: fire_stability/expected_fire は「観測軸として残す」(4動画の狭い
+# 標本でnull判定が出たが、低ティア・データ増で再評価の余地がある)。
+# ただし expected_fire_power は重い (実測1.7〜3.5秒/盤面、
+# scripts/_tmp_bench_expected_fire.py 参照) ため、将来のデータ拡充
+# (Phase L、動画数を大幅に増やす) で常時収集すると ~1fps律速の収集
+# パイプラインが破綻する。既定 OFF の opt-in にし、必要な時だけ True にする
+# (fire_stability は軽い(near_future_fire_power と同水準)ため既定収集のまま)。
+COLLECT_EXPECTED_FIRE: bool = False
+
 
 # ============================
 # CSV 列定義 (順序固定)
@@ -112,6 +122,21 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     "near_future_fire_k3", "near_future_fire_k3_raw",
     "near_future_fire_k4", "near_future_fire_k4_raw",
     "near_future_fire_k5", "near_future_fire_k5_raw",
+    # XV 火力の受けの多さ (fire_stability, K=2,4,6)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    "fire_stability_k2", "fire_stability_k2_raw",
+    "fire_stability_k4", "fire_stability_k4_raw",
+    "fire_stability_k6", "fire_stability_k6_raw",
+    # XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    # ⚠️ K=3,4 追加時に列定義の更新漏れがあった (正直な記録): 実装は
+    # EXPECTED_FIRE_K_LEVELS=(1,2,3,4) を計算するのに列は k1,k2 のみだったため、
+    # COLLECT_EXPECTED_FIRE=True で収集すると csv.DictWriter が未定義列
+    # (expected_fire_k3/k4) で ValueError を起こす潜在バグだった。ここで是正する。
+    "expected_fire_k1", "expected_fire_k1_raw",
+    "expected_fire_k2", "expected_fire_k2_raw",
+    "expected_fire_k3", "expected_fire_k3_raw",
+    "expected_fire_k4", "expected_fire_k4_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -363,6 +388,8 @@ def _fill_indicator_columns(
         "simultaneous_pop_richness_raw": spr.raw,
     })
     _fill_near_future_columns(row, board, next_pair, dnext_pair, elapsed_sec, active_colors)
+    _fill_fire_stability_columns(row, board, next_pair, dnext_pair, active_colors)
+    _fill_expected_fire_columns(row, board, elapsed_sec, active_colors)
 
 
 def _fill_near_future_columns(
@@ -389,6 +416,62 @@ def _fill_near_future_columns(
     for k in iv.NEAR_FUTURE_K_LEVELS:
         row[f"near_future_fire_k{k}"] = nf.values[k].score
         row[f"near_future_fire_k{k}_raw"] = nf.values[k].raw
+
+
+def _fill_fire_stability_columns(
+    row: dict[str, object],
+    board: Board,
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    active_colors: "tuple[int, ...] | None" = None,
+) -> None:
+    """XV 火力の受けの多さ (fire_stability_k2/4/6) を row dict に書き込む。
+
+    near_future_fire_power と同じビーム machinery (_GameColorTracker 由来の
+    active_colors・next_pair/dnext_pair) を流用する副産物として安価に計算する
+    (2026-07-22 本番統合、user提案#30)。
+    """
+    fs = iv.fire_stability(board, next_pair, dnext_pair, active_colors=active_colors)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        row[f"fire_stability_k{k}"] = fs.values[k].score
+        row[f"fire_stability_k{k}_raw"] = fs.values[k].raw
+
+
+def _fill_expected_fire_columns(
+    row: dict[str, object],
+    board: Board,
+    elapsed_sec: float,
+    active_colors: "tuple[int, ...] | None" = None,
+    enabled: "bool | None" = None,
+) -> None:
+    """XVI 平均ツモ期待火力 (expected_fire_k1..k4) を row dict に書き込む。
+
+    ⚠️ opt-in 設計 (2026-07-22、user判断): expected_fire_power は重い
+    (実測1.7〜3.5秒/盤面、scripts/_tmp_bench_expected_fire.py 参照。
+    near_future_fire_power の ~40-70ms/盤面 の20-40倍) ため、既定 OFF の
+    opt-in にする。Phase L (動画数を大幅に増やすデータ拡充) で常時収集すると
+    ~1fps律速の収集パイプラインが破綻するため。
+
+    enabled=None (既定) のときはモジュール定数 COLLECT_EXPECTED_FIRE を都度
+    参照する (呼び出し時点の値を動的に見る。テストで monkeypatch する場合も
+    正しく反映されるよう、関数のデフォルト引数に直接束縛しない設計)。
+    False (既定) のときは計算せず row に何も追加しない
+    (CSV列は INDICATOR_COLUMNS 定義に残ったまま、csv.DictWriter の
+    restval=既定'' により空欄で出力される = 列存在ガードと整合する後方互換)。
+    有効にしたい場合は COLLECT_EXPECTED_FIRE=True に変更するか、本関数の
+    enabled 引数を明示的に True で呼ぶ。
+
+    fire_stability (near_future_fire_power と同水準の軽さ) は対象外
+    (既定収集のまま、opt-inガード不要)。
+    """
+    if enabled is None:
+        enabled = COLLECT_EXPECTED_FIRE
+    if not enabled:
+        return
+    ef = iv.expected_fire_power(board, elapsed_sec=elapsed_sec, active_colors=active_colors)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        row[f"expected_fire_k{k}"] = ef.values[k].score
+        row[f"expected_fire_k{k}_raw"] = ef.values[k].raw
 
 
 def _chain_duration(side: SideResult) -> tuple[iv.IndicatorV2Value, str]:
