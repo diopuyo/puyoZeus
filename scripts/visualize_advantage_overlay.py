@@ -45,6 +45,10 @@ OUT_W, OUT_H = 1280, 720
 GRAPH_H = 150          # 下部に足すグラフ専用の黒帯高さ
 TOP_H = 240            # 上部に足す情報パネル専用の黒帯高さ (盤面には一切描画しない)
 CANVAS_H = TOP_H + OUT_H + GRAPH_H
+# show_recognition=True 時のみ使用: scripts/visualize_recognition.py の ROI 定数
+# (P1_ROI_X 等) はネイティブ解像度 1920x1080 で校正済みのため、認識色 overlay は
+# そのネイティブ解像度で描いてから OUT_W/OUT_H に縮小する (2026-07-23 追加)。
+NATIVE_W, NATIVE_H = 1920, 1080
 DEFAULT_FPS = 30.0
 EVEN_THRESHOLD = 5.0  # |有利不利| がこれ未満は「互角」
 EMA_ALPHA = 0.25      # 有利不利の時間平滑
@@ -604,6 +608,32 @@ def _fresh_trackers(
             HeavyAdvCache(model))
 
 
+def _pick_recog_display_board(
+    side_result: object, frozen_board: "Board | None",
+) -> tuple["Board | None", bool]:
+    """認識色 overlay 描画用に、CHAIN/GRAVITY_SETTLE 中は estimated_board
+    (物理推論スルー盤面、src/recognition_pipeline.py 反復5-6) を、それ以外は
+    凍結済み STABLE 盤面 (frozen_board) を返す (反復10 viz拡張)。
+
+    src/ は無改修 (SideResult の既存 optional フィールドを参照するのみ)。
+    古い SideResult (estimated_board 未搭載) でも getattr で安全に動く。
+
+    Args:
+        side_result: PipelineResult.p1 または .p2 (SideResult)。
+        frozen_board: 直近 STABLE で確定した盤面 (従来の b1/b2)。
+
+    Returns:
+        (描画対象 board, 低信頼度フラグ)。board が None なら描画対象なし。
+    """
+    state = getattr(side_result, "state", None)
+    if state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+        estimated = getattr(side_result, "estimated_board", None)
+        if estimated is not None:
+            provenance = getattr(side_result, "board_provenance", "observed")
+            return estimated, provenance == "chain_estimate_low_confidence"
+    return frozen_board, False
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
@@ -742,15 +772,33 @@ def _draw_overlay(
 
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
-             exclude_video: str | None = None, warmup_sec: float = 0.0) -> int:
+             exclude_video: str | None = None, warmup_sec: float = 0.0,
+             show_recognition: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
     warmup_sec: start_sec の何秒前から「処理だけ」始めるか (状態機械/会計の初期化用。
         この区間は認識を通すが動画には書き出さない)。
     end_sec: 書き出し終了秒。
+    show_recognition: True で scripts/visualize_recognition.py の認識色 overlay
+        (盤面セルに認識色記号+ state 枠) を合成する (2026-07-23 追加)。
+        既定 False = 従来通り無地の盤面 (後方互換、既存呼出元は挙動不変)。
+        認識自体は従来通り縮小済み frame で行う(推論経路は不変)。表示専用に
+        ネイティブ解像度 (1920x1080) でオーバーレイを描いてから縮小するため、
+        visualize_recognition.py の ROI 定数がそのまま使える。
     """
     model = _train_model(exclude_video)
+    _draw_recog_cells = _draw_recog_state = None
+    _vr_rois: tuple[int, int, int, int] | None = None
+    _vr_roi_size: tuple[int, int] | None = None
+    if show_recognition:
+        from scripts.visualize_recognition import (
+            draw_cell_overlay as _draw_recog_cells,
+            draw_state_label as _draw_recog_state,
+            P1_ROI_X, P1_ROI_Y, P2_ROI_X, P2_ROI_Y, ROI_W, ROI_H,
+        )
+        _vr_rois = (P1_ROI_X, P1_ROI_Y, P2_ROI_X, P2_ROI_Y)
+        _vr_roi_size = (ROI_W, ROI_H)
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
         print(f"[ERROR] open失敗: {video}", file=sys.stderr)
@@ -804,6 +852,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         ok, frame = cap.read()
         if not ok or frame is None:
             break
+        # show_recognition=True 時のみネイティブ解像度のコピーを保持
+        # (認識色 overlay 描画用。推論には使わないため計算経路は不変)。
+        raw_native = frame.copy() if show_recognition else None
         if frame.shape[:2] != (OUT_H, OUT_W):
             frame = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
         t = fi / fps
@@ -855,7 +906,40 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         waiting = b1 is None or b2 is None
-        writer.write(_draw_overlay(frame, adv_ema, p1_last, drivers, waiting,
+        display_frame = frame
+        if show_recognition:
+            # 認識色 overlay はネイティブ解像度 (1920x1080) で描いてから縮小する
+            # (visualize_recognition.py の ROI 定数をそのまま使うため。
+            # STABLE 凍結済みの b1/b2 = 評価と同条件の盤面を描画)。
+            if raw_native.shape[:2] != (NATIVE_H, NATIVE_W):
+                raw_native = cv2.resize(
+                    raw_native, (NATIVE_W, NATIVE_H), interpolation=cv2.INTER_AREA)
+            p1_x, p1_y, p2_x, p2_y = _vr_rois
+            # 反復10 viz拡張: CHAIN/GRAVITY_SETTLE 中は estimated_board (物理
+            # 推論スルー盤面) を描画する。無ければ従来通り凍結済み b1/b2。
+            disp_b1, low_conf_1 = _pick_recog_display_board(r.p1, b1)
+            disp_b2, low_conf_2 = _pick_recog_display_board(r.p2, b2)
+            if disp_b1 is not None:
+                _draw_recog_cells(raw_native, disp_b1, p1_x, p1_y)
+            if disp_b2 is not None:
+                _draw_recog_cells(raw_native, disp_b2, p2_x, p2_y)
+            _draw_recog_state(raw_native, r.p1.state, p1_x, p1_y,
+                              score=r.p1.score or 0, label_prefix="1P:")
+            _draw_recog_state(raw_native, r.p2.state, p2_x, p2_y,
+                              score=r.p2.score or 0, label_prefix="2P:")
+            # board_provenance=="chain_estimate_low_confidence" の側は
+            # ROI に橙色の枠を描いて低信頼であることを視覚化する。
+            if _vr_roi_size is not None:
+                roi_w, roi_h = _vr_roi_size
+                if low_conf_1:
+                    cv2.rectangle(raw_native, (p1_x, p1_y),
+                                  (p1_x + roi_w, p1_y + roi_h), (0, 165, 255), 4)
+                if low_conf_2:
+                    cv2.rectangle(raw_native, (p2_x, p2_y),
+                                  (p2_x + roi_w, p2_y + roi_h), (0, 165, 255), 4)
+            display_frame = cv2.resize(
+                raw_native, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
+        writer.write(_draw_overlay(display_frame, adv_ema, p1_last, drivers, waiting,
                                    history, t - start_sec, total_dur,
                                    ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2))
         written += 1
@@ -878,10 +962,16 @@ def main() -> None:
     ap.add_argument("--exclude-video", default=None,
                     help="学習から除外する動画ID (対象動画のリーク防止)")
     ap.add_argument("--sample-interval", type=float, default=0.15)
+    ap.add_argument(
+        "--show-recognition", action="store_true", dest="show_recognition",
+        help="scripts/visualize_recognition.py の認識色 overlay (盤面セル色記号+"
+             "state枠) を合成する (2026-07-23 追加、既定 False = 従来通り無地)。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
-             exclude_video=a.exclude_video, warmup_sec=a.warmup_sec)
+             exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
+             show_recognition=a.show_recognition)
 
 
 if __name__ == "__main__":
