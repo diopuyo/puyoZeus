@@ -2238,3 +2238,331 @@ def test_board_none_reason_field_default_none_backward_compat() -> None:
     )
     assert sr.board_none_reason is None
 
+
+# ============================
+# 反復5 (2026-07-23): 物理推論スルー (根治本体) テスト
+# ============================
+
+
+def _erasable_board_with_survivor() -> Board:
+    """4連結の赤 (row12 col1-4) + その上の緑 (row11 col0) の盤面。
+
+    ChainSimulator.simulate() で chain_count=1、final_board は
+    (12,0)=緑 (重力落下)、それ以外は空になる。
+    """
+    b = Board()
+    b.set(12, 1, COLOR_RED)
+    b.set(12, 2, COLOR_RED)
+    b.set(12, 3, COLOR_RED)
+    b.set(12, 4, COLOR_RED)
+    b.set(11, 0, COLOR_GREEN)
+    return b
+
+
+def _make_real_chain_event(chain_count_claimed: int, before: Board | None = None):
+    """実際に ChainSimulator で解決可能な起点盤面を持つ ChainEvent を作る。
+
+    chain_count_claimed: score 由来 chain_count として ChainEvent に積む値
+        (物理予測との答え合わせ用に、意図的に実際の連鎖数と変えられる)。
+    """
+    from src.chain_detector import ChainEvent
+    before_board = before if before is not None else _erasable_board_with_survivor()
+    return ChainEvent(
+        trigger_sec=10.0, end_sec=10.6, before_board=before_board,
+        chain_count=chain_count_claimed,
+        total_erased=4, total_score=40, base_score=40,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_progressed_chain_board_none_when_no_chain() -> None:
+    """反復5 Step2: chain_count=0 の ChainResult は None を返す。"""
+    from src.chain import ChainSimulator
+    from src.recognition_pipeline import _progressed_chain_board
+    cr = ChainSimulator().simulate(Board())  # 空盤面 = 連鎖なし
+    assert cr.chain_count == 0
+    assert _progressed_chain_board(cr, 10.0, 10.6, 10.3) is None
+
+
+def test_progressed_chain_board_returns_final_after_end() -> None:
+    """反復5 Step2: 経過時刻が end_sec 以降なら final_board を返す。"""
+    from src.chain import ChainSimulator
+    from src.recognition_pipeline import _progressed_chain_board
+    cr = ChainSimulator().simulate(_erasable_board_with_survivor())
+    assert cr.chain_count == 1
+    board = _progressed_chain_board(cr, 10.0, 10.6, 20.0)  # end_sec 超過
+    assert board is not None
+    assert board.get(12, 0) == COLOR_GREEN
+    assert board.get(12, 1) == COLOR_EMPTY
+
+
+def test_start_chain_estimate_stores_result_when_count_matches() -> None:
+    """反復5 Step2/Step3(a): score 由来 chain_count と物理予測が一致すれば
+    低信頼度フラグは立たない。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)  # 実際も 1 連鎖
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is not None
+    assert pipe._chain_estimate_result_1p.chain_count == 1
+    assert pipe._chain_estimate_low_confidence_1p is False
+
+
+def test_start_chain_estimate_low_confidence_on_count_mismatch() -> None:
+    """反復5 Step3(a) 答え合わせ: score由来 chain_count (claimed) と物理予測
+    (実際は 1連鎖) が不一致なら低信頼度フラグが立つ。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=5)  # 実際は 1 連鎖のはず
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is not None
+    assert pipe._chain_estimate_low_confidence_1p is True
+
+
+def test_start_chain_estimate_no_erasable_group_sets_none() -> None:
+    """反復5 Step2: 起点盤面に連鎖可能なグループが無ければ推定を開始しない。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1, before=Board())  # 空盤面
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is None
+
+
+def test_compute_chain_estimate_returns_board_during_chain() -> None:
+    """反復5 Step2: CHAIN 中は estimated_board が非 None、provenance は
+    chain_estimate (起点信頼度が高い場合)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=20.0,  # end_sec 超過 → final_board
+    )
+    assert board is not None
+    assert board.get(12, 0) == COLOR_GREEN
+    assert provenance == "chain_estimate"
+
+
+def test_compute_chain_estimate_low_confidence_provenance() -> None:
+    """反復5 Step3(a): 低信頼度フラグ時は provenance が
+    chain_estimate_low_confidence になる。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=99)  # 明らかに不一致
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.GRAVITY_SETTLE, time_sec=20.0,
+    )
+    assert board is not None
+    assert provenance == "chain_estimate_low_confidence"
+
+
+def test_compute_chain_estimate_none_outside_chain_states() -> None:
+    """反復5 Step2/Step4: CHAIN/GRAVITY_SETTLE 以外では常に (None, observed)
+    (= 標準 STABLE eval 経路には一切影響しない)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.STABLE, time_sec=20.0,
+    )
+    assert board is None
+    assert provenance == "observed"
+    # CHAIN/GRAVITY_SETTLE を抜けたら内部 state もクリアされる (次連鎖への
+    # 誤った持ち越し防止)。
+    assert pipe._chain_estimate_result_1p is None
+
+
+def test_chain_estimate_exposed_without_mutating_confirmed_board() -> None:
+    """反復5 統合 (Step2 主目的 + Step4 backward compat): CHAIN 中でも
+    confirmed_board の値は本機構によって一切変更されない
+    (= 標準 eval 経路 (STABLE のみ評価) への影響ゼロ) が、
+    estimated_board には物理推定盤面が独立に公開される。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    # cycle 49 の 4連結ゲート通過用: confirmed に起点盤面を直接注入する
+    # (postchain-fix テストと同じ given 条件パターン)。
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    result = pipe.update(40, 10.0, _dummy_frame())
+    assert result.p1.state == BoardState.CHAIN
+    # confirmed_board は本機構 (estimated_board) によって書き換えられて
+    # いない (= given でセットした起点盤面のままか、通常経路の値のまま)。
+    # 少なくとも「連鎖後の緑ぷよ落下」という推定結果には置き換わっていない。
+    assert (
+        result.p1.confirmed_board is None
+        or result.p1.confirmed_board.get(12, 1) != COLOR_EMPTY
+    ), "confirmed_board 自体が estimated_board の値で上書きされてはいけない"
+    assert result.p1.estimated_board is not None, (
+        "CHAIN 中は物理推定盤面が estimated_board に公開されるべき"
+        " (根治の主目的)"
+    )
+    assert result.p1.estimated_board.get(12, 0) == COLOR_GREEN
+    assert result.p1.board_provenance in (
+        "chain_estimate", "chain_estimate_low_confidence",
+    )
+
+
+def test_chain_estimate_applied_unconditionally_at_stable() -> None:
+    """反復5 修正 (2026-07-23): final_board は事前ゲートせず素直に適用する
+    (反復1の残像修正を邪魔しない、物理レビュー実測での回帰 0.09→0.28 の
+    根治)。STABLE 復帰の瞬間は、生 CNN と乖離していても物理予測が採用される。
+    """
+    unrelated_board = Board()
+    for r in range(0, 6):
+        unrelated_board.set(r, 5, COLOR_BLUE)  # final_board (ほぼ空) と大きく乖離
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(unrelated_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "final_board は事前ゲートせず素直に適用されるべき"
+        " (反復1の残像修正を維持)"
+    )
+
+
+def _run_chain_to_first_stable(
+    pipe: RecognitionPipeline, ev, frame_idx: int, t: float,
+) -> tuple[int, float, "SideResult"]:
+    """CHAIN 発火から最初の STABLE frame まで進め、(frame_idx, t, result) を返す。
+
+    CNN は起点盤面 (ev.before_board) と一致させたまま進める
+    (= inferred と CNN が一致し drift-resync が誤って先回りしないようにする)。
+    """
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+    result = res
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.state == BoardState.STABLE:
+            break
+    return frame_idx, t, result.p1
+
+
+def test_chain_estimate_answer_check_corrects_persistent_mismatch() -> None:
+    """反復5 修正 Step3(b)(c): STABLE 復帰後 CHAIN_VERIFY_FRAMES 分、生 CNN が
+    一貫して物理予測と乖離し続ける場合、事後検証が多数決盤面で補正する
+    (= 起点誤認が事後に判明したケースの救済)。単一フレーム比較でなく
+    複数フレームの多数決を使うため、GRAVITY_SETTLE 直後の一過性ノイズには
+    反応しない設計を、CNN が「一貫して」乖離するケースで確認する。
+
+    CNN は起点盤面と一致させたまま CHAIN/GRAVITY_SETTLE を経過させ
+    (drift-resync の先回り誤爆を避けるため)、STABLE 到達後に初めて
+    「無関係な盤面」に切り替えて答え合わせの補正を検証する。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(ev.before_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    frame_idx, t, first_stable = _run_chain_to_first_stable(pipe, ev, 40, 10.0)
+    assert first_stable.state == BoardState.STABLE
+    assert first_stable.confirmed_board is not None
+    assert first_stable.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "final_board は事前ゲートせず素直に適用されるべき"
+    )
+    # STABLE 到達後、CNN を「無関係な盤面」に切り替えて答え合わせを検証する。
+    unrelated_board = Board()
+    for r in range(0, 6):
+        unrelated_board.set(r, 5, COLOR_BLUE)
+    reader._p1 = unrelated_board
+
+    corrected_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.answer_check_result is not None:
+            corrected_res = result.p1
+            break
+    assert corrected_res is not None, "答え合わせが完了するはず"
+    assert corrected_res.answer_check_result == "verified_mismatch_corrected"
+    assert corrected_res.confirmed_board is not None
+    assert corrected_res.confirmed_board.get(12, 0) != COLOR_GREEN, (
+        "生CNNと一貫して乖離する物理予測は事後に補正されるべき"
+    )
+
+
+def test_chain_estimate_answer_check_verified_match_when_cnn_agrees() -> None:
+    """反復5 修正 Step3(b)(c): STABLE 復帰後の生 CNN が物理予測と一致する
+    場合は answer_check_result="verified_match" になり、confirmed_board は
+    物理予測のまま維持される (誤って補正しない)。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(ev.before_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    frame_idx, t, first_stable = _run_chain_to_first_stable(pipe, ev, 40, 10.0)
+    assert first_stable.state == BoardState.STABLE
+    # STABLE 到達後、CNN を「連鎖後の正しい盤面 (緑が (12,0) に落下)」に
+    # 切り替えて答え合わせを検証する (= 物理予測と一致するケース)。
+    matching_board = Board()
+    matching_board.set(12, 0, COLOR_GREEN)
+    reader._p1 = matching_board
+
+    verified_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.answer_check_result is not None:
+            verified_res = result.p1
+            break
+    assert verified_res is not None
+    assert verified_res.answer_check_result == "verified_match"
+    assert verified_res.confirmed_board is not None
+    assert verified_res.confirmed_board.get(12, 0) == COLOR_GREEN
+
