@@ -1910,6 +1910,10 @@ def test_gravity_settle_to_stable_applies_final_board_via_stash() -> None:
     _prime_match_active(pipe, frames=35)
     _force_confirmed_board(pipe, "1P", ev.before_board)
     pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    # 反達9 ガード1: 副作用 (constraint_valid 再有効化・tsumo_count 減算) を
+    # 判別可能にするため、事前に「壊れた/未消化」状態を明示的にセットしておく。
+    pipe._constraint_valid_1p = False
+    pipe._tsumo_count_1p[COLOR_RED] = 4  # 赤4個を事前累積 (連鎖で消去予定)
     t = 10.0
     frame_idx = 40
     res = pipe.update(frame_idx, t, _dummy_frame())
@@ -1934,6 +1938,17 @@ def test_gravity_settle_to_stable_applies_final_board_via_stash() -> None:
     )
     assert final_res.confirmed_board.get(12, 1) == COLOR_EMPTY, (
         "赤ぷよ4個は連鎖で消去済のはず"
+    )
+    # 反達9 ガード1: Phase C-6 の C 内の副作用も固定する (部分的再発検知)。
+    # 一部だけ復活する回帰 (final_board は反映されるが副作用が漏れる等) を
+    # 検知できるよう、既存の主張に加えて明示的にアサートする。
+    assert pipe._constraint_valid_1p is True, (
+        "連鎖完了で constraint_valid_1p が再有効化されるべき"
+        " (cycle 28a H2、副作用の再発防止アサート)"
+    )
+    assert pipe._tsumo_count_1p[COLOR_RED] == 0, (
+        "erased_color_count による tsumo_count 減算 (cycle 28a H3) が"
+        "実行されるべき (副作用の再発防止アサート)"
     )
 
 

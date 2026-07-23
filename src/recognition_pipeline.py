@@ -2458,20 +2458,36 @@ class RecognitionPipeline:
                 from src.hybrid_classifier import HybridClassifier
                 hc = self._reader._classifier
                 if isinstance(hc, HybridClassifier):
+                    # 反復9 #40 triage (2026-07-23): is_chain は常に False の
+                    # 死にフラグ (構造的に到達不能)。外側で既に
+                    # `state == BoardState.STABLE` を要求しているため、この
+                    # 内側の `state == BoardState.CHAIN` は state の相互排他性
+                    # 上、絶対に True にならない。
+                    # GS_EXEMPT: これは GRAVITY_SETTLE 導入で dead code 化した
+                    # (根治で直した) バグとは別種で、GRAVITY_SETTLE を考慮に
+                    # 加えても解決しない (STABLE と CHAIN/GRAVITY_SETTLE は
+                    # どのみち同時に真になり得ない)。正しい修正には
+                    # OnlineHsvCalibrator へ供給する対象 state 自体の再設計
+                    # (例: CHAIN/GRAVITY_SETTLE 中の estimated_board も候補に
+                    # 含め、is_chain で正しく除外する等) が必要だが、これは
+                    # HSV 較正という認識コアの挙動を変える変更であり、
+                    # Phase I (認識精度 99.99% 目標) の他フェーズ凍結方針・
+                    # 専用の診断/viz 評価を要する対象。再発防止ガード
+                    # (低リスク) の対象外として、意図的に現状維持する。
                     sides_to_update = []
                     if (self._sm_1p.context.state == BoardState.STABLE
                             and self._sm_1p.context.confirmed_board is not None):
                         sides_to_update.append((
                             DEFAULT_P1_REGION,
                             self._sm_1p.context.confirmed_board,
-                            self._sm_1p.context.state == BoardState.CHAIN,
+                            False,  # is_chain: 上記 GS_EXEMPT 参照、常に False
                         ))
                     if (self._sm_2p.context.state == BoardState.STABLE
                             and self._sm_2p.context.confirmed_board is not None):
                         sides_to_update.append((
                             DEFAULT_P2_REGION,
                             self._sm_2p.context.confirmed_board,
-                            self._sm_2p.context.state == BoardState.CHAIN,
+                            False,  # is_chain: 上記 GS_EXEMPT 参照、常に False
                         ))
                     if sides_to_update:
                         for region, board, is_chain in sides_to_update:
