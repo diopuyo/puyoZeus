@@ -343,4 +343,24 @@ DB pre-inject (cycle_12 で検証済) は本番 default に組み込む価値あ
 - per_video_inject_critical: 1583 (+71、 +4.7%)
 - v30_5min: critical 107 (= 主目標の 55 秒問題改善ゼロを数値確認)
 - 参考: merged38 比では -4 (= -0.3%) で実質同等
+
+## 8. 連鎖後残像バグ (2026-07-23 調査)
+
+### 8.1 P3 (`is_match_active` 誤 False) 仮説は iter4 診断で反証済み
+
+- 反復4 診断 (`board_none_reason` 内訳集計、`scripts/recognition_physics_review.py`)
+  で c62 game9 の CHAIN 中 `confirmed_board=None` の理由内訳を計測した結果、
+  1P/2P とも `chain_hold_none` (= CHAIN/GRAVITY_SETTLE 中は STABLE 以外という
+  仕様通りの凍結) がほぼ 100%、`menu_reset` (= P3 が狙う
+  `is_match_active` 誤 False → MENU 強制経路) はほぼ 0% だった
+  (実測: 1P `board_none_reason_chain` = `{'chain_hold_none': 1320}` /
+  1321 frame、`menu_reset` 0 件)。
+- つまり CHAIN 中に `confirmed_board` が None になるのは「STABLE 以外は
+  未確定」という設計通りの挙動であり、`is_match_active` の誤判定 (P3 が
+  想定した経路) はこの区間で発生していない。
+- **以後、この軸 (is_match_active 誤 False 対策) への投資はしない**。
+  「連鎖後残像/estimated_board 未カバー」問題の真因は別軸 (起点盤面
+  `before_board` の認識精度、または連続小連鎖時の trigger 検出タイミング)
+  にある。次の調査は `scripts/_diag_estimate_collapse_c62_1p.py`
+  (2026-07-23, c62 game9 1P estimated_board coverage 9.8% の真因診断) を参照。
 - **解釈**: per_video_inject 自体の評価であり、 軸 3-b 単体の -9 副次効果は別コンテキスト

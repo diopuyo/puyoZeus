@@ -112,6 +112,7 @@ def _capture_frames(
     video_stem: str, start_sec: float, max_sec: float,
     enable_chain_exit_warmup: bool = False,
     enable_chain_exit_next_signal: bool = False,
+    enable_chain_estimate_stale_hold: bool = True,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -119,6 +120,9 @@ def _capture_frames(
     P1 実験用の optional 引数 (既定 False = 従来通り、後方互換)。
     src/recognition_pipeline.py の既存 runtime flag をそのまま透過する
     (src 無改修、既存 default False で挙動不変)。
+    enable_chain_estimate_stale_hold: 案1 (2026-07-23) A/B 比較用。
+    src 側 default は True (既定で新挙動)。False を渡すと案1導入前の
+    挙動 (estimated_board=None) で比較計測できる。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -135,6 +139,7 @@ def _capture_frames(
         temporal_smoothing=1, load_next_detector=True, force_in_match=True,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
@@ -440,6 +445,7 @@ def _review_one_video(
     video_stem: str, start_sec: float, max_sec: float, sim: ChainSimulator,
     enable_chain_exit_warmup: bool = False,
     enable_chain_exit_next_signal: bool = False,
+    enable_chain_estimate_stale_hold: bool = True,
 ) -> dict:
     """1 動画・1 窓分の全メトリクスを計測する。"""
     print(f"  {video_stem}: start={start_sec}s max={max_sec}s を処理中...")
@@ -447,6 +453,7 @@ def _review_one_video(
         video_stem, start_sec, max_sec,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+        enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
     )
     out: dict = {"video_stem": video_stem, "start_sec": start_sec, "max_sec": max_sec, "sides": {}}
     for side, opp_side in (("1P", "2P"), ("2P", "1P")):
@@ -670,34 +677,59 @@ def _parse_args() -> argparse.Namespace:
              "実行し、後で scripts/_merge_physics_review_json.py でマージする"
              "運用向け (熱制約解除後の高速化、全コア使用可)。",
     )
+    ap.add_argument(
+        "--start-sec", type=float, default=None,
+        help="反復11 (2026-07-23): --video-stem と併用し、TARGET_WINDOWS に"
+             "無い任意動画・任意窓を処理する場合の開始秒。省略時は"
+             "TARGET_WINDOWS の登録値を使う (既存動作不変)。",
+    )
+    ap.add_argument(
+        "--max-sec", type=float, default=None,
+        help="反復11: --start-sec と併用する処理秒数 (窓の長さ)。",
+    )
+    ap.add_argument(
+        "--disable-chain-estimate-stale-hold", action="store_true",
+        dest="disable_chain_estimate_stale_hold",
+        help="案1 (2026-07-23) A/B比較用: estimated_board stale_hold "
+             "フォールバックを無効化し、案1導入前の挙動 (常に None) で"
+             "計測する (既定False=stale_hold有効、src側 default と同じ)。",
+    )
     return ap.parse_args()
 
 
 def main() -> None:
     """メイン処理: 対象動画を処理し JSON 保存 + サマリ出力する。"""
     args = _parse_args()
-    windows = TARGET_WINDOWS
-    if args.video_stem is not None:
+    if args.video_stem is not None and args.start_sec is not None and args.max_sec is not None:
+        # 反復11: TARGET_WINDOWS 未登録の任意動画・任意窓を直接指定する経路。
+        windows = ((args.video_stem, args.start_sec, args.max_sec),)
+    elif args.video_stem is not None:
         windows = tuple(w for w in TARGET_WINDOWS if w[0] == args.video_stem)
         if not windows:
-            print(f"[ERROR] video_stem={args.video_stem} は TARGET_WINDOWS に無い")
+            print(f"[ERROR] video_stem={args.video_stem} は TARGET_WINDOWS に無い"
+                  " (--start-sec/--max-sec も併せて指定すれば任意動画を処理可能)")
             return
+    else:
+        windows = TARGET_WINDOWS
     print(f"[INFO] 対象 {len(windows)} 動画・窓 (物理整合性レビュー) "
           f"warmup={args.enable_chain_exit_warmup} "
           f"next_signal={args.enable_chain_exit_next_signal}")
     sim = ChainSimulator()
+    enable_stale_hold = not args.disable_chain_estimate_stale_hold
     video_reports: list[dict] = []
     for stem, start_sec, max_sec in windows:
         video_reports.append(_review_one_video(
             stem, start_sec, max_sec, sim,
             enable_chain_exit_warmup=args.enable_chain_exit_warmup,
             enable_chain_exit_next_signal=args.enable_chain_exit_next_signal,
+            enable_chain_estimate_stale_hold=enable_stale_hold,
         ))
 
     summary = _summarize(video_reports)
     summary["condition"] = {
         "enable_chain_exit_warmup": args.enable_chain_exit_warmup,
         "enable_chain_exit_next_signal": args.enable_chain_exit_next_signal,
+        "enable_chain_estimate_stale_hold": enable_stale_hold,
     }
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{args.label}" if args.label else ""

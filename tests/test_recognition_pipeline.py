@@ -2389,6 +2389,180 @@ def test_compute_chain_estimate_none_outside_chain_states() -> None:
     assert pipe._chain_estimate_result_1p is None
 
 
+# ============================
+# 案1 (2026-07-23): stale_hold フォールバック
+# (c62 1P estimated_board カバレッジ崩壊 9.8% の真因対処、
+#  recognition_diag_c62_1p_estimate_collapse/summary.txt)
+# ============================
+
+
+def _make_unsimulatable_chain_event(trigger_sec: float = 10.0):
+    """simulate が chain_count=0 になる (推定が立ち上がらない) ChainEvent。
+
+    診断で確認された疑似連鎖イベント early-fire 失敗 (pred_cc=0) を
+    再現するための起点盤面 (空盤面 = 4連結なし)。
+    """
+    from src.chain_detector import ChainEvent
+    return ChainEvent(
+        trigger_sec=trigger_sec, end_sec=trigger_sec + 0.6, before_board=Board(),
+        chain_count=1, total_erased=0, total_score=0, base_score=0,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_start_chain_estimate_cold_start_seeds_last_board_with_before_board() -> None:
+    """案1: simulate 失敗 (result=None) でも cold start なら before_board で
+    last_board を seed する (直前保持の初期値)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._chain_estimate_last_board_1p is None
+    ev = _make_unsimulatable_chain_event()
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is None  # simulate 失敗 (pred_cc=0)
+    assert pipe._chain_estimate_last_board_1p is not None
+    assert pipe._chain_estimate_last_board_1p == ev.before_board
+
+
+def test_compute_chain_estimate_stale_hold_returns_last_board_with_provenance() -> None:
+    """案1 主目的: simulate 失敗時、None でなく last_board を
+    board_provenance='chain_estimate_stale_hold' で返す (デフォルト ON)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=100.05,
+    )
+    assert board is not None
+    assert board == ev.before_board
+    assert provenance == "chain_estimate_stale_hold"
+
+
+def test_compute_chain_estimate_stale_hold_disabled_flag_falls_back_to_none() -> None:
+    """案1 backward compat: enable_chain_estimate_stale_hold=False なら
+    従来通り (None, 'observed') (= 案1導入前の挙動と完全一致)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_chain_estimate_stale_hold=False,
+    )
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=100.05,
+    )
+    assert board is None
+    assert provenance == "observed"
+
+
+def test_compute_chain_estimate_stale_hold_prefers_established_board_over_new_failure() -> None:
+    """案1: 既に途中まで進行した推定盤面 (last_board) がある状態で、新規
+    トリガーの simulate が失敗しても、その失敗トリガーの (より情報の少ない)
+    before_board で上書きされない (= より進んだ推定を優先温存)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev1 = _make_real_chain_event(chain_count_claimed=1)  # simulate 成功
+    pipe._start_chain_estimate("1P", ev1)
+    board1, prov1 = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=ev1.end_sec,
+    )
+    assert prov1 == "chain_estimate"
+    assert board1 is not None and board1.get(12, 0) == COLOR_GREEN
+    # 新規トリガー (simulate 失敗) が既存 last_board を上書きしないことを確認。
+    ev2 = _make_unsimulatable_chain_event(trigger_sec=ev1.end_sec + 0.01)
+    pipe._start_chain_estimate("1P", ev2)
+    board2, prov2 = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=ev2.trigger_sec + 0.01,
+    )
+    assert prov2 == "chain_estimate_stale_hold"
+    assert board2 is not None
+    assert board2.get(12, 0) == COLOR_GREEN, (
+        "既存の進行済み推定 (last_board) が保持されるべき"
+        " (失敗トリガーの空 before_board に退行してはいけない)"
+    )
+
+
+def test_compute_chain_estimate_stale_hold_expires_after_max_sec() -> None:
+    """案1 安全弁: 連続 stale_hold が CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC を
+    超えたら None に戻る (古い盤面を無期限に貼り続ける事故防止)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    t0 = 100.05
+    board0, prov0 = pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=t0)
+    assert prov0 == "chain_estimate_stale_hold"
+    assert board0 is not None
+    t1 = t0 + RecognitionPipeline.CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC + 1.0
+    board1, prov1 = pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=t1)
+    assert board1 is None
+    assert prov1 == "observed"
+
+
+def test_compute_chain_estimate_stale_hold_clears_on_stable_return() -> None:
+    """案1: STABLE 復帰で last_board / stale streak が完全にクリアされる
+    (= 次の CHAIN 突入は必ず cold start からになる)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=100.05)
+    assert pipe._chain_estimate_last_board_1p is not None
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.STABLE, time_sec=100.10,
+    )
+    assert board is None
+    assert provenance == "observed"
+    assert pipe._chain_estimate_last_board_1p is None
+    assert pipe._chain_estimate_stale_since_1p is None
+
+
+def test_chain_estimate_stale_hold_end_to_end_keeps_prior_board_without_touching_confirmed() -> None:
+    """案1 統合: 実際の pipeline.update() 経路で、疑似 early-fire 再トリガー
+    (診断で確認された主要故障モード: before_board simulate が chain_count=0)
+    が発生しても estimated_board は None にならず直前の推定盤面を保持する。
+    confirmed_board (STABLE 評価用) は本機構によって一切変更されない。
+    """
+    ev1 = _make_real_chain_event(chain_count_claimed=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev1.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev1)  # type: ignore[assignment]
+    result = pipe.update(40, 10.0, _dummy_frame())
+    assert result.p1.state == BoardState.CHAIN
+    assert result.p1.estimated_board is not None
+    assert result.p1.estimated_board.get(12, 0) == COLOR_GREEN
+
+    # 診断で確認された故障モード (機能B/D 早期発火の疑似トリガーが
+    # before_board simulate に失敗する) を直接注入する。
+    ev2 = _make_unsimulatable_chain_event(trigger_sec=10.05)
+    pipe._start_chain_estimate("1P", ev2)
+    assert pipe._chain_estimate_result_1p is None  # simulate 失敗 (pred_cc=0)
+
+    result2 = pipe.update(41, 10.06, _dummy_frame())
+    assert result2.p1.state == BoardState.CHAIN  # active_chain_1p 継続中
+    assert result2.p1.estimated_board is not None, (
+        "stale_hold: フレッシュな推定が失敗しても None にならず"
+        "直前の盤面を保持すべき"
+    )
+    assert result2.p1.estimated_board.get(12, 0) == COLOR_GREEN, (
+        "直前の progressed board (既に成功していた推定) が保持されるべき"
+    )
+    assert result2.p1.board_provenance == "chain_estimate_stale_hold"
+    assert (
+        result2.p1.confirmed_board is None
+        or result2.p1.confirmed_board.get(12, 1) != COLOR_EMPTY
+    ), "confirmed_board 自体が stale_hold の値で上書きされてはいけない"
+
+
 def test_chain_estimate_exposed_without_mutating_confirmed_board() -> None:
     """反復5 統合 (Step2 主目的 + Step4 backward compat): CHAIN 中でも
     confirmed_board の値は本機構によって一切変更されない

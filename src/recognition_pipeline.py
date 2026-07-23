@@ -211,6 +211,15 @@ class SideResult:
     #   "chain_estimate_low_confidence": 起点盤面の物理予測 chain_count が
     #     score 由来 chain_count と不一致 (Step3(a) 答え合わせで検出、
     #     起点自体が誤認の疑いがあるため取り扱い注意)。
+    #   "chain_estimate_stale_hold": 案1 (2026-07-23, c62 1P estimated_board
+    #     カバレッジ崩壊 9.8% の真因診断 recognition_diag_c62_1p_estimate_collapse
+    #     への対処)。CHAIN/GRAVITY_SETTLE 中に疑似連鎖イベントの early-fire 等で
+    #     起点盤面 simulate が chain_count=0 (推定が立ち上がらない) となり
+    #     新規推定を計算できないフレームで、直前に成功した推定盤面 (無ければ
+    #     起点盤面) をそのまま保持して公開する。「推定が信頼できない保持中」
+    #     を意味し、値そのものは古い可能性がある点に注意。
+    #     CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC 超過、または STABLE 復帰で
+    #     自動的に None (= 従来同様 "observed") に戻る安全弁あり。
     # backwards compat のため default "observed"。
     board_provenance: str = "observed"
     # 反復5 修正 (2026-07-23): Step3(b)(c) 事後答え合わせの結果。
@@ -382,6 +391,16 @@ class RecognitionPipeline:
     # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
     # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
     CHAIN_VERIFY_MISMATCH_CELLS: int = 6
+
+    # 案1 (2026-07-23): stale_hold 安全弁。
+    # `recognition_diag_c62_1p_estimate_collapse/summary.txt` の実測では、
+    # 疑似連鎖イベント early-fire が連続発火し推定が立ち上がらない
+    # (H2 contaminated=True) 崩壊区間は最長でも約 7.8 秒だった。
+    # 本値はそれに安全マージンを持たせた「連続 stale_hold を許容する上限秒数」。
+    # 超過したら None (= 従来同様 'observed') に戻し、state machine 側の
+    # 未知バグで CHAIN が異常に長時間継続した場合に古い盤面を無期限に
+    # 貼り続ける事故を防ぐ。
+    CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC: float = 12.0
 
     # X4: game-event 終了を発動する最小連鎖数。
     # chain_count < この値の連鎖は game-event 終了を発動せず timing hold のみ。
@@ -645,6 +664,18 @@ class RecognitionPipeline:
         # 2026-06-06 採用: corr +0.004% 誤差・v89 連鎖過剰保持完全解消・置き認識復活で
         # user 目視 OK + 退行なし → default True に昇格。False で無効化可。
         enable_slide_override_ojama_hold: bool = True,
+        # 案1 (2026-07-23): estimated_board の stale_hold フォールバック。
+        # True にすると CHAIN/GRAVITY_SETTLE 中に起点盤面 simulate が
+        # chain_count=0 等で新規推定を計算できないフレームで、estimated_board
+        # を None にせず直前の推定盤面 (無ければ起点盤面) を保持する
+        # (board_provenance="chain_estimate_stale_hold")。
+        # c62 1P estimated_board カバレッジ崩壊 (9.8%) の主因である疑似連鎖
+        # イベント early-fire 連発への対処 (診断:
+        # recognition_diag_c62_1p_estimate_collapse/summary.txt)。
+        # confirmed_board (STABLE 評価用) は一切変更しない。
+        # user viz 承認前の savepoint 実装のため default True だが、
+        # False を渡せば従来挙動 (常に None) に完全に戻せる (backwards compat)。
+        enable_chain_estimate_stale_hold: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -767,6 +798,21 @@ class RecognitionPipeline:
         # 一致しない場合 True (= 起点盤面が疑わしい、低信頼度)。
         self._chain_estimate_low_confidence_1p: bool = False
         self._chain_estimate_low_confidence_2p: bool = False
+        # 案1 (2026-07-23): stale_hold フォールバック用 state。
+        # _chain_estimate_last_board_Xp: 直近に「成功した」推定盤面
+        #   (result が非 None で計算できたもの)、または CHAIN 突入時点の
+        #   起点盤面 (cold start フォールバック)。CHAIN/GRAVITY_SETTLE を
+        #   抜けたら None にクリアする。
+        # _chain_estimate_stale_since_Xp: 現在の stale_hold 連続適用が
+        #   開始した time_sec (None = stale_hold 非適用中)。
+        #   CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC 超過判定に使う安全弁用。
+        self._chain_estimate_last_board_1p: "Board | None" = None
+        self._chain_estimate_last_board_2p: "Board | None" = None
+        self._chain_estimate_stale_since_1p: float | None = None
+        self._chain_estimate_stale_since_2p: float | None = None
+        self._enable_chain_estimate_stale_hold: bool = bool(
+            enable_chain_estimate_stale_hold,
+        )
         # 反復5 修正 (2026-07-23): Step3(b)(c) 事後検証の進行 state。
         # {"expected": Board, "cnn_history": list[Board]} または None
         # (検証中でない)。Phase C-6 の C で final_board 適用直後にセットし、
@@ -1340,6 +1386,10 @@ class RecognitionPipeline:
         # user 目視 OK + 退行なし (corr +0.004% 誤差) で採用確定 → default True。
         # False を渡すと無効化できる (backwards compat のため optional 引数として維持)。
         enable_slide_override_ojama_hold: bool = True,
+        # 案1 (2026-07-23): estimated_board の stale_hold フォールバック。
+        # user viz 承認前の savepoint 実装のため default True だが、
+        # False で従来挙動 (常に None) に戻せる (backwards compat)。
+        enable_chain_estimate_stale_hold: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1494,6 +1544,7 @@ class RecognitionPipeline:
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
         )
 
     # ------------------------------------------------------------------
@@ -1559,6 +1610,11 @@ class RecognitionPipeline:
         self._chain_estimate_end_2p = 0.0
         self._chain_estimate_low_confidence_1p = False
         self._chain_estimate_low_confidence_2p = False
+        # 案1 (2026-07-23): stale_hold state も試合切替時にクリア。
+        self._chain_estimate_last_board_1p = None
+        self._chain_estimate_last_board_2p = None
+        self._chain_estimate_stale_since_1p = None
+        self._chain_estimate_stale_since_2p = None
         self._chain_verify_pending_1p = None
         self._chain_verify_pending_2p = None
         self._cnn_history_1p.clear()
@@ -3124,11 +3180,19 @@ class RecognitionPipeline:
             self._chain_estimate_trigger_1p = ev.trigger_sec
             self._chain_estimate_end_1p = ev.end_sec
             self._chain_estimate_low_confidence_1p = low_confidence
+            # 案1: cold start (= この CHAIN 継続区間でまだ一度も推定盤面を
+            # 保持していない) の場合のみ起点盤面で seed する。既に途中まで
+            # 進行した推定盤面 (last_board) があるなら、それより情報の少ない
+            # before_board で上書きしない (= より進んだ推定を優先温存)。
+            if self._chain_estimate_last_board_1p is None:
+                self._chain_estimate_last_board_1p = ev.before_board.copy()
         else:
             self._chain_estimate_result_2p = result
             self._chain_estimate_trigger_2p = ev.trigger_sec
             self._chain_estimate_end_2p = ev.end_sec
             self._chain_estimate_low_confidence_2p = low_confidence
+            if self._chain_estimate_last_board_2p is None:
+                self._chain_estimate_last_board_2p = ev.before_board.copy()
 
     def _stash_and_clear_active_chain(self, side: str) -> None:
         """active_chain_* を None にする前に退避してからクリアする。
@@ -3208,6 +3272,9 @@ class RecognitionPipeline:
 
         confirmed_board 自体は変更しない (標準 eval 経路への影響ゼロ)。
         estimated_board / board_provenance の算出専用ヘルパー。
+        案1 (2026-07-23): フレッシュな推定が計算できないフレーム
+        (起点盤面 simulate が chain_count=0 等) は _stale_hold_fallback に
+        委譲する (enable_chain_estimate_stale_hold=True の場合のみ)。
 
         Args:
             side: "1P" または "2P"。
@@ -3218,38 +3285,93 @@ class RecognitionPipeline:
             (estimated_board, board_provenance)。 非該当時は (None, "observed")。
         """
         if state not in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
-            # CHAIN/GRAVITY_SETTLE を抜けたら次回開始まで state をクリア。
+            # CHAIN/GRAVITY_SETTLE を抜けたら次回開始まで state を全てクリア
+            # (案1: stale_hold 用 state も含む。次回 CHAIN 突入は cold start)。
             if side == "1P":
                 self._chain_estimate_result_1p = None
+                self._chain_estimate_last_board_1p = None
+                self._chain_estimate_stale_since_1p = None
             else:
                 self._chain_estimate_result_2p = None
+                self._chain_estimate_last_board_2p = None
+                self._chain_estimate_stale_since_2p = None
             return None, "observed"
         result = (
             self._chain_estimate_result_1p if side == "1P"
             else self._chain_estimate_result_2p
         )
-        if result is None:
+        board: "Board | None" = None
+        low_confidence = False
+        if result is not None:
+            trigger = (
+                self._chain_estimate_trigger_1p if side == "1P"
+                else self._chain_estimate_trigger_2p
+            )
+            end = (
+                self._chain_estimate_end_1p if side == "1P"
+                else self._chain_estimate_end_2p
+            )
+            low_confidence = (
+                self._chain_estimate_low_confidence_1p if side == "1P"
+                else self._chain_estimate_low_confidence_2p
+            )
+            board = _progressed_chain_board(result, trigger, end, time_sec)
+        if board is not None:
+            # フレッシュな推定成功: last_board 更新 + stale streak 解除。
+            if side == "1P":
+                self._chain_estimate_last_board_1p = board.copy()
+                self._chain_estimate_stale_since_1p = None
+            else:
+                self._chain_estimate_last_board_2p = board.copy()
+                self._chain_estimate_stale_since_2p = None
+            provenance = (
+                "chain_estimate_low_confidence" if low_confidence
+                else "chain_estimate"
+            )
+            return board, provenance
+        if not self._enable_chain_estimate_stale_hold:
             return None, "observed"
-        trigger = (
-            self._chain_estimate_trigger_1p if side == "1P"
-            else self._chain_estimate_trigger_2p
+        return self._stale_hold_fallback(side, time_sec)
+
+    def _stale_hold_fallback(
+        self, side: str, time_sec: float,
+    ) -> "tuple[Board | None, str]":
+        """案1 (2026-07-23): estimated_board の stale_hold フォールバック本体。
+
+        フレッシュな推定 (_compute_chain_estimate) が計算できないフレームで
+        直前に成功した推定盤面 (last_board、無ければ CHAIN 突入時の起点盤面)
+        を保持して返す。「推定が信頼できない保持中」であることが下流で
+        区別できるよう board_provenance を明示する。
+        安全弁: 連続 stale_hold が CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC を
+        超えたら None に戻す (古い盤面を無期限に貼り続ける事故を防ぐ)。
+
+        Args:
+            side: "1P" または "2P"。
+            time_sec: 現フレームの時刻。
+
+        Returns:
+            (estimated_board, board_provenance)。 last_board が無い、または
+            安全弁超過なら (None, "observed")。
+        """
+        last_board = (
+            self._chain_estimate_last_board_1p if side == "1P"
+            else self._chain_estimate_last_board_2p
         )
-        end = (
-            self._chain_estimate_end_1p if side == "1P"
-            else self._chain_estimate_end_2p
-        )
-        low_confidence = (
-            self._chain_estimate_low_confidence_1p if side == "1P"
-            else self._chain_estimate_low_confidence_2p
-        )
-        board = _progressed_chain_board(result, trigger, end, time_sec)
-        if board is None:
+        if last_board is None:
             return None, "observed"
-        provenance = (
-            "chain_estimate_low_confidence" if low_confidence
-            else "chain_estimate"
+        stale_since = (
+            self._chain_estimate_stale_since_1p if side == "1P"
+            else self._chain_estimate_stale_since_2p
         )
-        return board, provenance
+        if stale_since is None:
+            stale_since = time_sec
+            if side == "1P":
+                self._chain_estimate_stale_since_1p = stale_since
+            else:
+                self._chain_estimate_stale_since_2p = stale_since
+        if time_sec - stale_since > self.CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC:
+            return None, "observed"
+        return last_board.copy(), "chain_estimate_stale_hold"
 
     def _update_chain_estimate_verification(
         self, side: str, state: BoardState, cnn_board: Board,
