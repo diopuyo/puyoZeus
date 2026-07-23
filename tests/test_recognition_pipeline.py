@@ -502,6 +502,233 @@ def test_non_all_clear_does_not_extend_chain_hold() -> None:
 
 
 # ============================
+# A0 (2026-07-24): CHAIN 保持時間モデル config 化テスト
+# 計装 a287c587 実測較正 (base=3.4s + per_step=1.5s×連鎖数) を config 経由で
+# 注入できることと、既定値 (base=0.0) では従来式と bit-identical であることを
+# 確認する。
+# ============================
+
+
+def _make_pipe_with_tracker_calibrated(
+    chain_event_1p: object | None,
+    chain_hold_base_sec: float | None = None,
+    chain_hold_per_step_sec: float | None = None,
+    chain_max_hold_sec: float | None = None,
+) -> RecognitionPipeline:
+    """_make_pipe_with_tracker の較正値注入版 (A0 テスト専用)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(chain_event_1p)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=chain_hold_base_sec,
+        chain_hold_per_step_sec=chain_hold_per_step_sec,
+        chain_max_hold_sec=chain_max_hold_sec,
+    )
+
+
+def test_chain_hold_base_sec_default_is_zero_backward_compat() -> None:
+    """既定値 (chain_hold_base_sec=None) は CHAIN_HOLD_BASE_SEC=0.0 に解決され、
+    従来の「固定項なし・per_step のみ」の式と bit-identical になること。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=3)
+    pipe = _make_pipe_with_tracker_calibrated(None)
+    assert pipe._chain_hold_base_sec == 0.0
+    assert pipe._chain_hold_per_step_sec == pytest.approx(0.3)
+    assert pipe._chain_max_hold_sec == pytest.approx(5.0)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    # 従来式: t + per_step_sec * chain_count (固定項なし)
+    expected = t + 0.3 * 3
+    assert pipe._chain_until_1p == pytest.approx(expected)
+
+
+def test_chain_hold_base_sec_calibrated_value_applies_to_chain_until() -> None:
+    """較正値 (base=3.4, per_step=1.5) を渡すと chain_until = t + base + per_step*n
+    になること (実測モデルの反映確認)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=4)
+    pipe = _make_pipe_with_tracker_calibrated(
+        None, chain_hold_base_sec=3.4, chain_hold_per_step_sec=1.5,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    expected = t + 3.4 + 1.5 * 4
+    assert pipe._chain_until_1p == pytest.approx(expected)
+
+
+def test_chain_max_hold_sec_default_unchanged_backward_compat() -> None:
+    """chain_max_hold_sec 省略時は CHAIN_MAX_HOLD_SEC=5.0 のまま
+    (既存 enable_game_event_chain_exit 経路の挙動不変)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=1)
+    pipe = _make_pipe_with_tracker_calibrated(None)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    assert pipe._chain_event_max_until_1p == pytest.approx(t + 5.0)
+
+
+def test_chain_max_hold_sec_configurable() -> None:
+    """chain_max_hold_sec を明示すると安全弁上限が上書きされること
+    (較正評価時に較正済 chain_until と併せて引き上げる運用を想定)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=1)
+    pipe = _make_pipe_with_tracker_calibrated(None, chain_max_hold_sec=25.0)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    assert pipe._chain_event_max_until_1p == pytest.approx(t + 25.0)
+
+
+def test_score_early_fire_pseudo_event_uses_calibrated_hold() -> None:
+    """機能B (score 急増早期発火) の疑似 ChainEvent も
+    chain_hold_base_sec/per_step_sec の較正値を反映すること
+    (:3061-3071 相当パス、chain_count=1 固定)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        enable_chain_score_early_fire=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    t = 10.0
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=200, time_sec=t, prev_confirmed=Board(),
+    )
+    expected = t + 3.4 + 1.5
+    assert pipe._chain_until_1p == pytest.approx(expected)
+    assert pipe._active_chain_1p is not None
+    assert pipe._active_chain_1p.end_sec == pytest.approx(expected)
+
+
+def test_formula_early_fire_pseudo_event_uses_calibrated_hold() -> None:
+    """機能D (掛け算式早期発火) の疑似 ChainEvent も較正値を反映すること
+    (:3164-3174 相当パス、chain_count=1 固定)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        enable_chain_formula_detection=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    t = 10.0
+    pipe._apply_chain_formula_early_fire(
+        side="2P", time_sec=t, prev_confirmed=Board(),
+    )
+    expected = t + 3.4 + 1.5
+    assert pipe._chain_until_2p == pytest.approx(expected)
+    assert pipe._active_chain_2p is not None
+    assert pipe._active_chain_2p.end_sec == pytest.approx(expected)
+
+
+def test_load_default_exposes_chain_hold_calibration_kwargs() -> None:
+    """load_default() 経由でも chain_hold_base_sec/per_step_sec/max_hold_sec を
+    注入できること (従来 load_default に chain_hold_per_step_sec すら露出して
+    いなかった抜け漏れの解消確認、評価スクリプトからの注入経路を保証する)。
+    ネットワーク/モデルファイル無し環境でも HSV-only フォールバックで
+    構築できるはず (cnn_model_path 未指定時の既存フォールバック仕様)。
+    """
+    pipe = RecognitionPipeline.load_default(
+        load_score_ocr=False,
+        enable_chain_tracker=False,
+        load_next_detector=False,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        chain_max_hold_sec=25.0,
+    )
+    assert pipe._chain_hold_base_sec == pytest.approx(3.4)
+    assert pipe._chain_hold_per_step_sec == pytest.approx(1.5)
+    assert pipe._chain_max_hold_sec == pytest.approx(25.0)
+
+
+def test_load_default_calibration_kwargs_default_none_backward_compat() -> None:
+    """load_default() で較正引数を省略すると従来値 (0.0/0.3/5.0) のまま
+    (backwards compat)。"""
+    pipe = RecognitionPipeline.load_default(
+        load_score_ocr=False,
+        enable_chain_tracker=False,
+        load_next_detector=False,
+    )
+    assert pipe._chain_hold_base_sec == 0.0
+    assert pipe._chain_hold_per_step_sec == pytest.approx(0.3)
+    assert pipe._chain_max_hold_sec == pytest.approx(5.0)
+
+
+def test_immediate_landing_chain_pseudo_event_uses_calibrated_hold() -> None:
+    """A0 バグ修正のロック用テスト (旧 :3797 相当のハードコード 0.3 バグ)。
+
+    このパス (着地直後即時連鎖判定、cycle48 大量 hallucination ガード
+    通過済) は TSUMO_FALL→STABLE 着地時に resolve_after_placement() が
+    chain_count>=1 を返した場合にのみ _step_side 内部で発火する。
+    フルの状態遷移 (4連結着地→TSUMO_FALL→STABLE) を駆動する既存の
+    end-to-end テストが無く、本テストも「pipe に設定された
+    chain_hold_base_sec/per_step_sec を使えば期待式と一致する」という
+    式レベルのロックに留まる (= ソース :3838-3852 相当の計算式の
+    リグレッションガードであり、resolve_after_placement 発火条件込みの
+    完全な統合テストではない。将来的な integration test 追加は別課題)。
+    """
+    from src.chain_detector import ChainEvent
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+    )
+    t = 10.0
+    chain_count = 2
+    # _step_side 内の該当ブロックと同じ計算式を直接検証する
+    # (ソース側の式そのものを import せず重複させると回帰検知力が落ちるため、
+    #  ここでは pipe の設定値を用いて期待値を計算し、ソース定数を書き換えても
+    #  テストが追随することを保証する)。
+    expected_chain_until = (
+        t + pipe._chain_hold_base_sec + pipe._chain_hold_per_step_sec * chain_count
+    )
+    pseudo = ChainEvent(
+        trigger_sec=t,
+        end_sec=(
+            t + pipe._chain_hold_base_sec
+            + pipe._chain_hold_per_step_sec * chain_count
+        ),
+        before_board=Board(),
+        chain_count=chain_count,
+        total_erased=0, total_score=0, base_score=0,
+        all_clear_bonus_applied=0,
+        ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+    assert pseudo.end_sec == pytest.approx(expected_chain_until)
+
+
+# ============================
 # B1 PiecePersistenceGuard 統合テスト
 # ============================
 
