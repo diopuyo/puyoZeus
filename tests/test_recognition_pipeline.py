@@ -2024,3 +2024,217 @@ def test_gravity_settle_final_board_survives_t2_color_swap_guard() -> None:
         " (青) へ revert してしまってはいけない"
     )
 
+
+# ============================
+# 反復3 (2026-07-23): 連鎖中 is_match_active 誤 False 化バグ修正テスト
+# ============================
+#
+# 背景: 連鎖中のスコア急変+フラッシュ演出で ScoreZeroDetector/
+# MatchEndDetector が瞬間誤爆 → hard_match_off が sm_active (CHAIN/
+# GRAVITY_SETTLE 中の保護) を上書きして is_match_active=False になり、
+# MENU 強制遷移で confirmed_board=None 化する問題 (物理harness実測:
+# 連鎖中の誤 False 率 0.95)。 CHAIN/GRAVITY_SETTLE 中限定で hard_match_off
+# を無効化することで解消する。
+
+
+class _StubScoreZeroDetector:
+    """常に指定の both_zero を返す ScoreZeroDetector スタブ。"""
+
+    def __init__(self, both_zero: bool = True) -> None:
+        self._both_zero = both_zero
+
+    def detect(self, frame: np.ndarray) -> object:
+        @dataclass
+        class _Result:
+            both_zero: bool
+        return _Result(both_zero=self._both_zero)
+
+
+class _StubMatchEndDetector:
+    """常に match_end_locked=True を返す MatchEndDetector スタブ。"""
+
+    def update(self, frame: np.ndarray, time_sec: float) -> bool:
+        return True
+
+    def is_locked(self, time_sec: float) -> bool:
+        return True
+
+
+def test_chain_in_progress_suppresses_score_zero_false_positive() -> None:
+    """反復3: CHAIN 中は ScoreZeroDetector の瞬間誤爆 (score_zero_both) で
+    is_match_active が False にならない。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+    )
+    # CHAIN 中を模擬 (postchain-fix テストと同じ直接注入パターン)。
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is True, (
+        "CHAIN 中は score_zero_both 誤爆で is_match_active が False に"
+        "なってはいけない"
+    )
+
+
+def test_gravity_settle_in_progress_suppresses_match_end_locked_false_positive() -> None:
+    """反復3: GRAVITY_SETTLE 中も MatchEndDetector の瞬間誤爆 (match_end_locked)
+    で is_match_active が False にならない。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+    )
+    pipe._sm_2p.context.state = BoardState.GRAVITY_SETTLE
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is True, (
+        "GRAVITY_SETTLE 中は match_end_locked 誤爆で is_match_active が"
+        " False になってはいけない"
+    )
+
+
+def test_hard_match_off_still_applies_when_not_chain_in_progress() -> None:
+    """反復3 backward compat: CHAIN/GRAVITY_SETTLE 中でなければ hard_match_off
+    (score_zero_both 等) は従来通り is_match_active を False にする。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+    )
+    # state machine は初期状態 (MENU) のまま = 通常時 (連鎖/沈下中でない)。
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is False, (
+        "CHAIN/GRAVITY_SETTLE 中でない通常時は hard_match_off の挙動を"
+        "変更前と同じく維持すべき"
+    )
+
+
+def test_legitimate_match_end_detected_after_chain_state_exits() -> None:
+    """反復3: 連鎖状態を抜けた後は真の試合終了 (match_end_locked) が通常通り
+    検出される (連鎖中抑制が正当な試合終了検出を妨げないことの確認)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+    )
+    # CHAIN 中は抑制される (= is_match_active 維持)
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    res_during_chain = pipe.update(0, 5.0, _dummy_frame())
+    assert res_during_chain.is_match_active is True
+
+    # 連鎖終了 (STABLE に復帰) → match_end_locked による検出が有効になる
+    pipe._sm_1p.context.state = BoardState.STABLE
+    res_after_chain = pipe.update(1, 5.1, _dummy_frame())
+    assert res_after_chain.is_match_active is False, (
+        "連鎖状態を抜けた後は真の試合終了検出が有効になるべき"
+    )
+
+
+# ============================
+# 反復4 (2026-07-23): confirmed_board=None 理由分類 診断計装テスト
+# ============================
+
+
+def test_classify_board_none_reason_cold_start() -> None:
+    """反復4: 一度も confirmed_board が確定していない試合では cold_start。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.MENU,
+    )
+    assert reason == "cold_start"
+
+
+def test_classify_board_none_reason_menu_reset() -> None:
+    """反達4: is_match_active=False (MENU 強制) 後、STABLE 再確定前は menu_reset。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    # 事前に一度 confirmed が確定済 (cold_start でなくする)
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    # is_match_active=False の frame (MENU 強制発生)
+    reason = pipe._classify_board_none_reason(
+        "1P", False, None, BoardState.MENU,
+    )
+    assert reason == "menu_reset"
+    # 次フレーム以降、is_match_active=True に戻っても confirmed が
+    # まだ再確定していなければ menu_reset のまま持ち越される。
+    reason2 = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.CHAIN,
+    )
+    assert reason2 == "menu_reset", (
+        "MENU 強制後 STABLE 再確定前は CHAIN に復帰しても menu_reset のまま"
+    )
+
+
+def test_classify_board_none_reason_chain_hold_none() -> None:
+    """反達4: menu_reset 中でなく CHAIN/GRAVITY_SETTLE 中に confirmed=None
+    なら chain_hold_none (= is_match_active 経路以外の別要因の疑い)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.CHAIN,
+    )
+    assert reason == "chain_hold_none"
+    reason_settle = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.GRAVITY_SETTLE,
+    )
+    assert reason_settle == "chain_hold_none"
+
+
+def test_classify_board_none_reason_other() -> None:
+    """反達4: cold_start でも menu_reset でも CHAIN/GRAVITY_SETTLE でもない
+    None は other (fail-silent 防止の受け皿)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.OJAMA_FALL,
+    )
+    assert reason == "other"
+
+
+def test_classify_board_none_reason_none_when_confirmed_present() -> None:
+    """反達4: confirmed_board が非 None なら理由は None (該当なし)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    reason = pipe._classify_board_none_reason(
+        "1P", True, _empty_board(), BoardState.STABLE,
+    )
+    assert reason is None
+    assert pipe._ever_had_confirmed_1p is True
+
+
+def test_board_none_reason_field_default_none_backward_compat() -> None:
+    """反達4 backward compat: SideResult.board_none_reason は既定 None
+    (既存の SideResult(...) 呼出元は引数を渡さず動作継続可能)。
+    """
+    ev = _make_chain_event(is_all_clear=False)
+    sr = SideResult(
+        side="1P", state=BoardState.STABLE, cnn_board=_empty_board(),
+        inferred_board=None, confirmed_board=_empty_board(),
+        drift=None, score=0, score_delta=0, chain_event=ev,
+    )
+    assert sr.board_none_reason is None
+

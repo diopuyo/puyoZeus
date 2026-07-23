@@ -183,6 +183,20 @@ class SideResult:
     #   source: "last_consumed_color" | "next_queue_2" | "next_queue_1" | "none"
     # backwards compat のため default None。フラグ ON/OFF 問わず常に記録する。
     landing_diag: dict | None = None
+    # 反復4 (2026-07-23): confirmed_board が None のとき、その理由を分類する
+    # 診断計装フィールド (挙動は一切変えない optional 計装)。
+    # confirmed_board is not None のフレームは常に None (該当なし)。
+    # 値の種類:
+    #   "cold_start": この試合でまだ一度も STABLE 確定していない (最初の未確定)
+    #   "menu_reset": 直近で is_match_active=False → MENU 強制 (confirmed_board
+    #                 =None 化) が起きて以降、STABLE で再確定していない
+    #                 (board_state_machine.py:480-488 経路)
+    #   "chain_hold_none": cold_start でも menu_reset でもないが CHAIN/
+    #                 GRAVITY_SETTLE 中に confirmed_board が None
+    #                 (= is_match_active 経路以外の別要因の疑い)
+    #   "other": 上記以外 (通常起こらないはずだが fail-silent 防止用の受け皿)
+    # backwards compat のため default None。
+    board_none_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -685,6 +699,17 @@ class RecognitionPipeline:
         # (GRAVITY_SETTLE 遷移) 自体が発生しないため、既存動作に影響しない。
         self._last_chain_event_for_settle_1p: ChainEvent | None = None
         self._last_chain_event_for_settle_2p: ChainEvent | None = None
+        # 反復4 (2026-07-23): confirmed_board=None 化の理由分類用 診断計装
+        # (SideResult.board_none_reason)。挙動には一切影響しない。
+        # _ever_had_confirmed_*: この試合で一度でも confirmed_board が
+        #   非 None になったことがあるか (cold_start 判定用)。
+        # _pending_menu_reset_*: is_match_active=False → MENU 強制
+        #   (board_state_machine.py:480-488) が発生し、まだ STABLE で
+        #   再確定していない状態かどうか (menu_reset 判定用)。
+        self._ever_had_confirmed_1p: bool = False
+        self._ever_had_confirmed_2p: bool = False
+        self._pending_menu_reset_1p: bool = False
+        self._pending_menu_reset_2p: bool = False
         # match active hysteresis 用
         self._last_active_frame_idx: int = -1
         self._match_active_started_frame: int = -1
@@ -1455,6 +1480,12 @@ class RecognitionPipeline:
         # 根治 (2026-07-23): 退避 ChainEvent も reset 時にクリア。
         self._last_chain_event_for_settle_1p = None
         self._last_chain_event_for_settle_2p = None
+        # 反復4 (2026-07-23): board_none_reason 診断計装用 state も
+        # 試合切替 (reset) 時にクリア (= 新しい試合では cold_start から)。
+        self._ever_had_confirmed_1p = False
+        self._ever_had_confirmed_2p = False
+        self._pending_menu_reset_1p = False
+        self._pending_menu_reset_2p = False
         self._cnn_history_1p.clear()
         self._cnn_history_2p.clear()
         self._last_active_frame_idx = -1
@@ -1672,12 +1703,31 @@ class RecognitionPipeline:
                 BoardState.GRAVITY_SETTLE,  # feat/gravity-settle-2026-06-05
             )
         )
+        # 反復3 (2026-07-23): 連鎖/重力沈下中は score 急変+フラッシュ演出で
+        # ScoreZeroDetector/MatchEndDetector が瞬間誤爆しやすい
+        # (物理harness実測: 連鎖中の誤 hard_match_off 率 0.95)。
+        # CHAIN/GRAVITY_SETTLE 中は sm_active による保護が effective_hard_off に
+        # 上書きされないよう、この 2 state 限定で hard_match_off を無効化する。
+        # 正当な試合終了 (致死連鎖でゲームセット等) は連鎖アニメ完了後の
+        # STABLE/MENU 遷移時に演出が視認可能になる想定のため、CHAIN/
+        # GRAVITY_SETTLE 中限定の抑制では検出を妨げない (連鎖終了後は
+        # chain_in_progress=False に戻り通常判定に復帰する)。
+        chain_in_progress = (
+            self._sm_1p.context.state in (
+                BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+            )
+            or self._sm_2p.context.state in (
+                BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+            )
+        )
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
         # cycle 71f (提案 A): score が直近 window 内で SCORE_MOVE_MIN_DELTA 以上
         # 動いていれば、 hard_match_off を打ち消して試合中継続を保証する.
         # 「演出/READY/GO! で MatchEnd が誤発火するが score は動いている」
         # シナリオ (= v50 51-63s) を解消.
-        effective_hard_off = hard_match_off and not score_actively_moving
+        effective_hard_off = (
+            hard_match_off and not score_actively_moving and not chain_in_progress
+        )
         is_active = (
             (raw_active or recent_active or sm_active or score_actively_moving)
             and not effective_hard_off
@@ -2962,6 +3012,57 @@ class RecognitionPipeline:
                 self._last_chain_event_for_settle_2p = self._active_chain_2p
             self._active_chain_2p = None
 
+    def _classify_board_none_reason(
+        self, side: str, is_active: bool,
+        published_confirmed: "Board | None", state: BoardState,
+    ) -> str | None:
+        """confirmed_board=None の理由を分類する (反復4 診断計装、挙動非変更)。
+
+        SideResult.board_none_reason に載せる分類ロジック本体。CHAIN 中の
+        confirmed_board=None が「is_match_active→MENU 経路」由来か
+        「別経路」由来かを切り分けるための計装 (真因調査用、修正ではない)。
+
+        Args:
+            side: "1P" または "2P"。
+            is_active: このフレームの is_match_active
+                (board_state_machine.py:480 の MENU 強制条件そのもの)。
+            published_confirmed: このフレームで SideResult に載る確定盤面。
+            state: このフレームの BoardState (ctx.state)。
+
+        Returns:
+            None (confirmed_board が非 None) / "cold_start" / "menu_reset" /
+            "chain_hold_none" / "other"。
+        """
+        ever_had = (
+            self._ever_had_confirmed_1p if side == "1P"
+            else self._ever_had_confirmed_2p
+        )
+        if not is_active:
+            # board_state_machine.py:480-488 の MENU 強制が今フレーム発生。
+            if side == "1P":
+                self._pending_menu_reset_1p = True
+            else:
+                self._pending_menu_reset_2p = True
+        pending_menu_reset = (
+            self._pending_menu_reset_1p if side == "1P"
+            else self._pending_menu_reset_2p
+        )
+        if published_confirmed is not None:
+            if side == "1P":
+                self._ever_had_confirmed_1p = True
+                self._pending_menu_reset_1p = False
+            else:
+                self._ever_had_confirmed_2p = True
+                self._pending_menu_reset_2p = False
+            return None
+        if not ever_had:
+            return "cold_start"
+        if pending_menu_reset:
+            return "menu_reset"
+        if state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            return "chain_hold_none"
+        return "other"
+
     def _step_side(
         self,
         side: str,
@@ -4048,6 +4149,11 @@ class RecognitionPipeline:
                     else:
                         # 発光 OFF 中 (STABLE 確定時のみ): frozen を更新する
                         glow_state.frozen_board = published_confirmed.copy()
+        # 反復4 (2026-07-23): confirmed_board=None の理由分類 (診断計装のみ、
+        # 挙動には一切影響しない optional フィールド)。
+        board_none_reason = self._classify_board_none_reason(
+            side, is_active, published_confirmed, ctx.state,
+        )
         return SideResult(
             side=side,
             state=ctx.state,
@@ -4064,6 +4170,7 @@ class RecognitionPipeline:
             erasure_alerts=recent_alerts if recent_alerts else None,
             transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
             landing_diag=_landing_diag,
+            board_none_reason=board_none_reason,
         )
 
 
