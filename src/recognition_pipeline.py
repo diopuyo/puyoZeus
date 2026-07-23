@@ -103,7 +103,7 @@ from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
     capture_patch_pair_robust,
 )
-from src.chain_detector import ChainEvent, VideoChainTracker
+from src.chain_detector import DEBOUNCE_CONFIRM_FRAMES, ChainEvent, VideoChainTracker
 from src.drift_detector import DriftDetector, DriftResult
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
@@ -934,6 +934,13 @@ class RecognitionPipeline:
         # 連鎖検出 (任意): 無ければ chain_event 常時 None で動作
         self._chain_tracker_1p = chain_tracker_1p
         self._chain_tracker_2p = chain_tracker_2p
+        # 修正C (2026-07-24): reset() で VideoChainTracker を再構築する際、
+        # debounce 設定を引き継ぐために保持しておく (backwards compat:
+        # tracker 未設定 / debounce_confirm_frames 未実装の duck-typed
+        # スタブ (テスト用) なら既定値 DEBOUNCE_CONFIRM_FRAMES=1 にフォールバック)。
+        self._chain_debounce_confirm_frames: int = getattr(
+            chain_tracker_1p, "debounce_confirm_frames", DEBOUNCE_CONFIRM_FRAMES,
+        )
         # cycle 71d (案 D8): VideoChainTracker への入力盤面に「前 frame の confirmed_board」 を
         # 使う. raw CNN 振動 (= cnn 32↔27 単発スパイク) を投票後の confirmed で吸収できる.
         # 初回 frame は confirmed が無いため raw CNN にフォールバック.
@@ -1431,6 +1438,10 @@ class RecognitionPipeline:
         chain_hold_base_sec: float | None = None,
         chain_hold_per_step_sec: float | None = None,
         chain_max_hold_sec: float | None = None,
+        # 修正C (2026-07-24): VideoChainTracker の偽イベント抑制 debounce。
+        # 既定 1 = 従来通り即時確定 (bit-identical, backwards compat)。
+        # 2 以上で debounce_confirm_frames 回連続の drop 観測を要求する。
+        chain_debounce_confirm_frames: int = DEBOUNCE_CONFIRM_FRAMES,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1481,8 +1492,14 @@ class RecognitionPipeline:
                 score = ScoreOcr.load_default()
             except FileNotFoundError:
                 score = None
-        ctracker_1p = VideoChainTracker() if enable_chain_tracker else None
-        ctracker_2p = VideoChainTracker() if enable_chain_tracker else None
+        ctracker_1p = (
+            VideoChainTracker(debounce_confirm_frames=chain_debounce_confirm_frames)
+            if enable_chain_tracker else None
+        )
+        ctracker_2p = (
+            VideoChainTracker(debounce_confirm_frames=chain_debounce_confirm_frames)
+            if enable_chain_tracker else None
+        )
         next_det: NextDetector | None = None
         if load_next_detector:
             try:
@@ -1675,11 +1692,16 @@ class RecognitionPipeline:
             self._score_tracker_1p.reset()
         if self._score_tracker_2p is not None:
             self._score_tracker_2p.reset()
-        # chain tracker 内部 state は再構築 (リセット API なし)
+        # chain tracker 内部 state は再構築 (リセット API なし)。
+        # 修正C: debounce 設定は _chain_debounce_confirm_frames から引き継ぐ。
         if self._chain_tracker_1p is not None:
-            self._chain_tracker_1p = VideoChainTracker()
+            self._chain_tracker_1p = VideoChainTracker(
+                debounce_confirm_frames=self._chain_debounce_confirm_frames,
+            )
         if self._chain_tracker_2p is not None:
-            self._chain_tracker_2p = VideoChainTracker()
+            self._chain_tracker_2p = VideoChainTracker(
+                debounce_confirm_frames=self._chain_debounce_confirm_frames,
+            )
         # cycle 71d (案 D8): VideoChainTracker 入力 cache もリセット.
         self._prev_confirmed_1p = None
         self._prev_confirmed_2p = None

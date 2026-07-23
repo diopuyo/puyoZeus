@@ -116,6 +116,7 @@ def _capture_frames(
     chain_hold_base_sec: float | None = None,
     chain_hold_per_step_sec: float | None = None,
     chain_max_hold_sec: float | None = None,
+    chain_debounce_confirm_frames: int = 1,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -129,6 +130,8 @@ def _capture_frames(
     chain_hold_base_sec / chain_hold_per_step_sec / chain_max_hold_sec:
     A0 (2026-07-24) CHAIN 保持時間モデル較正用。全て None (既定) なら
     src 側既定値 (0.0 / 0.3 / 5.0) と bit-identical (backwards compat)。
+    chain_debounce_confirm_frames: 修正C (2026-07-24) A/B 比較用。
+    既定 1 = src 側既定と bit-identical (従来通り即時確定)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -149,6 +152,7 @@ def _capture_frames(
         chain_hold_base_sec=chain_hold_base_sec,
         chain_hold_per_step_sec=chain_hold_per_step_sec,
         chain_max_hold_sec=chain_max_hold_sec,
+        chain_debounce_confirm_frames=chain_debounce_confirm_frames,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
@@ -494,6 +498,7 @@ def _review_one_video(
     chain_hold_base_sec: float | None = None,
     chain_hold_per_step_sec: float | None = None,
     chain_max_hold_sec: float | None = None,
+    chain_debounce_confirm_frames: int = 1,
 ) -> dict:
     """1 動画・1 窓分の全メトリクスを計測する。"""
     print(f"  {video_stem}: start={start_sec}s max={max_sec}s を処理中...")
@@ -505,6 +510,7 @@ def _review_one_video(
         chain_hold_base_sec=chain_hold_base_sec,
         chain_hold_per_step_sec=chain_hold_per_step_sec,
         chain_max_hold_sec=chain_max_hold_sec,
+        chain_debounce_confirm_frames=chain_debounce_confirm_frames,
     )
     out: dict = {"video_stem": video_stem, "start_sec": start_sec, "max_sec": max_sec, "sides": {}}
     for side, opp_side in (("1P", "2P"), ("2P", "1P")):
@@ -798,6 +804,13 @@ def _parse_args() -> argparse.Namespace:
              "(既定 None = src既定 5.0 で bit-identical、較正評価では "
              "chain_hold_base/per_step と併せて引き上げ推奨、例 25.0)。",
     )
+    ap.add_argument(
+        "--chain-debounce-confirm-frames", type=int, default=1,
+        dest="chain_debounce_confirm_frames",
+        help="修正C (2026-07-24) 偽連鎖イベント抑制 debounce の A/B 比較用 "
+             "(既定 1 = src既定 DEBOUNCE_CONFIRM_FRAMES と bit-identical、"
+             "2 以上で drop 連続確認を要求)。",
+    )
     return ap.parse_args()
 
 
@@ -820,7 +833,8 @@ def main() -> None:
           f"next_signal={args.enable_chain_exit_next_signal} "
           f"chain_hold_base_sec={args.chain_hold_base_sec} "
           f"chain_hold_per_step_sec={args.chain_hold_per_step_sec} "
-          f"chain_max_hold_sec={args.chain_max_hold_sec}")
+          f"chain_max_hold_sec={args.chain_max_hold_sec} "
+          f"chain_debounce_confirm_frames={args.chain_debounce_confirm_frames}")
     sim = ChainSimulator()
     enable_stale_hold = not args.disable_chain_estimate_stale_hold
     video_reports: list[dict] = []
@@ -833,6 +847,7 @@ def main() -> None:
             chain_hold_base_sec=args.chain_hold_base_sec,
             chain_hold_per_step_sec=args.chain_hold_per_step_sec,
             chain_max_hold_sec=args.chain_max_hold_sec,
+            chain_debounce_confirm_frames=args.chain_debounce_confirm_frames,
         ))
 
     summary = _summarize(video_reports)
@@ -843,6 +858,7 @@ def main() -> None:
         "chain_hold_base_sec": args.chain_hold_base_sec,
         "chain_hold_per_step_sec": args.chain_hold_per_step_sec,
         "chain_max_hold_sec": args.chain_max_hold_sec,
+        "chain_debounce_confirm_frames": args.chain_debounce_confirm_frames,
     }
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{args.label}" if args.label else ""
