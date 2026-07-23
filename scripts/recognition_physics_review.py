@@ -113,6 +113,9 @@ def _capture_frames(
     enable_chain_exit_warmup: bool = False,
     enable_chain_exit_next_signal: bool = False,
     enable_chain_estimate_stale_hold: bool = True,
+    chain_hold_base_sec: float | None = None,
+    chain_hold_per_step_sec: float | None = None,
+    chain_max_hold_sec: float | None = None,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -123,6 +126,9 @@ def _capture_frames(
     enable_chain_estimate_stale_hold: 案1 (2026-07-23) A/B 比較用。
     src 側 default は True (既定で新挙動)。False を渡すと案1導入前の
     挙動 (estimated_board=None) で比較計測できる。
+    chain_hold_base_sec / chain_hold_per_step_sec / chain_max_hold_sec:
+    A0 (2026-07-24) CHAIN 保持時間モデル較正用。全て None (既定) なら
+    src 側既定値 (0.0 / 0.3 / 5.0) と bit-identical (backwards compat)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -140,6 +146,9 @@ def _capture_frames(
         enable_chain_exit_warmup=enable_chain_exit_warmup,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+        chain_hold_base_sec=chain_hold_base_sec,
+        chain_hold_per_step_sec=chain_hold_per_step_sec,
+        chain_max_hold_sec=chain_max_hold_sec,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
@@ -260,6 +269,42 @@ def _measure_ghost_mismatch(records: list[_FrameRecord], sim: ChainSimulator) ->
             "lag_flag": first_stable_lag > GHOST_FIRST_STABLE_LAG_WARN_SEC,
         })
     return results
+
+
+# ============================
+# 1b. A0 (2026-07-24): 偽連鎖イベント数
+# ============================
+#
+# 「偽連鎖イベント」= CHAIN state を発火させた trigger のうち、
+# before_board を ChainSimulator.simulate() した結果 chain_count<1
+# (= 実際には連鎖しない盤面だった) または simulate 自体が例外になったもの。
+# _measure_ghost_mismatch が「対象外」として静かに skip していた集合
+# (:240-241 相当) を明示的に計測する。計装 a287c587 実測で
+# 「早期発火の 48% が連鎖ゼロの疑似発火」と確認済みの指標をここで定量化する。
+
+
+def _measure_false_chain_events(
+    records: list[_FrameRecord], sim: ChainSimulator,
+) -> dict:
+    """新規 chain trigger のうち simulate で chain_count<1 だった割合を返す。"""
+    n_total = 0
+    n_false = 0
+    for idx in _new_chain_triggers(records):
+        rec = records[idx]
+        n_total += 1
+        try:
+            before = Board.from_list(rec.chain_before_grid.tolist())
+            sim_result = sim.simulate(before)
+        except Exception:
+            n_false += 1
+            continue
+        if sim_result.chain_count < 1:
+            n_false += 1
+    return {
+        "n_total_triggers": n_total,
+        "n_false_triggers": n_false,
+        "false_trigger_rate": (n_false / n_total) if n_total > 0 else 0.0,
+    }
 
 
 # ============================
@@ -446,6 +491,9 @@ def _review_one_video(
     enable_chain_exit_warmup: bool = False,
     enable_chain_exit_next_signal: bool = False,
     enable_chain_estimate_stale_hold: bool = True,
+    chain_hold_base_sec: float | None = None,
+    chain_hold_per_step_sec: float | None = None,
+    chain_max_hold_sec: float | None = None,
 ) -> dict:
     """1 動画・1 窓分の全メトリクスを計測する。"""
     print(f"  {video_stem}: start={start_sec}s max={max_sec}s を処理中...")
@@ -454,6 +502,9 @@ def _review_one_video(
         enable_chain_exit_warmup=enable_chain_exit_warmup,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+        chain_hold_base_sec=chain_hold_base_sec,
+        chain_hold_per_step_sec=chain_hold_per_step_sec,
+        chain_max_hold_sec=chain_max_hold_sec,
     )
     out: dict = {"video_stem": video_stem, "start_sec": start_sec, "max_sec": max_sec, "sides": {}}
     for side, opp_side in (("1P", "2P"), ("2P", "1P")):
@@ -461,6 +512,7 @@ def _review_one_video(
         if not records:
             continue
         ghost = _measure_ghost_mismatch(records, sim)
+        false_chain = _measure_false_chain_events(records, sim)
         floating = _measure_floating_puyo(records)
         warp = _measure_color_warp(records)
         acct = _measure_ojama_accounting(records, by_side[opp_side])
@@ -478,7 +530,9 @@ def _review_one_video(
             records, (BoardState.GRAVITY_SETTLE.name,),
         )
         out["sides"][side] = {
-            "ghost_mismatch_events": ghost, "floating_puyo": floating,
+            "ghost_mismatch_events": ghost,
+            "false_chain_events": false_chain,
+            "floating_puyo": floating,
             "color_warp": warp, "ojama_accounting": acct,
             "match_active_false_negative": active_fn,
             "board_none_reason_chain": board_none_chain,
@@ -501,10 +555,13 @@ def _summarize(video_reports: list[dict]) -> dict:
     ghost_durations: list[float] = []
     ghost_unresolved: list[bool] = []
     ghost_lag_flags: list[bool] = []
+    confirm_lags: list[float] = []
     floating_rates: list[float] = []
     erasure_rates: list[float] = []
     acct_diffs: list[float] = []
     active_fn_rates: list[float] = []
+    n_total_triggers = 0
+    n_false_triggers = 0
     for rep in video_reports:
         for side_data in rep["sides"].values():
             for ev in side_data["ghost_mismatch_events"]:
@@ -512,6 +569,13 @@ def _summarize(video_reports: list[dict]) -> dict:
                 ghost_durations.append(ev["ghost_duration_sec"])
                 ghost_unresolved.append(not ev["resolved"])
                 ghost_lag_flags.append(ev["lag_flag"])
+                # A0 (2026-07-24): 「STABLE確定ラグ」= 連鎖発火〜最初の STABLE
+                # 復帰までの遅延秒 (既存 first_stable_lag_sec を集約・命名整理)。
+                confirm_lags.append(ev["first_stable_lag_sec"])
+            fc = side_data.get("false_chain_events")
+            if fc is not None:
+                n_total_triggers += fc["n_total_triggers"]
+                n_false_triggers += fc["n_false_triggers"]
             floating_rates.append(side_data["floating_puyo"]["violation_rate"])
             erasure_rates.append(side_data["color_warp"]["erasure_alerts_per_min"])
             for a in side_data["ojama_accounting"]:
@@ -525,6 +589,17 @@ def _summarize(video_reports: list[dict]) -> dict:
         # データ品質フラグ: 別の後続手番を挟んだ後の STABLE を誤って比較対象に
         # した疑いがある連鎖イベントの割合 (高いと上記 mismatch 系の信頼度が下がる)。
         "ghost_lag_flag_rate": _safe_mean([float(x) for x in ghost_lag_flags]),
+        # A0 (2026-07-24) 3指標セット (b): STABLE確定ラグ (連鎖発火〜最初の
+        # STABLE 復帰までの遅延秒、mean)。hold 時間を伸ばすトレードオフの
+        # 代償を可視化する指標 (伸びすぎなら不利判定の反映遅延として表れる)。
+        "confirmed_lag_sec_mean": _safe_mean(confirm_lags),
+        # A0 (2026-07-24) 3指標セット (a 別観点): 偽連鎖イベント数/率
+        # (CHAIN trigger のうち simulate で chain_count<1 だったもの)。
+        "n_total_chain_triggers": n_total_triggers,
+        "n_false_chain_triggers": n_false_triggers,
+        "false_chain_trigger_rate": (
+            n_false_triggers / n_total_triggers if n_total_triggers > 0 else 0.0
+        ),
         "floating_puyo_violation_rate_mean": _safe_mean(floating_rates),
         "color_warp_alerts_per_min_mean": _safe_mean(erasure_rates),
         "ojama_accounting_abs_diff_mean": _safe_mean(acct_diffs),
@@ -610,6 +685,15 @@ def _print_summary_table(summary: dict) -> None:
     print(f"     残像持続時間 秒 (mean)        : {summary['ghost_duration_sec_mean']:.2f}")
     print(f"     未解消率 (>{GHOST_SEARCH_MAX_SEC:.0f}秒経過)      : {summary['ghost_unresolved_rate']:.4f}")
     print(f"     [品質注意] lag_flag率(信頼度低下): {summary['ghost_lag_flag_rate']:.4f}")
+    print(
+        f"  [A0 (b)] 偽連鎖イベント率 (総{summary['n_total_chain_triggers']}件中"
+        f"{summary['n_false_chain_triggers']}件): "
+        f"{summary['false_chain_trigger_rate']:.4f}",
+    )
+    print(
+        f"  [A0 (c)] STABLE確定ラグ 秒 (mean) : "
+        f"{summary['confirmed_lag_sec_mean']:.2f}",
+    )
     print(f"  2. 浮きぷよ違反率 (mean)          : {summary['floating_puyo_violation_rate_mean']:.4f}")
     print(f"  3. 色ワープ/変色 件/分 (mean)     : {summary['color_warp_alerts_per_min_mean']:.4f}")
     print(f"  4. お邪魔会計 絶対差 個 (mean)    : {summary['ojama_accounting_abs_diff_mean']:.2f}")
@@ -694,6 +778,26 @@ def _parse_args() -> argparse.Namespace:
              "フォールバックを無効化し、案1導入前の挙動 (常に None) で"
              "計測する (既定False=stale_hold有効、src側 default と同じ)。",
     )
+    ap.add_argument(
+        "--chain-hold-base-sec", type=float, default=None,
+        dest="chain_hold_base_sec",
+        help="A0 (2026-07-24) 較正用: CHAIN 保持時間モデルの固定項 "
+             "(既定 None = src既定 0.0 で bit-identical、"
+             "計装 a287c587 実測較正値は 3.4)。",
+    )
+    ap.add_argument(
+        "--chain-hold-per-step-sec", type=float, default=None,
+        dest="chain_hold_per_step_sec",
+        help="A0 (2026-07-24) 較正用: CHAIN 保持時間モデルの連鎖数係数 "
+             "(既定 None = src既定 0.3 で bit-identical、実測較正値は 1.5)。",
+    )
+    ap.add_argument(
+        "--chain-max-hold-sec", type=float, default=None,
+        dest="chain_max_hold_sec",
+        help="A0 (2026-07-24) 較正用: CHAIN_MAX_HOLD_SEC 安全弁上限の上書き "
+             "(既定 None = src既定 5.0 で bit-identical、較正評価では "
+             "chain_hold_base/per_step と併せて引き上げ推奨、例 25.0)。",
+    )
     return ap.parse_args()
 
 
@@ -713,7 +817,10 @@ def main() -> None:
         windows = TARGET_WINDOWS
     print(f"[INFO] 対象 {len(windows)} 動画・窓 (物理整合性レビュー) "
           f"warmup={args.enable_chain_exit_warmup} "
-          f"next_signal={args.enable_chain_exit_next_signal}")
+          f"next_signal={args.enable_chain_exit_next_signal} "
+          f"chain_hold_base_sec={args.chain_hold_base_sec} "
+          f"chain_hold_per_step_sec={args.chain_hold_per_step_sec} "
+          f"chain_max_hold_sec={args.chain_max_hold_sec}")
     sim = ChainSimulator()
     enable_stale_hold = not args.disable_chain_estimate_stale_hold
     video_reports: list[dict] = []
@@ -723,6 +830,9 @@ def main() -> None:
             enable_chain_exit_warmup=args.enable_chain_exit_warmup,
             enable_chain_exit_next_signal=args.enable_chain_exit_next_signal,
             enable_chain_estimate_stale_hold=enable_stale_hold,
+            chain_hold_base_sec=args.chain_hold_base_sec,
+            chain_hold_per_step_sec=args.chain_hold_per_step_sec,
+            chain_max_hold_sec=args.chain_max_hold_sec,
         ))
 
     summary = _summarize(video_reports)
@@ -730,6 +840,9 @@ def main() -> None:
         "enable_chain_exit_warmup": args.enable_chain_exit_warmup,
         "enable_chain_exit_next_signal": args.enable_chain_exit_next_signal,
         "enable_chain_estimate_stale_hold": enable_stale_hold,
+        "chain_hold_base_sec": args.chain_hold_base_sec,
+        "chain_hold_per_step_sec": args.chain_hold_per_step_sec,
+        "chain_max_hold_sec": args.chain_max_hold_sec,
     }
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{args.label}" if args.label else ""

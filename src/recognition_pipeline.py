@@ -367,11 +367,24 @@ class RecognitionPipeline:
     # pipeline 側で post-hoc に有効期間を伸ばす。
     CHAIN_HOLD_PER_STEP_SEC: float = 0.3
 
+    # A0 (2026-07-24, 計装 a287c587 実測較正): CHAIN 保持時間モデルの固定項。
+    # 実測 (23動画418イベント) では `固定項 + 係数×連鎖数` の線形モデルが
+    # 原点通過モデルより有意に良く適合 (a≈2.61s, b≈1.17s/連鎖, R²0.356)。
+    # 既定値 0.0 = 従来の「固定項なし・per_step のみ」の式と完全同一
+    # (backwards compat, bit-identical)。較正値は呼び出し側 (評価 config) で
+    # optional 引数 chain_hold_base_sec 経由で注入する (src 既定は変更しない)。
+    CHAIN_HOLD_BASE_SEC: float = 0.0
+
     # game-event ベース連鎖終了: CHAIN 状態を timing hold だけでなく
     # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
     # を検知するまで維持する。安全弁として以下の秒数を上限とする。
     # 60fps × 5.0s = 300 frame。通常の長い連鎖 (= 11 連鎖 × 0.3s = 3.3s) を
     # 十分にカバーし、かつ異常時 (event 永続不達) での CHAIN 永続化を防ぐ。
+    # A0 (2026-07-24): CHAIN_HOLD_BASE_SEC/PER_STEP_SEC の較正値を使うと
+    # chain_until (本来の timing hold) がこの安全弁を上回るケースが生じうる
+    # (eff_until = max(chain_until, chain_event_max_until) のため)。
+    # その場合は呼び出し側で chain_max_hold_sec も併せて引き上げること
+    # (既定値はこの定数のまま、backwards compat)。
     CHAIN_MAX_HOLD_SEC: float = 5.0
 
     # X1: CHAIN 最小表示時間 (enable_chain_min_display=True 時に有効)。
@@ -516,6 +529,14 @@ class RecognitionPipeline:
         chain_tracker_2p: VideoChainTracker | None = None,
         stable_frame_count: int = 6,
         chain_hold_per_step_sec: float | None = None,
+        # A0 (2026-07-24): CHAIN 保持時間モデルの固定項 base + per_step×連鎖数。
+        # None (既定) なら CHAIN_HOLD_BASE_SEC=0.0 (= 従来式と bit-identical)。
+        chain_hold_base_sec: float | None = None,
+        # A0 (2026-07-24): CHAIN_MAX_HOLD_SEC (安全弁上限) の上書き。
+        # None (既定) なら CHAIN_MAX_HOLD_SEC=5.0 (= 従来値、backwards compat)。
+        # 較正済 chain_hold_base_sec/per_step_sec を使う場合は安全弁が
+        # 事実上無効化されうるため (クラス定数コメント参照)、併せて引き上げること。
+        chain_max_hold_sec: float | None = None,
         temporal_smoothing: int = 1,
         next_detector: NextDetector | None = None,
         force_in_match: bool = False,
@@ -745,6 +766,18 @@ class RecognitionPipeline:
             chain_hold_per_step_sec
             if chain_hold_per_step_sec is not None
             else self.CHAIN_HOLD_PER_STEP_SEC
+        )
+        # A0 (2026-07-24): 固定項 (既定 0.0 = 従来式と bit-identical)。
+        self._chain_hold_base_sec = (
+            chain_hold_base_sec
+            if chain_hold_base_sec is not None
+            else self.CHAIN_HOLD_BASE_SEC
+        )
+        # A0 (2026-07-24): 安全弁上限の上書き (既定 5.0 = backwards compat)。
+        self._chain_max_hold_sec = (
+            chain_max_hold_sec
+            if chain_max_hold_sec is not None
+            else self.CHAIN_MAX_HOLD_SEC
         )
         # 時系列平均 (δ): 直近 N frame の cell 単位 majority vote。
         # CNN ぶれを抑え、state machine の安定化を狙う。
@@ -1390,6 +1423,14 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False で従来挙動 (常に None) に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # A0 (2026-07-24): CHAIN 保持時間モデルの較正値注入用。
+        # 従来 __init__ には chain_hold_per_step_sec が存在したが load_default
+        # には露出していなかった (評価スクリプト経由で注入不可という抜け漏れ)。
+        # 今回まとめて露出する。全て None (既定) で従来値 (0.0 / 0.3 / 5.0) と
+        # bit-identical (backwards compat)。
+        chain_hold_base_sec: float | None = None,
+        chain_hold_per_step_sec: float | None = None,
+        chain_max_hold_sec: float | None = None,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1545,6 +1586,9 @@ class RecognitionPipeline:
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+            chain_hold_base_sec=chain_hold_base_sec,
+            chain_hold_per_step_sec=chain_hold_per_step_sec,
+            chain_max_hold_sec=chain_max_hold_sec,
         )
 
     # ------------------------------------------------------------------
@@ -2055,6 +2099,7 @@ class RecognitionPipeline:
                 )
                 self._chain_until_1p = (
                     time_sec
+                    + self._chain_hold_base_sec
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
@@ -2063,7 +2108,7 @@ class RecognitionPipeline:
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_1p = (
-                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                        time_sec + self._chain_max_hold_sec
                     )
                     self._chain_start_next_1p = self._last_seen_next_1p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
@@ -2080,6 +2125,7 @@ class RecognitionPipeline:
                 )
                 self._chain_until_2p = (
                     time_sec
+                    + self._chain_hold_base_sec
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
@@ -2087,7 +2133,7 @@ class RecognitionPipeline:
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_2p = (
-                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                        time_sec + self._chain_max_hold_sec
                     )
                     self._chain_start_next_2p = self._last_seen_next_2p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
@@ -3025,7 +3071,9 @@ class RecognitionPipeline:
         # 疑似 ChainEvent を生成 (chain_count=1 の最小ガード)
         pseudo = ChainEvent(
             trigger_sec=time_sec,
-            end_sec=time_sec + self._chain_hold_per_step_sec,
+            end_sec=(
+                time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+            ),
             before_board=before,
             chain_count=1,
             total_erased=0, total_score=score_delta, base_score=score_delta,
@@ -3033,7 +3081,9 @@ class RecognitionPipeline:
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
         )
-        chain_until = time_sec + self._chain_hold_per_step_sec
+        chain_until = (
+            time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+        )
         # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能B 早期発火) も物理推論
         # スルーの対象にする (estimated_board 補完率向上)。起点盤面
         # (before) は prev_confirmed 由来で cold_start 等では信頼度が
@@ -3044,7 +3094,7 @@ class RecognitionPipeline:
             self._chain_until_1p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_1p = (
-                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                    time_sec + self._chain_max_hold_sec
                 )
                 self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
@@ -3053,7 +3103,7 @@ class RecognitionPipeline:
             self._chain_until_2p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_2p = (
-                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                    time_sec + self._chain_max_hold_sec
                 )
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
@@ -3124,7 +3174,9 @@ class RecognitionPipeline:
         # 疑似 ChainEvent を生成 (score は不明なため 0)
         pseudo = ChainEvent(
             trigger_sec=time_sec,
-            end_sec=time_sec + self._chain_hold_per_step_sec,
+            end_sec=(
+                time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+            ),
             before_board=before,
             chain_count=1,
             total_erased=0, total_score=0, base_score=0,
@@ -3132,7 +3184,9 @@ class RecognitionPipeline:
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
         )
-        chain_until = time_sec + self._chain_hold_per_step_sec
+        chain_until = (
+            time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+        )
         # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能D 掛け算式早期発火) も
         # 物理推論スルーの対象にする。
         self._start_chain_estimate(side, pseudo)
@@ -3140,14 +3194,14 @@ class RecognitionPipeline:
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
             if self._enable_game_event_chain_exit:
-                self._chain_event_max_until_1p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_event_max_until_1p = time_sec + self._chain_max_hold_sec
                 self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
         else:
             self._active_chain_2p = pseudo
             self._chain_until_2p = chain_until
             if self._enable_game_event_chain_exit:
-                self._chain_event_max_until_2p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_event_max_until_2p = time_sec + self._chain_max_hold_sec
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
 
@@ -3792,9 +3846,19 @@ class RecognitionPipeline:
                         ctx.confirmed_board = prev_confirmed.copy() \
                             if prev_confirmed is not None else final_board
                 if chain_count >= 1:
+                    # A0 (2026-07-24) バグ修正: 従来ここだけハードコード 0.3 で
+                    # self._chain_hold_per_step_sec (config 可能な設定値) を
+                    # 無視していた。既定値 0.3 なら数値上は不変だが、較正値を
+                    # 渡した場合にこの経路 (cycle48 大量 hallucination ガード
+                    # 通過済の着地直後即時連鎖) だけ較正が効かない不整合が
+                    # あったため、他経路と同じ式に統一する。
                     pseudo = ChainEvent(
                         trigger_sec=time_sec,
-                        end_sec=time_sec + 0.3 * chain_count,
+                        end_sec=(
+                            time_sec
+                            + self._chain_hold_base_sec
+                            + self._chain_hold_per_step_sec * chain_count
+                        ),
                         before_board=inferred_landing,
                         chain_count=chain_count,
                         total_erased=0, total_score=0, base_score=0,
@@ -3804,6 +3868,7 @@ class RecognitionPipeline:
                     )
                     chain_until = (
                         time_sec
+                        + self._chain_hold_base_sec
                         + self._chain_hold_per_step_sec * chain_count
                     )
                     # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (着地直後の即時連鎖
