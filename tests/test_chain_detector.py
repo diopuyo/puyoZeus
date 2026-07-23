@@ -175,3 +175,55 @@ def _empty_grid_blue_remnant() -> Board:
     grid = _empty_grid()
     grid[12][0] = COLOR_BLUE
     return Board.from_list(grid)
+
+
+# ============================
+# 修正C (2026-07-24): debounce_confirm_frames テスト
+# ============================
+
+
+def test_debounce_default_is_bit_identical() -> None:
+    """debounce_confirm_frames 未指定 (既定 1) は従来通り即時確定する。"""
+    tracker = VideoChainTracker()
+    tracker.update(0.0, _board_with_red4())
+    event = tracker.update(0.5, _empty_board())
+    assert event is not None
+    assert event.chain_count == 1
+
+
+def test_debounce_rejects_1frame_flicker() -> None:
+    """1 フレームだけの色フリッカー(drop がすぐ解消)は debounce>1 で握りつぶす。"""
+    tracker = VideoChainTracker(debounce_confirm_frames=2)
+    tracker.update(0.0, _board_with_red4())
+    # フリッカー: 1 フレームだけ非空セルが 4 個消えたように見える (drop 検出)
+    assert tracker.update(0.1, _empty_board()) is None
+    # フリッカー解消 (元の赤4に戻る) → 候補は破棄され event は出ない
+    event = tracker.update(0.2, _board_with_red4())
+    assert event is None
+
+
+def test_debounce_confirms_persistent_drop() -> None:
+    """drop が debounce_confirm_frames 回連続で続けば ChainEvent を確定する。"""
+    tracker = VideoChainTracker(debounce_confirm_frames=2)
+    tracker.update(0.0, _board_with_red4())
+    # 1 回目の drop 観測 (候補として保留、まだ event なし)
+    assert tracker.update(0.1, _empty_board()) is None
+    # 2 回目 (debounce_confirm_frames=2 に到達) → 確定
+    event = tracker.update(0.2, _empty_board())
+    assert event is not None
+    assert event.chain_count == 1
+    assert event.total_erased == 4
+    # trigger_sec は最初の (フリッカー前) stable board の時刻
+    assert event.trigger_sec == 0.0
+
+
+def test_debounce_does_not_swallow_fast_followup_chain() -> None:
+    """本物の速い追撃連鎖(短時間差)は debounce 確認中でも取りこぼさない。"""
+    tracker = VideoChainTracker(debounce_confirm_frames=2)
+    tracker.update(0.0, _board_with_red4())
+    # 1 回目 drop 観測 (保留)
+    assert tracker.update(0.03, _empty_board()) is None
+    # 2 回目: 短時間差でも drop が継続していれば確定する (取りこぼさない)
+    event = tracker.update(0.06, _empty_board())
+    assert event is not None
+    assert event.chain_count == 1
