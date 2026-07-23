@@ -197,6 +197,31 @@ class SideResult:
     #   "other": 上記以外 (通常起こらないはずだが fail-silent 防止用の受け皿)
     # backwards compat のため default None。
     board_none_reason: str | None = None
+    # 反復5 (2026-07-23): 物理推論スルー (根治本体)。CHAIN/GRAVITY_SETTLE 中は
+    # confirmed_board が None のままだが (= 標準 eval 経路は従来通り None を
+    # 見て STABLE のみ評価、backward compat 完全維持)、起点盤面
+    # (chain_event.before_board) から ChainSimulator で連鎖を前進させた
+    # 「推定」盤面をここに公開する。相手盤面把握・打ち合い判定等の用途向け。
+    # confirmed_board is not None のフレームは常に None (該当なし)。
+    # backwards compat のため default None。
+    estimated_board: "Board | None" = None
+    # board_provenance の値:
+    #   "observed": confirmed_board が実観測 (通常の STABLE 確定値)。
+    #   "chain_estimate": CHAIN/GRAVITY_SETTLE 中の物理推定 (起点信頼度は高)。
+    #   "chain_estimate_low_confidence": 起点盤面の物理予測 chain_count が
+    #     score 由来 chain_count と不一致 (Step3(a) 答え合わせで検出、
+    #     起点自体が誤認の疑いがあるため取り扱い注意)。
+    # backwards compat のため default "observed"。
+    board_provenance: str = "observed"
+    # 反復5 修正 (2026-07-23): Step3(b)(c) 事後答え合わせの結果。
+    # 連鎖後 final_board 適用直後から CHAIN_VERIFY_FRAMES 分の STABLE
+    # cnn_board が集まったフレームでのみ非 None になる (それ以外は None =
+    # 検証中/対象外)。
+    #   "verified_match": 多数決盤面と物理予測が一致 (信頼度確認)。
+    #   "verified_mismatch_corrected": 不一致のため多数決盤面で confirmed_board
+    #     を補正した (起点誤認が事後に判明したケース)。
+    # backwards compat のため default None。
+    answer_check_result: str | None = None
 
 
 @dataclass(frozen=True)
@@ -345,6 +370,18 @@ class RecognitionPipeline:
     # 短連鎖 (1-2 連鎖 × 0.3s = 0.3-0.6s) がお邪魔信号で 0.1-0.2s で即終了し
     # 「一瞬表示/ちらつき」になる問題を防ぐ。
     CHAIN_MIN_DISPLAY_SEC: float = 0.8
+
+    # 反復5 Step3(b)(c) 修正版 (2026-07-23, 事後検証方式): Phase C-6 の C で
+    # 物理予測 final_board を適用「した後」、直近 CHAIN_VERIFY_FRAMES 分の
+    # STABLE cnn_board 多数決盤面と照合する答え合わせ。単一フレームの
+    # 生 CNN (= GRAVITY_SETTLE 直後の残光ノイズが乗りやすい) との比較で
+    # 正しい注入まで過剰棄却していた旧「事前ゲート」方式の回帰
+    # (残像/連鎖後不一致率 0.09→0.28 悪化) を修正するため、適用は止めず
+    # 事後の多数決比較で不一致なら補正する方式に変更。
+    CHAIN_VERIFY_FRAMES: int = 5
+    # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
+    # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
+    CHAIN_VERIFY_MISMATCH_CELLS: int = 6
 
     # X4: game-event 終了を発動する最小連鎖数。
     # chain_count < この値の連鎖は game-event 終了を発動せず timing hold のみ。
@@ -710,6 +747,33 @@ class RecognitionPipeline:
         self._ever_had_confirmed_2p: bool = False
         self._pending_menu_reset_1p: bool = False
         self._pending_menu_reset_2p: bool = False
+        # 反復5 (2026-07-23): 物理推論スルー機構 (根治本体)。
+        # Step1 診断で「chain_event.before_board (= 起点盤面) は 85.7% の
+        # ケースでそのまま使える」ことを確認済み。ctx.confirmed_board が
+        # None 化 (drift resync 等) していても before_board は独立に
+        # VideoChainTracker が捕捉するため影響を受けにくい。
+        # CHAIN/GRAVITY_SETTLE 中、この起点から ChainSimulator で連鎖を
+        # 前進させた盤面を SideResult.estimated_board として公開する
+        # (confirmed_board 自体は一切変更しない = 標準 eval 経路への
+        # 影響ゼロ、Step4 backward compat 要件)。
+        self._chain_estimate_result_1p: "ChainResult | None" = None
+        self._chain_estimate_result_2p: "ChainResult | None" = None
+        self._chain_estimate_trigger_1p: float = 0.0
+        self._chain_estimate_trigger_2p: float = 0.0
+        self._chain_estimate_end_1p: float = 0.0
+        self._chain_estimate_end_2p: float = 0.0
+        # Step3(a) 答え合わせ: score 由来 chain_count (ev.chain_count) と
+        # 物理予測 chain_count (before_board を simulate した実測値) が
+        # 一致しない場合 True (= 起点盤面が疑わしい、低信頼度)。
+        self._chain_estimate_low_confidence_1p: bool = False
+        self._chain_estimate_low_confidence_2p: bool = False
+        # 反復5 修正 (2026-07-23): Step3(b)(c) 事後検証の進行 state。
+        # {"expected": Board, "cnn_history": list[Board]} または None
+        # (検証中でない)。Phase C-6 の C で final_board 適用直後にセットし、
+        # 直近 CHAIN_VERIFY_FRAMES 分の STABLE cnn_board が集まったら
+        # 多数決盤面と照合して補正する (_update_chain_estimate_verification)。
+        self._chain_verify_pending_1p: dict | None = None
+        self._chain_verify_pending_2p: dict | None = None
         # match active hysteresis 用
         self._last_active_frame_idx: int = -1
         self._match_active_started_frame: int = -1
@@ -1486,6 +1550,17 @@ class RecognitionPipeline:
         self._ever_had_confirmed_2p = False
         self._pending_menu_reset_1p = False
         self._pending_menu_reset_2p = False
+        # 反復5 (2026-07-23): 物理推論スルー state も試合切替時にクリア。
+        self._chain_estimate_result_1p = None
+        self._chain_estimate_result_2p = None
+        self._chain_estimate_trigger_1p = 0.0
+        self._chain_estimate_trigger_2p = 0.0
+        self._chain_estimate_end_1p = 0.0
+        self._chain_estimate_end_2p = 0.0
+        self._chain_estimate_low_confidence_1p = False
+        self._chain_estimate_low_confidence_2p = False
+        self._chain_verify_pending_1p = None
+        self._chain_verify_pending_2p = None
         self._cnn_history_1p.clear()
         self._cnn_history_2p.clear()
         self._last_active_frame_idx = -1
@@ -1914,6 +1989,8 @@ class RecognitionPipeline:
             ev = self._chain_tracker_1p.update(time_sec, board_for_tracker_1p)
             if ev is not None and not chain_banned:
                 self._active_chain_1p = ev
+                # 反復5 Step2: 物理推論スルー開始 (起点盤面から連鎖を前進)
+                self._start_chain_estimate("1P", ev)
                 # 全消し連鎖は overlay 表示時間ぶん CHAIN を延長して、 CHAIN→STABLE
                 # 遷移時の _merge_diff_only が overlay corrupted cnn_board を
                 # 使わないようにする (v50 全消し overlay 誤認の構造的解消)。
@@ -1940,6 +2017,8 @@ class RecognitionPipeline:
             ev = self._chain_tracker_2p.update(time_sec, board_for_tracker_2p)
             if ev is not None and not chain_banned:
                 self._active_chain_2p = ev
+                # 反復5 Step2: 物理推論スルー開始 (起点盤面から連鎖を前進)
+                self._start_chain_estimate("2P", ev)
                 extra_all_clear = (
                     self.ALL_CLEAR_OVERLAY_HOLD_SEC if ev.is_all_clear else 0.0
                 )
@@ -2883,6 +2962,11 @@ class RecognitionPipeline:
             is_all_clear=False,
         )
         chain_until = time_sec + self._chain_hold_per_step_sec
+        # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能B 早期発火) も物理推論
+        # スルーの対象にする (estimated_board 補完率向上)。起点盤面
+        # (before) は prev_confirmed 由来で cold_start 等では信頼度が
+        # 低い場合があるが、それは Step3(a)(b)(c) の答え合わせで拾う。
+        self._start_chain_estimate(side, pseudo)
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
@@ -2977,6 +3061,9 @@ class RecognitionPipeline:
             is_all_clear=False,
         )
         chain_until = time_sec + self._chain_hold_per_step_sec
+        # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能D 掛け算式早期発火) も
+        # 物理推論スルーの対象にする。
+        self._start_chain_estimate(side, pseudo)
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
@@ -2991,6 +3078,41 @@ class RecognitionPipeline:
                 self._chain_event_max_until_2p = time_sec + self.CHAIN_MAX_HOLD_SEC
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
+
+    def _start_chain_estimate(self, side: str, ev: ChainEvent) -> None:
+        """Step2 (2026-07-23): 連鎖検出時に物理推論スルーを開始する。
+
+        ev.before_board (= 起点盤面、Step1 診断で 85.7% 有効と確認済み) から
+        ChainSimulator で連鎖を 1 度だけシミュレートし、再生用の ChainResult
+        を保持する。Step3(a) 答え合わせ: score 由来 chain_count (ev から算出)
+        と物理予測 chain_count (before_board を simulate した実測値) が
+        一致しなければ低信頼度フラグを立てる (= 起点盤面自体が誤認の疑い)。
+
+        Args:
+            side: "1P" または "2P"。
+            ev: 新規検出された ChainEvent。
+        """
+        from src.chain import ChainSimulator
+        if not hasattr(self, "_chain_sim"):
+            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+        try:
+            cr = self._chain_sim.simulate(ev.before_board)  # type: ignore[attr-defined]
+        except Exception:
+            cr = None
+        result = cr if (cr is not None and cr.chain_count > 0) else None
+        low_confidence = (
+            result is not None and result.chain_count != ev.chain_count
+        )
+        if side == "1P":
+            self._chain_estimate_result_1p = result
+            self._chain_estimate_trigger_1p = ev.trigger_sec
+            self._chain_estimate_end_1p = ev.end_sec
+            self._chain_estimate_low_confidence_1p = low_confidence
+        else:
+            self._chain_estimate_result_2p = result
+            self._chain_estimate_trigger_2p = ev.trigger_sec
+            self._chain_estimate_end_2p = ev.end_sec
+            self._chain_estimate_low_confidence_2p = low_confidence
 
     def _stash_and_clear_active_chain(self, side: str) -> None:
         """active_chain_* を None にする前に退避してからクリアする。
@@ -3062,6 +3184,105 @@ class RecognitionPipeline:
         if state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
             return "chain_hold_none"
         return "other"
+
+    def _compute_chain_estimate(
+        self, side: str, state: BoardState, time_sec: float,
+    ) -> "tuple[Board | None, str]":
+        """Step2 (2026-07-23): CHAIN/GRAVITY_SETTLE 中の物理推定盤面を返す。
+
+        confirmed_board 自体は変更しない (標準 eval 経路への影響ゼロ)。
+        estimated_board / board_provenance の算出専用ヘルパー。
+
+        Args:
+            side: "1P" または "2P"。
+            state: このフレームの BoardState (ctx.state)。
+            time_sec: 現フレームの時刻。
+
+        Returns:
+            (estimated_board, board_provenance)。 非該当時は (None, "observed")。
+        """
+        if state not in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            # CHAIN/GRAVITY_SETTLE を抜けたら次回開始まで state をクリア。
+            if side == "1P":
+                self._chain_estimate_result_1p = None
+            else:
+                self._chain_estimate_result_2p = None
+            return None, "observed"
+        result = (
+            self._chain_estimate_result_1p if side == "1P"
+            else self._chain_estimate_result_2p
+        )
+        if result is None:
+            return None, "observed"
+        trigger = (
+            self._chain_estimate_trigger_1p if side == "1P"
+            else self._chain_estimate_trigger_2p
+        )
+        end = (
+            self._chain_estimate_end_1p if side == "1P"
+            else self._chain_estimate_end_2p
+        )
+        low_confidence = (
+            self._chain_estimate_low_confidence_1p if side == "1P"
+            else self._chain_estimate_low_confidence_2p
+        )
+        board = _progressed_chain_board(result, trigger, end, time_sec)
+        if board is None:
+            return None, "observed"
+        provenance = (
+            "chain_estimate_low_confidence" if low_confidence
+            else "chain_estimate"
+        )
+        return board, provenance
+
+    def _update_chain_estimate_verification(
+        self, side: str, state: BoardState, cnn_board: Board,
+    ) -> "tuple[str | None, Board | None]":
+        """反復5 修正 Step3(b)(c): 連鎖後 final_board 適用の事後答え合わせ。
+
+        単一フレームの生 CNN でなく、直近 CHAIN_VERIFY_FRAMES 分の STABLE
+        cnn_board の多数決盤面と物理予測 (final_board) を照合する
+        (GRAVITY_SETTLE 直後の残光ノイズに強くするため)。適用は既に完了
+        済 (Phase C-6 の C で無条件適用) のため、ここでは止めずに
+        不一致時のみ多数決盤面で confirmed_board を補正する
+        (呼出元が返り値の補正盤面を ctx.confirmed_board に反映する)。
+
+        Args:
+            side: "1P" または "2P"。
+            state: このフレームの BoardState (ctx.state)。
+            cnn_board: この frame の生 CNN 観測。
+
+        Returns:
+            (answer_check_result, correction_board) のタプル。
+            answer_check_result: None (検証対象外/進行中) /
+                "verified_match" / "verified_mismatch_corrected"。
+            correction_board: "verified_mismatch_corrected" のときのみ
+                非 None (呼出元が ctx.confirmed_board に適用する多数決盤面)。
+        """
+        pending = (
+            self._chain_verify_pending_1p if side == "1P"
+            else self._chain_verify_pending_2p
+        )
+        if pending is None or state != BoardState.STABLE:
+            return None, None
+        pending["cnn_history"].append(cnn_board.copy())
+        if len(pending["cnn_history"]) < self.CHAIN_VERIFY_FRAMES:
+            return None, None
+        from src.board_state_machine import _vote_majority_board
+        history = pending["cnn_history"]
+        min_votes = max(1, len(history) // 2 + 1)  # 単純多数決
+        majority = _vote_majority_board(history, min_votes=min_votes)
+        diff = DriftDetector._count_mismatch(pending["expected"], majority)
+        if side == "1P":
+            self._chain_verify_pending_1p = None
+        else:
+            self._chain_verify_pending_2p = None
+        if diff <= self.CHAIN_VERIFY_MISMATCH_CELLS:
+            return "verified_match", None
+        # 不一致: 起点誤認の疑いが事後に判明 → 多数決盤面で補正する。
+        from src.board_state_machine import _apply_gravity_filter
+        _apply_gravity_filter(majority)
+        return "verified_mismatch_corrected", majority
 
     def _step_side(
         self,
@@ -3447,6 +3668,10 @@ class RecognitionPipeline:
                         time_sec
                         + self._chain_hold_per_step_sec * chain_count
                     )
+                    # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (着地直後の即時連鎖
+                    # 判定、cycle48 大量 hallucination ガード通過済) も
+                    # 物理推論スルーの対象にする。
+                    self._start_chain_estimate(side, pseudo)
                     if side == "1P":
                         self._active_chain_1p = pseudo
                         self._chain_until_1p = chain_until
@@ -3598,8 +3823,22 @@ class RecognitionPipeline:
                 if cr.chain_count > 0 and cr.final_board is not None:
                     final = cr.final_board.copy()
                     _apply_gravity_filter(final)
+                    # 反復5 修正 (2026-07-23, user承認): Step3(b)(c) の答え合わせを
+                    # 「事前ゲート」から「事後検証」に作り直す。
+                    # 旧実装は GRAVITY_SETTLE 直後の残光で汚れた単一フレーム CNN と
+                    # 比較して正しい final_board 注入 (反復1の残像修正) まで過剰
+                    # 棄却し、残像/連鎖後不一致率を悪化させる回帰を起こしていた
+                    # (物理レビュー実測: 0.09→0.28)。まず素直に適用し
+                    # (= 反復1の修正を邪魔しない)、直近数 STABLE frame の
+                    # 多数決盤面が揃ってから答え合わせする
+                    # (_update_chain_estimate_verification)。
                     ctx.confirmed_board = final
                     ctx.pending_board = final.copy()
+                    verify_state = {"expected": final.copy(), "cnn_history": []}
+                    if side == "1P":
+                        self._chain_verify_pending_1p = verify_state
+                    else:
+                        self._chain_verify_pending_2p = verify_state
                     # cycle 28a (H3, 2026-05-18): ChainSimulator chain_result
                     # から消去 puyo 色を集計、 自 side tsumo_count から減算。
                     # 連鎖前 board 認識誤りで「消去数 > 累積数」 になるケース
@@ -4149,10 +4388,26 @@ class RecognitionPipeline:
                     else:
                         # 発光 OFF 中 (STABLE 確定時のみ): frozen を更新する
                         glow_state.frozen_board = published_confirmed.copy()
+        # 反復5 修正 Step3(b)(c) (2026-07-23): 事後答え合わせ。連鎖後
+        # final_board 適用から CHAIN_VERIFY_FRAMES 分の STABLE cnn_board が
+        # 集まったフレームでのみ発火。不一致なら多数決盤面で confirmed_board
+        # を補正する (適用そのものは止めない = 反復1の残像修正を維持)。
+        answer_check_result, correction_board = (
+            self._update_chain_estimate_verification(side, ctx.state, cnn_board)
+        )
+        if correction_board is not None:
+            ctx.confirmed_board = correction_board
+            ctx.pending_board = correction_board.copy()
+            published_confirmed = correction_board
         # 反復4 (2026-07-23): confirmed_board=None の理由分類 (診断計装のみ、
         # 挙動には一切影響しない optional フィールド)。
         board_none_reason = self._classify_board_none_reason(
             side, is_active, published_confirmed, ctx.state,
+        )
+        # 反復5 Step2 (2026-07-23): 物理推論スルー。confirmed_board 自体は
+        # 一切変更しない (標準 eval 経路は従来通り None を見るのみ)。
+        estimated_board, board_provenance = self._compute_chain_estimate(
+            side, ctx.state, time_sec,
         )
         return SideResult(
             side=side,
@@ -4171,6 +4426,9 @@ class RecognitionPipeline:
             transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
             landing_diag=_landing_diag,
             board_none_reason=board_none_reason,
+            estimated_board=estimated_board,
+            board_provenance=board_provenance,
+            answer_check_result=answer_check_result,
         )
 
 
@@ -4612,6 +4870,38 @@ def _apply_piece_persistence_guard(
         guard.on_stable_confirmed(published_confirmed)
         return guard.guard(published_confirmed)
     return published_confirmed
+
+
+def _progressed_chain_board(
+    chain_result: "ChainResult",
+    trigger_sec: float,
+    end_sec: float,
+    time_sec: float,
+) -> "Board | None":
+    """反復5 Step2: 経過時刻に応じた連鎖進行中の推定盤面を返す (stateless)。
+
+    src/inference_board.py の InferenceBoardGenerator._chain_board_at と
+    同じ時刻→段数マッピングを用いる (別ロジック化による退行防止のため
+    同一の計算式を採用、inference_board.py 自体は変更しない)。
+
+    Args:
+        chain_result: ChainSimulator.simulate(起点盤面) の結果。
+        trigger_sec: 連鎖開始時刻。
+        end_sec: 連鎖終了予定時刻 (表示ホールド込み)。
+        time_sec: 現フレームの時刻。
+
+    Returns:
+        経過段数に対応する盤面。chain_count==0 なら None。
+    """
+    n_steps = chain_result.chain_count
+    if n_steps == 0:
+        return None
+    duration = max(0.001, end_sec - trigger_sec)
+    progress = max(0.0, min(1.0, (time_sec - trigger_sec) / duration))
+    idx = int(progress * n_steps)
+    if idx >= n_steps:
+        return chain_result.final_board
+    return chain_result.steps[idx].board_after
 
 
 def _is_game_event_chain_exit(

@@ -100,6 +100,12 @@ class _FrameRecord:
     # src.recognition_pipeline.SideResult.board_none_reason をそのまま透過)。
     # None(非該当) / "cold_start" / "menu_reset" / "chain_hold_none" / "other"。
     board_none_reason: str | None = None
+    # 反復5 (2026-07-23): 物理推論スルー (根治本体)。
+    # SideResult.estimated_board / board_provenance をそのまま透過。
+    # confirmed_board は変更しない設計のため、grid=None のケースでも
+    # estimated_grid には CHAIN/GRAVITY_SETTLE 中の物理推定盤面が入り得る。
+    estimated_grid: np.ndarray | None = None
+    board_provenance: str = "observed"
 
 
 def _capture_frames(
@@ -163,6 +169,12 @@ def _build_record(fi: int, t_sec: float, side_result: object) -> _FrameRecord:
         n_transition_drop_alerts=len(side_result.transition_drop_alerts or []),
         # getattr: 反復4 計装フィールド未搭載の古い SideResult でも動く安全策。
         board_none_reason=getattr(side_result, "board_none_reason", None),
+        # getattr: 反復5 計装フィールド未搭載の古い SideResult でも動く安全策。
+        estimated_grid=(
+            side_result.estimated_board._grid.copy()
+            if getattr(side_result, "estimated_board", None) is not None else None
+        ),
+        board_provenance=getattr(side_result, "board_provenance", "observed"),
     )
 
 
@@ -388,6 +400,38 @@ def _measure_board_none_reason_breakdown(
 
 
 # ============================
+# 5c. 反復5 (2026-07-23): 物理推論スルー (estimated_board) 補完率
+# ============================
+#
+# confirmed_board (= 標準 eval 経路が見る値) は Step4 backward compat の
+# ため意図的に変更していない。根治の実効果は「grid=None だった CHAIN/
+# GRAVITY_SETTLE フレームのうち、何割が estimated_board で補完されたか」
+# で測る。
+
+
+def _measure_estimated_board_coverage(
+    records: list[_FrameRecord], states: tuple[str, ...],
+) -> dict:
+    """confirmed_board=None のフレームのうち estimated_board で補完された割合。"""
+    target_frames = [r for r in records if r.state in states]
+    none_frames = [r for r in target_frames if r.grid is None]
+    covered = [r for r in none_frames if r.estimated_grid is not None]
+    provenance_counts: dict[str, int] = {}
+    for r in covered:
+        provenance_counts[r.board_provenance] = (
+            provenance_counts.get(r.board_provenance, 0) + 1
+        )
+    n_none = len(none_frames)
+    n_covered = len(covered)
+    return {
+        "n_grid_none_frames": n_none,
+        "n_covered_by_estimate": n_covered,
+        "coverage_rate": (n_covered / n_none) if n_none > 0 else 0.0,
+        "provenance_counts": provenance_counts,
+    }
+
+
+# ============================
 # 1 動画分の集計
 # ============================
 
@@ -420,12 +464,20 @@ def _review_one_video(
         board_none_settle = _measure_board_none_reason_breakdown(
             records, (BoardState.GRAVITY_SETTLE.name,),
         )
+        est_coverage_chain = _measure_estimated_board_coverage(
+            records, (BoardState.CHAIN.name,),
+        )
+        est_coverage_settle = _measure_estimated_board_coverage(
+            records, (BoardState.GRAVITY_SETTLE.name,),
+        )
         out["sides"][side] = {
             "ghost_mismatch_events": ghost, "floating_puyo": floating,
             "color_warp": warp, "ojama_accounting": acct,
             "match_active_false_negative": active_fn,
             "board_none_reason_chain": board_none_chain,
             "board_none_reason_gravity_settle": board_none_settle,
+            "estimated_board_coverage_chain": est_coverage_chain,
+            "estimated_board_coverage_gravity_settle": est_coverage_settle,
         }
     print(f"    -> {sum(len(v) for v in by_side.values())} frame*side 記録")
     return out
@@ -477,6 +529,35 @@ def _summarize(video_reports: list[dict]) -> dict:
         "board_none_reason_gravity_settle": _aggregate_reason_breakdown(
             video_reports, "board_none_reason_gravity_settle",
         ),
+        # 反復5: 物理推論スルー (estimated_board) の補完率 (全動画・全 side 集計)。
+        "estimated_board_coverage_chain": _aggregate_estimate_coverage(
+            video_reports, "estimated_board_coverage_chain",
+        ),
+        "estimated_board_coverage_gravity_settle": _aggregate_estimate_coverage(
+            video_reports, "estimated_board_coverage_gravity_settle",
+        ),
+    }
+
+
+def _aggregate_estimate_coverage(video_reports: list[dict], key: str) -> dict:
+    """全動画・全 side の estimated_board 補完率を合算する (反復5)。"""
+    total_none = 0
+    total_covered = 0
+    provenance_counts: dict[str, int] = {}
+    for rep in video_reports:
+        for side_data in rep["sides"].values():
+            ec = side_data.get(key)
+            if ec is None:
+                continue
+            total_none += ec["n_grid_none_frames"]
+            total_covered += ec["n_covered_by_estimate"]
+            for prov, n in ec["provenance_counts"].items():
+                provenance_counts[prov] = provenance_counts.get(prov, 0) + n
+    return {
+        "n_grid_none_frames": total_none,
+        "n_covered_by_estimate": total_covered,
+        "coverage_rate": (total_covered / total_none) if total_none > 0 else 0.0,
+        "provenance_counts": provenance_counts,
     }
 
 
@@ -529,6 +610,26 @@ def _print_summary_table(summary: dict) -> None:
     print("\n[反復4 診断] CHAIN/GRAVITY_SETTLE 中 grid=None の理由内訳")
     _print_reason_breakdown("CHAIN", summary["board_none_reason_chain"])
     _print_reason_breakdown("GRAVITY_SETTLE", summary["board_none_reason_gravity_settle"])
+    print("\n[反復5 診断] confirmed_board=None フレームの estimated_board 補完率")
+    print(
+        "  (confirmed_board は Step4 backward compat のため意図的に不変。"
+        "根治の実効果はここで測る)",
+    )
+    _print_coverage("CHAIN", summary["estimated_board_coverage_chain"])
+    _print_coverage("GRAVITY_SETTLE", summary["estimated_board_coverage_gravity_settle"])
+
+
+def _print_coverage(label: str, ec: dict) -> None:
+    """estimated_board 補完率を 1 state 分表示する (反復5)。"""
+    print(
+        f"  [{label}] grid=None: {ec['n_grid_none_frames']} 件のうち "
+        f"estimated_board で補完: {ec['n_covered_by_estimate']} 件 "
+        f"(補完率 {ec['coverage_rate']:.4f})",
+    )
+    for prov, n in sorted(
+        ec["provenance_counts"].items(), key=lambda kv: -kv[1],
+    ):
+        print(f"      - {prov:28s}: {n:6d} 件")
 
 
 def _print_reason_breakdown(label: str, bd: dict) -> None:
@@ -562,18 +663,31 @@ def _parse_args() -> argparse.Namespace:
         "--label", default="",
         help="出力ファイル名に付与する識別ラベル (例: warmup_on)。",
     )
+    ap.add_argument(
+        "--video-stem", default=None,
+        help="反復6 (2026-07-23): 指定した1動画 (TARGET_WINDOWS の stem) のみ"
+             "処理する (省略時=全動画、従来通り)。動画ごとに別プロセスで並列"
+             "実行し、後で scripts/_merge_physics_review_json.py でマージする"
+             "運用向け (熱制約解除後の高速化、全コア使用可)。",
+    )
     return ap.parse_args()
 
 
 def main() -> None:
     """メイン処理: 対象動画を処理し JSON 保存 + サマリ出力する。"""
     args = _parse_args()
-    print(f"[INFO] 対象 {len(TARGET_WINDOWS)} 動画・窓 (物理整合性レビュー) "
+    windows = TARGET_WINDOWS
+    if args.video_stem is not None:
+        windows = tuple(w for w in TARGET_WINDOWS if w[0] == args.video_stem)
+        if not windows:
+            print(f"[ERROR] video_stem={args.video_stem} は TARGET_WINDOWS に無い")
+            return
+    print(f"[INFO] 対象 {len(windows)} 動画・窓 (物理整合性レビュー) "
           f"warmup={args.enable_chain_exit_warmup} "
           f"next_signal={args.enable_chain_exit_next_signal}")
     sim = ChainSimulator()
     video_reports: list[dict] = []
-    for stem, start_sec, max_sec in TARGET_WINDOWS:
+    for stem, start_sec, max_sec in windows:
         video_reports.append(_review_one_video(
             stem, start_sec, max_sec, sim,
             enable_chain_exit_warmup=args.enable_chain_exit_warmup,
