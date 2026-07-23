@@ -638,6 +638,14 @@ class RecognitionPipeline:
         # 空→色FP 0.27%→0.10% と全軸改善 (user viz 承認)。
         # False に戻すには enable_chain_formula_detection=False を明示する。
         enable_chain_formula_detection: bool = True,
+        # 修正D (2026-07-24): 機能D 疑似発火の起点盤面を ChainSimulator で
+        # 事前検証する。真因診断 (_diag_false_event_source_2026-07-24.py) で
+        # 機能D 早期発火 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの
+        # 疑似発火 (偽イベント) と確定。True で before_board を simulate し、
+        # chain_count==0 なら疑似発火を抑制、chain_count>0 なら固定1でなく
+        # 実測値を使う。既定 False = 従来挙動完全維持 (backwards compat,
+        # bit-identical)。
+        enable_chain_formula_simulate_verify: bool = False,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -1107,6 +1115,10 @@ class RecognitionPipeline:
         self._enable_chain_formula_detection: bool = bool(enable_chain_formula_detection)
         self._formula_consec_1p: int = 0  # 掛け算式 連続フレームカウンタ 1P
         self._formula_consec_2p: int = 0  # 掛け算式 連続フレームカウンタ 2P
+        # 修正D (2026-07-24): 機能D 疑似発火 起点盤面の ChainSimulator 検証フラグ。
+        self._enable_chain_formula_simulate_verify: bool = bool(
+            enable_chain_formula_simulate_verify
+        )
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -1407,6 +1419,9 @@ class RecognitionPipeline:
         # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02 実装, 2026-06-03 採用 default ON)。
         # 全軸改善 + user viz 承認。False に戻すには明示指定する。
         enable_chain_formula_detection: bool = True,
+        # 修正D (2026-07-24): 機能D 疑似発火 起点盤面の ChainSimulator 検証。
+        # 既定 False = 従来挙動完全維持 (backwards compat, bit-identical)。
+        enable_chain_formula_simulate_verify: bool = False,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_hsv_deferred_consensus: bool = False,
@@ -1596,6 +1611,7 @@ class RecognitionPipeline:
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
@@ -3170,6 +3186,58 @@ class RecognitionPipeline:
         ir = compute_score_roi_ink_ratio(roi)
         return ir > CHAIN_FORMULA_INK_RATIO_MIN
 
+    def _simulate_before_board(
+        self, before_board: "Board",
+    ) -> "ChainResult | None":
+        """起点盤面を ChainSimulator で検証する (修正D, 2026-07-24 追加)。
+
+        _start_chain_estimate と機能D 早期発火ゲート (_resolve_formula_chain_count)
+        で共用する simulate 呼び出しの共通ヘルパー。stateless
+        (self._chain_sim は同一盤面の simulate を高速化するための lazy
+        キャッシュ属性のみ保持、ChainSimulator 自体は副作用なし)。
+
+        Args:
+            before_board: 検証対象の起点盤面。
+
+        Returns:
+            ChainSimulator.simulate の結果。simulate 失敗時は None。
+        """
+        from src.chain import ChainSimulator
+        if not hasattr(self, "_chain_sim"):
+            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+        try:
+            return self._chain_sim.simulate(before_board)  # type: ignore[attr-defined]
+        except Exception:
+            return None
+
+    def _resolve_formula_chain_count(
+        self, before_board: "Board",
+    ) -> "tuple[int | None, ChainResult | None]":
+        """機能D 早期発火の chain_count を検証つきで解決する (修正D, 2026-07-24)。
+
+        真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
+        77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火(偽イベント)
+        と確定した対策。enable_chain_formula_simulate_verify=False (既定)
+        では検証せず chain_count=1 固定を返す (bit-identical)。True の場合
+        のみ before_board を simulate し、chain_count==0 (連鎖が実在しない)
+        なら (None, None) を返し、呼び出し元に疑似発火を抑制させる。
+        chain_count>0 ならその実測値と ChainResult を返す (二重 simulate
+        回避のため _start_chain_estimate に precomputed_result として渡す)。
+
+        Args:
+            before_board: 早期発火の起点とする確定盤面。
+
+        Returns:
+            (chain_count, verified_result) のタプル。chain_count が None
+            の場合は疑似発火を抑制すべきことを示す。
+        """
+        if not self._enable_chain_formula_simulate_verify:
+            return 1, None
+        verified = self._simulate_before_board(before_board)
+        if verified is None or verified.chain_count <= 0:
+            return None, None
+        return verified.chain_count, verified
+
     def _apply_chain_formula_early_fire(
         self,
         side: str,
@@ -3180,6 +3248,11 @@ class RecognitionPipeline:
 
         _apply_chain_score_early_fire と同パターン。
         既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        修正D (2026-07-24): enable_chain_formula_simulate_verify=True の場合、
+        起点盤面 (before_board) を ChainSimulator で事前検証し、連鎖が実在
+        しない起点盤面での疑似発火を抑制する (偽イベント対策)。既定 False
+        では従来通り検証なしで chain_count=1 固定発火 (bit-identical)。
 
         Args:
             side: "1P" or "2P"
@@ -3193,25 +3266,31 @@ class RecognitionPipeline:
             if self._active_chain_2p is not None:
                 return
         before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        chain_count, verified = self._resolve_formula_chain_count(before)
+        if chain_count is None:
+            return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
         # 疑似 ChainEvent を生成 (score は不明なため 0)
         pseudo = ChainEvent(
             trigger_sec=time_sec,
             end_sec=(
-                time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+                time_sec + self._chain_hold_base_sec
+                + self._chain_hold_per_step_sec * chain_count
             ),
             before_board=before,
-            chain_count=1,
+            chain_count=chain_count,
             total_erased=0, total_score=0, base_score=0,
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
         )
         chain_until = (
-            time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+            time_sec + self._chain_hold_base_sec
+            + self._chain_hold_per_step_sec * chain_count
         )
         # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能D 掛け算式早期発火) も
-        # 物理推論スルーの対象にする。
-        self._start_chain_estimate(side, pseudo)
+        # 物理推論スルーの対象にする。修正D: 検証済みなら precomputed_result
+        # を渡して _start_chain_estimate 内での二重 simulate を避ける。
+        self._start_chain_estimate(side, pseudo, precomputed_result=verified)
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
@@ -3227,7 +3306,12 @@ class RecognitionPipeline:
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
 
-    def _start_chain_estimate(self, side: str, ev: ChainEvent) -> None:
+    def _start_chain_estimate(
+        self,
+        side: str,
+        ev: ChainEvent,
+        precomputed_result: "ChainResult | None" = None,
+    ) -> None:
         """Step2 (2026-07-23): 連鎖検出時に物理推論スルーを開始する。
 
         ev.before_board (= 起点盤面、Step1 診断で 85.7% 有効と確認済み) から
@@ -3239,14 +3323,15 @@ class RecognitionPipeline:
         Args:
             side: "1P" または "2P"。
             ev: 新規検出された ChainEvent。
+            precomputed_result: 呼び出し元で既に ev.before_board を simulate
+                済みの結果があれば渡す (修正D, 2026-07-24 追加、二重 simulate
+                回避)。None (既定) の場合は従来通りここで simulate する
+                (backwards compat, bit-identical)。
         """
-        from src.chain import ChainSimulator
-        if not hasattr(self, "_chain_sim"):
-            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
-        try:
-            cr = self._chain_sim.simulate(ev.before_board)  # type: ignore[attr-defined]
-        except Exception:
-            cr = None
+        if precomputed_result is not None:
+            cr = precomputed_result
+        else:
+            cr = self._simulate_before_board(ev.before_board)
         result = cr if (cr is not None and cr.chain_count > 0) else None
         low_confidence = (
             result is not None and result.chain_count != ev.chain_count

@@ -117,6 +117,7 @@ def _capture_frames(
     chain_hold_per_step_sec: float | None = None,
     chain_max_hold_sec: float | None = None,
     chain_debounce_confirm_frames: int = 1,
+    enable_chain_formula_simulate_verify: bool = False,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -132,6 +133,9 @@ def _capture_frames(
     src 側既定値 (0.0 / 0.3 / 5.0) と bit-identical (backwards compat)。
     chain_debounce_confirm_frames: 修正C (2026-07-24) A/B 比較用。
     既定 1 = src 側既定と bit-identical (従来通り即時確定)。
+    enable_chain_formula_simulate_verify: 修正D (2026-07-24) A/B 比較用。
+    既定 False = src 側既定と bit-identical (機能D 疑似発火の起点盤面
+    ChainSimulator 検証を無効化、従来挙動)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -153,6 +157,7 @@ def _capture_frames(
         chain_hold_per_step_sec=chain_hold_per_step_sec,
         chain_max_hold_sec=chain_max_hold_sec,
         chain_debounce_confirm_frames=chain_debounce_confirm_frames,
+        enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
@@ -499,6 +504,7 @@ def _review_one_video(
     chain_hold_per_step_sec: float | None = None,
     chain_max_hold_sec: float | None = None,
     chain_debounce_confirm_frames: int = 1,
+    enable_chain_formula_simulate_verify: bool = False,
 ) -> dict:
     """1 動画・1 窓分の全メトリクスを計測する。"""
     print(f"  {video_stem}: start={start_sec}s max={max_sec}s を処理中...")
@@ -511,6 +517,7 @@ def _review_one_video(
         chain_hold_per_step_sec=chain_hold_per_step_sec,
         chain_max_hold_sec=chain_max_hold_sec,
         chain_debounce_confirm_frames=chain_debounce_confirm_frames,
+        enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
     )
     out: dict = {"video_stem": video_stem, "start_sec": start_sec, "max_sec": max_sec, "sides": {}}
     for side, opp_side in (("1P", "2P"), ("2P", "1P")):
@@ -811,6 +818,14 @@ def _parse_args() -> argparse.Namespace:
              "(既定 1 = src既定 DEBOUNCE_CONFIRM_FRAMES と bit-identical、"
              "2 以上で drop 連続確認を要求)。",
     )
+    ap.add_argument(
+        "--enable-chain-formula-simulate-verify", action="store_true",
+        dest="enable_chain_formula_simulate_verify",
+        help="修正D (2026-07-24) 機能D 疑似発火の起点盤面 ChainSimulator "
+             "事前検証の A/B 比較用 (既定 False = src既定と bit-identical、"
+             "True で連鎖ゼロの起点盤面での疑似発火を抑制し chain_count を"
+             "実測値に補正する)。",
+    )
     return ap.parse_args()
 
 
@@ -848,6 +863,9 @@ def main() -> None:
             chain_hold_per_step_sec=args.chain_hold_per_step_sec,
             chain_max_hold_sec=args.chain_max_hold_sec,
             chain_debounce_confirm_frames=args.chain_debounce_confirm_frames,
+            enable_chain_formula_simulate_verify=(
+                args.enable_chain_formula_simulate_verify
+            ),
         ))
 
     summary = _summarize(video_reports)
@@ -859,6 +877,9 @@ def main() -> None:
         "chain_hold_per_step_sec": args.chain_hold_per_step_sec,
         "chain_max_hold_sec": args.chain_max_hold_sec,
         "chain_debounce_confirm_frames": args.chain_debounce_confirm_frames,
+        "enable_chain_formula_simulate_verify": (
+            args.enable_chain_formula_simulate_verify
+        ),
     }
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{args.label}" if args.label else ""

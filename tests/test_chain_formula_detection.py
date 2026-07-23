@@ -514,3 +514,138 @@ def test_slide_signal_no_effect_flag_off() -> None:
 
     assert pipe._active_chain_1p is dummy_ev, "フラグ OFF では active_chain を保持する"
     assert chain_ev_1p is dummy_ev, "フラグ OFF では chain_ev を保持する"
+
+
+# ===========================================================================
+# 修正D (2026-07-24): enable_chain_formula_simulate_verify のテスト
+#
+# 真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
+# 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火 (偽イベント) と
+# 確定。ChainSimulator 検証で偽イベントを源で断つ対策のテスト。
+# ===========================================================================
+
+
+def _make_clearable_board() -> "Board":
+    """4連結 (2x2) の赤ぷよで実際に連鎖が発生する起点盤面を返す。"""
+    from src.board import Board, COLOR_RED
+    board = Board()
+    for row, col in ((12, 0), (12, 1), (11, 0), (11, 1)):
+        board.set(row, col, COLOR_RED)
+    return board
+
+
+def _make_pipe_with_simulate_verify(
+    enable_verify: bool,
+) -> RecognitionPipeline:
+    """enable_chain_formula_simulate_verify を指定した最小構成 pipeline。"""
+    from src.image_reader import ImageReader
+    from src.match_state import MatchStateDetector
+    reader = MagicMock(spec=ImageReader)
+    reader._classifier = None
+    reader.read_both_boards.return_value = (None, None)
+    reader.set_pre_capture_mode = MagicMock()
+    reader.set_background_fingerprints = MagicMock()
+    match_det = MagicMock(spec=MatchStateDetector)
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=match_det,
+        enable_chain_formula_detection=True,
+        enable_chain_formula_simulate_verify=enable_verify,
+        force_in_match=True,
+    )
+
+
+def test_simulate_verify_default_is_off() -> None:
+    """enable_chain_formula_simulate_verify のデフォルト値は False (backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    default = sig.parameters["enable_chain_formula_simulate_verify"].default
+    assert default is False, f"デフォルト False 期待 (bit-identical): {default}"
+
+
+def test_load_default_simulate_verify_default_is_off() -> None:
+    """load_default の enable_chain_formula_simulate_verify も既定 False。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    default = sig.parameters["enable_chain_formula_simulate_verify"].default
+    assert default is False, f"load_default デフォルト False 期待: {default}"
+
+
+def test_simulate_verify_flag_off_fires_with_chain_count_one_bit_identical() -> None:
+    """flag=False (既定) では起点盤面が空でも従来通り chain_count=1 で発火する
+    (= bit-identical。検証ロジックが混入していないことの直接確認)。"""
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=False)
+    empty_board = Board()  # 連鎖ゼロの起点盤面
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=empty_board,
+    )
+    assert pipe._active_chain_1p is not None, (
+        "flag=False では検証なしで従来通り発火する (bit-identical)"
+    )
+    assert pipe._active_chain_1p.chain_count == 1, (
+        "flag=False では chain_count=1 固定 (従来挙動)"
+    )
+
+
+def test_simulate_verify_flag_on_suppresses_false_fire_on_empty_board() -> None:
+    """flag=True かつ起点盤面に連鎖が実在しない (空盤面) → 疑似発火を抑制する。"""
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    empty_board = Board()  # 連鎖ゼロの起点盤面 (偽イベントの典型パターン)
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=empty_board,
+    )
+    assert pipe._active_chain_1p is None, (
+        "flag=True かつ連鎖ゼロの起点盤面では疑似発火を抑制すべき"
+    )
+
+
+def test_simulate_verify_flag_on_fires_with_real_chain_count() -> None:
+    """flag=True かつ起点盤面に実際に連鎖がある → 固定1でなく実測 chain_count で発火する。"""
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    clearable_board = _make_clearable_board()  # 4連結 = 1連鎖 (simulate 実測済み)
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    assert pipe._active_chain_1p is not None, (
+        "flag=True でも連鎖が実在する起点盤面では正当な早期発火を保持すべき"
+        " (過剰抑制ガード = 最重要の安全確認)"
+    )
+    assert pipe._active_chain_1p.chain_count == 1, (
+        f"実測 chain_count=1 期待: {pipe._active_chain_1p.chain_count}"
+    )
+
+
+def test_simulate_verify_populates_chain_estimate_without_double_simulate() -> None:
+    """_start_chain_estimate が precomputed_result 経由で estimate を保持する
+    (二重 simulate を避けつつ既存の estimated_board 補完機能を維持)。"""
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    clearable_board = _make_clearable_board()
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    assert pipe._chain_estimate_result_1p is not None, (
+        "検証済み ChainResult が estimate 経路にも反映されるべき"
+    )
+    assert pipe._chain_estimate_result_1p.chain_count == 1
+
+
+def test_simulate_verify_active_chain_already_set_skips_gate() -> None:
+    """既に active_chain が有効なら (従来通り) simulate 検証にすら入らずスキップする。"""
+    from src.chain_detector import ChainEvent
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    dummy_ev = ChainEvent(
+        trigger_sec=0.5, end_sec=100.0, before_board=Board(),
+        chain_count=2, total_erased=8, total_score=400,
+        base_score=400, all_clear_bonus_applied=0,
+        ojama_sent=0, leftover_score=0, is_all_clear=False,
+    )
+    pipe._active_chain_1p = dummy_ev
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is dummy_ev, (
+        "既存 active_chain を上書きしないこと (機能D 本来のガード維持)"
+    )
