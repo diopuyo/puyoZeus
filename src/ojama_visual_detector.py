@@ -22,6 +22,10 @@ from src.board import BOARD_COLS, COLOR_OJAMA, HIDDEN_ROWS, Board
 from src.board_state_machine import (
     BoardState,
     DetectorSignals,
+    GRAVITY_SETTLE_MAX_SEC,
+    GRAVITY_SETTLE_MIN_FRAMES,
+    GRAVITY_SETTLE_PHYSICS_CLEAR_MIN,
+    GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
     StateContext,
 )
 
@@ -39,6 +43,18 @@ OJAMA_CONSEC_THRESH: int = 2
 # settle 判定: OJAMA_FALL 中に ROI お邪魔 count が N フレーム不変なら
 # お邪魔が静止完了と判断して STABLE 復帰する。
 OJAMA_SETTLE_CONSEC: int = 3
+
+# 案B (第2の根本原因対処, 2026-07-24):
+# OJAMA_FALL 退出が早すぎ (滞在中央値 0.0167s = 1 frame) で着弾前に状態が抜け、
+# empty_to_color 3 票ゲートが成立せず本物おじゃまが却下される問題への対処。
+# GravitySettleDetector (src/state_detectors.py) と同じ「全盤面ぷよ数の静止」
+# 判定方式を OJAMA_FALL 退出条件にも適用する。
+# 定数は GravitySettle 側の値を初期値として流用するが、 今後 ojama 固有の
+# チューニングが chain (GRAVITY_SETTLE) 側に波及しないよう独立命名する。
+OJAMA_FALL_SETTLE_MIN_FRAMES: int = GRAVITY_SETTLE_PHYSICS_CLEAR_MIN
+OJAMA_FALL_SETTLE_STABLE_FRAMES: int = GRAVITY_SETTLE_MIN_FRAMES
+OJAMA_FALL_SETTLE_DIFF_THRESHOLD: int = GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD
+OJAMA_FALL_MAX_SEC: float = GRAVITY_SETTLE_MAX_SEC
 
 # ROI の開始行 (= HIDDEN_ROWS = 1 = 可視最上段)
 _ROI_ROW_START: int = HIDDEN_ROWS
@@ -102,6 +118,9 @@ class OjamaVisualDetector:
     フラグ (RecognitionPipeline 側で注入):
         enable_ojama_visual_chain_exit: True で CHAIN 中でも発火を許可。
         enable_ojama_settle_detection: True で settle (お邪魔静止) 判定を有効化。
+        enable_ojama_fall_board_settle: 案B (2026-07-24)。True で OJAMA_FALL
+            退出条件を「全盤面ぷよ数が静止するまで待つ」方式 (GravitySettle と
+            同型) に切替える。default False = 既存挙動と完全 bit-identical。
 
     いずれも False のままなら既存挙動に近い動作となる (= STABLE/TSUMO_FALL 時の
     新規お邪魔出現のみ OJAMA_FALL に遷移)。
@@ -110,6 +129,9 @@ class OjamaVisualDetector:
     # 外部フラグ: RecognitionPipeline 側から __init__ 後に代入する。
     enable_ojama_visual_chain_exit: bool = False
     enable_ojama_settle_detection: bool = False
+    # 案B (2026-07-24): OJAMA_FALL 退出を全盤面 settle 判定に置き換えるフラグ。
+    # default False で `_detect_ojama_fall_exit` (既存ロジック) を完全維持する。
+    enable_ojama_fall_board_settle: bool = False
 
     # 内部 state (dataclass field、 init=False)
     _consec_count: int = field(default=0, init=False, repr=False)
@@ -117,6 +139,11 @@ class OjamaVisualDetector:
     _last_frame_idx: int = field(default=-1, init=False, repr=False)
     _settle_count: int = field(default=0, init=False, repr=False)
     _prev_settle_count: int = field(default=0, init=False, repr=False)
+    # 案B: 全盤面 settle 判定用の内部 state (GravitySettleDetector と同型)。
+    _settle_start_frame: int = field(default=-1, init=False, repr=False)
+    _settle_start_time: float = field(default=0.0, init=False, repr=False)
+    _board_stable_consec: int = field(default=0, init=False, repr=False)
+    _prev_board_puyo_count: int = field(default=-1, init=False, repr=False)
 
     def detect(
         self,
@@ -132,6 +159,9 @@ class OjamaVisualDetector:
         )
 
         if ctx.state == BoardState.OJAMA_FALL:
+            # 案B (2026-07-24): 全盤面 settle 判定に委譲 (default False で既存不変)。
+            if self.enable_ojama_fall_board_settle:
+                return self._detect_ojama_fall_exit_board_settle(ctx, signals)
             return self._detect_ojama_fall_exit(cur_count)
 
         return self._detect_ojama_fall_entry(ctx, cur_count)
@@ -163,6 +193,58 @@ class OjamaVisualDetector:
         # OJAMA_FALL 継続中: 遷移なし
         return None
 
+    def _detect_ojama_fall_exit_board_settle(
+        self, ctx: StateContext, signals: DetectorSignals,
+    ) -> BoardState | None:
+        """案B: 全盤面ぷよ数の静止を待つ OJAMA_FALL 退出判定.
+
+        GravitySettleDetector (src/state_detectors.py) と同型のロジック。
+        ROI (可視最上段 2 行) でなく盤面全体のぷよ数 (お邪魔含む) を見ることで、
+        おじゃまが着弾しきる前に退出してしまう問題 (真因: 滞在中央値 1 frame) を防ぐ。
+
+        条件 (いずれか):
+          - タイムアウト: OJAMA_FALL_MAX_SEC 秒経過で安全弁として強制 STABLE。
+          - OJAMA_FALL_SETTLE_MIN_FRAMES フレーム以上経過 かつ
+            ぷよ数差分 < OJAMA_FALL_SETTLE_DIFF_THRESHOLD の状態が
+            OJAMA_FALL_SETTLE_STABLE_FRAMES フレーム連続。
+        """
+        cur_board_count = signals.cnn_board.count_puyos()
+
+        # OJAMA_FALL に初めて入ったフレームを記録
+        if self._settle_start_frame < 0:
+            self._settle_start_time = signals.time_sec
+            self._settle_start_frame = ctx.frame_idx
+            self._board_stable_consec = 0
+            self._prev_board_puyo_count = cur_board_count
+            return None  # 最初のフレームは必ず継続
+
+        # タイムアウト: 安全弁として強制 STABLE 復帰
+        elapsed = signals.time_sec - self._settle_start_time
+        if elapsed >= OJAMA_FALL_MAX_SEC:
+            self._reset_internal_state()
+            return BoardState.STABLE
+
+        # 最低待機フレーム数未達: 継続 (カウンタのみ更新)
+        frames_in_settle = ctx.frame_idx - self._settle_start_frame
+        if frames_in_settle < OJAMA_FALL_SETTLE_MIN_FRAMES:
+            self._prev_board_puyo_count = cur_board_count
+            self._board_stable_consec = 0
+            return None
+
+        # ぷよ数変化の安定性チェック
+        diff = abs(cur_board_count - self._prev_board_puyo_count)
+        self._prev_board_puyo_count = cur_board_count
+        if diff < OJAMA_FALL_SETTLE_DIFF_THRESHOLD:
+            self._board_stable_consec += 1
+        else:
+            self._board_stable_consec = 0
+
+        if self._board_stable_consec >= OJAMA_FALL_SETTLE_STABLE_FRAMES:
+            self._reset_internal_state()
+            return BoardState.STABLE
+
+        return None  # 継続
+
     def _detect_ojama_fall_entry(
         self, ctx: StateContext, cur_count: int,
     ) -> BoardState | None:
@@ -176,7 +258,18 @@ class OjamaVisualDetector:
           - 「継続」: 開始後 cur_count > 0 の間はカウントを継続する。
           - OJAMA_CONSEC_THRESH フレーム到達で OJAMA_FALL 発火。
           この設計により「出現 → 安定」の 2 フレームで確実に検知できる。
+
+        防御コード (案B, 2026-07-24): CHAIN 等に途中横取りされて OJAMA_FALL から
+        state が抜けると、 このメソッドが (exit メソッドではなく) 毎 frame
+        呼ばれ続ける。 その間に settle 用内部 state をここで都度リセットしておかないと、
+        次回 OJAMA_FALL 再突入時に前回の残骸 (_settle_start_frame 等) が残り、
+        即 timeout 誤判定を起こす。
         """
+        self._settle_start_frame = -1
+        self._settle_start_time = 0.0
+        self._board_stable_consec = 0
+        self._prev_board_puyo_count = -1
+
         # CHAIN 中かつフラグ OFF → 発火しない
         if (
             ctx.state == BoardState.CHAIN
@@ -224,3 +317,8 @@ class OjamaVisualDetector:
         self._last_frame_idx = -1
         self._settle_count = 0
         self._prev_settle_count = 0
+        # 案B: 全盤面 settle 判定用の内部 state もリセット。
+        self._settle_start_frame = -1
+        self._settle_start_time = 0.0
+        self._board_stable_consec = 0
+        self._prev_board_puyo_count = -1
