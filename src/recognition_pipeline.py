@@ -643,9 +643,12 @@ class RecognitionPipeline:
         # 機能D 早期発火 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの
         # 疑似発火 (偽イベント) と確定。True で before_board を simulate し、
         # chain_count==0 なら疑似発火を抑制、chain_count>0 なら固定1でなく
-        # 実測値を使う。既定 False = 従来挙動完全維持 (backwards compat,
-        # bit-identical)。
-        enable_chain_formula_simulate_verify: bool = False,
+        # 実測値を使う。
+        # 2026-07-24 採用 (default ON): 物理採点+独立診断で偽イベント率
+        # 27.5%→0% と全面改善 (user viz 承認)。False に戻すには
+        # enable_chain_formula_simulate_verify=False を明示する
+        # (旧挙動・bit-identical、backwards compat のため維持)。
+        enable_chain_formula_simulate_verify: bool = True,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -1420,8 +1423,9 @@ class RecognitionPipeline:
         # 全軸改善 + user viz 承認。False に戻すには明示指定する。
         enable_chain_formula_detection: bool = True,
         # 修正D (2026-07-24): 機能D 疑似発火 起点盤面の ChainSimulator 検証。
-        # 既定 False = 従来挙動完全維持 (backwards compat, bit-identical)。
-        enable_chain_formula_simulate_verify: bool = False,
+        # 2026-07-24 採用 (default ON): 偽イベント率 27.5%→0% (user viz 承認)。
+        # False で旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_chain_formula_simulate_verify: bool = True,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_hsv_deferred_consensus: bool = False,
@@ -3217,12 +3221,14 @@ class RecognitionPipeline:
 
         真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
         77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火(偽イベント)
-        と確定した対策。enable_chain_formula_simulate_verify=False (既定)
-        では検証せず chain_count=1 固定を返す (bit-identical)。True の場合
-        のみ before_board を simulate し、chain_count==0 (連鎖が実在しない)
-        なら (None, None) を返し、呼び出し元に疑似発火を抑制させる。
-        chain_count>0 ならその実測値と ChainResult を返す (二重 simulate
-        回避のため _start_chain_estimate に precomputed_result として渡す)。
+        と確定した対策。2026-07-24 user viz 承認により
+        enable_chain_formula_simulate_verify=True が既定 (偽イベント率
+        27.5%→0%)。True の場合は before_board を simulate し、
+        chain_count==0 (連鎖が実在しない) なら (None, None) を返し、
+        呼び出し元に疑似発火を抑制させる。chain_count>0 ならその実測値と
+        ChainResult を返す (二重 simulate 回避のため _start_chain_estimate
+        に precomputed_result として渡す)。False を明示指定した場合のみ
+        検証せず chain_count=1 固定を返す (旧挙動, bit-identical)。
 
         Args:
             before_board: 早期発火の起点とする確定盤面。
@@ -3249,10 +3255,11 @@ class RecognitionPipeline:
         _apply_chain_score_early_fire と同パターン。
         既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
 
-        修正D (2026-07-24): enable_chain_formula_simulate_verify=True の場合、
-        起点盤面 (before_board) を ChainSimulator で事前検証し、連鎖が実在
-        しない起点盤面での疑似発火を抑制する (偽イベント対策)。既定 False
-        では従来通り検証なしで chain_count=1 固定発火 (bit-identical)。
+        修正D (2026-07-24): enable_chain_formula_simulate_verify=True (既定,
+        2026-07-24 user viz 承認) の場合、起点盤面 (before_board) を
+        ChainSimulator で事前検証し、連鎖が実在しない起点盤面での疑似発火を
+        抑制する (偽イベント対策)。False を明示指定した場合のみ従来通り
+        検証なしで chain_count=1 固定発火 (旧挙動, bit-identical)。
 
         Args:
             side: "1P" or "2P"

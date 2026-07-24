@@ -618,7 +618,16 @@ def test_score_early_fire_pseudo_event_uses_calibrated_hold() -> None:
 
 def test_formula_early_fire_pseudo_event_uses_calibrated_hold() -> None:
     """機能D (掛け算式早期発火) の疑似 ChainEvent も較正値を反映すること
-    (:3164-3174 相当パス、chain_count=1 固定)。"""
+    (:3164-3174 相当パス、chain_count=1 固定)。
+
+    2026-07-24: enable_chain_formula_simulate_verify の既定値が
+    True に変更された (機能D 採用、偽イベント率 27.5%→0%) ため、
+    本テストは較正値反映ロジック単体を確認する目的で
+    enable_chain_formula_simulate_verify=False を明示指定し、
+    空盤面 (連鎖ゼロ) でも従来通り chain_count=1 固定で発火する
+    旧経路 (bit-identical) を使う。simulate_verify=True 時の
+    空盤面抑制挙動は test_chain_formula_detection.py 側で確認済み。
+    """
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     pipe = RecognitionPipeline(
@@ -631,6 +640,7 @@ def test_formula_early_fire_pseudo_event_uses_calibrated_hold() -> None:
         chain_hold_base_sec=3.4,
         chain_hold_per_step_sec=1.5,
         enable_chain_formula_detection=True,
+        enable_chain_formula_simulate_verify=False,
     )
     _prime_match_active(pipe, frames=35)
     t = 10.0
