@@ -2992,3 +2992,124 @@ def test_chain_estimate_answer_check_verified_match_when_cnn_agrees() -> None:
     assert verified_res.confirmed_board is not None
     assert verified_res.confirmed_board.get(12, 0) == COLOR_GREEN
 
+
+# ============================
+# #45 おじゃま merge 統合修正 案(a)(b) + 案B 既定 ON 化 (2026-07-24)
+#
+# A/B 検証 (次ツモ遅延 2.80s→0.65s・浮き誤消去 -28%・採用 +38) +
+# user viz 全画像レビュー承認 (「全て after の方が品質高い」) を受け、
+# 以下 3 flag の既定値を False → True に変更した:
+#   - enable_ojama_fall_board_settle (案B: OJAMA_FALL 退出=全盤面 settle)
+#   - enable_gravity_filter_support   (案(a): 重力フィルタ支持緩和)
+#   - merge_use_majority_value        (案(b): 退出 merge 書込値の多数決化)
+# False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+# ============================
+
+
+def test_ojama_dropout_fix_flags_default_true_on_init() -> None:
+    """3 flag とも RecognitionPipeline.__init__ の既定値が True であること
+    (2026-07-24 既定 ON 化・user viz 承認)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    for name in (
+        "enable_ojama_fall_board_settle",
+        "enable_gravity_filter_support",
+        "merge_use_majority_value",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, f"{name} の __init__ 既定 True 期待: {default}"
+
+
+def test_ojama_dropout_fix_flags_default_true_on_load_default() -> None:
+    """3 flag とも load_default の既定値が True であること
+    (2026-07-24 既定 ON 化・user viz 承認)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    for name in (
+        "enable_ojama_fall_board_settle",
+        "enable_gravity_filter_support",
+        "merge_use_majority_value",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, f"{name} の load_default 既定 True 期待: {default}"
+
+
+def test_ojama_dropout_fix_default_pipeline_wiring_all_true() -> None:
+    """回帰: 既定 (=全部 True) で pipeline が正常構築され、
+    案B の settle 退出 + 再突入抑制 + 浮きフィルタ支持 + 多数決 merge が
+    実際に state machine / detector まで配線されていることを確認する。"""
+    from src.ojama_visual_detector import OjamaVisualDetector
+    from src.state_detectors import OjamaPhaseDetector
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    # pipeline レベルの内部 flag
+    assert pipe._enable_ojama_fall_board_settle is True
+    assert pipe._enable_gravity_filter_support is True
+    assert pipe._merge_use_majority_value is True
+
+    # BoardStateMachine (1P/2P 双方) への配線確認
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        assert sm._enable_gravity_filter_support is True  # noqa: SLF001
+        assert sm._merge_use_majority_value is True  # noqa: SLF001
+        ovd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaVisualDetector)),
+            None,
+        )
+        assert ovd is not None, "OjamaVisualDetector が detectors に未登録"
+        assert ovd.enable_ojama_fall_board_settle is True
+        opd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaPhaseDetector)),
+            None,
+        )
+        assert opd is not None, "OjamaPhaseDetector が detectors に未登録"
+        assert opd.defer_ojama_fall_exit_to_visual is True
+
+
+def test_ojama_dropout_fix_flags_explicit_false_restores_legacy() -> None:
+    """3 flag とも明示的に False を渡せば旧挙動 (bit-identical) の配線に
+    戻ることを確認する (backwards compat 退避経路)。"""
+    from src.ojama_visual_detector import OjamaVisualDetector
+    from src.state_detectors import OjamaPhaseDetector
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_fall_board_settle=False,
+        enable_gravity_filter_support=False,
+        merge_use_majority_value=False,
+    )
+    assert pipe._enable_ojama_fall_board_settle is False
+    assert pipe._enable_gravity_filter_support is False
+    assert pipe._merge_use_majority_value is False
+
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        assert sm._enable_gravity_filter_support is False  # noqa: SLF001
+        assert sm._merge_use_majority_value is False  # noqa: SLF001
+        ovd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaVisualDetector)),
+            None,
+        )
+        assert ovd is not None
+        assert ovd.enable_ojama_fall_board_settle is False
+        opd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaPhaseDetector)),
+            None,
+        )
+        assert opd is not None
+        assert opd.defer_ojama_fall_exit_to_visual is False
+
