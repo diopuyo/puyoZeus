@@ -522,6 +522,11 @@ def test_slide_signal_no_effect_flag_off() -> None:
 # 真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
 # 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火 (偽イベント) と
 # 確定。ChainSimulator 検証で偽イベントを源で断つ対策のテスト。
+#
+# 2026-07-24 user viz 承認: 物理採点+独立診断で偽イベント率 27.5%→0% を
+# 確認し default ON に採用 (savepoint/chain-formula-verify-default-on)。
+# 旧挙動 (検証なし・bit-identical) は enable_chain_formula_simulate_verify=False
+# を明示指定すれば維持できる (backwards compat)。
 # ===========================================================================
 
 
@@ -555,25 +560,27 @@ def _make_pipe_with_simulate_verify(
     )
 
 
-def test_simulate_verify_default_is_off() -> None:
-    """enable_chain_formula_simulate_verify のデフォルト値は False (backwards compat)。"""
+def test_simulate_verify_default_is_on() -> None:
+    """enable_chain_formula_simulate_verify のデフォルト値は True
+    (2026-07-24 user viz 承認により default ON 採用、偽イベント率 27.5%→0%)。"""
     import inspect
     sig = inspect.signature(RecognitionPipeline.__init__)
     default = sig.parameters["enable_chain_formula_simulate_verify"].default
-    assert default is False, f"デフォルト False 期待 (bit-identical): {default}"
+    assert default is True, f"デフォルト True 期待 (採用済): {default}"
 
 
-def test_load_default_simulate_verify_default_is_off() -> None:
-    """load_default の enable_chain_formula_simulate_verify も既定 False。"""
+def test_load_default_simulate_verify_default_is_on() -> None:
+    """load_default の enable_chain_formula_simulate_verify も既定 True。"""
     import inspect
     sig = inspect.signature(RecognitionPipeline.load_default)
     default = sig.parameters["enable_chain_formula_simulate_verify"].default
-    assert default is False, f"load_default デフォルト False 期待: {default}"
+    assert default is True, f"load_default デフォルト True 期待: {default}"
 
 
-def test_simulate_verify_flag_off_fires_with_chain_count_one_bit_identical() -> None:
-    """flag=False (既定) では起点盤面が空でも従来通り chain_count=1 で発火する
-    (= bit-identical。検証ロジックが混入していないことの直接確認)。"""
+def test_simulate_verify_flag_explicit_off_fires_with_chain_count_one_bit_identical() -> None:
+    """flag=False を明示指定した場合は起点盤面が空でも従来通り
+    chain_count=1 で発火する (= 旧挙動・bit-identical、backwards compat の
+    退避経路が生きていることの直接確認)。"""
     from src.board import Board
     pipe = _make_pipe_with_simulate_verify(enable_verify=False)
     empty_board = Board()  # 連鎖ゼロの起点盤面

@@ -364,3 +364,24 @@ DB pre-inject (cycle_12 で検証済) は本番 default に組み込む価値あ
   にある。次の調査は `scripts/_diag_estimate_collapse_c62_1p.py`
   (2026-07-23, c62 game9 1P estimated_board coverage 9.8% の真因診断) を参照。
 - **解釈**: per_video_inject 自体の評価であり、 軸 3-b 単体の -9 副次効果は別コンテキスト
+
+### 8.2 機能D (`enable_chain_formula_simulate_verify`) を default ON に採用 (2026-07-24)
+
+- 機能D (連鎖開始 掛け算式検知, `enable_chain_formula_detection`, default ON
+  済) の早期発火 77 件を `_diag_false_event_source_2026-07-24.py` で真因
+  診断した結果、35 件 (45.5%) が「連鎖ゼロの起点盤面」からの疑似発火
+  (偽イベント) と確定した。
+- 修正D として、早期発火の起点盤面 (`before_board`) を `ChainSimulator`
+  で事前検証し、`chain_count==0` (連鎖が実在しない) なら疑似発火を抑制、
+  `chain_count>0` なら固定 `chain_count=1` でなく実測値を使う対策を実装
+  (`src/recognition_pipeline.py` の `_resolve_formula_chain_count` /
+  `_apply_chain_formula_early_fire`)。
+- 物理採点 + 独立診断 (before/after 比較) で偽イベント率 27.5% → 0% と
+  確認され、user viz 承認により `enable_chain_formula_simulate_verify` の
+  既定値を `False` → `True` に変更 (2026-07-24、`__init__` /
+  `load_default` 両方)。誤抑制 (連鎖が実在する起点盤面を誤って握り潰す)
+  は最小構成テストで検証済みでゼロ。
+- 旧挙動 (検証なし・bit-identical) は
+  `enable_chain_formula_simulate_verify=False` を明示指定すれば維持できる
+  (backwards compat のため退避経路として残置)。
+  savepoint タグ: `savepoint/chain-formula-verify-default-on`。
