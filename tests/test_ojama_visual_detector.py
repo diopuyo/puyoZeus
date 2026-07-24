@@ -604,3 +604,137 @@ def test_board_settle_default_off_bit_identical_to_legacy() -> None:
     assert result == BoardState.STABLE, (
         "従来ロジック (ROI count==0 で即 STABLE) が維持されているはず"
     )
+
+
+# ============================
+# バグ修正 (2026-07-24): OJAMA_FALL 再突入振動ループの修正確認
+#
+# 真因: _detect_ojama_fall_exit_board_settle の settle-exit / timeout-exit が
+# _reset_internal_state() を無条件呼び出しし、 _prev_top_ojama_count を 0 に
+# 戻す。 ROI にまだ着弾済み・不動のお邪魔が残っている状態で退出すると、
+# 次フレームの _detect_ojama_fall_entry が「開始トリガー: prev==0」を満たして
+# 誤って OJAMA_FALL へ再突入し、 約0.183秒刻みの振動ループが発生する。
+# 振動中は TsumoPhaseDetector が None を返し続け TSUMO_FALL 検出が
+# 最大 +7秒 遅延する (A/B実測)。
+#
+# 修正: settle-exit / timeout-exit の両分岐で退出時点の ROI 実カウントを
+# _reset_internal_state(keep_top_ojama_count=...) で明示的に保持する。
+# ============================
+
+
+def test_reset_internal_state_default_keeps_bit_identical_zero_reset() -> None:
+    """`_reset_internal_state()` を引数なしで呼ぶと従来通り 0 リセットされる
+    (bit-identical、 既存呼び出し箇所の挙動を変えないことの確認)。
+    """
+    det = OjamaVisualDetector()
+    det._prev_top_ojama_count = 99  # noqa: SLF001
+
+    det._reset_internal_state()  # noqa: SLF001
+
+    assert det._prev_top_ojama_count == 0
+
+
+def test_reset_internal_state_keep_top_ojama_count_param() -> None:
+    """`_reset_internal_state(keep_top_ojama_count=N)` は N を保持する。"""
+    det = OjamaVisualDetector()
+    det._prev_top_ojama_count = 99  # noqa: SLF001
+
+    det._reset_internal_state(keep_top_ojama_count=7)  # noqa: SLF001
+
+    assert det._prev_top_ojama_count == 7
+
+
+def test_legacy_ojama_fall_exit_still_resets_prev_top_ojama_count_to_zero() -> None:
+    """回帰: 案B OFF (既定) の従来退出経路 `_detect_ojama_fall_exit` は改修後も
+    `_prev_top_ojama_count` を 0 にリセットする (bit-identical) ことを確認する。
+    """
+    det = OjamaVisualDetector()  # enable_ojama_fall_board_settle=False (既定)
+    det._consec_count = 3  # noqa: SLF001 (退出前状態を人工的に設定)
+
+    ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig = DetectorSignals(time_sec=0.0, cnn_board=_empty_board(), is_match_active=True)
+    result = det.detect(ctx, sig)
+
+    assert result == BoardState.STABLE
+    assert det._prev_top_ojama_count == 0, (
+        "既存経路 (_detect_ojama_fall_exit) は従来通り 0 リセットのはず"
+    )
+
+
+def test_board_settle_exit_preserves_prev_top_ojama_count_no_reentry() -> None:
+    """settle-exit (お邪魔静止) 退出時、 ROI にお邪魔が残っていれば
+    `_prev_top_ojama_count` に実カウントを保持し、 STABLE 復帰後の同一盤面が
+    続くフレームで OJAMA_FALL へ誤再突入しないことを確認する。
+
+    シーケンス自体は test_board_settle_a_monotonic_increase_then_stable_exits_at_expected_frame
+    と同一 (frame 11 で STABLE 復帰、 count=45 で安定)。
+    count=45 は ROI (可視最上段 2 行 = 12 セル) を満杯に埋める値。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+    counts = [20, 30, 40, 44] + [45] * 8
+    results = _drive_board_settle(det, counts)
+    assert results[11] == BoardState.STABLE
+
+    # 退出時点で ROI (12 セル) は満杯 = 12。 旧実装ならここが 0 になっていた。
+    expected_roi_count = _count_top_ojama(_board_with_n_puyos(45))
+    assert expected_roi_count == 12, "テスト前提: n=45 で ROI が満杯になるはず"
+    assert det._prev_top_ojama_count == expected_roi_count, (
+        "settle-exit 時点の ROI 実カウントを保持しているはず (0 でない)"
+    )
+
+    # STABLE 復帰後、 同一おじゃま盤面が続くフレームを複数回 detect() へ渡しても
+    # 誤って OJAMA_FALL へ再突入しないことを確認する (振動ループの再現防止)。
+    board_same = _board_with_n_puyos(45)
+    for i in range(OJAMA_CONSEC_THRESH + 3):
+        frame_idx = 12 + i
+        ctx = StateContext(state=BoardState.STABLE, frame_idx=frame_idx)
+        sig = DetectorSignals(
+            time_sec=float(frame_idx) / 30.0,
+            cnn_board=board_same,
+            is_match_active=True,
+        )
+        result = det.detect(ctx, sig)
+        assert result is None, (
+            f"frame {frame_idx}: おじゃまが不変のまま OJAMA_FALL へ誤再突入した"
+            " (振動ループ再発)"
+        )
+
+
+def test_board_settle_timeout_exit_preserves_prev_top_ojama_count_no_reentry() -> None:
+    """timeout-exit (安全弁) 退出時も同様に ROI 実カウントを保持し、
+    STABLE 復帰後の同一盤面フレームで誤再突入しないことを確認する。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(10), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    board50 = _board_with_n_puyos(50)
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_FALL_MAX_SEC + 0.1, cnn_board=board50, is_match_active=True,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result == BoardState.STABLE
+
+    expected_roi_count = _count_top_ojama(board50)
+    assert expected_roi_count > 0, "テスト前提: n=50 で ROI にお邪魔が残るはず"
+    assert det._prev_top_ojama_count == expected_roi_count, (
+        "timeout-exit 時点の ROI 実カウントを保持しているはず (0 でない)"
+    )
+
+    # STABLE 復帰後、 同一盤面が続いても誤再突入しない。
+    for i in range(OJAMA_CONSEC_THRESH + 3):
+        frame_idx = 2 + i
+        ctx = StateContext(state=BoardState.STABLE, frame_idx=frame_idx)
+        sig = DetectorSignals(
+            time_sec=OJAMA_FALL_MAX_SEC + 0.13 + float(i) / 30.0,
+            cnn_board=board50,
+            is_match_active=True,
+        )
+        assert det.detect(ctx, sig) is None, (
+            f"frame {frame_idx}: timeout-exit 後に誤って OJAMA_FALL へ再突入した"
+        )

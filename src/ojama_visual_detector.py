@@ -221,7 +221,13 @@ class OjamaVisualDetector:
         # タイムアウト: 安全弁として強制 STABLE 復帰
         elapsed = signals.time_sec - self._settle_start_time
         if elapsed >= OJAMA_FALL_MAX_SEC:
-            self._reset_internal_state()
+            # バグ修正 (2026-07-24): reset で _prev_top_ojama_count を無条件 0
+            # にすると、 ROI にまだ残っているお邪魔 (着弾済み・不動) を次
+            # フレームの _detect_ojama_fall_entry が「新規出現」と誤認し
+            # 即座に OJAMA_FALL へ再突入する (振動ループ、 TSUMO_FALL 検出を
+            # 最大 +7秒 遅延させる真因)。 退出時点の実カウントを保持する。
+            exit_top_count = _count_top_ojama(signals.cnn_board, signals.hsv_board)
+            self._reset_internal_state(keep_top_ojama_count=exit_top_count)
             return BoardState.STABLE
 
         # 最低待機フレーム数未達: 継続 (カウンタのみ更新)
@@ -240,7 +246,10 @@ class OjamaVisualDetector:
             self._board_stable_consec = 0
 
         if self._board_stable_consec >= OJAMA_FALL_SETTLE_STABLE_FRAMES:
-            self._reset_internal_state()
+            # バグ修正 (2026-07-24): タイムアウト分岐と同様、 settle 退出時も
+            # ROI 実カウントを保持して次フレームの誤再突入を防ぐ。
+            exit_top_count = _count_top_ojama(signals.cnn_board, signals.hsv_board)
+            self._reset_internal_state(keep_top_ojama_count=exit_top_count)
             return BoardState.STABLE
 
         return None  # 継続
@@ -310,10 +319,24 @@ class OjamaVisualDetector:
 
         return None
 
-    def _reset_internal_state(self) -> None:
-        """内部カウンタを全リセットする."""
+    def _reset_internal_state(
+        self, keep_top_ojama_count: int | None = None,
+    ) -> None:
+        """内部カウンタを全リセットする.
+
+        Args:
+            keep_top_ojama_count: None (既定) なら従来通り
+                `_prev_top_ojama_count` を 0 にリセットする (bit-identical)。
+                int を渡すとその値を `_prev_top_ojama_count` に保持する。
+                案B (`_detect_ojama_fall_exit_board_settle`) の退出時のみ、
+                退出時点の ROI 実カウントを渡すことで、 まだ ROI に残る
+                (着弾済み・不動の) お邪魔を次フレームが新規出現と誤認して
+                OJAMA_FALL へ即再突入する振動バグを防ぐ。
+        """
         self._consec_count = 0
-        self._prev_top_ojama_count = 0
+        self._prev_top_ojama_count = (
+            0 if keep_top_ojama_count is None else keep_top_ojama_count
+        )
         self._last_frame_idx = -1
         self._settle_count = 0
         self._prev_settle_count = 0
