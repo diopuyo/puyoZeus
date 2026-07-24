@@ -717,6 +717,25 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False を渡せば従来挙動 (常に None) に完全に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # #45 おじゃま merge 統合修正 案(a) (2026-07-24): 重力フィルタ支持緩和。
+        # 案B (enable_ojama_fall_board_settle) 適用後、 _merge_diff_only 内の
+        # `_apply_gravity_filter` が F ガード (empty_to_color_guard) 起因で
+        # EMPTY のまま残った cell を「浮き判定の gap」として誤扱いし、
+        # 積もり中のおじゃまを浮きぷよ誤消去する副作用が判明。
+        # True にすると `_apply_gravity_filter` に empty_to_color_guard
+        # (多数決板) を support_board として渡し、そのガードで非 EMPTY と
+        # 裏付けられる cell は gap 扱いしない。
+        # (b) enable_ojama_fall_board_settle と独立に A/B 切り分け可能。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_gravity_filter_support: bool = False,
+        # #45 おじゃま merge 統合修正 案(b) (2026-07-24): 退出 merge 書込値の
+        # 多数決化。 NON-STABLE → STABLE 復帰時の EMPTY→色 遷移ガード分岐で、
+        # 従来は単一フレーム CNN 値 (cnn_v) と多数決値 (guard_v) が不一致だと
+        # 却下していた (= 退出直前の単一フレームちらつきで正当な色復帰も却下)。
+        # True にすると guard_v が EMPTY でない場合、 cnn_v でなく guard_v を
+        # 書き込む (多数決値を信頼)。 (a) と独立に A/B 切り分け可能。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        merge_use_majority_value: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1022,6 +1041,12 @@ class RecognitionPipeline:
         if _gs:
             enable_chain_exit_next_signal = True  # 内部強制 ON
         self._enable_gravity_settle_state: bool = _gs
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_gravity_filter_support: bool = bool(
+            enable_gravity_filter_support
+        )
+        self._merge_use_majority_value: bool = bool(merge_use_majority_value)
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -1035,6 +1060,8 @@ class RecognitionPipeline:
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
+            enable_gravity_filter_support=self._enable_gravity_filter_support,
+            merge_use_majority_value=self._merge_use_majority_value,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1046,6 +1073,8 @@ class RecognitionPipeline:
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
+            enable_gravity_filter_support=self._enable_gravity_filter_support,
+            merge_use_majority_value=self._merge_use_majority_value,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1333,6 +1362,8 @@ class RecognitionPipeline:
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
+        enable_gravity_filter_support: bool = False,
+        merge_use_majority_value: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1350,6 +1381,9 @@ class RecognitionPipeline:
         #   GravitySettleDetector が GRAVITY_SETTLE → STABLE を担当する。
         # 案γ: enable_slide_override_ojama_hold=True で ChainPhaseDetector に伝播。
         #   CHAIN 中 slide_motion=True が来た場合 ojama-hold 保留を上書きして終了する。
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24):
+        #   enable_gravity_filter_support / merge_use_majority_value を
+        #   BoardStateMachine にそのまま伝播する (独立 flag)。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
         # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE + 案γ フラグを伝播する
@@ -1389,6 +1423,8 @@ class RecognitionPipeline:
             enable_warmup_guard=enable_warmup_guard,
             warmup_frames=STABLE_WARMUP_FRAMES,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_gravity_filter_support=enable_gravity_filter_support,
+            merge_use_majority_value=merge_use_majority_value,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -1494,6 +1530,13 @@ class RecognitionPipeline:
         # 既定 1 = 従来通り即時確定 (bit-identical, backwards compat)。
         # 2 以上で debounce_confirm_frames 回連続の drop 観測を要求する。
         chain_debounce_confirm_frames: int = DEBOUNCE_CONFIRM_FRAMES,
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24): 案B
+        # (enable_ojama_fall_board_settle) 適用後に判明した _merge_diff_only
+        # の 2 副作用を個別 flag で修正する (A/B 切り分け用、独立 flag)。
+        # user viz 承認前の実装のため default False (backwards compat、
+        # 既存挙動と完全 bit-identical)。
+        enable_gravity_filter_support: bool = False,
+        merge_use_majority_value: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1660,6 +1703,8 @@ class RecognitionPipeline:
             chain_hold_base_sec=chain_hold_base_sec,
             chain_hold_per_step_sec=chain_hold_per_step_sec,
             chain_max_hold_sec=chain_max_hold_sec,
+            enable_gravity_filter_support=enable_gravity_filter_support,
+            merge_use_majority_value=merge_use_majority_value,
         )
 
     # ------------------------------------------------------------------
