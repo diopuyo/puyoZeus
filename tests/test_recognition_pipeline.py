@@ -1719,6 +1719,293 @@ def test_enable_landing_observed_color_default_false_no_regression():
         assert result is not None, "update は None を返さない"
 
 
+# ---------------------------------------------------------------------------
+# 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+# _flag_landing_distrust_cells 単体テスト
+# ---------------------------------------------------------------------------
+
+
+def test_flag_landing_distrust_cells_detects_mismatch():
+    """着地セルで CNN 観測色が baseline (P2 推論) と食い違えばフラグされる。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()  # (5, 2) は着地前は空
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # baseline (P2 推論結果) = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (食い違い)
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert (5, 2) in distrust, (
+        "CNN 観測色が baseline と食い違う着地セルはフラグされるべき"
+    )
+
+
+def test_flag_landing_distrust_cells_no_flag_when_cnn_agrees():
+    """CNN 観測色が baseline と一致すればフラグされない。"""
+    from src.board import COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_RED)  # baseline と一致
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert not distrust, "CNN 観測色が baseline と一致すればフラグされないべき"
+
+
+def test_flag_landing_distrust_cells_no_flag_when_cnn_uninformative():
+    """#47 対策: CNN 観測が UNKNOWN/EMPTY/おじゃまなら証拠なしとしてフラグしない。
+
+    高速プレイで infer_placement (P2) が唯一の情報源となるケース (#47) の
+    挙動を壊さないための必須ガード。
+    """
+    from src.board import COLOR_OJAMA, COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+
+    for cnn_color in (COLOR_UNKNOWN, COLOR_EMPTY, COLOR_OJAMA):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        distrust = _flag_landing_distrust_cells(
+            inferred, prev_confirmed, cnn_board,
+        )
+        assert not distrust, (
+            f"CNN 観測色={cnn_color} (証拠なし) はフラグしないべき (#47 対策)"
+        )
+
+
+def test_flag_landing_distrust_cells_ignores_non_landing_cells():
+    """着地セル以外 (prev_confirmed が既に色付き) は差分抽出対象外でフラグしない。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    prev_confirmed.set(5, 2, COLOR_RED)  # 着地前から既に色あり (= 着地セルでない)
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # 食い違うが着地セルでないため対象外
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert not distrust, "着地セル (prev=EMPTY/UNKNOWN) 以外はフラグ対象外であるべき"
+
+
+# ---------------------------------------------------------------------------
+# 案(iii): enable_placement_color_cnn_check フラグ配線テスト
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_placement_color_check(enable_flag: bool) -> RecognitionPipeline:
+    """enable_placement_color_cnn_check フラグ付きの pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=detector,
+        enable_placement_color_cnn_check=enable_flag,
+    )
+
+
+def test_enable_placement_color_cnn_check_flag_off_default():
+    """フラグ OFF (default) → _enable_placement_color_cnn_check が False。"""
+    pipe = _make_pipe_placement_color_check(False)
+    assert not pipe._enable_placement_color_cnn_check, (
+        "default OFF: _enable_placement_color_cnn_check は False であるべき"
+    )
+    assert pipe._landing_distrust_1p == set()
+    assert pipe._landing_distrust_2p == set()
+
+
+def test_enable_placement_color_cnn_check_flag_on():
+    """フラグ ON → _enable_placement_color_cnn_check が True。"""
+    pipe = _make_pipe_placement_color_check(True)
+    assert pipe._enable_placement_color_cnn_check, (
+        "ON 時: _enable_placement_color_cnn_check は True であるべき"
+    )
+
+
+def test_enable_placement_color_cnn_check_default_false_no_regression():
+    """フラグ OFF (default) では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_placement_color_check(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+# ---------------------------------------------------------------------------
+# 案(iii): _start_landing_vote / _update_landing_votes 決定ロジックテスト
+# ---------------------------------------------------------------------------
+
+
+def test_start_landing_vote_stores_distrust_cells():
+    """_start_landing_vote は渡された distrust_cells を entry に保存する。"""
+    from src.board import COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    prev_confirmed = Board()
+    final_board = Board()
+    final_board.set(5, 2, COLOR_RED)
+    distrust = {(5, 2)}
+    pipe._start_landing_vote(
+        "1P", 0, prev_confirmed, final_board,
+        next_colors=(COLOR_RED, COLOR_RED),
+        distrust_cells=distrust,
+    )
+    entry = pipe._pending_landing_vote_1p[-1]
+    assert entry["distrust_cells"] == distrust
+
+
+def test_start_landing_vote_default_distrust_cells_empty():
+    """distrust_cells 省略時 (backwards compat) は空集合になる。"""
+    from src.board import COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    prev_confirmed = Board()
+    final_board = Board()
+    final_board.set(5, 2, COLOR_RED)
+    pipe._start_landing_vote(
+        "1P", 0, prev_confirmed, final_board,
+        next_colors=(COLOR_RED, COLOR_RED),
+    )
+    entry = pipe._pending_landing_vote_1p[-1]
+    assert entry["distrust_cells"] == set(), (
+        "distrust_cells 省略時は空集合 (= 従来挙動不変) であるべき"
+    )
+
+
+def _make_landing_vote_entry(
+    distrust_cells: set[tuple[int, int]],
+    next_winner: int,
+    cnn_winner: int,
+    next_pair: tuple[int, int],
+    start: int = 0,
+) -> dict:
+    """P7 (_update_landing_votes) 決定ロジックテスト用 pending entry を組み立てる。"""
+    cell = (5, 2)
+    return {
+        "start": start,
+        "cells": [(cell[0], cell[1], next_winner)],
+        "votes": {cell: [cnn_winner] * 5},
+        "next_color_votes": {cell: [next_winner] * 5},
+        "next_colors": next_pair,
+        "side": "1P",
+        "distrust_cells": distrust_cells,
+    }
+
+
+def test_update_landing_votes_distrust_cell_bypasses_next_color_bias():
+    """distrust セルは NEXT 色 votes を迂回し生 CNN 多数決フォールバックで確定する。"""
+    from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    entry = _make_landing_vote_entry(
+        distrust_cells={(5, 2)},
+        next_winner=COLOR_RED,
+        cnn_winner=COLOR_BLUE,
+        next_pair=(COLOR_RED, COLOR_GREEN),
+    )
+    pipe._pending_landing_vote_1p.append(entry)
+    confirmed = Board()
+    updated = pipe._update_landing_votes(
+        "1P", pipe.LANDING_VOTE_FRAMES, Board(), confirmed, frame_bgr=None,
+    )
+    assert updated is not None
+    assert updated.get(5, 2) == COLOR_BLUE, (
+        "distrust セルは NEXT 色 votes (RED) でなく生 CNN 多数決 (BLUE) で確定すべき"
+    )
+
+
+def test_update_landing_votes_non_distrust_cell_keeps_next_color_priority():
+    """distrust されていないセルは従来通り NEXT 色 votes 優先 (bit-identical)。"""
+    from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    entry = _make_landing_vote_entry(
+        distrust_cells=set(),
+        next_winner=COLOR_RED,
+        cnn_winner=COLOR_BLUE,
+        next_pair=(COLOR_RED, COLOR_GREEN),
+    )
+    pipe._pending_landing_vote_1p.append(entry)
+    confirmed = Board()
+    updated = pipe._update_landing_votes(
+        "1P", pipe.LANDING_VOTE_FRAMES, Board(), confirmed, frame_bgr=None,
+    )
+    assert updated is not None
+    assert updated.get(5, 2) == COLOR_RED, (
+        "非 distrust セルは従来通り NEXT 色 votes (RED) 優先で確定すべき"
+    )
+
+
+def test_update_landing_votes_early_confirm_path_respects_distrust():
+    """早期確定経路 (蓄積中の NEXT 色バイアス即時反映) も distrust セルは迂回する。
+
+    _update_landing_votes の「蓄積期間中」分岐 (LANDING_VOTE_NEXT_EARLY_COUNT/
+    RATIO による即時反映) が distrust_cells を無視すると、最終分岐のガードが
+    素通りされてしまう (早期確定済セルは最終分岐で再適用 skip されるため)。
+    本テストはその迂回漏れがないことを確認する。
+    """
+    from src.board import COLOR_BLUE, COLOR_RED
+
+    frame_bgr = _dummy_frame()
+    cell = (5, 2)
+    next_pair = (COLOR_RED, COLOR_BLUE)
+
+    def _run(distrust_cells: set[tuple[int, int]]) -> tuple[dict, "Board | None"]:
+        pipe = _make_pipe_placement_color_check(False)
+        entry: dict = {
+            "start": 0,
+            "cells": [(cell[0], cell[1], COLOR_RED)],
+            "votes": {cell: []},
+            "next_color_votes": {cell: []},
+            "next_colors": next_pair,
+            "side": "1P",
+            "distrust_cells": distrust_cells,
+        }
+        pipe._pending_landing_vote_1p.append(entry)
+        confirmed = Board()
+        # LANDING_VOTE_INIT_SKIP_FRAMES(5) 以上 LANDING_VOTE_FRAMES(24) 未満の
+        # 蓄積期間中フレームを LANDING_VOTE_NEXT_EARLY_COUNT(5) 回連続で処理する。
+        for offset in range(pipe.LANDING_VOTE_NEXT_EARLY_COUNT):
+            frame_idx = pipe.LANDING_VOTE_INIT_SKIP_FRAMES + offset
+            result = pipe._update_landing_votes(
+                "1P", frame_idx, Board(), confirmed, frame_bgr=frame_bgr,
+            )
+            if result is not None:
+                confirmed = result
+        return entry, confirmed
+
+    entry_distrust, confirmed_distrust = _run({cell})
+    entry_clean, confirmed_clean = _run(set())
+
+    assert cell not in entry_distrust.get("confirmed_cells", set()), (
+        "distrust セルは早期確定経路で confirmed_cells に登録されないべき"
+    )
+    assert cell in entry_clean.get("confirmed_cells", set()), (
+        "非 distrust セルは早期確定経路で従来通り confirmed_cells に登録されるべき"
+    )
+    assert confirmed_distrust is not None and confirmed_clean is not None
+    # distrust セル: 早期確定が起きないため confirmed_board は未反映 (= 空のまま)。
+    assert confirmed_distrust.get(*cell) == COLOR_EMPTY, (
+        "distrust セルは早期確定経路で confirmed_board に反映されないべき"
+    )
+    # 非 distrust セル: 早期確定により NEXT 色 votes のいずれかが反映される。
+    assert confirmed_clean.get(*cell) in next_pair, (
+        "非 distrust セルは早期確定経路で NEXT 色 votes のいずれかに反映されるべき"
+    )
+
+
 # ============================
 # 機能B: score 急増 CHAIN 早期発火テスト
 # ============================
