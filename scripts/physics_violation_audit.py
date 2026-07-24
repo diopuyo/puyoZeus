@@ -280,6 +280,32 @@ def _has_placement_event_in_range(records: list[_FrameRecord], i_lo: int, i_hi: 
     return any(records[k].state in target for k in range(i_lo + 1, i_hi + 1))
 
 
+# 2026-07-25 Step0 (書き込み元トレース診断 kickoff): 既存 _has_placement_event_in_range
+# は変更せず (後方互換維持)、CHAIN/GRAVITY_SETTLE も正当な色変化イベントとして含めた
+# 拡張版を新規追加する。連鎖確定 (P3/P4 経路) による事後補正が color_flicker /
+# conservation_gain として誤検出されているのではという仮説を、既存挙動を壊さずに
+# 検証するため (--strict-exclusion フラグでのみ有効化、既定 False = 従来通り)。
+STRICT_PLACEMENT_EVENT_STATES: tuple[str, ...] = (
+    BoardState.TSUMO_FALL.name, BoardState.OJAMA_FALL.name,
+    BoardState.CHAIN.name, BoardState.GRAVITY_SETTLE.name,
+)
+
+
+def _has_placement_event_in_range_strict(
+    records: list[_FrameRecord], i_lo: int, i_hi: int,
+) -> bool:
+    """(i_lo, i_hi] 区間に設置/着弾/連鎖/重力settle stateのフレームがあるか (拡張版)。
+
+    既存 _has_placement_event_in_range の CHAIN/GRAVITY_SETTLE 版。
+    連鎖 (消去→重力再充填で同セルに別色着地) を挟む色変化・個数増加は
+    正当なイベントとみなし除外対象に含める。
+    """
+    return any(
+        records[k].state in STRICT_PLACEMENT_EVENT_STATES
+        for k in range(i_lo + 1, i_hi + 1)
+    )
+
+
 def _menu_occurred_between(records: list[_FrameRecord], i_lo: int, i_hi: int) -> bool:
     """[i_lo, i_hi) 区間に MENU state のフレームがあるか (試合終了の正常検知)。"""
     return any(records[k].state == BoardState.MENU.name for k in range(i_lo, i_hi))
@@ -469,12 +495,20 @@ def _find_flicker_cells(
     return cells
 
 
-def _check_color_flicker(records: list[_FrameRecord], video_stem: str, side: str) -> list[Violation]:
+def _check_color_flicker(
+    records: list[_FrameRecord], video_stem: str, side: str,
+    *, strict_exclusion: bool = False,
+) -> list[Violation]:
     """類型4: 色フリッカ (STABLE observed snapshot間の直接色変化)。
 
     2026-07-24 FP修正: _check_conservation と同様に、連鎖 (消去→重力再充填で
     同セルに別色着地) または設置イベントを挟む snapshot 対は正当な色変化と
     みなし除外する (_has_chain_trigger_in_range / _has_placement_event_in_range)。
+
+    strict_exclusion: 2026-07-25 Step0 追加 (既定 False = 従来通り後方互換)。
+    True にすると設置/着弾判定を拡張版 (_has_placement_event_in_range_strict、
+    CHAIN/GRAVITY_SETTLE も含む) に切り替える。連鎖確定由来の正当な色変化を
+    見かけ上のフリッカから除外し、「本物のフリッカ件数」の下限推定を得る。
     """
     snaps = _distinct_stable_snapshots(records)
     chain_idxs = _new_chain_triggers(records)
@@ -482,8 +516,13 @@ def _check_color_flicker(records: list[_FrameRecord], video_stem: str, side: str
     for (prev_idx, prev_rec), (curr_idx, curr_rec) in zip(snaps, snaps[1:]):
         if _has_chain_trigger_in_range(records, chain_idxs, prev_rec.t_sec, curr_rec.t_sec):
             continue  # 連鎖 (消去→再充填) を挟む正当な色変化
-        if _has_placement_event_in_range(records, prev_idx, curr_idx):
-            continue  # 設置/着弾を挟む正当な色変化
+        placement_excluded = (
+            _has_placement_event_in_range_strict(records, prev_idx, curr_idx)
+            if strict_exclusion
+            else _has_placement_event_in_range(records, prev_idx, curr_idx)
+        )
+        if placement_excluded:
+            continue  # 設置/着弾 (strict時は連鎖/重力settle含む) を挟む正当な色変化
         cells = _find_flicker_cells(prev_rec.grid, curr_rec.grid)
         if not cells:
             continue
@@ -505,13 +544,20 @@ def _check_color_flicker(records: list[_FrameRecord], video_stem: str, side: str
 # ============================
 
 
-def _check_conservation(records: list[_FrameRecord], video_stem: str, side: str) -> list[Violation]:
+def _check_conservation(
+    records: list[_FrameRecord], video_stem: str, side: str,
+    *, strict_exclusion: bool = False,
+) -> list[Violation]:
     """類型2/3: STABLE snapshot間のぷよ数増減が対応イベントなしで発生していないか。
 
     類型2(消失): 区間内に新規 chain trigger が無いのに減少 (相殺はぷよ数を
     変えないため対象外、連鎖消去のみが正当な減少要因)。
     類型3(出現): 区間内に TSUMO_FALL/OJAMA_FALL state (設置/着弾の代理検出) が
     無いのに増加。
+
+    strict_exclusion: 2026-07-25 Step0 追加 (既定 False = 従来通り後方互換)。
+    True にすると類型3判定の設置/着弾検出を拡張版 (CHAIN/GRAVITY_SETTLE 含む)
+    に切り替える (_build_conservation_violation 参照)。
     """
     snaps = _distinct_stable_snapshots(records)
     chain_idxs = _new_chain_triggers(records)
@@ -524,6 +570,7 @@ def _check_conservation(records: list[_FrameRecord], video_stem: str, side: str)
         v = _build_conservation_violation(
             diff, records, chain_idxs, prev_idx, curr_idx, prev_rec, curr_rec,
             prev_n, curr_n, side, video_stem, lag_flag,
+            strict_exclusion=strict_exclusion,
         )
         if v is not None:
             violations.append(v)
@@ -534,8 +581,14 @@ def _build_conservation_violation(
     diff: int, records: list[_FrameRecord], chain_idxs: list[int],
     prev_idx: int, curr_idx: int, prev_rec: _FrameRecord, curr_rec: _FrameRecord,
     prev_n: int, curr_n: int, side: str, video_stem: str, lag_flag: bool,
+    *, strict_exclusion: bool = False,
 ) -> Violation | None:
-    """conservation 違反 1 件を判定して構築する (types 2/3 共通ロジック分離)。"""
+    """conservation 違反 1 件を判定して構築する (types 2/3 共通ロジック分離)。
+
+    strict_exclusion: 2026-07-25 Step0 追加 (既定 False = 従来通り後方互換)。
+    True で類型3 (出現) 判定を拡張版設置/着弾検出 (CHAIN/GRAVITY_SETTLE 含む)
+    に切り替える。連鎖確定由来の正当な個数増加 (P3/P4経路) を除外する仮説検証用。
+    """
     if diff < 0 and not _has_chain_trigger_in_range(
         records, chain_idxs, prev_rec.t_sec, curr_rec.t_sec,
     ):
@@ -548,7 +601,12 @@ def _build_conservation_violation(
             prev_frame_idx=prev_rec.frame_idx, prev_t_sec=prev_rec.t_sec,
             prev_grid=prev_rec.grid, curr_grid=curr_rec.grid,
         )
-    if diff > 0 and not _has_placement_event_in_range(records, prev_idx, curr_idx):
+    gain_excluded = (
+        _has_placement_event_in_range_strict(records, prev_idx, curr_idx)
+        if strict_exclusion
+        else _has_placement_event_in_range(records, prev_idx, curr_idx)
+    )
+    if diff > 0 and not gain_excluded:
         return Violation(
             type="conservation_gain", severity=VIOLATION_TYPE_SEVERITY["conservation_gain"],
             t_sec=curr_rec.t_sec, side=side, cells=[], video_stem=video_stem,
@@ -649,14 +707,22 @@ def _check_ojama_accounting_rate_floor(
 # ============================
 
 
-def _audit_one_side(records: list[_FrameRecord], video_stem: str, side: str) -> list[Violation]:
-    """1 (video, side) 分の全類型チェックを実行する。"""
+def _audit_one_side(
+    records: list[_FrameRecord], video_stem: str, side: str,
+    *, strict_exclusion: bool = False,
+) -> list[Violation]:
+    """1 (video, side) 分の全類型チェックを実行する。
+
+    strict_exclusion: 2026-07-25 Step0 追加 (既定 False = 従来通り後方互換)。
+    color_flicker/conservation_gain の設置/着弾判定を拡張版
+    (CHAIN/GRAVITY_SETTLE も含む) に切り替える。
+    """
     violations: list[Violation] = []
     violations += _check_gravity(records, video_stem, side)
     violations += _check_connection_uncleared(records, video_stem, side)
     violations += _check_color_count(records, video_stem, side)
-    violations += _check_color_flicker(records, video_stem, side)
-    violations += _check_conservation(records, video_stem, side)
+    violations += _check_color_flicker(records, video_stem, side, strict_exclusion=strict_exclusion)
+    violations += _check_conservation(records, video_stem, side, strict_exclusion=strict_exclusion)
     violations += _check_death_row_consistency(records, video_stem, side)
     violations += _check_ojama_accounting_rate_floor(records, video_stem, side)
     return violations
@@ -1125,6 +1191,13 @@ def _parse_args() -> argparse.Namespace:
         "--max-sec", type=float, default=None, dest="max_sec",
         help="--start-sec と併用する処理秒数。",
     )
+    ap.add_argument(
+        "--strict-exclusion", action="store_true", dest="strict_exclusion",
+        help="2026-07-25 Step0 追加: color_flicker/conservation_gain の設置/着弾"
+             "判定に CHAIN/GRAVITY_SETTLE も含める拡張版を使う (既定 False = "
+             "従来通り TSUMO_FALL/OJAMA_FALL のみ)。連鎖確定由来の正当な色変化を"
+             "除外し「本物のフリッカ件数」下限推定を得るための比較用フラグ。",
+    )
     return ap.parse_args()
 
 
@@ -1159,7 +1232,9 @@ def main() -> None:
             records = _mask_records_by_excluded_intervals(by_side[side], telop_intervals)
             if not records:
                 continue
-            side_violations = _audit_one_side(records, stem, side)
+            side_violations = _audit_one_side(
+                records, stem, side, strict_exclusion=args.strict_exclusion,
+            )
             video_violations += side_violations
             all_violations += side_violations
             dur_min = max(1e-6, (records[-1].t_sec - records[0].t_sec) / 60.0)
