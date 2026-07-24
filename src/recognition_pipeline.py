@@ -621,9 +621,11 @@ class RecognitionPipeline:
         # OjamaPhaseDetector.defer_ojama_fall_exit_to_visual も同時に True になり、
         # 退出判定を視覚 settle 判定に一本化する (地雷=score 側の無条件 STABLE 復帰
         # を構造的に無効化)。
-        # user viz 承認前の savepoint 実装のため default False (backwards compat、
-        # 既存挙動と完全 bit-identical)。
-        enable_ojama_fall_board_settle: bool = False,
+        # 2026-07-24 採用 (default ON): A/B 検証で次ツモ遅延 2.80s→0.65s・
+        # 浮き誤消去 -28%・採用 +38 (user viz 全画像レビューで「全て after の方が
+        # 品質高い」承認)。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_ojama_fall_board_settle: bool = True,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -726,16 +728,20 @@ class RecognitionPipeline:
         # (多数決板) を support_board として渡し、そのガードで非 EMPTY と
         # 裏付けられる cell は gap 扱いしない。
         # (b) enable_ojama_fall_board_settle と独立に A/B 切り分け可能。
-        # default False = 従来挙動完全維持 (backwards compat)。
-        enable_gravity_filter_support: bool = False,
+        # 2026-07-24 採用 (default ON): 案B (enable_ojama_fall_board_settle)
+        # と併せた A/B 検証 (user viz 全画像レビュー承認) で採用。False を
+        # 明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_gravity_filter_support: bool = True,
         # #45 おじゃま merge 統合修正 案(b) (2026-07-24): 退出 merge 書込値の
         # 多数決化。 NON-STABLE → STABLE 復帰時の EMPTY→色 遷移ガード分岐で、
         # 従来は単一フレーム CNN 値 (cnn_v) と多数決値 (guard_v) が不一致だと
         # 却下していた (= 退出直前の単一フレームちらつきで正当な色復帰も却下)。
         # True にすると guard_v が EMPTY でない場合、 cnn_v でなく guard_v を
         # 書き込む (多数決値を信頼)。 (a) と独立に A/B 切り分け可能。
-        # default False = 従来挙動完全維持 (backwards compat)。
-        merge_use_majority_value: bool = False,
+        # 2026-07-24 採用 (default ON): 案B と併せた A/B 検証 (user viz
+        # 全画像レビュー承認) で採用。False を明示指定すれば旧挙動
+        # (bit-identical) に戻せる (backwards compat)。
+        merge_use_majority_value: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1358,12 +1364,15 @@ class RecognitionPipeline:
         enable_ojama_visual_detection: bool = False,
         enable_ojama_visual_chain_exit: bool = False,
         enable_ojama_settle_detection: bool = False,
-        enable_ojama_fall_board_settle: bool = False,
+        # 2026-07-24 採用 (default ON): 呼び出し元 __init__ が常に明示値を
+        # 渡すため実運用では未使用だが、直接呼び出し時も採用済み挙動を
+        # 既定にする (__init__ の既定値と同期)。
+        enable_ojama_fall_board_settle: bool = True,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
-        enable_gravity_filter_support: bool = False,
-        merge_use_majority_value: bool = False,
+        enable_gravity_filter_support: bool = True,
+        merge_use_majority_value: bool = True,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1479,9 +1488,10 @@ class RecognitionPipeline:
         enable_ojama_settle_detection: bool = True,
         # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 退出を全盤面 settle
         # 判定に一本化する (OjamaVisualDetector + OjamaPhaseDetector 連動)。
-        # user viz 承認前の savepoint 実装のため default False (backwards compat、
-        # 既存挙動と完全 bit-identical)。
-        enable_ojama_fall_board_settle: bool = False,
+        # 2026-07-24 採用 (default ON): A/B 検証 (次ツモ遅延 2.80s→0.65s・
+        # 浮き誤消去 -28%・採用 +38、user viz 全画像レビュー承認) で採用。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_ojama_fall_board_settle: bool = True,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -1533,10 +1543,12 @@ class RecognitionPipeline:
         # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24): 案B
         # (enable_ojama_fall_board_settle) 適用後に判明した _merge_diff_only
         # の 2 副作用を個別 flag で修正する (A/B 切り分け用、独立 flag)。
-        # user viz 承認前の実装のため default False (backwards compat、
-        # 既存挙動と完全 bit-identical)。
-        enable_gravity_filter_support: bool = False,
-        merge_use_majority_value: bool = False,
+        # 2026-07-24 採用 (default ON): 案B (enable_ojama_fall_board_settle)
+        # と併せた A/B 検証 (user viz 全画像レビュー承認) で採用。それぞれ
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_gravity_filter_support: bool = True,
+        merge_use_majority_value: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 

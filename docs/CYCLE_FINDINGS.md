@@ -385,3 +385,39 @@ DB pre-inject (cycle_12 で検証済) は本番 default に組み込む価値あ
   `enable_chain_formula_simulate_verify=False` を明示指定すれば維持できる
   (backwards compat のため退避経路として残置)。
   savepoint タグ: `savepoint/chain-formula-verify-default-on`。
+
+### 8.3 おじゃまドロップ修正 3 flag を default ON に採用 (2026-07-24)
+
+- #45 おじゃま merge 統合修正の一環として実装した以下 3 flag を、
+  A/B 検証 + user viz 全画像レビュー承認 (「全て after の方が品質高い」) を
+  受けて既定値 `False` → `True` に変更した:
+  1. `enable_ojama_fall_board_settle` (案B: OJAMA_FALL 退出条件を
+     ROI ベース即時判定から「全盤面ぷよ数が静止するまで待つ」settle 判定に
+     切替。 OjamaVisualDetector と OjamaPhaseDetector 双方を同時連動させる
+     単一 flag)
+  2. `enable_gravity_filter_support` (案(a): 案B 適用後に判明した
+     `_apply_gravity_filter` の副作用対策。 F ガード
+     (`empty_to_color_guard`) 起因で EMPTY のまま残った cell を
+     `_merge_diff_only` に support_board として渡し、 積もり中のおじゃまを
+     浮きぷよ誤消去する副作用を防ぐ)
+  3. `merge_use_majority_value` (案(b): OJAMA_FALL 退出 merge の
+     EMPTY→色 遷移ガード分岐で、 単一フレーム CNN 値でなく多数決値
+     (`empty_to_color_guard`) を書き込む。 退出直前の単一フレーム
+     ちらつきによる正当な色復帰の却下を解消)
+- なお再突入振動バグ修正 (`_prev_top_ojama_count` 保持、
+  savepoint/ojama-fall-reentry-fix) は `enable_ojama_fall_board_settle=True`
+  時に構造的に自動適用されるため、追加の flag 変更は不要。
+- A/B 検証結果: 次ツモ遅延 2.80s → 0.65s に短縮、 浮き誤消去 -28%、
+  採用 (STABLE 復帰が正しく成立した件数) +38。 これらを反映した画像を
+  user が全数目視レビューし「全て after の方が品質高い」と承認済み。
+- 変更箇所: `src/recognition_pipeline.py` の `RecognitionPipeline.__init__` /
+  `_build_state_machine` / `load_default` の 3 箇所すべてで既定値を変更
+  (過去の機能D 既定 ON 化 (commit 6379517) と同一パターン)。
+  `src/board_state_machine.py` の `BoardStateMachine.__init__` 自体の内部
+  既定は `False` のまま維持し、 pipeline 層が明示的に `True` を配線する
+  設計を踏襲した (機能D と同じ思想)。
+- 旧挙動 (bit-identical) は 3 flag それぞれ `False` を明示指定すれば
+  維持できる (backwards compat のため退避経路として残置、
+  `tests/test_recognition_pipeline.py` の
+  `test_ojama_dropout_fix_flags_explicit_false_restores_legacy` で確認)。
+  savepoint タグ: `savepoint/ojama-dropout-fix-default-on`。
