@@ -346,6 +346,55 @@ def _apply_landing_observed_color_correction(
 
 
 # ============================
+# 色フリッカ根因への防御的修正 案(iii) (2026-07-25)
+# ============================
+
+
+def _flag_landing_distrust_cells(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+) -> set[tuple[int, int]]:
+    """着地セルのうち CNN 観測色が baseline (P2 推論) と食い違う「疑わしいセル」を検出する.
+
+    案(iii) の中核: 設置推論 (P2) が書いた色をこの関数自体は一切書き換えず
+    (baseline 不変、地雷再発防止 = feedback_recognition_regression_prevention)、
+    CNN 観測との不一致だけをフラグとして P7 (着地投票, _update_landing_votes) に
+    伝播する。フラグされたセルだけが NEXT 色 2 択バイアスを迂回し、
+    生 CNN 多数決フォールバックに必ず落ちる (呼び出し側で処理)。
+
+    #47 対策: cnn_board の観測色が UNKNOWN/EMPTY/おじゃまの場合は
+    「有効な反証なし」としてフラグしない。高速プレイで infer_placement が
+    唯一の情報源となるケース (#47) の挙動を壊さないため。
+
+    Args:
+        inferred: infer_placement (+ 既存後処理) が返した着地後の確定盤面
+            (baseline。この関数では変更しない)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (= 着地 cell 差分抽出用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面。
+
+    Returns:
+        疑わしい着地セル座標の集合 (r, c)。空集合 = 疑わしいセルなし。
+    """
+    from src.placement_inferrer import _VALID_PUYO_COLORS
+
+    distrust: set[tuple[int, int]] = set()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if not (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                continue
+            cnn_v = int(cnn_board.get(r, c))
+            if cnn_v in _VALID_PUYO_COLORS and cnn_v != iv:
+                distrust.add((r, c))
+    return distrust
+
+
+# ============================
 # Pipeline 本体
 # ============================
 
@@ -588,6 +637,16 @@ class RecognitionPipeline:
         # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_landing_observed_color: bool = False,
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
+        # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
+        # _update_landing_votes) に伝播する。フラグされたセルだけが
+        # NEXT 色 2 択バイアスを迂回し、生 CNN 多数決フォールバックに
+        # 必ず落ちる。baseline (P2 推論結果) 自体は書き換えない。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定
+        # (default ON 化 / main マージは別途 user 承認が必要)。
+        enable_placement_color_cnn_check: bool = False,
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
         # True (default) にすると HSV 経路の median 計算で赤 2 峰を collapse し
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
@@ -933,6 +992,15 @@ class RecognitionPipeline:
         # セット: NEXT変化検知時 / クリア: TSUMO_FALL→STABLE着地infer完了後。
         self._last_consumed_color_1p: tuple[int, int] | None = None
         self._last_consumed_color_2p: tuple[int, int] | None = None
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # TSUMO_FALL→STABLE 着地 infer 完了時に _flag_landing_distrust_cells で
+        # 検出した「疑わしいセル」座標集合 (1P/2P 別)。
+        # _last_consumed_color_Xp と同じ寿命管理パターン:
+        # セット: 着地 infer 完了時 (enable_placement_color_cnn_check=True 時のみ) /
+        # クリア: _start_landing_vote 呼出後 (P7 に伝播済み)。
+        # enable_placement_color_cnn_check=False (default) では常に空集合。
+        self._landing_distrust_1p: set[tuple[int, int]] = set()
+        self._landing_distrust_2p: set[tuple[int, int]] = set()
         # cycle 31 (2026-05-18, B 軸): baseline 整合性 check + 自己修復。
         # STABLE 中に baseline と CNN 出力の diff が連続異常なら baseline 壊れ
         # 判定 → state reset (= 試合 active 再起動 + bg_fp 再採取)。
@@ -1192,6 +1260,13 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # True で着地セルの CNN 観測色/baseline 不一致フラグを計算し、
+        # P7 (着地投票) に伝播する。default False = 従来挙動完全維持
+        # (backwards compat)。
+        self._enable_placement_color_cnn_check: bool = bool(
+            enable_placement_color_cnn_check,
+        )
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True で infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -1474,6 +1549,9 @@ class RecognitionPipeline:
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
         enable_landing_observed_color: bool = False,
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_placement_color_cnn_check: bool = False,
         enable_red_hue_wrap_fix: bool = True,
         # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
         # 2026-06-02: user viz 採用承認により default True に変更。
@@ -1693,6 +1771,7 @@ class RecognitionPipeline:
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_placement_color_cnn_check=enable_placement_color_cnn_check,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
@@ -2944,6 +3023,7 @@ class RecognitionPipeline:
         self, side: str, frame_idx: int,
         prev_confirmed: Board, final_board: Board,
         next_colors: tuple[int, int] | None = None,  # cycle 71m β2''
+        distrust_cells: set[tuple[int, int]] | None = None,
     ) -> None:
         """cycle 71h: 着地時に vote 蓄積エントリを追加.
 
@@ -2952,6 +3032,11 @@ class RecognitionPipeline:
 
         cycle 71m (β2''): next_colors を保存し、 vote 期間中に HSV 距離で
         NEXT 色 2 種類のどちらかに分類する追加 vote も蓄積する.
+
+        色フリッカ根因への防御的修正 案(iii) (2026-07-25): distrust_cells に
+        座標が含まれるセルは、_update_landing_votes 側で NEXT 色 2 択バイアスを
+        迂回し、生 CNN 多数決フォールバックに必ず落ちる (backwards compat:
+        None なら空集合扱いで従来挙動と完全に同一)。
         """
         cells_with_expected: list[tuple[int, int, int]] = []
         for r in range(BOARD_ROWS):
@@ -2974,6 +3059,8 @@ class RecognitionPipeline:
             },
             "next_colors": next_colors,
             "side": side,
+            # 案(iii): 疑わしいセル座標集合 (デフォルト空集合 = 従来挙動不変)。
+            "distrust_cells": distrust_cells or set(),
         }
         if side == "1P":
             self._pending_landing_vote_1p.append(entry)
@@ -3065,9 +3152,15 @@ class RecognitionPipeline:
                             # cycle 26 (A4): 早期確定経路。
                             # len>=5, ratio>=0.8 で即 updated_board に反映、
                             # confirmed_set に登録して以降の発火を抑止。
+                            # 案(iii) (2026-07-25): distrust セルは NEXT 色バイアス
+                            # による早期確定を迂回し、後段の生 CNN 多数決に委ねる。
                             nc_obs_now = entry["next_color_votes"][(r, c)]
+                            cell_distrusted = (r, c) in entry.get(
+                                "distrust_cells", set(),
+                            )
                             if (
                                 updated_board is not None
+                                and not cell_distrusted
                                 and len(nc_obs_now)
                                     >= self.LANDING_VOTE_NEXT_EARLY_COUNT
                             ):
@@ -3088,20 +3181,28 @@ class RecognitionPipeline:
                 if updated_board is None:
                     continue
                 confirmed_set = entry.get("confirmed_cells", set())
+                distrust_cells = entry.get("distrust_cells", set())
                 for (r, c, expected) in entry["cells"]:
                     # cycle 26 (A4): 早期確定済 cell は再適用 skip (上書き禁止)
                     if (r, c) in confirmed_set:
                         continue
-                    # cycle 71m β2'': NEXT 色 votes が十分なら採用 (= 多数決優先)
-                    # cycle 26 (A4): len>=3 のみ → ratio>=0.7 も必須化で誤分類抑制
-                    nc_obs = entry.get("next_color_votes", {}).get((r, c), [])
-                    if len(nc_obs) >= self.LANDING_VOTE_NEXT_MIN_COUNT:
-                        nc_counter = Counter(nc_obs)
-                        nc_winner, nc_count = nc_counter.most_common(1)[0]
-                        nc_ratio = nc_count / len(nc_obs)
-                        if nc_ratio >= self.LANDING_VOTE_NEXT_MIN_RATIO:
-                            updated_board.set(r, c, nc_winner)
-                            continue
+                    # 案(iii) (2026-07-25): distrust セルは NEXT 色 votes 優先ロジック
+                    # を完全に迂回し、下記の生 CNN 多数決フォールバックに必ず落ちる。
+                    # distrust_cells が空集合 (デフォルト/フラグ OFF) の場合は
+                    # 従来ロジックと bit-identical。
+                    if (r, c) not in distrust_cells:
+                        # cycle 71m β2'': NEXT 色 votes が十分なら採用 (= 多数決優先)
+                        # cycle 26 (A4): len>=3 のみ → ratio>=0.7 も必須化で誤分類抑制
+                        nc_obs = entry.get(
+                            "next_color_votes", {},
+                        ).get((r, c), [])
+                        if len(nc_obs) >= self.LANDING_VOTE_NEXT_MIN_COUNT:
+                            nc_counter = Counter(nc_obs)
+                            nc_winner, nc_count = nc_counter.most_common(1)[0]
+                            nc_ratio = nc_count / len(nc_obs)
+                            if nc_ratio >= self.LANDING_VOTE_NEXT_MIN_RATIO:
+                                updated_board.set(r, c, nc_winner)
+                                continue
                     # fallback: 既存 CNN 観測色の最頻値
                     obs = entry["votes"][(r, c)]
                     if not obs:
@@ -3944,6 +4045,24 @@ class RecognitionPipeline:
                 deferred_out=_deferred_buf if self._enable_hsv_deferred_consensus else None,
             )
             if inferred_landing is not None:
+                # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+                # 着地セル (= P2 設置推論の出力) のうち CNN 観測色が baseline と
+                # 食い違う「疑わしいセル」をフラグし、P7 (_start_landing_vote /
+                # _update_landing_votes) に伝播する。baseline (inferred_landing)
+                # 自体は一切書き換えない (地雷再発防止)。
+                # フラグ OFF (default) 時は常に空集合 = 下流は完全に bit-identical。
+                distrust_cells_for_side: set[tuple[int, int]] = (
+                    _flag_landing_distrust_cells(
+                        inferred_landing, prev_confirmed, cnn_board,
+                    )
+                    if self._enable_placement_color_cnn_check
+                    and prev_confirmed is not None
+                    else set()
+                )
+                if side == "1P":
+                    self._landing_distrust_1p = distrust_cells_for_side
+                else:
+                    self._landing_distrust_2p = distrust_cells_for_side
                 # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
                 # falling_pair タイミングずれで infer_placement が誤色を書いても
                 # 2 つの独立認識器 (CNN/HSV) が一致した色があれば優先採用する。
@@ -4328,10 +4447,17 @@ class RecognitionPipeline:
             and ctx.confirmed_board is not None
         ):
             _, falling_pair_for_grace = landing_pending
+            # 案(iii) (2026-07-25): 着地 infer 完了時に計算済の疑わしいセル集合を
+            # P7 (_start_landing_vote) に伝播する。
+            distrust_cells_for_vote = (
+                self._landing_distrust_1p if side == "1P"
+                else self._landing_distrust_2p
+            )
             if prev_confirmed is not None:
                 self._start_landing_vote(
                     side, frame_idx, prev_confirmed, ctx.confirmed_board,
                     next_colors=falling_pair_for_grace,
+                    distrust_cells=distrust_cells_for_vote,
                 )
             grace_until = frame_idx + self.LANDING_GRACE_FRAMES
             if side == "1P":
@@ -4339,11 +4465,14 @@ class RecognitionPipeline:
                     grace_until, ctx.confirmed_board.copy(),
                 )
                 self._landing_pending_1p = None
+                # 伝播済のため 1 ツモ分だけ生存させてクリア (次着地まで持ち越さない)。
+                self._landing_distrust_1p = set()
             else:
                 self._landing_grace_2p = (
                     grace_until, ctx.confirmed_board.copy(),
                 )
                 self._landing_pending_2p = None
+                self._landing_distrust_2p = set()
 
         # cycle 31 (B 軸, 2026-05-18): baseline 整合性 check + 自己修復。
         # STABLE 中なのに baseline と CNN puyo 数 diff が連続異常な場合、
