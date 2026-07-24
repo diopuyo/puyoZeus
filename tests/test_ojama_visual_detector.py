@@ -21,6 +21,10 @@ from src.board_state_machine import (
 )
 from src.ojama_visual_detector import (
     OJAMA_CONSEC_THRESH,
+    OJAMA_FALL_MAX_SEC,
+    OJAMA_FALL_SETTLE_DIFF_THRESHOLD,
+    OJAMA_FALL_SETTLE_MIN_FRAMES,
+    OJAMA_FALL_SETTLE_STABLE_FRAMES,
     OJAMA_SETTLE_CONSEC,
     OjamaVisualDetector,
     _count_top_ojama,
@@ -42,6 +46,25 @@ def _board_with_ojama_top(count: int = 1) -> Board:
     b = Board()
     for c in range(min(count, 6)):
         b.set(HIDDEN_ROWS, c, COLOR_OJAMA)
+    return b
+
+
+def _board_with_n_puyos(n: int) -> Board:
+    """count_puyos() が n を返す盤面を生成する (案B 全盤面 settle 判定テスト用).
+
+    行優先で先頭から n セルに COLOR_OJAMA を敷き詰める (色自体は判定に無関係、
+    count_puyos は EMPTY/UNKNOWN 以外を数えるため OJAMA で代用する)。
+    """
+    from src.board import BOARD_COLS as _COLS, BOARD_ROWS as _ROWS
+
+    b = Board()
+    filled = 0
+    for r in range(_ROWS):
+        for c in range(_COLS):
+            if filled >= n:
+                return b
+            b.set(r, c, COLOR_OJAMA)
+            filled += 1
     return b
 
 
@@ -432,3 +455,152 @@ def test_str_detector_signals_ojama_top_positive_default_false() -> None:
         is_match_active=True,
     )
     assert sig.ojama_top_positive is False, "デフォルト False で既存ビルドが壊れない"
+
+
+# ============================
+# 案B (第2の根本原因対処, 2026-07-24):
+# OJAMA_FALL 退出 = 全盤面 settle 判定 (enable_ojama_fall_board_settle)
+# ============================
+
+
+def _drive_board_settle(
+    det: OjamaVisualDetector,
+    counts: list[int],
+    *,
+    fps: float = 30.0,
+    start_frame: int = 0,
+) -> list[BoardState | None]:
+    """counts の各値を count_puyos() とする盤面を順に detect() へ渡す.
+
+    ctx.state は常に OJAMA_FALL (= 退出判定のみをテストする)。
+    """
+    results: list[BoardState | None] = []
+    for i, n in enumerate(counts):
+        frame_idx = start_frame + i
+        ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=frame_idx)
+        sig = DetectorSignals(
+            time_sec=float(frame_idx) / fps,
+            cnn_board=_board_with_n_puyos(n),
+            is_match_active=True,
+        )
+        results.append(det.detect(ctx, sig))
+    return results
+
+
+def test_board_settle_a_monotonic_increase_then_stable_exits_at_expected_frame() -> None:
+    """(a) 全盤面 count が単調増加 → 安定した時、 期待通りのフレーム数で STABLE 復帰する。
+
+    シーケンス: 20→30→40 (増加中、 frames_in_settle < MIN_FRAMES(3) の間は
+    diff 判定自体をスキップ) → 44 (frames_in_settle=3, diff=4 >= THRESHOLD(2) で
+    まだ不安定) → 45 が OJAMA_FALL_SETTLE_STABLE_FRAMES(8) 回連続 → STABLE。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+    counts = [20, 30, 40, 44] + [45] * 8  # 12 frames (idx 0-11)
+    results = _drive_board_settle(det, counts)
+
+    assert OJAMA_FALL_SETTLE_MIN_FRAMES == 3
+    assert OJAMA_FALL_SETTLE_STABLE_FRAMES == 8
+    assert OJAMA_FALL_SETTLE_DIFF_THRESHOLD == 2
+
+    # frame 11 (0-indexed) で STABLE 復帰するはず、 それより前は None。
+    assert all(r is None for r in results[:11]), (
+        "安定に必要な連続フレーム数に達するまでは None のはず"
+    )
+    assert results[11] == BoardState.STABLE, (
+        "count が OJAMA_FALL_SETTLE_STABLE_FRAMES フレーム不変で STABLE 復帰するはず"
+    )
+
+
+def test_board_settle_b_timeout_forces_stable() -> None:
+    """(b) OJAMA_FALL_MAX_SEC 秒超過で安定未達でも安全弁として強制 STABLE 復帰する。"""
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+
+    # frame 0: OJAMA_FALL 突入、 count=10 (start 記録のみ、 必ず None)
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(10), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    # frame 1: count がまだ変動中 (不安定) だが time_sec が MAX_SEC を超過 → 強制 STABLE
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_FALL_MAX_SEC + 0.1,
+        cnn_board=_board_with_n_puyos(50),  # 大きく変動 = 不安定
+        is_match_active=True,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result == BoardState.STABLE, (
+        "OJAMA_FALL_MAX_SEC 超過は安定未達でも強制 STABLE 復帰する安全弁のはず"
+    )
+
+
+def test_board_settle_c_intercept_resets_no_stale_contamination() -> None:
+    """(c) OJAMA_FALL から他 state に途中横取りされた後の再突入で内部 state が
+    汚染されないことを確認する (防御コード: _detect_ojama_fall_entry 先頭リセット)。
+
+    横取り経路には STABLE + ROI count=0 (= `_detect_ojama_fall_entry` の
+    「お邪魔なし」分岐、 これは _reset_internal_state() を呼ばない) を使う。
+    こうすることで「_detect_ojama_fall_entry 先頭の防御コード」 自体の効果を
+    (他の分岐が持つ reset 呼び出しから独立して) 検証できる。
+    もし防御コードが無ければ、 再突入直後に「古い _settle_start_time」 との
+    差分で即タイムアウト誤判定 (STABLE) してしまう。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+
+    # 1st OJAMA_FALL 突入 (frame 0, time=0.0): start 記録。
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(10), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+    # settle 内部 state が記録されていることを確認 (直接検証、 実装詳細だが防御コード検証に必要)。
+    assert det._settle_start_frame == 0  # noqa: SLF001
+
+    # 他 state (STABLE, ROI お邪魔なし) に途中横取りされる。
+    # time が大きく進む (= 旧実装ならここで stale time が残る)。
+    ctx_other = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig_other = DetectorSignals(
+        time_sec=100.0,  # 大きく時間が進む (OJAMA_FALL_MAX_SEC を大幅に超える)
+        cnn_board=_empty_board(),  # ROI count=0 の分岐 (reset_internal_state 非経由)
+        is_match_active=True,
+    )
+    res_other = det.detect(ctx_other, sig_other)
+    assert res_other is None, "STABLE + ROI count=0 では OJAMA_FALL 発火しない"
+    # 防御コードにより内部 state がリセットされているはず。
+    assert det._settle_start_frame == -1  # noqa: SLF001
+
+    # 2nd OJAMA_FALL 再突入 (frame 2, time=100.05): 新規 start として記録され、
+    # 直前の time=100.0 との差分でタイムアウト誤判定してはいけない。
+    ctx2 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=2)
+    sig2 = DetectorSignals(
+        time_sec=100.05, cnn_board=_board_with_n_puyos(10), is_match_active=True,
+    )
+    result = det.detect(ctx2, sig2)
+    assert result is None, (
+        "再突入直後は新規 start として記録され、 stale time でタイムアウトしてはいけない"
+    )
+
+
+def test_board_settle_default_off_bit_identical_to_legacy() -> None:
+    """既定 (enable_ojama_fall_board_settle=False) では従来の ROI ベース判定が
+    そのまま使われ、 全盤面 count とは無関係に振る舞う (bit-identical 確認)。
+
+    全盤面 count が変動し続けていても、 ROI (可視最上段 2 行) の count が 0 なら
+    従来通り即 STABLE 復帰する (= 案B のロジックが一切介入しない証拠)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=False)
+
+    # 全盤面には puyo が大量にある (ROI 外) が ROI 自体は空。
+    board = Board()
+    for r in range(HIDDEN_ROWS + 2, 13):
+        for c in range(6):
+            board.set(r, c, COLOR_OJAMA)
+    assert _count_top_ojama(board) == 0  # ROI 内は空
+
+    ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig = DetectorSignals(time_sec=0.0, cnn_board=board, is_match_active=True)
+    result = det.detect(ctx, sig)
+    assert result == BoardState.STABLE, (
+        "従来ロジック (ROI count==0 で即 STABLE) が維持されているはず"
+    )

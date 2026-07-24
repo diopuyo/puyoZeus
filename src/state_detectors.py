@@ -294,12 +294,24 @@ class OjamaPhaseDetector:
           おじゃまが降る → OJAMA_FALL
         - 現 state == OJAMA_FALL かつ score_delta < threshold → STABLE 復帰
           (= 落下が止まった後の平常時へ)
+          ただし defer_ojama_fall_exit_to_visual=True の場合は STABLE に戻さず
+          None を返し、 OjamaVisualDetector (全盤面 settle 判定) に完全委譲する。
 
     threshold は OJAMA_RATE_STANDARD (=70 点 = おじゃま 1 個分) を採用。
     これより小さい score 変動はおじゃまに化けないので OJAMA_FALL 不要。
+
+    案B (2026-07-24): 従来はここで score_delta<threshold なら無条件 STABLE 復帰
+    しており、 OjamaVisualDetector が settle 未完了で None を返しても
+    直後にこの detector が STABLE へ握り潰していた (= 真因の地雷)。
+    defer_ojama_fall_exit_to_visual=True で挙動を無効化し、 退出判定を
+    OjamaVisualDetector に一本化する。 default False で従来挙動を完全維持する。
     """
 
     score_threshold: int = 70
+    # 案B (2026-07-24): True で OJAMA_FALL 退出判定を OjamaVisualDetector に委譲
+    # (= 本 detector は STABLE に戻さず None を返す)。
+    # default False = 従来の無条件 STABLE 復帰ロジックを完全維持 (backwards compat)。
+    defer_ojama_fall_exit_to_visual: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -311,6 +323,9 @@ class OjamaPhaseDetector:
         # 自分で抜ける」ロジックで state machine がロックインしないように
         # する。本格的な「おじゃま落下完了」検出は B-3/B-4 統合で実装。
         if ctx.state == BoardState.OJAMA_FALL:
+            if self.defer_ojama_fall_exit_to_visual:
+                # 案B: OjamaVisualDetector の settle 判定完了まで委譲する。
+                return None
             return BoardState.STABLE
         return None
 

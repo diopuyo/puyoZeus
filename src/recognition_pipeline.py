@@ -615,6 +615,15 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 退出条件を
+        # 「全盤面ぷよ数が静止するまで待つ」方式 (GravitySettle と同型) に切替える。
+        # True にすると OjamaVisualDetector.enable_ojama_fall_board_settle に加え、
+        # OjamaPhaseDetector.defer_ojama_fall_exit_to_visual も同時に True になり、
+        # 退出判定を視覚 settle 判定に一本化する (地雷=score 側の無条件 STABLE 復帰
+        # を構造的に無効化)。
+        # user viz 承認前の savepoint 実装のため default False (backwards compat、
+        # 既存挙動と完全 bit-identical)。
+        enable_ojama_fall_board_settle: bool = False,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -989,6 +998,14 @@ class RecognitionPipeline:
         self._enable_ojama_settle_detection: bool = (
             _ovd_parent or bool(enable_ojama_settle_detection)
         )
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 全盤面 settle 判定フラグ。
+        # 独立公開フラグにせず OjamaVisualDetector / OjamaPhaseDetector 両方の
+        # 切替に直結させる (「ovd だけ直して地雷 (OjamaPhaseDetector 側の無条件
+        # STABLE 復帰) を直し忘れる」構成を構造的に不能化する設計)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_ojama_fall_board_settle: bool = bool(
+            enable_ojama_fall_board_settle
+        )
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
@@ -1014,6 +1031,7 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1024,6 +1042,7 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1310,6 +1329,7 @@ class RecognitionPipeline:
         enable_ojama_visual_detection: bool = False,
         enable_ojama_visual_chain_exit: bool = False,
         enable_ojama_settle_detection: bool = False,
+        enable_ojama_fall_board_settle: bool = False,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
@@ -1321,6 +1341,9 @@ class RecognitionPipeline:
         # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
         # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
         # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
+        # 案B (第2の根本原因対処, 2026-07-24): enable_ojama_fall_board_settle=True で
+        #   OjamaVisualDetector の全盤面 settle 判定 + OjamaPhaseDetector の
+        #   defer_ojama_fall_exit_to_visual を同時に有効化する (単一フラグに直結)。
         # 案P3: enable_chain_max_hold_override=True で ChainPhaseDetector に伝播。
         # feat/gravity-settle-2026-06-05: enable_gravity_settle_state=True で
         #   ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返し、
@@ -1346,9 +1369,14 @@ class RecognitionPipeline:
             ovd = OjamaVisualDetector(
                 enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
                 enable_ojama_settle_detection=enable_ojama_settle_detection,
+                enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
             )
             detectors.append(ovd)
-        detectors.append(OjamaPhaseDetector())
+        detectors.append(
+            OjamaPhaseDetector(
+                defer_ojama_fall_exit_to_visual=enable_ojama_fall_board_settle,
+            )
+        )
         detectors.append(TsumoPhaseDetector())
         # feat/gravity-settle-2026-06-05: GravitySettleDetector を最低優先 (末尾) で登録。
         # CHAIN より低優先 → settle 中に次連鎖 drop 検知で CHAIN detector が優先発火し
@@ -1413,6 +1441,11 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 退出を全盤面 settle
+        # 判定に一本化する (OjamaVisualDetector + OjamaPhaseDetector 連動)。
+        # user viz 承認前の savepoint 実装のため default False (backwards compat、
+        # 既存挙動と完全 bit-identical)。
+        enable_ojama_fall_board_settle: bool = False,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -1612,6 +1645,7 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
