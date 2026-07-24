@@ -71,6 +71,11 @@ from src.self_supervised.physical_consistency import (  # noqa: E402
 from scripts.recognition_physics_review import (  # noqa: E402
     _FrameRecord, _capture_frames, _new_chain_triggers,
 )
+# 2026-07-24 3コマmontage拡張: confirmed_board のセル色オーバーレイ描画は
+# 既存 visualize_recognition.draw_cell_overlay をそのまま流用する (描画ロジック
+# の重複実装を避ける、scripts/_diag_ojama_fall_board_settle_ab_2026-07-24.py の
+# 3コマmontage手法と同じ再利用パターン)。
+from scripts.visualize_recognition import draw_cell_overlay  # noqa: E402
 
 # ============================
 # 窓定義の再利用 (A/B診断 _diag_ojama_fall_exit_timing_2026-07-24.py と同一の
@@ -136,11 +141,31 @@ CONFIRM_LAG_WARN_SEC: float = 5.0
 # 監査器側で state machine と完全独立に同一フレームへ再適用し、除外区間を得る。
 TELOP_MASK_STATE_NAME: str = BoardState.MENU.name
 
-# 類型ごとに frame crop を出力する上位件数。
+# 類型ごとに frame crop を出力する上位件数 (montage対象外の単パネル類型に適用、
+# 全動画合算の上位。既存挙動を維持、後方互換のため据え置き)。
 MAX_FRAMES_PER_TYPE: int = 3
 
 # frame crop の余白 (px)。
 FRAME_CROP_MARGIN_PX: int = 30
+
+# 2026-07-24 3コマmontage拡張 (user要望):
+# 変化前STABLE/変化後STABLE/実画面 の3コマ横並びで出力する対象類型。
+# 色フリッカ (色A→B, 変化前後が見えないと判定不能) が最優先、保存則違反2種・
+# 4連結消去漏れも同様に前後比較が有効なため対象に含める。gravity_violation/
+# death_row_inconsistency は単snapshot判定 (前後比較の意味が薄い) のため
+# 単パネルのまま維持する (user明示指定)。
+MONTAGE_TYPES: frozenset[str] = frozenset({
+    "color_flicker", "connection_uncleared", "conservation_loss", "conservation_gain",
+})
+
+# montage対象類型は動画別に上位何件出すか (user指定「各類型 発生件数上位3〜5件/動画」
+# の中央値を採用)。単パネル類型 (MAX_FRAMES_PER_TYPE) とは集計軸が異なる
+# (こちらは (type, video_stem) 単位、単パネルは type 単位で全動画合算)。
+MAX_MONTAGE_FRAMES_PER_TYPE_PER_VIDEO: int = 5
+
+# montage 内の区切り線幅 (px) / 上部バナー高さ (px)。
+MONTAGE_SEPARATOR_PX: int = 4
+MONTAGE_BANNER_HEIGHT_PX: int = 26
 
 # severity ラベル
 SEVERITY_HIGH: str = "high"
@@ -182,6 +207,11 @@ class Violation:
     type/severity/t_sec/side/cells/detail はアーキ指定の必須フィールド。
     video_stem/frame_idx/lag_flag は動画別集計・frame crop 生成・信頼度表示に
     必要な実装上の追加フィールド (背後互換の懸念がない新規スクリプトのため追加)。
+
+    prev_frame_idx/prev_t_sec/prev_grid/curr_grid は 2026-07-24 3コマmontage拡張で
+    追加 (既定値で後方互換維持、MONTAGE_TYPES 対象の類型のみ実値を設定する)。
+    prev_frame_idx=-1 は「直前のSTABLE snapshotが存在しない (最初のsnapshot等)」
+    を表し、montage生成側で N/A コマにフォールバックする。
     """
     type: str
     severity: str
@@ -192,6 +222,10 @@ class Violation:
     video_stem: str = ""
     frame_idx: int = -1
     lag_flag: bool = False
+    prev_frame_idx: int = -1
+    prev_t_sec: float = -1.0
+    prev_grid: np.ndarray | None = None
+    curr_grid: np.ndarray | None = None
 
 
 # ============================
@@ -363,14 +397,20 @@ def _check_gravity(records: list[_FrameRecord], video_stem: str, side: str) -> l
 def _check_connection_uncleared(
     records: list[_FrameRecord], video_stem: str, side: str,
 ) -> list[Violation]:
-    """類型6: 4連結以上消去漏れ。"""
+    """類型6: 4連結以上消去漏れ。
+
+    2026-07-24 3コマmontage拡張: 前後比較目視のため直前のSTABLE snapshot
+    (prev_rec、検出ロジック自体は単snapshotのまま変更しない) を併記する。
+    """
     violations: list[Violation] = []
-    for idx, rec in _distinct_stable_snapshots(records):
+    snaps = _distinct_stable_snapshots(records)
+    for i, (idx, rec) in enumerate(snaps):
         board = Board.from_list(rec.grid.tolist())
         is_valid, clusters = check_no_pre_chain_4_plus_connection(board)
         if is_valid:
             continue
         lag_flag = _confirm_lag_sec(records, idx) > CONFIRM_LAG_WARN_SEC
+        prev_rec = snaps[i - 1][1] if i > 0 else None
         for cluster in clusters:
             violations.append(Violation(
                 type="connection_uncleared",
@@ -378,6 +418,10 @@ def _check_connection_uncleared(
                 t_sec=rec.t_sec, side=side, cells=cluster["cells"], video_stem=video_stem,
                 frame_idx=rec.frame_idx, lag_flag=lag_flag,
                 detail=f"色{cluster['color']}の{len(cluster['cells'])}連結がSTABLEで未消去",
+                prev_frame_idx=prev_rec.frame_idx if prev_rec is not None else -1,
+                prev_t_sec=prev_rec.t_sec if prev_rec is not None else -1.0,
+                prev_grid=prev_rec.grid if prev_rec is not None else None,
+                curr_grid=rec.grid,
             ))
     return violations
 
@@ -450,6 +494,8 @@ def _check_color_flicker(records: list[_FrameRecord], video_stem: str, side: str
             lag_flag=_confirm_lag_sec(records, curr_idx) > CONFIRM_LAG_WARN_SEC,
             detail=f"{len(cells)}セルで空を経由しない色変化 "
                    f"(t={prev_rec.t_sec:.2f}->{curr_rec.t_sec:.2f})",
+            prev_frame_idx=prev_rec.frame_idx, prev_t_sec=prev_rec.t_sec,
+            prev_grid=prev_rec.grid, curr_grid=curr_rec.grid,
         ))
     return violations
 
@@ -499,6 +545,8 @@ def _build_conservation_violation(
             frame_idx=curr_rec.frame_idx, lag_flag=lag_flag,
             detail=f"puyo数 {prev_n}->{curr_n} (Δ{diff}) だが区間内に連鎖イベントなし "
                    f"(t={prev_rec.t_sec:.2f}->{curr_rec.t_sec:.2f})",
+            prev_frame_idx=prev_rec.frame_idx, prev_t_sec=prev_rec.t_sec,
+            prev_grid=prev_rec.grid, curr_grid=curr_rec.grid,
         )
     if diff > 0 and not _has_placement_event_in_range(records, prev_idx, curr_idx):
         return Violation(
@@ -507,6 +555,8 @@ def _build_conservation_violation(
             frame_idx=curr_rec.frame_idx, lag_flag=lag_flag,
             detail=f"puyo数 {prev_n}->{curr_n} (Δ{diff}) だが区間内にTSUMO_FALL/OJAMA_FALL "
                    f"未検出 (t={prev_rec.t_sec:.2f}->{curr_rec.t_sec:.2f})",
+            prev_frame_idx=prev_rec.frame_idx, prev_t_sec=prev_rec.t_sec,
+            prev_grid=prev_rec.grid, curr_grid=curr_rec.grid,
         )
     return None
 
@@ -745,10 +795,13 @@ def _format_video_type_subtotal(violations: list[Violation]) -> str:
 # ============================
 
 
-def _crop_board_with_highlight(
-    frame: np.ndarray, region: object, cells: list[tuple[int, int]],
-) -> np.ndarray:
-    """盤面領域 (隠し段含む) を crop し、矛盾セルを赤枠でハイライトする。"""
+def _crop_board_region(frame: np.ndarray, region: object) -> tuple[np.ndarray, int, int]:
+    """盤面領域 (隠し段含む余白付き) を crop する。戻り値 (crop, x1, y1)、x1/y1はframe上のcrop左上座標。
+
+    2026-07-24 3コマmontage拡張: 元 _crop_board_with_highlight から crop 計算部分のみ
+    切り出した (ハイライト描画と分離し、montage側のconfirmed_boardオーバーレイでも
+    同一座標系を再利用するため)。
+    """
     cell_h = int(region.cell_height)  # type: ignore[attr-defined]
     x1 = region.x - FRAME_CROP_MARGIN_PX  # type: ignore[attr-defined]
     y1 = region.y - cell_h - FRAME_CROP_MARGIN_PX  # type: ignore[attr-defined]
@@ -757,15 +810,55 @@ def _crop_board_with_highlight(
     h_img, w_img = frame.shape[:2]
     x1, x2 = max(0, x1), min(w_img, x2)
     y1, y2 = max(0, y1), min(h_img, y2)
-    crop = frame[y1:y2, x1:x2].copy()
+    return frame[y1:y2, x1:x2].copy(), x1, y1
+
+
+def _draw_cell_highlight_boxes(
+    crop: np.ndarray, region: object, cells: list[tuple[int, int]], x1: int, y1: int,
+) -> None:
+    """矛盾セルを赤枠でハイライトする (crop に in-place 描画、x1/y1はcrop左上のframe座標)。"""
+    half_w = int(region.cell_width / 2)  # type: ignore[attr-defined]
+    half_h = int(region.cell_height / 2)  # type: ignore[attr-defined]
     for row, col in cells:
         cx, cy = region.cell_center(row, col)  # type: ignore[attr-defined]
-        half_w = int(region.cell_width / 2)  # type: ignore[attr-defined]
-        half_h = int(region.cell_height / 2)  # type: ignore[attr-defined]
         rx1, ry1 = cx - half_w - x1, cy - half_h - y1
         rx2, ry2 = cx + half_w - x1, cy + half_h - y1
         cv2.rectangle(crop, (rx1, ry1), (rx2, ry2), (0, 0, 255), 2)
+
+
+def _crop_board_with_highlight(
+    frame: np.ndarray, region: object, cells: list[tuple[int, int]],
+) -> np.ndarray:
+    """盤面領域 (隠し段含む) を crop し、矛盾セルを赤枠でハイライトする (単パネル用、既存動作維持)。"""
+    crop, x1, y1 = _crop_board_region(frame, region)
+    _draw_cell_highlight_boxes(crop, region, cells, x1, y1)
     return crop
+
+
+def _draw_confirmed_board_overlay(
+    crop: np.ndarray, grid: np.ndarray | None, region: object, x1: int, y1: int,
+) -> None:
+    """crop 上に confirmed_board の認識色シンボルを重畳する (in-place)。
+
+    visualize_recognition.draw_cell_overlay をそのまま流用する (描画ロジックの
+    重複実装を避ける)。draw_cell_overlay は roi_x/roi_y を「描画先画像内での
+    ROI原点」として使うだけなので、frame全体でなくcropを渡してもcrop内座標系
+    (region.x - x1, region.y - y1) を指定すれば正しく描画される。
+    """
+    if grid is None:
+        return
+    board = Board.from_list(grid.tolist())
+    roi_x_local = int(region.x - x1)  # type: ignore[attr-defined]
+    roi_y_local = int(region.y - y1)  # type: ignore[attr-defined]
+    draw_cell_overlay(crop, board, roi_x_local, roi_y_local)
+
+
+def _label_montage_panel(panel: np.ndarray, text: str) -> None:
+    """montageコマ内の簡潔ラベル (ASCII、CJKグリフ欠落のため日本語不使用)。"""
+    cv2.putText(
+        panel, text, (6, 20), cv2.FONT_HERSHEY_DUPLEX, 0.5,
+        (0, 255, 255), 1, cv2.LINE_AA,
+    )
 
 
 def _write_one_violation_frame(v: Violation, frames_dir: Path) -> bool:
@@ -791,14 +884,152 @@ def _write_one_violation_frame(v: Violation, frames_dir: Path) -> bool:
     return True
 
 
+# ============================
+# 2026-07-24 3コマmontage拡張: BEFORE(STABLE)/AFTER(STABLE)/ACTUAL 出力
+# ============================
+
+
+def _read_frame_at(cap: cv2.VideoCapture, frame_idx: int) -> np.ndarray | None:
+    """cap から frame_idx の1枚を読み込み、1920x1080に正規化して返す (読めなければNone)。"""
+    cap.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx))
+    ok, frame = cap.read()
+    if not ok or frame is None:
+        return None
+    if frame.shape[:2] != (1080, 1920):
+        frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
+    return frame
+
+
+def _panel_prev_stable(
+    prev_frame: np.ndarray | None, v: Violation, region: object,
+) -> np.ndarray | None:
+    """左コマ「変化前STABLE」(confirmed_board重畳+赤枠) を作る。prev不在ならNoneを返す。"""
+    if prev_frame is None:
+        return None
+    crop, x1, y1 = _crop_board_region(prev_frame, region)
+    _draw_confirmed_board_overlay(crop, v.prev_grid, region, x1, y1)
+    _draw_cell_highlight_boxes(crop, region, v.cells, x1, y1)
+    _label_montage_panel(crop, f"BEFORE(STABLE) t={v.prev_t_sec:.2f}s")
+    return crop
+
+
+def _panel_curr_stable(curr_frame: np.ndarray, v: Violation, region: object) -> np.ndarray:
+    """中コマ「変化後STABLE」(confirmed_board重畳+赤枠) を作る。"""
+    crop, x1, y1 = _crop_board_region(curr_frame, region)
+    _draw_confirmed_board_overlay(crop, v.curr_grid, region, x1, y1)
+    _draw_cell_highlight_boxes(crop, region, v.cells, x1, y1)
+    _label_montage_panel(crop, f"AFTER(STABLE) t={v.t_sec:.2f}s")
+    return crop
+
+
+def _panel_actual_screen(curr_frame: np.ndarray, v: Violation, region: object) -> np.ndarray:
+    """右コマ「実画面」(オーバーレイなし、赤枠のみ) を作る。"""
+    crop, x1, y1 = _crop_board_region(curr_frame, region)
+    _draw_cell_highlight_boxes(crop, region, v.cells, x1, y1)
+    _label_montage_panel(crop, f"ACTUAL SCREEN t={v.t_sec:.2f}s")
+    return crop
+
+
+def _na_panel(like: np.ndarray) -> np.ndarray:
+    """prev snapshot不在時 (最初のsnapshot等) の空欄コマ (N/A表示、安全なフォールバック)。"""
+    panel = np.zeros_like(like)
+    cv2.putText(
+        panel, "N/A (no prev snapshot)", (6, panel.shape[0] // 2),
+        cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA,
+    )
+    return panel
+
+
+def _stack_montage_panels(panels: list[np.ndarray]) -> np.ndarray:
+    """3コマを同一高さ/幅にpaddingし、区切り線付きで横並びにする。"""
+    h = max(p.shape[0] for p in panels)
+    w = max(p.shape[1] for p in panels)
+
+    def _pad(img: np.ndarray) -> np.ndarray:
+        out = np.zeros((h, w, 3), dtype=np.uint8)
+        out[: img.shape[0], : img.shape[1]] = img
+        return out
+
+    sep = np.full((h, MONTAGE_SEPARATOR_PX, 3), (255, 255, 255), dtype=np.uint8)
+    parts: list[np.ndarray] = []
+    for i, p in enumerate(panels):
+        if i > 0:
+            parts.append(sep)
+        parts.append(_pad(p))
+    return np.hstack(parts)
+
+
+def _build_montage_banner_text(v: Violation) -> str:
+    """montage上部の英数字サマリラベル (類型・動画・時刻・prev/curr色、CJKグリフ欠落回避のためASCIIのみ)。"""
+    text = (
+        f"{v.type} id={VIOLATION_TYPE_ID.get(v.type, -1)} vid={v.video_stem} "
+        f"{v.side} t={v.t_sec:.2f}s n_cells={len(v.cells)}"
+    )
+    if v.cells and v.prev_grid is not None and v.curr_grid is not None:
+        row, col = v.cells[0]
+        prev_c, curr_c = int(v.prev_grid[row, col]), int(v.curr_grid[row, col])
+        text += f" cell0(row{row},col{col})_color:{prev_c}->{curr_c}"
+    return text
+
+
+def _write_one_violation_montage(v: Violation, frames_dir: Path) -> bool:
+    """1件の違反に対応する3コマmontage (BEFORE STABLE/AFTER STABLE/ACTUAL) を書き出す。
+
+    prev snapshot が無い場合は左コマを N/A にする (安全なフォールバック、user制約準拠)。
+    """
+    video_path = VIDEO_DIR / f"video_{v.video_stem}.mp4"
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    region = DEFAULT_P1_REGION if v.side == "1P" else DEFAULT_P2_REGION
+    curr_frame_idx = v.frame_idx if v.frame_idx >= 0 else int(round(v.t_sec * fps))
+    curr_frame = _read_frame_at(cap, curr_frame_idx)
+    prev_frame = _read_frame_at(cap, v.prev_frame_idx) if v.prev_frame_idx >= 0 else None
+    cap.release()
+    if curr_frame is None:
+        return False
+
+    panel_curr = _panel_curr_stable(curr_frame, v, region)
+    panel_actual = _panel_actual_screen(curr_frame, v, region)
+    panel_prev = _panel_prev_stable(prev_frame, v, region)
+    if panel_prev is None:
+        panel_prev = _na_panel(panel_curr)
+
+    montage = _stack_montage_panels([panel_prev, panel_curr, panel_actual])
+    banner = np.zeros((MONTAGE_BANNER_HEIGHT_PX, montage.shape[1], 3), dtype=np.uint8)
+    cv2.putText(
+        banner, _build_montage_banner_text(v), (6, 18),
+        cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA,
+    )
+    out = np.vstack([banner, montage])
+    label = f"{v.t_sec:.2f}".replace(".", "_")
+    fname = f"{v.type}_{v.video_stem}_{v.side}_t{label}_montage.png"
+    cv2.imwrite(str(frames_dir / fname), out)
+    return True
+
+
 def _write_top_violation_frames(violations: list[Violation], frames_dir: Path) -> int:
-    """類型ごとに発生件数上位 MAX_FRAMES_PER_TYPE 件の frame crop を出力する。"""
+    """類型ごとに発生件数上位の frame crop を出力する。
+
+    2026-07-24 3コマmontage拡張: MONTAGE_TYPES 対象は (type, video_stem) 単位で
+    上位 MAX_MONTAGE_FRAMES_PER_TYPE_PER_VIDEO 件、それ以外は既存通り type 単位
+    (全動画合算) で上位 MAX_FRAMES_PER_TYPE 件を出す (既存挙動を維持)。
+    """
     frames_dir.mkdir(parents=True, exist_ok=True)
-    by_type: dict[str, list[Violation]] = {}
+    montage_group: dict[tuple[str, str], list[Violation]] = {}
+    single_group: dict[str, list[Violation]] = {}
     for v in violations:
-        by_type.setdefault(v.type, []).append(v)
+        if v.type in MONTAGE_TYPES:
+            montage_group.setdefault((v.type, v.video_stem), []).append(v)
+        else:
+            single_group.setdefault(v.type, []).append(v)
     n_written = 0
-    for vlist in by_type.values():
+    for vlist in montage_group.values():
+        for v in vlist[:MAX_MONTAGE_FRAMES_PER_TYPE_PER_VIDEO]:
+            if _write_one_violation_montage(v, frames_dir):
+                n_written += 1
+    for vlist in single_group.values():
         for v in vlist[:MAX_FRAMES_PER_TYPE]:
             if _write_one_violation_frame(v, frames_dir):
                 n_written += 1
