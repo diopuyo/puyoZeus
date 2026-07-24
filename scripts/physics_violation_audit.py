@@ -10,6 +10,13 @@ confirmed_board (STABLE 専用) と estimated_board (連鎖中物理推定) を�
 capture層 (フレーム取得・chain trigger 検出) は重複実装せず
 scripts.recognition_physics_review から import して流用する。
 
+2026-07-24 実用化修正: 既定4動画 (c62,30,35,38) の処理窓は
+scripts/_diag_ojama_fall_exit_timing_2026-07-24.py の TARGET_WINDOWS
+(A/B診断と同一の90秒級短窓) を動的importで再利用する
+(DIAG_WINDOW_BY_STEM 参照)。c62 は matches.tsv が無く、従来は
+「動画全体を1区間」に fallback して数十分を舐め長時間化していたため、
+既定4動画ではこの fallback を通らないようにした。
+
 類型一覧 (VIOLATION_TYPE_ID 参照):
     1  おじゃま会計乖離           — 骨組みのみ (未実装、TODO参照)
     2  保存則違反-消失            — 新規実装
@@ -29,9 +36,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,12 +62,30 @@ from src.board import (  # noqa: E402
 )
 from src.board_state_machine import BoardState  # noqa: E402
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION  # noqa: E402
+from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from src.self_supervised.physical_consistency import (  # noqa: E402
     check_color_count, check_gravity_rule, check_no_pre_chain_4_plus_connection,
 )
 from scripts.recognition_physics_review import (  # noqa: E402
     _FrameRecord, _capture_frames, _new_chain_triggers,
 )
+
+# ============================
+# 窓定義の再利用 (A/B診断 _diag_ojama_fall_exit_timing_2026-07-24.py と同一の
+# 4動画短窓。ファイル名にハイフンを含み通常の import 文が使えないため
+# importlib で動的 import する。窓定義の重複実装を避ける目的
+# (scripts/_diag_ojama_fall_board_settle_ab_2026-07-24.py と同じ再利用手法)。
+# ============================
+_DIAG_WINDOWS_PATH = PROJ_ROOT / "scripts" / "_diag_ojama_fall_exit_timing_2026-07-24.py"
+_diag_windows_spec = importlib.util.spec_from_file_location(
+    "_diag_ojama_fall_exit_timing_reuse_for_audit", _DIAG_WINDOWS_PATH,
+)
+assert _diag_windows_spec is not None and _diag_windows_spec.loader is not None
+_diag_windows_module = importlib.util.module_from_spec(_diag_windows_spec)
+# dataclass の型解決が module 登録前提のため、exec_module 前に登録しておく
+# (旧診断側スクリプトの同種コメントと同じ理由、AttributeError 回避)。
+sys.modules[_diag_windows_spec.name] = _diag_windows_module
+_diag_windows_spec.loader.exec_module(_diag_windows_module)  # 定義のみ実行 (main() は __name__ ガード済)
 
 # ============================
 # 定数
@@ -69,6 +98,20 @@ RUN_DIR: Path = OUTPUT_DIR / "latest"
 
 # フル走行対象動画 (アーキ指定): c62(マスター大連鎖多い) + 30/35/38(match_boundaries_v5確認済)。
 DEFAULT_VIDEO_STEMS: tuple[str, ...] = ("c62", "30", "35", "38")
+
+# 2026-07-24 実用化修正: DEFAULT_VIDEO_STEMS の実処理窓は A/B診断
+# (_diag_ojama_fall_exit_timing_2026-07-24.TARGET_WINDOWS) と完全一致させる。
+# c62 は matches.tsv 不在で従来「動画全体を1区間」に fallback し
+# 数十分を舐めて長時間化した実績があるため、既定4動画は必ずこの短窓を
+# 優先採用し全動画1区間フォールバックを踏ませない (_resolve_windows 参照)。
+DIAG_WINDOW_BY_STEM: dict[str, tuple[float, float]] = {
+    stem: (start, end - start)
+    for stem, start, end, _note in _diag_windows_module.TARGET_WINDOWS
+}
+
+# 進捗ログの間隔 (game-time 秒)。既存 _diag_*.py の frame数間隔ログと違い、
+# 本監査器は認識負荷が重く fps が動画により変動するため秒基準に統一する。
+PROGRESS_LOG_INTERVAL_SEC: float = 30.0
 
 # スモーク専用窓: video_30 の実測済み安全区間 (225.0-246.0s、
 # scripts/_diag_ojama_fall_board_settle_ab_2026-07-24.py で baseline_missing=False
@@ -478,12 +521,21 @@ def _video_duration_sec(video_stem: str) -> float:
 
 
 def _load_full_match_windows(video_stem: str) -> list[tuple[float, float]]:
-    """matches.tsv (match_boundaries_v5) から全試合区間を読む (フル試合通し前提)。
+    """matches.tsv (match_boundaries_v5) から全試合区間を読む。
 
-    無い動画 (例: c62、既に1試合分にクリップ済み) は動画全体を1区間として扱う。
+    DIAG_WINDOW_BY_STEM 未登録かつ matches.tsv も無い動画向けの最終フォールバック
+    (動画全体を1区間として扱う)。2026-07-24 実用化修正: c62 でこの経路を通り
+    数十分の動画全体を舐めて長時間化した実績があるため、既定4動画は
+    _resolve_windows 側で DIAG_WINDOW_BY_STEM を優先し、この経路を通らない。
+    未知動画向けの経路として残すが、事故再発防止に WARN を出す。
     """
     tsv_path = MATCH_BOUNDARIES_DIR / f"video_{video_stem}" / "matches.tsv"
     if not tsv_path.exists():
+        print(
+            f"[WARN] {video_stem}: matches.tsv 不在かつ DIAG_WINDOW_BY_STEM 未登録 "
+            "→ 動画全体を1区間として処理します (長時間化に注意、既定4動画では通らないはずの経路)",
+            flush=True,
+        )
         return [(0.0, _video_duration_sec(video_stem))]
     windows: list[tuple[float, float]] = []
     with open(tsv_path, encoding="utf-8") as f:
@@ -497,7 +549,13 @@ def _load_full_match_windows(video_stem: str) -> list[tuple[float, float]]:
 
 
 def _resolve_windows(args: argparse.Namespace) -> list[tuple[str, float, float]]:
-    """CLI引数から処理対象窓 (stem, start_sec, max_sec) のリストを決定する。"""
+    """CLI引数から処理対象窓 (stem, start_sec, max_sec) のリストを決定する。
+
+    2026-07-24 実用化修正: DIAG_WINDOW_BY_STEM に登録済のstem (既定4動画) は
+    A/B診断と同一の短窓を優先採用する (matches.tsv 不在動画=c62 で動画全体を
+    1区間として舐める事故を防ぐ)。--start-sec/--max-sec を明示指定した場合は
+    そちらを優先する (既存の任意区間診断用途を壊さない、後方互換維持)。
+    """
     if args.smoke:
         return [(SMOKE_VIDEO_STEM, SMOKE_START_SEC, SMOKE_MAX_SEC)]
     stems = [s.strip() for s in args.videos.split(",") if s.strip()]
@@ -505,9 +563,73 @@ def _resolve_windows(args: argparse.Namespace) -> list[tuple[str, float, float]]
         return [(stems[0], args.start_sec, args.max_sec)]
     windows: list[tuple[str, float, float]] = []
     for stem in stems:
+        if stem in DIAG_WINDOW_BY_STEM:
+            start, dur = DIAG_WINDOW_BY_STEM[stem]
+            windows.append((stem, start, dur))
+            continue
         for start, end in _load_full_match_windows(stem):
             windows.append((stem, start, max(0.0, end - start)))
     return windows
+
+
+# ============================
+# 進捗ログ計装 (2026-07-24 実用化修正)
+# ============================
+
+
+@dataclass
+class _ProgressState:
+    """1動画・1窓分の処理進捗 (直近ログ出力済み game-time 秒)。"""
+
+    last_logged_sec: float
+
+
+def _wrap_update_for_progress(
+    orig_update: Callable[..., object], video_stem: str, progress: _ProgressState,
+) -> Callable[..., object]:
+    """RecognitionPipeline.update を計装ラップし、game-time 30秒毎に進捗ログを出す。
+
+    src/recognition_pipeline.py 自体は変更しない (read-only制約遵守)。
+    クラスメソッドの一時差し替えのみで、呼び出し側が必ず finally で復元する
+    (scripts/_diag_ojama_fall_board_settle_ab_2026-07-24.py の
+    _wrap_gravity_filter_for_counting と同型の計装ラップパターン)。
+    """
+    def _wrapped(self, frame_idx: int, time_sec: float, frame: np.ndarray):
+        result = orig_update(self, frame_idx, time_sec, frame)
+        if time_sec - progress.last_logged_sec >= PROGRESS_LOG_INTERVAL_SEC:
+            progress.last_logged_sec = time_sec
+            print(
+                f"[{time.strftime('%H:%M:%S')}] [{video_stem}] "
+                f"t={time_sec:.1f}s まで処理済み", flush=True,
+            )
+        return result
+    return _wrapped
+
+
+@contextmanager
+def _log_progress_every_30s(video_stem: str, start_sec: float):
+    """with 節内の RecognitionPipeline.update 呼び出しを進捗ログ計装する。
+
+    with を抜けると必ず元の update に復元する (src 実質非改変の一時パッチ)。
+    """
+    progress = _ProgressState(last_logged_sec=start_sec)
+    orig_update = RecognitionPipeline.update
+    RecognitionPipeline.update = _wrap_update_for_progress(orig_update, video_stem, progress)
+    try:
+        yield
+    finally:
+        RecognitionPipeline.update = orig_update
+
+
+def _format_video_type_subtotal(violations: list[Violation]) -> str:
+    """1動画(1窓)分の類型別カウント小計を1行テキストにする (進捗ログ用)。"""
+    by_type: dict[str, int] = {}
+    for v in violations:
+        by_type[v.type] = by_type.get(v.type, 0) + 1
+    if not by_type:
+        return "類型別小計: (違反なし)"
+    ranked = sorted(by_type.items(), key=lambda kv: -kv[1])
+    return "類型別小計: " + ", ".join(f"{name}={n}" for name, n in ranked)
 
 
 # ============================
@@ -646,8 +768,10 @@ def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="盤面物理矛盾 全類型監査器 (#48)")
     ap.add_argument(
         "--videos", type=str, default=",".join(DEFAULT_VIDEO_STEMS),
-        help="対象動画stemのカンマ区切り (既定: c62,30,35,38)。フル試合通し前提、"
-             "各stemのmatches.tsvから全試合区間を読む (無ければ動画全体を1区間扱い)。",
+        help="対象動画stemのカンマ区切り (既定: c62,30,35,38)。既定4動画は"
+             "DIAG_WINDOW_BY_STEM (A/B診断と同一の短窓) を優先採用する。"
+             "未登録stemはmatches.tsvから全試合区間を読む (無ければ動画全体を1区間"
+             "扱い、長時間化に注意)。",
     )
     ap.add_argument(
         "--smoke", action="store_true",
@@ -674,16 +798,29 @@ def main() -> None:
     all_violations: list[Violation] = []
     duration_min_by_key: dict[str, float] = {}
     for stem, start_sec, max_sec in windows:
-        print(f"  {stem}: start={start_sec:.1f}s dur={max_sec:.1f}s を処理中...")
-        by_side = _capture_frames(stem, start_sec, max_sec)
+        print(
+            f"[{time.strftime('%H:%M:%S')}] [{stem}] 開始 "
+            f"start={start_sec:.1f}s dur={max_sec:.1f}s を処理中...", flush=True,
+        )
+        t_video_start = time.time()
+        with _log_progress_every_30s(stem, start_sec):
+            by_side = _capture_frames(stem, start_sec, max_sec)
+        video_violations: list[Violation] = []
         for side in ("1P", "2P"):
             records = by_side[side]
             if not records:
                 continue
-            all_violations += _audit_one_side(records, stem, side)
+            side_violations = _audit_one_side(records, stem, side)
+            video_violations += side_violations
+            all_violations += side_violations
             dur_min = max(1e-6, (records[-1].t_sec - records[0].t_sec) / 60.0)
             key = f"{stem}_{side}"
             duration_min_by_key[key] = duration_min_by_key.get(key, 0.0) + dur_min
+        print(
+            f"[{time.strftime('%H:%M:%S')}] [{stem}] 完了 "
+            f"({time.time() - t_video_start:.1f}s) {_format_video_type_subtotal(video_violations)}",
+            flush=True,
+        )
     summary = _build_summary(all_violations, duration_min_by_key)
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     n_frames = _write_top_violation_frames(all_violations, RUN_DIR / "frames")
