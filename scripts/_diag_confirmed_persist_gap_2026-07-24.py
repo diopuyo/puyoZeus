@@ -108,10 +108,23 @@ from src.board_state_machine import (  # noqa: E402
     NON_STABLE_STATES,
 )
 from src.chain import ChainSimulator  # noqa: E402
+from src.placement_inferrer import enumerate_landing_patterns  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
+import src.recognition_pipeline as _rp_module  # noqa: E402  monkeypatch対象module参照
 from scripts.visualize_recognition import (  # noqa: E402
     CELL_H, CELL_W, draw_cell_overlay,
 )
+
+# ============================
+# 2026-07-24 追加: infer_placement フック (候補(d)診断)
+#
+# #47設置ドロップの二重機構実証: F ガード (_merge_diff_only) が却下したセルの
+# うち、TSUMO_FALL起因のものについて placement_inferrer.infer_placement が
+# 「呼ばれて None (commit refuse)」 だったのか「そもそも呼ばれなかった」 のか
+# 「呼ばれて成功したが何らかの理由で最終 confirmed には反映されなかった」 のかを
+# 実証する。src/ 本体は一切変更せず、本診断プロセス内で module 属性を
+# 一時差し替え (monkeypatch) して呼出引数/返り値を観測するのみ。
+# ============================
 
 # ============================
 # 既存 2 資産の動的 import (再利用、読み取り専用利用のみ)
@@ -167,6 +180,12 @@ PROGRESS_LOG_INTERVAL_FRAMES: int = 1800
 _MARKER_RADIUS_MARGIN_PX: int = 4
 _MARKER_THICKNESS_PX: int = 3
 
+# TSUMO_FALL起因却下セルの infer_placement 呼出結果分類 (候補(d)診断)。
+_INFER_STATUS_NONE: str = "infer_none"          # 呼ばれたが None (commit refuse)
+_INFER_STATUS_NOT_CALLED: str = "infer_not_called"  # この frame/side で未呼出
+_INFER_STATUS_OTHER: str = "infer_other"        # 呼ばれて成功したが最終confirmedは空のまま
+_INFER_STATUS_NA: str = "n_a"                   # 非TSUMO_FALL起因 (対象外)
+
 
 def _print_progress(msg: str) -> None:
     now = time.strftime("%H:%M:%S")
@@ -206,6 +225,10 @@ class _RejectedCell:
     layer: str  # "layer2_insufficient_time" / "layer3_color_noise" / "conflict_other"
     history_len: int
     cell_votes: int
+    prev_state: str  # 遷移直前 state (TSUMO_FALL/OJAMA_FALL/GRAVITY_SETTLE/EFFECT/CHAIN)
+    # 以下2026-07-24候補(d)診断追加分 (prev_state=TSUMO_FALL 以外は n_a/-1固定):
+    infer_status: str  # _INFER_STATUS_* のいずれか
+    n_landing_patterns: int  # baseline盤面での物理配置パターン総数 (1なら一意)
 
 
 @dataclass
@@ -249,6 +272,56 @@ class _SeverityCase:
     )
 
 
+@dataclass
+class _InferCallRecord:
+    """1回の infer_placement 呼出記録 (候補(d)診断フック、src非改変)。"""
+
+    frame_idx: int
+    side: str
+    returned_none: bool
+
+
+class _InferPlacementHook:
+    """recognition_pipeline.infer_placement を実行時差し替えして記録する診断フック。
+
+    src/ ファイルは一切変更しない。プロセス内 module 属性の一時差し替えのみで、
+    install()/uninstall() で必ず元に戻す (呼出元 _collect_records が保証)。
+    side判定は infer_placement 呼出時の region kwarg と
+    DEFAULT_P1_REGION/DEFAULT_P2_REGION の同一性 (is 比較) で行う
+    (recognition_pipeline.py:3866-3869,4121-4124 で side別singleton定数を渡す実装に依拠)。
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[_InferCallRecord] = []
+        self._current_frame_idx: int = -1
+        self._original = _rp_module.infer_placement
+
+    def set_current_frame(self, frame_idx: int) -> None:
+        """呼出元 (_collect_records) が frame 処理直前に現在フレーム番号を通知する。"""
+        self._current_frame_idx = frame_idx
+
+    def _wrapped(self, *args: object, **kwargs: object) -> object:
+        result = self._original(*args, **kwargs)
+        region = kwargs.get("region")
+        if region is _rp_module.DEFAULT_P1_REGION:
+            side = "1P"
+        elif region is _rp_module.DEFAULT_P2_REGION:
+            side = "2P"
+        else:
+            side = "unknown"
+        self.calls.append(_InferCallRecord(
+            frame_idx=self._current_frame_idx, side=side,
+            returned_none=(result is None),
+        ))
+        return result
+
+    def install(self) -> None:
+        _rp_module.infer_placement = self._wrapped  # type: ignore[assignment]
+
+    def uninstall(self) -> None:
+        _rp_module.infer_placement = self._original  # type: ignore[assignment]
+
+
 # ============================
 # パス1: pipeline 走査 (enable_stable_recovery_gate 指定可)
 # ============================
@@ -256,8 +329,14 @@ class _SeverityCase:
 
 def _collect_records(
     video_stem: str, start_sec: float, end_sec: float, enable_recovery_gate: bool,
+    infer_hook: "_InferPlacementHook | None" = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
-    """video を走査し、1P/2P それぞれの frame 記録を返す (指定 gate 構成)。"""
+    """video を走査し、1P/2P それぞれの frame 記録を返す (指定 gate 構成)。
+
+    infer_hook: 非None時、frame処理毎に infer_placement 呼出を記録する
+    (候補(d)診断用、2026-07-24追加)。install/uninstallは本関数内で完結させ、
+    呼出元にmonkeypatchの後始末を委ねない (read-only診断原則の徹底)。
+    """
     cv2.setNumThreads(1)
     video_path = _video_path(video_stem)
     cap = cv2.VideoCapture(str(video_path))
@@ -276,33 +355,41 @@ def _collect_records(
     fi = start_frame
     n_read = 0
     tag = "ON" if enable_recovery_gate else "OFF"
-    while fi < end_frame:
-        ok, frame = cap.read()
-        if not ok or frame is None:
-            break
-        if frame.shape[:2] != (1080, 1920):
-            frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
-        t = fi / fps
-        r = pipe.update(fi, t, frame)
-        for side_recs, side_res in ((recs_1p, r.p1), (recs_2p, r.p2)):
-            ce = side_res.chain_event
-            side_recs.append(_FrameRec(
-                frame_idx=fi, t=t, state=side_res.state.name,
-                cnn_board=side_res.cnn_board.copy(),
-                confirmed_board=(
-                    side_res.confirmed_board.copy()
-                    if side_res.confirmed_board is not None else None
-                ),
-                chain_trigger_sec=(float(ce.trigger_sec) if ce is not None else None),
-                chain_before_grid=(ce.before_board._grid.copy() if ce is not None else None),
-                chain_count_event=(int(ce.chain_count) if ce is not None else None),
-            ))
-        fi += 1
-        n_read += 1
-        if n_read % PROGRESS_LOG_INTERVAL_FRAMES == 0:
-            _print_progress(
-                f"[{video_stem}/{tag}] t={t:.1f}s まで処理済み ({n_read} frames)",
-            )
+    if infer_hook is not None:
+        infer_hook.install()
+    try:
+        while fi < end_frame:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            if frame.shape[:2] != (1080, 1920):
+                frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
+            t = fi / fps
+            if infer_hook is not None:
+                infer_hook.set_current_frame(fi)
+            r = pipe.update(fi, t, frame)
+            for side_recs, side_res in ((recs_1p, r.p1), (recs_2p, r.p2)):
+                ce = side_res.chain_event
+                side_recs.append(_FrameRec(
+                    frame_idx=fi, t=t, state=side_res.state.name,
+                    cnn_board=side_res.cnn_board.copy(),
+                    confirmed_board=(
+                        side_res.confirmed_board.copy()
+                        if side_res.confirmed_board is not None else None
+                    ),
+                    chain_trigger_sec=(float(ce.trigger_sec) if ce is not None else None),
+                    chain_before_grid=(ce.before_board._grid.copy() if ce is not None else None),
+                    chain_count_event=(int(ce.chain_count) if ce is not None else None),
+                ))
+            fi += 1
+            n_read += 1
+            if n_read % PROGRESS_LOG_INTERVAL_FRAMES == 0:
+                _print_progress(
+                    f"[{video_stem}/{tag}] t={t:.1f}s まで処理済み ({n_read} frames)",
+                )
+    finally:
+        if infer_hook is not None:
+            infer_hook.uninstall()
     cap.release()
     return recs_1p, recs_2p, fps
 
@@ -433,10 +520,40 @@ def _track_persistence(
     return persist_count, run_len, recovered, recovered_offset, cnn_present_count / run_len
 
 
+def _classify_infer_status(
+    prev_state: str, side: str, exit_frame_idx: int, baseline: Board,
+    infer_calls_by_key: "dict[tuple[int, str], _InferCallRecord] | None",
+) -> tuple[str, int]:
+    """TSUMO_FALL起因却下遷移について、infer_placement呼出結果と物理パターン数を判定する。
+
+    候補(d) (物理のみ強制フォールバック) の効きうる範囲診断の核心ロジック。
+    非TSUMO_FALL起因 (OJAMA_FALL/GRAVITY_SETTLE/EFFECT/CHAIN) は infer_placement
+    自体が呼ばれる経路にないため常に n_a を返す (recognition_pipeline.py:3811 の
+    prev_state==TSUMO_FALL 条件に一致させる)。
+
+    Returns:
+        (infer_status, n_landing_patterns)。
+    """
+    n_patterns = len(enumerate_landing_patterns(baseline))
+    if prev_state != BoardState.TSUMO_FALL.name or infer_calls_by_key is None:
+        return _INFER_STATUS_NA, n_patterns
+    rec = infer_calls_by_key.get((exit_frame_idx, side))
+    if rec is None:
+        return _INFER_STATUS_NOT_CALLED, n_patterns
+    if rec.returned_none:
+        return _INFER_STATUS_NONE, n_patterns
+    return _INFER_STATUS_OTHER, n_patterns
+
+
 def _run_measurement_1_2(
     video: str, recs_1p: list[_FrameRec], recs_2p: list[_FrameRec],
+    infer_calls_by_key: "dict[tuple[int, str], _InferCallRecord] | None" = None,
 ) -> tuple[list[_RejectedCell], list[_PersistRecord]]:
-    """計測1+2 を 1P/2P 両サイドで実行する。"""
+    """計測1+2 を 1P/2P 両サイドで実行する。
+
+    infer_calls_by_key: 非None時、TSUMO_FALL起因却下セルに infer_status/
+    n_landing_patterns を付与する (候補(d)診断、2026-07-24追加)。
+    """
     rejected: list[_RejectedCell] = []
     persist: list[_PersistRecord] = []
     for side, records in (("1P", recs_1p), ("2P", recs_2p)):
@@ -449,13 +566,21 @@ def _run_measurement_1_2(
                 continue
             capped_history = _reconstruct_capped_history(records, seg_start, exit_idx, prev_state)
             cell_tuples = _classify_rejected_cells(records, baseline, exit_idx, capped_history)
+            if not cell_tuples:
+                continue
             run_end = transitions[i + 1][0] if i + 1 < len(transitions) else len(records)
             exit_t = records[exit_idx].t
+            exit_frame_idx = records[exit_idx].frame_idx
+            infer_status, n_patterns = _classify_infer_status(
+                prev_state, side, exit_frame_idx, baseline, infer_calls_by_key,
+            )
             for (r, c, color, layer, hist_len, votes) in cell_tuples:
                 rejected.append(_RejectedCell(
                     video=video, side=side, exit_idx=exit_idx, exit_t=exit_t,
                     row=r, col=c, rejected_color=color, layer=layer,
                     history_len=hist_len, cell_votes=votes,
+                    prev_state=prev_state, infer_status=infer_status,
+                    n_landing_patterns=n_patterns,
                 ))
                 p_count, run_len, recov, recov_off, cnn_rate = _track_persistence(
                     records, exit_idx, run_end, r, c, color,
@@ -691,15 +816,53 @@ def _build_ab_summary(
 def _write_rejected_csv(rejected: list[_RejectedCell], out_path: Path) -> None:
     cols = [
         "video", "side", "exit_idx", "exit_t", "row", "col", "rejected_color",
-        "layer", "history_len", "cell_votes",
+        "layer", "history_len", "cell_votes", "prev_state", "infer_status",
+        "n_landing_patterns",
     ]
     lines = [",".join(cols)]
     for r in rejected:
         lines.append(
             f"{r.video},{r.side},{r.exit_idx},{r.exit_t:.3f},{r.row},{r.col},"
-            f"{r.rejected_color},{r.layer},{r.history_len},{r.cell_votes}",
+            f"{r.rejected_color},{r.layer},{r.history_len},{r.cell_votes},"
+            f"{r.prev_state},{r.infer_status},{r.n_landing_patterns}",
         )
     out_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _build_prev_state_breakdown(rejected: list[_RejectedCell]) -> dict[str, int]:
+    """prev_state別の却下セル数集計 (計測1をF ガード対象state全体で分解)。"""
+    out: dict[str, int] = {}
+    for r in rejected:
+        out[r.prev_state] = out.get(r.prev_state, 0) + 1
+    return out
+
+
+def _build_infer_status_breakdown(rejected: list[_RejectedCell]) -> dict[str, int]:
+    """TSUMO_FALL起因却下セルの infer_placement 呼出結果内訳 (候補(d)診断)。"""
+    out: dict[str, int] = {}
+    for r in rejected:
+        if r.prev_state != BoardState.TSUMO_FALL.name:
+            continue
+        out[r.infer_status] = out.get(r.infer_status, 0) + 1
+    return out
+
+
+def _estimate_candidate_d_scope(rejected: list[_RejectedCell]) -> dict:
+    """候補(d) (物理のみ強制フォールバック) が効きうる範囲を推定する。
+
+    条件: TSUMO_FALL起因 かつ infer_placement=None かつ baseline盤面での
+    物理配置パターンが一意 (n_landing_patterns==1、= 曖昧性なしで確定可能)。
+    セル数 (row,col単位) と transition数 (1着地=最大2セル、二重計上防止用) の
+    両方を返す。
+    """
+    hits = [
+        r for r in rejected
+        if r.prev_state == BoardState.TSUMO_FALL.name
+        and r.infer_status == _INFER_STATUS_NONE
+        and r.n_landing_patterns == 1
+    ]
+    transitions = {(r.video, r.side, r.exit_idx) for r in hits}
+    return {"n_cells": len(hits), "n_transitions": len(transitions)}
 
 
 def _write_persist_csv(persist: list[_PersistRecord], out_path: Path) -> None:
@@ -749,8 +912,21 @@ def _format_summary_text(overall: dict, per_video: dict[str, dict]) -> str:
         f"復旧ゲートによる回復率(ON=default): {overall['recovered_rate']}",
         f"severity座標逆引き確定事例数 (持続が実害を起こした確定事例): "
         f"{overall['n_severity_cases_total']}",
-        "--- A/B (enable_stable_recovery_gate ON=default vs OFF) 動画別 ---",
+        "--- prev_state別 却下セル数 (F ガード対象state全体) ---",
     ]
+    for state_name, cnt in sorted(overall["prev_state_breakdown"].items()):
+        lines.append(f"  {state_name}: {cnt}")
+    lines.append(
+        "--- TSUMO_FALL起因却下セルの infer_placement 呼出結果内訳 (候補(d)診断) ---",
+    )
+    for status_name, cnt in sorted(overall["infer_status_breakdown_tsumo_fall"].items()):
+        lines.append(f"  {status_name}: {cnt}")
+    lines.append(
+        f"候補(d)が効きうる範囲 (infer_placement=None かつ 物理パターン一意): "
+        f"セル数={overall['candidate_d_scope']['n_cells']} "
+        f"transition数={overall['candidate_d_scope']['n_transitions']}",
+    )
+    lines.append("--- A/B (enable_stable_recovery_gate ON=default vs OFF) 動画別 ---")
     for video, s in per_video.items():
         ab = s["ab_summary"]
         lines.append(
@@ -780,6 +956,9 @@ def _build_overall_summary(
         "persist_frames_max": stats["persist_frames_max"],
         "recovered_rate": stats["recovered_rate"],
         "n_severity_cases_total": len(all_severity),
+        "prev_state_breakdown": _build_prev_state_breakdown(all_rejected),
+        "infer_status_breakdown_tsumo_fall": _build_infer_status_breakdown(all_rejected),
+        "candidate_d_scope": _estimate_candidate_d_scope(all_rejected),
     }
 
 
@@ -800,14 +979,27 @@ def _parse_args() -> argparse.Namespace:
 def _process_video(
     video_stem: str, start_sec: float, end_sec: float, note: str,
 ) -> tuple[list[_RejectedCell], list[_PersistRecord], list[_SeverityCase], dict]:
-    """1動画分の計測1〜4を実行する (ON=default パスで計測1-3、OFFも追加してA/B)。"""
+    """1動画分の計測1〜4を実行する (ON=default パスで計測1-3、OFFも追加してA/B)。
+
+    候補(d)診断: ON パスのみ _InferPlacementHook を仕込み、infer_placement 呼出結果
+    (frame_idx, side) -> _InferCallRecord の辞書を計測1に渡す。OFF パスは
+    候補(d)診断の対象外 (A/B対照はF ガードの永続分布のみ比較すれば十分) のため
+    フック非装着で従来通り (計算コスト削減、read-only原則にも合致)。
+    """
     _print_progress(f"[{video_stem}] 開始 (gate=ON=default) window={start_sec:.1f}-{end_sec:.1f}s ({note})")
     t0 = time.time()
-    recs_1p_on, recs_2p_on, fps = _collect_records(video_stem, start_sec, end_sec, True)
-    _print_progress(
-        f"[{video_stem}] ON pass 完了 ({len(recs_1p_on)} frame, {time.time() - t0:.1f}s)",
+    infer_hook = _InferPlacementHook()
+    recs_1p_on, recs_2p_on, fps = _collect_records(
+        video_stem, start_sec, end_sec, True, infer_hook=infer_hook,
     )
-    rejected_v, persist_v = _run_measurement_1_2(video_stem, recs_1p_on, recs_2p_on)
+    _print_progress(
+        f"[{video_stem}] ON pass 完了 ({len(recs_1p_on)} frame, {time.time() - t0:.1f}s, "
+        f"infer_placement呼出={len(infer_hook.calls)}件)",
+    )
+    infer_calls_by_key = {(c.frame_idx, c.side): c for c in infer_hook.calls}
+    rejected_v, persist_v = _run_measurement_1_2(
+        video_stem, recs_1p_on, recs_2p_on, infer_calls_by_key,
+    )
     sim = ChainSimulator()
     severity_v = _run_measurement_3(video_stem, recs_1p_on, recs_2p_on, persist_v, sim)
     _print_progress(
@@ -827,6 +1019,9 @@ def _process_video(
         "note": note, "window": [start_sec, end_sec], "fps": fps,
         "n_rejected_cells": len(rejected_v), "n_severity_cases": len(severity_v),
         "ab_summary": ab_summary,
+        "prev_state_breakdown": _build_prev_state_breakdown(rejected_v),
+        "infer_status_breakdown_tsumo_fall": _build_infer_status_breakdown(rejected_v),
+        "candidate_d_scope": _estimate_candidate_d_scope(rejected_v),
     }
     _write_ab_histogram(video_stem, persist_v, persist_off, OUTPUT_DIR / f"ab_histogram_{video_stem}.png")
     return rejected_v, persist_v, severity_v, video_summary
