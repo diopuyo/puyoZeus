@@ -83,6 +83,18 @@ ROUTE_P3_RESOLVE_AFTER_PLACEMENT: str = "P3_resolve_after_placement"
 # recognition_pipeline._step_side 内のインラインコードで関数境界がないため、
 # P1/P2/P3/P5 捕捉済みセルを除いた残差 diff としてまとめて記録する。
 ROUTE_INLINE_CATCHALL: str = "P_inline_untracked_P4_P6_P7_P8_P9"
+# Step2 (色フリッカ何手ズレ診断): TSUMO_FALL→STABLE 遷移フレームの
+# next_queue スナップショット (cells を伴わない meta-only レコード)。
+ROUTE_P2_DIAG_QUEUE_CONTEXT: str = "P2_diag_queue_context"
+
+# ズレ幅判定のカテゴリラベル (何手ズレ診断・Step2)。
+OFFSET_LABEL_ZERO: str = "0手(今回ツモ=prev_tail[-2])"
+OFFSET_LABEL_ONE: str = "1手先(prev_tail[-1])"
+OFFSET_LABEL_TWO: str = "2手先(post_tail[-1])"
+OFFSET_LABEL_UNMATCHED: str = "unmatched(どれとも不一致)"
+OFFSET_LABEL_NO_CONTEXT: str = "no_queue_context(突合不能)"
+# queue tail 保持数 (次の NEXT 変化イベント履歴を遡る深さ)。
+QUEUE_TAIL_DEPTH: int = 3
 
 # クロス集計: 速度バケット閾値 (秒)。curr_t_sec - prev_t_sec がこれ未満なら fast。
 SPEED_BUCKET_THRESHOLD_SEC: float = 0.3
@@ -135,6 +147,19 @@ class WriteTraceRecorder:
         self.records.append(WriteTraceRecord(
             route_id=route_id, frame_idx=ctx.frame_idx, t_sec=ctx.t_sec,
             side=ctx.side, cells=cells, meta=meta,
+        ))
+
+    def record_meta_only(self, ctx: _TraceCtx, route_id: str, meta: dict) -> None:
+        """cells を伴わない meta 専用レコードを記録する (queue_context 診断用)。
+
+        通常の record() は cells が空だと記録しない (盤面書き込みイベント
+        専用のため)。本メソッドは「書き込みは起きていないが診断に必要な
+        コンテキスト」(NEXT queue スナップショット等) を記録するための
+        別経路であり、cells=[] を許容する。
+        """
+        self.records.append(WriteTraceRecord(
+            route_id=route_id, frame_idx=ctx.frame_idx, t_sec=ctx.t_sec,
+            side=ctx.side, cells=[], meta=meta,
         ))
 
 
@@ -261,7 +286,13 @@ def _make_infer_placement_wrapper(orig, trace_ctx: _TraceCtx, recorder: WriteTra
         cells = _diff_cells(prev_confirmed, result)
         for r, c, _, _ in cells:
             trace_ctx.claimed_cells.add((r, c))
-        recorder.record(trace_ctx, ROUTE_P2_INFER_PLACEMENT, cells, meta={})
+        # 何手ズレ診断 (Step2): falling_pair は infer_placement 呼び出し時点で
+        # 既に手元にある第3位置引数 (prev_confirmed, cnn_board, falling_pair の順)。
+        # meta に残すことで P2_diag_queue_context の queue tail と突合できる。
+        recorder.record(
+            trace_ctx, ROUTE_P2_INFER_PLACEMENT, cells,
+            meta={"falling_pair": list(falling_pair) if falling_pair else None},
+        )
         return result
 
     return wrapped
@@ -305,6 +336,12 @@ def _make_step_side_wrapper(
         trace_ctx.claimed_cells = set()
         board_before = sm.context.confirmed_board
         before_copy = board_before.copy() if board_before is not None else None
+        # 何手ズレ診断 (Step2): 遷移前の state と next_queue 末尾を
+        # orig() 呼び出し前 (= sm.update() が走る前) にスナップショットする。
+        # recognition_pipeline.py:3803 の prev_next_queue = list(sm.context.next_queue)
+        # と同一タイミング (orig 内で sm.update() する直前) を外側から再現する。
+        prev_state = sm.context.state
+        prev_queue_tail = [list(p) for p in sm.context.next_queue[-QUEUE_TAIL_DEPTH:]]
 
         result = orig(
             self, side, frame_idx, time_sec, is_active, cnn_board, chain_event, **kwargs,
@@ -320,6 +357,16 @@ def _make_step_side_wrapper(
                             "P6 NEXT制約/P7着地投票/P8長期override/P9 T2差し戻し等、"
                             "個別関数境界がないため合算)",
                 },
+            )
+        # 何手ズレ診断 (Step2): TSUMO_FALL→STABLE 遷移フレームのみ、
+        # 遷移前後の next_queue 末尾 QUEUE_TAIL_DEPTH 件を記録する
+        # (P2_infer_placement の meta.falling_pair と (side, frame_idx) で突合する)。
+        post_state = sm.context.state
+        if prev_state == bsm.BoardState.TSUMO_FALL and post_state == bsm.BoardState.STABLE:
+            post_queue_tail = [list(p) for p in sm.context.next_queue[-QUEUE_TAIL_DEPTH:]]
+            recorder.record_meta_only(
+                trace_ctx, ROUTE_P2_DIAG_QUEUE_CONTEXT,
+                meta={"prev_queue_tail": prev_queue_tail, "post_queue_tail": post_queue_tail},
             )
         return result
 
@@ -398,9 +445,19 @@ def _attribute_route_for_violation(
     重なりが無ければ区間内の全 write_trace にフォールバックする。
     v.cells が空 (conservation_loss/gain) は区間内の全 write_trace を対象にする。
     複数候補がある場合は frame_idx が最大 (=直近) のものを採用する。
+
+    Step2 (2026-07-25) 追記: P2_diag_queue_context は盤面書き込みを伴わない
+    meta-only レコード (cells=[]) のため、候補プールから除外する。除外しないと
+    conservation_loss/gain (v.cells が空で in_range 全体を候補にする分岐) が
+    実際に盤面を書き換えていない診断レコードに誤帰属してしまう
+    (同一 frame_idx の P2_infer_placement 実書き込みより後に追加されるため
+    stable sort で attribution を奪ってしまう回帰)。
     """
     lo, hi = v.prev_frame_idx, v.frame_idx
-    in_range = [r for r in side_records if lo < r.frame_idx <= hi]
+    in_range = [
+        r for r in side_records
+        if lo < r.frame_idx <= hi and r.route_id != ROUTE_P2_DIAG_QUEUE_CONTEXT
+    ]
     if not in_range:
         return ROUTE_UNATTRIBUTED
     if v.cells:
@@ -462,6 +519,92 @@ def _format_crosstab_text(crosstab: dict) -> str:
 
 
 # ============================
+# P2 何手ズレ判定 (Step2)
+# ============================
+
+
+def _color_pair_matches(a: list[int] | None, b: list[int] | None) -> bool:
+    """2 色ペアが (回転による順序違いを無視して) 一致するか。"""
+    if a is None or b is None:
+        return False
+    return set(a) == set(b)
+
+
+def _classify_p2_offset(
+    falling_pair: list[int] | None, queue_ctx: WriteTraceRecord | None,
+) -> str:
+    """P2 の falling_pair が queue tail のどの位置と一致するかを判定する。
+
+    参照位置:
+      ref0 (0手/今回ツモ) = prev_queue_tail[-2]  (従来ロジック falling_pair_old と同一位置)
+      ref1 (1手先)        = prev_queue_tail[-1]  (遷移直前時点で最新の NEXT 読み)
+      ref2 (2手先)        = post_queue_tail[-1]  (遷移完了後にさらに進んだ NEXT 読み)
+    queue_ctx が無い (= TSUMO_FALL→STABLE 遷移を経ない P2 呼び出し、例: route B
+    prev_state!=TSUMO_FALL 経路) 場合は突合不能として区別する。
+    """
+    if queue_ctx is None:
+        return OFFSET_LABEL_NO_CONTEXT
+    prev_tail = queue_ctx.meta.get("prev_queue_tail") or []
+    post_tail = queue_ctx.meta.get("post_queue_tail") or []
+    ref0 = prev_tail[-2] if len(prev_tail) >= 2 else None
+    ref1 = prev_tail[-1] if len(prev_tail) >= 1 else None
+    ref2 = post_tail[-1] if len(post_tail) >= 1 else None
+    if _color_pair_matches(falling_pair, ref0):
+        return OFFSET_LABEL_ZERO
+    if _color_pair_matches(falling_pair, ref1):
+        return OFFSET_LABEL_ONE
+    if _color_pair_matches(falling_pair, ref2):
+        return OFFSET_LABEL_TWO
+    return OFFSET_LABEL_UNMATCHED
+
+
+def _build_p2_offset_table(records_by_side: dict[str, list[WriteTraceRecord]]) -> dict:
+    """P2_infer_placement の falling_pair と queue tail をズレ幅別に集計する。
+
+    (side, frame_idx) で P2_diag_queue_context と突合する
+    (両者は同一 _step_side 呼び出し内で同一 frame_idx/side を持つため一意)。
+    対象は全 P2 書き込み (違反有無を問わない、色フリッカ違反への絞り込みは
+    crosstab 側の attributed_route で別途可能)。
+    """
+    counts: dict[str, int] = {}
+    detail_rows: list[dict] = []
+    for side, side_records in records_by_side.items():
+        queue_ctx_by_frame: dict[int, WriteTraceRecord] = {
+            rec.frame_idx: rec
+            for rec in side_records if rec.route_id == ROUTE_P2_DIAG_QUEUE_CONTEXT
+        }
+        for rec in side_records:
+            if rec.route_id != ROUTE_P2_INFER_PLACEMENT:
+                continue
+            falling_pair = rec.meta.get("falling_pair")
+            if falling_pair is None:
+                continue
+            queue_ctx = queue_ctx_by_frame.get(rec.frame_idx)
+            label = _classify_p2_offset(falling_pair, queue_ctx)
+            counts[label] = counts.get(label, 0) + 1
+            detail_rows.append({
+                "side": side, "frame_idx": rec.frame_idx, "t_sec": rec.t_sec,
+                "falling_pair": falling_pair, "offset_label": label,
+                "prev_queue_tail": queue_ctx.meta.get("prev_queue_tail") if queue_ctx else None,
+                "post_queue_tail": queue_ctx.meta.get("post_queue_tail") if queue_ctx else None,
+            })
+    return {"counts": counts, "detail_rows": detail_rows}
+
+
+def _format_offset_table_text(offset_table: dict) -> str:
+    """ズレ幅内訳表を人間可読テキストに整形する。"""
+    total = len(offset_table["detail_rows"])
+    lines = [
+        "==== P2 falling_pair 何手ズレ判定 (Step2) ====",
+        f"対象 P2 書き込み件数 (falling_pair 有り): {total}",
+    ]
+    denom = total or 1
+    for label, n in sorted(offset_table["counts"].items(), key=lambda kv: -kv[1]):
+        lines.append(f"  {label:35s} count={n:4d} ({100.0 * n / denom:5.1f}%)")
+    return "\n".join(lines)
+
+
+# ============================
 # 1 動画分の実行 (Step1 本体)
 # ============================
 
@@ -510,6 +653,15 @@ def _run_one_video(video_stem: str, start_sec: float, max_sec: float) -> None:
     text = _format_crosstab_text(crosstab)
     (OUTPUT_DIR / f"{video_stem}_crosstab_summary.txt").write_text(text, encoding="utf-8")
     print(text)
+
+    # Step2: P2 falling_pair 何手ズレ判定 (A2 仮説の確証用)。
+    offset_table = _build_p2_offset_table(records_by_side)
+    (OUTPUT_DIR / f"{video_stem}_p2_offset_summary.json").write_text(
+        json.dumps(offset_table, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
+    )
+    offset_text = _format_offset_table_text(offset_table)
+    (OUTPUT_DIR / f"{video_stem}_p2_offset_summary.txt").write_text(offset_text, encoding="utf-8")
+    print(offset_text)
 
 
 # ============================
