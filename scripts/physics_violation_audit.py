@@ -43,7 +43,7 @@ import sys
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import cv2
@@ -62,7 +62,9 @@ from src.board import (  # noqa: E402
 )
 from src.board_state_machine import BoardState  # noqa: E402
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION  # noqa: E402
+from src.match_end_detector import MatchEndDetector  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
+from src.score_zero import ScoreZeroDetector  # noqa: E402
 from src.self_supervised.physical_consistency import (  # noqa: E402
     check_color_count, check_gravity_rule, check_no_pre_chain_4_plus_connection,
 )
@@ -124,6 +126,15 @@ SMOKE_MAX_SEC: float = 21.0
 # recognition_physics_review.py) と同じ根拠・同じ値を採用 (単純な1連鎖なら
 # 数秒で STABLE 復帰するはず、それ以上は比較対象が不確かとして信頼度を下げる)。
 CONFIRM_LAG_WARN_SEC: float = 5.0
+
+# 2026-07-24 FP修正 (試合終了演出テロップ誤検出対策):
+# RecognitionPipeline 内部の is_match_active は chain_in_progress 抑制
+# (src/recognition_pipeline.py 付近、連鎖終了直後の誤 hard_match_off 抑制)
+# と絡み合うため、演出開始タイミングが連鎖終了と重なると is_match_active が
+# 正しく False にならず confirmed_board が STABLE のまま演出テロップの
+# 色を盤面色として読み続ける (color_flicker FP の主因、実フレーム目視確認済)。
+# 監査器側で state machine と完全独立に同一フレームへ再適用し、除外区間を得る。
+TELOP_MASK_STATE_NAME: str = BoardState.MENU.name
 
 # 類型ごとに frame crop を出力する上位件数。
 MAX_FRAMES_PER_TYPE: int = 3
@@ -241,6 +252,93 @@ def _menu_occurred_between(records: list[_FrameRecord], i_lo: int, i_hi: int) ->
 
 
 # ============================
+# 試合外/テロップ フレーム独立検出・除外 (2026-07-24 FP修正)
+# ============================
+#
+# RecognitionPipeline 内部の is_match_active (force_in_match=True 環境下でも
+# match_end_locked/score_zero_both 自体は無効化されないが、chain_in_progress
+# 抑制ロジックと絡み合い連鎖終了直後の演出開始を取りこぼす懸念がある) に
+# 依存せず、監査器側で MatchEndDetector (やった!/ばたんきゅー テンプレ) と
+# ScoreZeroDetector (両者スコア00000000) を同一フレームへ独立適用し、
+# 試合外・演出中と判定できる区間を確実に除外する。read-only (src 非改変、
+# 既存 src クラスをそのまま呼ぶのみ)。
+
+
+def _scan_telop_exclusion_intervals(
+    video_stem: str, start_sec: float, max_sec: float,
+) -> list[tuple[float, float]]:
+    """1 動画・1 窓分を独立スキャンし、試合外/演出テロップ除外区間を返す。
+
+    MatchEndDetector.update() 内部ロックダウン (既定 5 秒) と ScoreZeroDetector
+    の両者ゼロ判定を毎フレーム適用し、いずれか true の連続区間をマージして返す。
+    テンプレート不在等で検出器が使えない場合は空リスト (除外なし、従来動作) を返す。
+    """
+    video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return []
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    start_frame = int(start_sec * fps)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
+    n_frames = int(max_sec * fps)
+    match_end_det = MatchEndDetector.load_default()
+    try:
+        score_zero_det: ScoreZeroDetector | None = ScoreZeroDetector.load_default()
+    except FileNotFoundError:
+        score_zero_det = None  # テンプレ不在なら score_zero 判定のみ無効化 (縮退動作)
+
+    intervals: list[tuple[float, float]] = []
+    cur_start: float | None = None
+    last_t: float = start_sec
+    for local_i in range(n_frames):
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        if frame.shape[:2] != (1080, 1920):
+            frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
+        t_sec = (start_frame + local_i) / fps
+        last_t = t_sec
+        excluded = bool(match_end_det.update(frame, t_sec))
+        if not excluded and score_zero_det is not None:
+            try:
+                excluded = bool(score_zero_det.detect(frame).both_zero)
+            except Exception:
+                excluded = False
+        if excluded and cur_start is None:
+            cur_start = t_sec
+        elif not excluded and cur_start is not None:
+            intervals.append((cur_start, t_sec))
+            cur_start = None
+    if cur_start is not None:
+        intervals.append((cur_start, last_t))
+    cap.release()
+    return intervals
+
+
+def _in_any_interval(t_sec: float, intervals: list[tuple[float, float]]) -> bool:
+    """t_sec がいずれかの除外区間 [t_lo, t_hi] に含まれるか。"""
+    return any(t_lo <= t_sec <= t_hi for t_lo, t_hi in intervals)
+
+
+def _mask_records_by_excluded_intervals(
+    records: list[_FrameRecord], intervals: list[tuple[float, float]],
+) -> list[_FrameRecord]:
+    """除外区間内フレームの state を MENU に上書きした新リストを返す (非破壊)。
+
+    _is_stable_observed は state==STABLE 限定のため、この上書きだけで
+    全類型 (色フリッカ/保存則/重力等) の STABLE snapshot 判定から
+    自動的に除外される。元の records は変更しない (dataclasses.replace)。
+    """
+    if not intervals:
+        return records
+    return [
+        replace(rec, state=TELOP_MASK_STATE_NAME) if _in_any_interval(rec.t_sec, intervals)
+        else rec
+        for rec in records
+    ]
+
+
+# ============================
 # 類型5/6/7: physical_consistency 流用ラッパー (STABLE observed 限定)
 # ============================
 
@@ -328,10 +426,20 @@ def _find_flicker_cells(
 
 
 def _check_color_flicker(records: list[_FrameRecord], video_stem: str, side: str) -> list[Violation]:
-    """類型4: 色フリッカ (STABLE observed snapshot間の直接色変化)。"""
+    """類型4: 色フリッカ (STABLE observed snapshot間の直接色変化)。
+
+    2026-07-24 FP修正: _check_conservation と同様に、連鎖 (消去→重力再充填で
+    同セルに別色着地) または設置イベントを挟む snapshot 対は正当な色変化と
+    みなし除外する (_has_chain_trigger_in_range / _has_placement_event_in_range)。
+    """
     snaps = _distinct_stable_snapshots(records)
+    chain_idxs = _new_chain_triggers(records)
     violations: list[Violation] = []
-    for (_, prev_rec), (curr_idx, curr_rec) in zip(snaps, snaps[1:]):
+    for (prev_idx, prev_rec), (curr_idx, curr_rec) in zip(snaps, snaps[1:]):
+        if _has_chain_trigger_in_range(records, chain_idxs, prev_rec.t_sec, curr_rec.t_sec):
+            continue  # 連鎖 (消去→再充填) を挟む正当な色変化
+        if _has_placement_event_in_range(records, prev_idx, curr_idx):
+            continue  # 設置/着弾を挟む正当な色変化
         cells = _find_flicker_cells(prev_rec.grid, curr_rec.grid)
         if not cells:
             continue
@@ -805,9 +913,19 @@ def main() -> None:
         t_video_start = time.time()
         with _log_progress_every_30s(stem, start_sec):
             by_side = _capture_frames(stem, start_sec, max_sec)
+        # 2026-07-24 FP修正: 試合外/演出テロップ区間を独立検出し、両 side 共通で
+        # 除外する (テロップは画面全体に表示されるため side 非依存)。
+        telop_intervals = _scan_telop_exclusion_intervals(stem, start_sec, max_sec)
+        if telop_intervals:
+            n_masked_sec = sum(hi - lo for lo, hi in telop_intervals)
+            print(
+                f"[{time.strftime('%H:%M:%S')}] [{stem}] 試合外/演出テロップ除外区間 "
+                f"{len(telop_intervals)} 件 (計 {n_masked_sec:.1f}s): {telop_intervals}",
+                flush=True,
+            )
         video_violations: list[Violation] = []
         for side in ("1P", "2P"):
-            records = by_side[side]
+            records = _mask_records_by_excluded_intervals(by_side[side], telop_intervals)
             if not records:
                 continue
             side_violations = _audit_one_side(records, stem, side)
