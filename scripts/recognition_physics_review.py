@@ -118,6 +118,7 @@ def _capture_frames(
     chain_max_hold_sec: float | None = None,
     chain_debounce_confirm_frames: int = 1,
     enable_chain_formula_simulate_verify: bool = False,
+    enable_placement_color_cnn_check: bool = False,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -136,6 +137,10 @@ def _capture_frames(
     enable_chain_formula_simulate_verify: 修正D (2026-07-24) A/B 比較用。
     既定 False = src 側既定と bit-identical (機能D 疑似発火の起点盤面
     ChainSimulator 検証を無効化、従来挙動)。
+    enable_placement_color_cnn_check: 2026-07-25 監査器(#48)効果測定用に追加。
+    既定 False = src 側既定と bit-identical (従来通り)。True で
+    src/recognition_pipeline.py の設置時色CNN照合 (甲修正) を有効化し、
+    RecognitionPipeline.load_default にそのまま透過する。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -158,6 +163,7 @@ def _capture_frames(
         chain_max_hold_sec=chain_max_hold_sec,
         chain_debounce_confirm_frames=chain_debounce_confirm_frames,
         enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
+        enable_placement_color_cnn_check=enable_placement_color_cnn_check,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)

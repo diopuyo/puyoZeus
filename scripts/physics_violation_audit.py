@@ -1198,6 +1198,14 @@ def _parse_args() -> argparse.Namespace:
              "従来通り TSUMO_FALL/OJAMA_FALL のみ)。連鎖確定由来の正当な色変化を"
              "除外し「本物のフリッカ件数」下限推定を得るための比較用フラグ。",
     )
+    ap.add_argument(
+        "--enable-placement-color-cnn-check", action="store_true",
+        dest="enable_placement_color_cnn_check",
+        help="2026-07-25 甲修正の効果測定用: RecognitionPipeline の設置時色CNN照合 "
+             "(src/recognition_pipeline.py enable_placement_color_cnn_check) を "
+             "有効化してフレーム収集する (既定 False = 従来通り無効、read-only診断)。"
+             "color_flicker 等の件数が甲修正でどう変わるかを比較する。",
+    )
     return ap.parse_args()
 
 
@@ -1206,7 +1214,10 @@ def main() -> None:
     cv2.setNumThreads(1)  # 熱対策・並列しない (アーキ指定)
     args = _parse_args()
     windows = _resolve_windows(args)
-    print(f"[INFO] 対象 {len(windows)} 窓 (smoke={args.smoke})")
+    print(
+        f"[INFO] 対象 {len(windows)} 窓 (smoke={args.smoke}, "
+        f"enable_placement_color_cnn_check={args.enable_placement_color_cnn_check})",
+    )
     all_violations: list[Violation] = []
     duration_min_by_key: dict[str, float] = {}
     for stem, start_sec, max_sec in windows:
@@ -1216,7 +1227,10 @@ def main() -> None:
         )
         t_video_start = time.time()
         with _log_progress_every_30s(stem, start_sec):
-            by_side = _capture_frames(stem, start_sec, max_sec)
+            by_side = _capture_frames(
+                stem, start_sec, max_sec,
+                enable_placement_color_cnn_check=args.enable_placement_color_cnn_check,
+            )
         # 2026-07-24 FP修正: 試合外/演出テロップ区間を独立検出し、両 side 共通で
         # 除外する (テロップは画面全体に表示されるため side 非依存)。
         telop_intervals = _scan_telop_exclusion_intervals(stem, start_sec, max_sec)
