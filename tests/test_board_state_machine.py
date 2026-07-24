@@ -377,6 +377,169 @@ def test_merge_diff_empty_to_color_guard_allows_majority() -> None:
     assert merged.get(12, 0) == COLOR_RED
 
 
+# ============================
+# #45 おじゃま merge 統合修正 案(a)(b) テスト (2026-07-24)
+# ============================
+
+
+def test_merge_diff_new_flags_default_off_bit_identical() -> None:
+    """回帰防止: 新 flag (enable_gravity_filter_support /
+    merge_use_majority_value) を明示的に False にした呼び出しと、
+    kwargs 省略の legacy 呼び出しが bit-identical であること."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_OJAMA)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_OJAMA)
+    cnn.set(12, 0, COLOR_RED)
+    guard = Board()
+    guard.set(12, 0, COLOR_OJAMA)
+
+    legacy = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    explicit_off = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        enable_gravity_filter_support=False,
+        merge_use_majority_value=False,
+    )
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_off.get(r, c)
+
+
+def test_merge_diff_gravity_filter_support_prevents_erasure() -> None:
+    """案(a): floor セル (row=12) が単一フレーム誤読で F ガード却下され
+    baseline (EMPTY) のまま残っても、 support_board (多数決 guard) が
+    そのセルを非空と裏付ける場合は浮き判定の gap として扱わず、
+    上に積もったおじゃまを誤消去しない (flag ON)。
+    flag OFF (default) では従来通り誤消去される (回帰確認)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _empty_board()
+    cnn = Board()
+    cnn.set(11, 0, COLOR_OJAMA)  # 上段: 単一フレームでも正しく観測
+    cnn.set(12, 0, COLOR_RED)    # floor: 単一フレーム誤読 (guard と不一致)
+    guard = Board()
+    guard.set(11, 0, COLOR_OJAMA)
+    guard.set(12, 0, COLOR_OJAMA)  # 多数決では floor も OJAMA と確認済み
+
+    # flag OFF (default): floor が F ガードで却下 (EMPTY のまま)
+    # → 浮き判定の gap 扱いされ、上のおじゃまが誤消去される (バグ再現)
+    merged_off = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    assert merged_off.get(12, 0) == 0
+    assert merged_off.get(11, 0) == 0  # バグ: 誤消去される
+
+    # flag ON: floor は (a) 単体では直らないが (b) の役割)、
+    # gap 扱いされなくなるため上のおじゃまは保持される
+    merged_on = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        enable_gravity_filter_support=True,
+    )
+    assert merged_on.get(12, 0) == 0
+    assert merged_on.get(11, 0) == COLOR_OJAMA  # 修正: 誤消去されない
+
+
+def test_merge_diff_majority_value_recovers_flicker() -> None:
+    """案(b): 退出時に単一フレーム cnn がちらついて guard と不一致でも、
+    guard_v (多数決値) が非空なら guard_v を書き込む (flag ON)。
+    flag OFF (default) では従来通り却下され baseline (EMPTY) のまま
+    (回帰確認)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _empty_board()
+    cnn = _board_with_red(12, 0)  # 単一フレームの誤読 (赤)
+    guard = Board()
+    guard.set(12, 0, COLOR_OJAMA)  # 多数決では OJAMA (正しい色)
+
+    # flag OFF (default): guard_v(OJAMA) != cnn_v(RED) → 却下、baseline 維持
+    merged_off = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    assert merged_off.get(12, 0) == 0
+
+    # flag ON: 多数決値 guard_v (OJAMA) を書き込む
+    merged_on = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        merge_use_majority_value=True,
+    )
+    assert merged_on.get(12, 0) == COLOR_OJAMA
+
+
+def test_ojama_fall_exit_gravity_filter_support_prevents_erasure_e2e() -> None:
+    """状態機械レベル e2e: 案(a) enable_gravity_filter_support=True で
+    OJAMA_FALL → STABLE 退出時の F ガード起因浮き誤消去を防ぐこと。
+    flag OFF (default) では従来通り誤消去される (回帰確認)。
+    """
+    board_both = Board()
+    board_both.set(11, 0, COLOR_OJAMA)
+    board_both.set(12, 0, COLOR_OJAMA)
+    cnn_flicker = Board()
+    cnn_flicker.set(11, 0, COLOR_OJAMA)
+    cnn_flicker.set(12, 0, COLOR_RED)  # floor だけ単一フレーム誤読
+
+    def _run(*, enable_gravity_filter_support: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_gravity_filter_support=enable_gravity_filter_support,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = _empty_board()
+        # OJAMA_FALL 中 (frame 1-5): 履歴に floor/上段とも OJAMA と蓄積
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, board_both))
+        # frame 6: STABLE 復帰。 floor だけ単一フレームちらつき (誤読)
+        sm.update(6, _signal(0.30, cnn_flicker))
+        return sm
+
+    sm_off = _run(enable_gravity_filter_support=False)
+    assert sm_off.context.state == BoardState.STABLE
+    assert sm_off.context.confirmed_board is not None
+    # バグ再現: floor の F ガード却下起因で上のおじゃまが誤消去される
+    assert sm_off.context.confirmed_board.get(11, 0) == 0
+
+    sm_on = _run(enable_gravity_filter_support=True)
+    assert sm_on.context.state == BoardState.STABLE
+    assert sm_on.context.confirmed_board is not None
+    # 修正: 上のおじゃまが保持される
+    assert sm_on.context.confirmed_board.get(11, 0) == COLOR_OJAMA
+
+
+def test_ojama_fall_exit_majority_value_recovers_flicker_e2e() -> None:
+    """状態機械レベル e2e: 案(b) merge_use_majority_value=True で
+    退出時の単一フレーム CNN ちらつきが多数決値で復旧すること。
+    flag OFF (default) では従来通り却下される (回帰確認)。
+    """
+    board_floor = Board()
+    board_floor.set(12, 0, COLOR_OJAMA)
+    cnn_flicker = _board_with_red(12, 0)  # 退出 frame の単一フレームちらつき
+
+    def _run(*, merge_use_majority_value: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            merge_use_majority_value=merge_use_majority_value,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = _empty_board()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, board_floor))
+        sm.update(6, _signal(0.30, cnn_flicker))
+        return sm
+
+    sm_off = _run(merge_use_majority_value=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(12, 0) == 0
+
+    sm_on = _run(merge_use_majority_value=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(12, 0) == COLOR_OJAMA
+
+
 def test_non_stable_history_accumulates_in_chain_state() -> None:
     """F: CHAIN state 中、 cnn_board 履歴が context に蓄積される."""
     sm = BoardStateMachine(

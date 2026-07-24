@@ -310,6 +310,8 @@ def _merge_diff_only(
     baseline: Board | None, new_cnn: Board,
     *, allow_puyo_to_empty: bool = True,
     empty_to_color_guard: Board | None = None,
+    enable_gravity_filter_support: bool = False,
+    merge_use_majority_value: bool = False,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -328,6 +330,19 @@ def _merge_diff_only(
             「guard 内で同色が観測されている」 場合のみ採用する。
             これにより、 NON-STABLE 中の瞬間的な背景誤認 (= 1-2 frame 限定)
             が confirmed_board に焼き付くのを防ぐ。 default None で従来挙動。
+        enable_gravity_filter_support: 案(a) 重力フィルタ支持緩和
+            (#45 おじゃま merge 統合修正, 2026-07-24)。 True にすると
+            `_apply_gravity_filter` に `empty_to_color_guard` を
+            support_board として渡す。 F ガード (empty_to_color_guard) 起因で
+            EMPTY のまま残った cell を「浮き判定の gap」 として扱わなくなり、
+            積もり中のおじゃまが誤って浮きぷよ扱いで消去されるのを防ぐ。
+            default False = 従来挙動完全維持 (backwards compat)。
+        merge_use_majority_value: 案(b) 退出 merge 書込値の多数決化
+            (#45 おじゃま merge 統合修正, 2026-07-24)。 True にすると
+            EMPTY → 色 遷移ガード分岐で、 単一フレーム cnn_v でなく
+            多数決値 empty_to_color_guard (guard_v) を書き込む。
+            退出時の単一フレーム CNN ちらつきによる却下を解消する。
+            default False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -368,15 +383,28 @@ def _merge_diff_only(
                 and empty_to_color_guard is not None
             ):
                 guard_v = empty_to_color_guard.get(r, c)
+                if guard_v == COLOR_EMPTY:
+                    continue  # 多数決も空 = 誤認可能性高 → baseline 維持
+                if merge_use_majority_value:
+                    # 案(b): 単一フレーム cnn_v でなく多数決値 guard_v を書込む
+                    # (退出時の単一フレームちらつきによる却下を解消)。
+                    merged.set(r, c, guard_v)
+                    continue
                 if guard_v != cnn_v:
-                    continue  # baseline (= EMPTY) 維持
+                    continue  # 従来挙動: 多数決と不一致な単一フレームは却下
             merged.set(r, c, cnn_v)
     # A: 浮きぷよ ban (空 cell の上に puyo は物理的にあり得ない、空に戻す)
-    _apply_gravity_filter(merged)
+    # 案(a): flag ON かつ guard あれば support_board として渡す。
+    support_board = (
+        empty_to_color_guard if enable_gravity_filter_support else None
+    )
+    _apply_gravity_filter(merged, support_board=support_board)
     return merged
 
 
-def _apply_gravity_filter(board: Board) -> None:
+def _apply_gravity_filter(
+    board: Board, *, support_board: Board | None = None,
+) -> None:
     """浮きぷよ ban (Phase C-6 の A): 空 cell の上に puyo がある場合、
     その上の puyo を空に戻す。連鎖中の重力再配置中に CNN が誤検出した
     「浮きぷよ」を物理的にあり得ないと却下する。
@@ -388,14 +416,29 @@ def _apply_gravity_filter(board: Board) -> None:
     erase しない)。 cycle 71v で一時的に UNKNOWN を gap 扱いにしたが、
     2P telop/UI で UNKNOWN になる cell 上のぷよが大量 erase される副作用が
     確認されたため撤回 (2026-05-14)。
+
+    Args:
+        support_board: 案(a) 重力フィルタ支持緩和 (#45 おじゃま merge
+            統合修正, 2026-07-24)。 None でない場合、 board 側が EMPTY でも
+            support_board の同 cell が非 EMPTY/非 UNKNOWN なら
+            「gap 扱いしない」 (= その cell を浮き判定の穴として使わない)。
+            F ガード (empty_to_color_guard) 起因で EMPTY のまま残った cell が
+            積もり中のおじゃまを浮きぷよ誤消去するのを防ぐ目的で渡す想定。
+            default None = 従来挙動完全維持 (backwards compat)。
     """
-    from src.board import COLOR_EMPTY
+    from src.board import COLOR_EMPTY, COLOR_UNKNOWN
 
     for c in range(BOARD_COLS):
         gap_found = False
         for r in range(BOARD_ROWS - 1, -1, -1):
             v = board.get(r, c)
             if v == COLOR_EMPTY:
+                # 案(a): support_board が同 cell を「空でない」と裏付ける
+                # 場合、この EMPTY を gap として扱わない (浮き判定の穴にしない)。
+                if support_board is not None:
+                    sup_v = support_board.get(r, c)
+                    if sup_v != COLOR_EMPTY and sup_v != COLOR_UNKNOWN:
+                        continue
                 gap_found = True
             elif gap_found:
                 # 空 cell の上に puyo → 浮き → 空に戻す
@@ -429,6 +472,8 @@ class BoardStateMachine:
         warmup_frames: int = STABLE_WARMUP_FRAMES,
         enable_stable_recovery_gate: bool = False,
         recovery_min_frames: int = STABLE_RECOVERY_MIN_FRAMES,
+        enable_gravity_filter_support: bool = False,
+        merge_use_majority_value: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -442,6 +487,17 @@ class BoardStateMachine:
         # default False = B1 禁忌隣接のため OFF。viz 検証後に判断する。
         self._enable_stable_recovery_gate = bool(enable_stable_recovery_gate)
         self._recovery_min_frames = max(1, int(recovery_min_frames))
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24):
+        # 案B (OJAMA_FALL 退出遅延, savepoint/ojama-fall-board-settle) 適用後に
+        # 判明した _merge_diff_only の 2 副作用を個別 flag で修正する。
+        # (a) enable_gravity_filter_support: F ガード起因の EMPTY を浮き判定の
+        #     穴にしない (積もり中おじゃまの誤消去防止)。
+        # (b) merge_use_majority_value: 退出 merge 書込値を多数決化し
+        #     単一フレーム CNN ちらつきによる却下を解消する。
+        # 両者は独立 flag (A/B 切り分け用)。 default False = 従来挙動完全維持
+        # (backwards compat)。
+        self._enable_gravity_filter_support = bool(enable_gravity_filter_support)
+        self._merge_use_majority_value = bool(merge_use_majority_value)
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -547,6 +603,8 @@ class BoardStateMachine:
             self._ctx.confirmed_board = _merge_diff_only(
                 self._ctx.confirmed_board, signals.cnn_board,
                 empty_to_color_guard=empty_guard,
+                enable_gravity_filter_support=self._enable_gravity_filter_support,
+                merge_use_majority_value=self._merge_use_majority_value,
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
