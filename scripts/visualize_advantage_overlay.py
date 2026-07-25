@@ -773,7 +773,9 @@ def _draw_overlay(
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
-             show_recognition: bool = False) -> int:
+             show_recognition: bool = False,
+             enable_landing_observed_color: bool = False,
+             force_in_match: bool = True) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -786,6 +788,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         認識自体は従来通り縮小済み frame で行う(推論経路は不変)。表示専用に
         ネイティブ解像度 (1920x1080) でオーバーレイを描いてから縮小するため、
         visualize_recognition.py の ROI 定数がそのまま使える。
+    enable_landing_observed_color: RecognitionPipeline.load_default に渡す
+        着地セル CNN==HSV 一致色補正フラグ (2026-07-25 レビュー動画#49で追加)。
+        既定 False = 従来挙動 (後方互換、既存呼出元は挙動不変)。
+    force_in_match: RecognitionPipeline.load_default に渡す試合中強制フラグ。
+        既定 True = 従来挙動 (後方互換、既存呼出元は挙動不変)。本スクリプト
+        本来の想定 (既に試合中で始まる短いクリップ) では MatchStateDetector が
+        導入部の欠如で NOT_IN_MATCH 誤判定するのを避けるため True が必要だが、
+        試合0本の境界(前試合のリザルト/ロード演出)を跨ぐフル試合レンダでは
+        逆に「試合外」凍結が効かず、ロード演出中の装飾アイコンを盤面と誤認して
+        書き込む副作用がある (2026-07-25 c34 game1 「青2個」実測で確認)。
+        試合境界を跨ぐ場合は False を明示指定する (2026-07-25 追加)。
     """
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
@@ -821,7 +834,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                              fps, (OUT_W, CANVAS_H))
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
-        temporal_smoothing=1, load_next_detector=True, force_in_match=True)
+        temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
+        enable_landing_observed_color=enable_landing_observed_color)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -967,11 +981,27 @@ def main() -> None:
         help="scripts/visualize_recognition.py の認識色 overlay (盤面セル色記号+"
              "state枠) を合成する (2026-07-23 追加、既定 False = 従来通り無地)。",
     )
+    ap.add_argument(
+        "--landing-observed-color", action="store_true", default=False,
+        dest="enable_landing_observed_color",
+        help="真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化 "
+             "(RecognitionPipeline.load_default に転送、 2026-07-25 レビュー動画#49で追加)。 "
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
+        "--no-force-in-match", action="store_false", default=True,
+        dest="force_in_match",
+        help="RecognitionPipeline.load_default の force_in_match を False にする "
+             "(試合境界を跨ぐフル試合レンダ専用。既定 True = 従来挙動不変。 "
+             "2026-07-25 c34 game1 境界レビューで追加、詳細は generate() docstring)。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
              exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
-             show_recognition=a.show_recognition)
+             show_recognition=a.show_recognition,
+             enable_landing_observed_color=a.enable_landing_observed_color,
+             force_in_match=a.force_in_match)
 
 
 if __name__ == "__main__":
