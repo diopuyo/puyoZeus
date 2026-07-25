@@ -183,6 +183,8 @@ def _collect_records(
     *,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
+    enable_baseline_broken_reset: bool = True,
+    enable_baseline_broken_grace: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -190,6 +192,10 @@ def _collect_records(
     enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
     2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
     効果測定用に追加。既定 False = 従来通り (bit-identical)。
+    RecognitionPipeline.load_default へそのまま透過する。
+    enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
+    baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
+    True/False = RecognitionPipeline 側既定と同一 (bit-identical)。
     RecognitionPipeline.load_default へそのまま透過する。
     pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
     既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
@@ -209,6 +215,8 @@ def _collect_records(
         enable_landing_observed_color=ENABLE_LANDING_OBSERVED_COLOR,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_baseline_broken_reset=enable_baseline_broken_reset,
+        enable_baseline_broken_grace=enable_baseline_broken_grace,
     )
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
@@ -661,11 +669,16 @@ def _process_one(
     *,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
+    enable_baseline_broken_reset: bool = True,
+    enable_baseline_broken_grace: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
     enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
     2026-07-25 DriftDetector再同期ループ暴走ガード効果測定用 (既定 False)。
+    enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
+    baseline_broken 自己リセット制御フラグの A/B 計測用 (既定 True/False =
+    RecognitionPipeline 側既定と同一)。
     """
     t0 = time.time()
     _print_progress(f"[{video}] 走査開始 start={start_sec:.1f}s dur={max_sec:.1f}s")
@@ -674,6 +687,8 @@ def _process_one(
         video, start_sec, max_sec,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_baseline_broken_reset=enable_baseline_broken_reset,
+        enable_baseline_broken_grace=enable_baseline_broken_grace,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -692,6 +707,19 @@ def _process_one(
             pipeline_obj, "_drift_resync_hsv_gate_suppressed_2p", 0,
         ),
     } if pipeline_obj is not None else {}
+    # baseline_broken 自己リセット 発火回数 + grace 抑制回数 (2026-07-25 A/B 計測用)。
+    baseline_broken_stats = {
+        "reset_count_1p": getattr(pipeline_obj, "_baseline_broken_reset_count_1p", 0),
+        "reset_count_2p": getattr(pipeline_obj, "_baseline_broken_reset_count_2p", 0),
+        "grace_suppressed_1p": getattr(
+            pipeline_obj, "_baseline_broken_grace_suppressed_1p", 0,
+        ),
+        "grace_suppressed_2p": getattr(
+            pipeline_obj, "_baseline_broken_grace_suppressed_2p", 0,
+        ),
+    } if pipeline_obj is not None else {}
+    if baseline_broken_stats:
+        _print_progress(f"[{video}] baseline_broken計測: {baseline_broken_stats}")
     if drift_suppressed:
         _print_progress(f"[{video}] drift_resync抑制カウンタ: {drift_suppressed}")
 
@@ -711,6 +739,7 @@ def _process_one(
         "stats_1p_all": stats_1p_all, "stats_2p_all": stats_2p_all,
         "stats_1p_steady_state": stats_1p_steady, "stats_2p_steady_state": stats_2p_steady,
         "drift_resync_suppressed": drift_suppressed,
+        "baseline_broken_stats": baseline_broken_stats,
     }
 
 
@@ -743,6 +772,7 @@ def _build_summary(results: list[dict]) -> dict:
             "stats_1p_steady_state": result["stats_1p_steady_state"],
             "stats_2p_steady_state": result["stats_2p_steady_state"],
             "drift_resync_suppressed": result.get("drift_resync_suppressed", {}),
+            "baseline_broken_stats": result.get("baseline_broken_stats", {}),
         }
     return summary
 
@@ -762,6 +792,9 @@ def _format_summary_text(results: list[dict]) -> str:
         lines.append(_format_stats_line("2P", result["stats_2p_corroborated"]))
         lines.append(
             f"    meta 1P: {result['meta_1p']} / meta 2P: {result['meta_2p']}",
+        )
+        lines.append(
+            f"    baseline_broken計測: {result.get('baseline_broken_stats', {})}",
         )
         lines.append(f"--- video_{result['video']} [全候補イベント参考] ---")
         lines.append(_format_stats_line("1P", result["stats_1p_all"]))
@@ -801,6 +834,22 @@ def _parse_args() -> argparse.Namespace:
         help="既定False。RecognitionPipeline の "
              "enable_drift_resync_hsv_gate を有効化する。",
     )
+    # baseline_broken 自己リセット 制御フラグ (2026-07-25, A/B 計測用)。
+    # 既定 True/False = RecognitionPipeline 側既定と同一 (bit-identical)。
+    ap.add_argument(
+        "--no-baseline-broken-reset", dest="enable_baseline_broken_reset",
+        action="store_false", default=True,
+        help="既定True(従来通り)。指定時は RecognitionPipeline の "
+             "enable_baseline_broken_reset を False にし、baseline_broken "
+             "自己リセット機能全体を無効化する。",
+    )
+    ap.add_argument(
+        "--enable-baseline-broken-grace", dest="enable_baseline_broken_grace",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_baseline_broken_grace を有効化する "
+             "(STABLE突入からBASELINE_BROKEN_STABLE_GRACE_SEC秒はカウンタ加算を抑制)。",
+    )
     ap.add_argument(
         "--output-suffix", dest="output_suffix", type=str, default="",
         help="既定\"\"(従来通り)。非空を渡すと出力ファイル名に付与し、"
@@ -822,6 +871,8 @@ def main() -> None:
     guard_kwargs = {
         "enable_drift_resync_match_start_guard": args.enable_drift_resync_match_start_guard,
         "enable_drift_resync_hsv_gate": args.enable_drift_resync_hsv_gate,
+        "enable_baseline_broken_reset": args.enable_baseline_broken_reset,
+        "enable_baseline_broken_grace": args.enable_baseline_broken_grace,
     }
     result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
     results = [result_c34]
