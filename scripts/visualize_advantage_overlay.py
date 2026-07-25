@@ -776,7 +776,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              show_recognition: bool = False,
              enable_landing_observed_color: bool = False,
              force_in_match: bool = True,
-             enable_drift_guards: bool = False) -> int:
+             enable_drift_guards: bool = False,
+             enable_match_start_full_clear: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -803,6 +804,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     enable_drift_guards: True で DriftDetector 再同期暴走ガード2種
         (試合開始15秒保護窓 + HSV較正3色未満抑制) を有効化する
         (2026-07-25 レビュー動画v3で追加)。既定 False = 従来挙動。
+    enable_match_start_full_clear: RecognitionPipeline.load_default に渡す
+        前試合盤面残骸リーク修正フラグ (幽霊B対策、2026-07-23 追加)。
+        既定 False = 従来挙動 (後方互換、既存呼出元は挙動不変)。
     """
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
@@ -841,7 +845,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_guards,
-        enable_drift_resync_hsv_gate=enable_drift_guards)
+        enable_drift_resync_hsv_gate=enable_drift_guards,
+        enable_match_start_full_clear=enable_match_start_full_clear)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -1007,6 +1012,13 @@ def main() -> None:
         help="DriftDetector再同期暴走ガード2種(開始15秒保護窓+HSV較正3色未満抑制)を"
              "有効化 (2026-07-25 レビュー動画v3で追加)。既定 OFF = 従来挙動不変。",
     )
+    ap.add_argument(
+        "--match-start-full-clear", action="store_true", default=False,
+        dest="enable_match_start_full_clear",
+        help="前試合盤面残骸リーク修正(幽霊B対策)を有効化 "
+             "(RecognitionPipeline.load_default に転送、2026-07-23 追加)。"
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -1014,7 +1026,8 @@ def main() -> None:
              show_recognition=a.show_recognition,
              enable_landing_observed_color=a.enable_landing_observed_color,
              force_in_match=a.force_in_match,
-             enable_drift_guards=a.enable_drift_guards)
+             enable_drift_guards=a.enable_drift_guards,
+             enable_match_start_full_clear=a.enable_match_start_full_clear)
 
 
 if __name__ == "__main__":
