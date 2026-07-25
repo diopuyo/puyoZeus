@@ -430,6 +430,13 @@ def _apply_placement_cnn_veto(
             (queue 色でなく CNN 色を書く)。CNN が EMPTY/UNKNOWN/おじゃま の
             場合は mode に関わらず保留する (無効色は書けないため)。
             A/B 計測 (8 フレーム反映基準) で "hold" が悪化する場合の代替案。
+            "empty_hold_cnn_color" (追試, 2026-07-25): "hold" の副作用
+            (色不一致セルまで保留 → P2 再発火疑いで書込件数倍増) を切り分ける
+            ため、保留対象を「CNN が EMPTY (= 視覚的にまだ何も無い、早すぎる
+            書き込みの証拠)」のケースのみに絞った複合変種。
+            CNN==EMPTY → 保留 (prev_confirmed の値に戻す、早すぎる書き込み防止)。
+            CNN が有効 puyo 色で queue 色と不一致 → CNN 色を採用 (cnn_color 挙動)。
+            CNN==UNKNOWN/おじゃま、または CNN==queue 色 → 従来通り queue 色。
 
     Returns:
         veto 適用後の確定盤面 (該当なしなら inferred のコピーがそのまま返る)。
@@ -449,6 +456,13 @@ def _apply_placement_cnn_veto(
             cnn_v = int(cnn_board.get(r, c))
             if cnn_v == iv:
                 continue  # CNN が queue 色と一致 → そのまま書く (no-op)
+            if mode == "empty_hold_cnn_color":
+                if cnn_v == COLOR_EMPTY:
+                    result.set(r, c, pv)  # 早すぎる書き込みのみ保留
+                elif cnn_v in _VALID_PUYO_COLORS:
+                    result.set(r, c, cnn_v)  # CNN 観測の別色を採用
+                # UNKNOWN/おじゃま は queue 色のまま (= 従来通り、no-op)
+                continue
             if mode == "cnn_color" and cnn_v in _VALID_PUYO_COLORS:
                 result.set(r, c, cnn_v)  # CNN 観測の別色を採用
                 continue

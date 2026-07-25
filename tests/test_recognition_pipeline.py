@@ -1921,6 +1921,57 @@ def test_apply_placement_cnn_veto_cnn_color_mode_adopts_cnn_observation():
     )
 
 
+def test_apply_placement_cnn_veto_empty_hold_cnn_color_holds_only_on_empty():
+    """mode='empty_hold_cnn_color': CNN==EMPTY (早すぎる書き込み) のみ保留する。"""
+    from src.board import COLOR_OJAMA, COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+
+    # CNN==EMPTY → 保留 (早すぎる書き込み防止)
+    cnn_board_empty = Board()  # (5,2) は既定 EMPTY
+    result_empty = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board_empty, mode="empty_hold_cnn_color",
+    )
+    assert int(result_empty.get(5, 2)) == COLOR_EMPTY, (
+        "CNN==EMPTY は保留 (prev の EMPTY に戻す) べき"
+    )
+
+    # CNN==UNKNOWN/おじゃま → 保留せず従来通り queue 色のまま
+    for cnn_color in (COLOR_UNKNOWN, COLOR_OJAMA):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        result = _apply_placement_cnn_veto(
+            inferred, prev_confirmed, cnn_board, mode="empty_hold_cnn_color",
+        )
+        assert int(result.get(5, 2)) == COLOR_RED, (
+            f"CNN=={cnn_color} (EMPTY でない) は保留せず queue 色のままであるべき"
+        )
+
+
+def test_apply_placement_cnn_veto_empty_hold_cnn_color_adopts_cnn_color_on_mismatch():
+    """mode='empty_hold_cnn_color': CNN が有効色で queue と不一致なら CNN 色を採用する。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (別の有効色、EMPTY でない)
+
+    result = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board, mode="empty_hold_cnn_color",
+    )
+
+    assert int(result.get(5, 2)) == COLOR_BLUE, (
+        "CNN が有効 puyo 色で queue 色と不一致なら CNN 色を採用するべき "
+        "(cnn_color 挙動と同一)"
+    )
+
+
 def test_apply_placement_cnn_veto_ignores_non_landing_cells():
     """着地セル以外 (prev_confirmed が既に色付き) は veto 対象外。"""
     from src.board import COLOR_BLUE, COLOR_RED
