@@ -561,6 +561,50 @@ class BoardStateMachine:
         else:
             self._ctx = StateContext()
 
+    def clear_match_start_residue(self) -> None:
+        """試合境界で残留しうる非表示 side-channel field のみをクリアする。
+
+        前試合盤面残骸リーク修正 (2026-07-23): confirmed_board/state 等の
+        主 state には触れず、non_stable_cnn_history / stable_recovery_counters
+        / recovery_cells / stable_warmup_remaining / next_queue の 5 field
+        のみを初期化する (`reset()` ほど広範囲ではない、狙い撃ちの部分クリア)。
+
+        force_in_match=True (raw_active 常時 True) 構成では update() の
+        is_match_active=False 分岐 (MENU 強制) が一度も発火しないため、
+        score リセット検知など別経路の試合境界シグナルから明示的に
+        このメソッドを呼び出す必要がある
+        (`recognition_pipeline.RecognitionPipeline.update` の
+        `enable_match_start_full_clear` 参照)。
+        """
+        self._ctx.non_stable_cnn_history = []
+        self._ctx.stable_recovery_counters = {}
+        self._ctx.recovery_cells = set()
+        self._ctx.stable_warmup_remaining = 0
+        self._ctx.next_queue = []
+
+    def force_match_boundary_reset(self) -> None:
+        """試合境界を外部から明示的に注入する (update() の
+        is_match_active=False 分岐と同一内容)。
+
+        追修 (2026-07-25): force_in_match=True (raw_active 常時 True) 構成
+        では update() に is_match_active=False が一度も渡らず、上記分岐
+        (state=MENU 強制 + confirmed_board 等 6 field クリア) が発火しない。
+        この構成では試合境界を score リセット (新ゲーム開始で score が
+        大幅減少/両者ほぼ0) からしか検知できないため、その検知経路
+        (`recognition_pipeline.RecognitionPipeline.update`) から本メソッドを
+        明示的に呼び出し、is_match_active=False 分岐と bit-identical な
+        クリアを行う (confirmed_board=None を含む主 state + 残骸 5 field)。
+        """
+        self._ctx.state = BoardState.MENU
+        self._ctx.pending_board = None
+        self._ctx.pending_count = 0
+        self._ctx.confirmed_board = None
+        self._ctx.last_stable_idx = -1
+        self._ctx.chain_count = 0
+        self._ctx.ojama_pending = 0
+        if self._enable_match_start_full_clear:
+            self.clear_match_start_residue()
+
     def update(
         self, frame_idx: int, signals: DetectorSignals,
     ) -> StateContext:
@@ -570,24 +614,7 @@ class BoardStateMachine:
 
         # 試合外なら全部 MENU に倒す (= 認識結果を保持しない)
         if not signals.is_match_active:
-            self._ctx.state = BoardState.MENU
-            self._ctx.pending_board = None
-            self._ctx.pending_count = 0
-            self._ctx.confirmed_board = None
-            self._ctx.last_stable_idx = -1
-            self._ctx.chain_count = 0
-            self._ctx.ojama_pending = 0
-            # 前試合盤面残骸リーク修正 (2026-07-23): 上記 6 field だけでは
-            # non_stable_cnn_history / stable_recovery_counters /
-            # recovery_cells / stable_warmup_remaining / next_queue が前試合の
-            # 値のまま残留し、次試合序盤に幽霊セルとして書き戻る経路になる。
-            # enable_match_start_full_clear=True でこれらも完全クリアする。
-            if self._enable_match_start_full_clear:
-                self._ctx.non_stable_cnn_history = []
-                self._ctx.stable_recovery_counters = {}
-                self._ctx.recovery_cells = set()
-                self._ctx.stable_warmup_remaining = 0
-                self._ctx.next_queue = []
+            self.force_match_boundary_reset()
             return self._ctx
 
         # 検出器を順に適用、最初に発火したものを採用

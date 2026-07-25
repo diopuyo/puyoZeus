@@ -309,6 +309,42 @@ def test_match_boundary_default_leaves_residue_default_off() -> None:
     assert ctx.stable_warmup_remaining == 5
 
 
+def test_force_match_boundary_reset_matches_menu_branch() -> None:
+    """追修 (2026-07-25): force_match_boundary_reset() は
+    is_match_active=False 分岐 (MENU 強制) と bit-identical な内容
+    (confirmed_board=None 含む) をクリアする (force_in_match=True 構成で
+    MENU 分岐が発火しない場合の代替呼び出し口)。"""
+    sm = BoardStateMachine(enable_match_start_full_clear=True)
+    _seed_stale_match_residue(sm)
+    sm.force_match_boundary_reset()
+    ctx = sm.context
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None
+    assert ctx.pending_board is None
+    assert ctx.pending_count == 0
+    assert ctx.last_stable_idx == -1
+    assert ctx.chain_count == 0
+    assert ctx.ojama_pending == 0
+    assert ctx.non_stable_cnn_history == []
+    assert ctx.stable_recovery_counters == {}
+    assert ctx.recovery_cells == set()
+    assert ctx.next_queue == []
+    assert ctx.stable_warmup_remaining == 0
+
+
+def test_force_match_boundary_reset_default_off_skips_residue_fields() -> None:
+    """backwards compat: enable_match_start_full_clear=False (default) では
+    force_match_boundary_reset() も残骸 5 field はクリアしない
+    (confirmed_board 等の主 6 field のみクリア、= 従来 MENU 分岐と同じ範囲)。"""
+    sm = BoardStateMachine()
+    _seed_stale_match_residue(sm)
+    sm.force_match_boundary_reset()
+    ctx = sm.context
+    assert ctx.confirmed_board is None
+    assert len(ctx.non_stable_cnn_history) == 3
+    assert ctx.stable_recovery_counters == {(10, 4): 2, (11, 4): 3}
+
+
 def test_match_boundary_full_clear_removes_residue() -> None:
     """enable_match_start_full_clear=True で試合境界の残骸フィールドが
     すべてクリアされ、次試合への幽霊セル書き戻り経路を断つ。"""
