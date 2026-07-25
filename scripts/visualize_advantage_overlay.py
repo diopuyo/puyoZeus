@@ -775,7 +775,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
              show_recognition: bool = False,
              enable_landing_observed_color: bool = False,
-             force_in_match: bool = True) -> int:
+             force_in_match: bool = True,
+             enable_drift_guards: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -799,6 +800,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         逆に「試合外」凍結が効かず、ロード演出中の装飾アイコンを盤面と誤認して
         書き込む副作用がある (2026-07-25 c34 game1 「青2個」実測で確認)。
         試合境界を跨ぐ場合は False を明示指定する (2026-07-25 追加)。
+    enable_drift_guards: True で DriftDetector 再同期暴走ガード2種
+        (試合開始15秒保護窓 + HSV較正3色未満抑制) を有効化する
+        (2026-07-25 レビュー動画v3で追加)。既定 False = 従来挙動。
     """
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
@@ -835,7 +839,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
-        enable_landing_observed_color=enable_landing_observed_color)
+        enable_landing_observed_color=enable_landing_observed_color,
+        enable_drift_resync_match_start_guard=enable_drift_guards,
+        enable_drift_resync_hsv_gate=enable_drift_guards)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -995,13 +1001,20 @@ def main() -> None:
              "(試合境界を跨ぐフル試合レンダ専用。既定 True = 従来挙動不変。 "
              "2026-07-25 c34 game1 境界レビューで追加、詳細は generate() docstring)。",
     )
+    ap.add_argument(
+        "--drift-guards", action="store_true", default=False,
+        dest="enable_drift_guards",
+        help="DriftDetector再同期暴走ガード2種(開始15秒保護窓+HSV較正3色未満抑制)を"
+             "有効化 (2026-07-25 レビュー動画v3で追加)。既定 OFF = 従来挙動不変。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
              exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
              show_recognition=a.show_recognition,
              enable_landing_observed_color=a.enable_landing_observed_color,
-             force_in_match=a.force_in_match)
+             force_in_match=a.force_in_match,
+             enable_drift_guards=a.enable_drift_guards)
 
 
 if __name__ == "__main__":
