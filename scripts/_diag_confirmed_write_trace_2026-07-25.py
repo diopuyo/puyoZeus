@@ -102,6 +102,12 @@ SPEED_BUCKET_FAST: str = "fast(<0.3s)"
 SPEED_BUCKET_SLOW: str = "slow(>=0.3s)"
 ROUTE_UNATTRIBUTED: str = "unattributed(write_trace内に該当なし)"
 
+# 試合開始直後 確定遅延診断 (Step3, 2026-07-25追記):
+# baseline-broken自己リセット/is_active ちらつき/match_just_started 再発火の
+# 主犯切り分け用。reset() の呼び出し種別タグ。
+RESET_KIND_BASELINE_BROKEN: str = "baseline_broken_self_reset"
+RESET_KIND_DRIFT_RESYNC: str = "drift_resync_keep_match_state"
+
 
 @dataclass
 class _TraceCtx:
@@ -161,6 +167,74 @@ class WriteTraceRecorder:
             route_id=route_id, frame_idx=ctx.frame_idx, t_sec=ctx.t_sec,
             side=ctx.side, cells=[], meta=meta,
         ))
+
+
+@dataclass
+class MatchStartDiagRecorder:
+    """試合開始直後 確定遅延診断 (Step3) 専用の軽量計装レコーダー (read-only)。
+
+    ①baseline-broken自己リセットループ/②is_activeちらつきによる
+    match_just_started 再発火/④HSV較正タイミングの主犯切り分けに使う。
+    write_trace (P1〜P9 経路タグ) とは独立した集計 (盤面セル書き込みを
+    伴わないイベントも扱うため、既存 WriteTraceRecorder とは別クラスにする)。
+    """
+
+    reset_events: list[dict] = field(default_factory=list)
+    match_start_events: list[dict] = field(default_factory=list)
+    is_active_flips: list[dict] = field(default_factory=list)
+
+
+def _make_reset_wrapper(orig, trace_ctx: _TraceCtx, diag: MatchStartDiagRecorder):
+    """②③: board_state_machine.BoardStateMachine.reset をラップし、呼び出しを記録する。
+
+    keep_match_state=False (recognition_pipeline.py:4625 baseline-broken
+    自己リセット) と keep_match_state=True (同:4655 drift resync) は
+    src 側で呼び出し引数が異なるため、この差だけで呼び出し元を判別できる
+    (別途 monkeypatch 不要)。frame_idx/t_sec/side は `_step_side` ラッパー
+    (_make_step_side_wrapper) が reset() 呼び出しに先立って trace_ctx に
+    設定済 (同期実行前提、_TraceCtx docstring 参照)。
+    """
+
+    @functools.wraps(orig)
+    def wrapped(self, *, keep_match_state: bool = False):
+        kind = RESET_KIND_DRIFT_RESYNC if keep_match_state else RESET_KIND_BASELINE_BROKEN
+        diag.reset_events.append({
+            "kind": kind, "side": trace_ctx.side,
+            "frame_idx": trace_ctx.frame_idx, "t_sec": trace_ctx.t_sec,
+        })
+        return orig(self, keep_match_state=keep_match_state)
+
+    return wrapped
+
+
+def _make_update_wrapper(orig, diag: MatchStartDiagRecorder, prev_holder: dict):
+    """②: RecognitionPipeline.update をラップし、match_active_started の新規セット
+
+    (= is_active が切れて再度立ち上がった回数、match_just_started 再発火の
+    直接証拠) と is_match_active の反転回数を記録する (instance 属性の
+    読み取りのみ、src は一切変更しない)。
+    """
+
+    @functools.wraps(orig)
+    def wrapped(self, frame_idx, time_sec, frame):
+        result = orig(self, frame_idx, time_sec, frame)
+        started_frame = getattr(self, "_match_active_started_frame", -1)
+        if started_frame >= 0 and prev_holder["started_frame"] < 0:
+            diag.match_start_events.append({"frame_idx": frame_idx, "t_sec": time_sec})
+        prev_holder["started_frame"] = started_frame
+        cur_active = bool(result.is_match_active)
+        if (
+            prev_holder["is_active"] is not None
+            and cur_active != prev_holder["is_active"]
+        ):
+            diag.is_active_flips.append({
+                "frame_idx": frame_idx, "t_sec": time_sec,
+                "from": prev_holder["is_active"], "to": cur_active,
+            })
+        prev_holder["is_active"] = cur_active
+        return result
+
+    return wrapped
 
 
 # ============================
@@ -375,9 +449,16 @@ def _make_step_side_wrapper(
 
 @contextmanager
 def _install_write_trace_hooks(video_stem: str):
-    """write_trace 計装を一時的に有効化する (with を抜けると必ず元実装へ復元)。"""
+    """write_trace 計装を一時的に有効化する (with を抜けると必ず元実装へ復元)。
+
+    Step3 (2026-07-25) 追記: MatchStartDiagRecorder (reset呼び出し/
+    match_active_started/is_active反転) も同時に計装し、
+    `(recorder, matchstart_diag)` のタプルで yield する。
+    """
     trace_ctx = _TraceCtx()
     recorder = WriteTraceRecorder()
+    matchstart_diag = MatchStartDiagRecorder()
+    prev_holder: dict = {"started_frame": -1, "is_active": None}
     video_stem_holder = {"stem": video_stem}
 
     orig_merge = bsm._merge_diff_only
@@ -385,6 +466,8 @@ def _install_write_trace_hooks(video_stem: str):
     orig_infer = rp.infer_placement
     orig_resolve = rp.resolve_after_placement
     orig_step_side = rp.RecognitionPipeline._step_side
+    orig_reset = bsm.BoardStateMachine.reset
+    orig_update = rp.RecognitionPipeline.update
 
     bsm._merge_diff_only = _make_merge_diff_only_wrapper(orig_merge, trace_ctx, recorder)
     bsm._apply_stable_recovery_gate = _make_stable_recovery_gate_wrapper(
@@ -397,14 +480,20 @@ def _install_write_trace_hooks(video_stem: str):
     rp.RecognitionPipeline._step_side = _make_step_side_wrapper(
         orig_step_side, trace_ctx, recorder, video_stem_holder,
     )
+    bsm.BoardStateMachine.reset = _make_reset_wrapper(orig_reset, trace_ctx, matchstart_diag)
+    rp.RecognitionPipeline.update = _make_update_wrapper(
+        orig_update, matchstart_diag, prev_holder,
+    )
     try:
-        yield recorder
+        yield recorder, matchstart_diag
     finally:
         bsm._merge_diff_only = orig_merge
         bsm._apply_stable_recovery_gate = orig_gate
         rp.infer_placement = orig_infer
         rp.resolve_after_placement = orig_resolve
         rp.RecognitionPipeline._step_side = orig_step_side
+        bsm.BoardStateMachine.reset = orig_reset
+        rp.RecognitionPipeline.update = orig_update
 
 
 # ============================
@@ -605,22 +694,147 @@ def _format_offset_table_text(offset_table: dict) -> str:
 
 
 # ============================
+# 試合開始直後 確定遅延診断 (Step3) 集計・出力
+# ============================
+
+# 遅延帯 (アーキ調査で確認済の一斉反映フレーム帯 1P≈frame14527/2P≈14530 を
+# 含む秒区間、user指定)。
+DELAY_WINDOW_START_SEC: float = 472.0
+DELAY_WINDOW_END_SEC: float = 485.0
+
+
+def _filter_window(events: list[dict], start_sec: float, end_sec: float) -> list[dict]:
+    """t_sec が [start_sec, end_sec] に入るイベントのみ抽出する。"""
+    return [e for e in events if start_sec <= e["t_sec"] <= end_sec]
+
+
+def _count_by_kind(events: list[dict]) -> dict[str, int]:
+    """reset_events の kind 別件数を数える。"""
+    counts: dict[str, int] = {}
+    for e in events:
+        counts[e["kind"]] = counts.get(e["kind"], 0) + 1
+    return counts
+
+
+def _build_matchstart_diag_summary(
+    diag: MatchStartDiagRecorder, start_sec: float, max_sec: float,
+) -> dict:
+    """reset/match_start/is_active 反転の全窓+遅延帯別集計を構築する。"""
+    end_sec = start_sec + max_sec
+    # 走査窓と遅延帯定数の共通区間 (走査窓が遅延帯と重ならない動画/窓では
+    # start > end の空区間になり、件数は自然に 0 になる)。
+    delay_start = max(DELAY_WINDOW_START_SEC, start_sec)
+    delay_end = min(DELAY_WINDOW_END_SEC, end_sec)
+    delay_reset = _filter_window(diag.reset_events, delay_start, delay_end)
+    delay_start_ev = _filter_window(diag.match_start_events, delay_start, delay_end)
+    delay_flip = _filter_window(diag.is_active_flips, delay_start, delay_end)
+    return {
+        "scan_window": {"start_sec": start_sec, "end_sec": end_sec},
+        "delay_window": {"start_sec": delay_start, "end_sec": delay_end},
+        "full_window": {
+            "n_reset_events": len(diag.reset_events),
+            "reset_kind_counts": _count_by_kind(diag.reset_events),
+            "n_match_start_events": len(diag.match_start_events),
+            "n_is_active_flips": len(diag.is_active_flips),
+        },
+        "delay_window_only": {
+            "n_reset_events": len(delay_reset),
+            "reset_kind_counts": _count_by_kind(delay_reset),
+            "n_match_start_events": len(delay_start_ev),
+            "n_is_active_flips": len(delay_flip),
+        },
+        "reset_events": diag.reset_events,
+        "match_start_events": diag.match_start_events,
+        "is_active_flips": diag.is_active_flips,
+    }
+
+
+def _format_matchstart_diag_text(summary: dict) -> str:
+    """人間可読テキストに整形する。"""
+    fw, dw = summary["full_window"], summary["delay_window_only"]
+    lines = [
+        "==== 試合開始直後 確定遅延診断 (Step3, 2026-07-25) ====",
+        f"走査窓: {summary['scan_window']['start_sec']:.1f}s-{summary['scan_window']['end_sec']:.1f}s",
+        f"遅延帯: {summary['delay_window']['start_sec']:.1f}s-{summary['delay_window']['end_sec']:.1f}s",
+        "--- 全窓 ---",
+        f"  reset呼び出し 計{fw['n_reset_events']}件 内訳={fw['reset_kind_counts']}",
+        f"  match_start再発火(is_active再起動) {fw['n_match_start_events']}件",
+        f"  is_active反転 {fw['n_is_active_flips']}件",
+        "--- 遅延帯のみ ---",
+        f"  reset呼び出し 計{dw['n_reset_events']}件 内訳={dw['reset_kind_counts']}",
+        f"  match_start再発火(is_active再起動) {dw['n_match_start_events']}件",
+        f"  is_active反転 {dw['n_is_active_flips']}件",
+    ]
+    for label, key in (
+        ("reset イベント詳細 (全窓)", "reset_events"),
+        ("match_start再発火 詳細 (全窓)", "match_start_events"),
+        ("is_active反転 詳細 (全窓)", "is_active_flips"),
+    ):
+        if summary[key]:
+            lines.append(f"--- {label} ---")
+            for e in summary[key]:
+                lines.append(f"  {e}")
+    return "\n".join(lines)
+
+
+def _write_matchstart_diag_outputs(
+    diag: MatchStartDiagRecorder, out_stem: str, start_sec: float, max_sec: float,
+) -> None:
+    """Step3 集計を json/txt で出力する。"""
+    summary = _build_matchstart_diag_summary(diag, start_sec, max_sec)
+    (OUTPUT_DIR / f"{out_stem}_matchstart_diag.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
+    )
+    text = _format_matchstart_diag_text(summary)
+    (OUTPUT_DIR / f"{out_stem}_matchstart_diag.txt").write_text(text, encoding="utf-8")
+    print(text)
+
+
+# ============================
 # 1 動画分の実行 (Step1 本体)
 # ============================
 
 
-def _run_one_video(video_stem: str, start_sec: float, max_sec: float) -> None:
-    """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。"""
+def _run_one_video(
+    video_stem: str, start_sec: float, max_sec: float,
+    *,
+    force_in_match: bool = True,
+    enable_landing_observed_color: bool = False,
+    output_stem: str | None = None,
+) -> None:
+    """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。
+
+    force_in_match / enable_landing_observed_color: 2026-07-25 試合開始直後
+    確定遅延診断 (Step3) 用に追加。既定 True/False = 従来通り
+    (_capture_frames の既定と一致、bit-identical)。
+    force_in_match=False + enable_landing_observed_color=True で
+    scripts/_diag_placement_confirm_frames_2026-07-25.py の精密計測構成
+    (force_in_match は load_default 既定 False) と一致する
+    (ただし stable_frame_count は本関数側の 3 のまま変更しない、後述参照)。
+    output_stem: 出力ファイル名の stem 上書き (None なら video_stem)。
+    従来構成の write_trace (例: c34_1P.jsonl) を上書きせず区別するために使う。
+    """
+    out_stem = output_stem if output_stem is not None else video_stem
     print(
         f"[{time.strftime('%H:%M:%S')}] [{video_stem}] write_trace計装 開始 "
-        f"start={start_sec:.1f}s dur={max_sec:.1f}s", flush=True,
+        f"start={start_sec:.1f}s dur={max_sec:.1f}s "
+        f"force_in_match={force_in_match} "
+        f"enable_landing_observed_color={enable_landing_observed_color} "
+        f"output_stem={out_stem}", flush=True,
     )
     t0 = time.time()
-    with _install_write_trace_hooks(video_stem) as recorder:
-        by_side = _capture_frames(video_stem, start_sec, max_sec)
+    with _install_write_trace_hooks(video_stem) as (recorder, matchstart_diag):
+        by_side = _capture_frames(
+            video_stem, start_sec, max_sec,
+            enable_landing_observed_color=enable_landing_observed_color,
+            force_in_match=force_in_match,
+        )
     print(
         f"[{time.strftime('%H:%M:%S')}] [{video_stem}] 処理完了 ({time.time() - t0:.1f}s) "
-        f"write_trace記録 {len(recorder.records)} 件", flush=True,
+        f"write_trace記録 {len(recorder.records)} 件 "
+        f"reset呼び出し {len(matchstart_diag.reset_events)} 件 "
+        f"match_start再発火 {len(matchstart_diag.match_start_events)} 件 "
+        f"is_active反転 {len(matchstart_diag.is_active_flips)} 件", flush=True,
     )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -628,9 +842,11 @@ def _run_one_video(video_stem: str, start_sec: float, max_sec: float) -> None:
     for rec in recorder.records:
         records_by_side.setdefault(rec.side, []).append(rec)
     for side, side_records in records_by_side.items():
-        out_path = OUTPUT_DIR / f"{video_stem}_{side}.jsonl"
+        out_path = OUTPUT_DIR / f"{out_stem}_{side}.jsonl"
         _write_trace_jsonl(side_records, out_path)
         print(f"  [{side}] write_trace {len(side_records)} 件 → {out_path}")
+
+    _write_matchstart_diag_outputs(matchstart_diag, out_stem, start_sec, max_sec)
 
     # 監査器本体 (physics_violation_audit.main) と同じ試合外/演出テロップ除外を
     # 適用してから違反検出する (masking無しだと監査器出力と件数がずれるため、
@@ -647,20 +863,20 @@ def _run_one_video(video_stem: str, start_sec: float, max_sec: float) -> None:
         violations += _check_conservation(recs, video_stem, side)
 
     crosstab = _build_crosstab(violations, records_by_side)
-    (OUTPUT_DIR / f"{video_stem}_crosstab_summary.json").write_text(
+    (OUTPUT_DIR / f"{out_stem}_crosstab_summary.json").write_text(
         json.dumps(crosstab, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
     )
     text = _format_crosstab_text(crosstab)
-    (OUTPUT_DIR / f"{video_stem}_crosstab_summary.txt").write_text(text, encoding="utf-8")
+    (OUTPUT_DIR / f"{out_stem}_crosstab_summary.txt").write_text(text, encoding="utf-8")
     print(text)
 
     # Step2: P2 falling_pair 何手ズレ判定 (A2 仮説の確証用)。
     offset_table = _build_p2_offset_table(records_by_side)
-    (OUTPUT_DIR / f"{video_stem}_p2_offset_summary.json").write_text(
+    (OUTPUT_DIR / f"{out_stem}_p2_offset_summary.json").write_text(
         json.dumps(offset_table, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
     )
     offset_text = _format_offset_table_text(offset_table)
-    (OUTPUT_DIR / f"{video_stem}_p2_offset_summary.txt").write_text(offset_text, encoding="utf-8")
+    (OUTPUT_DIR / f"{out_stem}_p2_offset_summary.txt").write_text(offset_text, encoding="utf-8")
     print(offset_text)
 
 
@@ -679,6 +895,26 @@ def _parse_args() -> argparse.Namespace:
     ap.add_argument("--video", type=str, default=None, help="対象動画stem (--smoke指定時は無視)。")
     ap.add_argument("--start-sec", type=float, default=None, dest="start_sec")
     ap.add_argument("--max-sec", type=float, default=None, dest="max_sec")
+    # 試合開始直後 確定遅延診断 (Step3, 2026-07-25) 用。既定は従来通り
+    # (force_in_match=True, enable_landing_observed_color=False) で
+    # bit-identical、明示指定時のみ挙動変更。
+    ap.add_argument(
+        "--force-in-match", dest="force_in_match", action=argparse.BooleanOptionalAction,
+        default=True,
+        help="既定True(従来通り)。--no-force-in-match で "
+             "MatchStateDetector実判定を使い試合開始直後保護機構を実際に発動させる。",
+    )
+    ap.add_argument(
+        "--enable-landing-observed-color", dest="enable_landing_observed_color",
+        action="store_true", default=False,
+        help="既定False(従来通り)。指定時は着地セル CNN==HSV 一致色補正を有効化する"
+             "(_diag_placement_confirm_frames_2026-07-25.py と同一構成にする際に指定)。",
+    )
+    ap.add_argument(
+        "--output-stem", dest="output_stem", type=str, default=None,
+        help="出力ファイル名 stem 上書き(既定None=video_stemと同一)。"
+             "従来構成の write_trace を上書きしたくない場合に指定する。",
+    )
     return ap.parse_args()
 
 
@@ -692,7 +928,12 @@ def main() -> None:
         stem = args.video
         start_sec = args.start_sec if args.start_sec is not None else 0.0
         max_sec = args.max_sec if args.max_sec is not None else 60.0
-    _run_one_video(stem, start_sec, max_sec)
+    _run_one_video(
+        stem, start_sec, max_sec,
+        force_in_match=args.force_in_match,
+        enable_landing_observed_color=args.enable_landing_observed_color,
+        output_stem=args.output_stem,
+    )
 
 
 if __name__ == "__main__":

@@ -120,6 +120,7 @@ def _capture_frames(
     enable_chain_formula_simulate_verify: bool = False,
     enable_placement_color_cnn_check: bool = False,
     enable_landing_observed_color: bool = False,
+    force_in_match: bool = True,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -148,6 +149,13 @@ def _capture_frames(
     (enable_landing_observed_color、真因A対処・着地セル CNN==HSV 一致色補正)
     を有効化し、RecognitionPipeline.load_default にそのまま透過する
     (src 無改修、既定 False で挙動不変)。
+    force_in_match: 2026-07-25 試合開始直後の確定遅延診断用に追加。
+    既定 True = 従来通り (本関数は元々 load_default(force_in_match=True) を
+    ハードコードしていたため、既定値変更なしで bit-identical)。False を
+    渡すと MatchStateDetector 実判定を使い、MATCH_JUST_STARTED /
+    BG_FP_FORCE / CHAIN_BAN 等の試合開始直後保護機構を実際に発動させた
+    状態で計測できる (_diag_placement_confirm_frames_2026-07-25.py の
+    構成と一致させる目的、既定 True で全既存呼び出し元は挙動不変)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -161,7 +169,8 @@ def _capture_frames(
 
     pipeline = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
-        temporal_smoothing=1, load_next_detector=True, force_in_match=True,
+        temporal_smoothing=1, load_next_detector=True,
+        force_in_match=force_in_match,
         enable_chain_exit_warmup=enable_chain_exit_warmup,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
