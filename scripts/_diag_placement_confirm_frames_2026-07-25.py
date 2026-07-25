@@ -969,7 +969,8 @@ def _parse_args() -> argparse.Namespace:
     )
     ap.add_argument(
         "--placement-cnn-veto-mode", dest="placement_cnn_veto_mode",
-        type=str, default="hold", choices=["hold", "cnn_color"],
+        type=str, default="hold",
+        choices=["hold", "cnn_color", "empty_hold_cnn_color"],
         help="既定'hold'。'cnn_color' で不一致セルに CNN 観測色 (有効 puyo 色の "
              "場合のみ) を採用する代替挙動を試す。",
     )
