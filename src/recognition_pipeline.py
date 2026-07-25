@@ -789,8 +789,9 @@ class RecognitionPipeline:
         # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
         # True にすると TSUMO_FALL→STABLE 着地時に着地 2 cell の CNN 観測色と
         # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
-        # デフォルト False = 従来挙動完全維持 (backwards compat)。
-        enable_landing_observed_color: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_landing_observed_color: bool = True,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
         # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
@@ -980,15 +981,15 @@ class RecognitionPipeline:
         # DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒以内は DriftDetector の
         # needs_resync を無視する (DriftDetector.update 自体は毎 frame 呼ぶため
         # 内部の連続乖離カウンタは追跡され続ける、reset だけ抑制される)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定
-        # (main マージ / default ON 化は別途 user 承認が必要)。
-        enable_drift_resync_match_start_guard: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_drift_resync_match_start_guard: bool = True,
         # ガード2: True にすると OnlineHsvCalibrator の較正済み色数
         # (_online_hsv_injected_colors) が DRIFT_RESYNC_MIN_CALIBRATED_COLORS
         # 未満の間、needs_resync を無視する。ガード1と独立に ON/OFF 可能。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        enable_drift_resync_hsv_gate: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_drift_resync_hsv_gate: bool = True,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
         # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
@@ -1010,8 +1011,9 @@ class RecognitionPipeline:
         # non_stable_cnn_history / stable_recovery_counters / recovery_cells /
         # stable_warmup_remaining / next_queue も完全クリアし、前試合終盤の
         # ぷよが次試合序盤に幽霊セルとして書き戻るのを防ぐ。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        enable_match_start_full_clear: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_match_start_full_clear: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1732,7 +1734,10 @@ class RecognitionPipeline:
         enable_gravity_filter_support: bool = True,
         merge_use_majority_value: bool = True,
         enable_column_partial_support: bool = False,
-        enable_match_start_full_clear: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化: 呼び出し元 __init__
+        # が常に明示値を渡すため実運用では未使用だが、直接呼び出し時も
+        # 採用済み挙動を既定にする (__init__ の既定値と同期)。
+        enable_match_start_full_clear: bool = True,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1835,7 +1840,9 @@ class RecognitionPipeline:
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
-        enable_landing_observed_color: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_landing_observed_color: bool = True,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_placement_color_cnn_check: bool = False,
@@ -1919,11 +1926,11 @@ class RecognitionPipeline:
         enable_gravity_filter_support: bool = True,
         merge_use_majority_value: bool = True,
         # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
-        # 両方 default False = 従来挙動完全維持・bit-identical (backwards
-        # compat)。user 承認前の savepoint 実装のため default OFF 固定
-        # (main マージ / default ON 化は別途 user 承認が必要)。
-        enable_drift_resync_match_start_guard: bool = False,
-        enable_drift_resync_hsv_gate: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards
+        # compat)。
+        enable_drift_resync_match_start_guard: bool = True,
+        enable_drift_resync_hsv_gate: bool = True,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_reset: bool = True,
@@ -1932,8 +1939,9 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_column_partial_support: bool = False,
         # 前試合盤面残骸リーク修正 (2026-07-23, A/B 計測用)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        enable_match_start_full_clear: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_match_start_full_clear: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
