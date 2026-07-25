@@ -71,6 +71,14 @@ GRAVITY_SETTLE_MAX_SEC: float = 1.5
 # 連鎖エフェクト残光が消えるまでの最小保護時間。
 GRAVITY_SETTLE_PHYSICS_CLEAR_MIN: int = 3
 
+# フレーム定数→時間定数化 Stage1 (2026-07-25):
+# GRAVITY_SETTLE_PHYSICS_CLEAR_MIN の秒定数版。GravitySettleDetector の
+# 実ロジックはこちらを正として使う (frame 定数は互換のため残置)。
+# 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため判定は
+# bit-identical。30fps 動画では実秒基準になり、体感の遅延 (フレーム差分基準
+# だと実質 2 倍の待ち時間になっていた) を解消する。
+GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC: float = GRAVITY_SETTLE_PHYSICS_CLEAR_MIN / 60
+
 # settle 中に「ぷよ数変化が安定」と見なすフレーム間差分の上限。
 # raw CNN ぷよ数が連続フレームで ±N 以内なら静止とみなす。
 GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD: int = 2

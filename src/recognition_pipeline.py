@@ -489,6 +489,11 @@ class RecognitionPipeline:
     # 60fps 換算で 60 frame = 1.0s. ぷよぷよ eスポーツの試合開始は READY→GO の
     # 演出と第一ツモ落下前にこの window がほぼ収まる前提。
     MATCH_JUST_STARTED_WINDOW_FRAMES: int = 60
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正として
+    # 使う (frame 定数は既存 import 互換のため残置)。60fps 動画では
+    # (frame_idx 差分)/60 == time_sec 差分 が恒等式のため bit-identical、
+    # 30fps 動画では実秒基準になり体感の遅延 (旧: 実質 2 倍) を解消する。
+    MATCH_JUST_STARTED_WINDOW_SEC: float = MATCH_JUST_STARTED_WINDOW_FRAMES / 60
 
     # 試合状態の hysteresis: 直前 N frame 内で 1P/2P がアクション中
     # (STABLE/TSUMO/CHAIN/OJAMA) なら、MatchStateDetector が NOT_IN_MATCH
@@ -497,12 +502,16 @@ class RecognitionPipeline:
     # 状態にならない (ネットワーク切断など特殊状況除く) というユーザー仕様
     # に基づく。
     MATCH_ACTIVE_HOLD_FRAMES: int = 10
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    MATCH_ACTIVE_HOLD_SEC: float = MATCH_ACTIVE_HOLD_FRAMES / 60
 
     # 試合開始から N frame 内は CHAIN 禁止: 試合 active 開始直後は puyo が
     # 増える時期で連鎖発生はあり得ない。VideoChainTracker が「メニュー画面
     # 0 個 → 試合開始直後 puyo 出現」を「連鎖発火 = 急減」と誤検出する
     # 現象を ban する。最初の 1 手目から CHAIN state に遷移するのを防ぐ。
     CHAIN_BAN_FRAMES_AFTER_MATCH_START: int = 30
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    CHAIN_BAN_SEC_AFTER_MATCH_START: float = CHAIN_BAN_FRAMES_AFTER_MATCH_START / 60
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
     # SCORE_MOVE_WINDOW_FRAMES 内に SCORE_MOVE_MIN_DELTA 以上動いていれば
@@ -510,6 +519,10 @@ class RecognitionPipeline:
     # 60 frame = 1 秒. 連鎖発火 (= 100+ 点増加) でなくとも、 ツモ落下中の
     # +1 点増加が継続的にあれば検出可能.
     SCORE_MOVE_WINDOW_FRAMES: int = 60
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    # `_recent_scores_*` は「件数 N 件保持」から「直近 N/60 秒保持」に変更する
+    # (score 取得タイムスタンプを併せて保持し、 経過秒数でトリムする)。
+    SCORE_MOVE_WINDOW_SEC: float = SCORE_MOVE_WINDOW_FRAMES / 60
     SCORE_MOVE_MIN_DELTA: int = 5
 
     # cycle 71h: 試合切替直後の bg_fp 採取緩和ガード.
@@ -521,6 +534,8 @@ class RecognitionPipeline:
     # 試合切替後 short window では puyo 数を問わず採取する。 短期間限定なので
     # 試合中の puyo 色を背景 fingerprint に取り込むリスクは小。
     BG_FP_FORCE_WINDOW_FRAMES: int = 120  # 2 秒
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    BG_FP_FORCE_WINDOW_SEC: float = BG_FP_FORCE_WINDOW_FRAMES / 60  # 2.0 秒
     # cycle 18 (2026-05-16, B3): cnn_phase_i_hsv_seed.pt (= empty 学習なし) では
     # bg_fp 鶏卵問題が再発するため 5→144 に緩和した定数。
     # B2 (A/B 対照実験): 144→4 に絞る仮説あり。__init__ で _bg_fp_force_max_puyo
@@ -541,11 +556,16 @@ class RecognitionPipeline:
     # 修正速度を更に上げる。 サンプル数減るが LANDING_VOTE_MIN_RATIO=0.3 と
     # 組み合わせて発火閾値を維持。
     LANDING_VOTE_FRAMES: int = 24
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする
+    # (frame 定数は既存 import / 白箱テスト互換のため残置)。
+    LANDING_VOTE_SEC: float = LANDING_VOTE_FRAMES / 60  # 0.4 秒
     # cycle 4 (2026-05-15, F7): 0.4 → 0.3 に下げて landing_vote 補正速度↑.
     LANDING_VOTE_MIN_RATIO: float = 0.3  # 3 割で確定 (NEXT 色一致時)
     # cycle 26 (2026-05-18, A2): 着地直後 5 frame の CNN ぶれを除外。
     # この期間は raw CNN が着地フラッシュ・揺らぎで不安定なため vote 蓄積から除外。
     LANDING_VOTE_INIT_SKIP_FRAMES: int = 5
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    LANDING_VOTE_INIT_SKIP_SEC: float = LANDING_VOTE_INIT_SKIP_FRAMES / 60
     # cycle 26 (A2): NEXT 色不一致時の fallback ratio。NEXT pair 色と majority が
     # 不一致なら 0.3 では弱い → 0.5 必須に引上げて誤色採用を抑制。
     LANDING_VOTE_MISMATCH_MIN_RATIO: float = 0.5
@@ -841,8 +861,11 @@ class RecognitionPipeline:
         # 着地直後 grace period: TSUMO_FALL→STABLE 遷移後 N frame は
         # CNN を信用せず inferred_landing で confirmed_board を hold。
         # ユーザー提案 (2026-05-10): 「置いた直後の誤認は推論で防げる」
-        self._landing_grace_1p: tuple[int, Board] | None = None
-        self._landing_grace_2p: tuple[int, Board] | None = None
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): tuple 第 3 要素に
+        # time_sec 基準の満了時刻 (grace_until_time) を追加。実ロジックは
+        # こちらを正として使い、第 1 要素 (frame 基準) は既存互換のため残置。
+        self._landing_grace_1p: tuple[int, Board, float] | None = None
+        self._landing_grace_2p: tuple[int, Board, float] | None = None
         # 2026-05-10 FIX-B: 5→10 frame に延長 (置いた直後の認識ぶれ抑制)
         # 着地直後の grace period. CNN/HSV の不安定 (= 着地直後の光・揺らぎ) で
         # confirmed が誤更新されるのを抑止. cycle 71h: 60→10 復帰 (= cycle 71f 互換).
@@ -858,6 +881,9 @@ class RecognitionPipeline:
         # cycle 29 (2026-05-18): 12 → 5 frame に短縮 + 起動を NEXT 移動検知に変更。
         # NEXT 変化 = 着地確定 signal、 state machine 詰まり (v97 53 秒問題) を救済。
         self.LANDING_GRACE_FRAMES: int = 5
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする
+        # (frame 定数は既存互換のため残置)。60fps では bit-identical。
+        self.LANDING_GRACE_SEC: float = self.LANDING_GRACE_FRAMES / 60
         # cycle 71h (ユーザー要件「1 秒後に完璧」 の本質対策):
         # TSUMO_FALL→STABLE 着地時に inferred_landing の追加 cells 位置を記録、
         # 後続 LANDING_VOTE_FRAMES の cnn_board で同位置 cell 色を蓄積.
@@ -960,6 +986,10 @@ class RecognitionPipeline:
         # match active hysteresis 用
         self._last_active_frame_idx: int = -1
         self._match_active_started_frame: int = -1
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): time_sec 基準の対を追加。
+        # 実ロジックはこちらを正として使う (frame 版は既存互換のため残置)。
+        self._last_active_frame_time: float = -1.0
+        self._match_active_started_time: float = -1.0
         # サイクル66 (2026-05-11): NEXT 累積色制約用 — 試合開始から最初の連鎖
         # 発火まで「累積 NEXT 色 = field 色 count」 制約を維持. 連鎖 / おじゃま
         # 落下発生時は invalidate (= 単純制約が崩れる).
@@ -1074,6 +1104,11 @@ class RecognitionPipeline:
         # 動いていれば「試合中」 を強制復帰させる. 60 frame = 1 秒分.
         self._recent_scores_1p: list[int | None] = []
         self._recent_scores_2p: list[int | None] = []
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 各 score 観測の time_sec を
+        # 並行保持し、 「直近 N 件」保持を「直近 SCORE_MOVE_WINDOW_SEC 秒」保持に
+        # 変換する (_trim_score_window 参照)。
+        self._recent_score_times_1p: list[float] = []
+        self._recent_score_times_2p: list[float] = []
         # 設計C 事後復旧ゲート: フラグを保持し _build_state_machine / _step_side に伝播。
         self._enable_stable_recovery_gate: bool = bool(enable_stable_recovery_gate)
         # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
@@ -1872,6 +1907,8 @@ class RecognitionPipeline:
         self._cnn_history_2p.clear()
         self._last_active_frame_idx = -1
         self._match_active_started_frame = -1
+        self._last_active_frame_time = -1.0
+        self._match_active_started_time = -1.0
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -1898,6 +1935,8 @@ class RecognitionPipeline:
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
+        self._recent_score_times_1p = []
+        self._recent_score_times_2p = []
         # cycle 71h: 着地後 vote 蓄積もリセット.
         self._pending_landing_vote_1p = []
         self._pending_landing_vote_2p = []
@@ -2013,14 +2052,21 @@ class RecognitionPipeline:
         )
         self._recent_scores_1p.append(cur_score_1p)
         self._recent_scores_2p.append(cur_score_2p)
-        if len(self._recent_scores_1p) > self.SCORE_MOVE_WINDOW_FRAMES:
-            self._recent_scores_1p = self._recent_scores_1p[
-                -self.SCORE_MOVE_WINDOW_FRAMES:
-            ]
-        if len(self._recent_scores_2p) > self.SCORE_MOVE_WINDOW_FRAMES:
-            self._recent_scores_2p = self._recent_scores_2p[
-                -self.SCORE_MOVE_WINDOW_FRAMES:
-            ]
+        self._recent_score_times_1p.append(time_sec)
+        self._recent_score_times_2p.append(time_sec)
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧「直近 N 件」保持を
+        # 「直近 SCORE_MOVE_WINDOW_SEC 秒」保持に置換 (_trim_score_window 参照)。
+        # 60fps 動画では 1 要素 ≒ 1/60 秒のため件数ベースの窓と一致し bit-identical。
+        self._recent_scores_1p, self._recent_score_times_1p = (
+            self._trim_score_window(
+                self._recent_scores_1p, self._recent_score_times_1p, time_sec,
+            )
+        )
+        self._recent_scores_2p, self._recent_score_times_2p = (
+            self._trim_score_window(
+                self._recent_scores_2p, self._recent_score_times_2p, time_sec,
+            )
+        )
         score_actively_moving = self._is_score_actively_moving(
             self._recent_scores_1p
         ) or self._is_score_actively_moving(self._recent_scores_2p)
@@ -2070,11 +2116,15 @@ class RecognitionPipeline:
                 and (self._score_tracker_2p.last_score or 0) > 0)
         ):
             raw_active = True
-        # 直前 N frame 以内に active 観測歴があれば強制 True (1 frame ぶれ吸収)
+        # 直前 N 秒以内に active 観測歴があれば強制 True (1 frame ぶれ吸収)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._last_active_frame_idx` (frame 差分) を time_sec 差分に置換。
+        # 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため
+        # bit-identical、30fps 動画では実秒基準になる。
         recent_active = (
-            self._last_active_frame_idx >= 0
-            and (frame_idx - self._last_active_frame_idx)
-            <= self.MATCH_ACTIVE_HOLD_FRAMES
+            self._last_active_frame_time >= 0
+            and (time_sec - self._last_active_frame_time)
+            <= self.MATCH_ACTIVE_HOLD_SEC
         )
         # 1P/2P state machine が現在 NON-STABLE state にある場合も active 強制
         # (= state machine 内部で active 認識中 → MENU に倒さない)
@@ -2124,10 +2174,13 @@ class RecognitionPipeline:
         if is_active:
             if self._match_active_started_frame < 0:
                 self._match_active_started_frame = frame_idx
+                self._match_active_started_time = time_sec
             self._last_active_frame_idx = frame_idx
+            self._last_active_frame_time = time_sec
         else:
             # 試合 active が完全に切れたら start もリセット
             self._match_active_started_frame = -1
+            self._match_active_started_time = -1.0
             self._bg_fp_captured = False
             self._bg_frame_buffer.clear()
             if hasattr(self._reader, "set_background_fingerprints"):
@@ -2199,9 +2252,12 @@ class RecognitionPipeline:
             puyo_count_total = (
                 cnn_1p_raw.count_puyos() + cnn_2p_raw.count_puyos()
             )
-            match_age = frame_idx - self._match_active_started_frame
+            # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+            # self._match_active_started_frame` (frame 差分) を time_sec 差分
+            # に置換。60fps では bit-identical、30fps では実秒基準になる。
+            match_age_sec = time_sec - self._match_active_started_time
             bg_fp_relaxed = (
-                match_age <= self.BG_FP_FORCE_WINDOW_FRAMES
+                match_age_sec <= self.BG_FP_FORCE_WINDOW_SEC
                 and puyo_count_total <= self._bg_fp_force_max_puyo
             )
             if puyo_count_total == 0 or bg_fp_relaxed:
@@ -2279,12 +2335,15 @@ class RecognitionPipeline:
         # VideoChainTracker は drop 観測 frame で 1 度だけ ChainEvent を返す。
         # state machine が CHAIN にロックされ続けるよう、event 受信後
         # chain_hold_per_step_sec × chain_count 秒間 signals に保持する。
-        # 試合開始から CHAIN_BAN_FRAMES_AFTER_MATCH_START 以内の event は破棄
+        # 試合開始から CHAIN_BAN_SEC_AFTER_MATCH_START 秒以内の event は破棄
         # (1 手目から連鎖はあり得ない、誤検出 ban)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._match_active_started_frame` (frame 差分) を time_sec 差分に
+        # 置換。60fps では bit-identical、30fps では実秒基準になる。
         chain_banned = (
-            self._match_active_started_frame >= 0
-            and (frame_idx - self._match_active_started_frame)
-            < self.CHAIN_BAN_FRAMES_AFTER_MATCH_START
+            self._match_active_started_time >= 0
+            and (time_sec - self._match_active_started_time)
+            < self.CHAIN_BAN_SEC_AFTER_MATCH_START
         )
         # cycle 71d (案 D8): VideoChainTracker への入力は前 frame の confirmed_board.
         # raw CNN 振動 (= cnn 32↔27 1 frame スパイク) は confirmed が 1 frame では動かないため
@@ -3024,6 +3083,7 @@ class RecognitionPipeline:
         prev_confirmed: Board, final_board: Board,
         next_colors: tuple[int, int] | None = None,  # cycle 71m β2''
         distrust_cells: set[tuple[int, int]] | None = None,
+        time_sec: float | None = None,  # フレーム定数→時間定数化 Stage1 (2026-07-25)
     ) -> None:
         """cycle 71h: 着地時に vote 蓄積エントリを追加.
 
@@ -3037,6 +3097,11 @@ class RecognitionPipeline:
         座標が含まれるセルは、_update_landing_votes 側で NEXT 色 2 択バイアスを
         迂回し、生 CNN 多数決フォールバックに必ず落ちる (backwards compat:
         None なら空集合扱いで従来挙動と完全に同一)。
+
+        Args:
+            time_sec: フレーム定数→時間定数化 Stage1 (2026-07-25)。呼び出し元
+                (_step_side) の time_sec。省略時 (backwards compat, 白箱テスト用)
+                は `frame_idx / 60` で代替し、旧 frame ベース挙動を保つ。
         """
         cells_with_expected: list[tuple[int, int, int]] = []
         for r in range(BOARD_ROWS):
@@ -3047,8 +3112,12 @@ class RecognitionPipeline:
                     cells_with_expected.append((r, c, fv))
         if not cells_with_expected:
             return
+        start_time = (
+            time_sec if time_sec is not None else frame_idx / 60
+        )
         entry: dict = {
             "start": frame_idx,
+            "start_time": start_time,
             "cells": cells_with_expected,
             "votes": {
                 (r, c): [] for (r, c, _) in cells_with_expected
@@ -3071,16 +3140,24 @@ class RecognitionPipeline:
         self, side: str, frame_idx: int,
         cnn_board: Board, confirmed_board: Board | None,
         frame_bgr: np.ndarray | None = None,  # cycle 71m β2''
+        time_sec: float | None = None,  # フレーム定数→時間定数化 Stage1 (2026-07-25)
     ) -> Board | None:
         """cycle 71h: 着地後 vote 累積 + 完了時の confirmed 更新.
 
         各 pending entry について:
-        - LANDING_VOTE_FRAMES 経過前: cnn_board の対象 cells を vote_buffer に追加
-        - LANDING_VOTE_FRAMES 経過: 最頻値で confirmed_board の cell 色を更新
+        - LANDING_VOTE_SEC 秒経過前: cnn_board の対象 cells を vote_buffer に追加
+        - LANDING_VOTE_SEC 秒経過: 最頻値で confirmed_board の cell 色を更新
 
         cycle 71m (β2''): frame_bgr が渡されれば、 各 cell の HSV を NEXT 色 2 種類
         への距離で分類する vote も並行で蓄積. 蓄積終了時、 NEXT 色 votes の多数決を
         優先採用 (= CNN 完全誤認時の救済).
+
+        Args:
+            time_sec: フレーム定数→時間定数化 Stage1 (2026-07-25)。呼び出し元
+                (_step_side) の time_sec。省略時 (backwards compat, 白箱テスト用)
+                は `frame_idx / 60` で代替し、旧 frame ベース挙動を保つ。
+                entry 側に "start_time" が無い場合も同様に entry["start"]/60 を
+                fallback として使う。
 
         Returns:
             更新後の confirmed_board. None なら更新なし.
@@ -3099,11 +3176,16 @@ class RecognitionPipeline:
         region = DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
         updated_board = confirmed_board.copy() if confirmed_board else None
         next_pending: list[dict] = []
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): cur_time / start_time は
+        # ともに time_sec 基準。 呼び出し元省略時 (白箱テスト互換) は
+        # frame_idx/60 を代替値として使い、旧 frame ベース挙動を維持する。
+        cur_time = time_sec if time_sec is not None else frame_idx / 60
         for entry in pending:
-            elapsed = frame_idx - entry["start"]
-            if elapsed < self.LANDING_VOTE_FRAMES:
-                # cycle 26 (A2): 着地直後 5 frame は CNN ぶれ大 → 蓄積 skip
-                in_init_skip = elapsed < self.LANDING_VOTE_INIT_SKIP_FRAMES
+            start_time = entry.get("start_time", entry["start"] / 60)
+            elapsed_sec = cur_time - start_time
+            if elapsed_sec < self.LANDING_VOTE_SEC:
+                # cycle 26 (A2): 着地直後 CNN ぶれ大 → 蓄積 skip
+                in_init_skip = elapsed_sec < self.LANDING_VOTE_INIT_SKIP_SEC
                 # 蓄積期間中: cnn の対象 cells 色を追加 (init_skip 除く)
                 if not in_init_skip:
                     for (r, c, _) in entry["cells"]:
@@ -3242,6 +3324,37 @@ class RecognitionPipeline:
             for det in getattr(sm, "_detectors", []):
                 if isinstance(det, GravitySettleDetector):
                     det.reset()
+
+    def _trim_score_window(
+        self,
+        scores: list[int | None],
+        times: list[float],
+        cur_time: float,
+    ) -> tuple[list[int | None], list[float]]:
+        """`SCORE_MOVE_WINDOW_SEC` 秒より古い要素を先頭から削除する.
+
+        フレーム定数→時間定数化 Stage1 (2026-07-25): 旧「直近 N 件保持」を
+        「直近 SCORE_MOVE_WINDOW_SEC 秒保持」に変換するヘルパー。
+        60fps 動画では 1 要素 ≒ 1/60 秒のため件数ベースの窓と一致し
+        bit-identical。30fps 動画では実秒基準の窓になる。
+
+        Args:
+            scores: score 履歴 (時系列順、times と同じ長さ)。
+            times: 各 score 観測時の time_sec (時系列順)。
+            cur_time: 現フレームの time_sec。
+
+        Returns:
+            トリム後の (scores, times) タプル。
+        """
+        cutoff = cur_time - self.SCORE_MOVE_WINDOW_SEC
+        drop = 0
+        for t in times:
+            if t > cutoff:
+                break
+            drop += 1
+        if drop == 0:
+            return scores, times
+        return scores[drop:], times[drop:]
 
     def _is_score_actively_moving(
         cls, recent_scores: list[int | None],
@@ -3847,12 +3960,15 @@ class RecognitionPipeline:
         ):
             effect_vis = False
         # cycle 71v 汎用化: 試合開始直後 window 判定 (初回 STABLE 確定で
-        # 空フィールド強制するため state_machine に伝搬)
+        # 空フィールド強制するため state_machine に伝搬)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._match_active_started_frame` (frame 差分) を time_sec 差分に
+        # 置換。60fps では bit-identical、30fps では実秒基準になる。
         match_just_started = (
             is_active
-            and self._match_active_started_frame >= 0
-            and (frame_idx - self._match_active_started_frame)
-            < self.MATCH_JUST_STARTED_WINDOW_FRAMES
+            and self._match_active_started_time >= 0
+            and (time_sec - self._match_active_started_time)
+            < self.MATCH_JUST_STARTED_WINDOW_SEC
         )
         # 設計C 事後復旧ゲート用 HSV-only 盤面を取得する。
         # フラグ OFF または frame_bgr なし の場合は None (安全弁A により発火しない)。
@@ -4458,18 +4574,22 @@ class RecognitionPipeline:
                     side, frame_idx, prev_confirmed, ctx.confirmed_board,
                     next_colors=falling_pair_for_grace,
                     distrust_cells=distrust_cells_for_vote,
+                    time_sec=time_sec,
                 )
             grace_until = frame_idx + self.LANDING_GRACE_FRAMES
+            # フレーム定数→時間定数化 Stage1 (2026-07-25): time_sec 基準の
+            # 満了時刻を併せて記録する (実ロジックはこちらを正として使う)。
+            grace_until_time = time_sec + self.LANDING_GRACE_SEC
             if side == "1P":
                 self._landing_grace_1p = (
-                    grace_until, ctx.confirmed_board.copy(),
+                    grace_until, ctx.confirmed_board.copy(), grace_until_time,
                 )
                 self._landing_pending_1p = None
                 # 伝播済のため 1 ツモ分だけ生存させてクリア (次着地まで持ち越さない)。
                 self._landing_distrust_1p = set()
             else:
                 self._landing_grace_2p = (
-                    grace_until, ctx.confirmed_board.copy(),
+                    grace_until, ctx.confirmed_board.copy(), grace_until_time,
                 )
                 self._landing_pending_2p = None
                 self._landing_distrust_2p = set()
@@ -4546,9 +4666,12 @@ class RecognitionPipeline:
         grace_state_pre = (
             self._landing_grace_1p if side == "1P" else self._landing_grace_2p
         )
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx <
+        # grace_state_pre[0]` (frame 差分) を time_sec 基準 (grace_state_pre[2])
+        # に置換。60fps では bit-identical、30fps では実秒基準になる。
         in_grace = (
             grace_state_pre is not None
-            and frame_idx < grace_state_pre[0]
+            and time_sec < grace_state_pre[2]
             and ctx.state == BoardState.STABLE
         )
 
@@ -4609,8 +4732,8 @@ class RecognitionPipeline:
         if in_grace and grace_state is not None:
             ctx.confirmed_board = grace_state[1].copy()
             ctx.pending_board = grace_state[1].copy()
-        elif grace_state is not None and frame_idx >= grace_state[0]:
-            # grace 終了: クリア
+        elif grace_state is not None and time_sec >= grace_state[2]:
+            # grace 終了: クリア (time_sec 基準、 Stage1 2026-07-25)
             if side == "1P":
                 self._landing_grace_1p = None
             else:
@@ -4640,7 +4763,7 @@ class RecognitionPipeline:
         if ctx.confirmed_board is not None:
             vote_updated = self._update_landing_votes(
                 side, frame_idx, cnn_board, ctx.confirmed_board,
-                frame_bgr=frame_bgr,
+                frame_bgr=frame_bgr, time_sec=time_sec,
             )
             if vote_updated is not None and not in_grace and not in_chain_exit_warmup:
                 ctx.confirmed_board = vote_updated
