@@ -3334,6 +3334,14 @@ def test_chain_estimate_applied_unconditionally_at_stable() -> None:
         chain_tracker_1p=tracker,  # type: ignore[arg-type]
         chain_tracker_2p=None,
         stable_frame_count=2,
+        # 本テストは unrelated_board (cnn_board と物理予測が常時大乖離) を
+        # 使い DriftDetector.needs_resync を意図的に頻発させる構成のため、
+        # 2026-07-25 既定 ON 化されたガード 2 種を明示 OFF にして
+        # drift 再同期による sm/gen リセットが従来通り即時発火する挙動を
+        # 維持する (本テストの検証意図は final_board 無条件適用であり、
+        # drift 再同期ガードの効果検証ではないため)。
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
     )
     _prime_match_active(pipe, frames=35)
     _force_confirmed_board(pipe, "1P", ev.before_board)
@@ -3644,8 +3652,9 @@ def _count_calls(obj: object, method_name: str) -> dict:
     return counter
 
 
-def test_drift_resync_guards_default_false_on_init() -> None:
-    """両ガードとも __init__ 既定値が False (backwards compat)。"""
+def test_drift_resync_guards_default_true_on_init() -> None:
+    """両ガードとも __init__ 既定値が True であること
+    (2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化)。"""
     import inspect
     sig = inspect.signature(RecognitionPipeline.__init__)
     for name in (
@@ -3653,11 +3662,12 @@ def test_drift_resync_guards_default_false_on_init() -> None:
         "enable_drift_resync_hsv_gate",
     ):
         default = sig.parameters[name].default
-        assert default is False, f"{name} の __init__ 既定 False 期待: {default}"
+        assert default is True, f"{name} の __init__ 既定 True 期待: {default}"
 
 
-def test_drift_resync_guards_default_false_on_load_default() -> None:
-    """両ガードとも load_default 既定値が False (backwards compat)。"""
+def test_drift_resync_guards_default_true_on_load_default() -> None:
+    """両ガードとも load_default 既定値が True であること
+    (2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化)。"""
     import inspect
     sig = inspect.signature(RecognitionPipeline.load_default)
     for name in (
@@ -3665,8 +3675,8 @@ def test_drift_resync_guards_default_false_on_load_default() -> None:
         "enable_drift_resync_hsv_gate",
     ):
         default = sig.parameters[name].default
-        assert default is False, (
-            f"{name} の load_default 既定 False 期待: {default}"
+        assert default is True, (
+            f"{name} の load_default 既定 True 期待: {default}"
         )
 
 
@@ -3680,9 +3690,21 @@ def test_drift_resync_guard_counters_init_zero() -> None:
 
 
 def test_drift_resync_guards_off_resyncs_immediately_bit_identical() -> None:
-    """両ガード OFF (既定) では試合開始直後でも needs_resync=True で
-    従来通り sm.reset/gen.reset/drift.reset が即発火する (bit-identical)。"""
-    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    """両ガード明示 OFF (2026-07-25 既定 ON 化により明示指定が必要) では
+    試合開始直後でも needs_resync=True で従来通り
+    sm.reset/gen.reset/drift.reset が即発火する (bit-identical)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
     pipe._drift_1p = _FakeAlwaysResyncDrift()
     sm_calls = _count_calls(pipe._sm_1p, "reset")
     gen_calls = _count_calls(pipe._gen_1p, "reset")
@@ -3720,7 +3742,11 @@ def test_drift_resync_match_start_guard_on_suppresses_within_window() -> None:
 
 def test_drift_resync_match_start_guard_on_allows_after_window() -> None:
     """ガード1 ON: DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒経過後は
-    needs_resync=True で従来通り resync が発火する。"""
+    needs_resync=True で従来通り resync が発火する。
+    ガード2 (hsv_gate) は 2026-07-25 既定 ON 化されたが、本テストは
+    ガード1 を単独検証する目的のため明示 OFF にして分離する
+    (テスト環境では OnlineHsvCalibrator が実際に較正しないため
+    ガード2 既定 ON のままだと較正未達判定のまま恒久的に抑制されてしまう)。"""
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     pipe = RecognitionPipeline(
@@ -3728,6 +3754,7 @@ def test_drift_resync_match_start_guard_on_allows_after_window() -> None:
         match_state_detector=detector,  # type: ignore[arg-type]
         stable_frame_count=2,
         enable_drift_resync_match_start_guard=True,
+        enable_drift_resync_hsv_gate=False,
     )
     pipe._drift_1p = _FakeAlwaysResyncDrift()
     sm_calls = _count_calls(pipe._sm_1p, "reset")
@@ -3762,8 +3789,12 @@ def test_drift_resync_hsv_gate_on_suppresses_when_uncalibrated() -> None:
 
 def test_drift_resync_hsv_gate_on_allows_when_calibrated() -> None:
     """ガード2 ON: 較正済み色数 >= DRIFT_RESYNC_MIN_CALIBRATED_COLORS なら
-    従来通り resync が発火する。"""
+    従来通り resync が発火する。ガード1 (match_start_guard) は
+    2026-07-25 既定 ON 化されたが、本テストはガード2 を単独検証する
+    目的のため明示 OFF にして分離する (t=0.0 は window 内で
+    ガード1 既定 ON のままだと無条件に抑制されてしまうため)。"""
     pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._enable_drift_resync_match_start_guard = False
     pipe._enable_drift_resync_hsv_gate = True
     pipe._online_hsv_injected_colors = {1, 2, 3}  # 3 色較正済みを模擬
     pipe._drift_1p = _FakeAlwaysResyncDrift()
