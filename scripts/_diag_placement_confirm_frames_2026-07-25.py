@@ -191,6 +191,8 @@ def _collect_records(
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
     enable_column_partial_support: bool = False,
+    enable_placement_cnn_veto: bool = False,
+    placement_cnn_veto_mode: str = "hold",
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -205,6 +207,10 @@ def _collect_records(
     RecognitionPipeline.load_default へそのまま透過する。
     enable_column_partial_support: 列ゲート緩和 (2026-07-25) の A/B 計測用に
     追加。既定 False = 従来通り (bit-identical)。
+    RecognitionPipeline.load_default へそのまま透過する。
+    enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
+    (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
+    False/"hold" = 従来通り (bit-identical)。
     RecognitionPipeline.load_default へそのまま透過する。
     pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
     既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
@@ -227,6 +233,8 @@ def _collect_records(
         enable_baseline_broken_reset=enable_baseline_broken_reset,
         enable_baseline_broken_grace=enable_baseline_broken_grace,
         enable_column_partial_support=enable_column_partial_support,
+        enable_placement_cnn_veto=enable_placement_cnn_veto,
+        placement_cnn_veto_mode=placement_cnn_veto_mode,
     )
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
@@ -711,6 +719,8 @@ def _process_one(
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
     enable_column_partial_support: bool = False,
+    enable_placement_cnn_veto: bool = False,
+    placement_cnn_veto_mode: str = "hold",
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -721,6 +731,9 @@ def _process_one(
     RecognitionPipeline 側既定と同一)。
     enable_column_partial_support: 列ゲート緩和 (2026-07-25) の A/B 計測用
     (既定 False)。
+    enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
+    (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用 (既定
+    False/"hold")。
     """
     t0 = time.time()
     _print_progress(f"[{video}] 走査開始 start={start_sec:.1f}s dur={max_sec:.1f}s")
@@ -732,6 +745,8 @@ def _process_one(
         enable_baseline_broken_reset=enable_baseline_broken_reset,
         enable_baseline_broken_grace=enable_baseline_broken_grace,
         enable_column_partial_support=enable_column_partial_support,
+        enable_placement_cnn_veto=enable_placement_cnn_veto,
+        placement_cnn_veto_mode=placement_cnn_veto_mode,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -765,6 +780,19 @@ def _process_one(
         _print_progress(f"[{video}] baseline_broken計測: {baseline_broken_stats}")
     if drift_suppressed:
         _print_progress(f"[{video}] drift_resync抑制カウンタ: {drift_suppressed}")
+    # 修正方針 甲 (2026-07-25): P2 設置推論 CNN veto 保留セル数計測。
+    placement_cnn_veto_stats = {
+        "held_count_1p": getattr(
+            pipeline_obj, "_placement_cnn_veto_held_count_1p", 0,
+        ),
+        "held_count_2p": getattr(
+            pipeline_obj, "_placement_cnn_veto_held_count_2p", 0,
+        ),
+    } if pipeline_obj is not None else {}
+    if placement_cnn_veto_stats:
+        _print_progress(
+            f"[{video}] placement_cnn_veto保留セル数: {placement_cnn_veto_stats}",
+        )
 
     events_1p, meta_1p = _build_placement_events(recs_1p, video, "1P", fps, start_sec)
     events_2p, meta_2p = _build_placement_events(recs_2p, video, "2P", fps, start_sec)
@@ -800,6 +828,7 @@ def _process_one(
         "stats_1p_steady_state": stats_1p_steady, "stats_2p_steady_state": stats_2p_steady,
         "drift_resync_suppressed": drift_suppressed,
         "baseline_broken_stats": baseline_broken_stats,
+        "placement_cnn_veto_stats": placement_cnn_veto_stats,
     }
 
 
@@ -833,6 +862,7 @@ def _build_summary(results: list[dict]) -> dict:
             "stats_2p_steady_state": result["stats_2p_steady_state"],
             "drift_resync_suppressed": result.get("drift_resync_suppressed", {}),
             "baseline_broken_stats": result.get("baseline_broken_stats", {}),
+            "placement_cnn_veto_stats": result.get("placement_cnn_veto_stats", {}),
         }
     return summary
 
@@ -855,6 +885,10 @@ def _format_summary_text(results: list[dict]) -> str:
         )
         lines.append(
             f"    baseline_broken計測: {result.get('baseline_broken_stats', {})}",
+        )
+        lines.append(
+            f"    placement_cnn_veto保留セル数: "
+            f"{result.get('placement_cnn_veto_stats', {})}",
         )
         lines.append(f"--- video_{result['video']} [全候補イベント参考] ---")
         lines.append(_format_stats_line("1P", result["stats_1p_all"]))
@@ -923,6 +957,22 @@ def _parse_args() -> argparse.Namespace:
              "enable_column_partial_support を有効化する "
              "(設計C 事後復旧ゲートの安全弁C浮き判定を列カウンタ進行中セルで緩和)。",
     )
+    # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25, A/B 計測用)。
+    # 既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-placement-cnn-veto", dest="enable_placement_cnn_veto",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_placement_cnn_veto を有効化する "
+             "(P2 infer_placement の着地セル書き込み前に現フレーム CNN 観測と "
+             "照合し、不一致なら保留する)。",
+    )
+    ap.add_argument(
+        "--placement-cnn-veto-mode", dest="placement_cnn_veto_mode",
+        type=str, default="hold", choices=["hold", "cnn_color"],
+        help="既定'hold'。'cnn_color' で不一致セルに CNN 観測色 (有効 puyo 色の "
+             "場合のみ) を採用する代替挙動を試す。",
+    )
     return ap.parse_args()
 
 
@@ -942,6 +992,8 @@ def main() -> None:
         "enable_baseline_broken_reset": args.enable_baseline_broken_reset,
         "enable_baseline_broken_grace": args.enable_baseline_broken_grace,
         "enable_column_partial_support": args.enable_column_partial_support,
+        "enable_placement_cnn_veto": args.enable_placement_cnn_veto,
+        "placement_cnn_veto_mode": args.placement_cnn_veto_mode,
     }
     result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
     results = [result_c34]
