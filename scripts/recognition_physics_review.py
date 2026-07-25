@@ -123,6 +123,8 @@ def _capture_frames(
     force_in_match: bool = True,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
+    enable_baseline_broken_reset: bool = True,
+    enable_baseline_broken_grace: bool = False,
     pipeline_out: dict | None = None,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
@@ -169,6 +171,10 @@ def _capture_frames(
     呼び出し後に pipeline_out["pipeline"] へ本関数内で構築した
     RecognitionPipeline インスタンスをそのまま格納する (read-only 観測用、
     戻り値の型・件数は変更しない)。
+    enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
+    baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
+    True/False = src 側既定と bit-identical (従来通り)。
+    RecognitionPipeline.load_default にそのまま透過する (src 無改修)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -196,6 +202,8 @@ def _capture_frames(
         enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_baseline_broken_reset=enable_baseline_broken_reset,
+        enable_baseline_broken_grace=enable_baseline_broken_grace,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)

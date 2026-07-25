@@ -607,6 +607,12 @@ class RecognitionPipeline:
     # ため、3 色較正済みであれば概ね安定しているとみなす。
     DRIFT_RESYNC_MIN_CALIBRATED_COLORS: int = 3
 
+    # baseline_broken リセット 限定緩和版 (2026-07-25, A/B 計測用)。
+    # enable_baseline_broken_grace=True の場合、STABLE 突入からこの秒数
+    # 経過するまではカウンタ加算を抑制する (着地直後の過渡的な puyo 数差で
+    # 誤って自己修復 reset が発火するのを防ぐ目的)。
+    BASELINE_BROKEN_STABLE_GRACE_SEC: float = 3.0
+
     def __init__(
         self,
         image_reader: ImageReader,
@@ -853,6 +859,14 @@ class RecognitionPipeline:
         # 未満の間、needs_resync を無視する。ガード1と独立に ON/OFF 可能。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_drift_resync_hsv_gate: bool = False,
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
+        # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_reset: bool = True,
+        # 限定緩和版: True で STABLE 突入から BASELINE_BROKEN_STABLE_GRACE_SEC
+        # 秒間はカウンタ加算を抑制する。enable_baseline_broken_reset=False の
+        # 場合は無視される。default False = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_grace: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1069,6 +1083,20 @@ class RecognitionPipeline:
         # v97 53 秒 TSUMO_FALL 詰まり問題への救済策。
         self._baseline_broken_consec_1p: int = 0
         self._baseline_broken_consec_2p: int = 0
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。_check_baseline_broken_reset で参照する。
+        self._enable_baseline_broken_reset: bool = bool(enable_baseline_broken_reset)
+        self._enable_baseline_broken_grace: bool = bool(enable_baseline_broken_grace)
+        # STABLE 突入時刻 (1P/2P 別、grace 判定用。-1.0 = 未記録)。
+        self._stable_entered_time_1p: float = -1.0
+        self._stable_entered_time_2p: float = -1.0
+        # grace 抑制回数カウンタ (1P/2P 別、効果測定用)。
+        self._baseline_broken_grace_suppressed_1p: int = 0
+        self._baseline_broken_grace_suppressed_2p: int = 0
+        # baseline_broken reset 実発火回数カウンタ (1P/2P 別、A/B 効果測定用)。
+        # _baseline_broken_consec_Xp は発火の度 0 に戻るため累計には使えない。
+        self._baseline_broken_reset_count_1p: int = 0
+        self._baseline_broken_reset_count_2p: int = 0
         # cycle 71v-B (2026-05-15): 試合中に観測した色を永続記録 (= NEXT 履歴 cap
         # 8 でスクロールアウトしても UNKNOWN 化しない)
         self._ever_seen_colors_1p: set[int] = set()
@@ -1714,6 +1742,10 @@ class RecognitionPipeline:
         # (main マージ / default ON 化は別途 user 承認が必要)。
         enable_drift_resync_match_start_guard: bool = False,
         enable_drift_resync_hsv_gate: bool = False,
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_reset: bool = True,
+        enable_baseline_broken_grace: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1887,6 +1919,8 @@ class RecognitionPipeline:
                 enable_drift_resync_match_start_guard
             ),
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_baseline_broken_reset=enable_baseline_broken_reset,
+            enable_baseline_broken_grace=enable_baseline_broken_grace,
         )
 
     # ------------------------------------------------------------------
@@ -3951,6 +3985,127 @@ class RecognitionPipeline:
         _apply_gravity_filter(majority)
         return "verified_mismatch_corrected", majority
 
+    def _check_baseline_broken_reset(
+        self,
+        side: str,
+        frame_idx: int,
+        time_sec: float,
+        is_active: bool,
+        ctx: "StateContext",
+        cnn_board: Board,
+        prev_state: BoardState,
+        sm: BoardStateMachine,
+        drift: DriftDetector,
+        gen: InferenceBoardGenerator,
+    ) -> None:
+        """cycle 31 baseline 整合性 check + 自己修復 (baseline_broken reset)。
+
+        制御フラグ化 (2026-07-25, A/B 計測用):
+        enable_baseline_broken_reset=False で機能全体をスキップする
+        (default True = 従来挙動完全維持、backwards compat)。
+        enable_baseline_broken_grace=True の場合、STABLE 突入から
+        BASELINE_BROKEN_STABLE_GRACE_SEC 秒間はカウンタ加算 (自己修復 reset
+        の判定材料) を抑制する (default False = 従来挙動、猶予なし)。
+        """
+        if not self._enable_baseline_broken_reset:
+            return
+        if not (
+            ctx.state == BoardState.STABLE
+            and ctx.confirmed_board is not None
+            and is_active
+        ):
+            return
+        stable_since_attr = (
+            "_stable_entered_time_1p" if side == "1P"
+            else "_stable_entered_time_2p"
+        )
+        if prev_state != BoardState.STABLE:
+            setattr(self, stable_since_attr, time_sec)
+        if self._enable_baseline_broken_grace:
+            stable_since = getattr(self, stable_since_attr)
+            if (
+                stable_since >= 0
+                and (time_sec - stable_since) < self.BASELINE_BROKEN_STABLE_GRACE_SEC
+            ):
+                grace_attr = (
+                    "_baseline_broken_grace_suppressed_1p" if side == "1P"
+                    else "_baseline_broken_grace_suppressed_2p"
+                )
+                setattr(self, grace_attr, getattr(self, grace_attr) + 1)
+                return
+        self._apply_baseline_broken_counter(
+            side, frame_idx, ctx.confirmed_board, cnn_board, sm, drift, gen,
+        )
+
+    def _apply_baseline_broken_counter(
+        self,
+        side: str,
+        frame_idx: int,
+        confirmed_board: Board,
+        cnn_board: Board,
+        sm: BoardStateMachine,
+        drift: DriftDetector,
+        gen: InferenceBoardGenerator,
+    ) -> None:
+        """baseline/CNN puyo数差の連続フレーム数を数え、閾値到達で自己修復 reset する。
+
+        v97 53 秒 TSUMO_FALL 詰まり問題への救済策 (cycle 31, 2026-05-18)。
+        """
+        baseline_count = confirmed_board.count_puyos()
+        cur_count = cnn_board.count_puyos()
+        diff = cur_count - baseline_count
+        BASELINE_BROKEN_DIFF_THRESHOLD = 8
+        BASELINE_BROKEN_CONSEC_FRAMES = 60  # 1 秒
+        consec_attr = (
+            "_baseline_broken_consec_1p" if side == "1P"
+            else "_baseline_broken_consec_2p"
+        )
+        if abs(diff) <= BASELINE_BROKEN_DIFF_THRESHOLD:
+            setattr(self, consec_attr, 0)
+            return
+        setattr(self, consec_attr, getattr(self, consec_attr) + 1)
+        if getattr(self, consec_attr) < BASELINE_BROKEN_CONSEC_FRAMES:
+            return
+        print(
+            f"[baseline-reset] {side} frame={frame_idx} "
+            f"baseline_count={baseline_count} "
+            f"cnn_count={cur_count} diff={diff} "
+            f"reset_after={getattr(self, consec_attr)} frames",
+        )
+        # 実発火回数カウンタ (A/B 効果測定用、2026-07-25)。
+        count_attr = (
+            "_baseline_broken_reset_count_1p" if side == "1P"
+            else "_baseline_broken_reset_count_2p"
+        )
+        setattr(self, count_attr, getattr(self, count_attr) + 1)
+        sm.reset(keep_match_state=False)
+        drift.reset()
+        gen.reset()
+        setattr(self, consec_attr, 0)
+        self._reacquire_background_fingerprints(side)
+
+    def _reacquire_background_fingerprints(self, side: str) -> None:
+        """baseline_broken reset 後の bg_fp 再採取トリガー (image_reader 側)。
+
+        試合 active を再起動し (_bg_fp_captured を False に戻す)、
+        次フレーム以降で背景指紋 (bg_fp) を再採取させる。
+        """
+        if hasattr(self._reader, "set_background_fingerprints"):
+            if side == "1P":
+                self._reader.set_background_fingerprints(
+                    None, getattr(self._reader, "_bg_fp_p2", None),
+                )
+            else:
+                self._reader.set_background_fingerprints(
+                    getattr(self._reader, "_bg_fp_p1", None), None,
+                )
+        # 試合 active 再起動: _bg_fp_captured フラグも reset
+        if hasattr(self, "_bg_fp_captured"):
+            self._bg_fp_captured = False
+        # I1 対応 A: bg_fp 再採取中は pre_capture_mode を on に戻す
+        if hasattr(self._reader, "set_pre_capture_mode"):
+            self._reader.set_pre_capture_mode(True)
+
     def _step_side(
         self,
         side: str,
@@ -4651,57 +4806,13 @@ class RecognitionPipeline:
                 self._landing_distrust_2p = set()
 
         # cycle 31 (B 軸, 2026-05-18): baseline 整合性 check + 自己修復。
-        # STABLE 中なのに baseline と CNN puyo 数 diff が連続異常な場合、
-        # baseline 自体が壊れている (= 背景誤認込み等) と判定して reset。
-        # state を MENU に戻して試合 active を再起動 → bg_fp 再採取。
-        # v97 53 秒 TSUMO_FALL 詰まり問題への救済。
-        if (
-            ctx.state == BoardState.STABLE
-            and ctx.confirmed_board is not None
-            and is_active
-        ):
-            baseline_count = ctx.confirmed_board.count_puyos()
-            cur_count = cnn_board.count_puyos()
-            diff = cur_count - baseline_count
-            BASELINE_BROKEN_DIFF_THRESHOLD = 8
-            BASELINE_BROKEN_CONSEC_FRAMES = 60  # 1 秒
-            consec_attr = (
-                "_baseline_broken_consec_1p" if side == "1P"
-                else "_baseline_broken_consec_2p"
-            )
-            if abs(diff) > BASELINE_BROKEN_DIFF_THRESHOLD:
-                setattr(self, consec_attr, getattr(self, consec_attr) + 1)
-                if getattr(self, consec_attr) >= BASELINE_BROKEN_CONSEC_FRAMES:
-                    print(
-                        f"[baseline-reset] {side} frame={frame_idx} "
-                        f"baseline_count={baseline_count} "
-                        f"cnn_count={cur_count} diff={diff} "
-                        f"reset_after={getattr(self, consec_attr)} frames",
-                    )
-                    sm.reset(keep_match_state=False)
-                    drift.reset()
-                    gen.reset()
-                    setattr(self, consec_attr, 0)
-                    # bg_fp 再採取トリガー: image_reader の bg_fp を None に
-                    if hasattr(self._reader, "set_background_fingerprints"):
-                        if side == "1P":
-                            self._reader.set_background_fingerprints(
-                                None,
-                                getattr(self._reader, "_bg_fp_p2", None),
-                            )
-                        else:
-                            self._reader.set_background_fingerprints(
-                                getattr(self._reader, "_bg_fp_p1", None),
-                                None,
-                            )
-                    # 試合 active 再起動: _bg_fp_captured フラグも reset
-                    if hasattr(self, "_bg_fp_captured"):
-                        self._bg_fp_captured = False
-                    # I1 対応 A: bg_fp 再採取中は pre_capture_mode を on に戻す
-                    if hasattr(self._reader, "set_pre_capture_mode"):
-                        self._reader.set_pre_capture_mode(True)
-            else:
-                setattr(self, consec_attr, 0)
+        # 制御フラグ化 (2026-07-25, A/B 計測用): 実装は _check_baseline_broken_reset
+        # に分離済み。enable_baseline_broken_reset=False で機能全体をスキップ、
+        # enable_baseline_broken_grace=True で STABLE 突入直後の猶予を追加できる。
+        self._check_baseline_broken_reset(
+            side, frame_idx, time_sec, is_active, ctx, cnn_board, prev_state,
+            sm, drift, gen,
+        )
 
         inferred = gen.generate(
             ctx, chain_event=chain_event, time_sec=time_sec,

@@ -803,6 +803,8 @@ def _run_one_video(
     output_stem: str | None = None,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
+    enable_baseline_broken_reset: bool = True,
+    enable_baseline_broken_grace: bool = False,
 ) -> None:
     """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。
 
@@ -819,6 +821,10 @@ def _run_one_video(
     2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
     効果測定用に追加。既定 False = 従来通り (bit-identical)。
     _capture_frames 経由で RecognitionPipeline.load_default へそのまま透過する。
+    enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
+    baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
+    True/False = 従来通り (bit-identical)。_capture_frames 経由で
+    RecognitionPipeline.load_default へそのまま透過する。
     """
     out_stem = output_stem if output_stem is not None else video_stem
     print(
@@ -828,6 +834,8 @@ def _run_one_video(
         f"enable_landing_observed_color={enable_landing_observed_color} "
         f"enable_drift_resync_match_start_guard={enable_drift_resync_match_start_guard} "
         f"enable_drift_resync_hsv_gate={enable_drift_resync_hsv_gate} "
+        f"enable_baseline_broken_reset={enable_baseline_broken_reset} "
+        f"enable_baseline_broken_grace={enable_baseline_broken_grace} "
         f"output_stem={out_stem}", flush=True,
     )
     t0 = time.time()
@@ -839,6 +847,8 @@ def _run_one_video(
             force_in_match=force_in_match,
             enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_baseline_broken_reset=enable_baseline_broken_reset,
+            enable_baseline_broken_grace=enable_baseline_broken_grace,
             pipeline_out=pipeline_out,
         )
     print(
@@ -868,6 +878,23 @@ def _run_one_video(
         print(f"  drift_resync抑制カウンタ: {suppressed}", flush=True)
         (OUTPUT_DIR / f"{out_stem}_drift_resync_suppressed.json").write_text(
             json.dumps(suppressed, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        # baseline_broken 自己リセット 制御フラグ効果計測 (2026-07-25)。
+        # reset_count_Xp = 実際に自己修復 reset が発火した累計回数
+        # (reset_events の "baseline_broken_self_reset" 件数と一致するはず)。
+        baseline_broken = {
+            "reset_count_1p": getattr(pipeline_obj, "_baseline_broken_reset_count_1p", 0),
+            "reset_count_2p": getattr(pipeline_obj, "_baseline_broken_reset_count_2p", 0),
+            "grace_suppressed_1p": getattr(
+                pipeline_obj, "_baseline_broken_grace_suppressed_1p", 0,
+            ),
+            "grace_suppressed_2p": getattr(
+                pipeline_obj, "_baseline_broken_grace_suppressed_2p", 0,
+            ),
+        }
+        print(f"  baseline_broken計測カウンタ: {baseline_broken}", flush=True)
+        (OUTPUT_DIR / f"{out_stem}_baseline_broken_counters.json").write_text(
+            json.dumps(baseline_broken, ensure_ascii=False, indent=2), encoding="utf-8",
         )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -964,6 +991,22 @@ def _parse_args() -> argparse.Namespace:
              "enable_drift_resync_hsv_gate を有効化する "
              "(HSV較正3色未満の間はDriftDetector再同期を抑制)。",
     )
+    # baseline_broken 自己リセット 制御フラグ (2026-07-25, A/B 計測用)。
+    # 既定 True/False = RecognitionPipeline 側既定と同一 (bit-identical)。
+    ap.add_argument(
+        "--no-baseline-broken-reset", dest="enable_baseline_broken_reset",
+        action="store_false", default=True,
+        help="既定True(従来通り)。指定時は RecognitionPipeline の "
+             "enable_baseline_broken_reset を False にし、baseline_broken "
+             "自己リセット機能全体を無効化する。",
+    )
+    ap.add_argument(
+        "--enable-baseline-broken-grace", dest="enable_baseline_broken_grace",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_baseline_broken_grace を有効化する "
+             "(STABLE突入からBASELINE_BROKEN_STABLE_GRACE_SEC秒はカウンタ加算を抑制)。",
+    )
     return ap.parse_args()
 
 
@@ -984,6 +1027,8 @@ def main() -> None:
         output_stem=args.output_stem,
         enable_drift_resync_match_start_guard=args.enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=args.enable_drift_resync_hsv_gate,
+        enable_baseline_broken_reset=args.enable_baseline_broken_reset,
+        enable_baseline_broken_grace=args.enable_baseline_broken_grace,
     )
 
 
