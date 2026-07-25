@@ -119,6 +119,7 @@ def _capture_frames(
     chain_debounce_confirm_frames: int = 1,
     enable_chain_formula_simulate_verify: bool = False,
     enable_placement_color_cnn_check: bool = False,
+    enable_landing_observed_color: bool = False,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -141,6 +142,12 @@ def _capture_frames(
     既定 False = src 側既定と bit-identical (従来通り)。True で
     src/recognition_pipeline.py の設置時色CNN照合 (甲修正) を有効化し、
     RecognitionPipeline.load_default にそのまま透過する。
+    enable_landing_observed_color: 2026-07-25 色フリッカ監査用に追加。
+    既定 False = src 側既定と bit-identical (従来通り)。True で
+    src/recognition_pipeline.py の既存 runtime flag
+    (enable_landing_observed_color、真因A対処・着地セル CNN==HSV 一致色補正)
+    を有効化し、RecognitionPipeline.load_default にそのまま透過する
+    (src 無改修、既定 False で挙動不変)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -164,6 +171,7 @@ def _capture_frames(
         chain_debounce_confirm_frames=chain_debounce_confirm_frames,
         enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
         enable_placement_color_cnn_check=enable_placement_color_cnn_check,
+        enable_landing_observed_color=enable_landing_observed_color,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)

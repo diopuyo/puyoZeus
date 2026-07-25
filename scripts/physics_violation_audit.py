@@ -1206,6 +1206,16 @@ def _parse_args() -> argparse.Namespace:
              "有効化してフレーム収集する (既定 False = 従来通り無効、read-only診断)。"
              "color_flicker 等の件数が甲修正でどう変わるかを比較する。",
     )
+    ap.add_argument(
+        "--enable-landing-observed-color", action="store_true",
+        dest="enable_landing_observed_color",
+        help="2026-07-25 色フリッカ監査用: RecognitionPipeline の既存 runtime "
+             "flag enable_landing_observed_color (真因A対処、着地セル "
+             "CNN==HSV 一致色補正、src/recognition_pipeline.py:639 既定OFF・"
+             "未採用) を有効化してフレーム収集する (既定 False = 従来通り "
+             "無効、read-only診断)。color_flicker 等の件数がこの既存機構で"
+             "どう変わるかを比較する。",
+    )
     return ap.parse_args()
 
 
@@ -1216,7 +1226,8 @@ def main() -> None:
     windows = _resolve_windows(args)
     print(
         f"[INFO] 対象 {len(windows)} 窓 (smoke={args.smoke}, "
-        f"enable_placement_color_cnn_check={args.enable_placement_color_cnn_check})",
+        f"enable_placement_color_cnn_check={args.enable_placement_color_cnn_check}, "
+        f"enable_landing_observed_color={args.enable_landing_observed_color})",
     )
     all_violations: list[Violation] = []
     duration_min_by_key: dict[str, float] = {}
@@ -1230,6 +1241,7 @@ def main() -> None:
             by_side = _capture_frames(
                 stem, start_sec, max_sec,
                 enable_placement_color_cnn_check=args.enable_placement_color_cnn_check,
+                enable_landing_observed_color=args.enable_landing_observed_color,
             )
         # 2026-07-24 FP修正: 試合外/演出テロップ区間を独立検出し、両 side 共通で
         # 除外する (テロップは画面全体に表示されるため side 非依存)。
