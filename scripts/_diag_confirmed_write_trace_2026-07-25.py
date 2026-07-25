@@ -324,10 +324,13 @@ def _make_stable_recovery_gate_wrapper(orig, trace_ctx: _TraceCtx, recorder: Wri
     """P5: board_state_machine._apply_stable_recovery_gate をラップする (in-place mutation)。"""
 
     @functools.wraps(orig)
-    def wrapped(ctx, signals, min_frames):
+    def wrapped(ctx, signals, min_frames, **kwargs):
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25) 追加後も
+        # 呼び出し元 (board_state_machine._update_within_current_state) が
+        # keyword 引数を渡せるよう **kwargs で forward する (backwards compat)。
         confirmed = ctx.confirmed_board
         before = confirmed.copy() if confirmed is not None else None
-        orig(ctx, signals, min_frames)
+        orig(ctx, signals, min_frames, **kwargs)
         after = ctx.confirmed_board
         if before is None or after is None:
             return

@@ -606,13 +606,20 @@ def test_stable_resume_gate_disabled_via_constructor() -> None:
 # ============================
 
 
-def _make_recovery_sm(min_frames: int = 3) -> BoardStateMachine:
+def _make_recovery_sm(
+    min_frames: int = 3, *, enable_column_partial_support: bool = False,
+) -> BoardStateMachine:
     """復旧ゲート有効 state machine を生成するヘルパー。
     テスト用に min_frames を小さく設定できる。
+
+    Args:
+        min_frames: 復旧ゲート発火に必要な連続フレーム数。
+        enable_column_partial_support: 列ゲート緩和 (2026-07-25) を有効化するか。
     """
     return BoardStateMachine(
         enable_stable_recovery_gate=True,
         recovery_min_frames=min_frames,
+        enable_column_partial_support=enable_column_partial_support,
     )
 
 
@@ -711,6 +718,98 @@ def test_recovery_gate_no_fire_when_floating_puyo() -> None:
 
     assert sm.context.confirmed_board is not None
     assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 浮きぷよで却下
+
+
+def test_recovery_gate_column_partial_support_off_bit_identical() -> None:
+    """列ゲート緩和 (2026-07-25) ①: OFF (明示指定) は従来挙動と bit-identical.
+
+    test_recovery_gate_no_fire_when_floating_puyo と同一シナリオを
+    enable_column_partial_support=False で明示実行し、結果が変わらないことを確認する。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = Board()
+    cnn.set(10, 0, COLOR_RED)
+    hsv = Board()
+    hsv.set(10, 0, COLOR_RED)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 浮きぷよで却下 (不変)
+
+
+def test_recovery_gate_column_partial_support_on_releases_progressing_cell() -> None:
+    """列ゲート緩和 (2026-07-25) ②: ON かつ下セルのカウンタが進行中 (>=2) なら解放.
+
+    row=10,col=0 (本線候補, min_frames=5 で発火) の直下 row=11,col=0 は
+    frame 0-1 で CNN≠HSV (カウンタ蓄積なし)、frame 2-4 で CNN==HSV=BLUE
+    (カウンタ 1→2→3 まで進行するが min_frames=5 には未到達=未発火)。
+    row=12,col=0 は最初から confirmed=OJAMA で床として確定済 (CNN/HSV も
+    OJAMA を維持し erase 対象にならないよう固定)。
+    OFF なら row=11 が confirmed==EMPTY のまま (支持なし) なので row=10 は
+    浮きぷよ判定で却下される。ON なら row=11 のカウンタ (3 >= 支持閾値 2) を
+    支持セルとみなし row=10 が解放される。
+    """
+    from src.board import COLOR_BLUE
+
+    n = 5
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=True)
+    sm._ctx.state = BoardState.STABLE
+    floor_board = _empty_board()
+    floor_board.set(12, 0, COLOR_OJAMA)  # 床は最初から確定済 (erase 対象外)
+    sm._ctx.confirmed_board = floor_board
+
+    for i in range(n):
+        cnn_i = Board()
+        hsv_i = Board()
+        cnn_i.set(10, 0, COLOR_RED)
+        hsv_i.set(10, 0, COLOR_RED)
+        cnn_i.set(12, 0, COLOR_OJAMA)  # 床は常時一致 (erase 候補にしない)
+        hsv_i.set(12, 0, COLOR_OJAMA)
+        if i >= 2:
+            # frame 2 以降のみ CNN==HSV=BLUE (カウンタ蓄積開始)
+            cnn_i.set(11, 0, COLOR_BLUE)
+            hsv_i.set(11, 0, COLOR_BLUE)
+        else:
+            # frame 0-1 は CNN≠HSV (カウンタ蓄積なし、安全弁A で reset)
+            cnn_i.set(11, 0, COLOR_BLUE)
+            hsv_i.set(11, 0, COLOR_RED)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn_i, hsv_i))
+
+    # row=11 のカウンタは 3 (frame 2,3,4) で min_frames=5 未到達 → まだ未発火
+    assert sm.context.stable_recovery_counters.get((11, 0), 0) == 3
+    assert sm.context.confirmed_board is not None
+    # 列ゲート緩和により row=10 が解放される
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_RED
+
+
+def test_recovery_gate_column_partial_support_on_rejects_true_floating() -> None:
+    """列ゲート緩和 (2026-07-25) ③: ON でもカウンタ=0 の真の浮きは却下される.
+
+    支持セル側の counter が一度も進行しない (=0) 場合は列ゲート緩和でも
+    支持扱いされず、従来通り浮きぷよとして却下される。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=True)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = Board()
+    cnn.set(10, 0, COLOR_RED)
+    hsv = Board()
+    hsv.set(10, 0, COLOR_RED)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.stable_recovery_counters.get((11, 0), 0) == 0
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 支持なし → 却下
 
 
 def test_recovery_gate_resets_on_non_stable_transition() -> None:

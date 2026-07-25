@@ -867,6 +867,14 @@ class RecognitionPipeline:
         # 秒間はカウンタ加算を抑制する。enable_baseline_broken_reset=False の
         # 場合は無視される。default False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_grace: bool = False,
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25, A/B 計測用)。
+        # True で設計C 事後復旧ゲートの安全弁C (浮き判定) が
+        # stable_recovery_counters 進行中の支持セルを浮き扱いしなくなる。
+        # 診断 (_diag_recovery_cell_timeseries_2026-07-25.py) で「8f 到達直前で
+        # 毎回リセットされる」列ゲート型の未反映を救済する狙い。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_column_partial_support: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1216,6 +1224,11 @@ class RecognitionPipeline:
             enable_gravity_filter_support
         )
         self._merge_use_majority_value: bool = bool(merge_use_majority_value)
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_column_partial_support: bool = bool(
+            enable_column_partial_support
+        )
         # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
         # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
         self._enable_drift_resync_match_start_guard: bool = bool(
@@ -1245,6 +1258,7 @@ class RecognitionPipeline:
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
             enable_gravity_filter_support=self._enable_gravity_filter_support,
             merge_use_majority_value=self._merge_use_majority_value,
+            enable_column_partial_support=self._enable_column_partial_support,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1258,6 +1272,7 @@ class RecognitionPipeline:
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
             enable_gravity_filter_support=self._enable_gravity_filter_support,
             merge_use_majority_value=self._merge_use_majority_value,
+            enable_column_partial_support=self._enable_column_partial_support,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1557,6 +1572,7 @@ class RecognitionPipeline:
         enable_slide_override_ojama_hold: bool = False,
         enable_gravity_filter_support: bool = True,
         merge_use_majority_value: bool = True,
+        enable_column_partial_support: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1618,6 +1634,7 @@ class RecognitionPipeline:
             enable_stable_recovery_gate=enable_stable_recovery_gate,
             enable_gravity_filter_support=enable_gravity_filter_support,
             merge_use_majority_value=merge_use_majority_value,
+            enable_column_partial_support=enable_column_partial_support,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -1746,6 +1763,9 @@ class RecognitionPipeline:
         # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_reset: bool = True,
         enable_baseline_broken_grace: bool = False,
+        # 列ゲート緩和 (2026-07-25, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_column_partial_support: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1921,6 +1941,7 @@ class RecognitionPipeline:
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
+            enable_column_partial_support=enable_column_partial_support,
         )
 
     # ------------------------------------------------------------------
