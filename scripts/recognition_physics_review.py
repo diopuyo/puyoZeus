@@ -121,6 +121,9 @@ def _capture_frames(
     enable_placement_color_cnn_check: bool = False,
     enable_landing_observed_color: bool = False,
     force_in_match: bool = True,
+    enable_drift_resync_match_start_guard: bool = False,
+    enable_drift_resync_hsv_gate: bool = False,
+    pipeline_out: dict | None = None,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -156,6 +159,16 @@ def _capture_frames(
     BG_FP_FORCE / CHAIN_BAN 等の試合開始直後保護機構を実際に発動させた
     状態で計測できる (_diag_placement_confirm_frames_2026-07-25.py の
     構成と一致させる目的、既定 True で全既存呼び出し元は挙動不変)。
+    enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
+    2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
+    効果測定用に追加。既定 False = src 側既定と bit-identical (従来通り)。
+    True で RecognitionPipeline.load_default の同名 optional 引数へ
+    そのまま透過する (src 無改修、既定 False で挙動不変)。
+    pipeline_out: 2026-07-25 抑制カウンタ (_drift_resync_*_suppressed_*)
+    計測用に追加。既定 None = 従来通り (副作用なし)。dict を渡すと
+    呼び出し後に pipeline_out["pipeline"] へ本関数内で構築した
+    RecognitionPipeline インスタンスをそのまま格納する (read-only 観測用、
+    戻り値の型・件数は変更しない)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -181,9 +194,13 @@ def _capture_frames(
         enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
         enable_placement_color_cnn_check=enable_placement_color_cnn_check,
         enable_landing_observed_color=enable_landing_observed_color,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
+    if pipeline_out is not None:
+        pipeline_out["pipeline"] = pipeline
 
     records: dict[str, list[_FrameRecord]] = {"1P": [], "2P": []}
     for local_i in range(n_frames):

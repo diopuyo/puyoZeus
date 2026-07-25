@@ -801,6 +801,8 @@ def _run_one_video(
     force_in_match: bool = True,
     enable_landing_observed_color: bool = False,
     output_stem: str | None = None,
+    enable_drift_resync_match_start_guard: bool = False,
+    enable_drift_resync_hsv_gate: bool = False,
 ) -> None:
     """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。
 
@@ -813,6 +815,10 @@ def _run_one_video(
     (ただし stable_frame_count は本関数側の 3 のまま変更しない、後述参照)。
     output_stem: 出力ファイル名の stem 上書き (None なら video_stem)。
     従来構成の write_trace (例: c34_1P.jsonl) を上書きせず区別するために使う。
+    enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
+    2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
+    効果測定用に追加。既定 False = 従来通り (bit-identical)。
+    _capture_frames 経由で RecognitionPipeline.load_default へそのまま透過する。
     """
     out_stem = output_stem if output_stem is not None else video_stem
     print(
@@ -820,14 +826,20 @@ def _run_one_video(
         f"start={start_sec:.1f}s dur={max_sec:.1f}s "
         f"force_in_match={force_in_match} "
         f"enable_landing_observed_color={enable_landing_observed_color} "
+        f"enable_drift_resync_match_start_guard={enable_drift_resync_match_start_guard} "
+        f"enable_drift_resync_hsv_gate={enable_drift_resync_hsv_gate} "
         f"output_stem={out_stem}", flush=True,
     )
     t0 = time.time()
+    pipeline_out: dict = {}
     with _install_write_trace_hooks(video_stem) as (recorder, matchstart_diag):
         by_side = _capture_frames(
             video_stem, start_sec, max_sec,
             enable_landing_observed_color=enable_landing_observed_color,
             force_in_match=force_in_match,
+            enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+            enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            pipeline_out=pipeline_out,
         )
     print(
         f"[{time.strftime('%H:%M:%S')}] [{video_stem}] 処理完了 ({time.time() - t0:.1f}s) "
@@ -836,6 +848,27 @@ def _run_one_video(
         f"match_start再発火 {len(matchstart_diag.match_start_events)} 件 "
         f"is_active反転 {len(matchstart_diag.is_active_flips)} 件", flush=True,
     )
+    # DriftDetector再同期ガード(commit c5bb50e) 抑制カウンタ計測 (2026-07-25)。
+    pipeline_obj = pipeline_out.get("pipeline")
+    if pipeline_obj is not None:
+        suppressed = {
+            "start_guard_suppressed_1p": getattr(
+                pipeline_obj, "_drift_resync_start_guard_suppressed_1p", 0,
+            ),
+            "start_guard_suppressed_2p": getattr(
+                pipeline_obj, "_drift_resync_start_guard_suppressed_2p", 0,
+            ),
+            "hsv_gate_suppressed_1p": getattr(
+                pipeline_obj, "_drift_resync_hsv_gate_suppressed_1p", 0,
+            ),
+            "hsv_gate_suppressed_2p": getattr(
+                pipeline_obj, "_drift_resync_hsv_gate_suppressed_2p", 0,
+            ),
+        }
+        print(f"  drift_resync抑制カウンタ: {suppressed}", flush=True)
+        (OUTPUT_DIR / f"{out_stem}_drift_resync_suppressed.json").write_text(
+            json.dumps(suppressed, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     records_by_side: dict[str, list[WriteTraceRecord]] = {"1P": [], "2P": []}
@@ -915,6 +948,22 @@ def _parse_args() -> argparse.Namespace:
         help="出力ファイル名 stem 上書き(既定None=video_stemと同一)。"
              "従来構成の write_trace を上書きしたくない場合に指定する。",
     )
+    # DriftDetector再同期ループ暴走ガード (commit c5bb50e) 効果測定用
+    # (2026-07-25)。既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-drift-match-start-guard", dest="enable_drift_resync_match_start_guard",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_drift_resync_match_start_guard を有効化する "
+             "(試合開始15秒はDriftDetector再同期を無視)。",
+    )
+    ap.add_argument(
+        "--enable-drift-hsv-gate", dest="enable_drift_resync_hsv_gate",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_drift_resync_hsv_gate を有効化する "
+             "(HSV較正3色未満の間はDriftDetector再同期を抑制)。",
+    )
     return ap.parse_args()
 
 
@@ -933,6 +982,8 @@ def main() -> None:
         force_in_match=args.force_in_match,
         enable_landing_observed_color=args.enable_landing_observed_color,
         output_stem=args.output_stem,
+        enable_drift_resync_match_start_guard=args.enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=args.enable_drift_resync_hsv_gate,
     )
 
 
