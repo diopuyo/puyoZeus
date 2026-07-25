@@ -808,6 +808,8 @@ def _run_one_video(
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
+    enable_placement_cnn_veto: bool = False,
+    placement_cnn_veto_mode: str = "hold",
 ) -> None:
     """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。
 
@@ -827,6 +829,10 @@ def _run_one_video(
     enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
     baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
     True/False = 従来通り (bit-identical)。_capture_frames 経由で
+    RecognitionPipeline.load_default へそのまま透過する。
+    enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
+    (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
+    False/"hold" = 従来通り (bit-identical)。_capture_frames 経由で
     RecognitionPipeline.load_default へそのまま透過する。
     """
     out_stem = output_stem if output_stem is not None else video_stem
@@ -852,6 +858,8 @@ def _run_one_video(
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
+            enable_placement_cnn_veto=enable_placement_cnn_veto,
+            placement_cnn_veto_mode=placement_cnn_veto_mode,
             pipeline_out=pipeline_out,
         )
     print(
@@ -898,6 +906,19 @@ def _run_one_video(
         print(f"  baseline_broken計測カウンタ: {baseline_broken}", flush=True)
         (OUTPUT_DIR / f"{out_stem}_baseline_broken_counters.json").write_text(
             json.dumps(baseline_broken, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        # 修正方針 甲 (2026-07-25): P2 設置推論 CNN veto 保留セル数計測。
+        placement_cnn_veto = {
+            "held_count_1p": getattr(
+                pipeline_obj, "_placement_cnn_veto_held_count_1p", 0,
+            ),
+            "held_count_2p": getattr(
+                pipeline_obj, "_placement_cnn_veto_held_count_2p", 0,
+            ),
+        }
+        print(f"  placement_cnn_veto保留セル数: {placement_cnn_veto}", flush=True)
+        (OUTPUT_DIR / f"{out_stem}_placement_cnn_veto_counters.json").write_text(
+            json.dumps(placement_cnn_veto, ensure_ascii=False, indent=2), encoding="utf-8",
         )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1010,6 +1031,22 @@ def _parse_args() -> argparse.Namespace:
              "enable_baseline_broken_grace を有効化する "
              "(STABLE突入からBASELINE_BROKEN_STABLE_GRACE_SEC秒はカウンタ加算を抑制)。",
     )
+    # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25, A/B 計測用)。
+    # 既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-placement-cnn-veto", dest="enable_placement_cnn_veto",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_placement_cnn_veto を有効化する "
+             "(P2 infer_placement の着地セル書き込み前に現フレーム CNN 観測と "
+             "照合し、不一致なら保留する)。",
+    )
+    ap.add_argument(
+        "--placement-cnn-veto-mode", dest="placement_cnn_veto_mode",
+        type=str, default="hold", choices=["hold", "cnn_color"],
+        help="既定'hold'。'cnn_color' で不一致セルに CNN 観測色 (有効 puyo 色の "
+             "場合のみ) を採用する代替挙動を試す。",
+    )
     return ap.parse_args()
 
 
@@ -1032,6 +1069,8 @@ def main() -> None:
         enable_drift_resync_hsv_gate=args.enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=args.enable_baseline_broken_reset,
         enable_baseline_broken_grace=args.enable_baseline_broken_grace,
+        enable_placement_cnn_veto=args.enable_placement_cnn_veto,
+        placement_cnn_veto_mode=args.placement_cnn_veto_mode,
     )
 
 

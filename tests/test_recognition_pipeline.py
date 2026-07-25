@@ -1844,6 +1844,151 @@ def test_enable_placement_color_cnn_check_default_false_no_regression():
 
 
 # ---------------------------------------------------------------------------
+# 修正方針 甲 (2026-07-25): _apply_placement_cnn_veto 単体テスト
+# ---------------------------------------------------------------------------
+
+
+def test_apply_placement_cnn_veto_holds_when_cnn_mismatch():
+    """CNN 観測色が queue 色 (inferred) と食い違う着地セルは保留 (EMPTY に戻る)。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()  # (5, 2) は着地前は空
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (不一致)
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_EMPTY, (
+        "CNN と queue 色が不一致な着地セルは保留 (prev の EMPTY に戻す) べき"
+    )
+
+
+def test_apply_placement_cnn_veto_writes_when_cnn_agrees():
+    """CNN 観測色が queue 色と一致すればそのまま書く (no-op)。"""
+    from src.board import COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_RED)  # 一致
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_RED, (
+        "CNN が queue 色と一致すればそのまま書き込まれるべき"
+    )
+
+
+def test_apply_placement_cnn_veto_holds_when_cnn_empty():
+    """CNN がまだ EMPTY/UNKNOWN しか観測していない着地セルも保留する (主リスク:反映遅延)。"""
+    from src.board import COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    for cnn_color in (COLOR_EMPTY, COLOR_UNKNOWN):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+        assert int(result.get(5, 2)) == COLOR_EMPTY, (
+            f"CNN 観測={cnn_color} (証拠なし) も保留 (書き込みを見送る) べき"
+        )
+
+
+def test_apply_placement_cnn_veto_cnn_color_mode_adopts_cnn_observation():
+    """mode='cnn_color' では CNN が有効 puyo 色を観測していればその色を採用する。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (別の有効色)
+
+    result = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board, mode="cnn_color",
+    )
+
+    assert int(result.get(5, 2)) == COLOR_BLUE, (
+        "mode='cnn_color' では CNN 観測色 (有効 puyo 色) を採用するべき"
+    )
+
+
+def test_apply_placement_cnn_veto_ignores_non_landing_cells():
+    """着地セル以外 (prev_confirmed が既に色付き) は veto 対象外。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    prev_confirmed.set(5, 2, COLOR_RED)  # 着地前から色あり (= 着地セルでない)
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # 食い違うが着地セルでないため対象外
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_RED, (
+        "着地セル (prev=EMPTY/UNKNOWN) 以外は veto 対象外で inferred のまま保持"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 修正方針 甲: enable_placement_cnn_veto フラグ配線テスト
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_placement_cnn_veto(
+    enable_flag: bool, mode: str = "hold",
+) -> RecognitionPipeline:
+    """enable_placement_cnn_veto フラグ付きの pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=detector,
+        enable_placement_cnn_veto=enable_flag,
+        placement_cnn_veto_mode=mode,
+    )
+
+
+def test_enable_placement_cnn_veto_flag_off_default():
+    """フラグ OFF (default) → _enable_placement_cnn_veto が False。"""
+    pipe = _make_pipe_placement_cnn_veto(False)
+    assert not pipe._enable_placement_cnn_veto, (
+        "default OFF: _enable_placement_cnn_veto は False であるべき"
+    )
+    assert pipe._placement_cnn_veto_mode == "hold"
+    assert pipe._placement_cnn_veto_held_count_1p == 0
+    assert pipe._placement_cnn_veto_held_count_2p == 0
+
+
+def test_enable_placement_cnn_veto_flag_on():
+    """フラグ ON → _enable_placement_cnn_veto が True で mode も反映される。"""
+    pipe = _make_pipe_placement_cnn_veto(True, mode="cnn_color")
+    assert pipe._enable_placement_cnn_veto, (
+        "ON 時: _enable_placement_cnn_veto は True であるべき"
+    )
+    assert pipe._placement_cnn_veto_mode == "cnn_color"
+
+
+def test_enable_placement_cnn_veto_default_false_no_regression():
+    """フラグ OFF (default) では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_placement_cnn_veto(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+# ---------------------------------------------------------------------------
 # 案(iii): _start_landing_vote / _update_landing_votes 決定ロジックテスト
 # ---------------------------------------------------------------------------
 

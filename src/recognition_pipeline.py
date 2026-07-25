@@ -395,6 +395,68 @@ def _flag_landing_distrust_cells(
 
 
 # ============================
+# 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)
+# ============================
+
+
+def _apply_placement_cnn_veto(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+    mode: str = "hold",
+) -> "Board":
+    """P2 (infer_placement) が着地セルへ色を書く前に、現フレーム CNN 観測と照合する.
+
+    背景 (project_color_flicker_p2_root_cause_2026-07-25): P2 誤色の内訳は
+    キューに正解無し 57% / 1 手先 24% / 1 手遅れ 14%。 案(iii)
+    (_flag_landing_distrust_cells) は書いた後に P7 (着地投票) へフラグ伝播
+    するが、本関数は書く前に止める「門番」として働く (併用可能、独立)。
+
+    動作: 着地セル (= prev_confirmed が空/UNKNOWN → inferred で新規に有効色)
+    のうち、cnn_board の観測色が inferred の色 (= NEXT キュー由来色) と
+    一致しない場合、そのセルの書き込みを保留する。保留セルは
+    prev_confirmed の値 (通常 EMPTY) に戻すだけで、新たな色は書かない。
+    保留セルは既存の着地色補正 (_apply_landing_observed_color_correction) /
+    P5 事後復旧ゲート (enable_stable_recovery_gate) / P7 3 票ゲート
+    (_update_landing_votes) が後続フレームで正しい色を埋める
+    (新規の復旧機構は作らない)。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (書き込み元)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (差分抽出用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面。
+        mode: "hold" (既定) = 不一致セルを保留 (prev_confirmed の値に戻す)。
+            "cnn_color" = CNN 観測色が有効 puyo 色ならその色を採用する
+            (queue 色でなく CNN 色を書く)。CNN が EMPTY/UNKNOWN/おじゃま の
+            場合は mode に関わらず保留する (無効色は書けないため)。
+            A/B 計測 (8 フレーム反映基準) で "hold" が悪化する場合の代替案。
+
+    Returns:
+        veto 適用後の確定盤面 (該当なしなら inferred のコピーがそのまま返る)。
+    """
+    from src.placement_inferrer import _VALID_PUYO_COLORS
+
+    result = inferred.copy()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if not (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                continue  # 着地セルでない (対象外)
+            cnn_v = int(cnn_board.get(r, c))
+            if cnn_v == iv:
+                continue  # CNN が queue 色と一致 → そのまま書く (no-op)
+            if mode == "cnn_color" and cnn_v in _VALID_PUYO_COLORS:
+                result.set(r, c, cnn_v)  # CNN 観測の別色を採用
+                continue
+            result.set(r, c, pv)  # 保留: prev_confirmed の値 (通常 EMPTY) に戻す
+    return result
+
+
+# ============================
 # Pipeline 本体
 # ============================
 
@@ -691,6 +753,26 @@ class RecognitionPipeline:
         # user 承認前の savepoint 実装のため default OFF 固定
         # (default ON 化 / main マージは別途 user 承認が必要)。
         enable_placement_color_cnn_check: bool = False,
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # True にすると infer_placement (P2) が着地セルへ色を書く時点で
+        # 現フレーム CNN 観測と照合し、不一致 (queue 色と不一致、または
+        # CNN が EMPTY/UNKNOWN/おじゃま) なら書き込みを保留する (そのセルは
+        # 書かない = prev_confirmed の値のまま)。保留セルは既存の着地色補正 /
+        # P5 事後復旧ゲート / P7 3 票ゲートが後続フレームで埋める
+        # (新規の復旧機構は作らない)。案(iii) (enable_placement_color_cnn_check)
+        # とは独立: 案(iii) は書いた後に P7 へフラグ伝播、本フラグは書く前に
+        # 止める門番。両方 True でも安全に併用可能 (併用時は本フラグが先に
+        # 適用されるため、案(iii) の distrust 判定対象セルは自然に減る)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定
+        # (default ON 化 / main マージは別途 user 承認が必要)。
+        enable_placement_cnn_veto: bool = False,
+        # 上記 veto の不一致時挙動。"hold" (既定) = 保留 (書かない)。
+        # "cnn_color" = CNN 観測色が有効 puyo 色ならその色を採用する
+        # (queue 色でなく CNN 色を書く、EMPTY/UNKNOWN/おじゃま のみ保留)。
+        # A/B 計測で "hold" が 8 フレーム反映基準を悪化させる場合の代替。
+        # enable_placement_cnn_veto=False の間は完全に無視される (無害)。
+        placement_cnn_veto_mode: str = "hold",
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
         # True (default) にすると HSV 経路の median 計算で赤 2 峰を collapse し
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
@@ -1391,6 +1473,13 @@ class RecognitionPipeline:
         self._enable_placement_color_cnn_check: bool = bool(
             enable_placement_color_cnn_check,
         )
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_placement_cnn_veto: bool = bool(enable_placement_cnn_veto)
+        self._placement_cnn_veto_mode: str = str(placement_cnn_veto_mode)
+        # 計装用カウンタ (A/B 計測での書き込み保留セル数の直接観測用)。
+        self._placement_cnn_veto_held_count_1p: int = 0
+        self._placement_cnn_veto_held_count_2p: int = 0
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True で infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -1678,6 +1767,10 @@ class RecognitionPipeline:
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_placement_color_cnn_check: bool = False,
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_placement_cnn_veto: bool = False,
+        placement_cnn_veto_mode: str = "hold",
         enable_red_hue_wrap_fix: bool = True,
         # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
         # 2026-06-02: user viz 採用承認により default True に変更。
@@ -1911,6 +2004,8 @@ class RecognitionPipeline:
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
             enable_placement_color_cnn_check=enable_placement_color_cnn_check,
+            enable_placement_cnn_veto=enable_placement_cnn_veto,
+            placement_cnn_veto_mode=placement_cnn_veto_mode,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
@@ -4393,6 +4488,28 @@ class RecognitionPipeline:
                 deferred_out=_deferred_buf if self._enable_hsv_deferred_consensus else None,
             )
             if inferred_landing is not None:
+                # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+                # 着地セルへ色を書く前に現フレーム CNN 観測と照合し、不一致なら
+                # 書き込みを保留する (門番、案(iii) より先に適用)。フラグ OFF
+                # (default) 時は inferred_landing を素通しし bit-identical。
+                if (
+                    self._enable_placement_cnn_veto
+                    and prev_confirmed is not None
+                ):
+                    _before_veto = inferred_landing
+                    inferred_landing = _apply_placement_cnn_veto(
+                        inferred_landing, prev_confirmed, cnn_board,
+                        mode=self._placement_cnn_veto_mode,
+                    )
+                    _held_n = sum(
+                        1 for _r in range(BOARD_ROWS) for _c in range(BOARD_COLS)
+                        if int(_before_veto.get(_r, _c))
+                        != int(inferred_landing.get(_r, _c))
+                    )
+                    if side == "1P":
+                        self._placement_cnn_veto_held_count_1p += _held_n
+                    else:
+                        self._placement_cnn_veto_held_count_2p += _held_n
                 # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
                 # 着地セル (= P2 設置推論の出力) のうち CNN 観測色が baseline と
                 # 食い違う「疑わしいセル」をフラグし、P7 (_start_landing_vote /

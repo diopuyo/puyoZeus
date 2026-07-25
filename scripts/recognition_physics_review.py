@@ -125,6 +125,8 @@ def _capture_frames(
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
+    enable_placement_cnn_veto: bool = False,
+    placement_cnn_veto_mode: str = "hold",
     pipeline_out: dict | None = None,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
@@ -175,6 +177,10 @@ def _capture_frames(
     baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
     True/False = src 側既定と bit-identical (従来通り)。
     RecognitionPipeline.load_default にそのまま透過する (src 無改修)。
+    enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
+    (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
+    False/"hold" = src 側既定と bit-identical (従来通り)。
+    RecognitionPipeline.load_default にそのまま透過する (src 無改修)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -204,6 +210,8 @@ def _capture_frames(
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=enable_baseline_broken_reset,
         enable_baseline_broken_grace=enable_baseline_broken_grace,
+        enable_placement_cnn_veto=enable_placement_cnn_veto,
+        placement_cnn_veto_mode=placement_cnn_veto_mode,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
