@@ -491,6 +491,7 @@ class BoardStateMachine:
         enable_gravity_filter_support: bool = False,
         merge_use_majority_value: bool = False,
         enable_column_partial_support: bool = False,
+        enable_match_start_full_clear: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -520,6 +521,19 @@ class BoardStateMachine:
         # フィルタに stable_recovery_counters 由来の support を渡す。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_column_partial_support = bool(enable_column_partial_support)
+        # 前試合盤面残骸リーク修正 (feat/recognition-postchain-fix-2026-07-23):
+        # is_match_active=False (MENU 強制) 時、従来は confirmed_board /
+        # pending_board / pending_count / last_stable_idx / chain_count /
+        # ojama_pending の 6 field しかクリアしておらず、
+        # non_stable_cnn_history / stable_recovery_counters / recovery_cells /
+        # stable_warmup_remaining / next_queue が前試合の値のまま残留していた。
+        # 残留した non_stable_cnn_history は次試合の NON-STABLE→STABLE 復帰時
+        # (empty_guard 多数決) に、stable_recovery_counters/recovery_cells は
+        # 設計C 事後復旧ゲートに、それぞれ前試合の色を「証拠」として渡してしまい、
+        # 前試合終盤に実在したぷよが次試合序盤へ幽霊セルとして書き戻る経路になる。
+        # True でこれら 5 field も試合境界で完全クリアする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_match_start_full_clear = bool(enable_match_start_full_clear)
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -563,6 +577,17 @@ class BoardStateMachine:
             self._ctx.last_stable_idx = -1
             self._ctx.chain_count = 0
             self._ctx.ojama_pending = 0
+            # 前試合盤面残骸リーク修正 (2026-07-23): 上記 6 field だけでは
+            # non_stable_cnn_history / stable_recovery_counters /
+            # recovery_cells / stable_warmup_remaining / next_queue が前試合の
+            # 値のまま残留し、次試合序盤に幽霊セルとして書き戻る経路になる。
+            # enable_match_start_full_clear=True でこれらも完全クリアする。
+            if self._enable_match_start_full_clear:
+                self._ctx.non_stable_cnn_history = []
+                self._ctx.stable_recovery_counters = {}
+                self._ctx.recovery_cells = set()
+                self._ctx.stable_warmup_remaining = 0
+                self._ctx.next_queue = []
             return self._ctx
 
         # 検出器を順に適用、最初に発火したものを採用
