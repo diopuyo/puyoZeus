@@ -25,7 +25,7 @@ from src.board_state_machine import (
     StateContext,
     GRAVITY_SETTLE_MIN_FRAMES,
     GRAVITY_SETTLE_MAX_SEC,
-    GRAVITY_SETTLE_PHYSICS_CLEAR_MIN,
+    GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC,
     GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
 )
 # フェーズ A 精緻化: OjamaVisualDetector を同一モジュールから利用可能にする。
@@ -369,7 +369,9 @@ class GravitySettleDetector:
         条件成立で STABLE に遷移させる (または STABLE を継続保留する)。
 
     STABLE 復帰条件 (AND):
-        1. GRAVITY_SETTLE に入ってから GRAVITY_SETTLE_PHYSICS_CLEAR_MIN フレーム以上経過。
+        1. GRAVITY_SETTLE に入ってから GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC 秒以上経過
+           (フレーム定数→時間定数化 Stage1, 2026-07-25。60fps では旧フレーム基準と
+           bit-identical)。
         2. raw CNN ぷよ数が直前フレームとの差分 < GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD
            の状態が GRAVITY_SETTLE_MIN_FRAMES フレーム連続。
         または:
@@ -434,9 +436,13 @@ class GravitySettleDetector:
             self._reset_settle()
             return BoardState.STABLE
 
-        # 最低待機フレーム数を満たさない間は継続
-        frames_in_settle = ctx.frame_idx - self._settle_start_frame
-        if frames_in_settle < GRAVITY_SETTLE_PHYSICS_CLEAR_MIN:
+        # 最低待機時間を満たさない間は継続。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `ctx.frame_idx -
+        # self._settle_start_frame` (frame 差分) を、同関数内で既に算出済の
+        # `elapsed` (time_sec 差分, MAX_SEC 判定と同一変数) に置換。
+        # 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため
+        # 判定は bit-identical。30fps 動画では実秒基準になる。
+        if elapsed < GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC:
             self._update_puyo_count(signals)
             return None
 

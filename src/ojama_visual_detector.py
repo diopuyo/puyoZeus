@@ -25,6 +25,7 @@ from src.board_state_machine import (
     GRAVITY_SETTLE_MAX_SEC,
     GRAVITY_SETTLE_MIN_FRAMES,
     GRAVITY_SETTLE_PHYSICS_CLEAR_MIN,
+    GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC,
     GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD,
     StateContext,
 )
@@ -52,6 +53,11 @@ OJAMA_SETTLE_CONSEC: int = 3
 # 定数は GravitySettle 側の値を初期値として流用するが、 今後 ojama 固有の
 # チューニングが chain (GRAVITY_SETTLE) 側に波及しないよう独立命名する。
 OJAMA_FALL_SETTLE_MIN_FRAMES: int = GRAVITY_SETTLE_PHYSICS_CLEAR_MIN
+# フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正として使う。
+# OJAMA_FALL_SETTLE_MIN_FRAMES (frame 定数) は既存 import 互換のため残置する。
+# 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため
+# _detect_ojama_fall_exit_board_settle の判定は bit-identical。
+OJAMA_FALL_SETTLE_MIN_SEC: float = GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC
 OJAMA_FALL_SETTLE_STABLE_FRAMES: int = GRAVITY_SETTLE_MIN_FRAMES
 OJAMA_FALL_SETTLE_DIFF_THRESHOLD: int = GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD
 OJAMA_FALL_MAX_SEC: float = GRAVITY_SETTLE_MAX_SEC
@@ -230,9 +236,13 @@ class OjamaVisualDetector:
             self._reset_internal_state(keep_top_ojama_count=exit_top_count)
             return BoardState.STABLE
 
-        # 最低待機フレーム数未達: 継続 (カウンタのみ更新)
-        frames_in_settle = ctx.frame_idx - self._settle_start_frame
-        if frames_in_settle < OJAMA_FALL_SETTLE_MIN_FRAMES:
+        # 最低待機時間未達: 継続 (カウンタのみ更新)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `ctx.frame_idx -
+        # self._settle_start_frame` (frame 差分) を、同関数内で既に算出済の
+        # `elapsed` (time_sec 差分, タイムアウト判定と同一変数) に置換。
+        # 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため
+        # 判定は bit-identical。30fps 動画では実秒基準になる。
+        if elapsed < OJAMA_FALL_SETTLE_MIN_SEC:
             self._prev_board_puyo_count = cur_board_count
             self._board_stable_consec = 0
             return None
