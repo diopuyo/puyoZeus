@@ -589,6 +589,24 @@ class RecognitionPipeline:
     # 18 frame 中 14 frame (= 78%) 一致で override 発火、 0.6s 以内に補正完了.
     STABLE_OVERRIDE_MIN_RATIO: float = 0.75
 
+    # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+    # 試合開始直後は HSV 較正が浅く (5色中1色) CNN 誤読が残り、推論盤面
+    # (inferred) と cnn_board の乖離が DriftDetector 閾値 (cell 6 / frame 3) を
+    # 超えて `sm.reset(keep_match_state=True) + drift.reset() + gen.reset()`
+    # (本ファイル _step_side 内) が発火 → リセット直後も誤読継続 → 再発火、
+    # の自己永続ループが最大 13 秒程度継続する不具合が確認された
+    # (c34 実測: リセット 86 回中 85 回がこの経路)。
+    # ガード1 (enable_drift_resync_match_start_guard) が有効な間、試合開始
+    # (_match_active_started_time) からこの秒数以内は needs_resync を無視する
+    # (観測された 13 秒暴走をカバーする値)。既存 MATCH_JUST_STARTED_WINDOW_SEC
+    # (1.0 秒、確定盤面の空フィールド強制用) とは別目的の定数のため独立させる。
+    DRIFT_RESYNC_MATCH_START_GUARD_SEC: float = 15.0
+    # ガード2 (enable_drift_resync_hsv_gate) が有効な間、OnlineHsvCalibrator の
+    # 較正済み色数 (_online_hsv_injected_colors) がこの値未満なら resync を
+    # 抑制する。試合は 4 色構成 (reference_four_colors_per_match_2026-07-22) の
+    # ため、3 色較正済みであれば概ね安定しているとみなす。
+    DRIFT_RESYNC_MIN_CALIBRATED_COLORS: int = 3
+
     def __init__(
         self,
         image_reader: ImageReader,
@@ -821,6 +839,20 @@ class RecognitionPipeline:
         # 全画像レビュー承認) で採用。False を明示指定すれば旧挙動
         # (bit-identical) に戻せる (backwards compat)。
         merge_use_majority_value: bool = True,
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # ガード1: True にすると試合開始から
+        # DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒以内は DriftDetector の
+        # needs_resync を無視する (DriftDetector.update 自体は毎 frame 呼ぶため
+        # 内部の連続乖離カウンタは追跡され続ける、reset だけ抑制される)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定
+        # (main マージ / default ON 化は別途 user 承認が必要)。
+        enable_drift_resync_match_start_guard: bool = False,
+        # ガード2: True にすると OnlineHsvCalibrator の較正済み色数
+        # (_online_hsv_injected_colors) が DRIFT_RESYNC_MIN_CALIBRATED_COLORS
+        # 未満の間、needs_resync を無視する。ガード1と独立に ON/OFF 可能。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_drift_resync_hsv_gate: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1156,6 +1188,20 @@ class RecognitionPipeline:
             enable_gravity_filter_support
         )
         self._merge_use_majority_value: bool = bool(merge_use_majority_value)
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
+        self._enable_drift_resync_match_start_guard: bool = bool(
+            enable_drift_resync_match_start_guard,
+        )
+        self._enable_drift_resync_hsv_gate: bool = bool(
+            enable_drift_resync_hsv_gate,
+        )
+        # デバッグカウンタ: 各ガードが needs_resync を抑制した回数 (1P/2P 別)。
+        # 効果測定用 (_diag 系スクリプトから読み出す想定)。
+        self._drift_resync_start_guard_suppressed_1p: int = 0
+        self._drift_resync_start_guard_suppressed_2p: int = 0
+        self._drift_resync_hsv_gate_suppressed_1p: int = 0
+        self._drift_resync_hsv_gate_suppressed_2p: int = 0
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -1662,6 +1708,12 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_gravity_filter_support: bool = True,
         merge_use_majority_value: bool = True,
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # 両方 default False = 従来挙動完全維持・bit-identical (backwards
+        # compat)。user 承認前の savepoint 実装のため default OFF 固定
+        # (main マージ / default ON 化は別途 user 承認が必要)。
+        enable_drift_resync_match_start_guard: bool = False,
+        enable_drift_resync_hsv_gate: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1831,6 +1883,10 @@ class RecognitionPipeline:
             chain_max_hold_sec=chain_max_hold_sec,
             enable_gravity_filter_support=enable_gravity_filter_support,
             merge_use_majority_value=merge_use_majority_value,
+            enable_drift_resync_match_start_guard=(
+                enable_drift_resync_match_start_guard
+            ),
+            enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         )
 
     # ------------------------------------------------------------------
@@ -4652,9 +4708,37 @@ class RecognitionPipeline:
         )
         drift_res = drift.update(inferred, cnn_board)
         if drift_res.needs_resync:
-            sm.reset(keep_match_state=True)
-            drift.reset()
-            gen.reset()
+            # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+            # 両ガードとも独立 flag のため、それぞれ単独評価 (どちらか一方でも
+            # 抑制条件を満たせば reset をスキップする)。counter は各ガードが
+            # 単独で適用された場合の抑制回数を記録する (効果測定用)。
+            _drift_resync_suppress = False
+            if self._enable_drift_resync_match_start_guard:
+                _since_match_start = (
+                    time_sec - self._match_active_started_time
+                )
+                if (
+                    self._match_active_started_time >= 0
+                    and _since_match_start
+                    < self.DRIFT_RESYNC_MATCH_START_GUARD_SEC
+                ):
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_start_guard_suppressed_1p += 1
+                    else:
+                        self._drift_resync_start_guard_suppressed_2p += 1
+            if self._enable_drift_resync_hsv_gate:
+                _calibrated_colors = len(self._online_hsv_injected_colors)
+                if _calibrated_colors < self.DRIFT_RESYNC_MIN_CALIBRATED_COLORS:
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_hsv_gate_suppressed_1p += 1
+                    else:
+                        self._drift_resync_hsv_gate_suppressed_2p += 1
+            if not _drift_resync_suppress:
+                sm.reset(keep_match_state=True)
+                drift.reset()
+                gen.reset()
 
         cur_score = (
             score_tracker.last_score if score_tracker is not None else None

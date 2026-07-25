@@ -3400,3 +3400,210 @@ def test_ojama_dropout_fix_flags_explicit_false_restores_legacy() -> None:
         assert opd is not None
         assert opd.defer_ojama_fall_exit_to_visual is False
 
+
+# ============================
+# DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)
+#
+# 試合開始直後は HSV 較正が浅く CNN 誤読が残り、推論盤面と cnn_board の
+# 乖離が DriftDetector 閾値を超えて sm.reset+drift.reset+gen.reset が
+# 発火 → リセット直後も誤読継続 → 再発火、の自己永続ループが最大 13 秒
+# 程度継続する不具合への 2 段ガード。両 flag とも default False
+# (= 従来挙動完全維持・bit-identical、backwards compat)。
+# ============================
+
+
+class _FakeAlwaysResyncDrift:
+    """DriftDetector 互換スタブ: 毎 update で needs_resync=True を返す。
+
+    _step_side が参照するのは `.update()` と `.reset()` のみ (本体
+    DriftDetector.consecutive_drift_count 等は _step_side からは未参照)。
+    """
+
+    def __init__(self) -> None:
+        self.reset_calls: int = 0
+        self.update_calls: int = 0
+
+    def update(self, inferred, cnn):  # noqa: ANN001, ANN201
+        from src.drift_detector import DriftResult
+        self.update_calls += 1
+        return DriftResult(
+            mismatch_count=99, consecutive_count=99,
+            is_drift=True, needs_resync=True,
+        )
+
+    def reset(self) -> None:
+        self.reset_calls += 1
+
+
+def _count_calls(obj: object, method_name: str) -> dict:
+    """obj.method_name 呼び出し回数を計測するラッパーに差し替える。"""
+    orig = getattr(obj, method_name)
+    counter = {"n": 0}
+
+    def _wrapper(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        counter["n"] += 1
+        return orig(*args, **kwargs)
+
+    setattr(obj, method_name, _wrapper)
+    return counter
+
+
+def test_drift_resync_guards_default_false_on_init() -> None:
+    """両ガードとも __init__ 既定値が False (backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    for name in (
+        "enable_drift_resync_match_start_guard",
+        "enable_drift_resync_hsv_gate",
+    ):
+        default = sig.parameters[name].default
+        assert default is False, f"{name} の __init__ 既定 False 期待: {default}"
+
+
+def test_drift_resync_guards_default_false_on_load_default() -> None:
+    """両ガードとも load_default 既定値が False (backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    for name in (
+        "enable_drift_resync_match_start_guard",
+        "enable_drift_resync_hsv_gate",
+    ):
+        default = sig.parameters[name].default
+        assert default is False, (
+            f"{name} の load_default 既定 False 期待: {default}"
+        )
+
+
+def test_drift_resync_guard_counters_init_zero() -> None:
+    """デバッグカウンタは construction 直後は全て 0。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0
+    assert pipe._drift_resync_start_guard_suppressed_2p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_2p == 0
+
+
+def test_drift_resync_guards_off_resyncs_immediately_bit_identical() -> None:
+    """両ガード OFF (既定) では試合開始直後でも needs_resync=True で
+    従来通り sm.reset/gen.reset/drift.reset が即発火する (bit-identical)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+    gen_calls = _count_calls(pipe._gen_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 window 内 (0.0s)
+
+    assert sm_calls["n"] >= 1, "guard OFF なら resync が即発火するべき"
+    assert gen_calls["n"] >= 1
+    assert pipe._drift_1p.reset_calls >= 1
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+
+
+def test_drift_resync_match_start_guard_on_suppresses_within_window() -> None:
+    """ガード1 ON: 試合開始から DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒
+    以内は needs_resync=True でも resync が抑制される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 (t=0.0)
+    pipe.update(1, 5.0, _dummy_frame())  # t=5.0 < 15.0 秒 → 抑制されるべき
+
+    assert sm_calls["n"] == 0, "window 内は resync が抑制されるべき"
+    assert pipe._drift_resync_start_guard_suppressed_1p >= 1
+    assert pipe._drift_1p.reset_calls == 0
+
+
+def test_drift_resync_match_start_guard_on_allows_after_window() -> None:
+    """ガード1 ON: DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒経過後は
+    needs_resync=True で従来通り resync が発火する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 (t=0.0)
+    pipe.update(
+        1,
+        RecognitionPipeline.DRIFT_RESYNC_MATCH_START_GUARD_SEC + 1.0,
+        _dummy_frame(),
+    )  # window 超過
+
+    assert sm_calls["n"] >= 1, "window 超過後は resync が発火するべき"
+    # frame 0 (t=0.0) は window 内のため 1 回だけ抑制され、frame 1 (window 超過)
+    # では抑制されない (= 累計 1 のまま増えない)。
+    assert pipe._drift_resync_start_guard_suppressed_1p == 1
+
+
+def test_drift_resync_hsv_gate_on_suppresses_when_uncalibrated() -> None:
+    """ガード2 ON: 較正済み色数 < DRIFT_RESYNC_MIN_CALIBRATED_COLORS の間は
+    needs_resync=True でも resync が抑制される。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._enable_drift_resync_hsv_gate = True  # 直接 flag をセット
+    assert len(pipe._online_hsv_injected_colors) == 0  # 較正なしの初期状態
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())
+
+    assert sm_calls["n"] == 0, "較正未達なら resync が抑制されるべき"
+    assert pipe._drift_resync_hsv_gate_suppressed_1p >= 1
+
+
+def test_drift_resync_hsv_gate_on_allows_when_calibrated() -> None:
+    """ガード2 ON: 較正済み色数 >= DRIFT_RESYNC_MIN_CALIBRATED_COLORS なら
+    従来通り resync が発火する。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._enable_drift_resync_hsv_gate = True
+    pipe._online_hsv_injected_colors = {1, 2, 3}  # 3 色較正済みを模擬
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())
+
+    assert sm_calls["n"] >= 1, "較正済みなら resync が発火するべき"
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+
+
+def test_drift_resync_guards_are_independent_flags() -> None:
+    """ガード1 のみ ON でもガード2 の抑制条件 (較正未達) は無関係に
+    resync が発火する (= 各ガードは独立 flag、ガード1 だけでは較正未達を
+    考慮しない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # window 超過後は較正状態 (未較正) に関わらず resync が発火する
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(
+        1,
+        RecognitionPipeline.DRIFT_RESYNC_MATCH_START_GUARD_SEC + 1.0,
+        _dummy_frame(),
+    )
+    assert sm_calls["n"] >= 1
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0, (
+        "ガード2 OFF なので hsv_gate カウンタは増えないべき"
+    )
+
