@@ -971,6 +971,13 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_column_partial_support: bool = False,
+        # 前試合盤面残骸リーク修正 (feat/recognition-postchain-fix-2026-07-23,
+        # A/B 計測用)。True で試合境界 (is_match_active False→MENU 強制) 時に
+        # non_stable_cnn_history / stable_recovery_counters / recovery_cells /
+        # stable_warmup_remaining / next_queue も完全クリアし、前試合終盤の
+        # ぷよが次試合序盤に幽霊セルとして書き戻るのを防ぐ。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_start_full_clear: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1325,6 +1332,11 @@ class RecognitionPipeline:
         self._enable_column_partial_support: bool = bool(
             enable_column_partial_support
         )
+        # 前試合盤面残骸リーク修正 (2026-07-23):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_match_start_full_clear: bool = bool(
+            enable_match_start_full_clear
+        )
         # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
         # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
         self._enable_drift_resync_match_start_guard: bool = bool(
@@ -1355,6 +1367,7 @@ class RecognitionPipeline:
             enable_gravity_filter_support=self._enable_gravity_filter_support,
             merge_use_majority_value=self._merge_use_majority_value,
             enable_column_partial_support=self._enable_column_partial_support,
+            enable_match_start_full_clear=self._enable_match_start_full_clear,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1369,6 +1382,7 @@ class RecognitionPipeline:
             enable_gravity_filter_support=self._enable_gravity_filter_support,
             merge_use_majority_value=self._merge_use_majority_value,
             enable_column_partial_support=self._enable_column_partial_support,
+            enable_match_start_full_clear=self._enable_match_start_full_clear,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1676,6 +1690,7 @@ class RecognitionPipeline:
         enable_gravity_filter_support: bool = True,
         merge_use_majority_value: bool = True,
         enable_column_partial_support: bool = False,
+        enable_match_start_full_clear: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1738,6 +1753,7 @@ class RecognitionPipeline:
             enable_gravity_filter_support=enable_gravity_filter_support,
             merge_use_majority_value=merge_use_majority_value,
             enable_column_partial_support=enable_column_partial_support,
+            enable_match_start_full_clear=enable_match_start_full_clear,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -1873,6 +1889,9 @@ class RecognitionPipeline:
         # 列ゲート緩和 (2026-07-25, A/B 計測用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_column_partial_support: bool = False,
+        # 前試合盤面残骸リーク修正 (2026-07-23, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_start_full_clear: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2051,6 +2070,7 @@ class RecognitionPipeline:
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
             enable_column_partial_support=enable_column_partial_support,
+            enable_match_start_full_clear=enable_match_start_full_clear,
         )
 
     # ------------------------------------------------------------------

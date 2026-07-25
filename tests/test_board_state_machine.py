@@ -275,6 +275,56 @@ def test_reset_keep_match_state_preserves_stable() -> None:
 
 
 # ============================
+# 前試合盤面残骸リーク修正 (feat/recognition-postchain-fix-2026-07-23)
+# ============================
+
+
+def _seed_stale_match_residue(sm: BoardStateMachine) -> None:
+    """game0 終盤に STABLE で蓄積した残骸を模擬して StateContext に注入する。"""
+    ctx = sm.context
+    ctx.state = BoardState.STABLE
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    ctx.confirmed_board = ghost.copy()
+    ctx.non_stable_cnn_history = [ghost.copy(), ghost.copy(), ghost.copy()]
+    ctx.stable_recovery_counters = {(10, 4): 2, (11, 4): 3}
+    ctx.recovery_cells = {(10, 4), (11, 4)}
+    ctx.next_queue = [(1, 2), (3, 4)]
+    ctx.stable_warmup_remaining = 5
+
+
+def test_match_boundary_default_leaves_residue_default_off() -> None:
+    """backwards compat: default (enable_match_start_full_clear=False) では
+    confirmed_board 以外の残骸フィールドは従来通りクリアされない。"""
+    sm = BoardStateMachine()
+    _seed_stale_match_residue(sm)
+    ctx = sm.update(1000, _signal(465.6, _empty_board(), match=False))
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None  # 従来からクリア対象
+    # 従来挙動: 以下は残留する (= 本テストは現状の bit-identical 挙動の記録)
+    assert len(ctx.non_stable_cnn_history) == 3
+    assert ctx.stable_recovery_counters == {(10, 4): 2, (11, 4): 3}
+    assert ctx.recovery_cells == {(10, 4), (11, 4)}
+    assert ctx.next_queue == [(1, 2), (3, 4)]
+    assert ctx.stable_warmup_remaining == 5
+
+
+def test_match_boundary_full_clear_removes_residue() -> None:
+    """enable_match_start_full_clear=True で試合境界の残骸フィールドが
+    すべてクリアされ、次試合への幽霊セル書き戻り経路を断つ。"""
+    sm = BoardStateMachine(enable_match_start_full_clear=True)
+    _seed_stale_match_residue(sm)
+    ctx = sm.update(1000, _signal(465.6, _empty_board(), match=False))
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None
+    assert ctx.non_stable_cnn_history == []
+    assert ctx.stable_recovery_counters == {}
+    assert ctx.recovery_cells == set()
+    assert ctx.next_queue == []
+    assert ctx.stable_warmup_remaining == 0
+
+
+# ============================
 # state 集合の整合性
 # ============================
 
