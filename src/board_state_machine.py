@@ -96,6 +96,14 @@ STABLE_RECOVERY_MIN_FRAMES: int = 8
 # EMPTY(0) / OJAMA(9) は方向2の除去ターゲットなので含めない。
 RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({10})
 
+# 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
+# _check_recovery_column の浮き判定で「下のセルが空」でも stable_recovery_counters
+# が一定フレーム以上進行中 (= 復旧合意が積み上がりつつある) なら浮き扱いしない
+# ための下限フレーム数。STABLE_RECOVERY_MIN_FRAMES (8) より緩い値にすることで
+# 「本線側が先に 8f 到達し、支持側がまだ 8f 未満」の組合せを救済する。
+# default False (enable_column_partial_support) では未使用 (backwards compat)。
+RECOVERY_COLUMN_SUPPORT_MIN_FRAMES: int = 2
+
 
 class BoardState(Enum):
     """1 プレイヤー側盤面の状態。"""
@@ -482,6 +490,7 @@ class BoardStateMachine:
         recovery_min_frames: int = STABLE_RECOVERY_MIN_FRAMES,
         enable_gravity_filter_support: bool = False,
         merge_use_majority_value: bool = False,
+        enable_column_partial_support: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -506,6 +515,11 @@ class BoardStateMachine:
         # (backwards compat)。
         self._enable_gravity_filter_support = bool(enable_gravity_filter_support)
         self._merge_use_majority_value = bool(merge_use_majority_value)
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
+        # True で _apply_stable_recovery_gate の安全弁C浮き判定/最終重力
+        # フィルタに stable_recovery_counters 由来の support を渡す。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_column_partial_support = bool(enable_column_partial_support)
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -712,6 +726,7 @@ class BoardStateMachine:
         ):
             _apply_stable_recovery_gate(
                 self._ctx, signals, self._recovery_min_frames,
+                enable_column_partial_support=self._enable_column_partial_support,
             )
 
 
@@ -722,16 +737,27 @@ class BoardStateMachine:
 
 def _check_recovery_column(
     confirmed: "Board", col: int, candidates: list[tuple[int, int, int]],
+    *,
+    recovery_counters: "dict[tuple[int, int], int] | None" = None,
+    support_min_frames: int = RECOVERY_COLUMN_SUPPORT_MIN_FRAMES,
 ) -> list[tuple[int, int, int]]:
     """列の重力整合チェック: 下から連続するブロックのみ復旧候補として残す.
 
     浮きぷよ防止 (安全弁C): 復旧候補セルの下に空 confirmed があれば浮きぷよに
     なるため除外する。列を下段から走査し、confirmed が空でない連続区間のみ許可。
 
+    列ゲート緩和 (enable_column_partial_support, 2026-07-25): recovery_counters を
+    渡すと、下のセルが confirmed==EMPTY でも stable_recovery_counters が
+    support_min_frames 以上進行中 (= 復旧合意が積み上がりつつある) なら
+    「支持セル」とみなし浮き扱いしない。 None (default) なら従来挙動と
+    bit-identical (backwards compat)。
+
     Args:
         confirmed: 現在の confirmed_board。
         col: 対象列番号 (0-5)。
         candidates: [(row, col, recovery_color), ...] — 復旧候補リスト。
+        recovery_counters: (row, col) → 連続合意フレーム数。None で無効化。
+        support_min_frames: 支持セルとみなす最低カウンタ値。
 
     Returns:
         重力整合チェック通過後の復旧候補リスト。
@@ -761,6 +787,12 @@ def _check_recovery_column(
         for below in range(r_desc + 1, BOARD_ROWS):
             below_v = col_confirmed[below]
             if below_v == COLOR_EMPTY and below not in cand_rows:
+                # 列ゲート緩和: カウンタ進行中の支持セルなら浮き扱いしない
+                if (
+                    recovery_counters is not None
+                    and recovery_counters.get((below, col), 0) >= support_min_frames
+                ):
+                    continue
                 floating = True
                 break
         if not floating:
@@ -836,10 +868,46 @@ def _collect_recovery_candidates(
     return add_candidates, fix_candidates
 
 
+def _build_recovery_support_board(
+    confirmed: "Board",
+    recovery_counters: "dict[tuple[int, int], int]",
+    cnn_board: "Board",
+    min_frames: int = RECOVERY_COLUMN_SUPPORT_MIN_FRAMES,
+) -> "Board":
+    """列ゲート緩和 (enable_column_partial_support) 用の support_board を構築.
+
+    counter >= min_frames のセルに CNN 観測色をプレースホルダとして書き込み、
+    最終 _apply_gravity_filter がそのセルを「浮き判定の穴」として扱わない
+    ようにする。EMPTY/UNKNOWN は安全弁として書き込まない。
+
+    Args:
+        confirmed: 現在の confirmed_board (この copy をベースにする)。
+        recovery_counters: (row, col) → 連続合意フレーム数。
+        cnn_board: 現フレームの CNN 認識盤面 (プレースホルダ色の取得元)。
+        min_frames: プレースホルダを書き込む最低カウンタ値。
+
+    Returns:
+        support_board (confirmed のコピー + プレースホルダ)。
+    """
+    from src.board import COLOR_EMPTY
+
+    support = confirmed.copy()
+    for (r, c), count in recovery_counters.items():
+        if count < min_frames:
+            continue
+        placeholder = int(cnn_board.get(r, c))
+        if placeholder == COLOR_EMPTY or placeholder in RECOVERY_EXCLUDED_COLORS:
+            continue
+        support.set(r, c, placeholder)
+    return support
+
+
 def _apply_stable_recovery_gate(
     ctx: "StateContext",
     signals: "DetectorSignals",
     min_frames: int,
+    *,
+    enable_column_partial_support: bool = False,
 ) -> None:
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
@@ -860,6 +928,11 @@ def _apply_stable_recovery_gate(
         ctx: StateContext (in-place 更新)。
         signals: 現フレームのシグナル (cnn_board, hsv_board を参照)。
         min_frames: 発火に必要な連続フレーム数。
+        enable_column_partial_support: 列ゲート緩和 (2026-07-25)。True にすると
+            安全弁C の浮き判定と最終重力フィルタに stable_recovery_counters
+            由来の support_board を渡し、「支持セルが復旧カウント進行中」の
+            ケースを浮きぷよ扱いしないようにする。
+            default False = 従来挙動完全維持 (backwards compat)。
     """
     if ctx.confirmed_board is None:
         return
@@ -879,9 +952,15 @@ def _apply_stable_recovery_gate(
     # パス2 (方向1のみ): 列ごとに重力整合チェック (安全弁C)
     passed_add: list[tuple[int, int, int]] = []
     cols_with_add = {c for (_, c, _) in add_candidates}
+    recovery_counters_for_check = (
+        ctx.stable_recovery_counters if enable_column_partial_support else None
+    )
     for col in cols_with_add:
         passed_add.extend(
-            _check_recovery_column(ctx.confirmed_board, col, add_candidates),
+            _check_recovery_column(
+                ctx.confirmed_board, col, add_candidates,
+                recovery_counters=recovery_counters_for_check,
+            ),
         )
 
     # パス3: confirmed 更新 (方向1/2/3 合算)
@@ -897,7 +976,12 @@ def _apply_stable_recovery_gate(
 
     # 方向1に対しのみ重力整合最終確認 (方向2/3は浮きぷよを生じさせない)
     if passed_add:
-        _apply_gravity_filter(ctx.confirmed_board)
+        support_board: "Board | None" = None
+        if enable_column_partial_support:
+            support_board = _build_recovery_support_board(
+                ctx.confirmed_board, ctx.stable_recovery_counters, signals.cnn_board,
+            )
+        _apply_gravity_filter(ctx.confirmed_board, support_board=support_board)
 
     # 振動抑制: non_stable_cnn_history に復旧後盤面を強制投入。
     # 次の NON-STABLE→STABLE 遷移の F ガード多数決で復旧色が票を持ち再崩壊防止。
@@ -932,6 +1016,7 @@ __all__ = [
     "NullDetector",
     "_apply_gravity_filter",
     "_apply_stable_recovery_gate",
+    "_build_recovery_support_board",
     "_check_recovery_column",
     "_collect_recovery_candidates",
     "_merge_diff_only",
@@ -940,6 +1025,7 @@ __all__ = [
     "DEFAULT_EMPTY_TO_COLOR_MIN_VOTES",
     "STABLE_WARMUP_FRAMES",
     "STABLE_RECOVERY_MIN_FRAMES",
+    "RECOVERY_COLUMN_SUPPORT_MIN_FRAMES",
     "RECOVERY_EXCLUDED_COLORS",
     "StateContext",
     "StateTransitionDetector",

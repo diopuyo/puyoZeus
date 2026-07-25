@@ -107,6 +107,11 @@ TRUTH_STABLE_MIN_FRAMES: int = 2
 # 受け入れ基準 (user指定、fps非依存の生フレーム数)。
 ACCEPTANCE_FRAMES: int = 8
 
+# 計測分母修正 (2026-07-25): 走査窓終端からこのフレーム数以内で発生した
+# イベントは「反映を確認しきれる前に窓が終わった」可能性がある
+# (right-censored)。集計の分母/分子から除外し、n_right_censored として別掲する。
+RIGHT_CENSOR_MARGIN_FRAMES: int = 30
+
 # 「試合開始直後」判定: 走査窓開始からこの秒数未満の着地を near_match_start と
 # 分類する (post-hoc実測で c34 のマッチ開始直後 (472-478s 付近) に区間B が
 # 数秒〜13秒台まで膨らむ現象を確認したため、定常状態と切り分けて報告する)。
@@ -185,6 +190,7 @@ def _collect_records(
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
+    enable_column_partial_support: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -196,6 +202,9 @@ def _collect_records(
     enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
     baseline_broken 自己リセット制御フラグの A/B 計測用に追加。既定
     True/False = RecognitionPipeline 側既定と同一 (bit-identical)。
+    RecognitionPipeline.load_default へそのまま透過する。
+    enable_column_partial_support: 列ゲート緩和 (2026-07-25) の A/B 計測用に
+    追加。既定 False = 従来通り (bit-identical)。
     RecognitionPipeline.load_default へそのまま透過する。
     pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
     既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
@@ -217,6 +226,7 @@ def _collect_records(
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=enable_baseline_broken_reset,
         enable_baseline_broken_grace=enable_baseline_broken_grace,
+        enable_column_partial_support=enable_column_partial_support,
     )
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
@@ -570,15 +580,37 @@ def _percentile_or_none(values: list[float], q: float) -> "float | None":
 def _delay_stats(
     events: list[_PlacementEvent], corroborated_only: bool,
     steady_state_only: bool = False,
+    window_end_frame_idx: "int | None" = None,
 ) -> dict:
     """反映遅延分布統計 (8フレーム達成率込み)。
 
     steady_state_only=True で試合開始直後 (NEAR_MATCH_START_SEC 未満) を除外し、
     定常状態のみの分布にする (試合開始直後は別要因の遅延が支配的なため分離)。
+
+    計測分母修正 (2026-07-25):
+    - effective_pct_within_acceptance_8f: 未反映 (never_reflected) を「失敗」と
+      数えた分母 (= pool 全体) に対する 8f 達成率。従来の
+      pct_within_acceptance_8f (分母=反映確認できたイベントのみ) は未反映を
+      暗黙に除外しており、未反映が多いほど見かけの達成率が過大評価される
+      問題があったため、こちらを主指標として追加する (旧指標は互換維持で残す)。
+    - window_end_frame_idx を渡すと、走査窓終端から RIGHT_CENSOR_MARGIN_FRAMES
+      以内で発生したイベントを right-censored とみなし、分母/分子の両方から
+      除外して n_right_censored に計上する (None なら従来通りスキップ、
+      backwards compat)。
     """
     pool = [e for e in events if (not corroborated_only) or e.has_next_corroboration]
     if steady_state_only:
         pool = [e for e in pool if not e.near_match_start]
+
+    n_right_censored = 0
+    if window_end_frame_idx is not None:
+        censored_ids = {
+            id(e) for e in pool
+            if (window_end_frame_idx - e.frame_place) <= RIGHT_CENSOR_MARGIN_FRAMES
+        }
+        n_right_censored = len(censored_ids)
+        pool = [e for e in pool if id(e) not in censored_ids]
+
     resolved = [e for e in pool if e.delay_frames_total is not None]
     delays = [float(e.delay_frames_total) for e in resolved]
     cnn_segs = [float(e.delay_frames_cnn_seg) for e in resolved if e.delay_frames_cnn_seg is not None]
@@ -589,11 +621,15 @@ def _delay_stats(
     within_8 = [e for e in resolved if e.within_acceptance]
     return {
         "n_events_total": len(pool),
+        "n_right_censored": n_right_censored,
         "n_resolved_within_window": len(resolved),
         "n_never_reflected": len(pool) - len(resolved),
         "n_within_acceptance_8f": len(within_8),
         "pct_within_acceptance_8f": (
             100.0 * len(within_8) / len(resolved) if resolved else None
+        ),
+        "effective_pct_within_acceptance_8f": (
+            100.0 * len(within_8) / len(pool) if pool else None
         ),
         "delay_frames_median": (float(np.median(delays)) if delays else None),
         "delay_frames_mean": (float(np.mean(delays)) if delays else None),
@@ -648,11 +684,14 @@ def _write_events_csv(events: list[_PlacementEvent], path: Path) -> None:
 
 def _format_stats_line(label: str, s: dict) -> str:
     return (
-        f"  {label}: n={s['n_events_total']} 未反映={s['n_never_reflected']} "
+        f"  {label}: n={s['n_events_total']} "
+        f"right_censored={s.get('n_right_censored', 0)} "
+        f"未反映={s['n_never_reflected']} "
         f"delay_frames(中央値/平均/p90/最大)="
         f"{s['delay_frames_median']}/{s['delay_frames_mean']}/"
         f"{s['delay_frames_p90']}/{s['delay_frames_max']} "
-        f"8f以内達成率={s['pct_within_acceptance_8f']} "
+        f"8f以内達成率(反映済のみ)={s['pct_within_acceptance_8f']} "
+        f"8f以内達成率(実効=未反映込み)={s.get('effective_pct_within_acceptance_8f')} "
         f"区間A(CNN到達)中央値={s['seg_cnn_visible_median']} "
         f"区間B(確定側)中央値={s['seg_confirm_median']} "
         f"初期色不一致={s['n_color_mismatch_at_place']}"
@@ -671,6 +710,7 @@ def _process_one(
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
     enable_baseline_broken_grace: bool = False,
+    enable_column_partial_support: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -679,6 +719,8 @@ def _process_one(
     enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
     baseline_broken 自己リセット制御フラグの A/B 計測用 (既定 True/False =
     RecognitionPipeline 側既定と同一)。
+    enable_column_partial_support: 列ゲート緩和 (2026-07-25) の A/B 計測用
+    (既定 False)。
     """
     t0 = time.time()
     _print_progress(f"[{video}] 走査開始 start={start_sec:.1f}s dur={max_sec:.1f}s")
@@ -689,6 +731,7 @@ def _process_one(
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=enable_baseline_broken_reset,
         enable_baseline_broken_grace=enable_baseline_broken_grace,
+        enable_column_partial_support=enable_column_partial_support,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -725,12 +768,29 @@ def _process_one(
 
     events_1p, meta_1p = _build_placement_events(recs_1p, video, "1P", fps, start_sec)
     events_2p, meta_2p = _build_placement_events(recs_2p, video, "2P", fps, start_sec)
-    stats_1p_corr = _delay_stats(events_1p, corroborated_only=True)
-    stats_2p_corr = _delay_stats(events_2p, corroborated_only=True)
-    stats_1p_all = _delay_stats(events_1p, corroborated_only=False)
-    stats_2p_all = _delay_stats(events_2p, corroborated_only=False)
-    stats_1p_steady = _delay_stats(events_1p, corroborated_only=True, steady_state_only=True)
-    stats_2p_steady = _delay_stats(events_2p, corroborated_only=True, steady_state_only=True)
+    # 計測分母修正 (2026-07-25): 走査窓終端 frame_idx を right-censoring 判定に渡す。
+    win_end_1p = recs_1p[-1].frame_idx if recs_1p else None
+    win_end_2p = recs_2p[-1].frame_idx if recs_2p else None
+    stats_1p_corr = _delay_stats(
+        events_1p, corroborated_only=True, window_end_frame_idx=win_end_1p,
+    )
+    stats_2p_corr = _delay_stats(
+        events_2p, corroborated_only=True, window_end_frame_idx=win_end_2p,
+    )
+    stats_1p_all = _delay_stats(
+        events_1p, corroborated_only=False, window_end_frame_idx=win_end_1p,
+    )
+    stats_2p_all = _delay_stats(
+        events_2p, corroborated_only=False, window_end_frame_idx=win_end_2p,
+    )
+    stats_1p_steady = _delay_stats(
+        events_1p, corroborated_only=True, steady_state_only=True,
+        window_end_frame_idx=win_end_1p,
+    )
+    stats_2p_steady = _delay_stats(
+        events_2p, corroborated_only=True, steady_state_only=True,
+        window_end_frame_idx=win_end_2p,
+    )
     return {
         "video": video, "fps": fps, "start_sec": start_sec, "max_sec": max_sec,
         "events_1p": events_1p, "events_2p": events_2p,
@@ -855,6 +915,14 @@ def _parse_args() -> argparse.Namespace:
         help="既定\"\"(従来通り)。非空を渡すと出力ファイル名に付与し、"
              "従来出力 (events_c34.csv/summary.json 等) を上書きしない。",
     )
+    # 列ゲート緩和 (2026-07-25, A/B 計測用)。既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-column-partial-support", dest="enable_column_partial_support",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_column_partial_support を有効化する "
+             "(設計C 事後復旧ゲートの安全弁C浮き判定を列カウンタ進行中セルで緩和)。",
+    )
     return ap.parse_args()
 
 
@@ -873,6 +941,7 @@ def main() -> None:
         "enable_drift_resync_hsv_gate": args.enable_drift_resync_hsv_gate,
         "enable_baseline_broken_reset": args.enable_baseline_broken_reset,
         "enable_baseline_broken_grace": args.enable_baseline_broken_grace,
+        "enable_column_partial_support": args.enable_column_partial_support,
     }
     result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
     results = [result_c34]
