@@ -180,8 +180,21 @@ def _video_path(video_stem: str) -> Path:
 
 def _collect_records(
     video_stem: str, start_sec: float, max_sec: float,
+    *,
+    enable_drift_resync_match_start_guard: bool = False,
+    enable_drift_resync_hsv_gate: bool = False,
+    pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
-    """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。"""
+    """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
+
+    enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
+    2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
+    効果測定用に追加。既定 False = 従来通り (bit-identical)。
+    RecognitionPipeline.load_default へそのまま透過する。
+    pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
+    既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
+    pipeline_out["pipeline"] へ構築済み RecognitionPipeline を格納する。
+    """
     cv2.setNumThreads(1)
     video_path = _video_path(video_stem)
     cap = cv2.VideoCapture(str(video_path))
@@ -194,8 +207,12 @@ def _collect_records(
 
     pipe = RecognitionPipeline.load_default(
         enable_landing_observed_color=ENABLE_LANDING_OBSERVED_COLOR,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
     )
     pipe.set_video_id(video_stem)
+    if pipeline_out is not None:
+        pipeline_out["pipeline"] = pipe
 
     recs_1p: list[_FrameRec] = []
     recs_2p: list[_FrameRec] = []
@@ -639,12 +656,44 @@ def _format_stats_line(label: str, s: dict) -> str:
 # ============================
 
 
-def _process_one(video: str, start_sec: float, max_sec: float) -> dict:
-    """1 動画分の走査 + イベント構築 + 集計。"""
+def _process_one(
+    video: str, start_sec: float, max_sec: float,
+    *,
+    enable_drift_resync_match_start_guard: bool = False,
+    enable_drift_resync_hsv_gate: bool = False,
+) -> dict:
+    """1 動画分の走査 + イベント構築 + 集計。
+
+    enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
+    2026-07-25 DriftDetector再同期ループ暴走ガード効果測定用 (既定 False)。
+    """
     t0 = time.time()
     _print_progress(f"[{video}] 走査開始 start={start_sec:.1f}s dur={max_sec:.1f}s")
-    recs_1p, recs_2p, fps = _collect_records(video, start_sec, max_sec)
+    pipeline_out: dict = {}
+    recs_1p, recs_2p, fps = _collect_records(
+        video, start_sec, max_sec,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        pipeline_out=pipeline_out,
+    )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
+    pipeline_obj = pipeline_out.get("pipeline")
+    drift_suppressed = {
+        "start_guard_suppressed_1p": getattr(
+            pipeline_obj, "_drift_resync_start_guard_suppressed_1p", 0,
+        ),
+        "start_guard_suppressed_2p": getattr(
+            pipeline_obj, "_drift_resync_start_guard_suppressed_2p", 0,
+        ),
+        "hsv_gate_suppressed_1p": getattr(
+            pipeline_obj, "_drift_resync_hsv_gate_suppressed_1p", 0,
+        ),
+        "hsv_gate_suppressed_2p": getattr(
+            pipeline_obj, "_drift_resync_hsv_gate_suppressed_2p", 0,
+        ),
+    } if pipeline_obj is not None else {}
+    if drift_suppressed:
+        _print_progress(f"[{video}] drift_resync抑制カウンタ: {drift_suppressed}")
 
     events_1p, meta_1p = _build_placement_events(recs_1p, video, "1P", fps, start_sec)
     events_2p, meta_2p = _build_placement_events(recs_2p, video, "2P", fps, start_sec)
@@ -661,15 +710,21 @@ def _process_one(video: str, start_sec: float, max_sec: float) -> dict:
         "stats_1p_corroborated": stats_1p_corr, "stats_2p_corroborated": stats_2p_corr,
         "stats_1p_all": stats_1p_all, "stats_2p_all": stats_2p_all,
         "stats_1p_steady_state": stats_1p_steady, "stats_2p_steady_state": stats_2p_steady,
+        "drift_resync_suppressed": drift_suppressed,
     }
 
 
-def _write_result_outputs(result: dict) -> None:
-    """1 動画分の CSV 出力。"""
+def _write_result_outputs(result: dict, output_suffix: str = "") -> None:
+    """1 動画分の CSV 出力。
+
+    output_suffix: 2026-07-25 ガードON計測用に追加。既定 "" = 従来通りの
+    ファイル名 (bit-identical)。非空を渡すと従来出力 (events_c34.csv 等) を
+    上書きせず区別できる (例: "_guardon" → events_c34_guardon.csv)。
+    """
     video = result["video"]
     _write_events_csv(
         result["events_1p"] + result["events_2p"],
-        OUTPUT_DIR / f"events_{video}.csv",
+        OUTPUT_DIR / f"events_{video}{output_suffix}.csv",
     )
 
 
@@ -687,6 +742,7 @@ def _build_summary(results: list[dict]) -> dict:
             "stats_2p_all_candidates": result["stats_2p_all"],
             "stats_1p_steady_state": result["stats_1p_steady_state"],
             "stats_2p_steady_state": result["stats_2p_steady_state"],
+            "drift_resync_suppressed": result.get("drift_resync_suppressed", {}),
         }
     return summary
 
@@ -727,6 +783,29 @@ def _format_summary_text(results: list[dict]) -> str:
 def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--smoke", action="store_true", help="短窓のみ処理する動作確認モード")
+    ap.add_argument(
+        "--only-c34", dest="only_c34", action="store_true", default=False,
+        help="既定False(c34+video_30両方処理)。指定時は c34 窓のみ処理する。",
+    )
+    # DriftDetector再同期ループ暴走ガード (commit c5bb50e) 効果測定用
+    # (2026-07-25)。既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-drift-match-start-guard", dest="enable_drift_resync_match_start_guard",
+        action="store_true", default=False,
+        help="既定False。RecognitionPipeline の "
+             "enable_drift_resync_match_start_guard を有効化する。",
+    )
+    ap.add_argument(
+        "--enable-drift-hsv-gate", dest="enable_drift_resync_hsv_gate",
+        action="store_true", default=False,
+        help="既定False。RecognitionPipeline の "
+             "enable_drift_resync_hsv_gate を有効化する。",
+    )
+    ap.add_argument(
+        "--output-suffix", dest="output_suffix", type=str, default="",
+        help="既定\"\"(従来通り)。非空を渡すと出力ファイル名に付与し、"
+             "従来出力 (events_c34.csv/summary.json 等) を上書きしない。",
+    )
     return ap.parse_args()
 
 
@@ -740,18 +819,24 @@ def main() -> None:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34)
-    result_v30 = _process_one(VIDEO_30, V30_START_SEC, max_sec_v30)
-    results = [result_c34, result_v30]
+    guard_kwargs = {
+        "enable_drift_resync_match_start_guard": args.enable_drift_resync_match_start_guard,
+        "enable_drift_resync_hsv_gate": args.enable_drift_resync_hsv_gate,
+    }
+    result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
+    results = [result_c34]
+    if not args.only_c34:
+        result_v30 = _process_one(VIDEO_30, V30_START_SEC, max_sec_v30, **guard_kwargs)
+        results.append(result_v30)
 
     for result in results:
-        _write_result_outputs(result)
+        _write_result_outputs(result, output_suffix=args.output_suffix)
 
     summary = _build_summary(results)
-    _write_json(summary, OUTPUT_DIR / "summary.json")
+    _write_json(summary, OUTPUT_DIR / f"summary{args.output_suffix}.json")
 
     text = _format_summary_text(results)
-    (OUTPUT_DIR / "summary.txt").write_text(text, encoding="utf-8")
+    (OUTPUT_DIR / f"summary{args.output_suffix}.txt").write_text(text, encoding="utf-8")
     _print_progress(f"[DONE] 出力先: {OUTPUT_DIR}")
     print(text)
 
