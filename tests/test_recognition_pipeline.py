@@ -3803,3 +3803,194 @@ def test_drift_resync_guards_are_independent_flags() -> None:
         "ガード2 OFF なので hsv_gate カウンタは増えないべき"
     )
 
+
+# ============================
+# 前試合盤面残骸リーク修正・追修 (2026-07-25)
+#
+# force_in_match=True (raw_active 常時 True) 構成では
+# BoardStateMachine.update() の is_match_active=False 分岐 (MENU 強制) が
+# 一度も発火しないため、score リセット境界検知から
+# BoardStateMachine.clear_match_start_residue() を直接呼び出す経路を追加した。
+# ============================
+
+
+class _FakeScoreTrackerSeq:
+    """ScoreTracker 互換スタブ: update() 呼び出しごとに事前指定の score を返す。"""
+
+    def __init__(self, scores: list[int]) -> None:
+        self._scores = scores
+        self._idx = 0
+        self._last_score: int | None = None
+
+    @property
+    def last_score(self) -> int | None:
+        return self._last_score
+
+    def update(self, frame):  # noqa: ANN001, ANN201
+        from src.score_ocr import ScoreDelta
+        cur = self._scores[min(self._idx, len(self._scores) - 1)]
+        prev = self._last_score
+        self._idx += 1
+        self._last_score = cur
+        delta = (cur - prev) if prev is not None else 0
+        return ScoreDelta(side="1P", prev_score=prev, cur_score=cur, delta=delta)
+
+    def reset(self) -> None:
+        self._last_score = None
+
+
+def _make_pipe_for_match_start_full_clear(
+    enable_match_start_full_clear: bool,
+) -> RecognitionPipeline:
+    """force_in_match=True 構成での追修テスト用 pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        force_in_match=True,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+    )
+
+
+def _seed_residue(sm) -> None:  # noqa: ANN001
+    """game0 終盤相当の残骸フィールド (confirmed_board 含む) を
+    StateContext に注入する。"""
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    sm.context.state = BoardState.STABLE
+    sm.context.confirmed_board = ghost.copy()
+    sm.context.non_stable_cnn_history = [ghost.copy(), ghost.copy()]
+    sm.context.stable_recovery_counters = {(10, 4): 2, (11, 4): 3}
+    sm.context.recovery_cells = {(10, 4), (11, 4)}
+    sm.context.next_queue = [(1, 2), (3, 4)]
+    sm.context.stable_warmup_remaining = 5
+
+
+def test_is_score_reset_boundary_detects_large_drop() -> None:
+    """スコア大幅減少 (新ゲーム開始) を検知する。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(10, 10, 6080, 32) is True
+
+
+def test_is_score_reset_boundary_detects_near_zero() -> None:
+    """両者スコアが 0 付近 (試合最初期) を検知する。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(0, 0, None, None) is True
+
+
+def test_is_score_reset_boundary_no_false_positive_on_normal_play() -> None:
+    """通常の得点増加では境界と誤検知しない。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(150, 120, 100, 100) is False
+
+
+def test_is_score_reset_boundary_none_score_returns_false() -> None:
+    """score が None (OCR 失敗) は判定不能として False (誤リセット回避)。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(None, 100, 5000, 100) is False
+
+
+def test_force_in_match_score_reset_clears_residue_when_flag_on() -> None:
+    """追修: force_in_match=True + enable_match_start_full_clear=True で、
+    score 大幅減少 (試合境界) 検知時に sm_1p/sm_2p の confirmed_board
+    (=幽霊セルの実体) + 残骸 5 field がクリアされる
+    (= MENU 分岐が発火しない構成でも残骸リークを防げる)。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    _seed_residue(pipe._sm_1p)
+    _seed_residue(pipe._sm_2p)
+
+    pipe.update(0, 0.0, _dummy_frame())  # prev score cache = 6080 (境界未検知)
+    assert pipe._sm_1p.context.confirmed_board is not None, (
+        "1 frame目 (境界未検知) では confirmed_board は残っているべき"
+    )
+    pipe.update(1, 0.033, _dummy_frame())  # 6080→10 の大幅減少 = 境界検知
+
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        ctx = sm.context
+        assert ctx.state == BoardState.MENU
+        assert ctx.confirmed_board is None, (
+            "境界検知後は幽霊セルの実体である confirmed_board も None に"
+            "クリアされるべき"
+        )
+        assert ctx.non_stable_cnn_history == []
+        assert ctx.stable_recovery_counters == {}
+        assert ctx.recovery_cells == set()
+        assert ctx.next_queue == []
+        assert ctx.stable_warmup_remaining == 0
+
+
+def test_force_in_match_score_reset_keeps_residue_when_flag_off() -> None:
+    """backwards compat: enable_match_start_full_clear=False (default) では
+    score 大幅減少を検知しても confirmed_board/残骸 5 field はクリアされない。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=False)
+    assert not pipe._enable_match_start_full_clear
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    _seed_residue(pipe._sm_1p)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    ctx = pipe._sm_1p.context
+    assert ctx.confirmed_board is not None
+    assert ctx.non_stable_cnn_history != []
+    assert ctx.stable_recovery_counters != {}
+    assert ctx.recovery_cells != set()
+    assert ctx.next_queue != []
+    assert ctx.stable_warmup_remaining != 0
+
+
+def test_force_in_match_score_reset_clears_chain_estimate_cache() -> None:
+    """追修 (実測): sm 側 5 field だけでは CHAIN 中の estimated_board 表示
+    (_chain_estimate_last_board_Xp の stale_hold キャッシュ) に前試合の
+    幽霊盤面が残ることが判明 (2P 側 v6 レンダ実測)。self.reset() 経由の
+    包括リセットで _active_chain_2p / _chain_estimate_last_board_2p も
+    クリアされることを確認する。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    from src.chain_detector import ChainEvent
+    pipe._active_chain_2p = ChainEvent(
+        trigger_sec=5.0, end_sec=999.0, before_board=ghost.copy(),
+        chain_count=1, total_erased=0, total_score=0,
+        base_score=0, all_clear_bonus_applied=0, ojama_sent=0,
+        leftover_score=0, is_all_clear=False,
+    )
+    pipe._chain_until_2p = 999.0
+    pipe._chain_estimate_last_board_2p = ghost.copy()
+    pipe._chain_estimate_stale_since_2p = 5.0
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())  # 6080→10 = 境界検知 → self.reset()
+
+    assert pipe._active_chain_2p is None
+    assert pipe._chain_until_2p == 0.0
+    assert pipe._chain_estimate_last_board_2p is None
+    assert pipe._chain_estimate_stale_since_2p is None
+
+
+def test_force_in_match_score_reset_edge_trigger_no_repeat_fire() -> None:
+    """追修: 「両者スコアほぼ0」は試合開始直後の数秒間継続して真になりうる
+    ため、境界条件が継続している間は 2 回目以降 self.reset() を再発火しない
+    (edge-trigger ラッチ)。序盤の tsumo 認識進行への継続妨害を防ぐ。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    # 6080→10→10→10→10 (境界成立が数フレーム継続する状況を模擬)
+    scores = [6080, 10, 10, 10, 10]
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq(scores)
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(scores)
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(len(scores)):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 1, (
+        "境界条件が継続する間 (両者スコア<=20 が連続) は 1 回のみ発火し、"
+        "毎フレーム re-fire してはならない"
+    )
+

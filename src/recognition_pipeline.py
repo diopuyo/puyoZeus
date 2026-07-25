@@ -97,6 +97,40 @@ CHAIN_EXIT_NEXT_WARMUP_SEC: float = 0.5
 # warmup 連動: フラグ ON 時は enable_chain_exit_warmup を内部で自動有効化し、
 #     凍結時間は CHAIN_EXIT_NEXT_WARMUP_SEC を使用 (CHAIN_EXIT_WARMUP_SEC より長い)。
 
+# 前試合盤面残骸リーク修正・追修 (2026-07-25): force_in_match=True 構成では
+# raw_active が常時 True になり、BoardStateMachine.update() の
+# is_match_active=False 分岐 (MENU 強制、5 field クリアの発火点) が一度も
+# 走らない。この構成での実際の試合境界は score リセット (新ゲーム開始で
+# score が大幅減少 / 両者ほぼ0) でのみ検知できるため、その専用しきい値を
+# ここで定義する (enable_match_start_full_clear=True 時のみ使用)。
+# SCORE_RESET_THRESHOLD (=500) は ojama_accounting.py の既存定数を流用し重複させない。
+from src.ojama_accounting import SCORE_RESET_THRESHOLD  # noqa: E402
+# 両者スコアがこれ以下なら「0付近」とみなす (OCR ノイズ許容)。
+# scripts/visualize_advantage_overlay.py の SCORE_NEAR_ZERO_THRESHOLD と同値。
+MATCH_START_SCORE_NEAR_ZERO_THRESHOLD: int = 20
+
+
+def _is_score_reset_boundary(
+    score1: int | None, score2: int | None,
+    prev1: int | None, prev2: int | None,
+) -> bool:
+    """スコア推移から試合境界 (新ゲーム開始/全消しリセット) を検知する (純関数)。
+
+    scripts/visualize_advantage_overlay.py の `_detect_score_reset` と同一
+    ロジック (= 表示層の境界検知と内部 state clear の判定を一致させる)。
+    score が None (OCR 失敗) の場合は判定不能として False (誤リセット回避)。
+    """
+    if score1 is None or score2 is None:
+        return False
+    if prev1 is not None and prev1 - score1 >= SCORE_RESET_THRESHOLD:
+        return True
+    if prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD:
+        return True
+    return (
+        score1 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
+        and score2 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
+    )
+
 from pathlib import Path
 
 from src.background_fingerprint import (
@@ -1337,6 +1371,14 @@ class RecognitionPipeline:
         self._enable_match_start_full_clear: bool = bool(
             enable_match_start_full_clear
         )
+        # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
+        # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
+        # 時のみ参照)。
+        self._prev_score_for_reset_1p: int | None = None
+        self._prev_score_for_reset_2p: int | None = None
+        # 追修: score リセット境界の edge-trigger ラッチ (継続 near-zero 期間中の
+        # 連続 self.reset() 発火を防ぐ。境界条件が一旦 False に戻るまで再発火しない)。
+        self._match_start_boundary_latched: bool = False
         # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
         # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
         self._enable_drift_resync_match_start_guard: bool = bool(
@@ -2243,6 +2285,10 @@ class RecognitionPipeline:
         # BoardStateMachine.detectors から GravitySettleDetector を探してリセットする。
         if self._enable_gravity_settle_state:
             self._reset_gravity_settle_detectors()
+        # 追修 (2026-07-25): score リセット境界検知用キャッシュもリセット。
+        self._prev_score_for_reset_1p = None
+        self._prev_score_for_reset_2p = None
+        self._match_start_boundary_latched = False
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -2699,6 +2745,41 @@ class RecognitionPipeline:
         # 4. score 差分
         score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
         score_d_2p = self._update_score_tracker(self._score_tracker_2p, frame)
+
+        # 追修 (2026-07-25): force_in_match=True 構成では is_match_active=False
+        # 分岐 (MENU 強制、confirmed_board 等クリアの発火点) が一度も走らない
+        # ため、score リセット境界 (新ゲーム開始/全消し) をここで直接検知して
+        # pipeline 全体を明示的にリセットする。sm_1p/sm_2p の confirmed_board
+        # だけでなく、_active_chain_Xp / _chain_estimate_last_board_Xp
+        # (CHAIN 中の estimated_board 表示に使われる stale_hold キャッシュ) 等
+        # 試合単位の全キャッシュに前試合の値が残るため (2026-07-25 実測:
+        # sm 側 5 field のみのクリアでは 2P 側の推定盤面表示に幽霊セルが残存)、
+        # self.reset() (既存の包括的試合切替 API) をそのまま流用する。
+        # edge-trigger ラッチ: 「両者スコアほぼ0」は真の試合開始直後の数秒間
+        # 継続して真になりうるため、境界条件が一旦 False に戻るまでは
+        # 毎フレーム re-fire しないようにする (連続 reset() で序盤の tsumo
+        # 認識進行を妨げないため)。
+        # enable_match_start_full_clear=False (default) では無効 (backwards compat)。
+        if self._enable_match_start_full_clear:
+            cur_score_1p = (
+                self._score_tracker_1p.last_score
+                if self._score_tracker_1p is not None else None
+            )
+            cur_score_2p = (
+                self._score_tracker_2p.last_score
+                if self._score_tracker_2p is not None else None
+            )
+            boundary_now = _is_score_reset_boundary(
+                cur_score_1p, cur_score_2p,
+                self._prev_score_for_reset_1p, self._prev_score_for_reset_2p,
+            )
+            if boundary_now and not self._match_start_boundary_latched:
+                self.reset()
+                self._match_start_boundary_latched = True
+            elif not boundary_now:
+                self._match_start_boundary_latched = False
+            self._prev_score_for_reset_1p = cur_score_1p
+            self._prev_score_for_reset_2p = cur_score_2p
 
         # 4a. 機能B: score 急増 CHAIN 早期発火 (enable_chain_score_early_fire=True 時のみ)。
         # VideoChainTracker の puyo 減少検知を待たずに、自 side score_delta が
