@@ -14,6 +14,7 @@ from src.board_state_machine import (
     DetectorSignals,
     NON_STABLE_STATES,
     NullDetector,
+    RECOVERY_COUNTER_CARRYOVER_MAX_SEC,
     STABLE_RECOVERY_MIN_FRAMES,
     StateContext,
     StateTransitionDetector,
@@ -694,6 +695,8 @@ def test_stable_resume_gate_disabled_via_constructor() -> None:
 
 def _make_recovery_sm(
     min_frames: int = 3, *, enable_column_partial_support: bool = False,
+    enable_recovery_counter_carryover: bool = False,
+    recovery_counter_carryover_max_sec: float = RECOVERY_COUNTER_CARRYOVER_MAX_SEC,
 ) -> BoardStateMachine:
     """復旧ゲート有効 state machine を生成するヘルパー。
     テスト用に min_frames を小さく設定できる。
@@ -701,11 +704,16 @@ def _make_recovery_sm(
     Args:
         min_frames: 復旧ゲート発火に必要な連続フレーム数。
         enable_column_partial_support: 列ゲート緩和 (2026-07-25) を有効化するか。
+        enable_recovery_counter_carryover: 復旧カウンタ carryover (2026-07-26)
+            を有効化するか。
+        recovery_counter_carryover_max_sec: carryover の非 STABLE 滞在上限秒数。
     """
     return BoardStateMachine(
         enable_stable_recovery_gate=True,
         recovery_min_frames=min_frames,
         enable_column_partial_support=enable_column_partial_support,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        recovery_counter_carryover_max_sec=recovery_counter_carryover_max_sec,
     )
 
 
@@ -917,6 +925,103 @@ def test_recovery_gate_resets_on_non_stable_transition() -> None:
     sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
 
     # カウンタと recovery_cells がクリアされている
+    assert sm.context.stable_recovery_counters == {}
+    assert sm.context.recovery_cells == set()
+
+
+# ============================
+# 復旧カウンタ carryover (enable_recovery_counter_carryover, 2026-07-26)
+# ============================
+
+
+def test_recovery_counter_carryover_off_bit_identical() -> None:
+    """carryover OFF (明示指定) は従来通り STABLE→NON-STABLE で即クリア.
+
+    default False と bit-identical であることの回帰防止テスト
+    (test_recovery_gate_resets_on_non_stable_transition と同一シナリオ)。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_recovery_counter_carryover=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
+
+    # OFF: 即座にクリアされる (従来挙動、bit-identical)
+    assert sm.context.stable_recovery_counters == {}
+    assert sm.context.recovery_cells == set()
+
+
+def test_recovery_counter_carryover_on_short_non_stable_preserves_counter() -> None:
+    """carryover ON + 短時間 NON-STABLE 遷移: カウンタが引き継がれる.
+
+    STABLE→CHAIN→STABLE を短時間 (上限秒数未満) で往復した場合、
+    stable_recovery_counters がクリアされず STABLE 復帰後も維持される。
+    """
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n, enable_recovery_counter_carryover=True,
+        recovery_counter_carryover_max_sec=2.0,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # frame0: STABLE 中に1フレーム蓄積 (counter=1、まだ未発火)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # frame1: 短時間 NON-STABLE (CHAIN) へ強制遷移 (経過 0.05s < 2.0s)
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, _empty_board(), _empty_board()))
+    assert sm.context.state == BoardState.CHAIN
+    # carryover: クリアされず維持されている
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # frame2: すぐに STABLE へ復帰 (経過 0.10s、依然 2.0s 未満)
+    sm._detectors.append(_ForceState(BoardState.STABLE, fire_at_frame=2))
+    sm.update(2, _stable_signal_with_hsv(0.10, _empty_board(), _empty_board()))
+    assert sm.context.state == BoardState.STABLE
+    # carryover: NON-STABLE 復帰後もカウンタが 0 に戻っていない
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+
+def test_recovery_counter_carryover_on_long_non_stable_clears_counter() -> None:
+    """carryover ON + 長時間 NON-STABLE 滞在: 上限秒数超過でクリアされる.
+
+    連鎖等で NON-STABLE が長引く場合は盤面が実際に変化している可能性が
+    高いため、上限秒数 (recovery_counter_carryover_max_sec) を超えたら
+    安全側にクリアする。
+    """
+    n = 3
+    max_sec = 0.2
+    sm = _make_recovery_sm(
+        min_frames=n, enable_recovery_counter_carryover=True,
+        recovery_counter_carryover_max_sec=max_sec,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # CHAIN へ遷移 (entry_time=0.05、まだ上限超過前)
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, _empty_board(), _empty_board()))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # CHAIN に長時間滞在 (detector 発火なし = 同一 state 継続)。
+    # time_sec が entry(0.05) + max_sec(0.2) を超えるとクリアされる。
+    sm.update(2, _stable_signal_with_hsv(0.40, _empty_board(), _empty_board()))
     assert sm.context.stable_recovery_counters == {}
     assert sm.context.recovery_cells == set()
 

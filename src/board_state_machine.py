@@ -104,6 +104,16 @@ RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({10})
 # default False (enable_column_partial_support) では未使用 (backwards compat)。
 RECOVERY_COLUMN_SUPPORT_MIN_FRAMES: int = 2
 
+# 復旧カウンタ carryover (enable_recovery_counter_carryover, 2026-07-26):
+# STABLE → NON-STABLE 遷移時に stable_recovery_counters/recovery_cells を
+# 即クリアせず、非 STABLE 滞在がこの秒数以内なら STABLE 復帰後もカウンタを
+# 引き継ぐ。連鎖等で長時間 NON-STABLE のままだと盤面が実際に変化して
+# いるため、この秒数を超えたら安全側にクリアする
+# (実例: 8f 到達直前の counter=4-5 が NON-STABLE 遷移で毎回消え未反映化する
+# 問題への対処、 diag `recovery_cell_timeseries_2026-07-25`)。
+# default False (enable_recovery_counter_carryover) では未使用 (backwards compat)。
+RECOVERY_COUNTER_CARRYOVER_MAX_SEC: float = 2.0
+
 
 class BoardState(Enum):
     """1 プレイヤー側盤面の状態。"""
@@ -189,6 +199,10 @@ class StateContext:
     recovery_cells: "set[tuple[int,int]]" = field(
         default_factory=set,
     )
+    # 復旧カウンタ carryover (2026-07-26): 直近の STABLE→NON-STABLE 遷移の
+    # time_sec。NON-STABLE 滞在中のみ値を持ち、STABLE 復帰時や carryover
+    # 機能無効時は None。 backwards compat: default None で既存動作と完全同一。
+    non_stable_entry_time_sec: float | None = None
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -492,6 +506,10 @@ class BoardStateMachine:
         merge_use_majority_value: bool = False,
         enable_column_partial_support: bool = False,
         enable_match_start_full_clear: bool = False,
+        enable_recovery_counter_carryover: bool = False,
+        recovery_counter_carryover_max_sec: float = (
+            RECOVERY_COUNTER_CARRYOVER_MAX_SEC
+        ),
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -534,6 +552,17 @@ class BoardStateMachine:
         # True でこれら 5 field も試合境界で完全クリアする。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         self._enable_match_start_full_clear = bool(enable_match_start_full_clear)
+        # 復旧カウンタ carryover (enable_recovery_counter_carryover, 2026-07-26):
+        # True で STABLE→NON-STABLE 遷移時の stable_recovery_counters /
+        # recovery_cells 即クリアを保留し、非 STABLE 滞在が
+        # recovery_counter_carryover_max_sec 以内なら STABLE 復帰後も引き継ぐ。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_recovery_counter_carryover = bool(
+            enable_recovery_counter_carryover
+        )
+        self._recovery_counter_carryover_max_sec = max(
+            0.0, float(recovery_counter_carryover_max_sec)
+        )
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -688,6 +717,10 @@ class BoardStateMachine:
             # _update_within_current_state が confirmed を書き換えるのを防ぐ。
             if self._enable_warmup_guard:
                 self._ctx.stable_warmup_remaining = self._warmup_frames
+            # 復旧カウンタ carryover: STABLE 復帰完了時点で滞在計測をリセット。
+            if self._enable_recovery_counter_carryover:
+                self._ctx.non_stable_entry_time_sec = None
+        old_state = self._ctx.state
         self._ctx.state = new_state
         # F: state 切替で NON-STABLE history をリセット
         self._ctx.non_stable_cnn_history = []
@@ -696,16 +729,63 @@ class BoardStateMachine:
         if new_state != BoardState.OJAMA_FALL:
             self._ctx.ojama_pending = 0
         # 設計C: STABLE → NON-STABLE 遷移時に復旧カウンタ・復旧済みセル集合をクリア。
-        # 次の STABLE 期間は新規状態から積み上げ直す。
+        # 次の STABLE 期間は新規状態から積み上げ直す (carryover 有効時は例外)。
         if new_state in NON_STABLE_STATES:
+            self._handle_recovery_clear_on_non_stable_entry(
+                old_state, signals.time_sec,
+            )
+
+    def _handle_recovery_clear_on_non_stable_entry(
+        self, old_state: BoardState, time_sec: float,
+    ) -> None:
+        """STABLE(等) → NON-STABLE 遷移時の復旧カウンタ処理.
+
+        enable_recovery_counter_carryover=False (default): 即時クリア
+        (従来挙動、 backwards compat)。
+        True: NON-STABLE 同士の遷移 (例: TSUMO_FALL→CHAIN) では滞在計測を
+        継続し (entry_time を上書きしない)、 STABLE から初めて非 STABLE に
+        入った瞬間のみ entry_time を記録する。 いずれの場合も
+        recovery_counter_carryover_max_sec 超過分は即クリアする。
+
+        Args:
+            old_state: 遷移前の state (呼び出し時点で self._ctx.state は
+                既に new_state に更新済みのため、判定用に別途受け取る)。
+            time_sec: 現フレームの時刻。
+        """
+        if not self._enable_recovery_counter_carryover:
             self._ctx.stable_recovery_counters.clear()
             self._ctx.recovery_cells.clear()
+            return
+        if old_state not in NON_STABLE_STATES:
+            self._ctx.non_stable_entry_time_sec = time_sec
+        self._maybe_clear_recovery_on_timeout(time_sec)
+
+    def _maybe_clear_recovery_on_timeout(self, time_sec: float) -> None:
+        """carryover 有効時、非 STABLE 滞在が上限秒数を超えたらクリアする.
+
+        連鎖等で長時間 NON-STABLE のままだと盤面が実際に変化している
+        可能性が高く、持ち越した復旧カウンタの証拠は信頼できないため
+        安全側にクリアする (recovery_counter_carryover_max_sec)。
+        """
+        entry = self._ctx.non_stable_entry_time_sec
+        if entry is None:
+            return
+        if time_sec - entry > self._recovery_counter_carryover_max_sec:
+            self._ctx.stable_recovery_counters.clear()
+            self._ctx.recovery_cells.clear()
+            self._ctx.non_stable_entry_time_sec = None
 
     def _update_within_current_state(
         self, signals: DetectorSignals,
     ) -> None:
         """現 state を維持したまま内部メトリクスのみ更新。"""
         if self._ctx.state in NON_STABLE_STATES:
+            # 復旧カウンタ carryover: NON-STABLE 滞在が長引く場合、上限秒数
+            # 超過分をこの idle フレームでも検知してクリアする
+            # (_apply_transition は state 遷移が起きた frame でしか動かない
+            # ため、同一 state に留まり続けるケースはここで拾う必要がある)。
+            if self._enable_recovery_counter_carryover:
+                self._maybe_clear_recovery_on_timeout(signals.time_sec)
             # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 中は
             # non_stable_cnn_history に蓄積しない (連鎖後エフェクト残光・
             # 落下中ぷよの混入による F ガード汚染を防ぐ)。

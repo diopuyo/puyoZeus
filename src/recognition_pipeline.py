@@ -1054,6 +1054,15 @@ class RecognitionPipeline:
         # (backwards compat)。enable_match_start_full_clear=False の場合は
         # そもそも本ブロックが無効なので本フラグは参照されない。
         enable_score_reset_strict: bool = True,
+        # 復旧カウンタ carryover (feat/recognition-postchain-fix-2026-07-23,
+        # #51, 2026-07-26, A/B 計測用): True で STABLE→NON-STABLE 遷移時の
+        # stable_recovery_counters/recovery_cells 即クリアを保留し、非
+        # STABLE 滞在が RECOVERY_COUNTER_CARRYOVER_MAX_SEC (既定 2.0秒) 以内
+        # なら STABLE 復帰後も引き継ぐ (8f 到達直前の未反映化への対処、
+        # diag `recovery_cell_timeseries_2026-07-25`)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_recovery_counter_carryover: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1413,6 +1422,11 @@ class RecognitionPipeline:
         self._enable_match_start_full_clear: bool = bool(
             enable_match_start_full_clear
         )
+        # 復旧カウンタ carryover (2026-07-26):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_recovery_counter_carryover: bool = bool(
+            enable_recovery_counter_carryover
+        )
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1456,6 +1470,7 @@ class RecognitionPipeline:
             merge_use_majority_value=self._merge_use_majority_value,
             enable_column_partial_support=self._enable_column_partial_support,
             enable_match_start_full_clear=self._enable_match_start_full_clear,
+            enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1471,6 +1486,7 @@ class RecognitionPipeline:
             merge_use_majority_value=self._merge_use_majority_value,
             enable_column_partial_support=self._enable_column_partial_support,
             enable_match_start_full_clear=self._enable_match_start_full_clear,
+            enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1782,6 +1798,10 @@ class RecognitionPipeline:
         # が常に明示値を渡すため実運用では未使用だが、直接呼び出し時も
         # 採用済み挙動を既定にする (__init__ の既定値と同期)。
         enable_match_start_full_clear: bool = True,
+        # 復旧カウンタ carryover (2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_recovery_counter_carryover: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1845,6 +1865,7 @@ class RecognitionPipeline:
             merge_use_majority_value=merge_use_majority_value,
             enable_column_partial_support=enable_column_partial_support,
             enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -1990,6 +2011,10 @@ class RecognitionPipeline:
         # バグの修正であるため既定 True。False で旧 (片側 OR・デバウンス無し)
         # 挙動に戻せる (backwards compat)。
         enable_score_reset_strict: bool = True,
+        # 復旧カウンタ carryover (#51, 2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_recovery_counter_carryover: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2170,6 +2195,7 @@ class RecognitionPipeline:
             enable_column_partial_support=enable_column_partial_support,
             enable_match_start_full_clear=enable_match_start_full_clear,
             enable_score_reset_strict=enable_score_reset_strict,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         )
 
     # ------------------------------------------------------------------
