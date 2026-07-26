@@ -40,6 +40,12 @@ DEFAULT_NON_STABLE_HISTORY_SIZE: int = 5
 # N=5 中 3 frame 以上で同色観測 = 信頼。 それ以下は瞬間的誤認とみなし baseline 維持。
 DEFAULT_EMPTY_TO_COLOR_MIN_VOTES: int = 3
 
+# 初回STABLE確定の多数決ガード (enable_initial_confirm_vote, 2026-07-27):
+# baseline is None (初回確定) 時、直前 NON-STABLE 滞在中に蓄積した
+# non_stable_cnn_history の何 frame 以上一致すれば採用するか。
+# EMPTY_TO_COLOR と同じ N=5/votes=3 の実績値を踏襲する。
+DEFAULT_INITIAL_CONFIRM_MIN_VOTES: int = 3
+
 # B1 (M1 warmup guard): STABLE 判定直後に confirmed 更新を N frame スキップ。
 # NON-STABLE → STABLE 遷移直後は CNN 出力がまだ不安定 (= エフェクト残光、
 # 背景誤認の溶け残り) であり、この期間に _update_within_current_state 経由で
@@ -323,9 +329,10 @@ def _boards_equal(a: Board | None, b: Board | None) -> bool:
 
 def _vote_majority_board(
     history: list[Board], min_votes: int,
+    *, fallback: Board | None = None,
 ) -> Board:
     """history の各 cell について多数決を取り、 min_votes 以上同色なら採用、
-    そうでなければ EMPTY を入れた Board を返す.
+    そうでなければ EMPTY (または fallback 値) を入れた Board を返す.
 
     F (cycle 56): STABLE 復帰時の「EMPTY → 色 遷移ガード」 用。
     NON-STABLE 中の cnn_board 履歴から「安定して観測されている色」 のみを抽出。
@@ -333,15 +340,21 @@ def _vote_majority_board(
     Args:
         history: NON-STABLE 中の cnn_board 履歴 (= 最大 N frame)
         min_votes: cell を採用するための最低観測 frame 数
+        fallback: 観測不足 cell (min_votes 未達) に採用する代替 board。
+            None (default) なら従来通り EMPTY のまま (backwards compat、
+            既存呼び出し元である F ガードは bit-identical)。
+            初回STABLE確定の多数決ガード (enable_initial_confirm_vote,
+            2026-07-27) では fallback=new_cnn を渡し、観測不足セルを
+            問答無用で EMPTY 化する新規バグ (色→空誤凍結の増設) を防ぐ。
 
     Returns:
-        多数決 board (= 観測不足 cell は EMPTY)
+        多数決 board (= 観測不足 cell は EMPTY または fallback 値)
     """
     from src.board import COLOR_EMPTY
 
     result = Board()
     if not history:
-        return result
+        return fallback.copy() if fallback is not None else result
     for r in range(BOARD_ROWS):
         for c in range(BOARD_COLS):
             counter: dict[int, int] = {}
@@ -353,8 +366,42 @@ def _vote_majority_board(
             max_v, max_n = max(counter.items(), key=lambda x: x[1])
             if max_n >= min_votes and max_v != COLOR_EMPTY:
                 result.set(r, c, max_v)
-            # else: EMPTY (= Board default、 観測不足)
+            elif fallback is not None:
+                result.set(r, c, fallback.get(r, c))
+            # else: EMPTY (= Board default、 観測不足、fallback 未指定)
     return result
+
+
+def _build_initial_confirmed_board(
+    new_cnn: Board,
+    initial_confirm_history: list[Board] | None,
+    initial_confirm_min_votes: int,
+) -> Board:
+    """初回STABLE確定 (baseline is None) の盤面を組み立てる (2026-07-27).
+
+    _merge_diff_only の 50 行規約超過を避けるため分離した専用ヘルパー。
+    history が十分にあれば多数決 (fallback=new_cnn で観測不足セルは
+    単発 CNN 値を維持、EMPTY 新規誤化を防ぐ)、 history が無ければ
+    従来通り new_cnn そのまま (backwards compat)。
+
+    Args:
+        new_cnn: 新たに観測された CNN 盤面 (単発フレーム)。
+        initial_confirm_history: 直前 NON-STABLE 滞在中に蓄積した
+            cnn_board 履歴。 None または空リストなら従来挙動。
+        initial_confirm_min_votes: 多数決の最低観測 frame 数。
+
+    Returns:
+        初回 confirmed_board (浮きぷよ ban 適用済み)。
+    """
+    if initial_confirm_history:
+        new = _vote_majority_board(
+            initial_confirm_history, initial_confirm_min_votes,
+            fallback=new_cnn,
+        )
+    else:
+        new = new_cnn.copy()
+    _apply_gravity_filter(new)
+    return new
 
 
 def _merge_diff_only(
@@ -363,6 +410,8 @@ def _merge_diff_only(
     empty_to_color_guard: Board | None = None,
     enable_gravity_filter_support: bool = False,
     merge_use_majority_value: bool = False,
+    initial_confirm_history: list[Board] | None = None,
+    initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -394,6 +443,12 @@ def _merge_diff_only(
             多数決値 empty_to_color_guard (guard_v) を書き込む。
             退出時の単一フレーム CNN ちらつきによる却下を解消する。
             default False = 従来挙動完全維持 (backwards compat)。
+        initial_confirm_history: 初回STABLE確定の多数決ガード
+            (enable_initial_confirm_vote, 2026-07-27)。 baseline is None
+            (初回確定) 時、直前 NON-STABLE 滞在中の cnn_board 履歴。
+            None または空リストなら従来挙動 (単発 new_cnn 採用、
+            backwards compat)。
+        initial_confirm_min_votes: 上記多数決の最低観測 frame 数。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -401,10 +456,9 @@ def _merge_diff_only(
     from src.board import COLOR_EMPTY
 
     if baseline is None:
-        new = new_cnn.copy()
-        # 浮きぷよ ban (A): baseline がなくても列ごとに重力整合
-        _apply_gravity_filter(new)
-        return new
+        return _build_initial_confirmed_board(
+            new_cnn, initial_confirm_history, initial_confirm_min_votes,
+        )
 
     from src.board import COLOR_UNKNOWN
 
@@ -534,6 +588,8 @@ class BoardStateMachine:
         enable_cnn_flicker_hsv_fallback: bool = False,
         cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
         cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
+        enable_initial_confirm_vote: bool = False,
+        initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -596,6 +652,13 @@ class BoardStateMachine:
         )
         self._cnn_flicker_window_frames = max(1, int(cnn_flicker_window_frames))
         self._cnn_flicker_min_changes = max(1, int(cnn_flicker_min_changes))
+        # 初回STABLE確定の多数決ガード (enable_initial_confirm_vote, 2026-07-27):
+        # 色→空凍結の修正3点セット③。 単一フレームCNNでなく、直前
+        # NON-STABLE滞在中に蓄積した non_stable_cnn_history の多数決で
+        # 初回confirmedを構成する (fallback=new_cnn で観測不足セルはEMPTY化しない)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_initial_confirm_vote = bool(enable_initial_confirm_vote)
+        self._initial_confirm_min_votes = max(1, int(initial_confirm_min_votes))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -737,11 +800,21 @@ class BoardStateMachine:
                     self._ctx.non_stable_cnn_history,
                     min_votes=self._empty_to_color_min_votes,
                 )
+            # 初回STABLE確定の多数決ガード (enable_initial_confirm_vote,
+            # 2026-07-27): baseline is None (初回確定) 時のみ使われる
+            # (baseline あり時は _merge_diff_only 側で無視される)。
+            initial_history = (
+                self._ctx.non_stable_cnn_history
+                if self._enable_initial_confirm_vote
+                else None
+            )
             self._ctx.confirmed_board = _merge_diff_only(
                 self._ctx.confirmed_board, signals.cnn_board,
                 empty_to_color_guard=empty_guard,
                 enable_gravity_filter_support=self._enable_gravity_filter_support,
                 merge_use_majority_value=self._merge_use_majority_value,
+                initial_confirm_history=initial_history,
+                initial_confirm_min_votes=self._initial_confirm_min_votes,
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
@@ -1264,6 +1337,8 @@ __all__ = [
     "_vote_majority_board",
     "DEFAULT_NON_STABLE_HISTORY_SIZE",
     "DEFAULT_EMPTY_TO_COLOR_MIN_VOTES",
+    "DEFAULT_INITIAL_CONFIRM_MIN_VOTES",
+    "_build_initial_confirmed_board",
     "STABLE_WARMUP_FRAMES",
     "STABLE_RECOVERY_MIN_FRAMES",
     "RECOVERY_COLUMN_SUPPORT_MIN_FRAMES",

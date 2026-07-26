@@ -76,6 +76,9 @@ OUTPUT_DIR: Path = PROJ_ROOT / "data" / "verify" / "write_trace"
 
 # 経路IDタグ (アーキ仕様の P1〜P13 のうち計装対象)。
 ROUTE_P1_MERGE_DIFF_ONLY: str = "P1_merge_diff_only"
+# P1盲点解消 (2026-07-27): baseline is None (初回STABLE確定) は従来
+# 無条件 return で記録対象外だった。この経路も専用タグで記録する。
+ROUTE_P1_INITIAL_CONFIRM: str = "P1_initial_confirm"
 ROUTE_P5_STABLE_RECOVERY_GATE: str = "P5_stable_recovery_gate"
 ROUTE_P2_INFER_PLACEMENT: str = "P2_infer_placement"
 ROUTE_P3_RESOLVE_AFTER_PLACEMENT: str = "P3_resolve_after_placement"
@@ -295,7 +298,27 @@ def _make_merge_diff_only_wrapper(orig, trace_ctx: _TraceCtx, recorder: WriteTra
     def wrapped(baseline, new_cnn, *args, **kwargs):
         merged = orig(baseline, new_cnn, *args, **kwargs)
         if baseline is None:
-            return merged  # 初回確定 (書き換え元なし、対象外)
+            # P1盲点解消 (2026-07-27): 初回STABLE確定 (書き換え元なし) も
+            # 専用タグで記録する。全セルでなく非EMPTYセルのみ + 盤面サマリ
+            # (肥大化回避、ユーザー指定)。
+            non_empty_cells: list[list[int]] = []
+            for r in range(BOARD_ROWS):
+                for c in range(BOARD_COLS):
+                    v = int(merged.get(r, c))
+                    if v != COLOR_EMPTY:
+                        non_empty_cells.append([r, c, COLOR_EMPTY, v])
+                        trace_ctx.claimed_cells.add((r, c))
+            history = kwargs.get("initial_confirm_history")
+            recorder.record(
+                trace_ctx, ROUTE_P1_INITIAL_CONFIRM, non_empty_cells,
+                meta={
+                    "non_empty_count": len(non_empty_cells),
+                    "initial_confirm_history_len": (
+                        len(history) if history is not None else 0
+                    ),
+                },
+            )
+            return merged  # 初回確定 (書き換え元なし)
         guard = kwargs.get("empty_to_color_guard")
         allow_puyo_to_empty = kwargs.get("allow_puyo_to_empty", True)
         cells: list[list[int]] = []
@@ -810,6 +833,8 @@ def _run_one_video(
     enable_baseline_broken_grace: bool = False,
     enable_placement_cnn_veto: bool = False,
     placement_cnn_veto_mode: str = "hold",
+    enable_initial_confirm_vote: bool = False,
+    initial_confirm_min_votes: int | None = None,
 ) -> None:
     """1 動画・1 窓分を計装付きで処理し、write_trace + クロス集計を出力する。
 
@@ -833,6 +858,10 @@ def _run_one_video(
     enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
     (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
     False/"hold" = 従来通り (bit-identical)。_capture_frames 経由で
+    RecognitionPipeline.load_default へそのまま透過する。
+    enable_initial_confirm_vote / initial_confirm_min_votes: 色→空凍結の
+    修正3点セット③ (2026-07-27) 効果測定用に追加。既定 False/None =
+    従来通り (bit-identical)。_capture_frames 経由で
     RecognitionPipeline.load_default へそのまま透過する。
     """
     out_stem = output_stem if output_stem is not None else video_stem
@@ -861,6 +890,8 @@ def _run_one_video(
             enable_placement_cnn_veto=enable_placement_cnn_veto,
             placement_cnn_veto_mode=placement_cnn_veto_mode,
             pipeline_out=pipeline_out,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
+            initial_confirm_min_votes=initial_confirm_min_votes,
         )
     print(
         f"[{time.strftime('%H:%M:%S')}] [{video_stem}] 処理完了 ({time.time() - t0:.1f}s) "
@@ -1048,6 +1079,20 @@ def _parse_args() -> argparse.Namespace:
         help="既定'hold'。'cnn_color' で不一致セルに CNN 観測色 (有効 puyo 色の "
              "場合のみ) を採用する代替挙動を試す。",
     )
+    # 色→空凍結の修正3点セット③ (2026-07-27, 検証(b)用)。
+    # 既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-initial-confirm-vote", dest="enable_initial_confirm_vote",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_initial_confirm_vote を有効化する "
+             "(初回STABLE確定を直前NON-STABLE滞在中の多数決historyで構成する)。",
+    )
+    ap.add_argument(
+        "--initial-confirm-min-votes", dest="initial_confirm_min_votes",
+        type=int, default=None,
+        help="既定None(src側既定値=3に委ねる)。initial_confirm_vote の最低観測frame数。",
+    )
     return ap.parse_args()
 
 
@@ -1072,6 +1117,8 @@ def main() -> None:
         enable_baseline_broken_grace=args.enable_baseline_broken_grace,
         enable_placement_cnn_veto=args.enable_placement_cnn_veto,
         placement_cnn_veto_mode=args.placement_cnn_veto_mode,
+        enable_initial_confirm_vote=args.enable_initial_confirm_vote,
+        initial_confirm_min_votes=args.initial_confirm_min_votes,
     )
 
 

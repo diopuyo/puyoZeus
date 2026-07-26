@@ -1590,3 +1590,96 @@ def test_gravity_settle_pipeline_flag_disable_explicit_false() -> None:
             for call in mock_build.call_args_list:
                 kwargs = call[1] if len(call) > 1 else {}
                 assert kwargs.get("enable_gravity_settle_state", True) is False
+
+
+# ============================
+# 色→空凍結の修正3点セット③: 初回STABLE確定の多数決ガード
+# (enable_initial_confirm_vote, 2026-07-27)
+# ============================
+
+
+def _run_initial_confirm_e2e(
+    *, enable_initial_confirm_vote: bool,
+    history_board: Board, trigger_board: Board,
+    n_history_frames: int = 4,
+) -> BoardStateMachine:
+    """MENU→TSUMO_FALL (history 蓄積) →STABLE (baseline is None) の e2e helper.
+
+    TSUMO_FALL 滞在中の n_history_frames フレームで history_board を観測させ、
+    最終フレーム (STABLE 遷移契機) では trigger_board を観測させる。
+    """
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.TSUMO_FALL, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=n_history_frames + 1),
+        ],
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
+    )
+    sm.update(0, _signal(0.0, _empty_board()))  # MENU→TSUMO_FALL (history 対象外)
+    for i in range(1, n_history_frames + 1):
+        sm.update(i, _signal(0.05 * i, history_board.copy()))
+    sm.update(
+        n_history_frames + 1, _signal(0.05 * (n_history_frames + 1), trigger_board),
+    )
+    return sm
+
+
+def test_initial_confirm_vote_off_bit_identical_e2e() -> None:
+    """OFF (default): history と無関係に、契機フレーム (trigger_board) の
+    単発 CNN 値がそのまま初回 confirmed になる (従来挙動、bit-identical)。
+    history が正しい色 (RED) を持っていても、trigger の単発誤読 (EMPTY) が
+    そのまま採用される (= 修正前の色→空凍結バグの再現、回帰確認)。
+    """
+    history_board = _board_with_red(12, 0)  # TSUMO_FALL 中は安定して RED 観測
+    trigger_board = _empty_board()  # 契機フレームだけ単発誤読で EMPTY
+
+    sm = _run_initial_confirm_e2e(
+        enable_initial_confirm_vote=False,
+        history_board=history_board, trigger_board=trigger_board,
+    )
+    assert sm.context.state == BoardState.STABLE
+    assert sm.context.confirmed_board is not None
+    # バグ再現: OFF では history 無視、単発誤読 (EMPTY) がそのまま初回確定
+    assert sm.context.confirmed_board.get(12, 0) == 0
+
+
+def test_initial_confirm_vote_on_rejects_single_frame_misread_e2e() -> None:
+    """ON: 直前 NON-STABLE 滞在中の多数決 history が、契機フレームの
+    単発 CNN 誤読 (色→空) を弾き、安定観測されていた色を初回 confirmed に採用する。
+    """
+    history_board = _board_with_red(12, 0)  # TSUMO_FALL 中は安定して RED 観測
+    trigger_board = _empty_board()  # 契機フレームだけ単発誤読で EMPTY
+
+    sm = _run_initial_confirm_e2e(
+        enable_initial_confirm_vote=True,
+        history_board=history_board, trigger_board=trigger_board,
+    )
+    assert sm.context.state == BoardState.STABLE
+    assert sm.context.confirmed_board is not None
+    # 修正: 多数決 history (RED) が単発誤読 (EMPTY) を弾く
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_merge_diff_initial_confirm_insufficient_history_falls_back_to_cnn() -> None:
+    """ON でも history が min_votes 未達の cell は、EMPTY 強制ではなく
+    fallback=new_cnn (単発 CNN 値) を採用する (新規 EMPTY 化バグの防止、
+    _vote_majority_board の fallback 引数の契約確認)。
+    """
+    from src.board_state_machine import (
+        DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        _merge_diff_only,
+    )
+
+    # history は 1 frame のみ (min_votes=3 未達) だが RED を観測
+    history = [_board_with_red(12, 0)]
+    assert len(history) < DEFAULT_INITIAL_CONFIRM_MIN_VOTES
+    # 契機フレームの単発 CNN 値は RED (history と一致、観測不足でも正しい値)
+    new_cnn = _board_with_red(12, 0)
+
+    merged = _merge_diff_only(
+        None, new_cnn,
+        initial_confirm_history=history,
+        initial_confirm_min_votes=DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+    )
+    # 観測不足でも fallback=new_cnn により EMPTY 化されず RED が採用される
+    assert merged.get(12, 0) == COLOR_RED

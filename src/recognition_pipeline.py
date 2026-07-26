@@ -36,6 +36,7 @@ from src.probabilistic_board import ProbabilisticBoard
 from src.board_state_machine import (
     BoardState,
     BoardStateMachine,
+    DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
     NON_STABLE_STATES,
     StateContext,
@@ -1070,6 +1071,17 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_cnn_flicker_hsv_fallback: bool = False,
+        # 色→空凍結の修正3点セット③ (feat/recognition-postchain-fix-2026-07-23,
+        # 2026-07-27): 初回STABLE確定の多数決ガード。 True にすると
+        # BoardStateMachine の baseline is None (初回確定) 時、直前
+        # NON-STABLE滞在中に蓄積した non_stable_cnn_history の多数決で
+        # 初回confirmedを構成する (fallback=new_cnn で観測不足セルはEMPTY化しない)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_initial_confirm_vote: bool = False,
+        initial_confirm_min_votes: int = (
+            DEFAULT_INITIAL_CONFIRM_MIN_VOTES
+        ),
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1439,6 +1451,12 @@ class RecognitionPipeline:
         self._enable_cnn_flicker_hsv_fallback: bool = bool(
             enable_cnn_flicker_hsv_fallback
         )
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_initial_confirm_vote: bool = bool(
+            enable_initial_confirm_vote
+        )
+        self._initial_confirm_min_votes: int = int(initial_confirm_min_votes)
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1484,6 +1502,8 @@ class RecognitionPipeline:
             enable_match_start_full_clear=self._enable_match_start_full_clear,
             enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
             enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=self._enable_initial_confirm_vote,
+            initial_confirm_min_votes=self._initial_confirm_min_votes,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1501,6 +1521,8 @@ class RecognitionPipeline:
             enable_match_start_full_clear=self._enable_match_start_full_clear,
             enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
             enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=self._enable_initial_confirm_vote,
+            initial_confirm_min_votes=self._initial_confirm_min_votes,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1820,6 +1842,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_cnn_flicker_hsv_fallback: bool = False,
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_initial_confirm_vote: bool = False,
+        initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1885,6 +1911,8 @@ class RecognitionPipeline:
             enable_match_start_full_clear=enable_match_start_full_clear,
             enable_recovery_counter_carryover=enable_recovery_counter_carryover,
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
+            initial_confirm_min_votes=initial_confirm_min_votes,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2038,6 +2066,11 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_cnn_flicker_hsv_fallback: bool = False,
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_initial_confirm_vote: bool = False,
+        initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2220,6 +2253,8 @@ class RecognitionPipeline:
             enable_score_reset_strict=enable_score_reset_strict,
             enable_recovery_counter_carryover=enable_recovery_counter_carryover,
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
+            initial_confirm_min_votes=initial_confirm_min_votes,
         )
 
     # ------------------------------------------------------------------
