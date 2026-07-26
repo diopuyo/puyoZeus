@@ -3872,8 +3872,16 @@ class _FakeScoreTrackerSeq:
 
 def _make_pipe_for_match_start_full_clear(
     enable_match_start_full_clear: bool,
+    enable_score_reset_strict: bool = False,
 ) -> RecognitionPipeline:
-    """force_in_match=True 構成での追修テスト用 pipeline を構築する。"""
+    """force_in_match=True 構成での追修テスト用 pipeline を構築する。
+
+    enable_score_reset_strict: 2026-07-26 追加。既存の残骸クリア系テストは
+    「単発 1 フレーム遷移で reset() が即発火する」旧挙動を前提に書かれて
+    いるため、既定 False (= 旧 OR・デバウンス無し挙動) を維持する
+    (backwards compat)。strict モード (両側条件 + 3 フレームデバウンス)
+    自体の検証は enable_score_reset_strict=True を明示指定するテストで行う。
+    """
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=True)
     return RecognitionPipeline(
@@ -3882,6 +3890,7 @@ def _make_pipe_for_match_start_full_clear(
         stable_frame_count=2,
         force_in_match=True,
         enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
     )
 
 
@@ -4023,5 +4032,70 @@ def test_force_in_match_score_reset_edge_trigger_no_repeat_fire() -> None:
     assert reset_calls["n"] == 1, (
         "境界条件が継続する間 (両者スコア<=20 が連続) は 1 回のみ発火し、"
         "毎フレーム re-fire してはならない"
+    )
+
+
+# --- score-reset 境界誤発火修正 (2026-07-26, strict モード) ---
+# diag_v29_mid_resetlog.log で確定した「片側のみの単発 score OCR 誤読で
+# 包括 reset() が試合中に誤発火する」欠陥の回帰テスト。
+
+
+def test_score_reset_strict_ignores_one_sided_ocr_glitch() -> None:
+    """strict モード: 片側 (1P) だけが急落し続けても、もう片方 (2P) が
+    不変であれば reset() は一切発火しない (診断ログ実例の回帰テスト:
+    2P=40031 不変なのに 1P だけ 48077→0 と誤読されたケース)。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([48077, 0, 0, 0, 0])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(
+        [40031, 40031, 40031, 40031, 40031]
+    )
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(5):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 0, (
+        "片側のみの急落 (もう片方は不変) では strict モードで一切発火して"
+        "はならない"
+    )
+
+
+def test_score_reset_strict_fires_after_three_consecutive_frames() -> None:
+    """strict モード: 両者が同時に急落した状態が 3 フレーム連続で成立すれば
+    reset() が発火する (デバウンス通過後の正常発火を確認)。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10, 10])
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(4):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 1, (
+        "両側同時急落が 3 フレーム連続で成立すれば 1 回発火するべき"
+    )
+
+
+def test_score_reset_strict_ignores_single_frame_both_side_glitch() -> None:
+    """strict モード: 両者が同時に急落したように見えても単発 1 フレームで
+    直後に元の値へ復帰する (OCR 誤読の典型パターン) 場合は、3 フレーム
+    連続条件を満たさないため reset() が発火しない。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 0, 6080, 6080])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([5900, 0, 5900, 5900])
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(4):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 0, (
+        "単発 1 フレームだけの両側急落 (直後に復帰) では 3 フレーム連続に"
+        "満たないため発火してはならない"
     )
 
