@@ -114,6 +114,19 @@ RECOVERY_COLUMN_SUPPORT_MIN_FRAMES: int = 2
 # default False (enable_recovery_counter_carryover) では未使用 (backwards compat)。
 RECOVERY_COUNTER_CARRYOVER_MAX_SEC: float = 2.0
 
+# CNN 乱高下セル HSV フォールバック (enable_cnn_flicker_hsv_fallback, #51 後半,
+# 2026-07-26): 深部セルで CNN が光沢ハイライトにより判定境界に張り付き、
+# フレーム毎に出力が反転 (9↔1↔0↔4) する事象への対策。復旧ゲートは
+# 「CNN==HSV の合意」が min_frames 連続することを要求するが、CNN 自体が
+# 毎フレーム反転していると合意が一度も成立せずカウンタが毎回リセットされ、
+# セルが長時間 (実測 14 秒) 未反映のまま残る。
+# 直近 CNN_FLICKER_WINDOW_FRAMES フレームの CNN 出力の変化回数が
+# CNN_FLICKER_MIN_CHANGES 以上のセルは「乱高下中」とみなし、その間は
+# HSV 出力を合意値とみなして扱う (= HSV を信頼する fallback)。
+# default False (enable_cnn_flicker_hsv_fallback) では未使用 (backwards compat)。
+CNN_FLICKER_WINDOW_FRAMES: int = 8
+CNN_FLICKER_MIN_CHANGES: int = 3
+
 
 class BoardState(Enum):
     """1 プレイヤー側盤面の状態。"""
@@ -203,6 +216,14 @@ class StateContext:
     # time_sec。NON-STABLE 滞在中のみ値を持ち、STABLE 復帰時や carryover
     # 機能無効時は None。 backwards compat: default None で既存動作と完全同一。
     non_stable_entry_time_sec: float | None = None
+    # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26):
+    # (row, col) → 直近 CNN 出力の履歴 (最新が末尾)。
+    # enable_cnn_flicker_hsv_fallback=True の場合のみ更新される。
+    # stable_recovery_counters と同じタイミングでクリアする。
+    # backwards compat: default={} で既存動作と完全同一。
+    cnn_flicker_history: "dict[tuple[int, int], list[int]]" = field(
+        default_factory=dict,
+    )
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -510,6 +531,9 @@ class BoardStateMachine:
         recovery_counter_carryover_max_sec: float = (
             RECOVERY_COUNTER_CARRYOVER_MAX_SEC
         ),
+        enable_cnn_flicker_hsv_fallback: bool = False,
+        cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
+        cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -563,6 +587,15 @@ class BoardStateMachine:
         self._recovery_counter_carryover_max_sec = max(
             0.0, float(recovery_counter_carryover_max_sec)
         )
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26):
+        # True で復旧ゲートの合意判定において、直近 N フレームの CNN 出力が
+        # 乱高下しているセルを HSV 優先に切り替える (詳細は定数定義部を参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_cnn_flicker_hsv_fallback = bool(
+            enable_cnn_flicker_hsv_fallback
+        )
+        self._cnn_flicker_window_frames = max(1, int(cnn_flicker_window_frames))
+        self._cnn_flicker_min_changes = max(1, int(cnn_flicker_min_changes))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -610,6 +643,7 @@ class BoardStateMachine:
         self._ctx.recovery_cells = set()
         self._ctx.stable_warmup_remaining = 0
         self._ctx.next_queue = []
+        self._ctx.cnn_flicker_history = {}
 
     def force_match_boundary_reset(self) -> None:
         """試合境界を外部から明示的に注入する (update() の
@@ -755,6 +789,7 @@ class BoardStateMachine:
         if not self._enable_recovery_counter_carryover:
             self._ctx.stable_recovery_counters.clear()
             self._ctx.recovery_cells.clear()
+            self._ctx.cnn_flicker_history.clear()
             return
         if old_state not in NON_STABLE_STATES:
             self._ctx.non_stable_entry_time_sec = time_sec
@@ -773,6 +808,7 @@ class BoardStateMachine:
         if time_sec - entry > self._recovery_counter_carryover_max_sec:
             self._ctx.stable_recovery_counters.clear()
             self._ctx.recovery_cells.clear()
+            self._ctx.cnn_flicker_history.clear()
             self._ctx.non_stable_entry_time_sec = None
 
     def _update_within_current_state(
@@ -859,6 +895,9 @@ class BoardStateMachine:
             _apply_stable_recovery_gate(
                 self._ctx, signals, self._recovery_min_frames,
                 enable_column_partial_support=self._enable_column_partial_support,
+                enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
+                cnn_flicker_window_frames=self._cnn_flicker_window_frames,
+                cnn_flicker_min_changes=self._cnn_flicker_min_changes,
             )
 
 
@@ -932,11 +971,45 @@ def _check_recovery_column(
     return result
 
 
+def _update_cnn_flicker_history_and_check(
+    history: "dict[tuple[int, int], list[int]]",
+    r: int,
+    c: int,
+    cnn_v: int,
+    window_frames: int,
+    min_changes: int,
+) -> bool:
+    """CNN 乱高下セル HSV フォールバック (#51 後半): セル (r, c) の CNN 出力
+    履歴を更新し、直近 window_frames フレーム内の変化回数が min_changes 以上
+    なら「乱高下中」と判定する。
+
+    Args:
+        history: ctx.cnn_flicker_history (in-place 更新)。
+        r, c: 対象セル。
+        cnn_v: 現フレームの CNN 出力色。
+        window_frames: 履歴保持フレーム数。
+        min_changes: 乱高下とみなす最小変化回数 (連続フレーム間の値変化回数)。
+
+    Returns:
+        True なら乱高下中 (= HSV を合意値とみなすべき)。
+    """
+    hist = history.setdefault((r, c), [])
+    hist.append(cnn_v)
+    if len(hist) > window_frames:
+        del hist[: len(hist) - window_frames]
+    changes = sum(1 for i in range(1, len(hist)) if hist[i] != hist[i - 1])
+    return changes >= min_changes
+
+
 def _collect_recovery_candidates(
     ctx: "StateContext",
     cnn_board: "Board",
     hsv_board: "Board",
     min_frames: int,
+    *,
+    enable_cnn_flicker_hsv_fallback: bool = False,
+    cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
+    cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
 ) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
     """各セルの合意値チェックとカウンタ更新を行い、候補を方向別に返す.
 
@@ -946,11 +1019,23 @@ def _collect_recovery_candidates(
 
     安全弁: UNKNOWN(10) は合意値として無効 (RECOVERY_EXCLUDED_COLORS)。
 
+    CNN 乱高下セル HSV フォールバック (enable_cnn_flicker_hsv_fallback,
+    #51 後半, 2026-07-26): True の場合、直近 N フレームの CNN 出力の変化回数
+    が閾値以上のセルは「乱高下中」とみなし、CNN==HSV の一致要件を HSV 値との
+    自明一致 (agreed_v = hsv_v) に置き換える。これにより光沢ハイライトで
+    判定境界に張り付き反転を続ける CNN の代わりに、一貫して正しい HSV の
+    合意形成を許可する。default False = 従来挙動完全維持 (backwards compat)。
+
     Args:
-        ctx: StateContext (stable_recovery_counters を in-place 更新)。
+        ctx: StateContext (stable_recovery_counters / cnn_flicker_history を
+            in-place 更新)。
         cnn_board: CNN 認識盤面。
         hsv_board: HSV 認識盤面。
         min_frames: 発火に必要な連続フレーム数。
+        enable_cnn_flicker_hsv_fallback: True で乱高下セルの HSV フォール
+            バックを有効化する。
+        cnn_flicker_window_frames: 乱高下判定用の履歴保持フレーム数。
+        cnn_flicker_min_changes: 乱高下とみなす最小変化回数。
 
     Returns:
         (add_candidates, fix_candidates) のタプル。
@@ -969,16 +1054,28 @@ def _collect_recovery_candidates(
             cnn_v = int(cnn_board.get(r, c))
             hsv_v = int(hsv_board.get(r, c))
 
-            # UNKNOWN は合意値として無効 → カウンタリセット
+            # UNKNOWN は合意値として無効 → カウンタリセット (raw 値で判定)
             if cnn_v in RECOVERY_EXCLUDED_COLORS or hsv_v in RECOVERY_EXCLUDED_COLORS:
                 recovery_counters.pop((r, c), None)
                 continue
-            # CNN≠HSV → 独立二重合意なし → カウンタリセット
-            if cnn_v != hsv_v:
+
+            # CNN 乱高下セル HSV フォールバック: 乱高下中なら HSV を合意値と
+            # みなす (agreed_v = hsv_v で以降の一致判定を自明成立させる)。
+            agreed_v = cnn_v
+            if enable_cnn_flicker_hsv_fallback:
+                is_flickering = _update_cnn_flicker_history_and_check(
+                    ctx.cnn_flicker_history, r, c, cnn_v,
+                    cnn_flicker_window_frames, cnn_flicker_min_changes,
+                )
+                if is_flickering:
+                    agreed_v = hsv_v
+
+            # CNN≠HSV (乱高下フォールバック未発動時) → 独立二重合意なし → カウンタリセット
+            if agreed_v != hsv_v:
                 recovery_counters.pop((r, c), None)
                 continue
             # confirmed == 合意値 → 差分なし → カウンタリセット
-            if confirmed_v == cnn_v:
+            if confirmed_v == agreed_v:
                 recovery_counters.pop((r, c), None)
                 continue
 
@@ -992,10 +1089,10 @@ def _collect_recovery_candidates(
             # 発火: 方向別に振り分け
             if confirmed_v == COLOR_EMPTY:
                 # 方向1: 空→色 (重力整合チェック必要)
-                add_candidates.append((r, c, cnn_v))
+                add_candidates.append((r, c, agreed_v))
             else:
                 # 方向2: 色→空 / 方向3: 色→別色 (重力整合チェック不要)
-                fix_candidates.append((r, c, cnn_v))
+                fix_candidates.append((r, c, agreed_v))
 
     return add_candidates, fix_candidates
 
@@ -1040,6 +1137,9 @@ def _apply_stable_recovery_gate(
     min_frames: int,
     *,
     enable_column_partial_support: bool = False,
+    enable_cnn_flicker_hsv_fallback: bool = False,
+    cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
+    cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
 ) -> None:
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
@@ -1065,6 +1165,12 @@ def _apply_stable_recovery_gate(
             由来の support_board を渡し、「支持セルが復旧カウント進行中」の
             ケースを浮きぷよ扱いしないようにする。
             default False = 従来挙動完全維持 (backwards compat)。
+        enable_cnn_flicker_hsv_fallback: CNN 乱高下セル HSV フォールバック
+            (#51 後半, 2026-07-26)。True にすると光沢ハイライトで判定境界に
+            張り付き反転を続ける CNN 出力セルを検出し、その間 HSV を合意値
+            とみなす。default False = 従来挙動完全維持 (backwards compat)。
+        cnn_flicker_window_frames: 乱高下判定用の履歴保持フレーム数。
+        cnn_flicker_min_changes: 乱高下とみなす最小変化回数。
     """
     if ctx.confirmed_board is None:
         return
@@ -1076,6 +1182,9 @@ def _apply_stable_recovery_gate(
     # パス1: 候補収集 + カウンタ更新
     add_candidates, fix_candidates = _collect_recovery_candidates(
         ctx, signals.cnn_board, hsv_board, min_frames,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        cnn_flicker_window_frames=cnn_flicker_window_frames,
+        cnn_flicker_min_changes=cnn_flicker_min_changes,
     )
 
     if not add_candidates and not fix_candidates:
@@ -1159,6 +1268,9 @@ __all__ = [
     "STABLE_RECOVERY_MIN_FRAMES",
     "RECOVERY_COLUMN_SUPPORT_MIN_FRAMES",
     "RECOVERY_EXCLUDED_COLORS",
+    "CNN_FLICKER_WINDOW_FRAMES",
+    "CNN_FLICKER_MIN_CHANGES",
+    "_update_cnn_flicker_history_and_check",
     "StateContext",
     "StateTransitionDetector",
     # feat/gravity-settle-2026-06-05: GRAVITY_SETTLE 関連定数

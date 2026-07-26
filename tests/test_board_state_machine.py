@@ -697,6 +697,9 @@ def _make_recovery_sm(
     min_frames: int = 3, *, enable_column_partial_support: bool = False,
     enable_recovery_counter_carryover: bool = False,
     recovery_counter_carryover_max_sec: float = RECOVERY_COUNTER_CARRYOVER_MAX_SEC,
+    enable_cnn_flicker_hsv_fallback: bool = False,
+    cnn_flicker_window_frames: int = 4,
+    cnn_flicker_min_changes: int = 2,
 ) -> BoardStateMachine:
     """復旧ゲート有効 state machine を生成するヘルパー。
     テスト用に min_frames を小さく設定できる。
@@ -707,6 +710,10 @@ def _make_recovery_sm(
         enable_recovery_counter_carryover: 復旧カウンタ carryover (2026-07-26)
             を有効化するか。
         recovery_counter_carryover_max_sec: carryover の非 STABLE 滞在上限秒数。
+        enable_cnn_flicker_hsv_fallback: CNN 乱高下セル HSV フォールバック
+            (#51 後半, 2026-07-26) を有効化するか。
+        cnn_flicker_window_frames: 乱高下判定用の履歴保持フレーム数。
+        cnn_flicker_min_changes: 乱高下とみなす最小変化回数。
     """
     return BoardStateMachine(
         enable_stable_recovery_gate=True,
@@ -714,6 +721,9 @@ def _make_recovery_sm(
         enable_column_partial_support=enable_column_partial_support,
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         recovery_counter_carryover_max_sec=recovery_counter_carryover_max_sec,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        cnn_flicker_window_frames=cnn_flicker_window_frames,
+        cnn_flicker_min_changes=cnn_flicker_min_changes,
     )
 
 
@@ -1024,6 +1034,88 @@ def test_recovery_counter_carryover_on_long_non_stable_clears_counter() -> None:
     sm.update(2, _stable_signal_with_hsv(0.40, _empty_board(), _empty_board()))
     assert sm.context.stable_recovery_counters == {}
     assert sm.context.recovery_cells == set()
+
+
+# ============================
+# CNN 乱高下セル HSV フォールバック (enable_cnn_flicker_hsv_fallback, #51 後半, 2026-07-26)
+# ============================
+
+
+def test_cnn_flicker_hsv_fallback_off_bit_identical() -> None:
+    """フラグ OFF (デフォルト): CNN が毎フレーム反転し HSV と一致しない場合、
+    従来通り一度もカウンタが積み上がらず永久に発火しない (実際の未反映バグの再現)。
+    """
+    from src.board import COLOR_BLUE, COLOR_GREEN
+
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_cnn_flicker_hsv_fallback=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    hsv = _board_with_red(12, 0)
+    for i in range(6):
+        cnn = Board()
+        cnn.set(12, 0, COLOR_BLUE if i % 2 == 0 else COLOR_GREEN)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 0
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # 未反映のまま
+
+
+def test_cnn_flicker_hsv_fallback_on_fires_with_flickering_cnn() -> None:
+    """フラグ ON: CNN が乱高下 (BLUE/GREEN 反転) するセルは、変化回数が
+    閾値を超えた時点から HSV (=RED) を合意値とみなしてカウントを進め、
+    最終的に HSV の色へ復旧する。
+    """
+    from src.board import COLOR_BLUE, COLOR_GREEN
+
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n,
+        enable_cnn_flicker_hsv_fallback=True,
+        cnn_flicker_window_frames=4,
+        cnn_flicker_min_changes=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    hsv = _board_with_red(12, 0)
+    for i in range(6):
+        cnn = Board()
+        cnn.set(12, 0, COLOR_BLUE if i % 2 == 0 else COLOR_GREEN)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+        if sm.context.confirmed_board.get(12, 0) == COLOR_RED:
+            break
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # HSV の色に復旧
+
+
+def test_cnn_flicker_hsv_fallback_stable_cell_unaffected() -> None:
+    """フラグ ON でも、CNN が乱高下していない (常に HSV と一致する) セルは
+    従来と同じ経路 (agreed_v=cnn_v) で発火し、挙動が変わらない (回帰防止)。
+    """
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n,
+        enable_cnn_flicker_hsv_fallback=True,
+        cnn_flicker_window_frames=4,
+        cnn_flicker_min_changes=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    for i in range(n - 1):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ発火前
+
+    sm.update(n - 1, _stable_signal_with_hsv(0.05 * (n - 1), cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # 通常経路で復旧
 
 
 def test_recovery_gate_off_explicit() -> None:
