@@ -21,6 +21,7 @@ state == STABLE 時の confirmed_board が「公式の確定盤面」として�
 
 from __future__ import annotations
 
+import os
 from collections import Counter, deque
 from dataclasses import dataclass
 
@@ -109,27 +110,47 @@ from src.ojama_accounting import SCORE_RESET_THRESHOLD  # noqa: E402
 # scripts/visualize_advantage_overlay.py の SCORE_NEAR_ZERO_THRESHOLD と同値。
 MATCH_START_SCORE_NEAR_ZERO_THRESHOLD: int = 20
 
+# 診断用 (2026-07-26, project_win_eval_regen_2026-07-26):
+# enable_match_start_full_clear 由来の reset() 発火を計測する opt-in デバッグ出力。
+# 環境変数未設定時は完全に no-op (既存挙動・性能に一切影響しない)。
+_DEBUG_RESET_PROBE_ENV: str = "PUYO_DEBUG_RESET_PROBE"
+
+# 誤発火修正 (2026-07-26, data/verify/win_eval_regen_2026-07-26/
+# diag_v29_mid_resetlog.log で確定): 片側のみの単発 score OCR 誤読
+# (例: 2P=40031 不変なのに 1P だけ 48077→0) で境界候補が単発 1 フレーム
+# だけ真になっても、strict モードでは連続 SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES
+# フレーム成立するまで実際の reset() 発火とみなさない (呼び出し側で使用)。
+SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES: int = 3
+
 
 def _is_score_reset_boundary(
     score1: int | None, score2: int | None,
     prev1: int | None, prev2: int | None,
+    strict: bool = False,
 ) -> bool:
-    """スコア推移から試合境界 (新ゲーム開始/全消しリセット) を検知する (純関数)。
+    """スコア推移から試合境界 (新ゲーム開始/全消しリセット) の候補フレームを
+    検知する (純関数、1 フレーム単位の判定・デバウンスは呼び出し側の責務)。
 
-    scripts/visualize_advantage_overlay.py の `_detect_score_reset` と同一
-    ロジック (= 表示層の境界検知と内部 state clear の判定を一致させる)。
+    strict=False (default, backwards compat): 従来ロジック。
+        scripts/visualize_advantage_overlay.py の `_detect_score_reset` と
+        同一 (= 表示層の境界検知と内部 state clear の判定を一致させる)。
+        片側のみの急落でも発火する (OR 条件)。
+    strict=True (2026-07-26 誤発火修正): 片側のみの単発 OCR 誤読による
+        誤発火を防ぐため、「両者ともに急落」または「両者ともにほぼ0」の
+        場合のみ発火する (AND 条件)。片側のみの急落では発火しない。
     score が None (OCR 失敗) の場合は判定不能として False (誤リセット回避)。
     """
     if score1 is None or score2 is None:
         return False
-    if prev1 is not None and prev1 - score1 >= SCORE_RESET_THRESHOLD:
-        return True
-    if prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD:
-        return True
-    return (
+    near_zero = (
         score1 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
         and score2 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
     )
+    drop1 = prev1 is not None and prev1 - score1 >= SCORE_RESET_THRESHOLD
+    drop2 = prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD
+    if not strict:
+        return drop1 or drop2 or near_zero
+    return (drop1 and drop2) or near_zero
 
 from pathlib import Path
 
@@ -1014,6 +1035,25 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_match_start_full_clear: bool = True,
+        # score-reset 境界誤発火修正 (2026-07-26, feat/recognition-postchain-fix-2026-07-23,
+        # diag_v29_mid_resetlog.log で発見): 片側のみ score が急落して見える
+        # 単発フレーム (例: 2P=40031 不変なのに 1P だけ 48077→0) が観測された。
+        # 実フレーム精査 (score ROI 目視 + ScoreOcr 直接実行) の結果、これは
+        # OCR 誤読ではなく「両者同時の本物の試合境界フェード演出」を、
+        # 1P/2P 各々の OCR 信頼度ゲートが数フレームずれて通過したことによる
+        # 見かけ上の片側化と判明 (掛け算式表示は avg_conf ゲートで既に正しく
+        # None 扱いされており、0 が漏れ出すことはない)。
+        # _is_score_reset_boundary を (a) 両側同時条件のみ許可 (b) 3 フレーム
+        # 連続成立必須、に厳格化することで、この数フレームのずれを吸収し
+        # 「片側だけ発火して見える」見かけ上の異常を解消する。ただし
+        # video_29 該当窓の再検証では 5 件の reset は全て本物の試合境界と
+        # 確認され、発火回数・収集行数は本修正前後で変化しなかった
+        # (= labeled_win 行数 -30% の真因はこの修正だけでは説明できない、
+        # 別途要調査)。既定 True (誤発火の疑いがあった箇所の防御的厳格化)。
+        # False を明示指定すれば旧 (片側 OR・デバウンス無し) 挙動に戻せる
+        # (backwards compat)。enable_match_start_full_clear=False の場合は
+        # そもそも本ブロックが無効なので本フラグは参照されない。
+        enable_score_reset_strict: bool = True,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1381,6 +1421,10 @@ class RecognitionPipeline:
         # 追修: score リセット境界の edge-trigger ラッチ (継続 near-zero 期間中の
         # 連続 self.reset() 発火を防ぐ。境界条件が一旦 False に戻るまで再発火しない)。
         self._match_start_boundary_latched: bool = False
+        # score-reset 境界誤発火修正 (2026-07-26): strict モードの厳格化条件を
+        # 保持し、デバウンス用連続フレームカウンタを管理する。
+        self._enable_score_reset_strict: bool = bool(enable_score_reset_strict)
+        self._score_reset_boundary_streak: int = 0
         # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
         # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
         self._enable_drift_resync_match_start_guard: bool = bool(
@@ -1942,6 +1986,10 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_match_start_full_clear: bool = True,
+        # score-reset 境界誤発火修正 (2026-07-26, A/B 計測用)。誤発火は確定
+        # バグの修正であるため既定 True。False で旧 (片側 OR・デバウンス無し)
+        # 挙動に戻せる (backwards compat)。
+        enable_score_reset_strict: bool = True,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2121,6 +2169,7 @@ class RecognitionPipeline:
             enable_baseline_broken_grace=enable_baseline_broken_grace,
             enable_column_partial_support=enable_column_partial_support,
             enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_score_reset_strict=enable_score_reset_strict,
         )
 
     # ------------------------------------------------------------------
@@ -2297,6 +2346,8 @@ class RecognitionPipeline:
         self._prev_score_for_reset_1p = None
         self._prev_score_for_reset_2p = None
         self._match_start_boundary_latched = False
+        # score-reset 境界誤発火修正 (2026-07-26): デバウンスカウンタもリセット。
+        self._score_reset_boundary_streak = 0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -2777,14 +2828,44 @@ class RecognitionPipeline:
                 self._score_tracker_2p.last_score
                 if self._score_tracker_2p is not None else None
             )
-            boundary_now = _is_score_reset_boundary(
+            # 誤発火修正 (2026-07-26): boundary_candidate は 1 フレーム単位の
+            # 生の境界候補 (strict=False なら従来通り即 fire 相当)。
+            # strict=True の場合は SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES 回
+            # 連続成立して初めて実際の発火 (boundary_now) とみなす。
+            # ラッチの解除判定は生の boundary_candidate で行う (デバウンス中の
+            # 一時的な boundary_now=False で誤ってラッチ解除しないため。
+            # 誤解除すると継続 near-zero 期間中に再発火してしまう)。
+            boundary_candidate = _is_score_reset_boundary(
                 cur_score_1p, cur_score_2p,
                 self._prev_score_for_reset_1p, self._prev_score_for_reset_2p,
+                strict=self._enable_score_reset_strict,
+            )
+            if boundary_candidate:
+                self._score_reset_boundary_streak += 1
+            else:
+                self._score_reset_boundary_streak = 0
+            boundary_now = (
+                self._score_reset_boundary_streak
+                >= SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES
+                if self._enable_score_reset_strict
+                else boundary_candidate
             )
             if boundary_now and not self._match_start_boundary_latched:
+                if os.environ.get(_DEBUG_RESET_PROBE_ENV):
+                    tsumo_1p_before = self.tsumo_count("1P")
+                    tsumo_2p_before = self.tsumo_count("2P")
+                    print(
+                        f"[reset_probe] t_sec={time_sec:.2f} "
+                        f"cur_score_1p={cur_score_1p} cur_score_2p={cur_score_2p} "
+                        f"prev_score_1p={self._prev_score_for_reset_1p} "
+                        f"prev_score_2p={self._prev_score_for_reset_2p} "
+                        f"tsumo_1p_before_reset={tsumo_1p_before} "
+                        f"tsumo_2p_before_reset={tsumo_2p_before}",
+                        flush=True,
+                    )
                 self.reset()
                 self._match_start_boundary_latched = True
-            elif not boundary_now:
+            elif not boundary_candidate:
                 self._match_start_boundary_latched = False
             self._prev_score_for_reset_1p = cur_score_1p
             self._prev_score_for_reset_2p = cur_score_2p
