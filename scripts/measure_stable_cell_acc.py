@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime
+import inspect
 import json
 import multiprocessing as _mp
 import sys
@@ -335,6 +336,25 @@ def _inject_hsv(pipe: RecognitionPipeline, hsv_path: Path) -> None:
                 pipe._online_hsv_injected = True
     except Exception as e:
         print(f"[measure] HSV inject 失敗 ({hsv_path}): {e}", file=sys.stderr)
+
+
+def _resolve_flag(value: Optional[bool], flag_name: str) -> bool:
+    """None ならライブラリ本体 (RecognitionPipeline.load_default) の既定値に解決する。
+
+    ローカルスクリプト側の決め打ち default がライブラリ本体の default 変更に
+    追従できず乖離するバグ (2026-07-26, enable_landing_observed_color で発覚) を
+    再発させないため、None のときは inspect で本体シグネチャから直接引く。
+    明示的に True/False が渡された場合はそれを優先する。
+    meta JSON への記録やログ表示など「実際に使われた bool 値」が必要な箇所専用。
+    pipeline 構築本体 (_make_pipeline_cnn) は kwargs 省略方式で本体既定に委ねるため
+    本関数を使わない (二重管理を避けるため)。
+    """
+    if value is not None:
+        return bool(value)
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    return bool(sig.parameters[flag_name].default)
+
+
 def _make_pipeline_cnn(
     video_id: str,
     enable_constraint_fill: bool = True,
@@ -344,7 +364,7 @@ def _make_pipeline_cnn(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -368,6 +388,18 @@ def _make_pipeline_cnn(
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     disable_per_video_hsv: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
@@ -399,7 +431,20 @@ def _make_pipeline_cnn(
             backwards compat: デフォルト False = 従来挙動。
         enable_landing_observed_color: True にすると着地セルの CNN==HSV 一致色補正を有効化。
             falling_pair タイミングずれで生じる着地色誤りを上流で断つ (真因 A 対処)。
-            backwards compat: デフォルト False = 従来挙動。
+            None (デフォルト) = RecognitionPipeline.load_default 本体の既定値 (True) に従う。
+            明示的に False を渡すと無効化できる。
+        enable_drift_resync_match_start_guard: Drift 再同期暴走ガード (試合開始側)。
+            None (デフォルト) = 本体既定値 (True) に従う。
+        enable_drift_resync_hsv_gate: Drift 再同期暴走ガード (HSV gate 側)。
+            None (デフォルト) = 本体既定値 (True) に従う。
+        enable_match_start_full_clear: 試合開始境界フルクリア。
+            None (デフォルト) = 本体既定値 (True) に従う。
+        enable_score_reset_strict: score-reset 境界の厳格判定。
+            None (デフォルト) = 本体既定値 (True) に従う。
+        enable_recovery_counter_carryover: #51 復旧カウンタ carryover。
+            None (デフォルト) = 本体既定値 (False) に従う。明示 True で有効化。
+        enable_cnn_flicker_hsv_fallback: #51 後半 CNN 乱高下 HSV フォールバック。
+            None (デフォルト) = 本体既定値 (False) に従う。明示 True で有効化。
         enable_red_hue_wrap_fix: True にすると赤色相折り返し補正を有効化。
             HSV median で赤 2 峰 (H=0-4 と H=166-179) を 1 峰に collapse する。
             backwards compat: デフォルト False = 従来挙動。
@@ -423,7 +468,7 @@ def _make_pipeline_cnn(
             「自動 HSV + 既定 merged レンジのみ」の汎用精度測定用。
             backwards compat: デフォルト False = 従来挙動と完全一致。
     """
-    pipe = RecognitionPipeline.load_default(
+    load_kwargs: dict = dict(
         force_in_match=True,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
@@ -432,7 +477,6 @@ def _make_pipeline_cnn(
         enable_landing_color_fix=enable_landing_color_fix,
         enable_chain_min_display=enable_chain_min_display,
         enable_hsv_classify_fallback=enable_hsv_classify_fallback,
-        enable_landing_observed_color=enable_landing_observed_color,
         enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
         enable_specular_robust_saturation=enable_specular_robust_saturation,
         enable_stable_recovery_gate=enable_stable_recovery_gate,
@@ -451,6 +495,23 @@ def _make_pipeline_cnn(
         enable_gravity_settle_state=enable_gravity_settle_state,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
     )
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
+    # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
+    # ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止。
+    _none_aware_flags: dict = {
+        "enable_landing_observed_color": enable_landing_observed_color,
+        "enable_drift_resync_match_start_guard": enable_drift_resync_match_start_guard,
+        "enable_drift_resync_hsv_gate": enable_drift_resync_hsv_gate,
+        "enable_match_start_full_clear": enable_match_start_full_clear,
+        "enable_score_reset_strict": enable_score_reset_strict,
+        "enable_recovery_counter_carryover": enable_recovery_counter_carryover,
+        "enable_cnn_flicker_hsv_fallback": enable_cnn_flicker_hsv_fallback,
+    }
+    load_kwargs.update(
+        {k: v for k, v in _none_aware_flags.items() if v is not None}
+    )
+    pipe = RecognitionPipeline.load_default(**load_kwargs)
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
     if not disable_per_video_hsv:
@@ -652,7 +713,7 @@ def _process_video(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -673,6 +734,18 @@ def _process_video(
     enable_gravity_settle_state: bool = False,
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -744,6 +817,12 @@ def _process_video(
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         disable_per_video_hsv=disable_per_video_hsv,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
@@ -780,7 +859,7 @@ def _process_video_worker(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -801,6 +880,18 @@ def _process_video_worker(
     enable_gravity_settle_state: bool = False,
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> VideoStats:
@@ -850,6 +941,12 @@ def _process_video_worker(
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2009,15 +2106,87 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--landing-observed-color",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=None,
         dest="enable_landing_observed_color",
         help=(
             "真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化する。 "
             "TSUMO_FALL→STABLE 着地時に infer_placement 後の着地 2 cell で "
             "CNN 観測色と HSV-only 観測色が一致する場合は観測色を採用し、 "
             "falling_pair タイミングずれによる yellow→red 等の誤色を上流で断つ。 "
-            "省略時は従来挙動 (infer_placement の結果をそのまま使用)。"
+            "省略時 (default=None) は RecognitionPipeline.load_default 本体の "
+            "既定値 (True, d6fffe3 で確定ON) に従う。 "
+            "--no-landing-observed-color で明示的に無効化できる "
+            "(2026-07-26: ローカル決め打ち default=False が本体既定値変更に "
+            "追従できず乖離していたバグを修正)。"
+        ),
+    )
+    p.add_argument(
+        "--drift-resync-match-start-guard",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_drift_resync_match_start_guard",
+        help=(
+            "#51: Drift 再同期暴走ガード (試合開始側) を制御する。 "
+            "省略時 (default=None) はライブラリ既定値 (True) に従う。 "
+            "--no-drift-resync-match-start-guard で明示的に無効化できる。"
+        ),
+    )
+    p.add_argument(
+        "--drift-resync-hsv-gate",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_drift_resync_hsv_gate",
+        help=(
+            "#51: Drift 再同期暴走ガード (HSV gate 側) を制御する。 "
+            "省略時 (default=None) はライブラリ既定値 (True) に従う。 "
+            "--no-drift-resync-hsv-gate で明示的に無効化できる。"
+        ),
+    )
+    p.add_argument(
+        "--match-start-full-clear",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_match_start_full_clear",
+        help=(
+            "試合開始境界フルクリアを制御する (d6fffe3 採用済)。 "
+            "省略時 (default=None) はライブラリ既定値 (True) に従う。 "
+            "--no-match-start-full-clear で明示的に無効化できる。"
+        ),
+    )
+    p.add_argument(
+        "--score-reset-strict",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_score_reset_strict",
+        help=(
+            "score-reset 境界の厳格判定 (両側 AND + 3 フレームデバウンス) を制御する。 "
+            "省略時 (default=None) はライブラリ既定値 (True) に従う。 "
+            "--no-score-reset-strict で明示的に無効化できる。"
+        ),
+    )
+    p.add_argument(
+        "--recovery-counter-carryover",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_recovery_counter_carryover",
+        help=(
+            "#51: 復旧カウンタ carryover (非 STABLE 滞在 "
+            "RECOVERY_COUNTER_CARRYOVER_MAX_SEC 以内ならカウンタ引継ぎ) を制御する。 "
+            "省略時 (default=None) はライブラリ既定値 (False) に従う。 "
+            "--recovery-counter-carryover で明示的に有効化できる。"
+        ),
+    )
+    p.add_argument(
+        "--cnn-flicker-hsv-fallback",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_cnn_flicker_hsv_fallback",
+        help=(
+            "#51 後半: CNN 乱高下セル (直近 8 フレームで出力変化 3 回以上) の "
+            "HSV フォールバックを制御する。 "
+            "省略時 (default=None) はライブラリ既定値 (False) に従う。 "
+            "--cnn-flicker-hsv-fallback で明示的に有効化できる。"
         ),
     )
     p.add_argument(
@@ -2314,7 +2483,7 @@ def _collect_results(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -2335,6 +2504,18 @@ def _collect_results(
     enable_gravity_settle_state: bool = False,
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2409,6 +2590,12 @@ def _collect_results(
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+            enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_score_reset_strict=enable_score_reset_strict,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2440,6 +2627,12 @@ def _collect_results(
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2458,7 +2651,7 @@ def _collect_serial(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -2479,6 +2672,18 @@ def _collect_serial(
     enable_gravity_settle_state: bool = False,
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2517,6 +2722,12 @@ def _collect_serial(
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+            enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_score_reset_strict=enable_score_reset_strict,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
         )
@@ -2538,7 +2749,7 @@ def _collect_parallel(
     enable_landing_color_fix: bool = False,
     enable_chain_min_display: bool = False,
     enable_hsv_classify_fallback: bool = False,
-    enable_landing_observed_color: bool = False,
+    enable_landing_observed_color: Optional[bool] = None,
     enable_red_hue_wrap_fix: bool = False,
     enable_specular_robust_saturation: bool = False,
     enable_stable_recovery_gate: bool = False,
@@ -2559,6 +2770,18 @@ def _collect_parallel(
     enable_gravity_settle_state: bool = False,
     # 案γ (2026-06-06): CHAIN 中 slide_motion=True が ojama-hold を上書き。
     enable_slide_override_ojama_hold: bool = False,
+    # #51 (2026-07-26): Drift 再同期ガード 2 種 / 試合開始境界フルクリア /
+    # score-reset 厳格判定 / 復旧カウンタ carryover / CNN 乱高下 HSV フォールバック。
+    # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う
+    # (ローカル決め打ち default が本体既定値変更に追従できず乖離するバグ
+    # (2026-07-26, enable_landing_observed_color で発覚) の再発防止)。
+    # 明示的に True/False を指定した場合のみ上書きする。
+    enable_drift_resync_match_start_guard: Optional[bool] = None,
+    enable_drift_resync_hsv_gate: Optional[bool] = None,
+    enable_match_start_full_clear: Optional[bool] = None,
+    enable_score_reset_strict: Optional[bool] = None,
+    enable_recovery_counter_carryover: Optional[bool] = None,
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
 ) -> list[VideoStats]:
@@ -2611,6 +2834,12 @@ def _collect_parallel(
                 enable_chain_exit_next_signal,
                 enable_gravity_settle_state,
                 enable_slide_override_ojama_hold,
+                enable_drift_resync_match_start_guard,
+                enable_drift_resync_hsv_gate,
+                enable_match_start_full_clear,
+                enable_score_reset_strict,
+                enable_recovery_counter_carryover,
+                enable_cnn_flicker_hsv_fallback,
                 persist_min_frames,
                 disable_per_video_hsv,
             )
@@ -2771,8 +3000,12 @@ def main() -> int:
     enable_hsv_classify_fallback: bool = bool(
         getattr(args, "enable_hsv_classify_fallback", False)
     )
-    enable_landing_observed_color: bool = bool(
-        getattr(args, "enable_landing_observed_color", False)
+    # landing_observed_color: None のまま保持し (bool() で潰さない)、
+    # ライブラリ既定値追従を _resolve_flag / _make_pipeline_cnn の omit-if-None に委ねる。
+    # (2026-07-26: 旧実装は bool(..., False) で決め打ちしており、本体 default が
+    # d6fffe3 で True に変わった後も測定スクリプトだけ False のまま乖離していた)
+    enable_landing_observed_color: Optional[bool] = getattr(
+        args, "enable_landing_observed_color", None
     )
     enable_red_hue_wrap_fix: bool = bool(args.enable_red_hue_wrap_fix)
     enable_specular_robust_saturation: bool = bool(args.enable_specular_robust_saturation)
@@ -2811,6 +3044,26 @@ def main() -> int:
     enable_slide_override_ojama_hold: bool = bool(
         getattr(args, "enable_slide_override_ojama_hold", True)
     )
+    # #51 系 + drift/full_clear/score_reset_strict: None のまま保持し
+    # ライブラリ既定値追従を omit-if-None に委ねる (landing_observed_color と同一方式)。
+    enable_drift_resync_match_start_guard: Optional[bool] = getattr(
+        args, "enable_drift_resync_match_start_guard", None
+    )
+    enable_drift_resync_hsv_gate: Optional[bool] = getattr(
+        args, "enable_drift_resync_hsv_gate", None
+    )
+    enable_match_start_full_clear: Optional[bool] = getattr(
+        args, "enable_match_start_full_clear", None
+    )
+    enable_score_reset_strict: Optional[bool] = getattr(
+        args, "enable_score_reset_strict", None
+    )
+    enable_recovery_counter_carryover: Optional[bool] = getattr(
+        args, "enable_recovery_counter_carryover", None
+    )
+    enable_cnn_flicker_hsv_fallback: Optional[bool] = getattr(
+        args, "enable_cnn_flicker_hsv_fallback", None
+    )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する
     persist_min_frames: int = max(1, int(getattr(args, "corruption_persist_frames", CORRUPTION_PERSIST_MIN_FRAMES)))
@@ -2847,10 +3100,28 @@ def main() -> int:
             "[measure] hsv_classify_fallback ENABLED "
             "(--hsv-classify-fallback 指定: 2 択強制確定回避 / 黄→赤誤分類発火点対策)"
         )
-    if enable_landing_observed_color:
+    # None (未指定) の場合はライブラリ既定値で解決した実効値をログに出す
+    # (何が実際に使われているかを常に明示する)。
+    _effective_landing_observed_color = _resolve_flag(
+        enable_landing_observed_color, "enable_landing_observed_color"
+    )
+    print(
+        f"[measure] landing_observed_color="
+        f"{'ENABLED' if _effective_landing_observed_color else 'DISABLED'} "
+        f"({'明示指定' if enable_landing_observed_color is not None else 'ライブラリ既定値'})"
+    )
+    for _flag_name, _flag_value in (
+        ("enable_drift_resync_match_start_guard", enable_drift_resync_match_start_guard),
+        ("enable_drift_resync_hsv_gate", enable_drift_resync_hsv_gate),
+        ("enable_match_start_full_clear", enable_match_start_full_clear),
+        ("enable_score_reset_strict", enable_score_reset_strict),
+        ("enable_recovery_counter_carryover", enable_recovery_counter_carryover),
+        ("enable_cnn_flicker_hsv_fallback", enable_cnn_flicker_hsv_fallback),
+    ):
+        _effective = _resolve_flag(_flag_value, _flag_name)
         print(
-            "[measure] landing_observed_color ENABLED "
-            "(--landing-observed-color 指定: 真因 A 対処 / CNN==HSV 一致色で着地補正)"
+            f"[measure] {_flag_name}={'ENABLED' if _effective else 'DISABLED'} "
+            f"({'明示指定' if _flag_value is not None else 'ライブラリ既定値'})"
         )
     disagreements: list[dict] = []
     print(f"[measure] corruption_persist_frames={persist_min_frames} (persistent corruption 集計閾値)")
@@ -2888,6 +3159,12 @@ def main() -> int:
         enable_chain_max_hold_override=enable_chain_max_hold_override,
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+        enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
+        enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
     )
@@ -2934,8 +3211,32 @@ def main() -> int:
             "enable_landing_color_fix": enable_landing_color_fix,
             # chain_min_display の on/off を記録 (後日比較用)
             "enable_chain_min_display": enable_chain_min_display,
-            # landing_observed_color の on/off を記録 (後日比較用)
-            "enable_landing_observed_color": enable_landing_observed_color,
+            # landing_observed_color の on/off を記録 (後日比較用)。
+            # None (未指定) はライブラリ既定値に解決してから記録する
+            # (出力 JSON スキーマは従来通り bool のまま、後方互換維持)。
+            "enable_landing_observed_color": _resolve_flag(
+                enable_landing_observed_color, "enable_landing_observed_color"
+            ),
+            # #51 系 + drift/full_clear/score_reset_strict (後日比較用、None は既定値解決後に記録)
+            "enable_drift_resync_match_start_guard": _resolve_flag(
+                enable_drift_resync_match_start_guard,
+                "enable_drift_resync_match_start_guard",
+            ),
+            "enable_drift_resync_hsv_gate": _resolve_flag(
+                enable_drift_resync_hsv_gate, "enable_drift_resync_hsv_gate"
+            ),
+            "enable_match_start_full_clear": _resolve_flag(
+                enable_match_start_full_clear, "enable_match_start_full_clear"
+            ),
+            "enable_score_reset_strict": _resolve_flag(
+                enable_score_reset_strict, "enable_score_reset_strict"
+            ),
+            "enable_recovery_counter_carryover": _resolve_flag(
+                enable_recovery_counter_carryover, "enable_recovery_counter_carryover"
+            ),
+            "enable_cnn_flicker_hsv_fallback": _resolve_flag(
+                enable_cnn_flicker_hsv_fallback, "enable_cnn_flicker_hsv_fallback"
+            ),
             # 並列ワーカ数を記録 (後日比較用)
             "workers": workers,
             # 改修3: non_stable chain 除外フラグ (後日比較用)
