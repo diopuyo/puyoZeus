@@ -186,6 +186,7 @@ def _video_path(video_stem: str) -> Path:
 def _collect_records(
     video_stem: str, start_sec: float, max_sec: float,
     *,
+    enable_landing_observed_color: bool = ENABLE_LANDING_OBSERVED_COLOR,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
@@ -193,10 +194,16 @@ def _collect_records(
     enable_column_partial_support: bool = False,
     enable_placement_cnn_veto: bool = False,
     placement_cnn_veto_mode: str = "hold",
+    enable_match_start_full_clear: bool = True,
+    enable_recovery_counter_carryover: bool = False,
+    enable_cnn_flicker_hsv_fallback: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
 
+    enable_landing_observed_color: 着地色補正 (レビュー承認4修正の1つ)。既定
+    ENABLE_LANDING_OBSERVED_COLOR (=True) = 従来通り (bit-identical)。
+    False を渡すと旧構成 (この修正なし) を再現できる (2026-07-25 汎化監査用に追加)。
     enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
     2026-07-25 DriftDetector再同期ループ暴走ガード(commit c5bb50e)の
     効果測定用に追加。既定 False = 従来通り (bit-identical)。
@@ -212,6 +219,15 @@ def _collect_records(
     (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
     False/"hold" = 従来通り (bit-identical)。
     RecognitionPipeline.load_default へそのまま透過する。
+    enable_match_start_full_clear: 試合境界フルクリア (レビュー承認4修正の1つ)。
+    既定 True = 従来通り (bit-identical、これまで本関数は明示せず
+    RecognitionPipeline 側既定 True に委ねていたのと同じ値)。False を渡すと
+    旧構成 (この修正なし) を再現できる (2026-07-25 汎化監査用に追加)。
+    enable_recovery_counter_carryover: 復旧カウンタ carryover (#51,
+    2026-07-26) の A/B 計測用に追加。既定 False = 従来通り (bit-identical)。
+    enable_cnn_flicker_hsv_fallback: CNN 乱高下セル HSV フォールバック
+    (#51 後半, 2026-07-26) の A/B 計測用に追加。既定 False = 従来通り
+    (bit-identical)。
     pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
     既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
     pipeline_out["pipeline"] へ構築済み RecognitionPipeline を格納する。
@@ -227,7 +243,7 @@ def _collect_records(
     cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
 
     pipe = RecognitionPipeline.load_default(
-        enable_landing_observed_color=ENABLE_LANDING_OBSERVED_COLOR,
+        enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=enable_baseline_broken_reset,
@@ -235,6 +251,9 @@ def _collect_records(
         enable_column_partial_support=enable_column_partial_support,
         enable_placement_cnn_veto=enable_placement_cnn_veto,
         placement_cnn_veto_mode=placement_cnn_veto_mode,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
     )
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
@@ -714,6 +733,7 @@ def _format_stats_line(label: str, s: dict) -> str:
 def _process_one(
     video: str, start_sec: float, max_sec: float,
     *,
+    enable_landing_observed_color: bool = ENABLE_LANDING_OBSERVED_COLOR,
     enable_drift_resync_match_start_guard: bool = False,
     enable_drift_resync_hsv_gate: bool = False,
     enable_baseline_broken_reset: bool = True,
@@ -721,9 +741,14 @@ def _process_one(
     enable_column_partial_support: bool = False,
     enable_placement_cnn_veto: bool = False,
     placement_cnn_veto_mode: str = "hold",
+    enable_match_start_full_clear: bool = True,
+    enable_recovery_counter_carryover: bool = False,
+    enable_cnn_flicker_hsv_fallback: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
+    enable_landing_observed_color: 着地色補正 (既定 ENABLE_LANDING_OBSERVED_COLOR
+    =True = 従来通り、bit-identical)。2026-07-25 汎化監査用に追加。
     enable_drift_resync_match_start_guard / enable_drift_resync_hsv_gate:
     2026-07-25 DriftDetector再同期ループ暴走ガード効果測定用 (既定 False)。
     enable_baseline_broken_reset / enable_baseline_broken_grace: 2026-07-25
@@ -734,12 +759,17 @@ def _process_one(
     enable_placement_cnn_veto / placement_cnn_veto_mode: 修正方針 甲
     (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用 (既定
     False/"hold")。
+    enable_match_start_full_clear: 試合境界フルクリア (既定 True = 従来通り、
+    bit-identical)。2026-07-25 汎化監査用に追加。
+    enable_recovery_counter_carryover / enable_cnn_flicker_hsv_fallback:
+    #51 (2026-07-26) の A/B 計測用 (既定 False)。
     """
     t0 = time.time()
     _print_progress(f"[{video}] 走査開始 start={start_sec:.1f}s dur={max_sec:.1f}s")
     pipeline_out: dict = {}
     recs_1p, recs_2p, fps = _collect_records(
         video, start_sec, max_sec,
+        enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
         enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
         enable_baseline_broken_reset=enable_baseline_broken_reset,
@@ -747,6 +777,9 @@ def _process_one(
         enable_column_partial_support=enable_column_partial_support,
         enable_placement_cnn_veto=enable_placement_cnn_veto,
         placement_cnn_veto_mode=placement_cnn_veto_mode,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -832,17 +865,21 @@ def _process_one(
     }
 
 
-def _write_result_outputs(result: dict, output_suffix: str = "") -> None:
+def _write_result_outputs(
+    result: dict, output_suffix: str = "", output_dir: Path = OUTPUT_DIR,
+) -> None:
     """1 動画分の CSV 出力。
 
     output_suffix: 2026-07-25 ガードON計測用に追加。既定 "" = 従来通りの
     ファイル名 (bit-identical)。非空を渡すと従来出力 (events_c34.csv 等) を
     上書きせず区別できる (例: "_guardon" → events_c34_guardon.csv)。
+    output_dir: 既定 OUTPUT_DIR = 従来通り (bit-identical)。2026-07-25
+    汎化監査用に追加、任意の出力先ディレクトリへ切り替え可能にする。
     """
     video = result["video"]
     _write_events_csv(
         result["events_1p"] + result["events_2p"],
-        OUTPUT_DIR / f"events_{video}{output_suffix}.csv",
+        output_dir / f"events_{video}{output_suffix}.csv",
     )
 
 
@@ -974,6 +1011,62 @@ def _parse_args() -> argparse.Namespace:
         help="既定'hold'。'cnn_color' で不一致セルに CNN 観測色 (有効 puyo 色の "
              "場合のみ) を採用する代替挙動を試す。",
     )
+    # 着地色補正 / 試合境界フルクリア (レビュー承認4修正のうち残り2つ) の
+    # OFF切替 (2026-07-25 汎化監査用に追加)。既定 True = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--no-landing-observed-color", dest="enable_landing_observed_color",
+        action="store_false", default=True,
+        help="既定True(従来通り)。指定時は着地色補正 "
+             "(enable_landing_observed_color) を無効化する (旧構成比較用)。",
+    )
+    ap.add_argument(
+        "--no-match-start-full-clear", dest="enable_match_start_full_clear",
+        action="store_false", default=True,
+        help="既定True(従来通り)。指定時は試合境界フルクリア "
+             "(enable_match_start_full_clear) を無効化する (旧構成比較用)。",
+    )
+    # 復旧カウンタ carryover (#51, 2026-07-26, A/B 計測用)。既定 False = 従来通り
+    # (bit-identical)。
+    ap.add_argument(
+        "--enable-recovery-counter-carryover",
+        dest="enable_recovery_counter_carryover",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_recovery_counter_carryover を有効化する "
+             "(STABLE→NON-STABLE 遷移時の復旧カウンタを短時間の非STABLE滞在なら"
+             "引き継ぐ)。",
+    )
+    # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+    # 既定 False = 従来通り (bit-identical)。
+    ap.add_argument(
+        "--enable-cnn-flicker-hsv-fallback",
+        dest="enable_cnn_flicker_hsv_fallback",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_cnn_flicker_hsv_fallback を有効化する "
+             "(CNN 出力が直近フレームで乱高下しているセルは HSV を合意値とみなす)。",
+    )
+    # 任意動画・任意窓での実行 (2026-07-25 汎化監査用に追加)。既定 None =
+    # 従来通り (c34+video_30 固定窓、bit-identical)。3引数はセットで指定する。
+    ap.add_argument(
+        "--video", dest="video", type=str, default=None,
+        help="既定None(従来通りc34+video_30)。指定時はこの video stem "
+             "(例: 29 → video_29.mp4) のみ単一窓で処理する。"
+             "--start-sec / --max-sec と併せて指定する。",
+    )
+    ap.add_argument(
+        "--start-sec", dest="start_sec", type=float, default=None,
+        help="--video 指定時の走査開始秒。",
+    )
+    ap.add_argument(
+        "--max-sec", dest="max_sec", type=float, default=None,
+        help="--video 指定時の走査秒数。",
+    )
+    ap.add_argument(
+        "--output-dir", dest="output_dir", type=str, default=None,
+        help="既定None(data/verify/placement_confirm_frames_2026-07-25、"
+             "従来通り)。指定時は出力先ディレクトリを切り替える。",
+    )
     return ap.parse_args()
 
 
@@ -985,9 +1078,12 @@ def main() -> None:
     if args.smoke:
         _print_progress("[SMOKE MODE] 短窓のみ処理します (本走行ではありません)")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # 出力先切替 (2026-07-25 汎化監査用に追加)。既定 None = 従来通り OUTPUT_DIR。
+    output_dir = Path(args.output_dir) if args.output_dir else OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     guard_kwargs = {
+        "enable_landing_observed_color": args.enable_landing_observed_color,
         "enable_drift_resync_match_start_guard": args.enable_drift_resync_match_start_guard,
         "enable_drift_resync_hsv_gate": args.enable_drift_resync_hsv_gate,
         "enable_baseline_broken_reset": args.enable_baseline_broken_reset,
@@ -995,22 +1091,35 @@ def main() -> None:
         "enable_column_partial_support": args.enable_column_partial_support,
         "enable_placement_cnn_veto": args.enable_placement_cnn_veto,
         "placement_cnn_veto_mode": args.placement_cnn_veto_mode,
+        "enable_match_start_full_clear": args.enable_match_start_full_clear,
+        "enable_recovery_counter_carryover": args.enable_recovery_counter_carryover,
+        "enable_cnn_flicker_hsv_fallback": args.enable_cnn_flicker_hsv_fallback,
     }
-    result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
-    results = [result_c34]
-    if not args.only_c34:
-        result_v30 = _process_one(VIDEO_30, V30_START_SEC, max_sec_v30, **guard_kwargs)
-        results.append(result_v30)
+
+    # 任意動画・任意窓モード (2026-07-25 汎化監査用に追加)。既定 (--video 未指定)
+    # では従来通り c34+video_30 固定窓を処理する (bit-identical)。
+    if args.video is not None:
+        if args.start_sec is None or args.max_sec is None:
+            raise SystemExit(
+                "--video 指定時は --start-sec と --max-sec も必須です",
+            )
+        results = [_process_one(args.video, args.start_sec, args.max_sec, **guard_kwargs)]
+    else:
+        result_c34 = _process_one(VIDEO_C34, C34_START_SEC, max_sec_c34, **guard_kwargs)
+        results = [result_c34]
+        if not args.only_c34:
+            result_v30 = _process_one(VIDEO_30, V30_START_SEC, max_sec_v30, **guard_kwargs)
+            results.append(result_v30)
 
     for result in results:
-        _write_result_outputs(result, output_suffix=args.output_suffix)
+        _write_result_outputs(result, output_suffix=args.output_suffix, output_dir=output_dir)
 
     summary = _build_summary(results)
-    _write_json(summary, OUTPUT_DIR / f"summary{args.output_suffix}.json")
+    _write_json(summary, output_dir / f"summary{args.output_suffix}.json")
 
     text = _format_summary_text(results)
-    (OUTPUT_DIR / f"summary{args.output_suffix}.txt").write_text(text, encoding="utf-8")
-    _print_progress(f"[DONE] 出力先: {OUTPUT_DIR}")
+    (output_dir / f"summary{args.output_suffix}.txt").write_text(text, encoding="utf-8")
+    _print_progress(f"[DONE] 出力先: {output_dir}")
     print(text)
 
 

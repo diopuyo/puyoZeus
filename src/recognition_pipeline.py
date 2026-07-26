@@ -1063,6 +1063,13 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_recovery_counter_carryover: bool = False,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # True で深部セルの CNN 判定境界張り付き反転 (9↔1↔0↔4 等) を検出し、
+        # その間 HSV 出力を復旧ゲートの合意値とみなす
+        # (詳細は src/board_state_machine.py の定数定義部を参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_cnn_flicker_hsv_fallback: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1427,6 +1434,11 @@ class RecognitionPipeline:
         self._enable_recovery_counter_carryover: bool = bool(
             enable_recovery_counter_carryover
         )
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_cnn_flicker_hsv_fallback: bool = bool(
+            enable_cnn_flicker_hsv_fallback
+        )
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1471,6 +1483,7 @@ class RecognitionPipeline:
             enable_column_partial_support=self._enable_column_partial_support,
             enable_match_start_full_clear=self._enable_match_start_full_clear,
             enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1487,6 +1500,7 @@ class RecognitionPipeline:
             enable_column_partial_support=self._enable_column_partial_support,
             enable_match_start_full_clear=self._enable_match_start_full_clear,
             enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1802,6 +1816,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_recovery_counter_carryover: bool = False,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_cnn_flicker_hsv_fallback: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1866,6 +1884,7 @@ class RecognitionPipeline:
             enable_column_partial_support=enable_column_partial_support,
             enable_match_start_full_clear=enable_match_start_full_clear,
             enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2015,6 +2034,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_recovery_counter_carryover: bool = False,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_cnn_flicker_hsv_fallback: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2196,6 +2219,7 @@ class RecognitionPipeline:
             enable_match_start_full_clear=enable_match_start_full_clear,
             enable_score_reset_strict=enable_score_reset_strict,
             enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         )
 
     # ------------------------------------------------------------------
