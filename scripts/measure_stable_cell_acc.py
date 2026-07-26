@@ -401,6 +401,17 @@ def _make_pipeline_cnn(
     enable_recovery_counter_carryover: Optional[bool] = None,
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     disable_per_video_hsv: bool = False,
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード
+    # optional 化。 本体既定値 (False) とローカル既定値 (True) が意図的に
+    # 異なる (本スクリプトは切り出し済み試合動画を常に「試合中」として
+    # 測定する用途のため True 固定が正しい) ため、他フラグと異なり
+    # _none_aware_flags (本体既定値に委譲) パターンは使わず、plain bool で
+    # ローカル既定 True を維持する。
+    force_in_match: bool = True,
+    # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+    # 本体既定値 (False) とローカル既定値が一致するため、他の #51 系と同様
+    # _none_aware_flags (本体既定値に委譲) パターンを使う。
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -467,9 +478,15 @@ def _make_pipeline_cnn(
             OnlineHsvCalibrator は load_default で生成されるため自動 HSV 学習は継続する。
             「自動 HSV + 既定 merged レンジのみ」の汎用精度測定用。
             backwards compat: デフォルト False = 従来挙動と完全一致。
+        force_in_match: 2026-07-25 試合開始直後の確定遅延診断用に追加された
+            RecognitionPipeline 本体の force_in_match をそのまま forward する。
+            backwards compat: デフォルト True = 従来挙動 (常に試合中扱い) と完全一致。
+        enable_initial_confirm_vote: 色→空凍結の修正3点セット③ (2026-07-27)。
+            初回STABLE確定を直前NON-STABLE滞在中の多数決historyで構成する。
+            None (デフォルト) = RecognitionPipeline.load_default 本体の既定値 (False) に従う。
     """
     load_kwargs: dict = dict(
-        force_in_match=True,
+        force_in_match=force_in_match,
         enable_constraint_fill=enable_constraint_fill,
         enable_t2_highconf_yield=enable_t2_highconf_yield,
         enable_infer_empty_guard=enable_infer_empty_guard,
@@ -507,6 +524,7 @@ def _make_pipeline_cnn(
         "enable_score_reset_strict": enable_score_reset_strict,
         "enable_recovery_counter_carryover": enable_recovery_counter_carryover,
         "enable_cnn_flicker_hsv_fallback": enable_cnn_flicker_hsv_fallback,
+        "enable_initial_confirm_vote": enable_initial_confirm_vote,
     }
     load_kwargs.update(
         {k: v for k, v in _none_aware_flags.items() if v is not None}
@@ -522,6 +540,7 @@ def _make_pipeline_cnn(
 def _make_pipeline_hsv_only(
     video_id: str,
     disable_per_video_hsv: bool = False,
+    force_in_match: bool = True,
 ) -> RecognitionPipeline:
     """HSV-only pipeline を構築する。
 
@@ -534,6 +553,9 @@ def _make_pipeline_hsv_only(
             OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
             「自動 HSV + 既定 merged レンジのみ」の全 3 軸整合測定用。
             backwards compat: デフォルト False = 従来挙動と完全一致。
+        force_in_match: 2026-07-25 試合開始直後の確定遅延診断用に追加された
+            RecognitionPipeline 本体の force_in_match をそのまま forward する。
+            backwards compat: デフォルト True = 従来挙動 (常に試合中扱い) と完全一致。
 
     Note:
         disable_per_video_hsv=True 時は raw_cnn / raw_hsv / confirmed の全 3 軸が
@@ -544,7 +566,7 @@ def _make_pipeline_hsv_only(
     """
     pipe = RecognitionPipeline.load_default(
         cnn_override_prob=2.0,
-        force_in_match=True,
+        force_in_match=force_in_match,
     )
     # per-video 手調整 HSV inject: disable_per_video_hsv=True の場合はスキップする。
     # OnlineHsvCalibrator は load_default で生成済みのため自動 HSV 学習は継続する。
@@ -748,6 +770,13 @@ def _process_video(
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード
+    # optional化。 末尾追加 (backwards compat、途中挿入で位置引数呼び出しが
+    # ずれる事故を防ぐ)。
+    force_in_match: bool = True,
+    # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+    # None = 本体既定値 (False) に従う。
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -782,6 +811,10 @@ def _process_video(
         enable_specular_robust_saturation: True にすると光沢ハイライト除外彩度計算を有効化。
             白ハイライト画素を彩度 median 計算から除外して EMPTY 誤判定を防ぐ (案D)。
             backwards compat: デフォルト False = 従来挙動。
+        force_in_match: RecognitionPipeline 本体の force_in_match を forward する。
+            backwards compat: デフォルト True = 従来挙動 (常に試合中扱い) と完全一致。
+        enable_initial_confirm_vote: 色→空凍結の修正3点セット③ (2026-07-27)。
+            None (デフォルト) = 本体既定値 (False) に従う。
     """
     cap_info = _open_capture(video_path, max_frames, sample_interval_sec)
     if cap_info is None:
@@ -824,10 +857,15 @@ def _process_video(
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         disable_per_video_hsv=disable_per_video_hsv,
+        force_in_match=force_in_match,
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
-    pipe_hsv = _make_pipeline_hsv_only(video_id, disable_per_video_hsv=disable_per_video_hsv)
+    pipe_hsv = _make_pipeline_hsv_only(
+        video_id, disable_per_video_hsv=disable_per_video_hsv,
+        force_in_match=force_in_match,
+    )
     print(
         f"[measure] {video_id}: fps={fps:.1f} target={n_target} "
         f"holdout={is_holdout} clip_duration={clip_duration_sec:.1f}s"
@@ -894,6 +932,13 @@ def _process_video_worker(
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード
+    # optional化。 末尾追加 (backwards compat、ProcessPoolExecutor.submit の
+    # 位置引数呼び出しがずれる事故を防ぐため必ず末尾)。
+    force_in_match: bool = True,
+    # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+    # None = 本体既定値 (False) に従う。末尾追加 (同上の理由)。
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -949,6 +994,8 @@ def _process_video_worker(
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
+        force_in_match=force_in_match,
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2190,6 +2237,18 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--initial-confirm-vote",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        dest="enable_initial_confirm_vote",
+        help=(
+            "色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定を "
+            "直前NON-STABLE滞在中の多数決historyで構成する。 "
+            "省略時 (default=None) はライブラリ既定値 (False) に従う。 "
+            "--initial-confirm-vote で明示的に有効化できる。"
+        ),
+    )
+    p.add_argument(
         "--red-hue-wrap-fix",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -2456,6 +2515,19 @@ def _parse_args() -> argparse.Namespace:
             "デフォルト False = 従来挙動完全一致 (backwards compat)。"
         ),
     )
+    p.add_argument(
+        "--force-in-match",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        dest="force_in_match",
+        help=(
+            "RecognitionPipeline 本体の force_in_match を forward する。 "
+            "色→空凍結の修正3点セット② (2026-07-27): 従来ハードコード True を "
+            "optional化。 --no-force-in-match で False にすると is_match_active "
+            "の実信号を使う構成で測定できる (試合開始直後の確定遅延診断用)。 "
+            "デフォルト True = 従来挙動完全一致 (backwards compat)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -2518,6 +2590,12 @@ def _collect_results(
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード
+    # optional化。 末尾追加 (backwards compat)。
+    force_in_match: bool = True,
+    # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+    # None = 本体既定値 (False) に従う。
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -2527,6 +2605,10 @@ def _collect_results(
             backwards compat: デフォルト True = 従来挙動。
         workers: 並列ワーカ数。1 (デフォルト) = 逐次実行 (backwards compat)。
             2 以上を指定すると ProcessPoolExecutor (spawn) で動画単位並列処理。
+        force_in_match: RecognitionPipeline 本体の force_in_match を forward する。
+            backwards compat: デフォルト True = 従来挙動と完全一致。
+        enable_initial_confirm_vote: 色→空凍結の修正3点セット③ (2026-07-27)。
+            None (デフォルト) = 本体既定値 (False) に従う。
         enable_t2_highconf_yield: True にすると T2 の prev_stable 上書きを
             CNN 支持セルでスキップする。backwards compat: デフォルト False = 従来挙動。
         enable_infer_empty_guard: True にすると infer_placement 空セル
@@ -2598,6 +2680,8 @@ def _collect_results(
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
+            force_in_match=force_in_match,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -2635,6 +2719,8 @@ def _collect_results(
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
+        force_in_match=force_in_match,
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
     )
 
 
@@ -2686,6 +2772,8 @@ def _collect_serial(
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
+    force_in_match: bool = True,
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2730,6 +2818,8 @@ def _collect_serial(
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             persist_min_frames=persist_min_frames,
             disable_per_video_hsv=disable_per_video_hsv,
+            force_in_match=force_in_match,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
         )
         stats_list.append(vstats)
     return stats_list
@@ -2784,6 +2874,15 @@ def _collect_parallel(
     enable_cnn_flicker_hsv_fallback: Optional[bool] = None,
     persist_min_frames: int = CORRUPTION_PERSIST_MIN_FRAMES,
     disable_per_video_hsv: bool = False,
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード
+    # optional化。 末尾追加 (backwards compat、下の executor.submit 位置引数
+    # タプルにも必ず同じ末尾位置で追加すること。 _process_video_worker の
+    # 引数順と完全一致させる必要がある、順序ズレは型が一致するため
+    # 例外にならず静かに壊れる)。
+    force_in_match: bool = True,
+    # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+    # None = 本体既定値 (False) に従う。末尾追加 (同上の理由)。
+    enable_initial_confirm_vote: Optional[bool] = None,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -2842,6 +2941,8 @@ def _collect_parallel(
                 enable_cnn_flicker_hsv_fallback,
                 persist_min_frames,
                 disable_per_video_hsv,
+                force_in_match,
+                enable_initial_confirm_vote,
             )
             futures[fut] = vid
 
@@ -3064,11 +3165,19 @@ def main() -> int:
     enable_cnn_flicker_hsv_fallback: Optional[bool] = getattr(
         args, "enable_cnn_flicker_hsv_fallback", None
     )
+    # 色→空凍結の修正3点セット③ (2026-07-27): None のまま保持し、
+    # ライブラリ既定値追従を omit-if-None に委ねる。
+    enable_initial_confirm_vote: Optional[bool] = getattr(
+        args, "enable_initial_confirm_vote", None
+    )
     workers: int = max(1, args.workers)
     # --corruption-persist-frames: 1 以上であることを保証する
     persist_min_frames: int = max(1, int(getattr(args, "corruption_persist_frames", CORRUPTION_PERSIST_MIN_FRAMES)))
     # per-video 手調整 HSV inject 無効化フラグ (汎用精度測定用)
     disable_per_video_hsv: bool = bool(getattr(args, "disable_per_video_hsv", False))
+    # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード optional化。
+    # デフォルト True = 従来挙動完全一致 (backwards compat)。
+    force_in_match: bool = bool(getattr(args, "force_in_match", True))
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
@@ -3117,6 +3226,7 @@ def main() -> int:
         ("enable_score_reset_strict", enable_score_reset_strict),
         ("enable_recovery_counter_carryover", enable_recovery_counter_carryover),
         ("enable_cnn_flicker_hsv_fallback", enable_cnn_flicker_hsv_fallback),
+        ("enable_initial_confirm_vote", enable_initial_confirm_vote),
     ):
         _effective = _resolve_flag(_flag_value, _flag_name)
         print(
@@ -3130,6 +3240,11 @@ def main() -> int:
         print(
             "[measure] disable_per_video_hsv=ON "
             "(手調整 per-video HSV inject スキップ: 自動 HSV + merged レンジのみで評価)"
+        )
+    if not force_in_match:
+        print(
+            "[measure] force_in_match=OFF "
+            "(--no-force-in-match 指定: is_match_active の実信号を使用)"
         )
     stats_list = _collect_results(
         video_ids, holdout_ids, args.video_dir,
@@ -3167,6 +3282,8 @@ def main() -> int:
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         persist_min_frames=persist_min_frames,
         disable_per_video_hsv=disable_per_video_hsv,
+        force_in_match=force_in_match,
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -3253,6 +3370,14 @@ def main() -> int:
             # True = inject スキップ = 「自動 HSV + merged レンジのみ」での評価
             # False = inject 有効 = 従来挙動と完全一致 (backwards compat)
             "disable_per_video_hsv": disable_per_video_hsv,
+            # force_in_match の on/off を記録 (後日比較用、色→空凍結の修正3点セット②)
+            # True (デフォルト) = 従来挙動 (常に試合中扱い) と完全一致 (backwards compat)
+            "force_in_match": force_in_match,
+            # enable_initial_confirm_vote の on/off を記録 (後日比較用、
+            # 色→空凍結の修正3点セット③)。None は既定値解決後に記録する。
+            "enable_initial_confirm_vote": _resolve_flag(
+                enable_initial_confirm_vote, "enable_initial_confirm_vote"
+            ),
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

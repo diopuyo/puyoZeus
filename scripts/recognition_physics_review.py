@@ -128,6 +128,8 @@ def _capture_frames(
     enable_placement_cnn_veto: bool = False,
     placement_cnn_veto_mode: str = "hold",
     pipeline_out: dict | None = None,
+    enable_initial_confirm_vote: bool = False,
+    initial_confirm_min_votes: int | None = None,
 ) -> dict[str, list[_FrameRecord]]:
     """1 動画・1 窓分を RecognitionPipeline で処理し、side別に記録を返す。
 
@@ -181,6 +183,11 @@ def _capture_frames(
     (2026-07-25) P2 設置推論の防御的 CNN 照合の A/B 計測用に追加。既定
     False/"hold" = src 側既定と bit-identical (従来通り)。
     RecognitionPipeline.load_default にそのまま透過する (src 無改修)。
+    enable_initial_confirm_vote / initial_confirm_min_votes: 色→空凍結の
+    修正3点セット③ (2026-07-27) 効果測定用に追加。既定 False/None =
+    src 側既定と bit-identical (従来通り)。RecognitionPipeline.load_default
+    にそのまま透過する (src 無改修、initial_confirm_min_votes は None なら
+    本関数からは渡さず src 側既定値に委ねる)。
     """
     video_path = VIDEO_DIR / f"video_{video_stem}.mp4"
     cap = cv2.VideoCapture(str(video_path))
@@ -191,6 +198,16 @@ def _capture_frames(
     start_frame = int(start_sec * fps)
     cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
     n_frames = int(max_sec * fps)
+
+    # 色→空凍結の修正3点セット③ (2026-07-27): initial_confirm_min_votes は
+    # None なら load_default に渡さず src 側既定値に委ねる (ローカル決め打ち
+    # default が本体既定値変更に追従できず乖離するバグの再発防止、
+    # 2026-07-26 enable_landing_observed_color と同一方針)。
+    _initial_confirm_kwargs: dict = {
+        "enable_initial_confirm_vote": enable_initial_confirm_vote,
+    }
+    if initial_confirm_min_votes is not None:
+        _initial_confirm_kwargs["initial_confirm_min_votes"] = initial_confirm_min_votes
 
     pipeline = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
@@ -212,6 +229,7 @@ def _capture_frames(
         enable_baseline_broken_grace=enable_baseline_broken_grace,
         enable_placement_cnn_veto=enable_placement_cnn_veto,
         placement_cnn_veto_mode=placement_cnn_veto_mode,
+        **_initial_confirm_kwargs,
     )
     if hasattr(pipeline, "set_video_id"):
         pipeline.set_video_id(video_stem)
