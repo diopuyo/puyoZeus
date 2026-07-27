@@ -1061,24 +1061,27 @@ class RecognitionPipeline:
         # STABLE 滞在が RECOVERY_COUNTER_CARRYOVER_MAX_SEC (既定 2.0秒) 以内
         # なら STABLE 復帰後も引き継ぐ (8f 到達直前の未反映化への対処、
         # diag `recovery_cell_timeseries_2026-07-25`)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_recovery_counter_carryover: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_recovery_counter_carryover: bool = True,
         # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
         # True で深部セルの CNN 判定境界張り付き反転 (9↔1↔0↔4 等) を検出し、
         # その間 HSV 出力を復旧ゲートの合意値とみなす
         # (詳細は src/board_state_machine.py の定数定義部を参照)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_cnn_flicker_hsv_fallback: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_cnn_flicker_hsv_fallback: bool = True,
         # 色→空凍結の修正3点セット③ (feat/recognition-postchain-fix-2026-07-23,
         # 2026-07-27): 初回STABLE確定の多数決ガード。 True にすると
         # BoardStateMachine の baseline is None (初回確定) 時、直前
         # NON-STABLE滞在中に蓄積した non_stable_cnn_history の多数決で
         # 初回confirmedを構成する (fallback=new_cnn で観測不足セルはEMPTY化しない)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_initial_confirm_vote: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = (
             DEFAULT_INITIAL_CONFIRM_MIN_VOTES
         ),
@@ -2059,17 +2062,20 @@ class RecognitionPipeline:
         # 挙動に戻せる (backwards compat)。
         enable_score_reset_strict: bool = True,
         # 復旧カウンタ carryover (#51, 2026-07-26, A/B 計測用)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_recovery_counter_carryover: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_recovery_counter_carryover: bool = True,
         # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_cnn_flicker_hsv_fallback: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_cnn_flicker_hsv_fallback: bool = True,
         # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_initial_confirm_vote: bool = False,
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
