@@ -6,12 +6,25 @@
     「閾値を緩めれば救えるのか、それとも桁違いで無駄なのか」を実測するのが
     本スクリプトの目的。
 
+2026-07-29 追記 (真因確定・修正版): 上記 6.7% は
+    scripts/measure_ojama_landing_delay.py の相手フレーム絞り込みが
+    「相手側 game_idx ラベル一致」に依存していたバグの産物と判明した。
+    1P/2P の game_idx は独立カウンタで、片側がスコアリセット検知を
+    1回見逃すと残り全体で固定オフセット分ズレる (実測: 両側データありの
+    game_idxペア361件中208件=57.6%が5秒超ズレ)。
+    scripts/measure_ojama_landing_delay.py に `_opponent_frame_mask` を
+    追加し (game_idxを信用せず、攻撃側自身の game_idx 境界時刻の範囲で
+    相手フレームを絞る時刻ベース方式に修正、backwards compat 用に
+    `use_game_idx_mask=True` で旧挙動も再現可能)、本スクリプトはその
+    新旧両方式を呼び分けて before/after を比較する。
+
 ⚠️ 認識の再実行は一切行わない。既存 npz (data/indicators_v2/
    boards_lean_fixed_regen_2026-07-28/、m30収集とは無関係の完了済みデータ)
-   と既存 CSV (exchange_landing_delay_regen_2026-07-28.csv) の読み取り集計
-   のみで完結する。scripts/measure_ojama_landing_delay.py・
-   scripts/measure_exchange_dynamics.py は import のみで一切変更しない
-   (両ファイルの既存方針を継承)。
+   の読み取り集計のみで完結する。scripts/measure_exchange_dynamics.py は
+   import のみで一切変更しない (既存方針を継承)。
+   scripts/measure_ojama_landing_delay.py は本タスクの真因修正
+   (`_opponent_frame_mask` 追加 + optional 引数追加のみ、既存シグネチャ
+   非破壊) のみ変更済み。
 
 _find_landing() (scripts/measure_ojama_landing_delay.py:103-139) は
 gap_threshold_sec を既に引数として受け取る設計 (関数シグネチャ変更不要)。
@@ -44,7 +57,8 @@ from scripts.measure_exchange_dynamics import (  # noqa: E402
     TIER_MAP, FireEvent, _process_video, _subset,
 )
 from scripts.measure_ojama_landing_delay import (  # noqa: E402
-    MAX_LANDING_SEARCH_SEC, _find_landing, _load_npz, _visible_ojama_counts,
+    MAX_LANDING_SEARCH_SEC, _find_landing, _load_npz, _opponent_frame_mask,
+    _visible_ojama_counts,
 )
 
 # 再収集済み npz (m30収集とは別プロセス、完了済み・変更なし)
@@ -58,6 +72,10 @@ COVERAGE_GATE_PCT: float = 20.0
 
 # ベースライン (現状確定済み、gap分布抽出の対象を特定するための閾値)
 BASELINE_GAP_THRESHOLD_SEC: float = 2.0
+
+# 修正前後比較用のマスク方式ラベル (2026-07-29 追加)。
+MASK_METHOD_OLD: str = "old_game_idx"
+MASK_METHOD_NEW: str = "new_time_window"
 
 
 def _first_violating_gap(
@@ -87,10 +105,20 @@ def _first_violating_gap(
     return float("nan")
 
 
-def _sweep_one_video(
-    npz_path: Path, events: list[FireEvent], gap_thresholds: tuple[float, ...],
+def _sweep_one_video_by_method(
+    npz_path: Path,
+    events: list[FireEvent],
+    gap_thresholds: tuple[float, ...],
+    use_game_idx_mask: bool,
+    col_prefix: str,
 ) -> list[dict]:
-    """1動画分、発火イベントごとに複数閾値の判定結果 + 原因ギャップ長を計算する。"""
+    """1動画分、指定マスク方式で複数閾値の判定結果 + 原因ギャップ長を計算する。
+
+    Args:
+        use_game_idx_mask: True=旧方式 (相手game_idxラベル一致)、
+            False=新方式 (攻撃側game_idx境界時刻の時刻ベース窓、修正後既定)。
+        col_prefix: 出力列名の接頭辞 (旧/新を区別するため)。
+    """
     records = _load_npz(npz_path)
     by_side = {r.side: r for r in records}
     if "1P" not in by_side or "2P" not in by_side:
@@ -101,7 +129,8 @@ def _sweep_one_video(
     for ev in events:
         opp_side = "2P" if ev.fire_side == "1P" else "1P"
         opp_rec = by_side[opp_side]
-        mask = opp_rec.game_idx == ev.game_idx
+        own_rec = by_side[ev.fire_side]
+        mask = _opponent_frame_mask(opp_rec, own_rec, ev.game_idx, use_game_idx_mask)
         row: dict = {
             "video_stem": ev.video_stem, "tier": ev.tier,
             "game_idx": ev.game_idx, "fire_side": ev.fire_side,
@@ -109,9 +138,9 @@ def _sweep_one_video(
         }
         if not mask.any():
             for gt in gap_thresholds:
-                row[f"status_gt{gt}"] = "no_opp_game_data"
-                row[f"available_gt{gt}"] = False
-            row["baseline_trigger_gap_sec"] = float("nan")
+                row[f"{col_prefix}_status_gt{gt}"] = "no_opp_game_data"
+                row[f"{col_prefix}_available_gt{gt}"] = False
+            row[f"{col_prefix}_trigger_gap_sec"] = float("nan")
             rows.append(row)
             continue
 
@@ -122,28 +151,46 @@ def _sweep_one_video(
             result = _find_landing(
                 opp_game.t_sec, opp_counts, ev.t_fire, gt, MAX_LANDING_SEARCH_SEC,
             )
-            row[f"status_gt{gt}"] = result.status
-            row[f"available_gt{gt}"] = result.available
+            row[f"{col_prefix}_status_gt{gt}"] = result.status
+            row[f"{col_prefix}_available_gt{gt}"] = result.available
 
         # 現行閾値 (2.0) で gap_in_window となった原因ギャップ長を実測
-        if row[f"status_gt{BASELINE_GAP_THRESHOLD_SEC}"] == "gap_in_window":
-            row["baseline_trigger_gap_sec"] = _first_violating_gap(
+        if row[f"{col_prefix}_status_gt{BASELINE_GAP_THRESHOLD_SEC}"] == "gap_in_window":
+            row[f"{col_prefix}_trigger_gap_sec"] = _first_violating_gap(
                 opp_game.t_sec, ev.t_fire, BASELINE_GAP_THRESHOLD_SEC, MAX_LANDING_SEARCH_SEC,
             )
         else:
-            row["baseline_trigger_gap_sec"] = float("nan")
+            row[f"{col_prefix}_trigger_gap_sec"] = float("nan")
         rows.append(row)
     return rows
 
 
-def _print_coverage_table(df: pd.DataFrame, gap_thresholds: tuple[float, ...]) -> None:
+def _sweep_one_video(
+    npz_path: Path, events: list[FireEvent], gap_thresholds: tuple[float, ...],
+) -> list[dict]:
+    """1動画分、新旧マスク方式それぞれの判定結果をマージして返す (before/after比較用)。"""
+    old_rows = _sweep_one_video_by_method(
+        npz_path, events, gap_thresholds, use_game_idx_mask=True, col_prefix="old",
+    )
+    new_rows = _sweep_one_video_by_method(
+        npz_path, events, gap_thresholds, use_game_idx_mask=False, col_prefix="new",
+    )
+    merged: list[dict] = []
+    for old_row, new_row in zip(old_rows, new_rows):
+        row = dict(old_row)
+        row.update({k: v for k, v in new_row.items() if k not in row})
+        merged.append(row)
+    return merged
+
+
+def _print_coverage_table(df: pd.DataFrame, gap_thresholds: tuple[float, ...], col_prefix: str) -> None:
     """閾値別の全体被覆率表を出力する (userタスク指定フォーマット)。"""
-    print("\n[閾値別 全体被覆率]")
+    print(f"\n[閾値別 全体被覆率 ({col_prefix})]")
     print(f"{'閾値(秒)':>10} | {'全体被覆率':>10} | {'opp_available':>16} | {'landed件数':>10} | {'20%基準':>10}")
     total = len(df)
     for gt in gap_thresholds:
-        avail_col = f"available_gt{gt}"
-        status_col = f"status_gt{gt}"
+        avail_col = f"{col_prefix}_available_gt{gt}"
+        status_col = f"{col_prefix}_status_gt{gt}"
         n_avail = int(df[avail_col].sum())
         n_landed = int((df[status_col] == "landed").sum())
         pct = n_avail / total * 100.0
@@ -152,10 +199,31 @@ def _print_coverage_table(df: pd.DataFrame, gap_thresholds: tuple[float, ...]) -
         print(f"{label:>10} | {pct:>9.1f}% | {n_avail:>6}/{total:<8} | {n_landed:>10} | {verdict:>10}")
 
 
-def _print_gap_distribution(df: pd.DataFrame) -> None:
+def _print_status_breakdown(df: pd.DataFrame) -> None:
+    """detection_status 内訳の 修正前(old)/修正後(new) 比較 (閾値2.0固定、userタスク必須項目)。"""
+    print(f"\n[detection_status 内訳 修正前(old)→修正後(new)、閾値={BASELINE_GAP_THRESHOLD_SEC}s]")
+    old_col = f"old_status_gt{BASELINE_GAP_THRESHOLD_SEC}"
+    new_col = f"new_status_gt{BASELINE_GAP_THRESHOLD_SEC}"
+    old_counts = df[old_col].value_counts()
+    new_counts = df[new_col].value_counts()
+    total = len(df)
+    all_statuses = sorted(set(old_counts.index) | set(new_counts.index))
+    for status in all_statuses:
+        n_old = int(old_counts.get(status, 0))
+        n_new = int(new_counts.get(status, 0))
+        print(
+            f"  {status:>24}: {n_old:>4} ({n_old / total * 100:5.1f}%) -> "
+            f"{n_new:>4} ({n_new / total * 100:5.1f}%)",
+        )
+
+
+def _print_gap_distribution(df: pd.DataFrame, col_prefix: str) -> None:
     """gap_in_window (閾値2.0) の実際のギャップ長分布を出力する (userタスク必須項目)。"""
-    gaps = df["baseline_trigger_gap_sec"].dropna()
-    print(f"\n[gap_in_window (閾値={BASELINE_GAP_THRESHOLD_SEC}s) の実際のギャップ長分布] n={len(gaps)}")
+    gaps = df[f"{col_prefix}_trigger_gap_sec"].dropna()
+    print(
+        f"\n[gap_in_window (閾値={BASELINE_GAP_THRESHOLD_SEC}s, {col_prefix}) "
+        f"の実際のギャップ長分布] n={len(gaps)}",
+    )
     if gaps.empty:
         print("  (該当行が0件、出せない)")
         return
@@ -174,7 +242,7 @@ def main(limit_videos: int | None = None) -> None:
     present = [p for p in npz_paths if p.exists()]
     if limit_videos is not None:
         present = present[:limit_videos]
-    print(f"[INFO] 対象 {len(present)} 動画 (閾値スイープ: {GAP_THRESHOLDS_SEC})")
+    print(f"[INFO] 対象 {len(present)} 動画 (閾値スイープ: {GAP_THRESHOLDS_SEC}, 新旧マスク方式比較)")
 
     t_start = time.time()
     sim = ChainSimulator()
@@ -194,8 +262,11 @@ def main(limit_videos: int | None = None) -> None:
         sys.exit(1)
 
     df = pd.DataFrame(all_rows)
-    _print_coverage_table(df, GAP_THRESHOLDS_SEC)
-    _print_gap_distribution(df)
+    _print_status_breakdown(df)
+    _print_coverage_table(df, GAP_THRESHOLDS_SEC, "old")
+    _print_coverage_table(df, GAP_THRESHOLDS_SEC, "new")
+    _print_gap_distribution(df, "old")
+    _print_gap_distribution(df, "new")
 
 
 if __name__ == "__main__":
