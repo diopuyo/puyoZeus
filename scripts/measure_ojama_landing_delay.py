@@ -49,7 +49,7 @@ from src.board import COLOR_OJAMA, HIDDEN_ROWS  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.indicators_v2 import TIME_PER_CHAIN_SEC, chain_to_time  # noqa: E402
 from scripts.measure_exchange_dynamics import (  # noqa: E402
-    CHAIN_BIN_CAP, NPZ_DIR, TIER_MAP, FireEvent, _load_npz,
+    CHAIN_BIN_CAP, NPZ_DIR, TIER_MAP, FireEvent, NpzRecord, _load_npz,
     _process_video, _subset,
 )
 
@@ -144,10 +144,52 @@ def _find_landing(
 # ============================
 
 
+def _opponent_frame_mask(
+    opp_rec: NpzRecord,
+    own_rec: NpzRecord,
+    game_idx: int,
+    use_game_idx_mask: bool = False,
+) -> np.ndarray:
+    """相手側フレームを「同じ実試合」に絞り込むマスクを返す。
+
+    バグ修正 (2026-07-29): 旧実装 (use_game_idx_mask=True) は 1P/2P 独立
+    カウンタである game_idx ラベルの一致で絞っていたが、片側がスコア
+    リセット検知を1回でも見逃すと動画残り全体で固定オフセット分ズレる
+    (実測: 両側データありのペア361件中208件=57.6%が5秒超ズレ、c11は
+    一貫して+2)。このズレにより実在する相手観測を誤って「別試合」として
+    捨てていた (no_baseline 118件中109件=92.4%がこのラベル不一致由来)。
+
+    修正後 (既定、use_game_idx_mask=False): game_idx ラベルを信用せず、
+    実時刻を真実として使う。攻撃側 (own_rec) 自身の game_idx 境界時刻
+    [開始, 終了] で相手フレームを絞る。攻撃側自身の game_idx は自身の
+    スコアリセットで区切られているため信用できる一方、相手側の game_idx
+    ラベルはズレうるため使わない。この時間区間内の相手フレームは定義上
+    「同じ実試合の同じ時間帯」になる。
+
+    Args:
+        use_game_idx_mask: True で旧挙動 (相手側 game_idx ラベル一致) を
+            再現する (backwards compat、A/B比較用)。既定 False = 新挙動。
+    """
+    if use_game_idx_mask:
+        return opp_rec.game_idx == game_idx
+    own_mask = own_rec.game_idx == game_idx
+    if not own_mask.any():
+        return np.zeros(len(opp_rec.t_sec), dtype=bool)
+    t_start = float(own_rec.t_sec[own_mask].min())
+    t_end = float(own_rec.t_sec[own_mask].max())
+    return (opp_rec.t_sec >= t_start) & (opp_rec.t_sec <= t_end)
+
+
 def _measure_landing_for_video(
-    npz_path: Path, events: list[FireEvent],
+    npz_path: Path, events: list[FireEvent], use_game_idx_mask: bool = False,
 ) -> list[dict]:
-    """1 動画分の発火イベント一覧に対し、相手盤面の着弾遅延を測定する。"""
+    """1 動画分の発火イベント一覧に対し、相手盤面の着弾遅延を測定する。
+
+    Args:
+        use_game_idx_mask: True で旧挙動 (相手側 game_idx ラベル一致) を
+            再現する (backwards compat、A/B比較用)。既定 False =
+            時刻ベースマスク (_opponent_frame_mask 参照、2026-07-29 修正)。
+    """
     records = _load_npz(npz_path)
     by_side = {r.side: r for r in records}
     if "1P" not in by_side or "2P" not in by_side:
@@ -158,7 +200,8 @@ def _measure_landing_for_video(
     for ev in events:
         opp_side = "2P" if ev.fire_side == "1P" else "1P"
         opp_rec = by_side[opp_side]
-        mask = opp_rec.game_idx == ev.game_idx
+        own_rec = by_side[ev.fire_side]
+        mask = _opponent_frame_mask(opp_rec, own_rec, ev.game_idx, use_game_idx_mask)
         if not mask.any():
             rows.append(_build_row(ev, LandingResult("no_opp_game_data", False, float("nan"), -1)))
             continue
