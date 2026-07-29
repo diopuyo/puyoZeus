@@ -96,9 +96,25 @@ score OCR は「固定セル」に対して数字クラスを分類するが、�
       **全動画ロールアウト前に追加のテンプレ採取・閾値再検討が必須**。
   加えて、表示位置がROI (盤面) の左端付近になる場合、ポップアップ自体が
   ROI境界で切れて一部読み取れないケースも1件観測した (video_c54 2P側
-  t≈637.0s の「9」、ROI左端で一部クリップ)。本モジュールは盤面ROI内のみを
-  検索範囲とする設計のため、盤面外にはみ出す表示は原理的に対応できない
-  (将来的にROIを盤面外側に少し広げる拡張が考えられるが未実装)。
+  t≈637.0s の「9」、ROI左端で一部クリップ)。
+  **2026-07-30 追加調査で根本原因を特定・修正済み**: 該当フレームを実際に
+  目視確認したところ、digit_9 の真の左端は DEFAULT_P2_REGION の左端より
+  約20px 外側にあり、元の ROI (盤面のみ) では NCC スコアが 0.30〜0.39 まで
+  低下し閾値 0.60 に届いていなかった。`CHAIN_COUNT_SEARCH_MARGIN_X_PX` /
+  `_Y_PX` (本ファイル該当箇所参照) を追加し、盤面外へ少し広げた範囲を検索
+  するよう `_crop_search_roi` を修正した結果、同フレームで NCC スコアが
+  0.865 まで回復し正しく「9」を検出できることを実測で確認した。誤検出リスク
+  (拡張範囲での新規誤爆) も同動画の複数無関係時刻で検証し、拡張前と同水準
+  (0.59〜0.61) に留まることを確認済み。
+  なお、同じイベントで報告されていた digit_2/3/4 の信頼度不安定
+  (confidence 0.60〜0.75) は **別原因** と判明した (2026-07-30 追加調査)。
+  拡張ROIで個別に確認したところ、真の位置は盤面内 (クリップなし) だが
+  NCC ピークスコア自体が 0.50〜0.65 程度に留まり、かつ一部時刻では
+  digit_8 テンプレが誤って高スコア (0.735) で競合する事例を確認した。
+  これはテンプレ自体の判別力不足 (数字ごとの手動crop品質のばらつき) が
+  原因であり、ROI クリップとは無関係。**本タスクではdigit_9のクリップ問題
+  のみを修正しており、digit_2/3/4 の別課題は未修正のまま残っている**
+  (再採取または前処理見直しが必要、要別タスク)。
 - テンプレは手動crop (背景の隣接ぷよが一部写り込む) のため、score_ocr の
   digit テンプレほど背景ノイズを除去できていない。tight crop (数字グリフ
   中心、背景余白を最小化) により誤検出はある程度抑えたが、完全排除はできて
@@ -248,6 +264,30 @@ EXPECTED_FRAME_SHAPE: tuple[int, int] = (1080, 1920)
 # ボーナス対象になるため、4 未満のグループは通常の連鎖では発生しない)。
 CHAIN_SCORE_APPROX_ERASED_PER_STEP: int = 4
 
+# ============================
+# チェーンカウントOCR専用の検索マージン (2026-07-30 追加)
+# ============================
+# 「N れんさ!」ポップアップは消えたぷよ群の付近に出現するため、そのぷよ群が
+# 盤面の縁 (特に左端) 付近だった場合、ポップアップのグラフィック自体が
+# DEFAULT_P1_REGION / DEFAULT_P2_REGION の境界からはみ出して描画される。
+# 実測 (2026-07-30、video_c54 2P側 game_idx=9 の実9連鎖イベント、
+# t≈636.9〜637.9秒): digit_9 の真の左端は DEFAULT_P2_REGION の左端より
+# 約20px 外側 (盤面より左、絶対座標で ROI 拡張後の相対位置 x=-20) にあり、
+# 元の ROI ではテンプレの左側が切り捨てられて NCC スコアが 0.30〜0.39 まで
+# 低下し閾値 0.60 に届かなかった (=候補生成に「9」が入らない根本原因)。
+# ROI をこのマージン分だけ盤面外へ広げてスキャンすると同フレームで NCC
+# スコアが 0.777〜0.865 まで回復し、正しく検出できることを実測で確認した。
+# 誤検出リスク検証 (同動画、ポップアップ非表示の複数時刻で実測): マージン
+# 拡張後も検索範囲拡大による新規の閾値超え誤検出は確認されず、誤検出の
+# 最大値は拡張前と同水準 (0.59〜0.61、いずれも元の ROI 内の既知の位置)
+# に留まった。
+# 本モジュール専用の定数として定義し、DEFAULT_P1_REGION / DEFAULT_P2_REGION
+# 自体 (src/image_reader.py) は変更しない (他用途への影響を避けるため、
+# userタスク指定)。縦方向は実測でのはみ出し事例が無いため、横方向より
+# 小さい安全マージンのみを確保する。
+CHAIN_COUNT_SEARCH_MARGIN_X_PX: int = 40
+CHAIN_COUNT_SEARCH_MARGIN_Y_PX: int = 20
+
 
 # ============================
 # 結果データクラス
@@ -263,6 +303,11 @@ class ChainCountReadResult:
             未検出/信頼度不足なら None。
         confidence: 採用したクラスの NCC 最大値 (0.0..1.0)。
         location: ROI 内でのテンプレ左上座標 (デバッグ用)。未検出時 None。
+            2026-07-30 以降、ROI は DEFAULT_P1_REGION / DEFAULT_P2_REGION に
+            CHAIN_COUNT_SEARCH_MARGIN_X_PX / _Y_PX 分のマージンを加えた範囲
+            (`_crop_search_roi` 参照) のため、座標系は DEFAULT_P1/P2_REGION
+            基準ではなくこの拡張後 ROI 基準になる点に注意 (デバッグ用途のみで
+            あり、外部の座標計算に依存するコードは無いことを確認済み)。
     """
 
     chain_count: int | None
@@ -316,10 +361,20 @@ def _region_to_bounds(region: BoardRegion) -> tuple[int, int, int, int]:
 
 
 def _crop_search_roi(frame: np.ndarray, side: Side) -> np.ndarray | None:
-    """フレームから「N れんさ!」ポップアップの検索対象 ROI (盤面全体) を切り出す。"""
+    """フレームから「N れんさ!」ポップアップの検索対象 ROI を切り出す。
+
+    盤面本体 (DEFAULT_P1_REGION / DEFAULT_P2_REGION) だけでなく、盤面の縁で
+    ポップアップが切れるケース (2026-07-30 実測、CHAIN_COUNT_SEARCH_MARGIN_*_PX
+    のコメント参照) に対応するため、専用マージン分を加えた範囲を検索する。
+    フレーム境界を超える分は切り詰める (はみ出し自体はエラーにしない)。
+    """
     region = DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
     y1, y2, x1, x2 = _region_to_bounds(region)
-    if y2 > frame.shape[0] or x2 > frame.shape[1]:
+    y1 = max(0, y1 - CHAIN_COUNT_SEARCH_MARGIN_Y_PX)
+    y2 = min(frame.shape[0], y2 + CHAIN_COUNT_SEARCH_MARGIN_Y_PX)
+    x1 = max(0, x1 - CHAIN_COUNT_SEARCH_MARGIN_X_PX)
+    x2 = min(frame.shape[1], x2 + CHAIN_COUNT_SEARCH_MARGIN_X_PX)
+    if y2 <= y1 or x2 <= x1:
         return None
     return frame[y1:y2, x1:x2].copy()
 
@@ -731,6 +786,8 @@ __all__ = [
     "CHAIN_NCC_MIN_CONFIDENCE",
     "CHAIN_POPUP_DISPLAY_DURATION_SEC",
     "CHAIN_SCORE_APPROX_ERASED_PER_STEP",
+    "CHAIN_COUNT_SEARCH_MARGIN_X_PX",
+    "CHAIN_COUNT_SEARCH_MARGIN_Y_PX",
     "CHAIN_TWO_DIGIT_MAX_GAP_PX",
     "CHAIN_TWO_DIGIT_MIN_GAP_PX",
     "CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX",

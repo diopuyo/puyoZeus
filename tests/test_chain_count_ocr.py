@@ -15,6 +15,8 @@ import pytest
 from src.chain_count_ocr import (
     CHAIN_COUNT_MAX,
     CHAIN_COUNT_MIN,
+    CHAIN_COUNT_SEARCH_MARGIN_X_PX,
+    CHAIN_COUNT_SEARCH_MARGIN_Y_PX,
     CHAIN_DIGIT_HEIGHT,
     CHAIN_DIGIT_LABELS,
     CHAIN_DIGIT_WIDTH,
@@ -24,6 +26,7 @@ from src.chain_count_ocr import (
     ChainCountWindowResult,
     _aggregate_window_samples,
     _approx_min_chain_score,
+    _crop_search_roi,
     _extract_monotonic_max_chain_count,
     _select_chain_count_by_score,
 )
@@ -179,6 +182,44 @@ def test_chain_count_ocr_no_popup_returns_none() -> None:
     frame = _make_blank_frame()
     res = ocr.read_side(frame, "1P")
     assert res.chain_count is None
+
+
+# =============================================================================
+# 検索マージン (2026-07-30 追加): 盤面の縁でクリップされるポップアップの回帰
+# =============================================================================
+
+
+def test_crop_search_roi_extends_beyond_default_region_by_margin() -> None:
+    """検索ROIは DEFAULT_P1/P2_REGION よりチェーンカウントOCR専用マージン分広い。
+
+    src/image_reader.py の DEFAULT_P1_REGION / DEFAULT_P2_REGION 自体は
+    変更していないことの確認も兼ねる (他用途への影響がないことの担保)。
+    """
+    frame = _make_blank_frame()
+    roi = _crop_search_roi(frame, "2P")
+    assert roi is not None
+    expected_h = DEFAULT_P2_REGION.height + 2 * CHAIN_COUNT_SEARCH_MARGIN_Y_PX
+    expected_w = DEFAULT_P2_REGION.width + 2 * CHAIN_COUNT_SEARCH_MARGIN_X_PX
+    assert roi.shape[:2] == (expected_h, expected_w)
+
+
+def test_chain_count_ocr_reads_digit_clipped_left_of_default_region() -> None:
+    """盤面ROI左端からわずかにはみ出すポップアップの回帰テスト (実測ケース)。
+
+    2026-07-30 実測: video_c54 2P側 game_idx=9 の実9連鎖イベントで、
+    digit_9 の左端が DEFAULT_P2_REGION の左端より約20px外側にあり検出に
+    失敗していた (NCCスコア0.30〜0.39、閾値0.60に届かず)。
+    CHAIN_COUNT_SEARCH_MARGIN_X_PX 追加後は合成データでも検出できることを
+    固定する (実測の -20px オフセットを再現)。
+    """
+    templates = _load_real_templates()
+    if 9 not in templates:
+        pytest.skip("digit_9 テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, templates[9], "2P", -20, 400)
+    res = ocr.read_side(frame, "2P")
+    assert res.chain_count == 9
 
 
 # =============================================================================
