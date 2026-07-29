@@ -35,6 +35,9 @@ from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker, OjamaAccountSnapshot,
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
 )
+from src.probability_calibration import (  # noqa: E402
+    PlattCalibrationParams, apply_platt_calibration, load_platt_calibration,
+)
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 from scripts.model_indicator_win import (  # noqa: E402
@@ -73,6 +76,16 @@ THREAT_SCALE = 0.22       # 到達火力差(お邪魔個) → 有利不利換算
 # 勝率較正: 有利不利→勝率。scripts.calibrate_winprob が実データで学習した
 #   sigmoid(k×有利不利) を使う。ファイルが無ければ直線 0.5+adv/200 にフォールバック。
 WINPROB_CALIB_PATH = Path("data/indicators_v2/winprob_calib.json")
+# Platt scaling(全位相共通)後段校正: scripts.fit_platt_calibration が
+#   model_indicator_win.py の全指標モデル(combined66データ)で学習した係数。
+#   adv_to_winprob(adv) が返す「表示用勝率」に対する系統的自信過剰の補正として
+#   最後段に1回だけ適用する(2026-07-29 追加、既定ON、user承認済み)。
+#   注意(近似適用): 校正器は model_indicator_win.py の全指標HistGBCの出力分布に
+#   対して学習されたものであり、本スクリプトの4成分ブレンドadv(pressure/
+#   forecast/model/threat + kill_override)から adv_to_winprob() で得た確率とは
+#   生成過程が異なる。両者とも「HistGBCの予測確率」という共通点はあるが、
+#   厳密な分布一致は保証されない近似適用である(詳細は generate() docstring)。
+PLATT_CALIBRATION_PATH = Path("data/indicators_v2/platt_calibration.json")
 
 
 def _load_winprob_k() -> float | None:
@@ -92,6 +105,38 @@ def adv_to_winprob(adv: float) -> float:
     if _WINPROB_K is not None:
         return 1.0 / (1.0 + math.exp(-_WINPROB_K * adv))
     return max(0.0, min(1.0, 0.5 + adv / 200.0))
+
+
+def _winprob_to_adv(p1: float) -> float:
+    """adv_to_winprob() の厳密な逆変換 (較正sigmoidありならlogit/k、無ければ直線)。
+
+    adv_to_winprob 側の分岐 (_WINPROB_K の有無) と完全に対にしないと、
+    Platt を恒等変換 (a=1,b=0) にしても adv が往復せず変化してしまう
+    (sigmoid較正 済みの p1 を直線式で逆変換すると値がズレるため)。
+    """
+    if _WINPROB_K is not None and _WINPROB_K != 0.0:
+        p_clip = min(1.0 - 1e-9, max(1e-9, p1))
+        return math.log(p_clip / (1.0 - p_clip)) / _WINPROB_K
+    return (p1 - 0.5) * 200.0
+
+
+def _apply_platt_to_display(
+    adv: float, p1: float, platt_params: PlattCalibrationParams | None,
+) -> tuple[float, float]:
+    """表示用の (adv, p1) に Platt scaling 後段校正を適用する (無効時は素通し)。
+
+    adv_to_winprob() の出力 p1 (系統的自信過剰を含む「表示用勝率」) を校正し、
+    校正後 p1 から _winprob_to_adv() で adv を再構成して返す (-100〜100)。
+    こうすることで EVEN_THRESHOLD判定・有利不利バー・グラフの全てに校正結果が
+    反映される。kill_override 適用後の adv に対して事後的に適用する
+    (kill_override は統計的予測ではなく物理判定=致死量オーバーライドのため
+    校正対象にしない)。platt_params が None (校正無効/欠損) の場合は無変換。
+    """
+    if platt_params is None:
+        return adv, p1
+    calibrated_p1 = apply_platt_calibration(p1, platt_params)
+    calibrated_adv = max(-100.0, min(100.0, _winprob_to_adv(calibrated_p1)))
+    return calibrated_adv, calibrated_p1
 
 
 # (B) キル判定(near-future): 「降るお邪魔量 > 受け容量」なら死=生存側の勝ち。
@@ -777,7 +822,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_landing_observed_color: bool = False,
              force_in_match: bool = True,
              enable_drift_guards: bool = False,
-             enable_match_start_full_clear: bool = False) -> int:
+             enable_match_start_full_clear: bool = False,
+             enable_recovery_counter_carryover: bool = False,
+             enable_cnn_flicker_hsv_fallback: bool = False,
+             enable_initial_confirm_vote: bool = False,
+             enable_platt_calibration: bool = True) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -807,7 +856,30 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     enable_match_start_full_clear: RecognitionPipeline.load_default に渡す
         前試合盤面残骸リーク修正フラグ (幽霊B対策、2026-07-23 追加)。
         既定 False = 従来挙動 (後方互換、既存呼出元は挙動不変)。
+    enable_recovery_counter_carryover: RecognitionPipeline.load_default に渡す
+        #51 復旧カウンタ carryover フラグ (2026-07-26 追加)。既定 False = 従来挙動
+        (後方互換、既存呼出元は挙動不変)。
+    enable_cnn_flicker_hsv_fallback: RecognitionPipeline.load_default に渡す
+        #51 後半 CNN 乱高下セル HSV フォールバックフラグ (2026-07-26 追加)。
+        既定 False = 従来挙動 (後方互換、既存呼出元は挙動不変)。
+    enable_initial_confirm_vote: RecognitionPipeline.load_default に渡す
+        初回 STABLE 確定の多数決ガードフラグ (2026-07-27 追加)。既定 False = 従来挙動
+        (後方互換、既存呼出元は挙動不変)。
+    enable_platt_calibration: 表示用勝率 (adv_to_winprob の出力) に Platt scaling
+        後段校正を適用する (2026-07-29 追加、data/indicators_v2/platt_calibration.json
+        を読む)。既定 True = 校正あり (user承認済みの既定ON)。False にすると
+        従来挙動 (校正なし) を完全再現する (backwards compat / A-B比較・切り戻し用)。
+        True かつ校正器ファイルが無い場合は CalibrationFileMissingError を
+        処理開始前(動画を1フレームも読む前)に送出する(黙って未校正で通さない
+        ためのガード。fail-fast のため重い動画処理を無駄にしない)。
+        校正器は model_indicator_win.py の全指標モデル(combined66データ)で
+        学習されたものであり、本スクリプトの4成分ブレンドモデルとは生成過程が
+        異なるため近似適用である点に注意 (詳細は PLATT_CALIBRATION_PATH 定義部・
+        _apply_platt_to_display のコメント参照)。
     """
+    platt_params: PlattCalibrationParams | None = None
+    if enable_platt_calibration:
+        platt_params = load_platt_calibration(PLATT_CALIBRATION_PATH, required=True)
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
     _vr_rois: tuple[int, int, int, int] | None = None
@@ -846,7 +918,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_guards,
         enable_drift_resync_hsv_gate=enable_drift_guards,
-        enable_match_start_full_clear=enable_match_start_full_clear)
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        enable_initial_confirm_vote=enable_initial_confirm_vote)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -923,6 +998,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
                                 board_room(b1), board_room(b2))
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
+            adv, p1 = _apply_platt_to_display(adv, p1, platt_params)  # Platt後段校正
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
         if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
@@ -1019,6 +1095,36 @@ def main() -> None:
              "(RecognitionPipeline.load_default に転送、2026-07-23 追加)。"
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
+    ap.add_argument(
+        "--recovery-counter-carryover", action="store_true", default=False,
+        dest="enable_recovery_counter_carryover",
+        help="#51: 復旧カウンタ carryover (非STABLE滞在が短時間なら"
+             "stable_recovery_counters/recovery_cellsを引き継ぐ) を有効化 "
+             "(RecognitionPipeline.load_default に転送、2026-07-26 追加)。"
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
+        "--cnn-flicker-hsv-fallback", action="store_true", default=False,
+        dest="enable_cnn_flicker_hsv_fallback",
+        help="#51後半: CNN乱高下セル(直近8フレームで出力変化3回以上)を"
+             "HSV出力にフォールバックさせる復旧ゲート緩和を有効化 "
+             "(RecognitionPipeline.load_default に転送、2026-07-26 追加)。"
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
+        "--initial-confirm-vote", action="store_true", default=False,
+        dest="enable_initial_confirm_vote",
+        help="初回STABLE確定を直前NON-STABLE滞在中のCNN履歴多数決で構成する"
+             "ガードを有効化 (RecognitionPipeline.load_default に転送、"
+             "2026-07-27 追加)。デフォルト OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
+        "--no-platt-calibration", action="store_false", default=True,
+        dest="enable_platt_calibration",
+        help="表示用勝率へのPlatt scaling後段校正を無効化し従来挙動(校正なし)を"
+             "完全再現する (2026-07-29 追加。既定 True=校正あり、user承認済み)。"
+             "A/B比較・切り戻し用。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -1027,7 +1133,11 @@ def main() -> None:
              enable_landing_observed_color=a.enable_landing_observed_color,
              force_in_match=a.force_in_match,
              enable_drift_guards=a.enable_drift_guards,
-             enable_match_start_full_clear=a.enable_match_start_full_clear)
+             enable_match_start_full_clear=a.enable_match_start_full_clear,
+             enable_recovery_counter_carryover=a.enable_recovery_counter_carryover,
+             enable_cnn_flicker_hsv_fallback=a.enable_cnn_flicker_hsv_fallback,
+             enable_initial_confirm_vote=a.enable_initial_confirm_vote,
+             enable_platt_calibration=a.enable_platt_calibration)
 
 
 if __name__ == "__main__":
