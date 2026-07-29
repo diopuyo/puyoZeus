@@ -109,9 +109,51 @@ score OCR は「固定セル」に対して数字クラスを分類するが、�
   TM_CCORR_NORMED は平均を引かずに正規化するため全クラスのスコアが
   0.95〜1.0 に張り付いて識別力を失った (実験スクリプトで確認、本実装には
   含めていない)。現状は無地 (mask なし) TM_CCOEFF_NORMED を採用する。
+
+## 【方式転換】得点裏取り集計 (2026-07-29 追加、userタスク指定)
+
+上記「連続列必須」方式 (`_extract_monotonic_max_chain_count`) は、
+video_c54 2P側の実9連鎖イベントで結果が **3** になる大きな過小評価を
+実データで起こした (digit_2/3/4 のこのクリップでの信頼度低下・位置不安定に
+より 1→9 の連続列の橋渡しに失敗、実際の空白期間がステップ間ギャップ許容
+`CHAIN_STEP_MAX_GAP_SEC` を超えたため)。1桁でも読み損ねると全体の結果が
+壊れる構造的脆弱性であり、テンプレが各クラス1サンプルしかない現状では
+読み損ねは頻発しうる。
+
+そこで、得点式 (src/scoring.py) が既知であることを利用し「連鎖数の候補ごとに
+期待得点を概算し、実測 delta_score と最も整合する候補を採用する」得点裏取り
+方式に転換する (`_aggregate_window_samples_score_backed`)。候補は window内で
+検出された値の **和集合** (単独検出も含む、連続列である必要はない)。
+
+期待得点の近似は「各ステップが 4 個消し・単色・連結ボーナスなしの最小構成
+だった」と仮定した **下限値** を使う (`_approx_min_chain_score`)。実戦では
+これより大きい連結・複数色同時消しが起きるため実得点は下限以上になるのが
+通常だが、連鎖ボーナス (chain_power) が連鎖数に対し急峻に増加する
+(0→8→16→32→64→...) ため、下限だけでも連鎖数を桁単位で強く制約できる。
+
+実データ検証 (2026-07-29、video_c54):
+- 2P game_idx=9 (delta_score=30920、実9連鎖・目視確認済み): 下限近似
+  expected(9)=27880 (比率1.03・対数距離0.03) が expected(8)=20200
+  (比率1.39・対数距離0.33) より明確に優位。9 を正しく選べる。
+- 1P game_idx=1 (delta_score=7598): 当初 simulate() は 4 連鎖と誤認していたが
+  後日の実フレーム再検証で真の連鎖数は 5 と判明済み (本ファイル上部の訂正
+  コメント参照)。下限近似でも expected(5)=4840 (比率1.10・対数距離0.09) が
+  expected(4)=2280 (比率1.74・対数距離0.55) より明確に優位で、真値 5 を
+  正しく選べる (simulate() の誤りより得点裏取りの方が正確だった実例)。
+
+一方、小さい連鎖数 (隣接1連鎖差) では下限近似の粗さにより選択がぶれうる
+ことも実データで確認した (例: chain_count=5 だが delta_score=1140 の
+イベントでは下限近似は N=3 を選好し simulate() の 5 と食い違った。
+ただしこのケースは simulate() 側の認識誤りである可能性も排除できず、
+どちらが正しいか本タスクの範囲では確証できない)。正直に記録する。
+
+新方式は `read_max_in_window(..., delta_score=...)` で `delta_score` を
+渡した場合のみ有効になる (省略時は既存の連続列方式のまま、backwards
+compat)。
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -120,6 +162,13 @@ import cv2
 import numpy as np
 
 from src.image_reader import BoardRegion, DEFAULT_P1_REGION, DEFAULT_P2_REGION
+from src.scoring import (
+    BASE_SCORE_PER_PUYO,
+    MIN_BONUS_MULTIPLIER,
+    chain_power,
+    is_score_consistent,
+    score_consistency_ratio,
+)
 
 # ============================
 # 定数 (1920x1080 前提)
@@ -194,6 +243,11 @@ CHAIN_STEP_MAX_GAP_SEC: float = 2.5
 # 入力フレームの想定サイズ (score_ocr と共通)
 EXPECTED_FRAME_SHAPE: tuple[int, int] = (1080, 1920)
 
+# 得点裏取り方式 (2026-07-29 追加) の期待得点近似で使う、1ステップあたりの
+# 最小消去数の仮定 (4連結の下限。CONNECTION_BONUS_TABLE は 4 個消しから
+# ボーナス対象になるため、4 未満のグループは通常の連鎖では発生しない)。
+CHAIN_SCORE_APPROX_ERASED_PER_STEP: int = 4
+
 
 # ============================
 # 結果データクラス
@@ -221,14 +275,21 @@ class ChainCountWindowResult:
     """ChainCountOcr.read_max_in_window() の結果。
 
     Attributes:
-        max_chain_count: window内で観測した連鎖数の最大値 (未検出のみなら None)。
+        max_chain_count: window内で採用した連鎖数 (未検出/不整合なら None)。
         samples: 各サンプル時刻の生の読み取り結果 (デバッグ・検証用)。
         n_hits: chain_count が非 None だったサンプル数。
+        method: 採用した集計方式 ("monotonic_run"=連続列方式 (既定) /
+            "score_backed"=得点裏取り方式、2026-07-29 追加)。
+            optional 追加フィールド (backwards compat、既定は旧方式名)。
+        score_ratio: 得点裏取り方式のときの score_consistency_ratio
+            (旧方式では None)。デバッグ・検証用。
     """
 
     max_chain_count: int | None
     samples: tuple[ChainCountReadResult, ...]
     n_hits: int
+    method: str = "monotonic_run"
+    score_ratio: float | None = None
 
 
 # ============================
@@ -463,11 +524,12 @@ class ChainCountOcr:
         t_start: float,
         t_end: float,
         sample_interval_sec: float = CHAIN_WINDOW_SAMPLE_INTERVAL_SEC,
+        delta_score: int | None = None,
     ) -> ChainCountWindowResult:
-        """[t_start, t_end] を一定間隔でサンプリングし、連鎖数の最大値を返す。
+        """[t_start, t_end] を一定間隔でサンプリングし、連鎖数を集計する。
 
         「N れんさ!」は連鎖ステップが進むたびに増えるため、1回の連鎖window内で
-        観測した最大値が最終連鎖数になる (userタスク仕様)。
+        観測した値が最終連鎖数の手がかりになる (userタスク仕様)。
 
         Args:
             cap: cv2.VideoCapture (呼び出し側でオープン済み)。
@@ -475,6 +537,11 @@ class ChainCountOcr:
             t_start: window開始時刻 (秒)。
             t_end: window終了時刻 (秒)。t_start 以上であること。
             sample_interval_sec: サンプリング間隔 (既定 0.05秒)。
+            delta_score: 実測の得点差分 (省略可、既定 None)。指定した場合
+                「得点裏取り」方式 (2026-07-29 追加) で集計する。連続列を
+                要求せず、window内の検出値の和集合から delta_score に
+                最も整合する値を選ぶ。省略時は既存の連続列方式のまま
+                (backwards compat)。
 
         Returns:
             ChainCountWindowResult。
@@ -489,7 +556,7 @@ class ChainCountOcr:
             if ok and frame is not None:
                 samples.append(self.read_side(frame, side))
             t += sample_interval_sec
-        return _aggregate_window_samples(samples, sample_interval_sec)
+        return _aggregate_window_samples(samples, sample_interval_sec, delta_score)
 
 
 # ============================
@@ -544,14 +611,19 @@ def _extract_monotonic_max_chain_count(
 def _aggregate_window_samples(
     samples: list[ChainCountReadResult],
     sample_interval_sec: float = CHAIN_WINDOW_SAMPLE_INTERVAL_SEC,
+    delta_score: int | None = None,
 ) -> ChainCountWindowResult:
-    """サンプル列から最大連鎖数を集計する (video I/O を含まない純粋関数)。
+    """サンプル列から連鎖数を集計する (video I/O を含まない純粋関数)。
 
-    単純な max() ではなく `_extract_monotonic_max_chain_count` による
-    連続列検証 (値の連続性 + 経過時間チェック) を経由する
-    (2026-07-29、誤検出耐性強化)。samples は一定間隔 sample_interval_sec で
-    採取された前提のため、リスト内インデックス × 間隔を経過時刻の代用とする。
+    delta_score が指定された場合は得点裏取り方式
+    (`_aggregate_window_samples_score_backed`) を使う。省略時 (None、既定)
+    は従来どおり `_extract_monotonic_max_chain_count` による連続列検証
+    (値の連続性 + 経過時間チェック) を経由する (backwards compat)。
+    samples は一定間隔 sample_interval_sec で採取された前提のため、
+    リスト内インデックス × 間隔を経過時刻の代用とする。
     """
+    if delta_score is not None:
+        return _aggregate_window_samples_score_backed(samples, delta_score)
     hits_results = [s for s in samples if s.chain_count is not None]
     hits = [
         (i * sample_interval_sec, s.chain_count)
@@ -563,6 +635,90 @@ def _aggregate_window_samples(
         max_chain_count=max_count,
         samples=tuple(samples),
         n_hits=len(hits_results),
+        method="monotonic_run",
+        score_ratio=None,
+    )
+
+
+# ============================
+# 得点裏取り集計 (2026-07-29 追加、モジュール先頭「方式転換」節を参照)
+# ============================
+
+
+def _approx_min_chain_score(chain_count: int) -> int:
+    """N連鎖の期待得点の下限近似 (各ステップ4個消し・単色・連結ボーナス0)。
+
+    calculate_chain_score() は ChainStep の内訳 (連結サイズ・色数) を要求
+    するため、連鎖数の整数値だけからは厳密な得点を計算できない。実戦では
+    最小構成より大きい連結・複数色消しが起きるため実得点はこの値以上に
+    なるのが通常だが、連鎖ボーナス (scoring.chain_power) は連鎖数に対して
+    急峻に増加するため、候補の絞り込みには十分な判別力を持つ
+    (モジュール先頭コメントの実データ検証を参照)。
+    """
+    if chain_count < 1:
+        return 0
+    total = 0
+    for step in range(1, chain_count + 1):
+        multiplier = max(MIN_BONUS_MULTIPLIER, chain_power(step))
+        total += CHAIN_SCORE_APPROX_ERASED_PER_STEP * BASE_SCORE_PER_PUYO * multiplier
+    return total
+
+
+def _log_distance_from_ideal(ratio: float) -> float:
+    """比率 1.0 (期待得点と実測が完全一致) からの対数距離。
+
+    0 以下または無限大 (= 比較不能) は最も遠い候補として扱うため inf を返す。
+    """
+    if 0.0 < ratio < float("inf"):
+        return abs(math.log(ratio))
+    return float("inf")
+
+
+def _select_chain_count_by_score(
+    candidates: set[int], delta_score: int,
+) -> tuple[int | None, float | None]:
+    """delta_score に最も整合する連鎖数候補を選ぶ (得点裏取り)。
+
+    候補ごとに `_approx_min_chain_score` の期待得点と `score_consistency_ratio`
+    を計算し、比率が 1.0 に最も近い (対数距離最小) 候補を採用する。連続列で
+    ある必要はない (2026-07-29 方式転換)。最有力候補でも
+    `is_score_consistent` (許容比率 [0.5, 2.0]) を満たさない場合は、
+    どの候補も信頼できないとみなし None を返す (誤った自信を防ぐ)。
+
+    Returns:
+        (採用した連鎖数 (信頼できる候補が無ければ None),
+         採用した候補の score_consistency_ratio (候補が無ければ None))。
+    """
+    valid = {n for n in candidates if CHAIN_COUNT_MIN <= n <= CHAIN_COUNT_MAX}
+    if not valid:
+        return None, None
+    scored = [
+        (n, score_consistency_ratio(_approx_min_chain_score(n), delta_score))
+        for n in sorted(valid)
+    ]
+    best_n, best_ratio = min(scored, key=lambda item: _log_distance_from_ideal(item[1]))
+    if not is_score_consistent(_approx_min_chain_score(best_n), delta_score):
+        return None, best_ratio
+    return best_n, best_ratio
+
+
+def _aggregate_window_samples_score_backed(
+    samples: list[ChainCountReadResult], delta_score: int,
+) -> ChainCountWindowResult:
+    """得点裏取り方式での window内集計。
+
+    連続列の完全性を要求せず、window内で検出された全ての値 (単独検出も
+    含む) の和集合を候補とし、実測 delta_score と最も整合する候補を採用する。
+    """
+    hits_results = [s for s in samples if s.chain_count is not None]
+    candidates = {s.chain_count for s in hits_results if s.chain_count is not None}
+    chosen, ratio = _select_chain_count_by_score(candidates, delta_score)
+    return ChainCountWindowResult(
+        max_chain_count=chosen,
+        samples=tuple(samples),
+        n_hits=len(hits_results),
+        method="score_backed",
+        score_ratio=ratio,
     )
 
 
@@ -574,6 +730,7 @@ __all__ = [
     "CHAIN_DIGIT_WIDTH",
     "CHAIN_NCC_MIN_CONFIDENCE",
     "CHAIN_POPUP_DISPLAY_DURATION_SEC",
+    "CHAIN_SCORE_APPROX_ERASED_PER_STEP",
     "CHAIN_TWO_DIGIT_MAX_GAP_PX",
     "CHAIN_TWO_DIGIT_MIN_GAP_PX",
     "CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX",
