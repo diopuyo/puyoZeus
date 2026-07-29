@@ -57,6 +57,13 @@ from src.board import (
     Board,
 )
 from src.chain import MIN_ERASE_COUNT
+from src.scoring import (
+    BASE_SCORE_PER_PUYO,
+    COLOR_BONUS_TABLE,
+    MAX_BONUS_MULTIPLIER,
+    MIN_BONUS_MULTIPLIER,
+    chain_power,
+)
 
 # ============================
 # 定数
@@ -366,3 +373,143 @@ def simulate_single(board: Board) -> BitboardChainResult:
     """1 盤面のみを判定する薄いラッパー (バッチ API のテスト・単発呼び出し用)。"""
     batch = batch_from_boards([board])
     return simulate_batch(batch)[0]
+
+
+# ============================
+# 近似得点付きバッチシミュレーション (#24 打ち合い計測器 Step2, 2026-07-29)
+# ============================
+#
+# simulate_batch (:293) は一切変更しない。本セクションは新規追加のみ
+# (backwards compat / 既存 cycle 非依存)。
+#
+# 目的: 「相手が閾値以上を返せる確率」の MC 計算をバッチ化して高速化する
+# ため、盤面バッチをそのまま得点 (お邪魔換算前の素点) 付きで返す。
+# calculate_chain_score (src/scoring.py) は ChainResult.steps (各ステップの
+# erased_groups 個別サイズ) を必要とするが、bitboard の pop mask は
+# グループ「size>=4 の membership」のみを判定し、個別グループの正確な
+# サイズ (5,6,7...) を保持しない。よって連結ボーナス (4連結=0,5=2,...,
+# 11+=10) は本関数では 0 (=4連結相当) に近似する。連鎖ボーナス
+# (chain_power) と色数ボーナス (color_bonus 相当の LUT) は src.scoring の
+# 公式テーブルをそのまま使うため厳密 (マジックナンバー非重複)。
+#
+# ⚠️ 近似の限界 (正直な注記、未検証):
+#   5+連結や同時多色消しが多い盤面ほど、実スコアに対して過小評価に
+#   なりうる。全消しボーナスも calculate_chain_score と同様に含めない
+#   (呼び出し側で持ち越し処理する設計、パリティ維持)。
+
+
+@dataclass(frozen=True)
+class BitboardChainScoreResult:
+    """BitboardChainResult に近似得点 (score_approx) を追加した結果。
+
+    Attributes:
+        chain_count / total_erased / total_ojama / final_planes:
+            BitboardChainResult と同一 (依存を増やさないため個別に保持)。
+        score_approx: 連鎖ボーナス+色数ボーナスのみを厳密計算した近似素点
+            (連結ボーナスは0近似、全消しボーナス未加算。calculate_chain_score
+            の total_score と同じ土俵の値だが下振れしうる、上記docstring参照)。
+    """
+    chain_count: int
+    total_erased: int
+    total_ojama: int
+    score_approx: int
+    final_planes: "dict[int, np.ndarray]"
+
+
+# 色数ボーナスの LUT (index=同時消去色数0-5、値=公式テーブル、色数0=消去なしで0)。
+_COLOR_BONUS_LUT: np.ndarray = np.array(
+    [0] + [COLOR_BONUS_TABLE[n] for n in range(1, 6)], dtype=np.int64,
+)
+
+
+def simulate_batch_with_approx_score(
+    planes: "dict[int, np.ndarray]",
+) -> "list[BitboardChainScoreResult]":
+    """simulate_batch と同じ連鎖判定を行い、近似得点も同時に計算する。
+
+    simulate_batch (:293) を一切変更せず、同一アルゴリズムをこの関数内に
+    複製する (2重管理のコストより「既存の検証済み関数に触れない」ことを
+    優先する、CLAUDE.md backward compat 原則)。連鎖判定自体の等価性は
+    既存 tests/test_chain_bitboard.py が担保する分岐と同一なので流用でき、
+    近似得点の妥当性は tests/test_chain_bitboard_approx_score.py で担保する。
+
+    Args:
+        planes: `batch_from_boards` で得た dict[color, (N,6)uint16配列]。
+
+    Returns:
+        list[BitboardChainScoreResult]: バッチ内各盤面の結果 (順序保持)。
+    """
+    n = next(iter(planes.values())).shape[0]
+    current = {color: arr.copy() for color, arr in planes.items()}
+    ojama = current[COLOR_OJAMA]
+
+    chain_count = np.zeros(n, dtype=np.int32)
+    total_erased = np.zeros(n, dtype=np.int64)
+    total_ojama = np.zeros(n, dtype=np.int64)
+    score_approx = np.zeros(n, dtype=np.int64)
+    active = np.ones(n, dtype=bool)
+
+    for step in range(MAX_CHAIN_STEPS):
+        if not active.any():
+            break
+
+        color_pop_masks = [_get_mask_pop_batch(current[c]) for c in TRACKED_COLORS]
+        color_union = color_pop_masks[0]
+        for m in color_pop_masks[1:]:
+            color_union = color_union | m
+
+        has_pop = np.any(color_union != 0, axis=-1)
+        still_popping = active & has_pop
+        if not still_popping.any():
+            break
+
+        ojama_cleared = _expand(color_union) & ojama
+        full_pop_mask = color_union | ojama_cleared
+
+        erased_per_board = _POPCOUNT_TABLE_16BIT[color_union].sum(axis=-1).astype(np.int64)
+        ojama_per_board = _POPCOUNT_TABLE_16BIT[ojama_cleared].sum(axis=-1).astype(np.int64)
+        total_erased += np.where(still_popping, erased_per_board, 0)
+        total_ojama += np.where(still_popping, ojama_per_board, 0)
+        chain_count += still_popping.astype(np.int32)
+
+        # 近似得点: 連鎖ボーナス (このステップの連鎖数から一意に決まる、
+        # 盤面非依存のスカラー) + 色数ボーナス (このステップで実際にpop
+        # した色の種類数、盤面ごとに異なる)。連結ボーナスは0近似
+        # (モジュール docstring 参照)。
+        num_colors_step = np.zeros(n, dtype=np.int64)
+        for m in color_pop_masks:
+            num_colors_step += np.any(m != 0, axis=-1).astype(np.int64)
+        chain_bonus_this_step = chain_power(step + 1)
+        raw_bonus = chain_bonus_this_step + _COLOR_BONUS_LUT[num_colors_step]
+        multiplier = np.clip(raw_bonus, MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER)
+        step_score = erased_per_board * BASE_SCORE_PER_PUYO * multiplier
+        score_approx += np.where(still_popping, step_score, 0)
+
+        keep_mask = (~full_pop_mask) & _MASK
+        keep_mask = np.where(
+            still_popping[:, None], keep_mask, np.full_like(keep_mask, FULL_MASK_13BIT),
+        )
+
+        for color in (*TRACKED_COLORS, COLOR_OJAMA):
+            current[color] = _pext_batch(current[color], keep_mask)
+        ojama = current[COLOR_OJAMA]
+
+        active = still_popping
+
+    results: "list[BitboardChainScoreResult]" = []
+    for i in range(n):
+        final_planes = {color: current[color][i].copy() for color in (*TRACKED_COLORS, COLOR_OJAMA)}
+        results.append(BitboardChainScoreResult(
+            chain_count=int(chain_count[i]),
+            total_erased=int(total_erased[i]),
+            total_ojama=int(total_ojama[i]),
+            score_approx=int(score_approx[i]),
+            final_planes=final_planes,
+        ))
+    return results
+
+
+def simulate_single_with_approx_score(board: Board) -> BitboardChainScoreResult:
+    """1 盤面のみを判定する薄いラッパー (近似得点版、単発呼び出し・テスト用)。"""
+    batch = batch_from_boards([board])
+    return simulate_batch_with_approx_score(batch)[0]
