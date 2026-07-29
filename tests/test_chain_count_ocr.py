@@ -23,6 +23,7 @@ from src.chain_count_ocr import (
     ChainCountReadResult,
     ChainCountWindowResult,
     _aggregate_window_samples,
+    _extract_monotonic_max_chain_count,
 )
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
 
@@ -90,8 +91,12 @@ class _FakeVideoCapture:
 
 def test_chain_count_ocr_constants() -> None:
     assert CHAIN_COUNT_MIN == 1
-    assert CHAIN_COUNT_MAX >= 4  # video_c54 で 4連鎖まで実測確認済み
-    assert len(CHAIN_DIGIT_LABELS) == CHAIN_COUNT_MAX - CHAIN_COUNT_MIN + 1
+    # 2026-07-29: 2桁対応 (10-19連鎖、理論上限19連鎖) により上限を拡張。
+    assert CHAIN_COUNT_MAX == 19
+    # CHAIN_DIGIT_LABELS はテンプレ「グリフ」クラス (0-9 の 10 種類)。
+    # "0" は2桁表示の一の位専用で単体の最終結果 (CHAIN_COUNT_MIN=1) とは別概念。
+    assert len(CHAIN_DIGIT_LABELS) == 10
+    assert set(CHAIN_DIGIT_LABELS) == set(range(0, 10))
     assert CHAIN_DIGIT_HEIGHT > 0 and CHAIN_DIGIT_WIDTH > 0
 
 
@@ -113,7 +118,7 @@ def test_chain_count_ocr_invalid_frame_shape() -> None:
 
 
 def test_chain_count_ocr_load_default_present_digits() -> None:
-    """1-4 は実テンプレが配置済み。5-9 欠損でも load 自体は失敗しない。"""
+    """0-9 の全クラスが実テンプレとして配置済み (2026-07-29 採取完了)。"""
     ocr = ChainCountOcr.load_default()
     assert ocr is not None
 
@@ -123,7 +128,7 @@ def test_chain_count_ocr_load_default_present_digits() -> None:
 # =============================================================================
 
 
-@pytest.mark.parametrize("digit", [1, 2, 3, 4])
+@pytest.mark.parametrize("digit", [1, 2, 3, 4, 5, 6, 7, 8, 9])
 @pytest.mark.parametrize("offset", [(30, 200), (150, 450)])
 def test_chain_count_ocr_reads_digit_at_various_positions(
     digit: int, offset: tuple[int, int],
@@ -138,6 +143,18 @@ def test_chain_count_ocr_reads_digit_at_various_positions(
     frame = _paint_digit_into_board(frame, tpl, "1P", offset_x, offset_y)
     res = ocr.read_side(frame, "1P")
     assert res.chain_count == digit
+
+
+def test_chain_count_ocr_digit_zero_alone_returns_none() -> None:
+    """"0" は2桁表示の一の位専用で、単体では最終結果になり得ない (仕様)。"""
+    templates = _load_real_templates()
+    if 0 not in templates:
+        pytest.skip("digit_0 テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, templates[0], "1P", 60, 300)
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count is None
 
 
 def test_chain_count_ocr_side_2p_independent_of_1p() -> None:
@@ -163,23 +180,170 @@ def test_chain_count_ocr_no_popup_returns_none() -> None:
 
 
 # =============================================================================
+# 2桁 (10-19連鎖) 結合ロジック (2026-07-29 追加)
+# =============================================================================
+
+
+def _paint_two_digit_into_board(
+    frame: np.ndarray, tens_tpl: np.ndarray, ones_tpl: np.ndarray,
+    side: str, offset_x: int, offset_y: int, gap_px: int,
+) -> np.ndarray:
+    """十の位・一の位のテンプレを隙間 gap_px で横に並べて貼り付ける。"""
+    frame = _paint_digit_into_board(frame, tens_tpl, side, offset_x, offset_y)
+    ones_x = offset_x + tens_tpl.shape[1] + gap_px
+    frame = _paint_digit_into_board(frame, ones_tpl, side, ones_x, offset_y)
+    return frame
+
+
+@pytest.mark.parametrize("ones_digit", [0, 2, 5, 9])
+def test_chain_count_ocr_reads_two_digit_combo(ones_digit: int) -> None:
+    """十の位=1 と一の位を隣接配置すると 10+ones_digit に結合される。"""
+    templates = _load_real_templates()
+    if 1 not in templates or ones_digit not in templates:
+        pytest.skip(f"digit_1 または digit_{ones_digit} テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_two_digit_into_board(
+        frame, templates[1], templates[ones_digit], "1P", 60, 300, gap_px=2,
+    )
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 10 + ones_digit
+
+
+def test_chain_count_ocr_lone_digit_one_not_combined() -> None:
+    """"1" の近くに他の数字がなければ 2桁結合されず単体の 1 のまま。"""
+    templates = _load_real_templates()
+    if 1 not in templates:
+        pytest.skip("digit_1 テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, templates[1], "1P", 60, 300)
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 1
+
+
+def test_chain_count_ocr_two_digit_row_mismatch_not_combined() -> None:
+    """縦位置が大きくずれた数字同士は2桁として結合しない (誤結合防止)。"""
+    templates = _load_real_templates()
+    if 1 not in templates or 5 not in templates:
+        pytest.skip("digit_1 または digit_5 テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, templates[1], "1P", 60, 200)
+    # 縦に 100px ずらして配置 (許容量 CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX=20 を超える)
+    frame = _paint_digit_into_board(frame, templates[5], "1P", 130, 300)
+    res = ocr.read_side(frame, "1P")
+    # 2桁 (15) には結合されず、いずれかの単体桁として読める
+    assert res.chain_count in (1, 5)
+
+
+def test_chain_count_ocr_two_digit_too_far_not_combined() -> None:
+    """横に離れすぎた数字同士は2桁として結合しない (誤結合防止)。"""
+    templates = _load_real_templates()
+    if 1 not in templates or 5 not in templates:
+        pytest.skip("digit_1 または digit_5 テンプレ未整備")
+    ocr = ChainCountOcr.load_default()
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, templates[1], "1P", 60, 300)
+    # 許容ギャップ (CHAIN_TWO_DIGIT_MAX_GAP_PX=30) を大きく超える距離に配置
+    frame = _paint_digit_into_board(frame, templates[5], "1P", 250, 300)
+    res = ocr.read_side(frame, "1P")
+    # 2桁 (15) には結合されず、いずれかの単体桁として読める
+    assert res.chain_count in (1, 5)
+
+
+# =============================================================================
 # window内 最大値集計 (純粋関数 + read_max_in_window)
 # =============================================================================
 
 
-def test_aggregate_window_samples_takes_max() -> None:
-    """連鎖ステップが進むたびに値が増える想定 → window内最大値を採用。"""
+def test_aggregate_window_samples_takes_max_for_clean_ascending_sequence() -> None:
+    """1→2→3→4 と綺麗に1ずつ増える (誤検出なし) 場合は素直に最大値を採用。"""
     samples = [
         ChainCountReadResult(1, 0.9, (0, 0)),
         ChainCountReadResult(None, 0.1, None),
         ChainCountReadResult(2, 0.85, (5, 5)),
+        ChainCountReadResult(3, 0.75, (8, 8)),
         ChainCountReadResult(4, 0.8, (10, 10)),
-        ChainCountReadResult(3, 0.7, (1, 1)),  # 揺り戻し (誤検出等) があっても max を採用
     ]
     result = _aggregate_window_samples(samples)
     assert isinstance(result, ChainCountWindowResult)
     assert result.max_chain_count == 4
     assert result.n_hits == 4
+
+
+def test_aggregate_window_samples_rejects_spike_above_true_max() -> None:
+    """真の最大値を上回る孤立した誤検出は棄却される (2026-07-29 修正の要点)。
+
+    旧実装 (単純 max()) では 1,2,4,3 の列で誤って 4 を採用してしまっていた
+    (旧テストの想定)。新実装では「4」は連続列 (1→2→3) に乗らない孤立検出
+    として棄却され、その後の正しい「3」で連続列が確定するため最大値は 3。
+    """
+    samples = [
+        ChainCountReadResult(1, 0.9, (0, 0)),
+        ChainCountReadResult(None, 0.1, None),
+        ChainCountReadResult(2, 0.85, (5, 5)),
+        ChainCountReadResult(4, 0.8, (10, 10)),  # 孤立した誤検出 (棄却されるべき)
+        ChainCountReadResult(3, 0.7, (1, 1)),
+    ]
+    result = _aggregate_window_samples(samples)
+    assert result.max_chain_count == 3
+    assert result.n_hits == 4  # n_hits は生の検出数 (棄却前) のまま
+
+
+def _seq(values: list[int], step_sec: float = 0.1) -> list[tuple[float, int]]:
+    """テスト用: 値列に等間隔 (step_sec) の経過時刻を付与する。"""
+    return [(i * step_sec, v) for i, v in enumerate(values)]
+
+
+def test_extract_monotonic_max_chain_count_isolated_detection_rejected() -> None:
+    """「3の直後に7」: 7は連続列に乗らないため棄却され、最大値は3のまま。"""
+    assert _extract_monotonic_max_chain_count(_seq([1, 2, 3, 7])) == 3
+
+
+def test_extract_monotonic_max_chain_count_no_precedent_rejected() -> None:
+    """「1が出ていないのに4だけ」: 連続列が開始できず None (孤立検出は全棄却)。"""
+    assert _extract_monotonic_max_chain_count(_seq([4])) is None
+
+
+def test_extract_monotonic_max_chain_count_mid_run_gap_conservative() -> None:
+    """連続列の途中欠け (1,2,(3欠落),4): 4は棄却され最大値は2 (保守的判断)。
+
+    真の最大値を過大評価するリスクより過小評価を許容する設計判断
+    (src/chain_count_ocr.py の _extract_monotonic_max_chain_count docstring 参照)。
+    """
+    assert _extract_monotonic_max_chain_count(_seq([1, 2, 4])) == 2
+
+
+def test_extract_monotonic_max_chain_count_multiple_candidate_runs() -> None:
+    """複数の連続列候補がある場合、最終的に最大値へ到達した列を採用する。"""
+    # 1回目の連続列が3で止まり、2回目の連続列が5まで進む想定
+    assert _extract_monotonic_max_chain_count(_seq([1, 2, 3, 1, 2, 3, 4, 5])) == 5
+
+
+def test_extract_monotonic_max_chain_count_repeats_do_not_advance() -> None:
+    """同一ステップの反復サンプル (peakフレームの複数回検出) は値を変えない。"""
+    assert _extract_monotonic_max_chain_count(_seq([1, 1, 1, 2, 2, 3, 3, 3])) == 3
+
+
+def test_extract_monotonic_max_chain_count_empty_returns_none() -> None:
+    assert _extract_monotonic_max_chain_count([]) is None
+
+
+def test_extract_monotonic_max_chain_count_rejects_plausible_spike_after_long_gap() -> None:
+    """数値上「+1」でも、長い時間差があれば別物として棄却する (実発見の回帰テスト)。
+
+    2026-07-29 に video_c54 で実際に発見した事例: 1→2→3→4 (実ステップ間隔
+    1.1〜1.4秒) の後、5.5秒後に無関係な勝利演出画面を confidence 0.63 で
+    「5」と弱く誤検出した。数値だけを見れば 4+1=5 で連続列に見えてしまうが、
+    実ステップ間隔を大幅に超える経過時間のため、時間差チェックで正しく
+    棄却され最大値は 4 のままになるべき。
+    """
+    hits = [
+        (0.0, 1), (1.2, 2), (2.6, 3), (3.9, 4),  # 実測に近い間隔 (1.1〜1.4秒)
+        (9.4, 5),  # 5.5秒後の誤検出 (CHAIN_STEP_MAX_GAP_SEC=2.5秒を大幅に超過)
+    ]
+    assert _extract_monotonic_max_chain_count(hits) == 4
 
 
 def test_aggregate_window_samples_all_none() -> None:

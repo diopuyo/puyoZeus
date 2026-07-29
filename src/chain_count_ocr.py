@@ -12,7 +12,7 @@
 この表示の最大値を読み取れば、simulate() の誤りに影響されない「真の連鎖数」が
 得られる。
 
-## 表示仕様 (実フレームで確認済み: video_c54.mp4, 1P側, t=252.6〜256.3秒)
+## 表示仕様 (実フレームで確認済み: video_c54.mp4, 1P側, t=252.6〜257.7秒)
 
 - 連鎖 1 ステップごとに「N れんさ!」がポップアップし、出現から消滅まで
   約 0.6〜0.7 秒 (60fps 実測) 表示される。フェード/縮小アニメーションあり。
@@ -26,6 +26,14 @@
   → 固定の小さな ROI (score_ocr の桁セルのような) では捕捉できない。
     盤面全体 (DEFAULT_P1_REGION / DEFAULT_P2_REGION) を検索範囲とし、
     数字テンプレを matchTemplate でスキャンして最良一致位置を探す。
+  **訂正 (2026-07-29)**: 本イベントは当初 4 連鎖で終了したと誤認していたが
+  (旧npz の simulate() 結果と偶然一致していたため)、digit_5 テンプレ採取後の
+  再検証で t≈257.55-257.70秒 に本物の「5 れんさ!」ポップアップ (glow演出付き)
+  を実フレームで確認した。t=258.5秒以降は盤面静止・ポップアップ消滅のため、
+  **真の連鎖数はこのイベントでは 5** (旧npz・新npz の simulate() は両方誤り)。
+  score_consistency_ratio による整合判定は、真の連鎖数を保証するものでは
+  ない好例として記録する (scripts/_verify_chain_count_screen_read_c54_2026-07-29.py
+  の訂正コメントも参照)。
 - フォントは src/score_ocr.py の score 桁 (白ゴシック体・固定ピッチ) とは
   異なる (黄〜オレンジのグラデーション・黒縁取りの装飾数字)。専用テンプレが
   必要 (models/ui_templates/chain_count_digits/digit_N.png)。
@@ -40,30 +48,67 @@ score OCR は「固定セル」に対して数字クラスを分類するが、�
 
 ## 既知の制約 (2026-07-29 時点、正直に明記)
 
-- **2 桁の連鎖数 (10連鎖以上) は未対応**。テンプレ・検出ロジックとも 1 桁前提。
-  10連鎖以上の局面では検出できず None を返す (要将来拡張)。
-- **digit_5〜digit_9 のテンプレ画像は本タスク時点で未採取** (video_c54 では
-  1〜4連鎖しか実フレームで確認できなかったため)。未整備クラスは ScoreOcr と
-  同様 OCR で None 扱いになる (欠損クラスは無視され警告ログを出す)。
-  全動画への適用検証時に、より長い連鎖が映る動画から追加採取が必要。
-- **2P側の表示位置・フォントは 1P側と同一という前提**。同一エンジン描画のため
-  同一と推測されるが、実フレームでの確認はまだ行っていない。
-- テンプレは手動crop (背景の隣接ぷよが一部写り込む) のため、score_ocr の
-  digit テンプレほど背景ノイズを除去できていない。tight crop (数字グリフ
-  中心、背景余白を最小化) により誤検出はある程度抑えたが、完全排除はできて
-  いない (下記閾値の根拠を参照)。
-- **色ベース mask + TM_CCORR_NORMED は不採用 (実験して悪化を確認済み)**。
-  数字部分を HSV 色域 (H:5-35, S:80-255, V:80-255) でマスクし
-  cv2.matchTemplate(..., mask=mask) で相関を取る手法を試したが、
-  TM_CCORR_NORMED は平均を引かずに正規化するため全クラスのスコアが
-  0.95〜1.0 に張り付いて識別力を失った (実験スクリプトで確認、本実装には
-  含めていない)。現状は無地 (mask なし) TM_CCOEFF_NORMED を採用する。
 - **誤検出耐性は限定的**: ポップアップ非表示フレームでの最大誤検出スコアが
   0.578 まで observed (n=2、video_c54 1P側のみ)。閾値 0.60 で当該 2 件は
   排除できるが、この閾値は極小サンプルに基づく暫定値であり、全動画検証で
   再検証が必須。閾値を上げた副作用として、遷移中の弱い信号フレーム
   (n=3, score 0.465〜0.505) は検出できなくなるが、1 ステップの表示継続時間
   (約0.65秒) 内に高信頼度な peak フレームが必ず含まれる前提で許容している。
+  → 2026-07-29 追加対応: window内の検出列を「1から始まり1ずつ増える
+  連続列」として検証する `_extract_monotonic_max_chain_count()` を追加。
+  孤立した誤検出 (例: 3の直後に7、1が出ていないのに4だけ) は連続列に
+  乗らない限り採用されず、真の最大値を上回る誤検出のリスクを大幅に低減
+  できる (下記「window内集計ロジック」参照)。ただし全動画検証は未実施。
+- **digit_5〜digit_9 のテンプレ採取済み** (2026-07-29、video_c54実フレーム
+  2件から採取: 1P側 game_idx=6 t≈640-638s は実際は6連鎖どまり(simulate()
+  誤りでcc=9と誤表記、要注意)、2P側 game_idx=9 t≈626-638s で1→9まで実際に
+  進行しテンプレ採取に成功)。**digit_0 も同時に採取済み** (2桁対応用、
+  video_c11 1P側 game_idx=3 t≈599-611s で実際に「10 れんさ!」まで進行、
+  simulate() は cc=12 と誤表記だったため実フレーム目視で10と確認)。
+  全 10 クラス (0-9) のテンプレが揃った。ただし採取元は少数の実フレームで
+  あり (各クラス概ね1サンプル)、動画・光源条件が変わると再現しない
+  可能性がある。全動画検証は未実施。
+- **2 桁の連鎖数 (10-19連鎖) に対応**。ぷよぷよの理論上の連鎖数上限は
+  19連鎖 (MEMORY.md 記載) であり、2桁になる場合は十の位が必ず "1" になる
+  という前提 (`CHAIN_TWO_DIGIT_TENS_LABEL`) で、"1" の右側 一定距離以内に
+  もう1桁 (0-9) が検出された場合にのみ結合する (`_try_combine_two_digit`)。
+  この前提は video_c11 の実測 1 件でのみ確認されており、行・間隔の許容量
+  (`CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX` 等) も単一サンプルからの暫定値。
+  20連鎖以上 (理論上起こらない) は非対応。
+- **2P側は「テンプレ自体は同一エンジン描画で通用する」ことは確認できたが、
+  `read_max_in_window()` の集計結果はこのイベントで大幅に過小報告した
+  (要改善、正直に記録)**。video_c54 2P側 game_idx=9 (t≈625.8-638.0s、実際は
+  1→9まで実フレーム目視で確認済み) に `read_max_in_window` を実行したところ
+  結果は 3 (真値の約1/3) だった。詳細:
+    - digit_1・digit_5・digit_6・digit_7・digit_8・digit_9 は高信頼度
+      (confidence 0.80〜1.00) かつ安定した位置で検出でき、フォント・
+      位置ロジックとも同一エンジン描画の前提は実証された。
+    - 一方 digit_2・digit_3・digit_4 はこのクリップでは confidence が
+      0.60〜0.75 程度に留まり位置も不安定 (真の該当ステップが別の数字
+      ラベルとして弱く誤分類される場面もあった)。原因は未特定 (真のステップが
+      落下ぷよ等で一部隠れていた可能性、1P側で採取したテンプレとの光源差等、
+      複数の仮説があるが未検証)。
+    - 結果として「1」から「5」への連続列の橋渡しに失敗し
+      (`CHAIN_STEP_MAX_GAP_SEC=2.5秒` を実際の空白期間 3.6秒以上が超過)、
+      連続列は 3 で頭打ちになった。これは「真の最大値を過大評価するより
+      過小評価を許容する」という設計方針どおりの挙動だが、実際の劣化幅
+      (9 → 3) はこの1件の検証だけでも無視できない大きさであり、
+      **全動画ロールアウト前に追加のテンプレ採取・閾値再検討が必須**。
+  加えて、表示位置がROI (盤面) の左端付近になる場合、ポップアップ自体が
+  ROI境界で切れて一部読み取れないケースも1件観測した (video_c54 2P側
+  t≈637.0s の「9」、ROI左端で一部クリップ)。本モジュールは盤面ROI内のみを
+  検索範囲とする設計のため、盤面外にはみ出す表示は原理的に対応できない
+  (将来的にROIを盤面外側に少し広げる拡張が考えられるが未実装)。
+- テンプレは手動crop (背景の隣接ぷよが一部写り込む) のため、score_ocr の
+  digit テンプレほど背景ノイズを除去できていない。tight crop (数字グリフ
+  中心、背景余白を最小化) により誤検出はある程度抑えたが、完全排除はできて
+  いない (上記閾値の根拠を参照)。
+- **色ベース mask + TM_CCORR_NORMED は不採用 (実験して悪化を確認済み)**。
+  数字部分を HSV 色域 (H:5-35, S:80-255, V:80-255) でマスクし
+  cv2.matchTemplate(..., mask=mask) で相関を取る手法を試したが、
+  TM_CCORR_NORMED は平均を引かずに正規化するため全クラスのスコアが
+  0.95〜1.0 に張り付いて識別力を失った (実験スクリプトで確認、本実装には
+  含めていない)。現状は無地 (mask なし) TM_CCOEFF_NORMED を採用する。
 """
 from __future__ import annotations
 
@@ -92,10 +137,30 @@ DEFAULT_CHAIN_TEMPLATE_DIR: Path = Path("models/ui_templates/chain_count_digits"
 CHAIN_DIGIT_HEIGHT: int = 110
 CHAIN_DIGIT_WIDTH: int = 70  # 代表値 (1=58px 〜 4=73px の中間、目安表示用)
 
-# 検出対象の連鎖数範囲 (1桁のみ対応。10連鎖以上は本モジュール未対応)
+# 検出対象の連鎖数範囲。ぷよぷよの理論上の連鎖数上限は 19 連鎖
+# (MEMORY.md reference_puyo_rules_confirmed_2026-07-22 参照) のため、
+# 2桁対応 (2026-07-29) により上限を 19 に拡張する。
 CHAIN_COUNT_MIN: int = 1
-CHAIN_COUNT_MAX: int = 9
-CHAIN_DIGIT_LABELS: tuple[int, ...] = tuple(range(CHAIN_COUNT_MIN, CHAIN_COUNT_MAX + 1))
+CHAIN_COUNT_MAX: int = 19
+
+# テンプレ (数字グリフ) クラスの範囲。0-9 の 10 クラス。
+# "0" は最終結果として単体で出ることはない (CHAIN_COUNT_MIN=1) が、
+# 2桁表示 (例: "10") の一の位として必要なため、テンプレクラスには含める。
+CHAIN_DIGIT_LABELS: tuple[int, ...] = tuple(range(0, 10))
+
+# 2桁表示 (10-19連鎖) の十の位は理論上つねに "1" (連鎖数上限19連鎖のため)。
+# この前提を使い、"1" の右隣に別の数字が近接検出された場合のみ2桁として
+# 結合する (_try_combine_two_digit 参照)。
+CHAIN_TWO_DIGIT_TENS_LABEL: int = 1
+
+# 2桁結合の位置判定パラメータ (2026-07-29 実測 1件のみ: video_c11,
+# 「10 れんさ!」の "1" と "0" は隙間 2px 程度でほぼ密着していた)。
+# 縦位置のずれ許容量 (px)。同一ポップアップの2桁は同じ行に描画されるはず。
+CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX: int = 20
+# 一の位の左端 x 座標 - (十の位の左端 x 座標 + 十の位テンプレ幅) の許容範囲 (px)。
+# 実測がほぼ密着 (2px) だったため、マイナス側 (わずかな重なり) も許容する。
+CHAIN_TWO_DIGIT_MIN_GAP_PX: int = -20
+CHAIN_TWO_DIGIT_MAX_GAP_PX: int = 30
 
 # NCC 信頼度閾値 (matchTemplate の TM_CCOEFF_NORMED 最大値)。
 # 2026-07-29 実測 (video_c54, 1P側, 12サンプル: peak4/near-peak6/no-popup2):
@@ -116,6 +181,16 @@ CHAIN_POPUP_DISPLAY_DURATION_SEC: float = 0.65
 # 取りこぼしのリスクは低い (60fps で 0.05s = 3 フレームおき)。
 CHAIN_WINDOW_SAMPLE_INTERVAL_SEC: float = 0.05
 
+# 連続列の「次のステップ」を受理する際の最大許容時間差 (秒)。
+# 2026-07-29 実測 (video_c54, 1P側, 1→2→3→4 の実ステップ間隔は 1.1〜1.4秒)。
+# 一方、同一 window 内で試合終了後の勝利演出画面 (盤面と無関係の背景) に
+# ポップアップ非表示なのに「5」を弱く誤検出し (confidence 0.63、4の次で
+# 数値上は連続列に見える) てしまう実例を検証で発見した (t_fire+1.0秒の
+# window 終端が勝利演出に到達していたケース)。これは値の連続性だけでは
+# 排除できないため、直前の受理から一定時間 (実測の倍以上の安全マージン) を
+# 超えた検出は「別物」とみなして棄却する。
+CHAIN_STEP_MAX_GAP_SEC: float = 2.5
+
 # 入力フレームの想定サイズ (score_ocr と共通)
 EXPECTED_FRAME_SHAPE: tuple[int, int] = (1080, 1920)
 
@@ -130,7 +205,8 @@ class ChainCountReadResult:
     """ChainCountOcr.read_side() の結果。
 
     Attributes:
-        chain_count: 読み取った連鎖数 (1-9)。未検出/信頼度不足なら None。
+        chain_count: 読み取った連鎖数 (1-19、10以上は2桁結合の結果)。
+            未検出/信頼度不足なら None。
         confidence: 採用したクラスの NCC 最大値 (0.0..1.0)。
         location: ROI 内でのテンプレ左上座標 (デバッグ用)。未検出時 None。
     """
@@ -205,6 +281,59 @@ def _match_digit_in_roi(
     return float(max_val), (int(max_loc[0]), int(max_loc[1]))
 
 
+# 1テンプレの ROI 内マッチ結果 (スコア, 左上座標, テンプレの(高さ,幅))
+_DigitMatch = tuple[float, tuple[int, int], tuple[int, int]]
+
+
+def _match_all_digits_in_roi(
+    gray_roi: np.ndarray, templates_gray: dict[int, np.ndarray],
+) -> dict[int, _DigitMatch]:
+    """登録済み全クラスを ROI 全体でスキャンし、クラスごとの最良一致を返す。
+
+    2桁結合判定 (_try_combine_two_digit) のため、単一の最良クラスだけでなく
+    クラスごとの結果を全て保持する。
+    """
+    out: dict[int, _DigitMatch] = {}
+    for label, tpl in templates_gray.items():
+        score, loc = _match_digit_in_roi(gray_roi, tpl)
+        out[label] = (score, loc, (tpl.shape[0], tpl.shape[1]))
+    return out
+
+
+def _try_combine_two_digit(
+    matches: dict[int, _DigitMatch], min_confidence: float,
+) -> ChainCountReadResult | None:
+    """十の位=1固定 (連鎖数理論上限19) の2桁ポップアップを検出・結合する。
+
+    "1" のテンプレが信頼度以上で見つかり、かつその右隣 (行が揃い、間隔が
+    妥当な範囲) に別の数字 (0-9) が見つかった場合のみ 10+一の位 を返す。
+    条件を満たさなければ None (呼び出し側は単一桁の通常ロジックにフォールバック)。
+    """
+    tens = matches.get(CHAIN_TWO_DIGIT_TENS_LABEL)
+    if tens is None or tens[0] < min_confidence:
+        return None
+    tens_score, (tens_x, tens_y), (_tens_h, tens_w) = tens
+    best_ones_label: int | None = None
+    best_ones_score: float = -1.0
+    for label, (score, (ones_x, ones_y), _shape) in matches.items():
+        if label == CHAIN_TWO_DIGIT_TENS_LABEL or score < min_confidence:
+            continue
+        if abs(ones_y - tens_y) > CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX:
+            continue
+        gap = ones_x - (tens_x + tens_w)
+        if not (CHAIN_TWO_DIGIT_MIN_GAP_PX <= gap <= CHAIN_TWO_DIGIT_MAX_GAP_PX):
+            continue
+        if score > best_ones_score:
+            best_ones_score, best_ones_label = score, label
+    if best_ones_label is None:
+        return None
+    combined = CHAIN_TWO_DIGIT_TENS_LABEL * 10 + best_ones_label
+    if combined > CHAIN_COUNT_MAX:
+        return None
+    confidence = min(tens_score, best_ones_score)
+    return ChainCountReadResult(combined, confidence, (tens_x, tens_y))
+
+
 # ============================
 # ChainCountOcr 本体
 # ============================
@@ -223,7 +352,8 @@ class ChainCountOcr:
         min_confidence: float = CHAIN_NCC_MIN_CONFIDENCE,
     ) -> None:
         """Args:
-            templates: 1-9 → テンプレ画像 (BGR or grayscale) の辞書。
+            templates: 0-9 → テンプレ画像 (BGR or grayscale) の辞書。
+                "0" は2桁表示の一の位判定にのみ使う (単体では出現しない)。
                 未指定 (None) クラスは OCR で None 扱いになる。
                 数字ごとに自然な字幅が異なるため (例: "1"は細い/"4"は太い)、
                 score_ocr と異なり共通サイズへのリサイズは行わない
@@ -265,7 +395,7 @@ class ChainCountOcr:
 
     @staticmethod
     def _load_templates_from_dir(template_dir: Path) -> dict[int, np.ndarray]:
-        """digit_N.png を全部スキャンする (N=1..9)。"""
+        """digit_N.png を全部スキャンする (N=0..9)。"""
         templates: dict[int, np.ndarray] = {}
         if not template_dir.is_dir():
             return templates
@@ -295,14 +425,25 @@ class ChainCountOcr:
         return self._classify(gray_roi)
 
     def _classify(self, gray_roi: np.ndarray) -> ChainCountReadResult:
-        """ROI 全体をスキャンし、最良一致クラスを返す (0-9 分類ロジック相当)。"""
+        """ROI 全体をスキャンし、最良一致クラスを返す (2桁結合 → 1桁 の順で判定)。"""
         if not self._templates_gray:
             return ChainCountReadResult(None, 0.0, None)
+        matches = _match_all_digits_in_roi(gray_roi, self._templates_gray)
+        two_digit = _try_combine_two_digit(matches, self._min_confidence)
+        if two_digit is not None:
+            return two_digit
+        return self._classify_single_digit(matches)
+
+    def _classify_single_digit(
+        self, matches: dict[int, _DigitMatch],
+    ) -> ChainCountReadResult:
+        """1桁分類のフォールバック ("0" は単体では出現しないため除外する)。"""
         best_label: int | None = None
         best_score: float = -1.0
         best_loc: tuple[int, int] = (0, 0)
-        for label, tpl in self._templates_gray.items():
-            score, loc = _match_digit_in_roi(gray_roi, tpl)
+        for label, (score, loc, _shape) in matches.items():
+            if label == 0:
+                continue  # "0" 単体は表示され得ない (2桁の一の位専用)
             if score > best_score:
                 best_score = score
                 best_label = label
@@ -348,7 +489,7 @@ class ChainCountOcr:
             if ok and frame is not None:
                 samples.append(self.read_side(frame, side))
             t += sample_interval_sec
-        return _aggregate_window_samples(samples)
+        return _aggregate_window_samples(samples, sample_interval_sec)
 
 
 # ============================
@@ -356,16 +497,72 @@ class ChainCountOcr:
 # ============================
 
 
+def _extract_monotonic_max_chain_count(
+    hits: list[tuple[float, int]],
+    max_step_gap_sec: float = CHAIN_STEP_MAX_GAP_SEC,
+) -> int | None:
+    """時刻順の (経過秒, 検出値) 列から「1始まり1ずつ増える連続列」の
+    最大値を抽出する。
+
+    「N れんさ!」は連鎖ステップが進むたびに 1 → 2 → 3 → … と必ず 1 ずつ
+    増えながら表示される、という構造的性質を使い、孤立した誤検出 (例: 3の
+    直後に7、1が出ていないのに4だけ) を棄却する (2026-07-29 userタスク指定)。
+
+    アルゴリズム: 有効な「連続列」を複数並行して追跡する (複数の連続列候補が
+    ある場合、すべて追跡し最後に最大値を採用する)。各検出値 v (時刻 t) について:
+      - 既存の連続列のいずれかで v == 現在値 なら同一ステップの反復として無視
+        (連続列は変化しないが最終更新時刻は t に進める)。
+      - 既存の連続列のいずれかで v == 現在値+1 かつ 直前の更新時刻からの
+        経過が max_step_gap_sec 以内なら、その連続列を v に進める。
+      - どの連続列にも該当せず v == 1 なら、新しい連続列を開始する。
+      - それ以外 (連続列の途中を飛ばした値・降下・1以外での新規開始・
+        時間差が空きすぎている継続候補) は孤立検出として棄却する
+        (連続列の状態は変えない)。
+    途中欠け (例 1,2,(3が未検出),4) は保守的に「4を棄却」として扱う
+    (真の最大値を過大評価するリスクより、過小評価の方を許容する設計判断)。
+
+    時間差チェックの背景 (2026-07-29 実検証で発見): 数値上「+1」に見えても、
+    試合終了後の勝利演出画面等 (盤面と無関係) を弱く誤検出すると、値の連続性
+    だけでは誤って受理してしまう。実ステップ間隔 (実測1.1〜1.4秒) を大幅に
+    超える経過時間での「継続」は別物とみなして棄却する。
+    """
+    active_runs: list[tuple[int, float]] = []  # (現在値, 最終更新時刻)
+    for t, v in hits:
+        matched = False
+        for i, (run_max, last_t) in enumerate(active_runs):
+            if v == run_max:
+                active_runs[i] = (run_max, t)
+                matched = True
+            elif v == run_max + 1 and (t - last_t) <= max_step_gap_sec:
+                active_runs[i] = (v, t)
+                matched = True
+        if not matched and v == 1:
+            active_runs.append((1, t))
+    return max((run_max for run_max, _ in active_runs), default=None)
+
+
 def _aggregate_window_samples(
     samples: list[ChainCountReadResult],
+    sample_interval_sec: float = CHAIN_WINDOW_SAMPLE_INTERVAL_SEC,
 ) -> ChainCountWindowResult:
-    """サンプル列から最大連鎖数を集計する (video I/O を含まない純粋関数)。"""
-    hits = [s for s in samples if s.chain_count is not None]
-    max_count = max((s.chain_count for s in hits), default=None)
+    """サンプル列から最大連鎖数を集計する (video I/O を含まない純粋関数)。
+
+    単純な max() ではなく `_extract_monotonic_max_chain_count` による
+    連続列検証 (値の連続性 + 経過時間チェック) を経由する
+    (2026-07-29、誤検出耐性強化)。samples は一定間隔 sample_interval_sec で
+    採取された前提のため、リスト内インデックス × 間隔を経過時刻の代用とする。
+    """
+    hits_results = [s for s in samples if s.chain_count is not None]
+    hits = [
+        (i * sample_interval_sec, s.chain_count)
+        for i, s in enumerate(samples)
+        if s.chain_count is not None
+    ]
+    max_count = _extract_monotonic_max_chain_count(hits)
     return ChainCountWindowResult(
         max_chain_count=max_count,
         samples=tuple(samples),
-        n_hits=len(hits),
+        n_hits=len(hits_results),
     )
 
 
@@ -377,6 +574,10 @@ __all__ = [
     "CHAIN_DIGIT_WIDTH",
     "CHAIN_NCC_MIN_CONFIDENCE",
     "CHAIN_POPUP_DISPLAY_DURATION_SEC",
+    "CHAIN_TWO_DIGIT_MAX_GAP_PX",
+    "CHAIN_TWO_DIGIT_MIN_GAP_PX",
+    "CHAIN_TWO_DIGIT_ROW_TOLERANCE_PX",
+    "CHAIN_TWO_DIGIT_TENS_LABEL",
     "CHAIN_WINDOW_SAMPLE_INTERVAL_SEC",
     "DEFAULT_CHAIN_TEMPLATE_DIR",
     "ChainCountOcr",
