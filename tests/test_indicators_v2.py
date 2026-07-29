@@ -1947,3 +1947,160 @@ def test_expected_fire_power_constants_values() -> None:
     assert iv.EXPECTED_FIRE_K_LEVELS == (1, 2, 3, 4)
     assert iv.EXPECTED_FIRE_EXACT_LEVELS == (1, 2)
     assert iv.EXPECTED_FIRE_MC_LEVELS == (3, 4)
+
+
+# ============================
+# XVIII おじゃまダメージ (発火点埋没モデル) のテスト
+# ============================
+
+
+def _headroom_board(height: int) -> Board:
+    """DEATH_COL(列2)の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
+
+    隣接同色を作らないため 1 手追加でも4連結が完成せず、
+    _takapt_best_drop が best_board=None (発火点フォールバック=DEATH_COL) を
+    返すことを保証する (height<=11 なら窒息もしない)。
+    """
+    g = _empty_grid()
+    colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN]
+    top = BOARD_ROWS - 1
+    for i in range(height):
+        g[top - i][2] = colors[i % 3]
+    return Board.from_list(g)
+
+
+def test_ojama_damage_range_0_1() -> None:
+    """様々な盤面・おじゃま量で score が常に 0〜1 に収まること。"""
+    for height in (0, 3, 6, 9, 11):
+        board = _headroom_board(height)
+        for count in (0, 3, 11, 12, 17, 18, 60, 200):
+            result = iv.ojama_damage(board, count)
+            assert 0.0 <= result.score <= 1.0
+
+
+def test_ojama_damage_monotonic_in_ojama_count() -> None:
+    """おじゃま量が増えるほど score は単調非減少 (headroom 固定)。"""
+    board = _headroom_board(9)  # headroom_dan = 3
+    counts = (0, 3, 11, 12, 15, 17, 18, 30, 60, 100)
+    scores = [iv.ojama_damage(board, c).score for c in counts]
+    for prev, cur in zip(scores, scores[1:]):
+        assert cur >= prev - 1e-9
+
+
+def test_ojama_damage_monotonic_in_board_fullness() -> None:
+    """盤面が埋まっている(=headroom小さい)ほど、同じおじゃま量で score が
+    非減少であること (盤面埋まり具合による増幅、逆転しないことを固定)。
+    """
+    heights_desc_headroom = (0, 3, 6, 9, 11)  # headroom = 12,9,6,3,1
+    for count in (0, 12, 18, 40):
+        scores = [
+            iv.ojama_damage(_headroom_board(h), count).score
+            for h in heights_desc_headroom
+        ]
+        for prev, cur in zip(scores, scores[1:]):
+            assert cur >= prev - 1e-9, (count, heights_desc_headroom, scores)
+
+
+def test_ojama_damage_breakpoints_headroom3() -> None:
+    """headroom_dan=3 前提 (user 12個/18個折れ点の解釈基準) での折れ点検証。
+
+    折れ線は連続 (段差ジャンプではなく傾きが変わる「折れ線」、原仕様の
+    「線形ではなく折れ線的」に対応)。12個・18個の前後で傾きが明確に
+    変わる (=許容帯はほぼ平ら、その先は明確に立ち上がる) ことを確認する。
+    """
+    board = _headroom_board(9)
+    s0 = iv.ojama_damage(board, 0).score
+    s11 = iv.ojama_damage(board, 11).score
+    s12 = iv.ojama_damage(board, 12).score
+    s17 = iv.ojama_damage(board, 17).score
+    s18 = iv.ojama_damage(board, 18).score
+    s60 = iv.ojama_damage(board, 60).score
+    # 12個までは「許容範囲」帯 (ほぼ平ら)。
+    assert s11 == pytest.approx(s0, abs=1e-6)
+    assert s12 == pytest.approx(s0, abs=1e-6)
+    # 12個超〜18個で明確に立ち上がる (かなり不利〜明確に不利)。
+    assert s17 > s12 + 0.1
+    assert s18 > s17
+    # 18個超はさらに悪化し、60個 (10段) でほぼ最大 (ほぼ死)。
+    assert s60 == pytest.approx(iv.OJAMA_DAMAGE_CEIL, abs=1e-6)
+    # 傾きが 0→12 帯より 12→18 帯で明確に急になること (折れ線の「折れ」)。
+    slope_flat = (s12 - s0) / 12.0
+    slope_steep = (s18 - s12) / 6.0
+    assert slope_steep > slope_flat + 1e-6
+
+
+def test_ojama_damage_empty_board_stays_low() -> None:
+    """空盤面は発火点(現在の最大連鎖)が存在しないため DEATH_COL 高さ0で
+    フォールバックし、headroom_dan=12 と非常に大きくなる。そのため大量の
+    おじゃまでも score は低いまま (本指標は「既存/構築中の発火点の埋没」を
+    測るものであり、空盤面の一般的危険度は別指標
+    (board_ojama_count/absorption_capacity/dig_resistance) の役割、という
+    既知のスコープ限定を固定するテスト)。
+    """
+    board = _empty_board()
+    result = iv.ojama_damage(board, 60)
+    assert result.score == pytest.approx(iv.OJAMA_DAMAGE_FLOOR, abs=1e-6)
+
+
+def test_ojama_damage_dead_board_is_max() -> None:
+    """窒息済み盤面は score=OJAMA_DAMAGE_CEIL (最大不利) を返す。"""
+    g = _empty_grid()
+    g[1][2] = COLOR_RED  # DEATH_ROW=1, DEATH_COL=2
+    board = Board.from_list(g)
+    assert board.is_dead()
+    result = iv.ojama_damage(board, 0)
+    assert result.score == iv.OJAMA_DAMAGE_CEIL
+
+
+def test_ojama_damage_zero_count_headroom_equals_raw() -> None:
+    """ojama_count=0 のとき raw (残り余裕段数) は headroom_dan そのものと一致
+    (0段引かれるだけなので当然だが、実装の単位整合の回帰確認として固定する)。
+    """
+    board = _headroom_board(9)  # DEATH_COL 高さ9 → headroom=12-9=3
+    result = iv.ojama_damage(board, 0)
+    assert result.raw == pytest.approx(3.0, abs=1e-9)
+
+
+def test_ojama_damage_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _headroom_board(9)
+    before = board.copy()
+    iv.ojama_damage(board, 30)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_ojama_damage_negative_count_treated_as_zero() -> None:
+    """ojama_count に負値が渡っても 0 個扱いにクランプされ例外にならない。"""
+    board = _headroom_board(9)
+    result = iv.ojama_damage(board, -5)
+    zero = iv.ojama_damage(board, 0)
+    assert result.score == pytest.approx(zero.score, abs=1e-9)
+
+
+def test_ojama_damage_exported_in_all() -> None:
+    """ojama_damage と関連定数が __all__ (EXTRA_INDICATOR_NAMES 相当) に
+    含まれること。既存 LEARNED_WEIGHTS_* 順序には影響しない末尾追加。
+    """
+    for name in (
+        "ojama_damage",
+        "OJAMA_DAMAGE_PER_DAN",
+        "REMAINING_MARGIN_SAFE_DAN",
+        "REMAINING_MARGIN_CRITICAL_DAN",
+        "REMAINING_MARGIN_FLOOR_DAN",
+        "OJAMA_DAMAGE_FLOOR",
+        "OJAMA_DAMAGE_MID",
+        "OJAMA_DAMAGE_CEIL",
+    ):
+        assert name in iv.__all__
+
+
+def test_ojama_damage_constants_ordering() -> None:
+    """暫定値は今後の学習調整を想定するため、絶対値ではなく折れ線として
+    意味を成す相対順序のみを固定する (SAFE > CRITICAL > FLOOR_DAN、
+    FLOOR < MID < CEIL)。
+    """
+    assert iv.REMAINING_MARGIN_SAFE_DAN > iv.REMAINING_MARGIN_CRITICAL_DAN
+    assert iv.REMAINING_MARGIN_CRITICAL_DAN > iv.REMAINING_MARGIN_FLOOR_DAN
+    assert iv.OJAMA_DAMAGE_FLOOR < iv.OJAMA_DAMAGE_MID < iv.OJAMA_DAMAGE_CEIL

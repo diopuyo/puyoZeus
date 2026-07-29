@@ -3391,6 +3391,172 @@ def _counter_reach_mc_k3k4_fast(
     return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
 
 
+# ============================
+# XVIII おじゃまダメージ (発火点埋没モデル) — 2026-07-29 追加
+# ============================
+#
+# user 伝授 (2026-07-29、複数往復のすり合わせで確定した構造):
+#   (1) 「お邪魔は18個(3段)超で明確に不利、12〜17個(2段台)もかなり不利、
+#        あとは盤面のぷよが多いほど1個あたりの不利度がジワジワ上がる」
+#   (2) 「カウンター(受けてから発火する)は、発火点までにお邪魔が3段あると厳しい」
+#   (3) 「飽和(将来組める最大火力)はおじゃま数の単調減少関数なので、飽和成分は
+#        おじゃま数の項で代理してよい(厳密な飽和探索=chain_bitboardでの深い構築
+#        探索は重いため今回は行わない、user 判断 2026-07-29)」
+#
+# この3発言は下記2入力の引き算1本に統合できる:
+#     残り余裕段数 = 発火点までの余裕段数(headroom_dan) − 受けたおじゃま段数(ojama_dan)
+#     ダメージ = 残り余裕段数の折れ線 (下がるほど不利、3水準2折れ)
+#
+#   - おじゃま量の項 (ojama_dan) は「発火点を埋める直接的な脅威」と「将来の
+#     組める余地=飽和を奪う脅威」の両方を兼ねる (user (3))。したがって
+#     飽和減少専用の別指標は用意しない (重複指標を増やさない、user 判断)。
+#   - 発火点までの余裕段数 (headroom_dan) が小さい (=盤面が埋まっている) ほど
+#     同じおじゃま量でも残り余裕段数がすぐに尽きる → 「盤面が埋まっているほど
+#     1個あたりの不利度がジワジワ上がる」(user (1) 後半) が自然に導かれる。
+#     「量に対する折れ線」と「盤面の埋まり具合による増幅」は別々の項ではなく、
+#     1つの引き算 (headroom_dan − ojama_dan) の中に統合されている。
+#   - user 12個(2段)/18個(3段) の折れ点は「典型的な発火点余裕が3段程度」
+#     (user (2)) という前提のもとで 残り余裕段数=+1段 / 0段 に相当すると
+#     解釈できる (headroom_dan=3 と仮定すると 12個→remain=1、18個→remain=0)。
+#     ※この対応関係は user から直接の数値確認を得たものではなく、コーダに
+#       よる構造上の解釈である (暫定)。折れ点位置・傾き・大きさは全て下記
+#       定数で調整可能にしてあり、実データ学習で調整する前提
+#       (CLAUDE.md「人間が重要と決めない。観測軸を提供→学習で重要度を発見」)。
+#   - 参考値 (user 別発言、非構造的): 「3個は受けても無害」「60個はほぼ死」。
+#     headroom_dan=3 の前提で換算すると 3個→remain=2.5 (安全域)、
+#     60個(10段)→remain=-7 に相当し、下記 REMAINING_MARGIN_FLOOR_DAN の
+#     決定にのみ参考として用いた (この換算自体も暫定・要検証)。
+
+# おじゃま「段」換算 (個数→段)。6列にほぼ均等落下する前提
+# (reference_ojama_landing_pattern.md 準拠)。
+# scripts/measure_exchange_dynamics.py の OJAMA_PER_DAN と同一単位・同一値
+# (=6) を用いる (値の意味は同じだが「受けるダメージ」の閾値算出であり
+# 同スクリプトの「返り量分類」閾値 RETURN_ONE_DAN_UPPER/RETURN_TWO_DAN_LOWER
+# とは出自が異なる別定数として独立に持つ。両者を安易に共通化しない)。
+OJAMA_DAMAGE_PER_DAN: float = 6.0
+
+# 残り余裕段数 (headroom_dan − ojama_dan) の折れ点。
+# SAFE 以上: 「許容範囲」帯 (被害ほぼフラット)。
+# CRITICAL (=0): 発火点そのものが埋まる境界 (「明確に不利」開始点)。
+# 上記コメント通り、headroom_dan=3 前提での user 12個/18個 折れ点からの逆算値。
+# ※暫定値。厳密な検証はされていない。
+REMAINING_MARGIN_SAFE_DAN: float = 1.0
+REMAINING_MARGIN_CRITICAL_DAN: float = 0.0
+
+# 残り余裕段数がこれ以下 (大きく負) になったらダメージ 1.0 で飽和させる下限。
+# user「60個(10段)はほぼ死」を headroom_dan=3 前提で換算した参考値 (暫定)。
+REMAINING_MARGIN_FLOOR_DAN: float = -7.0
+
+# 折れ線 3 水準の高さ (0〜1)。中間値は user 定性表現の相対順位のみを反映した
+# 暫定値であり、絶対的な正しさは未検証 (大きさは今後の学習に委ねる)。
+OJAMA_DAMAGE_FLOOR: float = 0.05  # 残り余裕 >= SAFE: 「受けても無害」帯
+OJAMA_DAMAGE_MID: float = 0.5    # 残り余裕 = CRITICAL: 「かなり不利」代表点
+OJAMA_DAMAGE_CEIL: float = 1.0   # 残り余裕 <= FLOOR: 「ほぼ死」帯
+
+
+def _diff_dropped_column(before: "Board", after: "Board") -> "int | None":
+    """1 puyo 追加前後の高さ差から、追加された列を特定する。
+
+    _takapt_best_drop の best_board は before に 1 puyo 追加した盤面
+    (=現在の最大連鎖=発火点を作る1手) のため、高さが変化した列が
+    その落下列 (発火点の列) になる。
+
+    Args:
+        before: 追加前の盤面。
+        after: 追加後の盤面 (_takapt_best_drop の best_board)。
+
+    Returns:
+        int | None: 高さが変化した列番号。差が見つからなければ None
+            (通常は起きないが、既存グループが既に発火可能だった等の
+            退化ケースに対する安全弁)。
+    """
+    for col in range(BOARD_COLS):
+        if before.height_of(col) != after.height_of(col):
+            return col
+    return None
+
+
+def _ignition_headroom_dan(board: Board, sim: ChainSimulator) -> float:
+    """発火点までの余裕段数 (headroom_dan) を求める。
+
+    発火点 = 現在の最大連鎖 (current_max_chain/takapt定石) を作る1手の
+    落下列。1手でも発火可能な組み合わせが存在しない盤面
+    (_takapt_best_drop の best_board=None、序盤等で頻出) では発火点が
+    未確定のため、窒息判定列 (DEATH_COL、death_margin と同じ列) の余裕
+    で代用する (暫定近似。理由: DEATH_COL は本プロジェクトで既に「最有力の
+    詰みボトルネック列」として扱われている列であり、一貫性がある)。
+
+    Args:
+        board: 評価対象の盤面 (STABLE 確定盤面、破壊しない)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        float: 余裕段数 (0〜MAX_COL_HEIGHT の範囲、通常は正)。
+    """
+    from src.board import DEATH_COL
+    _, best_board = _takapt_best_drop(board, sim)
+    ignite_col = (
+        _diff_dropped_column(board, best_board) if best_board is not None else None
+    )
+    col = ignite_col if ignite_col is not None else DEATH_COL
+    return float(MAX_COL_HEIGHT - board.height_of(col))
+
+
+def _ojama_damage_from_margin(remaining_margin_dan: float) -> float:
+    """残り余裕段数 → ダメージ (0〜1) への折れ線変換 (3水準2折れ)。
+
+    区間ごとに線形補間する (折れ線、閾値・傾きは全てモジュール定数)。
+    remaining_margin_dan が小さい (=余裕が無い/埋まった) ほどダメージ増。
+    """
+    if remaining_margin_dan >= REMAINING_MARGIN_SAFE_DAN:
+        return OJAMA_DAMAGE_FLOOR
+    if remaining_margin_dan >= REMAINING_MARGIN_CRITICAL_DAN:
+        span = REMAINING_MARGIN_SAFE_DAN - REMAINING_MARGIN_CRITICAL_DAN
+        t = (REMAINING_MARGIN_SAFE_DAN - remaining_margin_dan) / span
+        return OJAMA_DAMAGE_FLOOR + t * (OJAMA_DAMAGE_MID - OJAMA_DAMAGE_FLOOR)
+    if remaining_margin_dan >= REMAINING_MARGIN_FLOOR_DAN:
+        span = REMAINING_MARGIN_CRITICAL_DAN - REMAINING_MARGIN_FLOOR_DAN
+        t = (REMAINING_MARGIN_CRITICAL_DAN - remaining_margin_dan) / span
+        return OJAMA_DAMAGE_MID + t * (OJAMA_DAMAGE_CEIL - OJAMA_DAMAGE_MID)
+    return OJAMA_DAMAGE_CEIL
+
+
+def ojama_damage(
+    board: Board,
+    ojama_count: int,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XVIII おじゃまダメージ (発火点埋没モデル、user構造伝授の暫定実装)。
+
+    受けたおじゃま (ojama_count) が、現在の発火点 (=現在の最大連鎖を作る
+    1手の落下列) までの余裕段数をどれだけ侵食するかで不利度を測る。
+    「おじゃま量の折れ線」と「盤面の埋まり具合による増幅」は残り余裕段数
+    (headroom_dan − ojama_dan) 1本の引き算に統合されている
+    (モジュール冒頭コメント参照)。飽和 (将来の最大火力) 減少成分は
+    おじゃま数の単調減少関数として同じ ojama_dan 項が代理する
+    (user 判断、別指標化しない)。
+
+    Args:
+        board: 評価対象の自分側盤面 (STABLE 確定盤面、おじゃま着弾前の
+            現状盤面。ojama_count は既にこの board に含まれる分と
+            別の「評価したい量」を渡すこと、二重計上防止)。
+        ojama_count: 評価したいおじゃま量 (個数、生値)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 ダメージ (大きいほど不利、
+            折れ線3水準 OJAMA_DAMAGE_FLOOR/MID/CEIL で正規化済み)、
+            raw=残り余裕段数 (headroom_dan − ojama_dan、負値あり得る)。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=OJAMA_DAMAGE_CEIL, raw=REMAINING_MARGIN_FLOOR_DAN)
+    headroom_dan = _ignition_headroom_dan(board, sim)
+    ojama_dan = max(0.0, float(ojama_count)) / OJAMA_DAMAGE_PER_DAN
+    remaining = headroom_dan - ojama_dan
+    return IndicatorV2Value(score=_clamp01(_ojama_damage_from_margin(remaining)), raw=remaining)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -3520,4 +3686,14 @@ __all__ = [
     "counter_reach_probability_fast",
     "CounterReachResult",
     "COUNTER_REACH_EFFECTIVE_THRESHOLD_PROB",
+    # XVIII おじゃまダメージ (発火点埋没モデル)
+    # — 2026-07-29 追加 (末尾追加・既存に非依存)。
+    "ojama_damage",
+    "OJAMA_DAMAGE_PER_DAN",
+    "REMAINING_MARGIN_SAFE_DAN",
+    "REMAINING_MARGIN_CRITICAL_DAN",
+    "REMAINING_MARGIN_FLOOR_DAN",
+    "OJAMA_DAMAGE_FLOOR",
+    "OJAMA_DAMAGE_MID",
+    "OJAMA_DAMAGE_CEIL",
 ]
