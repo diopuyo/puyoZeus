@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import src.indicators_v2 as iv  # noqa: E402
 from src.board import Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.chain_detector import ChainEvent  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker, OjamaAccountSnapshot,
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
@@ -173,6 +174,66 @@ def kill_override(adv: float, inc1: float, inc2: float,
     g = min(1.0, (mag - KILL_RATIO_MIN) / (KILL_RATIO_FULL - KILL_RATIO_MIN))
     target = -100.0 if lead > 0 else 100.0  # 死ぬ側の逆へ
     return (1.0 - g) * adv + g * target
+
+
+# (早期発火) 2026-07-29 userレビュー指摘1/2 対処: adv 全体が「両者STABLE」
+#   (settled) までフリーズする設計(下記 generate() の settled ゲート参照) のため、
+#   12連鎖のような返せない本線を撃っても連鎖アニメ中は勝率が動かず、連鎖完了の
+#   瞬間に大きく飛ぶ(指摘1)。同様に相手の返し連鎖もアニメ中は無視されるため
+#   「攻撃側 100%」のまま張り付く(指摘2)。
+#   本トラッカーは chain_event 検知フレーム(掛け算式表示等、機能D。
+#   src/recognition_pipeline.py:4053 _apply_chain_formula_early_fire 参照)で
+#   即座に速報バイアスを加算する表示専用サイドチャネル。confirmed_board は
+#   一切変更しない(STABLE限定評価の思想を維持、feedback_chain_phase_physics_only)。
+EARLY_FIRE_CAP = 40.0     # 速報バイアス上限(過信防止。単独で100%表示は作らない)
+# 毎フレーム減衰(半減期 約346フレーム@30fps≒11.5秒)。実測 (2026-07-29
+# c56_g3 12連鎖) では settled フリーズが約19秒続いたため、その間ずっと
+# 速報値を維持できるよう緩やかに設定 (settled 再計算が入れば on_settled() で
+# 即クリアされるため、決着後に古い値が残り続けることはない)。
+EARLY_FIRE_DECAY = 0.998
+
+
+class EarlyFireTracker:
+    """chain_event 検知フレームで即座に有利不利へ反映する速報バイアス(1P視点)。
+
+    settled(両者STABLE)を待たず、起点盤面(ChainEvent.before_board)から
+    iv.immediate_fire_power で即発火お邪魔量を見積もり、相手盤面への
+    iv.ojama_damage(余裕浸食度)を bias として加算する。settled 再計算が
+    入ったら on_settled() で bias をクリアし確定計算に道を譲る(二重計上防止)。
+    """
+
+    def __init__(self) -> None:
+        self.bias = 0.0  # 1P視点 (正=1P有利)、範囲 ±EARLY_FIRE_CAP
+        self._last_trigger_1p: float | None = None
+        self._last_trigger_2p: float | None = None
+
+    def _fire_damage(self, before: "Board | None", opponent: "Board | None",
+                     elapsed: float) -> float:
+        """1 回の発火が相手に与える速報ダメージ(0〜1)を見積もる。"""
+        if before is None or opponent is None:
+            return 0.0
+        ojama = iv.immediate_fire_power(before, elapsed).raw
+        return iv.ojama_damage(opponent, ojama).score
+
+    def update(self, ev1: "ChainEvent | None", ev2: "ChainEvent | None",
+              opp_board_for_1p: "Board | None", opp_board_for_2p: "Board | None",
+              elapsed: float) -> float:
+        """毎フレーム呼ぶ(settled 有無に関わらず)。現在の bias を返す。"""
+        self.bias *= EARLY_FIRE_DECAY
+        if ev1 is not None and ev1.trigger_sec != self._last_trigger_1p:
+            self._last_trigger_1p = ev1.trigger_sec
+            dmg = self._fire_damage(ev1.before_board, opp_board_for_1p, elapsed)
+            self.bias += dmg * EARLY_FIRE_CAP
+        if ev2 is not None and ev2.trigger_sec != self._last_trigger_2p:
+            self._last_trigger_2p = ev2.trigger_sec
+            dmg = self._fire_damage(ev2.before_board, opp_board_for_2p, elapsed)
+            self.bias -= dmg * EARLY_FIRE_CAP
+        self.bias = max(-EARLY_FIRE_CAP, min(EARLY_FIRE_CAP, self.bias))
+        return self.bias
+
+    def on_settled(self) -> None:
+        """settled(確定)再計算が入ったら速報バイアスをクリアする(二重計上防止)。"""
+        self.bias = 0.0
 
 
 # (改修1) スコアリセット検知: 新ゲーム開始/全消し等でスコアが「前フレームから
@@ -639,18 +700,21 @@ class HeavyAdvCache:
 def _fresh_trackers(
     model,
 ) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
-           PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache]:
+           PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
+           EarlyFireTracker]:
     """スコアリセット検知時に持続トラッカー一式を初期状態で作り直す。
 
     各トラッカーは内部 state が僅少 (数個の float/Counter) のため、都度
     再生成するだけで「初期化」と等価であり専用 reset() の追加は不要
     (OjamaAccountingTracker のみ既存 reset() を呼び互換 API を維持する)。
+    戻り値末尾に EarlyFireTracker を追加 (2026-07-29、既存呼出元は1箇所のみで
+    アンパック先も同時更新済みのため後方互換上の実害なし)。
     """
     tracker = OjamaAccountingTracker()
     tracker.reset()
     return (tracker, _SideTracker(), _SideTracker(),
             PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
-            HeavyAdvCache(model))
+            HeavyAdvCache(model), EarlyFireTracker())
 
 
 def _pick_recog_display_board(
@@ -826,7 +890,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_recovery_counter_carryover: bool = False,
              enable_cnn_flicker_hsv_fallback: bool = False,
              enable_initial_confirm_vote: bool = False,
-             enable_platt_calibration: bool = False) -> int:
+             enable_platt_calibration: bool = False,
+             enable_early_fire_reaction: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -887,6 +952,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         学習されたものであり、本スクリプトの4成分ブレンドモデルとは生成過程が
         異なるため近似適用である点に注意 (詳細は PLATT_CALIBRATION_PATH 定義部・
         _apply_platt_to_display のコメント参照)。
+    enable_early_fire_reaction: True で EarlyFireTracker (chain_event 検知フレームで
+        即座に反映する速報バイアス) を表示に加算する (2026-07-29 userレビュー指摘1/2
+        対処、追加)。既定 False = 従来挙動 (settled ゲートのみ、後方互換、既存呼出元は
+        挙動不変)。confirmed_board は変更しないサイドチャネル (詳細は EarlyFireTracker
+        docstring 参照)。adv_ema/p1_last 自体 (EMA 内部状態) には混ぜず、表示直前
+        (グラフ点・バー・勝率テキスト) にのみ加算するため、無効時は完全に従来経路と
+        ビット一致する。
     """
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
@@ -953,6 +1025,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
     hcache = HeavyAdvCache(model)
+    efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
@@ -979,7 +1052,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv_ema, p1_last, drivers = 0.0, 0.5, []
             ukey1 = ukey2 = sat1 = sat2 = 0.0
             history.clear()
-            tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache = _fresh_trackers(model)
+            (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
+             efire_tracker) = _fresh_trackers(model)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -988,6 +1062,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
+        # (早期発火) chain_event 検知フレームで即座に速報バイアスを更新する。
+        # settled ゲートの外側 (= 非STABLE中も毎フレーム) で呼ぶことが本修正の要
+        # (2026-07-29 userレビュー指摘1/2対処、詳細は EarlyFireTracker docstring)。
+        if enable_early_fire_reaction:
+            efire_tracker.update(r.p1.chain_event, r.p2.chain_event, b2, b1,
+                                 tracker._elapsed(t))
         # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
@@ -1012,9 +1092,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv, p1 = _apply_platt_to_display(adv, p1, platt_params)  # Platt後段校正
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
+            if enable_early_fire_reaction:
+                efire_tracker.on_settled()  # 確定計算が入ったので速報バイアスをクリア
+        # (早期発火) 表示直前にのみ bias を加算する (adv_ema/p1_last の EMA 内部状態
+        # 自体には混ぜない = 無効時は従来経路とビット一致)。
+        disp_adv, disp_p1 = adv_ema, p1_last
+        if enable_early_fire_reaction and efire_tracker.bias != 0.0:
+            disp_adv = max(-100.0, min(100.0, adv_ema + efire_tracker.bias))
+            disp_p1 = adv_to_winprob(disp_adv)
         if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
             # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦を維持
-            history.append((t - start_sec, adv_ema))
+            history.append((t - start_sec, disp_adv))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         waiting = b1 is None or b2 is None
@@ -1051,12 +1139,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                                   (p2_x + roi_w, p2_y + roi_h), (0, 165, 255), 4)
             display_frame = cv2.resize(
                 raw_native, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
-        writer.write(_draw_overlay(display_frame, adv_ema, p1_last, drivers, waiting,
+        writer.write(_draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
                                    history, t - start_sec, total_dur,
                                    ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2))
         written += 1
         if written % 300 == 0:
-            print(f"  ... {written} frames (t={t:.1f}s adv={adv_ema:+.0f})")
+            print(f"  ... {written} frames (t={t:.1f}s adv={disp_adv:+.0f})")
     cap.release(); writer.release()
     print(f"[done] {written} frames -> {out}")
     return written
@@ -1147,6 +1235,15 @@ def main() -> None:
         dest="enable_platt_calibration",
         help="(後方互換) 校正を明示的に無効化する。既定が OFF なので通常は不要。",
     )
+    ap.add_argument(
+        "--early-fire-reaction", action="store_true", default=False,
+        dest="enable_early_fire_reaction",
+        help="chain_event 検知フレーム(掛け算式表示等)で即座に速報バイアスを"
+             "反映する EarlyFireTracker を有効化する (2026-07-29 userレビュー"
+             "指摘1/2対処: 12連鎖等の大型本線が settled ゲートで長時間反映されず"
+             "連鎖終了時に急変する問題、および相手の返し連鎖アニメ中の見落としに"
+             "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -1159,7 +1256,8 @@ def main() -> None:
              enable_recovery_counter_carryover=a.enable_recovery_counter_carryover,
              enable_cnn_flicker_hsv_fallback=a.enable_cnn_flicker_hsv_fallback,
              enable_initial_confirm_vote=a.enable_initial_confirm_vote,
-             enable_platt_calibration=a.enable_platt_calibration)
+             enable_platt_calibration=a.enable_platt_calibration,
+             enable_early_fire_reaction=a.enable_early_fire_reaction)
 
 
 if __name__ == "__main__":
