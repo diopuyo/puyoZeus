@@ -14,9 +14,10 @@ import types
 
 import numpy as np
 
+from src.probability_calibration import PlattCalibrationParams  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
-    kill_override, board_room, _detect_score_reset,
+    kill_override, board_room, _detect_score_reset, _apply_platt_to_display,
 )
 
 
@@ -218,3 +219,29 @@ def test_score_reset_ignores_one_sided_near_zero() -> None:
 def test_score_reset_none_score_is_undetectable() -> None:
     """score が None(OCR失敗)の場合は判定不能として False を返す。"""
     assert _detect_score_reset(None, 5000, 3000, 5000) is False
+
+
+def test_platt_display_noop_when_params_none() -> None:
+    """platt_params=None (校正無効/フラグOFF相当) なら (adv, p1) は完全不変。
+
+    これが「フラグOFFで旧挙動が完全に再現される」ことの直接的な回帰テスト。
+    """
+    adv, p1 = _apply_platt_to_display(42.0, 0.71, None)
+    assert adv == 42.0
+    assert p1 == 0.71
+
+
+def test_platt_display_recomputes_adv_from_calibrated_prob() -> None:
+    """校正が有効な場合、p1 が校正され、adv = (校正後p1-0.5)*200 に再構成される。"""
+    params = PlattCalibrationParams(a=1.0, b=0.0)  # 恒等変換
+    adv, p1 = _apply_platt_to_display(60.0, adv_to_winprob(60.0), params)
+    assert abs(p1 - adv_to_winprob(60.0)) < 1e-6  # 恒等変換なのでp1は不変
+    assert abs(adv - 60.0) < 1e-3  # adv も往復して不変
+
+
+def test_platt_display_clamped_to_range() -> None:
+    """校正後 adv も [-100,100] にクリップされる。"""
+    params = PlattCalibrationParams(a=10.0, b=0.0)  # 極端に強く0/1へ寄せる係数
+    adv, p1 = _apply_platt_to_display(90.0, 0.95, params)
+    assert -100.0 <= adv <= 100.0
+    assert 0.0 <= p1 <= 1.0
