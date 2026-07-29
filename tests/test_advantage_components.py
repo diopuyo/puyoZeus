@@ -14,10 +14,14 @@ import types
 
 import numpy as np
 
+from src.board import Board  # noqa: E402
+from src.chain_detector import ChainEvent  # noqa: E402
+from src.indicators_v2 import IndicatorV2Value  # noqa: E402
 from src.probability_calibration import PlattCalibrationParams  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
     kill_override, board_room, _detect_score_reset, _apply_platt_to_display,
+    EarlyFireTracker, EARLY_FIRE_CAP,
 )
 
 
@@ -245,3 +249,120 @@ def test_platt_display_clamped_to_range() -> None:
     adv, p1 = _apply_platt_to_display(90.0, 0.95, params)
     assert -100.0 <= adv <= 100.0
     assert 0.0 <= p1 <= 1.0
+
+
+# ============================
+# EarlyFireTracker (2026-07-29 userレビュー指摘1/2対処)
+# ============================
+
+def _make_chain_event(trigger_sec: float, before_board: Board | None = None) -> ChainEvent:
+    """テスト用の最小 ChainEvent を組み立てる (before_board 以外は不使用値でよい)。"""
+    return ChainEvent(
+        trigger_sec=trigger_sec, end_sec=trigger_sec + 1.0,
+        before_board=before_board if before_board is not None else Board(),
+        chain_count=1, total_erased=0, total_score=0, base_score=0,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_early_fire_bias_zero_when_no_events() -> None:
+    """chain_event が一度も来なければ bias は 0 のまま。"""
+    ft = EarlyFireTracker()
+    for _ in range(5):
+        v = ft.update(None, None, Board(), Board(), 0.0)
+    assert v == 0.0
+
+
+def test_early_fire_bias_positive_on_1p_fire(monkeypatch) -> None:
+    """1P の chain_event 検知 → bias は正 (1P有利) へ即座に動く。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=0.5, raw=30.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=0.5, raw=0.0))
+    ft = EarlyFireTracker()
+    ev1 = _make_chain_event(trigger_sec=10.0)
+    v = ft.update(ev1, None, Board(), Board(), 0.0)
+    assert v > 0.0
+    assert v <= EARLY_FIRE_CAP
+
+
+def test_early_fire_bias_negative_on_2p_fire(monkeypatch) -> None:
+    """2P の chain_event 検知 → bias は負 (2P有利) へ即座に動く (1P/2P対称)。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=0.5, raw=30.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=0.5, raw=0.0))
+    ft = EarlyFireTracker()
+    ev2 = _make_chain_event(trigger_sec=10.0)
+    v = ft.update(None, ev2, Board(), Board(), 0.0)
+    assert v < 0.0
+    assert v >= -EARLY_FIRE_CAP
+
+
+def test_early_fire_same_trigger_not_double_counted(monkeypatch) -> None:
+    """同一 trigger_sec の chain_event を複数フレームで受けても二重加算しない。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=0.5, raw=30.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=0.5, raw=0.0))
+    ft = EarlyFireTracker()
+    ev1 = _make_chain_event(trigger_sec=10.0)
+    v0 = ft.update(ev1, None, Board(), Board(), 0.0)
+    v1 = ft.update(ev1, None, Board(), Board(), 0.0)  # 同じ ev を再度渡す (毎フレームありうる)
+    assert v1 <= v0  # 減衰のみで新規加算はない
+
+
+def test_early_fire_decays_without_new_events(monkeypatch) -> None:
+    """新規発火が無ければ bias は減衰して 0 へ近づく。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=0.5, raw=30.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=0.5, raw=0.0))
+    ft = EarlyFireTracker()
+    ev1 = _make_chain_event(trigger_sec=10.0)
+    peak = ft.update(ev1, None, Board(), Board(), 0.0)
+    later = peak
+    for _ in range(300):
+        later = ft.update(None, None, Board(), Board(), 0.0)
+    assert 0.0 <= later < peak
+
+
+def test_early_fire_on_settled_clears_bias(monkeypatch) -> None:
+    """settled 再計算が入ったら on_settled() で bias が即座に 0 になる(二重計上防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=0.5, raw=30.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=0.5, raw=0.0))
+    ft = EarlyFireTracker()
+    ev1 = _make_chain_event(trigger_sec=10.0)
+    ft.update(ev1, None, Board(), Board(), 0.0)
+    assert ft.bias != 0.0
+    ft.on_settled()
+    assert ft.bias == 0.0
+
+
+def test_early_fire_bias_clamped_to_cap(monkeypatch) -> None:
+    """複数回の連続発火でも bias は ±EARLY_FIRE_CAP でクリップされる。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao.iv, "immediate_fire_power",
+                        lambda board, elapsed: IndicatorV2Value(score=1.0, raw=999.0))
+    monkeypatch.setattr(vao.iv, "ojama_damage",
+                        lambda board, ojama: IndicatorV2Value(score=1.0, raw=-99.0))
+    ft = EarlyFireTracker()
+    for i in range(5):
+        v = ft.update(_make_chain_event(trigger_sec=float(i)), None, Board(), Board(), 0.0)
+    assert v <= EARLY_FIRE_CAP
+
+
+def test_early_fire_none_board_is_safe() -> None:
+    """opponent/before board が None (未確定) でも例外にならず 0 扱い。"""
+    ft = EarlyFireTracker()
+    ev1 = _make_chain_event(trigger_sec=1.0)
+    v = ft.update(ev1, None, None, None, 0.0)
+    assert v == 0.0
