@@ -9,6 +9,12 @@
 """
 from __future__ import annotations
 
+import csv
+from pathlib import Path
+from types import SimpleNamespace
+
+import cv2
+import numpy as np
 import pytest
 
 from src.board import (
@@ -21,6 +27,8 @@ from src.board import (
     COLOR_PURPLE,
     Board,
 )
+from src.board_state_machine import BoardState
+from src.recognition_pipeline import RecognitionPipeline
 import src.indicators_v2 as iv
 import scripts.collect_indicators_v2 as collect_mod
 
@@ -579,6 +587,13 @@ def test_collect_signature_has_sample_interval_frames_appended_at_tail() -> None
     """collect() の新引数 sample_interval_frames が末尾追加され、
 
     既存引数の並び・デフォルト値が一切変わっていないこと (backwards compat)。
+
+    2026-07-30 追記: さらに末尾へ indicator_interval_frames を追加したため、
+    sample_interval_frames はもう「最後の引数」ではなくなった。ここでは
+    「sample_interval_frames までの並びが不変であること」のみを確認し、
+    新しい末尾の確認は test_collect_signature_has_indicator_interval_frames_appended_at_tail
+    に分離する (末尾追加のたびに前のブロックの「最後」アサーションを壊さない
+    ための一般化)。
     """
     import inspect
     sig = inspect.signature(collect_mod.collect)
@@ -587,5 +602,235 @@ def test_collect_signature_has_sample_interval_frames_appended_at_tail() -> None
         "video_path", "out_path", "max_sec", "sample_interval_sec",
         "start_sec", "board_npz_path",
     ]
-    assert params[-1] == "sample_interval_frames"
+    assert params[6] == "sample_interval_frames"
     assert sig.parameters["sample_interval_frames"].default is None
+
+
+def test_collect_signature_has_indicator_interval_frames_appended_at_tail() -> None:
+    """collect() の新引数 indicator_interval_frames が末尾追加され、
+
+    既存引数 (sample_interval_frames まで) の並び・デフォルト値が一切
+    変わっていないこと (2026-07-30 追加、backwards compat)。
+    """
+    import inspect
+    sig = inspect.signature(collect_mod.collect)
+    params = list(sig.parameters.keys())
+    assert params[-1] == "indicator_interval_frames"
+    assert sig.parameters["indicator_interval_frames"].default is None
+    assert params[-2] == "sample_interval_frames"
+
+
+# ============================
+# _resolve_indicator_interval_frames (2026-07-30 追加)
+# 認識と独立に指標計算・行出力を間引く幅を確定する純関数の回帰テスト。
+# ============================
+
+
+def test_resolve_indicator_interval_frames_omitted_defaults_to_one() -> None:
+    """省略時 (None) は 1 (間引きなし=毎フレーム、従来挙動) になること。"""
+    assert collect_mod._resolve_indicator_interval_frames(None) == 1
+    assert collect_mod._resolve_indicator_interval_frames() == 1
+
+
+def test_resolve_indicator_interval_frames_explicit_value_used() -> None:
+    """明示指定した値がそのまま使われること。"""
+    assert collect_mod._resolve_indicator_interval_frames(6) == 6
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, -100])
+def test_resolve_indicator_interval_frames_non_positive_clamped_to_one(
+    bad_value: int,
+) -> None:
+    """0 以下の指定は下限 1 に丸められること (_resolve_sample_interval_frames と同じ規約)。"""
+    assert collect_mod._resolve_indicator_interval_frames(bad_value) == (
+        collect_mod.MIN_SAMPLE_INTERVAL_FRAMES
+    )
+
+
+# ============================
+# collect() ループ結合テスト (2026-07-30 追加)
+# 実動画は使わず cv2.VideoCapture / RecognitionPipeline.load_default を
+# フェイクに差し替え、「認識は毎フレーム・指標計算だけが間引かれる」ことを
+# 直接検証する (実動画デコードは重いため一切使わない)。
+# ============================
+
+
+class _FakeCapture:
+    """cv2.VideoCapture の最小フェイク。固定本数のダミーフレームを返す。"""
+
+    def __init__(self, n_frames: int, fps: float = 30.0) -> None:
+        self._n_frames = n_frames
+        self._fps = fps
+        self._i = 0
+        # TARGET_H/TARGET_W と一致させ、collect() 内の cv2.resize を回避する
+        # (同一 ndarray 参照を使い回すのでメモリ確保は 1 回のみ)。
+        self._frame = np.zeros(
+            (collect_mod.TARGET_H, collect_mod.TARGET_W, 3), dtype=np.uint8,
+        )
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop: int) -> float:
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(self._n_frames)
+        return 0.0
+
+    def set(self, prop: int, value: float) -> None:  # noqa: D401 - フェイクなので no-op
+        pass
+
+    def read(self) -> "tuple[bool, np.ndarray | None]":
+        if self._i >= self._n_frames:
+            return False, None
+        self._i += 1
+        return True, self._frame
+
+    def release(self) -> None:
+        pass
+
+
+class _FakeThrottlePipeline:
+    """RecognitionPipeline.load_default の最小フェイク。
+
+    update() を呼ぶ度に必ず盤面セルを1つ追加する (dedup で潰されない
+    ようにするため、fill_idx が単調増加する限り毎回異なる盤面になる)。
+    """
+
+    def __init__(self) -> None:
+        self.update_calls: list[int] = []
+        self._grid = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=np.uint8)
+        self._cells = [(r, c) for r in range(BOARD_ROWS) for c in range(BOARD_COLS)]
+        self._fill_idx = 0
+        self._tsumo = {"1P": 0, "2P": 0}
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        r, c = self._cells[self._fill_idx % len(self._cells)]
+        self._grid[r, c] = COLOR_RED
+        self._fill_idx += 1
+        board = Board.from_list(self._grid.tolist())
+        # tsumo_count は毎フレーム (= 毎 update 呼び出し) 進める
+        # (おじゃま会計 drain が毎フレーム駆動されることの検証に使う)。
+        self._tsumo["1P"] += 1
+        self._tsumo["2P"] += 1
+        side = SimpleNamespace(
+            state=BoardState.STABLE,
+            score=1000 + self._fill_idx,  # 単調増加 (試合境界誤検知を防ぐ)
+            confirmed_board=board,
+            next_pair=None,
+            dnext_pair=None,
+            chain_event=None,
+        )
+        return SimpleNamespace(p1=side, p2=side)
+
+    def tsumo_count(self, side_label: str) -> int:
+        return self._tsumo[side_label]
+
+
+def _run_fake_collect(
+    tmp_path: Path, n_frames: int, **collect_kwargs: object,
+) -> "tuple[int, _FakeThrottlePipeline, Path]":
+    """cv2.VideoCapture / RecognitionPipeline.load_default をフェイクに
+    差し替えて collect() を実行する共通ヘルパ。
+    """
+    fake_cap = _FakeCapture(n_frames)
+    fake_pipeline = _FakeThrottlePipeline()
+
+    def _fake_video_capture(_path: str) -> _FakeCapture:
+        return fake_cap
+
+    def _fake_load_default(*args: object, **kwargs: object) -> _FakeThrottlePipeline:
+        return fake_pipeline
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(collect_mod.cv2, "VideoCapture", _fake_video_capture)
+        mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+        out_path = tmp_path / "out.csv"
+        n_rows = collect_mod.collect(
+            Path("dummy_video.mp4"), out_path, **collect_kwargs,
+        )
+    return n_rows, fake_pipeline, out_path
+
+
+def test_collect_indicator_interval_omitted_recognizes_and_emits_every_frame(
+    tmp_path: Path,
+) -> None:
+    """indicator_interval_frames 省略時、pipeline.update・行出力とも
+
+    全フレーム実行される (従来挙動そのまま、backwards compat)。
+    """
+    n_frames = 12
+    n_rows, fake_pipeline, _ = _run_fake_collect(tmp_path, n_frames)
+    assert len(fake_pipeline.update_calls) == n_frames
+    assert n_rows == n_frames * 2  # 1P/2P 双方、毎フレーム別盤面につき出力
+
+
+def test_collect_indicator_interval_frames_recognizes_every_frame(
+    tmp_path: Path,
+) -> None:
+    """indicator_interval_frames 指定時も pipeline.update は全フレーム呼ばれること
+
+    (認識は間引きの対象外であることの直接確認)。
+    """
+    n_frames = 12
+    n_rows, fake_pipeline, _ = _run_fake_collect(
+        tmp_path, n_frames, indicator_interval_frames=4,
+    )
+    assert len(fake_pipeline.update_calls) == n_frames
+
+
+def test_collect_indicator_interval_frames_throttles_only_row_output(
+    tmp_path: Path,
+) -> None:
+    """indicator_interval_frames 指定時、行の書き出しだけが間引かれること。
+
+    fi % interval == 0 のフレームのみ 1P/2P 各 1 行、それ以外は出力なし。
+    """
+    n_frames = 12
+    interval = 4
+    n_rows, fake_pipeline, out_path = _run_fake_collect(
+        tmp_path, n_frames, indicator_interval_frames=interval,
+    )
+    expected_sampled_frames = len(
+        [fi for fi in range(n_frames) if fi % interval == 0],
+    )
+    assert n_rows == expected_sampled_frames * 2
+    # CSV 実体の行数も一致すること (メモリ上の rows と書き出しが食い違わないか)
+    with open(out_path, newline="", encoding="utf-8") as f:
+        n_csv_rows = sum(1 for _ in csv.DictReader(f))
+    assert n_csv_rows == n_rows
+
+
+def test_collect_indicator_interval_frames_explicit_one_matches_omitted(
+    tmp_path: Path,
+) -> None:
+    """indicator_interval_frames=1 を明示指定しても省略時と同じ行数になること。"""
+    n_frames = 10
+    n_rows_omitted, _, _ = _run_fake_collect(tmp_path, n_frames)
+    n_rows_explicit_one, _, _ = _run_fake_collect(
+        tmp_path, n_frames, indicator_interval_frames=1,
+    )
+    assert n_rows_omitted == n_rows_explicit_one
+
+
+def test_collect_ojama_and_game_idx_advance_every_frame_even_when_throttled(
+    tmp_path: Path,
+) -> None:
+    """指標間引き中も、行に記録される tsumo が間引き幅ぶん飛んでいること。
+
+    水面下 (おじゃま会計 drain) では tsumo_count が毎フレーム進んでいる証拠になる。
+    間引き幅より粗い頻度でしか tsumo が進んでいなければ、おじゃま会計が
+    誤って間引かれている回帰を検知できる。
+    """
+    n_frames = 20
+    interval = 5
+    _, _, out_path = _run_fake_collect(
+        tmp_path, n_frames, indicator_interval_frames=interval,
+    )
+    with open(out_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    p1_tsumo = [int(r["tsumo"]) for r in rows if r["side"] == "1P"]
+    diffs = [b - a for a, b in zip(p1_tsumo, p1_tsumo[1:])]
+    assert all(d == interval for d in diffs), diffs
