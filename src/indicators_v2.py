@@ -40,6 +40,11 @@ from src.board import (
     VISIBLE_ROWS,
 )
 from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
+from src.chain_bitboard import (
+    batch_from_boards,
+    planes_to_board,
+    simulate_batch_with_approx_score,
+)
 from src.scoring import (
     OJAMA_RATE_STANDARD,
     calculate_chain_score,
@@ -2904,6 +2909,431 @@ def _expected_fire_finalize(
     return ExpectedFireResult(values=values, std_raw=std_raw, n_evaluated=n_evaluated)
 
 
+# ============================
+# XVII 打ち合い応手確率 (counter_reach_probability) — #24 Step2, 2026-07-29
+# ============================
+# user定義 (memory reference_saisoku_exchange_model_2026-07-22 確定):
+# 「有効な催促 = 着弾までに相手が返せる見込みが50%以下」。expected_fire_power
+# (XVI) は近未来ツモの「平均得点」を測るが、本指標はその rollout 機構を
+# そのまま流用し、集計を「平均」から「閾値 (お邪魔換算) 到達確率」に
+# 差し替えたもの。既存関数 (expected_fire_power / _expected_fire_exact_k1k2 /
+# _expected_fire_mc_k3k4 等) は一切変更せず、新規関数のみ追加する。
+#
+# 二層設計 (memory project_dual_mode_indicator_design_2026-07-22 準拠):
+#   precise (counter_reach_probability): 既存 ChainSimulator +
+#       calculate_chain_score による厳密得点。動画判定=精度優先オフライン
+#       向け (expected_fire_power と同じコスト特性)。
+#   fast (counter_reach_probability_fast): chain_bitboard バッチ +
+#       近似得点 (score_approx、連結ボーナス0近似)。リアルタイム軽量近似
+#       向け。候補配置後盤面をまとめて1回のバッチ呼び出しでシミュレートし、
+#       逐次 ChainSimulator.simulate() 呼び出しを排除する。
+#
+# 呼び出し側 (Step3以降) が「相手は OPP_CHAINING (連鎖中=応手不能)」を
+# 検出した場合は、本関数を呼ばず確率0として扱う設計とする (2026-07-29の
+# 重要な発見、scripts/measure_exchange_dynamics.py の OppCoverageStatus
+# 参照。src 側は scripts に依存しない層構造を保つため、その判定自体は
+# 呼び出し側=scripts 層の責務とする)。
+
+# 「有効な催促」判定の閾値 (user確定値、50%以下で有効)。
+COUNTER_REACH_EFFECTIVE_THRESHOLD_PROB: float = 0.5
+
+
+@dataclass(frozen=True)
+class CounterReachResult:
+    """XVII 打ち合い応手確率の算出結果 (K=1..4 を同時取得)。
+
+    Attributes:
+        probabilities: {K: 到達確率 (0.0〜1.0)}。「threshold_ojama 以上
+            (お邪魔換算) の返しを到達できる」ツモ列の割合。K=1,2は厳密
+            全列挙 (乱数不使用、正確な確率)、K=3,4はモンテカルロ近似。
+        n_evaluated: {K: 評価件数} (K=1:16, K=2:256, K=3,4: mc_n_samples)。
+    """
+    probabilities: "dict[int, float]"
+    n_evaluated: "dict[int, int]"
+
+
+def _counter_reach_empty_result(k_levels: "tuple[int, ...]") -> CounterReachResult:
+    """窒息盤面用の結果 (応手不能=到達確率0.0固定)。"""
+    return CounterReachResult(
+        probabilities={k: 0.0 for k in k_levels},
+        n_evaluated={k: 0 for k in k_levels},
+    )
+
+
+def _score_to_ojama_count(score: float, elapsed_sec: float) -> int:
+    """素点をお邪魔換算個数に変換する薄いヘルパー (score_to_ojama 呼び出しの共通化)。"""
+    return score_to_ojama(
+        score=max(0, int(round(score))), prev_leftover=0, elapsed_sec=elapsed_sec,
+        rate_base=OJAMA_RATE_STANDARD,
+    ).ojama_count
+
+
+def counter_reach_probability(
+    board: Board,
+    threshold_ojama: float,
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> CounterReachResult:
+    """XVII 打ち合い応手確率 (precise mode、ChainSimulator厳密得点)。
+
+    盤面 (通常は相手側の STABLE 確定盤面) から、試合4色のツモを K手 (1..4)
+    積んだ場合に「threshold_ojama 以上 (お邪魔換算) の返しに到達できる」
+    確率を返す。expected_fire_power (XVI) の rollout 機構
+    (_near_future_known_expand 等、既存・無変更) をそのまま流用し、集計の
+    みを「平均」から「閾値到達率」に差し替えている。
+
+    Args:
+        board: 応手側 (相手側) の STABLE 確定盤面 (破壊しない)。
+        threshold_ojama: 到達判定の閾値 (お邪魔換算個数)。呼び出し側が
+            攻撃側の送りお邪魔量等から渡す。0以下を渡すと常に到達
+            (確率1.0、窒息盤面を除く) になる。
+        elapsed_sec: 試合相対経過秒 (マージンタイム換算用)。
+        simulator: ChainSimulator インスタンス (省略時は共有)。
+        exact_beam_width/mc_beam_width/mc_n_samples/k_levels: XVI
+            (expected_fire_power) と同じ意味・既定値 (パラメータの一貫性
+            を保つため共有定数をそのまま使う)。
+        active_colors: 試合別4色 (省略時は盤面出現色フォールバック)。
+        rng_seed: K=3,4用乱数シード明示指定 (省略時は盤面内容から自動導出、
+            stateless: 同一盤面には常に同一結果)。
+
+    Returns:
+        CounterReachResult: K別到達確率 + 評価件数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _counter_reach_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    hits: "dict[int, tuple[int, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        hits.update(_counter_reach_exact_k1k2(
+            board, colors, sim, exact_beam_width, threshold_ojama, elapsed_sec,
+        ))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        hits.update(_counter_reach_mc_k3k4(
+            board, colors, sim, mc_beam_width, mc_n_samples, rng, threshold_ojama, elapsed_sec,
+        ))
+    return _counter_reach_finalize(hits, k_levels)
+
+
+def _counter_reach_exact_k1k2(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=1,2 の厳密到達判定 (_expected_fire_exact_k1k2 と同じ列挙構造、
+
+    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+    hits = {1: 0, 2: 0}
+    counts = {1: 0, 2: 0}
+
+    for pair1 in pairs:
+        expanded1 = _near_future_known_expand([(0.0, board)], pair1, sim)
+        score_h1 = expanded1[0][0] if expanded1 else 0.0
+        hits[1] += int(_score_to_ojama_count(score_h1, elapsed_sec) >= threshold_ojama)
+        counts[1] += 1
+
+        frontier_h1 = [(s, b) for s, b, _c in expanded1[:beam_width]] if expanded1 else []
+        for pair2 in pairs:
+            expanded2 = _near_future_known_expand(frontier_h1, pair2, sim) if frontier_h1 else []
+            top_h2 = expanded2[0][0] if expanded2 else 0.0
+            value_k2 = max(score_h1, top_h2)
+            hits[2] += int(_score_to_ojama_count(value_k2, elapsed_sec) >= threshold_ojama)
+            counts[2] += 1
+
+    return {1: (hits[1], counts[1]), 2: (hits[2], counts[2])}
+
+
+def _counter_reach_mc_k3k4(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=3,4 のモンテカルロ到達判定 (_expected_fire_mc_k3k4 と同じロールアウト、
+
+    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    """
+    hits = {3: 0, 4: 0}
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, 5):
+            if frontier:
+                pair = (rng.choice(colors), rng.choice(colors))
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []
+            if hand in (3, 4):
+                hits[hand] += int(
+                    _score_to_ojama_count(best_score, elapsed_sec) >= threshold_ojama,
+                )
+    return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
+
+
+def _counter_reach_finalize(
+    hits: "dict[int, tuple[int, int]]", k_levels: "tuple[int, ...]",
+) -> CounterReachResult:
+    """集計 (到達件数, 評価件数) から確率を組み立てる。"""
+    probabilities: "dict[int, float]" = {}
+    n_evaluated: "dict[int, int]" = {}
+    for k in sorted(k_levels):
+        hit_count, count = hits.get(k, (0, 0))
+        probabilities[k] = float(hit_count) / count if count > 0 else 0.0
+        n_evaluated[k] = count
+    return CounterReachResult(probabilities=probabilities, n_evaluated=n_evaluated)
+
+
+# ----------------------------
+# fast mode (chain_bitboard バッチ、近似得点)
+# ----------------------------
+
+
+def _enumerate_placement_boards(board: Board, pair: "tuple[int, int]") -> "list[Board]":
+    """22配置の配置後 (未シミュレート) 盤面一覧を返す。
+
+    _enumerate_placements (:784) の simulate 呼び出し前段のみを複製した
+    新規関数 (既存関数は無変更)。バッチ得点計算の入力を作るために使う。
+    """
+    boards: "list[Board]" = []
+    for rotation in range(4):
+        max_col = BOARD_COLS if rotation in (0, 2) else BOARD_COLS - 1
+        for col in range(max_col):
+            placed = _place_pair_to_board(board, pair, col, rotation)
+            if placed is not None and not placed.is_dead():
+                boards.append(placed)
+    return boards
+
+
+def _batch_score_boards(boards: "list[Board]") -> "list[tuple[float, dict, int]]":
+    """複数盤面を一括シミュレートし (score_approx, final_planes, chain_count) を
+
+    順序保持で返す (chain_bitboard.simulate_batch_with_approx_score 利用)。
+
+    ⚠️ 性能上の理由 (2026-07-29 実測、cProfile で確認): 戻り値に Board
+    オブジェクトを含めず、軽量な bitboard 表現 (final_planes dict、
+    Python ループなしでそのまま保持できる) のまま返す。以前は
+    planes_to_board を候補全件に対して都度呼んでいたが、実測でその
+    変換だけが全体の54% (9680件中ボトルネック、beam選抜で大半は
+    使われずに捨てられる) を占めていたため。実際に次手へ展開する候補
+    (beam_width 分のみ) だけ、呼び出し側が個別に planes_to_board で
+    Board へ復元する。
+    """
+    if not boards:
+        return []
+    planes = batch_from_boards(boards)
+    results = simulate_batch_with_approx_score(planes)
+    return [(float(r.score_approx), r.final_planes, r.chain_count) for r in results]
+
+
+def counter_reach_probability_fast(
+    board: Board,
+    threshold_ojama: float,
+    elapsed_sec: float = 0.0,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> CounterReachResult:
+    """XVII 打ち合い応手確率 (fast mode、chain_bitboardバッチ近似得点)。
+
+    counter_reach_probability の軽量近似版 (リアルタイム向け、memory
+    project_dual_mode_indicator_design_2026-07-22 の二層設計に基づく)。
+    候補配置後盤面をまとめて chain_bitboard.simulate_batch_with_approx_score
+    に渡すことで、逐次 ChainSimulator.simulate() 呼び出しを排除する。
+    得点は連結ボーナス0近似 (BitboardChainScoreResult docstring参照、
+    src/chain_bitboard.py)。
+
+    Args/Returns は counter_reach_probability と同じ (simulator引数のみ
+    無し、chain_bitboard は ChainSimulator を使わないため)。
+    """
+    if board.is_dead():
+        return _counter_reach_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    hits: "dict[int, tuple[int, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        hits.update(_counter_reach_exact_k1k2_fast(
+            board, colors, exact_beam_width, threshold_ojama, elapsed_sec,
+        ))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        hits.update(_counter_reach_mc_k3k4_fast(
+            board, colors, mc_beam_width, mc_n_samples, rng, threshold_ojama, elapsed_sec,
+        ))
+    return _counter_reach_finalize(hits, k_levels)
+
+
+def _counter_reach_exact_k1k2_fast(
+    board: Board,
+    colors: "tuple[int, ...]",
+    beam_width: int,
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=1,2 厳密到達判定の fast mode (chain_bitboardバッチ、近似得点)。
+
+    _counter_reach_exact_k1k2 と同じ列挙構造だが、1手目 (16通り×22配置=
+    最大352候補) と2手目 (16×beam_width通り×16×22配置) それぞれの候補
+    配置後盤面を1回ずつのバッチ呼び出しにまとめてシミュレートする
+    (逐次 ChainSimulator.simulate() 呼び出しを排除、高速化の主眼)。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+
+    hand1_boards: "list[Board]" = []
+    hand1_pair_idx: "list[int]" = []
+    for pi, pair1 in enumerate(pairs):
+        for b in _enumerate_placement_boards(board, pair1):
+            hand1_boards.append(b)
+            hand1_pair_idx.append(pi)
+    hand1_scored = _batch_score_boards(hand1_boards)
+
+    cand_per_pair1: "dict[int, list[tuple[float, dict]]]" = {}
+    for (score, planes_i, _cc), pi in zip(hand1_scored, hand1_pair_idx):
+        cand_per_pair1.setdefault(pi, []).append((score, planes_i))
+
+    # 上位 beam_width 件のみ Board へ復元する (2026-07-29 性能修正:
+    # _batch_score_boards のdocstring参照。352候補全件を復元すると
+    # planes_to_board が支配的コストになるため、2手目へ実際に展開する
+    # 候補分だけに絞る)。
+    frontier_per_pair1: "dict[int, list[tuple[float, Board]]]" = {}
+    score_h1_by_pair1: "dict[int, float]" = {}
+    for pi in range(len(pairs)):
+        cand = sorted(cand_per_pair1.get(pi, []), key=lambda x: x[0], reverse=True)
+        score_h1_by_pair1[pi] = cand[0][0] if cand else 0.0
+        frontier_per_pair1[pi] = [
+            (sc, planes_to_board(pl)) for sc, pl in cand[:beam_width]
+        ]
+
+    hits = {1: 0, 2: 0}
+    counts = {1: 0, 2: 0}
+    for pi in range(len(pairs)):
+        hits[1] += int(
+            _score_to_ojama_count(score_h1_by_pair1[pi], elapsed_sec) >= threshold_ojama,
+        )
+        counts[1] += 1
+
+    hand2_boards: "list[Board]" = []
+    hand2_owner: "list[tuple[int, int]]" = []
+    for pi in range(len(pairs)):
+        for _score, fb in frontier_per_pair1[pi]:
+            for pj, pair2 in enumerate(pairs):
+                for b in _enumerate_placement_boards(fb, pair2):
+                    hand2_boards.append(b)
+                    hand2_owner.append((pi, pj))
+    hand2_scored = _batch_score_boards(hand2_boards)
+
+    # 2手目は展開の終端 (K=2まで) なので Board への復元は不要 (score のみ使う)。
+    best_h2: "dict[tuple[int, int], float]" = {}
+    for (score, _planes_i, _cc), key in zip(hand2_scored, hand2_owner):
+        cur = best_h2.get(key)
+        if cur is None or score > cur:
+            best_h2[key] = score
+
+    for pi in range(len(pairs)):
+        score_h1 = score_h1_by_pair1[pi]
+        for pj in range(len(pairs)):
+            top_h2 = best_h2.get((pi, pj), 0.0)
+            value_k2 = max(score_h1, top_h2)
+            hits[2] += int(_score_to_ojama_count(value_k2, elapsed_sec) >= threshold_ojama)
+            counts[2] += 1
+
+    return {1: (hits[1], counts[1]), 2: (hits[2], counts[2])}
+
+
+def _counter_reach_mc_k3k4_fast(
+    board: Board,
+    colors: "tuple[int, ...]",
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=3,4 モンテカルロ到達判定の fast mode (全サンプル横断バッチ化)。
+
+    _counter_reach_mc_k3k4 と同じロールアウト (色ペアは各サンプル毎に
+    乱数取得) だが、hand ステップ毎に「全サンプル分の候補配置後盤面」を
+    1回のバッチにまとめて chain_bitboard でシミュレートする
+    (n_samples×最大22候補を1回のnumpy呼び出しで処理、高速化の主眼)。
+    """
+    frontiers: "list[list[tuple[float, Board]]]" = [[(0.0, board)] for _ in range(n_samples)]
+    best_scores = [0.0] * n_samples
+    hits = {3: 0, 4: 0}
+    pairs_per_sample = [
+        [(rng.choice(colors), rng.choice(colors)) for _ in range(4)]
+        for _ in range(n_samples)
+    ]
+
+    for hand in range(1, 5):
+        all_boards: "list[Board]" = []
+        owner: "list[int]" = []
+        for s in range(n_samples):
+            if not frontiers[s]:
+                continue
+            pair = pairs_per_sample[s][hand - 1]
+            for _, base_board in frontiers[s]:
+                for placed in _enumerate_placement_boards(base_board, pair):
+                    all_boards.append(placed)
+                    owner.append(s)
+        scored = _batch_score_boards(all_boards)
+
+        per_sample: "dict[int, list[tuple[float, dict, int]]]" = {}
+        for (score, planes_i, cc), s in zip(scored, owner):
+            per_sample.setdefault(s, []).append((score, planes_i, cc))
+
+        # hand=4 (最終手) はこれ以上展開しないため Board への復元をスキップする
+        # (2026-07-29 性能修正、_batch_score_boards のdocstring参照)。
+        is_last_hand = hand == 4
+        for s in range(n_samples):
+            cand = per_sample.get(s)
+            if not cand:
+                frontiers[s] = []
+                continue
+            cand.sort(key=lambda x: x[0], reverse=True)
+            top_score = cand[0][0]
+            if top_score > best_scores[s]:
+                best_scores[s] = top_score
+            if is_last_hand:
+                frontiers[s] = []
+            else:
+                frontiers[s] = [
+                    (sc, planes_to_board(pl)) for sc, pl, _cc in cand[:beam_width]
+                ]
+
+        if hand in (3, 4):
+            for s in range(n_samples):
+                hits[hand] += int(
+                    _score_to_ojama_count(best_scores[s], elapsed_sec) >= threshold_ojama,
+                )
+    return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -3022,4 +3452,12 @@ __all__ = [
     "EXPECTED_FIRE_MC_N_SAMPLES",
     "EXPECTED_FIRE_MC_BEAM_WIDTH",
     "EXPECTED_FIRE_NORM",
+    # XVII 打ち合い応手確率 (counter_reach_probability, K=1..4)
+    # — #24 Step2 追加 (2026-07-29、末尾追加・既存に非依存)。
+    # collect への本配線 (Step3) は未実施、現時点では計測器専用の
+    # 独立関数として提供する。
+    "counter_reach_probability",
+    "counter_reach_probability_fast",
+    "CounterReachResult",
+    "COUNTER_REACH_EFFECTIVE_THRESHOLD_PROB",
 ]
