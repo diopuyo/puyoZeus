@@ -7,6 +7,14 @@ CPUは動画レンダ1本のみ使用中のため nice -n 19 で実行する想�
 使い方:
     nice -n 19 python -m scripts._diag_settle_freeze_2026-07-29 \
         --video data/frames/video_c56.mp4 --start-sec 320 --end-sec 362 --label c56_g3
+
+追記 (2026-07-29, warmup有無A/B比較用): --warmup-sec を追加 (既定 30.0 = 従来の
+ハードコード値と同一、後方互換)。0 を指定すると warmup無し (visualize_advantage_overlay
+の D 版と同じ proc_frame==write_frame 挙動) で診断できる。あわせて
+DriftDetector 再同期暴走ガードの起点 (_match_active_started_time) と
+抑制カウンタ (_drift_resync_*_suppressed_*) の変化を印字する
+(warmup有無でガード窓の実効時刻がずれる仮説の検証用、pipeline側は無改造・
+読み取りのみ)。
 """
 from __future__ import annotations
 
@@ -32,12 +40,18 @@ import src.indicators_v2 as iv  # noqa: E402
 DEFAULT_FPS = 30.0
 
 
-def run(video: Path, start_sec: float, end_sec: float, label: str) -> None:
-    """指定区間を診断ログ付きで処理する(動画書き出しなし)。"""
+def run(video: Path, start_sec: float, end_sec: float, label: str,
+        warmup_sec: float = 30.0) -> None:
+    """指定区間を診断ログ付きで処理する(動画書き出しなし)。
+
+    warmup_sec: generate() の warmup_sec と同じ意味 (start_sec の何秒前から
+        「処理だけ」始めるか)。既定 30.0 = 従来のハードコード値と同一
+        (後方互換、既存呼出元の挙動は不変)。0.0 で warmup無し診断になる。
+    """
     model = _train_model(None)
     cap = cv2.VideoCapture(str(video))
     fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
-    warmup = 30.0
+    warmup = warmup_sec
     proc_frame = int(max(0.0, start_sec - warmup) * fps)
     end_frame = int(end_sec * fps)
     cap.set(cv2.CAP_PROP_POS_FRAMES, proc_frame)
@@ -65,6 +79,12 @@ def run(video: Path, start_sec: float, end_sec: float, label: str) -> None:
     adv_ema, p1_last = 0.0, 0.5
     last_settled = False
     last_disp_adv = 0.0
+    # (2026-07-29 warmup A/B) DriftDetector 再同期暴走ガードの実効窓を
+    # 直接観測する計装。pipeline 本体は無改造 (既存 private 属性の読み取りのみ)。
+    last_match_start_time = -1.0
+    last_guard_counts = (0, 0, 0, 0)
+    print(f"[{label}] warmup_sec={warmup:.1f} proc_frame={proc_frame} "
+          f"(t={proc_frame / fps:.2f}s) write開始想定 t={start_sec:.2f}s")
     for fi in range(proc_frame, end_frame):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -73,6 +93,25 @@ def run(video: Path, start_sec: float, end_sec: float, label: str) -> None:
             frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_AREA)
         t = fi / fps
         r = pipe.update(fi, t, frame)
+        # match_active_started_time の変化 (= ガード窓の起点が動いた瞬間) を記録。
+        cur_match_start_time = getattr(pipe, "_match_active_started_time", -1.0)
+        if cur_match_start_time != last_match_start_time:
+            print(f"[{label}] t={t:.2f}s MATCH_ACTIVE_STARTED_TIME "
+                  f"{last_match_start_time:.2f}->{cur_match_start_time:.2f} "
+                  f"(guard窓 15s: {max(0.0, cur_match_start_time):.2f}"
+                  f"~{cur_match_start_time + 15.0:.2f})")
+            last_match_start_time = cur_match_start_time
+        cur_guard_counts = (
+            getattr(pipe, "_drift_resync_start_guard_suppressed_1p", 0),
+            getattr(pipe, "_drift_resync_start_guard_suppressed_2p", 0),
+            getattr(pipe, "_drift_resync_hsv_gate_suppressed_1p", 0),
+            getattr(pipe, "_drift_resync_hsv_gate_suppressed_2p", 0),
+        )
+        if cur_guard_counts != last_guard_counts:
+            print(f"[{label}] t={t:.2f}s DRIFT_RESYNC_SUPPRESS "
+                  f"start_guard(1p={cur_guard_counts[0]},2p={cur_guard_counts[1]}) "
+                  f"hsv_gate(1p={cur_guard_counts[2]},2p={cur_guard_counts[3]})")
+            last_guard_counts = cur_guard_counts
         if _detect_score_reset(r.p1.score, r.p2.score, prev_score1, prev_score2):
             print(f"[{label}] t={t:.2f}s RESET")
             b1 = b2 = None
@@ -138,8 +177,10 @@ def main() -> None:
     ap.add_argument("--start-sec", type=float, required=True)
     ap.add_argument("--end-sec", type=float, required=True)
     ap.add_argument("--label", default="diag")
+    ap.add_argument("--warmup-sec", type=float, default=30.0,
+                     help="既定30.0=従来のハードコード値と同一。0でwarmup無し診断。")
     a = ap.parse_args()
-    run(Path(a.video), a.start_sec, a.end_sec, a.label)
+    run(Path(a.video), a.start_sec, a.end_sec, a.label, warmup_sec=a.warmup_sec)
 
 
 if __name__ == "__main__":
