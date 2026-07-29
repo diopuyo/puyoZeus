@@ -45,8 +45,13 @@ STUDY_DIRS = [
     "data/verify/labeled_win_c20_2026-07-26/study",
     "data/verify/labeled_win_m20_2026-07-28/study",
     "data/verify/labeled_win_m30_2026-07-28/study",
+    # 2026-07-29追加: c5/c30/c31/c83 の study CSV (この4動画のみ収集時点で
+    # 上記3ディレクトリに含まれていなかった)。追加のみ・既存探索ロジックは不変。
+    "data/verify/labeled_win_extra4_2026-07-29/study",
 ]
-SEGMENT_SUFFIXES = ["", "_gap", "_mid"]
+# 2026-07-29追加: c5/c30 は 900-1200秒帯 (既存3窓の谷間) を埋める gap2 窓を
+# 追加収集済みのため、このsuffixがないと当該区間のイベントを取りこぼす。
+SEGMENT_SUFFIXES = ["", "_gap", "_mid", "_gap2"]
 CHAIN_ANIM_DURATION_JSON = "data/verify/recognition_diag_chain_anim_duration_multi/summary.json"
 # 既存 SEC_PER_HAND (src/indicators_v2.py、読み取りのみ・変更しない) の実測中央値。
 # 「連鎖アニメ中に相手が実際に何手打っているか」の期待値との比較用。
