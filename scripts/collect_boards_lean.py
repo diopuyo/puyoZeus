@@ -24,10 +24,19 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
   next1_b    : (N,) int8     現ネクスト子ぷよ色 (1-5、未検出/未取得は -1)
   dnext_a    : (N,) int8     ダブルネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
   dnext_b    : (N,) int8     ダブルネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  chain_trigger_sec : (N,) float32  機能D (掛け算表示) 検知時刻。未検知は NaN
+                       (2026-07-29 追加、連鎖完了時刻の新方式較正用。
+                        既存 boards_lean_fixed 系 npz には存在しない新規キー
+                        であり、次回の再収集で初めて実値が入る)
 
   ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
   未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
   既存 boards_lean_fixed の再利用に影響なし)。
+  ⚠️ chain_trigger_sec は enable_chain_formula_detection (RecognitionPipeline
+  既定 True) が有効な収集であれば常に記録される (--with-next 等の追加指定は
+  不要)。ただし既存の boards_lean_fixed / boards_lean_fixed_regen_2026-07-28
+  npz は本キー追加より前に収集済みのため、chain_trigger_sec 列そのものが
+  存在しない (再収集しない限り遡って取得できない)。
 
 ## 勝敗 won の自己ラベル付け
 score のリセット(前値 - 現値 >= SCORE_RESET_THRESHOLD)でゲーム境界を検知し
@@ -125,6 +134,10 @@ WON_UNKNOWN: float = float("nan")
 # ぷよ色は 1-5 のため -1 は安全な sentinel。
 NEXT_COLOR_UNKNOWN: int = -1
 
+# chain_trigger_sec (機能D 掛け算表示検知時刻) が未検知/取得不能の場合の埋め値
+# (2026-07-29 追加)。t_sec は常に >= 0 のため NaN は安全な sentinel。
+CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
+
 
 # ============================
 # 蓄積バッファ
@@ -154,6 +167,12 @@ class _LeanNpzAccumulator:
     next1_bs: list[int] = field(default_factory=list)
     dnext_as: list[int] = field(default_factory=list)
     dnext_bs: list[int] = field(default_factory=list)
+    # 機能D (掛け算表示) 検知時刻 (2026-07-29 追加、連鎖完了時刻の新方式較正用)。
+    # RecognitionPipeline.SideResult.chain_event.trigger_sec をそのまま記録する。
+    # chain_event が None (掛け算表示未検知/連鎖なし) の場合は
+    # CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で埋める。既存呼び出し (引数省略) では
+    # 常に NaN のまま保存される (後方互換: 挙動不変)。
+    chain_trigger_secs: list[float] = field(default_factory=list)
 
     def append(
         self,
@@ -166,6 +185,7 @@ class _LeanNpzAccumulator:
         score: int | None = None,
         next_pair: tuple[int, int] | None = None,
         dnext_pair: tuple[int, int] | None = None,
+        chain_trigger_sec: float | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -180,6 +200,10 @@ class _LeanNpzAccumulator:
             next_pair: (軸ぷよ色, 子ぷよ色)。None は NEXT_COLOR_UNKNOWN で保存
                 (後方互換: 省略時は既存呼び出しと同じ挙動)。
             dnext_pair: ダブルネクストの (軸ぷよ色, 子ぷよ色)。同上。
+            chain_trigger_sec: この snapshot 時点で有効な機能D 検知時刻
+                (RecognitionPipeline.SideResult.chain_event.trigger_sec)。
+                None は CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動、2026-07-29 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -195,6 +219,9 @@ class _LeanNpzAccumulator:
         self.next1_bs.append(int(n_b))
         self.dnext_as.append(int(d_a))
         self.dnext_bs.append(int(d_b))
+        self.chain_trigger_secs.append(
+            chain_trigger_sec if chain_trigger_sec is not None else CHAIN_TRIGGER_SEC_UNKNOWN
+        )
 
     def assign_won_labels(
         self,
@@ -232,6 +259,10 @@ class _LeanNpzAccumulator:
 
         next1_a/next1_b/dnext_a/dnext_b (int8) を追加保存する (既存キーは不変、
         後方互換)。--with-next 未指定の収集では全て NEXT_COLOR_UNKNOWN (-1)。
+        chain_trigger_sec (float32、2026-07-29 追加) も同様に追加保存する。
+        機能D 検知時刻を記録しないだけの既存呼び出しでは全て NaN
+        (CHAIN_TRIGGER_SEC_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
+        挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
@@ -249,6 +280,7 @@ class _LeanNpzAccumulator:
             next1_b=np.array(self.next1_bs, dtype=np.int8),
             dnext_a=np.array(self.dnext_as, dtype=np.int8),
             dnext_b=np.array(self.dnext_bs, dtype=np.int8),
+            chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
         )
 
 
@@ -462,11 +494,13 @@ def collect_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
             next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
+            chain_event=result.p1.chain_event,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
             result.p2.state, result.p2.score, video_id, t_sec, fi,
             next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
+            chain_event=result.p2.chain_event,
         )
     cap.release()
 
@@ -489,20 +523,29 @@ def _process_side_lean(
     frame_idx: int,
     next_pair: tuple[int, int] | None = None,
     dnext_pair: tuple[int, int] | None = None,
+    chain_event: object | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
     next_pair/dnext_pair は capture_next=False (既定) の呼び出しでは常に
     None (SideResult 既定値) となり、acc.append 側で -1 埋めされる
     (後方互換)。
+
+    Args:
+        chain_event: result.p{1,2}.chain_event (src.recognition_pipeline.
+            ChainEvent | None、循環import回避のため object 型ヒント)。
+            機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
+            (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
     """
     _update_game_boundary(state, score)
     if board is None or not _should_emit(state, board, bstate):
         return
+    trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
+        chain_trigger_sec=trigger_sec,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
