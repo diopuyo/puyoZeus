@@ -16,6 +16,15 @@
 
 各行メタ: video_id / game_idx / t_sec / frame / 手数(tsumo) / side(1P/2P)。
 
+間引き方式 (2種類、独立):
+    - --sample-interval / --sample-interval-frames: 認識 (pipeline.update) 自体を
+      間引く既存方式。2026-07-30 実測でこれを使うと状態機械が遷移を取りこぼし
+      current_max_chain 等が壊れることが確定した (memory
+      `project_frame_sampling_corrupts_boards_2026-07-30`)。
+    - --indicator-interval-frames: 認識は全フレーム実行したまま、指標計算・行の
+      書き出しだけを間引く新方式 (2026-07-30 追加)。おじゃま会計 drain・
+      試合境界検知はエッジ検出型のため間引きの対象外 (常に毎フレーム実行)。
+
 使い方 (短尺検証):
     python -m scripts.collect_indicators_v2 \
         --video data/frames/video_124_4min.mp4 \
@@ -83,6 +92,38 @@ def _resolve_sample_interval_frames(
     else:
         resolved = int(round(sample_interval_sec * fps))
     return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
+
+def _resolve_indicator_interval_frames(
+    indicator_interval_frames: Optional[int] = None,
+) -> int:
+    """指標計算・行出力の間引き幅を確定する (2026-07-30 追加)。
+
+    2026-07-30 実測 (memory `project_frame_sampling_corrupts_boards_2026-07-30`)
+    で、認識そのもの (pipeline.update) を間引くと状態機械が前後フレームの
+    差分で遷移判定するため取りこぼしが起き、current_max_chain が 37.4% の
+    盤面でズレる (過小評価に偏る) ことが確定した。これを避けるため、認識は
+    常に全フレームで実行したまま「指標計算 + 行の書き出し」だけを N フレーム
+    ごとに間引きたい場合に本関数の戻り値を使う。
+
+    既存の --sample-interval / --sample-interval-frames (認識自体の間引き、
+    `_resolve_sample_interval_frames` が担当) とは完全に独立しており、
+    本関数はそちらの挙動に一切影響しない。
+
+    省略時 (None) は 1 (間引きなし = 毎フレーム指標計算、従来挙動) を返し、
+    既存呼出元の挙動を一切変えない (後方互換)。
+
+    Args:
+        indicator_interval_frames: 指標計算を行うフレーム間隔 (省略可)。
+            0 以下が渡された場合は不正値として下限 1 に丸める
+            (_resolve_sample_interval_frames と同じ丸めルール)。
+
+    Returns:
+        実際に使う間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if indicator_interval_frames is None:
+        return MIN_SAMPLE_INTERVAL_FRAMES
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, indicator_interval_frames)
 
 
 # XVI 平均ツモ期待火力 (expected_fire_power) の収集 opt-in フラグ (2026-07-22)。
@@ -569,10 +610,15 @@ def _process_side(
 ) -> None:
     """1 side を処理し、出力対象なら rows に行を追加する。
 
+    ⚠️ 2026-07-30 変更: 試合境界 (game_idx) 検知 `_update_game_idx` はここでは
+    呼ばない。score 減少検知はエッジ検出型 (前回値との差分判定) なので、
+    指標計算間引き (--indicator-interval-frames) の影響を受けないよう
+    呼出元 `collect()` のループで毎フレーム呼ぶ設計に変更した
+    (呼出元が `_update_game_idx` を毎フレーム呼び終えている前提で本関数を呼ぶこと)。
+
     Args:
         npz_acc: 盤面グリッドダンプ用バッファ (省略時はダンプしない)。
     """
-    _update_game_idx(tracker, side.score)
     board = side.confirmed_board
     if board is None or not _should_emit(tracker, side, board):
         return
@@ -604,6 +650,7 @@ def collect(
     start_sec: float = 0.0,
     board_npz_path: Optional[Path] = None,
     sample_interval_frames: Optional[int] = None,
+    indicator_interval_frames: Optional[int] = None,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
 
@@ -625,6 +672,19 @@ def collect(
             sample_interval_sec より優先される (2026-07-28 追加)。
             省略時 (None) は sample_interval_sec の従来挙動を完全維持する
             (後方互換)。実際に使われた間引き幅は標準出力にログされる。
+        indicator_interval_frames: 指標計算・行出力のみの間引き幅 (省略可、
+            2026-07-30 追加)。認識 (pipeline.update) は常に
+            sample_interval_frames/sample_interval_sec の間隔通り実行したまま、
+            「指標計算 + 行の書き出し」だけをこの値の倍数フレームに絞る。
+            2026-07-29 実測 (memory
+            `project_frame_sampling_corrupts_boards_2026-07-30`) で、認識
+            自体を間引くと状態機械が遷移を取りこぼし current_max_chain が
+            37.4%の盤面でズレる (過小評価に偏る) ことが確定したため、認識と
+            指標計算の間引きを分離する目的で追加した。
+            省略時 (None) は 1 (間引きなし) となり、既存呼出元の挙動を
+            完全に維持する (後方互換)。おじゃま会計 drain (tsumo_count 増分
+            駆動) と試合境界 (game_idx) 検知はエッジ検出型のため、本引数の
+            値に関わらず常に毎フレーム実行する (指標計算・行出力のみが対象)。
 
     Returns:
         出力した行数。
@@ -677,12 +737,21 @@ def collect(
     effective_interval_frames = _resolve_sample_interval_frames(
         sample_interval_sec, fps, sample_interval_frames,
     )
+    # 指標計算・行出力のみの間引き幅 (認識間引きとは独立、2026-07-30 追加)。
+    effective_indicator_interval_frames = _resolve_indicator_interval_frames(
+        indicator_interval_frames,
+    )
     # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
     # 見落としを後から気付けるようにするため、2026-07-28 追加)。
     print(
         f"[collect] sample_interval: {effective_interval_frames} frames "
         f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
         f"sample_interval_frames_arg={sample_interval_frames})"
+    )
+    print(
+        f"[collect] indicator_interval: {effective_indicator_interval_frames} "
+        f"frames (indicator_interval_frames_arg={indicator_interval_frames}; "
+        "認識は上記 sample_interval で毎回実行、指標計算・行出力のみ本間隔で間引く)"
     )
 
     for local_i in range(n_frames_to_process):
@@ -698,8 +767,16 @@ def collect(
         t_sec = fi / fps
         if local_i % effective_interval_frames != 0:
             continue
+        # --- 認識 (state machine): sample_interval に従い実行 (従来通り) ---
         result = pipeline.update(fi, t_sec, frame)
-        # --- お邪魔会計駆動: tsumo_count 増分で drain ---
+        # ============================================================
+        # 毎フレーム必須処理 (エッジ検出・状態保持型):
+        # indicator_interval_frames による間引きの対象外にする。
+        # 2026-07-30 実測で「間引くと取りこぼす」ことが確定した処理群。
+        # ============================================================
+        # おじゃま会計 drain (tsumo_count 増分駆動): 手数の増分を1つずつ
+        # 消費するため、間引くと着地イベントそのものを取りこぼす
+        # (2026-07-29 実測、15フレーム間引きで手数が実質100%消失した教訓)。
         snap = _drive_ojama(
             ojama_tracker, result.p1, result.p2,
             prev_state_p1, prev_state_p2, t_sec,
@@ -707,9 +784,20 @@ def collect(
             tracker_p2=tracker_p2,
             pipeline=pipeline,
         )
+        # 試合境界 (game_idx) 検知: score 大幅減少という「前回値との差分」で
+        # 判定するエッジ検出のため、指標間引きと無関係に毎フレーム進める。
+        _update_game_idx(tracker_p1, result.p1.score)
+        _update_game_idx(tracker_p2, result.p2.score)
+        # 状態遷移比較 (_drive_ojama の on_state_transition 用) も毎フレーム更新。
         prev_state_p1 = result.p1.state
         prev_state_p2 = result.p2.state
-        # --- 各 side 処理 ---
+        # ============================================================
+        # 指標計算・行出力 (stateless): ここだけ indicator_interval_frames
+        # で間引く。既存列は現在盤面のみの純関数のため、間引いても値は
+        # 壊れず出力行数が減るだけ (2026-07-30 追加)。
+        # ============================================================
+        if fi % effective_indicator_interval_frames != 0:
+            continue
         _process_side(
             video_id, "1P", result.p1, tracker_p1, pipeline,
             ojama_tracker, t_sec, fi, snap, rows, npz_acc,
@@ -849,6 +937,19 @@ def main() -> int:
             "CSV 行と 1 対 1 対応 (同順)。"
         ),
     )
+    parser.add_argument(
+        "--indicator-interval-frames", type=int, default=None,
+        dest="indicator_interval_frames",
+        help=(
+            "指標計算・行出力のみの間引き幅 (省略可、整数、2026-07-30 追加)。"
+            "認識 (pipeline.update) は --sample-interval / --sample-interval-frames "
+            "の間隔通り実行したまま、指標計算・行の書き出しだけをこのフレーム数"
+            "ごとに絞る。省略時は 1 (間引きなし=毎フレーム、従来挙動)。"
+            "認識自体を間引くと状態機械の遷移取りこぼしで current_max_chain 等が"
+            "壊れることが実測済みのため、認識は全フレームのままにしたい場合に使う"
+            "(例: --indicator-interval-frames 6 --sample-interval-frames 未指定)"
+        ),
+    )
     args = parser.parse_args()
     n = collect(
         args.video, args.out,
@@ -857,6 +958,7 @@ def main() -> int:
         start_sec=args.start_sec,
         board_npz_path=args.board_npz,
         sample_interval_frames=args.sample_interval_frames,
+        indicator_interval_frames=args.indicator_interval_frames,
     )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
     if args.start_sec > 0.0:
