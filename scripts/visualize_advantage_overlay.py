@@ -1129,12 +1129,23 @@ def main() -> None:
              "ガードを有効化 (RecognitionPipeline.load_default に転送、"
              "2026-07-27 追加)。デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
+    # CLI 既定は generate() の既定 (enable_platt_calibration=False) と必ず一致させる。
+    # 2026-07-29: 関数側を暫定 False に戻した際 (0a0b014) CLI 側の default=True を
+    # 直し忘れ、フラグ無指定で呼ぶと校正器ファイル欠損で必ず落ちる不整合が発生した。
+    # 校正を使う場合は --platt-calibration を明示する。
     ap.add_argument(
-        "--no-platt-calibration", action="store_false", default=True,
+        "--platt-calibration", action="store_true", default=False,
         dest="enable_platt_calibration",
-        help="表示用勝率へのPlatt scaling後段校正を無効化し従来挙動(校正なし)を"
-             "完全再現する (2026-07-29 追加。既定 True=校正あり、user承認済み)。"
-             "A/B比較・切り戻し用。",
+        help="表示用勝率へ Platt scaling 後段校正を適用する (2026-07-29 追加)。"
+             "既定 OFF = 従来挙動 (校正なし) 。data/indicators_v2/platt_calibration.json "
+             "が必要で、無い場合は動画を読む前に例外になる。A/B比較用。",
+    )
+    # 旧フラグ名の後方互換: --no-platt-calibration は既定OFFなので実質no-opだが、
+    # 既存スクリプトが渡しても落ちないよう受け付ける。
+    ap.add_argument(
+        "--no-platt-calibration", action="store_false",
+        dest="enable_platt_calibration",
+        help="(後方互換) 校正を明示的に無効化する。既定が OFF なので通常は不要。",
     )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
