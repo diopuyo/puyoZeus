@@ -83,6 +83,13 @@ def load_chain_anim_median_by_count() -> dict[int, float]:
     return {b["chain_bin"]: b["visual_median"] for b in data["chain_count_bins"]}
 
 
+def load_chain_anim_range_by_count() -> dict[int, tuple[float, float]]:
+    """連鎖数別の連鎖アニメ時間 (visual_min, visual_max) (n=418実測、妥当性チェック用)。"""
+    with open(CHAIN_ANIM_DURATION_JSON, encoding="utf-8") as f:
+        data = json.load(f)
+    return {b["chain_bin"]: (b["visual_min"], b["visual_max"]) for b in data["chain_count_bins"]}
+
+
 def find_study_files(video_stem: str) -> list[str]:
     """video_stem に対応する study CSV (base/_gap/_mid) を全 study dir から探す。"""
     found = []
@@ -159,6 +166,13 @@ def defender_side_of(fire_side: str) -> str:
 
 
 def summarize(vals: list[float], label: str) -> None:
+    """分布の要約統計を出力する。
+
+    ⚠️ 修正 (2026-07-29): 旧実装は百分位を「最近傍サンプル (round-half-to-even)」
+    で選んでおり、n が偶数のとき (例: n=2) 中央値が実質「最小値」に丸まる
+    バグがあった (例: n=2 の [0.20, 4.60] で median=0.20 と誤表示)。
+    numpy 既定の線形補間法と同じ方式に修正し、偶数個では中間2点の平均を返す。
+    """
     if not vals:
         print(f"{label}: データなし")
         return
@@ -166,8 +180,11 @@ def summarize(vals: list[float], label: str) -> None:
     n = len(vs)
 
     def pct(p: float) -> float:
-        idx = min(n - 1, max(0, int(round(p * (n - 1)))))
-        return vs[idx]
+        pos = p * (n - 1)
+        lo = int(pos)
+        hi = min(n - 1, lo + 1)
+        frac = pos - lo
+        return vs[lo] * (1 - frac) + vs[hi] * frac
 
     median = pct(0.5)
     print(
@@ -321,6 +338,7 @@ def main() -> None:
     # (「遅延秒 / SEC_PER_HAND」の過大評価疑惑を直接検証)
     # ------------------------------------------------------------------
     print("\n=== 追加項目: 連鎖アニメ中の相手側実測手数 vs 0.733秒/手モデル ===")
+    anim_range = load_chain_anim_range_by_count()
     hand_rows = []
     hand_missing = []
     for row in landed:
@@ -334,48 +352,156 @@ def main() -> None:
         t_chain_start = float(row["t_chain_start"])
         t_fire = float(row["t_fire"])
         anim_dur = t_fire - t_chain_start
+        cc = int(float(row["chain_count"]))
         inc_times = all_increment_times(series)
         n_hands_actual = sum(1 for t in inc_times if t_chain_start < t <= t_fire)
         n_hands_model = int(anim_dur // SEC_PER_HAND_EXISTING)
         window_gap = max_gap_in_window(series, t_chain_start, t_fire)
+        rng = anim_range.get(min(cc, 8))
+        plausible = rng is None or (rng[0] <= anim_dur <= rng[1])
         hand_rows.append(
             {
                 "video_stem": vs,
-                "chain_count": row["chain_count"],
+                "chain_count": cc,
                 "anim_dur_sec": anim_dur,
                 "n_hands_actual": n_hands_actual,
                 "n_hands_model": n_hands_model,
                 "window_gap": window_gap,
                 "reliable": window_gap <= COVERAGE_GAP_THRESHOLD_SEC,
+                "plausible_anim_dur": plausible,
             }
         )
-    print(f"{'video':6} {'chain':5} {'anim_dur':9} {'実測手数':8} {'モデル手数(÷0.733)':18} {'window_gap':10} {'reliable':8}")
-    for r in sorted(hand_rows, key=lambda x: x["anim_dur_sec"]):
+    print(f"{'video':6} {'chain':5} {'anim_dur':9} {'実測手数':8} {'モデル手数(÷0.733)':18} {'window_gap':10} {'reliable':8} {'anim妥当?':9}")
+    for r in sorted(hand_rows, key=lambda x: (x["chain_count"], x["anim_dur_sec"])):
         print(
             f"{r['video_stem']:6} {r['chain_count']:>5} {r['anim_dur_sec']:9.2f} "
-            f"{r['n_hands_actual']:8} {r['n_hands_model']:18} {r['window_gap']:10.2f} {str(r['reliable']):8}"
+            f"{r['n_hands_actual']:8} {r['n_hands_model']:18} {r['window_gap']:10.2f} "
+            f"{str(r['reliable']):8} {str(r['plausible_anim_dur']):9}"
         )
     n_unreliable_window = sum(1 for r in hand_rows if not r["reliable"])
+    n_implausible = sum(1 for r in hand_rows if r["reliable"] and not r["plausible_anim_dur"])
     if n_unreliable_window:
         print(
             f"\n注意: {n_unreliable_window} 件は連鎖アニメ区間 [t_chain_start, t_fire] 自体が"
             f" 900-1200秒帯などの収集断絶帯にかかっており、「実測手数」がデータ欠損による"
-            f" 見かけ上の値の可能性があります。以下はこれらを除外して集計します。"
+            f" 見かけ上の値の可能性があります。"
+        )
+    if n_implausible:
+        print(
+            f"注意: {n_implausible} 件は anim_dur (t_fire-t_chain_start) が"
+            f" 母集団実測 (n=418, chain_anim_duration_multi) の同一連鎖数ビンの"
+            f" min〜max 範囲から外れています (t_fire検出誤差の疑い、実測手数の"
+            f" 信頼性が下がるため表に明示します)。"
         )
     hand_rows_reliable = [r for r in hand_rows if r["reliable"]]
-    print(f"\n[信頼できる区間のみで再集計: n={len(hand_rows_reliable)} / {len(hand_rows)}]")
-    actual_hands = [r["n_hands_actual"] for r in hand_rows_reliable]
-    model_hands = [r["n_hands_model"] for r in hand_rows_reliable]
-    summarize([float(v) for v in actual_hands], "実測手数")
-    summarize([float(v) for v in model_hands], "モデル手数(÷0.733)")
-    overestimate = sum(1 for r in hand_rows_reliable if r["n_hands_model"] > r["n_hands_actual"])
-    underestimate = sum(1 for r in hand_rows_reliable if r["n_hands_model"] < r["n_hands_actual"])
-    exact = sum(1 for r in hand_rows_reliable if r["n_hands_model"] == r["n_hands_actual"])
-    print(
-        f"\nモデル > 実測 (過大評価): {overestimate} / {len(hand_rows_reliable)}, "
-        f"モデル < 実測 (過小評価): {underestimate} / {len(hand_rows_reliable)}, "
-        f"一致: {exact} / {len(hand_rows_reliable)}"
-    )
+    print(f"\n[収集断絶帯を除外: n={len(hand_rows_reliable)} / {len(hand_rows)} (このうちanim_dur不自然={n_implausible}件、下の層別表にはそのまま含めるが個別に明示する)]")
+
+    # ------------------------------------------------------------------
+    # 連鎖数別の層別集計 (プールでの相殺を避ける、user指摘反映)
+    # ------------------------------------------------------------------
+    print("\n=== 連鎖数別 層別集計 (プール禁止・user指摘反映) ===")
+    by_cc: dict[int, list[dict]] = {}
+    for r in hand_rows_reliable:
+        by_cc.setdefault(r["chain_count"], []).append(r)
+
+    print("\n[項目1: 連鎖数別 実測手数 (連鎖アニメ中) vs モデル値]")
+    for cc in sorted(by_cc):
+        rows = by_cc[cc]
+        n = len(rows)
+        actuals = [r["n_hands_actual"] for r in rows]
+        models = [r["n_hands_model"] for r in rows]
+        flags = [r["video_stem"] + ("*" if not r["plausible_anim_dur"] else "") for r in rows]
+        if n >= 3:
+            summarize([float(v) for v in actuals], f"  連鎖数={cc} 実測手数 (n={n})")
+            summarize([float(v) for v in models], f"  連鎖数={cc} モデル手数 (n={n})")
+        else:
+            print(
+                f"  連鎖数={cc}: n={n} (統計不能・個別値のみ) "
+                f"実測={actuals} モデル={models} 該当動画={flags}"
+            )
+
+    print("\n[項目2: 連鎖数別 実測/モデル比 (モデル=0の行は比が定義不能なので個別注記)]")
+    for cc in sorted(by_cc):
+        rows = by_cc[cc]
+        ratios = []
+        zero_model_notes = []
+        for r in rows:
+            if r["n_hands_model"] == 0:
+                zero_model_notes.append(f"{r['video_stem']}(実測{r['n_hands_actual']}/モデル0)")
+                continue
+            ratios.append(r["n_hands_actual"] / r["n_hands_model"])
+        n = len(rows)
+        if len(ratios) >= 3:
+            summarize(ratios, f"  連鎖数={cc} 実測/モデル比 (n={len(ratios)}, モデル0除く)")
+        elif ratios:
+            print(f"  連鎖数={cc}: 比の個別値 (n={len(ratios)}, 統計不能) = {[round(x, 2) for x in ratios]}")
+        if zero_model_notes:
+            print(f"    (モデル0で比計算不能: {zero_model_notes})")
+
+    # ------------------------------------------------------------------
+    # 項目3: 連鎖数別 総手数 (アニメ中手数 + 連鎖完了後~着弾の手数)
+    # 項目4: K推奨テーブル
+    # ------------------------------------------------------------------
+    print("\n[項目3: 連鎖数別 総手数 = アニメ中実測手数 + 連鎖完了後~着弾 (delay_sec/0.733)]")
+    print("(delay_sec は study CSV 不要・全25件から連鎖数別に算出済み)")
+    for cc in sorted(set(by_chain) | set(by_cc)):
+        delay_vals = by_chain.get(cc, [])
+        anim_rows = by_cc.get(cc, [])
+        n_delay = len(delay_vals)
+        n_anim = len(anim_rows)
+        if n_delay == 0:
+            print(f"  連鎖数={cc}: delay_secデータなし (判定不能)")
+            continue
+        delay_sorted = sorted(delay_vals)
+        delay_median = delay_sorted[n_delay // 2] if n_delay % 2 == 1 else (
+            delay_sorted[n_delay // 2 - 1] + delay_sorted[n_delay // 2]
+        ) / 2
+        post_hands = delay_median / SEC_PER_HAND_EXISTING
+        if n_anim == 0:
+            print(
+                f"  連鎖数={cc}: アニメ中手数データなし (判定不能、delay_secのみ"
+                f" n={n_delay} 中央値{delay_median:.2f}秒→着弾直前の残り約{post_hands:.1f}手相当)"
+            )
+            continue
+        actuals = [r["n_hands_actual"] for r in anim_rows]
+        anim_sorted = sorted(actuals)
+        anim_median = anim_sorted[n_anim // 2] if n_anim % 2 == 1 else (
+            anim_sorted[n_anim // 2 - 1] + anim_sorted[n_anim // 2]
+        ) / 2
+        total_hands = anim_median + post_hands
+        confidence = "参考値(n小)" if (n_anim < 3 or n_delay < 3) else "暫定値"
+        print(
+            f"  連鎖数={cc}: アニメ中手数中央値={anim_median:.1f}(n={n_anim}) + "
+            f"delay_sec中央値{delay_median:.2f}秒/0.733={post_hands:.1f}手(n={n_delay}) "
+            f"= 総手数目安 {total_hands:.1f} [{confidence}]"
+        )
+
+    print("\n[項目4: Kを連鎖数の関数にする場合の推奨テーブル (現行 MAX_SUPPORTED_K_HANDS=4 との比較)]")
+    print("(scripts/measure_exchange_effectiveness.py:79 MAX_SUPPORTED_K_HANDS、読み取りのみ・変更なし)")
+    EXISTING_K_CAP = 4
+    for cc in sorted(set(by_chain) | set(by_cc)):
+        delay_vals = by_chain.get(cc, [])
+        anim_rows = by_cc.get(cc, [])
+        n_delay = len(delay_vals)
+        n_anim = len(anim_rows)
+        if n_delay == 0 or n_anim == 0:
+            print(f"  連鎖数={cc}: データ不足のため推奨K決定不能")
+            continue
+        if n_anim < 3 or n_delay < 3:
+            print(f"  連鎖数={cc}: n小 (anim n={n_anim}, delay n={n_delay}) のため参考値扱い、確定推奨不可")
+            continue
+        delay_sorted = sorted(delay_vals)
+        delay_median = delay_sorted[n_delay // 2] if n_delay % 2 == 1 else (
+            delay_sorted[n_delay // 2 - 1] + delay_sorted[n_delay // 2]
+        ) / 2
+        actuals = [r["n_hands_actual"] for r in anim_rows]
+        anim_sorted = sorted(actuals)
+        anim_median = anim_sorted[n_anim // 2] if n_anim % 2 == 1 else (
+            anim_sorted[n_anim // 2 - 1] + anim_sorted[n_anim // 2]
+        ) / 2
+        total_hands = anim_median + delay_median / SEC_PER_HAND_EXISTING
+        verdict = "現行K=4で足りる" if total_hands <= EXISTING_K_CAP else f"現行K=4では不足 (推奨K≈{round(total_hands)})"
+        print(f"  連鎖数={cc}: 推奨K≈{total_hands:.1f} → {verdict}")
 
 
 if __name__ == "__main__":
