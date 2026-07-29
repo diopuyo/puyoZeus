@@ -826,7 +826,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_recovery_counter_carryover: bool = False,
              enable_cnn_flicker_hsv_fallback: bool = False,
              enable_initial_confirm_vote: bool = False,
-             enable_platt_calibration: bool = True) -> int:
+             enable_platt_calibration: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -867,8 +867,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         (後方互換、既存呼出元は挙動不変)。
     enable_platt_calibration: 表示用勝率 (adv_to_winprob の出力) に Platt scaling
         後段校正を適用する (2026-07-29 追加、data/indicators_v2/platt_calibration.json
-        を読む)。既定 True = 校正あり (user承認済みの既定ON)。False にすると
-        従来挙動 (校正なし) を完全再現する (backwards compat / A-B比較・切り戻し用)。
+        を読む)。**既定 False (暫定)**。user は「入れる」と承認済みで最終的には既定 ON に
+        すべきだが、以下2点が未解決のため暫定的に False としている:
+          (1) 校正器ファイル自体がまだ生成されていない (学習ジョブが setsid detach
+              されておらず親の終了で kill された。CPU が空いてから再実行が必要)。
+              既定 True のままだと generate() を既定引数で呼ぶだけで必ず例外になる。
+          (2) 学習時分布と適用時分布が一致しない。校正器は model_indicator_win.py の
+              全指標 HistGBC (combined66) で学習されるが、適用先は本ファイルの4成分
+              ブレンド (model 成分の重みは W_MODEL=0.20 のみ) を adv_to_winprob の
+              別 sigmoid 較正で確率化したもの。実測した改善値 (ECE 0.0264->0.0189、
+              終盤 p95 +72.3->+47.8) は HistGBC に対する数値で、**本表示に対する
+              数値ではない**。overlay 自身の校正 (EVEN判定頻度・p95の変化) は未測定。
+        → 上記(1)を解消し(2)を overlay 経路で実測して妥当性を確認したら既定 True に
+          戻すこと。False にすると従来挙動 (校正なし) を完全再現する。
         True かつ校正器ファイルが無い場合は CalibrationFileMissingError を
         処理開始前(動画を1フレームも読む前)に送出する(黙って未校正で通さない
         ためのガード。fail-fast のため重い動画処理を無駄にしない)。
