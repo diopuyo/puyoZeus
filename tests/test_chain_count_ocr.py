@@ -23,7 +23,9 @@ from src.chain_count_ocr import (
     ChainCountReadResult,
     ChainCountWindowResult,
     _aggregate_window_samples,
+    _approx_min_chain_score,
     _extract_monotonic_max_chain_count,
+    _select_chain_count_by_score,
 )
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
 
@@ -390,3 +392,104 @@ def test_read_max_in_window_invalid_range_returns_none() -> None:
     result = ocr.read_max_in_window(cap, "1P", t_start=2.0, t_end=1.0)
     assert result.max_chain_count is None
     assert result.samples == ()
+
+
+# =============================================================================
+# 得点裏取り方式 (2026-07-29 追加、方式転換の回帰テスト)
+# =============================================================================
+
+
+def test_approx_min_chain_score_matches_known_values() -> None:
+    """下限近似の値が手計算 (chain_power テーブルより) と一致することを固定する。
+
+    2026-07-29 実データ検証 (本ファイル上部 docstring) で使った値の回帰確認。
+    """
+    assert _approx_min_chain_score(1) == 40
+    assert _approx_min_chain_score(2) == 360
+    assert _approx_min_chain_score(3) == 1000
+    assert _approx_min_chain_score(8) == 20200
+    assert _approx_min_chain_score(9) == 27880
+
+
+def test_select_chain_count_by_score_picks_real_9_chain_over_broken_3() -> None:
+    """video_c54 2P game_idx=9 (実9連鎖) の実測 delta_score=30920 で検証。
+
+    旧方式 (連続列必須) はこのイベントで 3 という壊れた過小評価を返した
+    (実データ、本ファイル上部 docstring 参照)。候補集合に検出済みの値
+    {1,...,9} を丸ごと渡した場合、得点裏取り方式は 9 を正しく選べる。
+    """
+    candidates = {1, 2, 3, 4, 5, 6, 7, 8, 9}
+    chosen, ratio = _select_chain_count_by_score(candidates, delta_score=30920)
+    assert chosen == 9
+    assert ratio is not None and 0.5 <= ratio <= 2.0
+
+
+def test_select_chain_count_by_score_matches_true_5_chain_video_c54_1p() -> None:
+    """video_c54 1P game_idx=1 (実測 delta_score=7598) の実データ検証。
+
+    simulate() は当初 4 連鎖と誤認していたが、後日の実フレーム再検証で真の
+    連鎖数は 5 と判明済み (本ファイル上部 docstring の訂正コメント参照)。
+    得点裏取り方式は simulate() より正確に真値 5 を選べる。
+    """
+    candidates = {3, 4, 5, 6}
+    chosen, _ratio = _select_chain_count_by_score(candidates, delta_score=7598)
+    assert chosen == 5
+
+
+def test_select_chain_count_by_score_rejects_all_when_no_candidate_fits() -> None:
+    """どの候補も許容比率 [0.5, 2.0] に収まらない場合は None を返す (過剰な自信を防ぐ)。"""
+    chosen, ratio = _select_chain_count_by_score({1, 2}, delta_score=999_999)
+    assert chosen is None
+    # 比率自体は最良候補について返る (デバッグ用、None ではない)
+    assert ratio is not None
+
+
+def test_select_chain_count_by_score_empty_candidates_returns_none() -> None:
+    chosen, ratio = _select_chain_count_by_score(set(), delta_score=1000)
+    assert chosen is None
+    assert ratio is None
+
+
+def test_select_chain_count_by_score_ignores_out_of_range_candidates() -> None:
+    """CHAIN_COUNT_MIN/MAX 範囲外の候補は無視される (防御的、通常は発生しない)。"""
+    chosen, _ratio = _select_chain_count_by_score({0, 20, 3}, delta_score=1000)
+    assert chosen == 3
+
+
+def test_aggregate_window_samples_score_backed_rejects_decoy_within_gap() -> None:
+    """得点裏取りは、旧方式では棄却できない短時間内の decoy も正しく棄却できる。
+
+    合成データ (userタスク指定 (a) のシナリオを模した合成、実測ではない):
+    真の連鎖は 1→2→3→4 で delta_score は 4 連鎖相当 (2500) だったとする。
+    その直後 (CHAIN_STEP_MAX_GAP_SEC=2.5秒 以内) に無関係な要因で「5」が
+    弱く誤検出されたとすると、旧方式 (連続列必須、時間差チェックのみ) は
+    時間差が短いため誤って 5 を採用してしまう (時間差チェックはギャップが
+    大きい decoy にしか無力)。得点裏取りは delta_score との整合性で
+    正しく 4 を選び、decoy を棄却できる。
+    """
+    samples = [
+        ChainCountReadResult(1, 0.9, (0, 0)),
+        ChainCountReadResult(2, 0.85, (5, 5)),
+        ChainCountReadResult(3, 0.8, (8, 8)),
+        ChainCountReadResult(4, 0.8, (10, 10)),
+        ChainCountReadResult(5, 0.63, (20, 20)),  # decoy (短時間内、旧方式では棄却できない)
+    ]
+    # 合成の delta_score: 4 連鎖の下限近似そのもの (2280) を仮定
+    # (全消し繰越仮説による他候補との偶然の近接を避けるため、あえて厳密値を使う)
+    result = _aggregate_window_samples(samples, delta_score=_approx_min_chain_score(4))
+    assert result.method == "score_backed"
+    assert result.max_chain_count == 4
+
+
+def test_aggregate_window_samples_delta_score_omitted_keeps_monotonic_backward_compat() -> None:
+    """delta_score 省略時は既存の連続列方式のまま (backwards compat)。"""
+    samples = [
+        ChainCountReadResult(1, 0.9, (0, 0)),
+        ChainCountReadResult(2, 0.85, (5, 5)),
+        ChainCountReadResult(4, 0.8, (10, 10)),  # 孤立誤検出 (旧方式の要点)
+        ChainCountReadResult(3, 0.7, (1, 1)),
+    ]
+    result = _aggregate_window_samples(samples)
+    assert result.method == "monotonic_run"
+    assert result.max_chain_count == 3
+    assert result.score_ratio is None
