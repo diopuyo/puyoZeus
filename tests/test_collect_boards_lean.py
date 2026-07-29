@@ -794,6 +794,106 @@ class TestResolveSampleIntervalFrames:
         assert resolved == mod.MIN_SAMPLE_INTERVAL_FRAMES
 
 
+# ============================
+# chain_trigger_sec 保存テスト (2026-07-29 追加、機能D 検知時刻の記録)
+# ============================
+
+
+class TestChainTriggerSecColumn:
+    """chain_trigger_sec の保存・後方互換を検証する。"""
+
+    def test_chain_trigger_sec_saved_in_npz(self, tmp_path: Path) -> None:
+        """chain_trigger_sec を渡すと npz に float32 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            chain_trigger_sec=12.5,
+        )
+        out = tmp_path / "trigger_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "chain_trigger_sec" in data
+        assert data["chain_trigger_sec"].dtype == np.float32
+        assert float(data["chain_trigger_sec"][0]) == pytest.approx(12.5)
+
+    def test_chain_trigger_sec_none_saved_as_nan(self, tmp_path: Path) -> None:
+        """chain_trigger_sec=None は NaN (CHAIN_TRIGGER_SEC_UNKNOWN) として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "trigger_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert math.isnan(float(data["chain_trigger_sec"][0]))
+
+    def test_chain_trigger_sec_backward_compat_omitted_kwarg(self, tmp_path: Path) -> None:
+        """chain_trigger_sec 引数を省略した既存呼び出しでも NaN 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "trigger_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        assert math.isnan(float(data["chain_trigger_sec"][0]))
+
+    def test_existing_npz_keys_unchanged_after_trigger_sec_addition(self, tmp_path: Path) -> None:
+        """chain_trigger_sec 追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "trigger_compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in (
+            "grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won",
+            "score", "next1_a", "next1_b", "dnext_a", "dnext_b",
+        ):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        assert "chain_trigger_sec" in data
+
+    def test_process_side_lean_extracts_trigger_sec_from_chain_event(self) -> None:
+        """_process_side_lean が chain_event.trigger_sec を acc.append に伝搬すること。"""
+        mod = _import_lean()
+
+        class _FakeChainEvent:
+            trigger_sec = 42.5
+
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            chain_event=_FakeChainEvent(),
+        )
+        assert acc.chain_trigger_secs[0] == pytest.approx(42.5)
+
+    def test_process_side_lean_default_trigger_sec_is_nan(self) -> None:
+        """chain_event を渡さない場合 (既定 None) は NaN 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert math.isnan(acc.chain_trigger_secs[0])
+
+    def test_process_side_lean_chain_event_none_trigger_sec(self) -> None:
+        """chain_event=None を明示指定した場合も NaN 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            chain_event=None,
+        )
+        assert math.isnan(acc.chain_trigger_secs[0])
+
+
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
     """collect_lean() の新引数 sample_interval_frames が末尾追加され、
 

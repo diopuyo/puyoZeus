@@ -478,6 +478,49 @@ def test_honsen_output_empty_board_is_zero() -> None:
     assert v.score == 0.0
 
 
+# ============================
+# chain_completion_from_formula (2026-07-29 追加、掛け算表示ベース連鎖完了時刻)
+# ============================
+
+
+def test_chain_completion_from_formula_zero_chain() -> None:
+    """chain_count=0 のとき formula_appear_sec がそのまま返ること。"""
+    assert iv.chain_completion_from_formula(10.0, 0.0) == pytest.approx(10.0)
+    assert iv.chain_completion_from_formula(10.0, -5.0) == pytest.approx(10.0)
+
+
+def test_chain_completion_from_formula_default_coef() -> None:
+    """既定係数 CHAIN_ANIM_PER_STEP_SEC(=0.4) が使われること。"""
+    result = iv.chain_completion_from_formula(100.0, 4.0)
+    assert result == pytest.approx(100.0 + iv.CHAIN_ANIM_PER_STEP_SEC * 4.0)
+    assert iv.CHAIN_ANIM_PER_STEP_SEC == pytest.approx(0.4)
+
+
+def test_chain_completion_from_formula_custom_coef() -> None:
+    """per_step_sec を明示指定すると既定値の代わりにその値が使われること。"""
+    result = iv.chain_completion_from_formula(0.0, 3.0, per_step_sec=1.0)
+    assert result == pytest.approx(3.0)
+
+
+def test_chain_completion_from_formula_monotone_in_chain_count() -> None:
+    """連鎖数が大きいほど完了時刻が後ろにずれる (単調増加)。"""
+    t2 = iv.chain_completion_from_formula(0.0, 2.0)
+    t5 = iv.chain_completion_from_formula(0.0, 5.0)
+    assert t5 > t2
+
+
+def test_chain_completion_from_formula_is_independent_constant() -> None:
+    """CHAIN_ANIM_PER_STEP_SEC は TIME_PER_CHAIN_SEC (打ち合い窓予測用) や
+    RecognitionPipeline.CHAIN_HOLD_PER_STEP_SEC (state machine 保持用) とは
+    役割が異なる独立定数として存在すること (混同防止の回帰チェック)。"""
+    from src.recognition_pipeline import RecognitionPipeline
+    assert hasattr(iv, "CHAIN_ANIM_PER_STEP_SEC")
+    assert hasattr(iv, "TIME_PER_CHAIN_SEC")
+    assert hasattr(RecognitionPipeline, "CHAIN_HOLD_PER_STEP_SEC")
+    # 値がたまたま近くても、変更時に相互に影響しない別々の定数であることが本旨
+    assert iv.CHAIN_ANIM_PER_STEP_SEC == pytest.approx(0.4)
+
+
 def test_honsen_output_chain_board_nonzero() -> None:
     """連鎖盤面では honsen_output の raw > 0 かつ score が 0-1 範囲内。"""
     v = iv.honsen_output(_two_chain_board())

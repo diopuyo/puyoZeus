@@ -1086,6 +1086,63 @@ def chain_to_time(n: float) -> float:
     return max(0.0, TIME_PER_CHAIN_SEC * n)
 
 
+# ============================
+# 連鎖完了時刻 (掛け算表示ベース、2026-07-29 追加)
+# ============================
+#
+# 背景: scripts/measure_exchange_dynamics.py の FireEvent.t_fire (post-chain
+# 確定盤面時刻) は BoardStateMachine の CHAIN 状態離脱タイミング
+# (src/recognition_pipeline.py の CHAIN_HOLD_BASE_SEC/CHAIN_HOLD_PER_STEP_SEC
+# 等、state machine 内部の保持時間定数) に依存しており、「連鎖アニメが実際に
+# 何秒で終わるか」を測る値としては汚染されている。
+# data/verify/recognition_diag_chain_anim_duration_multi/summary.txt の実測
+# (23動画418イベント) では、ピクセルdiffベースの視覚実測 (盤面全体が動きを
+# 止める＝おじゃま落下・次ツモ出現まで含む「盤面settle」) の方が
+# pipeline_duration (t_fire 基準) より一貫して短く、t_fire は settle より
+# さらに遅い (2026-07-29 確認)。
+#
+# user提案: 掛け算表示 (RecognitionPipeline 機能D、
+# enable_chain_formula_detection) が検知された時刻を起点に
+# CHAIN_ANIM_PER_STEP_SEC * 連鎖数 を加算する方式に置き換える。
+#
+# CHAIN_ANIM_PER_STEP_SEC は次の2つの既存定数とは役割が異なるため独立させる
+# (混同しない、勝手に統合しない):
+#   - TIME_PER_CHAIN_SEC (=0.30, 本モジュール上部): 打ち合い窓予測の仮値。
+#   - RecognitionPipeline.CHAIN_HOLD_PER_STEP_SEC (=0.3, src/
+#     recognition_pipeline.py): state machine の CHAIN 状態を保持する内部
+#     タイマー用 (認識ロジック側の都合、消去演出の実測値ではない)。
+CHAIN_ANIM_PER_STEP_SEC: float = 0.4
+
+
+def chain_completion_from_formula(
+    formula_appear_sec: float,
+    chain_count: float,
+    per_step_sec: float = CHAIN_ANIM_PER_STEP_SEC,
+) -> float:
+    """掛け算表示検知時刻 + 連鎖数から連鎖完了(消去演出終了)時刻を推定する。
+
+    stateless: formula_appear_sec (機能D が掛け算式を検知した時刻) を起点に
+    per_step_sec * chain_count を加算するだけ。既存の t_fire ベース計算
+    (measure_ojama_landing_delay.py 等) を置き換えるものではなく、
+    並列に追加する新方式 (2026-07-29, userタスク指定)。
+
+    Args:
+        formula_appear_sec: 掛け算表示検知時刻 (秒)。RecognitionPipeline の
+            機能D (_apply_chain_formula_early_fire) がその場で確定させる
+            time_sec、または近似値として t_chain_start (pre-chain静止盤面
+            時刻) を使う場合はその旨を呼び出し側で明示すること。
+        chain_count: 連鎖数 (0 以下は 0 として扱う)。
+        per_step_sec: 1連鎖ステップあたりの消去演出秒数 (既定
+            CHAIN_ANIM_PER_STEP_SEC=0.4、userタスク指定値。母集団データでの
+            検証は未実施、要検証値であることに注意)。
+
+    Returns:
+        推定連鎖完了時刻 (秒)。
+    """
+    n = max(0.0, float(chain_count))
+    return formula_appear_sec + per_step_sec * n
+
+
 def honsen_output(
     board: Board,
     simulator: ChainSimulator | None = None,
@@ -3375,6 +3432,9 @@ __all__ = [
     "CHAIN_OJAMA_B",
     "TIME_PER_CHAIN_SEC",
     "HONSEN_OUTPUT_NORM",
+    # VII-3 連鎖完了時刻 (掛け算表示ベース、2026-07-29 追加)
+    "chain_completion_from_formula",
+    "CHAIN_ANIM_PER_STEP_SEC",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
