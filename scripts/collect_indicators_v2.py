@@ -51,6 +51,39 @@ TARGET_H: int = 1080
 DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす (会計と同基準)
 SCORE_RESET_THRESHOLD: int = 500
+# サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
+MIN_SAMPLE_INTERVAL_FRAMES: int = 1
+
+
+def _resolve_sample_interval_frames(
+    sample_interval_sec: float,
+    fps: float,
+    sample_interval_frames: Optional[int] = None,
+) -> int:
+    """認識サンプル間隔を「実際に使うフレーム数」として一意に確定する。
+
+    2026-07-28 user指示: 学習データ収集は fps に依存しない「Nフレームに1回」を
+    正確に指定したい。sample_interval_frames が指定された場合はそれを最優先し、
+    fps に関係なくそのフレーム数ごとに 1 回だけ認識する。
+    省略時 (None) は従来通り sample_interval_sec (秒) を fps 換算する
+    (完全後方互換、既存呼出元は一切変わらない)。
+
+    Args:
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        fps: 動画の fps。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (優先指定、省略可)。
+            0 以下が渡された場合も不正値として扱い、下限 1 に丸める
+            (秒指定の既存 max(1, ...) と挙動を揃える)。
+
+    Returns:
+        実際に使うフレーム間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if sample_interval_frames is not None:
+        resolved = sample_interval_frames
+    else:
+        resolved = int(round(sample_interval_sec * fps))
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
 
 # XVI 平均ツモ期待火力 (expected_fire_power) の収集 opt-in フラグ (2026-07-22)。
 # user判断: fire_stability/expected_fire は「観測軸として残す」(4動画の狭い
@@ -570,6 +603,7 @@ def collect(
     sample_interval_sec: float = 0.0,
     start_sec: float = 0.0,
     board_npz_path: Optional[Path] = None,
+    sample_interval_frames: Optional[int] = None,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
 
@@ -586,6 +620,11 @@ def collect(
             start_sec=0 のときの挙動は従来と完全に同一 (後方互換)。
         board_npz_path: 盤面グリッド npz 出力パス (省略時は保存しない)。
             grids=(N,13,6) int8 + メタ配列を保存する。CSV 行と 1 対 1 対応。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (省略可)。
+            指定すると fps に関係なくそのフレーム数ごとに 1 回認識し、
+            sample_interval_sec より優先される (2026-07-28 追加)。
+            省略時 (None) は sample_interval_sec の従来挙動を完全維持する
+            (後方互換)。実際に使われた間引き幅は標準出力にログされる。
 
     Returns:
         出力した行数。
@@ -635,7 +674,16 @@ def collect(
     npz_acc: Optional[_BoardNpzAccumulator] = (
         _BoardNpzAccumulator() if board_npz_path is not None else None
     )
-    sample_interval_frames = max(1, int(round(sample_interval_sec * fps)))
+    effective_interval_frames = _resolve_sample_interval_frames(
+        sample_interval_sec, fps, sample_interval_frames,
+    )
+    # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
+    # 見落としを後から気付けるようにするため、2026-07-28 追加)。
+    print(
+        f"[collect] sample_interval: {effective_interval_frames} frames "
+        f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
+        f"sample_interval_frames_arg={sample_interval_frames})"
+    )
 
     for local_i in range(n_frames_to_process):
         ok, frame = cap.read()
@@ -648,7 +696,7 @@ def collect(
         # fi はビデオ全体での絶対フレーム番号。t_sec は絶対時刻
         fi = start_frame + local_i
         t_sec = fi / fps
-        if local_i % sample_interval_frames != 0:
+        if local_i % effective_interval_frames != 0:
             continue
         result = pipeline.update(fi, t_sec, frame)
         # --- お邪魔会計駆動: tsumo_count 増分で drain ---
@@ -780,7 +828,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--sample-interval", type=float, default=0.0,
-        help="認識サンプル間隔秒 (0 = 全フレーム)",
+        help="認識サンプル間隔秒 (0 = 全フレーム)。"
+             "--sample-interval-frames 指定時はそちらが優先される",
+    )
+    parser.add_argument(
+        "--sample-interval-frames", type=int, default=None,
+        dest="sample_interval_frames",
+        help=(
+            "認識サンプル間隔フレーム数 (省略可、整数)。"
+            "fps に関係なくこのフレーム数ごとに 1 回認識する。"
+            "--sample-interval (秒) より優先される。"
+            "例: 8フレームに1回 (60fps 想定) なら --sample-interval-frames 8"
+        ),
     )
     parser.add_argument(
         "--board-npz", type=Path, default=None,
@@ -797,6 +856,7 @@ def main() -> int:
         sample_interval_sec=args.sample_interval,
         start_sec=args.start_sec,
         board_npz_path=args.board_npz,
+        sample_interval_frames=args.sample_interval_frames,
     )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
     if args.start_sec > 0.0:

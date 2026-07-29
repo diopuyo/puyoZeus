@@ -737,3 +737,75 @@ class TestWinnerBySurvival:
         acc.assign_won_labels({0: {"1P": 8000, "2P": 2000}})
         assert float(acc.wons[0]) == 1.0  # 1P 勝ち (窒息無視)
         assert float(acc.wons[1]) == 0.0  # 2P 負け
+
+
+# ============================
+# _resolve_sample_interval_frames (2026-07-28 追加)
+# collect_indicators_v2 と同仕様のフレーム単位間引き指定。
+# 動画デコードは一切行わず、fps を差し替えた純粋関数呼び出しのみで検証する。
+# ============================
+
+
+class TestResolveSampleIntervalFrames:
+    """フレーム数指定の優先・後方互換・不正値クランプを検証する。"""
+
+    def test_explicit_frames_takes_priority_over_sec(self) -> None:
+        """フレーム数指定が秒指定より優先されること (fps が変わっても結果不変)。"""
+        mod = _import_lean()
+        for fps in (30.0, 60.0):
+            resolved = mod._resolve_sample_interval_frames(
+                sample_interval_sec=1.0, fps=fps, sample_interval_frames=8,
+            )
+            assert resolved == 8, f"fps={fps} でもフレーム数指定 8 が優先されるべき"
+
+    def test_omitted_preserves_legacy_sec_behavior_60fps(self) -> None:
+        """フレーム数指定省略時、60fps で秒指定の従来換算結果と完全一致すること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.2, fps=60.0, sample_interval_frames=None,
+        )
+        assert resolved == max(1, int(round(0.2 * 60.0)))
+        assert resolved == 12
+
+    def test_omitted_preserves_legacy_sec_behavior_30fps(self) -> None:
+        """フレーム数指定省略時、30fps でも秒指定の従来換算結果と完全一致すること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.2, fps=30.0, sample_interval_frames=None,
+        )
+        assert resolved == max(1, int(round(0.2 * 30.0)))
+        assert resolved == 6
+
+    def test_zero_sec_defaults_to_one_frame(self) -> None:
+        """sample_interval_sec=0.0 (全フレーム指定) は従来通り 1 になること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.0, fps=60.0, sample_interval_frames=None,
+        )
+        assert resolved == 1
+
+    @pytest.mark.parametrize("bad_frames", [0, -1, -100])
+    def test_non_positive_frames_clamped_to_one(self, bad_frames: int) -> None:
+        """0 以下のフレーム数指定は下限 1 に丸められること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.0, fps=60.0, sample_interval_frames=bad_frames,
+        )
+        assert resolved == mod.MIN_SAMPLE_INTERVAL_FRAMES
+
+
+def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
+    """collect_lean() の新引数 sample_interval_frames が末尾追加され、
+
+    既存引数の並び・デフォルト値が一切変わっていないこと (backwards compat)。
+    """
+    import inspect
+    mod = _import_lean()
+    sig = inspect.signature(mod.collect_lean)
+    params = list(sig.parameters.keys())
+    assert params[:6] == [
+        "video_path", "out_npz", "max_sec", "start_sec",
+        "sample_interval_sec", "capture_next",
+    ]
+    assert params[-1] == "sample_interval_frames"
+    assert sig.parameters["sample_interval_frames"].default is None

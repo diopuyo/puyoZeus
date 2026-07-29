@@ -504,3 +504,88 @@ def test_collect_expected_fire_near_future_and_fire_stability_unaffected_by_opt_
         assert col in row
     for col in _XV_COLUMNS:
         assert col in row
+
+
+# ============================
+# _resolve_sample_interval_frames (2026-07-28 追加)
+# サンプリング間隔をフレーム単位で正確指定できるようにする回帰テスト。
+# 動画デコードは一切行わず、fps を差し替えた純粋関数呼び出しのみで検証する。
+# ============================
+
+
+def test_resolve_sample_interval_frames_explicit_takes_priority_over_sec() -> None:
+    """フレーム数指定が秒指定より優先されること (fps が変わっても結果不変)。"""
+    for fps in (30.0, 60.0):
+        resolved = collect_mod._resolve_sample_interval_frames(
+            sample_interval_sec=1.0,  # fps次第で全く違う値になるはずの秒指定
+            fps=fps,
+            sample_interval_frames=8,
+        )
+        assert resolved == 8, f"fps={fps} でもフレーム数指定 8 が優先されるべき"
+
+
+def test_resolve_sample_interval_frames_omitted_preserves_legacy_sec_behavior_60fps() -> None:
+    """フレーム数指定省略時、60fps で秒指定の従来換算結果と完全一致すること。"""
+    # 8フレーム(60fps) = 0.1333...秒 相当を秒指定した場合との整合を確認
+    resolved = collect_mod._resolve_sample_interval_frames(
+        sample_interval_sec=0.2, fps=60.0, sample_interval_frames=None,
+    )
+    assert resolved == max(1, int(round(0.2 * 60.0)))  # 従来式と同じ計算
+    assert resolved == 12
+
+
+def test_resolve_sample_interval_frames_omitted_preserves_legacy_sec_behavior_30fps() -> None:
+    """フレーム数指定省略時、30fps でも秒指定の従来換算結果と完全一致すること。
+
+    同じ 0.2 秒指定でも fps が違えばフレーム数換算結果が変わることを確認し、
+    「fps混在時に意図と違う間引きになる」現状課題が秒指定側では
+    引き続き再現される (=後方互換で挙動が一切変わっていない) ことを示す。
+    """
+    resolved = collect_mod._resolve_sample_interval_frames(
+        sample_interval_sec=0.2, fps=30.0, sample_interval_frames=None,
+    )
+    assert resolved == max(1, int(round(0.2 * 30.0)))  # 従来式と同じ計算
+    assert resolved == 6
+
+
+def test_resolve_sample_interval_frames_zero_sec_defaults_to_one_frame() -> None:
+    """sample_interval_sec=0.0 (全フレーム指定) は従来通り 1 になること。"""
+    resolved = collect_mod._resolve_sample_interval_frames(
+        sample_interval_sec=0.0, fps=60.0, sample_interval_frames=None,
+    )
+    assert resolved == 1
+
+
+@pytest.mark.parametrize("bad_frames", [0, -1, -100])
+def test_resolve_sample_interval_frames_non_positive_frames_clamped_to_one(
+    bad_frames: int,
+) -> None:
+    """0 以下のフレーム数指定は下限 1 に丸められること (秒指定側の max(1, ...) と整合)。"""
+    resolved = collect_mod._resolve_sample_interval_frames(
+        sample_interval_sec=0.0, fps=60.0, sample_interval_frames=bad_frames,
+    )
+    assert resolved == collect_mod.MIN_SAMPLE_INTERVAL_FRAMES
+
+
+def test_resolve_sample_interval_frames_default_none_when_omitted_kwarg() -> None:
+    """sample_interval_frames を渡さず呼んでも従来の秒指定挙動になること (引数省略呼び出し)。"""
+    resolved = collect_mod._resolve_sample_interval_frames(
+        sample_interval_sec=0.2, fps=60.0,
+    )
+    assert resolved == 12
+
+
+def test_collect_signature_has_sample_interval_frames_appended_at_tail() -> None:
+    """collect() の新引数 sample_interval_frames が末尾追加され、
+
+    既存引数の並び・デフォルト値が一切変わっていないこと (backwards compat)。
+    """
+    import inspect
+    sig = inspect.signature(collect_mod.collect)
+    params = list(sig.parameters.keys())
+    assert params[:6] == [
+        "video_path", "out_path", "max_sec", "sample_interval_sec",
+        "start_sec", "board_npz_path",
+    ]
+    assert params[-1] == "sample_interval_frames"
+    assert sig.parameters["sample_interval_frames"].default is None

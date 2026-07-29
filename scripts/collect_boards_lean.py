@@ -85,6 +85,39 @@ DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす
 SCORE_RESET_THRESHOLD: int = 500
 
+# サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
+MIN_SAMPLE_INTERVAL_FRAMES: int = 1
+
+
+def _resolve_sample_interval_frames(
+    sample_interval_sec: float,
+    fps: float,
+    sample_interval_frames: Optional[int] = None,
+) -> int:
+    """認識サンプル間隔を「実際に使うフレーム数」として一意に確定する。
+
+    collect_indicators_v2._resolve_sample_interval_frames と同じ仕様
+    (2026-07-28 user指示: fps に依存しない「Nフレームに1回」指定への統一)。
+    sample_interval_frames が指定された場合はそれを最優先し、fps に関係なく
+    そのフレーム数ごとに 1 回だけ認識する。省略時 (None) は従来通り
+    sample_interval_sec (秒) を fps 換算する (完全後方互換)。
+
+    Args:
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        fps: 動画の fps。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (優先指定、省略可)。
+            0 以下が渡された場合も不正値として扱い、下限 1 に丸める。
+
+    Returns:
+        実際に使うフレーム間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if sample_interval_frames is not None:
+        resolved = sample_interval_frames
+    else:
+        resolved = int(round(sample_interval_sec * fps))
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
+
 # 勝敗ラベルが付与できない試合の won 値
 WON_UNKNOWN: float = float("nan")
 
@@ -333,6 +366,7 @@ def collect_lean(
     start_sec: float = 0.0,
     sample_interval_sec: float = 0.0,
     capture_next: bool = False,
+    sample_interval_frames: Optional[int] = None,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -349,6 +383,11 @@ def collect_lean(
             dnext_a/dnext_b を実値で記録する (指標①本命版検証用)。
             既定 False = 従来挙動 (NextDetector 無効、全て -1 で保存、
             後方互換)。
+        sample_interval_frames: フレーム間引き間隔 (フレーム数、省略可)。
+            指定すると fps に関係なくそのフレーム数ごとに 1 回認識し、
+            sample_interval_sec より優先される (2026-07-28 追加)。
+            省略時 (None) は sample_interval_sec の従来挙動を完全維持する
+            (後方互換)。実際に使われた間引き幅は標準出力にログされる。
 
     Returns:
         蓄積した snapshot 数。
@@ -373,9 +412,17 @@ def collect_lean(
     video_id = video_path.stem
 
     # --- フレーム間引き設定 (collect_indicators_v2 と同じ計算式) ---
-    # sample_interval_sec=0.0 の場合は全フレーム処理 (step=1)
-    sample_interval_frames: int = max(1, int(round(sample_interval_sec * fps))) \
-        if sample_interval_sec > 0.0 else 1
+    # sample_interval_frames 指定時はそちらを優先、省略時は従来通り秒換算
+    effective_interval_frames = _resolve_sample_interval_frames(
+        sample_interval_sec, fps, sample_interval_frames,
+    )
+    # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
+    # 見落としを後から気付けるようにするため、2026-07-28 追加)。
+    print(
+        f"[lean] sample_interval: {effective_interval_frames} frames "
+        f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
+        f"sample_interval_frames_arg={sample_interval_frames})"
+    )
 
     # NextDetector / ChainTracker を OFF にして高速化
     # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
@@ -400,10 +447,10 @@ def collect_lean(
         ok, frame = cap.read()
         if not ok or frame is None:
             break
-        # --- フレーム間引き: sample_interval_frames おきに pipeline.update を呼ぶ ---
+        # --- フレーム間引き: effective_interval_frames おきに pipeline.update を呼ぶ ---
         # cap.read() は毎フレーム呼んでデコードし、間引き対象フレームはスキップ。
         # (collect_indicators_v2 と同じ方式)
-        if local_i % sample_interval_frames != 0:
+        if local_i % effective_interval_frames != 0:
             continue
         if frame.shape[:2] != (TARGET_H, TARGET_W):
             frame = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
@@ -503,6 +550,17 @@ def main() -> int:
             "フレーム間引き間隔 (秒)。0 = 全フレーム処理 (既定)。"
             "0.1 で約 3×、0.2 で約 6× 高速化。"
             "STABLE 検出・勝者判定には影響しない。"
+            "--sample-interval-frames 指定時はそちらが優先される"
+        ),
+    )
+    parser.add_argument(
+        "--sample-interval-frames", type=int, default=None,
+        dest="sample_interval_frames",
+        help=(
+            "フレーム間引き間隔 (フレーム数、省略可、整数)。"
+            "fps に関係なくこのフレーム数ごとに 1 回認識する。"
+            "--sample-interval (秒) より優先される。"
+            "例: 8フレームに1回 (60fps 想定) なら --sample-interval-frames 8"
         ),
     )
     parser.add_argument(
@@ -519,6 +577,7 @@ def main() -> int:
         start_sec=args.start_sec,
         sample_interval_sec=args.sample_interval,
         capture_next=args.with_next,
+        sample_interval_frames=args.sample_interval_frames,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
