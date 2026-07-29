@@ -29,6 +29,7 @@ import os
 import sys
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
@@ -81,6 +82,11 @@ SCORE_MISSING_SENTINEL: int = -1
 
 # 催促/本線分類の閾値 (memory reference_saisoku_exchange_model_2026-07-22 確定値)
 HONSEN_RATIO_THRESHOLD: float = 0.6
+
+# 整地判定の閾値 (2026-07-29 Step1追加、設計確定値)。送りお邪魔がこの個数
+# 以下の発火は、催促/本線の比率がどうであれ「打ち合いとして無意味」として
+# 整地に分類し除外扱いする (project_exchange_meter_design_b_2026-07-28 準拠)。
+SEICHI_OJAMA_MAX_COUNT: float = 4.0
 
 # 色ぷよ判定範囲 (COLOR_RED=1 〜 COLOR_PURPLE=5。おじゃま9・空0・不明10は除外)
 COLOR_PUYO_MIN: int = 1
@@ -165,6 +171,43 @@ class NpzRecord(NamedTuple):
     score: np.ndarray
 
 
+# ============================
+# 相手盤面の被覆状態 (Step1 追加、2026-07-29)
+# ============================
+#
+# 当初設計は opp_board_covered (真偽値) だったが、2026-07-29 userの指摘で
+# 「見えなかった理由」を区別する必要があると判明した。相手が連鎖中で盤面が
+# 見えないのは認識の欠陥ではなく「相手は応手不能」という決定的な情報であり、
+# 認識取りこぼしと同列の欠測として扱うと打ち合い計測が歪む
+# (project_exchange_meter_design_b_2026-07-28 準拠)。
+
+
+class OppCoverageStatus(Enum):
+    """1発火イベント時点での相手盤面の被覆状態。"""
+    OBSERVED = "OBSERVED"          # 相手盤面が観測できている
+    OPP_CHAINING = "OPP_CHAINING"  # 相手は連鎖中 (応手不能、決定的情報として扱う)
+    UNOBSERVED = "UNOBSERVED"      # 連鎖していないのに観測が途切れた(本物の取りこぼし)
+    MATCH_END = "MATCH_END"        # 攻撃側の試合がそこで終了 (観測対象なし)
+    # 設計判断 (2026-07-29): 判別不能 (score OCR 欠損/異常値でギャップ原因を
+    # 推定できない) を UNOBSERVED に混ぜると「認識の取りこぼし」と「スコア
+    # OCR の問題」が区別できなくなるため専用値として分離する。opp_rec_full
+    # 未指定 (計算未実施) 時の既定値もこれを流用する (「見えなかった」と
+    # 断定する UNOBSERVED とは意味が異なるため)。
+    UNKNOWN = "UNKNOWN"
+
+
+# 相手フレームの連続観測が途切れたとみなすギャップ秒数。
+# scripts/measure_ojama_landing_delay.py の OPP_GAP_THRESHOLD_SEC (:64) と
+# 同値・同根拠 (循環import回避のためこのファイル内に複製、値は完全一致させる)。
+OPP_COVERAGE_GAP_THRESHOLD_SEC: float = 2.0
+
+# MATCH_END 判定: 攻撃側自身の試合終了時刻までの残り秒数がこれ以下なら
+# 「そこで試合が終わったため観測対象がない」とみなす。scripts/
+# _diag_gap_cause_2026-07-29.py の実測 (no_future_frames 100件中86件が
+# 残り5秒以内) に基づく閾値 (2026-07-29)。
+MATCH_END_REMAINING_SEC: float = 5.0
+
+
 @dataclass
 class FireEvent:
     """1発火イベントのレコード (催促/本線分類 + シーケンス情報つき)。"""
@@ -195,6 +238,11 @@ class FireEvent:
     # before を参照するため保持。fi_idx-1 という旧仮定は新方式 (window方式)
     # では成立しないため、明示的に保存する: 2026-07-22 バグ修正)。
     before_idx: int = -1
+    # 相手盤面の被覆状態 (Step1追加、2026-07-29)。OppCoverageStatus.value
+    # (str) で保持する (Enum ではなく str: pandas.DataFrame.to_csv 出力を
+    # 素直な文字列にするため)。_build_fire_event に opp_rec_full を渡さない
+    # 既存呼び出しでは常に UNKNOWN のまま (backwards compat)。
+    opp_coverage_status: str = OppCoverageStatus.UNKNOWN.value
 
 
 # ============================
@@ -235,6 +283,74 @@ def _subset(rec: NpzRecord, mask: np.ndarray) -> NpzRecord:
 
 
 # ============================
+# 相手盤面の被覆状態分類 (Step1 追加、2026-07-29)
+# ============================
+
+
+def _restrict_to_time_window(rec_full: NpzRecord, t_start: float, t_end: float) -> NpzRecord:
+    """opp側の全フレームを、攻撃側自身のこのゲームの実時刻範囲に絞る。
+
+    相手側 game_idx ラベルは独立カウンタでズレる既知バグがあるため
+    (scripts/measure_ojama_landing_delay.py:154-180 _opponent_frame_mask
+    参照、2026-07-29 修正済み)、game_idx でなく実時刻で絞る。循環import
+    回避のためこのファイル内に最小限のみ複製する (ロジックは同一)。
+    """
+    mask = (rec_full.t_sec >= t_start) & (rec_full.t_sec <= t_end)
+    return _subset(rec_full, mask)
+
+
+def _classify_gap_cause(score_before: float, score_after: float) -> "OppCoverageStatus":
+    """観測ギャップ区間の相手側スコア増分から連鎖有無を推定する。
+
+    scripts/_diag_gap_cause_2026-07-29.py の _classify_score_delta と同じ
+    考え方 (既存定数 SCORE_DELTA_FIRE / ANOMALY_DELTA_SCORE_MIN を流用、
+    新規閾値は発明しない)。判別不能 (score欠損/負差分/異常値) は UNOBSERVED
+    に混ぜず UNKNOWN として区別する (設計判断、OppCoverageStatus 定義参照)。
+    """
+    if score_before < 0 or score_after < 0:
+        return OppCoverageStatus.UNKNOWN
+    delta = score_after - score_before
+    if delta < 0 or delta >= ANOMALY_DELTA_SCORE_MIN:
+        return OppCoverageStatus.UNKNOWN
+    if delta >= SCORE_DELTA_FIRE:
+        return OppCoverageStatus.OPP_CHAINING
+    return OppCoverageStatus.UNOBSERVED
+
+
+def _classify_opp_coverage(
+    t_fire: float,
+    own_game_end_t: float,
+    opp_window: NpzRecord,
+) -> "OppCoverageStatus":
+    """t_fire 時点での相手盤面の被覆状態を分類する (4値+UNKNOWN)。
+
+    Args:
+        t_fire: 発火確定時刻 (post-chain)。
+        own_game_end_t: 攻撃側自身のこのゲームの終了時刻 (最終フレーム時刻)。
+        opp_window: _restrict_to_time_window 済みの相手側フレーム。
+    """
+    t_sec = opp_window.t_sec
+    idx_before = int(np.searchsorted(t_sec, t_fire, side="right")) - 1
+    idx_after = idx_before + 1
+    if idx_after >= len(t_sec):
+        remaining = own_game_end_t - t_fire
+        if remaining <= MATCH_END_REMAINING_SEC:
+            return OppCoverageStatus.MATCH_END
+        return OppCoverageStatus.UNOBSERVED
+    if idx_before < 0:
+        # 発火直前の相手フレームが無い (試合開始直後等)。判断材料が無いため
+        # 「本物の取りこぼし」側に寄せる (連鎖中と誤判定しない安全側)。
+        return OppCoverageStatus.UNOBSERVED
+
+    gap = float(t_sec[idx_after]) - float(t_sec[idx_before])
+    if gap <= OPP_COVERAGE_GAP_THRESHOLD_SEC:
+        return OppCoverageStatus.OBSERVED
+    return _classify_gap_cause(
+        float(opp_window.score[idx_before]), float(opp_window.score[idx_after]),
+    )
+
+
+# ============================
 # 催促/本線分類
 # ============================
 
@@ -253,11 +369,22 @@ def _consumed_color_puyos(before_grid: np.ndarray, after_grid: np.ndarray) -> in
     return max(0, _count_color_puyos(before_grid) - _count_color_puyos(after_grid))
 
 
-def _classify_exchange(before_grid: np.ndarray, after_grid: np.ndarray) -> tuple[str, float]:
-    """発火前後の色ぷよ消費比から催促/本線を分類する。
+def _classify_exchange(
+    before_grid: np.ndarray,
+    after_grid: np.ndarray,
+    ojama_sent_count: float | None = None,
+) -> tuple[str, float]:
+    """発火前後の色ぷよ消費比から催促/本線/整地を分類する。
 
     ratio = 消費色ぷよ数 / 発火前色ぷよ数。0.6 未満なら催促、以上なら本線。
-    発火前色ぷよ数が0の場合は分類不能 ("不明") として返す。
+    発火前色ぷよ数が0の場合は分類不能 ("不明") として返す (この判定は不変)。
+
+    Args:
+        ojama_sent_count: 送りお邪魔の個数 (生値)。SEICHI_OJAMA_MAX_COUNT
+            以下ならラベルを「整地」に上書きする (2026-07-29 Step1追加、
+            設計確定: 送りお邪魔がほぼ無い発火は打ち合いとして無意味なため
+            除外扱い)。None または NaN (スコア欠損) の場合は上書きしない
+            (backwards compat: 省略時は従来通り催促/本線/不明の2値のみ)。
     """
     before_n = _count_color_puyos(before_grid)
     after_n = _count_color_puyos(after_grid)
@@ -266,6 +393,12 @@ def _classify_exchange(before_grid: np.ndarray, after_grid: np.ndarray) -> tuple
     consumed = max(0, before_n - after_n)
     ratio = consumed / before_n
     label = "催促" if ratio < HONSEN_RATIO_THRESHOLD else "本線"
+    if (
+        ojama_sent_count is not None
+        and not np.isnan(ojama_sent_count)
+        and ojama_sent_count <= SEICHI_OJAMA_MAX_COUNT
+    ):
+        label = "整地"
     return label, ratio
 
 
@@ -394,6 +527,7 @@ def _build_fire_event(
     tier: str,
     video_stem: str,
     before_idx: int | None = None,
+    opp_rec_full: NpzRecord | None = None,
 ) -> FireEvent:
     """1発火インデックス分の FireEvent を組み立てる (score有無どちらの検出でも共通)。
 
@@ -401,17 +535,14 @@ def _build_fire_event(
         before_idx: pre-chain静止盤面 (simulate 入力) の grids インデックス。
             省略時は従来通り fi-1 (既存呼び出しは省略のままなので挙動不変、
             backwards compat)。
+        opp_rec_full: 相手側の全フレーム (game_idx によるサブセット化前の
+            NpzRecord)。指定時のみ opp_coverage_status を実計算する
+            (Step1追加)。省略時は UNKNOWN のまま (backwards compat、
+            既存呼び出しは挙動不変)。
     """
     b_idx = before_idx if before_idx is not None else max(0, fi - 1)
     before_grid = rec.grids[b_idx]
     after_grid = rec.grids[fi]
-    label, ratio = _classify_exchange(before_grid, after_grid)
-
-    try:
-        before_board = Board.from_list(before_grid.tolist())
-        chain_count = sim.simulate(before_board).chain_count
-    except Exception:
-        chain_count = 0
 
     t_fire = float(rec.t_sec[fi])
     t_chain_start = float(rec.t_sec[b_idx])
@@ -419,13 +550,28 @@ def _build_fire_event(
     has_score = delta_score != SCORE_MISSING_SENTINEL
     ojama_count = _ojama_sent_count(delta_score, elapsed) if has_score else float("nan")
 
+    label, ratio = _classify_exchange(before_grid, after_grid, ojama_sent_count=ojama_count)
+
+    try:
+        before_board = Board.from_list(before_grid.tolist())
+        chain_count = sim.simulate(before_board).chain_count
+    except Exception:
+        chain_count = 0
+
+    coverage = OppCoverageStatus.UNKNOWN
+    if opp_rec_full is not None:
+        opp_window = _restrict_to_time_window(
+            opp_rec_full, float(rec.t_sec.min()), float(rec.t_sec.max()),
+        )
+        coverage = _classify_opp_coverage(t_fire, float(rec.t_sec.max()), opp_window)
+
     return FireEvent(
         video_stem=video_stem, tier=tier,
         game_idx=int(rec.game_idx[fi]), fire_side=rec.side,
         fi_idx=int(fi), t_fire=t_fire, delta_score=delta_score,
         chain_count=chain_count, ratio=ratio, label=label,
         ojama_sent_count=ojama_count, t_chain_start=t_chain_start,
-        before_idx=int(b_idx),
+        before_idx=int(b_idx), opp_coverage_status=coverage.value,
     )
 
 
@@ -444,6 +590,7 @@ def _process_side_game(
     game_start_t: float,
     tier: str,
     video_stem: str,
+    opp_rec_full: NpzRecord | None = None,
 ) -> list[FireEvent]:
     """1 (video, game, side) 分の発火イベントを検出し FireEvent を返す。
 
@@ -452,6 +599,11 @@ def _process_side_game(
     スコア方式、全欠損 (c30等) なら色ぷよ数方式のフォールバックを使う。
     いずれの方式でも、最終的に _passes_real_chain_gate (chain_count>=1) を
     満たさない疑似発火は棄却する (2026-07-22 追加)。
+
+    Args:
+        opp_rec_full: 相手側の全フレーム (opp_coverage_status 計算用、
+            Step1追加)。省略時は各 FireEvent.opp_coverage_status が
+            UNKNOWN のままになる (backwards compat)。
     """
     has_score = bool((rec.score >= 0).any())
     events: list[FireEvent] = []
@@ -464,7 +616,7 @@ def _process_side_game(
                 continue
             event = _build_fire_event(
                 rec, post_idx, delta_score, sim, game_start_t, tier, video_stem,
-                before_idx=pre_idx,
+                before_idx=pre_idx, opp_rec_full=opp_rec_full,
             )
             if _passes_real_chain_gate(event):
                 events.append(event)
@@ -474,7 +626,7 @@ def _process_side_game(
                 continue
             event = _build_fire_event(
                 rec, post_idx, SCORE_MISSING_SENTINEL, sim, game_start_t, tier, video_stem,
-                before_idx=pre_idx,
+                before_idx=pre_idx, opp_rec_full=opp_rec_full,
             )
             if _passes_real_chain_gate(event):
                 events.append(event)
@@ -498,13 +650,19 @@ def _merge_fragment_group(
     game_start_t: float,
     tier: str,
     video_stem: str,
+    opp_rec_full: NpzRecord | None = None,
 ) -> FireEvent:
     """1 グループ (継続断片込み) を 1 つの FireEvent に統合する。
 
     before は先頭断片の発火直前盤面、after は末尾断片の発火後盤面を使い、
     delta_score は各断片の合算 (SCORE_MISSING_SENTINEL 混在時は欠損扱い)。
-    chain_count/ratio/label/ojama_sent_count は統合後の盤面ペアで再計算する
-    (_build_fire_event に委譲、 fi_idx/before_idx のみ差し替え)。
+    chain_count/ratio/label/ojama_sent_count/opp_coverage_status は統合後の
+    盤面ペアで再計算する (_build_fire_event に委譲、fi_idx/before_idx のみ
+    差し替え)。
+
+    Args:
+        opp_rec_full: opp_coverage_status 再計算用 (Step1追加、
+            _build_fire_event にそのまま委譲、省略時は UNKNOWN)。
     """
     if len(group) == 1:
         group[0].frag_count = 1
@@ -519,7 +677,7 @@ def _merge_fragment_group(
     merged_delta = SCORE_MISSING_SENTINEL if has_missing else sum(deltas)
     merged = _build_fire_event(
         rec, after_idx, merged_delta, sim, game_start_t, tier, video_stem,
-        before_idx=before_idx,
+        before_idx=before_idx, opp_rec_full=opp_rec_full,
     )
     merged.frag_count = len(group)
     return merged
@@ -539,6 +697,7 @@ def _defrag_events(
     game_start_t: float,
     tier: str,
     video_stem: str,
+    opp_rec_full: NpzRecord | None = None,
 ) -> list[FireEvent]:
     """raw_events (t_fire 昇順、同一 side) を de-frag ルールで畳み込む。
 
@@ -566,7 +725,9 @@ def _defrag_events(
         else:
             groups.append([ev])
     return [
-        _merge_fragment_group(grp, rec, sim, game_start_t, tier, video_stem)
+        _merge_fragment_group(
+            grp, rec, sim, game_start_t, tier, video_stem, opp_rec_full=opp_rec_full,
+        )
         for grp in groups
     ]
 
@@ -641,6 +802,12 @@ def _process_video(
 
     raw は de-frag 前 (旧ロジック相当、比較レポート専用)、
     de-frag 後の一覧に対してのみ応酬シーケンス付与 (_build_sequences) を行う。
+
+    opp_coverage_status 計算 (Step1追加) のため、相手側フレームは各サイド
+    処理に r1p/r2p (game_idx サブセット化前の全体) をそのまま opp_rec_full
+    として渡す。g1p/g2p (旧来の game_idx ラベルによるサブセット) はサイド間
+    でラベルがズレる既知バグがあるため (measure_ojama_landing_delay.py:
+    154-180 参照)、opp_coverage_status の実時刻ベース判定には使わない。
     """
     video_stem = npz_path.stem
     tier = TIER_MAP.get(video_stem, "不明")
@@ -663,13 +830,17 @@ def _process_video(
         g2p = _subset(r2p, m2)
         game_start_t = float(min(g1p.t_sec[0], g2p.t_sec[0]))
 
-        raw1 = _process_side_game(g1p, sim, game_start_t, tier, video_stem)
-        raw2 = _process_side_game(g2p, sim, game_start_t, tier, video_stem)
+        raw1 = _process_side_game(g1p, sim, game_start_t, tier, video_stem, opp_rec_full=r2p)
+        raw2 = _process_side_game(g2p, sim, game_start_t, tier, video_stem, opp_rec_full=r1p)
         all_raw.extend(raw1)
         all_raw.extend(raw2)
 
-        defrag1 = _defrag_events(raw1, g1p, sim, game_start_t, tier, video_stem)
-        defrag2 = _defrag_events(raw2, g2p, sim, game_start_t, tier, video_stem)
+        defrag1 = _defrag_events(
+            raw1, g1p, sim, game_start_t, tier, video_stem, opp_rec_full=r2p,
+        )
+        defrag2 = _defrag_events(
+            raw2, g2p, sim, game_start_t, tier, video_stem, opp_rec_full=r1p,
+        )
         game_events = sorted(defrag1 + defrag2, key=lambda e: e.t_fire)
         _annotate_next_opp_fire(game_events)
         seq_id = _build_sequences(game_events, seq_id)
