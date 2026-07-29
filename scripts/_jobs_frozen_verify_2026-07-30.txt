@@ -1,0 +1,4 @@
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c56.mp4 --out-npz data/indicators_v2/boards_lean_fixed_regen_2026-07-28/c56.npz --sample-interval 0.2 --max-sec 3800
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c60.mp4 --out-npz data/indicators_v2/boards_lean_fixed_regen_2026-07-28/c60.npz --sample-interval 0.2 --max-sec 3800
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c65.mp4 --out-npz data/indicators_v2/boards_lean_fixed_regen_2026-07-28/c65.npz --sample-interval 0.2 --max-sec 3800
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c75.mp4 --out-npz data/indicators_v2/boards_lean_fixed_regen_2026-07-28/c75.npz --sample-interval 0.2 --max-sec 3800
