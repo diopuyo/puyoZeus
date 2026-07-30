@@ -172,12 +172,16 @@ class ScoreOcr:
         min_confidence: float = NCC_MIN_CONFIDENCE,
         margin_min: float = NCC_MARGIN_MIN,
         avg_min_confidence: float = NCC_AVG_MIN_CONFIDENCE,
+        enable_matmul_ncc: bool = False,
     ) -> None:
         """Args:
             templates: 0-9 → テンプレ画像 (50x40 BGR or grayscale) の辞書。
                 未指定 (None) クラスは OCR で None 扱い。
             min_confidence: 各桁の NCC 最低スコア。これ未満なら None。
             margin_min: 1 位と 2 位のスコア差。これ未満なら曖昧と見て None。
+            enable_matmul_ncc: NCC を行列積 1 回で一括計算する高速経路を使う
+                (2026-07-30)。default False = 従来の matchTemplate ループ。
+                詳細は `_ncc_scores_matmul` の docstring 参照。
         """
         self._templates_gray: dict[int, np.ndarray] = {}
         # 数字部分のマスク (背景を NCC から除外して識別力を上げるため)
@@ -198,6 +202,10 @@ class ScoreOcr:
         self._min_confidence = float(min_confidence)
         self._margin_min = float(margin_min)
         self._avg_min_confidence = float(avg_min_confidence)
+        # 行列積 NCC (2026-07-30 高速化)。テンプレは不変なので正規化行列を
+        # 初回利用時に 1 度だけ作って使い回す。
+        self._enable_matmul_ncc: bool = bool(enable_matmul_ncc)
+        self._tpl_matrix: tuple[tuple[int, ...], np.ndarray] | None = None
         # 警告は 1 度だけ出す
         self._warned_missing = False
         if not self._templates_gray:
@@ -220,10 +228,16 @@ class ScoreOcr:
         min_confidence: float = NCC_MIN_CONFIDENCE,
         margin_min: float = NCC_MARGIN_MIN,
         avg_min_confidence: float = NCC_AVG_MIN_CONFIDENCE,
+        enable_matmul_ncc: bool = False,
     ) -> "ScoreOcr":
-        """models/ui_templates/score_digits/ から digit_N.png を読み込む。"""
+        """models/ui_templates/score_digits/ から digit_N.png を読み込む。
+
+        enable_matmul_ncc: NCC を行列積1回に束ねる高速経路 (2026-07-30)。
+        既定 OFF (float64 演算で cv2 の float32 と最大 5.5e-07 の差が出るため)。
+        """
         templates = cls._load_templates_from_dir(template_dir)
         return cls(
+            enable_matmul_ncc=enable_matmul_ncc,
             templates=templates,
             min_confidence=min_confidence,
             margin_min=margin_min,
@@ -388,10 +402,11 @@ class ScoreOcr:
         if gray.shape != (DIGIT_HEIGHT, DIGIT_WIDTH):
             gray = cv2.resize(gray, (DIGIT_WIDTH, DIGIT_HEIGHT),
                                interpolation=cv2.INTER_AREA)
-        scores: dict[int, float] = {}
-        for label, tpl in self._templates_gray.items():
-            res = cv2.matchTemplate(gray, tpl, cv2.TM_CCOEFF_NORMED)
-            scores[label] = float(res.max())
+        scores = (
+            self._ncc_scores_matmul(gray)
+            if self._enable_matmul_ncc
+            else self._ncc_scores_loop(gray)
+        )
         # 最大スコア
         sorted_scores = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
         best_label, best_score = sorted_scores[0]
@@ -414,6 +429,96 @@ class ScoreOcr:
                 return None, best_score
             return tiebreak, best_score
         return best_label, best_score
+
+    def _ncc_scores_loop(self, gray: np.ndarray) -> dict[int, float]:
+        """従来経路: テンプレごとに matchTemplate を呼んで NCC スコアを集める。
+
+        Args:
+            gray: (DIGIT_HEIGHT, DIGIT_WIDTH) のグレースケールセル。
+
+        Returns:
+            label -> NCC スコアの辞書。
+        """
+        return {
+            label: float(
+                cv2.matchTemplate(gray, tpl, cv2.TM_CCOEFF_NORMED).max(),
+            )
+            for label, tpl in self._templates_gray.items()
+        }
+
+    def _ncc_scores_matmul(self, gray: np.ndarray) -> dict[int, float]:
+        """高速経路: 行列積 1 回で全テンプレの NCC スコアを一括計算する。
+
+        原理:
+            同サイズ同士の TM_CCOEFF_NORMED は結果が 1x1 になり、値は
+            **2 つの配列の Pearson 相関**に等しい。相関は「平均を引いて
+            L2 正規化したベクトルの内積」なので、テンプレ側を前計算しておけば
+            (テンプレ数 x 画素数) 行列と (画素数) ベクトルの積 1 回で
+            全テンプレ分のスコアが同時に得られる。
+            テンプレも入力も __init__ / _classify_digit で
+            (DIGIT_HEIGHT, DIGIT_WIDTH) に揃えられるため、同サイズ条件は常に成立する。
+
+        実測 (scripts/_diag_score_ocr_matmul_bench_2026-07-30.py):
+            1セル分 (10テンプレ) が 1777us → 12.1us で **146倍速**。
+            1フレーム換算 28.43ms → 0.19ms。認識全体の 19.5% を占めていた処理。
+            torch CUDA は転送コストが支配的で 371us (numpy の 33倍遅い) だったため
+            **GPU は使わない**。
+
+        bit-identical にならない点:
+            cv2 は内部を float32 で計算するのに対しこちらは float64 のため、
+            スコアに最大 5.5e-07 程度の差が出る (実測)。ラベル決定は
+            16セル全件で一致したが、`_min_confidence` / `_margin_min` の
+            境界ぴったりでは判定が変わりうる。よって既定 OFF。
+
+        Args:
+            gray: (DIGIT_HEIGHT, DIGIT_WIDTH) のグレースケールセル。
+
+        Returns:
+            label -> NCC スコアの辞書。行列化できない構成では従来経路に fallback。
+        """
+        prepared = self._prepare_template_matrix()
+        if prepared is None:
+            return self._ncc_scores_loop(gray)
+        labels, tpl_mat = prepared
+        vec = gray.ravel().astype(np.float64)
+        vec -= vec.mean()
+        norm = float(np.linalg.norm(vec))
+        if norm == 0.0:
+            # 均一セル: 相関は定義できない。従来経路 (cv2) の挙動に委ねる。
+            return self._ncc_scores_loop(gray)
+        raw = tpl_mat @ (vec / norm)
+        return {int(label): float(raw[i]) for i, label in enumerate(labels)}
+
+    def _prepare_template_matrix(
+        self,
+    ) -> tuple[tuple[int, ...], np.ndarray] | None:
+        """テンプレを「平均引き + L2 正規化」した行列にして返す (初回のみ計算)。
+
+        Returns:
+            (label の順序, (テンプレ数 x 画素数) の正規化済み行列)。
+            テンプレ不在・サイズ不揃い・分散ゼロのテンプレがある場合は None
+            (呼び出し元が従来経路に fallback する)。
+        """
+        if self._tpl_matrix is not None:
+            return self._tpl_matrix
+        if not self._templates_gray:
+            return None
+        labels = tuple(self._templates_gray.keys())
+        shapes = {self._templates_gray[label].shape for label in labels}
+        if len(shapes) != 1:
+            # サイズ不揃い = matchTemplate がスライドする挙動になるので等価でない
+            return None
+        mat = np.stack(
+            [self._templates_gray[label].ravel().astype(np.float64) for label in labels],
+        )
+        mat -= mat.mean(axis=1, keepdims=True)
+        norms = np.linalg.norm(mat, axis=1, keepdims=True)
+        if not np.all(norms > 0.0):
+            # 均一テンプレ (分散ゼロ) があると相関が定義できない
+            return None
+        mat /= norms
+        self._tpl_matrix = (labels, mat)
+        return self._tpl_matrix
 
     def _tiebreak_by_mask_sad(
         self, gray: np.ndarray, label_a: int, label_b: int
