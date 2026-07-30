@@ -1113,9 +1113,15 @@ class RecognitionPipeline:
         initial_confirm_min_votes: int = (
             DEFAULT_INITIAL_CONFIRM_MIN_VOTES
         ),
-        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30)。
-        # 既定 OFF = 従来通り毎フレーム走査 = bit-identical。
-        enable_large_roi_throttle: bool = False,
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30、2026-07-31 既定ON)。
+        # 走査を飛ばすので原理的に bit-identical にならないが、試合終了時刻を
+        # またぐ窓での実測 (3動画 x 2イベント = 1800フレーム) で
+        # **試合終了検出のずれ 0フレーム・盤面差分 0/1800** を確認した。
+        # 遅延が伝播しないのは hard_match_off が score_zero_both との OR で、
+        # score_zero / MatchStateDetector は間引き対象外のため独立経路が
+        # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
+        # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        enable_large_roi_throttle: bool = True,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
         # merge の色→空 遷移について HSV が色を保持する cell を消さない。
@@ -2177,9 +2183,15 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
-        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30)。
-        # 既定 OFF = 従来通り毎フレーム走査 = bit-identical。
-        enable_large_roi_throttle: bool = False,
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30、2026-07-31 既定ON)。
+        # 走査を飛ばすので原理的に bit-identical にならないが、試合終了時刻を
+        # またぐ窓での実測 (3動画 x 2イベント = 1800フレーム) で
+        # **試合終了検出のずれ 0フレーム・盤面差分 0/1800** を確認した。
+        # 遅延が伝播しないのは hard_match_off が score_zero_both との OR で、
+        # score_zero / MatchStateDetector は間引き対象外のため独立経路が
+        # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
+        # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        enable_large_roi_throttle: bool = True,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
         # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P tail 悪化、c26/c69 の 1P
