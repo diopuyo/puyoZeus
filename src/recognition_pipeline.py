@@ -86,6 +86,20 @@ from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN
 # 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
 CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 
+
+class _ScoreValNotCached:
+    """`_check_formula_detected` の cached_score_val 未指定を表す sentinel。
+
+    修正1 (2026-07-30): スコア OCR 完全重複読み排除。
+    score_ocr.read_side() の戻り値 (int | None) には「OCR 成功」も
+    「OCR 失敗 (None)」も含まれるため、素の None をデフォルト値に
+    使うと「キャッシュ未指定」と「キャッシュ済で OCR 失敗だった」を
+    区別できない。専用 sentinel クラスで明確に分離する。
+    """
+
+
+_SCORE_VAL_NOT_CACHED = _ScoreValNotCached()
+
 # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (enable_chain_exit_next_signal 用)。
 # CHAIN_EXIT_NEXT_WARMUP_SEC: 案X 専用の warmup 凍結時間。
 # 機能C の CHAIN_EXIT_WARMUP_SEC=0.1s はエフェクト残光のみを吸収する最小設定だが、
@@ -168,7 +182,7 @@ from src.match_state import MatchState, MatchStateDetector
 from src.next_detector import NextDetector
 from src.online_hsv_calibrator import OnlineHsvCalibrator
 from src.score_zero import ScoreZeroDetector
-from src.telop_detector import TelopDetector
+from src.telop_detector import TelopDetector, TelopResult
 from src.next_slide_detector import (
     NextSlideDetector,
     SlideMotionResult,
@@ -1724,6 +1738,7 @@ class RecognitionPipeline:
         mask_ojama_logit: bool = False,
         use_puyo_gate: bool = False,
         patch_ncc_threshold: float | None = None,
+        ui_mask_cells: frozenset[tuple[int, int]] | None = None,
     ) -> ImageReader:
         """HybridClassifier (HSV + CNN) で ImageReader を組み立てる.
 
@@ -1737,6 +1752,10 @@ class RecognitionPipeline:
 
         vote_mode=True (cycle 71) で HSV 分類器を per-pixel 投票方式に切替.
         cnn_override_prob: None なら DEFAULT_CNN_OVERRIDE_PROB を使用.
+        ui_mask_cells: 案B (2026-07-30)。HybridClassifier.classify_batch の
+            UI マスク判定対象セルを限定する。None (既定) では従来通り
+            全セルで判定する (backwards compat、bit-identical)。
+            速度優先で有効化する場合は src.ui_mask.UI_MASK_TARGET_CELLS を渡す。
         """
         from src.hybrid_classifier import HybridClassifier
         from src.image_reader import ColorClassifier
@@ -1783,6 +1802,7 @@ class RecognitionPipeline:
             cnn_classifier=cnn, cnn_override_prob=eff_override,
             mask_ojama_logit=mask_ojama_logit,
             use_puyo_gate=use_puyo_gate,
+            ui_mask_cells=ui_mask_cells,
         )
         # use_telop_mask=True で中央テロップ被覆 cell を COLOR_UNKNOWN に倒す
         # (V3.1 機能、A 統合の一環で 2026-05-09 から有効化)
@@ -2077,6 +2097,11 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
+        # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
+        # user viz 承認前のため既定 None を維持 (feedback_human_review_at_steps)。
+        # 有効化する場合は src.ui_mask.UI_MASK_TARGET_CELLS を渡すこと。
+        ui_mask_cells: "frozenset[tuple[int, int]] | None" = None,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2113,6 +2138,7 @@ class RecognitionPipeline:
                 mask_ojama_logit=mask_ojama_logit,
                 use_puyo_gate=use_puyo_gate,
                 patch_ncc_threshold=patch_ncc_threshold,
+                ui_mask_cells=ui_mask_cells,
             )
         else:
             reader = ImageReader(
@@ -2534,14 +2560,20 @@ class RecognitionPipeline:
             if hard_match_off:
                 raw_active = False
         # Telop visible 状態を保存 (EffectPhaseDetector で利用)
+        # 修正2 (2026-07-30): is_visible(frame) は内部で detect(frame) を呼ぶだけの
+        # 薄いラッパーなので、detect() を直接呼んで結果全体 (bbox 込み) を保持する。
+        # これにより後段の self._reader.read_both_boards() へ telop_result として
+        # 引き渡し、ImageReader 側の 2 回目の detect() 実行 (二重走査) を省略できる。
+        # is_visible() だけ呼ぶ場合と挙動は bit-identical (同じ detect() 呼び出し)。
         self._last_telop_visible = False
+        self._last_telop_result: "TelopResult | None" = None
         if self._telop_detector is not None:
             try:
-                self._last_telop_visible = bool(
-                    self._telop_detector.is_visible(frame),
-                )
+                self._last_telop_result = self._telop_detector.detect(frame)
+                self._last_telop_visible = bool(self._last_telop_result.is_visible)
             except Exception:
                 self._last_telop_visible = False
+                self._last_telop_result = None
         # score-based 補強: ScoreOcr が 1 度でも score>0 を読めれば
         # 試合中確定 (試合外/メニュー画面では 8 桁数字は読めないか 0 のまま)。
         # MatchStateDetector の試合中誤判定 (= NOT_IN_MATCH 返却) を補正。
@@ -2667,6 +2699,9 @@ class RecognitionPipeline:
             frame,
             skip_tier1_1p=_skip_t1_1p,
             skip_tier1_2p=_skip_t1_2p,
+            # 修正2 (2026-07-30): 上で計算済の telop 検出結果を使い回す
+            # (ImageReader 側の detect() 二重走査を防ぐ)。
+            telop_result=self._last_telop_result,
         )
 
         # 背景 FP 自動採取 (Phase C-5: robust 化):
@@ -2893,8 +2928,15 @@ class RecognitionPipeline:
                 self._stash_and_clear_active_chain("2P")
 
         # 4. score 差分
-        score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
-        score_d_2p = self._update_score_tracker(self._score_tracker_2p, frame)
+        # 修正1 (2026-07-30): 生 score 値 (_score_ocr_val_Xp) も同時に受け取り、
+        # 機能D (_check_formula_detected) が同一 frame・同一 side のスコアを
+        # 再度フルで読み直す (score_ocr.read_side 完全重複呼び出し) のを防ぐ。
+        score_d_1p, _score_ocr_val_1p = self._update_score_tracker(
+            self._score_tracker_1p, frame,
+        )
+        score_d_2p, _score_ocr_val_2p = self._update_score_tracker(
+            self._score_tracker_2p, frame,
+        )
 
         # 追修 (2026-07-25): force_in_match=True 構成では is_match_active=False
         # 分岐 (MENU 強制、confirmed_board 等クリアの発火点) が一度も走らない
@@ -3018,11 +3060,16 @@ class RecognitionPipeline:
                 self._score_tracker_2p.last_score
                 if self._score_tracker_2p is not None else None
             )
+            # 修正1 (2026-07-30): 上の 4. で同一 frame・同一 side を既に
+            # score_ocr.read_side() 済のため、その結果 (_score_ocr_val_Xp)
+            # を渡して完全重複読み (経路①②) を排除する。
             _formula_1p = self._check_formula_detected(
                 frame, self._score_ocr, "1P", _last_1p,
+                cached_score_val=_score_ocr_val_1p,
             )
             _formula_2p = self._check_formula_detected(
                 frame, self._score_ocr, "2P", _last_2p,
+                cached_score_val=_score_ocr_val_2p,
             )
             # 連続カウンタ更新
             self._formula_consec_1p = (
@@ -3879,12 +3926,21 @@ class RecognitionPipeline:
     @staticmethod
     def _update_score_tracker(
         tracker: ScoreTracker | None, frame: np.ndarray,
-    ) -> int:
-        """tracker があれば update、戻り値 delta (>=0 のみ)。"""
+    ) -> tuple[int, int | None]:
+        """tracker があれば update。
+
+        戻り値は (delta (>=0 のみ), 今回 frame の生 score OCR 値)。
+        修正1 (2026-07-30): 生 score 値は機能D (_check_formula_detected) が
+        同一 frame・同一 side のスコア再読み取り (score_ocr.read_side) を
+        避けるためのキャッシュとして呼出元から渡される。
+        戻り値の tuple 化は private staticmethod (呼出元はこのファイル内の
+        2 箇所のみ) のため backwards compat 上の懸念はない。
+        """
         if tracker is None:
-            return 0
+            return 0, None
         d = tracker.update(frame)
-        return max(0, d.delta) if d.is_valid else 0
+        delta = max(0, d.delta) if d.is_valid else 0
+        return delta, d.cur_score
 
     def _apply_chain_score_early_fire(
         self,
@@ -3962,6 +4018,9 @@ class RecognitionPipeline:
         score_ocr: "ScoreOcr | None",
         side: str,
         last_score: "int | None",
+        cached_score_val: "int | None | _ScoreValNotCached" = (
+            _SCORE_VAL_NOT_CACHED
+        ),
     ) -> bool:
         """機能D: 掛け算式表示を stateless に判定する。
 
@@ -3975,6 +4034,13 @@ class RecognitionPipeline:
             score_ocr: ScoreOcr インスタンス。None なら常に False。
             side: "1P" or "2P"
             last_score: 直前に読めた score 値。None または 0 なら試合外とみなす。
+            cached_score_val: 修正1 (2026-07-30)。呼出元 (ScoreTracker.update
+                経由の _update_score_tracker) が同一 frame・同一 side で既に
+                score_ocr.read_side() を実行済の場合、その戻り値 (int | None)
+                をここに渡すと本メソッド内部での再読み取りを省略する。
+                既定値 _SCORE_VAL_NOT_CACHED (未指定) では従来通り
+                score_ocr.read_side() をここで実行する
+                (backwards compat、bit-identical)。
 
         Returns:
             True = 掛け算式検知条件成立。
@@ -3989,7 +4055,10 @@ class RecognitionPipeline:
         f = _ensure_1080p(frame)
         if f is None:
             return False
-        score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
+        if cached_score_val is not _SCORE_VAL_NOT_CACHED:
+            score_val = cached_score_val
+        else:
+            score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
         if score_val is not None:
             return False  # OCR 成功 = 通常スコア表示
         roi = _crop_score_roi(f, side)  # type: ignore[arg-type]

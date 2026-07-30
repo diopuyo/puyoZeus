@@ -1200,16 +1200,25 @@ class ImageReader:
 
         # 2nd pass: バッチ classify (HybridClassifier で 5-20x 高速化)
         # cycle 34: bg_distance を classify_batch に渡して CNN logit soft prior
+        # 案B (2026-07-30): (row, col) も渡し、UI マスク判定対象セル限定を可能にする
+        # (HybridClassifier 側で ui_mask_cells 未指定なら無効化され従来通り)。
         if has_batch_api and cells_to_classify:
             patches = [p for _, _, p, _, _ in cells_to_classify]
             distances = [d for _, _, _, d, _ in cells_to_classify]
+            positions = [(row, col) for row, col, _, _, _ in cells_to_classify]
             try:
                 colors = self._classifier.classify_batch(
-                    patches, bg_distances=distances,
+                    patches, bg_distances=distances, cell_positions=positions,
                 )
             except TypeError:
-                # backwards compat: 古い classify_batch は bg_distances 未対応
-                colors = self._classifier.classify_batch(patches)
+                # backwards compat: 古い classify_batch は cell_positions 未対応
+                try:
+                    colors = self._classifier.classify_batch(
+                        patches, bg_distances=distances,
+                    )
+                except TypeError:
+                    # さらに古い classify_batch は bg_distances も未対応
+                    colors = self._classifier.classify_batch(patches)
             for (row, col, patch, _, hsv_p), color in zip(
                 cells_to_classify, colors,
             ):
@@ -1342,6 +1351,7 @@ class ImageReader:
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
         skip_tier1_1p: bool = False,
         skip_tier1_2p: bool = False,
+        telop_result: "TelopResult | None" = None,
     ) -> tuple[Board, Board]:
         """
         フレームから1P・2P両方の盤面を読み取る。
@@ -1354,6 +1364,12 @@ class ImageReader:
             p2_roi_offset: 2P 盤面の ROI 補正シフト (dx, dy) px。
             skip_tier1_1p: True のとき 1P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
             skip_tier1_2p: True のとき 2P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
+            telop_result: 呼出元 (RecognitionPipeline) が同一 frame に対して
+                既に計算済の TelopDetector.detect() 結果。指定すると本メソッド
+                内部の self._telop_detector.detect(frame) 再実行 (二重走査) を
+                省略してこの結果をそのまま使う。None (既定) では従来通り
+                内部で detect() を実行する (backwards compat、bit-identical)。
+                修正2 (2026-07-30): テロップ検出の重複排除。
 
         Returns:
             tuple[Board, Board]: (1P盤面, 2P盤面) のタプル。
@@ -1372,8 +1388,13 @@ class ImageReader:
             if state.state != MatchState.IN_MATCH:
                 return Board(), Board()
         # V3.1: テロップ検出 (フレーム単位で 1 度。read_board が cached bbox を使う)
+        # 修正2 (2026-07-30): telop_result が渡されていればそれを使い、
+        # 未指定 (None) なら従来通り自前で detect() する (backwards compat)。
         if self._telop_detector is not None:
-            telop_res = self._telop_detector.detect(frame)
+            telop_res = (
+                telop_result if telop_result is not None
+                else self._telop_detector.detect(frame)
+            )
             self._cached_telop_bbox = telop_res.bbox if telop_res.is_visible else None
         else:
             self._cached_telop_bbox = None
