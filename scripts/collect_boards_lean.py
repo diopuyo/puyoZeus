@@ -3,12 +3,16 @@
 collect_indicators_v2 の重い処理(全指標計算・お邪魔会計・ojama_disruption 等)を
 省略し、confirmed_board グリッドと勝敗 won ラベルのみを蓄積する。
 
-## 省略する処理
+## 省略する処理 (既定)
 - 全指標計算 (indicators_v2 モジュール呼び出しなし)
 - お邪魔会計 (OjamaAccountingTracker 不使用)
 - ojama_disruption (モンテカルロ計算なし)
 - NextDetector (load_next_detector=False。--with-next 指定時のみ有効化)
-- VideoChainTracker (enable_chain_tracker=False)
+- VideoChainTracker (enable_chain_tracker=False。--enable-chain-tracker 指定時のみ有効化。
+  2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が実運用で 0 件
+  だった実測があり、CHAIN 中の盤面凍結が機能しない欠陥の疑いがあるため、
+  基準データ収集ではこのフラグを明示指定して VideoChainTracker を有効化する。
+  省略時は従来通り無効 (後方互換、既存 boards_lean_fixed 系 npz の再現性維持))
 
 ## 出力 npz 形式
 collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
@@ -399,6 +403,7 @@ def collect_lean(
     sample_interval_sec: float = 0.0,
     capture_next: bool = False,
     sample_interval_frames: Optional[int] = None,
+    enable_chain_tracker: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -420,6 +425,16 @@ def collect_lean(
             sample_interval_sec より優先される (2026-07-28 追加)。
             省略時 (None) は sample_interval_sec の従来挙動を完全維持する
             (後方互換)。実際に使われた間引き幅は標準出力にログされる。
+        enable_chain_tracker: True で VideoChainTracker (1P/2P) を有効化する。
+            既定 False = 従来挙動 (無効、後方互換、既存 boards_lean_fixed 系
+            npz の再現性を維持する)。
+            2026-07-30 追記: 機能D (掛け算式検知, enable_chain_formula_detection)
+            のみでは実運用で CHAIN 検知が 0 件だった実測 (chain_trigger_sec
+            非NaN率 0.0%) があり、CHAIN 期間中に盤面が凍結されず消去途中の
+            盤面が STABLE 扱いされる欠陥の疑いがある。VideoChainTracker は
+            visualize_advantage_overlay.py / collect_indicators_v2.py の
+            本番経路で既定 True (実績あり) のため、基準データ収集ではこちらを
+            有効化する。
 
     Returns:
         蓄積した snapshot 数。
@@ -456,12 +471,14 @@ def collect_lean(
         f"sample_interval_frames_arg={sample_interval_frames})"
     )
 
-    # NextDetector / ChainTracker を OFF にして高速化
+    # NextDetector / ChainTracker は既定 OFF で高速化
     # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
+    # (enable_chain_tracker=True の場合のみ VideoChainTracker を有効化、
+    #  2026-07-30 基準データ収集で CHAIN 期間中の盤面凍結を機能させるため追加)
     pipeline = RecognitionPipeline.load_default(
         stable_frame_count=3,
         load_score_ocr=True,
-        enable_chain_tracker=False,
+        enable_chain_tracker=enable_chain_tracker,
         temporal_smoothing=1,
         load_next_detector=capture_next,
         force_in_match=True,
@@ -613,6 +630,15 @@ def main() -> int:
             "実値で記録する (指標①本命版検証用)。既定は無効 (-1 埋め、後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-chain-tracker", action="store_true", dest="enable_chain_tracker",
+        help=(
+            "VideoChainTracker (1P/2P) を有効化する。既定は無効 (後方互換、"
+            "既存 boards_lean_fixed 系 npz の再現性維持)。"
+            "2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が"
+            "実運用で 0 件だった実測があり、基準データ収集ではこちらを有効化する。"
+        ),
+    )
     args = parser.parse_args()
     n = collect_lean(
         args.video, args.out_npz,
@@ -621,6 +647,7 @@ def main() -> int:
         sample_interval_sec=args.sample_interval,
         capture_next=args.with_next,
         sample_interval_frames=args.sample_interval_frames,
+        enable_chain_tracker=args.enable_chain_tracker,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
