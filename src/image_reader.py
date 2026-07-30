@@ -250,6 +250,34 @@ DEFAULT_COLOR_RANGES: dict[int, list[HsvRange]] = {
 # 色分類器
 # ============================
 
+def _median_fast(a: np.ndarray) -> float:
+    """1D 配列の median を np.median と同値で高速に計算する。
+
+    高速化 (2026-07-30): セル単位 HSV 分類は 1 フレームあたり 584 回ずつ
+    H/S の median を取っており、実測 30.8ms/frame (認識全体の 11.9%) を占めていた。
+    実測でパッチサイズ 16x16〜32x32 では np.partition が np.median の 2〜4 倍速い
+    (`scripts/_diag_median_overhead_2026-07-30.py`)。一方セル横断のまとめ計算は
+    32x32 で削減 1.3% しかなく無効だったため、関数内部の置き換えを採用した。
+
+    np.median 自身も内部で partition + 中央 2 値の平均を行うため **返り値は完全同一**。
+    (偶数長は中央 2 値の float64 平均、奇数長は中央値そのもの)
+
+    Args:
+        a: 1D numpy 配列 (uint8 / int16 等の整数型を想定)。
+
+    Returns:
+        median 値 (float)。空配列では nan (np.median と同じ)。
+    """
+    n = a.size
+    if n == 0:
+        return float("nan")
+    k = n // 2
+    if n % 2:
+        return float(np.partition(a, k)[k])
+    part = np.partition(a, (k - 1, k))
+    return (float(part[k - 1]) + float(part[k])) / 2.0
+
+
 class ColorClassifier:
     """
     BGR画像パッチからぷよの色を分類する。
@@ -321,30 +349,33 @@ class ColorClassifier:
         Returns:
             安定化後の H median 値 (int, 0–180)。
         """
-        h_flat = h_channel.ravel().astype(np.int16)
+        # 高速化 (2026-07-30): int16 への astype を「補正を実際に適用する分岐」まで遅延させる。
+        # ravel() は非連続 view (hsv[:, :, 0]) なのでここで uint8 の複製が 1 回だけ起きる。
+        # 旧実装は毎回 int16 複製 (2 倍のメモリ帯域) を作っていた。
+        h_flat = np.asarray(h_channel).ravel()
         if not self._enable_red_hue_wrap_fix:
-            return int(np.median(h_flat))
+            return int(_median_fast(h_flat))
         # 2 峰ケース判定: LOW 側 (H < 30) と HIGH 側 (H >= 閾値) の両方が存在するか。
         # 紫 (H=130-165) や高 H 単峰の場合は両条件を満たさないため補正対象外。
         # RED_HUE_WRAP_THRESHOLD (=140) 未満の範囲が赤の低端 (0-30) と紫 (70-165) を分ける。
         # 赤 2 峰 = LOW 比率 >= 15% かつ HIGH 比率 >= 15% の共存ケース。
         RED_HUE_LOW_MAX: int = 30  # 赤低端の上限 H 値
-        n_total = max(1, len(h_flat))
-        low_ratio = float(np.sum(h_flat <= RED_HUE_LOW_MAX)) / n_total
-        high_ratio = float(np.sum(h_flat >= RED_HUE_WRAP_THRESHOLD)) / n_total
-        if low_ratio >= 0.15 and high_ratio >= 0.15:
-            # 赤 2 峰確定: 折り返し補正を適用
-            h_wrapped = np.where(
-                h_flat >= RED_HUE_WRAP_THRESHOLD,
-                h_flat - 180,
-                h_flat,
-            )
-            med_wrapped = float(np.median(h_wrapped))
-            if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
-                # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
-                return int(max(0, med_wrapped))
+        n_total = max(1, h_flat.size)
+        low_ratio = float(np.count_nonzero(h_flat <= RED_HUE_LOW_MAX)) / n_total
+        # 高速化: LOW 側が不足なら HIGH 側を数えるまでもなく補正対象外 (早期打ち切り)。
+        if low_ratio >= 0.15:
+            high_mask = h_flat >= RED_HUE_WRAP_THRESHOLD
+            high_ratio = float(np.count_nonzero(high_mask)) / n_total
+            if high_ratio >= 0.15:
+                # 赤 2 峰確定: 折り返し補正を適用 (ここでのみ int16 が必要)
+                h_wrapped = h_flat.astype(np.int16)
+                h_wrapped[high_mask] -= 180
+                med_wrapped = float(_median_fast(h_wrapped))
+                if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
+                    # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
+                    return int(max(0, med_wrapped))
         # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
-        return int(np.median(h_flat))
+        return int(_median_fast(h_flat))
 
     def _compute_specular_robust_s(self, s_channel: np.ndarray, v_channel: np.ndarray) -> int:
         """光沢ハイライト画素を除外した彩度 median を計算する (案D)。
@@ -365,19 +396,32 @@ class ColorClassifier:
         Returns:
             彩度 median 値 (int, 0–255)。
         """
-        s_flat = s_channel.ravel().astype(np.int32)
+        # 高速化 (2026-07-30): int32 への astype を廃止 (uint8 のままで median 値は同一)。
+        # 有効画素の materialize も「実際に除外がある」場合まで遅延させる。
+        s_flat = np.asarray(s_channel).ravel()
         if not self._enable_specular_robust_saturation:
             # OFF 時: 従来の全画素 median と完全同一
-            return int(np.median(s_flat))
-        v_flat = v_channel.ravel().astype(np.int32)
-        n_total = max(1, len(s_flat))
+            return int(_median_fast(s_flat))
+        v_flat = np.asarray(v_channel).ravel()
+        n_total = max(1, s_flat.size)
         # ハイライト画素マスク: 明るく(V高)かつ白っぽい(S低)画素
         specular_mask = (v_flat >= SPECULAR_V_MIN) & (s_flat <= SPECULAR_S_MAX)
-        valid_s = s_flat[~specular_mask]
+        n_specular = int(np.count_nonzero(specular_mask))
         # 有効画素が最小比率を下回る場合は fallback (全面ハイライト等の異常)
-        if len(valid_s) < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
-            return int(np.median(s_flat))
-        return int(np.median(valid_s))
+        if s_flat.size - n_specular < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
+            return int(_median_fast(s_flat))
+        if n_specular == 0 or n_specular == s_flat.size:
+            # n_specular == 0        : 除外画素なし → 複製を作らず全画素 median (同値)
+            # n_specular == size     : 全画素ハイライト → 全画素 median
+            #
+            # 後者は既存の潜在クラッシュへのガード (2026-07-30)。
+            # 5 画素未満のパッチでは int(n_total * SPECULAR_FALLBACK_MIN_RATIO) == 0 と
+            # なり上の fallback 判定 (0 < 0) をすり抜けるため、旧実装は空配列の
+            # median = nan を int() して ValueError で落ちていた (実測確認済み)。
+            # 「全面ハイライト等の異常なら全画素 median」という fallback の意図に沿わせる。
+            # 旧実装が例外だった入力しか変えないので回帰にはならない。
+            return int(_median_fast(s_flat))
+        return int(_median_fast(s_flat[~specular_mask]))
 
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
@@ -403,7 +447,7 @@ class ColorClassifier:
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
         s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
-        v = int(np.median(hsv_patch[:, :, 2]))
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
 
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY
@@ -475,7 +519,7 @@ class ColorClassifier:
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
         s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
-        v = int(np.median(hsv_patch[:, :, 2]))
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY
         scale = self._s_min_scale
