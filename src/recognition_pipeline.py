@@ -39,6 +39,7 @@ from src.board_state_machine import (
     DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
     NON_STABLE_STATES,
+    STABLE_RECOVERY_ADD_MIN_FRAMES,
     StateContext,
 )
 
@@ -1099,14 +1100,22 @@ class RecognitionPipeline:
         initial_confirm_min_votes: int = (
             DEFAULT_INITIAL_CONFIRM_MIN_VOTES
         ),
-        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用): True で
-        # NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を
-        # 保持する cell を消さない。光沢→空 の単一フレーム CNN 誤読が
-        # 無投票消去され gravity filter で上のぷよまで連鎖消去される列
-        # デッドロック (c34 1P col=1, frame 14332 実測) を根で止める。
+        # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
+        # merge の色→空 遷移について HSV が色を保持する cell を消さない。
+        # 光沢→空 の単一フレーム CNN 誤読が無投票消去され gravity filter で
+        # 上のぷよまで連鎖消去される列デッドロック (c34 1P col=1, frame 14332
+        # 実測) を根で止める。ただし 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P は
+        # tail 悪化、c26/c69 の 1P は効果ゼロ、8フレーム達成率は OFF/ON 不変と判明
+        # (data/verify/placement_confirm_frames_generalization_2026-07-30)。
+        # 汎化未確認のため default OFF。True で有効化 (backwards compat)。
+        enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用): True で
+        # 方向1 (空→色) のみ recovery_add_min_frames (既定 4) で復旧させ、
+        # 方向2/3 (色→空/色→色) は 8 frame 維持。「誤認が治るまでのラグ」短縮用。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_puyo_to_empty_hsv_guard: bool = False,
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1487,6 +1496,12 @@ class RecognitionPipeline:
         self._enable_puyo_to_empty_hsv_guard: bool = bool(
             enable_puyo_to_empty_hsv_guard
         )
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30): _build_state_machine
+        # 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_asymmetric_recovery_min_frames: bool = bool(
+            enable_asymmetric_recovery_min_frames
+        )
+        self._recovery_add_min_frames: int = int(recovery_add_min_frames)
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1537,6 +1552,10 @@ class RecognitionPipeline:
             enable_puyo_to_empty_hsv_guard=(
                 self._enable_puyo_to_empty_hsv_guard
             ),
+            enable_asymmetric_recovery_min_frames=(
+                self._enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=self._recovery_add_min_frames,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1559,6 +1578,10 @@ class RecognitionPipeline:
             enable_puyo_to_empty_hsv_guard=(
                 self._enable_puyo_to_empty_hsv_guard
             ),
+            enable_asymmetric_recovery_min_frames=(
+                self._enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=self._recovery_add_min_frames,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1888,10 +1911,14 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_initial_confirm_vote: bool = False,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
-        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用)。
-        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
-        # user 承認前の savepoint 実装のため default OFF 固定。
+        # 色→空 HSV 照合ガード (2026-07-30)。c34 型の列デッドロックには有効だが
+        # 4動画測定で c58/c26 の 2P tail 悪化・c26/c69 の 1P 効果ゼロ、汎化未確認の
+        # ため default OFF。True で有効化 (backwards compat)。
         enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1960,6 +1987,10 @@ class RecognitionPipeline:
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
             enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+            enable_asymmetric_recovery_min_frames=(
+                enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=recovery_add_min_frames,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2121,10 +2152,16 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
-        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用)。
+        # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
+        # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P tail 悪化、c26/c69 の 1P
+        # 効果ゼロ、8フレーム達成率は OFF/ON 不変と判明。汎化未確認のため
+        # default OFF。True で有効化 (backwards compat)。
+        enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
-        enable_puyo_to_empty_hsv_guard: bool = False,
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # user viz 承認前のため既定 None を維持 (feedback_human_review_at_steps)。
@@ -2316,6 +2353,10 @@ class RecognitionPipeline:
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
             enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+            enable_asymmetric_recovery_min_frames=(
+                enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=recovery_add_min_frames,
         )
 
     # ------------------------------------------------------------------
