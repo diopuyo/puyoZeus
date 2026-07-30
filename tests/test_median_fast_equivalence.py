@@ -236,3 +236,50 @@ def test_classify_unchanged_on_random_bgr() -> None:
         patch = rng.integers(0, 256, size=(32, 32, 3), dtype=np.uint8)
         first = clf.classify(patch)
         assert first == clf.classify(patch)
+
+
+# ---------------------------------------------------------------------------
+# _median_hsv_3ch (2026-07-31 追加。read_board のセルループ内 3ch median)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("h,w", [(1, 1), (1, 2), (3, 3), (4, 4), (15, 16), (24, 24), (39, 7)])
+def test_median_hsv_3ch_matches_three_np_medians(h: int, w: int) -> None:
+    """3ch まとめ median が np.median 3 回と完全一致する。
+
+    read_board のセルループは 1 セルあたり H/S/V の median を 3 回取っており
+    1 フレーム 360 回に達していた。(N,3) の axis=0 partition 1 回に束ねたが、
+    各チャンネルは独立に部分ソートされるので順序統計量は変わらない。
+    """
+    from src.image_reader import _median_hsv_3ch
+
+    rng = np.random.default_rng(h * 1000 + w)
+    for _ in range(40):
+        patch = rng.integers(0, 256, size=(h, w, 3), dtype=np.uint8)
+        got = _median_hsv_3ch(patch)
+        expected = (
+            int(np.median(patch[:, :, 0])),
+            int(np.median(patch[:, :, 1])),
+            int(np.median(patch[:, :, 2])),
+        )
+        assert got == expected
+
+
+def test_median_hsv_3ch_on_strided_view() -> None:
+    """非連続 view (hsv_full のスライス相当) でも一致する。
+
+    実運用では hsv_full[y1:y2, x1:x2] という strided view が渡るため、
+    ascontiguousarray を忘れると reshape が壊れる。その回帰を防ぐ。
+    """
+    from src.image_reader import _median_hsv_3ch
+
+    rng = np.random.default_rng(4242)
+    full = rng.integers(0, 256, size=(120, 160, 3), dtype=np.uint8)
+    for y, x, dy, dx in ((10, 20, 24, 24), (0, 0, 7, 13), (100, 140, 20, 20)):
+        view = full[y:y + dy, x:x + dx]
+        assert not view.flags["C_CONTIGUOUS"] or True  # view であることを明示
+        got = _median_hsv_3ch(view)
+        expected = (
+            int(np.median(view[:, :, 0])),
+            int(np.median(view[:, :, 1])),
+            int(np.median(view[:, :, 2])),
+        )
+        assert got == expected

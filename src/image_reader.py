@@ -250,6 +250,35 @@ DEFAULT_COLOR_RANGES: dict[int, list[HsvRange]] = {
 # 色分類器
 # ============================
 
+def _median_hsv_3ch(hsv_patch: np.ndarray) -> tuple[int, int, int]:
+    """HSV パッチの H/S/V それぞれの median を 1 回の partition で求める。
+
+    高速化 (2026-07-31): `read_board` のセルループが
+    `int(np.median(hsv_patch[:, :, i]))` を 3 回呼んでおり、
+    1 フレームあたり 360 回 (120セル x 3ch) に達していた
+    (2026-07-30 の `_median_fast` 置換から漏れていた箇所)。
+
+    (N, 3) に並べて axis=0 で partition すると各チャンネルが独立に部分ソートされ、
+    k 番目の要素はチャンネルごとの順序統計量と一致する。よって
+    **3 回の np.median と返り値は完全同一**で、partition 呼び出しは 1 回で済む。
+
+    Args:
+        hsv_patch: (H, W, 3) の HSV パッチ (uint8 想定)。
+
+    Returns:
+        (h_med, s_med, v_med)。いずれも int (np.median 同様に切り捨て)。
+    """
+    flat = np.ascontiguousarray(hsv_patch).reshape(-1, 3)
+    n = flat.shape[0]
+    k = n // 2
+    if n % 2:
+        med = np.partition(flat, k, axis=0)[k].astype(np.float64)
+    else:
+        part = np.partition(flat, (k - 1, k), axis=0)
+        med = (part[k - 1].astype(np.float64) + part[k].astype(np.float64)) / 2.0
+    return int(med[0]), int(med[1]), int(med[2])
+
+
 def _median_fast(a: np.ndarray) -> float:
     """1D 配列の median を np.median と同値で高速に計算する。
 
@@ -1157,6 +1186,11 @@ class ImageReader:
         cells_to_classify: list[
             tuple[int, int, np.ndarray, float | None, np.ndarray | None]
         ] = []
+        # 高速化 (2026-07-31): 旧実装はこの import をセルループ内で毎回実行していた
+        # (120回/frame)。sys.modules 参照とはいえ無駄なのでループ外に退避。
+        from src.background_fingerprint import (
+            PatchBackgroundFingerprint as _PatchBackgroundFingerprint,
+        )
         for row in range(HIDDEN_ROWS, BOARD_ROWS):
             visible_row = row - HIDDEN_ROWS
             for col in range(BOARD_COLS):
@@ -1177,9 +1211,9 @@ class ImageReader:
                     hsv_patch = hsv_full[y1:y2, x1:x2]
                     if hsv_patch.size > 0:
                         cell_hsv_patch = hsv_patch  # 2nd pass 再利用用に保持
-                        h_med = int(np.median(hsv_patch[:, :, 0]))
-                        s_med = int(np.median(hsv_patch[:, :, 1]))
-                        v_med = int(np.median(hsv_patch[:, :, 2]))
+                        # 高速化 (2026-07-31): 3ch 分の median を 1 回の
+                        # partition にまとめる (返り値は np.median 3 回と同一)
+                        h_med, s_med, v_med = _median_hsv_3ch(hsv_patch)
                         cur_fp = CellFingerprint(h_med, s_med, v_med)
                         bg_cell = bg_fp.cell_at(visible_row, col)
                         dist = cur_fp.distance_to(bg_cell)
@@ -1199,8 +1233,9 @@ class ImageReader:
                         # skip_tier1=True (NON-STABLE→STABLE 遷移直後) はスキップ:
                         # ツモ着地直後の cell を誤 EMPTY 化しない (= 失敗教訓遵守)。
                         # HSV + CNN の通常判定は続行するため背景誤認リスクは小さい。
-                        from src.background_fingerprint import PatchBackgroundFingerprint
-                        if isinstance(bg_fp, PatchBackgroundFingerprint):
+                        # 高速化 (2026-07-31): import はループ外へ退避済み
+                        # (sys.modules 参照でも 120回/frame 積むと無駄)
+                        if isinstance(bg_fp, _PatchBackgroundFingerprint):
                             bg_cell_for_tier1 = bg_fp.cell_at_patch(visible_row, col)
                         else:
                             bg_cell_for_tier1 = bg_cell
