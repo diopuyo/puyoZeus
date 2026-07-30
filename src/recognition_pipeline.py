@@ -87,6 +87,18 @@ from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN
 # 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
 CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 
+# 大 ROI 走査 (MatchEndDetector 800x600 / TelopDetector 720x400) の間引き間隔。
+# 2026-07-30 プロファイル実測: match_end 4.9ms x 2回/フレーム、telop 2.6ms x 2回/フレーム
+# = 合計約15ms/フレームで、認識時間の約12%を占める。
+# どちらも「勝敗演出」「全消しテロップ」という数秒間持続する事象の検出であり、
+# 毎フレーム走査する必要がない (ゲートは一切無く無条件実行されていた)。
+#
+# リスク (有界): match_end の検出が遅れると lockdown (盤面凍結) の開始が遅れる。
+# ただし MatchEndDetector の lockdown_sec=5.0 に対し遅延は最大 THROTTLE_FRAMES 分なので
+# 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
+# bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
+LARGE_ROI_THROTTLE_FRAMES: int = 4
+
 
 class _ScoreValNotCached:
     """`_check_formula_detected` の cached_score_val 未指定を表す sentinel。
@@ -1100,6 +1112,10 @@ class RecognitionPipeline:
         initial_confirm_min_votes: int = (
             DEFAULT_INITIAL_CONFIRM_MIN_VOTES
         ),
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30)。
+        # 既定 OFF = 従来通り毎フレーム走査 = bit-identical。
+        enable_large_roi_throttle: bool = False,
+        large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
         # merge の色→空 遷移について HSV が色を保持する cell を消さない。
         # 光沢→空 の単一フレーム CNN 誤読が無投票消去され gravity filter で
@@ -1491,6 +1507,14 @@ class RecognitionPipeline:
             enable_initial_confirm_vote
         )
         self._initial_confirm_min_votes: int = int(initial_confirm_min_votes)
+        # 大 ROI 走査 (match_end 800x600 / telop 720x400) の間引き (2026-07-30)。
+        # 既定 OFF = 従来通り毎フレーム走査で bit-identical。
+        self._enable_large_roi_throttle: bool = bool(enable_large_roi_throttle)
+        self._large_roi_throttle_frames: int = int(large_roi_throttle_frames)
+        # 間引き時に流用する前回結果 (従来は update() 内で毎フレーム初期化していた)
+        self._last_match_end_locked: bool = False
+        self._last_telop_visible: bool = False
+        self._last_telop_result: "TelopResult | None" = None
         # 色→空 HSV 照合ガード (2026-07-30): _build_state_machine 呼び出し前に
         # 格納が必要 (引数として渡すため)。
         self._enable_puyo_to_empty_hsv_guard: bool = bool(
@@ -2152,6 +2176,10 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30)。
+        # 既定 OFF = 従来通り毎フレーム走査 = bit-identical。
+        enable_large_roi_throttle: bool = False,
+        large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
         # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P tail 悪化、c26/c69 の 1P
         # 効果ゼロ、8フレーム達成率は OFF/ON 不変と判明。汎化未確認のため
@@ -2352,6 +2380,8 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_large_roi_throttle=enable_large_roi_throttle,
+            large_roi_throttle_frames=large_roi_throttle_frames,
             enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
             enable_asymmetric_recovery_min_frames=(
                 enable_asymmetric_recovery_min_frames
@@ -2373,6 +2403,20 @@ class RecognitionPipeline:
             video_id: 動画 ID (例: "v29")。None でリセット。
         """
         self._video_id = video_id
+
+    def _should_run_large_roi_scan(self, frame_idx: int) -> bool:
+        """大 ROI 走査 (match_end / telop) をこのフレームで実行すべきか。
+
+        間引きが無効 (既定) なら常に True = 従来通り毎フレーム実行 (bit-identical)。
+        有効時は LARGE_ROI_THROTTLE_FRAMES に 1 回だけ True を返す。
+
+        Args:
+            frame_idx: 動画全体での絶対フレーム番号。
+        """
+        if not self._enable_large_roi_throttle:
+            return True
+        interval = max(1, self._large_roi_throttle_frames)
+        return (frame_idx % interval) == 0
 
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
@@ -2557,6 +2601,7 @@ class RecognitionPipeline:
         #   recognition 凍結
         # - telop (中央テロップ) → 視覚的占有を後段で活用 (将来 cell mask)
         score_zero_both = False
+        # 大 ROI 走査の間引き判定に使う (下の match_end / telop で参照)
         if self._score_zero_detector is not None:
             try:
                 sz = self._score_zero_detector.detect(frame)
@@ -2565,12 +2610,19 @@ class RecognitionPipeline:
                 pass
         match_end_locked = False
         if self._match_end_detector is not None:
-            try:
-                match_end_locked = bool(
-                    self._match_end_detector.update(frame, time_sec),
-                )
-            except Exception:
-                pass
+            # 大 ROI 走査 (800x600) の間引き: 有効時は LARGE_ROI_THROTTLE_FRAMES に
+            # 1 回だけ実行し、間のフレームは前回結果を流用する。
+            # 既定 OFF (フラグ無効時は従来通り毎フレーム実行 = bit-identical)。
+            if self._should_run_large_roi_scan(frame_idx):
+                try:
+                    match_end_locked = bool(
+                        self._match_end_detector.update(frame, time_sec),
+                    )
+                    self._last_match_end_locked = match_end_locked
+                except Exception:
+                    pass
+            else:
+                match_end_locked = self._last_match_end_locked
         # cycle 71f (提案 A): score 動き情報を追跡 (= 試合 2 開始直後の演出で
         # MatchStateDetector / MatchEndDetector が「試合外」 と判定しても、
         # score が継続的に動いていれば「試合中」 と判定する確実な信号).
@@ -2635,15 +2687,22 @@ class RecognitionPipeline:
         # これにより後段の self._reader.read_both_boards() へ telop_result として
         # 引き渡し、ImageReader 側の 2 回目の detect() 実行 (二重走査) を省略できる。
         # is_visible() だけ呼ぶ場合と挙動は bit-identical (同じ detect() 呼び出し)。
-        self._last_telop_visible = False
-        self._last_telop_result: "TelopResult | None" = None
         if self._telop_detector is not None:
-            try:
-                self._last_telop_result = self._telop_detector.detect(frame)
-                self._last_telop_visible = bool(self._last_telop_result.is_visible)
-            except Exception:
-                self._last_telop_visible = False
-                self._last_telop_result = None
+            # 大 ROI 走査 (720x400) の間引き: match_end と同じ方針。
+            # 既定 OFF では毎フレーム実行され従来と bit-identical。
+            if self._should_run_large_roi_scan(frame_idx):
+                try:
+                    self._last_telop_result = self._telop_detector.detect(frame)
+                    self._last_telop_visible = bool(
+                        self._last_telop_result.is_visible,
+                    )
+                except Exception:
+                    self._last_telop_visible = False
+                    self._last_telop_result = None
+            # else: 前回の _last_telop_result / _last_telop_visible をそのまま流用
+        else:
+            self._last_telop_visible = False
+            self._last_telop_result = None
         # score-based 補強: ScoreOcr が 1 度でも score>0 を読めれば
         # 試合中確定 (試合外/メニュー画面では 8 桁数字は読めないか 0 のまま)。
         # MatchStateDetector の試合中誤判定 (= NOT_IN_MATCH 返却) を補正。
