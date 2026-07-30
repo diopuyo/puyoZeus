@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
+import cv2
 import numpy as np
 import pytest
 
@@ -22,6 +24,7 @@ from src.board import (
     Board,
 )
 from src.board_state_machine import BoardState
+from src.recognition_pipeline import RecognitionPipeline
 
 
 # ============================
@@ -895,10 +898,10 @@ class TestChainTriggerSecColumn:
 
 
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
-    """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker が
+    """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker /
 
-    末尾に順次 optional 追加され、既存引数の並び・デフォルト値が一切
-    変わっていないこと (backwards compat)。
+    normalize_fps_30 が末尾に順次 optional 追加され、既存引数の並び・
+    デフォルト値が一切変わっていないこと (backwards compat)。
     """
     import inspect
     mod = _import_lean()
@@ -910,8 +913,11 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     ]
     assert params[6] == "sample_interval_frames"
     assert sig.parameters["sample_interval_frames"].default is None
-    assert params[-1] == "enable_chain_tracker"
+    assert params[7] == "enable_chain_tracker"
     assert sig.parameters["enable_chain_tracker"].default is False
+    assert params[-1] == "normalize_fps_30"
+    # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
+    assert sig.parameters["normalize_fps_30"].default is True
 
 
 def test_collect_lean_enable_chain_tracker_default_false_backward_compat() -> None:
@@ -945,3 +951,186 @@ def test_main_cli_has_enable_chain_tracker_flag_default_false() -> None:
         ):
             mod.main()
     assert captured["enable_chain_tracker"] is False
+
+
+def _run_fake_main_lean(argv_tail: list[str]) -> dict[str, object]:
+    """collect_lean を差し替えて main() を実行し、渡された kwargs を返す共通ヘルパ。"""
+    from unittest.mock import patch
+
+    mod = _import_lean()
+    captured: dict[str, object] = {}
+
+    def _fake_collect_lean(*args: object, **kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    with patch.object(mod, "collect_lean", _fake_collect_lean):
+        with patch(
+            "sys.argv",
+            ["collect_boards_lean.py", "--video", "x.mp4", "--out-npz", "y.npz"]
+            + argv_tail,
+        ):
+            mod.main()
+    return captured
+
+
+def test_main_cli_normalize_fps_30_default_true_when_no_flags() -> None:
+    """CLI で --normalize-fps-30 / --no-normalize-fps-30 とも未指定なら
+
+    normalize_fps_30=True が collect_lean に渡る (2026-07-30 既定 True 化)。
+    """
+    captured = _run_fake_main_lean([])
+    assert captured["normalize_fps_30"] is True
+
+
+def test_main_cli_no_normalize_fps_30_flag_disables() -> None:
+    """--no-normalize-fps-30 指定時は normalize_fps_30=False が渡ること。"""
+    captured = _run_fake_main_lean(["--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
+
+
+def test_main_cli_no_normalize_fps_30_wins_when_both_specified() -> None:
+    """--normalize-fps-30 と --no-normalize-fps-30 を同時指定した場合、
+
+    無効化 (--no-normalize-fps-30) が優先されること (coordinator指示の仕様)。
+    """
+    captured = _run_fake_main_lean(["--normalize-fps-30", "--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
+
+
+# ============================
+# collect_lean() ループ結合テスト (2026-07-30 追加)
+# 実動画は使わず cv2.VideoCapture / RecognitionPipeline.load_default を
+# フェイクに差し替え、normalize_fps_30 の stride 自動注入・優先順位・
+# 既定OFF bit-identical を直接検証する (test_collect_indicators_v2.py の
+# _FakeCapture パターンを流用)。
+# ============================
+
+
+class _FakeCaptureLean:
+    """cv2.VideoCapture の最小フェイク。固定本数のダミーフレームを返す。"""
+
+    def __init__(self, n_frames: int, fps: float = 30.0) -> None:
+        self._n_frames = n_frames
+        self._fps = fps
+        self._i = 0
+        mod = _import_lean()
+        self._frame = np.zeros((mod.TARGET_H, mod.TARGET_W, 3), dtype=np.uint8)
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop: int) -> float:
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(self._n_frames)
+        return 0.0
+
+    def set(self, prop: int, value: float) -> None:  # noqa: D401 - フェイクなので no-op
+        pass
+
+    def read(self) -> "tuple[bool, np.ndarray | None]":
+        if self._i >= self._n_frames:
+            return False, None
+        self._i += 1
+        return True, self._frame
+
+    def release(self) -> None:
+        pass
+
+
+class _FakeLeanPipeline:
+    """RecognitionPipeline.load_default の最小フェイク (collect_lean 用)。"""
+
+    def __init__(self) -> None:
+        self.update_calls: list[int] = []
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        board = Board.from_list([[0] * BOARD_COLS for _ in range(BOARD_ROWS)])
+        side = SimpleNamespace(
+            state=BoardState.MENU,  # STABLE でないため acc.append は呼ばれない
+            score=None, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(p1=side, p2=side)
+
+    def set_video_id(self, video_id: str) -> None:
+        pass
+
+
+def _run_fake_collect_lean(
+    tmp_path: Path, n_frames: int, *, fps: float = 30.0, **collect_kwargs: object,
+) -> "tuple[int, _FakeLeanPipeline]":
+    """cv2.VideoCapture / RecognitionPipeline.load_default をフェイクに
+    差し替えて collect_lean() を実行する共通ヘルパ。
+    """
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(n_frames, fps=fps)
+    fake_pipeline = _FakeLeanPipeline()
+
+    def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+        return fake_cap
+
+    def _fake_load_default(*args: object, **kwargs: object) -> _FakeLeanPipeline:
+        return fake_pipeline
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+        mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(Path("dummy_video.mp4"), out_npz, **collect_kwargs)
+    return n, fake_pipeline
+
+
+def test_collect_lean_normalize_fps_30_default_omitted_applies_stride_2_for_60fps(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30 省略時 (2026-07-30 既定 True 化後) は 60fps 動画に
+
+    stride-2 が自動適用され、2フレームに1回だけ認識されること。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(tmp_path, n_frames, fps=60.0)
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+
+
+def test_collect_lean_normalize_fps_30_explicit_false_is_bit_identical(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30=False を明示指定した場合は 60fps でも間引かれず
+
+    全フレーム認識される (CLI --no-normalize-fps-30 相当、後方互換経路の保持)。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=False,
+    )
+    assert len(fake_pipeline.update_calls) == n_frames
+
+
+def test_collect_lean_normalize_fps_30_60fps_injects_stride_2(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30=True かつ 60fps のとき、2フレームに1回だけ認識される
+
+    (resolve_normalize_fps_30_stride(60.0) == 2 の自動注入を直接確認)。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+
+
+def test_collect_lean_normalize_fps_30_ignored_when_sample_interval_frames_explicit(
+    tmp_path: Path,
+) -> None:
+    """明示 sample_interval_frames が normalize_fps_30 より優先されること。"""
+    n_frames = 12
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0,
+        sample_interval_frames=4, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 4))

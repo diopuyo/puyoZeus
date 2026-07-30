@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
     OjamaAccountSnapshot,
@@ -651,6 +652,7 @@ def collect(
     board_npz_path: Optional[Path] = None,
     sample_interval_frames: Optional[int] = None,
     indicator_interval_frames: Optional[int] = None,
+    normalize_fps_30: bool = True,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
 
@@ -685,6 +687,17 @@ def collect(
             完全に維持する (後方互換)。おじゃま会計 drain (tsumo_count 増分
             駆動) と試合境界 (game_idx) 検知はエッジ検出型のため、本引数の
             値に関わらず常に毎フレーム実行する (指標計算・行出力のみが対象)。
+        normalize_fps_30: True (既定) で 60fps 動画を stride-2 (実効30fps) に
+            間引く (src.fps_normalize.resolve_normalize_fps_30_stride、
+            2026-07-30 追加)。優先順位は「明示 sample_interval_frames > 自動
+            normalize_fps_30」: sample_interval_frames が明示指定されている
+            場合は本フラグを無視する。
+            2026-07-30 既定 True 化 (user承認済み): A/B実測で 60fps stride-2 は
+            連鎖数誤り10.4%・列まるごと欠損0%・盤面相違26.0%(中央値1セル)と、
+            30fps動画の15fps間引き (26.1%・21.7%・48.4%) より一貫して良好、
+            かつ既存24本の30fps動画と時間解像度が揃う。無効化するには CLI
+            --no-normalize-fps-30 (または normalize_fps_30=False 明示) を使う。
+            False 指定時は従来挙動・bit-identical。
 
     Returns:
         出力した行数。
@@ -734,6 +747,11 @@ def collect(
     npz_acc: Optional[_BoardNpzAccumulator] = (
         _BoardNpzAccumulator() if board_npz_path is not None else None
     )
+    # --- fps正規化 (2026-07-30 追加、既定 OFF) ---
+    # 明示 sample_interval_frames が優先。未指定かつ normalize_fps_30=True の
+    # ときのみ、60fps 等の動画を実効30fps に揃える stride を自動注入する。
+    if sample_interval_frames is None and normalize_fps_30:
+        sample_interval_frames = resolve_normalize_fps_30_stride(fps)
     effective_interval_frames = _resolve_sample_interval_frames(
         sample_interval_sec, fps, sample_interval_frames,
     )
@@ -950,7 +968,32 @@ def main() -> int:
             "(例: --indicator-interval-frames 6 --sample-interval-frames 未指定)"
         ),
     )
+    parser.add_argument(
+        "--normalize-fps-30", action="store_true", dest="normalize_fps_30",
+        help=(
+            "60fps 等の動画を stride-2 相当 (実効30fps) に間引く "
+            "(src.fps_normalize.resolve_normalize_fps_30_stride、2026-07-30 追加)。"
+            "--sample-interval-frames が明示指定されている場合はそちらが優先され、"
+            "本フラグは無視される。"
+            "2026-07-30 既定 True 化 (user承認済み) により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-normalize-fps-30 を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-normalize-fps-30", action="store_true", dest="no_normalize_fps_30",
+        help=(
+            "60fps stride 正規化を明示的に無効化する (2026-07-30 追加、既定 "
+            "True 化に伴う逃げ道)。--normalize-fps-30 と同時指定した場合は本"
+            "フラグ (無効化) が優先される。全フレームであることが要件の"
+            "基準データ収集等、既定 ON では困る用途で使う。"
+        ),
+    )
     args = parser.parse_args()
+    # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
+    # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
+    # 新既定 True (collect() 関数側の既定と一致させる)。
+    normalize_fps_30 = not args.no_normalize_fps_30
     n = collect(
         args.video, args.out,
         max_sec=args.max_sec,
@@ -959,6 +1002,7 @@ def main() -> int:
         board_npz_path=args.board_npz,
         sample_interval_frames=args.sample_interval_frames,
         indicator_interval_frames=args.indicator_interval_frames,
+        normalize_fps_30=normalize_fps_30,
     )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
     if args.start_sec > 0.0:

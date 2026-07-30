@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
-"""データ量(20/40/66本)に対する中盤AUC推移を新軸(ぷよ総量)で再評価する (2026-07-30)。"""
+"""データ量(20/40/66本)に対する中盤AUC推移を新軸(ぷよ総量)で再評価する (2026-07-30)。
+
+閾値パラメータ化: winp モジュール (_diag_relphase_by_winpanel_2026-07-30) が
+環境変数 PUYO_PHASE_EARLY_MAX / PUYO_PHASE_LATE_MIN から解決した閾値を
+そのまま踏襲する(単一ソース)。デフォルトは2026-07-30改定の確定値(18/48)。
+出力先 OUT_DIR は閾値の組ごとに自動で分かれるため、過去の20/57結果は
+上書きされない。
+"""
 from __future__ import annotations
 
 import importlib
@@ -17,7 +24,16 @@ base = importlib.import_module("scripts._tmp_relphase_win_auc_2026-07-26")
 winp = importlib.import_module("scripts._diag_relphase_by_winpanel_2026-07-30")
 
 LABELED_WIN_CSV = "data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv"
-OUT_DIR = Path("data/verify/datavolume_newaxis_2026-07-30")
+def _out_dir_for_thresholds(early: float, late: float) -> Path:
+    """閾値の組に応じて出力先ディレクトリを分ける(過去結果を上書きしないため)。"""
+    if early == 20.0 and late == 57.0:
+        return Path("data/verify/datavolume_newaxis_2026-07-30")
+    if early == 18.0 and late == 48.0:
+        return Path("data/verify/datavolume_newaxis_th18_48_2026-07-30")
+    return Path(f"data/verify/datavolume_newaxis_th{early:.0f}_{late:.0f}_2026-07-30")
+
+
+OUT_DIR = _out_dir_for_thresholds(winp.PUYO_TOTAL_EARLY_MAX, winp.PUYO_TOTAL_LATE_MIN)
 
 M20_VIDEOS_TXT = Path("data/verify/labeled_win_m20_2026-07-28/selected_videos_m20.txt")
 C20_VIDEOS_TXT = Path("data/verify/labeled_win_c20_2026-07-26/selected_videos.txt")
@@ -28,8 +44,8 @@ COMBINED40_OLD_AXIS_CSV = Path(
     "data/verify/win_eval_m20_2026-07-28/relphase_combined40/relphase_auc_summary.csv")
 COMBINED66_OLD_AXIS_CSV = Path(
     "data/verify/win_eval_combined66_2026-07-29/relphase_combined66/relphase_auc_summary.csv")
-COMBINED66_NEW_AXIS_CSV = Path(
-    "data/verify/relphase_winpanel_2026-07-30/relphase_winpanel_auc_summary.csv")
+# winp.OUT_DIR は閾値の組に応じて自動で分かれる(単一ソースの閾値解決を踏襲)。
+COMBINED66_NEW_AXIS_CSV = winp.OUT_DIR / "relphase_winpanel_auc_summary.csv"
 
 RESAMPLE_SEED: int = 42
 RESAMPLE_SIZES: tuple[int, ...] = (20, 40)
