@@ -69,6 +69,22 @@ TARGETS: tuple[tuple[str, str, str, str, str], ...] = (
     ("src.recognition_pipeline", "RecognitionPipeline", "_update_score_tracker",
      "pipeline._update_score_tracker", "L1"),
     ("src.score_ocr", "ScoreOcr", "read_side", "  score_ocr.read_side", "L2"),
+    # --- read_board 内部と残余をさらに掘る (2026-07-30 第3段) ---
+    ("src.image_reader", "BoardRegion", "cell_sample_rect",
+     "    cell_sample_rect", "L3"),
+    ("src.background_fingerprint", "CellPatchFingerprint", "is_empty_by_ncc",
+     "    is_empty_by_ncc(背景照合)", "L3"),
+    ("src.ui_mask", "UiMaskMatcher", "is_ui", "    ui_mask.is_ui", "L3"),
+    ("src.image_reader", "ImageReader", "_bg_fp_for_region",
+     "    _bg_fp_for_region", "L3"),
+    # 残余の候補: おじゃま予告・連鎖追跡・設置推論
+    ("src.chain_detector", "VideoChainTracker", "update", "chain_tracker.update", "L1"),
+    ("src.ojama_warning", "OjamaWarningDetector", "detect",
+     "ojama_warning.detect", "L1"),
+    ("src.chain_animation_detector", "ChainAnimationDetector", "is_animating",
+     "chain_anim.is_animating", "L1"),
+    ("src.chain_phase_detector", "ChainPhaseDetector", "update",
+     "chain_phase.update", "L1"),
 )
 
 

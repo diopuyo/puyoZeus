@@ -2203,6 +2203,14 @@ class RecognitionPipeline:
         #   確定盤面の差分 0/900 フレーム (0.00%) = 挙動は完全に不変
         #   速度 +19.1% 〜 +25.6% (c60 t=1451 の別測定では 226.3→122.1ms)
         # 従来動作に戻す場合は明示的に None を渡す (backwards compat)。
+        # スコアOCRの NCC を行列積1回に束ねる高速経路 (2026-07-30)。
+        # 実測: 認識全体の19.5%を占める score_ocr.read_side が対象、
+        # 1セル分1777us→12.1us (146倍速)、1フレーム換算28.43ms→0.19ms。
+        # cv2(float32) と numpy(float64) の差でスコアに最大5.5e-07の
+        # 乖離が出るため bit-identical ではないが、実動画3本 x 300フレームの
+        # A/B で **OCRスコア差分 0/900・確定盤面差分 0/900** を実測したため
+        # 既定 ON (速度 +23.5〜26.8%)。従来経路に戻すには False を渡す。
+        enable_score_ocr_matmul: bool = True,
         ui_mask_cells: "frozenset[tuple[int, int]] | None" = UI_MASK_TARGET_CELLS,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
@@ -2252,7 +2260,9 @@ class RecognitionPipeline:
         score: ScoreOcr | None = None
         if load_score_ocr:
             try:
-                score = ScoreOcr.load_default()
+                score = ScoreOcr.load_default(
+                    enable_matmul_ncc=enable_score_ocr_matmul,
+                )
             except FileNotFoundError:
                 score = None
         ctracker_1p = (
