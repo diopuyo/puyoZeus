@@ -207,6 +207,7 @@ from src.placement_inferrer import (
     DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
+from src.ui_mask import UI_MASK_TARGET_CELLS
 from src.state_detectors import (
     ChainPhaseDetector,
     EffectPhaseDetector,
@@ -2192,9 +2193,17 @@ class RecognitionPipeline:
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
-        # user viz 承認前のため既定 None を維持 (feedback_human_review_at_steps)。
-        # 有効化する場合は src.ui_mask.UI_MASK_TARGET_CELLS を渡すこと。
-        ui_mask_cells: "frozenset[tuple[int, int]] | None" = None,
+        # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
+        # 一切効いていなかった** (渡していたのは診断スクリプト1本だけ)。
+        # 引き継ぎの「4.4→8.07fps 出荷済み」はその診断スクリプト内の値で、
+        # 本番はずっと絞り込み無しで動いていた
+        # (memory project_ui_mask_cells_never_wired_2026-07-30)。
+        #
+        # 実測 (video_c56/c60/c65 × 300フレーム = 900フレーム):
+        #   確定盤面の差分 0/900 フレーム (0.00%) = 挙動は完全に不変
+        #   速度 +19.1% 〜 +25.6% (c60 t=1451 の別測定では 226.3→122.1ms)
+        # 従来動作に戻す場合は明示的に None を渡す (backwards compat)。
+        ui_mask_cells: "frozenset[tuple[int, int]] | None" = UI_MASK_TARGET_CELLS,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
