@@ -154,6 +154,45 @@ def _compute_ncc_validated(a: np.ndarray, b: np.ndarray) -> float:
     return _compute_ncc_precomputed(a, b_flat, float(b_flat.std()))
 
 
+# 背景照合 NCC を np.corrcoef から「平均引き + 内積」の直接計算に置き換えるか
+# (2026-07-30)。実測 7.1倍速、corrcoef との差は 4.16e-17。
+# False にすると従来の np.corrcoef 経路に戻る (A/B 検証・回帰切り分け用)。
+ENABLE_DIRECT_PEARSON_NCC: bool = True
+
+
+def _compute_ncc_prepared(
+    a: np.ndarray,
+    b_centered: np.ndarray,
+    b_selfdot: float,
+    b_std: float,
+) -> float:
+    """bg 側の「平均引き済みベクトル」と「自己内積」を受け取って NCC を計算する。
+
+    `CellPatchFingerprint.ncc_to` は bg パッチが試合中不変であることを利用して
+    b 側の平均引き・自己内積をキャッシュしている。
+    per-call の仕事は「a の平均引き + 内積 2 回」だけになる。
+
+    Args:
+        a: 比較元パッチ (現フレーム)。
+        b_centered: bg パッチの float64 1D 化から平均を引いたもの。
+        b_selfdot: dot(b_centered, b_centered)。
+        b_std: bg パッチの std (均一判定用)。
+
+    Returns:
+        float: NCC 値 (-1.0〜1.0)。均一パッチは PATCH_NCC_UNIFORM_FALLBACK。
+    """
+    a_flat = a.ravel().astype(np.float64)
+    if a_flat.std() < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
+        # 均一パッチは背景との相関不定 → 背景と同一とみなして高値返却
+        return PATCH_NCC_UNIFORM_FALLBACK
+    a_c = a_flat - a_flat.mean()
+    denom = float(np.sqrt(float(np.dot(a_c, a_c)) * b_selfdot))
+    if denom == 0.0:
+        return PATCH_NCC_UNIFORM_FALLBACK
+    ncc = float(np.dot(a_c, b_centered) / denom)
+    return ncc if not np.isnan(ncc) else PATCH_NCC_UNIFORM_FALLBACK
+
+
 def _compute_ncc_precomputed(
     a: np.ndarray, b_flat: np.ndarray, b_std: float,
 ) -> float:
@@ -175,9 +214,25 @@ def _compute_ncc_precomputed(
     if a_flat.std() < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
         # 均一パッチは背景との相関不定 → 背景と同一とみなして高値返却
         return PATCH_NCC_UNIFORM_FALLBACK
-    corr = np.corrcoef(a_flat, b_flat)
-    ncc = float(corr[0, 1])
-    # NaN ガード (万が一 corrcoef が NaN を返した場合)
+    if not ENABLE_DIRECT_PEARSON_NCC:
+        corr = np.corrcoef(a_flat, b_flat)
+        ncc = float(corr[0, 1])
+        # NaN ガード (万が一 corrcoef が NaN を返した場合)
+        return ncc if not np.isnan(ncc) else PATCH_NCC_UNIFORM_FALLBACK
+    # 高速経路 (2026-07-30): np.corrcoef は 2xN 行列 → 2x2 共分散行列 → 対角の
+    # sqrt で 2 回割る、という重い道を通る。必要なのは 1 要素だけなので
+    # 「平均引き → 内積 2 回」で直接求める。
+    # 実測 (scripts/_diag_bg_ncc_cost_split_2026-07-30.py):
+    #   24x24x3 で 35.97us → 5.09us = 7.1倍速、corrcoef との差は 4.16e-17
+    #   (スコアOCRで許容した 5.5e-07 より 15 桁小さい)
+    # なお 120 セルまとめて einsum にする案は 2.0倍・絶対値 0.27ms しか
+    # 縮まらず不採用。効くのは呼び出し 1 回あたりの実装だった。
+    a_c = a_flat - a_flat.mean()
+    b_c = b_flat - b_flat.mean()
+    denom = float(np.sqrt(np.dot(a_c, a_c) * np.dot(b_c, b_c)))
+    if denom == 0.0:
+        return PATCH_NCC_UNIFORM_FALLBACK
+    ncc = float(np.dot(a_c, b_c) / denom)
     return ncc if not np.isnan(ncc) else PATCH_NCC_UNIFORM_FALLBACK
 
 
@@ -195,12 +250,13 @@ class CellPatchFingerprint:
     # フレームを跨いで再利用しても結果は変わらない (= 完全同値)。
     # 比較・repr からは除外する (キャッシュの有無で等価性が変わらないように)。
     _shape_cache: dict[
-        tuple[int, ...], tuple[np.ndarray, bool, np.ndarray, float]
+        tuple[int, ...],
+        tuple[np.ndarray, bool, np.ndarray, float, np.ndarray, float],
     ] = field(default_factory=dict, repr=False, compare=False)
 
     def _as_bg_for(
         self, target_shape: tuple[int, ...],
-    ) -> tuple[np.ndarray, bool, np.ndarray, float]:
+    ) -> tuple[np.ndarray, bool, np.ndarray, float, np.ndarray, float]:
         """target_shape に整形した自パッチと、その bg 有効性を返す (キャッシュ付き)。
 
         高速化 (2026-07-30): `ncc_to` は「毎フレーム新規に採取した現フレームパッチ」を
@@ -233,7 +289,17 @@ class CellPatchFingerprint:
             )
         # 有効性は「整形後のパッチ」に対して判定する (旧実装の順序と同一)
         b_flat = b.ravel().astype(np.float64)
-        entry = (b, _is_bg_patch_valid(b), b_flat, float(b_flat.std()))
+        # 直接ピアソン経路用: 平均引き済みベクトルと自己内積も前計算しておく
+        # (bg は不変なので毎フレーム作り直す必要がない)
+        b_centered = b_flat - b_flat.mean()
+        entry = (
+            b,
+            _is_bg_patch_valid(b),
+            b_flat,
+            float(b_flat.std()),
+            b_centered,
+            float(np.dot(b_centered, b_centered)),
+        )
         self._shape_cache[target_shape] = entry
         return entry
 
@@ -244,10 +310,12 @@ class CellPatchFingerprint:
         other (= 背景 FP) 側の resize 結果と有効性判定はキャッシュされる。
         """
         a = self.patch_hsv
-        _b, b_valid, b_flat, b_std = other._as_bg_for(a.shape)
+        _b, b_valid, b_flat, b_std, b_centered, b_selfdot = other._as_bg_for(a.shape)
         # 多層防御: bg パッチが採取失敗ゼロパッチなら 0.0 (= 非 EMPTY 側)
         if not b_valid:
             return 0.0
+        if ENABLE_DIRECT_PEARSON_NCC:
+            return _compute_ncc_prepared(a, b_centered, b_selfdot, b_std)
         return _compute_ncc_precomputed(a, b_flat, b_std)
 
     def is_empty_by_ncc(
