@@ -98,6 +98,9 @@ class _StubImageReader:
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
         skip_tier1_1p: bool = False,
         skip_tier1_2p: bool = False,
+        # 修正2 (2026-07-30): 実 ImageReader.read_both_boards の telop_result
+        # 追加 (optional 引数) に追従。スタブでは使わないため受け取るだけ。
+        telop_result: object | None = None,
     ) -> tuple[object, object]:
         return self._p1.copy(), self._p2.copy()
 

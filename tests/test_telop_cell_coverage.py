@@ -161,3 +161,71 @@ def test_telop_result_bbox_field_exists() -> None:
         is_visible=True, template_name="t", score=0.9, bbox=(10, 20, 100, 50),
     )
     assert r2.bbox == (10, 20, 100, 50)
+
+
+# ===========================================================================
+# 修正2 (2026-07-30): テロップ検出の二重走査排除 の回帰テスト
+# ===========================================================================
+
+
+def test_read_both_boards_telop_result_bypasses_internal_detect_when_provided() -> None:
+    """telop_result を渡すと reader 自身の telop_detector.detect が呼ばれない。
+
+    (呼出元 RecognitionPipeline が既に計算済の結果を再利用する経路の確認)
+    """
+    from unittest.mock import MagicMock
+
+    reader = ImageReader(use_telop_mask=True)
+    real_detector = reader._telop_detector
+    reader._telop_detector = MagicMock(wraps=real_detector)
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    fake_result = TelopDetector.load_default().detect(frame)
+
+    reader.read_both_boards(frame, telop_result=fake_result)
+
+    reader._telop_detector.detect.assert_not_called()  # type: ignore[union-attr]
+    assert reader._cached_telop_bbox == (
+        fake_result.bbox if fake_result.is_visible else None
+    )
+
+
+def test_read_both_boards_telop_result_none_falls_back_to_internal_detect() -> None:
+    """telop_result=None (既定) は従来通り内部 detect() を実行する (backwards compat)。"""
+    reader = ImageReader(use_telop_mask=True)
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    reader.read_both_boards(frame, telop_result=None)
+    # 黒フレームは検出されない → bbox=None (従来挙動と同じ)
+    assert reader._cached_telop_bbox is None
+
+
+def test_read_both_boards_telop_result_matches_internal_detect_bit_identical() -> None:
+    """telop_result を渡した場合と省略した場合で board 結果が bit-identical。"""
+    reader_default = ImageReader(use_telop_mask=True)
+    reader_cached = ImageReader(use_telop_mask=True)
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    frame[:, :, 1] = 120  # 単色フレーム (テロップは検出されない想定)
+
+    b1_default, b2_default = reader_default.read_both_boards(frame)
+    external_result = TelopDetector.load_default().detect(frame)
+    b1_cached, b2_cached = reader_cached.read_both_boards(
+        frame, telop_result=external_result,
+    )
+
+    assert reader_default._cached_telop_bbox == reader_cached._cached_telop_bbox
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert b1_default.get(row, col) == b1_cached.get(row, col)
+            assert b2_default.get(row, col) == b2_cached.get(row, col)
+
+
+def test_read_both_boards_telop_result_ignored_when_mask_disabled() -> None:
+    """use_telop_mask=False の reader では telop_result を渡しても無視される。"""
+    from src.telop_detector import TelopResult
+
+    reader = ImageReader(use_telop_mask=False)
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    fake_result = TelopResult(
+        is_visible=True, template_name="x", score=0.99, bbox=(10, 10, 50, 50),
+    )
+    reader.read_both_boards(frame, telop_result=fake_result)
+    assert reader._cached_telop_bbox is None

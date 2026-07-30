@@ -139,14 +139,23 @@ class MatchTemplatePatcher:
         return self._matchtemplate_total_sec
 
 
-def build_pipeline() -> RecognitionPipeline:
-    """本番(レンダ)と同じ設定でパイプラインを作る。"""
+def build_pipeline(enable_ui_mask_cells: bool = False) -> RecognitionPipeline:
+    """本番(レンダ)と同じ設定でパイプラインを作る。
+
+    2026-07-30 追記: enable_ui_mask_cells=True で案B (UI マスク判定セル限定)
+    を有効化する。既定 False は従来 (案A のみ) の計測と bit-identical。
+    """
+    ui_mask_cells = None
+    if enable_ui_mask_cells:
+        from src.ui_mask import UI_MASK_TARGET_CELLS
+        ui_mask_cells = UI_MASK_TARGET_CELLS
     return RecognitionPipeline.load_default(
         stable_frame_count=3,
         load_score_ocr=True,
         enable_chain_tracker=True,
         temporal_smoothing=1,
         force_in_match=True,
+        ui_mask_cells=ui_mask_cells,
     )
 
 
@@ -185,10 +194,11 @@ class RunResult:
 
 
 def measure_one(video: str, start_sec: float, n_frames: int,
-                 threads: int, mode: str) -> RunResult:
+                 threads: int, mode: str,
+                 enable_ui_mask_cells: bool = False) -> RunResult:
     """1構成 (スレッド数 x モード) を warmup + 計測してRunResultを返す。"""
     cv2.setNumThreads(threads)
-    pipeline = build_pipeline()
+    pipeline = build_pipeline(enable_ui_mask_cells=enable_ui_mask_cells)
     # warmup はパッチ無しで実施 (モデルロード等の初回コストを除く)
     run_frames(pipeline, video, start_sec, WARMUP_FRAMES)
     with MatchTemplatePatcher(mode=mode) as patcher:
@@ -246,13 +256,17 @@ def print_overhead(baseline: RunResult, instrumented: RunResult) -> None:
 
 
 def run_thread_setting(video: str, start_sec: float, n_frames: int,
-                        threads: int) -> None:
+                        threads: int,
+                        enable_ui_mask_cells: bool = False) -> None:
     """指定スレッド数で baseline / timing_only / full_site の3通りを測る。"""
-    baseline = measure_one(video, start_sec, n_frames, threads, mode="off")
+    baseline = measure_one(video, start_sec, n_frames, threads, mode="off",
+                            enable_ui_mask_cells=enable_ui_mask_cells)
     timing_only = measure_one(video, start_sec, n_frames, threads,
-                               mode="timing_only")
+                               mode="timing_only",
+                               enable_ui_mask_cells=enable_ui_mask_cells)
     full_site = measure_one(video, start_sec, n_frames, threads,
-                             mode="full_site")
+                             mode="full_site",
+                             enable_ui_mask_cells=enable_ui_mask_cells)
     print_run_summary("baseline(無パッチ)", baseline)
     print_run_summary("timing_only(単純ラップ)", timing_only)
     print_run_summary("full_site(呼び出し元特定込み)", full_site)
@@ -267,17 +281,25 @@ def main() -> None:
     ap.add_argument("--video", required=True)
     ap.add_argument("--start-sec", type=float, default=1451.0)
     ap.add_argument("--frames", type=int, default=60)
+    ap.add_argument(
+        "--enable-ui-mask-cells", action="store_true",
+        help="案B (UI_MASK_TARGET_CELLS によるセル限定) も有効化して計測する。"
+             "指定なし (既定) は案A のみの計測 (bit-identical な既定挙動)。",
+    )
     args = ap.parse_args()
 
     default_threads = cv2.getNumThreads()  # 何もいじらない既定値 (通常16)
     print(f"既定 cv2 スレッド数 = {default_threads}")
+    print(f"案B (UI マスクセル限定) = {args.enable_ui_mask_cells}")
 
     print(f"\n########## threads = {SINGLE_THREAD} ##########")
-    run_thread_setting(args.video, args.start_sec, args.frames, SINGLE_THREAD)
+    run_thread_setting(args.video, args.start_sec, args.frames, SINGLE_THREAD,
+                        enable_ui_mask_cells=args.enable_ui_mask_cells)
 
     print(f"\n########## threads = {default_threads} (既定) ##########")
     run_thread_setting(args.video, args.start_sec, args.frames,
-                        default_threads)
+                        default_threads,
+                        enable_ui_mask_cells=args.enable_ui_mask_cells)
 
 
 if __name__ == "__main__":

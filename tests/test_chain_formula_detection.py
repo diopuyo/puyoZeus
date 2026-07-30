@@ -164,6 +164,84 @@ def test_check_formula_detected_false_black_roi() -> None:
 
 
 # ===========================================================================
+# 修正1 (2026-07-30): スコア OCR 完全重複読み排除 の回帰テスト
+# ===========================================================================
+
+
+def test_check_formula_detected_uses_cached_score_val_without_calling_ocr() -> None:
+    """cached_score_val を渡すと score_ocr.read_side は呼ばれない (重複排除確認)。"""
+    bright_frame = _make_blank_1080p(fill=200)
+    mock_ocr = _make_mock_ocr(return_score=None)
+    result = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr, "1P", last_score=100,
+        cached_score_val=None,  # 経路① (ScoreTracker.update) が OCR 失敗した想定
+    )
+    assert result is True, "キャッシュ経由でも OCR=None+bright+last_score>0 は True 期待"
+    mock_ocr.read_side.assert_not_called()
+
+
+def test_check_formula_detected_cached_score_val_matches_uncached_result() -> None:
+    """cached_score_val あり/なしで判定結果が bit-identical であること。"""
+    bright_frame = _make_blank_1080p(fill=200)
+    # ケース1: OCR 成功 (score_val=12345) → False (通常スコア表示)
+    mock_ocr_success = _make_mock_ocr(return_score=12345)
+    result_uncached = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_success, "1P", last_score=12345,
+    )
+    result_cached = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_success, "1P", last_score=12345,
+        cached_score_val=12345,
+    )
+    assert result_uncached is False
+    assert result_cached is False
+
+    # ケース2: OCR 失敗 (score_val=None) → ink_ratio 次第 (bright なので True)
+    mock_ocr_fail = _make_mock_ocr(return_score=None)
+    result_uncached2 = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_fail, "1P", last_score=100,
+    )
+    result_cached2 = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_fail, "1P", last_score=100,
+        cached_score_val=None,
+    )
+    assert result_uncached2 is True
+    assert result_cached2 is True
+
+
+def test_update_score_tracker_returns_delta_and_raw_score_val() -> None:
+    """_update_score_tracker が (delta, 生 score 値) の tuple を返す (修正1)。"""
+    from unittest.mock import MagicMock
+
+    from src.score_ocr import ScoreOcr, ScoreTracker
+
+    mock_ocr = MagicMock(spec=ScoreOcr)
+    mock_ocr.read_side.return_value = (500, 0.9)
+    tracker = ScoreTracker("1P", mock_ocr)
+    delta, raw = RecognitionPipeline._update_score_tracker(
+        tracker, _make_blank_1080p(0),
+    )
+    assert raw == 500, "生 score 値 (cur_score) がそのまま返ること"
+    assert delta == 0, "初回 (prev_score=None) は is_valid=False → delta=0"
+
+    # 2 frame 目: prev=500, cur=700 → delta=200
+    mock_ocr.read_side.return_value = (700, 0.9)
+    delta2, raw2 = RecognitionPipeline._update_score_tracker(
+        tracker, _make_blank_1080p(0),
+    )
+    assert raw2 == 700
+    assert delta2 == 200
+
+
+def test_update_score_tracker_none_tracker_returns_zero_and_none() -> None:
+    """tracker=None のとき (0, None) を返す (backwards compat)。"""
+    delta, raw = RecognitionPipeline._update_score_tracker(
+        None, _make_blank_1080p(0),
+    )
+    assert delta == 0
+    assert raw is None
+
+
+# ===========================================================================
 # 連続 2frame 要件のテスト (pipeline 内カウンタ)
 # ===========================================================================
 
