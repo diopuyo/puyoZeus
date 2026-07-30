@@ -78,6 +78,13 @@ TARGETS: tuple[tuple[str, str, str, str, str], ...] = (
     ("src.image_reader", "ImageReader", "_bg_fp_for_region",
      "    _bg_fp_for_region", "L3"),
     # 残余の候補: おじゃま予告・連鎖追跡・設置推論
+    # --- read_board 内の未帰属 8.0ms と next_detector 4.5ms を掘る (第4段) ---
+    ("src.image_reader", "ImageReader", "_is_empty_static_mask",
+     "    _is_empty_static_mask", "L3"),
+    ("src.next_detector", "NextDetector", "_classify_side",
+     "  next._classify_side", "L2"),
+    ("src.next_detector", "NextDetector", "_extract", "  next._extract", "L2"),
+    ("src.next_detector", "NextDetector", "_inner_crop", "  next._inner_crop", "L2"),
     ("src.chain_detector", "VideoChainTracker", "update", "chain_tracker.update", "L1"),
     ("src.ojama_warning", "OjamaWarningDetector", "detect",
      "ojama_warning.detect", "L1"),

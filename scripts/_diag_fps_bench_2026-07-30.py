@@ -79,10 +79,19 @@ def main() -> None:
     frames = _read_frames(args.video, args.frames, args.start_sec)
     if not frames:
         raise RuntimeError("フレームを読めなかった")
+    # 間引きの実効値を表示する (2026-07-31 に既定 ON 化したので、
+    # 「フラグ未指定 = OFF」と表示すると誤読する)
+    import inspect
+
+    lib_default = inspect.signature(
+        RecognitionPipeline.load_default,
+    ).parameters["enable_large_roi_throttle"].default
+    effective = True if args.large_roi_throttle else bool(lib_default)
     print(
         f"動画: {args.video.name}  t={args.start_sec}s  "
         f"フレーム数: {len(frames)}  cv_threads={cv2.getNumThreads()}  "
-        f"間引き={'ON' if args.large_roi_throttle else 'OFF(既定)'}"
+        f"間引き={'ON' if effective else 'OFF'}"
+        f" (ライブラリ既定={lib_default}, 明示指定={args.large_roi_throttle})"
     )
 
     # 旧コード (d7fc6c2) との A/B 用: 旧版は enable_large_roi_throttle を知らないので
