@@ -1099,6 +1099,14 @@ class RecognitionPipeline:
         initial_confirm_min_votes: int = (
             DEFAULT_INITIAL_CONFIRM_MIN_VOTES
         ),
+        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用): True で
+        # NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を
+        # 保持する cell を消さない。光沢→空 の単一フレーム CNN 誤読が
+        # 無投票消去され gravity filter で上のぷよまで連鎖消去される列
+        # デッドロック (c34 1P col=1, frame 14332 実測) を根で止める。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_puyo_to_empty_hsv_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1474,6 +1482,11 @@ class RecognitionPipeline:
             enable_initial_confirm_vote
         )
         self._initial_confirm_min_votes: int = int(initial_confirm_min_votes)
+        # 色→空 HSV 照合ガード (2026-07-30): _build_state_machine 呼び出し前に
+        # 格納が必要 (引数として渡すため)。
+        self._enable_puyo_to_empty_hsv_guard: bool = bool(
+            enable_puyo_to_empty_hsv_guard
+        )
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1521,6 +1534,9 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=self._enable_initial_confirm_vote,
             initial_confirm_min_votes=self._initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=(
+                self._enable_puyo_to_empty_hsv_guard
+            ),
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1540,6 +1556,9 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=self._enable_initial_confirm_vote,
             initial_confirm_min_votes=self._initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=(
+                self._enable_puyo_to_empty_hsv_guard
+            ),
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1869,6 +1888,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_initial_confirm_vote: bool = False,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_puyo_to_empty_hsv_guard: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1936,6 +1959,7 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2097,6 +2121,10 @@ class RecognitionPipeline:
         # (backwards compat)。
         enable_initial_confirm_vote: bool = True,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 色→空 HSV 照合ガード (2026-07-30, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_puyo_to_empty_hsv_guard: bool = False,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # user viz 承認前のため既定 None を維持 (feedback_human_review_at_steps)。
@@ -2287,6 +2315,7 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
         )
 
     # ------------------------------------------------------------------
@@ -4663,12 +4692,22 @@ class RecognitionPipeline:
         )
         # 設計C 事後復旧ゲート用 HSV-only 盤面を取得する。
         # フラグ OFF または frame_bgr なし の場合は None (安全弁A により発火しない)。
+        # 色→空 HSV 照合ガード (2026-07-30): 復旧ゲートは STABLE 定常でしか
+        # HSV を要求しないが、案A のガードは NON-STABLE→STABLE 遷移フレーム
+        # (signals 構築時点の state はまだ NON-STABLE) の merge で HSV を必要と
+        # する。そのため enable_puyo_to_empty_hsv_guard 有効時は state を問わず
+        # HSV を供給する (実測: 遷移フレームで hsv_board=None のためガード不発
+        # だった)。フラグ OFF (既定) では OR 右項が False となり従来の
+        # 「復旧ゲート ON かつ STABLE」条件と bit-identical。
         _hsv_board_for_signals: "Board | None" = None
-        if (
-            self._enable_stable_recovery_gate
-            and frame_bgr is not None
-            and sm.context.state == BoardState.STABLE
-        ):
+        _need_hsv = frame_bgr is not None and (
+            (
+                self._enable_stable_recovery_gate
+                and sm.context.state == BoardState.STABLE
+            )
+            or self._enable_puyo_to_empty_hsv_guard
+        )
+        if _need_hsv:
             region_for_hsv = (
                 DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
             )

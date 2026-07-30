@@ -197,6 +197,7 @@ def _collect_records(
     enable_match_start_full_clear: bool = True,
     enable_recovery_counter_carryover: bool = False,
     enable_cnn_flicker_hsv_fallback: bool = False,
+    enable_puyo_to_empty_hsv_guard: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -254,6 +255,7 @@ def _collect_records(
         enable_match_start_full_clear=enable_match_start_full_clear,
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
     )
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
@@ -744,6 +746,7 @@ def _process_one(
     enable_match_start_full_clear: bool = True,
     enable_recovery_counter_carryover: bool = False,
     enable_cnn_flicker_hsv_fallback: bool = False,
+    enable_puyo_to_empty_hsv_guard: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -780,6 +783,7 @@ def _process_one(
         enable_match_start_full_clear=enable_match_start_full_clear,
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -1046,6 +1050,17 @@ def _parse_args() -> argparse.Namespace:
              "enable_cnn_flicker_hsv_fallback を有効化する "
              "(CNN 出力が直近フレームで乱高下しているセルは HSV を合意値とみなす)。",
     )
+    # 色→空 HSV 照合ガード (案A, 2026-07-30, A/B 計測用)。既定 False =
+    # 従来通り (bit-identical)。反映遅延受け入れ (8フレーム基準) の A/B 用。
+    ap.add_argument(
+        "--enable-puyo-to-empty-hsv-guard",
+        dest="enable_puyo_to_empty_hsv_guard",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_puyo_to_empty_hsv_guard を有効化する "
+             "(NON-STABLE→STABLE 復帰 merge の色→空 遷移を HSV が色を保持する "
+             "cell について退ける、案A)。",
+    )
     # 任意動画・任意窓での実行 (2026-07-25 汎化監査用に追加)。既定 None =
     # 従来通り (c34+video_30 固定窓、bit-identical)。3引数はセットで指定する。
     ap.add_argument(
@@ -1094,6 +1109,7 @@ def main() -> None:
         "enable_match_start_full_clear": args.enable_match_start_full_clear,
         "enable_recovery_counter_carryover": args.enable_recovery_counter_carryover,
         "enable_cnn_flicker_hsv_fallback": args.enable_cnn_flicker_hsv_fallback,
+        "enable_puyo_to_empty_hsv_guard": args.enable_puyo_to_empty_hsv_guard,
     }
 
     # 任意動画・任意窓モード (2026-07-25 汎化監査用に追加)。既定 (--video 未指定)

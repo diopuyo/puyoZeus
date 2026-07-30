@@ -895,9 +895,10 @@ class TestChainTriggerSecColumn:
 
 
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
-    """collect_lean() の新引数 sample_interval_frames が末尾追加され、
+    """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker が
 
-    既存引数の並び・デフォルト値が一切変わっていないこと (backwards compat)。
+    末尾に順次 optional 追加され、既存引数の並び・デフォルト値が一切
+    変わっていないこと (backwards compat)。
     """
     import inspect
     mod = _import_lean()
@@ -907,5 +908,40 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
         "video_path", "out_npz", "max_sec", "start_sec",
         "sample_interval_sec", "capture_next",
     ]
-    assert params[-1] == "sample_interval_frames"
+    assert params[6] == "sample_interval_frames"
     assert sig.parameters["sample_interval_frames"].default is None
+    assert params[-1] == "enable_chain_tracker"
+    assert sig.parameters["enable_chain_tracker"].default is False
+
+
+def test_collect_lean_enable_chain_tracker_default_false_backward_compat() -> None:
+    """enable_chain_tracker 省略時は False (= 従来通り VideoChainTracker 無効)。
+
+    既存呼び出し (引数省略) の挙動を一切変えないことを保証する
+    (2026-07-30 全フレーム基準データ収集の CHAIN 凍結欠陥修正で追加)。
+    """
+    import inspect
+    mod = _import_lean()
+    sig = inspect.signature(mod.collect_lean)
+    assert sig.parameters["enable_chain_tracker"].default is False
+
+
+def test_main_cli_has_enable_chain_tracker_flag_default_false() -> None:
+    """CLI --enable-chain-tracker フラグが store_true・既定 False で追加されている。"""
+    import argparse
+    from unittest.mock import patch
+
+    mod = _import_lean()
+    captured: dict[str, object] = {}
+
+    def _fake_collect_lean(*args: object, **kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    with patch.object(mod, "collect_lean", _fake_collect_lean):
+        with patch(
+            "sys.argv",
+            ["collect_boards_lean.py", "--video", "x.mp4", "--out-npz", "y.npz"],
+        ):
+            mod.main()
+    assert captured["enable_chain_tracker"] is False

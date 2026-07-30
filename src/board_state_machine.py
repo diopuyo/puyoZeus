@@ -404,6 +404,42 @@ def _build_initial_confirmed_board(
     return new
 
 
+def _should_keep_puyo_over_empty(
+    base_v: int, cnn_v: int, hsv_v: int | None,
+    allow_puyo_to_empty: bool, enable_hsv_guard: bool,
+) -> bool:
+    """色→空 遷移で baseline の puyo を維持すべきか判定する (色→空 保護).
+
+    従来の休眠ガード (allow_puyo_to_empty=False の blanket ban) に加え、
+    enable_hsv_guard=True 時は HSV が同 cell に色を保持している場合のみ
+    単一フレーム CNN の空誤読 (光沢→空) を退ける。CNN と HSV が共に空を
+    読む本物の連鎖消去は退けない (両者一致時は False を返す)。
+
+    Args:
+        base_v: baseline (直前確定盤面) の色。
+        cnn_v: 現フレーム CNN の色。
+        hsv_v: 現フレーム HSV の色。None なら HSV 無し (照合ガード不発)。
+        allow_puyo_to_empty: False で休眠 blanket ban を発動 (従来 dead code)。
+        enable_hsv_guard: True で HSV 照合ガードを発動する。
+
+    Returns:
+        True なら消さず baseline の puyo を維持する。
+    """
+    from src.board import COLOR_UNKNOWN
+    if base_v == COLOR_EMPTY or cnn_v != COLOR_EMPTY:
+        return False  # そもそも色→空 遷移でない
+    if not allow_puyo_to_empty:
+        return True  # 休眠ガード (blanket ban、従来挙動)
+    if (
+        enable_hsv_guard
+        and hsv_v is not None
+        and hsv_v != COLOR_EMPTY
+        and hsv_v != COLOR_UNKNOWN
+    ):
+        return True  # HSV が色を裏付ける → 単一フレーム CNN の空誤読を退ける
+    return False
+
+
 def _merge_diff_only(
     baseline: Board | None, new_cnn: Board,
     *, allow_puyo_to_empty: bool = True,
@@ -412,6 +448,8 @@ def _merge_diff_only(
     merge_use_majority_value: bool = False,
     initial_confirm_history: list[Board] | None = None,
     initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+    hsv_board: Board | None = None,
+    enable_puyo_to_empty_hsv_guard: bool = False,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -449,6 +487,15 @@ def _merge_diff_only(
             None または空リストなら従来挙動 (単発 new_cnn 採用、
             backwards compat)。
         initial_confirm_min_votes: 上記多数決の最低観測 frame 数。
+        hsv_board: 現フレームの HSV 認識盤面。 enable_puyo_to_empty_hsv_guard
+            用の照合対象。 None なら照合ガード不発 (従来挙動)。
+        enable_puyo_to_empty_hsv_guard: 色→空 HSV 照合ガード (2026-07-30)。
+            True にすると、 baseline が色・cnn が空 の cell について HSV が
+            色を保持している場合は消さず baseline を維持する。 単一フレーム
+            CNN の光沢→空 誤読が STABLE 復帰 merge で無投票消去され、直後の
+            gravity filter で上のぷよまで連鎖消去される列デッドロック
+            (c34 1P col=1, frame 14332 実測) を根で止める。
+            default False = 従来挙動完全維持・bit-identical (backwards compat)。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -473,11 +520,14 @@ def _merge_diff_only(
             # telop 被覆や image_reader 不確実時に旧色を保持.
             if cnn_v == COLOR_UNKNOWN:
                 continue
-            # B: puyo→空 遷移を ban (= 確定 cell 保護)
-            if (
-                not allow_puyo_to_empty
-                and base_v != COLOR_EMPTY
-                and cnn_v == COLOR_EMPTY
+            # B: 色→空 遷移の保護 (= 確定 cell 保護)。休眠 blanket ban
+            # (allow_puyo_to_empty=False) に加え、HSV 照合ガード
+            # (enable_puyo_to_empty_hsv_guard) で HSV が色を裏付ける単一
+            # フレーム CNN の空誤読 (光沢→空) を退ける。
+            hsv_v = hsv_board.get(r, c) if hsv_board is not None else None
+            if _should_keep_puyo_over_empty(
+                base_v, cnn_v, hsv_v, allow_puyo_to_empty,
+                enable_puyo_to_empty_hsv_guard,
             ):
                 continue  # baseline の puyo を維持
             # F (cycle 56): EMPTY → 色 遷移ガード。 NON-STABLE 中の多数決で
@@ -590,6 +640,7 @@ class BoardStateMachine:
         cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
         enable_initial_confirm_vote: bool = False,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        enable_puyo_to_empty_hsv_guard: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -659,6 +710,14 @@ class BoardStateMachine:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         self._enable_initial_confirm_vote = bool(enable_initial_confirm_vote)
         self._initial_confirm_min_votes = max(1, int(initial_confirm_min_votes))
+        # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
+        # merge の色→空 遷移について HSV が色を保持する cell を消さない。
+        # 光沢→空 の単一フレーム CNN 誤読が無投票消去され gravity filter で
+        # 上のぷよまで連鎖消去される列デッドロックを根で止める。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_puyo_to_empty_hsv_guard = bool(
+            enable_puyo_to_empty_hsv_guard
+        )
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -815,6 +874,10 @@ class BoardStateMachine:
                 merge_use_majority_value=self._merge_use_majority_value,
                 initial_confirm_history=initial_history,
                 initial_confirm_min_votes=self._initial_confirm_min_votes,
+                hsv_board=signals.hsv_board,
+                enable_puyo_to_empty_hsv_guard=(
+                    self._enable_puyo_to_empty_hsv_guard
+                ),
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
@@ -1334,6 +1397,7 @@ __all__ = [
     "_check_recovery_column",
     "_collect_recovery_candidates",
     "_merge_diff_only",
+    "_should_keep_puyo_over_empty",
     "_vote_majority_board",
     "DEFAULT_NON_STABLE_HISTORY_SIZE",
     "DEFAULT_EMPTY_TO_COLOR_MIN_VOTES",

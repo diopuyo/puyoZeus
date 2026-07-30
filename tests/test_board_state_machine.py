@@ -465,6 +465,168 @@ def test_merge_diff_empty_to_color_guard_allows_majority() -> None:
 
 
 # ============================
+# 色→空 HSV 照合ガード テスト (enable_puyo_to_empty_hsv_guard, 2026-07-30)
+# c34 1P col=1 frame 14332 列デッドロック根因への対処
+# ============================
+
+
+def test_should_keep_puyo_over_empty_hsv_holds_color() -> None:
+    """HSV が色を裏付ける色→空 は維持 (光沢→空 の CNN 誤読を退ける)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is True
+
+
+def test_should_keep_puyo_over_empty_both_empty_erases() -> None:
+    """CNN も HSV も空 = 本物の連鎖消去 → 消す (遅延させない)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_EMPTY,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_hsv_unknown_erases() -> None:
+    """HSV が UNKNOWN (判定不能) なら裏付けにならず消す."""
+    from src.board import COLOR_UNKNOWN
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_UNKNOWN,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_guard_off_erases() -> None:
+    """flag OFF なら HSV が色でも消す (従来挙動・bit-identical)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=False,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_blanket_ban_dormant() -> None:
+    """休眠 blanket ban (allow_puyo_to_empty=False) は HSV 無しでも維持."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, None,
+        allow_puyo_to_empty=False, enable_hsv_guard=False,
+    ) is True
+
+
+def test_should_keep_puyo_over_empty_not_color_to_empty() -> None:
+    """色→空 遷移でない (cnn が色) 場合は常に False."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_EMPTY, COLOR_RED, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_merge_diff_hsv_guard_keeps_color() -> None:
+    """merge 統合: baseline 色 / cnn 空 / hsv 色 + flag ON → 消さない."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=True,
+    )
+    assert merged.get(12, 0) == COLOR_RED
+
+
+def test_merge_diff_hsv_guard_off_erases() -> None:
+    """merge 統合: flag OFF なら従来通り消す (bit-identical)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    assert merged.get(12, 0) == COLOR_EMPTY
+
+
+def test_merge_diff_hsv_guard_default_off_bit_identical() -> None:
+    """kwargs 省略 legacy 呼び出しと flag 明示 False が bit-identical."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    legacy = _merge_diff_only(baseline, cnn)
+    explicit_off = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_off.get(r, c)
+
+
+def test_merge_diff_hsv_guard_prevents_gravity_cascade() -> None:
+    """列デッドロック縮小版 (c34 1P col=1 frame 14332): cnn が中段 r11 のみ
+    空誤読し hsv は色を保持。flag ON なら r11 維持 + 上の r10 も gravity
+    filter で連鎖消去されない (初発を根で止める)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    cnn = Board()
+    hsv = Board()
+    for r in (10, 11, 12):
+        baseline.set(r, 1, COLOR_RED)
+        hsv.set(r, 1, COLOR_RED)
+    cnn.set(10, 1, COLOR_RED)
+    cnn.set(11, 1, COLOR_EMPTY)  # 光沢→空 誤読
+    cnn.set(12, 1, COLOR_RED)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=True,
+    )
+    assert merged.get(10, 1) == COLOR_RED
+    assert merged.get(11, 1) == COLOR_RED  # 無投票消去されない
+    assert merged.get(12, 1) == COLOR_RED
+
+
+def test_merge_diff_hsv_guard_off_reproduces_cascade() -> None:
+    """対照: flag OFF (従来) では r11 が無投票消去され gravity filter が
+    r10 も連鎖消去する (デッドロック初発の再現)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    cnn = Board()
+    hsv = Board()
+    for r in (10, 11, 12):
+        baseline.set(r, 1, COLOR_RED)
+        hsv.set(r, 1, COLOR_RED)
+    cnn.set(10, 1, COLOR_RED)
+    cnn.set(11, 1, COLOR_EMPTY)
+    cnn.set(12, 1, COLOR_RED)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    assert merged.get(11, 1) == COLOR_EMPTY  # 無投票消去
+    assert merged.get(10, 1) == COLOR_EMPTY  # gravity cascade
+    assert merged.get(12, 1) == COLOR_RED    # 最下段は残る
+
+
+def test_board_state_machine_stores_hsv_guard_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること."""
+    sm_on = BoardStateMachine(enable_puyo_to_empty_hsv_guard=True)
+    assert sm_on._enable_puyo_to_empty_hsv_guard is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_puyo_to_empty_hsv_guard is False
+
+
+# ============================
 # #45 おじゃま merge 統合修正 案(a)(b) テスト (2026-07-24)
 # ============================
 
