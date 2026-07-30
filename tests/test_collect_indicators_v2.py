@@ -607,17 +607,64 @@ def test_collect_signature_has_sample_interval_frames_appended_at_tail() -> None
 
 
 def test_collect_signature_has_indicator_interval_frames_appended_at_tail() -> None:
-    """collect() の新引数 indicator_interval_frames が末尾追加され、
+    """collect() の新引数 indicator_interval_frames / normalize_fps_30 が
 
-    既存引数 (sample_interval_frames まで) の並び・デフォルト値が一切
-    変わっていないこと (2026-07-30 追加、backwards compat)。
+    末尾に順次 optional 追加され、既存引数 (sample_interval_frames まで) の
+    並び・デフォルト値が一切変わっていないこと (2026-07-30 追加、backwards compat)。
     """
     import inspect
     sig = inspect.signature(collect_mod.collect)
     params = list(sig.parameters.keys())
-    assert params[-1] == "indicator_interval_frames"
+    assert params[-2] == "indicator_interval_frames"
     assert sig.parameters["indicator_interval_frames"].default is None
-    assert params[-2] == "sample_interval_frames"
+    assert params[-3] == "sample_interval_frames"
+    assert params[-1] == "normalize_fps_30"
+    # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
+    assert sig.parameters["normalize_fps_30"].default is True
+
+
+def _run_fake_main_collect(argv_tail: list[str]) -> dict[str, object]:
+    """collect を差し替えて main() を実行し、渡された kwargs を返す共通ヘルパ。"""
+    from unittest.mock import patch
+
+    captured: dict[str, object] = {}
+
+    def _fake_collect(*args: object, **kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    with patch.object(collect_mod, "collect", _fake_collect):
+        with patch(
+            "sys.argv",
+            ["collect_indicators_v2.py", "--video", "x.mp4", "--out", "y.csv"]
+            + argv_tail,
+        ):
+            collect_mod.main()
+    return captured
+
+
+def test_main_cli_normalize_fps_30_default_true_when_no_flags() -> None:
+    """CLI で --normalize-fps-30 / --no-normalize-fps-30 とも未指定なら
+
+    normalize_fps_30=True が collect に渡る (2026-07-30 既定 True 化)。
+    """
+    captured = _run_fake_main_collect([])
+    assert captured["normalize_fps_30"] is True
+
+
+def test_main_cli_no_normalize_fps_30_flag_disables() -> None:
+    """--no-normalize-fps-30 指定時は normalize_fps_30=False が渡ること。"""
+    captured = _run_fake_main_collect(["--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
+
+
+def test_main_cli_no_normalize_fps_30_wins_when_both_specified() -> None:
+    """--normalize-fps-30 と --no-normalize-fps-30 を同時指定した場合、
+
+    無効化 (--no-normalize-fps-30) が優先されること (coordinator指示の仕様)。
+    """
+    captured = _run_fake_main_collect(["--normalize-fps-30", "--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
 
 
 # ============================
@@ -730,12 +777,15 @@ class _FakeThrottlePipeline:
 
 
 def _run_fake_collect(
-    tmp_path: Path, n_frames: int, **collect_kwargs: object,
+    tmp_path: Path, n_frames: int, *, fps: float = 30.0, **collect_kwargs: object,
 ) -> "tuple[int, _FakeThrottlePipeline, Path]":
     """cv2.VideoCapture / RecognitionPipeline.load_default をフェイクに
     差し替えて collect() を実行する共通ヘルパ。
+
+    fps: フェイク動画の fps (既定 30.0 = 従来のテスト呼び出しと完全一致)。
+        normalize_fps_30 の A/B テスト (2026-07-30 追加) のため optional 追加。
     """
-    fake_cap = _FakeCapture(n_frames)
+    fake_cap = _FakeCapture(n_frames, fps=fps)
     fake_pipeline = _FakeThrottlePipeline()
 
     def _fake_video_capture(_path: str) -> _FakeCapture:
@@ -834,3 +884,77 @@ def test_collect_ojama_and_game_idx_advance_every_frame_even_when_throttled(
     p1_tsumo = [int(r["tsumo"]) for r in rows if r["side"] == "1P"]
     diffs = [b - a for a, b in zip(p1_tsumo, p1_tsumo[1:])]
     assert all(d == interval for d in diffs), diffs
+
+
+# ============================
+# normalize_fps_30 (2026-07-30 追加、既定 OFF)
+# 60fps 動画を実効30fpsへ stride-2 で間引く自動注入の優先順位・後方互換を検証。
+# ============================
+
+
+def test_collect_normalize_fps_30_default_omitted_applies_stride_2_for_60fps(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30 省略時 (2026-07-30 既定 True 化後) は 60fps 動画に
+
+    stride-2 が自動適用され、2フレームに1回だけ認識・行出力されること。
+    """
+    n_frames = 10
+    n_rows, fake_pipeline, _ = _run_fake_collect(tmp_path, n_frames, fps=60.0)
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+    assert n_rows == len(range(0, n_frames, 2)) * 2
+
+
+def test_collect_normalize_fps_30_explicit_false_is_bit_identical(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30=False を明示指定した場合は 60fps でも間引かれず
+
+    全フレーム認識される (CLI --no-normalize-fps-30 相当、後方互換経路の保持)。
+    """
+    n_frames = 10
+    n_rows, fake_pipeline, _ = _run_fake_collect(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=False,
+    )
+    assert len(fake_pipeline.update_calls) == n_frames
+    assert n_rows == n_frames * 2
+
+
+def test_collect_normalize_fps_30_60fps_injects_stride_2(tmp_path: Path) -> None:
+    """normalize_fps_30=True かつ 60fps のとき、2フレームに1回だけ認識される
+
+    (resolve_normalize_fps_30_stride(60.0) == 2 が sample_interval_frames として
+    自動注入されることの直接確認)。
+    """
+    n_frames = 10
+    _, fake_pipeline, _ = _run_fake_collect(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+
+
+def test_collect_normalize_fps_30_30fps_no_effective_change(tmp_path: Path) -> None:
+    """normalize_fps_30=True でも 30fps 動画は stride=1 (間引きなし) のままであること
+
+    (resolve_normalize_fps_30_stride(30.0) == 1)。
+    """
+    n_frames = 10
+    _, fake_pipeline, _ = _run_fake_collect(
+        tmp_path, n_frames, fps=30.0, normalize_fps_30=True,
+    )
+    assert len(fake_pipeline.update_calls) == n_frames
+
+
+def test_collect_normalize_fps_30_ignored_when_sample_interval_frames_explicit(
+    tmp_path: Path,
+) -> None:
+    """明示 sample_interval_frames が normalize_fps_30 より優先されること
+
+    (優先順位: 「明示 sample_interval_frames > 自動 normalize_fps_30」)。
+    """
+    n_frames = 12
+    _, fake_pipeline, _ = _run_fake_collect(
+        tmp_path, n_frames, fps=60.0,
+        sample_interval_frames=4, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 4))

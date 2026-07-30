@@ -22,10 +22,13 @@
    (=既存列そのまま) を採用する。
 
 3. 閾値 (user指定の実数、三分位計算はしない)
-   序盤: raw<=20 / 中盤: 21<=raw<=56 / 終盤: raw>=57
-   ※ user発言「20以外が序盤」は文脈上「20以下」の誤記と解釈した
-   (57以上が終盤・あいだが中盤という構造と整合するため)。この解釈は
-   誤りの可能性があるため報告に明記し、user訂正を受けられる形にする。
+   初回指示: 序盤 raw<=20 / 中盤 21<=raw<=56 / 終盤 raw>=57
+   2026-07-30 改定 (これが正・デフォルト): 序盤 raw<=18 / 中盤 19<=raw<=47 /
+   終盤 raw>=48 (reference_phase_split_by_color_puyo_count_2026-07-30)。
+   将来の再改定に備え、閾値は環境変数 PUYO_PHASE_EARLY_MAX /
+   PUYO_PHASE_LATE_MIN で上書き可能にパラメータ化した(マジックナンバー禁止規約
+   準拠)。出力先 OUT_DIR は閾値の組ごとに自動で分かれるため、異なる閾値で
+   実行しても過去の結果ファイルを上書きしない。
 
 4. 1P/2P統合 = 遅い方(終盤寄り)を採用
    user確定:「序盤＜中盤＜後半で遅い方を採用する」。合計でも平均でもない。
@@ -61,6 +64,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -80,7 +84,13 @@ WINPANEL_DIR = Path("data/verify/winners_panel_diff_2026-07-26")
 OLD_RELPHASE_SUMMARY_CSV = Path(
     "data/verify/win_eval_combined66_2026-07-29/relphase_combined66/relphase_auc_summary.csv"
 )
-OUT_DIR = Path("data/verify/relphase_winpanel_2026-07-30")
+def _out_dir_for_thresholds(early: float, late: float) -> Path:
+    """閾値の組に応じて出力先ディレクトリを分ける(過去結果を上書きしないため)。"""
+    if early == 20.0 and late == 57.0:
+        return Path("data/verify/relphase_winpanel_2026-07-30")
+    if early == 18.0 and late == 48.0:
+        return Path("data/verify/relphase_winpanel_th18_48_2026-07-30")
+    return Path(f"data/verify/relphase_winpanel_th{early:.0f}_{late:.0f}_2026-07-30")
 
 # 旧切り出し(手数リセット)のstudyディレクトリ (combined66公式評価と同一ソース)
 OLD_STUDY_DIRS = [
@@ -97,10 +107,19 @@ OLD_STUDY_DIRS = [
 EXCLUDE_MIN_DURATION_SEC: float = 15.0
 EXCLUDE_MAX_DURATION_SEC: float = 200.0
 
-# 盤面ぷよ総量(おじゃま含む)の位相境界。user確定値。
-# 「20以外が序盤」は文脈上「20以下」の誤記と解釈(要user確認、報告に明記)。
-PUYO_TOTAL_EARLY_MAX: float = 20.0
-PUYO_TOTAL_LATE_MIN: float = 57.0
+def _resolve_threshold(env_name: str, default: float) -> float:
+    """環境変数があれば優先、無ければデフォルト値を使う(閾値パラメータ化)。"""
+    raw = os.environ.get(env_name)
+    return float(raw) if raw is not None else default
+
+
+# 盤面ぷよ総量(おじゃま含む)の位相境界。
+# デフォルトは2026-07-30改定の確定値(18/48)。初回指示の20/57は環境変数で
+# 明示指定した場合のみ再現する(reference_phase_split_by_color_puyo_count_2026-07-30)。
+PUYO_TOTAL_EARLY_MAX: float = _resolve_threshold("PUYO_PHASE_EARLY_MAX", 18.0)
+PUYO_TOTAL_LATE_MIN: float = _resolve_threshold("PUYO_PHASE_LATE_MIN", 48.0)
+
+OUT_DIR = _out_dir_for_thresholds(PUYO_TOTAL_EARLY_MAX, PUYO_TOTAL_LATE_MIN)
 
 # 旧方式のcontamination除外しきい値 (base モジュールと同一値を明示的に踏襲)
 CONTAMINATION_SEG_MAX: float = base.CONTAMINATION_SEG_MAX
@@ -110,7 +129,7 @@ _PHASE_ORDER: dict[str, int] = {"序盤": 0, "中盤": 1, "終盤": 2}
 _PHASE_ORDER_INV: dict[int, str] = {v: k for k, v in _PHASE_ORDER.items()}
 
 def phase_from_puyo_total(raw: pd.Series) -> pd.Series:
-    """盤面ぷよ総量(おじゃま含む)から 序盤(<=20)/中盤(21-56)/終盤(>=57) を割り当てる。"""
+    """盤面ぷよ総量(おじゃま含む)から序盤/中盤/終盤を割り当てる(閾値はモジュール定数)。"""
     return pd.Series(
         np.select(
             [raw <= PUYO_TOTAL_EARLY_MAX, raw >= PUYO_TOTAL_LATE_MIN],

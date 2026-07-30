@@ -98,7 +98,15 @@ def write_jobs_txt(rows: list[dict[str, Any]], out_path: Path) -> None:
             "PYTHONPATH=. ./venv/bin/python -u -m scripts._collect_lean_1t "
             f"--video {video_path} --out-npz {out_npz} "
             f"--start-sec {r['start_sec']} --max-sec {r['dur_sec']} "
-            "--sample-interval 0 --enable-chain-tracker --with-next"
+            "--sample-interval 0 --enable-chain-tracker --with-next "
+            # 意図的なライブラリ既定上書き (2026-07-30, coordinator指示):
+            # collect_boards_lean.py の normalize_fps_30 既定は True に変更
+            # 済み (60fps stride-2 化、user承認済み)。しかしこの基準データは
+            # 「全フレームの正解」であることが定義そのものであり、stride化
+            # すると実効30fpsになって全フレームでなくなる。既に収集済みの
+            # 全件が全フレームのため、ここで既定に従うと世代混在を自分で
+            # 作ってしまう。よって --no-normalize-fps-30 を必ず明示する。
+            "--no-normalize-fps-30"
         )
         lines.append(cmd)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
