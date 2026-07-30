@@ -98,6 +98,15 @@ GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD: int = 2
 # N フレーム = 8 frame (約 0.27s @ 30fps) で実質的な持続合意と判断。
 STABLE_RECOVERY_MIN_FRAMES: int = 8
 
+# 復旧ゲート方向別しきい値 (enable_asymmetric_recovery_min_frames, 2026-07-30):
+# 方向1 (空→色: ぷよを追加する復旧) のみを短縮する非対称化。誤って追加しても
+# 実ぷよが無ければ次の観測で消えるため相対的に安全。方向2/3 (色→空/色→色) は
+# 誤消去・誤訂正が gravity filter で上のぷよまで連鎖消去し増幅する
+# (2026-07-30 列デッドロック実測) ため STABLE_RECOVERY_MIN_FRAMES (8) を維持する。
+# 「消す方が危険」という非対称を一貫させる (色→空 HSV 照合ガードと同じ考え方)。
+# default OFF (enable_asymmetric_recovery_min_frames) では未使用 (backwards compat)。
+STABLE_RECOVERY_ADD_MIN_FRAMES: int = 4
+
 # 復旧ゲートの「合意値」として無効な色 = UNKNOWN(10) のみ。
 # EMPTY(0) / OJAMA(9) は方向2の除去ターゲットなので含めない。
 RECOVERY_EXCLUDED_COLORS: frozenset[int] = frozenset({10})
@@ -640,7 +649,21 @@ class BoardStateMachine:
         cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
         enable_initial_confirm_vote: bool = False,
         initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
+        # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P は tail 悪化、c26/c69 の 1P は
+        # 効果ゼロと判明 (data/verify/placement_confirm_frames_generalization_2026-07-30)。
+        # 8フレーム達成率は OFF/ON 不変で、改善は不合格イベントの重症度低下のみ。
+        # 汎化未確認のため default OFF を維持する。False で bit-identical (backwards compat)。
         enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用): True で
+        # 方向1 (空→色) のみ recovery_add_min_frames (既定 4) で発火させ、
+        # 方向2/3 (色→空/色→色) は recovery_min_frames (既定 8) を維持する。
+        # 「誤認が治るまでのラグ」短縮用。誤って追加しても実ぷよが無ければ次の
+        # 観測で消えるため空→色のみ短縮する (消す方向は増幅リスクで据え置き)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前のため default OFF 固定。
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -718,6 +741,12 @@ class BoardStateMachine:
         self._enable_puyo_to_empty_hsv_guard = bool(
             enable_puyo_to_empty_hsv_guard
         )
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30): 方向1(空→色)のみ
+        # 短縮する。default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_asymmetric_recovery_min_frames = bool(
+            enable_asymmetric_recovery_min_frames
+        )
+        self._recovery_add_min_frames = max(1, int(recovery_add_min_frames))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -1028,8 +1057,16 @@ class BoardStateMachine:
             and self._ctx.confirmed_board is not None
             and self._ctx.stable_warmup_remaining == 0
         ):
+            # 非対称化 有効時のみ方向1 (空→色) に短縮値を渡す。None なら従来通り
+            # 全方向 recovery_min_frames (bit-identical、backwards compat)。
+            _add_min = (
+                self._recovery_add_min_frames
+                if self._enable_asymmetric_recovery_min_frames
+                else None
+            )
             _apply_stable_recovery_gate(
                 self._ctx, signals, self._recovery_min_frames,
+                add_min_frames=_add_min,
                 enable_column_partial_support=self._enable_column_partial_support,
                 enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
                 cnn_flicker_window_frames=self._cnn_flicker_window_frames,
@@ -1143,6 +1180,7 @@ def _collect_recovery_candidates(
     hsv_board: "Board",
     min_frames: int,
     *,
+    add_min_frames: "int | None" = None,
     enable_cnn_flicker_hsv_fallback: bool = False,
     cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
     cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
@@ -1167,7 +1205,10 @@ def _collect_recovery_candidates(
             in-place 更新)。
         cnn_board: CNN 認識盤面。
         hsv_board: HSV 認識盤面。
-        min_frames: 発火に必要な連続フレーム数。
+        min_frames: 発火に必要な連続フレーム数 (方向2/3 = 色→空/色→色)。
+        add_min_frames: 方向1 (空→色) の発火に必要な連続フレーム数。None なら
+            min_frames を使う (従来と bit-identical、backwards compat)。非対称化
+            (enable_asymmetric_recovery_min_frames) 有効時のみ短縮値が渡る。
         enable_cnn_flicker_hsv_fallback: True で乱高下セルの HSV フォール
             バックを有効化する。
         cnn_flicker_window_frames: 乱高下判定用の履歴保持フレーム数。
@@ -1219,15 +1260,22 @@ def _collect_recovery_candidates(
             prev_count = recovery_counters.get((r, c), 0)
             new_count = prev_count + 1
             recovery_counters[(r, c)] = new_count
-            if new_count < min_frames:
-                continue
 
-            # 発火: 方向別に振り分け
+            # 方向別しきい値 (非対称化): 方向1(空→色)は add_min_frames、方向2/3
+            # (色→空/色→色)は min_frames を要求する。add_min_frames=None なら
+            # 両者 min_frames で従来と bit-identical (backwards compat)。
             if confirmed_v == COLOR_EMPTY:
                 # 方向1: 空→色 (重力整合チェック必要)
+                effective_min = (
+                    add_min_frames if add_min_frames is not None else min_frames
+                )
+                if new_count < effective_min:
+                    continue
                 add_candidates.append((r, c, agreed_v))
             else:
                 # 方向2: 色→空 / 方向3: 色→別色 (重力整合チェック不要)
+                if new_count < min_frames:
+                    continue
                 fix_candidates.append((r, c, agreed_v))
 
     return add_candidates, fix_candidates
@@ -1272,6 +1320,7 @@ def _apply_stable_recovery_gate(
     signals: "DetectorSignals",
     min_frames: int,
     *,
+    add_min_frames: "int | None" = None,
     enable_column_partial_support: bool = False,
     enable_cnn_flicker_hsv_fallback: bool = False,
     cnn_flicker_window_frames: int = CNN_FLICKER_WINDOW_FRAMES,
@@ -1280,7 +1329,8 @@ def _apply_stable_recovery_gate(
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
     双方向発火条件 (STABLE state、hsv_board!=None、warmup 外):
-        方向1 (空→色): confirmed=EMPTY, CNN==HSV=有効色 が min_frames 連続
+        方向1 (空→色): confirmed=EMPTY, CNN==HSV=有効色 が add_min_frames 連続
+                       (None なら min_frames)
         方向2 (色→空): confirmed=色,   CNN==HSV=EMPTY  が min_frames 連続
         方向3 (色→色): confirmed=色A,  CNN==HSV=色B    が min_frames 連続
 
@@ -1318,6 +1368,7 @@ def _apply_stable_recovery_gate(
     # パス1: 候補収集 + カウンタ更新
     add_candidates, fix_candidates = _collect_recovery_candidates(
         ctx, signals.cnn_board, hsv_board, min_frames,
+        add_min_frames=add_min_frames,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         cnn_flicker_window_frames=cnn_flicker_window_frames,
         cnn_flicker_min_changes=cnn_flicker_min_changes,
@@ -1405,6 +1456,7 @@ __all__ = [
     "_build_initial_confirmed_board",
     "STABLE_WARMUP_FRAMES",
     "STABLE_RECOVERY_MIN_FRAMES",
+    "STABLE_RECOVERY_ADD_MIN_FRAMES",
     "RECOVERY_COLUMN_SUPPORT_MIN_FRAMES",
     "RECOVERY_EXCLUDED_COLORS",
     "CNN_FLICKER_WINDOW_FRAMES",

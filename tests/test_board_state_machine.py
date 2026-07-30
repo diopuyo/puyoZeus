@@ -619,7 +619,11 @@ def test_merge_diff_hsv_guard_off_reproduces_cascade() -> None:
 
 
 def test_board_state_machine_stores_hsv_guard_flag() -> None:
-    """フラグが BoardStateMachine に格納され既定 False であること."""
+    """フラグが BoardStateMachine に格納され既定 False であること.
+
+    2026-07-30 汎化未確認 (4動画で c58/c26 2P tail 悪化・c26/c69 1P 効果ゼロ)
+    のため default OFF。True で有効化 (backwards compat)。
+    """
     sm_on = BoardStateMachine(enable_puyo_to_empty_hsv_guard=True)
     assert sm_on._enable_puyo_to_empty_hsv_guard is True
     sm_default = BoardStateMachine()
@@ -941,6 +945,79 @@ def test_recovery_gate_does_not_fire_before_n_frames() -> None:
 
     assert sm.context.confirmed_board is not None
     assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ空
+
+
+def test_asymmetric_recovery_add_direction_fires_early() -> None:
+    """非対称化: 方向1(空→色)は add_min_frames で発火する (min_frames より早い).
+
+    2026-07-30 enable_asymmetric_recovery_min_frames。誤認が治るまでのラグ短縮
+    のため空→色のみ短縮。default OFF なので明示 True で有効化して検証する。
+    """
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        enable_asymmetric_recovery_min_frames=True,
+        recovery_add_min_frames=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)  # 最下段 = 重力整合 OK
+    hsv = _board_with_red(12, 0)
+    # 1 フレーム目: add_min_frames=2 未満なので未発火
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+    # 2 フレーム目: add_min_frames=2 到達で発火 (min_frames=4 を待たない)
+    sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_asymmetric_recovery_fix_direction_keeps_min_frames() -> None:
+    """非対称化: 方向2(色→空)は min_frames を維持する (add_min_frames で早期発火しない).
+
+    「消す方向」は gravity filter で増幅リスクがあるため短縮しない。
+    """
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        enable_asymmetric_recovery_min_frames=True,
+        recovery_add_min_frames=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _board_with_red(12, 0)  # 確定は赤
+
+    cnn = _empty_board()  # CNN==HSV==空 (色→空 復旧)
+    hsv = _empty_board()
+    # add_min_frames=2 到達しても色→空 は min_frames=4 未満なので未発火
+    for i in range(3):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # まだ消えない
+    # 4 フレーム目: min_frames=4 到達で発火
+    sm.update(3, _stable_signal_with_hsv(0.15, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+
+
+def test_asymmetric_recovery_off_is_symmetric() -> None:
+    """既定 OFF では方向1も min_frames を要求する (bit-identical, backwards compat)."""
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        recovery_add_min_frames=2,  # 渡しても OFF なら無視される
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # add_min_frames=2 相当の 2 フレームでは未発火 (OFF なので min_frames=4 必要)
+    for i in range(3):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+    sm.update(3, _stable_signal_with_hsv(0.15, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
 
 
 def test_recovery_gate_no_fire_when_cnn_hsv_differ() -> None:

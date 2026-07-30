@@ -891,7 +891,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_cnn_flicker_hsv_fallback: bool = False,
              enable_initial_confirm_vote: bool = False,
              enable_platt_calibration: bool = False,
-             enable_early_fire_reaction: bool = False) -> int:
+             enable_early_fire_reaction: bool = False,
+             enable_puyo_to_empty_hsv_guard: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -959,6 +960,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         docstring 参照)。adv_ema/p1_last 自体 (EMA 内部状態) には混ぜず、表示直前
         (グラフ点・バー・勝率テキスト) にのみ加算するため、無効時は完全に従来経路と
         ビット一致する。
+    enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
+        色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
+        NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
+        cell を消さない (列デッドロックの初発を停止、実測は
+        scripts/_diag_column_deadlock_trace_2026-07-30.py 参照)。ただし 4動画測定で
+        c58/c26 の 2P tail 悪化・c26/c69 の 1P 効果ゼロ、汎化未確認のため
+        load_default 既定 OFF。既定 False = 従来挙動不変 (後方互換、A/B比較用)。
     """
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
@@ -1004,7 +1012,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_match_start_full_clear=enable_match_start_full_clear,
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
-        enable_initial_confirm_vote=enable_initial_confirm_vote)
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
+        enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -1244,6 +1253,14 @@ def main() -> None:
              "連鎖終了時に急変する問題、および相手の返し連鎖アニメ中の見落としに"
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
+    ap.add_argument(
+        "--puyo-to-empty-hsv-guard", action="store_true", default=False,
+        dest="enable_puyo_to_empty_hsv_guard",
+        help="色→空 HSV 照合ガードを有効化 (RecognitionPipeline.load_default に転送、"
+             "コミット 97445cc, 2026-07-30 追加)。c34 型の列デッドロックには有効だが"
+             "c58/c26 の 2P で tail 悪化・c26/c69 の 1P で効果ゼロ (汎化未確認)。"
+             "デフォルト OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -1257,7 +1274,8 @@ def main() -> None:
              enable_cnn_flicker_hsv_fallback=a.enable_cnn_flicker_hsv_fallback,
              enable_initial_confirm_vote=a.enable_initial_confirm_vote,
              enable_platt_calibration=a.enable_platt_calibration,
-             enable_early_fire_reaction=a.enable_early_fire_reaction)
+             enable_early_fire_reaction=a.enable_early_fire_reaction,
+             enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard)
 
 
 if __name__ == "__main__":
