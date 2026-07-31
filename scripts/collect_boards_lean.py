@@ -99,6 +99,11 @@ DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす
 SCORE_RESET_THRESHOLD: int = 500
 
+# ゲーム境界の共有カウンタのデバウンス幅 [秒] (2026-07-31)。
+# 1P/2P が同じ境界を検知したときに 2 回進めないための窓。
+# 実際の 1 試合は最短 14 秒 (勝利数パネル実測) なので誤抑制しない。
+GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
+
 # サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
 MIN_SAMPLE_INTERVAL_FRAMES: int = 1
 
@@ -355,13 +360,61 @@ class _SideState:
     final_scores: dict[int, int | None] = field(default_factory=dict)
 
 
-def _update_game_boundary(state: _SideState, score: int | None) -> None:
+@dataclass
+class _SharedGameCounter:
+    """1P/2P で共有するゲーム境界カウンタ (2026-07-31 の desync 根治)。
+
+    旧実装は `_SideState.game_idx` を **side ごとに独立して**進めていた。
+    ゲーム境界は「両者共通の 1 つの事象」なのに、検知は各 side の score
+    リセットに依存するため:
+      - 検知フレームがずれると game_idx がずれる (実測 57.6% が 5秒超のずれ)
+      - **片側の score OCR が壊れている動画 (c26/c58 等) ではその side が
+        game 0 に留まり続け、以降すべてのゲームが対応しなくなる**
+    その結果 `_merge_final_scores` や won 付与が別ゲーム同士を突き合わせる。
+
+    共有カウンタにすると「どちらかが検知すれば両者が進む」ので、
+    片側の検知失敗に耐える。両者が同じ境界を検知したときに 2 回進まないよう
+    直前の進行から GAME_BOUNDARY_DEBOUNCE_SEC 以内は進めない
+    (実際の 1 試合は最短 14 秒なので誤抑制しない)。
+    """
+    game_idx: int = 0
+    # 最後に境界を進めた時刻 [秒]。None = まだ一度も進めていない。
+    last_advance_sec: float | None = None
+
+    def advance_if_new(self, t_sec: float) -> bool:
+        """境界を進める (デバウンス内なら進めない)。進めたら True。"""
+        if (
+            self.last_advance_sec is not None
+            and t_sec - self.last_advance_sec < GAME_BOUNDARY_DEBOUNCE_SEC
+        ):
+            return False
+        self.game_idx += 1
+        self.last_advance_sec = t_sec
+        return True
+
+
+def _update_game_boundary(
+    state: _SideState,
+    score: int | None,
+    shared: "_SharedGameCounter | None" = None,
+    t_sec: float = 0.0,
+) -> None:
     """score リセット検知で game_idx を進める。旧ゲームの最終 score は
     リセット直前の prev_score (高値) を記録する。
 
-    バグ修正: 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
+    バグ修正 (旧): 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
     書き込んでから game_idx を進めていたため、旧ゲームの最終スコアが
     リセット後低値で上書きされ勝者判定が全て None になっていた。
+
+    バグ修正 (2026-07-31): `shared` を渡すと **1P/2P 共有のカウンタ**を使い、
+    どちらかが境界を検知すれば両 side が同じ game_idx に揃う。
+    shared=None のときは従来の side 独立カウンタ (後方互換)。
+
+    Args:
+        state: 対象 side の状態。
+        score: 今フレームの score OCR 値 (None は無視)。
+        shared: 共有カウンタ。None なら side 独立 (旧挙動)。
+        t_sec: 現在時刻 [秒]。shared のデバウンス判定に使う。
     """
     if score is None:
         return
@@ -372,7 +425,13 @@ def _update_game_boundary(state: _SideState, score: int | None) -> None:
     if is_reset:
         # 旧ゲームの最終スコア = リセット直前の高値を確定
         state.final_scores[state.game_idx] = state.prev_score
-        state.game_idx += 1
+        if shared is None:
+            state.game_idx += 1
+        else:
+            shared.advance_if_new(t_sec)
+    if shared is not None:
+        # 共有カウンタに追従 (相手側が検知した境界にも乗る)
+        state.game_idx = shared.game_idx
     # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
     state.final_scores[state.game_idx] = score
     state.prev_score = score
@@ -513,6 +572,9 @@ def collect_lean(
     acc = _LeanNpzAccumulator()
     state_p1 = _SideState()
     state_p2 = _SideState()
+    # ゲーム境界は両者共通の 1 つの事象なので共有カウンタで管理する
+    # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
+    shared_game = _SharedGameCounter()
 
     for local_i in range(n_frames):
         ok, frame = cap.read()
@@ -533,13 +595,13 @@ def collect_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
             next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
-            chain_event=result.p1.chain_event,
+            chain_event=result.p1.chain_event, shared_game=shared_game,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
             result.p2.state, result.p2.score, video_id, t_sec, fi,
             next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
-            chain_event=result.p2.chain_event,
+            chain_event=result.p2.chain_event, shared_game=shared_game,
         )
     cap.release()
 
@@ -563,6 +625,7 @@ def _process_side_lean(
     next_pair: tuple[int, int] | None = None,
     dnext_pair: tuple[int, int] | None = None,
     chain_event: object | None = None,
+    shared_game: "_SharedGameCounter | None" = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -575,8 +638,11 @@ def _process_side_lean(
             ChainEvent | None、循環import回避のため object 型ヒント)。
             機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
             (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
+        shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
+            渡すと片側の score OCR 破綻でも game_idx がずれない。
+            None なら従来の side 独立カウンタ (後方互換)。
     """
-    _update_game_boundary(state, score)
+    _update_game_boundary(state, score, shared=shared_game, t_sec=t_sec)
     if board is None or not _should_emit(state, board, bstate):
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import math
 import sys
@@ -879,20 +880,55 @@ def _draw_overlay(
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
+# ============================
+# 認識フラグの既定値解決 (2026-07-31)
+# ============================
+
+# 「スクリプト側が明示 False を渡すため、ライブラリ既定 True の認識改善が
+# viz では一切効いていない」罠を潰すための仕組み。
+# 実測 (inspect) で食い違っていたのは 7 つ:
+#   enable_landing_observed_color / enable_match_start_full_clear /
+#   enable_recovery_counter_carryover / enable_cnn_flicker_hsv_fallback /
+#   enable_initial_confirm_vote / enable_drift_resync_match_start_guard /
+#   enable_drift_resync_hsv_gate
+# いずれもライブラリ既定 True に対しスクリプトが False を渡していた。
+# → **viz で承認したのに本番は別挙動**という事故が起きうる (レビュー制度の破綻)。
+#
+# 方式: スクリプト側の既定を None にし、None のときは
+# RecognitionPipeline.load_default の既定値を inspect で読んで採用する。
+# 明示指定 (--flag / --no-flag) されたときだけそれを尊重する。
+# (scripts/measure_stable_cell_acc.py:354 と同じ方式)
+
+
+def _pipeline_default(name: str) -> bool:
+    """RecognitionPipeline.load_default の当該引数の既定値を返す。
+
+    引数が存在しない場合は False (呼び出し側で無害な既定として扱う)。
+    """
+    params = inspect.signature(RecognitionPipeline.load_default).parameters
+    param = params.get(name)
+    return bool(param.default) if param is not None else False
+
+
+def _resolve_flag(name: str, value: "bool | None") -> bool:
+    """None ならライブラリ既定に解決し、明示指定はそのまま返す。"""
+    return _pipeline_default(name) if value is None else bool(value)
+
+
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
              show_recognition: bool = False,
-             enable_landing_observed_color: bool = False,
+             enable_landing_observed_color: bool | None = None,
              force_in_match: bool = True,
-             enable_drift_guards: bool = False,
-             enable_match_start_full_clear: bool = False,
-             enable_recovery_counter_carryover: bool = False,
-             enable_cnn_flicker_hsv_fallback: bool = False,
-             enable_initial_confirm_vote: bool = False,
+             enable_drift_guards: bool | None = None,
+             enable_match_start_full_clear: bool | None = None,
+             enable_recovery_counter_carryover: bool | None = None,
+             enable_cnn_flicker_hsv_fallback: bool | None = None,
+             enable_initial_confirm_vote: bool | None = None,
              enable_platt_calibration: bool = False,
              enable_early_fire_reaction: bool = False,
-             enable_puyo_to_empty_hsv_guard: bool = False) -> int:
+             enable_puyo_to_empty_hsv_guard: bool | None = None) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -1006,14 +1042,23 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
-        enable_landing_observed_color=enable_landing_observed_color,
-        enable_drift_resync_match_start_guard=enable_drift_guards,
-        enable_drift_resync_hsv_gate=enable_drift_guards,
-        enable_match_start_full_clear=enable_match_start_full_clear,
-        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
-        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
-        enable_initial_confirm_vote=enable_initial_confirm_vote,
-        enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard)
+        # 未指定 (None) はライブラリ既定に解決する = 本番と同じ挙動を描画する
+        enable_landing_observed_color=_resolve_flag(
+            "enable_landing_observed_color", enable_landing_observed_color),
+        enable_drift_resync_match_start_guard=_resolve_flag(
+            "enable_drift_resync_match_start_guard", enable_drift_guards),
+        enable_drift_resync_hsv_gate=_resolve_flag(
+            "enable_drift_resync_hsv_gate", enable_drift_guards),
+        enable_match_start_full_clear=_resolve_flag(
+            "enable_match_start_full_clear", enable_match_start_full_clear),
+        enable_recovery_counter_carryover=_resolve_flag(
+            "enable_recovery_counter_carryover", enable_recovery_counter_carryover),
+        enable_cnn_flicker_hsv_fallback=_resolve_flag(
+            "enable_cnn_flicker_hsv_fallback", enable_cnn_flicker_hsv_fallback),
+        enable_initial_confirm_vote=_resolve_flag(
+            "enable_initial_confirm_vote", enable_initial_confirm_vote),
+        enable_puyo_to_empty_hsv_guard=_resolve_flag(
+            "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard))
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -1177,7 +1222,7 @@ def main() -> None:
              "state枠) を合成する (2026-07-23 追加、既定 False = 従来通り無地)。",
     )
     ap.add_argument(
-        "--landing-observed-color", action="store_true", default=False,
+        "--landing-observed-color", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_landing_observed_color",
         help="真因 A 対処: 着地セルの CNN==HSV 一致色補正を有効化 "
              "(RecognitionPipeline.load_default に転送、 2026-07-25 レビュー動画#49で追加)。 "
@@ -1191,20 +1236,20 @@ def main() -> None:
              "2026-07-25 c34 game1 境界レビューで追加、詳細は generate() docstring)。",
     )
     ap.add_argument(
-        "--drift-guards", action="store_true", default=False,
+        "--drift-guards", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_drift_guards",
         help="DriftDetector再同期暴走ガード2種(開始15秒保護窓+HSV較正3色未満抑制)を"
              "有効化 (2026-07-25 レビュー動画v3で追加)。既定 OFF = 従来挙動不変。",
     )
     ap.add_argument(
-        "--match-start-full-clear", action="store_true", default=False,
+        "--match-start-full-clear", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_match_start_full_clear",
         help="前試合盤面残骸リーク修正(幽霊B対策)を有効化 "
              "(RecognitionPipeline.load_default に転送、2026-07-23 追加)。"
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
     ap.add_argument(
-        "--recovery-counter-carryover", action="store_true", default=False,
+        "--recovery-counter-carryover", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_recovery_counter_carryover",
         help="#51: 復旧カウンタ carryover (非STABLE滞在が短時間なら"
              "stable_recovery_counters/recovery_cellsを引き継ぐ) を有効化 "
@@ -1212,7 +1257,7 @@ def main() -> None:
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
     ap.add_argument(
-        "--cnn-flicker-hsv-fallback", action="store_true", default=False,
+        "--cnn-flicker-hsv-fallback", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_cnn_flicker_hsv_fallback",
         help="#51後半: CNN乱高下セル(直近8フレームで出力変化3回以上)を"
              "HSV出力にフォールバックさせる復旧ゲート緩和を有効化 "
@@ -1220,7 +1265,7 @@ def main() -> None:
              "デフォルト OFF = 従来挙動不変 (backwards compat)。",
     )
     ap.add_argument(
-        "--initial-confirm-vote", action="store_true", default=False,
+        "--initial-confirm-vote", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_initial_confirm_vote",
         help="初回STABLE確定を直前NON-STABLE滞在中のCNN履歴多数決で構成する"
              "ガードを有効化 (RecognitionPipeline.load_default に転送、"
@@ -1254,7 +1299,7 @@ def main() -> None:
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
-        "--puyo-to-empty-hsv-guard", action="store_true", default=False,
+        "--puyo-to-empty-hsv-guard", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_puyo_to_empty_hsv_guard",
         help="色→空 HSV 照合ガードを有効化 (RecognitionPipeline.load_default に転送、"
              "コミット 97445cc, 2026-07-30 追加)。c34 型の列デッドロックには有効だが"
