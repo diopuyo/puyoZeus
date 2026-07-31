@@ -958,3 +958,21 @@ def test_collect_normalize_fps_30_ignored_when_sample_interval_frames_explicit(
         sample_interval_frames=4, normalize_fps_30=True,
     )
     assert fake_pipeline.update_calls == list(range(0, n_frames, 4))
+
+
+def test_xii_columns_are_tail_of_indicator_columns() -> None:
+    """XII 5 指標が INDICATOR_COLUMNS 内で連続して正しい順序で含まれること。
+
+    既存列の位置を変更していないことの回帰検知。
+    #18 追加時点では末尾10列だったが、その後 near_future/fire_stability/
+    expected_fire 系が末尾に追加された (EXTRA_INDICATOR_NAMES 末尾追加ルール)。
+    そのため「末尾であること」でなく「連続部分列として正しい順序で存在すること」
+    を検証する形に更新した (順序保持ルールの本来の意図を保ちつつ後続追加を許す)。
+    """
+    cols = collect_mod.INDICATOR_COLUMNS
+    assert _XII_COLUMNS[0] in cols, "XII 列が INDICATOR_COLUMNS に存在しない"
+    start = cols.index(_XII_COLUMNS[0])
+    assert cols[start:start + len(_XII_COLUMNS)] == _XII_COLUMNS, (
+        "XII 5 指標の相対順序が崩れている (順序保持ルール違反)"
+    )
+
