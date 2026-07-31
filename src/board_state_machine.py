@@ -40,6 +40,14 @@ DEFAULT_NON_STABLE_HISTORY_SIZE: int = 5
 # N=5 中 3 frame 以上で同色観測 = 信頼。 それ以下は瞬間的誤認とみなし baseline 維持。
 DEFAULT_EMPTY_TO_COLOR_MIN_VOTES: int = 3
 
+# ネクスト裏付け確定 (2026-07-31)。直近に消費された next/dnext ペアの色に
+# 一致する cell だけ、空→色の必要票数をこの値に緩める。
+# 裏付けの無い色には DEFAULT_EMPTY_TO_COLOR_MIN_VOTES を維持する。
+NEXT_CORROBORATED_MIN_VOTES: int = 1
+# 裏付けに使う next_queue の末尾件数 (直近に消費されたペアのみを見る)。
+# 大きくすると盤面上のあらゆる色が裏付け扱いになり緩和が無意味になる。
+NEXT_CORROBORATION_QUEUE_TAIL: int = 2
+
 # 初回STABLE確定の多数決ガード (enable_initial_confirm_vote, 2026-07-27):
 # baseline is None (初回確定) 時、直前 NON-STABLE 滞在中に蓄積した
 # non_stable_cnn_history の何 frame 以上一致すれば採用するか。
@@ -339,6 +347,8 @@ def _boards_equal(a: Board | None, b: Board | None) -> bool:
 def _vote_majority_board(
     history: list[Board], min_votes: int,
     *, fallback: Board | None = None,
+    corroborated_colors: "frozenset[int] | None" = None,
+    corroborated_min_votes: int | None = None,
 ) -> Board:
     """history の各 cell について多数決を取り、 min_votes 以上同色なら採用、
     そうでなければ EMPTY (または fallback 値) を入れた Board を返す.
@@ -355,6 +365,26 @@ def _vote_majority_board(
             初回STABLE確定の多数決ガード (enable_initial_confirm_vote,
             2026-07-27) では fallback=new_cnn を渡し、観測不足セルを
             問答無用で EMPTY 化する新規バグ (色→空誤凍結の増設) を防ぐ。
+        corroborated_colors: **ネクスト裏付け色** (2026-07-31)。
+            直近で消費された next/dnext ペアに含まれる色の集合。
+            多数決の勝者色がこの集合に含まれる cell だけ、必要票数を
+            corroborated_min_votes に緩める。
+            None (default) なら一切緩めない = 従来と bit-identical。
+        corroborated_min_votes: 裏付けありセルの必要票数 (通常 min_votes 未満)。
+
+    ## なぜ「閾値を一律に下げる」のと違うか
+    閾値の一律緩和は**情報量を減らして速くする**ので精度を売る。実測でも
+    recovery_min_frames 8→4 で初期色不一致が 2→3 に増えた。
+    こちらは「ピクセル以外の独立した情報 (ネクスト表示)」を足して
+    **裏付けのある色にだけ**緩めるので、速度と精度が同時に上がりうる。
+    裏付けの無い色 (= 誤読の疑いが濃い) には従来どおりフル票数を要求する。
+
+    ## 弱い使い方にしている理由
+    「どのネクストがどの設置に対応するか」の追跡は過去に信頼できなかった
+    (キューに正解無し57%、memory project_color_flicker_p2_root_cause_2026-07-25)。
+    そこで対応付けを真値として使わず、**「直近に消費されたペアの色に
+    含まれるか」という集合メンバシップだけ**を裏付けに使う。
+    対応付けが多少ずれても安全側に倒れる。
 
     Returns:
         多数決 board (= 観測不足 cell は EMPTY または fallback 値)
@@ -373,7 +403,16 @@ def _vote_majority_board(
             if not counter:
                 continue
             max_v, max_n = max(counter.items(), key=lambda x: x[1])
-            if max_n >= min_votes and max_v != COLOR_EMPTY:
+            # ネクスト裏付けのある色だけ必要票数を緩める (2026-07-31)。
+            # 裏付けが無ければ従来どおり min_votes を要求する。
+            need = min_votes
+            if (
+                corroborated_colors is not None
+                and corroborated_min_votes is not None
+                and max_v in corroborated_colors
+            ):
+                need = corroborated_min_votes
+            if max_n >= need and max_v != COLOR_EMPTY:
                 result.set(r, c, max_v)
             elif fallback is not None:
                 result.set(r, c, fallback.get(r, c))
@@ -631,6 +670,8 @@ class BoardStateMachine:
         *,
         non_stable_history_size: int = DEFAULT_NON_STABLE_HISTORY_SIZE,
         empty_to_color_min_votes: int = DEFAULT_EMPTY_TO_COLOR_MIN_VOTES,
+        enable_next_corroborated_confirm: bool = False,
+        next_corroborated_min_votes: int = NEXT_CORROBORATED_MIN_VOTES,
         enable_stable_resume_gate: bool = True,
         enable_warmup_guard: bool = False,
         warmup_frames: int = STABLE_WARMUP_FRAMES,
@@ -667,6 +708,13 @@ class BoardStateMachine:
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
+        # ネクスト裏付け確定 (2026-07-31)。default OFF = bit-identical。
+        self._enable_next_corroborated_confirm = bool(
+            enable_next_corroborated_confirm
+        )
+        self._next_corroborated_min_votes = max(
+            1, int(next_corroborated_min_votes)
+        )
         self._enable_stable_resume_gate = bool(enable_stable_resume_gate)
         # B1 (M1 warmup guard): STABLE 遷移直後の confirmed 凍結を有効化するか。
         # backwards compat: default False で既存動作と同一。
@@ -819,6 +867,37 @@ class BoardStateMachine:
         if self._enable_match_start_full_clear:
             self.clear_match_start_residue()
 
+    def _next_corroborated_colors(self) -> "frozenset[int] | None":
+        """直近に消費された next/dnext ペアの色集合を返す (裏付け用)。
+
+        ネクスト裏付け確定 (2026-07-31) の情報源。フラグ OFF なら None を返し、
+        `_vote_majority_board` は従来どおり一律 min_votes で判定する
+        (= bit-identical)。
+
+        **キューの対応付けは真値として使わない。**「どのネクストがどの設置に
+        対応するか」の追跡は過去に信頼できなかった (キューに正解無し57%)。
+        ここでは末尾 NEXT_CORROBORATION_QUEUE_TAIL 件のペアに含まれる色の
+        **集合メンバシップだけ**を使うので、対応付けがずれても安全側に倒れる。
+
+        Returns:
+            裏付け色の集合。フラグ OFF / キューが空なら None。
+        """
+        if not self._enable_next_corroborated_confirm:
+            return None
+        queue = getattr(self._ctx, "next_queue", None)
+        if not queue:
+            return None
+        colors: set[int] = set()
+        for pair in list(queue)[-NEXT_CORROBORATION_QUEUE_TAIL:]:
+            if not pair:
+                continue
+            for v in pair:
+                iv = int(v)
+                # 有効なぷよ色 (1-5) のみ。おじゃま(9)/UNKNOWN(10)/空(0) は除く
+                if 1 <= iv <= 5:
+                    colors.add(iv)
+        return frozenset(colors) if colors else None
+
     def update(
         self, frame_idx: int, signals: DetectorSignals,
     ) -> StateContext:
@@ -887,6 +966,11 @@ class BoardStateMachine:
                 empty_guard = _vote_majority_board(
                     self._ctx.non_stable_cnn_history,
                     min_votes=self._empty_to_color_min_votes,
+                    corroborated_colors=self._next_corroborated_colors(),
+                    corroborated_min_votes=(
+                        self._next_corroborated_min_votes
+                        if self._enable_next_corroborated_confirm else None
+                    ),
                 )
             # 初回STABLE確定の多数決ガード (enable_initial_confirm_vote,
             # 2026-07-27): baseline is None (初回確定) 時のみ使われる
