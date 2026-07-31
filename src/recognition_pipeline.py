@@ -97,7 +97,7 @@ CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 # ただし MatchEndDetector の lockdown_sec=5.0 に対し遅延は最大 THROTTLE_FRAMES 分なので
 # 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
 # bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
-LARGE_ROI_THROTTLE_FRAMES: int = 4
+LARGE_ROI_THROTTLE_FRAMES: int = 8
 
 
 class _ScoreValNotCached:

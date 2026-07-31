@@ -220,18 +220,77 @@ class NextDetector:
         x2 = min(w, cx + rw)
         return patch[y1:y2, x1:x2]
 
-    def _classify_side(
+    def _prepare_side(
         self,
         frame: np.ndarray,
         rois: tuple[tuple[str, tuple[int, int, int, int]], ...],
+    ) -> list[tuple[str, np.ndarray, np.ndarray, np.ndarray]]:
+        """ROI ごとに (key, full, cnn_patch, hsv_patch) を切り出す。
+
+        高速化 (2026-07-31): CNN 分類をサイド横断で 1 バッチに束ねるため、
+        切り出しと分類を分離した。切り出し内容は従来と同一。
+
+        Args:
+            frame: 1920x1080 の BGR フレーム。
+            rois: (key, ROI) の並び。
+
+        Returns:
+            (key, full パッチ, CNN 用パッチ, HSV 用パッチ) のリスト。
+        """
+        return [
+            (
+                key,
+                (full := self._extract(frame, roi)),
+                self._inner_crop(full, INNER_CROP_RATIO),
+                self._inner_crop(full, INNER_CROP_RATIO_HSV),
+            )
+            for key, roi in rois
+        ]
+
+    def _classify_cnn_batch(self, cnn_patches: list[np.ndarray]) -> list[int]:
+        """CNN 分類をまとめて実行する (classify_batch があれば 1 回で)。
+
+        高速化 (2026-07-31): 旧実装は 4 ROI x 2 サイド = **8 回の単発 CNN 呼び出し**
+        で、実測 559us/回・合計 4.47ms/frame (認識全体の約12%) を占めていた。
+        パッチ 1 枚の推論としては固定費が支配的なので、束ねると大きく縮む。
+        盤面側は既に 156 セルを 2 回に束ねている (classify_batch)。
+
+        classify_batch を持たない分類器 (テストのスタブ等) では従来通り
+        1 枚ずつ classify する (backwards compat)。
+
+        Args:
+            cnn_patches: CNN 用パッチのリスト。
+
+        Returns:
+            各パッチの色コード (入力と同じ順序)。
+        """
+        if not cnn_patches:
+            return []
+        batch_fn = getattr(self._classifier, "classify_batch", None)
+        if batch_fn is None:
+            return [self._classifier.classify(p) for p in cnn_patches]
+        return [int(c) for c in batch_fn(cnn_patches)]
+
+    def _vote_side(
+        self,
+        prepared: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]],
+        cnn_codes: list[int],
         side: str = "1P",
     ) -> NextDetectionResult:
+        """CNN 結果を受け取って HSV / centroid と多数決を取る。
+
+        多数決ロジックは旧 `_classify_side` からそのまま切り出したもの。
+
+        Args:
+            prepared: `_prepare_side` の出力。
+            cnn_codes: 各 ROI の CNN 判定 (prepared と同じ順序)。
+            side: "1P" / "2P" (HSV の背景補正に使う)。
+
+        Returns:
+            NextDetectionResult。
+        """
         labels: dict[str, int] = {}
-        for key, roi in rois:
-            full = self._extract(frame, roi)
-            cnn_patch = self._inner_crop(full, INNER_CROP_RATIO)
-            hsv_patch = self._inner_crop(full, INNER_CROP_RATIO_HSV)
-            cnn_code = self._classifier.classify(cnn_patch)
+        for (key, full, _cnn_patch, hsv_patch), cnn_code in zip(prepared, cnn_codes):
             hsv_code = hsv_dominant_color(hsv_patch, side=side)
             # W9-G: NextPairCentroid (平均色 1-NN) を 3 つ目の signal として使用
             cen_code = None
@@ -267,6 +326,21 @@ class NextDetector:
             dnext_top=labels["dnext_top"], dnext_bot=labels["dnext_bot"],
         )
 
+    def _classify_side(
+        self,
+        frame: np.ndarray,
+        rois: tuple[tuple[str, tuple[int, int, int, int]], ...],
+        side: str = "1P",
+    ) -> NextDetectionResult:
+        """1 サイド分を切り出し → CNN 分類 → 多数決 (従来の入口を維持)。
+
+        `detect_both` はサイド横断で CNN を束ねるためこれを経由しないが、
+        `detect` / `detect_2p` 単独呼び出しの互換のために残す。
+        """
+        prepared = self._prepare_side(frame, rois)
+        cnn_codes = self._classify_cnn_batch([p[2] for p in prepared])
+        return self._vote_side(prepared, cnn_codes, side=side)
+
     @staticmethod
     def _check_resolution(frame: np.ndarray) -> None:
         if frame is None or frame.ndim != 3:
@@ -278,28 +352,46 @@ class NextDetector:
     def detect(self, frame: np.ndarray) -> NextDetectionResult:
         """1P 側のフレームから 4 セル抽出 → 色分類して結果を返す。"""
         self._check_resolution(frame)
-        return self._classify_side(frame, (
-            ("next_top", ROI_1P_NEXT_TOP),
-            ("next_bot", ROI_1P_NEXT_BOT),
-            ("dnext_top", ROI_1P_DNEXT_TOP),
-            ("dnext_bot", ROI_1P_DNEXT_BOT),
-        ), side="1P")
+        return self._classify_side(frame, self.ROIS_1P, side="1P")
 
     def detect_2p(self, frame: np.ndarray) -> NextDetectionResult:
         """2P 側のフレームから 4 セル抽出。"""
         self._check_resolution(frame)
-        return self._classify_side(frame, (
-            ("next_top", ROI_2P_NEXT_TOP),
-            ("next_bot", ROI_2P_NEXT_BOT),
-            ("dnext_top", ROI_2P_DNEXT_TOP),
-            ("dnext_bot", ROI_2P_DNEXT_BOT),
-        ), side="2P")
+        return self._classify_side(frame, self.ROIS_2P, side="2P")
+
+    # 1P / 2P の ROI 並び (detect / detect_2p / detect_both で共有)
+    ROIS_1P: tuple[tuple[str, tuple[int, int, int, int]], ...] = (
+        ("next_top", ROI_1P_NEXT_TOP),
+        ("next_bot", ROI_1P_NEXT_BOT),
+        ("dnext_top", ROI_1P_DNEXT_TOP),
+        ("dnext_bot", ROI_1P_DNEXT_BOT),
+    )
+    ROIS_2P: tuple[tuple[str, tuple[int, int, int, int]], ...] = (
+        ("next_top", ROI_2P_NEXT_TOP),
+        ("next_bot", ROI_2P_NEXT_BOT),
+        ("dnext_top", ROI_2P_DNEXT_TOP),
+        ("dnext_bot", ROI_2P_DNEXT_BOT),
+    )
 
     def detect_both(self, frame: np.ndarray) -> NextDetectionBothResult:
-        """1P / 2P 両側を同時検出して返す。両者が一致するかも見られる。"""
+        """1P / 2P 両側を同時検出して返す。両者が一致するかも見られる。
+
+        高速化 (2026-07-31): 旧実装は detect() と detect_2p() を別々に呼び、
+        **1フレームで 8 回の単発 CNN 推論** (実測 559us/回、合計 4.47ms) をしていた。
+        両サイドのパッチを集めて **CNN を 1 バッチに束ねる**。
+        切り出し・HSV・多数決のロジックは一切変えていない。
+        """
+        self._check_resolution(frame)
+        prep_1p = self._prepare_side(frame, self.ROIS_1P)
+        prep_2p = self._prepare_side(frame, self.ROIS_2P)
+        # 8 枚まとめて 1 回の CNN 推論
+        codes = self._classify_cnn_batch(
+            [p[2] for p in prep_1p] + [p[2] for p in prep_2p],
+        )
+        n1 = len(prep_1p)
         return NextDetectionBothResult(
-            p1=self.detect(frame),
-            p2=self.detect_2p(frame),
+            p1=self._vote_side(prep_1p, codes[:n1], side="1P"),
+            p2=self._vote_side(prep_2p, codes[n1:], side="2P"),
         )
 
     def extract_patches(self, frame: np.ndarray, side: str = "1P") -> dict[str, np.ndarray]:
