@@ -85,6 +85,13 @@ V30_START_SEC: float = 225.0
 V30_MAX_SEC: float = 90.0  # 225.0-315.0s
 
 # 「安定」判定: 同色が何秒連続すれば「安定して埋まった」とみなすか。
+# 本番の収集・レンダが明示している stable_frame_count (2026-07-31)。
+# collect_boards_lean.py:560 / collect_indicators_v2.py:728 /
+# visualize_advantage_overlay.py:1043 / recognition_physics_review.py:213
+# がいずれも 3 を渡している。RecognitionPipeline.load_default の既定は 6 で、
+# 引数なしで呼ぶと**本番と違う設定を測ってしまう**。
+PRODUCTION_STABLE_FRAME_COUNT: int = 3
+
 # fps換算で frame 数にする (30fps→3f, 60fps→6f、既存 stable_frame_count=6
 # @60fps 相当の基準と整合)。
 RAW_STABLE_MIN_SEC: float = 0.10
@@ -198,6 +205,8 @@ def _collect_records(
     enable_recovery_counter_carryover: bool = False,
     enable_cnn_flicker_hsv_fallback: bool = False,
     enable_puyo_to_empty_hsv_guard: bool = False,
+    stable_frame_count: int | None = None,
+    recovery_min_frames: int | None = None,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -243,6 +252,16 @@ def _collect_records(
     end_frame = int((start_sec + max_sec) * fps)
     cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
 
+    # 【2026-07-31】本番の収集・レンダは全て stable_frame_count=3 を明示しているのに
+    # 本測定器は load_default の既定 6 を使っていた (= 本番と違う設定を測っていた)。
+    # viz の7フラグ罠と同型の事故なので、未指定なら本番値に合わせた上で警告を出す。
+    if stable_frame_count is None:
+        stable_frame_count = PRODUCTION_STABLE_FRAME_COUNT
+        print(
+            f"[warn] --stable-frame-count 未指定のため本番値 "
+            f"{PRODUCTION_STABLE_FRAME_COUNT} を使用 "
+            f"(load_default の既定 6 ではない)"
+        )
     pipe = RecognitionPipeline.load_default(
         enable_landing_observed_color=enable_landing_observed_color,
         enable_drift_resync_match_start_guard=enable_drift_resync_match_start_guard,
@@ -256,7 +275,19 @@ def _collect_records(
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+        **(
+            {} if stable_frame_count is None
+            else {"stable_frame_count": int(stable_frame_count)}
+        ),
     )
+    # 復旧ゲート閾値 (STABLE_RECOVERY_MIN_FRAMES) は load_default から届かないので
+    # 構築後の state machine に直接差し込む (2026-07-31 掃引用、read-only 診断)。
+    # 既定 None のときは一切触らない = 従来と完全に同じ挙動。
+    if recovery_min_frames is not None:
+        for _attr in ("_sm_1p", "_sm_2p"):
+            _sm = getattr(pipe, _attr, None)
+            if _sm is not None and hasattr(_sm, "_recovery_min_frames"):
+                _sm._recovery_min_frames = max(1, int(recovery_min_frames))
     pipe.set_video_id(video_stem)
     if pipeline_out is not None:
         pipeline_out["pipeline"] = pipe
@@ -747,6 +778,8 @@ def _process_one(
     enable_recovery_counter_carryover: bool = False,
     enable_cnn_flicker_hsv_fallback: bool = False,
     enable_puyo_to_empty_hsv_guard: bool = False,
+    stable_frame_count: int | None = None,
+    recovery_min_frames: int | None = None,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -784,6 +817,8 @@ def _process_one(
         enable_recovery_counter_carryover=enable_recovery_counter_carryover,
         enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
         enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+        stable_frame_count=stable_frame_count,
+        recovery_min_frames=recovery_min_frames,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -986,6 +1021,20 @@ def _parse_args() -> argparse.Namespace:
              "(STABLE突入からBASELINE_BROKEN_STABLE_GRACE_SEC秒はカウンタ加算を抑制)。",
     )
     ap.add_argument(
+        "--stable-frame-count", dest="stable_frame_count", type=int, default=None,
+        help="着地後に STABLE 宣言するまでの連続フレーム数 (本番既定 6)。"
+             "省略時はライブラリ既定 = 従来と完全に同じ挙動。"
+             "小さくすると反映は速くなるが、着地しきる前の遷移フレームを "
+             "STABLE 誤認する (浮きぷよ) リスクが上がる。",
+    )
+    ap.add_argument(
+        "--recovery-min-frames", dest="recovery_min_frames", type=int, default=None,
+        help="確定済みセルを上書きするまでの証拠フレーム数 "
+             "(STABLE_RECOVERY_MIN_FRAMES、本番既定 8)。省略時は変更しない。"
+             "小さくすると「誤認が治るまで」の右tailが縮むが、"
+             "一時的な誤読で確定盤面が書き換わりやすくなる。",
+    )
+    ap.add_argument(
         "--output-suffix", dest="output_suffix", type=str, default="",
         help="既定\"\"(従来通り)。非空を渡すと出力ファイル名に付与し、"
              "従来出力 (events_c34.csv/summary.json 等) を上書きしない。",
@@ -1110,6 +1159,9 @@ def main() -> None:
         "enable_recovery_counter_carryover": args.enable_recovery_counter_carryover,
         "enable_cnn_flicker_hsv_fallback": args.enable_cnn_flicker_hsv_fallback,
         "enable_puyo_to_empty_hsv_guard": args.enable_puyo_to_empty_hsv_guard,
+        # 2026-07-31 掃引用。None なら従来と完全に同じ挙動。
+        "stable_frame_count": args.stable_frame_count,
+        "recovery_min_frames": args.recovery_min_frames,
     }
 
     # 任意動画・任意窓モード (2026-07-25 汎化監査用に追加)。既定 (--video 未指定)
