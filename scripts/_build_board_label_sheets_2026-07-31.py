@@ -71,7 +71,7 @@ COLOR_BGR: dict[int, tuple[int, int, int]] = {
 # 出力する 1 セルの描画サイズ [px]
 CELL_PX: int = 56
 # 盤面切り出しの拡大率 (スマホで見て判断できる大きさにする)
-CROP_SCALE: float = 1.6
+CROP_SCALE: float = 2.0
 
 
 def _render_grid(grid: np.ndarray) -> np.ndarray:
@@ -95,6 +95,24 @@ def _render_grid(grid: np.ndarray) -> np.ndarray:
                     img, (x1 + 2, y1 + 2),
                     (x1 + CELL_PX - 2, y1 + CELL_PX - 2), (90, 90, 90), 1,
                 )
+    # 背景誤検出の稜線ハイライト (2026-07-31)。各列で最も高い位置にある
+    # ぷよ = 盤面輪郭。背景誤検出はこの輪郭より上に1-2セルはみ出す傾向がある
+    # (004 で確認: 実盤面の最上ぷよの1段上に偽の赤)。そのセルを黄枠で囲み、
+    # 「ここが偽ぷよの出やすい場所」として目視確認を誘導する。
+    for c in range(BOARD_COLS):
+        top_r = None
+        for r in range(HIDDEN_ROWS, BOARD_ROWS):
+            if int(grid[r, c]) != COLOR_EMPTY:
+                top_r = r
+                break
+        if top_r is not None:
+            # 最上ぷよ自身を黄枠で囲む (これが本当にそこにあるか確認する対象)
+            y1 = (top_r - HIDDEN_ROWS) * CELL_PX
+            x1 = c * CELL_PX
+            cv2.rectangle(
+                img, (x1 + 1, y1 + 1),
+                (x1 + CELL_PX - 1, y1 + CELL_PX - 1), (0, 220, 220), 2,
+            )
     return img
 
 
