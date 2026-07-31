@@ -26,12 +26,16 @@ from src.scoring import (
     MAX_BONUS_MULTIPLIER,
     OJAMA_RATE_MIN,
     OJAMA_RATE_STANDARD,
+    SCORE_CONSISTENCY_RATIO_MAX,
+    SCORE_CONSISTENCY_RATIO_MIN,
     calculate_chain_score,
     calculate_step_score,
     chain_power,
     color_bonus,
     compute_effective_rate,
     connection_bonus,
+    is_score_consistent,
+    score_consistency_ratio,
     score_to_ojama,
 )
 from src.chain import ChainStep, PuyoGroup
@@ -350,3 +354,68 @@ def test_bonus_multiplier_below_999_unchanged() -> None:
     step = _fake_step(chain_idx=5, group_size=4, num_colors=1)
     sc = calculate_step_score(step)
     assert sc.bonus_multiplier == 64
+
+
+# ============================
+# 得点整合性チェック (2026-07-29 追加)
+# ============================
+
+
+def test_score_consistency_ratio_exact_match_is_1() -> None:
+    """期待得点と実測が完全一致するとき比率は1.0になること。"""
+    assert score_consistency_ratio(1000, 1000) == pytest.approx(1.0)
+
+
+def test_score_consistency_ratio_known_bad_case_c54() -> None:
+    """c54 の既知の疑義事例 (期待40点 vs 実測7598点) は大幅な比率になること
+    (all_clear_carryover を考慮しても 2140 に対し 3.55 倍で不整合の範囲)。"""
+    ratio = score_consistency_ratio(40, 7598)
+    # 全消し仮説 (40+2100=2140) を考慮しても 7598/2140 ≈ 3.55
+    assert ratio == pytest.approx(7598 / 2140, rel=1e-6)
+    assert not is_score_consistent(40, 7598)
+
+
+def test_score_consistency_ratio_all_clear_carryover_accepted() -> None:
+    """全消し繰越を考慮すると許容範囲になるケース (期待40点+2100点=2140点付近)。"""
+    ratio = score_consistency_ratio(40, 2140, allow_all_clear_carryover=True)
+    assert ratio == pytest.approx(1.0, rel=1e-6)
+    assert is_score_consistent(40, 2140)
+
+
+def test_score_consistency_ratio_all_clear_carryover_disabled() -> None:
+    """allow_all_clear_carryover=False では全消し仮説を使わないこと
+    (後方互換: 既定 True、明示 False で従来の単純比較のみ)。"""
+    ratio = score_consistency_ratio(40, 2140, allow_all_clear_carryover=False)
+    assert ratio == pytest.approx(2140 / 40, rel=1e-6)
+    assert not is_score_consistent(40, 2140, allow_all_clear_carryover=False)
+
+
+def test_is_score_consistent_within_default_band() -> None:
+    """許容比率 [0.5, 2.0] 内は整合と判定されること。"""
+    assert is_score_consistent(100, 100)
+    assert is_score_consistent(100, 50)  # ratio=0.5 (下限ちょうど)
+    assert is_score_consistent(100, 200)  # ratio=2.0 (上限ちょうど)
+
+
+def test_is_score_consistent_outside_default_band() -> None:
+    """許容比率の外は不整合と判定されること。"""
+    assert not is_score_consistent(100, 49)
+    assert not is_score_consistent(100, 201)
+
+
+def test_score_consistency_ratio_custom_band() -> None:
+    """ratio_min/ratio_max を明示指定すると既定値の代わりに使われること。"""
+    assert is_score_consistent(100, 250, ratio_min=0.1, ratio_max=3.0)
+    assert not is_score_consistent(100, 250, ratio_min=0.1, ratio_max=2.0)
+
+
+def test_score_consistency_ratio_zero_expected_nonzero_observed_is_inf() -> None:
+    """期待得点が0以下で実測>0の場合は明確な不整合 (inf) を返すこと。"""
+    ratio = score_consistency_ratio(0, 100, allow_all_clear_carryover=False)
+    assert ratio == float("inf")
+
+
+def test_score_consistency_default_thresholds_are_module_constants() -> None:
+    """既定の許容比率が SCORE_CONSISTENCY_RATIO_MIN/MAX と一致すること。"""
+    assert SCORE_CONSISTENCY_RATIO_MIN == pytest.approx(0.5)
+    assert SCORE_CONSISTENCY_RATIO_MAX == pytest.approx(2.0)

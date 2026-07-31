@@ -67,7 +67,20 @@ class HybridClassifier:
         use_ui_mask: bool = True,
         mask_ojama_logit: bool = False,
         use_puyo_gate: bool = False,
+        ui_mask_cells: frozenset[tuple[int, int]] | None = None,
     ) -> None:
+        """
+        Args:
+            ui_mask_cells: 案B (2026-07-30)。指定すると classify_batch の
+                UI マスク判定 (is_ui 呼出) を、この集合に含まれる raw row/col
+                セルだけに限定する (それ以外は判定省略 = 常に is_ui=False 扱い)。
+                座標系は src.ui_mask.UI_MASK_TARGET_CELLS と同じ raw row
+                (HIDDEN_ROWS 込み)。
+                None (既定) では従来通り全セルで is_ui を判定する
+                (backwards compat、bit-identical)。
+                実際に絞り込みが効くのは classify_batch に cell_positions も
+                渡した場合のみ (両方揃わないと従来動作にフォールバックする)。
+        """
         self._hsv = hsv_classifier or ColorClassifier()
         self._cnn = cnn_classifier
         self._cnn_override_prob = float(cnn_override_prob)
@@ -79,6 +92,8 @@ class HybridClassifier:
             self._ui_matcher = UiMaskMatcher.load_default()
         else:
             self._ui_matcher = None
+        # 案B (2026-07-30): UI マスク判定対象セルの限定 (既定 None = 全セル)。
+        self._ui_mask_cells: frozenset[tuple[int, int]] | None = ui_mask_cells
         # cycle 32e (2026-05-19): ojama を CNN 学習対象外にしているため、
         # 推論時に ojama logit を mask する (= argmax 候補から除外)。
         # default=False で backwards compat 維持。 cycle 32e model 利用時に
@@ -172,6 +187,7 @@ class HybridClassifier:
     def classify_batch(
         self, bgr_patches: list[np.ndarray],
         bg_distances: list[float | None] | None = None,
+        cell_positions: list[tuple[int, int]] | None = None,
     ) -> list[int]:
         """Z-3C: 複数 patch をまとめて色 code に分類。
 
@@ -182,6 +198,13 @@ class HybridClassifier:
         各 patch の bg_fp 距離が指定された場合、 distance が小さい cell の
         CNN 出力に EMPTY logit soft prior を加算 (= 背景誤認の補正)。
         backwards compat: bg_distances=None で旧挙動と完全同一。
+
+        案B (2026-07-30): cell_positions optional 引数追加。
+        bgr_patches と同じ順序・同じ長さの (raw_row, col) リストを渡すと、
+        __init__ の ui_mask_cells に含まれないセルの is_ui 呼出を省略できる
+        (matchTemplate 呼出削減)。cell_positions=None、または ui_mask_cells
+        未指定、または長さ不一致の場合は従来通り全セルで判定する
+        (backwards compat、bit-identical)。
         """
         if not bgr_patches:
             return []
@@ -193,9 +216,18 @@ class HybridClassifier:
         BG_DIST_BOOST_SCALE: float = 50.0
         BG_DIST_MAX_RELEVANT: float = 150.0
         # UI mask の事前判定 (バッチ化不可、cell ごと)
+        # 案B: ui_mask_cells + cell_positions が両方揃った時のみセル限定を有効化。
+        # 長さ不一致は呼出元の不整合 (バグ) の疑いがあるため安全側 (全セル判定) に倒す。
+        restrict_cells = (
+            self._ui_mask_cells is not None
+            and cell_positions is not None
+            and len(cell_positions) == n
+        )
         ui_mask = [False] * n
         if self._ui_matcher is not None:
             for i, p in enumerate(bgr_patches):
+                if restrict_cells and cell_positions[i] not in self._ui_mask_cells:
+                    continue  # UI 描画され得ない位置 → is_ui 呼出省略 (常に False 扱い)
                 if p.size > 0 and self._ui_matcher.is_ui(p):
                     ui_mask[i] = True
         if self._cnn is None:

@@ -17,7 +17,12 @@ import numpy as np
 BOARD_COLS: int = 6
 BOARD_ROWS: int = 13
 DEATH_COL: int = 2       # 窒息判定列 (0-indexed)
-DEATH_ROW: int = 0       # 窒息判定行 (最上段)
+# 窒息判定行。
+# user確定ルール (2026-07-22, docs/PUYO_RULES_CONFIRMED_2026-07-22.md):
+#   死亡マスは「3列目の画面内一番上」= 隠し段(row0)を除いた可視最上段 = row1。
+#   row0(隠し段)は回し入れ等で一時的にぷよが通過しうる非公開領域であり、
+#   そこが埋まっただけでは窒息と判定しない (旧 DEATH_ROW=0 は判定が甘すぎた)。
+DEATH_ROW: int = 1       # 窒息判定行 (可視最上段。隠し段 row0 は含まない)
 
 # 可視領域の行数 (画面に表示される範囲)
 # 隠し段 (row 0) は画面外で、回し入れ等で puyo が入ることがある
@@ -169,8 +174,12 @@ class Board:
 
     def is_dead(self) -> bool:
         """
-        窒息判定。3列目(index:2)最上段にぷよがあればTrue。
+        窒息判定。3列目(index:2)の可視最上段(row=DEATH_ROW=1)にぷよがあればTrue。
+        隠し段(row0)は判定に含めない (user確定ルール 2026-07-22)。
         COLOR_UNKNOWN は判定不能とみなして False (確定的には死んでいない)。
+
+        本メソッドは STABLE (連鎖解決後) の静止盤面に対する静的判定として使う。
+        ゲーム本来の判定タイミング (次ツモ・連鎖解決後) と整合する。
 
         Returns:
             bool: 窒息状態ならTrue。

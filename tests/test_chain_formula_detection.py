@@ -164,6 +164,84 @@ def test_check_formula_detected_false_black_roi() -> None:
 
 
 # ===========================================================================
+# 修正1 (2026-07-30): スコア OCR 完全重複読み排除 の回帰テスト
+# ===========================================================================
+
+
+def test_check_formula_detected_uses_cached_score_val_without_calling_ocr() -> None:
+    """cached_score_val を渡すと score_ocr.read_side は呼ばれない (重複排除確認)。"""
+    bright_frame = _make_blank_1080p(fill=200)
+    mock_ocr = _make_mock_ocr(return_score=None)
+    result = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr, "1P", last_score=100,
+        cached_score_val=None,  # 経路① (ScoreTracker.update) が OCR 失敗した想定
+    )
+    assert result is True, "キャッシュ経由でも OCR=None+bright+last_score>0 は True 期待"
+    mock_ocr.read_side.assert_not_called()
+
+
+def test_check_formula_detected_cached_score_val_matches_uncached_result() -> None:
+    """cached_score_val あり/なしで判定結果が bit-identical であること。"""
+    bright_frame = _make_blank_1080p(fill=200)
+    # ケース1: OCR 成功 (score_val=12345) → False (通常スコア表示)
+    mock_ocr_success = _make_mock_ocr(return_score=12345)
+    result_uncached = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_success, "1P", last_score=12345,
+    )
+    result_cached = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_success, "1P", last_score=12345,
+        cached_score_val=12345,
+    )
+    assert result_uncached is False
+    assert result_cached is False
+
+    # ケース2: OCR 失敗 (score_val=None) → ink_ratio 次第 (bright なので True)
+    mock_ocr_fail = _make_mock_ocr(return_score=None)
+    result_uncached2 = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_fail, "1P", last_score=100,
+    )
+    result_cached2 = RecognitionPipeline._check_formula_detected(
+        bright_frame, mock_ocr_fail, "1P", last_score=100,
+        cached_score_val=None,
+    )
+    assert result_uncached2 is True
+    assert result_cached2 is True
+
+
+def test_update_score_tracker_returns_delta_and_raw_score_val() -> None:
+    """_update_score_tracker が (delta, 生 score 値) の tuple を返す (修正1)。"""
+    from unittest.mock import MagicMock
+
+    from src.score_ocr import ScoreOcr, ScoreTracker
+
+    mock_ocr = MagicMock(spec=ScoreOcr)
+    mock_ocr.read_side.return_value = (500, 0.9)
+    tracker = ScoreTracker("1P", mock_ocr)
+    delta, raw = RecognitionPipeline._update_score_tracker(
+        tracker, _make_blank_1080p(0),
+    )
+    assert raw == 500, "生 score 値 (cur_score) がそのまま返ること"
+    assert delta == 0, "初回 (prev_score=None) は is_valid=False → delta=0"
+
+    # 2 frame 目: prev=500, cur=700 → delta=200
+    mock_ocr.read_side.return_value = (700, 0.9)
+    delta2, raw2 = RecognitionPipeline._update_score_tracker(
+        tracker, _make_blank_1080p(0),
+    )
+    assert raw2 == 700
+    assert delta2 == 200
+
+
+def test_update_score_tracker_none_tracker_returns_zero_and_none() -> None:
+    """tracker=None のとき (0, None) を返す (backwards compat)。"""
+    delta, raw = RecognitionPipeline._update_score_tracker(
+        None, _make_blank_1080p(0),
+    )
+    assert delta == 0
+    assert raw is None
+
+
+# ===========================================================================
 # 連続 2frame 要件のテスト (pipeline 内カウンタ)
 # ===========================================================================
 
@@ -514,3 +592,145 @@ def test_slide_signal_no_effect_flag_off() -> None:
 
     assert pipe._active_chain_1p is dummy_ev, "フラグ OFF では active_chain を保持する"
     assert chain_ev_1p is dummy_ev, "フラグ OFF では chain_ev を保持する"
+
+
+# ===========================================================================
+# 修正D (2026-07-24): enable_chain_formula_simulate_verify のテスト
+#
+# 真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
+# 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火 (偽イベント) と
+# 確定。ChainSimulator 検証で偽イベントを源で断つ対策のテスト。
+#
+# 2026-07-24 user viz 承認: 物理採点+独立診断で偽イベント率 27.5%→0% を
+# 確認し default ON に採用 (savepoint/chain-formula-verify-default-on)。
+# 旧挙動 (検証なし・bit-identical) は enable_chain_formula_simulate_verify=False
+# を明示指定すれば維持できる (backwards compat)。
+# ===========================================================================
+
+
+def _make_clearable_board() -> "Board":
+    """4連結 (2x2) の赤ぷよで実際に連鎖が発生する起点盤面を返す。"""
+    from src.board import Board, COLOR_RED
+    board = Board()
+    for row, col in ((12, 0), (12, 1), (11, 0), (11, 1)):
+        board.set(row, col, COLOR_RED)
+    return board
+
+
+def _make_pipe_with_simulate_verify(
+    enable_verify: bool,
+) -> RecognitionPipeline:
+    """enable_chain_formula_simulate_verify を指定した最小構成 pipeline。"""
+    from src.image_reader import ImageReader
+    from src.match_state import MatchStateDetector
+    reader = MagicMock(spec=ImageReader)
+    reader._classifier = None
+    reader.read_both_boards.return_value = (None, None)
+    reader.set_pre_capture_mode = MagicMock()
+    reader.set_background_fingerprints = MagicMock()
+    match_det = MagicMock(spec=MatchStateDetector)
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=match_det,
+        enable_chain_formula_detection=True,
+        enable_chain_formula_simulate_verify=enable_verify,
+        force_in_match=True,
+    )
+
+
+def test_simulate_verify_default_is_on() -> None:
+    """enable_chain_formula_simulate_verify のデフォルト値は True
+    (2026-07-24 user viz 承認により default ON 採用、偽イベント率 27.5%→0%)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    default = sig.parameters["enable_chain_formula_simulate_verify"].default
+    assert default is True, f"デフォルト True 期待 (採用済): {default}"
+
+
+def test_load_default_simulate_verify_default_is_on() -> None:
+    """load_default の enable_chain_formula_simulate_verify も既定 True。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    default = sig.parameters["enable_chain_formula_simulate_verify"].default
+    assert default is True, f"load_default デフォルト True 期待: {default}"
+
+
+def test_simulate_verify_flag_explicit_off_fires_with_chain_count_one_bit_identical() -> None:
+    """flag=False を明示指定した場合は起点盤面が空でも従来通り
+    chain_count=1 で発火する (= 旧挙動・bit-identical、backwards compat の
+    退避経路が生きていることの直接確認)。"""
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=False)
+    empty_board = Board()  # 連鎖ゼロの起点盤面
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=empty_board,
+    )
+    assert pipe._active_chain_1p is not None, (
+        "flag=False では検証なしで従来通り発火する (bit-identical)"
+    )
+    assert pipe._active_chain_1p.chain_count == 1, (
+        "flag=False では chain_count=1 固定 (従来挙動)"
+    )
+
+
+def test_simulate_verify_flag_on_suppresses_false_fire_on_empty_board() -> None:
+    """flag=True かつ起点盤面に連鎖が実在しない (空盤面) → 疑似発火を抑制する。"""
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    empty_board = Board()  # 連鎖ゼロの起点盤面 (偽イベントの典型パターン)
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=empty_board,
+    )
+    assert pipe._active_chain_1p is None, (
+        "flag=True かつ連鎖ゼロの起点盤面では疑似発火を抑制すべき"
+    )
+
+
+def test_simulate_verify_flag_on_fires_with_real_chain_count() -> None:
+    """flag=True かつ起点盤面に実際に連鎖がある → 固定1でなく実測 chain_count で発火する。"""
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    clearable_board = _make_clearable_board()  # 4連結 = 1連鎖 (simulate 実測済み)
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    assert pipe._active_chain_1p is not None, (
+        "flag=True でも連鎖が実在する起点盤面では正当な早期発火を保持すべき"
+        " (過剰抑制ガード = 最重要の安全確認)"
+    )
+    assert pipe._active_chain_1p.chain_count == 1, (
+        f"実測 chain_count=1 期待: {pipe._active_chain_1p.chain_count}"
+    )
+
+
+def test_simulate_verify_populates_chain_estimate_without_double_simulate() -> None:
+    """_start_chain_estimate が precomputed_result 経由で estimate を保持する
+    (二重 simulate を避けつつ既存の estimated_board 補完機能を維持)。"""
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    clearable_board = _make_clearable_board()
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    assert pipe._chain_estimate_result_1p is not None, (
+        "検証済み ChainResult が estimate 経路にも反映されるべき"
+    )
+    assert pipe._chain_estimate_result_1p.chain_count == 1
+
+
+def test_simulate_verify_active_chain_already_set_skips_gate() -> None:
+    """既に active_chain が有効なら (従来通り) simulate 検証にすら入らずスキップする。"""
+    from src.chain_detector import ChainEvent
+    from src.board import Board
+    pipe = _make_pipe_with_simulate_verify(enable_verify=True)
+    dummy_ev = ChainEvent(
+        trigger_sec=0.5, end_sec=100.0, before_board=Board(),
+        chain_count=2, total_erased=8, total_score=400,
+        base_score=400, all_clear_bonus_applied=0,
+        ojama_sent=0, leftover_score=0, is_all_clear=False,
+    )
+    pipe._active_chain_1p = dummy_ev
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=Board(),
+    )
+    assert pipe._active_chain_1p is dummy_ev, (
+        "既存 active_chain を上書きしないこと (機能D 本来のガード維持)"
+    )

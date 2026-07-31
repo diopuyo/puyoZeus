@@ -21,6 +21,7 @@ state == STABLE 時の confirmed_board が「公式の確定盤面」として�
 
 from __future__ import annotations
 
+import os
 from collections import Counter, deque
 from dataclasses import dataclass
 
@@ -35,8 +36,10 @@ from src.probabilistic_board import ProbabilisticBoard
 from src.board_state_machine import (
     BoardState,
     BoardStateMachine,
+    DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
     NON_STABLE_STATES,
+    STABLE_RECOVERY_ADD_MIN_FRAMES,
     StateContext,
 )
 
@@ -84,6 +87,32 @@ from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN
 # 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
 CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 
+# 大 ROI 走査 (MatchEndDetector 800x600 / TelopDetector 720x400) の間引き間隔。
+# 2026-07-30 プロファイル実測: match_end 4.9ms x 2回/フレーム、telop 2.6ms x 2回/フレーム
+# = 合計約15ms/フレームで、認識時間の約12%を占める。
+# どちらも「勝敗演出」「全消しテロップ」という数秒間持続する事象の検出であり、
+# 毎フレーム走査する必要がない (ゲートは一切無く無条件実行されていた)。
+#
+# リスク (有界): match_end の検出が遅れると lockdown (盤面凍結) の開始が遅れる。
+# ただし MatchEndDetector の lockdown_sec=5.0 に対し遅延は最大 THROTTLE_FRAMES 分なので
+# 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
+# bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
+LARGE_ROI_THROTTLE_FRAMES: int = 8
+
+
+class _ScoreValNotCached:
+    """`_check_formula_detected` の cached_score_val 未指定を表す sentinel。
+
+    修正1 (2026-07-30): スコア OCR 完全重複読み排除。
+    score_ocr.read_side() の戻り値 (int | None) には「OCR 成功」も
+    「OCR 失敗 (None)」も含まれるため、素の None をデフォルト値に
+    使うと「キャッシュ未指定」と「キャッシュ済で OCR 失敗だった」を
+    区別できない。専用 sentinel クラスで明確に分離する。
+    """
+
+
+_SCORE_VAL_NOT_CACHED = _ScoreValNotCached()
+
 # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (enable_chain_exit_next_signal 用)。
 # CHAIN_EXIT_NEXT_WARMUP_SEC: 案X 専用の warmup 凍結時間。
 # 機能C の CHAIN_EXIT_WARMUP_SEC=0.1s はエフェクト残光のみを吸収する最小設定だが、
@@ -97,13 +126,67 @@ CHAIN_EXIT_NEXT_WARMUP_SEC: float = 0.5
 # warmup 連動: フラグ ON 時は enable_chain_exit_warmup を内部で自動有効化し、
 #     凍結時間は CHAIN_EXIT_NEXT_WARMUP_SEC を使用 (CHAIN_EXIT_WARMUP_SEC より長い)。
 
+# 前試合盤面残骸リーク修正・追修 (2026-07-25): force_in_match=True 構成では
+# raw_active が常時 True になり、BoardStateMachine.update() の
+# is_match_active=False 分岐 (MENU 強制、5 field クリアの発火点) が一度も
+# 走らない。この構成での実際の試合境界は score リセット (新ゲーム開始で
+# score が大幅減少 / 両者ほぼ0) でのみ検知できるため、その専用しきい値を
+# ここで定義する (enable_match_start_full_clear=True 時のみ使用)。
+# SCORE_RESET_THRESHOLD (=500) は ojama_accounting.py の既存定数を流用し重複させない。
+from src.ojama_accounting import SCORE_RESET_THRESHOLD  # noqa: E402
+# 両者スコアがこれ以下なら「0付近」とみなす (OCR ノイズ許容)。
+# scripts/visualize_advantage_overlay.py の SCORE_NEAR_ZERO_THRESHOLD と同値。
+MATCH_START_SCORE_NEAR_ZERO_THRESHOLD: int = 20
+
+# 診断用 (2026-07-26, project_win_eval_regen_2026-07-26):
+# enable_match_start_full_clear 由来の reset() 発火を計測する opt-in デバッグ出力。
+# 環境変数未設定時は完全に no-op (既存挙動・性能に一切影響しない)。
+_DEBUG_RESET_PROBE_ENV: str = "PUYO_DEBUG_RESET_PROBE"
+
+# 誤発火修正 (2026-07-26, data/verify/win_eval_regen_2026-07-26/
+# diag_v29_mid_resetlog.log で確定): 片側のみの単発 score OCR 誤読
+# (例: 2P=40031 不変なのに 1P だけ 48077→0) で境界候補が単発 1 フレーム
+# だけ真になっても、strict モードでは連続 SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES
+# フレーム成立するまで実際の reset() 発火とみなさない (呼び出し側で使用)。
+SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES: int = 3
+
+
+def _is_score_reset_boundary(
+    score1: int | None, score2: int | None,
+    prev1: int | None, prev2: int | None,
+    strict: bool = False,
+) -> bool:
+    """スコア推移から試合境界 (新ゲーム開始/全消しリセット) の候補フレームを
+    検知する (純関数、1 フレーム単位の判定・デバウンスは呼び出し側の責務)。
+
+    strict=False (default, backwards compat): 従来ロジック。
+        scripts/visualize_advantage_overlay.py の `_detect_score_reset` と
+        同一 (= 表示層の境界検知と内部 state clear の判定を一致させる)。
+        片側のみの急落でも発火する (OR 条件)。
+    strict=True (2026-07-26 誤発火修正): 片側のみの単発 OCR 誤読による
+        誤発火を防ぐため、「両者ともに急落」または「両者ともにほぼ0」の
+        場合のみ発火する (AND 条件)。片側のみの急落では発火しない。
+    score が None (OCR 失敗) の場合は判定不能として False (誤リセット回避)。
+    """
+    if score1 is None or score2 is None:
+        return False
+    near_zero = (
+        score1 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
+        and score2 <= MATCH_START_SCORE_NEAR_ZERO_THRESHOLD
+    )
+    drop1 = prev1 is not None and prev1 - score1 >= SCORE_RESET_THRESHOLD
+    drop2 = prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD
+    if not strict:
+        return drop1 or drop2 or near_zero
+    return (drop1 and drop2) or near_zero
+
 from pathlib import Path
 
 from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
     capture_patch_pair_robust,
 )
-from src.chain_detector import ChainEvent, VideoChainTracker
+from src.chain_detector import DEBOUNCE_CONFIRM_FRAMES, ChainEvent, VideoChainTracker
 from src.drift_detector import DriftDetector, DriftResult
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
@@ -112,7 +195,7 @@ from src.match_state import MatchState, MatchStateDetector
 from src.next_detector import NextDetector
 from src.online_hsv_calibrator import OnlineHsvCalibrator
 from src.score_zero import ScoreZeroDetector
-from src.telop_detector import TelopDetector
+from src.telop_detector import TelopDetector, TelopResult
 from src.next_slide_detector import (
     NextSlideDetector,
     SlideMotionResult,
@@ -124,6 +207,7 @@ from src.placement_inferrer import (
     DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
+from src.ui_mask import UI_MASK_TARGET_CELLS
 from src.state_detectors import (
     ChainPhaseDetector,
     EffectPhaseDetector,
@@ -183,6 +267,54 @@ class SideResult:
     #   source: "last_consumed_color" | "next_queue_2" | "next_queue_1" | "none"
     # backwards compat のため default None。フラグ ON/OFF 問わず常に記録する。
     landing_diag: dict | None = None
+    # 反復4 (2026-07-23): confirmed_board が None のとき、その理由を分類する
+    # 診断計装フィールド (挙動は一切変えない optional 計装)。
+    # confirmed_board is not None のフレームは常に None (該当なし)。
+    # 値の種類:
+    #   "cold_start": この試合でまだ一度も STABLE 確定していない (最初の未確定)
+    #   "menu_reset": 直近で is_match_active=False → MENU 強制 (confirmed_board
+    #                 =None 化) が起きて以降、STABLE で再確定していない
+    #                 (board_state_machine.py:480-488 経路)
+    #   "chain_hold_none": cold_start でも menu_reset でもないが CHAIN/
+    #                 GRAVITY_SETTLE 中に confirmed_board が None
+    #                 (= is_match_active 経路以外の別要因の疑い)
+    #   "other": 上記以外 (通常起こらないはずだが fail-silent 防止用の受け皿)
+    # backwards compat のため default None。
+    board_none_reason: str | None = None
+    # 反復5 (2026-07-23): 物理推論スルー (根治本体)。CHAIN/GRAVITY_SETTLE 中は
+    # confirmed_board が None のままだが (= 標準 eval 経路は従来通り None を
+    # 見て STABLE のみ評価、backward compat 完全維持)、起点盤面
+    # (chain_event.before_board) から ChainSimulator で連鎖を前進させた
+    # 「推定」盤面をここに公開する。相手盤面把握・打ち合い判定等の用途向け。
+    # confirmed_board is not None のフレームは常に None (該当なし)。
+    # backwards compat のため default None。
+    estimated_board: "Board | None" = None
+    # board_provenance の値:
+    #   "observed": confirmed_board が実観測 (通常の STABLE 確定値)。
+    #   "chain_estimate": CHAIN/GRAVITY_SETTLE 中の物理推定 (起点信頼度は高)。
+    #   "chain_estimate_low_confidence": 起点盤面の物理予測 chain_count が
+    #     score 由来 chain_count と不一致 (Step3(a) 答え合わせで検出、
+    #     起点自体が誤認の疑いがあるため取り扱い注意)。
+    #   "chain_estimate_stale_hold": 案1 (2026-07-23, c62 1P estimated_board
+    #     カバレッジ崩壊 9.8% の真因診断 recognition_diag_c62_1p_estimate_collapse
+    #     への対処)。CHAIN/GRAVITY_SETTLE 中に疑似連鎖イベントの early-fire 等で
+    #     起点盤面 simulate が chain_count=0 (推定が立ち上がらない) となり
+    #     新規推定を計算できないフレームで、直前に成功した推定盤面 (無ければ
+    #     起点盤面) をそのまま保持して公開する。「推定が信頼できない保持中」
+    #     を意味し、値そのものは古い可能性がある点に注意。
+    #     CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC 超過、または STABLE 復帰で
+    #     自動的に None (= 従来同様 "observed") に戻る安全弁あり。
+    # backwards compat のため default "observed"。
+    board_provenance: str = "observed"
+    # 反復5 修正 (2026-07-23): Step3(b)(c) 事後答え合わせの結果。
+    # 連鎖後 final_board 適用直後から CHAIN_VERIFY_FRAMES 分の STABLE
+    # cnn_board が集まったフレームでのみ非 None になる (それ以外は None =
+    # 検証中/対象外)。
+    #   "verified_match": 多数決盤面と物理予測が一致 (信頼度確認)。
+    #   "verified_mismatch_corrected": 不一致のため多数決盤面で confirmed_board
+    #     を補正した (起点誤認が事後に判明したケース)。
+    # backwards compat のため default None。
+    answer_check_result: str | None = None
 
 
 @dataclass(frozen=True)
@@ -298,6 +430,131 @@ def _apply_landing_observed_color_correction(
 
 
 # ============================
+# 色フリッカ根因への防御的修正 案(iii) (2026-07-25)
+# ============================
+
+
+def _flag_landing_distrust_cells(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+) -> set[tuple[int, int]]:
+    """着地セルのうち CNN 観測色が baseline (P2 推論) と食い違う「疑わしいセル」を検出する.
+
+    案(iii) の中核: 設置推論 (P2) が書いた色をこの関数自体は一切書き換えず
+    (baseline 不変、地雷再発防止 = feedback_recognition_regression_prevention)、
+    CNN 観測との不一致だけをフラグとして P7 (着地投票, _update_landing_votes) に
+    伝播する。フラグされたセルだけが NEXT 色 2 択バイアスを迂回し、
+    生 CNN 多数決フォールバックに必ず落ちる (呼び出し側で処理)。
+
+    #47 対策: cnn_board の観測色が UNKNOWN/EMPTY/おじゃまの場合は
+    「有効な反証なし」としてフラグしない。高速プレイで infer_placement が
+    唯一の情報源となるケース (#47) の挙動を壊さないため。
+
+    Args:
+        inferred: infer_placement (+ 既存後処理) が返した着地後の確定盤面
+            (baseline。この関数では変更しない)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (= 着地 cell 差分抽出用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面。
+
+    Returns:
+        疑わしい着地セル座標の集合 (r, c)。空集合 = 疑わしいセルなし。
+    """
+    from src.placement_inferrer import _VALID_PUYO_COLORS
+
+    distrust: set[tuple[int, int]] = set()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if not (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                continue
+            cnn_v = int(cnn_board.get(r, c))
+            if cnn_v in _VALID_PUYO_COLORS and cnn_v != iv:
+                distrust.add((r, c))
+    return distrust
+
+
+# ============================
+# 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)
+# ============================
+
+
+def _apply_placement_cnn_veto(
+    inferred: "Board",
+    prev_confirmed: "Board",
+    cnn_board: "Board",
+    mode: str = "hold",
+) -> "Board":
+    """P2 (infer_placement) が着地セルへ色を書く前に、現フレーム CNN 観測と照合する.
+
+    背景 (project_color_flicker_p2_root_cause_2026-07-25): P2 誤色の内訳は
+    キューに正解無し 57% / 1 手先 24% / 1 手遅れ 14%。 案(iii)
+    (_flag_landing_distrust_cells) は書いた後に P7 (着地投票) へフラグ伝播
+    するが、本関数は書く前に止める「門番」として働く (併用可能、独立)。
+
+    動作: 着地セル (= prev_confirmed が空/UNKNOWN → inferred で新規に有効色)
+    のうち、cnn_board の観測色が inferred の色 (= NEXT キュー由来色) と
+    一致しない場合、そのセルの書き込みを保留する。保留セルは
+    prev_confirmed の値 (通常 EMPTY) に戻すだけで、新たな色は書かない。
+    保留セルは既存の着地色補正 (_apply_landing_observed_color_correction) /
+    P5 事後復旧ゲート (enable_stable_recovery_gate) / P7 3 票ゲート
+    (_update_landing_votes) が後続フレームで正しい色を埋める
+    (新規の復旧機構は作らない)。
+
+    Args:
+        inferred: infer_placement が返した着地後の確定盤面 (書き込み元)。
+        prev_confirmed: TSUMO_FALL 開始前の確定盤面 (差分抽出用)。
+        cnn_board: 着地後の CNN+HSV 融合観測盤面。
+        mode: "hold" (既定) = 不一致セルを保留 (prev_confirmed の値に戻す)。
+            "cnn_color" = CNN 観測色が有効 puyo 色ならその色を採用する
+            (queue 色でなく CNN 色を書く)。CNN が EMPTY/UNKNOWN/おじゃま の
+            場合は mode に関わらず保留する (無効色は書けないため)。
+            A/B 計測 (8 フレーム反映基準) で "hold" が悪化する場合の代替案。
+            "empty_hold_cnn_color" (追試, 2026-07-25): "hold" の副作用
+            (色不一致セルまで保留 → P2 再発火疑いで書込件数倍増) を切り分ける
+            ため、保留対象を「CNN が EMPTY (= 視覚的にまだ何も無い、早すぎる
+            書き込みの証拠)」のケースのみに絞った複合変種。
+            CNN==EMPTY → 保留 (prev_confirmed の値に戻す、早すぎる書き込み防止)。
+            CNN が有効 puyo 色で queue 色と不一致 → CNN 色を採用 (cnn_color 挙動)。
+            CNN==UNKNOWN/おじゃま、または CNN==queue 色 → 従来通り queue 色。
+
+    Returns:
+        veto 適用後の確定盤面 (該当なしなら inferred のコピーがそのまま返る)。
+    """
+    from src.placement_inferrer import _VALID_PUYO_COLORS
+
+    result = inferred.copy()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            pv = int(prev_confirmed.get(r, c))
+            iv = int(inferred.get(r, c))
+            if not (
+                pv in (COLOR_EMPTY, COLOR_UNKNOWN)
+                and iv not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+            ):
+                continue  # 着地セルでない (対象外)
+            cnn_v = int(cnn_board.get(r, c))
+            if cnn_v == iv:
+                continue  # CNN が queue 色と一致 → そのまま書く (no-op)
+            if mode == "empty_hold_cnn_color":
+                if cnn_v == COLOR_EMPTY:
+                    result.set(r, c, pv)  # 早すぎる書き込みのみ保留
+                elif cnn_v in _VALID_PUYO_COLORS:
+                    result.set(r, c, cnn_v)  # CNN 観測の別色を採用
+                # UNKNOWN/おじゃま は queue 色のまま (= 従来通り、no-op)
+                continue
+            if mode == "cnn_color" and cnn_v in _VALID_PUYO_COLORS:
+                result.set(r, c, cnn_v)  # CNN 観測の別色を採用
+                continue
+            result.set(r, c, pv)  # 保留: prev_confirmed の値 (通常 EMPTY) に戻す
+    return result
+
+
+# ============================
 # Pipeline 本体
 # ============================
 
@@ -319,11 +576,24 @@ class RecognitionPipeline:
     # pipeline 側で post-hoc に有効期間を伸ばす。
     CHAIN_HOLD_PER_STEP_SEC: float = 0.3
 
+    # A0 (2026-07-24, 計装 a287c587 実測較正): CHAIN 保持時間モデルの固定項。
+    # 実測 (23動画418イベント) では `固定項 + 係数×連鎖数` の線形モデルが
+    # 原点通過モデルより有意に良く適合 (a≈2.61s, b≈1.17s/連鎖, R²0.356)。
+    # 既定値 0.0 = 従来の「固定項なし・per_step のみ」の式と完全同一
+    # (backwards compat, bit-identical)。較正値は呼び出し側 (評価 config) で
+    # optional 引数 chain_hold_base_sec 経由で注入する (src 既定は変更しない)。
+    CHAIN_HOLD_BASE_SEC: float = 0.0
+
     # game-event ベース連鎖終了: CHAIN 状態を timing hold だけでなく
     # 「次ツモ出現 (next_pair 変化)」または「連鎖した側の盤面にお邪魔新規出現」
     # を検知するまで維持する。安全弁として以下の秒数を上限とする。
     # 60fps × 5.0s = 300 frame。通常の長い連鎖 (= 11 連鎖 × 0.3s = 3.3s) を
     # 十分にカバーし、かつ異常時 (event 永続不達) での CHAIN 永続化を防ぐ。
+    # A0 (2026-07-24): CHAIN_HOLD_BASE_SEC/PER_STEP_SEC の較正値を使うと
+    # chain_until (本来の timing hold) がこの安全弁を上回るケースが生じうる
+    # (eff_until = max(chain_until, chain_event_max_until) のため)。
+    # その場合は呼び出し側で chain_max_hold_sec も併せて引き上げること
+    # (既定値はこの定数のまま、backwards compat)。
     CHAIN_MAX_HOLD_SEC: float = 5.0
 
     # X1: CHAIN 最小表示時間 (enable_chain_min_display=True 時に有効)。
@@ -331,6 +601,28 @@ class RecognitionPipeline:
     # 短連鎖 (1-2 連鎖 × 0.3s = 0.3-0.6s) がお邪魔信号で 0.1-0.2s で即終了し
     # 「一瞬表示/ちらつき」になる問題を防ぐ。
     CHAIN_MIN_DISPLAY_SEC: float = 0.8
+
+    # 反復5 Step3(b)(c) 修正版 (2026-07-23, 事後検証方式): Phase C-6 の C で
+    # 物理予測 final_board を適用「した後」、直近 CHAIN_VERIFY_FRAMES 分の
+    # STABLE cnn_board 多数決盤面と照合する答え合わせ。単一フレームの
+    # 生 CNN (= GRAVITY_SETTLE 直後の残光ノイズが乗りやすい) との比較で
+    # 正しい注入まで過剰棄却していた旧「事前ゲート」方式の回帰
+    # (残像/連鎖後不一致率 0.09→0.28 悪化) を修正するため、適用は止めず
+    # 事後の多数決比較で不一致なら補正する方式に変更。
+    CHAIN_VERIFY_FRAMES: int = 5
+    # 事後不一致とみなす cell 数閾値 (COLOR_UNKNOWN 除外)。
+    # cycle 48 の大量 hallucination ガード基準 (6 cell) を流用。
+    CHAIN_VERIFY_MISMATCH_CELLS: int = 6
+
+    # 案1 (2026-07-23): stale_hold 安全弁。
+    # `recognition_diag_c62_1p_estimate_collapse/summary.txt` の実測では、
+    # 疑似連鎖イベント early-fire が連続発火し推定が立ち上がらない
+    # (H2 contaminated=True) 崩壊区間は最長でも約 7.8 秒だった。
+    # 本値はそれに安全マージンを持たせた「連続 stale_hold を許容する上限秒数」。
+    # 超過したら None (= 従来同様 'observed') に戻し、state machine 側の
+    # 未知バグで CHAIN が異常に長時間継続した場合に古い盤面を無期限に
+    # 貼り続ける事故を防ぐ。
+    CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC: float = 12.0
 
     # X4: game-event 終了を発動する最小連鎖数。
     # chain_count < この値の連鎖は game-event 終了を発動せず timing hold のみ。
@@ -357,6 +649,11 @@ class RecognitionPipeline:
     # 60fps 換算で 60 frame = 1.0s. ぷよぷよ eスポーツの試合開始は READY→GO の
     # 演出と第一ツモ落下前にこの window がほぼ収まる前提。
     MATCH_JUST_STARTED_WINDOW_FRAMES: int = 60
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正として
+    # 使う (frame 定数は既存 import 互換のため残置)。60fps 動画では
+    # (frame_idx 差分)/60 == time_sec 差分 が恒等式のため bit-identical、
+    # 30fps 動画では実秒基準になり体感の遅延 (旧: 実質 2 倍) を解消する。
+    MATCH_JUST_STARTED_WINDOW_SEC: float = MATCH_JUST_STARTED_WINDOW_FRAMES / 60
 
     # 試合状態の hysteresis: 直前 N frame 内で 1P/2P がアクション中
     # (STABLE/TSUMO/CHAIN/OJAMA) なら、MatchStateDetector が NOT_IN_MATCH
@@ -365,12 +662,16 @@ class RecognitionPipeline:
     # 状態にならない (ネットワーク切断など特殊状況除く) というユーザー仕様
     # に基づく。
     MATCH_ACTIVE_HOLD_FRAMES: int = 10
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    MATCH_ACTIVE_HOLD_SEC: float = MATCH_ACTIVE_HOLD_FRAMES / 60
 
     # 試合開始から N frame 内は CHAIN 禁止: 試合 active 開始直後は puyo が
     # 増える時期で連鎖発生はあり得ない。VideoChainTracker が「メニュー画面
     # 0 個 → 試合開始直後 puyo 出現」を「連鎖発火 = 急減」と誤検出する
     # 現象を ban する。最初の 1 手目から CHAIN state に遷移するのを防ぐ。
     CHAIN_BAN_FRAMES_AFTER_MATCH_START: int = 30
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    CHAIN_BAN_SEC_AFTER_MATCH_START: float = CHAIN_BAN_FRAMES_AFTER_MATCH_START / 60
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
     # SCORE_MOVE_WINDOW_FRAMES 内に SCORE_MOVE_MIN_DELTA 以上動いていれば
@@ -378,6 +679,10 @@ class RecognitionPipeline:
     # 60 frame = 1 秒. 連鎖発火 (= 100+ 点増加) でなくとも、 ツモ落下中の
     # +1 点増加が継続的にあれば検出可能.
     SCORE_MOVE_WINDOW_FRAMES: int = 60
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    # `_recent_scores_*` は「件数 N 件保持」から「直近 N/60 秒保持」に変更する
+    # (score 取得タイムスタンプを併せて保持し、 経過秒数でトリムする)。
+    SCORE_MOVE_WINDOW_SEC: float = SCORE_MOVE_WINDOW_FRAMES / 60
     SCORE_MOVE_MIN_DELTA: int = 5
 
     # cycle 71h: 試合切替直後の bg_fp 採取緩和ガード.
@@ -389,6 +694,8 @@ class RecognitionPipeline:
     # 試合切替後 short window では puyo 数を問わず採取する。 短期間限定なので
     # 試合中の puyo 色を背景 fingerprint に取り込むリスクは小。
     BG_FP_FORCE_WINDOW_FRAMES: int = 120  # 2 秒
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    BG_FP_FORCE_WINDOW_SEC: float = BG_FP_FORCE_WINDOW_FRAMES / 60  # 2.0 秒
     # cycle 18 (2026-05-16, B3): cnn_phase_i_hsv_seed.pt (= empty 学習なし) では
     # bg_fp 鶏卵問題が再発するため 5→144 に緩和した定数。
     # B2 (A/B 対照実験): 144→4 に絞る仮説あり。__init__ で _bg_fp_force_max_puyo
@@ -409,11 +716,16 @@ class RecognitionPipeline:
     # 修正速度を更に上げる。 サンプル数減るが LANDING_VOTE_MIN_RATIO=0.3 と
     # 組み合わせて発火閾値を維持。
     LANDING_VOTE_FRAMES: int = 24
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする
+    # (frame 定数は既存 import / 白箱テスト互換のため残置)。
+    LANDING_VOTE_SEC: float = LANDING_VOTE_FRAMES / 60  # 0.4 秒
     # cycle 4 (2026-05-15, F7): 0.4 → 0.3 に下げて landing_vote 補正速度↑.
     LANDING_VOTE_MIN_RATIO: float = 0.3  # 3 割で確定 (NEXT 色一致時)
     # cycle 26 (2026-05-18, A2): 着地直後 5 frame の CNN ぶれを除外。
     # この期間は raw CNN が着地フラッシュ・揺らぎで不安定なため vote 蓄積から除外。
     LANDING_VOTE_INIT_SKIP_FRAMES: int = 5
+    # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
+    LANDING_VOTE_INIT_SKIP_SEC: float = LANDING_VOTE_INIT_SKIP_FRAMES / 60
     # cycle 26 (A2): NEXT 色不一致時の fallback ratio。NEXT pair 色と majority が
     # 不一致なら 0.3 では弱い → 0.5 必須に引上げて誤色採用を抑制。
     LANDING_VOTE_MISMATCH_MIN_RATIO: float = 0.5
@@ -437,6 +749,30 @@ class RecognitionPipeline:
     # 18 frame 中 14 frame (= 78%) 一致で override 発火、 0.6s 以内に補正完了.
     STABLE_OVERRIDE_MIN_RATIO: float = 0.75
 
+    # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+    # 試合開始直後は HSV 較正が浅く (5色中1色) CNN 誤読が残り、推論盤面
+    # (inferred) と cnn_board の乖離が DriftDetector 閾値 (cell 6 / frame 3) を
+    # 超えて `sm.reset(keep_match_state=True) + drift.reset() + gen.reset()`
+    # (本ファイル _step_side 内) が発火 → リセット直後も誤読継続 → 再発火、
+    # の自己永続ループが最大 13 秒程度継続する不具合が確認された
+    # (c34 実測: リセット 86 回中 85 回がこの経路)。
+    # ガード1 (enable_drift_resync_match_start_guard) が有効な間、試合開始
+    # (_match_active_started_time) からこの秒数以内は needs_resync を無視する
+    # (観測された 13 秒暴走をカバーする値)。既存 MATCH_JUST_STARTED_WINDOW_SEC
+    # (1.0 秒、確定盤面の空フィールド強制用) とは別目的の定数のため独立させる。
+    DRIFT_RESYNC_MATCH_START_GUARD_SEC: float = 15.0
+    # ガード2 (enable_drift_resync_hsv_gate) が有効な間、OnlineHsvCalibrator の
+    # 較正済み色数 (_online_hsv_injected_colors) がこの値未満なら resync を
+    # 抑制する。試合は 4 色構成 (reference_four_colors_per_match_2026-07-22) の
+    # ため、3 色較正済みであれば概ね安定しているとみなす。
+    DRIFT_RESYNC_MIN_CALIBRATED_COLORS: int = 3
+
+    # baseline_broken リセット 限定緩和版 (2026-07-25, A/B 計測用)。
+    # enable_baseline_broken_grace=True の場合、STABLE 突入からこの秒数
+    # 経過するまではカウンタ加算を抑制する (着地直後の過渡的な puyo 数差で
+    # 誤って自己修復 reset が発火するのを防ぐ目的)。
+    BASELINE_BROKEN_STABLE_GRACE_SEC: float = 3.0
+
     def __init__(
         self,
         image_reader: ImageReader,
@@ -446,6 +782,14 @@ class RecognitionPipeline:
         chain_tracker_2p: VideoChainTracker | None = None,
         stable_frame_count: int = 6,
         chain_hold_per_step_sec: float | None = None,
+        # A0 (2026-07-24): CHAIN 保持時間モデルの固定項 base + per_step×連鎖数。
+        # None (既定) なら CHAIN_HOLD_BASE_SEC=0.0 (= 従来式と bit-identical)。
+        chain_hold_base_sec: float | None = None,
+        # A0 (2026-07-24): CHAIN_MAX_HOLD_SEC (安全弁上限) の上書き。
+        # None (既定) なら CHAIN_MAX_HOLD_SEC=5.0 (= 従来値、backwards compat)。
+        # 較正済 chain_hold_base_sec/per_step_sec を使う場合は安全弁が
+        # 事実上無効化されうるため (クラス定数コメント参照)、併せて引き上げること。
+        chain_max_hold_sec: float | None = None,
         temporal_smoothing: int = 1,
         next_detector: NextDetector | None = None,
         force_in_match: bool = False,
@@ -495,8 +839,39 @@ class RecognitionPipeline:
         # 真因 A 対処 (2026-06-01): 着地セルの CNN==HSV 一致色で falling_pair ズレを補正。
         # True にすると TSUMO_FALL→STABLE 着地時に着地 2 cell の CNN 観測色と
         # HSV-only 観測色が一致する場合、infer_placement 結果を観測色で上書きする。
-        # デフォルト False = 従来挙動完全維持 (backwards compat)。
-        enable_landing_observed_color: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_landing_observed_color: bool = True,
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
+        # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
+        # _update_landing_votes) に伝播する。フラグされたセルだけが
+        # NEXT 色 2 択バイアスを迂回し、生 CNN 多数決フォールバックに
+        # 必ず落ちる。baseline (P2 推論結果) 自体は書き換えない。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定
+        # (default ON 化 / main マージは別途 user 承認が必要)。
+        enable_placement_color_cnn_check: bool = False,
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # True にすると infer_placement (P2) が着地セルへ色を書く時点で
+        # 現フレーム CNN 観測と照合し、不一致 (queue 色と不一致、または
+        # CNN が EMPTY/UNKNOWN/おじゃま) なら書き込みを保留する (そのセルは
+        # 書かない = prev_confirmed の値のまま)。保留セルは既存の着地色補正 /
+        # P5 事後復旧ゲート / P7 3 票ゲートが後続フレームで埋める
+        # (新規の復旧機構は作らない)。案(iii) (enable_placement_color_cnn_check)
+        # とは独立: 案(iii) は書いた後に P7 へフラグ伝播、本フラグは書く前に
+        # 止める門番。両方 True でも安全に併用可能 (併用時は本フラグが先に
+        # 適用されるため、案(iii) の distrust 判定対象セルは自然に減る)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定
+        # (default ON 化 / main マージは別途 user 承認が必要)。
+        enable_placement_cnn_veto: bool = False,
+        # 上記 veto の不一致時挙動。"hold" (既定) = 保留 (書かない)。
+        # "cnn_color" = CNN 観測色が有効 puyo 色ならその色を採用する
+        # (queue 色でなく CNN 色を書く、EMPTY/UNKNOWN/おじゃま のみ保留)。
+        # A/B 計測で "hold" が 8 フレーム反映基準を悪化させる場合の代替。
+        # enable_placement_cnn_veto=False の間は完全に無視される (無害)。
+        placement_cnn_veto_mode: str = "hold",
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正。
         # True (default) にすると HSV 経路の median 計算で赤 2 峰を collapse し
         # 黄↔赤ちらつきを抑制する。ColorClassifier に enable_red_hue_wrap_fix を伝播。
@@ -524,6 +899,17 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 退出条件を
+        # 「全盤面ぷよ数が静止するまで待つ」方式 (GravitySettle と同型) に切替える。
+        # True にすると OjamaVisualDetector.enable_ojama_fall_board_settle に加え、
+        # OjamaPhaseDetector.defer_ojama_fall_exit_to_visual も同時に True になり、
+        # 退出判定を視覚 settle 判定に一本化する (地雷=score 側の無条件 STABLE 復帰
+        # を構造的に無効化)。
+        # 2026-07-24 採用 (default ON): A/B 検証で次ツモ遅延 2.80s→0.65s・
+        # 浮き誤消去 -28%・採用 +38 (user viz 全画像レビューで「全て after の方が
+        # 品質高い」承認)。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_ojama_fall_board_settle: bool = True,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -547,6 +933,17 @@ class RecognitionPipeline:
         # 空→色FP 0.27%→0.10% と全軸改善 (user viz 承認)。
         # False に戻すには enable_chain_formula_detection=False を明示する。
         enable_chain_formula_detection: bool = True,
+        # 修正D (2026-07-24): 機能D 疑似発火の起点盤面を ChainSimulator で
+        # 事前検証する。真因診断 (_diag_false_event_source_2026-07-24.py) で
+        # 機能D 早期発火 77件中35件=45.5%が「連鎖ゼロの起点盤面」からの
+        # 疑似発火 (偽イベント) と確定。True で before_board を simulate し、
+        # chain_count==0 なら疑似発火を抑制、chain_count>0 なら固定1でなく
+        # 実測値を使う。
+        # 2026-07-24 採用 (default ON): 物理採点+独立診断で偽イベント率
+        # 27.5%→0% と全面改善 (user viz 承認)。False に戻すには
+        # enable_chain_formula_simulate_verify=False を明示する
+        # (旧挙動・bit-identical、backwards compat のため維持)。
+        enable_chain_formula_simulate_verify: bool = True,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -594,6 +991,159 @@ class RecognitionPipeline:
         # 2026-06-06 採用: corr +0.004% 誤差・v89 連鎖過剰保持完全解消・置き認識復活で
         # user 目視 OK + 退行なし → default True に昇格。False で無効化可。
         enable_slide_override_ojama_hold: bool = True,
+        # 案1 (2026-07-23): estimated_board の stale_hold フォールバック。
+        # True にすると CHAIN/GRAVITY_SETTLE 中に起点盤面 simulate が
+        # chain_count=0 等で新規推定を計算できないフレームで、estimated_board
+        # を None にせず直前の推定盤面 (無ければ起点盤面) を保持する
+        # (board_provenance="chain_estimate_stale_hold")。
+        # c62 1P estimated_board カバレッジ崩壊 (9.8%) の主因である疑似連鎖
+        # イベント early-fire 連発への対処 (診断:
+        # recognition_diag_c62_1p_estimate_collapse/summary.txt)。
+        # confirmed_board (STABLE 評価用) は一切変更しない。
+        # user viz 承認前の savepoint 実装のため default True だが、
+        # False を渡せば従来挙動 (常に None) に完全に戻せる (backwards compat)。
+        enable_chain_estimate_stale_hold: bool = True,
+        # #45 おじゃま merge 統合修正 案(a) (2026-07-24): 重力フィルタ支持緩和。
+        # 案B (enable_ojama_fall_board_settle) 適用後、 _merge_diff_only 内の
+        # `_apply_gravity_filter` が F ガード (empty_to_color_guard) 起因で
+        # EMPTY のまま残った cell を「浮き判定の gap」として誤扱いし、
+        # 積もり中のおじゃまを浮きぷよ誤消去する副作用が判明。
+        # True にすると `_apply_gravity_filter` に empty_to_color_guard
+        # (多数決板) を support_board として渡し、そのガードで非 EMPTY と
+        # 裏付けられる cell は gap 扱いしない。
+        # (b) enable_ojama_fall_board_settle と独立に A/B 切り分け可能。
+        # 2026-07-24 採用 (default ON): 案B (enable_ojama_fall_board_settle)
+        # と併せた A/B 検証 (user viz 全画像レビュー承認) で採用。False を
+        # 明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_gravity_filter_support: bool = True,
+        # #45 おじゃま merge 統合修正 案(b) (2026-07-24): 退出 merge 書込値の
+        # 多数決化。 NON-STABLE → STABLE 復帰時の EMPTY→色 遷移ガード分岐で、
+        # 従来は単一フレーム CNN 値 (cnn_v) と多数決値 (guard_v) が不一致だと
+        # 却下していた (= 退出直前の単一フレームちらつきで正当な色復帰も却下)。
+        # True にすると guard_v が EMPTY でない場合、 cnn_v でなく guard_v を
+        # 書き込む (多数決値を信頼)。 (a) と独立に A/B 切り分け可能。
+        # 2026-07-24 採用 (default ON): 案B と併せた A/B 検証 (user viz
+        # 全画像レビュー承認) で採用。False を明示指定すれば旧挙動
+        # (bit-identical) に戻せる (backwards compat)。
+        merge_use_majority_value: bool = True,
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # ガード1: True にすると試合開始から
+        # DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒以内は DriftDetector の
+        # needs_resync を無視する (DriftDetector.update 自体は毎 frame 呼ぶため
+        # 内部の連続乖離カウンタは追跡され続ける、reset だけ抑制される)。
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_drift_resync_match_start_guard: bool = True,
+        # ガード2: True にすると OnlineHsvCalibrator の較正済み色数
+        # (_online_hsv_injected_colors) が DRIFT_RESYNC_MIN_CALIBRATED_COLORS
+        # 未満の間、needs_resync を無視する。ガード1と独立に ON/OFF 可能。
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_drift_resync_hsv_gate: bool = True,
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
+        # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_reset: bool = True,
+        # 限定緩和版: True で STABLE 突入から BASELINE_BROKEN_STABLE_GRACE_SEC
+        # 秒間はカウンタ加算を抑制する。enable_baseline_broken_reset=False の
+        # 場合は無視される。default False = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_grace: bool = False,
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25, A/B 計測用)。
+        # True で設計C 事後復旧ゲートの安全弁C (浮き判定) が
+        # stable_recovery_counters 進行中の支持セルを浮き扱いしなくなる。
+        # 診断 (_diag_recovery_cell_timeseries_2026-07-25.py) で「8f 到達直前で
+        # 毎回リセットされる」列ゲート型の未反映を救済する狙い。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_column_partial_support: bool = False,
+        # 前試合盤面残骸リーク修正 (feat/recognition-postchain-fix-2026-07-23,
+        # A/B 計測用)。True で試合境界 (is_match_active False→MENU 強制) 時に
+        # non_stable_cnn_history / stable_recovery_counters / recovery_cells /
+        # stable_warmup_remaining / next_queue も完全クリアし、前試合終盤の
+        # ぷよが次試合序盤に幽霊セルとして書き戻るのを防ぐ。
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_match_start_full_clear: bool = True,
+        # score-reset 境界誤発火修正 (2026-07-26, feat/recognition-postchain-fix-2026-07-23,
+        # diag_v29_mid_resetlog.log で発見): 片側のみ score が急落して見える
+        # 単発フレーム (例: 2P=40031 不変なのに 1P だけ 48077→0) が観測された。
+        # 実フレーム精査 (score ROI 目視 + ScoreOcr 直接実行) の結果、これは
+        # OCR 誤読ではなく「両者同時の本物の試合境界フェード演出」を、
+        # 1P/2P 各々の OCR 信頼度ゲートが数フレームずれて通過したことによる
+        # 見かけ上の片側化と判明 (掛け算式表示は avg_conf ゲートで既に正しく
+        # None 扱いされており、0 が漏れ出すことはない)。
+        # _is_score_reset_boundary を (a) 両側同時条件のみ許可 (b) 3 フレーム
+        # 連続成立必須、に厳格化することで、この数フレームのずれを吸収し
+        # 「片側だけ発火して見える」見かけ上の異常を解消する。ただし
+        # video_29 該当窓の再検証では 5 件の reset は全て本物の試合境界と
+        # 確認され、発火回数・収集行数は本修正前後で変化しなかった
+        # (= labeled_win 行数 -30% の真因はこの修正だけでは説明できない、
+        # 別途要調査)。既定 True (誤発火の疑いがあった箇所の防御的厳格化)。
+        # False を明示指定すれば旧 (片側 OR・デバウンス無し) 挙動に戻せる
+        # (backwards compat)。enable_match_start_full_clear=False の場合は
+        # そもそも本ブロックが無効なので本フラグは参照されない。
+        enable_score_reset_strict: bool = True,
+        # 復旧カウンタ carryover (feat/recognition-postchain-fix-2026-07-23,
+        # #51, 2026-07-26, A/B 計測用): True で STABLE→NON-STABLE 遷移時の
+        # stable_recovery_counters/recovery_cells 即クリアを保留し、非
+        # STABLE 滞在が RECOVERY_COUNTER_CARRYOVER_MAX_SEC (既定 2.0秒) 以内
+        # なら STABLE 復帰後も引き継ぐ (8f 到達直前の未反映化への対処、
+        # diag `recovery_cell_timeseries_2026-07-25`)。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_recovery_counter_carryover: bool = True,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # True で深部セルの CNN 判定境界張り付き反転 (9↔1↔0↔4 等) を検出し、
+        # その間 HSV 出力を復旧ゲートの合意値とみなす
+        # (詳細は src/board_state_machine.py の定数定義部を参照)。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_cnn_flicker_hsv_fallback: bool = True,
+        # 色→空凍結の修正3点セット③ (feat/recognition-postchain-fix-2026-07-23,
+        # 2026-07-27): 初回STABLE確定の多数決ガード。 True にすると
+        # BoardStateMachine の baseline is None (初回確定) 時、直前
+        # NON-STABLE滞在中に蓄積した non_stable_cnn_history の多数決で
+        # 初回confirmedを構成する (fallback=new_cnn で観測不足セルはEMPTY化しない)。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_initial_confirm_vote: bool = True,
+        initial_confirm_min_votes: int = (
+            DEFAULT_INITIAL_CONFIRM_MIN_VOTES
+        ),
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30、2026-07-31 既定ON)。
+        # 走査を飛ばすので原理的に bit-identical にならないが、試合終了時刻を
+        # またぐ窓での実測 (3動画 x 2イベント = 1800フレーム) で
+        # **試合終了検出のずれ 0フレーム・盤面差分 0/1800** を確認した。
+        # 遅延が伝播しないのは hard_match_off が score_zero_both との OR で、
+        # score_zero / MatchStateDetector は間引き対象外のため独立経路が
+        # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
+        # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        # 側別 彩度適応較正 (2026-07-31)。実測で 2P 側は彩度が系統的に低い
+        # (ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5、p10 は 98 対 59) のに
+        # 盤面の色分類器は左右で同じ s_min を使っていた。有効化すると各盤面
+        # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
+        enable_side_sat_calibration: bool = False,
+        enable_large_roi_throttle: bool = True,
+        large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
+        # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
+        # merge の色→空 遷移について HSV が色を保持する cell を消さない。
+        # 光沢→空 の単一フレーム CNN 誤読が無投票消去され gravity filter で
+        # 上のぷよまで連鎖消去される列デッドロック (c34 1P col=1, frame 14332
+        # 実測) を根で止める。ただし 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P は
+        # tail 悪化、c26/c69 の 1P は効果ゼロ、8フレーム達成率は OFF/ON 不変と判明
+        # (data/verify/placement_confirm_frames_generalization_2026-07-30)。
+        # 汎化未確認のため default OFF。True で有効化 (backwards compat)。
+        enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用): True で
+        # 方向1 (空→色) のみ recovery_add_min_frames (既定 4) で復旧させ、
+        # 方向2/3 (色→空/色→色) は 8 frame 維持。「誤認が治るまでのラグ」短縮用。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -634,8 +1184,11 @@ class RecognitionPipeline:
         # 着地直後 grace period: TSUMO_FALL→STABLE 遷移後 N frame は
         # CNN を信用せず inferred_landing で confirmed_board を hold。
         # ユーザー提案 (2026-05-10): 「置いた直後の誤認は推論で防げる」
-        self._landing_grace_1p: tuple[int, Board] | None = None
-        self._landing_grace_2p: tuple[int, Board] | None = None
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): tuple 第 3 要素に
+        # time_sec 基準の満了時刻 (grace_until_time) を追加。実ロジックは
+        # こちらを正として使い、第 1 要素 (frame 基準) は既存互換のため残置。
+        self._landing_grace_1p: tuple[int, Board, float] | None = None
+        self._landing_grace_2p: tuple[int, Board, float] | None = None
         # 2026-05-10 FIX-B: 5→10 frame に延長 (置いた直後の認識ぶれ抑制)
         # 着地直後の grace period. CNN/HSV の不安定 (= 着地直後の光・揺らぎ) で
         # confirmed が誤更新されるのを抑止. cycle 71h: 60→10 復帰 (= cycle 71f 互換).
@@ -651,6 +1204,9 @@ class RecognitionPipeline:
         # cycle 29 (2026-05-18): 12 → 5 frame に短縮 + 起動を NEXT 移動検知に変更。
         # NEXT 変化 = 着地確定 signal、 state machine 詰まり (v97 53 秒問題) を救済。
         self.LANDING_GRACE_FRAMES: int = 5
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする
+        # (frame 定数は既存互換のため残置)。60fps では bit-identical。
+        self.LANDING_GRACE_SEC: float = self.LANDING_GRACE_FRAMES / 60
         # cycle 71h (ユーザー要件「1 秒後に完璧」 の本質対策):
         # TSUMO_FALL→STABLE 着地時に inferred_landing の追加 cells 位置を記録、
         # 後続 LANDING_VOTE_FRAMES の cnn_board で同位置 cell 色を蓄積.
@@ -664,6 +1220,18 @@ class RecognitionPipeline:
             if chain_hold_per_step_sec is not None
             else self.CHAIN_HOLD_PER_STEP_SEC
         )
+        # A0 (2026-07-24): 固定項 (既定 0.0 = 従来式と bit-identical)。
+        self._chain_hold_base_sec = (
+            chain_hold_base_sec
+            if chain_hold_base_sec is not None
+            else self.CHAIN_HOLD_BASE_SEC
+        )
+        # A0 (2026-07-24): 安全弁上限の上書き (既定 5.0 = backwards compat)。
+        self._chain_max_hold_sec = (
+            chain_max_hold_sec
+            if chain_max_hold_sec is not None
+            else self.CHAIN_MAX_HOLD_SEC
+        )
         # 時系列平均 (δ): 直近 N frame の cell 単位 majority vote。
         # CNN ぶれを抑え、state machine の安定化を狙う。
         self._smoothing_n = max(1, int(temporal_smoothing))
@@ -674,9 +1242,77 @@ class RecognitionPipeline:
         self._chain_until_1p: float = 0.0
         self._active_chain_2p: ChainEvent | None = None
         self._chain_until_2p: float = 0.0
+        # 根治 (2026-07-23): CHAIN → GRAVITY_SETTLE → STABLE 経路でも連鎖後
+        # final_board 反映 (Phase C-6 の C, _step_side 内) を機能させるための退避先。
+        # enable_gravity_settle_state=True (default) では CHAIN は必ず
+        # GRAVITY_SETTLE を経由してから STABLE に遷移するため、その遷移フレーム
+        # では active_chain_* は既に None 化されている (= chain_event 引数も None)。
+        # active_chain を None にする直前にこのフィールドへ退避しておき、
+        # GRAVITY_SETTLE→STABLE 遷移時の fallback 参照元として使う。
+        # enable_gravity_settle_state=False の場合は退避が消費される経路
+        # (GRAVITY_SETTLE 遷移) 自体が発生しないため、既存動作に影響しない。
+        self._last_chain_event_for_settle_1p: ChainEvent | None = None
+        self._last_chain_event_for_settle_2p: ChainEvent | None = None
+        # 反復4 (2026-07-23): confirmed_board=None 化の理由分類用 診断計装
+        # (SideResult.board_none_reason)。挙動には一切影響しない。
+        # _ever_had_confirmed_*: この試合で一度でも confirmed_board が
+        #   非 None になったことがあるか (cold_start 判定用)。
+        # _pending_menu_reset_*: is_match_active=False → MENU 強制
+        #   (board_state_machine.py:480-488) が発生し、まだ STABLE で
+        #   再確定していない状態かどうか (menu_reset 判定用)。
+        self._ever_had_confirmed_1p: bool = False
+        self._ever_had_confirmed_2p: bool = False
+        self._pending_menu_reset_1p: bool = False
+        self._pending_menu_reset_2p: bool = False
+        # 反復5 (2026-07-23): 物理推論スルー機構 (根治本体)。
+        # Step1 診断で「chain_event.before_board (= 起点盤面) は 85.7% の
+        # ケースでそのまま使える」ことを確認済み。ctx.confirmed_board が
+        # None 化 (drift resync 等) していても before_board は独立に
+        # VideoChainTracker が捕捉するため影響を受けにくい。
+        # CHAIN/GRAVITY_SETTLE 中、この起点から ChainSimulator で連鎖を
+        # 前進させた盤面を SideResult.estimated_board として公開する
+        # (confirmed_board 自体は一切変更しない = 標準 eval 経路への
+        # 影響ゼロ、Step4 backward compat 要件)。
+        self._chain_estimate_result_1p: "ChainResult | None" = None
+        self._chain_estimate_result_2p: "ChainResult | None" = None
+        self._chain_estimate_trigger_1p: float = 0.0
+        self._chain_estimate_trigger_2p: float = 0.0
+        self._chain_estimate_end_1p: float = 0.0
+        self._chain_estimate_end_2p: float = 0.0
+        # Step3(a) 答え合わせ: score 由来 chain_count (ev.chain_count) と
+        # 物理予測 chain_count (before_board を simulate した実測値) が
+        # 一致しない場合 True (= 起点盤面が疑わしい、低信頼度)。
+        self._chain_estimate_low_confidence_1p: bool = False
+        self._chain_estimate_low_confidence_2p: bool = False
+        # 案1 (2026-07-23): stale_hold フォールバック用 state。
+        # _chain_estimate_last_board_Xp: 直近に「成功した」推定盤面
+        #   (result が非 None で計算できたもの)、または CHAIN 突入時点の
+        #   起点盤面 (cold start フォールバック)。CHAIN/GRAVITY_SETTLE を
+        #   抜けたら None にクリアする。
+        # _chain_estimate_stale_since_Xp: 現在の stale_hold 連続適用が
+        #   開始した time_sec (None = stale_hold 非適用中)。
+        #   CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC 超過判定に使う安全弁用。
+        self._chain_estimate_last_board_1p: "Board | None" = None
+        self._chain_estimate_last_board_2p: "Board | None" = None
+        self._chain_estimate_stale_since_1p: float | None = None
+        self._chain_estimate_stale_since_2p: float | None = None
+        self._enable_chain_estimate_stale_hold: bool = bool(
+            enable_chain_estimate_stale_hold,
+        )
+        # 反復5 修正 (2026-07-23): Step3(b)(c) 事後検証の進行 state。
+        # {"expected": Board, "cnn_history": list[Board]} または None
+        # (検証中でない)。Phase C-6 の C で final_board 適用直後にセットし、
+        # 直近 CHAIN_VERIFY_FRAMES 分の STABLE cnn_board が集まったら
+        # 多数決盤面と照合して補正する (_update_chain_estimate_verification)。
+        self._chain_verify_pending_1p: dict | None = None
+        self._chain_verify_pending_2p: dict | None = None
         # match active hysteresis 用
         self._last_active_frame_idx: int = -1
         self._match_active_started_frame: int = -1
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): time_sec 基準の対を追加。
+        # 実ロジックはこちらを正として使う (frame 版は既存互換のため残置)。
+        self._last_active_frame_time: float = -1.0
+        self._match_active_started_time: float = -1.0
         # サイクル66 (2026-05-11): NEXT 累積色制約用 — 試合開始から最初の連鎖
         # 発火まで「累積 NEXT 色 = field 色 count」 制約を維持. 連鎖 / おじゃま
         # 落下発生時は invalidate (= 単純制約が崩れる).
@@ -709,12 +1345,35 @@ class RecognitionPipeline:
         # セット: NEXT変化検知時 / クリア: TSUMO_FALL→STABLE着地infer完了後。
         self._last_consumed_color_1p: tuple[int, int] | None = None
         self._last_consumed_color_2p: tuple[int, int] | None = None
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # TSUMO_FALL→STABLE 着地 infer 完了時に _flag_landing_distrust_cells で
+        # 検出した「疑わしいセル」座標集合 (1P/2P 別)。
+        # _last_consumed_color_Xp と同じ寿命管理パターン:
+        # セット: 着地 infer 完了時 (enable_placement_color_cnn_check=True 時のみ) /
+        # クリア: _start_landing_vote 呼出後 (P7 に伝播済み)。
+        # enable_placement_color_cnn_check=False (default) では常に空集合。
+        self._landing_distrust_1p: set[tuple[int, int]] = set()
+        self._landing_distrust_2p: set[tuple[int, int]] = set()
         # cycle 31 (2026-05-18, B 軸): baseline 整合性 check + 自己修復。
         # STABLE 中に baseline と CNN 出力の diff が連続異常なら baseline 壊れ
         # 判定 → state reset (= 試合 active 再起動 + bg_fp 再採取)。
         # v97 53 秒 TSUMO_FALL 詰まり問題への救済策。
         self._baseline_broken_consec_1p: int = 0
         self._baseline_broken_consec_2p: int = 0
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。_check_baseline_broken_reset で参照する。
+        self._enable_baseline_broken_reset: bool = bool(enable_baseline_broken_reset)
+        self._enable_baseline_broken_grace: bool = bool(enable_baseline_broken_grace)
+        # STABLE 突入時刻 (1P/2P 別、grace 判定用。-1.0 = 未記録)。
+        self._stable_entered_time_1p: float = -1.0
+        self._stable_entered_time_2p: float = -1.0
+        # grace 抑制回数カウンタ (1P/2P 別、効果測定用)。
+        self._baseline_broken_grace_suppressed_1p: int = 0
+        self._baseline_broken_grace_suppressed_2p: int = 0
+        # baseline_broken reset 実発火回数カウンタ (1P/2P 別、A/B 効果測定用)。
+        # _baseline_broken_consec_Xp は発火の度 0 に戻るため累計には使えない。
+        self._baseline_broken_reset_count_1p: int = 0
+        self._baseline_broken_reset_count_2p: int = 0
         # cycle 71v-B (2026-05-15): 試合中に観測した色を永続記録 (= NEXT 履歴 cap
         # 8 でスクロールアウトしても UNKNOWN 化しない)
         self._ever_seen_colors_1p: set[int] = set()
@@ -755,6 +1414,13 @@ class RecognitionPipeline:
         # 連鎖検出 (任意): 無ければ chain_event 常時 None で動作
         self._chain_tracker_1p = chain_tracker_1p
         self._chain_tracker_2p = chain_tracker_2p
+        # 修正C (2026-07-24): reset() で VideoChainTracker を再構築する際、
+        # debounce 設定を引き継ぐために保持しておく (backwards compat:
+        # tracker 未設定 / debounce_confirm_frames 未実装の duck-typed
+        # スタブ (テスト用) なら既定値 DEBOUNCE_CONFIRM_FRAMES=1 にフォールバック)。
+        self._chain_debounce_confirm_frames: int = getattr(
+            chain_tracker_1p, "debounce_confirm_frames", DEBOUNCE_CONFIRM_FRAMES,
+        )
         # cycle 71d (案 D8): VideoChainTracker への入力盤面に「前 frame の confirmed_board」 を
         # 使う. raw CNN 振動 (= cnn 32↔27 単発スパイク) を投票後の confirmed で吸収できる.
         # 初回 frame は confirmed が無いため raw CNN にフォールバック.
@@ -775,6 +1441,11 @@ class RecognitionPipeline:
         # 動いていれば「試合中」 を強制復帰させる. 60 frame = 1 秒分.
         self._recent_scores_1p: list[int | None] = []
         self._recent_scores_2p: list[int | None] = []
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 各 score 観測の time_sec を
+        # 並行保持し、 「直近 N 件」保持を「直近 SCORE_MOVE_WINDOW_SEC 秒」保持に
+        # 変換する (_trim_score_window 参照)。
+        self._recent_score_times_1p: list[float] = []
+        self._recent_score_times_2p: list[float] = []
         # 設計C 事後復旧ゲート: フラグを保持し _build_state_machine / _step_side に伝播。
         self._enable_stable_recovery_gate: bool = bool(enable_stable_recovery_gate)
         # フェーズ A 精緻化 (2026-06-02): おじゃま視覚検知フラグ群。
@@ -792,6 +1463,14 @@ class RecognitionPipeline:
         self._enable_ojama_settle_detection: bool = (
             _ovd_parent or bool(enable_ojama_settle_detection)
         )
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 全盤面 settle 判定フラグ。
+        # 独立公開フラグにせず OjamaVisualDetector / OjamaPhaseDetector 両方の
+        # 切替に直結させる (「ovd だけ直して地雷 (OjamaPhaseDetector 側の無条件
+        # STABLE 復帰) を直し忘れる」構成を構造的に不能化する設計)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_ojama_fall_board_settle: bool = bool(
+            enable_ojama_fall_board_settle
+        )
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
@@ -808,6 +1487,90 @@ class RecognitionPipeline:
         if _gs:
             enable_chain_exit_next_signal = True  # 内部強制 ON
         self._enable_gravity_settle_state: bool = _gs
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_gravity_filter_support: bool = bool(
+            enable_gravity_filter_support
+        )
+        self._merge_use_majority_value: bool = bool(merge_use_majority_value)
+        # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_column_partial_support: bool = bool(
+            enable_column_partial_support
+        )
+        # 前試合盤面残骸リーク修正 (2026-07-23):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_match_start_full_clear: bool = bool(
+            enable_match_start_full_clear
+        )
+        # 復旧カウンタ carryover (2026-07-26):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_recovery_counter_carryover: bool = bool(
+            enable_recovery_counter_carryover
+        )
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26):
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_cnn_flicker_hsv_fallback: bool = bool(
+            enable_cnn_flicker_hsv_fallback
+        )
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # _build_state_machine 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_initial_confirm_vote: bool = bool(
+            enable_initial_confirm_vote
+        )
+        self._initial_confirm_min_votes: int = int(initial_confirm_min_votes)
+        # 大 ROI 走査 (match_end 800x600 / telop 720x400) の間引き (2026-07-30)。
+        # 既定 OFF = 従来通り毎フレーム走査で bit-identical。
+        self._enable_large_roi_throttle: bool = bool(enable_large_roi_throttle)
+        # 側別 彩度適応較正 (2026-07-31) を reader に伝える。
+        # reader が set_side_sat_calibration を持たない構成 (テストの
+        # スタブ等) では黙って無視する (backwards compat)。
+        if enable_side_sat_calibration:
+            _rd = getattr(self, '_reader', None)
+            if _rd is not None and hasattr(_rd, 'set_side_sat_calibration'):
+                _rd.set_side_sat_calibration(True)
+        self._large_roi_throttle_frames: int = int(large_roi_throttle_frames)
+        # 間引き時に流用する前回結果 (従来は update() 内で毎フレーム初期化していた)
+        self._last_match_end_locked: bool = False
+        self._last_telop_visible: bool = False
+        self._last_telop_result: "TelopResult | None" = None
+        # 色→空 HSV 照合ガード (2026-07-30): _build_state_machine 呼び出し前に
+        # 格納が必要 (引数として渡すため)。
+        self._enable_puyo_to_empty_hsv_guard: bool = bool(
+            enable_puyo_to_empty_hsv_guard
+        )
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30): _build_state_machine
+        # 呼び出し前に格納が必要 (引数として渡すため)。
+        self._enable_asymmetric_recovery_min_frames: bool = bool(
+            enable_asymmetric_recovery_min_frames
+        )
+        self._recovery_add_min_frames: int = int(recovery_add_min_frames)
+        # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
+        # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
+        # 時のみ参照)。
+        self._prev_score_for_reset_1p: int | None = None
+        self._prev_score_for_reset_2p: int | None = None
+        # 追修: score リセット境界の edge-trigger ラッチ (継続 near-zero 期間中の
+        # 連続 self.reset() 発火を防ぐ。境界条件が一旦 False に戻るまで再発火しない)。
+        self._match_start_boundary_latched: bool = False
+        # score-reset 境界誤発火修正 (2026-07-26): strict モードの厳格化条件を
+        # 保持し、デバウンス用連続フレームカウンタを管理する。
+        self._enable_score_reset_strict: bool = bool(enable_score_reset_strict)
+        self._score_reset_boundary_streak: int = 0
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # 個別 flag で独立 ON/OFF 可能 (_step_side の needs_resync 分岐で参照)。
+        self._enable_drift_resync_match_start_guard: bool = bool(
+            enable_drift_resync_match_start_guard,
+        )
+        self._enable_drift_resync_hsv_gate: bool = bool(
+            enable_drift_resync_hsv_gate,
+        )
+        # デバッグカウンタ: 各ガードが needs_resync を抑制した回数 (1P/2P 別)。
+        # 効果測定用 (_diag 系スクリプトから読み出す想定)。
+        self._drift_resync_start_guard_suppressed_1p: int = 0
+        self._drift_resync_start_guard_suppressed_2p: int = 0
+        self._drift_resync_hsv_gate_suppressed_1p: int = 0
+        self._drift_resync_hsv_gate_suppressed_2p: int = 0
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -817,9 +1580,25 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
+            enable_gravity_filter_support=self._enable_gravity_filter_support,
+            merge_use_majority_value=self._merge_use_majority_value,
+            enable_column_partial_support=self._enable_column_partial_support,
+            enable_match_start_full_clear=self._enable_match_start_full_clear,
+            enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=self._enable_initial_confirm_vote,
+            initial_confirm_min_votes=self._initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=(
+                self._enable_puyo_to_empty_hsv_guard
+            ),
+            enable_asymmetric_recovery_min_frames=(
+                self._enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=self._recovery_add_min_frames,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -827,9 +1606,25 @@ class RecognitionPipeline:
             enable_ojama_visual_detection=self._enable_ojama_visual_detection,
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
+            enable_gravity_filter_support=self._enable_gravity_filter_support,
+            merge_use_majority_value=self._merge_use_majority_value,
+            enable_column_partial_support=self._enable_column_partial_support,
+            enable_match_start_full_clear=self._enable_match_start_full_clear,
+            enable_recovery_counter_carryover=self._enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=self._enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=self._enable_initial_confirm_vote,
+            initial_confirm_min_votes=self._initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=(
+                self._enable_puyo_to_empty_hsv_guard
+            ),
+            enable_asymmetric_recovery_min_frames=(
+                self._enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=self._recovery_add_min_frames,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -921,6 +1716,10 @@ class RecognitionPipeline:
         self._enable_chain_formula_detection: bool = bool(enable_chain_formula_detection)
         self._formula_consec_1p: int = 0  # 掛け算式 連続フレームカウンタ 1P
         self._formula_consec_2p: int = 0  # 掛け算式 連続フレームカウンタ 2P
+        # 修正D (2026-07-24): 機能D 疑似発火 起点盤面の ChainSimulator 検証フラグ。
+        self._enable_chain_formula_simulate_verify: bool = bool(
+            enable_chain_formula_simulate_verify
+        )
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -937,6 +1736,20 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+        # True で着地セルの CNN 観測色/baseline 不一致フラグを計算し、
+        # P7 (着地投票) に伝播する。default False = 従来挙動完全維持
+        # (backwards compat)。
+        self._enable_placement_color_cnn_check: bool = bool(
+            enable_placement_color_cnn_check,
+        )
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_placement_cnn_veto: bool = bool(enable_placement_cnn_veto)
+        self._placement_cnn_veto_mode: str = str(placement_cnn_veto_mode)
+        # 計装用カウンタ (A/B 計測での書き込み保留セル数の直接観測用)。
+        self._placement_cnn_veto_held_count_1p: int = 0
+        self._placement_cnn_veto_held_count_2p: int = 0
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # True で infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、
         # 後続フレームの CNN==HSV consensus 投票で確定させる。
@@ -1010,6 +1823,7 @@ class RecognitionPipeline:
         mask_ojama_logit: bool = False,
         use_puyo_gate: bool = False,
         patch_ncc_threshold: float | None = None,
+        ui_mask_cells: frozenset[tuple[int, int]] | None = None,
     ) -> ImageReader:
         """HybridClassifier (HSV + CNN) で ImageReader を組み立てる.
 
@@ -1023,6 +1837,10 @@ class RecognitionPipeline:
 
         vote_mode=True (cycle 71) で HSV 分類器を per-pixel 投票方式に切替.
         cnn_override_prob: None なら DEFAULT_CNN_OVERRIDE_PROB を使用.
+        ui_mask_cells: 案B (2026-07-30)。HybridClassifier.classify_batch の
+            UI マスク判定対象セルを限定する。None (既定) では従来通り
+            全セルで判定する (backwards compat、bit-identical)。
+            速度優先で有効化する場合は src.ui_mask.UI_MASK_TARGET_CELLS を渡す。
         """
         from src.hybrid_classifier import HybridClassifier
         from src.image_reader import ColorClassifier
@@ -1069,6 +1887,7 @@ class RecognitionPipeline:
             cnn_classifier=cnn, cnn_override_prob=eff_override,
             mask_ojama_logit=mask_ojama_logit,
             use_puyo_gate=use_puyo_gate,
+            ui_mask_cells=ui_mask_cells,
         )
         # use_telop_mask=True で中央テロップ被覆 cell を COLOR_UNKNOWN に倒す
         # (V3.1 機能、A 統合の一環で 2026-05-09 から有効化)
@@ -1109,9 +1928,40 @@ class RecognitionPipeline:
         enable_ojama_visual_detection: bool = False,
         enable_ojama_visual_chain_exit: bool = False,
         enable_ojama_settle_detection: bool = False,
+        # 2026-07-24 採用 (default ON): 呼び出し元 __init__ が常に明示値を
+        # 渡すため実運用では未使用だが、直接呼び出し時も採用済み挙動を
+        # 既定にする (__init__ の既定値と同期)。
+        enable_ojama_fall_board_settle: bool = True,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
+        enable_gravity_filter_support: bool = True,
+        merge_use_majority_value: bool = True,
+        enable_column_partial_support: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化: 呼び出し元 __init__
+        # が常に明示値を渡すため実運用では未使用だが、直接呼び出し時も
+        # 採用済み挙動を既定にする (__init__ の既定値と同期)。
+        enable_match_start_full_clear: bool = True,
+        # 復旧カウンタ carryover (2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_recovery_counter_carryover: bool = False,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_cnn_flicker_hsv_fallback: bool = False,
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_initial_confirm_vote: bool = False,
+        initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 色→空 HSV 照合ガード (2026-07-30)。c34 型の列デッドロックには有効だが
+        # 4動画測定で c58/c26 の 2P tail 悪化・c26/c69 の 1P 効果ゼロ、汎化未確認の
+        # ため default OFF。True で有効化 (backwards compat)。
+        enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -1120,12 +1970,18 @@ class RecognitionPipeline:
         # 設計C 事後復旧ゲート: enable_stable_recovery_gate=True で BoardStateMachine に伝播。
         # フェーズ A 精緻化: enable_ojama_visual_detection=True で OjamaVisualDetector を
         # OjamaPhaseDetector の前 (優先順 3) に挿入する。score 差分ベース fallback は維持。
+        # 案B (第2の根本原因対処, 2026-07-24): enable_ojama_fall_board_settle=True で
+        #   OjamaVisualDetector の全盤面 settle 判定 + OjamaPhaseDetector の
+        #   defer_ojama_fall_exit_to_visual を同時に有効化する (単一フラグに直結)。
         # 案P3: enable_chain_max_hold_override=True で ChainPhaseDetector に伝播。
         # feat/gravity-settle-2026-06-05: enable_gravity_settle_state=True で
         #   ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返し、
         #   GravitySettleDetector が GRAVITY_SETTLE → STABLE を担当する。
         # 案γ: enable_slide_override_ojama_hold=True で ChainPhaseDetector に伝播。
         #   CHAIN 中 slide_motion=True が来た場合 ojama-hold 保留を上書きして終了する。
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24):
+        #   enable_gravity_filter_support / merge_use_majority_value を
+        #   BoardStateMachine にそのまま伝播する (独立 flag)。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
         # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE + 案γ フラグを伝播する
@@ -1145,9 +2001,14 @@ class RecognitionPipeline:
             ovd = OjamaVisualDetector(
                 enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
                 enable_ojama_settle_detection=enable_ojama_settle_detection,
+                enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
             )
             detectors.append(ovd)
-        detectors.append(OjamaPhaseDetector())
+        detectors.append(
+            OjamaPhaseDetector(
+                defer_ojama_fall_exit_to_visual=enable_ojama_fall_board_settle,
+            )
+        )
         detectors.append(TsumoPhaseDetector())
         # feat/gravity-settle-2026-06-05: GravitySettleDetector を最低優先 (末尾) で登録。
         # CHAIN より低優先 → settle 中に次連鎖 drop 検知で CHAIN detector が優先発火し
@@ -1160,6 +2021,19 @@ class RecognitionPipeline:
             enable_warmup_guard=enable_warmup_guard,
             warmup_frames=STABLE_WARMUP_FRAMES,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
+            enable_gravity_filter_support=enable_gravity_filter_support,
+            merge_use_majority_value=merge_use_majority_value,
+            enable_column_partial_support=enable_column_partial_support,
+            enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
+            initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+            enable_asymmetric_recovery_min_frames=(
+                enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=recovery_add_min_frames,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -1199,7 +2073,16 @@ class RecognitionPipeline:
         enable_landing_color_fix: bool = False,
         enable_chain_min_display: bool = False,
         enable_hsv_classify_fallback: bool = False,
-        enable_landing_observed_color: bool = False,
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_landing_observed_color: bool = True,
+        # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_placement_color_cnn_check: bool = False,
+        # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_placement_cnn_veto: bool = False,
+        placement_cnn_veto_mode: str = "hold",
         enable_red_hue_wrap_fix: bool = True,
         # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算。
         # 2026-06-02: user viz 採用承認により default True に変更。
@@ -1212,6 +2095,12 @@ class RecognitionPipeline:
         enable_ojama_visual_chain_exit: bool = True,
         enable_ojama_infer_guard: bool = True,
         enable_ojama_settle_detection: bool = True,
+        # 案B (第2の根本原因対処, 2026-07-24): OJAMA_FALL 退出を全盤面 settle
+        # 判定に一本化する (OjamaVisualDetector + OjamaPhaseDetector 連動)。
+        # 2026-07-24 採用 (default ON): A/B 検証 (次ツモ遅延 2.80s→0.65s・
+        # 浮き誤消去 -28%・採用 +38、user viz 全画像レビュー承認) で採用。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_ojama_fall_board_settle: bool = True,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -1221,6 +2110,10 @@ class RecognitionPipeline:
         # 機能D: 連鎖開始 掛け算式 検知 (2026-06-02 実装, 2026-06-03 採用 default ON)。
         # 全軸改善 + user viz 承認。False に戻すには明示指定する。
         enable_chain_formula_detection: bool = True,
+        # 修正D (2026-07-24): 機能D 疑似発火 起点盤面の ChainSimulator 検証。
+        # 2026-07-24 採用 (default ON): 偽イベント率 27.5%→0% (user viz 承認)。
+        # False で旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_chain_formula_simulate_verify: bool = True,
         # 案 Y-4 HSV-first commit + deferred consensus (2026-06-03)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_hsv_deferred_consensus: bool = False,
@@ -1240,6 +2133,114 @@ class RecognitionPipeline:
         # user 目視 OK + 退行なし (corr +0.004% 誤差) で採用確定 → default True。
         # False を渡すと無効化できる (backwards compat のため optional 引数として維持)。
         enable_slide_override_ojama_hold: bool = True,
+        # 案1 (2026-07-23): estimated_board の stale_hold フォールバック。
+        # user viz 承認前の savepoint 実装のため default True だが、
+        # False で従来挙動 (常に None) に戻せる (backwards compat)。
+        enable_chain_estimate_stale_hold: bool = True,
+        # A0 (2026-07-24): CHAIN 保持時間モデルの較正値注入用。
+        # 従来 __init__ には chain_hold_per_step_sec が存在したが load_default
+        # には露出していなかった (評価スクリプト経由で注入不可という抜け漏れ)。
+        # 今回まとめて露出する。全て None (既定) で従来値 (0.0 / 0.3 / 5.0) と
+        # bit-identical (backwards compat)。
+        chain_hold_base_sec: float | None = None,
+        chain_hold_per_step_sec: float | None = None,
+        chain_max_hold_sec: float | None = None,
+        # 修正C (2026-07-24): VideoChainTracker の偽イベント抑制 debounce。
+        # 既定 1 = 従来通り即時確定 (bit-identical, backwards compat)。
+        # 2 以上で debounce_confirm_frames 回連続の drop 観測を要求する。
+        chain_debounce_confirm_frames: int = DEBOUNCE_CONFIRM_FRAMES,
+        # #45 おじゃま merge 統合修正 案(a)(b) (2026-07-24): 案B
+        # (enable_ojama_fall_board_settle) 適用後に判明した _merge_diff_only
+        # の 2 副作用を個別 flag で修正する (A/B 切り分け用、独立 flag)。
+        # 2026-07-24 採用 (default ON): 案B (enable_ojama_fall_board_settle)
+        # と併せた A/B 検証 (user viz 全画像レビュー承認) で採用。それぞれ
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_gravity_filter_support: bool = True,
+        merge_use_majority_value: bool = True,
+        # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards
+        # compat)。
+        enable_drift_resync_match_start_guard: bool = True,
+        enable_drift_resync_hsv_gate: bool = True,
+        # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
+        # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
+        enable_baseline_broken_reset: bool = True,
+        enable_baseline_broken_grace: bool = False,
+        # 列ゲート緩和 (2026-07-25, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_column_partial_support: bool = False,
+        # 前試合盤面残骸リーク修正 (2026-07-23, A/B 計測用)。
+        # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
+        # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+        enable_match_start_full_clear: bool = True,
+        # score-reset 境界誤発火修正 (2026-07-26, A/B 計測用)。誤発火は確定
+        # バグの修正であるため既定 True。False で旧 (片側 OR・デバウンス無し)
+        # 挙動に戻せる (backwards compat)。
+        enable_score_reset_strict: bool = True,
+        # 復旧カウンタ carryover (#51, 2026-07-26, A/B 計測用)。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_recovery_counter_carryover: bool = True,
+        # CNN 乱高下セル HSV フォールバック (#51 後半, 2026-07-26, A/B 計測用)。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_cnn_flicker_hsv_fallback: bool = True,
+        # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
+        # 2026-07-27 user レビュー (video_84, #51系3修正全6観点OK) 承認で
+        # 既定 ON 化。False を明示指定すれば旧挙動 (bit-identical) に戻せる
+        # (backwards compat)。
+        enable_initial_confirm_vote: bool = True,
+        initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        # 大 ROI 走査 (match_end / telop) の間引き (2026-07-30、2026-07-31 既定ON)。
+        # 走査を飛ばすので原理的に bit-identical にならないが、試合終了時刻を
+        # またぐ窓での実測 (3動画 x 2イベント = 1800フレーム) で
+        # **試合終了検出のずれ 0フレーム・盤面差分 0/1800** を確認した。
+        # 遅延が伝播しないのは hard_match_off が score_zero_both との OR で、
+        # score_zero / MatchStateDetector は間引き対象外のため独立経路が
+        # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
+        # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        # 側別 彩度適応較正 (2026-07-31)。実測で 2P 側は彩度が系統的に低い
+        # (ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5、p10 は 98 対 59) のに
+        # 盤面の色分類器は左右で同じ s_min を使っていた。有効化すると各盤面
+        # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
+        enable_side_sat_calibration: bool = False,
+        enable_large_roi_throttle: bool = True,
+        large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
+        # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
+        # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P tail 悪化、c26/c69 の 1P
+        # 効果ゼロ、8フレーム達成率は OFF/ON 不変と判明。汎化未確認のため
+        # default OFF。True で有効化 (backwards compat)。
+        enable_puyo_to_empty_hsv_guard: bool = False,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-07-30, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_asymmetric_recovery_min_frames: bool = False,
+        recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
+        # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
+        # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
+        # 一切効いていなかった** (渡していたのは診断スクリプト1本だけ)。
+        # 引き継ぎの「4.4→8.07fps 出荷済み」はその診断スクリプト内の値で、
+        # 本番はずっと絞り込み無しで動いていた
+        # (memory project_ui_mask_cells_never_wired_2026-07-30)。
+        #
+        # 実測 (video_c56/c60/c65 × 300フレーム = 900フレーム):
+        #   確定盤面の差分 0/900 フレーム (0.00%) = 挙動は完全に不変
+        #   速度 +19.1% 〜 +25.6% (c60 t=1451 の別測定では 226.3→122.1ms)
+        # 従来動作に戻す場合は明示的に None を渡す (backwards compat)。
+        # スコアOCRの NCC を行列積1回に束ねる高速経路 (2026-07-30)。
+        # 実測: 認識全体の19.5%を占める score_ocr.read_side が対象、
+        # 1セル分1777us→12.1us (146倍速)、1フレーム換算28.43ms→0.19ms。
+        # cv2(float32) と numpy(float64) の差でスコアに最大5.5e-07の
+        # 乖離が出るため bit-identical ではないが、実動画3本 x 300フレームの
+        # A/B で **OCRスコア差分 0/900・確定盤面差分 0/900** を実測したため
+        # 既定 ON (速度 +23.5〜26.8%)。従来経路に戻すには False を渡す。
+        enable_score_ocr_matmul: bool = True,
+        ui_mask_cells: "frozenset[tuple[int, int]] | None" = UI_MASK_TARGET_CELLS,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -1276,6 +2277,7 @@ class RecognitionPipeline:
                 mask_ojama_logit=mask_ojama_logit,
                 use_puyo_gate=use_puyo_gate,
                 patch_ncc_threshold=patch_ncc_threshold,
+                ui_mask_cells=ui_mask_cells,
             )
         else:
             reader = ImageReader(
@@ -1287,11 +2289,19 @@ class RecognitionPipeline:
         score: ScoreOcr | None = None
         if load_score_ocr:
             try:
-                score = ScoreOcr.load_default()
+                score = ScoreOcr.load_default(
+                    enable_matmul_ncc=enable_score_ocr_matmul,
+                )
             except FileNotFoundError:
                 score = None
-        ctracker_1p = VideoChainTracker() if enable_chain_tracker else None
-        ctracker_2p = VideoChainTracker() if enable_chain_tracker else None
+        ctracker_1p = (
+            VideoChainTracker(debounce_confirm_frames=chain_debounce_confirm_frames)
+            if enable_chain_tracker else None
+        )
+        ctracker_2p = (
+            VideoChainTracker(debounce_confirm_frames=chain_debounce_confirm_frames)
+            if enable_chain_tracker else None
+        )
         next_det: NextDetector | None = None
         if load_next_detector:
             try:
@@ -1378,6 +2388,9 @@ class RecognitionPipeline:
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_placement_color_cnn_check=enable_placement_color_cnn_check,
+            enable_placement_cnn_veto=enable_placement_cnn_veto,
+            placement_cnn_veto_mode=placement_cnn_veto_mode,
             enable_red_hue_wrap_fix=enable_red_hue_wrap_fix,
             enable_specular_robust_saturation=enable_specular_robust_saturation,
             enable_stable_recovery_gate=enable_stable_recovery_gate,
@@ -1385,15 +2398,44 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
+            enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
+            enable_chain_formula_simulate_verify=enable_chain_formula_simulate_verify,
             enable_hsv_deferred_consensus=enable_hsv_deferred_consensus,
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+            chain_hold_base_sec=chain_hold_base_sec,
+            chain_hold_per_step_sec=chain_hold_per_step_sec,
+            chain_max_hold_sec=chain_max_hold_sec,
+            enable_gravity_filter_support=enable_gravity_filter_support,
+            merge_use_majority_value=merge_use_majority_value,
+            enable_drift_resync_match_start_guard=(
+                enable_drift_resync_match_start_guard
+            ),
+            enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_baseline_broken_reset=enable_baseline_broken_reset,
+            enable_baseline_broken_grace=enable_baseline_broken_grace,
+            enable_column_partial_support=enable_column_partial_support,
+            enable_match_start_full_clear=enable_match_start_full_clear,
+            enable_score_reset_strict=enable_score_reset_strict,
+            enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+            enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+            enable_initial_confirm_vote=enable_initial_confirm_vote,
+            initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_side_sat_calibration=enable_side_sat_calibration,
+            enable_large_roi_throttle=enable_large_roi_throttle,
+            large_roi_throttle_frames=large_roi_throttle_frames,
+            enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
+            enable_asymmetric_recovery_min_frames=(
+                enable_asymmetric_recovery_min_frames
+            ),
+            recovery_add_min_frames=recovery_add_min_frames,
         )
 
     # ------------------------------------------------------------------
@@ -1410,6 +2452,20 @@ class RecognitionPipeline:
             video_id: 動画 ID (例: "v29")。None でリセット。
         """
         self._video_id = video_id
+
+    def _should_run_large_roi_scan(self, frame_idx: int) -> bool:
+        """大 ROI 走査 (match_end / telop) をこのフレームで実行すべきか。
+
+        間引きが無効 (既定) なら常に True = 従来通り毎フレーム実行 (bit-identical)。
+        有効時は LARGE_ROI_THROTTLE_FRAMES に 1 回だけ True を返す。
+
+        Args:
+            frame_idx: 動画全体での絶対フレーム番号。
+        """
+        if not self._enable_large_roi_throttle:
+            return True
+        interval = max(1, self._large_roi_throttle_frames)
+        return (frame_idx % interval) == 0
 
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
@@ -1441,10 +2497,37 @@ class RecognitionPipeline:
         self._chain_until_1p = 0.0
         self._active_chain_2p = None
         self._chain_until_2p = 0.0
+        # 根治 (2026-07-23): 退避 ChainEvent も reset 時にクリア。
+        self._last_chain_event_for_settle_1p = None
+        self._last_chain_event_for_settle_2p = None
+        # 反復4 (2026-07-23): board_none_reason 診断計装用 state も
+        # 試合切替 (reset) 時にクリア (= 新しい試合では cold_start から)。
+        self._ever_had_confirmed_1p = False
+        self._ever_had_confirmed_2p = False
+        self._pending_menu_reset_1p = False
+        self._pending_menu_reset_2p = False
+        # 反復5 (2026-07-23): 物理推論スルー state も試合切替時にクリア。
+        self._chain_estimate_result_1p = None
+        self._chain_estimate_result_2p = None
+        self._chain_estimate_trigger_1p = 0.0
+        self._chain_estimate_trigger_2p = 0.0
+        self._chain_estimate_end_1p = 0.0
+        self._chain_estimate_end_2p = 0.0
+        self._chain_estimate_low_confidence_1p = False
+        self._chain_estimate_low_confidence_2p = False
+        # 案1 (2026-07-23): stale_hold state も試合切替時にクリア。
+        self._chain_estimate_last_board_1p = None
+        self._chain_estimate_last_board_2p = None
+        self._chain_estimate_stale_since_1p = None
+        self._chain_estimate_stale_since_2p = None
+        self._chain_verify_pending_1p = None
+        self._chain_verify_pending_2p = None
         self._cnn_history_1p.clear()
         self._cnn_history_2p.clear()
         self._last_active_frame_idx = -1
         self._match_active_started_frame = -1
+        self._last_active_frame_time = -1.0
+        self._match_active_started_time = -1.0
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -1455,17 +2538,24 @@ class RecognitionPipeline:
             self._score_tracker_1p.reset()
         if self._score_tracker_2p is not None:
             self._score_tracker_2p.reset()
-        # chain tracker 内部 state は再構築 (リセット API なし)
+        # chain tracker 内部 state は再構築 (リセット API なし)。
+        # 修正C: debounce 設定は _chain_debounce_confirm_frames から引き継ぐ。
         if self._chain_tracker_1p is not None:
-            self._chain_tracker_1p = VideoChainTracker()
+            self._chain_tracker_1p = VideoChainTracker(
+                debounce_confirm_frames=self._chain_debounce_confirm_frames,
+            )
         if self._chain_tracker_2p is not None:
-            self._chain_tracker_2p = VideoChainTracker()
+            self._chain_tracker_2p = VideoChainTracker(
+                debounce_confirm_frames=self._chain_debounce_confirm_frames,
+            )
         # cycle 71d (案 D8): VideoChainTracker 入力 cache もリセット.
         self._prev_confirmed_1p = None
         self._prev_confirmed_2p = None
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
+        self._recent_score_times_1p = []
+        self._recent_score_times_2p = []
         # cycle 71h: 着地後 vote 蓄積もリセット.
         self._pending_landing_vote_1p = []
         self._pending_landing_vote_2p = []
@@ -1532,6 +2622,12 @@ class RecognitionPipeline:
         # BoardStateMachine.detectors から GravitySettleDetector を探してリセットする。
         if self._enable_gravity_settle_state:
             self._reset_gravity_settle_detectors()
+        # 追修 (2026-07-25): score リセット境界検知用キャッシュもリセット。
+        self._prev_score_for_reset_1p = None
+        self._prev_score_for_reset_2p = None
+        self._match_start_boundary_latched = False
+        # score-reset 境界誤発火修正 (2026-07-26): デバウンスカウンタもリセット。
+        self._score_reset_boundary_streak = 0
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -1554,6 +2650,7 @@ class RecognitionPipeline:
         #   recognition 凍結
         # - telop (中央テロップ) → 視覚的占有を後段で活用 (将来 cell mask)
         score_zero_both = False
+        # 大 ROI 走査の間引き判定に使う (下の match_end / telop で参照)
         if self._score_zero_detector is not None:
             try:
                 sz = self._score_zero_detector.detect(frame)
@@ -1562,12 +2659,19 @@ class RecognitionPipeline:
                 pass
         match_end_locked = False
         if self._match_end_detector is not None:
-            try:
-                match_end_locked = bool(
-                    self._match_end_detector.update(frame, time_sec),
-                )
-            except Exception:
-                pass
+            # 大 ROI 走査 (800x600) の間引き: 有効時は LARGE_ROI_THROTTLE_FRAMES に
+            # 1 回だけ実行し、間のフレームは前回結果を流用する。
+            # 既定 OFF (フラグ無効時は従来通り毎フレーム実行 = bit-identical)。
+            if self._should_run_large_roi_scan(frame_idx):
+                try:
+                    match_end_locked = bool(
+                        self._match_end_detector.update(frame, time_sec),
+                    )
+                    self._last_match_end_locked = match_end_locked
+                except Exception:
+                    pass
+            else:
+                match_end_locked = self._last_match_end_locked
         # cycle 71f (提案 A): score 動き情報を追跡 (= 試合 2 開始直後の演出で
         # MatchStateDetector / MatchEndDetector が「試合外」 と判定しても、
         # score が継続的に動いていれば「試合中」 と判定する確実な信号).
@@ -1581,14 +2685,21 @@ class RecognitionPipeline:
         )
         self._recent_scores_1p.append(cur_score_1p)
         self._recent_scores_2p.append(cur_score_2p)
-        if len(self._recent_scores_1p) > self.SCORE_MOVE_WINDOW_FRAMES:
-            self._recent_scores_1p = self._recent_scores_1p[
-                -self.SCORE_MOVE_WINDOW_FRAMES:
-            ]
-        if len(self._recent_scores_2p) > self.SCORE_MOVE_WINDOW_FRAMES:
-            self._recent_scores_2p = self._recent_scores_2p[
-                -self.SCORE_MOVE_WINDOW_FRAMES:
-            ]
+        self._recent_score_times_1p.append(time_sec)
+        self._recent_score_times_2p.append(time_sec)
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧「直近 N 件」保持を
+        # 「直近 SCORE_MOVE_WINDOW_SEC 秒」保持に置換 (_trim_score_window 参照)。
+        # 60fps 動画では 1 要素 ≒ 1/60 秒のため件数ベースの窓と一致し bit-identical。
+        self._recent_scores_1p, self._recent_score_times_1p = (
+            self._trim_score_window(
+                self._recent_scores_1p, self._recent_score_times_1p, time_sec,
+            )
+        )
+        self._recent_scores_2p, self._recent_score_times_2p = (
+            self._trim_score_window(
+                self._recent_scores_2p, self._recent_score_times_2p, time_sec,
+            )
+        )
         score_actively_moving = self._is_score_actively_moving(
             self._recent_scores_1p
         ) or self._is_score_actively_moving(self._recent_scores_2p)
@@ -1620,14 +2731,27 @@ class RecognitionPipeline:
             if hard_match_off:
                 raw_active = False
         # Telop visible 状態を保存 (EffectPhaseDetector で利用)
-        self._last_telop_visible = False
+        # 修正2 (2026-07-30): is_visible(frame) は内部で detect(frame) を呼ぶだけの
+        # 薄いラッパーなので、detect() を直接呼んで結果全体 (bbox 込み) を保持する。
+        # これにより後段の self._reader.read_both_boards() へ telop_result として
+        # 引き渡し、ImageReader 側の 2 回目の detect() 実行 (二重走査) を省略できる。
+        # is_visible() だけ呼ぶ場合と挙動は bit-identical (同じ detect() 呼び出し)。
         if self._telop_detector is not None:
-            try:
-                self._last_telop_visible = bool(
-                    self._telop_detector.is_visible(frame),
-                )
-            except Exception:
-                self._last_telop_visible = False
+            # 大 ROI 走査 (720x400) の間引き: match_end と同じ方針。
+            # 既定 OFF では毎フレーム実行され従来と bit-identical。
+            if self._should_run_large_roi_scan(frame_idx):
+                try:
+                    self._last_telop_result = self._telop_detector.detect(frame)
+                    self._last_telop_visible = bool(
+                        self._last_telop_result.is_visible,
+                    )
+                except Exception:
+                    self._last_telop_visible = False
+                    self._last_telop_result = None
+            # else: 前回の _last_telop_result / _last_telop_visible をそのまま流用
+        else:
+            self._last_telop_visible = False
+            self._last_telop_result = None
         # score-based 補強: ScoreOcr が 1 度でも score>0 を読めれば
         # 試合中確定 (試合外/メニュー画面では 8 桁数字は読めないか 0 のまま)。
         # MatchStateDetector の試合中誤判定 (= NOT_IN_MATCH 返却) を補正。
@@ -1638,11 +2762,15 @@ class RecognitionPipeline:
                 and (self._score_tracker_2p.last_score or 0) > 0)
         ):
             raw_active = True
-        # 直前 N frame 以内に active 観測歴があれば強制 True (1 frame ぶれ吸収)
+        # 直前 N 秒以内に active 観測歴があれば強制 True (1 frame ぶれ吸収)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._last_active_frame_idx` (frame 差分) を time_sec 差分に置換。
+        # 60fps 動画では (frame_idx 差分)/60 == time_sec 差分 が恒等式のため
+        # bit-identical、30fps 動画では実秒基準になる。
         recent_active = (
-            self._last_active_frame_idx >= 0
-            and (frame_idx - self._last_active_frame_idx)
-            <= self.MATCH_ACTIVE_HOLD_FRAMES
+            self._last_active_frame_time >= 0
+            and (time_sec - self._last_active_frame_time)
+            <= self.MATCH_ACTIVE_HOLD_SEC
         )
         # 1P/2P state machine が現在 NON-STABLE state にある場合も active 強制
         # (= state machine 内部で active 認識中 → MENU に倒さない)
@@ -1658,12 +2786,31 @@ class RecognitionPipeline:
                 BoardState.GRAVITY_SETTLE,  # feat/gravity-settle-2026-06-05
             )
         )
+        # 反復3 (2026-07-23): 連鎖/重力沈下中は score 急変+フラッシュ演出で
+        # ScoreZeroDetector/MatchEndDetector が瞬間誤爆しやすい
+        # (物理harness実測: 連鎖中の誤 hard_match_off 率 0.95)。
+        # CHAIN/GRAVITY_SETTLE 中は sm_active による保護が effective_hard_off に
+        # 上書きされないよう、この 2 state 限定で hard_match_off を無効化する。
+        # 正当な試合終了 (致死連鎖でゲームセット等) は連鎖アニメ完了後の
+        # STABLE/MENU 遷移時に演出が視認可能になる想定のため、CHAIN/
+        # GRAVITY_SETTLE 中限定の抑制では検出を妨げない (連鎖終了後は
+        # chain_in_progress=False に戻り通常判定に復帰する)。
+        chain_in_progress = (
+            self._sm_1p.context.state in (
+                BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+            )
+            or self._sm_2p.context.state in (
+                BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+            )
+        )
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
         # cycle 71f (提案 A): score が直近 window 内で SCORE_MOVE_MIN_DELTA 以上
         # 動いていれば、 hard_match_off を打ち消して試合中継続を保証する.
         # 「演出/READY/GO! で MatchEnd が誤発火するが score は動いている」
         # シナリオ (= v50 51-63s) を解消.
-        effective_hard_off = hard_match_off and not score_actively_moving
+        effective_hard_off = (
+            hard_match_off and not score_actively_moving and not chain_in_progress
+        )
         is_active = (
             (raw_active or recent_active or sm_active or score_actively_moving)
             and not effective_hard_off
@@ -1673,10 +2820,13 @@ class RecognitionPipeline:
         if is_active:
             if self._match_active_started_frame < 0:
                 self._match_active_started_frame = frame_idx
+                self._match_active_started_time = time_sec
             self._last_active_frame_idx = frame_idx
+            self._last_active_frame_time = time_sec
         else:
             # 試合 active が完全に切れたら start もリセット
             self._match_active_started_frame = -1
+            self._match_active_started_time = -1.0
             self._bg_fp_captured = False
             self._bg_frame_buffer.clear()
             if hasattr(self._reader, "set_background_fingerprints"):
@@ -1727,6 +2877,9 @@ class RecognitionPipeline:
             frame,
             skip_tier1_1p=_skip_t1_1p,
             skip_tier1_2p=_skip_t1_2p,
+            # 修正2 (2026-07-30): 上で計算済の telop 検出結果を使い回す
+            # (ImageReader 側の detect() 二重走査を防ぐ)。
+            telop_result=self._last_telop_result,
         )
 
         # 背景 FP 自動採取 (Phase C-5: robust 化):
@@ -1748,9 +2901,12 @@ class RecognitionPipeline:
             puyo_count_total = (
                 cnn_1p_raw.count_puyos() + cnn_2p_raw.count_puyos()
             )
-            match_age = frame_idx - self._match_active_started_frame
+            # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+            # self._match_active_started_frame` (frame 差分) を time_sec 差分
+            # に置換。60fps では bit-identical、30fps では実秒基準になる。
+            match_age_sec = time_sec - self._match_active_started_time
             bg_fp_relaxed = (
-                match_age <= self.BG_FP_FORCE_WINDOW_FRAMES
+                match_age_sec <= self.BG_FP_FORCE_WINDOW_SEC
                 and puyo_count_total <= self._bg_fp_force_max_puyo
             )
             if puyo_count_total == 0 or bg_fp_relaxed:
@@ -1828,12 +2984,15 @@ class RecognitionPipeline:
         # VideoChainTracker は drop 観測 frame で 1 度だけ ChainEvent を返す。
         # state machine が CHAIN にロックされ続けるよう、event 受信後
         # chain_hold_per_step_sec × chain_count 秒間 signals に保持する。
-        # 試合開始から CHAIN_BAN_FRAMES_AFTER_MATCH_START 以内の event は破棄
+        # 試合開始から CHAIN_BAN_SEC_AFTER_MATCH_START 秒以内の event は破棄
         # (1 手目から連鎖はあり得ない、誤検出 ban)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._match_active_started_frame` (frame 差分) を time_sec 差分に
+        # 置換。60fps では bit-identical、30fps では実秒基準になる。
         chain_banned = (
-            self._match_active_started_frame >= 0
-            and (frame_idx - self._match_active_started_frame)
-            < self.CHAIN_BAN_FRAMES_AFTER_MATCH_START
+            self._match_active_started_time >= 0
+            and (time_sec - self._match_active_started_time)
+            < self.CHAIN_BAN_SEC_AFTER_MATCH_START
         )
         # cycle 71d (案 D8): VideoChainTracker への入力は前 frame の confirmed_board.
         # raw CNN 振動 (= cnn 32↔27 1 frame スパイク) は confirmed が 1 frame では動かないため
@@ -1850,6 +3009,8 @@ class RecognitionPipeline:
             ev = self._chain_tracker_1p.update(time_sec, board_for_tracker_1p)
             if ev is not None and not chain_banned:
                 self._active_chain_1p = ev
+                # 反復5 Step2: 物理推論スルー開始 (起点盤面から連鎖を前進)
+                self._start_chain_estimate("1P", ev)
                 # 全消し連鎖は overlay 表示時間ぶん CHAIN を延長して、 CHAIN→STABLE
                 # 遷移時の _merge_diff_only が overlay corrupted cnn_board を
                 # 使わないようにする (v50 全消し overlay 誤認の構造的解消)。
@@ -1858,6 +3019,7 @@ class RecognitionPipeline:
                 )
                 self._chain_until_1p = (
                     time_sec
+                    + self._chain_hold_base_sec
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
@@ -1866,7 +3028,7 @@ class RecognitionPipeline:
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_1p = (
-                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                        time_sec + self._chain_max_hold_sec
                     )
                     self._chain_start_next_1p = self._last_seen_next_1p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
@@ -1876,11 +3038,14 @@ class RecognitionPipeline:
             ev = self._chain_tracker_2p.update(time_sec, board_for_tracker_2p)
             if ev is not None and not chain_banned:
                 self._active_chain_2p = ev
+                # 反復5 Step2: 物理推論スルー開始 (起点盤面から連鎖を前進)
+                self._start_chain_estimate("2P", ev)
                 extra_all_clear = (
                     self.ALL_CLEAR_OVERLAY_HOLD_SEC if ev.is_all_clear else 0.0
                 )
                 self._chain_until_2p = (
                     time_sec
+                    + self._chain_hold_base_sec
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
@@ -1888,7 +3053,7 @@ class RecognitionPipeline:
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_2p = (
-                        time_sec + self.CHAIN_MAX_HOLD_SEC
+                        time_sec + self._chain_max_hold_sec
                     )
                     self._chain_start_next_2p = self._last_seen_next_2p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
@@ -1920,7 +3085,8 @@ class RecognitionPipeline:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
                 if self._enable_chain_max_hold_override:
                     self._chain_max_hold_expired_1p = True
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
         if self._active_chain_2p is not None:
             eff_until_2p = (
                 self._chain_event_max_until_2p
@@ -1936,11 +3102,84 @@ class RecognitionPipeline:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
                 if self._enable_chain_max_hold_override:
                     self._chain_max_hold_expired_2p = True
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
 
         # 4. score 差分
-        score_d_1p = self._update_score_tracker(self._score_tracker_1p, frame)
-        score_d_2p = self._update_score_tracker(self._score_tracker_2p, frame)
+        # 修正1 (2026-07-30): 生 score 値 (_score_ocr_val_Xp) も同時に受け取り、
+        # 機能D (_check_formula_detected) が同一 frame・同一 side のスコアを
+        # 再度フルで読み直す (score_ocr.read_side 完全重複呼び出し) のを防ぐ。
+        score_d_1p, _score_ocr_val_1p = self._update_score_tracker(
+            self._score_tracker_1p, frame,
+        )
+        score_d_2p, _score_ocr_val_2p = self._update_score_tracker(
+            self._score_tracker_2p, frame,
+        )
+
+        # 追修 (2026-07-25): force_in_match=True 構成では is_match_active=False
+        # 分岐 (MENU 強制、confirmed_board 等クリアの発火点) が一度も走らない
+        # ため、score リセット境界 (新ゲーム開始/全消し) をここで直接検知して
+        # pipeline 全体を明示的にリセットする。sm_1p/sm_2p の confirmed_board
+        # だけでなく、_active_chain_Xp / _chain_estimate_last_board_Xp
+        # (CHAIN 中の estimated_board 表示に使われる stale_hold キャッシュ) 等
+        # 試合単位の全キャッシュに前試合の値が残るため (2026-07-25 実測:
+        # sm 側 5 field のみのクリアでは 2P 側の推定盤面表示に幽霊セルが残存)、
+        # self.reset() (既存の包括的試合切替 API) をそのまま流用する。
+        # edge-trigger ラッチ: 「両者スコアほぼ0」は真の試合開始直後の数秒間
+        # 継続して真になりうるため、境界条件が一旦 False に戻るまでは
+        # 毎フレーム re-fire しないようにする (連続 reset() で序盤の tsumo
+        # 認識進行を妨げないため)。
+        # enable_match_start_full_clear=False (default) では無効 (backwards compat)。
+        if self._enable_match_start_full_clear:
+            cur_score_1p = (
+                self._score_tracker_1p.last_score
+                if self._score_tracker_1p is not None else None
+            )
+            cur_score_2p = (
+                self._score_tracker_2p.last_score
+                if self._score_tracker_2p is not None else None
+            )
+            # 誤発火修正 (2026-07-26): boundary_candidate は 1 フレーム単位の
+            # 生の境界候補 (strict=False なら従来通り即 fire 相当)。
+            # strict=True の場合は SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES 回
+            # 連続成立して初めて実際の発火 (boundary_now) とみなす。
+            # ラッチの解除判定は生の boundary_candidate で行う (デバウンス中の
+            # 一時的な boundary_now=False で誤ってラッチ解除しないため。
+            # 誤解除すると継続 near-zero 期間中に再発火してしまう)。
+            boundary_candidate = _is_score_reset_boundary(
+                cur_score_1p, cur_score_2p,
+                self._prev_score_for_reset_1p, self._prev_score_for_reset_2p,
+                strict=self._enable_score_reset_strict,
+            )
+            if boundary_candidate:
+                self._score_reset_boundary_streak += 1
+            else:
+                self._score_reset_boundary_streak = 0
+            boundary_now = (
+                self._score_reset_boundary_streak
+                >= SCORE_RESET_BOUNDARY_DEBOUNCE_FRAMES
+                if self._enable_score_reset_strict
+                else boundary_candidate
+            )
+            if boundary_now and not self._match_start_boundary_latched:
+                if os.environ.get(_DEBUG_RESET_PROBE_ENV):
+                    tsumo_1p_before = self.tsumo_count("1P")
+                    tsumo_2p_before = self.tsumo_count("2P")
+                    print(
+                        f"[reset_probe] t_sec={time_sec:.2f} "
+                        f"cur_score_1p={cur_score_1p} cur_score_2p={cur_score_2p} "
+                        f"prev_score_1p={self._prev_score_for_reset_1p} "
+                        f"prev_score_2p={self._prev_score_for_reset_2p} "
+                        f"tsumo_1p_before_reset={tsumo_1p_before} "
+                        f"tsumo_2p_before_reset={tsumo_2p_before}",
+                        flush=True,
+                    )
+                self.reset()
+                self._match_start_boundary_latched = True
+            elif not boundary_candidate:
+                self._match_start_boundary_latched = False
+            self._prev_score_for_reset_1p = cur_score_1p
+            self._prev_score_for_reset_2p = cur_score_2p
 
         # 4a. 機能B: score 急増 CHAIN 早期発火 (enable_chain_score_early_fire=True 時のみ)。
         # VideoChainTracker の puyo 減少検知を待たずに、自 side score_delta が
@@ -1999,11 +3238,16 @@ class RecognitionPipeline:
                 self._score_tracker_2p.last_score
                 if self._score_tracker_2p is not None else None
             )
+            # 修正1 (2026-07-30): 上の 4. で同一 frame・同一 side を既に
+            # score_ocr.read_side() 済のため、その結果 (_score_ocr_val_Xp)
+            # を渡して完全重複読み (経路①②) を排除する。
             _formula_1p = self._check_formula_detected(
                 frame, self._score_ocr, "1P", _last_1p,
+                cached_score_val=_score_ocr_val_1p,
             )
             _formula_2p = self._check_formula_detected(
                 frame, self._score_ocr, "2P", _last_2p,
+                cached_score_val=_score_ocr_val_2p,
             )
             # 連続カウンタ更新
             self._formula_consec_1p = (
@@ -2184,7 +3428,8 @@ class RecognitionPipeline:
                 start_next=self._chain_start_next_1p,
             ):
                 chain_ev_1p = None
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
         if self._enable_game_event_chain_exit and chain_ev_2p is not None:
             # X1/X4 ガード: enable_chain_min_display=True 時は抑止条件を先に確認。
             _suppress_2p = (
@@ -2202,7 +3447,8 @@ class RecognitionPipeline:
                 start_next=self._chain_start_next_2p,
             ):
                 chain_ev_2p = None
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
 
         # 案X*(B): NextSlide signal で CHAIN 即終了 (enable_chain_exit_next_signal=True 時)。
         # slide_motion=True が確認された side の active_chain を即クリアする。
@@ -2215,11 +3461,13 @@ class RecognitionPipeline:
             _slide_2p_now: bool = bool(slide_2p)
             if _slide_1p_now and self._active_chain_1p is not None:
                 # 1P 側: slide 検知 → CHAIN 即終了
-                self._active_chain_1p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("1P")
                 chain_ev_1p = None
             if _slide_2p_now and self._active_chain_2p is not None:
                 # 2P 側: slide 検知 → CHAIN 即終了
-                self._active_chain_2p = None
+                # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
+                self._stash_and_clear_active_chain("2P")
                 chain_ev_2p = None
 
         # 連鎖発火で constraint invalidate (= 連鎖中は puyo 消える + ojama 落下)
@@ -2309,20 +3557,36 @@ class RecognitionPipeline:
                 from src.hybrid_classifier import HybridClassifier
                 hc = self._reader._classifier
                 if isinstance(hc, HybridClassifier):
+                    # 反復9 #40 triage (2026-07-23): is_chain は常に False の
+                    # 死にフラグ (構造的に到達不能)。外側で既に
+                    # `state == BoardState.STABLE` を要求しているため、この
+                    # 内側の `state == BoardState.CHAIN` は state の相互排他性
+                    # 上、絶対に True にならない。
+                    # GS_EXEMPT: これは GRAVITY_SETTLE 導入で dead code 化した
+                    # (根治で直した) バグとは別種で、GRAVITY_SETTLE を考慮に
+                    # 加えても解決しない (STABLE と CHAIN/GRAVITY_SETTLE は
+                    # どのみち同時に真になり得ない)。正しい修正には
+                    # OnlineHsvCalibrator へ供給する対象 state 自体の再設計
+                    # (例: CHAIN/GRAVITY_SETTLE 中の estimated_board も候補に
+                    # 含め、is_chain で正しく除外する等) が必要だが、これは
+                    # HSV 較正という認識コアの挙動を変える変更であり、
+                    # Phase I (認識精度 99.99% 目標) の他フェーズ凍結方針・
+                    # 専用の診断/viz 評価を要する対象。再発防止ガード
+                    # (低リスク) の対象外として、意図的に現状維持する。
                     sides_to_update = []
                     if (self._sm_1p.context.state == BoardState.STABLE
                             and self._sm_1p.context.confirmed_board is not None):
                         sides_to_update.append((
                             DEFAULT_P1_REGION,
                             self._sm_1p.context.confirmed_board,
-                            self._sm_1p.context.state == BoardState.CHAIN,
+                            False,  # is_chain: 上記 GS_EXEMPT 参照、常に False
                         ))
                     if (self._sm_2p.context.state == BoardState.STABLE
                             and self._sm_2p.context.confirmed_board is not None):
                         sides_to_update.append((
                             DEFAULT_P2_REGION,
                             self._sm_2p.context.confirmed_board,
-                            self._sm_2p.context.state == BoardState.CHAIN,
+                            False,  # is_chain: 上記 GS_EXEMPT 参照、常に False
                         ))
                     if sides_to_update:
                         for region, board, is_chain in sides_to_update:
@@ -2544,6 +3808,8 @@ class RecognitionPipeline:
         self, side: str, frame_idx: int,
         prev_confirmed: Board, final_board: Board,
         next_colors: tuple[int, int] | None = None,  # cycle 71m β2''
+        distrust_cells: set[tuple[int, int]] | None = None,
+        time_sec: float | None = None,  # フレーム定数→時間定数化 Stage1 (2026-07-25)
     ) -> None:
         """cycle 71h: 着地時に vote 蓄積エントリを追加.
 
@@ -2552,6 +3818,16 @@ class RecognitionPipeline:
 
         cycle 71m (β2''): next_colors を保存し、 vote 期間中に HSV 距離で
         NEXT 色 2 種類のどちらかに分類する追加 vote も蓄積する.
+
+        色フリッカ根因への防御的修正 案(iii) (2026-07-25): distrust_cells に
+        座標が含まれるセルは、_update_landing_votes 側で NEXT 色 2 択バイアスを
+        迂回し、生 CNN 多数決フォールバックに必ず落ちる (backwards compat:
+        None なら空集合扱いで従来挙動と完全に同一)。
+
+        Args:
+            time_sec: フレーム定数→時間定数化 Stage1 (2026-07-25)。呼び出し元
+                (_step_side) の time_sec。省略時 (backwards compat, 白箱テスト用)
+                は `frame_idx / 60` で代替し、旧 frame ベース挙動を保つ。
         """
         cells_with_expected: list[tuple[int, int, int]] = []
         for r in range(BOARD_ROWS):
@@ -2562,8 +3838,12 @@ class RecognitionPipeline:
                     cells_with_expected.append((r, c, fv))
         if not cells_with_expected:
             return
+        start_time = (
+            time_sec if time_sec is not None else frame_idx / 60
+        )
         entry: dict = {
             "start": frame_idx,
+            "start_time": start_time,
             "cells": cells_with_expected,
             "votes": {
                 (r, c): [] for (r, c, _) in cells_with_expected
@@ -2574,6 +3854,8 @@ class RecognitionPipeline:
             },
             "next_colors": next_colors,
             "side": side,
+            # 案(iii): 疑わしいセル座標集合 (デフォルト空集合 = 従来挙動不変)。
+            "distrust_cells": distrust_cells or set(),
         }
         if side == "1P":
             self._pending_landing_vote_1p.append(entry)
@@ -2584,16 +3866,24 @@ class RecognitionPipeline:
         self, side: str, frame_idx: int,
         cnn_board: Board, confirmed_board: Board | None,
         frame_bgr: np.ndarray | None = None,  # cycle 71m β2''
+        time_sec: float | None = None,  # フレーム定数→時間定数化 Stage1 (2026-07-25)
     ) -> Board | None:
         """cycle 71h: 着地後 vote 累積 + 完了時の confirmed 更新.
 
         各 pending entry について:
-        - LANDING_VOTE_FRAMES 経過前: cnn_board の対象 cells を vote_buffer に追加
-        - LANDING_VOTE_FRAMES 経過: 最頻値で confirmed_board の cell 色を更新
+        - LANDING_VOTE_SEC 秒経過前: cnn_board の対象 cells を vote_buffer に追加
+        - LANDING_VOTE_SEC 秒経過: 最頻値で confirmed_board の cell 色を更新
 
         cycle 71m (β2''): frame_bgr が渡されれば、 各 cell の HSV を NEXT 色 2 種類
         への距離で分類する vote も並行で蓄積. 蓄積終了時、 NEXT 色 votes の多数決を
         優先採用 (= CNN 完全誤認時の救済).
+
+        Args:
+            time_sec: フレーム定数→時間定数化 Stage1 (2026-07-25)。呼び出し元
+                (_step_side) の time_sec。省略時 (backwards compat, 白箱テスト用)
+                は `frame_idx / 60` で代替し、旧 frame ベース挙動を保つ。
+                entry 側に "start_time" が無い場合も同様に entry["start"]/60 を
+                fallback として使う。
 
         Returns:
             更新後の confirmed_board. None なら更新なし.
@@ -2612,11 +3902,16 @@ class RecognitionPipeline:
         region = DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
         updated_board = confirmed_board.copy() if confirmed_board else None
         next_pending: list[dict] = []
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): cur_time / start_time は
+        # ともに time_sec 基準。 呼び出し元省略時 (白箱テスト互換) は
+        # frame_idx/60 を代替値として使い、旧 frame ベース挙動を維持する。
+        cur_time = time_sec if time_sec is not None else frame_idx / 60
         for entry in pending:
-            elapsed = frame_idx - entry["start"]
-            if elapsed < self.LANDING_VOTE_FRAMES:
-                # cycle 26 (A2): 着地直後 5 frame は CNN ぶれ大 → 蓄積 skip
-                in_init_skip = elapsed < self.LANDING_VOTE_INIT_SKIP_FRAMES
+            start_time = entry.get("start_time", entry["start"] / 60)
+            elapsed_sec = cur_time - start_time
+            if elapsed_sec < self.LANDING_VOTE_SEC:
+                # cycle 26 (A2): 着地直後 CNN ぶれ大 → 蓄積 skip
+                in_init_skip = elapsed_sec < self.LANDING_VOTE_INIT_SKIP_SEC
                 # 蓄積期間中: cnn の対象 cells 色を追加 (init_skip 除く)
                 if not in_init_skip:
                     for (r, c, _) in entry["cells"]:
@@ -2665,9 +3960,15 @@ class RecognitionPipeline:
                             # cycle 26 (A4): 早期確定経路。
                             # len>=5, ratio>=0.8 で即 updated_board に反映、
                             # confirmed_set に登録して以降の発火を抑止。
+                            # 案(iii) (2026-07-25): distrust セルは NEXT 色バイアス
+                            # による早期確定を迂回し、後段の生 CNN 多数決に委ねる。
                             nc_obs_now = entry["next_color_votes"][(r, c)]
+                            cell_distrusted = (r, c) in entry.get(
+                                "distrust_cells", set(),
+                            )
                             if (
                                 updated_board is not None
+                                and not cell_distrusted
                                 and len(nc_obs_now)
                                     >= self.LANDING_VOTE_NEXT_EARLY_COUNT
                             ):
@@ -2688,20 +3989,28 @@ class RecognitionPipeline:
                 if updated_board is None:
                     continue
                 confirmed_set = entry.get("confirmed_cells", set())
+                distrust_cells = entry.get("distrust_cells", set())
                 for (r, c, expected) in entry["cells"]:
                     # cycle 26 (A4): 早期確定済 cell は再適用 skip (上書き禁止)
                     if (r, c) in confirmed_set:
                         continue
-                    # cycle 71m β2'': NEXT 色 votes が十分なら採用 (= 多数決優先)
-                    # cycle 26 (A4): len>=3 のみ → ratio>=0.7 も必須化で誤分類抑制
-                    nc_obs = entry.get("next_color_votes", {}).get((r, c), [])
-                    if len(nc_obs) >= self.LANDING_VOTE_NEXT_MIN_COUNT:
-                        nc_counter = Counter(nc_obs)
-                        nc_winner, nc_count = nc_counter.most_common(1)[0]
-                        nc_ratio = nc_count / len(nc_obs)
-                        if nc_ratio >= self.LANDING_VOTE_NEXT_MIN_RATIO:
-                            updated_board.set(r, c, nc_winner)
-                            continue
+                    # 案(iii) (2026-07-25): distrust セルは NEXT 色 votes 優先ロジック
+                    # を完全に迂回し、下記の生 CNN 多数決フォールバックに必ず落ちる。
+                    # distrust_cells が空集合 (デフォルト/フラグ OFF) の場合は
+                    # 従来ロジックと bit-identical。
+                    if (r, c) not in distrust_cells:
+                        # cycle 71m β2'': NEXT 色 votes が十分なら採用 (= 多数決優先)
+                        # cycle 26 (A4): len>=3 のみ → ratio>=0.7 も必須化で誤分類抑制
+                        nc_obs = entry.get(
+                            "next_color_votes", {},
+                        ).get((r, c), [])
+                        if len(nc_obs) >= self.LANDING_VOTE_NEXT_MIN_COUNT:
+                            nc_counter = Counter(nc_obs)
+                            nc_winner, nc_count = nc_counter.most_common(1)[0]
+                            nc_ratio = nc_count / len(nc_obs)
+                            if nc_ratio >= self.LANDING_VOTE_NEXT_MIN_RATIO:
+                                updated_board.set(r, c, nc_winner)
+                                continue
                     # fallback: 既存 CNN 観測色の最頻値
                     obs = entry["votes"][(r, c)]
                     if not obs:
@@ -2742,6 +4051,37 @@ class RecognitionPipeline:
                 if isinstance(det, GravitySettleDetector):
                     det.reset()
 
+    def _trim_score_window(
+        self,
+        scores: list[int | None],
+        times: list[float],
+        cur_time: float,
+    ) -> tuple[list[int | None], list[float]]:
+        """`SCORE_MOVE_WINDOW_SEC` 秒より古い要素を先頭から削除する.
+
+        フレーム定数→時間定数化 Stage1 (2026-07-25): 旧「直近 N 件保持」を
+        「直近 SCORE_MOVE_WINDOW_SEC 秒保持」に変換するヘルパー。
+        60fps 動画では 1 要素 ≒ 1/60 秒のため件数ベースの窓と一致し
+        bit-identical。30fps 動画では実秒基準の窓になる。
+
+        Args:
+            scores: score 履歴 (時系列順、times と同じ長さ)。
+            times: 各 score 観測時の time_sec (時系列順)。
+            cur_time: 現フレームの time_sec。
+
+        Returns:
+            トリム後の (scores, times) タプル。
+        """
+        cutoff = cur_time - self.SCORE_MOVE_WINDOW_SEC
+        drop = 0
+        for t in times:
+            if t > cutoff:
+                break
+            drop += 1
+        if drop == 0:
+            return scores, times
+        return scores[drop:], times[drop:]
+
     def _is_score_actively_moving(
         cls, recent_scores: list[int | None],
     ) -> bool:
@@ -2764,12 +4104,21 @@ class RecognitionPipeline:
     @staticmethod
     def _update_score_tracker(
         tracker: ScoreTracker | None, frame: np.ndarray,
-    ) -> int:
-        """tracker があれば update、戻り値 delta (>=0 のみ)。"""
+    ) -> tuple[int, int | None]:
+        """tracker があれば update。
+
+        戻り値は (delta (>=0 のみ), 今回 frame の生 score OCR 値)。
+        修正1 (2026-07-30): 生 score 値は機能D (_check_formula_detected) が
+        同一 frame・同一 side のスコア再読み取り (score_ocr.read_side) を
+        避けるためのキャッシュとして呼出元から渡される。
+        戻り値の tuple 化は private staticmethod (呼出元はこのファイル内の
+        2 箇所のみ) のため backwards compat 上の懸念はない。
+        """
         if tracker is None:
-            return 0
+            return 0, None
         d = tracker.update(frame)
-        return max(0, d.delta) if d.is_valid else 0
+        delta = max(0, d.delta) if d.is_valid else 0
+        return delta, d.cur_score
 
     def _apply_chain_score_early_fire(
         self,
@@ -2804,7 +4153,9 @@ class RecognitionPipeline:
         # 疑似 ChainEvent を生成 (chain_count=1 の最小ガード)
         pseudo = ChainEvent(
             trigger_sec=time_sec,
-            end_sec=time_sec + self._chain_hold_per_step_sec,
+            end_sec=(
+                time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+            ),
             before_board=before,
             chain_count=1,
             total_erased=0, total_score=score_delta, base_score=score_delta,
@@ -2812,13 +4163,20 @@ class RecognitionPipeline:
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
         )
-        chain_until = time_sec + self._chain_hold_per_step_sec
+        chain_until = (
+            time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
+        )
+        # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能B 早期発火) も物理推論
+        # スルーの対象にする (estimated_board 補完率向上)。起点盤面
+        # (before) は prev_confirmed 由来で cold_start 等では信頼度が
+        # 低い場合があるが、それは Step3(a)(b)(c) の答え合わせで拾う。
+        self._start_chain_estimate(side, pseudo)
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_1p = (
-                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                    time_sec + self._chain_max_hold_sec
                 )
                 self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
@@ -2827,7 +4185,7 @@ class RecognitionPipeline:
             self._chain_until_2p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_2p = (
-                    time_sec + self.CHAIN_MAX_HOLD_SEC
+                    time_sec + self._chain_max_hold_sec
                 )
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
@@ -2838,6 +4196,9 @@ class RecognitionPipeline:
         score_ocr: "ScoreOcr | None",
         side: str,
         last_score: "int | None",
+        cached_score_val: "int | None | _ScoreValNotCached" = (
+            _SCORE_VAL_NOT_CACHED
+        ),
     ) -> bool:
         """機能D: 掛け算式表示を stateless に判定する。
 
@@ -2851,6 +4212,13 @@ class RecognitionPipeline:
             score_ocr: ScoreOcr インスタンス。None なら常に False。
             side: "1P" or "2P"
             last_score: 直前に読めた score 値。None または 0 なら試合外とみなす。
+            cached_score_val: 修正1 (2026-07-30)。呼出元 (ScoreTracker.update
+                経由の _update_score_tracker) が同一 frame・同一 side で既に
+                score_ocr.read_side() を実行済の場合、その戻り値 (int | None)
+                をここに渡すと本メソッド内部での再読み取りを省略する。
+                既定値 _SCORE_VAL_NOT_CACHED (未指定) では従来通り
+                score_ocr.read_side() をここで実行する
+                (backwards compat、bit-identical)。
 
         Returns:
             True = 掛け算式検知条件成立。
@@ -2865,12 +4233,69 @@ class RecognitionPipeline:
         f = _ensure_1080p(frame)
         if f is None:
             return False
-        score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
+        if cached_score_val is not _SCORE_VAL_NOT_CACHED:
+            score_val = cached_score_val
+        else:
+            score_val, _conf = score_ocr.read_side(f, side)  # type: ignore[arg-type]
         if score_val is not None:
             return False  # OCR 成功 = 通常スコア表示
         roi = _crop_score_roi(f, side)  # type: ignore[arg-type]
         ir = compute_score_roi_ink_ratio(roi)
         return ir > CHAIN_FORMULA_INK_RATIO_MIN
+
+    def _simulate_before_board(
+        self, before_board: "Board",
+    ) -> "ChainResult | None":
+        """起点盤面を ChainSimulator で検証する (修正D, 2026-07-24 追加)。
+
+        _start_chain_estimate と機能D 早期発火ゲート (_resolve_formula_chain_count)
+        で共用する simulate 呼び出しの共通ヘルパー。stateless
+        (self._chain_sim は同一盤面の simulate を高速化するための lazy
+        キャッシュ属性のみ保持、ChainSimulator 自体は副作用なし)。
+
+        Args:
+            before_board: 検証対象の起点盤面。
+
+        Returns:
+            ChainSimulator.simulate の結果。simulate 失敗時は None。
+        """
+        from src.chain import ChainSimulator
+        if not hasattr(self, "_chain_sim"):
+            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+        try:
+            return self._chain_sim.simulate(before_board)  # type: ignore[attr-defined]
+        except Exception:
+            return None
+
+    def _resolve_formula_chain_count(
+        self, before_board: "Board",
+    ) -> "tuple[int | None, ChainResult | None]":
+        """機能D 早期発火の chain_count を検証つきで解決する (修正D, 2026-07-24)。
+
+        真因診断 (_diag_false_event_source_2026-07-24.py) で機能D 早期発火
+        77件中35件=45.5%が「連鎖ゼロの起点盤面」からの疑似発火(偽イベント)
+        と確定した対策。2026-07-24 user viz 承認により
+        enable_chain_formula_simulate_verify=True が既定 (偽イベント率
+        27.5%→0%)。True の場合は before_board を simulate し、
+        chain_count==0 (連鎖が実在しない) なら (None, None) を返し、
+        呼び出し元に疑似発火を抑制させる。chain_count>0 ならその実測値と
+        ChainResult を返す (二重 simulate 回避のため _start_chain_estimate
+        に precomputed_result として渡す)。False を明示指定した場合のみ
+        検証せず chain_count=1 固定を返す (旧挙動, bit-identical)。
+
+        Args:
+            before_board: 早期発火の起点とする確定盤面。
+
+        Returns:
+            (chain_count, verified_result) のタプル。chain_count が None
+            の場合は疑似発火を抑制すべきことを示す。
+        """
+        if not self._enable_chain_formula_simulate_verify:
+            return 1, None
+        verified = self._simulate_before_board(before_board)
+        if verified is None or verified.chain_count <= 0:
+            return None, None
+        return verified.chain_count, verified
 
     def _apply_chain_formula_early_fire(
         self,
@@ -2882,6 +4307,12 @@ class RecognitionPipeline:
 
         _apply_chain_score_early_fire と同パターン。
         既に _active_chain_* が有効な場合はスキップ (既存経路優先)。
+
+        修正D (2026-07-24): enable_chain_formula_simulate_verify=True (既定,
+        2026-07-24 user viz 承認) の場合、起点盤面 (before_board) を
+        ChainSimulator で事前検証し、連鎖が実在しない起点盤面での疑似発火を
+        抑制する (偽イベント対策)。False を明示指定した場合のみ従来通り
+        検証なしで chain_count=1 固定発火 (旧挙動, bit-identical)。
 
         Args:
             side: "1P" or "2P"
@@ -2895,32 +4326,443 @@ class RecognitionPipeline:
             if self._active_chain_2p is not None:
                 return
         before = prev_confirmed.copy() if prev_confirmed is not None else Board()
+        chain_count, verified = self._resolve_formula_chain_count(before)
+        if chain_count is None:
+            return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
         # 疑似 ChainEvent を生成 (score は不明なため 0)
         pseudo = ChainEvent(
             trigger_sec=time_sec,
-            end_sec=time_sec + self._chain_hold_per_step_sec,
+            end_sec=(
+                time_sec + self._chain_hold_base_sec
+                + self._chain_hold_per_step_sec * chain_count
+            ),
             before_board=before,
-            chain_count=1,
+            chain_count=chain_count,
             total_erased=0, total_score=0, base_score=0,
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
         )
-        chain_until = time_sec + self._chain_hold_per_step_sec
+        chain_until = (
+            time_sec + self._chain_hold_base_sec
+            + self._chain_hold_per_step_sec * chain_count
+        )
+        # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能D 掛け算式早期発火) も
+        # 物理推論スルーの対象にする。修正D: 検証済みなら precomputed_result
+        # を渡して _start_chain_estimate 内での二重 simulate を避ける。
+        self._start_chain_estimate(side, pseudo, precomputed_result=verified)
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
             if self._enable_game_event_chain_exit:
-                self._chain_event_max_until_1p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_event_max_until_1p = time_sec + self._chain_max_hold_sec
                 self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
         else:
             self._active_chain_2p = pseudo
             self._chain_until_2p = chain_until
             if self._enable_game_event_chain_exit:
-                self._chain_event_max_until_2p = time_sec + self.CHAIN_MAX_HOLD_SEC
+                self._chain_event_max_until_2p = time_sec + self._chain_max_hold_sec
                 self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
+
+    def _start_chain_estimate(
+        self,
+        side: str,
+        ev: ChainEvent,
+        precomputed_result: "ChainResult | None" = None,
+    ) -> None:
+        """Step2 (2026-07-23): 連鎖検出時に物理推論スルーを開始する。
+
+        ev.before_board (= 起点盤面、Step1 診断で 85.7% 有効と確認済み) から
+        ChainSimulator で連鎖を 1 度だけシミュレートし、再生用の ChainResult
+        を保持する。Step3(a) 答え合わせ: score 由来 chain_count (ev から算出)
+        と物理予測 chain_count (before_board を simulate した実測値) が
+        一致しなければ低信頼度フラグを立てる (= 起点盤面自体が誤認の疑い)。
+
+        Args:
+            side: "1P" または "2P"。
+            ev: 新規検出された ChainEvent。
+            precomputed_result: 呼び出し元で既に ev.before_board を simulate
+                済みの結果があれば渡す (修正D, 2026-07-24 追加、二重 simulate
+                回避)。None (既定) の場合は従来通りここで simulate する
+                (backwards compat, bit-identical)。
+        """
+        if precomputed_result is not None:
+            cr = precomputed_result
+        else:
+            cr = self._simulate_before_board(ev.before_board)
+        result = cr if (cr is not None and cr.chain_count > 0) else None
+        low_confidence = (
+            result is not None and result.chain_count != ev.chain_count
+        )
+        if side == "1P":
+            self._chain_estimate_result_1p = result
+            self._chain_estimate_trigger_1p = ev.trigger_sec
+            self._chain_estimate_end_1p = ev.end_sec
+            self._chain_estimate_low_confidence_1p = low_confidence
+            # 案1: cold start (= この CHAIN 継続区間でまだ一度も推定盤面を
+            # 保持していない) の場合のみ起点盤面で seed する。既に途中まで
+            # 進行した推定盤面 (last_board) があるなら、それより情報の少ない
+            # before_board で上書きしない (= より進んだ推定を優先温存)。
+            if self._chain_estimate_last_board_1p is None:
+                self._chain_estimate_last_board_1p = ev.before_board.copy()
+        else:
+            self._chain_estimate_result_2p = result
+            self._chain_estimate_trigger_2p = ev.trigger_sec
+            self._chain_estimate_end_2p = ev.end_sec
+            self._chain_estimate_low_confidence_2p = low_confidence
+            if self._chain_estimate_last_board_2p is None:
+                self._chain_estimate_last_board_2p = ev.before_board.copy()
+
+    def _stash_and_clear_active_chain(self, side: str) -> None:
+        """active_chain_* を None にする前に退避してからクリアする。
+
+        根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰でも連鎖後
+        final_board 反映 (Phase C-6 の C) を機能させるための共通ヘルパー。
+        active_chain が None クリアされる全箇所 (timing hold 超過 /
+        game-event 次ツモ変化 exit / NextSlide 即終了) から呼び出す。
+
+        Args:
+            side: "1P" または "2P"。
+        """
+        if side == "1P":
+            if self._active_chain_1p is not None:
+                self._last_chain_event_for_settle_1p = self._active_chain_1p
+            self._active_chain_1p = None
+        else:
+            if self._active_chain_2p is not None:
+                self._last_chain_event_for_settle_2p = self._active_chain_2p
+            self._active_chain_2p = None
+
+    def _classify_board_none_reason(
+        self, side: str, is_active: bool,
+        published_confirmed: "Board | None", state: BoardState,
+    ) -> str | None:
+        """confirmed_board=None の理由を分類する (反復4 診断計装、挙動非変更)。
+
+        SideResult.board_none_reason に載せる分類ロジック本体。CHAIN 中の
+        confirmed_board=None が「is_match_active→MENU 経路」由来か
+        「別経路」由来かを切り分けるための計装 (真因調査用、修正ではない)。
+
+        Args:
+            side: "1P" または "2P"。
+            is_active: このフレームの is_match_active
+                (board_state_machine.py:480 の MENU 強制条件そのもの)。
+            published_confirmed: このフレームで SideResult に載る確定盤面。
+            state: このフレームの BoardState (ctx.state)。
+
+        Returns:
+            None (confirmed_board が非 None) / "cold_start" / "menu_reset" /
+            "chain_hold_none" / "other"。
+        """
+        ever_had = (
+            self._ever_had_confirmed_1p if side == "1P"
+            else self._ever_had_confirmed_2p
+        )
+        if not is_active:
+            # board_state_machine.py:480-488 の MENU 強制が今フレーム発生。
+            if side == "1P":
+                self._pending_menu_reset_1p = True
+            else:
+                self._pending_menu_reset_2p = True
+        pending_menu_reset = (
+            self._pending_menu_reset_1p if side == "1P"
+            else self._pending_menu_reset_2p
+        )
+        if published_confirmed is not None:
+            if side == "1P":
+                self._ever_had_confirmed_1p = True
+                self._pending_menu_reset_1p = False
+            else:
+                self._ever_had_confirmed_2p = True
+                self._pending_menu_reset_2p = False
+            return None
+        if not ever_had:
+            return "cold_start"
+        if pending_menu_reset:
+            return "menu_reset"
+        if state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            return "chain_hold_none"
+        return "other"
+
+    def _compute_chain_estimate(
+        self, side: str, state: BoardState, time_sec: float,
+    ) -> "tuple[Board | None, str]":
+        """Step2 (2026-07-23): CHAIN/GRAVITY_SETTLE 中の物理推定盤面を返す。
+
+        confirmed_board 自体は変更しない (標準 eval 経路への影響ゼロ)。
+        estimated_board / board_provenance の算出専用ヘルパー。
+        案1 (2026-07-23): フレッシュな推定が計算できないフレーム
+        (起点盤面 simulate が chain_count=0 等) は _stale_hold_fallback に
+        委譲する (enable_chain_estimate_stale_hold=True の場合のみ)。
+
+        Args:
+            side: "1P" または "2P"。
+            state: このフレームの BoardState (ctx.state)。
+            time_sec: 現フレームの時刻。
+
+        Returns:
+            (estimated_board, board_provenance)。 非該当時は (None, "observed")。
+        """
+        if state not in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            # CHAIN/GRAVITY_SETTLE を抜けたら次回開始まで state を全てクリア
+            # (案1: stale_hold 用 state も含む。次回 CHAIN 突入は cold start)。
+            if side == "1P":
+                self._chain_estimate_result_1p = None
+                self._chain_estimate_last_board_1p = None
+                self._chain_estimate_stale_since_1p = None
+            else:
+                self._chain_estimate_result_2p = None
+                self._chain_estimate_last_board_2p = None
+                self._chain_estimate_stale_since_2p = None
+            return None, "observed"
+        result = (
+            self._chain_estimate_result_1p if side == "1P"
+            else self._chain_estimate_result_2p
+        )
+        board: "Board | None" = None
+        low_confidence = False
+        if result is not None:
+            trigger = (
+                self._chain_estimate_trigger_1p if side == "1P"
+                else self._chain_estimate_trigger_2p
+            )
+            end = (
+                self._chain_estimate_end_1p if side == "1P"
+                else self._chain_estimate_end_2p
+            )
+            low_confidence = (
+                self._chain_estimate_low_confidence_1p if side == "1P"
+                else self._chain_estimate_low_confidence_2p
+            )
+            board = _progressed_chain_board(result, trigger, end, time_sec)
+        if board is not None:
+            # フレッシュな推定成功: last_board 更新 + stale streak 解除。
+            if side == "1P":
+                self._chain_estimate_last_board_1p = board.copy()
+                self._chain_estimate_stale_since_1p = None
+            else:
+                self._chain_estimate_last_board_2p = board.copy()
+                self._chain_estimate_stale_since_2p = None
+            provenance = (
+                "chain_estimate_low_confidence" if low_confidence
+                else "chain_estimate"
+            )
+            return board, provenance
+        if not self._enable_chain_estimate_stale_hold:
+            return None, "observed"
+        return self._stale_hold_fallback(side, time_sec)
+
+    def _stale_hold_fallback(
+        self, side: str, time_sec: float,
+    ) -> "tuple[Board | None, str]":
+        """案1 (2026-07-23): estimated_board の stale_hold フォールバック本体。
+
+        フレッシュな推定 (_compute_chain_estimate) が計算できないフレームで
+        直前に成功した推定盤面 (last_board、無ければ CHAIN 突入時の起点盤面)
+        を保持して返す。「推定が信頼できない保持中」であることが下流で
+        区別できるよう board_provenance を明示する。
+        安全弁: 連続 stale_hold が CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC を
+        超えたら None に戻す (古い盤面を無期限に貼り続ける事故を防ぐ)。
+
+        Args:
+            side: "1P" または "2P"。
+            time_sec: 現フレームの時刻。
+
+        Returns:
+            (estimated_board, board_provenance)。 last_board が無い、または
+            安全弁超過なら (None, "observed")。
+        """
+        last_board = (
+            self._chain_estimate_last_board_1p if side == "1P"
+            else self._chain_estimate_last_board_2p
+        )
+        if last_board is None:
+            return None, "observed"
+        stale_since = (
+            self._chain_estimate_stale_since_1p if side == "1P"
+            else self._chain_estimate_stale_since_2p
+        )
+        if stale_since is None:
+            stale_since = time_sec
+            if side == "1P":
+                self._chain_estimate_stale_since_1p = stale_since
+            else:
+                self._chain_estimate_stale_since_2p = stale_since
+        if time_sec - stale_since > self.CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC:
+            return None, "observed"
+        return last_board.copy(), "chain_estimate_stale_hold"
+
+    def _update_chain_estimate_verification(
+        self, side: str, state: BoardState, cnn_board: Board,
+    ) -> "tuple[str | None, Board | None]":
+        """反復5 修正 Step3(b)(c): 連鎖後 final_board 適用の事後答え合わせ。
+
+        単一フレームの生 CNN でなく、直近 CHAIN_VERIFY_FRAMES 分の STABLE
+        cnn_board の多数決盤面と物理予測 (final_board) を照合する
+        (GRAVITY_SETTLE 直後の残光ノイズに強くするため)。適用は既に完了
+        済 (Phase C-6 の C で無条件適用) のため、ここでは止めずに
+        不一致時のみ多数決盤面で confirmed_board を補正する
+        (呼出元が返り値の補正盤面を ctx.confirmed_board に反映する)。
+
+        Args:
+            side: "1P" または "2P"。
+            state: このフレームの BoardState (ctx.state)。
+            cnn_board: この frame の生 CNN 観測。
+
+        Returns:
+            (answer_check_result, correction_board) のタプル。
+            answer_check_result: None (検証対象外/進行中) /
+                "verified_match" / "verified_mismatch_corrected"。
+            correction_board: "verified_mismatch_corrected" のときのみ
+                非 None (呼出元が ctx.confirmed_board に適用する多数決盤面)。
+        """
+        pending = (
+            self._chain_verify_pending_1p if side == "1P"
+            else self._chain_verify_pending_2p
+        )
+        if pending is None or state != BoardState.STABLE:
+            return None, None
+        pending["cnn_history"].append(cnn_board.copy())
+        if len(pending["cnn_history"]) < self.CHAIN_VERIFY_FRAMES:
+            return None, None
+        from src.board_state_machine import _vote_majority_board
+        history = pending["cnn_history"]
+        min_votes = max(1, len(history) // 2 + 1)  # 単純多数決
+        majority = _vote_majority_board(history, min_votes=min_votes)
+        diff = DriftDetector._count_mismatch(pending["expected"], majority)
+        if side == "1P":
+            self._chain_verify_pending_1p = None
+        else:
+            self._chain_verify_pending_2p = None
+        if diff <= self.CHAIN_VERIFY_MISMATCH_CELLS:
+            return "verified_match", None
+        # 不一致: 起点誤認の疑いが事後に判明 → 多数決盤面で補正する。
+        from src.board_state_machine import _apply_gravity_filter
+        _apply_gravity_filter(majority)
+        return "verified_mismatch_corrected", majority
+
+    def _check_baseline_broken_reset(
+        self,
+        side: str,
+        frame_idx: int,
+        time_sec: float,
+        is_active: bool,
+        ctx: "StateContext",
+        cnn_board: Board,
+        prev_state: BoardState,
+        sm: BoardStateMachine,
+        drift: DriftDetector,
+        gen: InferenceBoardGenerator,
+    ) -> None:
+        """cycle 31 baseline 整合性 check + 自己修復 (baseline_broken reset)。
+
+        制御フラグ化 (2026-07-25, A/B 計測用):
+        enable_baseline_broken_reset=False で機能全体をスキップする
+        (default True = 従来挙動完全維持、backwards compat)。
+        enable_baseline_broken_grace=True の場合、STABLE 突入から
+        BASELINE_BROKEN_STABLE_GRACE_SEC 秒間はカウンタ加算 (自己修復 reset
+        の判定材料) を抑制する (default False = 従来挙動、猶予なし)。
+        """
+        if not self._enable_baseline_broken_reset:
+            return
+        if not (
+            ctx.state == BoardState.STABLE
+            and ctx.confirmed_board is not None
+            and is_active
+        ):
+            return
+        stable_since_attr = (
+            "_stable_entered_time_1p" if side == "1P"
+            else "_stable_entered_time_2p"
+        )
+        if prev_state != BoardState.STABLE:
+            setattr(self, stable_since_attr, time_sec)
+        if self._enable_baseline_broken_grace:
+            stable_since = getattr(self, stable_since_attr)
+            if (
+                stable_since >= 0
+                and (time_sec - stable_since) < self.BASELINE_BROKEN_STABLE_GRACE_SEC
+            ):
+                grace_attr = (
+                    "_baseline_broken_grace_suppressed_1p" if side == "1P"
+                    else "_baseline_broken_grace_suppressed_2p"
+                )
+                setattr(self, grace_attr, getattr(self, grace_attr) + 1)
+                return
+        self._apply_baseline_broken_counter(
+            side, frame_idx, ctx.confirmed_board, cnn_board, sm, drift, gen,
+        )
+
+    def _apply_baseline_broken_counter(
+        self,
+        side: str,
+        frame_idx: int,
+        confirmed_board: Board,
+        cnn_board: Board,
+        sm: BoardStateMachine,
+        drift: DriftDetector,
+        gen: InferenceBoardGenerator,
+    ) -> None:
+        """baseline/CNN puyo数差の連続フレーム数を数え、閾値到達で自己修復 reset する。
+
+        v97 53 秒 TSUMO_FALL 詰まり問題への救済策 (cycle 31, 2026-05-18)。
+        """
+        baseline_count = confirmed_board.count_puyos()
+        cur_count = cnn_board.count_puyos()
+        diff = cur_count - baseline_count
+        BASELINE_BROKEN_DIFF_THRESHOLD = 8
+        BASELINE_BROKEN_CONSEC_FRAMES = 60  # 1 秒
+        consec_attr = (
+            "_baseline_broken_consec_1p" if side == "1P"
+            else "_baseline_broken_consec_2p"
+        )
+        if abs(diff) <= BASELINE_BROKEN_DIFF_THRESHOLD:
+            setattr(self, consec_attr, 0)
+            return
+        setattr(self, consec_attr, getattr(self, consec_attr) + 1)
+        if getattr(self, consec_attr) < BASELINE_BROKEN_CONSEC_FRAMES:
+            return
+        print(
+            f"[baseline-reset] {side} frame={frame_idx} "
+            f"baseline_count={baseline_count} "
+            f"cnn_count={cur_count} diff={diff} "
+            f"reset_after={getattr(self, consec_attr)} frames",
+        )
+        # 実発火回数カウンタ (A/B 効果測定用、2026-07-25)。
+        count_attr = (
+            "_baseline_broken_reset_count_1p" if side == "1P"
+            else "_baseline_broken_reset_count_2p"
+        )
+        setattr(self, count_attr, getattr(self, count_attr) + 1)
+        sm.reset(keep_match_state=False)
+        drift.reset()
+        gen.reset()
+        setattr(self, consec_attr, 0)
+        self._reacquire_background_fingerprints(side)
+
+    def _reacquire_background_fingerprints(self, side: str) -> None:
+        """baseline_broken reset 後の bg_fp 再採取トリガー (image_reader 側)。
+
+        試合 active を再起動し (_bg_fp_captured を False に戻す)、
+        次フレーム以降で背景指紋 (bg_fp) を再採取させる。
+        """
+        if hasattr(self._reader, "set_background_fingerprints"):
+            if side == "1P":
+                self._reader.set_background_fingerprints(
+                    None, getattr(self._reader, "_bg_fp_p2", None),
+                )
+            else:
+                self._reader.set_background_fingerprints(
+                    getattr(self._reader, "_bg_fp_p1", None), None,
+                )
+        # 試合 active 再起動: _bg_fp_captured フラグも reset
+        if hasattr(self, "_bg_fp_captured"):
+            self._bg_fp_captured = False
+        # I1 対応 A: bg_fp 再採取中は pre_capture_mode を on に戻す
+        if hasattr(self._reader, "set_pre_capture_mode"):
+            self._reader.set_pre_capture_mode(True)
 
     def _step_side(
         self,
@@ -2987,21 +4829,34 @@ class RecognitionPipeline:
         ):
             effect_vis = False
         # cycle 71v 汎用化: 試合開始直後 window 判定 (初回 STABLE 確定で
-        # 空フィールド強制するため state_machine に伝搬)
+        # 空フィールド強制するため state_machine に伝搬)。
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx -
+        # self._match_active_started_frame` (frame 差分) を time_sec 差分に
+        # 置換。60fps では bit-identical、30fps では実秒基準になる。
         match_just_started = (
             is_active
-            and self._match_active_started_frame >= 0
-            and (frame_idx - self._match_active_started_frame)
-            < self.MATCH_JUST_STARTED_WINDOW_FRAMES
+            and self._match_active_started_time >= 0
+            and (time_sec - self._match_active_started_time)
+            < self.MATCH_JUST_STARTED_WINDOW_SEC
         )
         # 設計C 事後復旧ゲート用 HSV-only 盤面を取得する。
         # フラグ OFF または frame_bgr なし の場合は None (安全弁A により発火しない)。
+        # 色→空 HSV 照合ガード (2026-07-30): 復旧ゲートは STABLE 定常でしか
+        # HSV を要求しないが、案A のガードは NON-STABLE→STABLE 遷移フレーム
+        # (signals 構築時点の state はまだ NON-STABLE) の merge で HSV を必要と
+        # する。そのため enable_puyo_to_empty_hsv_guard 有効時は state を問わず
+        # HSV を供給する (実測: 遷移フレームで hsv_board=None のためガード不発
+        # だった)。フラグ OFF (既定) では OR 右項が False となり従来の
+        # 「復旧ゲート ON かつ STABLE」条件と bit-identical。
         _hsv_board_for_signals: "Board | None" = None
-        if (
-            self._enable_stable_recovery_gate
-            and frame_bgr is not None
-            and sm.context.state == BoardState.STABLE
-        ):
+        _need_hsv = frame_bgr is not None and (
+            (
+                self._enable_stable_recovery_gate
+                and sm.context.state == BoardState.STABLE
+            )
+            or self._enable_puyo_to_empty_hsv_guard
+        )
+        if _need_hsv:
             region_for_hsv = (
                 DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
             )
@@ -3044,6 +4899,28 @@ class RecognitionPipeline:
         prev_next_queue = list(sm.context.next_queue)
 
         ctx: StateContext = sm.update(frame_idx, signals)
+
+        # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では chain_event
+        # 引数が既に None 化されているため、退避しておいた ChainEvent を
+        # fallback として使う「実効 chain_event」をこの frame の先頭で 1 回だけ
+        # 確定する。Phase C-6 の C (final_board 反映) と T2 (STABLE→STABLE
+        # 誤色棄却の連鎖直後 skip 判定) の両方がこの同一値を参照することで、
+        # T2 が Phase C-6 の C の直後に fresh な final_board を古い
+        # prev_stable で即座に上書きしてしまう相互作用を防ぐ
+        # (cycle 71 系との相性確認: architect 指摘事項)。
+        # backward compat 注記: prev_state==CHAIN (= enable_gravity_settle_state
+        # =False 時の従来経路) では _effective_chain_event は raw chain_event と
+        # 完全に同値にする (= 退避 stash を一切参照しない)。これにより
+        # GRAVITY_SETTLE 未経由の既存経路の挙動を 1 bit も変えない
+        # (退避 stash はフラグに関係なく常時更新されるが、CHAIN 直行経路では
+        # 一切参照されないため無害)。
+        if prev_state == BoardState.GRAVITY_SETTLE:
+            _effective_chain_event = (
+                self._last_chain_event_for_settle_1p if side == "1P"
+                else self._last_chain_event_for_settle_2p
+            )
+        else:
+            _effective_chain_event = chain_event
 
         # W-α (Phase G C-1): TSUMO_FALL → STABLE 復帰時に隠し段推論結果の
         # ProbabilisticBoard を保持して下流に publish する。
@@ -3163,6 +5040,46 @@ class RecognitionPipeline:
                 deferred_out=_deferred_buf if self._enable_hsv_deferred_consensus else None,
             )
             if inferred_landing is not None:
+                # 修正方針 甲: P2 設置推論の防御的 CNN 照合 (2026-07-25)。
+                # 着地セルへ色を書く前に現フレーム CNN 観測と照合し、不一致なら
+                # 書き込みを保留する (門番、案(iii) より先に適用)。フラグ OFF
+                # (default) 時は inferred_landing を素通しし bit-identical。
+                if (
+                    self._enable_placement_cnn_veto
+                    and prev_confirmed is not None
+                ):
+                    _before_veto = inferred_landing
+                    inferred_landing = _apply_placement_cnn_veto(
+                        inferred_landing, prev_confirmed, cnn_board,
+                        mode=self._placement_cnn_veto_mode,
+                    )
+                    _held_n = sum(
+                        1 for _r in range(BOARD_ROWS) for _c in range(BOARD_COLS)
+                        if int(_before_veto.get(_r, _c))
+                        != int(inferred_landing.get(_r, _c))
+                    )
+                    if side == "1P":
+                        self._placement_cnn_veto_held_count_1p += _held_n
+                    else:
+                        self._placement_cnn_veto_held_count_2p += _held_n
+                # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+                # 着地セル (= P2 設置推論の出力) のうち CNN 観測色が baseline と
+                # 食い違う「疑わしいセル」をフラグし、P7 (_start_landing_vote /
+                # _update_landing_votes) に伝播する。baseline (inferred_landing)
+                # 自体は一切書き換えない (地雷再発防止)。
+                # フラグ OFF (default) 時は常に空集合 = 下流は完全に bit-identical。
+                distrust_cells_for_side: set[tuple[int, int]] = (
+                    _flag_landing_distrust_cells(
+                        inferred_landing, prev_confirmed, cnn_board,
+                    )
+                    if self._enable_placement_color_cnn_check
+                    and prev_confirmed is not None
+                    else set()
+                )
+                if side == "1P":
+                    self._landing_distrust_1p = distrust_cells_for_side
+                else:
+                    self._landing_distrust_2p = distrust_cells_for_side
                 # 真因 A 対処 (2026-06-01): 着地セル CNN==HSV 一致色で補正。
                 # falling_pair タイミングずれで infer_placement が誤色を書いても
                 # 2 つの独立認識器 (CNN/HSV) が一致した色があれば優先採用する。
@@ -3270,9 +5187,19 @@ class RecognitionPipeline:
                         ctx.confirmed_board = prev_confirmed.copy() \
                             if prev_confirmed is not None else final_board
                 if chain_count >= 1:
+                    # A0 (2026-07-24) バグ修正: 従来ここだけハードコード 0.3 で
+                    # self._chain_hold_per_step_sec (config 可能な設定値) を
+                    # 無視していた。既定値 0.3 なら数値上は不変だが、較正値を
+                    # 渡した場合にこの経路 (cycle48 大量 hallucination ガード
+                    # 通過済の着地直後即時連鎖) だけ較正が効かない不整合が
+                    # あったため、他経路と同じ式に統一する。
                     pseudo = ChainEvent(
                         trigger_sec=time_sec,
-                        end_sec=time_sec + 0.3 * chain_count,
+                        end_sec=(
+                            time_sec
+                            + self._chain_hold_base_sec
+                            + self._chain_hold_per_step_sec * chain_count
+                        ),
                         before_board=inferred_landing,
                         chain_count=chain_count,
                         total_erased=0, total_score=0, base_score=0,
@@ -3282,8 +5209,13 @@ class RecognitionPipeline:
                     )
                     chain_until = (
                         time_sec
+                        + self._chain_hold_base_sec
                         + self._chain_hold_per_step_sec * chain_count
                     )
+                    # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (着地直後の即時連鎖
+                    # 判定、cycle48 大量 hallucination ガード通過済) も
+                    # 物理推論スルーの対象にする。
+                    self._start_chain_estimate(side, pseudo)
                     if side == "1P":
                         self._active_chain_1p = pseudo
                         self._chain_until_1p = chain_until
@@ -3407,24 +5339,50 @@ class RecognitionPipeline:
         # final_board (= 物理推論で確定した連鎖後盤面) で上書き。
         # 旧実装は CNN 盤面を採用していたが、連鎖アニメ残光・エフェクトで
         # CNN は信頼できないため、物理推論結果を真値として採用する。
+        # 根治 (2026-07-23): enable_gravity_settle_state=True (default) では
+        # CHAIN は必ず GRAVITY_SETTLE を経由してから STABLE に遷移するため、
+        # この遷移フレームでは prev_state==GRAVITY_SETTLE かつ chain_event 引数は
+        # 既に None (active_chain が上流で None 化済) になっており、旧条件
+        # (prev_state==CHAIN) は dead code だった。GRAVITY_SETTLE も許容し、
+        # _effective_chain_event (frame 先頭で確定済、 chain_event None 時は
+        # 退避 ChainEvent を fallback) を使う。
         if (
-            prev_state == BoardState.CHAIN
+            prev_state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
             and ctx.state == BoardState.STABLE
-            and chain_event is not None
+            and _effective_chain_event is not None
         ):
+            # 退避 event は one-shot 消費 (次回以降の誤爆防止のため即クリア)
+            if side == "1P":
+                self._last_chain_event_for_settle_1p = None
+            else:
+                self._last_chain_event_for_settle_2p = None
             try:
                 from src.board_state_machine import _apply_gravity_filter
                 from src.chain import ChainSimulator
                 if not hasattr(self, "_chain_sim"):
                     self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
                 cr = self._chain_sim.simulate(  # type: ignore[attr-defined]
-                    chain_event.before_board,
+                    _effective_chain_event.before_board,
                 )
                 if cr.chain_count > 0 and cr.final_board is not None:
                     final = cr.final_board.copy()
                     _apply_gravity_filter(final)
+                    # 反復5 修正 (2026-07-23, user承認): Step3(b)(c) の答え合わせを
+                    # 「事前ゲート」から「事後検証」に作り直す。
+                    # 旧実装は GRAVITY_SETTLE 直後の残光で汚れた単一フレーム CNN と
+                    # 比較して正しい final_board 注入 (反復1の残像修正) まで過剰
+                    # 棄却し、残像/連鎖後不一致率を悪化させる回帰を起こしていた
+                    # (物理レビュー実測: 0.09→0.28)。まず素直に適用し
+                    # (= 反復1の修正を邪魔しない)、直近数 STABLE frame の
+                    # 多数決盤面が揃ってから答え合わせする
+                    # (_update_chain_estimate_verification)。
                     ctx.confirmed_board = final
                     ctx.pending_board = final.copy()
+                    verify_state = {"expected": final.copy(), "cnn_history": []}
+                    if side == "1P":
+                        self._chain_verify_pending_1p = verify_state
+                    else:
+                        self._chain_verify_pending_2p = verify_state
                     # cycle 28a (H3, 2026-05-18): ChainSimulator chain_result
                     # から消去 puyo 色を集計、 自 side tsumo_count から減算。
                     # 連鎖前 board 認識誤りで「消去数 > 累積数」 になるケース
@@ -3471,9 +5429,11 @@ class RecognitionPipeline:
         # 案X 連動: enable_chain_exit_next_signal=True 時は CHAIN_EXIT_NEXT_WARMUP_SEC(0.5s) を使用。
         # 案X が連鎖を早く終わらせると置き直後・エフェクト残光が STABLE 露出するため
         # 通常の CHAIN_EXIT_WARMUP_SEC(0.1s) より長い凍結時間が必要。
+        # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰も同様に凍結対象とする
+        # (enable_gravity_settle_state=True では CHAIN が直接 STABLE に遷移しないため)。
         if (
             self._enable_chain_exit_warmup
-            and prev_state == BoardState.CHAIN
+            and prev_state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
             and ctx.state == BoardState.STABLE
         ):
             # 案X 時は専用の長い凍結時間を使用、それ以外は機能C の短い凍結時間を使用
@@ -3504,84 +5464,82 @@ class RecognitionPipeline:
             and ctx.confirmed_board is not None
         ):
             _, falling_pair_for_grace = landing_pending
+            # 案(iii) (2026-07-25): 着地 infer 完了時に計算済の疑わしいセル集合を
+            # P7 (_start_landing_vote) に伝播する。
+            distrust_cells_for_vote = (
+                self._landing_distrust_1p if side == "1P"
+                else self._landing_distrust_2p
+            )
             if prev_confirmed is not None:
                 self._start_landing_vote(
                     side, frame_idx, prev_confirmed, ctx.confirmed_board,
                     next_colors=falling_pair_for_grace,
+                    distrust_cells=distrust_cells_for_vote,
+                    time_sec=time_sec,
                 )
             grace_until = frame_idx + self.LANDING_GRACE_FRAMES
+            # フレーム定数→時間定数化 Stage1 (2026-07-25): time_sec 基準の
+            # 満了時刻を併せて記録する (実ロジックはこちらを正として使う)。
+            grace_until_time = time_sec + self.LANDING_GRACE_SEC
             if side == "1P":
                 self._landing_grace_1p = (
-                    grace_until, ctx.confirmed_board.copy(),
+                    grace_until, ctx.confirmed_board.copy(), grace_until_time,
                 )
                 self._landing_pending_1p = None
+                # 伝播済のため 1 ツモ分だけ生存させてクリア (次着地まで持ち越さない)。
+                self._landing_distrust_1p = set()
             else:
                 self._landing_grace_2p = (
-                    grace_until, ctx.confirmed_board.copy(),
+                    grace_until, ctx.confirmed_board.copy(), grace_until_time,
                 )
                 self._landing_pending_2p = None
+                self._landing_distrust_2p = set()
 
         # cycle 31 (B 軸, 2026-05-18): baseline 整合性 check + 自己修復。
-        # STABLE 中なのに baseline と CNN puyo 数 diff が連続異常な場合、
-        # baseline 自体が壊れている (= 背景誤認込み等) と判定して reset。
-        # state を MENU に戻して試合 active を再起動 → bg_fp 再採取。
-        # v97 53 秒 TSUMO_FALL 詰まり問題への救済。
-        if (
-            ctx.state == BoardState.STABLE
-            and ctx.confirmed_board is not None
-            and is_active
-        ):
-            baseline_count = ctx.confirmed_board.count_puyos()
-            cur_count = cnn_board.count_puyos()
-            diff = cur_count - baseline_count
-            BASELINE_BROKEN_DIFF_THRESHOLD = 8
-            BASELINE_BROKEN_CONSEC_FRAMES = 60  # 1 秒
-            consec_attr = (
-                "_baseline_broken_consec_1p" if side == "1P"
-                else "_baseline_broken_consec_2p"
-            )
-            if abs(diff) > BASELINE_BROKEN_DIFF_THRESHOLD:
-                setattr(self, consec_attr, getattr(self, consec_attr) + 1)
-                if getattr(self, consec_attr) >= BASELINE_BROKEN_CONSEC_FRAMES:
-                    print(
-                        f"[baseline-reset] {side} frame={frame_idx} "
-                        f"baseline_count={baseline_count} "
-                        f"cnn_count={cur_count} diff={diff} "
-                        f"reset_after={getattr(self, consec_attr)} frames",
-                    )
-                    sm.reset(keep_match_state=False)
-                    drift.reset()
-                    gen.reset()
-                    setattr(self, consec_attr, 0)
-                    # bg_fp 再採取トリガー: image_reader の bg_fp を None に
-                    if hasattr(self._reader, "set_background_fingerprints"):
-                        if side == "1P":
-                            self._reader.set_background_fingerprints(
-                                None,
-                                getattr(self._reader, "_bg_fp_p2", None),
-                            )
-                        else:
-                            self._reader.set_background_fingerprints(
-                                getattr(self._reader, "_bg_fp_p1", None),
-                                None,
-                            )
-                    # 試合 active 再起動: _bg_fp_captured フラグも reset
-                    if hasattr(self, "_bg_fp_captured"):
-                        self._bg_fp_captured = False
-                    # I1 対応 A: bg_fp 再採取中は pre_capture_mode を on に戻す
-                    if hasattr(self._reader, "set_pre_capture_mode"):
-                        self._reader.set_pre_capture_mode(True)
-            else:
-                setattr(self, consec_attr, 0)
+        # 制御フラグ化 (2026-07-25, A/B 計測用): 実装は _check_baseline_broken_reset
+        # に分離済み。enable_baseline_broken_reset=False で機能全体をスキップ、
+        # enable_baseline_broken_grace=True で STABLE 突入直後の猶予を追加できる。
+        self._check_baseline_broken_reset(
+            side, frame_idx, time_sec, is_active, ctx, cnn_board, prev_state,
+            sm, drift, gen,
+        )
 
         inferred = gen.generate(
             ctx, chain_event=chain_event, time_sec=time_sec,
         )
         drift_res = drift.update(inferred, cnn_board)
         if drift_res.needs_resync:
-            sm.reset(keep_match_state=True)
-            drift.reset()
-            gen.reset()
+            # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)。
+            # 両ガードとも独立 flag のため、それぞれ単独評価 (どちらか一方でも
+            # 抑制条件を満たせば reset をスキップする)。counter は各ガードが
+            # 単独で適用された場合の抑制回数を記録する (効果測定用)。
+            _drift_resync_suppress = False
+            if self._enable_drift_resync_match_start_guard:
+                _since_match_start = (
+                    time_sec - self._match_active_started_time
+                )
+                if (
+                    self._match_active_started_time >= 0
+                    and _since_match_start
+                    < self.DRIFT_RESYNC_MATCH_START_GUARD_SEC
+                ):
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_start_guard_suppressed_1p += 1
+                    else:
+                        self._drift_resync_start_guard_suppressed_2p += 1
+            if self._enable_drift_resync_hsv_gate:
+                _calibrated_colors = len(self._online_hsv_injected_colors)
+                if _calibrated_colors < self.DRIFT_RESYNC_MIN_CALIBRATED_COLORS:
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_hsv_gate_suppressed_1p += 1
+                    else:
+                        self._drift_resync_hsv_gate_suppressed_2p += 1
+            if not _drift_resync_suppress:
+                sm.reset(keep_match_state=True)
+                drift.reset()
+                gen.reset()
 
         cur_score = (
             score_tracker.last_score if score_tracker is not None else None
@@ -3593,9 +5551,12 @@ class RecognitionPipeline:
         grace_state_pre = (
             self._landing_grace_1p if side == "1P" else self._landing_grace_2p
         )
+        # フレーム定数→時間定数化 Stage1 (2026-07-25): 旧 `frame_idx <
+        # grace_state_pre[0]` (frame 差分) を time_sec 基準 (grace_state_pre[2])
+        # に置換。60fps では bit-identical、30fps では実秒基準になる。
         in_grace = (
             grace_state_pre is not None
-            and frame_idx < grace_state_pre[0]
+            and time_sec < grace_state_pre[2]
             and ctx.state == BoardState.STABLE
         )
 
@@ -3656,8 +5617,8 @@ class RecognitionPipeline:
         if in_grace and grace_state is not None:
             ctx.confirmed_board = grace_state[1].copy()
             ctx.pending_board = grace_state[1].copy()
-        elif grace_state is not None and frame_idx >= grace_state[0]:
-            # grace 終了: クリア
+        elif grace_state is not None and time_sec >= grace_state[2]:
+            # grace 終了: クリア (time_sec 基準、 Stage1 2026-07-25)
             if side == "1P":
                 self._landing_grace_1p = None
             else:
@@ -3687,7 +5648,7 @@ class RecognitionPipeline:
         if ctx.confirmed_board is not None:
             vote_updated = self._update_landing_votes(
                 side, frame_idx, cnn_board, ctx.confirmed_board,
-                frame_bgr=frame_bgr,
+                frame_bgr=frame_bgr, time_sec=time_sec,
             )
             if vote_updated is not None and not in_grace and not in_chain_exit_warmup:
                 ctx.confirmed_board = vote_updated
@@ -3797,6 +5758,12 @@ class RecognitionPipeline:
             # 前 STABLE と現 STABLE で「色A → 色B」(異色間変化) かつ
             # 間に CHAIN signal がなければ認識誤りと判断し前値で上書き。
             # grace 中・chain_event あり・prev_stable なし は skip。
+            # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では、この
+            # frame の chain_event 引数は既に None だが実質は連鎖直後
+            # (Phase C-6 の C が final_board を注入した frame) であるため、
+            # 生の chain_event でなく _effective_chain_event (frame 先頭で
+            # 確定済) で判定する。 でなければ T2 が Phase C-6 の C の直後に
+            # fresh な final_board を古い prev_stable で即座に上書きしてしまう。
             prev_stable_t2 = (
                 self._prev_stable_confirmed_1p if side == "1P"
                 else self._prev_stable_confirmed_2p
@@ -3814,7 +5781,7 @@ class RecognitionPipeline:
                     self._deferred_just_committed_2p = False
             if (
                 prev_stable is not None
-                and chain_event is None
+                and _effective_chain_event is None
                 and not in_grace
                 and not _deferred_committed_this_frame  # 案 Y-4: deferred 確定 frame は T2 スキップ
             ):
@@ -3966,6 +5933,27 @@ class RecognitionPipeline:
                     else:
                         # 発光 OFF 中 (STABLE 確定時のみ): frozen を更新する
                         glow_state.frozen_board = published_confirmed.copy()
+        # 反復5 修正 Step3(b)(c) (2026-07-23): 事後答え合わせ。連鎖後
+        # final_board 適用から CHAIN_VERIFY_FRAMES 分の STABLE cnn_board が
+        # 集まったフレームでのみ発火。不一致なら多数決盤面で confirmed_board
+        # を補正する (適用そのものは止めない = 反復1の残像修正を維持)。
+        answer_check_result, correction_board = (
+            self._update_chain_estimate_verification(side, ctx.state, cnn_board)
+        )
+        if correction_board is not None:
+            ctx.confirmed_board = correction_board
+            ctx.pending_board = correction_board.copy()
+            published_confirmed = correction_board
+        # 反復4 (2026-07-23): confirmed_board=None の理由分類 (診断計装のみ、
+        # 挙動には一切影響しない optional フィールド)。
+        board_none_reason = self._classify_board_none_reason(
+            side, is_active, published_confirmed, ctx.state,
+        )
+        # 反復5 Step2 (2026-07-23): 物理推論スルー。confirmed_board 自体は
+        # 一切変更しない (標準 eval 経路は従来通り None を見るのみ)。
+        estimated_board, board_provenance = self._compute_chain_estimate(
+            side, ctx.state, time_sec,
+        )
         return SideResult(
             side=side,
             state=ctx.state,
@@ -3982,6 +5970,10 @@ class RecognitionPipeline:
             erasure_alerts=recent_alerts if recent_alerts else None,
             transition_drop_alerts=transition_drop_alerts if transition_drop_alerts else None,
             landing_diag=_landing_diag,
+            board_none_reason=board_none_reason,
+            estimated_board=estimated_board,
+            board_provenance=board_provenance,
+            answer_check_result=answer_check_result,
         )
 
 
@@ -4423,6 +6415,38 @@ def _apply_piece_persistence_guard(
         guard.on_stable_confirmed(published_confirmed)
         return guard.guard(published_confirmed)
     return published_confirmed
+
+
+def _progressed_chain_board(
+    chain_result: "ChainResult",
+    trigger_sec: float,
+    end_sec: float,
+    time_sec: float,
+) -> "Board | None":
+    """反復5 Step2: 経過時刻に応じた連鎖進行中の推定盤面を返す (stateless)。
+
+    src/inference_board.py の InferenceBoardGenerator._chain_board_at と
+    同じ時刻→段数マッピングを用いる (別ロジック化による退行防止のため
+    同一の計算式を採用、inference_board.py 自体は変更しない)。
+
+    Args:
+        chain_result: ChainSimulator.simulate(起点盤面) の結果。
+        trigger_sec: 連鎖開始時刻。
+        end_sec: 連鎖終了予定時刻 (表示ホールド込み)。
+        time_sec: 現フレームの時刻。
+
+    Returns:
+        経過段数に対応する盤面。chain_count==0 なら None。
+    """
+    n_steps = chain_result.chain_count
+    if n_steps == 0:
+        return None
+    duration = max(0.001, end_sec - trigger_sec)
+    progress = max(0.0, min(1.0, (time_sec - trigger_sec) / duration))
+    idx = int(progress * n_steps)
+    if idx >= n_steps:
+        return chain_result.final_board
+    return chain_result.steps[idx].board_after
 
 
 def _is_game_event_chain_exit(

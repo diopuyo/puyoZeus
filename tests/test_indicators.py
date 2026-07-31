@@ -111,9 +111,13 @@ def make_no_chain_board() -> Board:
 
 
 def make_dead_board() -> Board:
-    """窒息中の盤面 (3列目最上段にぷよ)。"""
+    """窒息中の盤面 (3列目・可視最上段=row1 にぷよ)。
+
+    user確定ルール (2026-07-22): 死亡マスは隠し段(row0)でなく可視最上段(row1)。
+    board.DEATH_ROW=1 に合わせて row1 を埋める (旧 row0 は隠し段で窒息にならない)。
+    """
     grid = empty_grid()
-    grid[0][2] = COLOR_RED
+    grid[1][2] = COLOR_RED
     return board_from_grid(grid)
 
 

@@ -1,0 +1,2 @@
+./venv/bin/python -m scripts.visualize_advantage_overlay --video data/frames/video_c62.mp4 --out data/indicators_v2/overlay/advantage_c62_game9_nearfuture.mp4 --start-sec 877.4 --end-sec 949.2 --warmup-sec 10.0
+./venv/bin/python -m scripts.visualize_advantage_overlay --video data/frames/video_c82.mp4 --out data/indicators_v2/overlay/advantage_c82_game13_nearfuture.mp4 --start-sec 896.4 --end-sec 1001.8 --warmup-sec 10.0

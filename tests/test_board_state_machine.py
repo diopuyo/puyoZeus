@@ -14,6 +14,7 @@ from src.board_state_machine import (
     DetectorSignals,
     NON_STABLE_STATES,
     NullDetector,
+    RECOVERY_COUNTER_CARRYOVER_MAX_SEC,
     STABLE_RECOVERY_MIN_FRAMES,
     StateContext,
     StateTransitionDetector,
@@ -275,6 +276,92 @@ def test_reset_keep_match_state_preserves_stable() -> None:
 
 
 # ============================
+# 前試合盤面残骸リーク修正 (feat/recognition-postchain-fix-2026-07-23)
+# ============================
+
+
+def _seed_stale_match_residue(sm: BoardStateMachine) -> None:
+    """game0 終盤に STABLE で蓄積した残骸を模擬して StateContext に注入する。"""
+    ctx = sm.context
+    ctx.state = BoardState.STABLE
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    ctx.confirmed_board = ghost.copy()
+    ctx.non_stable_cnn_history = [ghost.copy(), ghost.copy(), ghost.copy()]
+    ctx.stable_recovery_counters = {(10, 4): 2, (11, 4): 3}
+    ctx.recovery_cells = {(10, 4), (11, 4)}
+    ctx.next_queue = [(1, 2), (3, 4)]
+    ctx.stable_warmup_remaining = 5
+
+
+def test_match_boundary_default_leaves_residue_default_off() -> None:
+    """backwards compat: default (enable_match_start_full_clear=False) では
+    confirmed_board 以外の残骸フィールドは従来通りクリアされない。"""
+    sm = BoardStateMachine()
+    _seed_stale_match_residue(sm)
+    ctx = sm.update(1000, _signal(465.6, _empty_board(), match=False))
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None  # 従来からクリア対象
+    # 従来挙動: 以下は残留する (= 本テストは現状の bit-identical 挙動の記録)
+    assert len(ctx.non_stable_cnn_history) == 3
+    assert ctx.stable_recovery_counters == {(10, 4): 2, (11, 4): 3}
+    assert ctx.recovery_cells == {(10, 4), (11, 4)}
+    assert ctx.next_queue == [(1, 2), (3, 4)]
+    assert ctx.stable_warmup_remaining == 5
+
+
+def test_force_match_boundary_reset_matches_menu_branch() -> None:
+    """追修 (2026-07-25): force_match_boundary_reset() は
+    is_match_active=False 分岐 (MENU 強制) と bit-identical な内容
+    (confirmed_board=None 含む) をクリアする (force_in_match=True 構成で
+    MENU 分岐が発火しない場合の代替呼び出し口)。"""
+    sm = BoardStateMachine(enable_match_start_full_clear=True)
+    _seed_stale_match_residue(sm)
+    sm.force_match_boundary_reset()
+    ctx = sm.context
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None
+    assert ctx.pending_board is None
+    assert ctx.pending_count == 0
+    assert ctx.last_stable_idx == -1
+    assert ctx.chain_count == 0
+    assert ctx.ojama_pending == 0
+    assert ctx.non_stable_cnn_history == []
+    assert ctx.stable_recovery_counters == {}
+    assert ctx.recovery_cells == set()
+    assert ctx.next_queue == []
+    assert ctx.stable_warmup_remaining == 0
+
+
+def test_force_match_boundary_reset_default_off_skips_residue_fields() -> None:
+    """backwards compat: enable_match_start_full_clear=False (default) では
+    force_match_boundary_reset() も残骸 5 field はクリアしない
+    (confirmed_board 等の主 6 field のみクリア、= 従来 MENU 分岐と同じ範囲)。"""
+    sm = BoardStateMachine()
+    _seed_stale_match_residue(sm)
+    sm.force_match_boundary_reset()
+    ctx = sm.context
+    assert ctx.confirmed_board is None
+    assert len(ctx.non_stable_cnn_history) == 3
+    assert ctx.stable_recovery_counters == {(10, 4): 2, (11, 4): 3}
+
+
+def test_match_boundary_full_clear_removes_residue() -> None:
+    """enable_match_start_full_clear=True で試合境界の残骸フィールドが
+    すべてクリアされ、次試合への幽霊セル書き戻り経路を断つ。"""
+    sm = BoardStateMachine(enable_match_start_full_clear=True)
+    _seed_stale_match_residue(sm)
+    ctx = sm.update(1000, _signal(465.6, _empty_board(), match=False))
+    assert ctx.state == BoardState.MENU
+    assert ctx.confirmed_board is None
+    assert ctx.non_stable_cnn_history == []
+    assert ctx.stable_recovery_counters == {}
+    assert ctx.recovery_cells == set()
+    assert ctx.next_queue == []
+    assert ctx.stable_warmup_remaining == 0
+
+
+# ============================
 # state 集合の整合性
 # ============================
 
@@ -377,6 +464,335 @@ def test_merge_diff_empty_to_color_guard_allows_majority() -> None:
     assert merged.get(12, 0) == COLOR_RED
 
 
+# ============================
+# 色→空 HSV 照合ガード テスト (enable_puyo_to_empty_hsv_guard, 2026-07-30)
+# c34 1P col=1 frame 14332 列デッドロック根因への対処
+# ============================
+
+
+def test_should_keep_puyo_over_empty_hsv_holds_color() -> None:
+    """HSV が色を裏付ける色→空 は維持 (光沢→空 の CNN 誤読を退ける)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is True
+
+
+def test_should_keep_puyo_over_empty_both_empty_erases() -> None:
+    """CNN も HSV も空 = 本物の連鎖消去 → 消す (遅延させない)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_EMPTY,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_hsv_unknown_erases() -> None:
+    """HSV が UNKNOWN (判定不能) なら裏付けにならず消す."""
+    from src.board import COLOR_UNKNOWN
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_UNKNOWN,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_guard_off_erases() -> None:
+    """flag OFF なら HSV が色でも消す (従来挙動・bit-identical)."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=False,
+    ) is False
+
+
+def test_should_keep_puyo_over_empty_blanket_ban_dormant() -> None:
+    """休眠 blanket ban (allow_puyo_to_empty=False) は HSV 無しでも維持."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_RED, COLOR_EMPTY, None,
+        allow_puyo_to_empty=False, enable_hsv_guard=False,
+    ) is True
+
+
+def test_should_keep_puyo_over_empty_not_color_to_empty() -> None:
+    """色→空 遷移でない (cnn が色) 場合は常に False."""
+    from src.board_state_machine import _should_keep_puyo_over_empty
+
+    assert _should_keep_puyo_over_empty(
+        COLOR_EMPTY, COLOR_RED, COLOR_RED,
+        allow_puyo_to_empty=True, enable_hsv_guard=True,
+    ) is False
+
+
+def test_merge_diff_hsv_guard_keeps_color() -> None:
+    """merge 統合: baseline 色 / cnn 空 / hsv 色 + flag ON → 消さない."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=True,
+    )
+    assert merged.get(12, 0) == COLOR_RED
+
+
+def test_merge_diff_hsv_guard_off_erases() -> None:
+    """merge 統合: flag OFF なら従来通り消す (bit-identical)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    assert merged.get(12, 0) == COLOR_EMPTY
+
+
+def test_merge_diff_hsv_guard_default_off_bit_identical() -> None:
+    """kwargs 省略 legacy 呼び出しと flag 明示 False が bit-identical."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _board_with_red(12, 0)
+    cnn = _empty_board()
+    hsv = _board_with_red(12, 0)
+    legacy = _merge_diff_only(baseline, cnn)
+    explicit_off = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_off.get(r, c)
+
+
+def test_merge_diff_hsv_guard_prevents_gravity_cascade() -> None:
+    """列デッドロック縮小版 (c34 1P col=1 frame 14332): cnn が中段 r11 のみ
+    空誤読し hsv は色を保持。flag ON なら r11 維持 + 上の r10 も gravity
+    filter で連鎖消去されない (初発を根で止める)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    cnn = Board()
+    hsv = Board()
+    for r in (10, 11, 12):
+        baseline.set(r, 1, COLOR_RED)
+        hsv.set(r, 1, COLOR_RED)
+    cnn.set(10, 1, COLOR_RED)
+    cnn.set(11, 1, COLOR_EMPTY)  # 光沢→空 誤読
+    cnn.set(12, 1, COLOR_RED)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=True,
+    )
+    assert merged.get(10, 1) == COLOR_RED
+    assert merged.get(11, 1) == COLOR_RED  # 無投票消去されない
+    assert merged.get(12, 1) == COLOR_RED
+
+
+def test_merge_diff_hsv_guard_off_reproduces_cascade() -> None:
+    """対照: flag OFF (従来) では r11 が無投票消去され gravity filter が
+    r10 も連鎖消去する (デッドロック初発の再現)."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    cnn = Board()
+    hsv = Board()
+    for r in (10, 11, 12):
+        baseline.set(r, 1, COLOR_RED)
+        hsv.set(r, 1, COLOR_RED)
+    cnn.set(10, 1, COLOR_RED)
+    cnn.set(11, 1, COLOR_EMPTY)
+    cnn.set(12, 1, COLOR_RED)
+    merged = _merge_diff_only(
+        baseline, cnn, hsv_board=hsv, enable_puyo_to_empty_hsv_guard=False,
+    )
+    assert merged.get(11, 1) == COLOR_EMPTY  # 無投票消去
+    assert merged.get(10, 1) == COLOR_EMPTY  # gravity cascade
+    assert merged.get(12, 1) == COLOR_RED    # 最下段は残る
+
+
+def test_board_state_machine_stores_hsv_guard_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること.
+
+    2026-07-30 汎化未確認 (4動画で c58/c26 2P tail 悪化・c26/c69 1P 効果ゼロ)
+    のため default OFF。True で有効化 (backwards compat)。
+    """
+    sm_on = BoardStateMachine(enable_puyo_to_empty_hsv_guard=True)
+    assert sm_on._enable_puyo_to_empty_hsv_guard is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_puyo_to_empty_hsv_guard is False
+
+
+# ============================
+# #45 おじゃま merge 統合修正 案(a)(b) テスト (2026-07-24)
+# ============================
+
+
+def test_merge_diff_new_flags_default_off_bit_identical() -> None:
+    """回帰防止: 新 flag (enable_gravity_filter_support /
+    merge_use_majority_value) を明示的に False にした呼び出しと、
+    kwargs 省略の legacy 呼び出しが bit-identical であること."""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_OJAMA)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_OJAMA)
+    cnn.set(12, 0, COLOR_RED)
+    guard = Board()
+    guard.set(12, 0, COLOR_OJAMA)
+
+    legacy = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    explicit_off = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        enable_gravity_filter_support=False,
+        merge_use_majority_value=False,
+    )
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_off.get(r, c)
+
+
+def test_merge_diff_gravity_filter_support_prevents_erasure() -> None:
+    """案(a): floor セル (row=12) が単一フレーム誤読で F ガード却下され
+    baseline (EMPTY) のまま残っても、 support_board (多数決 guard) が
+    そのセルを非空と裏付ける場合は浮き判定の gap として扱わず、
+    上に積もったおじゃまを誤消去しない (flag ON)。
+    flag OFF (default) では従来通り誤消去される (回帰確認)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _empty_board()
+    cnn = Board()
+    cnn.set(11, 0, COLOR_OJAMA)  # 上段: 単一フレームでも正しく観測
+    cnn.set(12, 0, COLOR_RED)    # floor: 単一フレーム誤読 (guard と不一致)
+    guard = Board()
+    guard.set(11, 0, COLOR_OJAMA)
+    guard.set(12, 0, COLOR_OJAMA)  # 多数決では floor も OJAMA と確認済み
+
+    # flag OFF (default): floor が F ガードで却下 (EMPTY のまま)
+    # → 浮き判定の gap 扱いされ、上のおじゃまが誤消去される (バグ再現)
+    merged_off = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    assert merged_off.get(12, 0) == 0
+    assert merged_off.get(11, 0) == 0  # バグ: 誤消去される
+
+    # flag ON: floor は (a) 単体では直らないが (b) の役割)、
+    # gap 扱いされなくなるため上のおじゃまは保持される
+    merged_on = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        enable_gravity_filter_support=True,
+    )
+    assert merged_on.get(12, 0) == 0
+    assert merged_on.get(11, 0) == COLOR_OJAMA  # 修正: 誤消去されない
+
+
+def test_merge_diff_majority_value_recovers_flicker() -> None:
+    """案(b): 退出時に単一フレーム cnn がちらついて guard と不一致でも、
+    guard_v (多数決値) が非空なら guard_v を書き込む (flag ON)。
+    flag OFF (default) では従来通り却下され baseline (EMPTY) のまま
+    (回帰確認)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = _empty_board()
+    cnn = _board_with_red(12, 0)  # 単一フレームの誤読 (赤)
+    guard = Board()
+    guard.set(12, 0, COLOR_OJAMA)  # 多数決では OJAMA (正しい色)
+
+    # flag OFF (default): guard_v(OJAMA) != cnn_v(RED) → 却下、baseline 維持
+    merged_off = _merge_diff_only(baseline, cnn, empty_to_color_guard=guard)
+    assert merged_off.get(12, 0) == 0
+
+    # flag ON: 多数決値 guard_v (OJAMA) を書き込む
+    merged_on = _merge_diff_only(
+        baseline, cnn, empty_to_color_guard=guard,
+        merge_use_majority_value=True,
+    )
+    assert merged_on.get(12, 0) == COLOR_OJAMA
+
+
+def test_ojama_fall_exit_gravity_filter_support_prevents_erasure_e2e() -> None:
+    """状態機械レベル e2e: 案(a) enable_gravity_filter_support=True で
+    OJAMA_FALL → STABLE 退出時の F ガード起因浮き誤消去を防ぐこと。
+    flag OFF (default) では従来通り誤消去される (回帰確認)。
+    """
+    board_both = Board()
+    board_both.set(11, 0, COLOR_OJAMA)
+    board_both.set(12, 0, COLOR_OJAMA)
+    cnn_flicker = Board()
+    cnn_flicker.set(11, 0, COLOR_OJAMA)
+    cnn_flicker.set(12, 0, COLOR_RED)  # floor だけ単一フレーム誤読
+
+    def _run(*, enable_gravity_filter_support: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_gravity_filter_support=enable_gravity_filter_support,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = _empty_board()
+        # OJAMA_FALL 中 (frame 1-5): 履歴に floor/上段とも OJAMA と蓄積
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, board_both))
+        # frame 6: STABLE 復帰。 floor だけ単一フレームちらつき (誤読)
+        sm.update(6, _signal(0.30, cnn_flicker))
+        return sm
+
+    sm_off = _run(enable_gravity_filter_support=False)
+    assert sm_off.context.state == BoardState.STABLE
+    assert sm_off.context.confirmed_board is not None
+    # バグ再現: floor の F ガード却下起因で上のおじゃまが誤消去される
+    assert sm_off.context.confirmed_board.get(11, 0) == 0
+
+    sm_on = _run(enable_gravity_filter_support=True)
+    assert sm_on.context.state == BoardState.STABLE
+    assert sm_on.context.confirmed_board is not None
+    # 修正: 上のおじゃまが保持される
+    assert sm_on.context.confirmed_board.get(11, 0) == COLOR_OJAMA
+
+
+def test_ojama_fall_exit_majority_value_recovers_flicker_e2e() -> None:
+    """状態機械レベル e2e: 案(b) merge_use_majority_value=True で
+    退出時の単一フレーム CNN ちらつきが多数決値で復旧すること。
+    flag OFF (default) では従来通り却下される (回帰確認)。
+    """
+    board_floor = Board()
+    board_floor.set(12, 0, COLOR_OJAMA)
+    cnn_flicker = _board_with_red(12, 0)  # 退出 frame の単一フレームちらつき
+
+    def _run(*, merge_use_majority_value: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            merge_use_majority_value=merge_use_majority_value,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = _empty_board()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, board_floor))
+        sm.update(6, _signal(0.30, cnn_flicker))
+        return sm
+
+    sm_off = _run(merge_use_majority_value=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(12, 0) == 0
+
+    sm_on = _run(merge_use_majority_value=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(12, 0) == COLOR_OJAMA
+
+
 def test_non_stable_history_accumulates_in_chain_state() -> None:
     """F: CHAIN state 中、 cnn_board 履歴が context に蓄積される."""
     sm = BoardStateMachine(
@@ -443,13 +859,37 @@ def test_stable_resume_gate_disabled_via_constructor() -> None:
 # ============================
 
 
-def _make_recovery_sm(min_frames: int = 3) -> BoardStateMachine:
+def _make_recovery_sm(
+    min_frames: int = 3, *, enable_column_partial_support: bool = False,
+    enable_recovery_counter_carryover: bool = False,
+    recovery_counter_carryover_max_sec: float = RECOVERY_COUNTER_CARRYOVER_MAX_SEC,
+    enable_cnn_flicker_hsv_fallback: bool = False,
+    cnn_flicker_window_frames: int = 4,
+    cnn_flicker_min_changes: int = 2,
+) -> BoardStateMachine:
     """復旧ゲート有効 state machine を生成するヘルパー。
     テスト用に min_frames を小さく設定できる。
+
+    Args:
+        min_frames: 復旧ゲート発火に必要な連続フレーム数。
+        enable_column_partial_support: 列ゲート緩和 (2026-07-25) を有効化するか。
+        enable_recovery_counter_carryover: 復旧カウンタ carryover (2026-07-26)
+            を有効化するか。
+        recovery_counter_carryover_max_sec: carryover の非 STABLE 滞在上限秒数。
+        enable_cnn_flicker_hsv_fallback: CNN 乱高下セル HSV フォールバック
+            (#51 後半, 2026-07-26) を有効化するか。
+        cnn_flicker_window_frames: 乱高下判定用の履歴保持フレーム数。
+        cnn_flicker_min_changes: 乱高下とみなす最小変化回数。
     """
     return BoardStateMachine(
         enable_stable_recovery_gate=True,
         recovery_min_frames=min_frames,
+        enable_column_partial_support=enable_column_partial_support,
+        enable_recovery_counter_carryover=enable_recovery_counter_carryover,
+        recovery_counter_carryover_max_sec=recovery_counter_carryover_max_sec,
+        enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
+        cnn_flicker_window_frames=cnn_flicker_window_frames,
+        cnn_flicker_min_changes=cnn_flicker_min_changes,
     )
 
 
@@ -507,6 +947,79 @@ def test_recovery_gate_does_not_fire_before_n_frames() -> None:
     assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ空
 
 
+def test_asymmetric_recovery_add_direction_fires_early() -> None:
+    """非対称化: 方向1(空→色)は add_min_frames で発火する (min_frames より早い).
+
+    2026-07-30 enable_asymmetric_recovery_min_frames。誤認が治るまでのラグ短縮
+    のため空→色のみ短縮。default OFF なので明示 True で有効化して検証する。
+    """
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        enable_asymmetric_recovery_min_frames=True,
+        recovery_add_min_frames=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)  # 最下段 = 重力整合 OK
+    hsv = _board_with_red(12, 0)
+    # 1 フレーム目: add_min_frames=2 未満なので未発火
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+    # 2 フレーム目: add_min_frames=2 到達で発火 (min_frames=4 を待たない)
+    sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_asymmetric_recovery_fix_direction_keeps_min_frames() -> None:
+    """非対称化: 方向2(色→空)は min_frames を維持する (add_min_frames で早期発火しない).
+
+    「消す方向」は gravity filter で増幅リスクがあるため短縮しない。
+    """
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        enable_asymmetric_recovery_min_frames=True,
+        recovery_add_min_frames=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _board_with_red(12, 0)  # 確定は赤
+
+    cnn = _empty_board()  # CNN==HSV==空 (色→空 復旧)
+    hsv = _empty_board()
+    # add_min_frames=2 到達しても色→空 は min_frames=4 未満なので未発火
+    for i in range(3):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # まだ消えない
+    # 4 フレーム目: min_frames=4 到達で発火
+    sm.update(3, _stable_signal_with_hsv(0.15, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+
+
+def test_asymmetric_recovery_off_is_symmetric() -> None:
+    """既定 OFF では方向1も min_frames を要求する (bit-identical, backwards compat)."""
+    sm = BoardStateMachine(
+        enable_stable_recovery_gate=True,
+        recovery_min_frames=4,
+        recovery_add_min_frames=2,  # 渡しても OFF なら無視される
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # add_min_frames=2 相当の 2 フレームでは未発火 (OFF なので min_frames=4 必要)
+    for i in range(3):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY
+    sm.update(3, _stable_signal_with_hsv(0.15, cnn, hsv))
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
 def test_recovery_gate_no_fire_when_cnn_hsv_differ() -> None:
     """設計C ③: CNN≠HSV の場合は発火しない (安全弁A)."""
     from src.board import COLOR_BLUE
@@ -550,6 +1063,98 @@ def test_recovery_gate_no_fire_when_floating_puyo() -> None:
     assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 浮きぷよで却下
 
 
+def test_recovery_gate_column_partial_support_off_bit_identical() -> None:
+    """列ゲート緩和 (2026-07-25) ①: OFF (明示指定) は従来挙動と bit-identical.
+
+    test_recovery_gate_no_fire_when_floating_puyo と同一シナリオを
+    enable_column_partial_support=False で明示実行し、結果が変わらないことを確認する。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = Board()
+    cnn.set(10, 0, COLOR_RED)
+    hsv = Board()
+    hsv.set(10, 0, COLOR_RED)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 浮きぷよで却下 (不変)
+
+
+def test_recovery_gate_column_partial_support_on_releases_progressing_cell() -> None:
+    """列ゲート緩和 (2026-07-25) ②: ON かつ下セルのカウンタが進行中 (>=2) なら解放.
+
+    row=10,col=0 (本線候補, min_frames=5 で発火) の直下 row=11,col=0 は
+    frame 0-1 で CNN≠HSV (カウンタ蓄積なし)、frame 2-4 で CNN==HSV=BLUE
+    (カウンタ 1→2→3 まで進行するが min_frames=5 には未到達=未発火)。
+    row=12,col=0 は最初から confirmed=OJAMA で床として確定済 (CNN/HSV も
+    OJAMA を維持し erase 対象にならないよう固定)。
+    OFF なら row=11 が confirmed==EMPTY のまま (支持なし) なので row=10 は
+    浮きぷよ判定で却下される。ON なら row=11 のカウンタ (3 >= 支持閾値 2) を
+    支持セルとみなし row=10 が解放される。
+    """
+    from src.board import COLOR_BLUE
+
+    n = 5
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=True)
+    sm._ctx.state = BoardState.STABLE
+    floor_board = _empty_board()
+    floor_board.set(12, 0, COLOR_OJAMA)  # 床は最初から確定済 (erase 対象外)
+    sm._ctx.confirmed_board = floor_board
+
+    for i in range(n):
+        cnn_i = Board()
+        hsv_i = Board()
+        cnn_i.set(10, 0, COLOR_RED)
+        hsv_i.set(10, 0, COLOR_RED)
+        cnn_i.set(12, 0, COLOR_OJAMA)  # 床は常時一致 (erase 候補にしない)
+        hsv_i.set(12, 0, COLOR_OJAMA)
+        if i >= 2:
+            # frame 2 以降のみ CNN==HSV=BLUE (カウンタ蓄積開始)
+            cnn_i.set(11, 0, COLOR_BLUE)
+            hsv_i.set(11, 0, COLOR_BLUE)
+        else:
+            # frame 0-1 は CNN≠HSV (カウンタ蓄積なし、安全弁A で reset)
+            cnn_i.set(11, 0, COLOR_BLUE)
+            hsv_i.set(11, 0, COLOR_RED)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn_i, hsv_i))
+
+    # row=11 のカウンタは 3 (frame 2,3,4) で min_frames=5 未到達 → まだ未発火
+    assert sm.context.stable_recovery_counters.get((11, 0), 0) == 3
+    assert sm.context.confirmed_board is not None
+    # 列ゲート緩和により row=10 が解放される
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_RED
+
+
+def test_recovery_gate_column_partial_support_on_rejects_true_floating() -> None:
+    """列ゲート緩和 (2026-07-25) ③: ON でもカウンタ=0 の真の浮きは却下される.
+
+    支持セル側の counter が一度も進行しない (=0) 場合は列ゲート緩和でも
+    支持扱いされず、従来通り浮きぷよとして却下される。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_column_partial_support=True)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = Board()
+    cnn.set(10, 0, COLOR_RED)
+    hsv = Board()
+    hsv.set(10, 0, COLOR_RED)
+
+    for i in range(n + 2):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.stable_recovery_counters.get((11, 0), 0) == 0
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(10, 0) == COLOR_EMPTY  # 支持なし → 却下
+
+
 def test_recovery_gate_resets_on_non_stable_transition() -> None:
     """設計C ⑤: NON-STABLE 遷移でカウンタと recovery_cells がクリアされる."""
     n = 2
@@ -571,6 +1176,185 @@ def test_recovery_gate_resets_on_non_stable_transition() -> None:
     # カウンタと recovery_cells がクリアされている
     assert sm.context.stable_recovery_counters == {}
     assert sm.context.recovery_cells == set()
+
+
+# ============================
+# 復旧カウンタ carryover (enable_recovery_counter_carryover, 2026-07-26)
+# ============================
+
+
+def test_recovery_counter_carryover_off_bit_identical() -> None:
+    """carryover OFF (明示指定) は従来通り STABLE→NON-STABLE で即クリア.
+
+    default False と bit-identical であることの回帰防止テスト
+    (test_recovery_gate_resets_on_non_stable_transition と同一シナリオ)。
+    """
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_recovery_counter_carryover=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, cnn, hsv))
+
+    # OFF: 即座にクリアされる (従来挙動、bit-identical)
+    assert sm.context.stable_recovery_counters == {}
+    assert sm.context.recovery_cells == set()
+
+
+def test_recovery_counter_carryover_on_short_non_stable_preserves_counter() -> None:
+    """carryover ON + 短時間 NON-STABLE 遷移: カウンタが引き継がれる.
+
+    STABLE→CHAIN→STABLE を短時間 (上限秒数未満) で往復した場合、
+    stable_recovery_counters がクリアされず STABLE 復帰後も維持される。
+    """
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n, enable_recovery_counter_carryover=True,
+        recovery_counter_carryover_max_sec=2.0,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    # frame0: STABLE 中に1フレーム蓄積 (counter=1、まだ未発火)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # frame1: 短時間 NON-STABLE (CHAIN) へ強制遷移 (経過 0.05s < 2.0s)
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, _empty_board(), _empty_board()))
+    assert sm.context.state == BoardState.CHAIN
+    # carryover: クリアされず維持されている
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # frame2: すぐに STABLE へ復帰 (経過 0.10s、依然 2.0s 未満)
+    sm._detectors.append(_ForceState(BoardState.STABLE, fire_at_frame=2))
+    sm.update(2, _stable_signal_with_hsv(0.10, _empty_board(), _empty_board()))
+    assert sm.context.state == BoardState.STABLE
+    # carryover: NON-STABLE 復帰後もカウンタが 0 に戻っていない
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+
+def test_recovery_counter_carryover_on_long_non_stable_clears_counter() -> None:
+    """carryover ON + 長時間 NON-STABLE 滞在: 上限秒数超過でクリアされる.
+
+    連鎖等で NON-STABLE が長引く場合は盤面が実際に変化している可能性が
+    高いため、上限秒数 (recovery_counter_carryover_max_sec) を超えたら
+    安全側にクリアする。
+    """
+    n = 3
+    max_sec = 0.2
+    sm = _make_recovery_sm(
+        min_frames=n, enable_recovery_counter_carryover=True,
+        recovery_counter_carryover_max_sec=max_sec,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    sm.update(0, _stable_signal_with_hsv(0.0, cnn, hsv))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # CHAIN へ遷移 (entry_time=0.05、まだ上限超過前)
+    sm._detectors.append(_ForceState(BoardState.CHAIN, fire_at_frame=1))
+    sm.update(1, _stable_signal_with_hsv(0.05, _empty_board(), _empty_board()))
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 1
+
+    # CHAIN に長時間滞在 (detector 発火なし = 同一 state 継続)。
+    # time_sec が entry(0.05) + max_sec(0.2) を超えるとクリアされる。
+    sm.update(2, _stable_signal_with_hsv(0.40, _empty_board(), _empty_board()))
+    assert sm.context.stable_recovery_counters == {}
+    assert sm.context.recovery_cells == set()
+
+
+# ============================
+# CNN 乱高下セル HSV フォールバック (enable_cnn_flicker_hsv_fallback, #51 後半, 2026-07-26)
+# ============================
+
+
+def test_cnn_flicker_hsv_fallback_off_bit_identical() -> None:
+    """フラグ OFF (デフォルト): CNN が毎フレーム反転し HSV と一致しない場合、
+    従来通り一度もカウンタが積み上がらず永久に発火しない (実際の未反映バグの再現)。
+    """
+    from src.board import COLOR_BLUE, COLOR_GREEN
+
+    n = 3
+    sm = _make_recovery_sm(min_frames=n, enable_cnn_flicker_hsv_fallback=False)
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    hsv = _board_with_red(12, 0)
+    for i in range(6):
+        cnn = Board()
+        cnn.set(12, 0, COLOR_BLUE if i % 2 == 0 else COLOR_GREEN)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+
+    assert sm.context.stable_recovery_counters.get((12, 0), 0) == 0
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # 未反映のまま
+
+
+def test_cnn_flicker_hsv_fallback_on_fires_with_flickering_cnn() -> None:
+    """フラグ ON: CNN が乱高下 (BLUE/GREEN 反転) するセルは、変化回数が
+    閾値を超えた時点から HSV (=RED) を合意値とみなしてカウントを進め、
+    最終的に HSV の色へ復旧する。
+    """
+    from src.board import COLOR_BLUE, COLOR_GREEN
+
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n,
+        enable_cnn_flicker_hsv_fallback=True,
+        cnn_flicker_window_frames=4,
+        cnn_flicker_min_changes=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    hsv = _board_with_red(12, 0)
+    for i in range(6):
+        cnn = Board()
+        cnn.set(12, 0, COLOR_BLUE if i % 2 == 0 else COLOR_GREEN)
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+        if sm.context.confirmed_board.get(12, 0) == COLOR_RED:
+            break
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # HSV の色に復旧
+
+
+def test_cnn_flicker_hsv_fallback_stable_cell_unaffected() -> None:
+    """フラグ ON でも、CNN が乱高下していない (常に HSV と一致する) セルは
+    従来と同じ経路 (agreed_v=cnn_v) で発火し、挙動が変わらない (回帰防止)。
+    """
+    n = 3
+    sm = _make_recovery_sm(
+        min_frames=n,
+        enable_cnn_flicker_hsv_fallback=True,
+        cnn_flicker_window_frames=4,
+        cnn_flicker_min_changes=2,
+    )
+    sm._ctx.state = BoardState.STABLE
+    sm._ctx.confirmed_board = _empty_board()
+
+    cnn = _board_with_red(12, 0)
+    hsv = _board_with_red(12, 0)
+    for i in range(n - 1):
+        sm.update(i, _stable_signal_with_hsv(0.05 * i, cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_EMPTY  # まだ発火前
+
+    sm.update(n - 1, _stable_signal_with_hsv(0.05 * (n - 1), cnn, hsv))
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED  # 通常経路で復旧
 
 
 def test_recovery_gate_off_explicit() -> None:
@@ -1045,3 +1829,96 @@ def test_gravity_settle_pipeline_flag_disable_explicit_false() -> None:
             for call in mock_build.call_args_list:
                 kwargs = call[1] if len(call) > 1 else {}
                 assert kwargs.get("enable_gravity_settle_state", True) is False
+
+
+# ============================
+# 色→空凍結の修正3点セット③: 初回STABLE確定の多数決ガード
+# (enable_initial_confirm_vote, 2026-07-27)
+# ============================
+
+
+def _run_initial_confirm_e2e(
+    *, enable_initial_confirm_vote: bool,
+    history_board: Board, trigger_board: Board,
+    n_history_frames: int = 4,
+) -> BoardStateMachine:
+    """MENU→TSUMO_FALL (history 蓄積) →STABLE (baseline is None) の e2e helper.
+
+    TSUMO_FALL 滞在中の n_history_frames フレームで history_board を観測させ、
+    最終フレーム (STABLE 遷移契機) では trigger_board を観測させる。
+    """
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.TSUMO_FALL, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=n_history_frames + 1),
+        ],
+        enable_initial_confirm_vote=enable_initial_confirm_vote,
+    )
+    sm.update(0, _signal(0.0, _empty_board()))  # MENU→TSUMO_FALL (history 対象外)
+    for i in range(1, n_history_frames + 1):
+        sm.update(i, _signal(0.05 * i, history_board.copy()))
+    sm.update(
+        n_history_frames + 1, _signal(0.05 * (n_history_frames + 1), trigger_board),
+    )
+    return sm
+
+
+def test_initial_confirm_vote_off_bit_identical_e2e() -> None:
+    """OFF (default): history と無関係に、契機フレーム (trigger_board) の
+    単発 CNN 値がそのまま初回 confirmed になる (従来挙動、bit-identical)。
+    history が正しい色 (RED) を持っていても、trigger の単発誤読 (EMPTY) が
+    そのまま採用される (= 修正前の色→空凍結バグの再現、回帰確認)。
+    """
+    history_board = _board_with_red(12, 0)  # TSUMO_FALL 中は安定して RED 観測
+    trigger_board = _empty_board()  # 契機フレームだけ単発誤読で EMPTY
+
+    sm = _run_initial_confirm_e2e(
+        enable_initial_confirm_vote=False,
+        history_board=history_board, trigger_board=trigger_board,
+    )
+    assert sm.context.state == BoardState.STABLE
+    assert sm.context.confirmed_board is not None
+    # バグ再現: OFF では history 無視、単発誤読 (EMPTY) がそのまま初回確定
+    assert sm.context.confirmed_board.get(12, 0) == 0
+
+
+def test_initial_confirm_vote_on_rejects_single_frame_misread_e2e() -> None:
+    """ON: 直前 NON-STABLE 滞在中の多数決 history が、契機フレームの
+    単発 CNN 誤読 (色→空) を弾き、安定観測されていた色を初回 confirmed に採用する。
+    """
+    history_board = _board_with_red(12, 0)  # TSUMO_FALL 中は安定して RED 観測
+    trigger_board = _empty_board()  # 契機フレームだけ単発誤読で EMPTY
+
+    sm = _run_initial_confirm_e2e(
+        enable_initial_confirm_vote=True,
+        history_board=history_board, trigger_board=trigger_board,
+    )
+    assert sm.context.state == BoardState.STABLE
+    assert sm.context.confirmed_board is not None
+    # 修正: 多数決 history (RED) が単発誤読 (EMPTY) を弾く
+    assert sm.context.confirmed_board.get(12, 0) == COLOR_RED
+
+
+def test_merge_diff_initial_confirm_insufficient_history_falls_back_to_cnn() -> None:
+    """ON でも history が min_votes 未達の cell は、EMPTY 強制ではなく
+    fallback=new_cnn (単発 CNN 値) を採用する (新規 EMPTY 化バグの防止、
+    _vote_majority_board の fallback 引数の契約確認)。
+    """
+    from src.board_state_machine import (
+        DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+        _merge_diff_only,
+    )
+
+    # history は 1 frame のみ (min_votes=3 未達) だが RED を観測
+    history = [_board_with_red(12, 0)]
+    assert len(history) < DEFAULT_INITIAL_CONFIRM_MIN_VOTES
+    # 契機フレームの単発 CNN 値は RED (history と一致、観測不足でも正しい値)
+    new_cnn = _board_with_red(12, 0)
+
+    merged = _merge_diff_only(
+        None, new_cnn,
+        initial_confirm_history=history,
+        initial_confirm_min_votes=DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
+    )
+    # 観測不足でも fallback=new_cnn により EMPTY 化されず RED が採用される
+    assert merged.get(12, 0) == COLOR_RED

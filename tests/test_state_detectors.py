@@ -279,6 +279,48 @@ def test_ojama_detector_default_threshold_is_70() -> None:
 
 
 # ============================
+# 案B (2026-07-24): defer_ojama_fall_exit_to_visual
+# ============================
+
+
+def test_ojama_detector_defer_flag_default_is_false() -> None:
+    """defer_ojama_fall_exit_to_visual のデフォルトは False (backwards compat)."""
+    det = OjamaPhaseDetector()
+    assert det.defer_ojama_fall_exit_to_visual is False
+
+
+def test_ojama_detector_defers_when_flag_true() -> None:
+    """defer=True の場合、 OJAMA_FALL 中に score_delta が閾値未満でも
+    STABLE を返さず None を返す (= OjamaVisualDetector に完全委譲)。"""
+    det = OjamaPhaseDetector(
+        score_threshold=70, defer_ojama_fall_exit_to_visual=True,
+    )
+    ctx = StateContext(state=BoardState.OJAMA_FALL)
+    res = det.detect(ctx, _signal(5.0, _empty_board(), score_delta=0))
+    assert res is None, "defer=True なら score_delta 低下でも None を返すはず"
+
+
+def test_ojama_detector_defer_false_keeps_legacy_behavior() -> None:
+    """defer=False (default) では従来通り無条件 STABLE 復帰する (回帰確認)。"""
+    det = OjamaPhaseDetector(
+        score_threshold=70, defer_ojama_fall_exit_to_visual=False,
+    )
+    ctx = StateContext(state=BoardState.OJAMA_FALL)
+    res = det.detect(ctx, _signal(5.0, _empty_board(), score_delta=0))
+    assert res == BoardState.STABLE, "defer=False では従来通り STABLE 復帰"
+
+
+def test_ojama_detector_defer_true_still_fires_on_score_delta() -> None:
+    """defer=True でも score_delta >= threshold の発火ロジックには影響しない。"""
+    det = OjamaPhaseDetector(
+        score_threshold=70, defer_ojama_fall_exit_to_visual=True,
+    )
+    ctx = StateContext(state=BoardState.STABLE)
+    res = det.detect(ctx, _signal(5.0, _empty_board(), score_delta=100))
+    assert res == BoardState.OJAMA_FALL
+
+
+# ============================
 # EffectPhaseDetector
 # ============================
 

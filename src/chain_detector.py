@@ -50,6 +50,14 @@ ERASURE_MIN_DROP: int = 4
 # このフレーム数だけ前を「発火前 board」とみなす
 SNAPSHOT_LOOKBACK: int = 2
 
+# 修正C (2026-07-24): 偽連鎖イベント抑制用 debounce 確認フレーム数。
+# 1 = 既定・従来通り即時確定 (bit-identical, backwards compat)。
+# 2 以上を指定すると、drop 検出が debounce_confirm_frames 回連続で
+# 観測されるまで ChainEvent 確定を保留する（1 フレームの色フリッカーが
+# 作る見かけの減少を「本物の連鎖」と誤認しないようにする）。
+# 詳細は VideoChainTracker._update_with_debounce の docstring 参照。
+DEBOUNCE_CONFIRM_FRAMES: int = 1
+
 # ChainFineTuner が出力する calibration ファイル (Phase I)
 DEFAULT_CALIBRATION_PATH: Path = Path("data/verify/chain_tracker_calibration.json")
 
@@ -147,6 +155,7 @@ class VideoChainTracker:
         prev_all_clear_pending: bool = False,
         apply_calibration: bool = False,
         calibration_path: Path | str | None = None,
+        debounce_confirm_frames: int = DEBOUNCE_CONFIRM_FRAMES,
     ) -> None:
         # apply_calibration=True なら data/verify/chain_tracker_calibration.json
         # の値で erasure_min_drop / snapshot_lookback を上書きする。
@@ -178,6 +187,10 @@ class VideoChainTracker:
         self._last_stable_count: int | None = None
         self._last_stable_board: Board | None = None
         self._last_stable_t: float | None = None
+        # 修正C: debounce 確認カウンタ。0 = 候補なし（通常状態）。
+        # debounce_confirm_frames<=1 の既定経路では未使用（値は常に 0 のまま）。
+        self._debounce_frames = max(1, int(debounce_confirm_frames))
+        self._pending_confirm_count: int = 0
 
     # ============================
     # 状態更新
@@ -191,6 +204,10 @@ class VideoChainTracker:
             - 前回 stable 時点と比較して非空セル数が erasure_min_drop 以上減少
             - → stable 時点の board を発火前として simulate
             - simulate 結果の chain_count が 0 なら誤検出（noise）として破棄
+            - debounce_confirm_frames > 1 の場合、上記の減少判定が
+              その回数分連続で観測されて初めて ChainEvent を確定する
+              （修正C: 1 フレームの色フリッカーによる偽イベント抑制）。
+              既定値 1 では従来通り即時確定（bit-identical）。
         """
         current_count = count_non_empty(board)
         self._history.append((t_sec, board))
@@ -198,55 +215,107 @@ class VideoChainTracker:
         if len(self._history) > self._lookback + 2:
             self._history.pop(0)
 
-        event: ChainEvent | None = None
-
         if self._last_stable_count is None:
             # 初回
-            self._last_stable_count = current_count
-            self._last_stable_board = board
-            self._last_stable_t = t_sec
+            self._advance_stable(current_count, board, t_sec)
             return None
 
-        drop = self._last_stable_count - current_count
-        if drop >= self._erasure_min_drop:
-            # 消去発生疑い
-            assert self._last_stable_board is not None
-            assert self._last_stable_t is not None
-            sim = self._simulator.simulate(self._last_stable_board)
-            if sim.chain_count >= 1:
-                scored = calculate_chain_score(sim)
-                # 前回全消しのボーナスを今回に持ち越し（公式仕様: 次連鎖発火時加算）
-                bonus = ALL_CLEAR_BONUS if self._all_clear_pending else 0
-                effective_score = scored.total_score + bonus
-                # 持ち越しフラグを「今回が全消しなら次回」に更新
-                self._all_clear_pending = scored.is_all_clear
+        drop_detected = (
+            self._last_stable_count - current_count >= self._erasure_min_drop
+        )
 
-                elapsed = max(0.0, self._last_stable_t - self._match_start_sec)
-                ojama_r = score_to_ojama(
-                    effective_score,
-                    prev_leftover=self._leftover,
-                    elapsed_sec=elapsed,
-                    rate_base=self._rate_base,
-                )
-                event = ChainEvent(
-                    trigger_sec=self._last_stable_t,
-                    end_sec=t_sec,
-                    before_board=self._last_stable_board,
-                    chain_count=sim.chain_count,
-                    total_erased=sim.total_erased,
-                    total_score=effective_score,
-                    base_score=scored.total_score,
-                    all_clear_bonus_applied=bonus,
-                    ojama_sent=ojama_r.ojama_count,
-                    leftover_score=ojama_r.leftover_score,
-                    is_all_clear=scored.is_all_clear,
-                )
-                self._leftover = ojama_r.leftover_score
+        if self._debounce_frames <= 1:
+            # 既定経路（debounce 無効）: 従来通り即時判定。bit-identical。
+            event = self._try_emit_event(t_sec) if drop_detected else None
+            self._advance_stable(current_count, board, t_sec)
+            return event
 
-        # 現在のフレームを stable として更新（次の比較用）
-        self._last_stable_count = current_count
+        return self._update_with_debounce(t_sec, current_count, board, drop_detected)
+
+    def _advance_stable(self, count: int, board: Board, t_sec: float) -> None:
+        """現フレームを新しい stable 基準点として記録する（次回比較用）。"""
+        self._last_stable_count = count
         self._last_stable_board = board
         self._last_stable_t = t_sec
+
+    def _try_emit_event(self, t_sec: float) -> ChainEvent | None:
+        """last_stable_board を simulate し、有効な連鎖なら ChainEvent を返す。
+
+        simulate 結果の chain_count が 0（= 4連結消去対象なし）の場合は
+        誤検出（noise）として None を返す。
+        """
+        assert self._last_stable_board is not None
+        assert self._last_stable_t is not None
+        sim = self._simulator.simulate(self._last_stable_board)
+        if sim.chain_count < 1:
+            return None
+        scored = calculate_chain_score(sim)
+        # 前回全消しのボーナスを今回に持ち越し（公式仕様: 次連鎖発火時加算）
+        bonus = ALL_CLEAR_BONUS if self._all_clear_pending else 0
+        effective_score = scored.total_score + bonus
+        # 持ち越しフラグを「今回が全消しなら次回」に更新
+        self._all_clear_pending = scored.is_all_clear
+
+        elapsed = max(0.0, self._last_stable_t - self._match_start_sec)
+        ojama_r = score_to_ojama(
+            effective_score,
+            prev_leftover=self._leftover,
+            elapsed_sec=elapsed,
+            rate_base=self._rate_base,
+        )
+        event = ChainEvent(
+            trigger_sec=self._last_stable_t,
+            end_sec=t_sec,
+            before_board=self._last_stable_board,
+            chain_count=sim.chain_count,
+            total_erased=sim.total_erased,
+            total_score=effective_score,
+            base_score=scored.total_score,
+            all_clear_bonus_applied=bonus,
+            ojama_sent=ojama_r.ojama_count,
+            leftover_score=ojama_r.leftover_score,
+            is_all_clear=scored.is_all_clear,
+        )
+        self._leftover = ojama_r.leftover_score
+        return event
+
+    def _update_with_debounce(
+        self,
+        t_sec: float,
+        current_count: int,
+        board: Board,
+        drop_detected: bool,
+    ) -> ChainEvent | None:
+        """修正C: debounce_confirm_frames > 1 時の候補確認ロジック。
+
+        drop_detected が debounce_frames 回連続で観測されて初めて
+        （凍結した last_stable_board を simulate して）ChainEvent を確定する。
+        途中で drop が消えた（=色フリッカーが1フレームで解消した）場合は
+        候補を破棄し、そのフレームを新しい stable 基準として採用する
+        （偽イベントを握りつぶす）。本物の連鎖は drop が継続 or 拡大する
+        ため debounce_frames 回以内に確定し、速い追撃連鎖も取りこぼさない。
+        """
+        if self._pending_confirm_count == 0:
+            if drop_detected:
+                # 候補として保留（last_stable はまだ更新しない）
+                self._pending_confirm_count = 1
+                return None
+            self._advance_stable(current_count, board, t_sec)
+            return None
+
+        if not drop_detected:
+            # drop が消失 = フリッカー解消。候補を破棄し現フレームを採用。
+            self._pending_confirm_count = 0
+            self._advance_stable(current_count, board, t_sec)
+            return None
+
+        self._pending_confirm_count += 1
+        if self._pending_confirm_count < self._debounce_frames:
+            return None  # まだ確認フレーム数未達、last_stable は保留のまま
+
+        event = self._try_emit_event(t_sec)
+        self._pending_confirm_count = 0
+        self._advance_stable(current_count, board, t_sec)
         return event
 
     # ============================
@@ -273,6 +342,11 @@ class VideoChainTracker:
     def all_clear_pending(self) -> bool:
         return self._all_clear_pending
 
+    @property
+    def debounce_confirm_frames(self) -> int:
+        """修正C debounce 設定値（呼出元が reset 時の再構築に使う）。"""
+        return self._debounce_frames
+
 
 # ============================
 # バッチ処理用ユーティリティ
@@ -283,6 +357,7 @@ def track_chains(
     frames: Iterable[tuple[float, Board]],
     match_start_sec: float = 0.0,
     prev_leftover: int = 0,
+    debounce_confirm_frames: int = DEBOUNCE_CONFIRM_FRAMES,
 ) -> list[ChainEvent]:
     """
     フレーム列から検出された全連鎖イベントを一括で返す。
@@ -291,6 +366,7 @@ def track_chains(
         frames: (時刻 [秒], Board) の iterable。時刻は単調増加前提。
         match_start_sec: 試合開始秒（マージンタイム計算用）。
         prev_leftover: 前試合からの繰越（通常 0）。
+        debounce_confirm_frames: 修正C debounce（既定 1 = 従来通り）。
 
     Returns:
         list[ChainEvent]
@@ -298,6 +374,7 @@ def track_chains(
     tracker = VideoChainTracker(
         match_start_sec=match_start_sec,
         prev_leftover=prev_leftover,
+        debounce_confirm_frames=debounce_confirm_frames,
     )
     events: list[ChainEvent] = []
     for t, board in frames:
