@@ -1,0 +1,3 @@
+./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --enable-drift-match-start-guard --enable-drift-hsv-gate --output-suffix _baseline_a > logs/baseline_ab_a_2026-07-25.log 2>&1
+./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --enable-drift-match-start-guard --enable-drift-hsv-gate --no-baseline-broken-reset --output-suffix _baseline_b > logs/baseline_ab_b_2026-07-25.log 2>&1
+./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --enable-drift-match-start-guard --enable-drift-hsv-gate --enable-baseline-broken-grace --output-suffix _baseline_c > logs/baseline_ab_c_2026-07-25.log 2>&1

@@ -39,8 +39,9 @@ for f in "$RAW" "$H264"; do
 done
 
 log "レンダ開始 (--platt-calibration を明示)"
+# _zap_1t は visualize_advantage_overlay.main をそのまま呼ぶラッパーなので、
+# -m モジュール指定は渡さず overlay の引数を直接続ける (元の _gen_review4 と同じ形)。
 nice -n 10 ./venv/bin/python -m scripts._zap_1t \
-  -m scripts.visualize_advantage_overlay \
   --video data/frames/video_c56.mp4 \
   --out "$RAW" \
   --start-sec 288.0 --end-sec 362.0 \

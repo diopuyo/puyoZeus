@@ -653,6 +653,14 @@ def main() -> None:
         "--no-phase", action="store_true",
         help="位相別モデルをスキップ (高速化)",
     )
+    parser.add_argument(
+        "--fixed-q33", type=float, default=None,
+        help="序盤/中盤境界を手数固定値で上書き (未指定時は従来通り分位点自動算出)",
+    )
+    parser.add_argument(
+        "--fixed-q67", type=float, default=None,
+        help="中盤/終盤境界を手数固定値で上書き (未指定時は従来通り分位点自動算出)",
+    )
     args = parser.parse_args()
 
     print(f"[model_indicator_win] labeled={args.labeled}")
@@ -674,12 +682,18 @@ def main() -> None:
     y = paired["won_1p"].astype(int).values
     print(f"  won=1 (1P勝ち): {(y==1).sum()}  won=0 (2P勝ち): {(y==0).sum()}")
 
-    # 手数三分位
+    # 手数三分位 (--fixed-q33/--fixed-q67 指定時は固定境界で上書き=新旧データ同条件比較用)
     tsumo_vals = paired["tsumo_1p"].astype(float)
-    tsumo_q33 = float(tsumo_vals.quantile(TSUMO_EARLY_RATIO))
-    tsumo_q67 = float(tsumo_vals.quantile(TSUMO_LATE_RATIO))
-    print(f"  手数三分位: 序盤<={tsumo_q33:.0f}, 中盤 {tsumo_q33:.0f}-{tsumo_q67:.0f}, "
-          f"終盤>{tsumo_q67:.0f}")
+    if args.fixed_q33 is not None and args.fixed_q67 is not None:
+        tsumo_q33 = float(args.fixed_q33)
+        tsumo_q67 = float(args.fixed_q67)
+        print(f"  手数境界(固定指定): 序盤<={tsumo_q33:.0f}, 中盤 {tsumo_q33:.0f}-{tsumo_q67:.0f}, "
+              f"終盤>{tsumo_q67:.0f}")
+    else:
+        tsumo_q33 = float(tsumo_vals.quantile(TSUMO_EARLY_RATIO))
+        tsumo_q67 = float(tsumo_vals.quantile(TSUMO_LATE_RATIO))
+        print(f"  手数三分位(自動算出): 序盤<={tsumo_q33:.0f}, 中盤 {tsumo_q33:.0f}-{tsumo_q67:.0f}, "
+              f"終盤>{tsumo_q67:.0f}")
 
     # グループ配列
     groups = paired["video_id_1p"].values

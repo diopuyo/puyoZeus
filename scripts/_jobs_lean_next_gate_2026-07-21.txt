@@ -1,0 +1,3 @@
+# フェーズ2 コストゲート: 実動画2本 (video_c1, video_c3) をフル収集し実wall時間を計測する
+./venv/bin/python -u -m scripts.collect_boards_lean --video data/frames/video_c1.mp4 --out-npz data/indicators_v2/boards_lean_next/c1.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts.collect_boards_lean --video data/frames/video_c3.mp4 --out-npz data/indicators_v2/boards_lean_next/c3.npz --sample-interval 0.2 --max-sec 1200 --with-next

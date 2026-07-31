@@ -1,0 +1,25 @@
+# 指標①本命版検証: 残り23本 (--with-next) をcv2単一スレッドラッパー経由で収集
+# sample-interval は元の boards_lean_fixed 収集と同一 (0.2秒) に合わせる
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c10.mp4 --out-npz data/indicators_v2/boards_lean_next/c10.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c20.mp4 --out-npz data/indicators_v2/boards_lean_next/c20.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c24.mp4 --out-npz data/indicators_v2/boards_lean_next/c24.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c30.mp4 --out-npz data/indicators_v2/boards_lean_next/c30.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c33.mp4 --out-npz data/indicators_v2/boards_lean_next/c33.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c37.mp4 --out-npz data/indicators_v2/boards_lean_next/c37.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c42.mp4 --out-npz data/indicators_v2/boards_lean_next/c42.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c43.mp4 --out-npz data/indicators_v2/boards_lean_next/c43.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c44.mp4 --out-npz data/indicators_v2/boards_lean_next/c44.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c54.mp4 --out-npz data/indicators_v2/boards_lean_next/c54.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c55.mp4 --out-npz data/indicators_v2/boards_lean_next/c55.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c56.mp4 --out-npz data/indicators_v2/boards_lean_next/c56.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c57.mp4 --out-npz data/indicators_v2/boards_lean_next/c57.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c58.mp4 --out-npz data/indicators_v2/boards_lean_next/c58.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c62.mp4 --out-npz data/indicators_v2/boards_lean_next/c62.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c65.mp4 --out-npz data/indicators_v2/boards_lean_next/c65.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c68.mp4 --out-npz data/indicators_v2/boards_lean_next/c68.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c71.mp4 --out-npz data/indicators_v2/boards_lean_next/c71.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c76.mp4 --out-npz data/indicators_v2/boards_lean_next/c76.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c79.mp4 --out-npz data/indicators_v2/boards_lean_next/c79.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c81.mp4 --out-npz data/indicators_v2/boards_lean_next/c81.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c82.mp4 --out-npz data/indicators_v2/boards_lean_next/c82.npz --sample-interval 0.2 --max-sec 1200 --with-next
+./venv/bin/python -u -m scripts._collect_lean_1t --video data/frames/video_c84.mp4 --out-npz data/indicators_v2/boards_lean_next/c84.npz --sample-interval 0.2 --max-sec 1200 --with-next
