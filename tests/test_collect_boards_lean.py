@@ -1134,3 +1134,91 @@ def test_collect_lean_normalize_fps_30_ignored_when_sample_interval_frames_expli
         sample_interval_frames=4, normalize_fps_30=True,
     )
     assert fake_pipeline.update_calls == list(range(0, n_frames, 4))
+
+
+# ============================
+# 共有ゲーム境界カウンタ (2026-07-31 desync 根治)
+# ============================
+
+class TestSharedGameCounter:
+    """1P/2P 共有の game_idx が desync を防ぐことを検証する。
+
+    旧実装は _SideState.game_idx を side ごとに独立して進めていたため:
+      - 検知フレームがずれると game_idx がずれる (実測 57.6% が 5秒超)
+      - 片側の score OCR が壊れている動画 (c26/c58 等) ではその side が
+        game 0 に留まり、以降すべてのゲームが対応しなくなる
+    """
+
+    def test_both_sides_share_index_when_one_side_detects(self) -> None:
+        """片側だけが境界を検知しても両者の game_idx が揃う。
+
+        これが旧実装の最大の欠陥 (score OCR が片側で壊れている動画)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        # 1P はスコアが進んでリセットする / 2P はスコアを読めない (None)
+        mod._update_game_boundary(s1, 5000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s2, None, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s1, 100, shared=shared, t_sec=60.0)  # 境界
+        assert shared.game_idx == 1
+        assert s1.game_idx == 1
+        # 2P はこの後 score を読めた時点で共有カウンタに追従する
+        mod._update_game_boundary(s2, 300, shared=shared, t_sec=61.0)
+        assert s2.game_idx == 1, "片側検知の境界に追従していない"
+
+    def test_same_boundary_detected_by_both_advances_once(self) -> None:
+        """両者が同じ境界を検知しても game_idx は 1 だけ進む (デバウンス)。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        mod._update_game_boundary(s1, 8000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s2, 7000, shared=shared, t_sec=10.0)
+        # 同一境界を 1P が t=60.0、2P が t=60.5 で検知
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)
+        mod._update_game_boundary(s2, 0, shared=shared, t_sec=60.5)
+        assert shared.game_idx == 1, "同一境界で 2 回進んでいる"
+        assert s1.game_idx == s2.game_idx == 1
+
+    def test_separate_boundaries_beyond_debounce_advance_twice(self) -> None:
+        """デバウンス幅を超えて離れた 2 つの境界は別ゲームとして数える。
+
+        1 試合は最短 14 秒なので、デバウンス 5 秒は実試合を潰さない。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)   # 境界1
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=90.0)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=120.0)  # 境界2
+        assert shared.game_idx == 2
+
+    def test_final_scores_recorded_under_shared_index(self) -> None:
+        """final_scores が共有 game_idx をキーに記録される。
+
+        ここがずれると _merge_final_scores が別ゲーム同士を突き合わせる
+        (勝敗ラベルが壊れる真因)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        for t, sc1, sc2 in ((10.0, 1000, 2000), (20.0, 5000, 6000)):
+            mod._update_game_boundary(s1, sc1, shared=shared, t_sec=t)
+            mod._update_game_boundary(s2, sc2, shared=shared, t_sec=t)
+        # 1P だけが境界を検知 (2P は score が読めない)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)
+        mod._update_game_boundary(s2, 100, shared=shared, t_sec=60.0)
+        # game 0 の最終スコアは両者ともリセット直前の高値
+        assert s1.final_scores[0] == 5000
+        assert s2.final_scores[0] == 6000
+        # game 1 は両者とも同じキーに入る
+        assert 1 in s1.final_scores and 1 in s2.final_scores
+
+    def test_shared_none_keeps_legacy_independent_behaviour(self) -> None:
+        """shared=None なら従来の side 独立カウンタ (後方互換)。"""
+        mod = _import_lean()
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 5000)
+        mod._update_game_boundary(s1, 0)
+        assert s1.game_idx == 1
