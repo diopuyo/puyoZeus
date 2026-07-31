@@ -90,6 +90,20 @@ V30_MAX_SEC: float = 90.0  # 225.0-315.0s
 # visualize_advantage_overlay.py:1043 / recognition_physics_review.py:213
 # がいずれも 3 を渡している。RecognitionPipeline.load_default の既定は 6 で、
 # 引数なしで呼ぶと**本番と違う設定を測ってしまう**。
+# 盤面が**正当に確定できない**状態 (2026-07-31)。
+# これらの最中に着地しても confirmed_board は更新できないので、
+# その遅延は「直すべき遅延」ではなく物理的に正当な待ちである。
+#   CHAIN         : 連鎖演出中 (消去→落下が進行中)
+#   OJAMA_FALL    : おじゃま落下中
+#   GRAVITY_SETTLE: 重力落ち着き待ち
+#   MENU          : 試合外 (境界演出等)
+#   EFFECT        : 全消し等の演出中
+# これを混ぜて測っていたため、側の差が試合展開に振り回されていた
+# (「2Pが遅い」は c34 1本の攻め/受けの偏りだった)。
+BLOCKING_STATES: frozenset[str] = frozenset({
+    "CHAIN", "OJAMA_FALL", "GRAVITY_SETTLE", "MENU", "EFFECT",
+})
+
 PRODUCTION_STABLE_FRAME_COUNT: int = 3
 
 # fps換算で frame 数にする (30fps→3f, 60fps→6f、既存 stable_frame_count=6
@@ -150,6 +164,10 @@ class _FrameRec:
     cnn_grid: np.ndarray
     confirmed_grid: "np.ndarray | None"
     next_pair: "tuple[int, int] | None"
+    # 状態文脈 (2026-07-31 追加)。BoardState 名の文字列。
+    # 「盤面が正当に確定できないフレーム」を層別するために使う。
+    # 既定 "" は state を記録しない旧呼び出し用 (後方互換)。
+    state: str = ""
 
 
 @dataclass
@@ -179,6 +197,11 @@ class _PlacementEvent:
     delay_frames_confirm_seg: "int | None"
     within_acceptance: "bool | None"
     near_match_start: bool
+    # 状態文脈 (2026-07-31 追加)。イベント窓内に「盤面が正当に確定できない
+    # 状態」が含まれていたか。含まれる遅延は物理的に正当な待ちなので、
+    # 直すべき遅延と混ぜない。既定値付きなので末尾に置く (dataclass 制約)。
+    window_had_blocking_state: bool = False
+    window_blocking_states: str = ""
 
 
 # ============================
@@ -315,6 +338,10 @@ def _collect_records(
                     if side_res.confirmed_board is not None else None
                 ),
                 next_pair=side_res.next_pair,
+                # 状態文脈 (2026-07-31)。BoardState.XXX の XXX だけを持つ。
+                state=str(getattr(side_res, "state", "")).replace(
+                    "BoardState.", "",
+                ),
             ))
         fi += 1
         n_read += 1
@@ -589,6 +616,15 @@ def _build_one_event(
     near_match_start: bool,
 ) -> _PlacementEvent:
     """1 件分の _PlacementEvent を組み立てる (delay 計算込み)。"""
+    # 状態文脈の判定 (2026-07-31)。着地から反映 (未反映なら窓端) までの間に
+    # 「盤面が正当に確定できない状態」が含まれていたかを記録する。
+    # これを混ぜて測っていたため、側の差が試合展開に振り回されていた。
+    _end_idx = reflect_idx if reflect_idx is not None else len(records) - 1
+    _seen: list[str] = []
+    for _r in records[place_idx:max(place_idx + 1, _end_idx + 1)]:
+        st = _r.state
+        if st in BLOCKING_STATES and st not in _seen:
+            _seen.append(st)
     color_match = (
         (raw_a == truth_a and raw_b == truth_b)
         if truth_a is not None and truth_b is not None else None
@@ -627,6 +663,8 @@ def _build_one_event(
             (delay_total <= ACCEPTANCE_FRAMES) if delay_total is not None else None
         ),
         near_match_start=near_match_start,
+        window_had_blocking_state=bool(_seen),
+        window_blocking_states=",".join(_seen),
     )
 
 
@@ -681,7 +719,38 @@ def _delay_stats(
         if e.delay_frames_confirm_seg is not None
     ]
     within_8 = [e for e in resolved if e.within_acceptance]
+    # 【本来測るべき数字】状態文脈で層別する (2026-07-31)。
+    # 連鎖中・おじゃま落下中・メニュー中の遅延は物理的に正当な待ちであり、
+    # 「直すべき遅延」ではない。混ぜて測っていたため側の差が試合展開に
+    # 振り回されていた (「2Pが遅い」は c34 1本の攻め/受けの偏りだった)。
+    clean = [e for e in resolved if not e.window_had_blocking_state]
+    blocked = [e for e in resolved if e.window_had_blocking_state]
+    clean_delays = [
+        e.delay_frames_total for e in clean if e.delay_frames_total is not None
+    ]
+    clean_within_8 = [e for e in clean if e.within_acceptance]
+    # どの状態が遅延を作っていたかの内訳 (対処の優先順位づけに使う)
+    blocking_counter: dict[str, int] = {}
+    for e in blocked:
+        for st in e.window_blocking_states.split(","):
+            if st:
+                blocking_counter[st] = blocking_counter.get(st, 0) + 1
     return {
+        # --- クリーン層 (直すべき遅延) ---
+        "n_clean": len(clean),
+        "clean_delay_median": (
+            float(np.median(clean_delays)) if clean_delays else None
+        ),
+        "clean_delay_p90": (
+            float(np.percentile(clean_delays, 90)) if clean_delays else None
+        ),
+        "clean_delay_max": (max(clean_delays) if clean_delays else None),
+        "clean_pct_within_acceptance_8f": (
+            100.0 * len(clean_within_8) / len(clean) if clean else None
+        ),
+        # --- 阻害状態を含む層 (物理的に正当な待ち) ---
+        "n_blocked": len(blocked),
+        "blocking_state_counts": blocking_counter,
         "n_events_total": len(pool),
         "n_right_censored": n_right_censored,
         "n_resolved_within_window": len(resolved),
@@ -757,6 +826,26 @@ def _format_stats_line(label: str, s: dict) -> str:
         f"区間A(CNN到達)中央値={s['seg_cnn_visible_median']} "
         f"区間B(確定側)中央値={s['seg_confirm_median']} "
         f"初期色不一致={s['n_color_mismatch_at_place']}"
+    )
+
+
+def _format_clean_line(label: str, s: dict) -> str:
+    """【本来測るべき数字】状態文脈でクリーンなイベントのみの集計 (2026-07-31)。
+
+    連鎖中・おじゃま落下中・メニュー中を含むイベントは物理的に正当な待ちなので
+    除外する。混ぜて測ると側の差が試合展開に振り回される。
+    """
+    counts = s.get("blocking_state_counts") or {}
+    top = ", ".join(
+        f"{k}:{v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])
+    )
+    return (
+        f"  {label} [クリーン層]: n={s.get('n_clean')} "
+        f"delay(中央/p90/最大)="
+        f"{s.get('clean_delay_median')}/{s.get('clean_delay_p90')}/"
+        f"{s.get('clean_delay_max')} "
+        f"8f以内達成率={s.get('clean_pct_within_acceptance_8f')} "
+        f"| 阻害状態を含む={s.get('n_blocked')} ({top or 'なし'})"
     )
 
 
@@ -960,6 +1049,9 @@ def _format_summary_text(results: list[dict]) -> str:
         )
         lines.append(_format_stats_line("1P", result["stats_1p_corroborated"]))
         lines.append(_format_stats_line("2P", result["stats_2p_corroborated"]))
+        # 【本来測るべき数字】状態文脈でクリーンな層のみ (2026-07-31)
+        lines.append(_format_clean_line("1P", result["stats_1p_corroborated"]))
+        lines.append(_format_clean_line("2P", result["stats_2p_corroborated"]))
         lines.append(
             f"    meta 1P: {result['meta_1p']} / meta 2P: {result['meta_2p']}",
         )
