@@ -7,6 +7,15 @@
 #   mid  = 1200-1560s (--start-sec 1200 --max-sec 360)
 #
 # 使い方: bash scripts/_gen_jobs_labeled_win_m30_2026-07-28.sh <selected_videos_m30.txt>
+#
+# 2026-07-29 追記: --sample-interval-frames 15 を一度追加したが、投入前検証
+# (data/verify/sample_interval_verify_2026-07-29/) でtsumo (手数) カウンタが
+# 実ゲームプレイ区間で 0/38 (1P) 0/40 (2P) と全数消失する致命的な取りこぼしを
+# 実測したため revert 済み。原因は src/recognition_pipeline.py の tsumo_count
+# がTSUMO_FALL→STABLE着地の一点検出(edge-triggered)であり、15フレーム間引き
+# だとサンプル間で着地イベントごと丸ごと見逃され得ること、かつ
+# chain-tsumo-undershoot クランプ(同ファイル5144-5156行)が未検出分を0に
+# ゼロ化してしまうこと。ユーザー判断待ち(現状は間引き無しのまま維持)。
 set -u
 PROJ_DIR="/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer"; cd "${PROJ_DIR}" || exit 1
 

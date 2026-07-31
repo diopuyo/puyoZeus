@@ -1,0 +1,4244 @@
+{
+  "c_series": {
+    "c10": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 718.0,
+        "end_sec": 758.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 80.0274877025463,
+        "h_std": 33.43975158452893,
+        "s_mean": 100.24843858506945,
+        "s_std": 50.126861510787286,
+        "v_mean": 93.9687865306713,
+        "v_std": 60.63003551332645,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 12,
+          "h_median": 110.0,
+          "h_std": 21.371547804395348,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 15,
+          "h_median": 59.0,
+          "h_std": 16.385427129685155,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 18,
+          "h_median": 18.0,
+          "h_std": 23.428904802549212,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 13,
+          "h_median": 138.0,
+          "h_std": 12.981552682910147,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c11": {
+      "coverage_limit_sec": 1199.0,
+      "window": {
+        "start_sec": 630.0,
+        "end_sec": 672.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 99.4015404369213,
+        "h_std": 39.403816648990514,
+        "s_mean": 130.85257667824075,
+        "s_std": 55.43491016163092,
+        "v_mean": 119.48457139756944,
+        "v_std": 73.13529232693627,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 40,
+          "h_median": 3.0,
+          "h_std": 6.969512158178052,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 43,
+          "h_median": 109.0,
+          "h_std": 9.90322289401184,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 8,
+          "h_median": 74.0,
+          "h_std": 2.7726341266023544,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 54,
+          "h_median": 21.0,
+          "h_std": 20.033367655387153,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 49,
+          "h_median": 138.0,
+          "h_std": 0.49318554994263564,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c12": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 572.0,
+        "end_sec": 714.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 82.03562427662037,
+        "h_std": 40.701604819049834,
+        "s_mean": 106.38610496238427,
+        "s_std": 61.236151515730015,
+        "v_mean": 119.23061595775464,
+        "v_std": 72.90945678802137,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 33,
+          "h_median": 178.0,
+          "h_std": 0.785353452498602,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 42,
+          "h_median": 109.0,
+          "h_std": 5.4488057523630005,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 30,
+          "h_median": 59.5,
+          "h_std": 10.971731353295564,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 38,
+          "h_median": 19.0,
+          "h_std": 15.056771605863446,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 129.5,
+          "h_std": 0.0,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 0.5
+        }
+      }
+    },
+    "c13": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 554.0,
+        "end_sec": 620.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 10,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 79.73282877604167,
+        "h_std": 48.81354636175812,
+        "s_mean": 128.32333369502314,
+        "s_std": 60.68184561030536,
+        "v_mean": 134.20865776909721,
+        "v_std": 76.76405522090378,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 66,
+          "h_median": 9.5,
+          "h_std": 20.791999813289433,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 70,
+          "h_median": 109.0,
+          "h_std": 19.07095237500728,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 5,
+          "h_median": 74.0,
+          "h_std": 3.9698866482558417,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 99,
+          "h_median": 20.0,
+          "h_std": 14.796602480116727,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 80,
+          "h_median": 138.0,
+          "h_std": 15.229720122182155,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c14": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 694.0,
+        "end_sec": 780.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 83.52582501446759,
+        "h_std": 44.016415723893076,
+        "s_mean": 113.06579390914352,
+        "s_std": 63.95204896578775,
+        "v_mean": 125.49446650752314,
+        "v_std": 76.90256709257444,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 50,
+          "h_median": 8.0,
+          "h_std": 15.42753765040992,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 63,
+          "h_median": 109.0,
+          "h_std": 12.37105831771182,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 3,
+          "h_median": 73.0,
+          "h_std": 0.4714045207910317,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 50,
+          "h_median": 19.0,
+          "h_std": 20.371794226331662,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 46,
+          "h_median": 138.0,
+          "h_std": 1.1666441621738033,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c15": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 680.0,
+        "end_sec": 718.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 10,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 77.19580584490741,
+        "h_std": 50.66170203714307,
+        "s_mean": 139.7280714699074,
+        "s_std": 57.104334705371016,
+        "v_mean": 119.53962492766203,
+        "v_std": 74.98416125891568,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 58,
+          "h_median": 6.5,
+          "h_std": 20.674788995295696,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 56,
+          "h_median": 108.0,
+          "h_std": 1.927248223318863,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 68,
+          "h_median": 58.0,
+          "h_std": 8.176536711539654,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 71,
+          "h_median": 138.0,
+          "h_std": 14.067482668806637,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c16": {
+      "coverage_limit_sec": 1195.800048828125,
+      "window": {
+        "start_sec": 712.0,
+        "end_sec": 766.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 87.32679904513888,
+        "h_std": 42.800610135741465,
+        "s_mean": 122.8879173900463,
+        "s_std": 58.25810720252351,
+        "v_mean": 122.04029550057871,
+        "v_std": 72.1409466886478,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 88,
+          "h_median": 3.0,
+          "h_std": 8.982328329682801,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 62,
+          "h_median": 109.0,
+          "h_std": 0.9711298225026386,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 64,
+          "h_median": 57.75,
+          "h_std": 2.324491186764052,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 51,
+          "h_median": 138.0,
+          "h_std": 4.23667824151267,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c17": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 714.0,
+        "end_sec": 796.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 72.69100875289352,
+        "h_std": 42.12128407787779,
+        "s_mean": 131.66912109375,
+        "s_std": 69.40567328808109,
+        "v_mean": 129.63726236979167,
+        "v_std": 80.73446106411234,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 47,
+          "h_median": 2.0,
+          "h_std": 0.9394285656066527,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 41,
+          "h_median": 108.0,
+          "h_std": 1.021482516652289,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 55,
+          "h_median": 58.0,
+          "h_std": 11.041409659673318,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 38,
+          "h_median": 22.0,
+          "h_std": 6.380765005064949,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 130.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c18": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 666.0,
+        "end_sec": 728.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 103.39135416666667,
+        "h_std": 37.027725895614,
+        "s_mean": 128.38947446469908,
+        "s_std": 57.62439704500595,
+        "v_mean": 126.91510561342592,
+        "v_std": 71.98653769122859,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 76,
+          "h_median": 3.5,
+          "h_std": 15.460393953998775,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 80,
+          "h_median": 109.0,
+          "h_std": 1.1789826122551597,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 70,
+          "h_median": 59.0,
+          "h_std": 3.2065701047590855,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 56,
+          "h_median": 138.0,
+          "h_std": 0.8554671119288203,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c19": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 620.0,
+        "end_sec": 704.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 69.58620442708333,
+        "h_std": 64.75869262481287,
+        "s_mean": 136.29654369212963,
+        "s_std": 61.9439653028953,
+        "v_mean": 119.27040256076388,
+        "v_std": 70.48225410974663,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 26,
+          "h_median": 3.25,
+          "h_std": 9.304751601567014,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 32,
+          "h_median": 108.5,
+          "h_std": 24.6424232460507,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 34,
+          "h_median": 58.0,
+          "h_std": 6.957125868203101,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 38,
+          "h_median": 20.0,
+          "h_std": 2.723652427986445,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 27.0,
+          "h_std": 0.0,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 42.0
+        }
+      }
+    },
+    "c20": {
+      "coverage_limit_sec": 1195.4000244140625,
+      "window": {
+        "start_sec": 664.0,
+        "end_sec": 722.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 84.01847800925925,
+        "h_std": 46.204853982430365,
+        "s_mean": 113.09393518518519,
+        "s_std": 63.33292852662453,
+        "v_mean": 130.62340386284723,
+        "v_std": 72.33920882626846,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 61,
+          "h_median": 177.0,
+          "h_std": 25.115456600462984,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 48,
+          "h_median": 110.0,
+          "h_std": 10.263118299143892,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 4,
+          "h_median": 73.5,
+          "h_std": 1.479019945774904,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 61,
+          "h_median": 20.0,
+          "h_std": 0.9892597108939379,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 74,
+          "h_median": 138.0,
+          "h_std": 13.10928526338769,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c21": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 602.0,
+        "end_sec": 644.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 106.09708297164352,
+        "h_std": 62.208372260566605,
+        "s_mean": 109.48299949363425,
+        "s_std": 73.7296869460947,
+        "v_mean": 102.35910951967593,
+        "v_std": 77.25651987641056,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 24,
+          "h_median": 177.0,
+          "h_std": 0.5204164998665332,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 26,
+          "h_median": 110.0,
+          "h_std": 1.3317915148600603,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 34,
+          "h_median": 58.0,
+          "h_std": 4.349387460353103,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 19,
+          "h_median": 138.0,
+          "h_std": 1.3210421471590668,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c22": {
+      "coverage_limit_sec": 1193.0,
+      "window": {
+        "start_sec": 604.0,
+        "end_sec": 664.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 87.64084563078704,
+        "h_std": 45.88201550211222,
+        "s_mean": 111.54026005497686,
+        "s_std": 61.11460152184803,
+        "v_mean": 125.02270146122684,
+        "v_std": 75.08332589113618,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 48,
+          "h_median": 178.0,
+          "h_std": 0.5910795208768445,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 33,
+          "h_median": 109.0,
+          "h_std": 0.9403709484353273,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 2,
+          "h_median": 77.0,
+          "h_std": 3.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 47,
+          "h_median": 18.0,
+          "h_std": 1.0069923035063177,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 46,
+          "h_median": 138.0,
+          "h_std": 1.132314490704819,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c23": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 710.0,
+        "end_sec": 752.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 9,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 110.13664677372685,
+        "h_std": 41.83466984826992,
+        "s_mean": 110.51072808159722,
+        "s_std": 51.71091195989718,
+        "v_mean": 122.3541333912037,
+        "v_std": 65.48747719859404,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 53,
+          "h_median": 176.0,
+          "h_std": 0.5291502622129182,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 64,
+          "h_median": 58.0,
+          "h_std": 12.800716284737497,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 59,
+          "h_median": 19.0,
+          "h_std": 14.20333420967225,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 74,
+          "h_median": 139.0,
+          "h_std": 13.595711159885091,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c24": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 694.0,
+        "end_sec": 750.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 9,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 73.47354962384259,
+        "h_std": 46.78818696280601,
+        "s_mean": 168.32940646701388,
+        "s_std": 72.63271692852622,
+        "v_mean": 132.9100003616898,
+        "v_std": 82.20439437924819,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 1,
+          "h_median": 3.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 60,
+          "h_median": 108.0,
+          "h_std": 11.041474841101014,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 57,
+          "h_median": 58.0,
+          "h_std": 6.493811719111886,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 86,
+          "h_median": 22.0,
+          "h_std": 2.2809451823365308,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 55,
+          "h_median": 138.0,
+          "h_std": 0.3525585350848239,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c25": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 646.0,
+        "end_sec": 706.0,
+        "game_abs_idx": 11,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 93.13351164641203,
+        "h_std": 46.9521546413466,
+        "s_mean": 112.73153501157407,
+        "s_std": 60.13405080814269,
+        "v_mean": 119.28455222800926,
+        "v_std": 73.8537082247213,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 25,
+          "h_median": 177.0,
+          "h_std": 14.093103120163265,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 29,
+          "h_median": 109.0,
+          "h_std": 1.220611725546749,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 2,
+          "h_median": 73.5,
+          "h_std": 0.5,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 29,
+          "h_median": 20.0,
+          "h_std": 25.957387562781108,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 31,
+          "h_median": 138.0,
+          "h_std": 0.4784644185223008,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c26": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 642.0,
+        "end_sec": 702.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 108.89825846354167,
+        "h_std": 32.39017332664716,
+        "s_mean": 123.07801576967593,
+        "s_std": 54.11374131173895,
+        "v_mean": 122.49383572048612,
+        "v_std": 72.25859219518075,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 46,
+          "h_median": 177.0,
+          "h_std": 12.782830521589,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 74,
+          "h_median": 109.0,
+          "h_std": 16.983648088986026,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 52,
+          "h_median": 56.0,
+          "h_std": 9.544445044790072,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 2,
+          "h_median": 20.0,
+          "h_std": 2.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 64,
+          "h_median": 139.0,
+          "h_std": 1.2865743031399313,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c27": {
+      "coverage_limit_sec": 1197.199951171875,
+      "window": {
+        "start_sec": 752.0,
+        "end_sec": 824.0,
+        "game_abs_idx": 5,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 91.99536639178241,
+        "h_std": 46.440850977147726,
+        "s_mean": 101.82949074074074,
+        "s_std": 56.733825609235744,
+        "v_mean": 127.66288302951389,
+        "v_std": 63.48675862888284,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 69,
+          "h_median": 176.0,
+          "h_std": 13.148563351181929,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 59,
+          "h_median": 58.0,
+          "h_std": 11.071604972005336,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 43,
+          "h_median": 19.0,
+          "h_std": 22.52969316466838,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 61,
+          "h_median": 139.0,
+          "h_std": 20.66741798300857,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c28": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 596.0,
+        "end_sec": 656.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 74.35497142650463,
+        "h_std": 38.59139499847275,
+        "s_mean": 114.05482458043981,
+        "s_std": 60.01676988450916,
+        "v_mean": 118.53722800925927,
+        "v_std": 74.89264652902595,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 18,
+          "h_median": 2.0,
+          "h_std": 15.190420958251583,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 25,
+          "h_median": 109.0,
+          "h_std": 17.621010186706094,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 46,
+          "h_median": 59.0,
+          "h_std": 15.783387212802667,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 32,
+          "h_median": 20.0,
+          "h_std": 43.92275879580397,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 132.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c29": {
+      "coverage_limit_sec": 1198.5999755859375,
+      "window": {
+        "start_sec": 712.0,
+        "end_sec": 760.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 125.66611002604166,
+        "h_std": 54.334021716144406,
+        "s_mean": 117.65603696469907,
+        "s_std": 56.13969283294739,
+        "v_mean": 126.86667173032407,
+        "v_std": 69.98334442882843,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 59,
+          "h_median": 5.0,
+          "h_std": 6.4516682677815975,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 35,
+          "h_median": 110.0,
+          "h_std": 10.959796661304571,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 2,
+          "h_median": 75.5,
+          "h_std": 1.5,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 26,
+          "h_median": 19.0,
+          "h_std": 0.9638433912416667,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 55,
+          "h_median": 138.0,
+          "h_std": 4.818353341715388,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c34": {
+      "coverage_limit_sec": 1197.7989501953125,
+      "window": {
+        "start_sec": 648.0,
+        "end_sec": 690.0,
+        "game_abs_idx": 11,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 109.91787651909722,
+        "h_std": 51.772797289951036,
+        "s_mean": 122.8232642505787,
+        "s_std": 54.41309378631129,
+        "v_mean": 127.25009801793982,
+        "v_std": 70.17248200994251,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 43,
+          "h_median": 4.25,
+          "h_std": 8.958153867290916,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 52,
+          "h_median": 109.0,
+          "h_std": 2.1153846153846154,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 36,
+          "h_median": 58.0,
+          "h_std": 6.144040071082035,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 58,
+          "h_median": 138.0,
+          "h_std": 0.3290574945515916,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c35": {
+      "coverage_limit_sec": 1197.5999755859375,
+      "window": {
+        "start_sec": 618.0,
+        "end_sec": 686.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 116.30988823784722,
+        "h_std": 51.05366549465714,
+        "s_mean": 115.9594017650463,
+        "s_std": 55.92725835728069,
+        "v_mean": 119.15174153645833,
+        "v_std": 72.77353660175083,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 36,
+          "h_median": 7.0,
+          "h_std": 8.363801395138177,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 22,
+          "h_median": 108.75,
+          "h_std": 2.298602701678846,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 10,
+          "h_median": 73.5,
+          "h_std": 36.14419040454496,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 42,
+          "h_median": 19.5,
+          "h_std": 22.647278748094166,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 46,
+          "h_median": 138.0,
+          "h_std": 3.8312249345417992,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c36": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 660.0,
+        "end_sec": 734.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 85.84489872685185,
+        "h_std": 40.388269165534446,
+        "s_mean": 93.47942563657408,
+        "s_std": 62.49027122674269,
+        "v_mean": 115.21601453993055,
+        "v_std": 74.84056893012699,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 37,
+          "h_median": 109.0,
+          "h_std": 4.737406896730136,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 39,
+          "h_median": 58.0,
+          "h_std": 7.349095486571319,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 37,
+          "h_median": 19.0,
+          "h_std": 6.846832029381786,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 46,
+          "h_median": 138.0,
+          "h_std": 17.3765290496907,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c37": {
+      "coverage_limit_sec": 1198.5999755859375,
+      "window": {
+        "start_sec": 650.0,
+        "end_sec": 682.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 10,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 104.3973122829861,
+        "h_std": 42.72095475691909,
+        "s_mean": 119.23103479456019,
+        "s_std": 52.763617684442146,
+        "v_mean": 124.16071361400464,
+        "v_std": 65.42501736816304,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 44,
+          "h_median": 177.0,
+          "h_std": 9.073389051996443,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 65,
+          "h_median": 110.0,
+          "h_std": 1.876923076923077,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 43,
+          "h_median": 58.0,
+          "h_std": 5.860718894468354,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 67,
+          "h_median": 20.0,
+          "h_std": 28.504952222037907,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        }
+      }
+    },
+    "c40": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 652.0,
+        "end_sec": 742.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 9,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 90.54581018518519,
+        "h_std": 70.14106115963307,
+        "s_mean": 103.20635416666667,
+        "s_std": 56.39906247543803,
+        "v_mean": 134.3016872829861,
+        "v_std": 66.98643532393486,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 59,
+          "h_median": 177.0,
+          "h_std": 0.584248366575512,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 60,
+          "h_median": 57.0,
+          "h_std": 13.989688663043536,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 63,
+          "h_median": 19.0,
+          "h_std": 0.9878960084733469,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 56,
+          "h_median": 138.0,
+          "h_std": 28.702733994787156,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c41": {
+      "coverage_limit_sec": 1197.4000244140625,
+      "window": {
+        "start_sec": 550.0,
+        "end_sec": 606.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 84.40269567418981,
+        "h_std": 46.42190693488568,
+        "s_mean": 130.16111255787038,
+        "s_std": 60.270707812842694,
+        "v_mean": 116.39034866898149,
+        "v_std": 78.3920624297556,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 60,
+          "h_median": 178.0,
+          "h_std": 0.7875575620741934,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 58,
+          "h_median": 109.0,
+          "h_std": 1.4247107890173534,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 60,
+          "h_median": 59.0,
+          "h_std": 4.467350693892548,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 43,
+          "h_median": 19.0,
+          "h_std": 10.783992002250239,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 131.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c42": {
+      "coverage_limit_sec": 1198.5999755859375,
+      "window": {
+        "start_sec": 566.0,
+        "end_sec": 610.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 125.81187789351851,
+        "h_std": 42.801115223605976,
+        "s_mean": 117.08229636863426,
+        "s_std": 44.86492381402626,
+        "v_mean": 109.17343677662036,
+        "v_std": 59.887600684043605,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 11,
+          "h_median": 178.0,
+          "h_std": 0.4714045207910317,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 15,
+          "h_median": 109.0,
+          "h_std": 2.6246692913372702,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 20,
+          "h_median": 72.5,
+          "h_std": 27.76616646208115,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 1,
+          "h_median": 14.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 4,
+          "h_median": 138.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c43": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 600.0,
+        "end_sec": 672.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 75.02620768229167,
+        "h_std": 52.120246134811545,
+        "s_mean": 117.39008716724537,
+        "s_std": 53.20893146891668,
+        "v_mean": 126.98508029513889,
+        "v_std": 72.42509589595984,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 60,
+          "h_median": 177.0,
+          "h_std": 0.5571631343484301,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 69,
+          "h_median": 57.0,
+          "h_std": 4.248985200762047,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 38,
+          "h_median": 20.0,
+          "h_std": 0.9059857886895795,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 58,
+          "h_median": 138.0,
+          "h_std": 0.8587868555456738,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c44": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 634.0,
+        "end_sec": 700.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 70.66675925925927,
+        "h_std": 53.42870248083696,
+        "s_mean": 126.33855758101852,
+        "s_std": 47.6565867823848,
+        "v_mean": 115.93095305266203,
+        "v_std": 63.649356984055714,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 29,
+          "h_median": 177.0,
+          "h_std": 16.124713950951193,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 20,
+          "h_median": 110.0,
+          "h_std": 31.8305179819619,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 5,
+          "h_median": 73.0,
+          "h_std": 3.9191835884530852,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 24,
+          "h_median": 18.5,
+          "h_std": 34.307332387633345,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 24,
+          "h_median": 138.0,
+          "h_std": 6.86122357082823,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c45": {
+      "coverage_limit_sec": 1198.800048828125,
+      "window": {
+        "start_sec": 656.0,
+        "end_sec": 718.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 72.24865342881944,
+        "h_std": 46.029569667912305,
+        "s_mean": 114.21819444444445,
+        "s_std": 46.01848875790825,
+        "v_mean": 111.07515299479167,
+        "v_std": 64.2188354664129,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 16,
+          "h_median": 177.0,
+          "h_std": 0.5890150893739516,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 17,
+          "h_median": 109.0,
+          "h_std": 1.741017480817499,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 18,
+          "h_median": 58.0,
+          "h_std": 17.498853577969324,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 19,
+          "h_median": 138.0,
+          "h_std": 5.282071280123949,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c46": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 650.0,
+        "end_sec": 716.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 71.56301396122686,
+        "h_std": 45.45443732208453,
+        "s_mean": 132.09806242766203,
+        "s_std": 57.81053534581039,
+        "v_mean": 118.99899341724537,
+        "v_std": 80.48071169229895,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 32,
+          "h_median": 178.0,
+          "h_std": 1.1135528725660042,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 38,
+          "h_median": 58.0,
+          "h_std": 7.705326520446983,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 49,
+          "h_median": 19.0,
+          "h_std": 1.9991668402054625,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 53,
+          "h_median": 138.0,
+          "h_std": 1.210785751481845,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c47": {
+      "coverage_limit_sec": 1195.5999755859375,
+      "window": {
+        "start_sec": 672.0,
+        "end_sec": 728.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 78.87157190393519,
+        "h_std": 49.70310702219054,
+        "s_mean": 131.36643952546297,
+        "s_std": 57.888801207684686,
+        "v_mean": 123.89682183159722,
+        "v_std": 75.16931959701499,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 43,
+          "h_median": 178.0,
+          "h_std": 2.046798977963265,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 45,
+          "h_median": 110.0,
+          "h_std": 12.493623064745893,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 2,
+          "h_median": 74.5,
+          "h_std": 0.5,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 40,
+          "h_median": 17.0,
+          "h_std": 1.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 45,
+          "h_median": 138.0,
+          "h_std": 21.047975768482278,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c48": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 592.0,
+        "end_sec": 640.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 10,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 118.64803240740741,
+        "h_std": 50.18695499686892,
+        "s_mean": 115.26586371527777,
+        "s_std": 49.98126024044737,
+        "v_mean": 122.09045464409722,
+        "v_std": 61.90147900528124,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 49,
+          "h_median": 177.0,
+          "h_std": 9.727763734254777,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 52,
+          "h_median": 110.0,
+          "h_std": 8.73678207046196,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 52,
+          "h_median": 59.0,
+          "h_std": 5.884018320640507,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 36,
+          "h_median": 18.0,
+          "h_std": 33.12325874761915,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 3,
+          "h_median": 110.0,
+          "h_std": 10.143416036468626,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 20.0
+        }
+      }
+    },
+    "c49": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 644.0,
+        "end_sec": 694.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 113.65979202835648,
+        "h_std": 59.43072879010251,
+        "s_mean": 109.98827835648149,
+        "s_std": 54.41559839658901,
+        "v_mean": 125.1752271412037,
+        "v_std": 62.26507568376516,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 48,
+          "h_median": 3.0,
+          "h_std": 8.036854939986718,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 37,
+          "h_median": 108.0,
+          "h_std": 15.662890872211271,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 38,
+          "h_median": 59.0,
+          "h_std": 48.29646443016604,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 28,
+          "h_median": 138.0,
+          "h_std": 1.670191850155703,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c50": {
+      "coverage_limit_sec": 1198.998046875,
+      "window": {
+        "start_sec": 602.0,
+        "end_sec": 646.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 53.65451352719907,
+        "h_std": 39.1780190863963,
+        "s_mean": 129.71529839409723,
+        "s_std": 53.30472645921756,
+        "v_mean": 108.66601960358797,
+        "v_std": 72.78993221231015,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 41,
+          "h_median": 177.0,
+          "h_std": 15.779943480795136,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 31,
+          "h_median": 109.0,
+          "h_std": 1.307347363171577,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 31,
+          "h_median": 58.0,
+          "h_std": 2.9291850180429297,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 34,
+          "h_median": 20.0,
+          "h_std": 1.3490994048446723,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        }
+      }
+    },
+    "c51": {
+      "coverage_limit_sec": 1194.800048828125,
+      "window": {
+        "start_sec": 604.0,
+        "end_sec": 642.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 96.25860749421297,
+        "h_std": 59.95885038866356,
+        "s_mean": 100.56729058159722,
+        "s_std": 60.742502439560305,
+        "v_mean": 117.76824833622685,
+        "v_std": 71.94167614563737,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 29,
+          "h_median": 108.0,
+          "h_std": 2.700244406958882,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 41,
+          "h_median": 59.0,
+          "h_std": 15.864855333132585,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 52,
+          "h_median": 21.0,
+          "h_std": 6.1438319962083225,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 40,
+          "h_median": 138.0,
+          "h_std": 1.7173744495595595,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c52": {
+      "coverage_limit_sec": 1198.0,
+      "window": {
+        "start_sec": 616.0,
+        "end_sec": 660.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 81.66060836226852,
+        "h_std": 41.38236458115718,
+        "s_mean": 125.35075122974537,
+        "s_std": 48.35972211828578,
+        "v_mean": 116.68856553819444,
+        "v_std": 69.5536149375375,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 38,
+          "h_median": 4.5,
+          "h_std": 6.711536502338509,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 30,
+          "h_median": 58.0,
+          "h_std": 5.935673695733468,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 36,
+          "h_median": 19.0,
+          "h_std": 19.279058554956254,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 54,
+          "h_median": 138.0,
+          "h_std": 1.0075163339804032,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c53": {
+      "coverage_limit_sec": 1199.0,
+      "window": {
+        "start_sec": 626.0,
+        "end_sec": 698.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 104.87139286747686,
+        "h_std": 35.93355047629166,
+        "s_mean": 124.28889793113426,
+        "s_std": 51.75487435396332,
+        "v_mean": 132.4221683304398,
+        "v_std": 64.06758705378569,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 42,
+          "h_median": 177.0,
+          "h_std": 2.4667328533225716,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 39,
+          "h_median": 109.0,
+          "h_std": 1.3936080247898661,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 37,
+          "h_median": 57.0,
+          "h_std": 2.7118763231591205,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 45,
+          "h_median": 138.0,
+          "h_std": 3.1969120903741235,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c54": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 600.0,
+        "end_sec": 676.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 81.50385091145833,
+        "h_std": 49.45910811620853,
+        "s_mean": 126.76312644675926,
+        "s_std": 53.08506141581142,
+        "v_mean": 115.96314019097223,
+        "v_std": 69.03866017334349,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 66,
+          "h_median": 110.0,
+          "h_std": 16.662783638571877,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 54,
+          "h_median": 58.0,
+          "h_std": 21.092448297233485,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 47,
+          "h_median": 16.0,
+          "h_std": 22.561439680006814,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 53,
+          "h_median": 137.0,
+          "h_std": 22.130410592207916,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c55": {
+      "coverage_limit_sec": 1185.800048828125,
+      "window": {
+        "start_sec": 644.0,
+        "end_sec": 688.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 92.66582501446759,
+        "h_std": 37.40160075122978,
+        "s_mean": 122.65101960358797,
+        "s_std": 51.062634650878074,
+        "v_mean": 114.75252495659723,
+        "v_std": 69.81270131781045,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 46,
+          "h_median": 178.0,
+          "h_std": 10.400533339689845,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 34,
+          "h_median": 109.0,
+          "h_std": 1.4444740185657263,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 50,
+          "h_median": 58.0,
+          "h_std": 3.561474413778653,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 24,
+          "h_median": 18.0,
+          "h_std": 1.1575161985907585,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 130.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c56": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 668.0,
+        "end_sec": 732.0,
+        "game_abs_idx": 10,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 4,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 93.2165353732639,
+        "h_std": 42.29882895637718,
+        "s_mean": 103.67715133101852,
+        "s_std": 62.22480715873532,
+        "v_mean": 114.94604636863426,
+        "v_std": 74.30301261715711,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 25,
+          "h_median": 2.0,
+          "h_std": 4.158485983032468,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 20,
+          "h_median": 58.0,
+          "h_std": 10.710362972374,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 28,
+          "h_median": 20.0,
+          "h_std": 7.8454458387119885,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 31,
+          "h_median": 138.0,
+          "h_std": 22.287264623817585,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c57": {
+      "coverage_limit_sec": 1197.800048828125,
+      "window": {
+        "start_sec": 612.0,
+        "end_sec": 684.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 71.92884729456019,
+        "h_std": 50.35946523182557,
+        "s_mean": 126.64367115162037,
+        "s_std": 50.727577528503936,
+        "v_mean": 119.26183883101852,
+        "v_std": 65.47424306402753,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 45,
+          "h_median": 178.0,
+          "h_std": 1.0497813183356477,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 26,
+          "h_median": 109.0,
+          "h_std": 1.1135595147541097,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 43,
+          "h_median": 58.0,
+          "h_std": 8.471933748478884,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 39,
+          "h_median": 19.0,
+          "h_std": 15.313392831113555,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 1,
+          "h_median": 131.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c58": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 678.0,
+        "end_sec": 748.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 113.97540328414352,
+        "h_std": 34.14442904743799,
+        "s_mean": 123.4046119068287,
+        "s_std": 52.91133227635335,
+        "v_mean": 124.32306315104167,
+        "v_std": 72.14252241220153,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 47,
+          "h_median": 176.0,
+          "h_std": 0.655788723720104,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 58,
+          "h_median": 111.0,
+          "h_std": 1.6843909903355054,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 52,
+          "h_median": 60.0,
+          "h_std": 1.2722501963569028,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 54,
+          "h_median": 139.0,
+          "h_std": 0.955813918560292,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c59": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 598.0,
+        "end_sec": 670.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 89.83861219618055,
+        "h_std": 44.657181184709046,
+        "s_mean": 97.40543077256945,
+        "s_std": 58.75748990456113,
+        "v_mean": 130.13526294849538,
+        "v_std": 67.33805946686383,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 68,
+          "h_median": 177.0,
+          "h_std": 9.670145189653603,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 34,
+          "h_median": 109.0,
+          "h_std": 3.8101859929717423,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 55,
+          "h_median": 58.0,
+          "h_std": 14.431410874710439,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 53,
+          "h_median": 138.0,
+          "h_std": 2.940249890693361,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c60": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 660.0,
+        "end_sec": 730.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 102.16918511284722,
+        "h_std": 50.18800977722993,
+        "s_mean": 107.82148763020834,
+        "s_std": 62.281983436687284,
+        "v_mean": 133.57845341435186,
+        "v_std": 74.15784154937364,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 67,
+          "h_median": 6.0,
+          "h_std": 8.30212258904604,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 2,
+          "h_median": 99.5,
+          "h_std": 0.5,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 0.5
+        },
+        "緑": {
+          "n": 63,
+          "h_median": 58.0,
+          "h_std": 6.014637390380878,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 81,
+          "h_median": 18.0,
+          "h_std": 25.267919662298215,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 94,
+          "h_median": 138.0,
+          "h_std": 1.8618920875731004,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c61": {
+      "coverage_limit_sec": 1193.0,
+      "window": {
+        "start_sec": 652.0,
+        "end_sec": 702.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 9,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 112.65327220775463,
+        "h_std": 56.28625791406188,
+        "s_mean": 101.65345305266203,
+        "s_std": 55.86050791370469,
+        "v_mean": 137.20570855034723,
+        "v_std": 66.81579368403216,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 64,
+          "h_median": 177.25,
+          "h_std": 11.213827191490523,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 52,
+          "h_median": 57.0,
+          "h_std": 10.250288637875682,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 70,
+          "h_median": 20.0,
+          "h_std": 18.14321709429208,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 74,
+          "h_median": 138.0,
+          "h_std": 2.3538740738595214,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c62": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 764.0,
+        "end_sec": 820.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 120.05850188078703,
+        "h_std": 55.41028816529647,
+        "s_mean": 117.6047142650463,
+        "s_std": 51.55272355323265,
+        "v_mean": 119.45612268518518,
+        "v_std": 65.10523894437854,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 43,
+          "h_median": 178.0,
+          "h_std": 10.415065710306393,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 31,
+          "h_median": 109.0,
+          "h_std": 2.4308329871561334,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 36,
+          "h_median": 58.0,
+          "h_std": 11.031170762664393,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 23,
+          "h_median": 19.0,
+          "h_std": 19.502411270625487,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        }
+      }
+    },
+    "c63": {
+      "coverage_limit_sec": 1194.199951171875,
+      "window": {
+        "start_sec": 538.0,
+        "end_sec": 642.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 101.83186957465277,
+        "h_std": 39.16213693736501,
+        "s_mean": 119.7068211082176,
+        "s_std": 56.64720351567316,
+        "v_mean": 129.37127459490742,
+        "v_std": 73.6418657008893,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 79,
+          "h_median": 109.0,
+          "h_std": 10.17904920813361,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 59,
+          "h_median": 58.0,
+          "h_std": 11.627013637910972,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 76,
+          "h_median": 19.0,
+          "h_std": 28.70479328524204,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 65,
+          "h_median": 138.0,
+          "h_std": 0.9686200762275196,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c64": {
+      "coverage_limit_sec": 1196.39501953125,
+      "window": {
+        "start_sec": 94.0,
+        "end_sec": 1196.39501953125,
+        "game_abs_idx": 0,
+        "note": "fallback_any_duration"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 57.49749095775463,
+        "h_std": 44.14132766400234,
+        "s_mean": 131.59213903356482,
+        "s_std": 58.3741233562863,
+        "v_mean": 121.2648972800926,
+        "v_std": 81.77235241071918,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 40,
+          "h_median": 178.0,
+          "h_std": 10.862181765921653,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 75,
+          "h_median": 108.5,
+          "h_std": 17.81254239761036,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 64,
+          "h_median": 58.0,
+          "h_std": 22.789681170896046,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 67,
+          "h_median": 19.5,
+          "h_std": 6.529684432850041,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 33,
+          "h_median": 138.0,
+          "h_std": 0.4104914298225474,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c65": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 644.0,
+        "end_sec": 716.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 123.81779730902778,
+        "h_std": 45.631774740650684,
+        "s_mean": 120.03056061921296,
+        "s_std": 52.1583759795825,
+        "v_mean": 123.29006763599537,
+        "v_std": 67.53668283406382,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 35,
+          "h_median": 178.0,
+          "h_std": 15.937867642818471,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 53,
+          "h_median": 109.0,
+          "h_std": 19.92625689328392,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 45,
+          "h_median": 59.0,
+          "h_std": 14.507452320773147,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 3,
+          "h_median": 173.0,
+          "h_std": 66.4880941723153,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 21.0
+        },
+        "紫": {
+          "n": 67,
+          "h_median": 138.0,
+          "h_std": 19.57825544918403,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c66": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 732.0,
+        "end_sec": 778.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 85.30133572048611,
+        "h_std": 34.584974851579254,
+        "s_mean": 109.21480866608796,
+        "s_std": 58.93764992729885,
+        "v_mean": 127.59126736111111,
+        "v_std": 68.59055311340663,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 44,
+          "h_median": 109.0,
+          "h_std": 1.2036338746197832,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 43,
+          "h_median": 57.0,
+          "h_std": 2.5353637266887326,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 29,
+          "h_median": 20.0,
+          "h_std": 0.6487892318009234,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 29,
+          "h_median": 138.0,
+          "h_std": 0.30454347814923616,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c67": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 560.0,
+        "end_sec": 704.0,
+        "game_abs_idx": 7,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 100.84903464988426,
+        "h_std": 31.13995431626333,
+        "s_mean": 116.2834375,
+        "s_std": 51.445281874903,
+        "v_mean": 113.47072735821759,
+        "v_std": 67.62537568269673,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 33,
+          "h_median": 178.0,
+          "h_std": 0.6547602137424051,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 33,
+          "h_median": 110.0,
+          "h_std": 2.250803346025445,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 27,
+          "h_median": 59.0,
+          "h_std": 18.738691148352938,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 26,
+          "h_median": 138.0,
+          "h_std": 17.341718689351172,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c68": {
+      "coverage_limit_sec": 1197.0,
+      "window": {
+        "start_sec": 608.0,
+        "end_sec": 714.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 71.19091362847222,
+        "h_std": 49.923743080492464,
+        "s_mean": 126.10723198784723,
+        "s_std": 55.78347156652377,
+        "v_mean": 120.41333912037037,
+        "v_std": 72.1312005237328,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 40,
+          "h_median": 178.0,
+          "h_std": 16.67407242871473,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 57,
+          "h_median": 109.0,
+          "h_std": 15.461048267909538,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 39,
+          "h_median": 59.0,
+          "h_std": 10.922098788515331,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 60,
+          "h_median": 19.0,
+          "h_std": 20.516010008446248,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        }
+      }
+    },
+    "c69": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 668.0,
+        "end_sec": 718.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 78.32007631655092,
+        "h_std": 49.416564689882925,
+        "s_mean": 130.96973741319445,
+        "s_std": 51.22205633553435,
+        "v_mean": 111.57600766782407,
+        "v_std": 72.88444727476086,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 45,
+          "h_median": 177.0,
+          "h_std": 19.459589405604394,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 59,
+          "h_median": 111.0,
+          "h_std": 25.793068644846862,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 64,
+          "h_median": 60.5,
+          "h_std": 19.126236620048747,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 75,
+          "h_median": 139.0,
+          "h_std": 25.972390468854933,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c70": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 620.0,
+        "end_sec": 682.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 75.88560329861112,
+        "h_std": 64.75878330020711,
+        "s_mean": 131.9663035300926,
+        "s_std": 62.81301582356285,
+        "v_mean": 120.53387984664352,
+        "v_std": 73.77587869986532,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 42,
+          "h_median": 108.0,
+          "h_std": 1.3663015938479592,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 68,
+          "h_median": 58.0,
+          "h_std": 5.96219708812507,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 53,
+          "h_median": 20.0,
+          "h_std": 0.8576089190463028,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 54,
+          "h_median": 138.0,
+          "h_std": 1.3523591133525759,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c71": {
+      "coverage_limit_sec": 1197.5999755859375,
+      "window": {
+        "start_sec": 574.0,
+        "end_sec": 612.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 91.84179723668981,
+        "h_std": 62.895175388260554,
+        "s_mean": 110.62848596643518,
+        "s_std": 57.41791181177855,
+        "v_mean": 130.09071361400464,
+        "v_std": 66.31434540526838,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 55,
+          "h_median": 3.0,
+          "h_std": 10.028584147326082,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 70,
+          "h_median": 109.0,
+          "h_std": 14.624978632463025,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 57,
+          "h_median": 58.0,
+          "h_std": 15.462103316361448,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 50,
+          "h_median": 19.0,
+          "h_std": 31.53680389640016,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        }
+      }
+    },
+    "c72": {
+      "coverage_limit_sec": 1196.5999755859375,
+      "window": {
+        "start_sec": 624.0,
+        "end_sec": 716.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 91.69936487268518,
+        "h_std": 64.14697846088643,
+        "s_mean": 126.66045355902777,
+        "s_std": 52.28616644404765,
+        "v_mean": 115.20240270543981,
+        "v_std": 71.28313895884472,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 69,
+          "h_median": 109.0,
+          "h_std": 17.160059844133187,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 47,
+          "h_median": 58.0,
+          "h_std": 22.994173293082802,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 72,
+          "h_median": 19.0,
+          "h_std": 47.165745946222245,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 32,
+          "h_median": 138.0,
+          "h_std": 21.480545113180323,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c73": {
+      "coverage_limit_sec": 1198.800048828125,
+      "window": {
+        "start_sec": 670.0,
+        "end_sec": 720.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 10,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 99.53304072627314,
+        "h_std": 33.34340980345028,
+        "s_mean": 126.07000289351852,
+        "s_std": 47.68109531981184,
+        "v_mean": 119.5144288917824,
+        "v_std": 63.85887990237368,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "青": {
+          "n": 46,
+          "h_median": 109.0,
+          "h_std": 2.130878392146582,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 57,
+          "h_median": 58.0,
+          "h_std": 8.652182655077839,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 49,
+          "h_median": 19.0,
+          "h_std": 24.98809379124953,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 49,
+          "h_median": 138.0,
+          "h_std": 4.318219780666077,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c74": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 650.0,
+        "end_sec": 682.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 120.183134765625,
+        "h_std": 43.52389484883141,
+        "s_mean": 123.16890986689815,
+        "s_std": 50.84137629461793,
+        "v_mean": 114.0389525462963,
+        "v_std": 69.4622683384044,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 2,
+          "h_median": 163.0,
+          "h_std": 2.0,
+          "within_default_range": false,
+          "dist_to_default_range_deg": 3.0
+        },
+        "青": {
+          "n": 33,
+          "h_median": 109.0,
+          "h_std": 1.2045216311728357,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 63,
+          "h_median": 58.0,
+          "h_std": 2.8181868055095816,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 36,
+          "h_median": 19.0,
+          "h_std": 0.927960727138337,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 65,
+          "h_median": 138.0,
+          "h_std": 0.3892034043284158,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c75": {
+      "coverage_limit_sec": 1196.4000244140625,
+      "window": {
+        "start_sec": 678.0,
+        "end_sec": 714.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 9,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 105.72994321469908,
+        "h_std": 37.099291024113334,
+        "s_mean": 118.02553023726851,
+        "s_std": 55.10653707987966,
+        "v_mean": 133.3692581741898,
+        "v_std": 65.95848577231793,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 38,
+          "h_median": 177.0,
+          "h_std": 2.7122803270828753,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 49,
+          "h_median": 109.0,
+          "h_std": 2.8903320153027194,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 87,
+          "h_median": 58.0,
+          "h_std": 2.5556560780289543,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 50,
+          "h_median": 138.0,
+          "h_std": 0.48176757881783616,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c76": {
+      "coverage_limit_sec": 1199.199951171875,
+      "window": {
+        "start_sec": 650.0,
+        "end_sec": 728.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 8,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 86.44515010127314,
+        "h_std": 46.639582061776395,
+        "s_mean": 107.03680230034722,
+        "s_std": 63.24520387505877,
+        "v_mean": 138.02837058738427,
+        "v_std": 70.78353432163259,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 64,
+          "h_median": 177.0,
+          "h_std": 0.6315200093199417,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 40,
+          "h_median": 109.0,
+          "h_std": 3.3652405188931147,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 1,
+          "h_median": 74.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 57,
+          "h_median": 20.0,
+          "h_std": 20.112717151028885,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 58,
+          "h_median": 138.0,
+          "h_std": 0.9989590301290328,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c77": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 588.0,
+        "end_sec": 666.0,
+        "game_abs_idx": 9,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 98.10000868055556,
+        "h_std": 43.242478636435834,
+        "s_mean": 161.01392614293982,
+        "s_std": 62.20561929756755,
+        "v_mean": 114.92091290509259,
+        "v_std": 79.68126089141228,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 63,
+          "h_median": 1.0,
+          "h_std": 0.7551419297238467,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 56,
+          "h_median": 109.0,
+          "h_std": 3.333312074762143,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 8,
+          "h_median": 71.5,
+          "h_std": 1.2686114456365274,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 58,
+          "h_median": 21.0,
+          "h_std": 11.583076342256192,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 46,
+          "h_median": 137.0,
+          "h_std": 4.021210306007605,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c78": {
+      "coverage_limit_sec": 1199.4000244140625,
+      "window": {
+        "start_sec": 592.0,
+        "end_sec": 644.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 5,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 51.82885525173611,
+        "h_std": 46.87934199240887,
+        "s_mean": 143.43175600405092,
+        "s_std": 55.39291128677158,
+        "v_mean": 120.11492874710648,
+        "v_std": 78.20762644021006,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 45,
+          "h_median": 178.0,
+          "h_std": 0.6688686000117158,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 39,
+          "h_median": 109.0,
+          "h_std": 20.028439674429006,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 64,
+          "h_median": 58.0,
+          "h_std": 11.27319657140334,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "紫": {
+          "n": 35,
+          "h_median": 138.0,
+          "h_std": 18.49862653478548,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c79": {
+      "coverage_limit_sec": 1197.0,
+      "window": {
+        "start_sec": 600.0,
+        "end_sec": 638.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 7,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 127.31699363425926,
+        "h_std": 50.05910838219946,
+        "s_mean": 124.00591796875,
+        "s_std": 56.19844888653024,
+        "v_mean": 128.90436378761575,
+        "v_std": 65.48186413268829,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 53,
+          "h_median": 177.0,
+          "h_std": 0.43600830219967335,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 29,
+          "h_median": 110.0,
+          "h_std": 1.328369674776429,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 3,
+          "h_median": 71.0,
+          "h_std": 2.357022603955158,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 21,
+          "h_median": 20.5,
+          "h_std": 19.649594804059415,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 48,
+          "h_median": 139.0,
+          "h_std": 8.55125858792143,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c80": {
+      "coverage_limit_sec": 1199.5999755859375,
+      "window": {
+        "start_sec": 546.0,
+        "end_sec": 604.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 66.04319733796297,
+        "h_std": 47.97617282889789,
+        "s_mean": 143.68585141782407,
+        "s_std": 52.52874828017928,
+        "v_mean": 108.38929796006944,
+        "v_std": 71.76275432661537,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 28,
+          "h_median": 5.0,
+          "h_std": 5.521376639933197,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 2,
+          "h_median": 100.0,
+          "h_std": 0.0,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "緑": {
+          "n": 48,
+          "h_median": 58.0,
+          "h_std": 5.810287437310366,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 34,
+          "h_median": 18.5,
+          "h_std": 15.512691533577176,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 24,
+          "h_median": 138.0,
+          "h_std": 7.022656785955963,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    },
+    "c81": {
+      "coverage_limit_sec": 1199.800048828125,
+      "window": {
+        "start_sec": 706.0,
+        "end_sec": 776.0,
+        "game_abs_idx": 8,
+        "note": "ok"
+      },
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "n_cell_sync_ok": 6,
+      "n_cell_sync_total": 10,
+      "region_hsv": {
+        "h_mean": 106.56143373842593,
+        "h_std": 54.85244744582874,
+        "s_mean": 136.48269205729167,
+        "s_std": 55.41186798407799,
+        "v_mean": 120.40408420138888,
+        "v_std": 75.43982694340578,
+        "n_pixels": 2764800
+      },
+      "color_hue": {
+        "赤": {
+          "n": 36,
+          "h_median": 2.0,
+          "h_std": 8.296101863070932,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "青": {
+          "n": 0,
+          "h_median": null,
+          "h_std": null,
+          "within_default_range": null,
+          "dist_to_default_range_deg": null
+        },
+        "緑": {
+          "n": 45,
+          "h_median": 57.5,
+          "h_std": 17.722518283838436,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "黄": {
+          "n": 40,
+          "h_median": 20.0,
+          "h_std": 1.509915146622485,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        },
+        "紫": {
+          "n": 52,
+          "h_median": 137.0,
+          "h_std": 3.2645186629259317,
+          "within_default_range": true,
+          "dist_to_default_range_deg": 0.0
+        }
+      }
+    }
+  },
+  "v_series": {
+    "v29_match2_156s": {
+      "duration_sec": 153.03333333333333,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 103.39551793981481,
+        "h_std": 40.60395319328785,
+        "s_mean": 125.63260416666667,
+        "s_std": 56.285163745772785,
+        "v_mean": 134.68193504050927,
+        "v_std": 70.99137473825846,
+        "n_pixels": 2764800
+      }
+    },
+    "v29m2_buf15s": {
+      "duration_sec": 144.06666666666666,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 106.45257523148148,
+        "h_std": 40.16540312018343,
+        "s_mean": 127.17051540798612,
+        "s_std": 51.427183853419784,
+        "v_mean": 129.92005678530091,
+        "v_std": 69.63261848080053,
+        "n_pixels": 2764800
+      }
+    },
+    "v30_5min_90s": {
+      "duration_sec": 93.91666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 114.92662941261574,
+        "h_std": 49.90565918027868,
+        "s_mean": 113.8280222800926,
+        "s_std": 52.870818205624005,
+        "v_mean": 129.29482566550925,
+        "v_std": 65.899360573147,
+        "n_pixels": 2764800
+      }
+    },
+    "v30_match11_89s": {
+      "duration_sec": 94.95,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 115.41223813657408,
+        "h_std": 49.64365631705089,
+        "s_mean": 116.45373589409722,
+        "s_std": 57.749148185431466,
+        "v_mean": 139.58639829282407,
+        "v_std": 65.83356622369529,
+        "n_pixels": 2764800
+      }
+    },
+    "v30_match11_buf15s": {
+      "duration_sec": 108.01666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 126.07576244212963,
+        "h_std": 47.720179585903985,
+        "s_mean": 112.03530381944445,
+        "s_std": 51.10789203587819,
+        "v_mean": 124.5919484230324,
+        "v_std": 62.07310600114886,
+        "n_pixels": 2764800
+      }
+    },
+    "v40_match7_125s": {
+      "duration_sec": 121.98333333333333,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 106.552890625,
+        "h_std": 54.07251089373066,
+        "s_mean": 100.77199074074075,
+        "s_std": 61.921481036198976,
+        "v_mean": 127.86324544270833,
+        "v_std": 67.06643484387203,
+        "n_pixels": 2764800
+      }
+    },
+    "v40m7_buf15s": {
+      "duration_sec": 123.98333333333333,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 106.79393627025463,
+        "h_std": 54.93771390052574,
+        "s_mean": 98.9755052806713,
+        "s_std": 60.872776656248234,
+        "v_mean": 125.16906647858796,
+        "v_std": 66.66103944189824,
+        "n_pixels": 2764800
+      }
+    },
+    "v51_match2_97s": {
+      "duration_sec": 97.0,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 107.58129448784722,
+        "h_std": 57.42161486148881,
+        "s_mean": 125.30615668402778,
+        "s_std": 52.77361606170591,
+        "v_mean": 118.06081163194445,
+        "v_std": 70.72294698766582,
+        "n_pixels": 2764800
+      }
+    },
+    "v51m2_buf15s": {
+      "duration_sec": 115.01666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 106.66370551215277,
+        "h_std": 53.54033991262097,
+        "s_mean": 125.6363599537037,
+        "s_std": 59.10903378627546,
+        "v_mean": 138.22943287037037,
+        "v_std": 70.81952230673119,
+        "n_pixels": 2764800
+      }
+    },
+    "v57_match2_100s": {
+      "duration_sec": 100.0,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 72.47991355613426,
+        "h_std": 50.5297838166095,
+        "s_mean": 116.11144603587962,
+        "s_std": 60.35965629332407,
+        "v_mean": 128.3853179253472,
+        "v_std": 69.61326819767766,
+        "n_pixels": 2764800
+      }
+    },
+    "v57m2_buf15s": {
+      "duration_sec": 119.01666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 71.41269856770833,
+        "h_std": 54.319069461236985,
+        "s_mean": 113.28465096932871,
+        "s_std": 52.10853368064652,
+        "v_mean": 120.03656430844907,
+        "v_std": 67.21438400717486,
+        "n_pixels": 2764800
+      }
+    },
+    "v70_match2_113s": {
+      "duration_sec": 113.0,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 75.17163953993055,
+        "h_std": 47.41281395154791,
+        "s_mean": 128.02163049768518,
+        "s_std": 54.11966893548393,
+        "v_mean": 124.40457248263888,
+        "v_std": 69.19862018296796,
+        "n_pixels": 2764800
+      }
+    },
+    "v70m2_buf15s": {
+      "duration_sec": 131.01666666666668,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 74.00332646122685,
+        "h_std": 48.591061228781264,
+        "s_mean": 124.26478515625,
+        "s_std": 51.3745890786415,
+        "v_mean": 123.47941984953704,
+        "v_std": 67.50139104198698,
+        "n_pixels": 2764800
+      }
+    },
+    "v89_match3_95s": {
+      "duration_sec": 90.16666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 90.57274233217592,
+        "h_std": 39.18978870265693,
+        "s_mean": 94.66519205729166,
+        "s_std": 51.55411854925774,
+        "v_mean": 113.68676540798612,
+        "v_std": 65.96863819065719,
+        "n_pixels": 2764800
+      }
+    },
+    "v89m3_buf15s": {
+      "duration_sec": 85.03333333333333,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 91.59711877893518,
+        "h_std": 41.12136111303762,
+        "s_mean": 98.44219111689814,
+        "s_std": 53.65042613297617,
+        "v_mean": 123.15611219618056,
+        "v_std": 64.749203825079,
+        "n_pixels": 2764800
+      }
+    },
+    "v95_match15_99s": {
+      "duration_sec": 102.26666666666667,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 106.20393229166666,
+        "h_std": 52.71002137739434,
+        "s_mean": 119.17731336805555,
+        "s_std": 56.211897545895475,
+        "v_mean": 87.55548502604167,
+        "v_std": 69.00521245659927,
+        "n_pixels": 2764800
+      }
+    },
+    "v95m15_buf15s": {
+      "duration_sec": 115.03333333333333,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 107.19483434606481,
+        "h_std": 51.191553432926845,
+        "s_mean": 102.9662839988426,
+        "s_std": 53.351042575320186,
+        "v_mean": 110.655224609375,
+        "v_std": 69.1985777787764,
+        "n_pixels": 2764800
+      }
+    },
+    "v97_match11_96s": {
+      "duration_sec": 96.0,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 113.52858723958333,
+        "h_std": 46.1376744829985,
+        "s_mean": 112.798701171875,
+        "s_std": 59.65202114160846,
+        "v_mean": 132.0620949074074,
+        "v_std": 69.77482227684494,
+        "n_pixels": 2764800
+      }
+    },
+    "v97_match11_buf15s": {
+      "duration_sec": 111.0,
+      "n_frames_read": 5,
+      "n_frames_target": 5,
+      "region_hsv": {
+        "h_mean": 124.06709165219907,
+        "h_std": 38.72744376843043,
+        "s_mean": 108.3545095486111,
+        "s_std": 49.29232713355617,
+        "v_mean": 112.13707465277778,
+        "v_std": 61.927101359974806,
+        "n_pixels": 2764800
+      }
+    }
+  },
+  "correlations": {
+    "c_series": {
+      "h_mean": {
+        "corr_vs_flicker_rate": 0.1632649577842695,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": -0.01559224933429962,
+        "n_reset": 66
+      },
+      "h_std": {
+        "corr_vs_flicker_rate": 0.2374630185720826,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": -0.05234124925845664,
+        "n_reset": 66
+      },
+      "s_mean": {
+        "corr_vs_flicker_rate": 0.11698523002375263,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": -0.08260347561669822,
+        "n_reset": 66
+      },
+      "s_std": {
+        "corr_vs_flicker_rate": -0.11274833873876386,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": 0.025978983681942486,
+        "n_reset": 66
+      },
+      "v_mean": {
+        "corr_vs_flicker_rate": -0.1470547975241207,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": 0.06793080104019449,
+        "n_reset": 66
+      },
+      "v_std": {
+        "corr_vs_flicker_rate": 0.009255445955680293,
+        "n_flicker": 66,
+        "corr_vs_baseline_reset_lines": -0.044502374522914716,
+        "n_reset": 66
+      }
+    },
+    "v_series": {
+      "h_mean": {
+        "corr_vs_current_default_acc": -0.30670600307504386,
+        "n_default": 19,
+        "corr_vs_with51_acc": -0.3340727944051018,
+        "n_with51": 19
+      },
+      "h_std": {
+        "corr_vs_current_default_acc": 0.014513508512335628,
+        "n_default": 19,
+        "corr_vs_with51_acc": 0.010231086850565063,
+        "n_with51": 19
+      },
+      "s_mean": {
+        "corr_vs_current_default_acc": 0.25207950421367886,
+        "n_default": 19,
+        "corr_vs_with51_acc": 0.2607650043164143,
+        "n_with51": 19
+      },
+      "s_std": {
+        "corr_vs_current_default_acc": -0.10705879655058888,
+        "n_default": 19,
+        "corr_vs_with51_acc": -0.10414809994620007,
+        "n_with51": 19
+      },
+      "v_mean": {
+        "corr_vs_current_default_acc": -0.2619473202463085,
+        "n_default": 19,
+        "corr_vs_with51_acc": -0.25784199627609244,
+        "n_with51": 19
+      },
+      "v_std": {
+        "corr_vs_current_default_acc": 0.3256876890027121,
+        "n_default": 19,
+        "corr_vs_with51_acc": 0.33019439557476005,
+        "n_with51": 19
+      }
+    }
+  }
+}

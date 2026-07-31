@@ -1,0 +1,3 @@
+PYTHONPATH=. ./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --output-suffix _baseline
+PYTHONPATH=. ./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --enable-recovery-counter-carryover --output-suffix _carryover
+PYTHONPATH=. ./venv/bin/python scripts/_diag_placement_confirm_frames_2026-07-25.py --only-c34 --enable-recovery-counter-carryover --enable-cnn-flicker-hsv-fallback --output-suffix _carryover_flicker

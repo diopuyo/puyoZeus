@@ -47,6 +47,7 @@ col0がt=287.6(色あり)からt=289.8(全0)、t=304.0(全0のまま)、t=306.6(
 """
 from __future__ import annotations
 
+import argparse
 import random
 import sys
 from dataclasses import dataclass
@@ -362,9 +363,16 @@ def _split_into_match_segments(g: NpzRecord) -> list[NpzRecord]:
 # ============================
 
 
-def _process_video(stem: str) -> tuple[list[ColumnCollapseEvent], list[CellFreezeEvent]]:
-    """1動画分の全side・全game_idxを処理する。"""
-    npz_path = NPZ_DIR_REGEN / f"{stem}.npz"
+def _process_video(
+    stem: str, npz_dir: Path = NPZ_DIR_REGEN,
+) -> tuple[list[ColumnCollapseEvent], list[CellFreezeEvent]]:
+    """1動画分の全side・全game_idxを処理する。
+
+    npz_dir: 既定はNPZ_DIR_REGEN(23動画基準corpus)。2026-07-30の隔離検証
+    (boards_lean_frozen_verify_2026-07-30等)ではこの引数で切り替える
+    (backward compat: 省略時は既存動作と完全に同一)。
+    """
+    npz_path = npz_dir / f"{stem}.npz"
     if not npz_path.exists():
         return [], []
     col_events: list[ColumnCollapseEvent] = []
@@ -472,10 +480,10 @@ def _grab_frame(video_path: Path, t_sec: float) -> np.ndarray | None:
     return _ensure_1080p(frame)
 
 
-def _save_frame_pair(ev: ColumnCollapseEvent, label: str) -> None:
+def _save_frame_pair(ev: ColumnCollapseEvent, label: str, out_dir: Path = OUT_DIR) -> None:
     """崩壊前後のA/Bフレームを保存する (userレビュー用、判読可能な解像度)。"""
     video_path = VIDEO_DIR / f"video_{ev.video_stem}.mp4"
-    ev_dir = OUT_DIR / label
+    ev_dir = out_dir / label
     ev_dir.mkdir(parents=True, exist_ok=True)
     for tag, t in (("before", ev.t_before), ("collapse", ev.t_collapse)):
         frame = _grab_frame(video_path, t)
@@ -492,7 +500,7 @@ def _save_frame_pair(ev: ColumnCollapseEvent, label: str) -> None:
             )
     print(f"[OK] 実フレーム保存: {label} -> {ev_dir}")
 
-def _sample_and_save_frames(df_col: pd.DataFrame) -> None:
+def _sample_and_save_frames(df_col: pd.DataFrame, out_dir: Path = OUT_DIR) -> None:
     """疑惑列崩壊からランダムに動画横断でサンプルし実フレームを保存する。"""
     suspects = df_col[df_col["score_suspicious"] & ~df_col["right_censored"]]  # 回復確認済みのみ(証拠が強い候補)
     if suspects.empty:
@@ -529,14 +537,14 @@ def _sample_and_save_frames(df_col: pd.DataFrame) -> None:
             right_censored=bool(row.right_censored),
             phase_bucket=row.phase_bucket, row_band_summary=row.row_band_summary,
         )
-        _save_frame_pair(ev, label)
+        _save_frame_pair(ev, label, out_dir=out_dir)
 
 # ============================
 # 集計・報告
 # ============================
 
 
-def _summarize_column(df_col: pd.DataFrame) -> None:
+def _summarize_column(df_col: pd.DataFrame, out_dir: Path = OUT_DIR) -> None:
     """列崩壊イベントの層別集計を表示・保存する。"""
     if df_col.empty:
         print("[列崩壊] 0件")
@@ -564,10 +572,10 @@ def _summarize_column(df_col: pd.DataFrame) -> None:
             print(f"  >= {cut}秒: {(dur >= cut).sum()}件 ({100*frac:.1f}%)")
     n_censored = int((df_col["score_suspicious"] & df_col["right_censored"]).sum())
     print(f"[右打ち切り(未回復のままゲーム終了)] {n_censored}/{n_susp}件")
-    df_col.to_csv(OUT_DIR / "column_collapse_events.csv", index=False)
+    df_col.to_csv(out_dir / "column_collapse_events.csv", index=False)
 
 
-def _summarize_cell(df_cell: pd.DataFrame) -> None:
+def _summarize_cell(df_cell: pd.DataFrame, out_dir: Path = OUT_DIR) -> None:
     """セル単位フリーズの層別集計を表示・保存する。"""
     if df_cell.empty:
         print("[セルフリーズ] 0件")
@@ -588,7 +596,7 @@ def _summarize_cell(df_cell: pd.DataFrame) -> None:
         print(f"\n[列崩壊疑惑同時発生セルの凍結時間 (n={len(dur_susp)})]")
         print(f"中央値={dur_susp.median():.2f}s p90={dur_susp.quantile(0.9):.2f}s"
               f" 最大={dur_susp.max():.2f}s")
-    df_cell.to_csv(OUT_DIR / "cell_freeze_events.csv", index=False)
+    df_cell.to_csv(out_dir / "cell_freeze_events.csv", index=False)
 
 
 def _summarize_co_occurrence(df_col: pd.DataFrame) -> None:
@@ -609,16 +617,34 @@ def _summarize_co_occurrence(df_col: pd.DataFrame) -> None:
 # ============================
 
 
+def _parse_args() -> argparse.Namespace:
+    """CLI引数をパースする (2026-07-30追加、backward compat: 省略時は既定23動画corpus)。"""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--npz-dir", type=Path, default=NPZ_DIR_REGEN,
+        help="npzディレクトリ (既定: 23動画基準corpus boards_lean_fixed_regen_2026-07-28)",
+    )
+    parser.add_argument(
+        "--out-dir", type=Path, default=OUT_DIR,
+        help="出力先ディレクトリ (既定: data/verify/frozen_cells_2026-07-30)",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    stems = sorted(p.stem for p in NPZ_DIR_REGEN.glob("*.npz"))
+    args = _parse_args()
+    npz_dir: Path = args.npz_dir
+    out_dir: Path = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stems = sorted(p.stem for p in npz_dir.glob("*.npz"))
+    print(f"[準備] npz_dir={npz_dir}")
     print(f"[準備] 対象動画: {len(stems)}本")
     print(stems)
 
     all_col: list[ColumnCollapseEvent] = []
     all_cell: list[CellFreezeEvent] = []
     for stem in stems:
-        col_ev, cell_ev = _process_video(stem)
+        col_ev, cell_ev = _process_video(stem, npz_dir=npz_dir)
         all_col.extend(col_ev)
         all_cell.extend(cell_ev)
         print(f"[{stem}] 列崩壊候補={len(col_ev)}件 セルフリーズ候補={len(cell_ev)}件", flush=True)
@@ -627,12 +653,12 @@ def main() -> None:
     df_cell = pd.DataFrame([e.__dict__ for e in all_cell])
     df_col = _annotate_co_occurrence(df_col)
 
-    _summarize_column(df_col)
-    _summarize_cell(df_cell)
+    _summarize_column(df_col, out_dir=out_dir)
+    _summarize_cell(df_cell, out_dir=out_dir)
     _summarize_co_occurrence(df_col)
-    _sample_and_save_frames(df_col)
+    _sample_and_save_frames(df_col, out_dir=out_dir)
 
-    print(f"\n保存先: {OUT_DIR}")
+    print(f"\n保存先: {out_dir}")
 
 
 if __name__ == "__main__":

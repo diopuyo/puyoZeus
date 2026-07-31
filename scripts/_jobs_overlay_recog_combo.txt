@@ -1,0 +1,1 @@
+./venv/bin/python -m scripts.visualize_advantage_overlay --video data/frames/video_c62.mp4 --out data/indicators_v2/overlay/advantage_recog_c62_game9to10.mp4 --start-sec 900.0 --end-sec 1001.4 --warmup-sec 15.0 --show-recognition
