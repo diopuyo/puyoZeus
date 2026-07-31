@@ -1121,6 +1121,11 @@ class RecognitionPipeline:
         # score_zero / MatchStateDetector は間引き対象外のため独立経路が
         # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
         # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        # 側別 彩度適応較正 (2026-07-31)。実測で 2P 側は彩度が系統的に低い
+        # (ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5、p10 は 98 対 59) のに
+        # 盤面の色分類器は左右で同じ s_min を使っていた。有効化すると各盤面
+        # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
+        enable_side_sat_calibration: bool = False,
         enable_large_roi_throttle: bool = True,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
@@ -1517,6 +1522,13 @@ class RecognitionPipeline:
         # 大 ROI 走査 (match_end 800x600 / telop 720x400) の間引き (2026-07-30)。
         # 既定 OFF = 従来通り毎フレーム走査で bit-identical。
         self._enable_large_roi_throttle: bool = bool(enable_large_roi_throttle)
+        # 側別 彩度適応較正 (2026-07-31) を reader に伝える。
+        # reader が set_side_sat_calibration を持たない構成 (テストの
+        # スタブ等) では黙って無視する (backwards compat)。
+        if enable_side_sat_calibration:
+            _rd = getattr(self, '_reader', None)
+            if _rd is not None and hasattr(_rd, 'set_side_sat_calibration'):
+                _rd.set_side_sat_calibration(True)
         self._large_roi_throttle_frames: int = int(large_roi_throttle_frames)
         # 間引き時に流用する前回結果 (従来は update() 内で毎フレーム初期化していた)
         self._last_match_end_locked: bool = False
@@ -2191,6 +2203,11 @@ class RecognitionPipeline:
         # score_zero / MatchStateDetector は間引き対象外のため独立経路が
         # 同一フレームで発火するから (設計時の有界性の主張が実証された)。
         # 速度 +19.5〜53.4%。False で従来の毎フレーム走査に戻る。
+        # 側別 彩度適応較正 (2026-07-31)。実測で 2P 側は彩度が系統的に低い
+        # (ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5、p10 は 98 対 59) のに
+        # 盤面の色分類器は左右で同じ s_min を使っていた。有効化すると各盤面
+        # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
+        enable_side_sat_calibration: bool = False,
         enable_large_roi_throttle: bool = True,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
@@ -2411,6 +2428,7 @@ class RecognitionPipeline:
             enable_cnn_flicker_hsv_fallback=enable_cnn_flicker_hsv_fallback,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
             initial_confirm_min_votes=initial_confirm_min_votes,
+            enable_side_sat_calibration=enable_side_sat_calibration,
             enable_large_roi_throttle=enable_large_roi_throttle,
             large_roi_throttle_frames=large_roi_throttle_frames,
             enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,

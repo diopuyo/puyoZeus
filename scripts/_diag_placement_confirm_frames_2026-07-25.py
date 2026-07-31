@@ -207,6 +207,7 @@ def _collect_records(
     enable_puyo_to_empty_hsv_guard: bool = False,
     stable_frame_count: int | None = None,
     recovery_min_frames: int | None = None,
+    enable_side_sat_calibration: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -279,6 +280,7 @@ def _collect_records(
             {} if stable_frame_count is None
             else {"stable_frame_count": int(stable_frame_count)}
         ),
+        enable_side_sat_calibration=enable_side_sat_calibration,
     )
     # 復旧ゲート閾値 (STABLE_RECOVERY_MIN_FRAMES) は load_default から届かないので
     # 構築後の state machine に直接差し込む (2026-07-31 掃引用、read-only 診断)。
@@ -780,6 +782,7 @@ def _process_one(
     enable_puyo_to_empty_hsv_guard: bool = False,
     stable_frame_count: int | None = None,
     recovery_min_frames: int | None = None,
+    enable_side_sat_calibration: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -819,6 +822,7 @@ def _process_one(
         enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
         stable_frame_count=stable_frame_count,
         recovery_min_frames=recovery_min_frames,
+        enable_side_sat_calibration=enable_side_sat_calibration,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -1028,6 +1032,11 @@ def _parse_args() -> argparse.Namespace:
              "STABLE 誤認する (浮きぷよ) リスクが上がる。",
     )
     ap.add_argument(
+        "--side-sat-calibration", dest="enable_side_sat_calibration",
+        action="store_true", default=False,
+        help="側別 彩度適応較正を有効化する (2026-07-31)。",
+    )
+    ap.add_argument(
         "--recovery-min-frames", dest="recovery_min_frames", type=int, default=None,
         help="確定済みセルを上書きするまでの証拠フレーム数 "
              "(STABLE_RECOVERY_MIN_FRAMES、本番既定 8)。省略時は変更しない。"
@@ -1162,6 +1171,7 @@ def main() -> None:
         # 2026-07-31 掃引用。None なら従来と完全に同じ挙動。
         "stable_frame_count": args.stable_frame_count,
         "recovery_min_frames": args.recovery_min_frames,
+        "enable_side_sat_calibration": args.enable_side_sat_calibration,
     }
 
     # 任意動画・任意窓モード (2026-07-25 汎化監査用に追加)。既定 (--video 未指定)
