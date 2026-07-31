@@ -50,6 +50,7 @@ ojama_sent = (total_score + 繰越) / rate
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from src.board import COLOR_OJAMA
@@ -363,6 +364,93 @@ def split_ojama_drop_per_turn(
     p = max(0, int(pending))
     drop_now = min(p, drop_max)
     return drop_now, p - drop_now
+
+
+# ============================
+# 得点整合性チェック (2026-07-29 追加)
+# ============================
+#
+# 背景 (userドメイン知識、2026-07-29): 掛け算表示は連鎖数そのものは表示しない
+# (表示されるのは「消えたぷよ数」と「ボーナス合計値」の2つのみ) ため、
+# 掛け算表示から連鎖数を直接読み取ることはできない。
+# 一方で得点式 (calculate_chain_score) は既知であり、連鎖ボーナス
+# (CHAIN_POWER_TABLE) は連鎖数に対して急峻に増えるため、
+# 「simulate(before_grid) が計算した期待得点」と「npz 実測の delta_score
+# (score OCR 差分)」を比較すれば、simulate() が実際の連鎖を正しく
+# 再現できているかの整合性チェックとして使える。
+#
+# 許容比率 [0.5, 2.0] (2倍まで): 連鎖ボーナスは連鎖数が 1 つずれるだけでも
+# (0→8→16→32→64→...) 前後の値に対し倍前後の差が生じうるため、認識ノイズ
+# 由来の軽微なズレまで過剰検出しないよう 2 倍を許容帯とする。一方
+# c54 の既知の疑義事例 (期待40点 vs 実測7598点 ≈ 190倍) のような桁違いの
+# 乖離は本閾値で明確に検出できる (userタスク指定、根拠は本コメントに明記。
+# 統計的に最適化された値ではなく実務的な閾値であることに注意)。
+SCORE_CONSISTENCY_RATIO_MIN: float = 0.5
+SCORE_CONSISTENCY_RATIO_MAX: float = 2.0
+
+
+def score_consistency_ratio(
+    expected_score: int,
+    observed_delta_score: int,
+    allow_all_clear_carryover: bool = True,
+) -> float:
+    """期待得点に対する実測 delta_score の比率を返す (整合性チェック用)。
+
+    全消しボーナス (前回連鎖の全消し達成分、次連鎖の得点に加算される仕様) は
+    ChainScoreResult.total_score に含まれないため、allow_all_clear_carryover
+    =True (既定) の場合は expected_score と expected_score+ALL_CLEAR_BONUS の
+    2 仮説のうち観測値に近い方 (対数距離が小さい方) を採用する
+    (全消し起因の見かけ上の不整合を過検出しないため)。
+
+    Args:
+        expected_score: calculate_chain_score(simulate結果).total_score。
+        observed_delta_score: npz 実測の delta_score (score OCR 差分)。
+        allow_all_clear_carryover: True で全消し繰越仮説も許容する (既定)。
+
+    Returns:
+        observed / expected の比率。両仮説とも expected<=0 かつ
+        observed_delta_score>0 の場合は inf (=明確な不整合) を返す。
+    """
+    hypotheses = [expected_score]
+    if allow_all_clear_carryover:
+        hypotheses.append(expected_score + ALL_CLEAR_BONUS)
+    ratios: list[float] = []
+    for exp in hypotheses:
+        if exp <= 0:
+            ratios.append(float("inf") if observed_delta_score > 0 else 1.0)
+        else:
+            ratios.append(observed_delta_score / exp)
+
+    def _log_distance(r: float) -> float:
+        return abs(math.log(r)) if 0.0 < r < float("inf") else float("inf")
+
+    return min(ratios, key=_log_distance)
+
+
+def is_score_consistent(
+    expected_score: int,
+    observed_delta_score: int,
+    ratio_min: float = SCORE_CONSISTENCY_RATIO_MIN,
+    ratio_max: float = SCORE_CONSISTENCY_RATIO_MAX,
+    allow_all_clear_carryover: bool = True,
+) -> bool:
+    """期待得点と実測 delta_score が許容比率内で整合するかを返す。
+
+    Args:
+        expected_score: calculate_chain_score(simulate結果).total_score。
+        observed_delta_score: npz 実測の delta_score。
+        ratio_min: 許容比率の下限 (既定 SCORE_CONSISTENCY_RATIO_MIN=0.5)。
+        ratio_max: 許容比率の上限 (既定 SCORE_CONSISTENCY_RATIO_MAX=2.0)。
+        allow_all_clear_carryover: score_consistency_ratio 参照。
+
+    Returns:
+        True = 許容比率内 (整合)、False = 不整合 (simulate() が実際の連鎖を
+        再現できていない疑いあり)。
+    """
+    ratio = score_consistency_ratio(
+        expected_score, observed_delta_score, allow_all_clear_carryover,
+    )
+    return ratio_min <= ratio <= ratio_max
 
 
 def compute_effective_rate(

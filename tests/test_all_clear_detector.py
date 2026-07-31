@@ -75,11 +75,32 @@ def test_is_all_clear_after_chain() -> None:
 
 
 def test_is_all_clear_with_ojama_only() -> None:
-    """おじゃまだけ残っている (色ぷよ 0) → 全消し。"""
+    """おじゃまだけ残っている (色ぷよ 0) → 全消しではない。
+
+    user確定 (2026-07-22): 全消し=「おじゃま含め盤面が完全に空」。
+    色ぷよ 0 でもおじゃまが残っていれば全消しにならない (旧実装の誤りを修正)。
+    """
     r = is_all_clear(_board_with_ojama_only(), score=500)
-    assert r.is_all_clear
+    assert not r.is_all_clear
     assert r.n_color_puyo == 0
     assert r.n_puyo_on_field == 2  # おじゃま 2 個
+    assert "おじゃま" in r.reason
+
+
+def test_is_all_clear_ojama_and_color_both_empty() -> None:
+    """色ぷよもおじゃまも 0 個 + score>0 → 全消し。"""
+    r = is_all_clear(_empty_board(), score=500)
+    assert r.is_all_clear
+    assert r.n_puyo_on_field == 0
+
+
+def test_is_all_clear_ojama_relaxed_via_flag() -> None:
+    """require_no_ojama=False (後方互換 optional 引数) なら旧来の色ぷよ 0 判定に戻せる。"""
+    r = is_all_clear(
+        _board_with_ojama_only(), score=500,
+        require_no_ojama=False,
+    )
+    assert r.is_all_clear
 
 
 def test_is_all_clear_relax_score() -> None:

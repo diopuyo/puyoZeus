@@ -26,6 +26,8 @@
 """
 from __future__ import annotations
 
+import random
+import zlib
 from dataclasses import dataclass
 
 from src.board import (
@@ -37,7 +39,12 @@ from src.board import (
     Board,
     VISIBLE_ROWS,
 )
-from src.chain import ChainResult, ChainSimulator
+from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
+from src.chain_bitboard import (
+    batch_from_boards,
+    planes_to_board,
+    simulate_batch_with_approx_score,
+)
 from src.scoring import (
     OJAMA_RATE_STANDARD,
     calculate_chain_score,
@@ -519,8 +526,10 @@ def dig_resistance(
     src/old/indicators.py の OjamaDefenseCapacityIndicator を流用移植。
     score = 平均 (0.7×survival + 0.3×dig)。0-1 スケール済み。
 
-    限界: drop_ojama は毎ターン「左から6個ずつ均等」でお邪魔落下オフセット
-    未反映 + 載りきらない分サイレントスキップ (窒息寸前の評価が甘い)。
+    限界: drop_ojama は「6列に均等配分 (floor(N/6)) + 端数はランダム列」
+    (chain.py._calc_ojama_drop_counts、user伝授済の実際の着弾仕様) で
+    お邪魔落下オフセット未反映 + 載りきらない分サイレントスキップ
+    (窒息寸前の評価が甘い)。
     """
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead():
@@ -1077,6 +1086,63 @@ def chain_to_time(n: float) -> float:
     return max(0.0, TIME_PER_CHAIN_SEC * n)
 
 
+# ============================
+# 連鎖完了時刻 (掛け算表示ベース、2026-07-29 追加)
+# ============================
+#
+# 背景: scripts/measure_exchange_dynamics.py の FireEvent.t_fire (post-chain
+# 確定盤面時刻) は BoardStateMachine の CHAIN 状態離脱タイミング
+# (src/recognition_pipeline.py の CHAIN_HOLD_BASE_SEC/CHAIN_HOLD_PER_STEP_SEC
+# 等、state machine 内部の保持時間定数) に依存しており、「連鎖アニメが実際に
+# 何秒で終わるか」を測る値としては汚染されている。
+# data/verify/recognition_diag_chain_anim_duration_multi/summary.txt の実測
+# (23動画418イベント) では、ピクセルdiffベースの視覚実測 (盤面全体が動きを
+# 止める＝おじゃま落下・次ツモ出現まで含む「盤面settle」) の方が
+# pipeline_duration (t_fire 基準) より一貫して短く、t_fire は settle より
+# さらに遅い (2026-07-29 確認)。
+#
+# user提案: 掛け算表示 (RecognitionPipeline 機能D、
+# enable_chain_formula_detection) が検知された時刻を起点に
+# CHAIN_ANIM_PER_STEP_SEC * 連鎖数 を加算する方式に置き換える。
+#
+# CHAIN_ANIM_PER_STEP_SEC は次の2つの既存定数とは役割が異なるため独立させる
+# (混同しない、勝手に統合しない):
+#   - TIME_PER_CHAIN_SEC (=0.30, 本モジュール上部): 打ち合い窓予測の仮値。
+#   - RecognitionPipeline.CHAIN_HOLD_PER_STEP_SEC (=0.3, src/
+#     recognition_pipeline.py): state machine の CHAIN 状態を保持する内部
+#     タイマー用 (認識ロジック側の都合、消去演出の実測値ではない)。
+CHAIN_ANIM_PER_STEP_SEC: float = 0.4
+
+
+def chain_completion_from_formula(
+    formula_appear_sec: float,
+    chain_count: float,
+    per_step_sec: float = CHAIN_ANIM_PER_STEP_SEC,
+) -> float:
+    """掛け算表示検知時刻 + 連鎖数から連鎖完了(消去演出終了)時刻を推定する。
+
+    stateless: formula_appear_sec (機能D が掛け算式を検知した時刻) を起点に
+    per_step_sec * chain_count を加算するだけ。既存の t_fire ベース計算
+    (measure_ojama_landing_delay.py 等) を置き換えるものではなく、
+    並列に追加する新方式 (2026-07-29, userタスク指定)。
+
+    Args:
+        formula_appear_sec: 掛け算表示検知時刻 (秒)。RecognitionPipeline の
+            機能D (_apply_chain_formula_early_fire) がその場で確定させる
+            time_sec、または近似値として t_chain_start (pre-chain静止盤面
+            時刻) を使う場合はその旨を呼び出し側で明示すること。
+        chain_count: 連鎖数 (0 以下は 0 として扱う)。
+        per_step_sec: 1連鎖ステップあたりの消去演出秒数 (既定
+            CHAIN_ANIM_PER_STEP_SEC=0.4、userタスク指定値。母集団データでの
+            検証は未実施、要検証値であることに注意)。
+
+    Returns:
+        推定連鎖完了時刻 (秒)。
+    """
+    n = max(0.0, float(chain_count))
+    return formula_appear_sec + per_step_sec * n
+
+
 def honsen_output(
     board: Board,
     simulator: ChainSimulator | None = None,
@@ -1620,6 +1686,13 @@ NORM_SUB_CHAIN: float = 12.0
 # 同時消しリッチネス: 1ステップ平均グループ数の正規化分母 (経験的上限 ~6)。
 NORM_SIMULTANEOUS_POP: float = 6.0
 
+# XII-1b 本来の飽和 (build天井): ビームサーチの既定深さ・幅。
+# 厳密な「理論最大連鎖」は組合せ爆発で不可能なため、N手先ビームサーチによる
+# 近似値 (= 「N手到達可能連鎖 (build天井)」) として実装する (アーキ承認済設計)。
+# depth=1 は saturated_chain_count (=_takapt_best_drop) と一致する (サニティ)。
+BUILD_CEILING_CHAIN_DEPTH: int = 2
+BUILD_CEILING_CHAIN_BEAM_WIDTH: int = 8
+
 
 def _takapt_full_scan(
     board: Board, sim: ChainSimulator,
@@ -1671,6 +1744,280 @@ def saturated_chain_count(
     """
     sim = simulator or _SHARED_SIMULATOR
     best_chain, _ = _takapt_best_drop(board, sim)
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+def _build_ceiling_expand(
+    frontier: "list[tuple[int, Board]]",
+    sim: ChainSimulator,
+    beam_width: int,
+) -> "list[tuple[int, Board]]":
+    """ビームサーチ 1 手分の展開: frontier の各盤面から takapt 30 通りを試行し、
+
+    chain_count 降順で上位 beam_width 件を返す (potential_fire_power の
+    _pfp_first_pass と同じ探索単位を frontier 複数盤面に一般化したもの)。
+
+    Args:
+        frontier: 直前深さの上位候補 [(chain_count, board)]。
+        sim: ChainSimulator インスタンス。
+        beam_width: 保持する上位候補数。
+
+    Returns:
+        (chain_count, dropped_board) を chain_count 降順で最大 beam_width 個。
+    """
+    candidates: list[tuple[int, Board]] = []
+    for _, base_board in frontier:
+        for col in range(BOARD_COLS):
+            for color in IGNITION_TRIAL_COLORS:
+                dropped = _drop_one_color(base_board, col, color)
+                if dropped is None:
+                    continue
+                chain = sim.simulate(dropped).chain_count
+                candidates.append((chain, dropped))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[:beam_width]
+
+
+def build_ceiling_chain(
+    board: Board,
+    depth: int = BUILD_CEILING_CHAIN_DEPTH,
+    beam_width: int = BUILD_CEILING_CHAIN_BEAM_WIDTH,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1b 本来の飽和 (build天井、N 手先ビームサーチ近似)。
+
+    saturated_chain_count (=1手先の最大到達連鎖) を一般化し、N 手 (depth) 先まで
+    ビームサーチで盤面を「積む」ことで到達しうる最大連鎖数を近似する。
+    「盤面を埋めた理論最大連鎖」の厳密解は組合せ爆発で不可能なため、
+    ここでは正直に「N手到達可能連鎖 (build天井)」の近似値として扱う
+    (アーキ承認済設計。saturated_chain_count とは別名で新設し、既存指標・
+    学習済 weight には一切影響しない)。
+
+    探索: 各手で 5色×6列=30 通りの 1 個落としを試行 → simulate → chain_count
+    上位 beam_width 件のみ次の手へ展開 (potential_fire_power と同じ剪定方式)。
+    全深さを通じて観測された最大 chain_count を返す (= 単調非減少)。
+    depth=1 のときは saturated_chain_count と厳密に一致する (サニティ)。
+
+    最大 sim 数 = 30 + beam_width×30×(depth-1) (depth=2, beam=8 既定で 270)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        depth: 先読み手数 (既定 BUILD_CEILING_CHAIN_DEPTH=2)。
+        beam_width: 各深さで保持する上位候補数 (既定 BUILD_CEILING_CHAIN_BEAM_WIDTH=8)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=N手到達可能な最大連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead() or depth < 1:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    best_chain = 0
+    frontier: "list[tuple[int, Board]]" = [(0, board)]
+    for _ in range(depth):
+        frontier = _build_ceiling_expand(frontier, sim, beam_width)
+        if not frontier:
+            break
+        # frontier は chain_count 降順ソート済み: 先頭がこの深さの最大値。
+        # 深さを跨いだ「単調非減少の最良値」として running max を保持する。
+        best_chain = max(best_chain, frontier[0][0])
+    return IndicatorV2Value(
+        score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+# ============================
+# XII-1c 忠実な飽和連鎖量 (非発火構築ビーム) — saturation_chain
+# ============================
+
+# user確定定義 (2026-07-22): 盤面を「発火させずに」約93% (範囲88-98%) まで
+# 組み上げ、最後に発火して到達する最大連鎖数 = 本線の完成天井。
+# 色は「都合よく組める前提」(任意色供給可、takapt 5色から自由選択)。
+#
+# アーキ診断 (フェーズ0、scripts/_tmp_diag_ceiling_objective.py で実証):
+# 既存 build_ceiling_chain (XII-1b) の _build_ceiling_expand は各手を
+# chain_count 降順で枝刈りしており「今すぐ発火する盤面」を最優先する
+# = 「発火させず積む」の目的関数と正反対 (実データで frontier top1 の
+# 62.5% が「未消去のまま発火済みグループを保持した盤面」と確認)。
+# saturation_chain は目的関数を「非発火のまま構造的ポテンシャルを育てる」
+# 向きに修正した別名の新規指標として追加する (既存 build_ceiling_chain /
+# 学習済み重みには一切影響しない)。
+
+# 盤面全体の有効セル数 (6列×13行=78、隠し段 row0 含む)。
+# user確定 (2026-07-22訂正): 充填率の分母は可視12行のみ (ON_FIELD_CAP=72) で
+# はなく盤面全体78を「そのまま」使う (窒息セルの特別除外もしない、シンプルに
+# 78フラット)。count_puyos() も全13行を数えるため、この分母と整合する。
+FULL_BOARD_CAP: int = BOARD_ROWS * BOARD_COLS  # = 78
+
+# 目標充填率の既定値 (FULL_BOARD_CAP=78 に対する割合)。範囲 0.88-0.98。
+SATURATION_FILL_RATIO_DEFAULT: float = 0.93
+
+# 非発火構築ビームサーチの各深さで保持する上位候補数。
+SATURATION_BEAM_WIDTH_DEFAULT: int = 6
+
+# 安全弁: 理論上は target_cells - 現在ぷよ数 で収束するが、無限ループ防止に
+# 盤面全体のセル数 (FULL_BOARD_CAP=78) を上限とする。
+SATURATION_MAX_BUILD_STEPS: int = FULL_BOARD_CAP
+
+
+def _sat_group_size_after_drop(
+    board: Board, row: int, col: int, color: int,
+) -> int:
+    """(row, col) に color を置いた後の同色連結グループサイズを返す (早期打切り)。
+
+    1 個のぷよ追加が「発火するか否か」に影響するのは、追加セル自身が属する
+    連結成分のサイズのみ (無関係な既存グループには影響しない)。
+    MIN_ERASE_COUNT (=4) に達したら即座に打ち切るため、
+    全域探索の ChainSimulator.simulate より大幅に軽量 (発火判定専用)。
+
+    Args:
+        board: color を置いた後の盤面。
+        row: 置いたセルの行。
+        col: 置いたセルの列。
+        color: 置いた色。
+
+    Returns:
+        int: 連結グループサイズ (MIN_ERASE_COUNT 以上なら MIN_ERASE_COUNT で打切り)。
+    """
+    visited: "set[tuple[int, int]]" = {(row, col)}
+    stack: "list[tuple[int, int]]" = [(row, col)]
+    size = 0
+    while stack:
+        r, c = stack.pop()
+        size += 1
+        if size >= MIN_ERASE_COUNT:
+            return size
+        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nr, nc = r + dr, c + dc
+            if not (0 <= nr < BOARD_ROWS and 0 <= nc < BOARD_COLS):
+                continue
+            if (nr, nc) in visited:
+                continue
+            if board.get(nr, nc) == color:
+                visited.add((nr, nc))
+                stack.append((nr, nc))
+    return size
+
+
+def _sat_expand_step(
+    frontier: "list[Board]", beam_width: int,
+) -> "list[Board]":
+    """非発火ビーム 1 手分の展開 (saturation_chain 専用、simulate 不要で高速)。
+
+    frontier の各盤面へ 1 個ずつ置き、「発火しない (置いた瞬間に4連結以上に
+    ならない)」候補のみ残す。ランキングは「連結グループサイズ (3>2>1、
+    大きいほど本線完成に近い = あと1個で消える3連結を優先)」を第一キー、
+    「置いた列の結果的な高さ (低いほど窒息リスクが低い)」を第二キーとする
+    軽量ヒューリスティック。
+
+    Args:
+        frontier: 直前深さの候補盤面リスト (非発火のみ)。
+        beam_width: 保持する上位候補数。
+
+    Returns:
+        list[Board]: 次深さの上位候補 (最大 beam_width 件、非発火のみ)。
+    """
+    scored: "list[tuple[int, int, Board]]" = []
+    seen_keys: "set[bytes]" = set()
+    for base_board in frontier:
+        for col in range(BOARD_COLS):
+            row = _drop_row(base_board, col)
+            if row is None:
+                continue
+            for color in IGNITION_TRIAL_COLORS:
+                dropped = _drop_one_color(base_board, col, color)
+                if dropped is None or dropped.is_dead():
+                    continue
+                group_size = _sat_group_size_after_drop(dropped, row, col, color)
+                if group_size >= MIN_ERASE_COUNT:
+                    continue  # 発火してしまう配置は「積む」候補から除外
+                key = dropped._grid.tobytes()
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                scored.append((group_size, dropped.height_of(col), dropped))
+    # group_size 降順 (3連結優先) → 結果的な列高さ昇順 (低いほど良い)。
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [cand_board for _, _, cand_board in scored[:beam_width]]
+
+
+def _sat_measure_terminal_chain(
+    frontier: "list[Board]", sim: ChainSimulator,
+) -> int:
+    """終端 frontier の各候補に対し 1 手発火 (takapt 30 通り) を試し、
+
+    到達できる最大連鎖数を返す (saturation_chain の最終計測ステップ)。
+
+    Args:
+        frontier: 構築ビームの終端候補盤面リスト。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        int: frontier 全候補中の最大到達連鎖数。
+    """
+    best_chain = 0
+    for candidate in frontier:
+        chain, _ = _takapt_best_drop(candidate, sim)
+        best_chain = max(best_chain, chain)
+    return best_chain
+
+
+def saturation_chain(
+    board: Board,
+    fill_ratio: float = SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = SATURATION_BEAM_WIDTH_DEFAULT,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1c 忠実な飽和連鎖量 (user確定定義、非発火構築ビーム)。
+
+    盤面を発火させずに fill_ratio (既定93%、範囲88-98%でスイープ可) まで
+    組み上げ、最後に1手発火させて到達する最大連鎖数 = 本線の完成天井。
+    色は「都合よく組める前提」で任意色供給可 (takapt 5色から自由選択)。
+
+    アルゴリズム:
+        1. target_cells = round(fill_ratio * FULL_BOARD_CAP) まで、
+           「発火しない (置いた瞬間に4連結未満)」1 ぷよ配置のみをビーム
+           サーチで積む (_sat_expand_step: 軽量な局所連結ヒューリスティック
+           で枝刈り、simulate を呼ばないため高速)。
+        2. target 到達、または これ以上非発火で置けない (デッドロック) で終端。
+        3. 終端の各候補 (最大 beam_width 個) について 1 手発火 (takapt 30通り
+           full simulate) を試し、到達できる最大連鎖数を採用する
+           (_sat_measure_terminal_chain)。
+
+    既存 build_ceiling_chain (chain_count 降順で「今すぐ発火する盤面」を優先
+    = 目的関数が逆、フェーズ0診断で実証) とは別実装。stateless・非破壊、
+    既存指標・学習済み重みに一切影響しない。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        fill_ratio: 目標充填率 (既定 SATURATION_FILL_RATIO_DEFAULT=0.93、
+            範囲 0.88-0.98 でスイープ可)。
+        beam_width: 各深さで保持する上位候補数 (既定 SATURATION_BEAM_WIDTH_DEFAULT=6)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/19 (0〜1), raw=飽和到達可能な最大連鎖数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=0.0, raw=0.0)
+
+    target_cells = round(fill_ratio * FULL_BOARD_CAP)
+    frontier: "list[Board]" = [board]
+    steps = min(
+        max(0, target_cells - board.count_puyos()), SATURATION_MAX_BUILD_STEPS,
+    )
+    for _ in range(steps):
+        next_frontier = _sat_expand_step(frontier, beam_width)
+        if not next_frontier:
+            break  # デッドロック (非発火で置ける手が尽きた): 現状で終端
+        frontier = next_frontier
+
+    best_chain = _sat_measure_terminal_chain(frontier, sim)
     return IndicatorV2Value(
         score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
         raw=float(best_chain),
@@ -1801,6 +2148,1415 @@ def simultaneous_pop_richness(
     )
 
 
+# ============================
+# XIII 催促保持 (saisoku_hold) — 打ち合いモデル本命 (user 2026-07-22 すり合わせ)
+# ============================
+#
+# reference_saisoku_exchange_model_2026-07-22 の定義に忠実:
+#   「0〜1手で撃てる連鎖」の中に「整地でない攻撃弾 (催促)」を保持しているか。
+#   催促 = 消費色ぷよ率 < 60% (本線でない) かつ 送りお邪魔 > 4個 (整地でない)。
+#   お邪魔換算は標準レート70固定・マージン非適用 (盤面の素の攻撃力を時間非依存の
+#   内在量として測るため、elapsed_sec=0.0 で compute_effective_rate の
+#   マージンタイム減衰を回避する)。
+
+# 消費色ぷよ率の閾値 (未満=催促寄り、以上=本線として除外)。
+SAISOKU_CONSUME_RATIO: float = 0.6
+# 送りお邪魔の閾値 (超過=攻撃、以下=整地として除外)。
+SAISOKU_OJAMA_MIN: int = 4
+# saisoku_hold_count の正規化分母 (0手候補1 + 1手 takapt 30通り = 最大31、暫定)。
+SAISOKU_HOLD_COUNT_NORM: float = 31.0
+
+
+def _saisoku_hold_hits(board: Board, sim: ChainSimulator) -> "list[ChainResult]":
+    """0手 (直接発火可能) + 1手 (takapt 30通り) の発火候補 ChainResult 一覧を返す。
+
+    追加 sim コスト: 0手判定 1 回 + _takapt_full_scan の 30 通り (既存流用)。
+    非発火 (chain_count==0) は含めない。
+    """
+    hits: list[ChainResult] = []
+    zero_hand = sim.simulate(board)
+    if zero_hand.chain_count > 0:
+        hits.append(zero_hand)
+    hits.extend(result for _, _, _, _, result in _takapt_full_scan(board, sim))
+    return hits
+
+
+def _saisoku_hold_eval(color_count: int, result: ChainResult) -> tuple[int, float]:
+    """1 候補分の (送りお邪魔数, 色ぷよ消費率) を計算する。
+
+    お邪魔換算は標準レート70固定・マージン非適用 (elapsed_sec=0.0)。
+    """
+    score = calculate_chain_score(result).total_score
+    ojama = score_to_ojama(
+        score=score, prev_leftover=0, elapsed_sec=0.0, rate_base=OJAMA_RATE_STANDARD,
+    ).ojama_count
+    consume_ratio = (
+        float(result.total_erased) / float(color_count) if color_count > 0 else 1.0
+    )
+    return int(ojama), consume_ratio
+
+
+def saisoku_hold(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> dict[str, IndicatorV2Value]:
+    """催促保持 (saisoku_hold): 0〜1手で撃てる「整地でない攻撃弾」を持つか。
+
+    `reference_saisoku_exchange_model_2026-07-22` の定義に忠実な v1 実装。
+    各発火候補 (0手直接発火 + 1手 takapt 30通り、_takapt_full_scan 流用) について、
+    色ぷよ消費率 < SAISOKU_CONSUME_RATIO (本線でない) かつ
+    送りお邪魔 > SAISOKU_OJAMA_MIN (整地でない) を満たすものを「催促」とみなす。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        dict[str, IndicatorV2Value]:
+            "saisoku_hold_flag": 催促を1つでも保持していれば1.0、無ければ0.0。
+            "saisoku_hold_max_ojama": 該当催促の最大送りお邪魔 (raw=個数, /ON_FIELD_CAP正規化)。
+            "saisoku_hold_count": 該当する(列×色)発火オプション数 (/SAISOKU_HOLD_COUNT_NORM正規化)。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    color_count = _count_color_puyos(board)
+    hits = _saisoku_hold_hits(board, sim)
+    matched_ojama: list[int] = []
+    for result in hits:
+        ojama, consume_ratio = _saisoku_hold_eval(color_count, result)
+        if consume_ratio < SAISOKU_CONSUME_RATIO and ojama > SAISOKU_OJAMA_MIN:
+            matched_ojama.append(ojama)
+    flag = 1.0 if matched_ojama else 0.0
+    max_ojama = float(max(matched_ojama)) if matched_ojama else 0.0
+    count = float(len(matched_ojama))
+    return {
+        "saisoku_hold_flag": IndicatorV2Value(score=flag, raw=flag),
+        "saisoku_hold_max_ojama": IndicatorV2Value(
+            score=_clamp01(max_ojama / ON_FIELD_CAP), raw=max_ojama,
+        ),
+        "saisoku_hold_count": IndicatorV2Value(
+            score=_clamp01(count / SAISOKU_HOLD_COUNT_NORM), raw=count,
+        ),
+    }
+
+
+# ============================
+# XIV 近未来最大火力 (near_future_fire_power) — 2026-07-22 本番統合
+# ============================
+# user採否決定 (2026-07-22): win-AUC検証 (scripts/_tmp_near_future_gen.py /
+# _tmp_near_future_auc_verify.py) で中盤 current_max_chain 比 +0.12〜+0.17
+# (K=1〜5単調増加)・終盤 +0.04〜+0.08 の強いシグナルを確認。飽和連鎖量
+# (XII-1c saturation_chain、無制限深さ) は「理想ツモ無制限だと空き空間量を
+# 測るだけで信頼不可」と user 判断で撤退確定したが、その副産物として
+# 「有限ホライズン (2+K 手で打ち切り) にすれば空き空間量に支配されない
+# discriminative な指標になる」との知見が得られ、本指標として結実した。
+#
+# stateless 設計の修正履歴 (2026-07-22、正直な記録):
+#   初回統合時は「試合ごとに5色中1色除外」というドメイン事実を、1盤面のみ
+#   から近似する _near_future_active_colors (盤面上の出現色) で代用していた。
+#   再検証で中盤 AUC がプロト (0.776) に対し本番 (0.664) と乖離 (-0.11) し、
+#   原因は約27%の盤面で active_colors 近似がプロトの試合全体頻度と食い違う
+#   ことと特定した (K手の多段探索で複利的に累積し乖離が拡大)。
+#   → CLAUDE.md「観測指標は stateless、state 保持は外部 wrapper」原則に
+#   従い、near_future_fire_power 自体は active_colors を引数で受け取る
+#   純関数のまま維持し、試合単位の色頻度計算 (プロトの
+#   _compute_active_colors_by_game と同じロジック) は
+#   scripts/collect_indicators_v2.py 側の外部トラッカー (_GameColorTracker)
+#   に移した。active_colors 省略時は従来通り _near_future_active_colors
+#   (盤面出現色) にフォールバックし、後方互換を維持する。
+
+# 既知ネクストスロット数 (next, dnext の2手。値が無ければ理想ツモ代用)。
+NEAR_FUTURE_KNOWN_HAND_SLOTS: int = 2
+# K の水準 (独立5指標、EXTRA_INDICATOR_NAMES 末尾に near_future_fire_k1..k5 として追加)。
+NEAR_FUTURE_K_LEVELS: tuple[int, ...] = (1, 2, 3, 4, 5)
+# 各手で保持する上位候補数 (build_ceiling_chain の BUILD_CEILING_CHAIN_BEAM_WIDTH と同じ値)。
+NEAR_FUTURE_BEAM_WIDTH: int = 8
+# 盤面上で観測された色数がこれ未満なら5色探索にフォールバックする閾値。
+NEAR_FUTURE_MIN_OBSERVED_COLORS: int = 4
+# 正規化分母 (既存火力系 immediate_fire_power/reach_fire_power/potential_fire_power と統一)。
+NEAR_FUTURE_FIRE_NORM: int = ON_FIELD_CAP  # = 72
+
+
+@dataclass(frozen=True)
+class NearFutureFireResult:
+    """XIV 近未来最大火力の算出結果 (K=1..5 を1回のビームサーチで同時取得)。
+
+    Attributes:
+        values: {K: IndicatorV2Value} (score=raw/72お邪魔換算、raw=お邪魔換算個数)。
+        chain_refs: {K: 到達した最大連鎖数} (デバッグ/verify 用の参考値)。
+        used_real_next: next_pair/dnext_pair のいずれかを実際に使ったか
+            (False = 両方未検知で全手が理想ツモ代用になったことを示す)。
+    """
+    values: "dict[int, IndicatorV2Value]"
+    chain_refs: "dict[int, int]"
+    used_real_next: bool
+
+
+def _near_future_active_colors(board: Board) -> "tuple[int, ...]":
+    """盤面上に実際に出現している色の集合を返す (試合別4色制限の stateless 近似)。
+
+    観測色数が NEAR_FUTURE_MIN_OBSERVED_COLORS (4) 未満なら安全側 (5色) に
+    フォールバックする (除外情報が不十分な序盤等で誤って探索範囲を狭めない)。
+    """
+    present = sorted(
+        {int(v) for row in board._grid for v in row if int(v) in IGNITION_TRIAL_COLORS},
+    )
+    if len(present) < NEAR_FUTURE_MIN_OBSERVED_COLORS:
+        return IGNITION_TRIAL_COLORS
+    return tuple(present)
+
+
+def _near_future_is_valid_pair(pair: "tuple[int, int] | None") -> bool:
+    """next_pair/dnext_pair が実ネクストとして使える値かを判定する。"""
+    if pair is None:
+        return False
+    return all(c in IGNITION_TRIAL_COLORS for c in pair)
+
+
+def _near_future_known_expand(
+    frontier: "list[tuple[float, Board]]", pair: "tuple[int, int]", sim: ChainSimulator,
+) -> "list[tuple[float, Board, int]]":
+    """既知ペア (22配置、_enumerate_placements 流用) で1手展開する。
+
+    ⚠️ バグ修正 (2026-07-22、win-AUC再検証で発見): 次の手のfrontierに
+    引き継ぐ盤面は「発火後の残骸」(result.final_board) でなければならない。
+    以前は配置直後 (発火前、消えるはずの puyo が residual するcredits) の
+    `placed` をそのまま引き継いでおり、K手を重ねるほど物理的に誤った
+    (本来消えているぷよが残存する) 盤面が複利的に蓄積し、Kが増えるほど
+    プロトとの乖離が拡大する主因になっていた。
+    """
+    candidates: "list[tuple[float, Board, int]]" = []
+    for _, base_board in frontier:
+        for _, placed in _enumerate_placements(base_board, pair, sim):
+            if placed.is_dead():
+                continue
+            result = sim.simulate(placed)
+            score = calculate_chain_score(result).total_score
+            candidates.append((float(score), result.final_board, result.chain_count))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates
+
+
+def _near_future_free_expand(
+    frontier: "list[tuple[float, Board]]", colors: "tuple[int, ...]", sim: ChainSimulator,
+) -> "list[tuple[float, Board, int]]":
+    """自由1個ずつ (6列×色数) で1手展開する (理想ツモ、_drop_one_color 流用)。
+
+    ⚠️ バグ修正 (2026-07-22): _near_future_known_expand と同じ理由で、
+    次の手へ引き継ぐ盤面は発火後の残骸 (result.final_board) を使う。
+    """
+    candidates: "list[tuple[float, Board, int]]" = []
+    for _, base_board in frontier:
+        for col in range(BOARD_COLS):
+            for color in colors:
+                dropped = _drop_one_color(base_board, col, color)
+                if dropped is None or dropped.is_dead():
+                    continue
+                result = sim.simulate(dropped)
+                score = calculate_chain_score(result).total_score
+                candidates.append((float(score), result.final_board, result.chain_count))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates
+
+
+def _near_future_empty_result(k_levels: "tuple[int, ...]") -> NearFutureFireResult:
+    """窒息盤面用の 0 埋め結果。"""
+    zero = IndicatorV2Value(score=0.0, raw=0.0)
+    return NearFutureFireResult(
+        values={k: zero for k in k_levels},
+        chain_refs={k: 0 for k in k_levels},
+        used_real_next=False,
+    )
+
+
+def near_future_fire_power(
+    board: Board,
+    next_pair: "tuple[int, int] | None" = None,
+    dnext_pair: "tuple[int, int] | None" = None,
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    beam_width: int = NEAR_FUTURE_BEAM_WIDTH,
+    k_levels: "tuple[int, ...]" = NEAR_FUTURE_K_LEVELS,
+    active_colors: "tuple[int, ...] | None" = None,
+) -> NearFutureFireResult:
+    """XIV 近未来最大火力 (K=1..5)。
+
+    現在盤面から、ネクスト・ダブルネクスト (既知なら実色で22配置探索、未検知
+    なら理想ツモ(自由1個ずつ)で代用) を置いたあと、さらに K手 (1..5) を
+    理想ツモで積んだ場合に到達できる最大得点 (お邪魔換算) を返す。
+    K=1..5 は1回のビームサーチのチェックポイントとして同時に得る
+    (探索コストを共有、~40ms/盤面で5指標、プロト実測値)。
+
+    saturated_chain_count/build_ceiling_chain/saturation_chain (無制限深さの
+    飽和連鎖量、user判断により撤退) とは異なり、本指標は最大 2+5=7 手で
+    打ち切る有限ホライズンのため空き空間量に支配されない
+    (win-AUC検証: 中盤 current_max_chain 比 +0.12〜+0.17、K増加で単調改善)。
+
+    stateless 修正 (2026-07-22): 本関数自身は純関数のまま維持し、試合単位の
+    4色 (active_colors) は呼び出し側 (外部 wrapper、例:
+    scripts/collect_indicators_v2.py の試合単位色頻度トラッカー) から明示的に
+    渡す設計にした (CLAUDE.md「観測指標は stateless、state 保持は外部
+    wrapper」準拠)。active_colors 省略時は従来通り
+    `_near_future_active_colors` (現在盤面上の出現色、1盤面のみの近似) に
+    フォールバックする (既存シグネチャへの optional 追加のみで後方互換)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        next_pair: (TOP色, BOT色) または None (未検知、理想ツモで代用)。
+        dnext_pair: 同上。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用お邪魔換算)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        beam_width: 各手で保持する上位候補数 (既定 NEAR_FUTURE_BEAM_WIDTH=8)。
+        k_levels: 出力する K 水準 (既定 1..5)。
+        active_colors: 呼び出し側が把握している試合別4色 (省略/None なら
+            盤面出現色フォールバック)。
+
+    Returns:
+        NearFutureFireResult: K別 IndicatorV2Value + 参考連鎖数 + used_real_next。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _near_future_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+    return _near_future_search(
+        board, colors, next_pair, dnext_pair, elapsed_sec, sim, beam_width, k_levels,
+    )
+
+
+def _near_future_search(
+    board: Board,
+    colors: "tuple[int, ...]",
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    elapsed_sec: float,
+    sim: ChainSimulator,
+    beam_width: int,
+    k_levels: "tuple[int, ...]",
+) -> NearFutureFireResult:
+    """near_future_fire_power の本体探索ループ (ビーム + チェックポイント)。"""
+    max_k = max(k_levels)
+    total_hands = NEAR_FUTURE_KNOWN_HAND_SLOTS + max_k
+    frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+    best_score = 0.0
+    best_chain = 0
+    used_real_next = False
+    checkpoints: "dict[int, tuple[float, int]]" = {}
+
+    for hand_idx in range(total_hands):
+        if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
+            expanded = _near_future_known_expand(frontier, next_pair, sim)
+            used_real_next = True
+        elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
+            expanded = _near_future_known_expand(frontier, dnext_pair, sim)
+            used_real_next = True
+        else:
+            expanded = _near_future_free_expand(frontier, colors, sim)
+        if not expanded:
+            break
+        frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+        top_score, _top_board, top_chain = expanded[0]
+        if top_score > best_score:
+            best_score, best_chain = top_score, top_chain
+        k_here = hand_idx + 1 - NEAR_FUTURE_KNOWN_HAND_SLOTS
+        if k_here in k_levels:
+            checkpoints[k_here] = (best_score, best_chain)
+
+    return _near_future_finalize(checkpoints, k_levels, elapsed_sec, used_real_next)
+
+
+def _near_future_finalize(
+    checkpoints: "dict[int, tuple[float, int]]",
+    k_levels: "tuple[int, ...]",
+    elapsed_sec: float,
+    used_real_next: bool,
+) -> NearFutureFireResult:
+    """チェックポイント (得点, 連鎖) をお邪魔換算+正規化して結果を組み立てる。
+
+    ビームが途中で尽きた場合、未記録の K は直前の値を引き継ぐ (得点は
+    単調非減少のため、直前値がその時点での妥当な下界になる)。
+    """
+    values: "dict[int, IndicatorV2Value]" = {}
+    chain_refs: "dict[int, int]" = {}
+    prev_score, prev_chain = 0.0, 0
+    for k in sorted(k_levels):
+        score, chain = checkpoints.get(k, (prev_score, prev_chain))
+        ojama = score_to_ojama(
+            score=score, prev_leftover=0, elapsed_sec=elapsed_sec, rate_base=OJAMA_RATE_STANDARD,
+        ).ojama_count
+        values[k] = IndicatorV2Value(
+            score=_clamp01(float(ojama) / NEAR_FUTURE_FIRE_NORM), raw=float(ojama),
+        )
+        chain_refs[k] = chain
+        prev_score, prev_chain = score, chain
+    return NearFutureFireResult(values=values, chain_refs=chain_refs, used_real_next=used_real_next)
+
+
+# ============================
+# XV 火力の受けの多さ (fire_stability) — 2026-07-22
+# ============================
+# user提案 #30: 検証済み中盤本命「受けやすさ (ukeyasusa)」の火力版。
+# 「最大火力そのもの」ではなく「最大火力に近い配置パターンがどれだけ多いか」
+# を数える (多い=頑健=どんなツモが来ても安定して火力を出せる、1通りのみ=脆い)。
+#
+# near_future_fire_power と同じビーム machinery (_near_future_free_expand /
+# _near_future_known_expand / _near_future_is_valid_pair /
+# _near_future_active_colors、2026-07-22 final_board バグ修正済み) を
+# そのまま再利用する副産物として安価に計算する (追加 sim コストゼロ、
+# 既存ビームの候補スコア分布から数えるだけ)。
+
+# ホライズン K の水準 (「≈6手、数水準」の指示を反映し 2/4/6 の3段で観測)。
+FIRE_STABILITY_K_LEVELS: tuple[int, ...] = (2, 4, 6)
+# 最大火力の何%以内を「近い (=安定して出せる)」とみなすか (win-AUC検証で
+# 0.8/0.9 を比較した結果、0.8 を既定値として採用)。
+FIRE_STABILITY_THRESHOLD_RATIO: float = 0.8
+# 各手で保持する上位候補数 (near_future_fire_power と同じビーム幅を踏襲)。
+FIRE_STABILITY_BEAM_WIDTH: int = NEAR_FUTURE_BEAM_WIDTH
+
+
+@dataclass(frozen=True)
+class FireStabilityResult:
+    """XV 火力の受けの多さの算出結果 (K=2,4,6 を1回のビームサーチで同時取得)。
+
+    Attributes:
+        values: {K: IndicatorV2Value} (score=raw=閾値内パターン数の割合
+            [0-1]、raw フィールドには件数そのものも保持しデバッグに使う)。
+        candidate_counts: {K: その手で列挙された候補総数} (デバッグ/verify用)。
+    """
+    values: "dict[int, IndicatorV2Value]"
+    candidate_counts: "dict[int, int]"
+
+
+def _fire_stability_empty_result(k_levels: "tuple[int, ...]") -> FireStabilityResult:
+    """窒息盤面用の 0 埋め結果。"""
+    zero = IndicatorV2Value(score=0.0, raw=0.0)
+    return FireStabilityResult(
+        values={k: zero for k in k_levels},
+        candidate_counts={k: 0 for k in k_levels},
+    )
+
+
+def fire_stability(
+    board: Board,
+    next_pair: "tuple[int, int] | None" = None,
+    dnext_pair: "tuple[int, int] | None" = None,
+    simulator: "ChainSimulator | None" = None,
+    beam_width: int = FIRE_STABILITY_BEAM_WIDTH,
+    k_levels: "tuple[int, ...]" = FIRE_STABILITY_K_LEVELS,
+    threshold_ratio: float = FIRE_STABILITY_THRESHOLD_RATIO,
+    active_colors: "tuple[int, ...] | None" = None,
+) -> FireStabilityResult:
+    """XV 火力の受けの多さ (fire_stability, K=2,4,6)。
+
+    near_future_fire_power と同じ K 手先ビームサーチを行い、0〜Kホライズン
+    全体で列挙された全配置パターン (各手のビーム幅で絞る前の生リストを
+    累積) のうち、その時点までの最良得点 (near_future_fire_power と同じ
+    running max) の threshold_ratio (既定80%) 以内に入るパターンの割合を
+    返す。多いほど「どんな展開になっても安定して高火力を出せる」頑健な
+    盤面であることを示す (受けやすさの火力版)。
+
+    stateless 設計: near_future_fire_power と同様、active_colors を引数で
+    受け取る純関数 (省略時は現在盤面の出現色フォールバック)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        next_pair: (TOP色, BOT色) または None (未検知、理想ツモで代用)。
+        dnext_pair: 同上。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        beam_width: 各手で保持する上位候補数。
+        k_levels: 出力する K 水準 (既定 2,4,6)。
+        threshold_ratio: 「近い」とみなす閾値比率 (既定0.8=最大の80%以上)。
+        active_colors: 呼び出し側が把握している試合別4色 (省略時は盤面出現色)。
+
+    Returns:
+        FireStabilityResult: K別 IndicatorV2Value (score=raw=割合) + 候補総数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _fire_stability_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+    return _fire_stability_search(
+        board, colors, next_pair, dnext_pair, sim, beam_width, k_levels, threshold_ratio,
+    )
+
+
+def _fire_stability_search(
+    board: Board,
+    colors: "tuple[int, ...]",
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    sim: ChainSimulator,
+    beam_width: int,
+    k_levels: "tuple[int, ...]",
+    threshold_ratio: float,
+) -> FireStabilityResult:
+    """fire_stability の本体探索ループ (near_future_fire_power と同じビーム展開)。
+
+    「Kホライズン全体 (0〜K手目まで) で列挙された全配置パターン」を累積し、
+    その中で近未来最大火力 (running max、near_future_fire_power と同じ基準)
+    の threshold_ratio 以内に入る件数の割合を返す。最終手だけを見る設計では
+    「早い手で大連鎖が1回だけ起きた後、以降どの手も単発では追いつけず常に
+    ゼロになる」不自然な挙動になったため、累積候補群で「その大連鎖に迫る
+    選択肢が経路全体でどれだけ多かったか」を測る設計に修正した。
+    """
+    max_k = max(k_levels)
+    total_hands = NEAR_FUTURE_KNOWN_HAND_SLOTS + max_k
+    frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+    best_score = 0.0
+    cumulative_scores: "list[float]" = []
+    checkpoints: "dict[int, tuple[float, int]]" = {}
+
+    for hand_idx in range(total_hands):
+        if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
+            expanded = _near_future_known_expand(frontier, next_pair, sim)
+        elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
+            expanded = _near_future_known_expand(frontier, dnext_pair, sim)
+        else:
+            expanded = _near_future_free_expand(frontier, colors, sim)
+        if not expanded:
+            break
+        frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+        top_score = expanded[0][0]
+        if top_score > best_score:
+            best_score = top_score
+        cumulative_scores.extend(score for score, _b, _c in expanded)
+
+        k_here = hand_idx + 1 - NEAR_FUTURE_KNOWN_HAND_SLOTS
+        if k_here in k_levels:
+            checkpoints[k_here] = _fire_stability_ratio(
+                cumulative_scores, best_score, threshold_ratio,
+            )
+
+    return _fire_stability_finalize(checkpoints, k_levels)
+
+
+def _fire_stability_ratio(
+    cumulative_scores: "list[float]", reference_max: float, threshold_ratio: float,
+) -> "tuple[float, int]":
+    """累積候補群のうち reference_max の threshold_ratio 以内に入る割合と件数を返す。
+
+    reference_max はホライズン内で観測された running max (_fire_stability_search
+    参照、near_future_fire_power と同じ基準)。
+    """
+    if not cumulative_scores or reference_max <= 0.0:
+        return 0.0, 0
+    cutoff = reference_max * threshold_ratio
+    count = sum(1 for score in cumulative_scores if score >= cutoff)
+    return count / len(cumulative_scores), count
+
+
+def _fire_stability_finalize(
+    checkpoints: "dict[int, tuple[float, int]]", k_levels: "tuple[int, ...]",
+) -> FireStabilityResult:
+    """チェックポイント (割合, 件数) から結果を組み立てる。
+
+    ビームが途中で尽きた場合、未記録の K は直前の値を引き継ぐ
+    (near_future_fire_power と同じ後方フォールバック方針)。
+    """
+    values: "dict[int, IndicatorV2Value]" = {}
+    counts: "dict[int, int]" = {}
+    prev_ratio, prev_count = 0.0, 0
+    for k in sorted(k_levels):
+        ratio, count = checkpoints.get(k, (prev_ratio, prev_count))
+        values[k] = IndicatorV2Value(score=_clamp01(ratio), raw=float(count))
+        counts[k] = count
+        prev_ratio, prev_count = ratio, count
+    return FireStabilityResult(values=values, candidate_counts=counts)
+
+
+# ============================
+# XVI 平均ツモ期待火力 (expected_fire_power) — 2026-07-22
+# ============================
+# user新指標: near_future_fire_power (理想ツモ=色を自由に選べる best case) の逆。
+# 「ランダムな色のツモ (選べない) が来た時に、それを最適配置したら出せる火力」の
+# 期待値 (expected case) を測る。「どんな色が来ても安定して火力が出せるか」
+# = 受けの多さ/安定性の再定義版 (旧 fire_stability=最大近傍パターン数、は
+# 独立の観測軸として残す)。
+#
+# 移植方針 (near_future の候補生成 machinery の再利用、file:line根拠):
+#   near_future_fire_power の「既知ネクスト」経路 _near_future_known_expand
+#   (本ファイル内、pair=(色A,色B) 固定・22配置の位置のみ探索して最良得点を
+#   返す) が、まさに「色固定・位置最適化」という本指標に必要なビルディング
+#   ブロックそのものである。near_future では next_pair/dnext_pair に
+#   「実際に検出されたネクスト」を渡していたが、本指標では代わりに
+#   「試合4色からのツモ色ペア」を渡す。位置探索ロジックには一切手を加えない。
+#
+# K=1〜4、手法を使い分ける (user最終指示、2026-07-22 追加):
+#   K=1,2: 全ツモ色パターンを厳密に列挙して平均する (2個1組=4色×4色=16通り、
+#     K=2は16×16=256通りの色列)。この規模なら乱数もseedの悩みも不要な
+#     厳密期待値が出せる (_expected_fire_exact_k1k2)。
+#   K=3,4: 全列挙は 4096/65536 通りで重すぎるため、モンテカルロ (ランダム
+#     色ペア列を N 回サンプルして平均) で近似する (_expected_fire_mc_k3k4)。
+#     乱数は盤面内容から決定論的に導出したシードを使う (_expected_fire_seed、
+#     stateless: 同一盤面には常に同一結果)。
+
+# 出力する K 水準 (1〜4、user指示)。
+EXPECTED_FIRE_K_LEVELS: tuple[int, ...] = (1, 2, 3, 4)
+# K=1,2 (厳密全列挙) の対象。
+EXPECTED_FIRE_EXACT_LEVELS: tuple[int, ...] = (1, 2)
+# K=3,4 (モンテカルロ) の対象。
+EXPECTED_FIRE_MC_LEVELS: tuple[int, ...] = (3, 4)
+# K=2 の厳密全列挙で、1手目の位置候補のうち何個を2手目へ引き継ぐか。
+# ベンチ結果 (scripts/_tmp_bench_expected_fire.py、正直な記録): 256通り ×
+# この幅ぶんの位置探索が乗算されるため、幅=1で ~350-450ms/盤面、幅=2で
+# ~700-900ms/盤面 (概ね比例)。「重ければ枝刈り」の指示に従い幅=1を既定値
+# とする (1手目は必ず得点最大の1候補のみ2手目へ引き継ぐ)。
+EXPECTED_FIRE_EXACT_BEAM_WIDTH: int = 1
+# K=3,4 モンテカルロのサンプル数 (4手ロールアウトを1回として、この回数だけ
+# 試行し、K=3到達時点・K=4到達時点の両方をチェックポイントとして同時取得する
+# = near_future と同じ「サンプルを使い回す」設計)。
+#
+# ⚠️ ベンチ結果 (正直な記録、scripts/_tmp_bench_expected_fire.py):
+# 当初 mc_beam_width=8 (near_future と同じ幅)・n=48 で試したところ、
+# v29.npz の実盤面10件 (異なる盤面・同一 ChainSimulator 共有キャッシュ、
+# 収集パイプラインと同じ使用条件) で平均 5920ms・最大 10187ms/盤面と
+# 判明し「重すぎない」の範囲を大きく超えた (K=2 厳密256通りではなく
+# K=3,4 モンテカルロの beam_width=8×4手 の分岐爆発が主因)。
+# mc_beam_width=2・n=24 に絞ったところ平均 1665ms・最大 3432ms まで縮小
+# (これでもなお比較的重い。位置ヘッジの幅を落とすため K3,4 の推定値は
+# beam_width=8 版よりやや低めに偏る可能性がある — 正直な注記)。
+# 「検証段階でまだ本体差し替え確定でない」ため、コストと精度のトレードオフ
+# を許容範囲まで軽くした値をここでは既定値とする。
+EXPECTED_FIRE_MC_N_SAMPLES: int = 24
+# モンテカルロ内の各手で保持する上位候補数。near_future_fire_power と同じ
+# 幅=8 だと分岐が4手に渡って乗算し重すぎたため、幅=2 に縮小した (上記ベンチ
+# 参照)。厳密列挙と異なり1系列のみ辿るため、幅を絞ると位置のヘッジ余地が
+# 減り推定値がやや低めに偏りうる。
+EXPECTED_FIRE_MC_BEAM_WIDTH: int = 2
+# 正規化分母 (既存火力系と統一)。
+EXPECTED_FIRE_NORM: int = ON_FIELD_CAP
+
+
+@dataclass(frozen=True)
+class ExpectedFireResult:
+    """XVI 平均ツモ期待火力の算出結果 (K=1..4 を同時取得)。
+
+    Attributes:
+        values: {K: IndicatorV2Value} (score=raw/72お邪魔換算、raw=平均お邪魔換算)。
+        std_raw: {K: 標準偏差} (お邪魔換算スケール、安定性の参考値、デバッグ用)。
+        n_evaluated: {K: 実際に平均に使った件数} (K=1:16, K=2:256, K=3,4:
+            EXPECTED_FIRE_MC_N_SAMPLES。デバッグ/標準誤差計算用)。
+    """
+    values: "dict[int, IndicatorV2Value]"
+    std_raw: "dict[int, float]"
+    n_evaluated: "dict[int, int]"
+
+
+def _expected_fire_empty_result(k_levels: "tuple[int, ...]") -> ExpectedFireResult:
+    """窒息盤面用の 0 埋め結果。"""
+    zero = IndicatorV2Value(score=0.0, raw=0.0)
+    return ExpectedFireResult(
+        values={k: zero for k in k_levels},
+        std_raw={k: 0.0 for k in k_levels},
+        n_evaluated={k: 0 for k in k_levels},
+    )
+
+
+def _expected_fire_seed(board: Board) -> int:
+    """盤面から決定論的な乱数シードを導出する (stateless: 同一盤面→同一結果)。
+
+    組込み hash() は文字列/バイト列に対しプロセスごとにランダム化される
+    (PYTHONHASHSEED) ため使わず、zlib.crc32 (プロセス非依存の決定的ハッシュ)
+    を使う (scripts/_tmp_ama_builder.py で踏んだ落とし穴と同じ回避策)。
+    """
+    return zlib.crc32(board._grid.tobytes())
+
+
+def _expected_fire_all_pairs(colors: "tuple[int, ...]") -> "list[tuple[int, int]]":
+    """試合4色から (main, sub) 順序付き全16通りツモペアを列挙する。
+
+    同色ペア (例: 赤赤) も実際のツモ仕様通り含む (4色×4色=16通り)。
+    """
+    return [(a, b) for a in colors for b in colors]
+
+
+def expected_fire_power(
+    board: Board,
+    simulator: "ChainSimulator | None" = None,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    elapsed_sec: float = 0.0,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> ExpectedFireResult:
+    """XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)。
+
+    現在盤面から、試合の4色 (active_colors) の中の色のツモ (色は選べない、
+    位置のみ最適化) を K 手 (1..4) 積んだ場合に到達できる得点 (お邪魔換算)
+    の期待値を返す。near_future_fire_power (理想ツモ=色も自由に選べる
+    best case) の対極として「どんな色が来ても安定して火力が出せるか」
+    (expected case) を測る。
+
+    K=1,2 は全ツモ色パターン (16通り/256通り) を厳密に列挙した平均値
+    (乱数不使用)。K=3,4 はモンテカルロ近似 (盤面内容から決定論的に導出した
+    シードを使う stateless 設計、同一盤面には常に同一結果)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        exact_beam_width: K=2 厳密列挙で1手目→2手目へ引き継ぐ候補数。
+        mc_beam_width: K=3,4 モンテカルロの各手で保持する上位候補数。
+        mc_n_samples: K=3,4 モンテカルロのサンプル数。
+        k_levels: 出力する K 水準 (既定 1..4)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム用お邪魔換算)。
+        active_colors: 試合別4色 (省略時は盤面出現色フォールバック)。
+        rng_seed: K=3,4 用乱数シードの明示指定 (省略時は盤面内容から自動導出)。
+
+    Returns:
+        ExpectedFireResult: K別 IndicatorV2Value (score=raw/72, raw=平均お邪魔
+        換算) + 標準偏差 (参考) + 評価件数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _expected_fire_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    stats: "dict[int, tuple[float, float, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        stats.update(_expected_fire_exact_k1k2(board, colors, sim, exact_beam_width))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        stats.update(
+            _expected_fire_mc_k3k4(board, colors, sim, mc_beam_width, mc_n_samples, rng),
+        )
+    return _expected_fire_finalize(stats, k_levels, elapsed_sec)
+
+
+def _expected_fire_exact_k1k2(
+    board: Board, colors: "tuple[int, ...]", sim: ChainSimulator, beam_width: int,
+) -> "dict[int, tuple[float, float, int]]":
+    """K=1,2 の厳密平均を計算する (全16通り/256通りのツモ色列を列挙)。
+
+    K=1: 16通りのツモペアそれぞれを最適配置した得点の平均。
+    K=2: 1手目16通り × 2手目16通り = 256通りの色列それぞれについて、
+        (1手目の得点, 2手目までの最良得点=running max) の後者を平均する。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+    sums = {1: 0.0, 2: 0.0}
+    sq_sums = {1: 0.0, 2: 0.0}
+    counts = {1: 0, 2: 0}
+
+    for pair1 in pairs:
+        expanded1 = _near_future_known_expand([(0.0, board)], pair1, sim)
+        score_h1 = expanded1[0][0] if expanded1 else 0.0
+        sums[1] += score_h1
+        sq_sums[1] += score_h1 * score_h1
+        counts[1] += 1
+
+        frontier_h1 = [(s, b) for s, b, _c in expanded1[:beam_width]] if expanded1 else []
+        for pair2 in pairs:
+            expanded2 = _near_future_known_expand(frontier_h1, pair2, sim) if frontier_h1 else []
+            top_h2 = expanded2[0][0] if expanded2 else 0.0
+            value_k2 = max(score_h1, top_h2)
+            sums[2] += value_k2
+            sq_sums[2] += value_k2 * value_k2
+            counts[2] += 1
+
+    return {1: (sums[1], sq_sums[1], counts[1]), 2: (sums[2], sq_sums[2], counts[2])}
+
+
+def _expected_fire_mc_k3k4(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+) -> "dict[int, tuple[float, float, int]]":
+    """K=3,4 のモンテカルロ平均を計算する (1回の4手ロールアウトで両方取得)。
+
+    各サンプル: 4手分ランダムな色ペアを引き、_near_future_known_expand
+    (near_future と同じ位置最適化ロジック) で毎手最適配置する running max
+    ロールアウト。K=3到達時点・K=4到達時点の両方をチェックポイントとして
+    記録する (near_future のチェックポイント共有と同じ設計)。
+    """
+    sums = {3: 0.0, 4: 0.0}
+    sq_sums = {3: 0.0, 4: 0.0}
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, 5):
+            if frontier:
+                pair = (rng.choice(colors), rng.choice(colors))
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []
+            if hand in (3, 4):
+                sums[hand] += best_score
+                sq_sums[hand] += best_score * best_score
+    return {3: (sums[3], sq_sums[3], n_samples), 4: (sums[4], sq_sums[4], n_samples)}
+
+
+def _expected_fire_search(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    k_levels: "tuple[int, ...]",
+    n_samples: int,
+    elapsed_sec: float,
+    rng: "random.Random",
+) -> ExpectedFireResult:
+    """expected_fire_power の本体探索ループ (モンテカルロ、K=1,2同時チェックポイント)。
+
+    1サンプル = 「ランダム色ペアを _near_future_known_expand (near_future の
+    既知ペア展開ロジックをそのまま再利用) で最適配置」を K 回繰り返す
+    ロールアウト。max_k (=2) 手分ロールアウトし、K=1 到達時点・K=2 到達時点の
+    両方の running max をチェックポイントとして記録する (near_future と
+    同じ「サンプルを使い回す」設計、モンテカルロを2重に走らせない)。
+    """
+    max_k = max(k_levels)
+    sums = {k: 0.0 for k in k_levels}
+    sq_sums = {k: 0.0 for k in k_levels}
+
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, max_k + 1):
+            if frontier:
+                pair = _expected_fire_sample_pair(rng, colors)
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []  # 以降のホライズンも配置不能 (満杯等)、値を据え置く
+            if hand in k_levels:
+                sums[hand] += best_score
+                sq_sums[hand] += best_score * best_score
+
+    return _expected_fire_finalize(sums, sq_sums, k_levels, n_samples, elapsed_sec)
+
+
+def _expected_fire_finalize(
+    stats: "dict[int, tuple[float, float, int]]",
+    k_levels: "tuple[int, ...]",
+    elapsed_sec: float,
+) -> ExpectedFireResult:
+    """集計 (平均・分散・評価件数) をお邪魔換算+正規化して結果を組み立てる。
+
+    K=1,2 (厳密全列挙) と K=3,4 (モンテカルロ) で評価件数 (n_evaluated) が
+    大きく異なる (16/256 vs mc_n_samples) ため、K ごとに独立して扱う。
+    """
+    values: "dict[int, IndicatorV2Value]" = {}
+    std_raw: "dict[int, float]" = {}
+    n_evaluated: "dict[int, int]" = {}
+    for k in sorted(k_levels):
+        total, total_sq, count = stats.get(k, (0.0, 0.0, 0))
+        mean_score = total / count if count > 0 else 0.0
+        variance = (total_sq / count - mean_score * mean_score) if count > 0 else 0.0
+        std_score = variance ** 0.5 if variance > 0.0 else 0.0
+        ojama = score_to_ojama(
+            score=mean_score, prev_leftover=0, elapsed_sec=elapsed_sec,
+            rate_base=OJAMA_RATE_STANDARD,
+        ).ojama_count
+        values[k] = IndicatorV2Value(
+            score=_clamp01(float(ojama) / EXPECTED_FIRE_NORM), raw=float(ojama),
+        )
+        # 標準偏差も同じレート換算の目安として /rate してお邪魔換算スケールに揃える。
+        std_raw[k] = std_score / float(OJAMA_RATE_STANDARD)
+        n_evaluated[k] = count
+    return ExpectedFireResult(values=values, std_raw=std_raw, n_evaluated=n_evaluated)
+
+
+# ============================
+# XVII 打ち合い応手確率 (counter_reach_probability) — #24 Step2, 2026-07-29
+# ============================
+# user定義 (memory reference_saisoku_exchange_model_2026-07-22 確定):
+# 「有効な催促 = 着弾までに相手が返せる見込みが50%以下」。expected_fire_power
+# (XVI) は近未来ツモの「平均得点」を測るが、本指標はその rollout 機構を
+# そのまま流用し、集計を「平均」から「閾値 (お邪魔換算) 到達確率」に
+# 差し替えたもの。既存関数 (expected_fire_power / _expected_fire_exact_k1k2 /
+# _expected_fire_mc_k3k4 等) は一切変更せず、新規関数のみ追加する。
+#
+# 二層設計 (memory project_dual_mode_indicator_design_2026-07-22 準拠):
+#   precise (counter_reach_probability): 既存 ChainSimulator +
+#       calculate_chain_score による厳密得点。動画判定=精度優先オフライン
+#       向け (expected_fire_power と同じコスト特性)。
+#   fast (counter_reach_probability_fast): chain_bitboard バッチ +
+#       近似得点 (score_approx、連結ボーナス0近似)。リアルタイム軽量近似
+#       向け。候補配置後盤面をまとめて1回のバッチ呼び出しでシミュレートし、
+#       逐次 ChainSimulator.simulate() 呼び出しを排除する。
+#
+# 呼び出し側 (Step3以降) が「相手は OPP_CHAINING (連鎖中=応手不能)」を
+# 検出した場合は、本関数を呼ばず確率0として扱う設計とする (2026-07-29の
+# 重要な発見、scripts/measure_exchange_dynamics.py の OppCoverageStatus
+# 参照。src 側は scripts に依存しない層構造を保つため、その判定自体は
+# 呼び出し側=scripts 層の責務とする)。
+
+# 「有効な催促」判定の閾値 (user確定値、50%以下で有効)。
+COUNTER_REACH_EFFECTIVE_THRESHOLD_PROB: float = 0.5
+
+
+@dataclass(frozen=True)
+class CounterReachResult:
+    """XVII 打ち合い応手確率の算出結果 (K=1..4 を同時取得)。
+
+    Attributes:
+        probabilities: {K: 到達確率 (0.0〜1.0)}。「threshold_ojama 以上
+            (お邪魔換算) の返しを到達できる」ツモ列の割合。K=1,2は厳密
+            全列挙 (乱数不使用、正確な確率)、K=3,4はモンテカルロ近似。
+        n_evaluated: {K: 評価件数} (K=1:16, K=2:256, K=3,4: mc_n_samples)。
+    """
+    probabilities: "dict[int, float]"
+    n_evaluated: "dict[int, int]"
+
+
+def _counter_reach_empty_result(k_levels: "tuple[int, ...]") -> CounterReachResult:
+    """窒息盤面用の結果 (応手不能=到達確率0.0固定)。"""
+    return CounterReachResult(
+        probabilities={k: 0.0 for k in k_levels},
+        n_evaluated={k: 0 for k in k_levels},
+    )
+
+
+def _score_to_ojama_count(score: float, elapsed_sec: float) -> int:
+    """素点をお邪魔換算個数に変換する薄いヘルパー (score_to_ojama 呼び出しの共通化)。"""
+    return score_to_ojama(
+        score=max(0, int(round(score))), prev_leftover=0, elapsed_sec=elapsed_sec,
+        rate_base=OJAMA_RATE_STANDARD,
+    ).ojama_count
+
+
+def counter_reach_probability(
+    board: Board,
+    threshold_ojama: float,
+    elapsed_sec: float = 0.0,
+    simulator: "ChainSimulator | None" = None,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> CounterReachResult:
+    """XVII 打ち合い応手確率 (precise mode、ChainSimulator厳密得点)。
+
+    盤面 (通常は相手側の STABLE 確定盤面) から、試合4色のツモを K手 (1..4)
+    積んだ場合に「threshold_ojama 以上 (お邪魔換算) の返しに到達できる」
+    確率を返す。expected_fire_power (XVI) の rollout 機構
+    (_near_future_known_expand 等、既存・無変更) をそのまま流用し、集計の
+    みを「平均」から「閾値到達率」に差し替えている。
+
+    Args:
+        board: 応手側 (相手側) の STABLE 確定盤面 (破壊しない)。
+        threshold_ojama: 到達判定の閾値 (お邪魔換算個数)。呼び出し側が
+            攻撃側の送りお邪魔量等から渡す。0以下を渡すと常に到達
+            (確率1.0、窒息盤面を除く) になる。
+        elapsed_sec: 試合相対経過秒 (マージンタイム換算用)。
+        simulator: ChainSimulator インスタンス (省略時は共有)。
+        exact_beam_width/mc_beam_width/mc_n_samples/k_levels: XVI
+            (expected_fire_power) と同じ意味・既定値 (パラメータの一貫性
+            を保つため共有定数をそのまま使う)。
+        active_colors: 試合別4色 (省略時は盤面出現色フォールバック)。
+        rng_seed: K=3,4用乱数シード明示指定 (省略時は盤面内容から自動導出、
+            stateless: 同一盤面には常に同一結果)。
+
+    Returns:
+        CounterReachResult: K別到達確率 + 評価件数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return _counter_reach_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    hits: "dict[int, tuple[int, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        hits.update(_counter_reach_exact_k1k2(
+            board, colors, sim, exact_beam_width, threshold_ojama, elapsed_sec,
+        ))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        hits.update(_counter_reach_mc_k3k4(
+            board, colors, sim, mc_beam_width, mc_n_samples, rng, threshold_ojama, elapsed_sec,
+        ))
+    return _counter_reach_finalize(hits, k_levels)
+
+
+def _counter_reach_exact_k1k2(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=1,2 の厳密到達判定 (_expected_fire_exact_k1k2 と同じ列挙構造、
+
+    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+    hits = {1: 0, 2: 0}
+    counts = {1: 0, 2: 0}
+
+    for pair1 in pairs:
+        expanded1 = _near_future_known_expand([(0.0, board)], pair1, sim)
+        score_h1 = expanded1[0][0] if expanded1 else 0.0
+        hits[1] += int(_score_to_ojama_count(score_h1, elapsed_sec) >= threshold_ojama)
+        counts[1] += 1
+
+        frontier_h1 = [(s, b) for s, b, _c in expanded1[:beam_width]] if expanded1 else []
+        for pair2 in pairs:
+            expanded2 = _near_future_known_expand(frontier_h1, pair2, sim) if frontier_h1 else []
+            top_h2 = expanded2[0][0] if expanded2 else 0.0
+            value_k2 = max(score_h1, top_h2)
+            hits[2] += int(_score_to_ojama_count(value_k2, elapsed_sec) >= threshold_ojama)
+            counts[2] += 1
+
+    return {1: (hits[1], counts[1]), 2: (hits[2], counts[2])}
+
+
+def _counter_reach_mc_k3k4(
+    board: Board,
+    colors: "tuple[int, ...]",
+    sim: ChainSimulator,
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=3,4 のモンテカルロ到達判定 (_expected_fire_mc_k3k4 と同じロールアウト、
+
+    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    """
+    hits = {3: 0, 4: 0}
+    for _ in range(n_samples):
+        frontier: "list[tuple[float, Board]]" = [(0.0, board)]
+        best_score = 0.0
+        for hand in range(1, 5):
+            if frontier:
+                pair = (rng.choice(colors), rng.choice(colors))
+                expanded = _near_future_known_expand(frontier, pair, sim)
+                if expanded:
+                    frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
+                    top_score = expanded[0][0]
+                    if top_score > best_score:
+                        best_score = top_score
+                else:
+                    frontier = []
+            if hand in (3, 4):
+                hits[hand] += int(
+                    _score_to_ojama_count(best_score, elapsed_sec) >= threshold_ojama,
+                )
+    return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
+
+
+def _counter_reach_finalize(
+    hits: "dict[int, tuple[int, int]]", k_levels: "tuple[int, ...]",
+) -> CounterReachResult:
+    """集計 (到達件数, 評価件数) から確率を組み立てる。"""
+    probabilities: "dict[int, float]" = {}
+    n_evaluated: "dict[int, int]" = {}
+    for k in sorted(k_levels):
+        hit_count, count = hits.get(k, (0, 0))
+        probabilities[k] = float(hit_count) / count if count > 0 else 0.0
+        n_evaluated[k] = count
+    return CounterReachResult(probabilities=probabilities, n_evaluated=n_evaluated)
+
+
+# ----------------------------
+# fast mode (chain_bitboard バッチ、近似得点)
+# ----------------------------
+
+
+def _enumerate_placement_boards(board: Board, pair: "tuple[int, int]") -> "list[Board]":
+    """22配置の配置後 (未シミュレート) 盤面一覧を返す。
+
+    _enumerate_placements (:784) の simulate 呼び出し前段のみを複製した
+    新規関数 (既存関数は無変更)。バッチ得点計算の入力を作るために使う。
+    """
+    boards: "list[Board]" = []
+    for rotation in range(4):
+        max_col = BOARD_COLS if rotation in (0, 2) else BOARD_COLS - 1
+        for col in range(max_col):
+            placed = _place_pair_to_board(board, pair, col, rotation)
+            if placed is not None and not placed.is_dead():
+                boards.append(placed)
+    return boards
+
+
+def _batch_score_boards(boards: "list[Board]") -> "list[tuple[float, dict, int]]":
+    """複数盤面を一括シミュレートし (score_approx, final_planes, chain_count) を
+
+    順序保持で返す (chain_bitboard.simulate_batch_with_approx_score 利用)。
+
+    ⚠️ 性能上の理由 (2026-07-29 実測、cProfile で確認): 戻り値に Board
+    オブジェクトを含めず、軽量な bitboard 表現 (final_planes dict、
+    Python ループなしでそのまま保持できる) のまま返す。以前は
+    planes_to_board を候補全件に対して都度呼んでいたが、実測でその
+    変換だけが全体の54% (9680件中ボトルネック、beam選抜で大半は
+    使われずに捨てられる) を占めていたため。実際に次手へ展開する候補
+    (beam_width 分のみ) だけ、呼び出し側が個別に planes_to_board で
+    Board へ復元する。
+    """
+    if not boards:
+        return []
+    planes = batch_from_boards(boards)
+    results = simulate_batch_with_approx_score(planes)
+    return [(float(r.score_approx), r.final_planes, r.chain_count) for r in results]
+
+
+def counter_reach_probability_fast(
+    board: Board,
+    threshold_ojama: float,
+    elapsed_sec: float = 0.0,
+    exact_beam_width: int = EXPECTED_FIRE_EXACT_BEAM_WIDTH,
+    mc_beam_width: int = EXPECTED_FIRE_MC_BEAM_WIDTH,
+    mc_n_samples: int = EXPECTED_FIRE_MC_N_SAMPLES,
+    k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
+    active_colors: "tuple[int, ...] | None" = None,
+    rng_seed: "int | None" = None,
+) -> CounterReachResult:
+    """XVII 打ち合い応手確率 (fast mode、chain_bitboardバッチ近似得点)。
+
+    counter_reach_probability の軽量近似版 (リアルタイム向け、memory
+    project_dual_mode_indicator_design_2026-07-22 の二層設計に基づく)。
+    候補配置後盤面をまとめて chain_bitboard.simulate_batch_with_approx_score
+    に渡すことで、逐次 ChainSimulator.simulate() 呼び出しを排除する。
+    得点は連結ボーナス0近似 (BitboardChainScoreResult docstring参照、
+    src/chain_bitboard.py)。
+
+    Args/Returns は counter_reach_probability と同じ (simulator引数のみ
+    無し、chain_bitboard は ChainSimulator を使わないため)。
+    """
+    if board.is_dead():
+        return _counter_reach_empty_result(k_levels)
+    colors = active_colors if active_colors is not None else _near_future_active_colors(board)
+
+    hits: "dict[int, tuple[int, int]]" = {}
+    if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
+        hits.update(_counter_reach_exact_k1k2_fast(
+            board, colors, exact_beam_width, threshold_ojama, elapsed_sec,
+        ))
+    if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
+        seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
+        rng = random.Random(seed)
+        hits.update(_counter_reach_mc_k3k4_fast(
+            board, colors, mc_beam_width, mc_n_samples, rng, threshold_ojama, elapsed_sec,
+        ))
+    return _counter_reach_finalize(hits, k_levels)
+
+
+def _counter_reach_exact_k1k2_fast(
+    board: Board,
+    colors: "tuple[int, ...]",
+    beam_width: int,
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=1,2 厳密到達判定の fast mode (chain_bitboardバッチ、近似得点)。
+
+    _counter_reach_exact_k1k2 と同じ列挙構造だが、1手目 (16通り×22配置=
+    最大352候補) と2手目 (16×beam_width通り×16×22配置) それぞれの候補
+    配置後盤面を1回ずつのバッチ呼び出しにまとめてシミュレートする
+    (逐次 ChainSimulator.simulate() 呼び出しを排除、高速化の主眼)。
+    """
+    pairs = _expected_fire_all_pairs(colors)
+
+    hand1_boards: "list[Board]" = []
+    hand1_pair_idx: "list[int]" = []
+    for pi, pair1 in enumerate(pairs):
+        for b in _enumerate_placement_boards(board, pair1):
+            hand1_boards.append(b)
+            hand1_pair_idx.append(pi)
+    hand1_scored = _batch_score_boards(hand1_boards)
+
+    cand_per_pair1: "dict[int, list[tuple[float, dict]]]" = {}
+    for (score, planes_i, _cc), pi in zip(hand1_scored, hand1_pair_idx):
+        cand_per_pair1.setdefault(pi, []).append((score, planes_i))
+
+    # 上位 beam_width 件のみ Board へ復元する (2026-07-29 性能修正:
+    # _batch_score_boards のdocstring参照。352候補全件を復元すると
+    # planes_to_board が支配的コストになるため、2手目へ実際に展開する
+    # 候補分だけに絞る)。
+    frontier_per_pair1: "dict[int, list[tuple[float, Board]]]" = {}
+    score_h1_by_pair1: "dict[int, float]" = {}
+    for pi in range(len(pairs)):
+        cand = sorted(cand_per_pair1.get(pi, []), key=lambda x: x[0], reverse=True)
+        score_h1_by_pair1[pi] = cand[0][0] if cand else 0.0
+        frontier_per_pair1[pi] = [
+            (sc, planes_to_board(pl)) for sc, pl in cand[:beam_width]
+        ]
+
+    hits = {1: 0, 2: 0}
+    counts = {1: 0, 2: 0}
+    for pi in range(len(pairs)):
+        hits[1] += int(
+            _score_to_ojama_count(score_h1_by_pair1[pi], elapsed_sec) >= threshold_ojama,
+        )
+        counts[1] += 1
+
+    hand2_boards: "list[Board]" = []
+    hand2_owner: "list[tuple[int, int]]" = []
+    for pi in range(len(pairs)):
+        for _score, fb in frontier_per_pair1[pi]:
+            for pj, pair2 in enumerate(pairs):
+                for b in _enumerate_placement_boards(fb, pair2):
+                    hand2_boards.append(b)
+                    hand2_owner.append((pi, pj))
+    hand2_scored = _batch_score_boards(hand2_boards)
+
+    # 2手目は展開の終端 (K=2まで) なので Board への復元は不要 (score のみ使う)。
+    best_h2: "dict[tuple[int, int], float]" = {}
+    for (score, _planes_i, _cc), key in zip(hand2_scored, hand2_owner):
+        cur = best_h2.get(key)
+        if cur is None or score > cur:
+            best_h2[key] = score
+
+    for pi in range(len(pairs)):
+        score_h1 = score_h1_by_pair1[pi]
+        for pj in range(len(pairs)):
+            top_h2 = best_h2.get((pi, pj), 0.0)
+            value_k2 = max(score_h1, top_h2)
+            hits[2] += int(_score_to_ojama_count(value_k2, elapsed_sec) >= threshold_ojama)
+            counts[2] += 1
+
+    return {1: (hits[1], counts[1]), 2: (hits[2], counts[2])}
+
+
+def _counter_reach_mc_k3k4_fast(
+    board: Board,
+    colors: "tuple[int, ...]",
+    beam_width: int,
+    n_samples: int,
+    rng: "random.Random",
+    threshold_ojama: float,
+    elapsed_sec: float,
+) -> "dict[int, tuple[int, int]]":
+    """K=3,4 モンテカルロ到達判定の fast mode (全サンプル横断バッチ化)。
+
+    _counter_reach_mc_k3k4 と同じロールアウト (色ペアは各サンプル毎に
+    乱数取得) だが、hand ステップ毎に「全サンプル分の候補配置後盤面」を
+    1回のバッチにまとめて chain_bitboard でシミュレートする
+    (n_samples×最大22候補を1回のnumpy呼び出しで処理、高速化の主眼)。
+    """
+    frontiers: "list[list[tuple[float, Board]]]" = [[(0.0, board)] for _ in range(n_samples)]
+    best_scores = [0.0] * n_samples
+    hits = {3: 0, 4: 0}
+    pairs_per_sample = [
+        [(rng.choice(colors), rng.choice(colors)) for _ in range(4)]
+        for _ in range(n_samples)
+    ]
+
+    for hand in range(1, 5):
+        all_boards: "list[Board]" = []
+        owner: "list[int]" = []
+        for s in range(n_samples):
+            if not frontiers[s]:
+                continue
+            pair = pairs_per_sample[s][hand - 1]
+            for _, base_board in frontiers[s]:
+                for placed in _enumerate_placement_boards(base_board, pair):
+                    all_boards.append(placed)
+                    owner.append(s)
+        scored = _batch_score_boards(all_boards)
+
+        per_sample: "dict[int, list[tuple[float, dict, int]]]" = {}
+        for (score, planes_i, cc), s in zip(scored, owner):
+            per_sample.setdefault(s, []).append((score, planes_i, cc))
+
+        # hand=4 (最終手) はこれ以上展開しないため Board への復元をスキップする
+        # (2026-07-29 性能修正、_batch_score_boards のdocstring参照)。
+        is_last_hand = hand == 4
+        for s in range(n_samples):
+            cand = per_sample.get(s)
+            if not cand:
+                frontiers[s] = []
+                continue
+            cand.sort(key=lambda x: x[0], reverse=True)
+            top_score = cand[0][0]
+            if top_score > best_scores[s]:
+                best_scores[s] = top_score
+            if is_last_hand:
+                frontiers[s] = []
+            else:
+                frontiers[s] = [
+                    (sc, planes_to_board(pl)) for sc, pl, _cc in cand[:beam_width]
+                ]
+
+        if hand in (3, 4):
+            for s in range(n_samples):
+                hits[hand] += int(
+                    _score_to_ojama_count(best_scores[s], elapsed_sec) >= threshold_ojama,
+                )
+    return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
+
+
+# ============================
+# XVIII おじゃまダメージ (発火点埋没モデル) — 2026-07-29 追加
+# ============================
+#
+# user 伝授 (2026-07-29、複数往復のすり合わせで確定した構造):
+#   (1) 「お邪魔は18個(3段)超で明確に不利、12〜17個(2段台)もかなり不利、
+#        あとは盤面のぷよが多いほど1個あたりの不利度がジワジワ上がる」
+#   (2) 「カウンター(受けてから発火する)は、発火点までにお邪魔が3段あると厳しい」
+#   (3) 「飽和(将来組める最大火力)はおじゃま数の単調減少関数なので、飽和成分は
+#        おじゃま数の項で代理してよい(厳密な飽和探索=chain_bitboardでの深い構築
+#        探索は重いため今回は行わない、user 判断 2026-07-29)」
+#
+# この3発言は下記2入力の引き算1本に統合できる:
+#     残り余裕段数 = 発火点までの余裕段数(headroom_dan) − 受けたおじゃま段数(ojama_dan)
+#     ダメージ = 残り余裕段数の折れ線 (下がるほど不利、3水準2折れ)
+#
+#   - おじゃま量の項 (ojama_dan) は「発火点を埋める直接的な脅威」と「将来の
+#     組める余地=飽和を奪う脅威」の両方を兼ねる (user (3))。したがって
+#     飽和減少専用の別指標は用意しない (重複指標を増やさない、user 判断)。
+#   - 発火点までの余裕段数 (headroom_dan) が小さい (=盤面が埋まっている) ほど
+#     同じおじゃま量でも残り余裕段数がすぐに尽きる → 「盤面が埋まっているほど
+#     1個あたりの不利度がジワジワ上がる」(user (1) 後半) が自然に導かれる。
+#     「量に対する折れ線」と「盤面の埋まり具合による増幅」は別々の項ではなく、
+#     1つの引き算 (headroom_dan − ojama_dan) の中に統合されている。
+#   - user 12個(2段)/18個(3段) の折れ点は「典型的な発火点余裕が3段程度」
+#     (user (2)) という前提のもとで 残り余裕段数=+1段 / 0段 に相当すると
+#     解釈できる (headroom_dan=3 と仮定すると 12個→remain=1、18個→remain=0)。
+#     ※この対応関係は user から直接の数値確認を得たものではなく、コーダに
+#       よる構造上の解釈である (暫定)。折れ点位置・傾き・大きさは全て下記
+#       定数で調整可能にしてあり、実データ学習で調整する前提
+#       (CLAUDE.md「人間が重要と決めない。観測軸を提供→学習で重要度を発見」)。
+#   - 参考値 (user 別発言、非構造的): 「3個は受けても無害」「60個はほぼ死」。
+#     headroom_dan=3 の前提で換算すると 3個→remain=2.5 (安全域)、
+#     60個(10段)→remain=-7 に相当し、下記 REMAINING_MARGIN_FLOOR_DAN の
+#     決定にのみ参考として用いた (この換算自体も暫定・要検証)。
+
+# おじゃま「段」換算 (個数→段)。6列にほぼ均等落下する前提
+# (reference_ojama_landing_pattern.md 準拠)。
+# scripts/measure_exchange_dynamics.py の OJAMA_PER_DAN と同一単位・同一値
+# (=6) を用いる (値の意味は同じだが「受けるダメージ」の閾値算出であり
+# 同スクリプトの「返り量分類」閾値 RETURN_ONE_DAN_UPPER/RETURN_TWO_DAN_LOWER
+# とは出自が異なる別定数として独立に持つ。両者を安易に共通化しない)。
+OJAMA_DAMAGE_PER_DAN: float = 6.0
+
+# 残り余裕段数 (headroom_dan − ojama_dan) の折れ点。
+# SAFE 以上: 「許容範囲」帯 (被害ほぼフラット)。
+# CRITICAL (=0): 発火点そのものが埋まる境界 (「明確に不利」開始点)。
+# 上記コメント通り、headroom_dan=3 前提での user 12個/18個 折れ点からの逆算値。
+# ※暫定値。厳密な検証はされていない。
+REMAINING_MARGIN_SAFE_DAN: float = 1.0
+REMAINING_MARGIN_CRITICAL_DAN: float = 0.0
+
+# 残り余裕段数がこれ以下 (大きく負) になったらダメージ 1.0 で飽和させる下限。
+# user「60個(10段)はほぼ死」を headroom_dan=3 前提で換算した参考値 (暫定)。
+REMAINING_MARGIN_FLOOR_DAN: float = -7.0
+
+# 折れ線 3 水準の高さ (0〜1)。中間値は user 定性表現の相対順位のみを反映した
+# 暫定値であり、絶対的な正しさは未検証 (大きさは今後の学習に委ねる)。
+OJAMA_DAMAGE_FLOOR: float = 0.05  # 残り余裕 >= SAFE: 「受けても無害」帯
+OJAMA_DAMAGE_MID: float = 0.5    # 残り余裕 = CRITICAL: 「かなり不利」代表点
+OJAMA_DAMAGE_CEIL: float = 1.0   # 残り余裕 <= FLOOR: 「ほぼ死」帯
+
+
+def _diff_dropped_column(before: "Board", after: "Board") -> "int | None":
+    """1 puyo 追加前後の高さ差から、追加された列を特定する。
+
+    _takapt_best_drop の best_board は before に 1 puyo 追加した盤面
+    (=現在の最大連鎖=発火点を作る1手) のため、高さが変化した列が
+    その落下列 (発火点の列) になる。
+
+    Args:
+        before: 追加前の盤面。
+        after: 追加後の盤面 (_takapt_best_drop の best_board)。
+
+    Returns:
+        int | None: 高さが変化した列番号。差が見つからなければ None
+            (通常は起きないが、既存グループが既に発火可能だった等の
+            退化ケースに対する安全弁)。
+    """
+    for col in range(BOARD_COLS):
+        if before.height_of(col) != after.height_of(col):
+            return col
+    return None
+
+
+def _ignition_headroom_dan(board: Board, sim: ChainSimulator) -> float:
+    """発火点までの余裕段数 (headroom_dan) を求める。
+
+    発火点 = 現在の最大連鎖 (current_max_chain/takapt定石) を作る1手の
+    落下列。1手でも発火可能な組み合わせが存在しない盤面
+    (_takapt_best_drop の best_board=None、序盤等で頻出) では発火点が
+    未確定のため、窒息判定列 (DEATH_COL、death_margin と同じ列) の余裕
+    で代用する (暫定近似。理由: DEATH_COL は本プロジェクトで既に「最有力の
+    詰みボトルネック列」として扱われている列であり、一貫性がある)。
+
+    Args:
+        board: 評価対象の盤面 (STABLE 確定盤面、破壊しない)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        float: 余裕段数 (0〜MAX_COL_HEIGHT の範囲、通常は正)。
+    """
+    from src.board import DEATH_COL
+    _, best_board = _takapt_best_drop(board, sim)
+    ignite_col = (
+        _diff_dropped_column(board, best_board) if best_board is not None else None
+    )
+    col = ignite_col if ignite_col is not None else DEATH_COL
+    return float(MAX_COL_HEIGHT - board.height_of(col))
+
+
+def _ojama_damage_from_margin(remaining_margin_dan: float) -> float:
+    """残り余裕段数 → ダメージ (0〜1) への折れ線変換 (3水準2折れ)。
+
+    区間ごとに線形補間する (折れ線、閾値・傾きは全てモジュール定数)。
+    remaining_margin_dan が小さい (=余裕が無い/埋まった) ほどダメージ増。
+    """
+    if remaining_margin_dan >= REMAINING_MARGIN_SAFE_DAN:
+        return OJAMA_DAMAGE_FLOOR
+    if remaining_margin_dan >= REMAINING_MARGIN_CRITICAL_DAN:
+        span = REMAINING_MARGIN_SAFE_DAN - REMAINING_MARGIN_CRITICAL_DAN
+        t = (REMAINING_MARGIN_SAFE_DAN - remaining_margin_dan) / span
+        return OJAMA_DAMAGE_FLOOR + t * (OJAMA_DAMAGE_MID - OJAMA_DAMAGE_FLOOR)
+    if remaining_margin_dan >= REMAINING_MARGIN_FLOOR_DAN:
+        span = REMAINING_MARGIN_CRITICAL_DAN - REMAINING_MARGIN_FLOOR_DAN
+        t = (REMAINING_MARGIN_CRITICAL_DAN - remaining_margin_dan) / span
+        return OJAMA_DAMAGE_MID + t * (OJAMA_DAMAGE_CEIL - OJAMA_DAMAGE_MID)
+    return OJAMA_DAMAGE_CEIL
+
+
+def ojama_damage(
+    board: Board,
+    ojama_count: int,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XVIII おじゃまダメージ (発火点埋没モデル、user構造伝授の暫定実装)。
+
+    受けたおじゃま (ojama_count) が、現在の発火点 (=現在の最大連鎖を作る
+    1手の落下列) までの余裕段数をどれだけ侵食するかで不利度を測る。
+    「おじゃま量の折れ線」と「盤面の埋まり具合による増幅」は残り余裕段数
+    (headroom_dan − ojama_dan) 1本の引き算に統合されている
+    (モジュール冒頭コメント参照)。飽和 (将来の最大火力) 減少成分は
+    おじゃま数の単調減少関数として同じ ojama_dan 項が代理する
+    (user 判断、別指標化しない)。
+
+    Args:
+        board: 評価対象の自分側盤面 (STABLE 確定盤面、おじゃま着弾前の
+            現状盤面。ojama_count は既にこの board に含まれる分と
+            別の「評価したい量」を渡すこと、二重計上防止)。
+        ojama_count: 評価したいおじゃま量 (個数、生値)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 ダメージ (大きいほど不利、
+            折れ線3水準 OJAMA_DAMAGE_FLOOR/MID/CEIL で正規化済み)、
+            raw=残り余裕段数 (headroom_dan − ojama_dan、負値あり得る)。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    if board.is_dead():
+        return IndicatorV2Value(score=OJAMA_DAMAGE_CEIL, raw=REMAINING_MARGIN_FLOOR_DAN)
+    headroom_dan = _ignition_headroom_dan(board, sim)
+    ojama_dan = max(0.0, float(ojama_count)) / OJAMA_DAMAGE_PER_DAN
+    remaining = headroom_dan - ojama_dan
+    return IndicatorV2Value(score=_clamp01(_ojama_damage_from_margin(remaining)), raw=remaining)
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -1842,6 +3598,9 @@ __all__ = [
     "CHAIN_OJAMA_B",
     "TIME_PER_CHAIN_SEC",
     "HONSEN_OUTPUT_NORM",
+    # VII-3 連鎖完了時刻 (掛け算表示ベース、2026-07-29 追加)
+    "chain_completion_from_formula",
+    "CHAIN_ANIM_PER_STEP_SEC",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
@@ -1877,4 +3636,64 @@ __all__ = [
     "NORM_MULTI_COLOR_IGNITION",
     "NORM_SUB_CHAIN",
     "NORM_SIMULTANEOUS_POP",
+    # XII-1b 本来の飽和 (build天井) — 検証中の新規指標 (末尾追加、既存に非依存)
+    "build_ceiling_chain",
+    "BUILD_CEILING_CHAIN_DEPTH",
+    "BUILD_CEILING_CHAIN_BEAM_WIDTH",
+    # XII-1c 忠実な飽和連鎖量 (非発火構築ビーム) — 検証中の新規指標 (末尾追加、既存に非依存)
+    "saturation_chain",
+    "FULL_BOARD_CAP",
+    "SATURATION_FILL_RATIO_DEFAULT",
+    "SATURATION_BEAM_WIDTH_DEFAULT",
+    "SATURATION_MAX_BUILD_STEPS",
+    # XIII 催促保持 (saisoku_hold) — 検証中の新規指標 (末尾追加、既存に非依存)
+    "saisoku_hold",
+    "SAISOKU_CONSUME_RATIO",
+    "SAISOKU_OJAMA_MIN",
+    "SAISOKU_HOLD_COUNT_NORM",
+    # XIV 近未来最大火力 (near_future_fire_power, K=1..5)
+    # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
+    "near_future_fire_power",
+    "NearFutureFireResult",
+    "NEAR_FUTURE_KNOWN_HAND_SLOTS",
+    "NEAR_FUTURE_K_LEVELS",
+    "NEAR_FUTURE_BEAM_WIDTH",
+    "NEAR_FUTURE_MIN_OBSERVED_COLORS",
+    "NEAR_FUTURE_FIRE_NORM",
+    # XV 火力の受けの多さ (fire_stability, K=2,4,6)
+    # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
+    "fire_stability",
+    "FireStabilityResult",
+    "FIRE_STABILITY_K_LEVELS",
+    "FIRE_STABILITY_THRESHOLD_RATIO",
+    "FIRE_STABILITY_BEAM_WIDTH",
+    # XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+    # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
+    "expected_fire_power",
+    "ExpectedFireResult",
+    "EXPECTED_FIRE_K_LEVELS",
+    "EXPECTED_FIRE_EXACT_LEVELS",
+    "EXPECTED_FIRE_MC_LEVELS",
+    "EXPECTED_FIRE_EXACT_BEAM_WIDTH",
+    "EXPECTED_FIRE_MC_N_SAMPLES",
+    "EXPECTED_FIRE_MC_BEAM_WIDTH",
+    "EXPECTED_FIRE_NORM",
+    # XVII 打ち合い応手確率 (counter_reach_probability, K=1..4)
+    # — #24 Step2 追加 (2026-07-29、末尾追加・既存に非依存)。
+    # collect への本配線 (Step3) は未実施、現時点では計測器専用の
+    # 独立関数として提供する。
+    "counter_reach_probability",
+    "counter_reach_probability_fast",
+    "CounterReachResult",
+    "COUNTER_REACH_EFFECTIVE_THRESHOLD_PROB",
+    # XVIII おじゃまダメージ (発火点埋没モデル)
+    # — 2026-07-29 追加 (末尾追加・既存に非依存)。
+    "ojama_damage",
+    "OJAMA_DAMAGE_PER_DAN",
+    "REMAINING_MARGIN_SAFE_DAN",
+    "REMAINING_MARGIN_CRITICAL_DAN",
+    "REMAINING_MARGIN_FLOOR_DAN",
+    "OJAMA_DAMAGE_FLOOR",
+    "OJAMA_DAMAGE_MID",
+    "OJAMA_DAMAGE_CEIL",
 ]

@@ -151,21 +151,32 @@ class TestIsDead:
         board = Board()
         assert board.is_dead() is False
 
-    def test_dead_when_death_col_top_occupied(self):
+    def test_dead_when_death_col_visible_top_occupied(self):
+        """user確定ルール (2026-07-22): 死亡マスは3列目の可視最上段=row1。
+
+        隠し段 (row0) は含まない (DEATH_ROW=1 に修正済み)。
+        """
         grid = empty_grid()
-        grid[0][2] = COLOR_RED  # 3列目(index:2)の最上段
+        grid[1][2] = COLOR_RED  # 3列目(index:2)の可視最上段 (row0=隠し段は除く)
         board = Board.from_list(grid)
         assert board.is_dead() is True
 
     def test_not_dead_other_col_top(self):
         grid = empty_grid()
-        grid[0][1] = COLOR_RED  # 2列目は死なない
+        grid[1][1] = COLOR_RED  # 2列目は死なない
+        board = Board.from_list(grid)
+        assert board.is_dead() is False
+
+    def test_not_dead_hidden_row_only(self):
+        """隠し段 (row0) だけ埋まっていても窒息ではない (回し入れ等で一時的に有り得る)。"""
+        grid = empty_grid()
+        grid[0][2] = COLOR_RED  # 3列目だが隠し段 (row0)
         board = Board.from_list(grid)
         assert board.is_dead() is False
 
     def test_not_dead_death_col_not_top(self):
         grid = empty_grid()
-        grid[1][2] = COLOR_RED  # 3列目だが最上段ではない
+        grid[2][2] = COLOR_RED  # 3列目だが可視最上段(row1)ではない
         board = Board.from_list(grid)
         assert board.is_dead() is False
 

@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
+import cv2
 import numpy as np
 import pytest
 
@@ -22,6 +24,7 @@ from src.board import (
     Board,
 )
 from src.board_state_machine import BoardState
+from src.recognition_pipeline import RecognitionPipeline
 
 
 # ============================
@@ -555,6 +558,103 @@ class TestScoreColumn:
 
 
 # ============================
+# next_pair / dnext_pair 保存テスト (指標① 本命版検証用、2026-07 追加)
+# ============================
+
+class TestNextPairColumn:
+    """next1_a/next1_b/dnext_a/dnext_b の保存・後方互換を検証する。"""
+
+    def test_next_pair_saved_in_npz(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair を渡すと npz に正しい int8 値で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW),
+        )
+        out = tmp_path / "next_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["next1_a"][0]) == COLOR_RED
+        assert int(data["next1_b"][0]) == COLOR_BLUE
+        assert int(data["dnext_a"][0]) == COLOR_GREEN
+        assert int(data["dnext_b"][0]) == COLOR_YELLOW
+
+    def test_next_pair_none_saved_as_unknown(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair=None は NEXT_COLOR_UNKNOWN (-1) として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "next_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert int(data[key][0]) == mod.NEXT_COLOR_UNKNOWN
+
+    def test_next_pair_backward_compat_omitted_kwarg(self, tmp_path: Path) -> None:
+        """next_pair/dnext_pair 引数を省略した既存呼び出しでも -1 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        # 既存コード同様、next_pair/dnext_pair を渡さない呼び出し
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "next_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert int(data[key][0]) == mod.NEXT_COLOR_UNKNOWN
+
+    def test_next_pair_dtype_int8(self, tmp_path: Path) -> None:
+        """next1_a 等が int8 dtype で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board()._grid, "v29", "1P", 1.0, 0, 1,
+            next_pair=(COLOR_RED, COLOR_BLUE),
+        )
+        out = tmp_path / "next_dtype.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in ("next1_a", "next1_b", "dnext_a", "dnext_b"):
+            assert data[key].dtype == np.int8
+
+    def test_process_side_lean_passes_through_next_pair(self, tmp_path: Path) -> None:
+        """_process_side_lean が next_pair/dnext_pair を acc.append に伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            next_pair=(COLOR_RED, COLOR_GREEN), dnext_pair=(COLOR_BLUE, COLOR_YELLOW),
+        )
+        assert acc.next1_as[0] == COLOR_RED
+        assert acc.next1_bs[0] == COLOR_GREEN
+        assert acc.dnext_as[0] == COLOR_BLUE
+        assert acc.dnext_bs[0] == COLOR_YELLOW
+
+    def test_process_side_lean_default_next_pair_is_unknown(self) -> None:
+        """_process_side_lean で next_pair/dnext_pair を渡さない場合 -1 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert acc.next1_as[0] == mod.NEXT_COLOR_UNKNOWN
+        assert acc.dnext_as[0] == mod.NEXT_COLOR_UNKNOWN
+
+    def test_collect_lean_accepts_capture_next_kwarg(self) -> None:
+        """collect_lean が capture_next キーワード引数を受け付け、既定 False であること。"""
+        import inspect
+        mod = _import_lean()
+        sig = inspect.signature(mod.collect_lean)
+        assert "capture_next" in sig.parameters
+        assert sig.parameters["capture_next"].default is False
+
+
+# ============================
 # 窒息フォールバック判定テスト (修正3)
 # ============================
 
@@ -562,9 +662,13 @@ class TestWinnerBySurvival:
     """修正3: _winner_by_survival の窒息フォールバック判定を検証する。"""
 
     def _make_suffocated_board(self) -> Board:
-        """3列目最上段(row=0, col=2)にぷよを置いた窒息盤面を返す。"""
+        """3列目の画面内最上段(row=1, col=2)にぷよを置いた窒息盤面を返す。
+
+        2026-07-22 ルール是正: 窒息セルは隠し段(row0)でなく画面内最上段(row1)。
+        _DEATH_ROW=1 に合わせる。
+        """
         g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
-        g[0][2] = COLOR_RED  # 窒息セル
+        g[1][2] = COLOR_RED  # 窒息セル (画面内最上段)
         # 下段にも適当にぷよ (count_puyos > 0 にする)
         for col in range(BOARD_COLS):
             g[BOARD_ROWS - 1][col] = COLOR_RED
@@ -636,3 +740,485 @@ class TestWinnerBySurvival:
         acc.assign_won_labels({0: {"1P": 8000, "2P": 2000}})
         assert float(acc.wons[0]) == 1.0  # 1P 勝ち (窒息無視)
         assert float(acc.wons[1]) == 0.0  # 2P 負け
+
+
+# ============================
+# _resolve_sample_interval_frames (2026-07-28 追加)
+# collect_indicators_v2 と同仕様のフレーム単位間引き指定。
+# 動画デコードは一切行わず、fps を差し替えた純粋関数呼び出しのみで検証する。
+# ============================
+
+
+class TestResolveSampleIntervalFrames:
+    """フレーム数指定の優先・後方互換・不正値クランプを検証する。"""
+
+    def test_explicit_frames_takes_priority_over_sec(self) -> None:
+        """フレーム数指定が秒指定より優先されること (fps が変わっても結果不変)。"""
+        mod = _import_lean()
+        for fps in (30.0, 60.0):
+            resolved = mod._resolve_sample_interval_frames(
+                sample_interval_sec=1.0, fps=fps, sample_interval_frames=8,
+            )
+            assert resolved == 8, f"fps={fps} でもフレーム数指定 8 が優先されるべき"
+
+    def test_omitted_preserves_legacy_sec_behavior_60fps(self) -> None:
+        """フレーム数指定省略時、60fps で秒指定の従来換算結果と完全一致すること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.2, fps=60.0, sample_interval_frames=None,
+        )
+        assert resolved == max(1, int(round(0.2 * 60.0)))
+        assert resolved == 12
+
+    def test_omitted_preserves_legacy_sec_behavior_30fps(self) -> None:
+        """フレーム数指定省略時、30fps でも秒指定の従来換算結果と完全一致すること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.2, fps=30.0, sample_interval_frames=None,
+        )
+        assert resolved == max(1, int(round(0.2 * 30.0)))
+        assert resolved == 6
+
+    def test_zero_sec_defaults_to_one_frame(self) -> None:
+        """sample_interval_sec=0.0 (全フレーム指定) は従来通り 1 になること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.0, fps=60.0, sample_interval_frames=None,
+        )
+        assert resolved == 1
+
+    @pytest.mark.parametrize("bad_frames", [0, -1, -100])
+    def test_non_positive_frames_clamped_to_one(self, bad_frames: int) -> None:
+        """0 以下のフレーム数指定は下限 1 に丸められること。"""
+        mod = _import_lean()
+        resolved = mod._resolve_sample_interval_frames(
+            sample_interval_sec=0.0, fps=60.0, sample_interval_frames=bad_frames,
+        )
+        assert resolved == mod.MIN_SAMPLE_INTERVAL_FRAMES
+
+
+# ============================
+# chain_trigger_sec 保存テスト (2026-07-29 追加、機能D 検知時刻の記録)
+# ============================
+
+
+class TestChainTriggerSecColumn:
+    """chain_trigger_sec の保存・後方互換を検証する。"""
+
+    def test_chain_trigger_sec_saved_in_npz(self, tmp_path: Path) -> None:
+        """chain_trigger_sec を渡すと npz に float32 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            chain_trigger_sec=12.5,
+        )
+        out = tmp_path / "trigger_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "chain_trigger_sec" in data
+        assert data["chain_trigger_sec"].dtype == np.float32
+        assert float(data["chain_trigger_sec"][0]) == pytest.approx(12.5)
+
+    def test_chain_trigger_sec_none_saved_as_nan(self, tmp_path: Path) -> None:
+        """chain_trigger_sec=None は NaN (CHAIN_TRIGGER_SEC_UNKNOWN) として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "trigger_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert math.isnan(float(data["chain_trigger_sec"][0]))
+
+    def test_chain_trigger_sec_backward_compat_omitted_kwarg(self, tmp_path: Path) -> None:
+        """chain_trigger_sec 引数を省略した既存呼び出しでも NaN 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "trigger_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        assert math.isnan(float(data["chain_trigger_sec"][0]))
+
+    def test_existing_npz_keys_unchanged_after_trigger_sec_addition(self, tmp_path: Path) -> None:
+        """chain_trigger_sec 追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "trigger_compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in (
+            "grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won",
+            "score", "next1_a", "next1_b", "dnext_a", "dnext_b",
+        ):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        assert "chain_trigger_sec" in data
+
+    def test_process_side_lean_extracts_trigger_sec_from_chain_event(self) -> None:
+        """_process_side_lean が chain_event.trigger_sec を acc.append に伝搬すること。"""
+        mod = _import_lean()
+
+        class _FakeChainEvent:
+            trigger_sec = 42.5
+
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            chain_event=_FakeChainEvent(),
+        )
+        assert acc.chain_trigger_secs[0] == pytest.approx(42.5)
+
+    def test_process_side_lean_default_trigger_sec_is_nan(self) -> None:
+        """chain_event を渡さない場合 (既定 None) は NaN 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert math.isnan(acc.chain_trigger_secs[0])
+
+    def test_process_side_lean_chain_event_none_trigger_sec(self) -> None:
+        """chain_event=None を明示指定した場合も NaN 埋めされること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            chain_event=None,
+        )
+        assert math.isnan(acc.chain_trigger_secs[0])
+
+
+def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
+    """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker /
+
+    normalize_fps_30 が末尾に順次 optional 追加され、既存引数の並び・
+    デフォルト値が一切変わっていないこと (backwards compat)。
+    """
+    import inspect
+    mod = _import_lean()
+    sig = inspect.signature(mod.collect_lean)
+    params = list(sig.parameters.keys())
+    assert params[:6] == [
+        "video_path", "out_npz", "max_sec", "start_sec",
+        "sample_interval_sec", "capture_next",
+    ]
+    assert params[6] == "sample_interval_frames"
+    assert sig.parameters["sample_interval_frames"].default is None
+    assert params[7] == "enable_chain_tracker"
+    assert sig.parameters["enable_chain_tracker"].default is False
+    assert params[-1] == "normalize_fps_30"
+    # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
+    assert sig.parameters["normalize_fps_30"].default is True
+
+
+def test_collect_lean_enable_chain_tracker_default_false_backward_compat() -> None:
+    """enable_chain_tracker 省略時は False (= 従来通り VideoChainTracker 無効)。
+
+    既存呼び出し (引数省略) の挙動を一切変えないことを保証する
+    (2026-07-30 全フレーム基準データ収集の CHAIN 凍結欠陥修正で追加)。
+    """
+    import inspect
+    mod = _import_lean()
+    sig = inspect.signature(mod.collect_lean)
+    assert sig.parameters["enable_chain_tracker"].default is False
+
+
+def test_main_cli_has_enable_chain_tracker_flag_default_false() -> None:
+    """CLI --enable-chain-tracker フラグが store_true・既定 False で追加されている。"""
+    import argparse
+    from unittest.mock import patch
+
+    mod = _import_lean()
+    captured: dict[str, object] = {}
+
+    def _fake_collect_lean(*args: object, **kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    with patch.object(mod, "collect_lean", _fake_collect_lean):
+        with patch(
+            "sys.argv",
+            ["collect_boards_lean.py", "--video", "x.mp4", "--out-npz", "y.npz"],
+        ):
+            mod.main()
+    assert captured["enable_chain_tracker"] is False
+
+
+def _run_fake_main_lean(argv_tail: list[str]) -> dict[str, object]:
+    """collect_lean を差し替えて main() を実行し、渡された kwargs を返す共通ヘルパ。"""
+    from unittest.mock import patch
+
+    mod = _import_lean()
+    captured: dict[str, object] = {}
+
+    def _fake_collect_lean(*args: object, **kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    with patch.object(mod, "collect_lean", _fake_collect_lean):
+        with patch(
+            "sys.argv",
+            ["collect_boards_lean.py", "--video", "x.mp4", "--out-npz", "y.npz"]
+            + argv_tail,
+        ):
+            mod.main()
+    return captured
+
+
+def test_main_cli_normalize_fps_30_default_true_when_no_flags() -> None:
+    """CLI で --normalize-fps-30 / --no-normalize-fps-30 とも未指定なら
+
+    normalize_fps_30=True が collect_lean に渡る (2026-07-30 既定 True 化)。
+    """
+    captured = _run_fake_main_lean([])
+    assert captured["normalize_fps_30"] is True
+
+
+def test_main_cli_no_normalize_fps_30_flag_disables() -> None:
+    """--no-normalize-fps-30 指定時は normalize_fps_30=False が渡ること。"""
+    captured = _run_fake_main_lean(["--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
+
+
+def test_main_cli_no_normalize_fps_30_wins_when_both_specified() -> None:
+    """--normalize-fps-30 と --no-normalize-fps-30 を同時指定した場合、
+
+    無効化 (--no-normalize-fps-30) が優先されること (coordinator指示の仕様)。
+    """
+    captured = _run_fake_main_lean(["--normalize-fps-30", "--no-normalize-fps-30"])
+    assert captured["normalize_fps_30"] is False
+
+
+# ============================
+# collect_lean() ループ結合テスト (2026-07-30 追加)
+# 実動画は使わず cv2.VideoCapture / RecognitionPipeline.load_default を
+# フェイクに差し替え、normalize_fps_30 の stride 自動注入・優先順位・
+# 既定OFF bit-identical を直接検証する (test_collect_indicators_v2.py の
+# _FakeCapture パターンを流用)。
+# ============================
+
+
+class _FakeCaptureLean:
+    """cv2.VideoCapture の最小フェイク。固定本数のダミーフレームを返す。"""
+
+    def __init__(self, n_frames: int, fps: float = 30.0) -> None:
+        self._n_frames = n_frames
+        self._fps = fps
+        self._i = 0
+        mod = _import_lean()
+        self._frame = np.zeros((mod.TARGET_H, mod.TARGET_W, 3), dtype=np.uint8)
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop: int) -> float:
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(self._n_frames)
+        return 0.0
+
+    def set(self, prop: int, value: float) -> None:  # noqa: D401 - フェイクなので no-op
+        pass
+
+    def read(self) -> "tuple[bool, np.ndarray | None]":
+        if self._i >= self._n_frames:
+            return False, None
+        self._i += 1
+        return True, self._frame
+
+    def release(self) -> None:
+        pass
+
+
+class _FakeLeanPipeline:
+    """RecognitionPipeline.load_default の最小フェイク (collect_lean 用)。"""
+
+    def __init__(self) -> None:
+        self.update_calls: list[int] = []
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        board = Board.from_list([[0] * BOARD_COLS for _ in range(BOARD_ROWS)])
+        side = SimpleNamespace(
+            state=BoardState.MENU,  # STABLE でないため acc.append は呼ばれない
+            score=None, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(p1=side, p2=side)
+
+    def set_video_id(self, video_id: str) -> None:
+        pass
+
+
+def _run_fake_collect_lean(
+    tmp_path: Path, n_frames: int, *, fps: float = 30.0, **collect_kwargs: object,
+) -> "tuple[int, _FakeLeanPipeline]":
+    """cv2.VideoCapture / RecognitionPipeline.load_default をフェイクに
+    差し替えて collect_lean() を実行する共通ヘルパ。
+    """
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(n_frames, fps=fps)
+    fake_pipeline = _FakeLeanPipeline()
+
+    def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+        return fake_cap
+
+    def _fake_load_default(*args: object, **kwargs: object) -> _FakeLeanPipeline:
+        return fake_pipeline
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+        mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(Path("dummy_video.mp4"), out_npz, **collect_kwargs)
+    return n, fake_pipeline
+
+
+def test_collect_lean_normalize_fps_30_default_omitted_applies_stride_2_for_60fps(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30 省略時 (2026-07-30 既定 True 化後) は 60fps 動画に
+
+    stride-2 が自動適用され、2フレームに1回だけ認識されること。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(tmp_path, n_frames, fps=60.0)
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+
+
+def test_collect_lean_normalize_fps_30_explicit_false_is_bit_identical(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30=False を明示指定した場合は 60fps でも間引かれず
+
+    全フレーム認識される (CLI --no-normalize-fps-30 相当、後方互換経路の保持)。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=False,
+    )
+    assert len(fake_pipeline.update_calls) == n_frames
+
+
+def test_collect_lean_normalize_fps_30_60fps_injects_stride_2(
+    tmp_path: Path,
+) -> None:
+    """normalize_fps_30=True かつ 60fps のとき、2フレームに1回だけ認識される
+
+    (resolve_normalize_fps_30_stride(60.0) == 2 の自動注入を直接確認)。
+    """
+    n_frames = 10
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 2))
+
+
+def test_collect_lean_normalize_fps_30_ignored_when_sample_interval_frames_explicit(
+    tmp_path: Path,
+) -> None:
+    """明示 sample_interval_frames が normalize_fps_30 より優先されること。"""
+    n_frames = 12
+    _, fake_pipeline = _run_fake_collect_lean(
+        tmp_path, n_frames, fps=60.0,
+        sample_interval_frames=4, normalize_fps_30=True,
+    )
+    assert fake_pipeline.update_calls == list(range(0, n_frames, 4))
+
+
+# ============================
+# 共有ゲーム境界カウンタ (2026-07-31 desync 根治)
+# ============================
+
+class TestSharedGameCounter:
+    """1P/2P 共有の game_idx が desync を防ぐことを検証する。
+
+    旧実装は _SideState.game_idx を side ごとに独立して進めていたため:
+      - 検知フレームがずれると game_idx がずれる (実測 57.6% が 5秒超)
+      - 片側の score OCR が壊れている動画 (c26/c58 等) ではその side が
+        game 0 に留まり、以降すべてのゲームが対応しなくなる
+    """
+
+    def test_both_sides_share_index_when_one_side_detects(self) -> None:
+        """片側だけが境界を検知しても両者の game_idx が揃う。
+
+        これが旧実装の最大の欠陥 (score OCR が片側で壊れている動画)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        # 1P はスコアが進んでリセットする / 2P はスコアを読めない (None)
+        mod._update_game_boundary(s1, 5000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s2, None, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s1, 100, shared=shared, t_sec=60.0)  # 境界
+        assert shared.game_idx == 1
+        assert s1.game_idx == 1
+        # 2P はこの後 score を読めた時点で共有カウンタに追従する
+        mod._update_game_boundary(s2, 300, shared=shared, t_sec=61.0)
+        assert s2.game_idx == 1, "片側検知の境界に追従していない"
+
+    def test_same_boundary_detected_by_both_advances_once(self) -> None:
+        """両者が同じ境界を検知しても game_idx は 1 だけ進む (デバウンス)。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        mod._update_game_boundary(s1, 8000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s2, 7000, shared=shared, t_sec=10.0)
+        # 同一境界を 1P が t=60.0、2P が t=60.5 で検知
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)
+        mod._update_game_boundary(s2, 0, shared=shared, t_sec=60.5)
+        assert shared.game_idx == 1, "同一境界で 2 回進んでいる"
+        assert s1.game_idx == s2.game_idx == 1
+
+    def test_separate_boundaries_beyond_debounce_advance_twice(self) -> None:
+        """デバウンス幅を超えて離れた 2 つの境界は別ゲームとして数える。
+
+        1 試合は最短 14 秒なので、デバウンス 5 秒は実試合を潰さない。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=10.0)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)   # 境界1
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=90.0)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=120.0)  # 境界2
+        assert shared.game_idx == 2
+
+    def test_final_scores_recorded_under_shared_index(self) -> None:
+        """final_scores が共有 game_idx をキーに記録される。
+
+        ここがずれると _merge_final_scores が別ゲーム同士を突き合わせる
+        (勝敗ラベルが壊れる真因)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        s1, s2 = mod._SideState(), mod._SideState()
+        for t, sc1, sc2 in ((10.0, 1000, 2000), (20.0, 5000, 6000)):
+            mod._update_game_boundary(s1, sc1, shared=shared, t_sec=t)
+            mod._update_game_boundary(s2, sc2, shared=shared, t_sec=t)
+        # 1P だけが境界を検知 (2P は score が読めない)
+        mod._update_game_boundary(s1, 0, shared=shared, t_sec=60.0)
+        mod._update_game_boundary(s2, 100, shared=shared, t_sec=60.0)
+        # game 0 の最終スコアは両者ともリセット直前の高値
+        assert s1.final_scores[0] == 5000
+        assert s2.final_scores[0] == 6000
+        # game 1 は両者とも同じキーに入る
+        assert 1 in s1.final_scores and 1 in s2.final_scores
+
+    def test_shared_none_keeps_legacy_independent_behaviour(self) -> None:
+        """shared=None なら従来の side 独立カウンタ (後方互換)。"""
+        mod = _import_lean()
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 5000)
+        mod._update_game_boundary(s1, 0)
+        assert s1.game_idx == 1

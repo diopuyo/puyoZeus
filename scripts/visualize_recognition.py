@@ -1329,6 +1329,19 @@ def main() -> int:
              "ライブラリ default=True (有効、 2026-06-03 採用)。 --no-chain-formula-detection で無効化。",
     )
     parser.add_argument(
+        "--chain-formula-simulate-verify",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        dest="enable_chain_formula_simulate_verify",
+        help="修正D (2026-07-24): 機能D 疑似発火の起点盤面を ChainSimulator で "
+             "事前検証する。 真因診断で機能D 早期発火 77件中35件=45.5%が "
+             "連鎖ゼロの起点盤面からの疑似発火 (偽イベント) と確定した対策。 "
+             "True で連鎖ゼロの起点盤面での疑似発火を抑制し、 連鎖ありは "
+             "固定 chain_count=1 でなく実測値で発火する。 "
+             "ライブラリ default=False (無効、 bit-identical)。 "
+             "--chain-formula-simulate-verify で有効化。",
+    )
+    parser.add_argument(
         "--hsv-deferred-consensus",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -1515,6 +1528,9 @@ def main() -> int:
         enable_chain_exit_warmup=args.enable_chain_exit_warmup,
         # 機能D (2026-06-02): --chain-formula-detection で有効化
         enable_chain_formula_detection=args.enable_chain_formula_detection,
+        enable_chain_formula_simulate_verify=(
+            args.enable_chain_formula_simulate_verify
+        ),
         # 案 Y-4 (2026-06-03): --hsv-deferred-consensus で有効化
         enable_hsv_deferred_consensus=args.enable_hsv_deferred_consensus,
         # 不具合B 対処 (2026-06-04): --ojama-warning-glow-guard で有効化

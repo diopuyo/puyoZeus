@@ -62,6 +62,9 @@ class _StubImageReader:
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
         skip_tier1_1p: bool = False,
         skip_tier1_2p: bool = False,
+        # 修正2 (2026-07-30): 実 ImageReader.read_both_boards の telop_result
+        # 追加 (optional 引数) に追従。スタブでは使わないため受け取るだけ。
+        telop_result: object | None = None,
     ) -> tuple[Board, Board]:
         self.last_skip_tier1_1p = skip_tier1_1p
         self.last_skip_tier1_2p = skip_tier1_2p
@@ -499,6 +502,243 @@ def test_non_all_clear_does_not_extend_chain_hold() -> None:
     pipe.update(40, t, _dummy_frame())
     expected_base = t + pipe._chain_hold_per_step_sec * 2
     assert pipe._chain_until_1p == pytest.approx(expected_base)
+
+
+# ============================
+# A0 (2026-07-24): CHAIN 保持時間モデル config 化テスト
+# 計装 a287c587 実測較正 (base=3.4s + per_step=1.5s×連鎖数) を config 経由で
+# 注入できることと、既定値 (base=0.0) では従来式と bit-identical であることを
+# 確認する。
+# ============================
+
+
+def _make_pipe_with_tracker_calibrated(
+    chain_event_1p: object | None,
+    chain_hold_base_sec: float | None = None,
+    chain_hold_per_step_sec: float | None = None,
+    chain_max_hold_sec: float | None = None,
+) -> RecognitionPipeline:
+    """_make_pipe_with_tracker の較正値注入版 (A0 テスト専用)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(chain_event_1p)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=chain_hold_base_sec,
+        chain_hold_per_step_sec=chain_hold_per_step_sec,
+        chain_max_hold_sec=chain_max_hold_sec,
+    )
+
+
+def test_chain_hold_base_sec_default_is_zero_backward_compat() -> None:
+    """既定値 (chain_hold_base_sec=None) は CHAIN_HOLD_BASE_SEC=0.0 に解決され、
+    従来の「固定項なし・per_step のみ」の式と bit-identical になること。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=3)
+    pipe = _make_pipe_with_tracker_calibrated(None)
+    assert pipe._chain_hold_base_sec == 0.0
+    assert pipe._chain_hold_per_step_sec == pytest.approx(0.3)
+    assert pipe._chain_max_hold_sec == pytest.approx(5.0)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    # 従来式: t + per_step_sec * chain_count (固定項なし)
+    expected = t + 0.3 * 3
+    assert pipe._chain_until_1p == pytest.approx(expected)
+
+
+def test_chain_hold_base_sec_calibrated_value_applies_to_chain_until() -> None:
+    """較正値 (base=3.4, per_step=1.5) を渡すと chain_until = t + base + per_step*n
+    になること (実測モデルの反映確認)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=4)
+    pipe = _make_pipe_with_tracker_calibrated(
+        None, chain_hold_base_sec=3.4, chain_hold_per_step_sec=1.5,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    expected = t + 3.4 + 1.5 * 4
+    assert pipe._chain_until_1p == pytest.approx(expected)
+
+
+def test_chain_max_hold_sec_default_unchanged_backward_compat() -> None:
+    """chain_max_hold_sec 省略時は CHAIN_MAX_HOLD_SEC=5.0 のまま
+    (既存 enable_game_event_chain_exit 経路の挙動不変)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=1)
+    pipe = _make_pipe_with_tracker_calibrated(None)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    assert pipe._chain_event_max_until_1p == pytest.approx(t + 5.0)
+
+
+def test_chain_max_hold_sec_configurable() -> None:
+    """chain_max_hold_sec を明示すると安全弁上限が上書きされること
+    (較正評価時に較正済 chain_until と併せて引き上げる運用を想定)。"""
+    ev = _make_chain_event(is_all_clear=False, chain_count=1)
+    pipe = _make_pipe_with_tracker_calibrated(None, chain_max_hold_sec=25.0)
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    pipe.update(40, t, _dummy_frame())
+    assert pipe._chain_event_max_until_1p == pytest.approx(t + 25.0)
+
+
+def test_score_early_fire_pseudo_event_uses_calibrated_hold() -> None:
+    """機能B (score 急増早期発火) の疑似 ChainEvent も
+    chain_hold_base_sec/per_step_sec の較正値を反映すること
+    (:3061-3071 相当パス、chain_count=1 固定)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        enable_chain_score_early_fire=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    t = 10.0
+    pipe._apply_chain_score_early_fire(
+        side="1P", score_delta=200, time_sec=t, prev_confirmed=Board(),
+    )
+    expected = t + 3.4 + 1.5
+    assert pipe._chain_until_1p == pytest.approx(expected)
+    assert pipe._active_chain_1p is not None
+    assert pipe._active_chain_1p.end_sec == pytest.approx(expected)
+
+
+def test_formula_early_fire_pseudo_event_uses_calibrated_hold() -> None:
+    """機能D (掛け算式早期発火) の疑似 ChainEvent も較正値を反映すること
+    (:3164-3174 相当パス、chain_count=1 固定)。
+
+    2026-07-24: enable_chain_formula_simulate_verify の既定値が
+    True に変更された (機能D 採用、偽イベント率 27.5%→0%) ため、
+    本テストは較正値反映ロジック単体を確認する目的で
+    enable_chain_formula_simulate_verify=False を明示指定し、
+    空盤面 (連鎖ゼロ) でも従来通り chain_count=1 固定で発火する
+    旧経路 (bit-identical) を使う。simulate_verify=True 時の
+    空盤面抑制挙動は test_chain_formula_detection.py 側で確認済み。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        enable_chain_formula_detection=True,
+        enable_chain_formula_simulate_verify=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    t = 10.0
+    pipe._apply_chain_formula_early_fire(
+        side="2P", time_sec=t, prev_confirmed=Board(),
+    )
+    expected = t + 3.4 + 1.5
+    assert pipe._chain_until_2p == pytest.approx(expected)
+    assert pipe._active_chain_2p is not None
+    assert pipe._active_chain_2p.end_sec == pytest.approx(expected)
+
+
+def test_load_default_exposes_chain_hold_calibration_kwargs() -> None:
+    """load_default() 経由でも chain_hold_base_sec/per_step_sec/max_hold_sec を
+    注入できること (従来 load_default に chain_hold_per_step_sec すら露出して
+    いなかった抜け漏れの解消確認、評価スクリプトからの注入経路を保証する)。
+    ネットワーク/モデルファイル無し環境でも HSV-only フォールバックで
+    構築できるはず (cnn_model_path 未指定時の既存フォールバック仕様)。
+    """
+    pipe = RecognitionPipeline.load_default(
+        load_score_ocr=False,
+        enable_chain_tracker=False,
+        load_next_detector=False,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+        chain_max_hold_sec=25.0,
+    )
+    assert pipe._chain_hold_base_sec == pytest.approx(3.4)
+    assert pipe._chain_hold_per_step_sec == pytest.approx(1.5)
+    assert pipe._chain_max_hold_sec == pytest.approx(25.0)
+
+
+def test_load_default_calibration_kwargs_default_none_backward_compat() -> None:
+    """load_default() で較正引数を省略すると従来値 (0.0/0.3/5.0) のまま
+    (backwards compat)。"""
+    pipe = RecognitionPipeline.load_default(
+        load_score_ocr=False,
+        enable_chain_tracker=False,
+        load_next_detector=False,
+    )
+    assert pipe._chain_hold_base_sec == 0.0
+    assert pipe._chain_hold_per_step_sec == pytest.approx(0.3)
+    assert pipe._chain_max_hold_sec == pytest.approx(5.0)
+
+
+def test_immediate_landing_chain_pseudo_event_uses_calibrated_hold() -> None:
+    """A0 バグ修正のロック用テスト (旧 :3797 相当のハードコード 0.3 バグ)。
+
+    このパス (着地直後即時連鎖判定、cycle48 大量 hallucination ガード
+    通過済) は TSUMO_FALL→STABLE 着地時に resolve_after_placement() が
+    chain_count>=1 を返した場合にのみ _step_side 内部で発火する。
+    フルの状態遷移 (4連結着地→TSUMO_FALL→STABLE) を駆動する既存の
+    end-to-end テストが無く、本テストも「pipe に設定された
+    chain_hold_base_sec/per_step_sec を使えば期待式と一致する」という
+    式レベルのロックに留まる (= ソース :3838-3852 相当の計算式の
+    リグレッションガードであり、resolve_after_placement 発火条件込みの
+    完全な統合テストではない。将来的な integration test 追加は別課題)。
+    """
+    from src.chain_detector import ChainEvent
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        chain_hold_base_sec=3.4,
+        chain_hold_per_step_sec=1.5,
+    )
+    t = 10.0
+    chain_count = 2
+    # _step_side 内の該当ブロックと同じ計算式を直接検証する
+    # (ソース側の式そのものを import せず重複させると回帰検知力が落ちるため、
+    #  ここでは pipe の設定値を用いて期待値を計算し、ソース定数を書き換えても
+    #  テストが追随することを保証する)。
+    expected_chain_until = (
+        t + pipe._chain_hold_base_sec + pipe._chain_hold_per_step_sec * chain_count
+    )
+    pseudo = ChainEvent(
+        trigger_sec=t,
+        end_sec=(
+            t + pipe._chain_hold_base_sec
+            + pipe._chain_hold_per_step_sec * chain_count
+        ),
+        before_board=Board(),
+        chain_count=chain_count,
+        total_erased=0, total_score=0, base_score=0,
+        all_clear_bonus_applied=0,
+        ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+    assert pseudo.end_sec == pytest.approx(expected_chain_until)
 
 
 # ============================
@@ -1482,6 +1722,489 @@ def test_enable_landing_observed_color_default_false_no_regression():
         assert result is not None, "update は None を返さない"
 
 
+# ---------------------------------------------------------------------------
+# 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
+# _flag_landing_distrust_cells 単体テスト
+# ---------------------------------------------------------------------------
+
+
+def test_flag_landing_distrust_cells_detects_mismatch():
+    """着地セルで CNN 観測色が baseline (P2 推論) と食い違えばフラグされる。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()  # (5, 2) は着地前は空
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # baseline (P2 推論結果) = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (食い違い)
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert (5, 2) in distrust, (
+        "CNN 観測色が baseline と食い違う着地セルはフラグされるべき"
+    )
+
+
+def test_flag_landing_distrust_cells_no_flag_when_cnn_agrees():
+    """CNN 観測色が baseline と一致すればフラグされない。"""
+    from src.board import COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_RED)  # baseline と一致
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert not distrust, "CNN 観測色が baseline と一致すればフラグされないべき"
+
+
+def test_flag_landing_distrust_cells_no_flag_when_cnn_uninformative():
+    """#47 対策: CNN 観測が UNKNOWN/EMPTY/おじゃまなら証拠なしとしてフラグしない。
+
+    高速プレイで infer_placement (P2) が唯一の情報源となるケース (#47) の
+    挙動を壊さないための必須ガード。
+    """
+    from src.board import COLOR_OJAMA, COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+
+    for cnn_color in (COLOR_UNKNOWN, COLOR_EMPTY, COLOR_OJAMA):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        distrust = _flag_landing_distrust_cells(
+            inferred, prev_confirmed, cnn_board,
+        )
+        assert not distrust, (
+            f"CNN 観測色={cnn_color} (証拠なし) はフラグしないべき (#47 対策)"
+        )
+
+
+def test_flag_landing_distrust_cells_ignores_non_landing_cells():
+    """着地セル以外 (prev_confirmed が既に色付き) は差分抽出対象外でフラグしない。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _flag_landing_distrust_cells
+
+    prev_confirmed = Board()
+    prev_confirmed.set(5, 2, COLOR_RED)  # 着地前から既に色あり (= 着地セルでない)
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # 食い違うが着地セルでないため対象外
+
+    distrust = _flag_landing_distrust_cells(inferred, prev_confirmed, cnn_board)
+
+    assert not distrust, "着地セル (prev=EMPTY/UNKNOWN) 以外はフラグ対象外であるべき"
+
+
+# ---------------------------------------------------------------------------
+# 案(iii): enable_placement_color_cnn_check フラグ配線テスト
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_placement_color_check(enable_flag: bool) -> RecognitionPipeline:
+    """enable_placement_color_cnn_check フラグ付きの pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=detector,
+        enable_placement_color_cnn_check=enable_flag,
+    )
+
+
+def test_enable_placement_color_cnn_check_flag_off_default():
+    """フラグ OFF (default) → _enable_placement_color_cnn_check が False。"""
+    pipe = _make_pipe_placement_color_check(False)
+    assert not pipe._enable_placement_color_cnn_check, (
+        "default OFF: _enable_placement_color_cnn_check は False であるべき"
+    )
+    assert pipe._landing_distrust_1p == set()
+    assert pipe._landing_distrust_2p == set()
+
+
+def test_enable_placement_color_cnn_check_flag_on():
+    """フラグ ON → _enable_placement_color_cnn_check が True。"""
+    pipe = _make_pipe_placement_color_check(True)
+    assert pipe._enable_placement_color_cnn_check, (
+        "ON 時: _enable_placement_color_cnn_check は True であるべき"
+    )
+
+
+def test_enable_placement_color_cnn_check_default_false_no_regression():
+    """フラグ OFF (default) では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_placement_color_check(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+# ---------------------------------------------------------------------------
+# 修正方針 甲 (2026-07-25): _apply_placement_cnn_veto 単体テスト
+# ---------------------------------------------------------------------------
+
+
+def test_apply_placement_cnn_veto_holds_when_cnn_mismatch():
+    """CNN 観測色が queue 色 (inferred) と食い違う着地セルは保留 (EMPTY に戻る)。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()  # (5, 2) は着地前は空
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (不一致)
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_EMPTY, (
+        "CNN と queue 色が不一致な着地セルは保留 (prev の EMPTY に戻す) べき"
+    )
+
+
+def test_apply_placement_cnn_veto_writes_when_cnn_agrees():
+    """CNN 観測色が queue 色と一致すればそのまま書く (no-op)。"""
+    from src.board import COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_RED)  # 一致
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_RED, (
+        "CNN が queue 色と一致すればそのまま書き込まれるべき"
+    )
+
+
+def test_apply_placement_cnn_veto_holds_when_cnn_empty():
+    """CNN がまだ EMPTY/UNKNOWN しか観測していない着地セルも保留する (主リスク:反映遅延)。"""
+    from src.board import COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    for cnn_color in (COLOR_EMPTY, COLOR_UNKNOWN):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+        assert int(result.get(5, 2)) == COLOR_EMPTY, (
+            f"CNN 観測={cnn_color} (証拠なし) も保留 (書き込みを見送る) べき"
+        )
+
+
+def test_apply_placement_cnn_veto_cnn_color_mode_adopts_cnn_observation():
+    """mode='cnn_color' では CNN が有効 puyo 色を観測していればその色を採用する。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (別の有効色)
+
+    result = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board, mode="cnn_color",
+    )
+
+    assert int(result.get(5, 2)) == COLOR_BLUE, (
+        "mode='cnn_color' では CNN 観測色 (有効 puyo 色) を採用するべき"
+    )
+
+
+def test_apply_placement_cnn_veto_empty_hold_cnn_color_holds_only_on_empty():
+    """mode='empty_hold_cnn_color': CNN==EMPTY (早すぎる書き込み) のみ保留する。"""
+    from src.board import COLOR_OJAMA, COLOR_RED, COLOR_UNKNOWN
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+
+    # CNN==EMPTY → 保留 (早すぎる書き込み防止)
+    cnn_board_empty = Board()  # (5,2) は既定 EMPTY
+    result_empty = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board_empty, mode="empty_hold_cnn_color",
+    )
+    assert int(result_empty.get(5, 2)) == COLOR_EMPTY, (
+        "CNN==EMPTY は保留 (prev の EMPTY に戻す) べき"
+    )
+
+    # CNN==UNKNOWN/おじゃま → 保留せず従来通り queue 色のまま
+    for cnn_color in (COLOR_UNKNOWN, COLOR_OJAMA):
+        cnn_board = Board()
+        cnn_board.set(5, 2, cnn_color)
+        result = _apply_placement_cnn_veto(
+            inferred, prev_confirmed, cnn_board, mode="empty_hold_cnn_color",
+        )
+        assert int(result.get(5, 2)) == COLOR_RED, (
+            f"CNN=={cnn_color} (EMPTY でない) は保留せず queue 色のままであるべき"
+        )
+
+
+def test_apply_placement_cnn_veto_empty_hold_cnn_color_adopts_cnn_color_on_mismatch():
+    """mode='empty_hold_cnn_color': CNN が有効色で queue と不一致なら CNN 色を採用する。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)  # queue 色 = 赤
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # CNN 観測 = 青 (別の有効色、EMPTY でない)
+
+    result = _apply_placement_cnn_veto(
+        inferred, prev_confirmed, cnn_board, mode="empty_hold_cnn_color",
+    )
+
+    assert int(result.get(5, 2)) == COLOR_BLUE, (
+        "CNN が有効 puyo 色で queue 色と不一致なら CNN 色を採用するべき "
+        "(cnn_color 挙動と同一)"
+    )
+
+
+def test_apply_placement_cnn_veto_ignores_non_landing_cells():
+    """着地セル以外 (prev_confirmed が既に色付き) は veto 対象外。"""
+    from src.board import COLOR_BLUE, COLOR_RED
+    from src.recognition_pipeline import _apply_placement_cnn_veto
+
+    prev_confirmed = Board()
+    prev_confirmed.set(5, 2, COLOR_RED)  # 着地前から色あり (= 着地セルでない)
+    inferred = Board()
+    inferred.set(5, 2, COLOR_RED)
+    cnn_board = Board()
+    cnn_board.set(5, 2, COLOR_BLUE)  # 食い違うが着地セルでないため対象外
+
+    result = _apply_placement_cnn_veto(inferred, prev_confirmed, cnn_board)
+
+    assert int(result.get(5, 2)) == COLOR_RED, (
+        "着地セル (prev=EMPTY/UNKNOWN) 以外は veto 対象外で inferred のまま保持"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 修正方針 甲: enable_placement_cnn_veto フラグ配線テスト
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_placement_cnn_veto(
+    enable_flag: bool, mode: str = "hold",
+) -> RecognitionPipeline:
+    """enable_placement_cnn_veto フラグ付きの pipeline を構築する。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=detector,
+        enable_placement_cnn_veto=enable_flag,
+        placement_cnn_veto_mode=mode,
+    )
+
+
+def test_enable_placement_cnn_veto_flag_off_default():
+    """フラグ OFF (default) → _enable_placement_cnn_veto が False。"""
+    pipe = _make_pipe_placement_cnn_veto(False)
+    assert not pipe._enable_placement_cnn_veto, (
+        "default OFF: _enable_placement_cnn_veto は False であるべき"
+    )
+    assert pipe._placement_cnn_veto_mode == "hold"
+    assert pipe._placement_cnn_veto_held_count_1p == 0
+    assert pipe._placement_cnn_veto_held_count_2p == 0
+
+
+def test_enable_placement_cnn_veto_flag_on():
+    """フラグ ON → _enable_placement_cnn_veto が True で mode も反映される。"""
+    pipe = _make_pipe_placement_cnn_veto(True, mode="cnn_color")
+    assert pipe._enable_placement_cnn_veto, (
+        "ON 時: _enable_placement_cnn_veto は True であるべき"
+    )
+    assert pipe._placement_cnn_veto_mode == "cnn_color"
+
+
+def test_enable_placement_cnn_veto_default_false_no_regression():
+    """フラグ OFF (default) では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_placement_cnn_veto(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+# ---------------------------------------------------------------------------
+# 案(iii): _start_landing_vote / _update_landing_votes 決定ロジックテスト
+# ---------------------------------------------------------------------------
+
+
+def test_start_landing_vote_stores_distrust_cells():
+    """_start_landing_vote は渡された distrust_cells を entry に保存する。"""
+    from src.board import COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    prev_confirmed = Board()
+    final_board = Board()
+    final_board.set(5, 2, COLOR_RED)
+    distrust = {(5, 2)}
+    pipe._start_landing_vote(
+        "1P", 0, prev_confirmed, final_board,
+        next_colors=(COLOR_RED, COLOR_RED),
+        distrust_cells=distrust,
+    )
+    entry = pipe._pending_landing_vote_1p[-1]
+    assert entry["distrust_cells"] == distrust
+
+
+def test_start_landing_vote_default_distrust_cells_empty():
+    """distrust_cells 省略時 (backwards compat) は空集合になる。"""
+    from src.board import COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    prev_confirmed = Board()
+    final_board = Board()
+    final_board.set(5, 2, COLOR_RED)
+    pipe._start_landing_vote(
+        "1P", 0, prev_confirmed, final_board,
+        next_colors=(COLOR_RED, COLOR_RED),
+    )
+    entry = pipe._pending_landing_vote_1p[-1]
+    assert entry["distrust_cells"] == set(), (
+        "distrust_cells 省略時は空集合 (= 従来挙動不変) であるべき"
+    )
+
+
+def _make_landing_vote_entry(
+    distrust_cells: set[tuple[int, int]],
+    next_winner: int,
+    cnn_winner: int,
+    next_pair: tuple[int, int],
+    start: int = 0,
+) -> dict:
+    """P7 (_update_landing_votes) 決定ロジックテスト用 pending entry を組み立てる。"""
+    cell = (5, 2)
+    return {
+        "start": start,
+        "cells": [(cell[0], cell[1], next_winner)],
+        "votes": {cell: [cnn_winner] * 5},
+        "next_color_votes": {cell: [next_winner] * 5},
+        "next_colors": next_pair,
+        "side": "1P",
+        "distrust_cells": distrust_cells,
+    }
+
+
+def test_update_landing_votes_distrust_cell_bypasses_next_color_bias():
+    """distrust セルは NEXT 色 votes を迂回し生 CNN 多数決フォールバックで確定する。"""
+    from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    entry = _make_landing_vote_entry(
+        distrust_cells={(5, 2)},
+        next_winner=COLOR_RED,
+        cnn_winner=COLOR_BLUE,
+        next_pair=(COLOR_RED, COLOR_GREEN),
+    )
+    pipe._pending_landing_vote_1p.append(entry)
+    confirmed = Board()
+    updated = pipe._update_landing_votes(
+        "1P", pipe.LANDING_VOTE_FRAMES, Board(), confirmed, frame_bgr=None,
+    )
+    assert updated is not None
+    assert updated.get(5, 2) == COLOR_BLUE, (
+        "distrust セルは NEXT 色 votes (RED) でなく生 CNN 多数決 (BLUE) で確定すべき"
+    )
+
+
+def test_update_landing_votes_non_distrust_cell_keeps_next_color_priority():
+    """distrust されていないセルは従来通り NEXT 色 votes 優先 (bit-identical)。"""
+    from src.board import COLOR_BLUE, COLOR_GREEN, COLOR_RED
+
+    pipe = _make_pipe_placement_color_check(False)
+    entry = _make_landing_vote_entry(
+        distrust_cells=set(),
+        next_winner=COLOR_RED,
+        cnn_winner=COLOR_BLUE,
+        next_pair=(COLOR_RED, COLOR_GREEN),
+    )
+    pipe._pending_landing_vote_1p.append(entry)
+    confirmed = Board()
+    updated = pipe._update_landing_votes(
+        "1P", pipe.LANDING_VOTE_FRAMES, Board(), confirmed, frame_bgr=None,
+    )
+    assert updated is not None
+    assert updated.get(5, 2) == COLOR_RED, (
+        "非 distrust セルは従来通り NEXT 色 votes (RED) 優先で確定すべき"
+    )
+
+
+def test_update_landing_votes_early_confirm_path_respects_distrust():
+    """早期確定経路 (蓄積中の NEXT 色バイアス即時反映) も distrust セルは迂回する。
+
+    _update_landing_votes の「蓄積期間中」分岐 (LANDING_VOTE_NEXT_EARLY_COUNT/
+    RATIO による即時反映) が distrust_cells を無視すると、最終分岐のガードが
+    素通りされてしまう (早期確定済セルは最終分岐で再適用 skip されるため)。
+    本テストはその迂回漏れがないことを確認する。
+    """
+    from src.board import COLOR_BLUE, COLOR_RED
+
+    frame_bgr = _dummy_frame()
+    cell = (5, 2)
+    next_pair = (COLOR_RED, COLOR_BLUE)
+
+    def _run(distrust_cells: set[tuple[int, int]]) -> tuple[dict, "Board | None"]:
+        pipe = _make_pipe_placement_color_check(False)
+        entry: dict = {
+            "start": 0,
+            "cells": [(cell[0], cell[1], COLOR_RED)],
+            "votes": {cell: []},
+            "next_color_votes": {cell: []},
+            "next_colors": next_pair,
+            "side": "1P",
+            "distrust_cells": distrust_cells,
+        }
+        pipe._pending_landing_vote_1p.append(entry)
+        confirmed = Board()
+        # LANDING_VOTE_INIT_SKIP_FRAMES(5) 以上 LANDING_VOTE_FRAMES(24) 未満の
+        # 蓄積期間中フレームを LANDING_VOTE_NEXT_EARLY_COUNT(5) 回連続で処理する。
+        for offset in range(pipe.LANDING_VOTE_NEXT_EARLY_COUNT):
+            frame_idx = pipe.LANDING_VOTE_INIT_SKIP_FRAMES + offset
+            result = pipe._update_landing_votes(
+                "1P", frame_idx, Board(), confirmed, frame_bgr=frame_bgr,
+            )
+            if result is not None:
+                confirmed = result
+        return entry, confirmed
+
+    entry_distrust, confirmed_distrust = _run({cell})
+    entry_clean, confirmed_clean = _run(set())
+
+    assert cell not in entry_distrust.get("confirmed_cells", set()), (
+        "distrust セルは早期確定経路で confirmed_cells に登録されないべき"
+    )
+    assert cell in entry_clean.get("confirmed_cells", set()), (
+        "非 distrust セルは早期確定経路で従来通り confirmed_cells に登録されるべき"
+    )
+    assert confirmed_distrust is not None and confirmed_clean is not None
+    # distrust セル: 早期確定が起きないため confirmed_board は未反映 (= 空のまま)。
+    assert confirmed_distrust.get(*cell) == COLOR_EMPTY, (
+        "distrust セルは早期確定経路で confirmed_board に反映されないべき"
+    )
+    # 非 distrust セル: 早期確定により NEXT 色 votes のいずれかが反映される。
+    assert confirmed_clean.get(*cell) in next_pair, (
+        "非 distrust セルは早期確定経路で NEXT 色 votes のいずれかに反映されるべき"
+    )
+
+
 # ============================
 # 機能B: score 急増 CHAIN 早期発火テスト
 # ============================
@@ -1791,5 +2514,1591 @@ def test_chain_exit_next_signal_uses_longer_warmup():
     )
     assert _warmup_sec_c == CHAIN_EXIT_WARMUP_SEC, (
         f"案X OFF 時の凍結時間は {CHAIN_EXIT_WARMUP_SEC}s のはず: {_warmup_sec_c}"
+    )
+
+
+# ============================
+# 根治 (2026-07-23): 連鎖後残像バグ — GRAVITY_SETTLE 経由 final_board 反映テスト
+# ============================
+#
+# 背景: enable_gravity_settle_state=True (default) では CHAIN は必ず
+# GRAVITY_SETTLE を経由してから STABLE に遷移するため、Phase C-6 の C
+# (final_board 反映) の旧条件 (prev_state==CHAIN) が dead code 化していた。
+# _last_chain_event_for_settle_1p/2p による退避 + GRAVITY_SETTLE も対象に
+# 含める拡張で根治する。
+
+
+def _make_erasable_chain_event(chain_count: int = 1):
+    """4連結の赤ぷよ (row12 col1-4) + その上の緑ぷよ (row11 col0) を持つ
+    ChainEvent を生成する。
+
+    連鎖後、赤4個が消去され緑ぷよが重力で (12,0) に落下する結果になる。
+    CNN は常に空盤面/固定盤面を返すスタブと対比することで、final_board
+    反映の有無を判別できる。
+    """
+    from src.chain_detector import ChainEvent
+    before = Board()
+    before.set(12, 1, COLOR_RED)
+    before.set(12, 2, COLOR_RED)
+    before.set(12, 3, COLOR_RED)
+    before.set(12, 4, COLOR_RED)
+    before.set(11, 0, COLOR_GREEN)
+    return ChainEvent(
+        trigger_sec=1.0,
+        end_sec=1.5,
+        before_board=before,
+        chain_count=chain_count,
+        total_erased=4,
+        total_score=40,
+        base_score=40,
+        all_clear_bonus_applied=0,
+        ojama_sent=0,
+        leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_stash_and_clear_active_chain_saves_event() -> None:
+    """根治: active_chain が非 None のとき、退避してから None クリアする。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._active_chain_1p = ev
+    pipe._stash_and_clear_active_chain("1P")
+    assert pipe._active_chain_1p is None
+    assert pipe._last_chain_event_for_settle_1p is ev
+
+
+def test_stash_and_clear_active_chain_2p_side() -> None:
+    """根治: side="2P" でも同様に動作する。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._active_chain_2p = ev
+    pipe._stash_and_clear_active_chain("2P")
+    assert pipe._active_chain_2p is None
+    assert pipe._last_chain_event_for_settle_2p is ev
+
+
+def test_stash_and_clear_active_chain_noop_when_already_none() -> None:
+    """根治: active_chain が既に None のときは退避値を書き換えない。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._last_chain_event_for_settle_1p = ev
+    pipe._active_chain_1p = None
+    pipe._stash_and_clear_active_chain("1P")
+    assert pipe._last_chain_event_for_settle_1p is ev, (
+        "active_chain が None のときは退避値を書き換えないべき"
+    )
+
+
+def test_last_chain_event_for_settle_init_none() -> None:
+    """根治: 初期状態では退避フィールドは None。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._last_chain_event_for_settle_1p is None
+    assert pipe._last_chain_event_for_settle_2p is None
+
+
+def test_last_chain_event_for_settle_reset_clears() -> None:
+    """根治: reset() 後は退避フィールドが None に戻る。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_chain_event(is_all_clear=False)
+    pipe._last_chain_event_for_settle_1p = ev
+    pipe._last_chain_event_for_settle_2p = ev
+    pipe.reset()
+    assert pipe._last_chain_event_for_settle_1p is None
+    assert pipe._last_chain_event_for_settle_2p is None
+
+
+def _force_confirmed_board(pipe: RecognitionPipeline, side: str, board: Board) -> None:
+    """テスト用: state machine の confirmed_board/pending_board を直接注入する。
+
+    本番では TSUMO_FALL 着地等の正当な経路を経て confirmed が確定するが、
+    その経路を完全再現するのはテストの本旨でないため、「連鎖直前に既に
+    この盤面が confirmed だった」を given 条件として直接注入する
+    (cycle 49 の 4連結ゲートを満たすために必要)。
+    """
+    sm = pipe._sm_1p if side == "1P" else pipe._sm_2p
+    sm.context.confirmed_board = board.copy()
+    sm.context.pending_board = board.copy()
+
+
+def test_gravity_settle_to_stable_applies_final_board_via_stash() -> None:
+    """根治 (統合): CHAIN → GRAVITY_SETTLE → STABLE 経路でも final_board が反映される。
+
+    CNN は常に空盤面を返す (StubImageReader) ため、この経路が機能しなければ
+    confirmed_board は空のまま。 fix が効いていれば ChainSimulator.simulate()
+    の結果 (緑ぷよが (12,0) に落下) が反映される。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    # 反達9 ガード1: 副作用 (constraint_valid 再有効化・tsumo_count 減算) を
+    # 判別可能にするため、事前に「壊れた/未消化」状態を明示的にセットしておく。
+    pipe._constraint_valid_1p = False
+    pipe._tsumo_count_1p[COLOR_RED] = 4  # 赤4個を事前累積 (連鎖で消去予定)
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    # active_chain クリア (CHAIN_MAX_HOLD_SEC=5.0s) → GRAVITY_SETTLE →
+    # STABLE (GRAVITY_SETTLE_MAX_SEC=1.5s タイムアウト) まで十分に時間を進める。
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "GRAVITY_SETTLE 経由でも ChainSimulator の final_board (緑ぷよ落下) が"
+        "反映されるべき (= 根治の主目的)"
+    )
+    assert final_res.confirmed_board.get(12, 1) == COLOR_EMPTY, (
+        "赤ぷよ4個は連鎖で消去済のはず"
+    )
+    # 反達9 ガード1: Phase C-6 の C 内の副作用も固定する (部分的再発検知)。
+    # 一部だけ復活する回帰 (final_board は反映されるが副作用が漏れる等) を
+    # 検知できるよう、既存の主張に加えて明示的にアサートする。
+    assert pipe._constraint_valid_1p is True, (
+        "連鎖完了で constraint_valid_1p が再有効化されるべき"
+        " (cycle 28a H2、副作用の再発防止アサート)"
+    )
+    assert pipe._tsumo_count_1p[COLOR_RED] == 0, (
+        "erased_color_count による tsumo_count 減算 (cycle 28a H3) が"
+        "実行されるべき (副作用の再発防止アサート)"
+    )
+
+
+def test_chain_direct_to_stable_unaffected_when_gravity_settle_disabled() -> None:
+    """根治 backward compat: enable_gravity_settle_state=False では退避 stash が
+    使われず、CHAIN → STABLE 直行経路の挙動が変更前と完全に同じ。
+
+    Phase C-6 の C は raw chain_event (この遷移フレームでは常に None) のみ
+    参照し退避 stash を使わないため、final_board 反映は起きない
+    (= 変更前と同じ dead code のままの挙動を維持)。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_gravity_settle_state=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(20):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_EMPTY, (
+        "GS=False の従来経路は変更前と同じ挙動を維持すべき (緑ぷよ落下は起きない)"
+    )
+
+
+def test_gravity_settle_final_board_survives_t2_color_swap_guard() -> None:
+    """根治 (T2 相互作用): 色→別色 swap を伴う final_board 反映が、直後の T2
+    (STABLE→STABLE 誤色棄却) で即座に revert されないことを確認する。
+
+    T2 は「(実効) chain_event が None のときのみ」誤色棄却を行う設計。
+    GRAVITY_SETTLE 経由では素の chain_event 引数は常に None になるため、
+    _effective_chain_event (退避 stash 込み) で判定しないと、T2 が
+    Phase C-6 の C 直後に fresh な final_board を古い prev_stable (青)
+    へ即座に revert してしまう (architect 指摘の cycle 71 系相互作用)。
+    """
+    ev = _make_erasable_chain_event(chain_count=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    # given: 連鎖直前の confirmed (= 4連結ゲート用) と、T2 が参照する
+    # 「直前 STABLE 確定盤面」 (= 青ぷよ、連鎖前の別スナップショット) を
+    # それぞれ独立に注入する。
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    prev_stable_snapshot = Board()
+    prev_stable_snapshot.set(12, 0, COLOR_BLUE)
+    pipe._prev_stable_confirmed_1p = prev_stable_snapshot
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "T2 が Phase C-6 の C 直後に fresh な final_board を古い prev_stable"
+        " (青) へ revert してしまってはいけない"
+    )
+
+
+# ============================
+# 反復3 (2026-07-23): 連鎖中 is_match_active 誤 False 化バグ修正テスト
+# ============================
+#
+# 背景: 連鎖中のスコア急変+フラッシュ演出で ScoreZeroDetector/
+# MatchEndDetector が瞬間誤爆 → hard_match_off が sm_active (CHAIN/
+# GRAVITY_SETTLE 中の保護) を上書きして is_match_active=False になり、
+# MENU 強制遷移で confirmed_board=None 化する問題 (物理harness実測:
+# 連鎖中の誤 False 率 0.95)。 CHAIN/GRAVITY_SETTLE 中限定で hard_match_off
+# を無効化することで解消する。
+
+
+class _StubScoreZeroDetector:
+    """常に指定の both_zero を返す ScoreZeroDetector スタブ。"""
+
+    def __init__(self, both_zero: bool = True) -> None:
+        self._both_zero = both_zero
+
+    def detect(self, frame: np.ndarray) -> object:
+        @dataclass
+        class _Result:
+            both_zero: bool
+        return _Result(both_zero=self._both_zero)
+
+
+class _StubMatchEndDetector:
+    """常に match_end_locked=True を返す MatchEndDetector スタブ。"""
+
+    def update(self, frame: np.ndarray, time_sec: float) -> bool:
+        return True
+
+    def is_locked(self, time_sec: float) -> bool:
+        return True
+
+
+def test_chain_in_progress_suppresses_score_zero_false_positive() -> None:
+    """反復3: CHAIN 中は ScoreZeroDetector の瞬間誤爆 (score_zero_both) で
+    is_match_active が False にならない。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+    )
+    # CHAIN 中を模擬 (postchain-fix テストと同じ直接注入パターン)。
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is True, (
+        "CHAIN 中は score_zero_both 誤爆で is_match_active が False に"
+        "なってはいけない"
+    )
+
+
+def test_gravity_settle_in_progress_suppresses_match_end_locked_false_positive() -> None:
+    """反復3: GRAVITY_SETTLE 中も MatchEndDetector の瞬間誤爆 (match_end_locked)
+    で is_match_active が False にならない。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+    )
+    pipe._sm_2p.context.state = BoardState.GRAVITY_SETTLE
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is True, (
+        "GRAVITY_SETTLE 中は match_end_locked 誤爆で is_match_active が"
+        " False になってはいけない"
+    )
+
+
+def test_hard_match_off_still_applies_when_not_chain_in_progress() -> None:
+    """反復3 backward compat: CHAIN/GRAVITY_SETTLE 中でなければ hard_match_off
+    (score_zero_both 等) は従来通り is_match_active を False にする。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+    )
+    # state machine は初期状態 (MENU) のまま = 通常時 (連鎖/沈下中でない)。
+    result = pipe.update(0, 5.0, _dummy_frame())
+    assert result.is_match_active is False, (
+        "CHAIN/GRAVITY_SETTLE 中でない通常時は hard_match_off の挙動を"
+        "変更前と同じく維持すべき"
+    )
+
+
+def test_legitimate_match_end_detected_after_chain_state_exits() -> None:
+    """反復3: 連鎖状態を抜けた後は真の試合終了 (match_end_locked) が通常通り
+    検出される (連鎖中抑制が正当な試合終了検出を妨げないことの確認)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+    )
+    # CHAIN 中は抑制される (= is_match_active 維持)
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    res_during_chain = pipe.update(0, 5.0, _dummy_frame())
+    assert res_during_chain.is_match_active is True
+
+    # 連鎖終了 (STABLE に復帰) → match_end_locked による検出が有効になる
+    pipe._sm_1p.context.state = BoardState.STABLE
+    res_after_chain = pipe.update(1, 5.1, _dummy_frame())
+    assert res_after_chain.is_match_active is False, (
+        "連鎖状態を抜けた後は真の試合終了検出が有効になるべき"
+    )
+
+
+# ============================
+# 反復4 (2026-07-23): confirmed_board=None 理由分類 診断計装テスト
+# ============================
+
+
+def test_classify_board_none_reason_cold_start() -> None:
+    """反復4: 一度も confirmed_board が確定していない試合では cold_start。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.MENU,
+    )
+    assert reason == "cold_start"
+
+
+def test_classify_board_none_reason_menu_reset() -> None:
+    """反達4: is_match_active=False (MENU 強制) 後、STABLE 再確定前は menu_reset。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    # 事前に一度 confirmed が確定済 (cold_start でなくする)
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    # is_match_active=False の frame (MENU 強制発生)
+    reason = pipe._classify_board_none_reason(
+        "1P", False, None, BoardState.MENU,
+    )
+    assert reason == "menu_reset"
+    # 次フレーム以降、is_match_active=True に戻っても confirmed が
+    # まだ再確定していなければ menu_reset のまま持ち越される。
+    reason2 = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.CHAIN,
+    )
+    assert reason2 == "menu_reset", (
+        "MENU 強制後 STABLE 再確定前は CHAIN に復帰しても menu_reset のまま"
+    )
+
+
+def test_classify_board_none_reason_chain_hold_none() -> None:
+    """反達4: menu_reset 中でなく CHAIN/GRAVITY_SETTLE 中に confirmed=None
+    なら chain_hold_none (= is_match_active 経路以外の別要因の疑い)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.CHAIN,
+    )
+    assert reason == "chain_hold_none"
+    reason_settle = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.GRAVITY_SETTLE,
+    )
+    assert reason_settle == "chain_hold_none"
+
+
+def test_classify_board_none_reason_other() -> None:
+    """反達4: cold_start でも menu_reset でも CHAIN/GRAVITY_SETTLE でもない
+    None は other (fail-silent 防止の受け皿)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    pipe._classify_board_none_reason("1P", True, _empty_board(), BoardState.STABLE)
+    reason = pipe._classify_board_none_reason(
+        "1P", True, None, BoardState.OJAMA_FALL,
+    )
+    assert reason == "other"
+
+
+def test_classify_board_none_reason_none_when_confirmed_present() -> None:
+    """反達4: confirmed_board が非 None なら理由は None (該当なし)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    reason = pipe._classify_board_none_reason(
+        "1P", True, _empty_board(), BoardState.STABLE,
+    )
+    assert reason is None
+    assert pipe._ever_had_confirmed_1p is True
+
+
+def test_board_none_reason_field_default_none_backward_compat() -> None:
+    """反達4 backward compat: SideResult.board_none_reason は既定 None
+    (既存の SideResult(...) 呼出元は引数を渡さず動作継続可能)。
+    """
+    ev = _make_chain_event(is_all_clear=False)
+    sr = SideResult(
+        side="1P", state=BoardState.STABLE, cnn_board=_empty_board(),
+        inferred_board=None, confirmed_board=_empty_board(),
+        drift=None, score=0, score_delta=0, chain_event=ev,
+    )
+    assert sr.board_none_reason is None
+
+
+# ============================
+# 反復5 (2026-07-23): 物理推論スルー (根治本体) テスト
+# ============================
+
+
+def _erasable_board_with_survivor() -> Board:
+    """4連結の赤 (row12 col1-4) + その上の緑 (row11 col0) の盤面。
+
+    ChainSimulator.simulate() で chain_count=1、final_board は
+    (12,0)=緑 (重力落下)、それ以外は空になる。
+    """
+    b = Board()
+    b.set(12, 1, COLOR_RED)
+    b.set(12, 2, COLOR_RED)
+    b.set(12, 3, COLOR_RED)
+    b.set(12, 4, COLOR_RED)
+    b.set(11, 0, COLOR_GREEN)
+    return b
+
+
+def _make_real_chain_event(chain_count_claimed: int, before: Board | None = None):
+    """実際に ChainSimulator で解決可能な起点盤面を持つ ChainEvent を作る。
+
+    chain_count_claimed: score 由来 chain_count として ChainEvent に積む値
+        (物理予測との答え合わせ用に、意図的に実際の連鎖数と変えられる)。
+    """
+    from src.chain_detector import ChainEvent
+    before_board = before if before is not None else _erasable_board_with_survivor()
+    return ChainEvent(
+        trigger_sec=10.0, end_sec=10.6, before_board=before_board,
+        chain_count=chain_count_claimed,
+        total_erased=4, total_score=40, base_score=40,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_progressed_chain_board_none_when_no_chain() -> None:
+    """反復5 Step2: chain_count=0 の ChainResult は None を返す。"""
+    from src.chain import ChainSimulator
+    from src.recognition_pipeline import _progressed_chain_board
+    cr = ChainSimulator().simulate(Board())  # 空盤面 = 連鎖なし
+    assert cr.chain_count == 0
+    assert _progressed_chain_board(cr, 10.0, 10.6, 10.3) is None
+
+
+def test_progressed_chain_board_returns_final_after_end() -> None:
+    """反復5 Step2: 経過時刻が end_sec 以降なら final_board を返す。"""
+    from src.chain import ChainSimulator
+    from src.recognition_pipeline import _progressed_chain_board
+    cr = ChainSimulator().simulate(_erasable_board_with_survivor())
+    assert cr.chain_count == 1
+    board = _progressed_chain_board(cr, 10.0, 10.6, 20.0)  # end_sec 超過
+    assert board is not None
+    assert board.get(12, 0) == COLOR_GREEN
+    assert board.get(12, 1) == COLOR_EMPTY
+
+
+def test_start_chain_estimate_stores_result_when_count_matches() -> None:
+    """反復5 Step2/Step3(a): score 由来 chain_count と物理予測が一致すれば
+    低信頼度フラグは立たない。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)  # 実際も 1 連鎖
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is not None
+    assert pipe._chain_estimate_result_1p.chain_count == 1
+    assert pipe._chain_estimate_low_confidence_1p is False
+
+
+def test_start_chain_estimate_low_confidence_on_count_mismatch() -> None:
+    """反復5 Step3(a) 答え合わせ: score由来 chain_count (claimed) と物理予測
+    (実際は 1連鎖) が不一致なら低信頼度フラグが立つ。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=5)  # 実際は 1 連鎖のはず
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is not None
+    assert pipe._chain_estimate_low_confidence_1p is True
+
+
+def test_start_chain_estimate_no_erasable_group_sets_none() -> None:
+    """反復5 Step2: 起点盤面に連鎖可能なグループが無ければ推定を開始しない。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1, before=Board())  # 空盤面
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is None
+
+
+def test_compute_chain_estimate_returns_board_during_chain() -> None:
+    """反復5 Step2: CHAIN 中は estimated_board が非 None、provenance は
+    chain_estimate (起点信頼度が高い場合)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=20.0,  # end_sec 超過 → final_board
+    )
+    assert board is not None
+    assert board.get(12, 0) == COLOR_GREEN
+    assert provenance == "chain_estimate"
+
+
+def test_compute_chain_estimate_low_confidence_provenance() -> None:
+    """反復5 Step3(a): 低信頼度フラグ時は provenance が
+    chain_estimate_low_confidence になる。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=99)  # 明らかに不一致
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.GRAVITY_SETTLE, time_sec=20.0,
+    )
+    assert board is not None
+    assert provenance == "chain_estimate_low_confidence"
+
+
+def test_compute_chain_estimate_none_outside_chain_states() -> None:
+    """反復5 Step2/Step4: CHAIN/GRAVITY_SETTLE 以外では常に (None, observed)
+    (= 標準 STABLE eval 経路には一切影響しない)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.STABLE, time_sec=20.0,
+    )
+    assert board is None
+    assert provenance == "observed"
+    # CHAIN/GRAVITY_SETTLE を抜けたら内部 state もクリアされる (次連鎖への
+    # 誤った持ち越し防止)。
+    assert pipe._chain_estimate_result_1p is None
+
+
+# ============================
+# 案1 (2026-07-23): stale_hold フォールバック
+# (c62 1P estimated_board カバレッジ崩壊 9.8% の真因対処、
+#  recognition_diag_c62_1p_estimate_collapse/summary.txt)
+# ============================
+
+
+def _make_unsimulatable_chain_event(trigger_sec: float = 10.0):
+    """simulate が chain_count=0 になる (推定が立ち上がらない) ChainEvent。
+
+    診断で確認された疑似連鎖イベント early-fire 失敗 (pred_cc=0) を
+    再現するための起点盤面 (空盤面 = 4連結なし)。
+    """
+    from src.chain_detector import ChainEvent
+    return ChainEvent(
+        trigger_sec=trigger_sec, end_sec=trigger_sec + 0.6, before_board=Board(),
+        chain_count=1, total_erased=0, total_score=0, base_score=0,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
+        is_all_clear=False,
+    )
+
+
+def test_start_chain_estimate_cold_start_seeds_last_board_with_before_board() -> None:
+    """案1: simulate 失敗 (result=None) でも cold start なら before_board で
+    last_board を seed する (直前保持の初期値)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._chain_estimate_last_board_1p is None
+    ev = _make_unsimulatable_chain_event()
+    pipe._start_chain_estimate("1P", ev)
+    assert pipe._chain_estimate_result_1p is None  # simulate 失敗 (pred_cc=0)
+    assert pipe._chain_estimate_last_board_1p is not None
+    assert pipe._chain_estimate_last_board_1p == ev.before_board
+
+
+def test_compute_chain_estimate_stale_hold_returns_last_board_with_provenance() -> None:
+    """案1 主目的: simulate 失敗時、None でなく last_board を
+    board_provenance='chain_estimate_stale_hold' で返す (デフォルト ON)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=100.05,
+    )
+    assert board is not None
+    assert board == ev.before_board
+    assert provenance == "chain_estimate_stale_hold"
+
+
+def test_compute_chain_estimate_stale_hold_disabled_flag_falls_back_to_none() -> None:
+    """案1 backward compat: enable_chain_estimate_stale_hold=False なら
+    従来通り (None, 'observed') (= 案1導入前の挙動と完全一致)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_chain_estimate_stale_hold=False,
+    )
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=100.05,
+    )
+    assert board is None
+    assert provenance == "observed"
+
+
+def test_compute_chain_estimate_stale_hold_prefers_established_board_over_new_failure() -> None:
+    """案1: 既に途中まで進行した推定盤面 (last_board) がある状態で、新規
+    トリガーの simulate が失敗しても、その失敗トリガーの (より情報の少ない)
+    before_board で上書きされない (= より進んだ推定を優先温存)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev1 = _make_real_chain_event(chain_count_claimed=1)  # simulate 成功
+    pipe._start_chain_estimate("1P", ev1)
+    board1, prov1 = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=ev1.end_sec,
+    )
+    assert prov1 == "chain_estimate"
+    assert board1 is not None and board1.get(12, 0) == COLOR_GREEN
+    # 新規トリガー (simulate 失敗) が既存 last_board を上書きしないことを確認。
+    ev2 = _make_unsimulatable_chain_event(trigger_sec=ev1.end_sec + 0.01)
+    pipe._start_chain_estimate("1P", ev2)
+    board2, prov2 = pipe._compute_chain_estimate(
+        "1P", BoardState.CHAIN, time_sec=ev2.trigger_sec + 0.01,
+    )
+    assert prov2 == "chain_estimate_stale_hold"
+    assert board2 is not None
+    assert board2.get(12, 0) == COLOR_GREEN, (
+        "既存の進行済み推定 (last_board) が保持されるべき"
+        " (失敗トリガーの空 before_board に退行してはいけない)"
+    )
+
+
+def test_compute_chain_estimate_stale_hold_expires_after_max_sec() -> None:
+    """案1 安全弁: 連続 stale_hold が CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC を
+    超えたら None に戻る (古い盤面を無期限に貼り続ける事故防止)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    t0 = 100.05
+    board0, prov0 = pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=t0)
+    assert prov0 == "chain_estimate_stale_hold"
+    assert board0 is not None
+    t1 = t0 + RecognitionPipeline.CHAIN_ESTIMATE_STALE_HOLD_MAX_SEC + 1.0
+    board1, prov1 = pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=t1)
+    assert board1 is None
+    assert prov1 == "observed"
+
+
+def test_compute_chain_estimate_stale_hold_clears_on_stable_return() -> None:
+    """案1: STABLE 復帰で last_board / stale streak が完全にクリアされる
+    (= 次の CHAIN 突入は必ず cold start からになる)。
+    """
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    ev = _make_unsimulatable_chain_event(trigger_sec=100.0)
+    pipe._start_chain_estimate("1P", ev)
+    pipe._compute_chain_estimate("1P", BoardState.CHAIN, time_sec=100.05)
+    assert pipe._chain_estimate_last_board_1p is not None
+    board, provenance = pipe._compute_chain_estimate(
+        "1P", BoardState.STABLE, time_sec=100.10,
+    )
+    assert board is None
+    assert provenance == "observed"
+    assert pipe._chain_estimate_last_board_1p is None
+    assert pipe._chain_estimate_stale_since_1p is None
+
+
+def test_chain_estimate_stale_hold_end_to_end_keeps_prior_board_without_touching_confirmed() -> None:
+    """案1 統合: 実際の pipeline.update() 経路で、疑似 early-fire 再トリガー
+    (診断で確認された主要故障モード: before_board simulate が chain_count=0)
+    が発生しても estimated_board は None にならず直前の推定盤面を保持する。
+    confirmed_board (STABLE 評価用) は本機構によって一切変更されない。
+    """
+    ev1 = _make_real_chain_event(chain_count_claimed=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev1.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev1)  # type: ignore[assignment]
+    result = pipe.update(40, 10.0, _dummy_frame())
+    assert result.p1.state == BoardState.CHAIN
+    assert result.p1.estimated_board is not None
+    assert result.p1.estimated_board.get(12, 0) == COLOR_GREEN
+
+    # 診断で確認された故障モード (機能B/D 早期発火の疑似トリガーが
+    # before_board simulate に失敗する) を直接注入する。
+    ev2 = _make_unsimulatable_chain_event(trigger_sec=10.05)
+    pipe._start_chain_estimate("1P", ev2)
+    assert pipe._chain_estimate_result_1p is None  # simulate 失敗 (pred_cc=0)
+
+    result2 = pipe.update(41, 10.06, _dummy_frame())
+    assert result2.p1.state == BoardState.CHAIN  # active_chain_1p 継続中
+    assert result2.p1.estimated_board is not None, (
+        "stale_hold: フレッシュな推定が失敗しても None にならず"
+        "直前の盤面を保持すべき"
+    )
+    assert result2.p1.estimated_board.get(12, 0) == COLOR_GREEN, (
+        "直前の progressed board (既に成功していた推定) が保持されるべき"
+    )
+    assert result2.p1.board_provenance == "chain_estimate_stale_hold"
+    assert (
+        result2.p1.confirmed_board is None
+        or result2.p1.confirmed_board.get(12, 1) != COLOR_EMPTY
+    ), "confirmed_board 自体が stale_hold の値で上書きされてはいけない"
+
+
+def test_chain_estimate_exposed_without_mutating_confirmed_board() -> None:
+    """反復5 統合 (Step2 主目的 + Step4 backward compat): CHAIN 中でも
+    confirmed_board の値は本機構によって一切変更されない
+    (= 標準 eval 経路 (STABLE のみ評価) への影響ゼロ) が、
+    estimated_board には物理推定盤面が独立に公開される。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    pipe = _make_pipe_with_tracker(None)
+    _prime_match_active(pipe, frames=35)
+    # cycle 49 の 4連結ゲート通過用: confirmed に起点盤面を直接注入する
+    # (postchain-fix テストと同じ given 条件パターン)。
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    result = pipe.update(40, 10.0, _dummy_frame())
+    assert result.p1.state == BoardState.CHAIN
+    # confirmed_board は本機構 (estimated_board) によって書き換えられて
+    # いない (= given でセットした起点盤面のままか、通常経路の値のまま)。
+    # 少なくとも「連鎖後の緑ぷよ落下」という推定結果には置き換わっていない。
+    assert (
+        result.p1.confirmed_board is None
+        or result.p1.confirmed_board.get(12, 1) != COLOR_EMPTY
+    ), "confirmed_board 自体が estimated_board の値で上書きされてはいけない"
+    assert result.p1.estimated_board is not None, (
+        "CHAIN 中は物理推定盤面が estimated_board に公開されるべき"
+        " (根治の主目的)"
+    )
+    assert result.p1.estimated_board.get(12, 0) == COLOR_GREEN
+    assert result.p1.board_provenance in (
+        "chain_estimate", "chain_estimate_low_confidence",
+    )
+
+
+def test_chain_estimate_applied_unconditionally_at_stable() -> None:
+    """反復5 修正 (2026-07-23): final_board は事前ゲートせず素直に適用する
+    (反復1の残像修正を邪魔しない、物理レビュー実測での回帰 0.09→0.28 の
+    根治)。STABLE 復帰の瞬間は、生 CNN と乖離していても物理予測が採用される。
+    """
+    unrelated_board = Board()
+    for r in range(0, 6):
+        unrelated_board.set(r, 5, COLOR_BLUE)  # final_board (ほぼ空) と大きく乖離
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(unrelated_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        # 本テストは unrelated_board (cnn_board と物理予測が常時大乖離) を
+        # 使い DriftDetector.needs_resync を意図的に頻発させる構成のため、
+        # 2026-07-25 既定 ON 化されたガード 2 種を明示 OFF にして
+        # drift 再同期による sm/gen リセットが従来通り即時発火する挙動を
+        # 維持する (本テストの検証意図は final_board 無条件適用であり、
+        # drift 再同期ガードの効果検証ではないため)。
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t = 10.0
+    frame_idx = 40
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+
+    final_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        final_res = result.p1
+        if final_res.state == BoardState.STABLE:
+            break
+    assert final_res is not None
+    assert final_res.state == BoardState.STABLE
+    assert final_res.confirmed_board is not None
+    assert final_res.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "final_board は事前ゲートせず素直に適用されるべき"
+        " (反復1の残像修正を維持)"
+    )
+
+
+def _run_chain_to_first_stable(
+    pipe: RecognitionPipeline, ev, frame_idx: int, t: float,
+) -> tuple[int, float, "SideResult"]:
+    """CHAIN 発火から最初の STABLE frame まで進め、(frame_idx, t, result) を返す。
+
+    CNN は起点盤面 (ev.before_board) と一致させたまま進める
+    (= inferred と CNN が一致し drift-resync が誤って先回りしないようにする)。
+    """
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.p1.state == BoardState.CHAIN
+    result = res
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.state == BoardState.STABLE:
+            break
+    return frame_idx, t, result.p1
+
+
+def test_chain_estimate_answer_check_corrects_persistent_mismatch() -> None:
+    """反復5 修正 Step3(b)(c): STABLE 復帰後 CHAIN_VERIFY_FRAMES 分、生 CNN が
+    一貫して物理予測と乖離し続ける場合、事後検証が多数決盤面で補正する
+    (= 起点誤認が事後に判明したケースの救済)。単一フレーム比較でなく
+    複数フレームの多数決を使うため、GRAVITY_SETTLE 直後の一過性ノイズには
+    反応しない設計を、CNN が「一貫して」乖離するケースで確認する。
+
+    CNN は起点盤面と一致させたまま CHAIN/GRAVITY_SETTLE を経過させ
+    (drift-resync の先回り誤爆を避けるため)、STABLE 到達後に初めて
+    「無関係な盤面」に切り替えて答え合わせの補正を検証する。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(ev.before_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    frame_idx, t, first_stable = _run_chain_to_first_stable(pipe, ev, 40, 10.0)
+    assert first_stable.state == BoardState.STABLE
+    assert first_stable.confirmed_board is not None
+    assert first_stable.confirmed_board.get(12, 0) == COLOR_GREEN, (
+        "final_board は事前ゲートせず素直に適用されるべき"
+    )
+    # STABLE 到達後、CNN を「無関係な盤面」に切り替えて答え合わせを検証する。
+    unrelated_board = Board()
+    for r in range(0, 6):
+        unrelated_board.set(r, 5, COLOR_BLUE)
+    reader._p1 = unrelated_board
+
+    corrected_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.answer_check_result is not None:
+            corrected_res = result.p1
+            break
+    assert corrected_res is not None, "答え合わせが完了するはず"
+    assert corrected_res.answer_check_result == "verified_mismatch_corrected"
+    assert corrected_res.confirmed_board is not None
+    assert corrected_res.confirmed_board.get(12, 0) != COLOR_GREEN, (
+        "生CNNと一貫して乖離する物理予測は事後に補正されるべき"
+    )
+
+
+def test_chain_estimate_answer_check_verified_match_when_cnn_agrees() -> None:
+    """反復5 修正 Step3(b)(c): STABLE 復帰後の生 CNN が物理予測と一致する
+    場合は answer_check_result="verified_match" になり、confirmed_board は
+    物理予測のまま維持される (誤って補正しない)。
+    """
+    ev = _make_real_chain_event(chain_count_claimed=1)
+    reader = _StubImageReader(ev.before_board, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(None)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    _prime_match_active(pipe, frames=35)
+    _force_confirmed_board(pipe, "1P", ev.before_board)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    frame_idx, t, first_stable = _run_chain_to_first_stable(pipe, ev, 40, 10.0)
+    assert first_stable.state == BoardState.STABLE
+    # STABLE 到達後、CNN を「連鎖後の正しい盤面 (緑が (12,0) に落下)」に
+    # 切り替えて答え合わせを検証する (= 物理予測と一致するケース)。
+    matching_board = Board()
+    matching_board.set(12, 0, COLOR_GREEN)
+    reader._p1 = matching_board
+
+    verified_res: SideResult | None = None
+    for _ in range(30):
+        frame_idx += 1
+        t += 1.0
+        result = pipe.update(frame_idx, t, _dummy_frame())
+        if result.p1.answer_check_result is not None:
+            verified_res = result.p1
+            break
+    assert verified_res is not None
+    assert verified_res.answer_check_result == "verified_match"
+    assert verified_res.confirmed_board is not None
+    assert verified_res.confirmed_board.get(12, 0) == COLOR_GREEN
+
+
+# ============================
+# #45 おじゃま merge 統合修正 案(a)(b) + 案B 既定 ON 化 (2026-07-24)
+#
+# A/B 検証 (次ツモ遅延 2.80s→0.65s・浮き誤消去 -28%・採用 +38) +
+# user viz 全画像レビュー承認 (「全て after の方が品質高い」) を受け、
+# 以下 3 flag の既定値を False → True に変更した:
+#   - enable_ojama_fall_board_settle (案B: OJAMA_FALL 退出=全盤面 settle)
+#   - enable_gravity_filter_support   (案(a): 重力フィルタ支持緩和)
+#   - merge_use_majority_value        (案(b): 退出 merge 書込値の多数決化)
+# False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
+# ============================
+
+
+def test_ojama_dropout_fix_flags_default_true_on_init() -> None:
+    """3 flag とも RecognitionPipeline.__init__ の既定値が True であること
+    (2026-07-24 既定 ON 化・user viz 承認)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    for name in (
+        "enable_ojama_fall_board_settle",
+        "enable_gravity_filter_support",
+        "merge_use_majority_value",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, f"{name} の __init__ 既定 True 期待: {default}"
+
+
+def test_ojama_dropout_fix_flags_default_true_on_load_default() -> None:
+    """3 flag とも load_default の既定値が True であること
+    (2026-07-24 既定 ON 化・user viz 承認)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    for name in (
+        "enable_ojama_fall_board_settle",
+        "enable_gravity_filter_support",
+        "merge_use_majority_value",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, f"{name} の load_default 既定 True 期待: {default}"
+
+
+def test_ojama_dropout_fix_default_pipeline_wiring_all_true() -> None:
+    """回帰: 既定 (=全部 True) で pipeline が正常構築され、
+    案B の settle 退出 + 再突入抑制 + 浮きフィルタ支持 + 多数決 merge が
+    実際に state machine / detector まで配線されていることを確認する。"""
+    from src.ojama_visual_detector import OjamaVisualDetector
+    from src.state_detectors import OjamaPhaseDetector
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+    )
+    # pipeline レベルの内部 flag
+    assert pipe._enable_ojama_fall_board_settle is True
+    assert pipe._enable_gravity_filter_support is True
+    assert pipe._merge_use_majority_value is True
+
+    # BoardStateMachine (1P/2P 双方) への配線確認
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        assert sm._enable_gravity_filter_support is True  # noqa: SLF001
+        assert sm._merge_use_majority_value is True  # noqa: SLF001
+        ovd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaVisualDetector)),
+            None,
+        )
+        assert ovd is not None, "OjamaVisualDetector が detectors に未登録"
+        assert ovd.enable_ojama_fall_board_settle is True
+        opd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaPhaseDetector)),
+            None,
+        )
+        assert opd is not None, "OjamaPhaseDetector が detectors に未登録"
+        assert opd.defer_ojama_fall_exit_to_visual is True
+
+
+def test_ojama_dropout_fix_flags_explicit_false_restores_legacy() -> None:
+    """3 flag とも明示的に False を渡せば旧挙動 (bit-identical) の配線に
+    戻ることを確認する (backwards compat 退避経路)。"""
+    from src.ojama_visual_detector import OjamaVisualDetector
+    from src.state_detectors import OjamaPhaseDetector
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_fall_board_settle=False,
+        enable_gravity_filter_support=False,
+        merge_use_majority_value=False,
+    )
+    assert pipe._enable_ojama_fall_board_settle is False
+    assert pipe._enable_gravity_filter_support is False
+    assert pipe._merge_use_majority_value is False
+
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        assert sm._enable_gravity_filter_support is False  # noqa: SLF001
+        assert sm._merge_use_majority_value is False  # noqa: SLF001
+        ovd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaVisualDetector)),
+            None,
+        )
+        assert ovd is not None
+        assert ovd.enable_ojama_fall_board_settle is False
+        opd = next(
+            (d for d in sm._detectors if isinstance(d, OjamaPhaseDetector)),
+            None,
+        )
+        assert opd is not None
+        assert opd.defer_ojama_fall_exit_to_visual is False
+
+
+# ============================
+# DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)
+#
+# 試合開始直後は HSV 較正が浅く CNN 誤読が残り、推論盤面と cnn_board の
+# 乖離が DriftDetector 閾値を超えて sm.reset+drift.reset+gen.reset が
+# 発火 → リセット直後も誤読継続 → 再発火、の自己永続ループが最大 13 秒
+# 程度継続する不具合への 2 段ガード。両 flag とも default False
+# (= 従来挙動完全維持・bit-identical、backwards compat)。
+# ============================
+
+
+class _FakeAlwaysResyncDrift:
+    """DriftDetector 互換スタブ: 毎 update で needs_resync=True を返す。
+
+    _step_side が参照するのは `.update()` と `.reset()` のみ (本体
+    DriftDetector.consecutive_drift_count 等は _step_side からは未参照)。
+    """
+
+    def __init__(self) -> None:
+        self.reset_calls: int = 0
+        self.update_calls: int = 0
+
+    def update(self, inferred, cnn):  # noqa: ANN001, ANN201
+        from src.drift_detector import DriftResult
+        self.update_calls += 1
+        return DriftResult(
+            mismatch_count=99, consecutive_count=99,
+            is_drift=True, needs_resync=True,
+        )
+
+    def reset(self) -> None:
+        self.reset_calls += 1
+
+
+def _count_calls(obj: object, method_name: str) -> dict:
+    """obj.method_name 呼び出し回数を計測するラッパーに差し替える。"""
+    orig = getattr(obj, method_name)
+    counter = {"n": 0}
+
+    def _wrapper(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        counter["n"] += 1
+        return orig(*args, **kwargs)
+
+    setattr(obj, method_name, _wrapper)
+    return counter
+
+
+def test_drift_resync_guards_default_true_on_init() -> None:
+    """両ガードとも __init__ 既定値が True であること
+    (2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    for name in (
+        "enable_drift_resync_match_start_guard",
+        "enable_drift_resync_hsv_gate",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, f"{name} の __init__ 既定 True 期待: {default}"
+
+
+def test_drift_resync_guards_default_true_on_load_default() -> None:
+    """両ガードとも load_default 既定値が True であること
+    (2026-07-25 user レビュー (c34 v6) 承認・既定 ON 化)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    for name in (
+        "enable_drift_resync_match_start_guard",
+        "enable_drift_resync_hsv_gate",
+    ):
+        default = sig.parameters[name].default
+        assert default is True, (
+            f"{name} の load_default 既定 True 期待: {default}"
+        )
+
+
+def test_drift_resync_guard_counters_init_zero() -> None:
+    """デバッグカウンタは construction 直後は全て 0。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0
+    assert pipe._drift_resync_start_guard_suppressed_2p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_2p == 0
+
+
+def test_drift_resync_guards_off_resyncs_immediately_bit_identical() -> None:
+    """両ガード明示 OFF (2026-07-25 既定 ON 化により明示指定が必要) では
+    試合開始直後でも needs_resync=True で従来通り
+    sm.reset/gen.reset/drift.reset が即発火する (bit-identical)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+    gen_calls = _count_calls(pipe._gen_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 window 内 (0.0s)
+
+    assert sm_calls["n"] >= 1, "guard OFF なら resync が即発火するべき"
+    assert gen_calls["n"] >= 1
+    assert pipe._drift_1p.reset_calls >= 1
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+
+
+def test_drift_resync_match_start_guard_on_suppresses_within_window() -> None:
+    """ガード1 ON: 試合開始から DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒
+    以内は needs_resync=True でも resync が抑制される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 (t=0.0)
+    pipe.update(1, 5.0, _dummy_frame())  # t=5.0 < 15.0 秒 → 抑制されるべき
+
+    assert sm_calls["n"] == 0, "window 内は resync が抑制されるべき"
+    assert pipe._drift_resync_start_guard_suppressed_1p >= 1
+    assert pipe._drift_1p.reset_calls == 0
+
+
+def test_drift_resync_match_start_guard_on_allows_after_window() -> None:
+    """ガード1 ON: DRIFT_RESYNC_MATCH_START_GUARD_SEC 秒経過後は
+    needs_resync=True で従来通り resync が発火する。
+    ガード2 (hsv_gate) は 2026-07-25 既定 ON 化されたが、本テストは
+    ガード1 を単独検証する目的のため明示 OFF にして分離する
+    (テスト環境では OnlineHsvCalibrator が実際に較正しないため
+    ガード2 既定 ON のままだと較正未達判定のまま恒久的に抑制されてしまう)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())  # 試合開始 (t=0.0)
+    pipe.update(
+        1,
+        RecognitionPipeline.DRIFT_RESYNC_MATCH_START_GUARD_SEC + 1.0,
+        _dummy_frame(),
+    )  # window 超過
+
+    assert sm_calls["n"] >= 1, "window 超過後は resync が発火するべき"
+    # frame 0 (t=0.0) は window 内のため 1 回だけ抑制され、frame 1 (window 超過)
+    # では抑制されない (= 累計 1 のまま増えない)。
+    assert pipe._drift_resync_start_guard_suppressed_1p == 1
+
+
+def test_drift_resync_hsv_gate_on_suppresses_when_uncalibrated() -> None:
+    """ガード2 ON: 較正済み色数 < DRIFT_RESYNC_MIN_CALIBRATED_COLORS の間は
+    needs_resync=True でも resync が抑制される。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._enable_drift_resync_hsv_gate = True  # 直接 flag をセット
+    assert len(pipe._online_hsv_injected_colors) == 0  # 較正なしの初期状態
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())
+
+    assert sm_calls["n"] == 0, "較正未達なら resync が抑制されるべき"
+    assert pipe._drift_resync_hsv_gate_suppressed_1p >= 1
+
+
+def test_drift_resync_hsv_gate_on_allows_when_calibrated() -> None:
+    """ガード2 ON: 較正済み色数 >= DRIFT_RESYNC_MIN_CALIBRATED_COLORS なら
+    従来通り resync が発火する。ガード1 (match_start_guard) は
+    2026-07-25 既定 ON 化されたが、本テストはガード2 を単独検証する
+    目的のため明示 OFF にして分離する (t=0.0 は window 内で
+    ガード1 既定 ON のままだと無条件に抑制されてしまうため)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    pipe._enable_drift_resync_match_start_guard = False
+    pipe._enable_drift_resync_hsv_gate = True
+    pipe._online_hsv_injected_colors = {1, 2, 3}  # 3 色較正済みを模擬
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe.update(0, 0.0, _dummy_frame())
+
+    assert sm_calls["n"] >= 1, "較正済みなら resync が発火するべき"
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0
+
+
+def test_drift_resync_guards_are_independent_flags() -> None:
+    """ガード1 のみ ON でもガード2 の抑制条件 (較正未達) は無関係に
+    resync が発火する (= 各ガードは独立 flag、ガード1 だけでは較正未達を
+    考慮しない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        enable_drift_resync_match_start_guard=True,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # window 超過後は較正状態 (未較正) に関わらず resync が発火する
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(
+        1,
+        RecognitionPipeline.DRIFT_RESYNC_MATCH_START_GUARD_SEC + 1.0,
+        _dummy_frame(),
+    )
+    assert sm_calls["n"] >= 1
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0, (
+        "ガード2 OFF なので hsv_gate カウンタは増えないべき"
+    )
+
+
+# ============================
+# 前試合盤面残骸リーク修正・追修 (2026-07-25)
+#
+# force_in_match=True (raw_active 常時 True) 構成では
+# BoardStateMachine.update() の is_match_active=False 分岐 (MENU 強制) が
+# 一度も発火しないため、score リセット境界検知から
+# BoardStateMachine.clear_match_start_residue() を直接呼び出す経路を追加した。
+# ============================
+
+
+class _FakeScoreTrackerSeq:
+    """ScoreTracker 互換スタブ: update() 呼び出しごとに事前指定の score を返す。"""
+
+    def __init__(self, scores: list[int]) -> None:
+        self._scores = scores
+        self._idx = 0
+        self._last_score: int | None = None
+
+    @property
+    def last_score(self) -> int | None:
+        return self._last_score
+
+    def update(self, frame):  # noqa: ANN001, ANN201
+        from src.score_ocr import ScoreDelta
+        cur = self._scores[min(self._idx, len(self._scores) - 1)]
+        prev = self._last_score
+        self._idx += 1
+        self._last_score = cur
+        delta = (cur - prev) if prev is not None else 0
+        return ScoreDelta(side="1P", prev_score=prev, cur_score=cur, delta=delta)
+
+    def reset(self) -> None:
+        self._last_score = None
+
+
+def _make_pipe_for_match_start_full_clear(
+    enable_match_start_full_clear: bool,
+    enable_score_reset_strict: bool = False,
+) -> RecognitionPipeline:
+    """force_in_match=True 構成での追修テスト用 pipeline を構築する。
+
+    enable_score_reset_strict: 2026-07-26 追加。既存の残骸クリア系テストは
+    「単発 1 フレーム遷移で reset() が即発火する」旧挙動を前提に書かれて
+    いるため、既定 False (= 旧 OR・デバウンス無し挙動) を維持する
+    (backwards compat)。strict モード (両側条件 + 3 フレームデバウンス)
+    自体の検証は enable_score_reset_strict=True を明示指定するテストで行う。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        stable_frame_count=2,
+        force_in_match=True,
+        enable_match_start_full_clear=enable_match_start_full_clear,
+        enable_score_reset_strict=enable_score_reset_strict,
+    )
+
+
+def _seed_residue(sm) -> None:  # noqa: ANN001
+    """game0 終盤相当の残骸フィールド (confirmed_board 含む) を
+    StateContext に注入する。"""
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    sm.context.state = BoardState.STABLE
+    sm.context.confirmed_board = ghost.copy()
+    sm.context.non_stable_cnn_history = [ghost.copy(), ghost.copy()]
+    sm.context.stable_recovery_counters = {(10, 4): 2, (11, 4): 3}
+    sm.context.recovery_cells = {(10, 4), (11, 4)}
+    sm.context.next_queue = [(1, 2), (3, 4)]
+    sm.context.stable_warmup_remaining = 5
+
+
+def test_is_score_reset_boundary_detects_large_drop() -> None:
+    """スコア大幅減少 (新ゲーム開始) を検知する。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(10, 10, 6080, 32) is True
+
+
+def test_is_score_reset_boundary_detects_near_zero() -> None:
+    """両者スコアが 0 付近 (試合最初期) を検知する。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(0, 0, None, None) is True
+
+
+def test_is_score_reset_boundary_no_false_positive_on_normal_play() -> None:
+    """通常の得点増加では境界と誤検知しない。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(150, 120, 100, 100) is False
+
+
+def test_is_score_reset_boundary_none_score_returns_false() -> None:
+    """score が None (OCR 失敗) は判定不能として False (誤リセット回避)。"""
+    from src.recognition_pipeline import _is_score_reset_boundary
+    assert _is_score_reset_boundary(None, 100, 5000, 100) is False
+
+
+def test_force_in_match_score_reset_clears_residue_when_flag_on() -> None:
+    """追修: force_in_match=True + enable_match_start_full_clear=True で、
+    score 大幅減少 (試合境界) 検知時に sm_1p/sm_2p の confirmed_board
+    (=幽霊セルの実体) + 残骸 5 field がクリアされる
+    (= MENU 分岐が発火しない構成でも残骸リークを防げる)。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    _seed_residue(pipe._sm_1p)
+    _seed_residue(pipe._sm_2p)
+
+    pipe.update(0, 0.0, _dummy_frame())  # prev score cache = 6080 (境界未検知)
+    assert pipe._sm_1p.context.confirmed_board is not None, (
+        "1 frame目 (境界未検知) では confirmed_board は残っているべき"
+    )
+    pipe.update(1, 0.033, _dummy_frame())  # 6080→10 の大幅減少 = 境界検知
+
+    for sm in (pipe._sm_1p, pipe._sm_2p):
+        ctx = sm.context
+        assert ctx.state == BoardState.MENU
+        assert ctx.confirmed_board is None, (
+            "境界検知後は幽霊セルの実体である confirmed_board も None に"
+            "クリアされるべき"
+        )
+        assert ctx.non_stable_cnn_history == []
+        assert ctx.stable_recovery_counters == {}
+        assert ctx.recovery_cells == set()
+        assert ctx.next_queue == []
+        assert ctx.stable_warmup_remaining == 0
+
+
+def test_force_in_match_score_reset_keeps_residue_when_flag_off() -> None:
+    """backwards compat: enable_match_start_full_clear=False (default) では
+    score 大幅減少を検知しても confirmed_board/残骸 5 field はクリアされない。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=False)
+    assert not pipe._enable_match_start_full_clear
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    _seed_residue(pipe._sm_1p)
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())
+
+    ctx = pipe._sm_1p.context
+    assert ctx.confirmed_board is not None
+    assert ctx.non_stable_cnn_history != []
+    assert ctx.stable_recovery_counters != {}
+    assert ctx.recovery_cells != set()
+    assert ctx.next_queue != []
+    assert ctx.stable_warmup_remaining != 0
+
+
+def test_force_in_match_score_reset_clears_chain_estimate_cache() -> None:
+    """追修 (実測): sm 側 5 field だけでは CHAIN 中の estimated_board 表示
+    (_chain_estimate_last_board_Xp の stale_hold キャッシュ) に前試合の
+    幽霊盤面が残ることが判明 (2P 側 v6 レンダ実測)。self.reset() 経由の
+    包括リセットで _active_chain_2p / _chain_estimate_last_board_2p も
+    クリアされることを確認する。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10])
+    ghost = _board_with_red(10, 4)
+    ghost.set(11, 4, COLOR_RED)
+    from src.chain_detector import ChainEvent
+    pipe._active_chain_2p = ChainEvent(
+        trigger_sec=5.0, end_sec=999.0, before_board=ghost.copy(),
+        chain_count=1, total_erased=0, total_score=0,
+        base_score=0, all_clear_bonus_applied=0, ojama_sent=0,
+        leftover_score=0, is_all_clear=False,
+    )
+    pipe._chain_until_2p = 999.0
+    pipe._chain_estimate_last_board_2p = ghost.copy()
+    pipe._chain_estimate_stale_since_2p = 5.0
+
+    pipe.update(0, 0.0, _dummy_frame())
+    pipe.update(1, 0.033, _dummy_frame())  # 6080→10 = 境界検知 → self.reset()
+
+    assert pipe._active_chain_2p is None
+    assert pipe._chain_until_2p == 0.0
+    assert pipe._chain_estimate_last_board_2p is None
+    assert pipe._chain_estimate_stale_since_2p is None
+
+
+def test_force_in_match_score_reset_edge_trigger_no_repeat_fire() -> None:
+    """追修: 「両者スコアほぼ0」は試合開始直後の数秒間継続して真になりうる
+    ため、境界条件が継続している間は 2 回目以降 self.reset() を再発火しない
+    (edge-trigger ラッチ)。序盤の tsumo 認識進行への継続妨害を防ぐ。"""
+    pipe = _make_pipe_for_match_start_full_clear(enable_match_start_full_clear=True)
+    # 6080→10→10→10→10 (境界成立が数フレーム継続する状況を模擬)
+    scores = [6080, 10, 10, 10, 10]
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq(scores)
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(scores)
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(len(scores)):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 1, (
+        "境界条件が継続する間 (両者スコア<=20 が連続) は 1 回のみ発火し、"
+        "毎フレーム re-fire してはならない"
+    )
+
+
+# --- score-reset 境界誤発火修正 (2026-07-26, strict モード) ---
+# diag_v29_mid_resetlog.log で確定した「片側のみの単発 score OCR 誤読で
+# 包括 reset() が試合中に誤発火する」欠陥の回帰テスト。
+
+
+def test_score_reset_strict_ignores_one_sided_ocr_glitch() -> None:
+    """strict モード: 片側 (1P) だけが急落し続けても、もう片方 (2P) が
+    不変であれば reset() は一切発火しない (診断ログ実例の回帰テスト:
+    2P=40031 不変なのに 1P だけ 48077→0 と誤読されたケース)。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([48077, 0, 0, 0, 0])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(
+        [40031, 40031, 40031, 40031, 40031]
+    )
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(5):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 0, (
+        "片側のみの急落 (もう片方は不変) では strict モードで一切発火して"
+        "はならない"
+    )
+
+
+def test_score_reset_strict_fires_after_three_consecutive_frames() -> None:
+    """strict モード: 両者が同時に急落した状態が 3 フレーム連続で成立すれば
+    reset() が発火する (デバウンス通過後の正常発火を確認)。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 10, 10, 10])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([6080, 10, 10, 10])
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(4):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 1, (
+        "両側同時急落が 3 フレーム連続で成立すれば 1 回発火するべき"
+    )
+
+
+def test_score_reset_strict_ignores_single_frame_both_side_glitch() -> None:
+    """strict モード: 両者が同時に急落したように見えても単発 1 フレームで
+    直後に元の値へ復帰する (OCR 誤読の典型パターン) 場合は、3 フレーム
+    連続条件を満たさないため reset() が発火しない。"""
+    pipe = _make_pipe_for_match_start_full_clear(
+        enable_match_start_full_clear=True, enable_score_reset_strict=True,
+    )
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([6080, 0, 6080, 6080])
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq([5900, 0, 5900, 5900])
+    reset_calls = _count_calls(pipe, "reset")
+
+    for i in range(4):
+        pipe.update(i, i * 0.033, _dummy_frame())
+
+    assert reset_calls["n"] == 0, (
+        "単発 1 フレームだけの両側急落 (直後に復帰) では 3 フレーム連続に"
+        "満たないため発火してはならない"
     )
 

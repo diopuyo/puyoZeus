@@ -89,7 +89,14 @@ TAIOU_RESPONSE_SCORE_THRESHOLD: int = SCORE_DELTA_FIRE
 
 
 class NpzRecord(NamedTuple):
-    """1本分の npz データ。"""
+    """1本分の npz データ。
+
+    next1_a/next1_b/dnext_a/dnext_b (指標①本命版検証用、2026-07 追加):
+    boards_lean_next (--with-next 収集) には実値、boards_lean_fixed 等の
+    旧形式には存在しないため _load_npz が -1 (NEXT_COLOR_UNKNOWN) 埋め配列を
+    補完する。末尾の optional フィールドのため既存の位置引数呼び出し
+    (NpzRecord(video_id, side, t_sec, ...)) は後方互換で動作する。
+    """
     video_id: str
     side: str
     t_sec: np.ndarray     # shape(N,)
@@ -97,10 +104,24 @@ class NpzRecord(NamedTuple):
     grids: np.ndarray     # shape(N,13,6)
     won: np.ndarray       # shape(N,)
     score: np.ndarray     # shape(N,) int32, -1=欠損
+    next1_a: np.ndarray = np.empty(0, dtype=np.int8)   # shape(N,) int8, -1=未検出
+    next1_b: np.ndarray = np.empty(0, dtype=np.int8)
+    dnext_a: np.ndarray = np.empty(0, dtype=np.int8)
+    dnext_b: np.ndarray = np.empty(0, dtype=np.int8)
+
+
+# next_pair/dnext_pair が npz に存在しない場合の埋め値
+# (scripts/collect_boards_lean.py の NEXT_COLOR_UNKNOWN と同値)。
+NEXT_COLOR_UNKNOWN: int = -1
 
 
 def _load_npz(path: Path) -> list[NpzRecord]:
-    """1つの npz から NpzRecord を側ごとに返す。"""
+    """1つの npz から NpzRecord を側ごとに返す。
+
+    next1_a/next1_b/dnext_a/dnext_b (指標①本命版用) が npz に存在すれば
+    実値を、存在しなければ (boards_lean_fixed 等の旧形式) NEXT_COLOR_UNKNOWN
+    で埋めた配列を格納する (後方互換、呼び出し側は常に同じ型で扱える)。
+    """
     with np.load(path, allow_pickle=True) as d:
         video_ids = d["video_id"]  # shape(N,) <U8
         sides = d["side"]          # shape(N,) <U2
@@ -109,6 +130,11 @@ def _load_npz(path: Path) -> list[NpzRecord]:
         grids = d["grids"].astype(np.int8)
         wons = d["won"].astype(np.float32)
         scores = d["score"].astype(np.int32)
+        n = len(scores)
+        next1_a = _read_next_column(d, "next1_a", n)
+        next1_b = _read_next_column(d, "next1_b", n)
+        dnext_a = _read_next_column(d, "dnext_a", n)
+        dnext_b = _read_next_column(d, "dnext_b", n)
 
     # 側ごとに分割
     records: list[NpzRecord] = []
@@ -125,8 +151,22 @@ def _load_npz(path: Path) -> list[NpzRecord]:
             grids=grids[mask],
             won=wons[mask],
             score=scores[mask],
+            next1_a=next1_a[mask],
+            next1_b=next1_b[mask],
+            dnext_a=dnext_a[mask],
+            dnext_b=dnext_b[mask],
         ))
     return records
+
+
+def _read_next_column(npz_data: object, key: str, n: int) -> np.ndarray:
+    """npz からネクスト列を読む。存在しなければ NEXT_COLOR_UNKNOWN 埋め配列を返す。
+
+    boards_lean_fixed 等の旧形式 npz (next1_a 等が無い) との後方互換のため。
+    """
+    if key in npz_data:  # type: ignore[operator]
+        return npz_data[key].astype(np.int8)  # type: ignore[index]
+    return np.full(n, NEXT_COLOR_UNKNOWN, dtype=np.int8)
 
 
 def _detect_fire_events(
@@ -156,15 +196,51 @@ def _board_from_grid(grid: np.ndarray) -> Board:
     return Board.from_list(grid.tolist())
 
 
+def _game_relative_elapsed(t_fire: float, game_start_t: float) -> float:
+    """試合開始からの経過秒を返す(マージンタイム計算用)。
+
+    npz の t_sec は動画絶対時刻 (1動画に複数試合を含む場合、game_idx>=1 の
+    試合では数百〜千秒に達する)。そのまま score_to_ojama 系の elapsed_sec に
+    渡すとマージンタイム減衰 (MARGIN_TIME_START_SEC=96s 以降 16秒毎に×0.75、
+    最大14回) が過剰発火し potential_fire_power / immediate_fire_power の
+    raw が桁違いに膨張するバグがあった (実データ確認済み、修正版)。
+
+    その試合内での最初のフレーム時刻をゼロ点として補正する。
+    ⚠️ game_idx==0 (先頭試合) でも動画によっては録画開始が試合開始より
+    大幅に遅れる (実測で最大 200 秒超) ケースがあり、無条件に「先頭試合は
+    ほぼ0点」とは言えない。よって game_idx の値に関わらず常にこの補正を
+    適用する (特別扱いしない)。
+    数秒のバッファ誤差はマージンタイム閾値96秒に対し軽微なため許容する
+    (scripts/proto_net_threat.py の同名関数と同等ロジック)。
+
+    Args:
+        t_fire: 対象フレームの動画絶対時刻(秒)。
+        game_start_t: その (video_id, game_idx, side) グループの
+            最初のフレーム時刻(秒)。
+
+    Returns:
+        試合開始からの経過秒(0以上)。
+    """
+    return max(0.0, t_fire - game_start_t)
+
+
 def _compute_features(
     board: Board,
-    t_sec: float,
+    elapsed_sec: float,
     sim: ChainSimulator,
 ) -> dict[str, float]:
-    """発火直前盤面から指標を計算して辞書で返す。"""
+    """発火直前盤面から指標を計算して辞書で返す。
+
+    Args:
+        board: 対象盤面。
+        elapsed_sec: 試合開始からの経過秒(マージンタイム計算用)。
+            ⚠️ 動画絶対時刻 (npz の t_sec) をそのまま渡さないこと。
+            呼び出し側で _game_relative_elapsed() を通した値を渡す。
+        sim: ChainSimulator。
+    """
     cmc = current_max_chain(board, sim)
-    pfp = potential_fire_power(board, t_sec, sim)
-    ifp = immediate_fire_power(board, t_sec, sim)
+    pfp = potential_fire_power(board, elapsed_sec, sim)
+    ifp = immediate_fire_power(board, elapsed_sec, sim)
     ho = honsen_output(board, sim)
     # honsen_tempo_output: opp_chain は外部から渡せないのでここでは opp=0 仮置き
     # → 呼び出し側で opp_chain を使って再計算する
@@ -496,6 +572,10 @@ def _process_game(
     if not fire_events:
         return []
 
+    # 試合開始時刻の近似 = この (video_id, game_idx, fire_side) で
+    # 記録された最初のフレーム時刻(マージンタイム計算の基準点、バグ修正)
+    game_start_t = float(fire_rec.t_sec[0])
+
     # 相手盤面を (t, Board) ペアで保持(重い計算は発火時点のみ)
     opp_boards: list[tuple[float, Board]] = []
     for i in range(len(opp_rec.t_sec)):
@@ -530,10 +610,13 @@ def _process_game(
         nearest_opp = int(np.argmin(np.abs(opp_t_arr - t_fire)))
         opp_board = opp_boards[nearest_opp][1]
 
+        # 試合開始からの経過秒(マージンタイム計算用、動画絶対時刻ではない)
+        elapsed_in_game = _game_relative_elapsed(t_fire, game_start_t)
+
         # 発火側指標
-        fire_feats = _compute_features(fire_board, t_fire, sim)
+        fire_feats = _compute_features(fire_board, elapsed_in_game, sim)
         # 相手側指標
-        opp_feats = _compute_features(opp_board, t_fire, sim)
+        opp_feats = _compute_features(opp_board, elapsed_in_game, sim)
 
         # honsen_tempo_output: 両者の current_max_chain で計算
         hto_fire = honsen_tempo_output(
@@ -635,14 +718,32 @@ def _estimate_puyo_quantiles(npz_paths: list[Path]) -> tuple[float, float]:
     return float(np.quantile(arr, PHASE_QUANTILE_LOW)), float(np.quantile(arr, PHASE_QUANTILE_HIGH))
 
 
+def _parse_args() -> "argparse.Namespace":
+    """CLI 引数をパースする。省略時は既定 (boards_lean_fixed) で従来挙動と完全一致。"""
+    import argparse
+    parser = argparse.ArgumentParser(description="発火イベント+打ち合い結果ラベル生成")
+    parser.add_argument(
+        "--npz-dir", type=Path, default=NPZ_DIR,
+        help=f"入力 npz ディレクトリ (既定: {NPZ_DIR})",
+    )
+    parser.add_argument(
+        "--output", type=Path, default=OUTPUT_PATH,
+        help=f"出力 CSV パス (既定: {OUTPUT_PATH})",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     """メイン処理。"""
     warnings.filterwarnings("ignore")
-    npz_paths = sorted(NPZ_DIR.glob("c*.npz"))
+    args = _parse_args()
+    npz_dir: Path = args.npz_dir
+    output_path: Path = args.output
+    npz_paths = sorted(npz_dir.glob("c*.npz"))
     if not npz_paths:
-        print(f"[ERROR] npz が見つかりません: {NPZ_DIR}", file=sys.stderr)
+        print(f"[ERROR] npz が見つかりません: {npz_dir}", file=sys.stderr)
         sys.exit(1)
-    print(f"[INFO] npz {len(npz_paths)} 本を処理します")
+    print(f"[INFO] npz {len(npz_paths)} 本を処理します ({npz_dir})")
 
     # 位相分位点を事前推定
     q_low, q_high = _estimate_puyo_quantiles(npz_paths)
@@ -673,12 +774,16 @@ def main() -> None:
                 t_sec=r1p.t_sec[mask1], game_idx=r1p.game_idx[mask1],
                 grids=r1p.grids[mask1], won=r1p.won[mask1],
                 score=r1p.score[mask1],
+                next1_a=r1p.next1_a[mask1], next1_b=r1p.next1_b[mask1],
+                dnext_a=r1p.dnext_a[mask1], dnext_b=r1p.dnext_b[mask1],
             )
             g2p = NpzRecord(
                 video_id=r2p.video_id, side="2P",
                 t_sec=r2p.t_sec[mask2], game_idx=r2p.game_idx[mask2],
                 grids=r2p.grids[mask2], won=r2p.won[mask2],
                 score=r2p.score[mask2],
+                next1_a=r2p.next1_a[mask2], next1_b=r2p.next1_b[mask2],
+                dnext_a=r2p.dnext_a[mask2], dnext_b=r2p.dnext_b[mask2],
             )
             for side in ("1P", "2P"):
                 try:
@@ -694,9 +799,9 @@ def main() -> None:
         sys.exit(1)
 
     df = pd.DataFrame(all_rows)
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(OUTPUT_PATH, index=False)
-    print(f"[DONE] {len(df)} 行を {OUTPUT_PATH} に保存しました")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    print(f"[DONE] {len(df)} 行を {output_path} に保存しました")
     print(f"  位相別: {df['phase'].value_counts().to_dict()}")
     print(f"  fire_side: {df['fire_side'].value_counts().to_dict()}")
     print(f"  net_ojama mean={df['net_ojama'].mean():.2f}  returned={df['returned'].mean():.2f}"

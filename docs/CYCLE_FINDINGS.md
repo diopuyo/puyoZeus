@@ -343,4 +343,81 @@ DB pre-inject (cycle_12 で検証済) は本番 default に組み込む価値あ
 - per_video_inject_critical: 1583 (+71、 +4.7%)
 - v30_5min: critical 107 (= 主目標の 55 秒問題改善ゼロを数値確認)
 - 参考: merged38 比では -4 (= -0.3%) で実質同等
+
+## 8. 連鎖後残像バグ (2026-07-23 調査)
+
+### 8.1 P3 (`is_match_active` 誤 False) 仮説は iter4 診断で反証済み
+
+- 反復4 診断 (`board_none_reason` 内訳集計、`scripts/recognition_physics_review.py`)
+  で c62 game9 の CHAIN 中 `confirmed_board=None` の理由内訳を計測した結果、
+  1P/2P とも `chain_hold_none` (= CHAIN/GRAVITY_SETTLE 中は STABLE 以外という
+  仕様通りの凍結) がほぼ 100%、`menu_reset` (= P3 が狙う
+  `is_match_active` 誤 False → MENU 強制経路) はほぼ 0% だった
+  (実測: 1P `board_none_reason_chain` = `{'chain_hold_none': 1320}` /
+  1321 frame、`menu_reset` 0 件)。
+- つまり CHAIN 中に `confirmed_board` が None になるのは「STABLE 以外は
+  未確定」という設計通りの挙動であり、`is_match_active` の誤判定 (P3 が
+  想定した経路) はこの区間で発生していない。
+- **以後、この軸 (is_match_active 誤 False 対策) への投資はしない**。
+  「連鎖後残像/estimated_board 未カバー」問題の真因は別軸 (起点盤面
+  `before_board` の認識精度、または連続小連鎖時の trigger 検出タイミング)
+  にある。次の調査は `scripts/_diag_estimate_collapse_c62_1p.py`
+  (2026-07-23, c62 game9 1P estimated_board coverage 9.8% の真因診断) を参照。
 - **解釈**: per_video_inject 自体の評価であり、 軸 3-b 単体の -9 副次効果は別コンテキスト
+
+### 8.2 機能D (`enable_chain_formula_simulate_verify`) を default ON に採用 (2026-07-24)
+
+- 機能D (連鎖開始 掛け算式検知, `enable_chain_formula_detection`, default ON
+  済) の早期発火 77 件を `_diag_false_event_source_2026-07-24.py` で真因
+  診断した結果、35 件 (45.5%) が「連鎖ゼロの起点盤面」からの疑似発火
+  (偽イベント) と確定した。
+- 修正D として、早期発火の起点盤面 (`before_board`) を `ChainSimulator`
+  で事前検証し、`chain_count==0` (連鎖が実在しない) なら疑似発火を抑制、
+  `chain_count>0` なら固定 `chain_count=1` でなく実測値を使う対策を実装
+  (`src/recognition_pipeline.py` の `_resolve_formula_chain_count` /
+  `_apply_chain_formula_early_fire`)。
+- 物理採点 + 独立診断 (before/after 比較) で偽イベント率 27.5% → 0% と
+  確認され、user viz 承認により `enable_chain_formula_simulate_verify` の
+  既定値を `False` → `True` に変更 (2026-07-24、`__init__` /
+  `load_default` 両方)。誤抑制 (連鎖が実在する起点盤面を誤って握り潰す)
+  は最小構成テストで検証済みでゼロ。
+- 旧挙動 (検証なし・bit-identical) は
+  `enable_chain_formula_simulate_verify=False` を明示指定すれば維持できる
+  (backwards compat のため退避経路として残置)。
+  savepoint タグ: `savepoint/chain-formula-verify-default-on`。
+
+### 8.3 おじゃまドロップ修正 3 flag を default ON に採用 (2026-07-24)
+
+- #45 おじゃま merge 統合修正の一環として実装した以下 3 flag を、
+  A/B 検証 + user viz 全画像レビュー承認 (「全て after の方が品質高い」) を
+  受けて既定値 `False` → `True` に変更した:
+  1. `enable_ojama_fall_board_settle` (案B: OJAMA_FALL 退出条件を
+     ROI ベース即時判定から「全盤面ぷよ数が静止するまで待つ」settle 判定に
+     切替。 OjamaVisualDetector と OjamaPhaseDetector 双方を同時連動させる
+     単一 flag)
+  2. `enable_gravity_filter_support` (案(a): 案B 適用後に判明した
+     `_apply_gravity_filter` の副作用対策。 F ガード
+     (`empty_to_color_guard`) 起因で EMPTY のまま残った cell を
+     `_merge_diff_only` に support_board として渡し、 積もり中のおじゃまを
+     浮きぷよ誤消去する副作用を防ぐ)
+  3. `merge_use_majority_value` (案(b): OJAMA_FALL 退出 merge の
+     EMPTY→色 遷移ガード分岐で、 単一フレーム CNN 値でなく多数決値
+     (`empty_to_color_guard`) を書き込む。 退出直前の単一フレーム
+     ちらつきによる正当な色復帰の却下を解消)
+- なお再突入振動バグ修正 (`_prev_top_ojama_count` 保持、
+  savepoint/ojama-fall-reentry-fix) は `enable_ojama_fall_board_settle=True`
+  時に構造的に自動適用されるため、追加の flag 変更は不要。
+- A/B 検証結果: 次ツモ遅延 2.80s → 0.65s に短縮、 浮き誤消去 -28%、
+  採用 (STABLE 復帰が正しく成立した件数) +38。 これらを反映した画像を
+  user が全数目視レビューし「全て after の方が品質高い」と承認済み。
+- 変更箇所: `src/recognition_pipeline.py` の `RecognitionPipeline.__init__` /
+  `_build_state_machine` / `load_default` の 3 箇所すべてで既定値を変更
+  (過去の機能D 既定 ON 化 (commit 6379517) と同一パターン)。
+  `src/board_state_machine.py` の `BoardStateMachine.__init__` 自体の内部
+  既定は `False` のまま維持し、 pipeline 層が明示的に `True` を配線する
+  設計を踏襲した (機能D と同じ思想)。
+- 旧挙動 (bit-identical) は 3 flag それぞれ `False` を明示指定すれば
+  維持できる (backwards compat のため退避経路として残置、
+  `tests/test_recognition_pipeline.py` の
+  `test_ojama_dropout_fix_flags_explicit_false_restores_legacy` で確認)。
+  savepoint タグ: `savepoint/ojama-dropout-fix-default-on`。

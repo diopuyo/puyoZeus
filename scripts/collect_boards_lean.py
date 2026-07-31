@@ -3,12 +3,16 @@
 collect_indicators_v2 の重い処理(全指標計算・お邪魔会計・ojama_disruption 等)を
 省略し、confirmed_board グリッドと勝敗 won ラベルのみを蓄積する。
 
-## 省略する処理
+## 省略する処理 (既定)
 - 全指標計算 (indicators_v2 モジュール呼び出しなし)
 - お邪魔会計 (OjamaAccountingTracker 不使用)
 - ojama_disruption (モンテカルロ計算なし)
-- NextDetector (load_next_detector=False)
-- VideoChainTracker (enable_chain_tracker=False)
+- NextDetector (load_next_detector=False。--with-next 指定時のみ有効化)
+- VideoChainTracker (enable_chain_tracker=False。--enable-chain-tracker 指定時のみ有効化。
+  2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が実運用で 0 件
+  だった実測があり、CHAIN 中の盤面凍結が機能しない欠陥の疑いがあるため、
+  基準データ収集ではこのフラグを明示指定して VideoChainTracker を有効化する。
+  省略時は従来通り無効 (後方互換、既存 boards_lean_fixed 系 npz の再現性維持))
 
 ## 出力 npz 形式
 collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
@@ -20,6 +24,23 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
   frame_idx  : (N,) int32
   won        : (N,) float32  1P視点の勝敗 (1.0/0.0/NaN)
   score      : (N,) int32    スコア (-1 = None)
+  next1_a    : (N,) int8     現ネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  next1_b    : (N,) int8     現ネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_a    : (N,) int8     ダブルネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_b    : (N,) int8     ダブルネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  chain_trigger_sec : (N,) float32  機能D (掛け算表示) 検知時刻。未検知は NaN
+                       (2026-07-29 追加、連鎖完了時刻の新方式較正用。
+                        既存 boards_lean_fixed 系 npz には存在しない新規キー
+                        であり、次回の再収集で初めて実値が入る)
+
+  ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
+  未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
+  既存 boards_lean_fixed の再利用に影響なし)。
+  ⚠️ chain_trigger_sec は enable_chain_formula_detection (RecognitionPipeline
+  既定 True) が有効な収集であれば常に記録される (--with-next 等の追加指定は
+  不要)。ただし既存の boards_lean_fixed / boards_lean_fixed_regen_2026-07-28
+  npz は本キー追加より前に収集済みのため、chain_trigger_sec 列そのものが
+  存在しない (再収集しない限り遡って取得できない)。
 
 ## 勝敗 won の自己ラベル付け
 score のリセット(前値 - 現値 >= SCORE_RESET_THRESHOLD)でゲーム境界を検知し
@@ -63,6 +84,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
 # ============================
@@ -77,8 +99,54 @@ DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす
 SCORE_RESET_THRESHOLD: int = 500
 
+# ゲーム境界の共有カウンタのデバウンス幅 [秒] (2026-07-31)。
+# 1P/2P が同じ境界を検知したときに 2 回進めないための窓。
+# 実際の 1 試合は最短 14 秒 (勝利数パネル実測) なので誤抑制しない。
+GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
+
+# サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
+MIN_SAMPLE_INTERVAL_FRAMES: int = 1
+
+
+def _resolve_sample_interval_frames(
+    sample_interval_sec: float,
+    fps: float,
+    sample_interval_frames: Optional[int] = None,
+) -> int:
+    """認識サンプル間隔を「実際に使うフレーム数」として一意に確定する。
+
+    collect_indicators_v2._resolve_sample_interval_frames と同じ仕様
+    (2026-07-28 user指示: fps に依存しない「Nフレームに1回」指定への統一)。
+    sample_interval_frames が指定された場合はそれを最優先し、fps に関係なく
+    そのフレーム数ごとに 1 回だけ認識する。省略時 (None) は従来通り
+    sample_interval_sec (秒) を fps 換算する (完全後方互換)。
+
+    Args:
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        fps: 動画の fps。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (優先指定、省略可)。
+            0 以下が渡された場合も不正値として扱い、下限 1 に丸める。
+
+    Returns:
+        実際に使うフレーム間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if sample_interval_frames is not None:
+        resolved = sample_interval_frames
+    else:
+        resolved = int(round(sample_interval_sec * fps))
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
+
 # 勝敗ラベルが付与できない試合の won 値
 WON_UNKNOWN: float = float("nan")
+
+# next_pair/dnext_pair が None (未検出 / NextDetector 無効) の場合の埋め値。
+# ぷよ色は 1-5 のため -1 は安全な sentinel。
+NEXT_COLOR_UNKNOWN: int = -1
+
+# chain_trigger_sec (機能D 掛け算表示検知時刻) が未検知/取得不能の場合の埋め値
+# (2026-07-29 追加)。t_sec は常に >= 0 のため NaN は安全な sentinel。
+CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
 
 
 # ============================
@@ -102,6 +170,19 @@ class _LeanNpzAccumulator:
     wons: list[float] = field(default_factory=list)
     # score を保存: オフライン再ラベル付けを可能にする (None は -1 として保存)
     scores: list[int] = field(default_factory=list)
+    # ネクスト情報 (指標①本命版検証用、2026-07 追加)。
+    # None は NEXT_COLOR_UNKNOWN (-1) として保存する。既存キー・既存呼び出しの
+    # 後方互換のため append() では末尾の optional 引数として追加する。
+    next1_as: list[int] = field(default_factory=list)
+    next1_bs: list[int] = field(default_factory=list)
+    dnext_as: list[int] = field(default_factory=list)
+    dnext_bs: list[int] = field(default_factory=list)
+    # 機能D (掛け算表示) 検知時刻 (2026-07-29 追加、連鎖完了時刻の新方式較正用)。
+    # RecognitionPipeline.SideResult.chain_event.trigger_sec をそのまま記録する。
+    # chain_event が None (掛け算表示未検知/連鎖なし) の場合は
+    # CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で埋める。既存呼び出し (引数省略) では
+    # 常に NaN のまま保存される (後方互換: 挙動不変)。
+    chain_trigger_secs: list[float] = field(default_factory=list)
 
     def append(
         self,
@@ -112,6 +193,9 @@ class _LeanNpzAccumulator:
         game_idx: int,
         frame_idx: int,
         score: int | None = None,
+        next_pair: tuple[int, int] | None = None,
+        dnext_pair: tuple[int, int] | None = None,
+        chain_trigger_sec: float | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -123,6 +207,13 @@ class _LeanNpzAccumulator:
             game_idx: ゲーム境界カウンタ。
             frame_idx: フレーム絶対番号。
             score: スコア OCR 値。None は -1 に変換して保存。
+            next_pair: (軸ぷよ色, 子ぷよ色)。None は NEXT_COLOR_UNKNOWN で保存
+                (後方互換: 省略時は既存呼び出しと同じ挙動)。
+            dnext_pair: ダブルネクストの (軸ぷよ色, 子ぷよ色)。同上。
+            chain_trigger_sec: この snapshot 時点で有効な機能D 検知時刻
+                (RecognitionPipeline.SideResult.chain_event.trigger_sec)。
+                None は CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動、2026-07-29 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -132,6 +223,15 @@ class _LeanNpzAccumulator:
         self.frame_idxs.append(frame_idx)
         self.wons.append(WON_UNKNOWN)
         self.scores.append(score if score is not None else -1)
+        n_a, n_b = next_pair if next_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        d_a, d_b = dnext_pair if dnext_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        self.next1_as.append(int(n_a))
+        self.next1_bs.append(int(n_b))
+        self.dnext_as.append(int(d_a))
+        self.dnext_bs.append(int(d_b))
+        self.chain_trigger_secs.append(
+            chain_trigger_sec if chain_trigger_sec is not None else CHAIN_TRIGGER_SEC_UNKNOWN
+        )
 
     def assign_won_labels(
         self,
@@ -165,7 +265,15 @@ class _LeanNpzAccumulator:
             self.wons[i] = 1.0 if self.sides[i] == winner else 0.0
 
     def save(self, path: Path) -> None:
-        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。"""
+        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。
+
+        next1_a/next1_b/dnext_a/dnext_b (int8) を追加保存する (既存キーは不変、
+        後方互換)。--with-next 未指定の収集では全て NEXT_COLOR_UNKNOWN (-1)。
+        chain_trigger_sec (float32、2026-07-29 追加) も同様に追加保存する。
+        機能D 検知時刻を記録しないだけの既存呼び出しでは全て NaN
+        (CHAIN_TRIGGER_SEC_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
+        挙動には影響しない新規キー)。
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             str(path),
@@ -178,6 +286,11 @@ class _LeanNpzAccumulator:
             frame_idx=np.array(self.frame_idxs, dtype=np.int32),
             won=np.array(self.wons, dtype=np.float32),
             score=np.array(self.scores, dtype=np.int32),
+            next1_a=np.array(self.next1_as, dtype=np.int8),
+            next1_b=np.array(self.next1_bs, dtype=np.int8),
+            dnext_a=np.array(self.dnext_as, dtype=np.int8),
+            dnext_b=np.array(self.dnext_bs, dtype=np.int8),
+            chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
         )
 
 
@@ -185,8 +298,10 @@ class _LeanNpzAccumulator:
 # 窒息フォールバック判定ヘルパ
 # ============================
 
-# 窒息判定: 盤面の3列目(index=2)最上段(row=0)にぷよがあれば窒息
-_DEATH_ROW: int = 0
+# 窒息判定: 3列目(index=2)の画面内最上段(row=1、隠し段row0は除く)にぷよがあれば窒息。
+# 2026-07-22 ルール是正: 旧 row=0(隠し段)は窒息検知漏れ(完全オーバーフローしないと発火せず)。
+# board.py DEATH_ROW と同じ定義に統一。
+_DEATH_ROW: int = 1
 _DEATH_COL: int = 2
 
 
@@ -196,7 +311,7 @@ def _winner_by_survival(
 ) -> str | None:
     """スコア判定不能時のフォールバック: 窒息していない側を勝者とする。
 
-    各 game_idx の末尾 snapshot の grid で窒息セル (row=0, col=2 != 0) を確認する。
+    各 game_idx の末尾 snapshot の grid で窒息セル (row=_DEATH_ROW=1, col=2 != 0) を確認する。
     どちらも窒息なし / 両方窒息 / snapshot なしの場合は None を返す。
 
     Args:
@@ -245,13 +360,61 @@ class _SideState:
     final_scores: dict[int, int | None] = field(default_factory=dict)
 
 
-def _update_game_boundary(state: _SideState, score: int | None) -> None:
+@dataclass
+class _SharedGameCounter:
+    """1P/2P で共有するゲーム境界カウンタ (2026-07-31 の desync 根治)。
+
+    旧実装は `_SideState.game_idx` を **side ごとに独立して**進めていた。
+    ゲーム境界は「両者共通の 1 つの事象」なのに、検知は各 side の score
+    リセットに依存するため:
+      - 検知フレームがずれると game_idx がずれる (実測 57.6% が 5秒超のずれ)
+      - **片側の score OCR が壊れている動画 (c26/c58 等) ではその side が
+        game 0 に留まり続け、以降すべてのゲームが対応しなくなる**
+    その結果 `_merge_final_scores` や won 付与が別ゲーム同士を突き合わせる。
+
+    共有カウンタにすると「どちらかが検知すれば両者が進む」ので、
+    片側の検知失敗に耐える。両者が同じ境界を検知したときに 2 回進まないよう
+    直前の進行から GAME_BOUNDARY_DEBOUNCE_SEC 以内は進めない
+    (実際の 1 試合は最短 14 秒なので誤抑制しない)。
+    """
+    game_idx: int = 0
+    # 最後に境界を進めた時刻 [秒]。None = まだ一度も進めていない。
+    last_advance_sec: float | None = None
+
+    def advance_if_new(self, t_sec: float) -> bool:
+        """境界を進める (デバウンス内なら進めない)。進めたら True。"""
+        if (
+            self.last_advance_sec is not None
+            and t_sec - self.last_advance_sec < GAME_BOUNDARY_DEBOUNCE_SEC
+        ):
+            return False
+        self.game_idx += 1
+        self.last_advance_sec = t_sec
+        return True
+
+
+def _update_game_boundary(
+    state: _SideState,
+    score: int | None,
+    shared: "_SharedGameCounter | None" = None,
+    t_sec: float = 0.0,
+) -> None:
     """score リセット検知で game_idx を進める。旧ゲームの最終 score は
     リセット直前の prev_score (高値) を記録する。
 
-    バグ修正: 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
+    バグ修正 (旧): 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
     書き込んでから game_idx を進めていたため、旧ゲームの最終スコアが
     リセット後低値で上書きされ勝者判定が全て None になっていた。
+
+    バグ修正 (2026-07-31): `shared` を渡すと **1P/2P 共有のカウンタ**を使い、
+    どちらかが境界を検知すれば両 side が同じ game_idx に揃う。
+    shared=None のときは従来の side 独立カウンタ (後方互換)。
+
+    Args:
+        state: 対象 side の状態。
+        score: 今フレームの score OCR 値 (None は無視)。
+        shared: 共有カウンタ。None なら side 独立 (旧挙動)。
+        t_sec: 現在時刻 [秒]。shared のデバウンス判定に使う。
     """
     if score is None:
         return
@@ -262,7 +425,13 @@ def _update_game_boundary(state: _SideState, score: int | None) -> None:
     if is_reset:
         # 旧ゲームの最終スコア = リセット直前の高値を確定
         state.final_scores[state.game_idx] = state.prev_score
-        state.game_idx += 1
+        if shared is None:
+            state.game_idx += 1
+        else:
+            shared.advance_if_new(t_sec)
+    if shared is not None:
+        # 共有カウンタに追従 (相手側が検知した境界にも乗る)
+        state.game_idx = shared.game_idx
     # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
     state.final_scores[state.game_idx] = score
     state.prev_score = score
@@ -292,6 +461,10 @@ def collect_lean(
     max_sec: float = 0.0,
     start_sec: float = 0.0,
     sample_interval_sec: float = 0.0,
+    capture_next: bool = False,
+    sample_interval_frames: Optional[int] = None,
+    enable_chain_tracker: bool = False,
+    normalize_fps_30: bool = True,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -304,6 +477,39 @@ def collect_lean(
             (従来挙動)。collect_indicators_v2 と同じ間引き方式を採用:
             cap.read() は毎フレーム呼び、sample_interval_frames おきに
             pipeline.update を呼ぶ。
+        capture_next: True で NextDetector を有効化し next1_a/next1_b/
+            dnext_a/dnext_b を実値で記録する (指標①本命版検証用)。
+            既定 False = 従来挙動 (NextDetector 無効、全て -1 で保存、
+            後方互換)。
+        sample_interval_frames: フレーム間引き間隔 (フレーム数、省略可)。
+            指定すると fps に関係なくそのフレーム数ごとに 1 回認識し、
+            sample_interval_sec より優先される (2026-07-28 追加)。
+            省略時 (None) は sample_interval_sec の従来挙動を完全維持する
+            (後方互換)。実際に使われた間引き幅は標準出力にログされる。
+        enable_chain_tracker: True で VideoChainTracker (1P/2P) を有効化する。
+            既定 False = 従来挙動 (無効、後方互換、既存 boards_lean_fixed 系
+            npz の再現性を維持する)。
+            2026-07-30 追記: 機能D (掛け算式検知, enable_chain_formula_detection)
+            のみでは実運用で CHAIN 検知が 0 件だった実測 (chain_trigger_sec
+            非NaN率 0.0%) があり、CHAIN 期間中に盤面が凍結されず消去途中の
+            盤面が STABLE 扱いされる欠陥の疑いがある。VideoChainTracker は
+            visualize_advantage_overlay.py / collect_indicators_v2.py の
+            本番経路で既定 True (実績あり) のため、基準データ収集ではこちらを
+            有効化する。
+        normalize_fps_30: True (既定) で 60fps 動画を stride-2 (実効30fps) に
+            間引く (src.fps_normalize.resolve_normalize_fps_30_stride、
+            2026-07-30 追加)。60fps 動画を全フレーム処理すると
+            board_state_machine.py 等のフレーム数定数が想定する実時間の半分に
+            なる問題への対処。優先順位は「明示 --sample-interval-frames > 自動
+            --normalize-fps-30」: sample_interval_frames が明示指定されている
+            場合は本フラグを無視する。
+            2026-07-30 既定 True 化 (user承認済み): A/B実測で 60fps stride-2 は
+            連鎖数誤り10.4%・列まるごと欠損0%・盤面相違26.0%(中央値1セル)と、
+            30fps動画の15fps間引き (26.1%・21.7%・48.4%) より一貫して良好、
+            かつ既存24本の30fps動画と時間解像度が揃う (データセットの世代混在
+            を防ぐ)。無効化するには明示 --no-normalize-fps-30 (または本関数を
+            呼ぶ側で normalize_fps_30=False) を指定する。False 指定時は
+            従来挙動・bit-identical (30fps未満動画では stride=1 で常に無変化)。
 
     Returns:
         蓄積した snapshot 数。
@@ -327,18 +533,35 @@ def collect_lean(
 
     video_id = video_path.stem
 
-    # --- フレーム間引き設定 (collect_indicators_v2 と同じ計算式) ---
-    # sample_interval_sec=0.0 の場合は全フレーム処理 (step=1)
-    sample_interval_frames: int = max(1, int(round(sample_interval_sec * fps))) \
-        if sample_interval_sec > 0.0 else 1
+    # --- fps正規化 (2026-07-30 追加、既定 OFF) ---
+    # 明示 --sample-interval-frames が優先。未指定かつ normalize_fps_30=True の
+    # ときのみ、60fps 等の動画を実効30fps に揃える stride を自動注入する。
+    if sample_interval_frames is None and normalize_fps_30:
+        sample_interval_frames = resolve_normalize_fps_30_stride(fps)
 
-    # NextDetector / ChainTracker を OFF にして高速化
+    # --- フレーム間引き設定 (collect_indicators_v2 と同じ計算式) ---
+    # sample_interval_frames 指定時はそちらを優先、省略時は従来通り秒換算
+    effective_interval_frames = _resolve_sample_interval_frames(
+        sample_interval_sec, fps, sample_interval_frames,
+    )
+    # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
+    # 見落としを後から気付けるようにするため、2026-07-28 追加)。
+    print(
+        f"[lean] sample_interval: {effective_interval_frames} frames "
+        f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
+        f"sample_interval_frames_arg={sample_interval_frames})"
+    )
+
+    # NextDetector / ChainTracker は既定 OFF で高速化
+    # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
+    # (enable_chain_tracker=True の場合のみ VideoChainTracker を有効化、
+    #  2026-07-30 基準データ収集で CHAIN 期間中の盤面凍結を機能させるため追加)
     pipeline = RecognitionPipeline.load_default(
         stable_frame_count=3,
         load_score_ocr=True,
-        enable_chain_tracker=False,
+        enable_chain_tracker=enable_chain_tracker,
         temporal_smoothing=1,
-        load_next_detector=False,
+        load_next_detector=capture_next,
         force_in_match=True,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
@@ -349,15 +572,18 @@ def collect_lean(
     acc = _LeanNpzAccumulator()
     state_p1 = _SideState()
     state_p2 = _SideState()
+    # ゲーム境界は両者共通の 1 つの事象なので共有カウンタで管理する
+    # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
+    shared_game = _SharedGameCounter()
 
     for local_i in range(n_frames):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
-        # --- フレーム間引き: sample_interval_frames おきに pipeline.update を呼ぶ ---
+        # --- フレーム間引き: effective_interval_frames おきに pipeline.update を呼ぶ ---
         # cap.read() は毎フレーム呼んでデコードし、間引き対象フレームはスキップ。
         # (collect_indicators_v2 と同じ方式)
-        if local_i % sample_interval_frames != 0:
+        if local_i % effective_interval_frames != 0:
             continue
         if frame.shape[:2] != (TARGET_H, TARGET_W):
             frame = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
@@ -368,10 +594,14 @@ def collect_lean(
         _process_side_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
+            next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
+            chain_event=result.p1.chain_event, shared_game=shared_game,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
             result.p2.state, result.p2.score, video_id, t_sec, fi,
+            next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
+            chain_event=result.p2.chain_event, shared_game=shared_game,
         )
     cap.release()
 
@@ -392,15 +622,35 @@ def _process_side_lean(
     video_id: str,
     t_sec: float,
     frame_idx: int,
+    next_pair: tuple[int, int] | None = None,
+    dnext_pair: tuple[int, int] | None = None,
+    chain_event: object | None = None,
+    shared_game: "_SharedGameCounter | None" = None,
 ) -> None:
-    """1 side の STABLE snapshot を蓄積する。指標計算は行わない。"""
-    _update_game_boundary(state, score)
+    """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
+
+    next_pair/dnext_pair は capture_next=False (既定) の呼び出しでは常に
+    None (SideResult 既定値) となり、acc.append 側で -1 埋めされる
+    (後方互換)。
+
+    Args:
+        chain_event: result.p{1,2}.chain_event (src.recognition_pipeline.
+            ChainEvent | None、循環import回避のため object 型ヒント)。
+            機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
+            (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
+        shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
+            渡すと片側の score OCR 破綻でも game_idx がずれない。
+            None なら従来の side 独立カウンタ (後方互換)。
+    """
+    _update_game_boundary(state, score, shared=shared_game, t_sec=t_sec)
     if board is None or not _should_emit(state, board, bstate):
         return
+    trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
-        score=score,
+        score=score, next_pair=next_pair, dnext_pair=dnext_pair,
+        chain_trigger_sec=trigger_sec,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
@@ -448,14 +698,70 @@ def main() -> int:
             "フレーム間引き間隔 (秒)。0 = 全フレーム処理 (既定)。"
             "0.1 で約 3×、0.2 で約 6× 高速化。"
             "STABLE 検出・勝者判定には影響しない。"
+            "--sample-interval-frames 指定時はそちらが優先される"
+        ),
+    )
+    parser.add_argument(
+        "--sample-interval-frames", type=int, default=None,
+        dest="sample_interval_frames",
+        help=(
+            "フレーム間引き間隔 (フレーム数、省略可、整数)。"
+            "fps に関係なくこのフレーム数ごとに 1 回認識する。"
+            "--sample-interval (秒) より優先される。"
+            "例: 8フレームに1回 (60fps 想定) なら --sample-interval-frames 8"
+        ),
+    )
+    parser.add_argument(
+        "--with-next", action="store_true", dest="with_next",
+        help=(
+            "NextDetector を有効化し next1_a/next1_b/dnext_a/dnext_b を"
+            "実値で記録する (指標①本命版検証用)。既定は無効 (-1 埋め、後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-tracker", action="store_true", dest="enable_chain_tracker",
+        help=(
+            "VideoChainTracker (1P/2P) を有効化する。既定は無効 (後方互換、"
+            "既存 boards_lean_fixed 系 npz の再現性維持)。"
+            "2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が"
+            "実運用で 0 件だった実測があり、基準データ収集ではこちらを有効化する。"
+        ),
+    )
+    parser.add_argument(
+        "--normalize-fps-30", action="store_true", dest="normalize_fps_30",
+        help=(
+            "60fps 等の動画を stride-2 相当 (実効30fps) に間引く "
+            "(src.fps_normalize.resolve_normalize_fps_30_stride、2026-07-30 追加)。"
+            "--sample-interval-frames が明示指定されている場合はそちらが優先され、"
+            "本フラグは無視される。"
+            "2026-07-30 既定 True 化 (user承認済み) により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-normalize-fps-30 を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-normalize-fps-30", action="store_true", dest="no_normalize_fps_30",
+        help=(
+            "60fps stride 正規化を明示的に無効化する (2026-07-30 追加、既定 "
+            "True 化に伴う逃げ道)。--normalize-fps-30 と同時指定した場合は本"
+            "フラグ (無効化) が優先される。全フレームであることが要件の"
+            "基準データ収集等、既定 ON では困る用途で使う。"
         ),
     )
     args = parser.parse_args()
+    # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
+    # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
+    # 新既定 True (collect_lean() 関数側の既定と一致させる)。
+    normalize_fps_30 = not args.no_normalize_fps_30
     n = collect_lean(
         args.video, args.out_npz,
         max_sec=args.max_sec,
         start_sec=args.start_sec,
         sample_interval_sec=args.sample_interval,
+        capture_next=args.with_next,
+        sample_interval_frames=args.sample_interval_frames,
+        enable_chain_tracker=args.enable_chain_tracker,
+        normalize_fps_30=normalize_fps_30,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

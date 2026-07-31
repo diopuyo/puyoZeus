@@ -16,6 +16,15 @@
 
 各行メタ: video_id / game_idx / t_sec / frame / 手数(tsumo) / side(1P/2P)。
 
+間引き方式 (2種類、独立):
+    - --sample-interval / --sample-interval-frames: 認識 (pipeline.update) 自体を
+      間引く既存方式。2026-07-30 実測でこれを使うと状態機械が遷移を取りこぼし
+      current_max_chain 等が壊れることが確定した (memory
+      `project_frame_sampling_corrupts_boards_2026-07-30`)。
+    - --indicator-interval-frames: 認識は全フレーム実行したまま、指標計算・行の
+      書き出しだけを間引く新方式 (2026-07-30 追加)。おじゃま会計 drain・
+      試合境界検知はエッジ検出型のため間引きの対象外 (常に毎フレーム実行)。
+
 使い方 (短尺検証):
     python -m scripts.collect_indicators_v2 \
         --video data/frames/video_124_4min.mp4 \
@@ -38,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
     OjamaAccountSnapshot,
@@ -51,6 +61,81 @@ TARGET_H: int = 1080
 DEFAULT_FPS: float = 30.0
 # 試合境界検知: score がこの値以上減少したら新しい試合とみなす (会計と同基準)
 SCORE_RESET_THRESHOLD: int = 500
+# サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
+MIN_SAMPLE_INTERVAL_FRAMES: int = 1
+
+
+def _resolve_sample_interval_frames(
+    sample_interval_sec: float,
+    fps: float,
+    sample_interval_frames: Optional[int] = None,
+) -> int:
+    """認識サンプル間隔を「実際に使うフレーム数」として一意に確定する。
+
+    2026-07-28 user指示: 学習データ収集は fps に依存しない「Nフレームに1回」を
+    正確に指定したい。sample_interval_frames が指定された場合はそれを最優先し、
+    fps に関係なくそのフレーム数ごとに 1 回だけ認識する。
+    省略時 (None) は従来通り sample_interval_sec (秒) を fps 換算する
+    (完全後方互換、既存呼出元は一切変わらない)。
+
+    Args:
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        fps: 動画の fps。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (優先指定、省略可)。
+            0 以下が渡された場合も不正値として扱い、下限 1 に丸める
+            (秒指定の既存 max(1, ...) と挙動を揃える)。
+
+    Returns:
+        実際に使うフレーム間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if sample_interval_frames is not None:
+        resolved = sample_interval_frames
+    else:
+        resolved = int(round(sample_interval_sec * fps))
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
+
+def _resolve_indicator_interval_frames(
+    indicator_interval_frames: Optional[int] = None,
+) -> int:
+    """指標計算・行出力の間引き幅を確定する (2026-07-30 追加)。
+
+    2026-07-30 実測 (memory `project_frame_sampling_corrupts_boards_2026-07-30`)
+    で、認識そのもの (pipeline.update) を間引くと状態機械が前後フレームの
+    差分で遷移判定するため取りこぼしが起き、current_max_chain が 37.4% の
+    盤面でズレる (過小評価に偏る) ことが確定した。これを避けるため、認識は
+    常に全フレームで実行したまま「指標計算 + 行の書き出し」だけを N フレーム
+    ごとに間引きたい場合に本関数の戻り値を使う。
+
+    既存の --sample-interval / --sample-interval-frames (認識自体の間引き、
+    `_resolve_sample_interval_frames` が担当) とは完全に独立しており、
+    本関数はそちらの挙動に一切影響しない。
+
+    省略時 (None) は 1 (間引きなし = 毎フレーム指標計算、従来挙動) を返し、
+    既存呼出元の挙動を一切変えない (後方互換)。
+
+    Args:
+        indicator_interval_frames: 指標計算を行うフレーム間隔 (省略可)。
+            0 以下が渡された場合は不正値として下限 1 に丸める
+            (_resolve_sample_interval_frames と同じ丸めルール)。
+
+    Returns:
+        実際に使う間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if indicator_interval_frames is None:
+        return MIN_SAMPLE_INTERVAL_FRAMES
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, indicator_interval_frames)
+
+
+# XVI 平均ツモ期待火力 (expected_fire_power) の収集 opt-in フラグ (2026-07-22)。
+# user判断: fire_stability/expected_fire は「観測軸として残す」(4動画の狭い
+# 標本でnull判定が出たが、低ティア・データ増で再評価の余地がある)。
+# ただし expected_fire_power は重い (実測1.7〜3.5秒/盤面、
+# scripts/_tmp_bench_expected_fire.py 参照) ため、将来のデータ拡充
+# (Phase L、動画数を大幅に増やす) で常時収集すると ~1fps律速の収集
+# パイプラインが破綻する。既定 OFF の opt-in にし、必要な時だけ True にする
+# (fire_stability は軽い(near_future_fire_power と同水準)ため既定収集のまま)。
+COLLECT_EXPECTED_FIRE: bool = False
 
 
 # ============================
@@ -100,12 +185,33 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     # X 受けやすさ
     "ukeyasusa", "ukeyasusa_raw",
     # XII board sim 本命指標 (飽和連鎖量・発火点・副砲・同時消しリッチネス)
-    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持)
     "saturated_chain_count", "saturated_chain_count_raw",
     "ignition_point_count", "ignition_point_count_raw",
     "multi_color_ignition", "multi_color_ignition_raw",
     "sub_chain_count", "sub_chain_count_raw",
     "simultaneous_pop_richness", "simultaneous_pop_richness_raw",
+    # XIV 近未来最大火力 (near_future_fire_power, K=1..5)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    "near_future_fire_k1", "near_future_fire_k1_raw",
+    "near_future_fire_k2", "near_future_fire_k2_raw",
+    "near_future_fire_k3", "near_future_fire_k3_raw",
+    "near_future_fire_k4", "near_future_fire_k4_raw",
+    "near_future_fire_k5", "near_future_fire_k5_raw",
+    # XV 火力の受けの多さ (fire_stability, K=2,4,6)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    "fire_stability_k2", "fire_stability_k2_raw",
+    "fire_stability_k4", "fire_stability_k4_raw",
+    "fire_stability_k6", "fire_stability_k6_raw",
+    # XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+    # — INDICATOR_COLUMNS 末尾 (新指標は常に末尾追加で順序保持、2026-07-22 本番統合)
+    # ⚠️ K=3,4 追加時に列定義の更新漏れがあった (正直な記録): 実装は
+    # EXPECTED_FIRE_K_LEVELS=(1,2,3,4) を計算するのに列は k1,k2 のみだったため、
+    # COLLECT_EXPECTED_FIRE=True で収集すると csv.DictWriter が未定義列
+    # (expected_fire_k3/k4) で ValueError を起こす潜在バグだった。ここで是正する。
+    "expected_fire_k1", "expected_fire_k1_raw",
+    "expected_fire_k2", "expected_fire_k2_raw",
+    "expected_fire_k3", "expected_fire_k3_raw",
+    "expected_fire_k4", "expected_fire_k4_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -149,6 +255,70 @@ class _BoardNpzAccumulator:
         )
 
 
+# ============================
+# 試合単位 active_colors トラッカー (2026-07-22, stateless修正)
+# ============================
+# 背景 (正直な記録): near_future_fire_power の初回統合では「試合ごとに
+# 5色中1色除外」というドメイン事実を1盤面のみから近似していたが、
+# win-AUC再検証でプロト (試合全体の色頻度で判定) との乖離が中盤で最大-0.11
+# に達し、原因は約27%の盤面でこの近似がプロトと食い違うことと特定した。
+# CLAUDE.md「観測指標は stateless、state 保持は外部 wrapper」に従い、
+# iv.near_future_fire_power 自体は純関数のまま維持し、試合単位の色頻度計算
+# (プロトの _compute_active_colors_by_game と同じ「頻度上位N色採用」ロジック、
+# scripts/_tmp_ama_builder.py 参照) をこの収集パイプライン側の外部トラッカー
+# _GameColorTracker に移す。
+#
+# ⚠️ プロトとの相違点 (正直な注記): プロトはオフラインの完成済み試合データ
+# 全体 (未来のフレームも含む) から頻度を求めたが、本トラッカーは動画を
+# 1パスで逐次処理するため「その時点までの累積頻度」しか使えない
+# (因果的・先読み無し)。試合序盤は データ不足で GAME_COLOR_MIN_DISTINCT
+# 未満のことがあり、その場合は近似段階を1段落として
+# iv.near_future_fire_power 自身の盤面出現色フォールバックに委ねる
+# (二重フォールバック構成、後方互換)。
+
+# 出現頻度上位何色を active_colors として採用するか (プロトと同じ4)。
+GAME_COLOR_KEEP_COUNT: int = 4
+# 累積で観測できた色の種類数がこれ未満なら None (盤面出現色フォールバックへ)。
+GAME_COLOR_MIN_DISTINCT: int = 4
+
+
+@dataclass
+class _GameColorTracker:
+    """1 (video_id, side, game_idx) 分の色出現頻度を累積するトラッカー。
+
+    near_future_fire_power は stateless 純関数のまま、本クラスが
+    「試合単位 active_colors」という state を外部で保持する
+    (CLAUDE.md 準拠の wrapper)。試合境界 (game_idx 変化) で reset() する。
+    """
+    counts: dict[int, int] = field(default_factory=dict)
+
+    def reset(self) -> None:
+        """試合境界で呼ぶ (新しい試合の頻度をゼロから積み直す)。"""
+        self.counts = {}
+
+    def update(self, board: Board) -> None:
+        """1 盤面分のセル色を累積する (色ぷよ5色のみ対象、お邪魔等は除外)。"""
+        for row in board._grid:
+            for cell in row:
+                c = int(cell)
+                if c in iv.IGNITION_TRIAL_COLORS:
+                    self.counts[c] = self.counts.get(c, 0) + 1
+
+    def active_colors(self) -> "tuple[int, ...] | None":
+        """出現頻度上位 GAME_COLOR_KEEP_COUNT 色を返す (データ不足なら None)。
+
+        観測できた色の種類数が GAME_COLOR_MIN_DISTINCT 未満なら、判別材料
+        不足として None を返し、呼び出し側フォールバック (盤面出現色) に委ねる。
+        """
+        observed = {c for c, n in self.counts.items() if n > 0}
+        if len(observed) < GAME_COLOR_MIN_DISTINCT:
+            return None
+        ranked = sorted(
+            iv.IGNITION_TRIAL_COLORS, key=lambda c: self.counts.get(c, 0), reverse=True,
+        )
+        return tuple(sorted(ranked[:GAME_COLOR_KEEP_COUNT]))
+
+
 @dataclass
 class _SideTracker:
     """1 side の前処理状態 (間引き・全消し検知用)。"""
@@ -156,6 +326,7 @@ class _SideTracker:
     prev_score: int | None = None
     last_emitted_grid: bytes | None = None  # 直前に出力した盤面 (間引き)
     prev_tsumo: int = 0  # tsumo_count 駆動 drain 用: 前回の手数
+    color_tracker: _GameColorTracker = field(default_factory=_GameColorTracker)
 
 
 def _compute_row(
@@ -168,8 +339,15 @@ def _compute_row(
     tsumo: int,
     elapsed_sec: float,
     snap: OjamaAccountSnapshot,
+    active_colors: "tuple[int, ...] | None" = None,
 ) -> dict[str, object]:
-    """1 STABLE snapshot から指標を算出し CSV 行 dict を返す。"""
+    """1 STABLE snapshot から指標を算出し CSV 行 dict を返す。
+
+    Args:
+        active_colors: 試合単位 active_colors (_GameColorTracker 由来)。
+            None なら near_future_fire_power 側の盤面出現色フォールバックに
+            委ねる (後方互換維持、optional 追加のみ)。
+    """
     is_p1 = side_label == "1P"
     net = snap.net_balance_capped if is_p1 else -snap.net_balance_capped
     forecast = snap.forecast_p1 if is_p1 else snap.forecast_p2
@@ -185,7 +363,7 @@ def _compute_row(
     }
     _fill_indicator_columns(
         row, board, tsumo, elapsed_sec, net, forecast, total_conn,
-        side.next_pair, side.dnext_pair,
+        side.next_pair, side.dnext_pair, active_colors,
     )
     row["chain_duration_sec"] = round(dur.raw, 3) if dur is not None else 0.0
     row["chain_duration_source"] = dur_src
@@ -202,8 +380,14 @@ def _fill_indicator_columns(
     total_conn: iv.GroupObservation,
     next_pair: "tuple[int, int] | None" = None,
     dnext_pair: "tuple[int, int] | None" = None,
+    active_colors: "tuple[int, ...] | None" = None,
 ) -> None:
-    """指標値を row dict に書き込む (chain_duration を除く)。"""
+    """指標値を row dict に書き込む (chain_duration を除く)。
+
+    Args:
+        active_colors: near_future_fire_power に渡す試合単位4色
+            (_GameColorTracker 由来、None なら盤面出現色フォールバック)。
+    """
     tc = iv.tsumo_count_rate(tsumo)
     bp = iv.board_puyo_total(board)
     bc = iv.board_color_puyo_total(board)
@@ -278,6 +462,91 @@ def _fill_indicator_columns(
         "simultaneous_pop_richness": spr.score,
         "simultaneous_pop_richness_raw": spr.raw,
     })
+    _fill_near_future_columns(row, board, next_pair, dnext_pair, elapsed_sec, active_colors)
+    _fill_fire_stability_columns(row, board, next_pair, dnext_pair, active_colors)
+    _fill_expected_fire_columns(row, board, elapsed_sec, active_colors)
+
+
+def _fill_near_future_columns(
+    row: dict[str, object],
+    board: Board,
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    elapsed_sec: float,
+    active_colors: "tuple[int, ...] | None" = None,
+) -> None:
+    """XIV 近未来最大火力 (near_future_fire_k1..k5) を row dict に書き込む。
+
+    既知ネクスト・ダブルネクスト (next_pair/dnext_pair、SideResult 由来) を
+    使い、無ければ iv.near_future_fire_power 側で理想ツモにフォールバックする。
+    1回のビームサーチで K=1..5 を同時取得する (~40ms/盤面、プロト実測値。
+    XII board sim 本命指標と同水準の予算内)。
+
+    active_colors (_GameColorTracker 由来の試合単位4色) を渡すことで、
+    プロト検証相当の色制限精度を再現する (2026-07-22 stateless修正)。
+    """
+    nf = iv.near_future_fire_power(
+        board, next_pair, dnext_pair, elapsed_sec, active_colors=active_colors,
+    )
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        row[f"near_future_fire_k{k}"] = nf.values[k].score
+        row[f"near_future_fire_k{k}_raw"] = nf.values[k].raw
+
+
+def _fill_fire_stability_columns(
+    row: dict[str, object],
+    board: Board,
+    next_pair: "tuple[int, int] | None",
+    dnext_pair: "tuple[int, int] | None",
+    active_colors: "tuple[int, ...] | None" = None,
+) -> None:
+    """XV 火力の受けの多さ (fire_stability_k2/4/6) を row dict に書き込む。
+
+    near_future_fire_power と同じビーム machinery (_GameColorTracker 由来の
+    active_colors・next_pair/dnext_pair) を流用する副産物として安価に計算する
+    (2026-07-22 本番統合、user提案#30)。
+    """
+    fs = iv.fire_stability(board, next_pair, dnext_pair, active_colors=active_colors)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        row[f"fire_stability_k{k}"] = fs.values[k].score
+        row[f"fire_stability_k{k}_raw"] = fs.values[k].raw
+
+
+def _fill_expected_fire_columns(
+    row: dict[str, object],
+    board: Board,
+    elapsed_sec: float,
+    active_colors: "tuple[int, ...] | None" = None,
+    enabled: "bool | None" = None,
+) -> None:
+    """XVI 平均ツモ期待火力 (expected_fire_k1..k4) を row dict に書き込む。
+
+    ⚠️ opt-in 設計 (2026-07-22、user判断): expected_fire_power は重い
+    (実測1.7〜3.5秒/盤面、scripts/_tmp_bench_expected_fire.py 参照。
+    near_future_fire_power の ~40-70ms/盤面 の20-40倍) ため、既定 OFF の
+    opt-in にする。Phase L (動画数を大幅に増やすデータ拡充) で常時収集すると
+    ~1fps律速の収集パイプラインが破綻するため。
+
+    enabled=None (既定) のときはモジュール定数 COLLECT_EXPECTED_FIRE を都度
+    参照する (呼び出し時点の値を動的に見る。テストで monkeypatch する場合も
+    正しく反映されるよう、関数のデフォルト引数に直接束縛しない設計)。
+    False (既定) のときは計算せず row に何も追加しない
+    (CSV列は INDICATOR_COLUMNS 定義に残ったまま、csv.DictWriter の
+    restval=既定'' により空欄で出力される = 列存在ガードと整合する後方互換)。
+    有効にしたい場合は COLLECT_EXPECTED_FIRE=True に変更するか、本関数の
+    enabled 引数を明示的に True で呼ぶ。
+
+    fire_stability (near_future_fire_power と同水準の軽さ) は対象外
+    (既定収集のまま、opt-inガード不要)。
+    """
+    if enabled is None:
+        enabled = COLLECT_EXPECTED_FIRE
+    if not enabled:
+        return
+    ef = iv.expected_fire_power(board, elapsed_sec=elapsed_sec, active_colors=active_colors)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        row[f"expected_fire_k{k}"] = ef.values[k].score
+        row[f"expected_fire_k{k}_raw"] = ef.values[k].raw
 
 
 def _chain_duration(side: SideResult) -> tuple[iv.IndicatorV2Value, str]:
@@ -298,10 +567,15 @@ def _chain_duration(side: SideResult) -> tuple[iv.IndicatorV2Value, str]:
 def _update_game_idx(
     tracker: _SideTracker, score: int | None,
 ) -> None:
-    """score 大幅減少で game_idx を進める (試合境界分割)。"""
+    """score 大幅減少で game_idx を進める (試合境界分割)。
+
+    試合境界では _GameColorTracker (試合単位 active_colors 用の色頻度) も
+    reset し、新しい試合の頻度をゼロから積み直す。
+    """
     if score is not None and tracker.prev_score is not None:
         if tracker.prev_score - score >= SCORE_RESET_THRESHOLD:
             tracker.game_idx += 1
+            tracker.color_tracker.reset()
     if score is not None:
         tracker.prev_score = score
 
@@ -337,18 +611,26 @@ def _process_side(
 ) -> None:
     """1 side を処理し、出力対象なら rows に行を追加する。
 
+    ⚠️ 2026-07-30 変更: 試合境界 (game_idx) 検知 `_update_game_idx` はここでは
+    呼ばない。score 減少検知はエッジ検出型 (前回値との差分判定) なので、
+    指標計算間引き (--indicator-interval-frames) の影響を受けないよう
+    呼出元 `collect()` のループで毎フレーム呼ぶ設計に変更した
+    (呼出元が `_update_game_idx` を毎フレーム呼び終えている前提で本関数を呼ぶこと)。
+
     Args:
         npz_acc: 盤面グリッドダンプ用バッファ (省略時はダンプしない)。
     """
-    _update_game_idx(tracker, side.score)
     board = side.confirmed_board
     if board is None or not _should_emit(tracker, side, board):
         return
+    # 試合単位 active_colors 用の色頻度を累積 (この盤面分も含めて確定させてから使う)。
+    tracker.color_tracker.update(board)
+    active_colors = tracker.color_tracker.active_colors()
     elapsed = tsumo_tracker._elapsed(t_sec)  # 試合相対経過秒 (マージンタイム用)
     tsumo = pipeline.tsumo_count(side_label)
     row = _compute_row(
         video_id, side_label, side, board, t_sec, frame_idx,
-        tsumo, elapsed, snap,
+        tsumo, elapsed, snap, active_colors,
     )
     row["game_idx"] = tracker.game_idx
     rows.append(row)
@@ -368,6 +650,9 @@ def collect(
     sample_interval_sec: float = 0.0,
     start_sec: float = 0.0,
     board_npz_path: Optional[Path] = None,
+    sample_interval_frames: Optional[int] = None,
+    indicator_interval_frames: Optional[int] = None,
+    normalize_fps_30: bool = True,
 ) -> int:
     """1 動画を処理して指標 dataset CSV を出力する。
 
@@ -384,6 +669,35 @@ def collect(
             start_sec=0 のときの挙動は従来と完全に同一 (後方互換)。
         board_npz_path: 盤面グリッド npz 出力パス (省略時は保存しない)。
             grids=(N,13,6) int8 + メタ配列を保存する。CSV 行と 1 対 1 対応。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (省略可)。
+            指定すると fps に関係なくそのフレーム数ごとに 1 回認識し、
+            sample_interval_sec より優先される (2026-07-28 追加)。
+            省略時 (None) は sample_interval_sec の従来挙動を完全維持する
+            (後方互換)。実際に使われた間引き幅は標準出力にログされる。
+        indicator_interval_frames: 指標計算・行出力のみの間引き幅 (省略可、
+            2026-07-30 追加)。認識 (pipeline.update) は常に
+            sample_interval_frames/sample_interval_sec の間隔通り実行したまま、
+            「指標計算 + 行の書き出し」だけをこの値の倍数フレームに絞る。
+            2026-07-29 実測 (memory
+            `project_frame_sampling_corrupts_boards_2026-07-30`) で、認識
+            自体を間引くと状態機械が遷移を取りこぼし current_max_chain が
+            37.4%の盤面でズレる (過小評価に偏る) ことが確定したため、認識と
+            指標計算の間引きを分離する目的で追加した。
+            省略時 (None) は 1 (間引きなし) となり、既存呼出元の挙動を
+            完全に維持する (後方互換)。おじゃま会計 drain (tsumo_count 増分
+            駆動) と試合境界 (game_idx) 検知はエッジ検出型のため、本引数の
+            値に関わらず常に毎フレーム実行する (指標計算・行出力のみが対象)。
+        normalize_fps_30: True (既定) で 60fps 動画を stride-2 (実効30fps) に
+            間引く (src.fps_normalize.resolve_normalize_fps_30_stride、
+            2026-07-30 追加)。優先順位は「明示 sample_interval_frames > 自動
+            normalize_fps_30」: sample_interval_frames が明示指定されている
+            場合は本フラグを無視する。
+            2026-07-30 既定 True 化 (user承認済み): A/B実測で 60fps stride-2 は
+            連鎖数誤り10.4%・列まるごと欠損0%・盤面相違26.0%(中央値1セル)と、
+            30fps動画の15fps間引き (26.1%・21.7%・48.4%) より一貫して良好、
+            かつ既存24本の30fps動画と時間解像度が揃う。無効化するには CLI
+            --no-normalize-fps-30 (または normalize_fps_30=False 明示) を使う。
+            False 指定時は従来挙動・bit-identical。
 
     Returns:
         出力した行数。
@@ -433,7 +747,30 @@ def collect(
     npz_acc: Optional[_BoardNpzAccumulator] = (
         _BoardNpzAccumulator() if board_npz_path is not None else None
     )
-    sample_interval_frames = max(1, int(round(sample_interval_sec * fps)))
+    # --- fps正規化 (2026-07-30 追加、既定 OFF) ---
+    # 明示 sample_interval_frames が優先。未指定かつ normalize_fps_30=True の
+    # ときのみ、60fps 等の動画を実効30fps に揃える stride を自動注入する。
+    if sample_interval_frames is None and normalize_fps_30:
+        sample_interval_frames = resolve_normalize_fps_30_stride(fps)
+    effective_interval_frames = _resolve_sample_interval_frames(
+        sample_interval_sec, fps, sample_interval_frames,
+    )
+    # 指標計算・行出力のみの間引き幅 (認識間引きとは独立、2026-07-30 追加)。
+    effective_indicator_interval_frames = _resolve_indicator_interval_frames(
+        indicator_interval_frames,
+    )
+    # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
+    # 見落としを後から気付けるようにするため、2026-07-28 追加)。
+    print(
+        f"[collect] sample_interval: {effective_interval_frames} frames "
+        f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
+        f"sample_interval_frames_arg={sample_interval_frames})"
+    )
+    print(
+        f"[collect] indicator_interval: {effective_indicator_interval_frames} "
+        f"frames (indicator_interval_frames_arg={indicator_interval_frames}; "
+        "認識は上記 sample_interval で毎回実行、指標計算・行出力のみ本間隔で間引く)"
+    )
 
     for local_i in range(n_frames_to_process):
         ok, frame = cap.read()
@@ -446,10 +783,18 @@ def collect(
         # fi はビデオ全体での絶対フレーム番号。t_sec は絶対時刻
         fi = start_frame + local_i
         t_sec = fi / fps
-        if local_i % sample_interval_frames != 0:
+        if local_i % effective_interval_frames != 0:
             continue
+        # --- 認識 (state machine): sample_interval に従い実行 (従来通り) ---
         result = pipeline.update(fi, t_sec, frame)
-        # --- お邪魔会計駆動: tsumo_count 増分で drain ---
+        # ============================================================
+        # 毎フレーム必須処理 (エッジ検出・状態保持型):
+        # indicator_interval_frames による間引きの対象外にする。
+        # 2026-07-30 実測で「間引くと取りこぼす」ことが確定した処理群。
+        # ============================================================
+        # おじゃま会計 drain (tsumo_count 増分駆動): 手数の増分を1つずつ
+        # 消費するため、間引くと着地イベントそのものを取りこぼす
+        # (2026-07-29 実測、15フレーム間引きで手数が実質100%消失した教訓)。
         snap = _drive_ojama(
             ojama_tracker, result.p1, result.p2,
             prev_state_p1, prev_state_p2, t_sec,
@@ -457,9 +802,20 @@ def collect(
             tracker_p2=tracker_p2,
             pipeline=pipeline,
         )
+        # 試合境界 (game_idx) 検知: score 大幅減少という「前回値との差分」で
+        # 判定するエッジ検出のため、指標間引きと無関係に毎フレーム進める。
+        _update_game_idx(tracker_p1, result.p1.score)
+        _update_game_idx(tracker_p2, result.p2.score)
+        # 状態遷移比較 (_drive_ojama の on_state_transition 用) も毎フレーム更新。
         prev_state_p1 = result.p1.state
         prev_state_p2 = result.p2.state
-        # --- 各 side 処理 ---
+        # ============================================================
+        # 指標計算・行出力 (stateless): ここだけ indicator_interval_frames
+        # で間引く。既存列は現在盤面のみの純関数のため、間引いても値は
+        # 壊れず出力行数が減るだけ (2026-07-30 追加)。
+        # ============================================================
+        if fi % effective_indicator_interval_frames != 0:
+            continue
         _process_side(
             video_id, "1P", result.p1, tracker_p1, pipeline,
             ojama_tracker, t_sec, fi, snap, rows, npz_acc,
@@ -578,7 +934,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--sample-interval", type=float, default=0.0,
-        help="認識サンプル間隔秒 (0 = 全フレーム)",
+        help="認識サンプル間隔秒 (0 = 全フレーム)。"
+             "--sample-interval-frames 指定時はそちらが優先される",
+    )
+    parser.add_argument(
+        "--sample-interval-frames", type=int, default=None,
+        dest="sample_interval_frames",
+        help=(
+            "認識サンプル間隔フレーム数 (省略可、整数)。"
+            "fps に関係なくこのフレーム数ごとに 1 回認識する。"
+            "--sample-interval (秒) より優先される。"
+            "例: 8フレームに1回 (60fps 想定) なら --sample-interval-frames 8"
+        ),
     )
     parser.add_argument(
         "--board-npz", type=Path, default=None,
@@ -588,13 +955,54 @@ def main() -> int:
             "CSV 行と 1 対 1 対応 (同順)。"
         ),
     )
+    parser.add_argument(
+        "--indicator-interval-frames", type=int, default=None,
+        dest="indicator_interval_frames",
+        help=(
+            "指標計算・行出力のみの間引き幅 (省略可、整数、2026-07-30 追加)。"
+            "認識 (pipeline.update) は --sample-interval / --sample-interval-frames "
+            "の間隔通り実行したまま、指標計算・行の書き出しだけをこのフレーム数"
+            "ごとに絞る。省略時は 1 (間引きなし=毎フレーム、従来挙動)。"
+            "認識自体を間引くと状態機械の遷移取りこぼしで current_max_chain 等が"
+            "壊れることが実測済みのため、認識は全フレームのままにしたい場合に使う"
+            "(例: --indicator-interval-frames 6 --sample-interval-frames 未指定)"
+        ),
+    )
+    parser.add_argument(
+        "--normalize-fps-30", action="store_true", dest="normalize_fps_30",
+        help=(
+            "60fps 等の動画を stride-2 相当 (実効30fps) に間引く "
+            "(src.fps_normalize.resolve_normalize_fps_30_stride、2026-07-30 追加)。"
+            "--sample-interval-frames が明示指定されている場合はそちらが優先され、"
+            "本フラグは無視される。"
+            "2026-07-30 既定 True 化 (user承認済み) により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-normalize-fps-30 を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-normalize-fps-30", action="store_true", dest="no_normalize_fps_30",
+        help=(
+            "60fps stride 正規化を明示的に無効化する (2026-07-30 追加、既定 "
+            "True 化に伴う逃げ道)。--normalize-fps-30 と同時指定した場合は本"
+            "フラグ (無効化) が優先される。全フレームであることが要件の"
+            "基準データ収集等、既定 ON では困る用途で使う。"
+        ),
+    )
     args = parser.parse_args()
+    # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
+    # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
+    # 新既定 True (collect() 関数側の既定と一致させる)。
+    normalize_fps_30 = not args.no_normalize_fps_30
     n = collect(
         args.video, args.out,
         max_sec=args.max_sec,
         sample_interval_sec=args.sample_interval,
         start_sec=args.start_sec,
         board_npz_path=args.board_npz,
+        sample_interval_frames=args.sample_interval_frames,
+        indicator_interval_frames=args.indicator_interval_frames,
+        normalize_fps_30=normalize_fps_30,
     )
     print(f"[collect] {args.video.name} -> {args.out} : {n} rows")
     if args.start_sec > 0.0:

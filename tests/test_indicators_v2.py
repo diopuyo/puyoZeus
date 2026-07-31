@@ -329,9 +329,10 @@ def test_dig_resistance_range() -> None:
 
 
 def test_dig_resistance_dead_board() -> None:
+    """窒息 = 3列目の可視最上段(DEATH_ROW=1)が埋まっている状態 (2026-07-22 user確定)。"""
     g = _empty_grid()
-    from src.board import DEATH_COL
-    g[0][DEATH_COL] = COLOR_RED  # 窒息
+    from src.board import DEATH_COL, DEATH_ROW
+    g[DEATH_ROW][DEATH_COL] = COLOR_RED  # 窒息
     v = iv.dig_resistance(Board.from_list(g))
     assert v.score == 0.0
 
@@ -475,6 +476,49 @@ def test_honsen_output_empty_board_is_zero() -> None:
     v = iv.honsen_output(_empty_board())
     assert v.raw == 0.0
     assert v.score == 0.0
+
+
+# ============================
+# chain_completion_from_formula (2026-07-29 追加、掛け算表示ベース連鎖完了時刻)
+# ============================
+
+
+def test_chain_completion_from_formula_zero_chain() -> None:
+    """chain_count=0 のとき formula_appear_sec がそのまま返ること。"""
+    assert iv.chain_completion_from_formula(10.0, 0.0) == pytest.approx(10.0)
+    assert iv.chain_completion_from_formula(10.0, -5.0) == pytest.approx(10.0)
+
+
+def test_chain_completion_from_formula_default_coef() -> None:
+    """既定係数 CHAIN_ANIM_PER_STEP_SEC(=0.4) が使われること。"""
+    result = iv.chain_completion_from_formula(100.0, 4.0)
+    assert result == pytest.approx(100.0 + iv.CHAIN_ANIM_PER_STEP_SEC * 4.0)
+    assert iv.CHAIN_ANIM_PER_STEP_SEC == pytest.approx(0.4)
+
+
+def test_chain_completion_from_formula_custom_coef() -> None:
+    """per_step_sec を明示指定すると既定値の代わりにその値が使われること。"""
+    result = iv.chain_completion_from_formula(0.0, 3.0, per_step_sec=1.0)
+    assert result == pytest.approx(3.0)
+
+
+def test_chain_completion_from_formula_monotone_in_chain_count() -> None:
+    """連鎖数が大きいほど完了時刻が後ろにずれる (単調増加)。"""
+    t2 = iv.chain_completion_from_formula(0.0, 2.0)
+    t5 = iv.chain_completion_from_formula(0.0, 5.0)
+    assert t5 > t2
+
+
+def test_chain_completion_from_formula_is_independent_constant() -> None:
+    """CHAIN_ANIM_PER_STEP_SEC は TIME_PER_CHAIN_SEC (打ち合い窓予測用) や
+    RecognitionPipeline.CHAIN_HOLD_PER_STEP_SEC (state machine 保持用) とは
+    役割が異なる独立定数として存在すること (混同防止の回帰チェック)。"""
+    from src.recognition_pipeline import RecognitionPipeline
+    assert hasattr(iv, "CHAIN_ANIM_PER_STEP_SEC")
+    assert hasattr(iv, "TIME_PER_CHAIN_SEC")
+    assert hasattr(RecognitionPipeline, "CHAIN_HOLD_PER_STEP_SEC")
+    # 値がたまたま近くても、変更時に相互に影響しない別々の定数であることが本旨
+    assert iv.CHAIN_ANIM_PER_STEP_SEC == pytest.approx(0.4)
 
 
 def test_honsen_output_chain_board_nonzero() -> None:
@@ -1164,7 +1208,8 @@ def test_taiou_capacity_range_all_boards() -> None:
 def test_taiou_capacity_dead_board_zero() -> None:
     """窒息盤面は対応力 0 を返すこと。"""
     g = _empty_grid()
-    # col=2 を最上段 (row=0) まで埋め is_dead()=True に
+    # col=2 を全13行埋め尽くし is_dead()=True に (row0/row1 双方埋まるため
+    # DEATH_ROW=0/1 いずれの定義でも窒息判定は不変)
     for r in range(BOARD_ROWS):
         g[r][2] = COLOR_RED
     dead_board = Board.from_list(g)
@@ -1203,3 +1248,859 @@ def test_taiou_capacity_exported_in_all() -> None:
     assert "taiou_capacity" in iv.__all__
     assert "REF_OJAMA_TAIOU" in iv.__all__
     assert "TAIOU_W_POTENTIAL" in iv.__all__
+
+
+# ============================
+# XII-1b 本来の飽和 (build天井、ビームサーチ近似) — build_ceiling_chain
+# ============================
+
+
+def test_build_ceiling_chain_empty_board_is_zero() -> None:
+    """空盤面は 1 個追加でも発火できないため raw=0, score=0。"""
+    v = iv.build_ceiling_chain(_empty_board())
+    assert v.score == pytest.approx(0.0)
+    assert v.raw == pytest.approx(0.0)
+
+
+def test_build_ceiling_chain_depth1_matches_saturated_chain_count() -> None:
+    """depth=1 は saturated_chain_count (=_takapt_best_drop) と厳密に一致する
+
+    (サニティチェック: ビームサーチが 1 手先読みに退化した場合の下位互換確認)。
+    """
+    for board in (_four_chain_board(), _two_chain_board(), _deep_chain_board()):
+        sat = iv.saturated_chain_count(board)
+        ceil1 = iv.build_ceiling_chain(board, depth=1)
+        assert ceil1.raw == pytest.approx(sat.raw), (
+            f"depth=1 が saturated_chain_count と不一致: "
+            f"ceil={ceil1.raw} sat={sat.raw}"
+        )
+        assert ceil1.score == pytest.approx(sat.score)
+
+
+def test_build_ceiling_chain_depth2_ge_depth1() -> None:
+    """depth=2 (既定) は depth=1 以上 (単調非減少: build余地は非負)。"""
+    for board in (_four_chain_board(), _two_chain_board(), _deep_chain_board()):
+        ceil1 = iv.build_ceiling_chain(board, depth=1)
+        ceil2 = iv.build_ceiling_chain(board, depth=2)
+        assert ceil2.raw >= ceil1.raw, (
+            f"depth=2 が depth=1 未満: ceil2={ceil2.raw} ceil1={ceil1.raw}"
+        )
+
+
+def test_build_ceiling_chain_default_depth_is_2() -> None:
+    """既定パラメータ (depth=2, beam_width=8) が定数と一致すること。"""
+    assert iv.BUILD_CEILING_CHAIN_DEPTH == 2
+    assert iv.BUILD_CEILING_CHAIN_BEAM_WIDTH == 8
+
+
+def test_build_ceiling_chain_score_in_range() -> None:
+    """score は 0〜1 に収まる。"""
+    for board in (_empty_board(), _four_chain_board(), _two_chain_board()):
+        v = iv.build_ceiling_chain(board)
+        assert 0.0 <= v.score <= 1.0
+
+
+def test_build_ceiling_chain_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _four_chain_board()
+    before = board.copy()
+    iv.build_ceiling_chain(board, depth=2)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_build_ceiling_chain_dead_board_is_zero() -> None:
+    """窒息盤面 (3列目・可視最上段埋まり) は raw=0, score=0。
+
+    DEATH_ROW=1 (可視最上段。隠し段 row0 は含まない、2026-07-22 user確定)。
+    """
+    from src.board import DEATH_ROW
+    g = _empty_grid()
+    g[DEATH_ROW][2] = 1  # 3列目 (index=2) 可視最上段
+    board = Board.from_list(g)
+    v = iv.build_ceiling_chain(board)
+    assert v.score == pytest.approx(0.0)
+    assert v.raw == pytest.approx(0.0)
+
+
+def test_build_ceiling_chain_exported_in_all() -> None:
+    """build_ceiling_chain が __all__ に含まれること。"""
+    assert "build_ceiling_chain" in iv.__all__
+    assert "BUILD_CEILING_CHAIN_DEPTH" in iv.__all__
+    assert "BUILD_CEILING_CHAIN_BEAM_WIDTH" in iv.__all__
+
+
+# ============================
+# XII-1c 忠実な飽和連鎖量 (非発火構築ビーム) — saturation_chain
+# ============================
+
+
+def test_saturation_chain_empty_board_builds_and_ignites() -> None:
+    """空盤面でも非発火構築ビームで組み上げ、発火可能な連鎖が得られる。
+
+    build_ceiling_chain(depth=2) は空盤面で raw=0 (2手先読みでは発火不可)
+    だが、saturation_chain は 93% まで積むため空盤面からでも連鎖が組める。
+    """
+    v = iv.saturation_chain(_empty_board())
+    assert v.raw > 0.0
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_score_in_range() -> None:
+    """score は 0〜1 に収まる。"""
+    for board in (_empty_board(), _four_chain_board(), _two_chain_board(), _deep_chain_board()):
+        v = iv.saturation_chain(board)
+        assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _four_chain_board()
+    before = board.copy()
+    iv.saturation_chain(board)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_saturation_chain_dead_board_is_zero() -> None:
+    """窒息盤面 (3列目・可視最上段埋まり) は raw=0, score=0。
+
+    DEATH_ROW=1 (可視最上段。隠し段 row0 は含まない、2026-07-22 user確定)。
+    """
+    from src.board import DEATH_ROW
+    g = _empty_grid()
+    g[DEATH_ROW][2] = 1  # 3列目 (index=2) 可視最上段
+    board = Board.from_list(g)
+    v = iv.saturation_chain(board)
+    assert v.score == pytest.approx(0.0)
+    assert v.raw == pytest.approx(0.0)
+
+
+def test_saturation_chain_ge_build_ceiling_chain() -> None:
+    """本来の飽和 (93%まで積む) は build_ceiling_chain (2手先読み) 以上になりうる。
+
+    saturation_chain は 93% まで積むため build_ceiling_chain (depth=2) より
+    小さくなることは基本的にない (同じ最終手 takapt スキャンを使うため)。
+    """
+    for board in (_empty_board(), _four_chain_board(), _two_chain_board()):
+        sat = iv.saturation_chain(board)
+        ceil = iv.build_ceiling_chain(board, depth=2)
+        assert sat.raw >= ceil.raw, (
+            f"saturation_chain が build_ceiling_chain 未満: "
+            f"sat={sat.raw} ceil={ceil.raw}"
+        )
+
+
+def test_saturation_chain_target_cells_already_reached() -> None:
+    """既に fill_ratio 到達済み (steps=0) でも例外なく現盤面の発火力を測る。"""
+    board = _four_chain_board()
+    v = iv.saturation_chain(board, fill_ratio=0.01)
+    assert v.raw >= 0.0
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_fill_ratio_monotonic_non_decreasing() -> None:
+    """fill_ratio を上げるほど raw は非減少になりやすい (積む余地が増えるため)。
+
+    構造ヒューリスティックのビームサーチのため厳密な単調性は保証されないが、
+    低 fill_ratio (0.5) は高 fill_ratio (0.93) 以下になることを確認する
+    (空盤面で検証、十分な余地があるケース)。
+    """
+    board = _empty_board()
+    low = iv.saturation_chain(board, fill_ratio=0.5)
+    high = iv.saturation_chain(board, fill_ratio=0.93)
+    assert high.raw >= low.raw
+
+
+def test_saturation_chain_partial_fill_completes_without_hang() -> None:
+    """部分的に埋まった盤面 (構築ビームが多数回実行される) でも正常終了する。
+
+    下 5 段を市松模様 (赤/青交互、4連結を作らない配置) で埋めた盤面で、
+    構築ステップが多数回走っても (デッドロック分岐含め) 無限ループせず
+    終端することを確認する。
+    """
+    g = _empty_grid()
+    colors = [COLOR_RED, COLOR_BLUE]
+    for col in range(BOARD_COLS):
+        for row in range(8, BOARD_ROWS):
+            g[row][col] = colors[(row + col) % 2]
+    board = Board.from_list(g)
+    v = iv.saturation_chain(board)
+    assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_exported_in_all() -> None:
+    """saturation_chain が __all__ に含まれること。"""
+    assert "saturation_chain" in iv.__all__
+    assert "FULL_BOARD_CAP" in iv.__all__
+    assert "SATURATION_FILL_RATIO_DEFAULT" in iv.__all__
+    assert "SATURATION_BEAM_WIDTH_DEFAULT" in iv.__all__
+    assert "SATURATION_MAX_BUILD_STEPS" in iv.__all__
+
+
+def test_full_board_cap_is_78() -> None:
+    """FULL_BOARD_CAP は盤面全体 (6列×13行、隠し段 row0 含む) = 78。"""
+    assert iv.FULL_BOARD_CAP == BOARD_ROWS * BOARD_COLS
+    assert iv.FULL_BOARD_CAP == 78
+
+
+# ============================
+# XIII 催促保持 (saisoku_hold)
+# ============================
+#
+# reference_saisoku_exchange_model_2026-07-22 の定義に忠実な盤面設計:
+#   催促 = 消費色ぷよ率 < 60% かつ 送りお邪魔 > 4個
+#   整地 = 消費色ぷよ率 < 60% かつ 送りお邪魔 ≤ 4個 (催促統計から除外)
+
+
+def _saisoku_attack_board() -> Board:
+    """催促候補: 赤4→青4の2連鎖 (erased=8, ojama>4) + 非参加padding 10個。
+
+    padding は縦alt色で 4 連結しない (発火に無関係、消費率の分母のみ増やす)。
+    color_count=18, erased=8 → consume_ratio=0.444<0.6, ojama=5 (>4) → 催促該当。
+    """
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[10][0] = COLOR_RED
+    g[12][2] = COLOR_BLUE
+    g[11][1] = COLOR_BLUE
+    g[10][1] = COLOR_BLUE
+    g[9][0] = COLOR_BLUE
+    g[11][2] = COLOR_GREEN
+    g[10][2] = COLOR_YELLOW
+    g[12][3] = COLOR_PURPLE
+    g[11][3] = COLOR_YELLOW
+    g[10][3] = COLOR_PURPLE
+    g[12][4] = COLOR_GREEN
+    g[11][4] = COLOR_PURPLE
+    g[12][5] = COLOR_YELLOW
+    g[11][5] = COLOR_GREEN
+    g[10][5] = COLOR_YELLOW
+    return Board.from_list(g)
+
+
+def _saisoku_seichi_board() -> Board:
+    """整地候補: 赤4連結のみ (erased=4, ojama=0) + 非参加padding 20個。
+
+    color_count=24, erased=4 → consume_ratio=0.167<0.6 だが ojama=0 (≤4) → 整地扱い
+    (催促条件を満たさない = flag は 0 のまま)。
+    """
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    colors = [COLOR_GREEN, COLOR_YELLOW, COLOR_PURPLE]
+    idx = 0
+    for col in range(2, 6):
+        for row in (12, 11, 10, 9, 8):
+            g[row][col] = colors[idx % 3]
+            idx += 1
+            if idx >= 20:
+                break
+        if idx >= 20:
+            break
+    return Board.from_list(g)
+
+
+def test_saisoku_hold_detects_attack() -> None:
+    """催促条件 (消費<60% かつ お邪魔>4) を満たす盤面で flag=1。"""
+    result = iv.saisoku_hold(_saisoku_attack_board())
+    assert result["saisoku_hold_flag"].raw == 1.0
+    assert result["saisoku_hold_max_ojama"].raw > iv.SAISOKU_OJAMA_MIN
+    assert result["saisoku_hold_count"].raw >= 1.0
+
+
+def test_saisoku_hold_seichi_board_is_excluded() -> None:
+    """整地 (お邪魔≤4) は催促条件を満たさず flag=0。"""
+    result = iv.saisoku_hold(_saisoku_seichi_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+    assert result["saisoku_hold_max_ojama"].raw == 0.0
+    assert result["saisoku_hold_count"].raw == 0.0
+
+
+def test_saisoku_hold_honsen_board_is_excluded() -> None:
+    """本線 (消費≥60%) は padding が無い分 consume_ratio=1.0 のため催促から除外。"""
+    result = iv.saisoku_hold(_two_chain_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+
+
+def test_saisoku_hold_empty_board_is_zero() -> None:
+    """空盤面は発火候補が存在せず全て 0。"""
+    result = iv.saisoku_hold(_empty_board())
+    assert result["saisoku_hold_flag"].raw == 0.0
+    assert result["saisoku_hold_max_ojama"].raw == 0.0
+    assert result["saisoku_hold_count"].raw == 0.0
+
+
+def test_saisoku_hold_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _saisoku_attack_board()
+    before = board.copy()
+    iv.saisoku_hold(board)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+@pytest.mark.parametrize(
+    "board", [_empty_board(), _saisoku_attack_board(), _saisoku_seichi_board(), _two_chain_board()],
+)
+def test_saisoku_hold_score_in_range(board: Board) -> None:
+    """全出力が 0-1 範囲・NaN なしであること。"""
+    result = iv.saisoku_hold(board)
+    for value in result.values():
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw  # NaN なし
+
+
+def test_saisoku_hold_exported_in_all() -> None:
+    """saisoku_hold が __all__ に含まれること。"""
+    assert "saisoku_hold" in iv.__all__
+    assert "SAISOKU_CONSUME_RATIO" in iv.__all__
+    assert "SAISOKU_OJAMA_MIN" in iv.__all__
+    assert "SAISOKU_HOLD_COUNT_NORM" in iv.__all__
+
+
+def test_saisoku_hold_constants_values() -> None:
+    """定数値が仕様書 (2026-07-22) 通りであること。"""
+    assert iv.SAISOKU_CONSUME_RATIO == pytest.approx(0.6)
+    assert iv.SAISOKU_OJAMA_MIN == 4
+
+
+# ============================
+# XIV 近未来最大火力 (near_future_fire_power, K=1..5)
+# ============================
+# user採否決定 (2026-07-22): win-AUC検証 (中盤+0.12〜+0.17) を受けて本番統合。
+# 「既知ネクスト+ダブルネクスト(色固定・22配置) → K手(1..5)理想ツモ」で
+# 到達する最大得点 (お邪魔換算) を1回のビームサーチで同時取得する。
+
+
+def _near_future_seed_board() -> Board:
+    """4連結1つ (2x2赤) + 未参加の色ぷよを少量持つ盤面 (K手先での伸びしろあり)。"""
+    g = _empty_grid()
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    g[12][3] = COLOR_BLUE
+    g[12][4] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+def test_near_future_fire_power_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw  # NaN なし
+
+
+def test_near_future_fire_power_k_monotonic_non_decreasing() -> None:
+    """K を増やすほど raw (お邪魔換算) が単調非減少であること (running max 性質)。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    raws = [result.values[k].raw for k in sorted(iv.NEAR_FUTURE_K_LEVELS)]
+    for prev, cur in zip(raws, raws[1:]):
+        assert cur >= prev
+    assert result.values[5].raw >= result.values[1].raw
+
+
+def test_near_future_fire_power_empty_board_is_low() -> None:
+    """空盤面は伸びしろが乏しく、K=1 は 0 に近い (即座には発火不能)。"""
+    result = iv.near_future_fire_power(_empty_board())
+    assert result.values[1].raw == 0.0
+
+
+def test_near_future_fire_power_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.near_future_fire_power(board)
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_known_next_path_used() -> None:
+    """next_pair/dnext_pair が有効なら used_real_next=True になること (既知経路)。"""
+    result = iv.near_future_fire_power(
+        _near_future_seed_board(), next_pair=(COLOR_RED, COLOR_BLUE),
+        dnext_pair=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    assert result.used_real_next is True
+
+
+def test_near_future_fire_power_fallback_path_used() -> None:
+    """next_pair/dnext_pair が両方 None なら used_real_next=False (全理想ツモ代用)。"""
+    result = iv.near_future_fire_power(_near_future_seed_board())
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_invalid_next_falls_back() -> None:
+    """next_pair の色が不正 (未検出 -1 等) なら理想ツモにフォールバックする。"""
+    result = iv.near_future_fire_power(_near_future_seed_board(), next_pair=(-1, -1))
+    assert result.used_real_next is False
+
+
+def test_near_future_fire_power_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.near_future_fire_power(board, next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW))
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_near_future_fire_power_exported_in_all() -> None:
+    """near_future_fire_power が __all__ に含まれること。"""
+    assert "near_future_fire_power" in iv.__all__
+    assert "NearFutureFireResult" in iv.__all__
+    assert "NEAR_FUTURE_K_LEVELS" in iv.__all__
+    assert "NEAR_FUTURE_BEAM_WIDTH" in iv.__all__
+
+
+def test_near_future_fire_power_constants_values() -> None:
+    """定数値が実装通りであること (K水準1-5・既知スロット2・正規化=ON_FIELD_CAP)。"""
+    assert iv.NEAR_FUTURE_K_LEVELS == (1, 2, 3, 4, 5)
+    assert iv.NEAR_FUTURE_KNOWN_HAND_SLOTS == 2
+    assert iv.NEAR_FUTURE_FIRE_NORM == iv.ON_FIELD_CAP
+
+
+# ============================
+# XIV stateless修正 (2026-07-22): active_colors 引数
+# ============================
+# user指示: near_future_fire_power は active_colors を引数で受け取る純関数の
+# まま維持し (CLAUDE.md「観測指標はstateless、state保持は外部wrapper」)、
+# 試合単位の色計算は呼び出し側 (collect_indicators_v2.py) が担う設計に修正。
+
+
+def test_near_future_fire_power_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    result_omitted = iv.near_future_fire_power(board)
+    result_explicit_none = iv.near_future_fire_power(board, active_colors=None)
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        assert result_omitted.values[k].raw == result_explicit_none.values[k].raw
+
+
+def test_near_future_fire_power_active_colors_explicit_is_used() -> None:
+    """active_colors を明示指定すると、盤面出現色フォールバックより優先されること。
+
+    赤・青のみの盤面に対し、緑・黄限定の active_colors を渡すと理想手が
+    赤・青を使えなくなるため、通常 (フォールバック=赤青自由) より raw が
+    変化する (少なくとも同一にはならない) ことを確認する。
+    """
+    board = _near_future_seed_board()
+    default_result = iv.near_future_fire_power(board)
+    restricted_result = iv.near_future_fire_power(
+        board, active_colors=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    diffs = [
+        default_result.values[k].raw != restricted_result.values[k].raw
+        for k in iv.NEAR_FUTURE_K_LEVELS
+    ]
+    assert any(diffs), "active_colors 指定が探索結果に反映されていない"
+
+
+def test_near_future_fire_power_active_colors_score_in_range() -> None:
+    """active_colors 指定時も score が 0-1 範囲・NaN なしであること。"""
+    board = _near_future_seed_board()
+    result = iv.near_future_fire_power(
+        board, active_colors=(COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW),
+    )
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
+
+
+# ============================
+# XV 火力の受けの多さ (fire_stability, K=2,4,6)
+# ============================
+# user提案 #30: 検証済み中盤本命「受けやすさ (ukeyasusa)」の火力版。
+# near_future_fire_power と同じビーム machinery を再利用する副産物として
+# 実装 (最大火力そのものでなく、最大火力近傍のパターン数/割合を測る)。
+
+
+def test_fire_stability_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.fire_stability(_near_future_seed_board())
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
+
+
+def test_fire_stability_empty_board_is_low() -> None:
+    """空盤面 (発火材料なし) は K=2 で raw (件数) が候補総数以下に収まること。"""
+    result = iv.fire_stability(_empty_board())
+    assert result.values[2].raw <= result.candidate_counts[2]
+
+
+def test_fire_stability_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.fire_stability(board)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+
+
+def test_fire_stability_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    result_omitted = iv.fire_stability(board)
+    result_explicit_none = iv.fire_stability(board, active_colors=None)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert result_omitted.values[k].raw == result_explicit_none.values[k].raw
+
+
+def test_fire_stability_active_colors_explicit_is_used() -> None:
+    """active_colors を明示指定すると探索結果 (件数) が変わりうること。"""
+    board = _near_future_seed_board()
+    default_result = iv.fire_stability(board)
+    restricted_result = iv.fire_stability(
+        board, active_colors=(COLOR_GREEN, COLOR_YELLOW),
+    )
+    diffs = [
+        default_result.candidate_counts[k] != restricted_result.candidate_counts[k]
+        or default_result.values[k].raw != restricted_result.values[k].raw
+        for k in iv.FIRE_STABILITY_K_LEVELS
+    ]
+    assert any(diffs), "active_colors 指定が探索結果に反映されていない"
+
+
+def test_fire_stability_threshold_ratio_monotonic() -> None:
+    """閾値を上げる (0.8→0.95) ほど、近傍とみなされる件数が減る (単調非増加) こと。"""
+    board = _near_future_seed_board()
+    loose = iv.fire_stability(board, threshold_ratio=0.5)
+    strict = iv.fire_stability(board, threshold_ratio=0.95)
+    for k in iv.FIRE_STABILITY_K_LEVELS:
+        assert strict.candidate_counts[k] <= loose.candidate_counts[k]
+
+
+def test_fire_stability_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.fire_stability(board, next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=(COLOR_GREEN, COLOR_YELLOW))
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_fire_stability_exported_in_all() -> None:
+    """fire_stability が __all__ に含まれること。"""
+    assert "fire_stability" in iv.__all__
+    assert "FireStabilityResult" in iv.__all__
+    assert "FIRE_STABILITY_K_LEVELS" in iv.__all__
+    assert "FIRE_STABILITY_THRESHOLD_RATIO" in iv.__all__
+
+
+def test_fire_stability_constants_values() -> None:
+    """定数値が実装通りであること (K水準2,4,6・既定閾値0.8)。"""
+    assert iv.FIRE_STABILITY_K_LEVELS == (2, 4, 6)
+    assert iv.FIRE_STABILITY_THRESHOLD_RATIO == pytest.approx(0.8)
+
+
+# ============================
+# XVI 平均ツモ期待火力 (expected_fire_power, K=1..4)
+# ============================
+# user新指標: near_future_fire_power (理想ツモ=best case) の逆。ランダムな
+# 色のツモを最適配置した時の火力の期待値を測る expected case。
+# K=1,2 は全ツモ色パターン (16通り/256通り) を厳密列挙、K=3,4 は
+# モンテカルロ近似 (乱数は盤面内容から決定論的に導出、再現性あり)。
+
+
+def test_expected_fire_power_score_in_range() -> None:
+    """全 K の score が 0-1 範囲・NaN なしであること。"""
+    result = iv.expected_fire_power(_near_future_seed_board(), mc_n_samples=4)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        value = result.values[k]
+        assert 0.0 <= value.score <= 1.0
+        assert value.raw == value.raw
+
+
+def test_expected_fire_power_exact_k1k2_is_deterministic_no_seed_needed() -> None:
+    """K=1,2 (厳密全列挙) は乱数を使わないため rng_seed 無指定でも常に同一結果。"""
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(board, active_colors=colors, k_levels=(1, 2))
+    r2 = iv.expected_fire_power(board, active_colors=colors, k_levels=(1, 2))
+    assert r1.values[1].raw == r2.values[1].raw
+    assert r1.values[2].raw == r2.values[2].raw
+
+
+def test_expected_fire_power_mc_k3k4_is_deterministic_for_same_board() -> None:
+    """stateless: K=3,4 (モンテカルロ) も同一盤面には常に同一結果を返すこと。
+
+    乱数シードは盤面内容から決定論的に導出するため (_expected_fire_seed)、
+    呼び出しごとに変わってはならない。
+    """
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8)
+    r2 = iv.expected_fire_power(board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8)
+    assert r1.values[3].raw == r2.values[3].raw
+    assert r1.values[4].raw == r2.values[4].raw
+
+
+def test_expected_fire_power_rng_seed_override_is_reproducible() -> None:
+    """rng_seed を明示指定すると、指定した値に応じて完走し評価件数が一致すること。"""
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    r1 = iv.expected_fire_power(
+        board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8, rng_seed=1,
+    )
+    r2 = iv.expected_fire_power(
+        board, active_colors=colors, k_levels=(3, 4), mc_n_samples=8, rng_seed=1,
+    )
+    assert r1.values[3].raw == r2.values[3].raw
+    assert r1.n_evaluated[3] == 8 and r2.n_evaluated[4] == 8
+
+
+def test_expected_fire_power_n_evaluated_matches_exact_and_mc_counts() -> None:
+    """n_evaluated が K=1:16・K=2:256 (4色固定時) ・K=3,4:mc_n_samples になっていること。
+
+    active_colors を明示的に4色指定する (省略時は観測色数次第で5色フォール
+    バックがあり得るため、16/256 の前提が崩れる)。
+    """
+    board = _near_future_seed_board()
+    colors = (COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW)
+    result = iv.expected_fire_power(board, active_colors=colors, mc_n_samples=10)
+    assert result.n_evaluated[1] == 16
+    assert result.n_evaluated[2] == 256
+    assert result.n_evaluated[3] == 10
+    assert result.n_evaluated[4] == 10
+
+
+def test_expected_fire_power_k_is_monotonic_non_decreasing() -> None:
+    """K を増やすほど raw (平均お邪魔換算) が単調非減少であること (running max 性質)。
+
+    K=1,2 (厳密) → K=3,4 (モンテカルロ) の橋渡しが滑らかであることの確認。
+    """
+    result = iv.expected_fire_power(_near_future_seed_board(), mc_n_samples=16)
+    raws = [result.values[k].raw for k in sorted(iv.EXPECTED_FIRE_K_LEVELS)]
+    for prev, cur in zip(raws, raws[1:]):
+        assert cur >= prev
+
+
+def test_expected_fire_power_empty_board_is_zero() -> None:
+    """空盤面 (発火材料なし) は K=1 で raw=0 になること。"""
+    result = iv.expected_fire_power(_empty_board(), mc_n_samples=4)
+    assert result.values[1].raw == 0.0
+
+
+def test_expected_fire_power_dead_board_is_zero() -> None:
+    """窒息盤面は全 K が 0 (例外なし)。"""
+    board = _empty_board()
+    board.set(1, 2, COLOR_RED)  # DEATH_ROW=1, DEATH_COL=2
+    assert board.is_dead()
+    result = iv.expected_fire_power(board, mc_n_samples=4)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        assert result.values[k].raw == 0.0
+        assert result.values[k].score == 0.0
+        assert result.n_evaluated[k] == 0
+
+
+def test_expected_fire_power_active_colors_none_is_backward_compat() -> None:
+    """active_colors 省略時 (None) は従来通り盤面出現色フォールバックで動くこと。"""
+    board = _near_future_seed_board()
+    r1 = iv.expected_fire_power(board, mc_n_samples=8, rng_seed=42)
+    r2 = iv.expected_fire_power(board, active_colors=None, mc_n_samples=8, rng_seed=42)
+    for k in iv.EXPECTED_FIRE_K_LEVELS:
+        assert r1.values[k].raw == r2.values[k].raw
+
+
+def test_expected_fire_power_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _near_future_seed_board()
+    before = board.copy()
+    iv.expected_fire_power(board, mc_n_samples=4)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_expected_fire_power_exported_in_all() -> None:
+    """expected_fire_power が __all__ に含まれること。"""
+    assert "expected_fire_power" in iv.__all__
+    assert "ExpectedFireResult" in iv.__all__
+    assert "EXPECTED_FIRE_K_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_EXACT_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_MC_LEVELS" in iv.__all__
+    assert "EXPECTED_FIRE_MC_N_SAMPLES" in iv.__all__
+
+
+def test_expected_fire_power_constants_values() -> None:
+    """定数値が実装通りであること (K水準1-4・厳密1,2・モンテカルロ3,4)。"""
+    assert iv.EXPECTED_FIRE_K_LEVELS == (1, 2, 3, 4)
+    assert iv.EXPECTED_FIRE_EXACT_LEVELS == (1, 2)
+    assert iv.EXPECTED_FIRE_MC_LEVELS == (3, 4)
+
+
+# ============================
+# XVIII おじゃまダメージ (発火点埋没モデル) のテスト
+# ============================
+
+
+def _headroom_board(height: int) -> Board:
+    """DEATH_COL(列2)の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
+
+    隣接同色を作らないため 1 手追加でも4連結が完成せず、
+    _takapt_best_drop が best_board=None (発火点フォールバック=DEATH_COL) を
+    返すことを保証する (height<=11 なら窒息もしない)。
+    """
+    g = _empty_grid()
+    colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN]
+    top = BOARD_ROWS - 1
+    for i in range(height):
+        g[top - i][2] = colors[i % 3]
+    return Board.from_list(g)
+
+
+def test_ojama_damage_range_0_1() -> None:
+    """様々な盤面・おじゃま量で score が常に 0〜1 に収まること。"""
+    for height in (0, 3, 6, 9, 11):
+        board = _headroom_board(height)
+        for count in (0, 3, 11, 12, 17, 18, 60, 200):
+            result = iv.ojama_damage(board, count)
+            assert 0.0 <= result.score <= 1.0
+
+
+def test_ojama_damage_monotonic_in_ojama_count() -> None:
+    """おじゃま量が増えるほど score は単調非減少 (headroom 固定)。"""
+    board = _headroom_board(9)  # headroom_dan = 3
+    counts = (0, 3, 11, 12, 15, 17, 18, 30, 60, 100)
+    scores = [iv.ojama_damage(board, c).score for c in counts]
+    for prev, cur in zip(scores, scores[1:]):
+        assert cur >= prev - 1e-9
+
+
+def test_ojama_damage_monotonic_in_board_fullness() -> None:
+    """盤面が埋まっている(=headroom小さい)ほど、同じおじゃま量で score が
+    非減少であること (盤面埋まり具合による増幅、逆転しないことを固定)。
+    """
+    heights_desc_headroom = (0, 3, 6, 9, 11)  # headroom = 12,9,6,3,1
+    for count in (0, 12, 18, 40):
+        scores = [
+            iv.ojama_damage(_headroom_board(h), count).score
+            for h in heights_desc_headroom
+        ]
+        for prev, cur in zip(scores, scores[1:]):
+            assert cur >= prev - 1e-9, (count, heights_desc_headroom, scores)
+
+
+def test_ojama_damage_breakpoints_headroom3() -> None:
+    """headroom_dan=3 前提 (user 12個/18個折れ点の解釈基準) での折れ点検証。
+
+    折れ線は連続 (段差ジャンプではなく傾きが変わる「折れ線」、原仕様の
+    「線形ではなく折れ線的」に対応)。12個・18個の前後で傾きが明確に
+    変わる (=許容帯はほぼ平ら、その先は明確に立ち上がる) ことを確認する。
+    """
+    board = _headroom_board(9)
+    s0 = iv.ojama_damage(board, 0).score
+    s11 = iv.ojama_damage(board, 11).score
+    s12 = iv.ojama_damage(board, 12).score
+    s17 = iv.ojama_damage(board, 17).score
+    s18 = iv.ojama_damage(board, 18).score
+    s60 = iv.ojama_damage(board, 60).score
+    # 12個までは「許容範囲」帯 (ほぼ平ら)。
+    assert s11 == pytest.approx(s0, abs=1e-6)
+    assert s12 == pytest.approx(s0, abs=1e-6)
+    # 12個超〜18個で明確に立ち上がる (かなり不利〜明確に不利)。
+    assert s17 > s12 + 0.1
+    assert s18 > s17
+    # 18個超はさらに悪化し、60個 (10段) でほぼ最大 (ほぼ死)。
+    assert s60 == pytest.approx(iv.OJAMA_DAMAGE_CEIL, abs=1e-6)
+    # 傾きが 0→12 帯より 12→18 帯で明確に急になること (折れ線の「折れ」)。
+    slope_flat = (s12 - s0) / 12.0
+    slope_steep = (s18 - s12) / 6.0
+    assert slope_steep > slope_flat + 1e-6
+
+
+def test_ojama_damage_empty_board_stays_low() -> None:
+    """空盤面は発火点(現在の最大連鎖)が存在しないため DEATH_COL 高さ0で
+    フォールバックし、headroom_dan=12 と非常に大きくなる。そのため大量の
+    おじゃまでも score は低いまま (本指標は「既存/構築中の発火点の埋没」を
+    測るものであり、空盤面の一般的危険度は別指標
+    (board_ojama_count/absorption_capacity/dig_resistance) の役割、という
+    既知のスコープ限定を固定するテスト)。
+    """
+    board = _empty_board()
+    result = iv.ojama_damage(board, 60)
+    assert result.score == pytest.approx(iv.OJAMA_DAMAGE_FLOOR, abs=1e-6)
+
+
+def test_ojama_damage_dead_board_is_max() -> None:
+    """窒息済み盤面は score=OJAMA_DAMAGE_CEIL (最大不利) を返す。"""
+    g = _empty_grid()
+    g[1][2] = COLOR_RED  # DEATH_ROW=1, DEATH_COL=2
+    board = Board.from_list(g)
+    assert board.is_dead()
+    result = iv.ojama_damage(board, 0)
+    assert result.score == iv.OJAMA_DAMAGE_CEIL
+
+
+def test_ojama_damage_zero_count_headroom_equals_raw() -> None:
+    """ojama_count=0 のとき raw (残り余裕段数) は headroom_dan そのものと一致
+    (0段引かれるだけなので当然だが、実装の単位整合の回帰確認として固定する)。
+    """
+    board = _headroom_board(9)  # DEATH_COL 高さ9 → headroom=12-9=3
+    result = iv.ojama_damage(board, 0)
+    assert result.raw == pytest.approx(3.0, abs=1e-9)
+
+
+def test_ojama_damage_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊)。"""
+    board = _headroom_board(9)
+    before = board.copy()
+    iv.ojama_damage(board, 30)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_ojama_damage_negative_count_treated_as_zero() -> None:
+    """ojama_count に負値が渡っても 0 個扱いにクランプされ例外にならない。"""
+    board = _headroom_board(9)
+    result = iv.ojama_damage(board, -5)
+    zero = iv.ojama_damage(board, 0)
+    assert result.score == pytest.approx(zero.score, abs=1e-9)
+
+
+def test_ojama_damage_exported_in_all() -> None:
+    """ojama_damage と関連定数が __all__ (EXTRA_INDICATOR_NAMES 相当) に
+    含まれること。既存 LEARNED_WEIGHTS_* 順序には影響しない末尾追加。
+    """
+    for name in (
+        "ojama_damage",
+        "OJAMA_DAMAGE_PER_DAN",
+        "REMAINING_MARGIN_SAFE_DAN",
+        "REMAINING_MARGIN_CRITICAL_DAN",
+        "REMAINING_MARGIN_FLOOR_DAN",
+        "OJAMA_DAMAGE_FLOOR",
+        "OJAMA_DAMAGE_MID",
+        "OJAMA_DAMAGE_CEIL",
+    ):
+        assert name in iv.__all__
+
+
+def test_ojama_damage_constants_ordering() -> None:
+    """暫定値は今後の学習調整を想定するため、絶対値ではなく折れ線として
+    意味を成す相対順序のみを固定する (SAFE > CRITICAL > FLOOR_DAN、
+    FLOOR < MID < CEIL)。
+    """
+    assert iv.REMAINING_MARGIN_SAFE_DAN > iv.REMAINING_MARGIN_CRITICAL_DAN
+    assert iv.REMAINING_MARGIN_CRITICAL_DAN > iv.REMAINING_MARGIN_FLOOR_DAN
+    assert iv.OJAMA_DAMAGE_FLOOR < iv.OJAMA_DAMAGE_MID < iv.OJAMA_DAMAGE_CEIL

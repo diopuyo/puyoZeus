@@ -138,6 +138,40 @@ class HsvRange:
     v_max: int = 255
 
 
+# ============================
+# 側別 彩度適応較正 (2026-07-31)
+# ============================
+# 実測: 画面の右半分 (2P 側) は 3 動画すべてで彩度が系統的に低い
+#   盤面の彩度中央値 1P 127.0/102.0/123.5 に対し 2P 94.0/62.0/61.0
+#   ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5 (p10 は 98 対 59)
+# にもかかわらず **盤面の色分類器は左右で同じ s_min を使っている**
+# (_s_min_scale は解像度依存の全体スケールのみで側別調整が無い)。
+# → 2P だけ HSV 判定が通りにくく、CNN と食い違って票数を余計に要求する。
+#   実測の区間B (確定側) が 1P 2.0 に対し 2P 8.0 という 4 倍差と整合する。
+#
+# 対処は背景 FP と同じ「実測から較正する」方式にする。固定の側別ハードコードは
+# キャラや動画が変わると再びずれるので採らない。
+#
+# 基準となる彩度中央値。この値の側では scale=1.0 (従来と同じ) になる。
+# 1P の実測中央値 (123.0) に合わせてある。
+SIDE_SAT_REFERENCE_MEDIAN: float = 123.0
+# 較正で許容するスケール下限 (set_s_min_scale 側のクランプと同値)。
+SIDE_SAT_SCALE_MIN: float = 0.3
+# 較正に使うサンプル画素の彩度下限。これ未満は空セル/背景とみなし較正から除く
+# (空セルばかりの盤面で scale が過剰に下がるのを防ぐ)。
+SIDE_SAT_SAMPLE_MIN: int = 40
+# 較正を確定するまでに必要なサンプルフレーム数。
+# 少なすぎると演出フレームに引きずられる。
+SIDE_SAT_CALIB_MIN_FRAMES: int = 8
+
+# cell_sample_rect のキャッシュ (2026-07-31)。
+# キー = (領域x, 領域y, 幅, 高さ, row, col)。盤面領域は P1/P2 とシフト版で数種、
+# セルは 78 個なので上限は数百エントリに収まる。
+_CELL_RECT_CACHE: dict[
+    tuple[int, int, int, int, int, int], tuple[int, int, int, int]
+] = {}
+
+
 @dataclass
 class BoardRegion:
     """
@@ -195,10 +229,20 @@ class BoardRegion:
         Note: この変更で学習用 patch 領域が変わるため、 既存 CNN model は
         新しい sample 領域で再 fine-tune する必要がある.
         """
+        # 高速化 (2026-07-31): 実測 278.8回/frame で 0.4ms。矩形は
+        # (領域の幾何, row, col) の純関数なのでキャッシュできる。
+        # BoardRegion は frozen でない dataclass なので、幾何を**キーに含める**
+        # (座標が書き換えられても誤ったキャッシュを引かない)。
+        key = (self.x, self.y, self.width, self.height, row, col)
+        hit = _CELL_RECT_CACHE.get(key)
+        if hit is not None:
+            return hit
         cx, cy = self.cell_center(row, col)
         half_w = max(1, int(self.cell_width * CELL_SAMPLE_RATIO / 2))
         half_h = max(1, int(self.cell_height * CELL_SAMPLE_RATIO / 2))
-        return cx - half_w, cy - half_h, cx + half_w, cy + half_h
+        rect = (cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+        _CELL_RECT_CACHE[key] = rect
+        return rect
 
 
 # ============================
@@ -249,6 +293,63 @@ DEFAULT_COLOR_RANGES: dict[int, list[HsvRange]] = {
 # ============================
 # 色分類器
 # ============================
+
+def _median_hsv_3ch(hsv_patch: np.ndarray) -> tuple[int, int, int]:
+    """HSV パッチの H/S/V それぞれの median を 1 回の partition で求める。
+
+    高速化 (2026-07-31): `read_board` のセルループが
+    `int(np.median(hsv_patch[:, :, i]))` を 3 回呼んでおり、
+    1 フレームあたり 360 回 (120セル x 3ch) に達していた
+    (2026-07-30 の `_median_fast` 置換から漏れていた箇所)。
+
+    (N, 3) に並べて axis=0 で partition すると各チャンネルが独立に部分ソートされ、
+    k 番目の要素はチャンネルごとの順序統計量と一致する。よって
+    **3 回の np.median と返り値は完全同一**で、partition 呼び出しは 1 回で済む。
+
+    Args:
+        hsv_patch: (H, W, 3) の HSV パッチ (uint8 想定)。
+
+    Returns:
+        (h_med, s_med, v_med)。いずれも int (np.median 同様に切り捨て)。
+    """
+    flat = np.ascontiguousarray(hsv_patch).reshape(-1, 3)
+    n = flat.shape[0]
+    k = n // 2
+    if n % 2:
+        med = np.partition(flat, k, axis=0)[k].astype(np.float64)
+    else:
+        part = np.partition(flat, (k - 1, k), axis=0)
+        med = (part[k - 1].astype(np.float64) + part[k].astype(np.float64)) / 2.0
+    return int(med[0]), int(med[1]), int(med[2])
+
+
+def _median_fast(a: np.ndarray) -> float:
+    """1D 配列の median を np.median と同値で高速に計算する。
+
+    高速化 (2026-07-30): セル単位 HSV 分類は 1 フレームあたり 584 回ずつ
+    H/S の median を取っており、実測 30.8ms/frame (認識全体の 11.9%) を占めていた。
+    実測でパッチサイズ 16x16〜32x32 では np.partition が np.median の 2〜4 倍速い
+    (`scripts/_diag_median_overhead_2026-07-30.py`)。一方セル横断のまとめ計算は
+    32x32 で削減 1.3% しかなく無効だったため、関数内部の置き換えを採用した。
+
+    np.median 自身も内部で partition + 中央 2 値の平均を行うため **返り値は完全同一**。
+    (偶数長は中央 2 値の float64 平均、奇数長は中央値そのもの)
+
+    Args:
+        a: 1D numpy 配列 (uint8 / int16 等の整数型を想定)。
+
+    Returns:
+        median 値 (float)。空配列では nan (np.median と同じ)。
+    """
+    n = a.size
+    if n == 0:
+        return float("nan")
+    k = n // 2
+    if n % 2:
+        return float(np.partition(a, k)[k])
+    part = np.partition(a, (k - 1, k))
+    return (float(part[k - 1]) + float(part[k])) / 2.0
+
 
 class ColorClassifier:
     """
@@ -321,30 +422,33 @@ class ColorClassifier:
         Returns:
             安定化後の H median 値 (int, 0–180)。
         """
-        h_flat = h_channel.ravel().astype(np.int16)
+        # 高速化 (2026-07-30): int16 への astype を「補正を実際に適用する分岐」まで遅延させる。
+        # ravel() は非連続 view (hsv[:, :, 0]) なのでここで uint8 の複製が 1 回だけ起きる。
+        # 旧実装は毎回 int16 複製 (2 倍のメモリ帯域) を作っていた。
+        h_flat = np.asarray(h_channel).ravel()
         if not self._enable_red_hue_wrap_fix:
-            return int(np.median(h_flat))
+            return int(_median_fast(h_flat))
         # 2 峰ケース判定: LOW 側 (H < 30) と HIGH 側 (H >= 閾値) の両方が存在するか。
         # 紫 (H=130-165) や高 H 単峰の場合は両条件を満たさないため補正対象外。
         # RED_HUE_WRAP_THRESHOLD (=140) 未満の範囲が赤の低端 (0-30) と紫 (70-165) を分ける。
         # 赤 2 峰 = LOW 比率 >= 15% かつ HIGH 比率 >= 15% の共存ケース。
         RED_HUE_LOW_MAX: int = 30  # 赤低端の上限 H 値
-        n_total = max(1, len(h_flat))
-        low_ratio = float(np.sum(h_flat <= RED_HUE_LOW_MAX)) / n_total
-        high_ratio = float(np.sum(h_flat >= RED_HUE_WRAP_THRESHOLD)) / n_total
-        if low_ratio >= 0.15 and high_ratio >= 0.15:
-            # 赤 2 峰確定: 折り返し補正を適用
-            h_wrapped = np.where(
-                h_flat >= RED_HUE_WRAP_THRESHOLD,
-                h_flat - 180,
-                h_flat,
-            )
-            med_wrapped = float(np.median(h_wrapped))
-            if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
-                # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
-                return int(max(0, med_wrapped))
+        n_total = max(1, h_flat.size)
+        low_ratio = float(np.count_nonzero(h_flat <= RED_HUE_LOW_MAX)) / n_total
+        # 高速化: LOW 側が不足なら HIGH 側を数えるまでもなく補正対象外 (早期打ち切り)。
+        if low_ratio >= 0.15:
+            high_mask = h_flat >= RED_HUE_WRAP_THRESHOLD
+            high_ratio = float(np.count_nonzero(high_mask)) / n_total
+            if high_ratio >= 0.15:
+                # 赤 2 峰確定: 折り返し補正を適用 (ここでのみ int16 が必要)
+                h_wrapped = h_flat.astype(np.int16)
+                h_wrapped[high_mask] -= 180
+                med_wrapped = float(_median_fast(h_wrapped))
+                if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
+                    # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
+                    return int(max(0, med_wrapped))
         # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
-        return int(np.median(h_flat))
+        return int(_median_fast(h_flat))
 
     def _compute_specular_robust_s(self, s_channel: np.ndarray, v_channel: np.ndarray) -> int:
         """光沢ハイライト画素を除外した彩度 median を計算する (案D)。
@@ -365,19 +469,32 @@ class ColorClassifier:
         Returns:
             彩度 median 値 (int, 0–255)。
         """
-        s_flat = s_channel.ravel().astype(np.int32)
+        # 高速化 (2026-07-30): int32 への astype を廃止 (uint8 のままで median 値は同一)。
+        # 有効画素の materialize も「実際に除外がある」場合まで遅延させる。
+        s_flat = np.asarray(s_channel).ravel()
         if not self._enable_specular_robust_saturation:
             # OFF 時: 従来の全画素 median と完全同一
-            return int(np.median(s_flat))
-        v_flat = v_channel.ravel().astype(np.int32)
-        n_total = max(1, len(s_flat))
+            return int(_median_fast(s_flat))
+        v_flat = np.asarray(v_channel).ravel()
+        n_total = max(1, s_flat.size)
         # ハイライト画素マスク: 明るく(V高)かつ白っぽい(S低)画素
         specular_mask = (v_flat >= SPECULAR_V_MIN) & (s_flat <= SPECULAR_S_MAX)
-        valid_s = s_flat[~specular_mask]
+        n_specular = int(np.count_nonzero(specular_mask))
         # 有効画素が最小比率を下回る場合は fallback (全面ハイライト等の異常)
-        if len(valid_s) < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
-            return int(np.median(s_flat))
-        return int(np.median(valid_s))
+        if s_flat.size - n_specular < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
+            return int(_median_fast(s_flat))
+        if n_specular == 0 or n_specular == s_flat.size:
+            # n_specular == 0        : 除外画素なし → 複製を作らず全画素 median (同値)
+            # n_specular == size     : 全画素ハイライト → 全画素 median
+            #
+            # 後者は既存の潜在クラッシュへのガード (2026-07-30)。
+            # 5 画素未満のパッチでは int(n_total * SPECULAR_FALLBACK_MIN_RATIO) == 0 と
+            # なり上の fallback 判定 (0 < 0) をすり抜けるため、旧実装は空配列の
+            # median = nan を int() して ValueError で落ちていた (実測確認済み)。
+            # 「全面ハイライト等の異常なら全画素 median」という fallback の意図に沿わせる。
+            # 旧実装が例外だった入力しか変えないので回帰にはならない。
+            return int(_median_fast(s_flat))
+        return int(_median_fast(s_flat[~specular_mask]))
 
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
@@ -403,7 +520,7 @@ class ColorClassifier:
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
         s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
-        v = int(np.median(hsv_patch[:, :, 2]))
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
 
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY
@@ -475,7 +592,7 @@ class ColorClassifier:
         h = self._compute_stable_h_median(hsv_patch[:, :, 0])
         # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
         s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
-        v = int(np.median(hsv_patch[:, :, 2]))
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
         if v < EMPTY_V_THRESHOLD:
             return COLOR_EMPTY
         scale = self._s_min_scale
@@ -708,6 +825,11 @@ class ImageReader:
                 不一致なら EMPTY 化 (= 幻ぷよ抑制)。None で無効 (既存挙動)。
         """
         self._classifier: ColorClassifier = classifier or ColorClassifier()
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF = 従来と bit-identical。
+        self._enable_side_sat_calibration: bool = False
+        # region の幾何をキーに (サンプル彩度の蓄積, 確定scale) を持つ
+        self._side_sat_samples: dict[tuple, list[float]] = {}
+        self._side_sat_scale: dict[tuple, float] = {}
         self._p1_region: BoardRegion = p1_region or DEFAULT_P1_REGION
         self._p2_region: BoardRegion = p2_region or DEFAULT_P2_REGION
         self._bg_fp_p1 = bg_fingerprint_p1
@@ -1056,6 +1178,64 @@ class ImageReader:
                     return False  # D=True → EMPTY 化キャンセル
         return True  # A=True, D=False → EMPTY 化
 
+    def set_side_sat_calibration(self, enabled: bool) -> None:
+        """側別 彩度適応較正の有効/無効を切り替える (2026-07-31)。
+
+        既定 OFF。有効化すると各盤面領域の実測彩度から s_min スケールを
+        較正し、彩度が低い側 (実測で 2P) の HSV 判定が通りやすくなる。
+        """
+        self._enable_side_sat_calibration = bool(enabled)
+
+    def _side_sat_key(self, region: BoardRegion) -> tuple:
+        """region の幾何をキーにする (BoardRegion は frozen でないため)。"""
+        return (region.x, region.y, region.width, region.height)
+
+    def _update_side_sat_scale(
+        self, hsv_full: "np.ndarray | None", region: BoardRegion,
+    ) -> float | None:
+        """盤面領域の実測彩度から s_min スケールを較正して返す。
+
+        背景 FP と同じ「実測から較正する」方式。固定の側別ハードコードは
+        キャラや動画が変わると再びずれるので採らない。
+
+        SIDE_SAT_CALIB_MIN_FRAMES 分のサンプルが貯まるまでは None を返し、
+        呼び出し側は較正を適用しない (立ち上がりで誤った scale を焼き付けない)。
+
+        Args:
+            hsv_full: 事前計算済み HSV 全画像。None なら較正できない。
+            region: 対象の盤面領域。
+
+        Returns:
+            [SIDE_SAT_SCALE_MIN, 1.0] のスケール。未確定なら None。
+        """
+        if hsv_full is None:
+            return None
+        key = self._side_sat_key(region)
+        cached = self._side_sat_scale.get(key)
+        if cached is not None:
+            return cached
+        y1 = max(0, region.y)
+        y2 = min(hsv_full.shape[0], region.y + region.height)
+        x1 = max(0, region.x)
+        x2 = min(hsv_full.shape[1], region.x + region.width)
+        if y2 <= y1 or x2 <= x1:
+            return None
+        sat = hsv_full[y1:y2, x1:x2, 1]
+        # 空セル/背景を除いた「ぷよらしい画素」だけで中央値を取る
+        vals = sat[sat >= SIDE_SAT_SAMPLE_MIN]
+        if vals.size == 0:
+            return None
+        samples = self._side_sat_samples.setdefault(key, [])
+        samples.append(float(np.median(vals)))
+        if len(samples) < SIDE_SAT_CALIB_MIN_FRAMES:
+            return None
+        # 複数フレームの中央値を取り、演出フレームの影響を薄める
+        measured = float(np.median(np.asarray(samples)))
+        scale = measured / SIDE_SAT_REFERENCE_MEDIAN
+        scale = float(max(SIDE_SAT_SCALE_MIN, min(1.0, scale)))
+        self._side_sat_scale[key] = scale
+        return scale
+
     def read_board(
         self,
         frame: np.ndarray,
@@ -1113,6 +1293,24 @@ class ImageReader:
         cells_to_classify: list[
             tuple[int, int, np.ndarray, float | None, np.ndarray | None]
         ] = []
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF では一切触らない。
+        # 分類器は 1P/2P で共有されているので、この region の分類が終わるまで
+        # スケールを差し替え、finally で必ず元に戻す (単一スレッド前提)。
+        _sat_target = getattr(self._classifier, "_hsv", self._classifier)
+        _sat_saved: float | None = None
+        if self._enable_side_sat_calibration and hasattr(
+            _sat_target, "set_s_min_scale",
+        ):
+            _scale = self._update_side_sat_scale(hsv_full, region)
+            if _scale is not None:
+                _sat_saved = getattr(_sat_target, "_s_min_scale", 1.0)
+                # 解像度依存スケールと掛け合わせる (低解像度の緩和を潰さない)
+                _sat_target.set_s_min_scale(_sat_saved * _scale)
+        # 高速化 (2026-07-31): 旧実装はこの import をセルループ内で毎回実行していた
+        # (120回/frame)。sys.modules 参照とはいえ無駄なのでループ外に退避。
+        from src.background_fingerprint import (
+            PatchBackgroundFingerprint as _PatchBackgroundFingerprint,
+        )
         for row in range(HIDDEN_ROWS, BOARD_ROWS):
             visible_row = row - HIDDEN_ROWS
             for col in range(BOARD_COLS):
@@ -1133,9 +1331,9 @@ class ImageReader:
                     hsv_patch = hsv_full[y1:y2, x1:x2]
                     if hsv_patch.size > 0:
                         cell_hsv_patch = hsv_patch  # 2nd pass 再利用用に保持
-                        h_med = int(np.median(hsv_patch[:, :, 0]))
-                        s_med = int(np.median(hsv_patch[:, :, 1]))
-                        v_med = int(np.median(hsv_patch[:, :, 2]))
+                        # 高速化 (2026-07-31): 3ch 分の median を 1 回の
+                        # partition にまとめる (返り値は np.median 3 回と同一)
+                        h_med, s_med, v_med = _median_hsv_3ch(hsv_patch)
                         cur_fp = CellFingerprint(h_med, s_med, v_med)
                         bg_cell = bg_fp.cell_at(visible_row, col)
                         dist = cur_fp.distance_to(bg_cell)
@@ -1155,8 +1353,9 @@ class ImageReader:
                         # skip_tier1=True (NON-STABLE→STABLE 遷移直後) はスキップ:
                         # ツモ着地直後の cell を誤 EMPTY 化しない (= 失敗教訓遵守)。
                         # HSV + CNN の通常判定は続行するため背景誤認リスクは小さい。
-                        from src.background_fingerprint import PatchBackgroundFingerprint
-                        if isinstance(bg_fp, PatchBackgroundFingerprint):
+                        # 高速化 (2026-07-31): import はループ外へ退避済み
+                        # (sys.modules 参照でも 120回/frame 積むと無駄)
+                        if isinstance(bg_fp, _PatchBackgroundFingerprint):
                             bg_cell_for_tier1 = bg_fp.cell_at_patch(visible_row, col)
                         else:
                             bg_cell_for_tier1 = bg_cell
@@ -1200,16 +1399,25 @@ class ImageReader:
 
         # 2nd pass: バッチ classify (HybridClassifier で 5-20x 高速化)
         # cycle 34: bg_distance を classify_batch に渡して CNN logit soft prior
+        # 案B (2026-07-30): (row, col) も渡し、UI マスク判定対象セル限定を可能にする
+        # (HybridClassifier 側で ui_mask_cells 未指定なら無効化され従来通り)。
         if has_batch_api and cells_to_classify:
             patches = [p for _, _, p, _, _ in cells_to_classify]
             distances = [d for _, _, _, d, _ in cells_to_classify]
+            positions = [(row, col) for row, col, _, _, _ in cells_to_classify]
             try:
                 colors = self._classifier.classify_batch(
-                    patches, bg_distances=distances,
+                    patches, bg_distances=distances, cell_positions=positions,
                 )
             except TypeError:
-                # backwards compat: 古い classify_batch は bg_distances 未対応
-                colors = self._classifier.classify_batch(patches)
+                # backwards compat: 古い classify_batch は cell_positions 未対応
+                try:
+                    colors = self._classifier.classify_batch(
+                        patches, bg_distances=distances,
+                    )
+                except TypeError:
+                    # さらに古い classify_batch は bg_distances も未対応
+                    colors = self._classifier.classify_batch(patches)
             for (row, col, patch, _, hsv_p), color in zip(
                 cells_to_classify, colors,
             ):
@@ -1262,6 +1470,11 @@ class ImageReader:
         # 隠し段を物理推論で確定 or UNKNOWN にする
         self._infer_hidden_rows(board)
 
+        # 側別 彩度スケールを必ず元に戻す (分類器は 1P/2P で共有のため)。
+        # read_board は単一 return なのでここが唯一の出口
+        # (途中 return が追加された場合はこの復元が漏れるので注意)。
+        if _sat_saved is not None:
+            _sat_target.set_s_min_scale(_sat_saved)
         return board
 
     def _apply_profile_filter(
@@ -1342,6 +1555,7 @@ class ImageReader:
         p2_roi_offset: tuple[float, float] = (0.0, 0.0),
         skip_tier1_1p: bool = False,
         skip_tier1_2p: bool = False,
+        telop_result: "TelopResult | None" = None,
     ) -> tuple[Board, Board]:
         """
         フレームから1P・2P両方の盤面を読み取る。
@@ -1354,6 +1568,12 @@ class ImageReader:
             p2_roi_offset: 2P 盤面の ROI 補正シフト (dx, dy) px。
             skip_tier1_1p: True のとき 1P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
             skip_tier1_2p: True のとき 2P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
+            telop_result: 呼出元 (RecognitionPipeline) が同一 frame に対して
+                既に計算済の TelopDetector.detect() 結果。指定すると本メソッド
+                内部の self._telop_detector.detect(frame) 再実行 (二重走査) を
+                省略してこの結果をそのまま使う。None (既定) では従来通り
+                内部で detect() を実行する (backwards compat、bit-identical)。
+                修正2 (2026-07-30): テロップ検出の重複排除。
 
         Returns:
             tuple[Board, Board]: (1P盤面, 2P盤面) のタプル。
@@ -1372,8 +1592,13 @@ class ImageReader:
             if state.state != MatchState.IN_MATCH:
                 return Board(), Board()
         # V3.1: テロップ検出 (フレーム単位で 1 度。read_board が cached bbox を使う)
+        # 修正2 (2026-07-30): telop_result が渡されていればそれを使い、
+        # 未指定 (None) なら従来通り自前で detect() する (backwards compat)。
         if self._telop_detector is not None:
-            telop_res = self._telop_detector.detect(frame)
+            telop_res = (
+                telop_result if telop_result is not None
+                else self._telop_detector.detect(frame)
+            )
             self._cached_telop_bbox = telop_res.bbox if telop_res.is_visible else None
         else:
             self._cached_telop_bbox = None
