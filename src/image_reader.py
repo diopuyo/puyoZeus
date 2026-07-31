@@ -138,6 +138,32 @@ class HsvRange:
     v_max: int = 255
 
 
+# ============================
+# 側別 彩度適応較正 (2026-07-31)
+# ============================
+# 実測: 画面の右半分 (2P 側) は 3 動画すべてで彩度が系統的に低い
+#   盤面の彩度中央値 1P 127.0/102.0/123.5 に対し 2P 94.0/62.0/61.0
+#   ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5 (p10 は 98 対 59)
+# にもかかわらず **盤面の色分類器は左右で同じ s_min を使っている**
+# (_s_min_scale は解像度依存の全体スケールのみで側別調整が無い)。
+# → 2P だけ HSV 判定が通りにくく、CNN と食い違って票数を余計に要求する。
+#   実測の区間B (確定側) が 1P 2.0 に対し 2P 8.0 という 4 倍差と整合する。
+#
+# 対処は背景 FP と同じ「実測から較正する」方式にする。固定の側別ハードコードは
+# キャラや動画が変わると再びずれるので採らない。
+#
+# 基準となる彩度中央値。この値の側では scale=1.0 (従来と同じ) になる。
+# 1P の実測中央値 (123.0) に合わせてある。
+SIDE_SAT_REFERENCE_MEDIAN: float = 123.0
+# 較正で許容するスケール下限 (set_s_min_scale 側のクランプと同値)。
+SIDE_SAT_SCALE_MIN: float = 0.3
+# 較正に使うサンプル画素の彩度下限。これ未満は空セル/背景とみなし較正から除く
+# (空セルばかりの盤面で scale が過剰に下がるのを防ぐ)。
+SIDE_SAT_SAMPLE_MIN: int = 40
+# 較正を確定するまでに必要なサンプルフレーム数。
+# 少なすぎると演出フレームに引きずられる。
+SIDE_SAT_CALIB_MIN_FRAMES: int = 8
+
 # cell_sample_rect のキャッシュ (2026-07-31)。
 # キー = (領域x, 領域y, 幅, 高さ, row, col)。盤面領域は P1/P2 とシフト版で数種、
 # セルは 78 個なので上限は数百エントリに収まる。
@@ -799,6 +825,11 @@ class ImageReader:
                 不一致なら EMPTY 化 (= 幻ぷよ抑制)。None で無効 (既存挙動)。
         """
         self._classifier: ColorClassifier = classifier or ColorClassifier()
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF = 従来と bit-identical。
+        self._enable_side_sat_calibration: bool = False
+        # region の幾何をキーに (サンプル彩度の蓄積, 確定scale) を持つ
+        self._side_sat_samples: dict[tuple, list[float]] = {}
+        self._side_sat_scale: dict[tuple, float] = {}
         self._p1_region: BoardRegion = p1_region or DEFAULT_P1_REGION
         self._p2_region: BoardRegion = p2_region or DEFAULT_P2_REGION
         self._bg_fp_p1 = bg_fingerprint_p1
@@ -1147,6 +1178,64 @@ class ImageReader:
                     return False  # D=True → EMPTY 化キャンセル
         return True  # A=True, D=False → EMPTY 化
 
+    def set_side_sat_calibration(self, enabled: bool) -> None:
+        """側別 彩度適応較正の有効/無効を切り替える (2026-07-31)。
+
+        既定 OFF。有効化すると各盤面領域の実測彩度から s_min スケールを
+        較正し、彩度が低い側 (実測で 2P) の HSV 判定が通りやすくなる。
+        """
+        self._enable_side_sat_calibration = bool(enabled)
+
+    def _side_sat_key(self, region: BoardRegion) -> tuple:
+        """region の幾何をキーにする (BoardRegion は frozen でないため)。"""
+        return (region.x, region.y, region.width, region.height)
+
+    def _update_side_sat_scale(
+        self, hsv_full: "np.ndarray | None", region: BoardRegion,
+    ) -> float | None:
+        """盤面領域の実測彩度から s_min スケールを較正して返す。
+
+        背景 FP と同じ「実測から較正する」方式。固定の側別ハードコードは
+        キャラや動画が変わると再びずれるので採らない。
+
+        SIDE_SAT_CALIB_MIN_FRAMES 分のサンプルが貯まるまでは None を返し、
+        呼び出し側は較正を適用しない (立ち上がりで誤った scale を焼き付けない)。
+
+        Args:
+            hsv_full: 事前計算済み HSV 全画像。None なら較正できない。
+            region: 対象の盤面領域。
+
+        Returns:
+            [SIDE_SAT_SCALE_MIN, 1.0] のスケール。未確定なら None。
+        """
+        if hsv_full is None:
+            return None
+        key = self._side_sat_key(region)
+        cached = self._side_sat_scale.get(key)
+        if cached is not None:
+            return cached
+        y1 = max(0, region.y)
+        y2 = min(hsv_full.shape[0], region.y + region.height)
+        x1 = max(0, region.x)
+        x2 = min(hsv_full.shape[1], region.x + region.width)
+        if y2 <= y1 or x2 <= x1:
+            return None
+        sat = hsv_full[y1:y2, x1:x2, 1]
+        # 空セル/背景を除いた「ぷよらしい画素」だけで中央値を取る
+        vals = sat[sat >= SIDE_SAT_SAMPLE_MIN]
+        if vals.size == 0:
+            return None
+        samples = self._side_sat_samples.setdefault(key, [])
+        samples.append(float(np.median(vals)))
+        if len(samples) < SIDE_SAT_CALIB_MIN_FRAMES:
+            return None
+        # 複数フレームの中央値を取り、演出フレームの影響を薄める
+        measured = float(np.median(np.asarray(samples)))
+        scale = measured / SIDE_SAT_REFERENCE_MEDIAN
+        scale = float(max(SIDE_SAT_SCALE_MIN, min(1.0, scale)))
+        self._side_sat_scale[key] = scale
+        return scale
+
     def read_board(
         self,
         frame: np.ndarray,
@@ -1204,6 +1293,19 @@ class ImageReader:
         cells_to_classify: list[
             tuple[int, int, np.ndarray, float | None, np.ndarray | None]
         ] = []
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF では一切触らない。
+        # 分類器は 1P/2P で共有されているので、この region の分類が終わるまで
+        # スケールを差し替え、finally で必ず元に戻す (単一スレッド前提)。
+        _sat_target = getattr(self._classifier, "_hsv", self._classifier)
+        _sat_saved: float | None = None
+        if self._enable_side_sat_calibration and hasattr(
+            _sat_target, "set_s_min_scale",
+        ):
+            _scale = self._update_side_sat_scale(hsv_full, region)
+            if _scale is not None:
+                _sat_saved = getattr(_sat_target, "_s_min_scale", 1.0)
+                # 解像度依存スケールと掛け合わせる (低解像度の緩和を潰さない)
+                _sat_target.set_s_min_scale(_sat_saved * _scale)
         # 高速化 (2026-07-31): 旧実装はこの import をセルループ内で毎回実行していた
         # (120回/frame)。sys.modules 参照とはいえ無駄なのでループ外に退避。
         from src.background_fingerprint import (
@@ -1368,6 +1470,11 @@ class ImageReader:
         # 隠し段を物理推論で確定 or UNKNOWN にする
         self._infer_hidden_rows(board)
 
+        # 側別 彩度スケールを必ず元に戻す (分類器は 1P/2P で共有のため)。
+        # read_board は単一 return なのでここが唯一の出口
+        # (途中 return が追加された場合はこの復元が漏れるので注意)。
+        if _sat_saved is not None:
+            _sat_target.set_s_min_scale(_sat_saved)
         return board
 
     def _apply_profile_filter(
