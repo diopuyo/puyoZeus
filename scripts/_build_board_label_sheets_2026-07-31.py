@@ -41,6 +41,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import random
 from pathlib import Path
 
@@ -68,10 +69,63 @@ COLOR_BGR: dict[int, tuple[int, int, int]] = {
     9: (170, 170, 170),     # おじゃま = 明るいグレー
     10: (0, 0, 0),          # UNKNOWN = 黒
 }
+# ============================
+# サンプリングの試合文脈フィルタ (2026-07-31 v3)
+# ============================
+# 初回40枚のNG分析で、誤判定サンプルが全て「決着・遷移・エフェクト」局面に
+# 集中していたことが判明した (13=連鎖煙直後+試合末尾4.4s / 18=連鎖後の
+# 反映凍結 / 24=試合終了の崩壊 / 30=満杯の×印)。
+# 「密な盤面を優先する」サンプリングがクライマックスの遷移フレームを
+# 過剰に拾っていたのが原因。
+#
+# 対処: 測定対象外のフレームをサンプリング段階で除外する。
+#   1. 試合区間外 (勝利数パネル基準) → 24型の崩壊シーンを排除
+#   2. 試合末尾 MATCH_END_EXCLUDE_SEC 秒以内 → 13型の決着局面を排除
+#   3. 連鎖検知 (chain_trigger_sec) から CHAIN_COOLDOWN_SEC 秒以内
+#      → 13/007型のエフェクト煙を排除
+# **本物の認識バグ (×印誤認・背景誤検出・反映凍結) は除外しない** —
+# それを見つけるのが物差しの目的。
+MATCH_END_EXCLUDE_SEC: float = 8.0
+CHAIN_COOLDOWN_SEC: float = 3.0
+WINNERS_PANEL_DIR: Path = Path("data/verify/winners_panel_diff_2026-07-26")
+
 # 出力する 1 セルの描画サイズ [px]
 CELL_PX: int = 56
 # 盤面切り出しの拡大率 (スマホで見て判断できる大きさにする)
 CROP_SCALE: float = 2.0
+
+
+_MATCH_WINDOWS_CACHE: dict[str, list[tuple[float, float]]] = {}
+
+
+def _stable_match_windows(video_id: str) -> list[tuple[float, float]]:
+    """勝利数パネルから「安定サンプリングして良い区間」を返す (キャッシュ付き)。
+
+    各試合の [start_sec, end_sec - MATCH_END_EXCLUDE_SEC) を許可区間とする。
+    パネルデータが無い動画は空リスト = その動画からはサンプルしない
+    (試合区間が分からないと24型の崩壊シーンを排除できないため、安全側に倒す)。
+    """
+    if video_id in _MATCH_WINDOWS_CACHE:
+        return _MATCH_WINDOWS_CACHE[video_id]
+    path = WINNERS_PANEL_DIR / f"{video_id}.json"
+    windows: list[tuple[float, float]] = []
+    if path.exists():
+        try:
+            games = json.loads(path.read_text(encoding="utf-8")).get("games", [])
+            for g in games:
+                s0 = float(g["start_sec"])
+                e0 = float(g["end_sec"]) - MATCH_END_EXCLUDE_SEC
+                if e0 > s0:
+                    windows.append((s0, e0))
+        except Exception:
+            windows = []
+    _MATCH_WINDOWS_CACHE[video_id] = windows
+    return windows
+
+
+def _in_stable_window(video_id: str, t_sec: float) -> bool:
+    """t_sec が安定サンプリング許可区間内か。"""
+    return any(s0 <= t_sec < e0 for s0, e0 in _stable_match_windows(video_id))
 
 
 def _render_grid(grid: np.ndarray) -> np.ndarray:
@@ -190,8 +244,21 @@ def main() -> None:
         vids = np.asarray(d["video_id"]).astype(str)
         sides = np.asarray(d["side"]).astype(str)
         fidx = np.asarray(d["frame_idx"])
+        tsecs = np.asarray(d["t_sec"]).astype(float)
+        cts = (
+            np.asarray(d["chain_trigger_sec"]).astype(float)
+            if "chain_trigger_sec" in d.files
+            else np.full(len(grids), np.nan)
+        )
         for i in range(len(grids)):
             g = grids[i]
+            # 試合文脈フィルタ (2026-07-31 v3): 決着・遷移・エフェクト局面を除外
+            t = float(tsecs[i])
+            if not _in_stable_window(str(vids[i]), t):
+                continue  # 試合外 or 試合末尾 (24型・13型を排除)
+            ct = float(cts[i])
+            if not np.isnan(ct) and 0.0 <= t - ct < CHAIN_COOLDOWN_SEC:
+                continue  # 連鎖検知直後 (エフェクト煙、13/007型を排除)
             if args.strategy == "floating":
                 ok = False
                 for c in range(BOARD_COLS):
