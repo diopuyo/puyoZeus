@@ -138,6 +138,14 @@ class HsvRange:
     v_max: int = 255
 
 
+# cell_sample_rect のキャッシュ (2026-07-31)。
+# キー = (領域x, 領域y, 幅, 高さ, row, col)。盤面領域は P1/P2 とシフト版で数種、
+# セルは 78 個なので上限は数百エントリに収まる。
+_CELL_RECT_CACHE: dict[
+    tuple[int, int, int, int, int, int], tuple[int, int, int, int]
+] = {}
+
+
 @dataclass
 class BoardRegion:
     """
@@ -195,10 +203,20 @@ class BoardRegion:
         Note: この変更で学習用 patch 領域が変わるため、 既存 CNN model は
         新しい sample 領域で再 fine-tune する必要がある.
         """
+        # 高速化 (2026-07-31): 実測 278.8回/frame で 0.4ms。矩形は
+        # (領域の幾何, row, col) の純関数なのでキャッシュできる。
+        # BoardRegion は frozen でない dataclass なので、幾何を**キーに含める**
+        # (座標が書き換えられても誤ったキャッシュを引かない)。
+        key = (self.x, self.y, self.width, self.height, row, col)
+        hit = _CELL_RECT_CACHE.get(key)
+        if hit is not None:
+            return hit
         cx, cy = self.cell_center(row, col)
         half_w = max(1, int(self.cell_width * CELL_SAMPLE_RATIO / 2))
         half_h = max(1, int(self.cell_height * CELL_SAMPLE_RATIO / 2))
-        return cx - half_w, cy - half_h, cx + half_w, cy + half_h
+        rect = (cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+        _CELL_RECT_CACHE[key] = rect
+        return rect
 
 
 # ============================
