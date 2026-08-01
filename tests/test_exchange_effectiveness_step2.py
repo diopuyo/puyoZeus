@@ -10,12 +10,9 @@ import math
 import pytest
 
 from src.board import Board, COLOR_RED, COLOR_BLUE, DEATH_COL, DEATH_ROW
+from src.indicators_v2 import CHAIN_ANIM_PER_STEP_SEC
 from scripts.measure_exchange_dynamics import OppCoverageStatus
 from scripts.measure_exchange_effectiveness import (
-    LANDING_DELAY_ANCHOR_CHAIN_HIGH,
-    LANDING_DELAY_ANCHOR_CHAIN_LOW,
-    LANDING_DELAY_ANCHOR_SEC_HIGH,
-    LANDING_DELAY_ANCHOR_SEC_LOW,
     MAX_SUPPORTED_K_HANDS,
     ExchangeAdvantageLabel,
     classify_exchange_advantage,
@@ -31,12 +28,14 @@ from scripts.measure_exchange_effectiveness import (
 # ============================
 
 
-def test_landing_delay_matches_anchor_points_exactly() -> None:
-    """線形補間なので2つのアンカー点そのものでは実測値と完全一致する。"""
-    got_low = estimate_landing_delay_sec(LANDING_DELAY_ANCHOR_CHAIN_LOW)
-    got_high = estimate_landing_delay_sec(LANDING_DELAY_ANCHOR_CHAIN_HIGH)
-    assert got_low == pytest.approx(LANDING_DELAY_ANCHOR_SEC_LOW)
-    assert got_high == pytest.approx(LANDING_DELAY_ANCHOR_SEC_HIGH)
+def test_landing_delay_delegates_to_indicators_v2_formula() -> None:
+    """2026-08-01 Step0: 物差し一本化後は estimate_chain_anim_duration_sec
+
+    (CHAIN_ANIM_PER_STEP_SEC=0.4秒/連鎖) と完全一致する
+    (詳細な境界値テーブルは tests/test_landing_delay_unification.py 参照)。
+    """
+    for n in (1, 4, 8, 13):
+        assert estimate_landing_delay_sec(n) == pytest.approx(CHAIN_ANIM_PER_STEP_SEC * n)
 
 
 def test_landing_delay_non_negative_for_zero_or_negative_chain() -> None:
@@ -50,25 +49,28 @@ def test_available_hands_clamped_to_max_supported() -> None:
 
     対応上限) にクランプされる。
 
-    ⚠️ 正直な注記: 現行の着弾遅延モデル (2アンカー点) では、1連鎖でも
-    見積もり手数は約13手に達し、常にこの上限でクランプされる。つまり
-    現状の実装では「相手に残り何手あるか」の情報は事実上使われず、
-    常にK=4(対応関数がサポートする最大値)が使われる。これは
-    counter_reach_probability がK=1..4までしか対応していない (既存
-    expected_fire_power由来の設計) ことに起因する既知の制約であり、
-    Step3配線前にuser/アーキ判断が必要な論点として報告する。
+    2026-08-01 Step0 訂正: 旧2アンカー点モデルでは1連鎖でも約13手相当に
+    達し常に上限クランプだったが、物差し一本化 (CHAIN_ANIM_PER_STEP_SEC=
+    0.4) + floor(遅延/1手時間)+1 修正後は連鎖数が小さいうちは
+    クランプされず (例: 1連鎖=1手)、8連鎖・13連鎖では依然クランプされる
+    (詳細は tests/test_landing_delay_unification.py の境界値テーブル)。
     """
     hands_1 = estimate_available_hands(1)
     hands_8 = estimate_available_hands(8)
     hands_13 = estimate_available_hands(13)
-    assert hands_1 == MAX_SUPPORTED_K_HANDS
+    assert hands_1 < MAX_SUPPORTED_K_HANDS
     assert hands_8 == MAX_SUPPORTED_K_HANDS
     assert hands_13 == MAX_SUPPORTED_K_HANDS
 
 
-def test_available_hands_non_negative() -> None:
-    """連鎖数が負でも手数見積もりは0以上。"""
-    assert estimate_available_hands(-3) >= 0
+def test_available_hands_never_below_one() -> None:
+    """2026-08-01 Step0: +1 修正 (受け側の着地1手分) により、
+
+    連鎖数が0・負でも見積もり手数は必ず1以上になる
+    (0手=応手する暇がない、という旧仕様は撤廃)。
+    """
+    assert estimate_available_hands(-3) >= 1
+    assert estimate_available_hands(0) >= 1
 
 
 # ============================

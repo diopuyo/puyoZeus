@@ -1143,6 +1143,32 @@ def chain_completion_from_formula(
     return formula_appear_sec + per_step_sec * n
 
 
+# ============================
+# 着弾遅延の物差し一本化 (2026-08-01、Step0)
+# ============================
+#
+# 背景: 着弾遅延(連鎖アニメ所要秒数)の定数系が3つ併存していた
+# (TIME_PER_CHAIN_SEC=0.30 の過小評価版 / measure_exchange_effectiveness.py の
+# 2アンカー点線形補間 n=2 の暫定値 / CHAIN_ANIM_PER_STEP_SEC=0.4 の
+# 23動画418イベント実測ベース、検証件数最多)。本関数は 3 つ目の
+# CHAIN_ANIM_PER_STEP_SEC に一本化する窓口として追加する (user/アーキ確定、
+# 2026-08-01)。既存 chain_to_time / chain_completion_from_formula は
+# 用途が異なる別ロジックのため変更しない (backwards compat)。
+def estimate_chain_anim_duration_sec(chain_count: float) -> float:
+    """連鎖数から連鎖アニメ(消去演出)所要秒数を推定する (物差し一本化版)。
+
+    CHAIN_ANIM_PER_STEP_SEC (=0.4秒/連鎖、23動画418イベント実測ベース) を
+    使う。連鎖数が0以下の場合は0.0にクランプする。
+
+    Args:
+        chain_count: 連鎖数 (0以下は0として扱う)。
+
+    Returns:
+        推定所要秒数 (float, >= 0)。
+    """
+    return max(0.0, CHAIN_ANIM_PER_STEP_SEC * chain_count)
+
+
 def honsen_output(
     board: Board,
     simulator: ChainSimulator | None = None,
@@ -3601,6 +3627,8 @@ __all__ = [
     # VII-3 連鎖完了時刻 (掛け算表示ベース、2026-07-29 追加)
     "chain_completion_from_formula",
     "CHAIN_ANIM_PER_STEP_SEC",
+    # VII-4 着弾遅延の物差し一本化 (2026-08-01 Step0)
+    "estimate_chain_anim_duration_sec",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
