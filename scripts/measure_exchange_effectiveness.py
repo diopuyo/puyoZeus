@@ -36,6 +36,7 @@ from src.indicators_v2 import (
     CounterReachResult,
     counter_reach_probability,
     counter_reach_probability_fast,
+    estimate_chain_anim_duration_sec,
 )
 from src.indicators_v2 import SEC_PER_HAND as EXISTING_SEC_PER_HAND
 from scripts.measure_exchange_dynamics import (
@@ -46,28 +47,14 @@ from scripts.measure_exchange_dynamics import (
 )
 
 # ============================
-# 着弾遅延 -> 相手の手数見積もり (要再計測、独立定数)
+# 着弾遅延 -> 相手の手数見積もり (物差し一本化、2026-08-01 Step0)
 # ============================
 #
-# memory project_exchange_measurement_foundation_2026-07-22 の実測2点
-# (8連鎖=14.5秒, 13連鎖=18秒、n極小=20件で確定不可だが唯一の実測値) から
-# 線形補間する。既存 TIME_PER_CHAIN_SEC(0.30秒/連鎖、大幅な過小評価と判明
-# 済み) とは無関係の専用定数として分離する (どちらか一方の再検証が他方に
-# 影響しないようにするため)。
-
-LANDING_DELAY_ANCHOR_CHAIN_LOW: int = 8
-LANDING_DELAY_ANCHOR_SEC_LOW: float = 14.5
-LANDING_DELAY_ANCHOR_CHAIN_HIGH: int = 13
-LANDING_DELAY_ANCHOR_SEC_HIGH: float = 18.0
-
-LANDING_DELAY_SLOPE_SEC_PER_CHAIN: float = (
-    (LANDING_DELAY_ANCHOR_SEC_HIGH - LANDING_DELAY_ANCHOR_SEC_LOW)
-    / (LANDING_DELAY_ANCHOR_CHAIN_HIGH - LANDING_DELAY_ANCHOR_CHAIN_LOW)
-)
-LANDING_DELAY_INTERCEPT_SEC: float = (
-    LANDING_DELAY_ANCHOR_SEC_LOW
-    - LANDING_DELAY_SLOPE_SEC_PER_CHAIN * LANDING_DELAY_ANCHOR_CHAIN_LOW
-)
+# 旧実装は本モジュール専用の2アンカー点線形補間 (memory
+# project_exchange_measurement_foundation_2026-07-22、n=2の暫定値) を
+# 使っていたが、23動画418イベント実測ベースで最も検証件数が多い
+# src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+# =0.4秒/連鎖) に一本化した (2026-08-01、user/アーキ確定)。
 
 # counter_reach_probability系がサポートするK水準の上限 (src/indicators_v2.py
 # EXPECTED_FIRE_K_LEVELS と同じ 1..4)。着弾遅延から逆算した手数がこれを
@@ -76,29 +63,30 @@ MAX_SUPPORTED_K_HANDS: int = 4
 
 
 def estimate_landing_delay_sec(chain_count: int) -> float:
-    """連鎖数から着弾遅延秒数を推定する (2アンカー点の線形補間、要再計測)。
+    """連鎖数から着弾遅延秒数を推定する (物差し一本化版)。
 
-    ⚠️ n極小 (実測20件) の粗い推定であることに注意。連鎖数が負・0の場合は
-    0.0 にクランプする。
+    src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+    =0.4秒/連鎖、23動画418イベント実測ベース) に委譲する。連鎖数が負・0の
+    場合は0.0にクランプする (委譲先の関数が保証)。
     """
-    delay = (
-        LANDING_DELAY_INTERCEPT_SEC
-        + LANDING_DELAY_SLOPE_SEC_PER_CHAIN * max(0, chain_count)
-    )
-    return max(0.0, delay)
+    return estimate_chain_anim_duration_sec(float(chain_count))
 
 
 def estimate_available_hands(chain_count: int) -> int:
-    """着弾までに相手が打てる手数 (K) を概算する (SEC_PER_HAND換算、切り捨て)。
+    """着弾までに相手が打てる手数 (K) を概算する。
 
-    既存 SEC_PER_HAND (実測中央値、src/indicators_v2.py) をそのまま使う
-    (新規のマジックナンバーを増やさない)。1未満に切り捨たっても最低1手は
-    打てると仮定せず、0 (=応手する暇がない) を許容する。
-    counter_reach_probability の対応レンジ (K=1..4) にクランプする。
+    user伝授 (reference_ojama_landing_gated_by_placement_2026-07-29):
+    「おじゃまは連鎖完了後に受け側のツモが着地した時に降る」ため、
+    floor(連鎖アニメ時間 ÷ 1手時間) + 1 手 (受け側の着地1手分) が正しい
+    見積もりとなる。+1 により最低手数は常に1以上になる
+    (旧実装の「0手=応手する暇がない」を許容する設計は、この修正で
+    到達しなくなる: delay_sec>=0 なら floor(delay/hand)>=0 なので
+    +1 後は必ず>=1)。
+    counter_reach_probability の対応レンジ (K=1..4) に上限クランプする。
     """
     delay_sec = estimate_landing_delay_sec(chain_count)
-    hands = int(delay_sec // EXISTING_SEC_PER_HAND)
-    return max(0, min(MAX_SUPPORTED_K_HANDS, hands))
+    hands = int(delay_sec // EXISTING_SEC_PER_HAND) + 1
+    return min(MAX_SUPPORTED_K_HANDS, hands)
 
 
 # ============================
@@ -223,13 +211,14 @@ def judge_exchange_effectiveness(
         )
 
     k_hands = estimate_available_hands(chain_count)
-    if k_hands <= 0:
-        # 相手が1手も打てない見込み (着弾が速すぎる) = 応手不能に準ずる。
-        return EffectivenessJudgement(
-            reach_probability=0.0, is_effective=True,
-            advantage_label=ExchangeAdvantageLabel.ADVANTAGE,
-            coverage_status=coverage_status,
-        )
+    # 2026-08-01 Step0: estimate_available_hands は
+    # floor(遅延/1手時間)+1 のため必ず 1 以上を返す (受け側の着地1手分を
+    # 必ず含むため)。旧実装は k_hands<=0 (=応手する暇がない) を許容する
+    # 分岐を持っていたが、+1 修正後はこの分岐に到達しない。dead code を
+    # 放置せず assert で到達不能を明示する (回帰テスト:
+    # tests/test_landing_delay_unification.py
+    # test_k_hands_never_reaches_zero_branch)。
+    assert k_hands >= 1, "estimate_available_hands は常に1以上を返す設計 (Step0)"
 
     fn = counter_reach_probability_fast if mode == "fast" else counter_reach_probability
     result_one: CounterReachResult = fn(

@@ -49,7 +49,7 @@ from src.indicators_v2 import (  # noqa: E402
     max_column_height,
     potential_fire_power,
     second_chain_potential,
-    chain_to_time,
+    estimate_chain_anim_duration_sec,
 )
 from src.scoring import score_to_ojama  # noqa: E402
 
@@ -59,7 +59,16 @@ from src.scoring import score_to_ojama  # noqa: E402
 NPZ_DIR = PROJ_ROOT / "data" / "indicators_v2" / "boards_lean_fixed"
 OUTPUT_PATH = PROJ_ROOT / "data" / "indicators_v2" / "exchange_labels.csv"
 
+# score OCR が完全破綻し発火検出(スコア増分ベース)が信用できない動画
+# (memory project_video_difficulty_3broken_2026-07-29 + c69 追加確認、
+#  build_board_pairs_lean.py の won=NaN 全滅動画と一致)。
+# --exclude-videos 省略時はこの定数を使わず全動画処理する(既定=旧挙動と完全一致)。
+SCORE_OCR_BROKEN_VIDEOS: frozenset[str] = frozenset({"c26", "c30", "c58", "c69"})
+
 # 発火検出: 短窓でのスコア増分閾値
+# TODO(2026-08-01 Step0): scripts/measure_exchange_dynamics.py 側の同種閾値
+# (=40) と不一致 (本ファイルは80)。Step0では意図的に触らない
+# (user/アーキ判断待ち、統一するかは別途要判断)。
 SCORE_DELTA_FIRE: int = 80
 
 # 返し窓: score=-1 補間なし。連鎖数不明時のデフォルト秒数
@@ -79,7 +88,8 @@ DEATH_MARGIN_DANGER_THRESHOLD: float = 0.2
 RETURN_FACTOR: float = 0.8
 
 # taiou_success (対応成功) 判定用定数
-# T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で定義
+# T_guard = estimate_chain_anim_duration_sec(攻撃側連鎖数) + SEC_PER_HAND で定義
+# (2026-08-01 Step0: 旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 から一本化)
 # SEC_PER_HAND は indicators_v2 から import するが、念のため本スクリプト内にも定義
 _SEC_PER_HAND_LOCAL: float = 0.733  # indicators_v2.SEC_PER_HAND と同値(実測中央値)
 # T_guard 終端から何秒後まで「埋まっていないか」を確認する窓(秒)
@@ -359,12 +369,14 @@ def _compute_returned_competitive(
 ) -> int:
     """A-1: 競合返し判定。
 
-    相手が返し窓 W = chain_to_time(発火側連鎖数) 内に発火し、
+    相手が返し窓 W = estimate_chain_anim_duration_sec(発火側連鎖数) 内に発火し、
     かつ 返しお邪魔 >= 発火側お邪魔 × RETURN_FACTOR を満たすか。
+    (2026-08-01 Step0: 旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 から一本化)
 
     - お邪魔換算は標準レート固定(マージン補正バグ回避)。
     - 発火側の連鎖数は current_max_chain.raw で近似(呼び出し元で渡す)。
-    - return_window_sec = chain_to_time(approx_chains) が呼び出し元で計算済み。
+    - return_window_sec = estimate_chain_anim_duration_sec(approx_chains) が
+      呼び出し元で計算済み。
     """
     fire_ojama = _delta_score_to_ojama_count(fire_delta_score)
 
@@ -492,7 +504,10 @@ def _compute_taiou_success(
         (taiou_success, survived) の 2値タプル。
     """
     from src.indicators_v2 import SEC_PER_HAND
-    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+    # 2026-08-01 Step0: 着弾遅延は estimate_chain_anim_duration_sec
+    # (CHAIN_ANIM_PER_STEP_SEC=0.4秒/連鎖、23動画418イベント実測ベース) に
+    # 一本化 (旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 は過小評価と判明済み)。
+    t_guard = estimate_chain_anim_duration_sec(max(1.0, approx_chains)) + SEC_PER_HAND
     fired = _opp_fired_in_tguard(fire_t, t_guard, opp_t_sec, opp_score)
     safe = _opp_is_safe_after_tguard(fire_t, t_guard, opp_boards)
     taiou_success = int(fired and safe)
@@ -523,7 +538,10 @@ def _compute_net_ojama_after(
         正味お邪魔個数(float)。攻撃−相殺。負値=相殺超過。
     """
     from src.indicators_v2 import SEC_PER_HAND
-    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+    # 2026-08-01 Step0: 着弾遅延は estimate_chain_anim_duration_sec
+    # (CHAIN_ANIM_PER_STEP_SEC=0.4秒/連鎖、23動画418イベント実測ベース) に
+    # 一本化 (旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 は過小評価と判明済み)。
+    t_guard = estimate_chain_anim_duration_sec(max(1.0, approx_chains)) + SEC_PER_HAND
 
     attack_ojama = _delta_to_ojama_standard(fire_delta_score)
 
@@ -631,8 +649,11 @@ def _process_game(
         )
 
         # 返し窓: 発火連鎖数から推定(current_max_chain を近似として使用)
+        # 2026-08-01 Step0: chain_to_time (TIME_PER_CHAIN_SEC=0.30、過小評価
+        # 判明済み) から estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+        # =0.4、23動画418イベント実測ベース) に一本化。
         approx_chains = max(1.0, fire_feats["current_max_chain"])
-        return_window = chain_to_time(approx_chains)
+        return_window = estimate_chain_anim_duration_sec(approx_chains)
         if return_window <= 0:
             return_window = RETURN_WINDOW_DEFAULT_SEC
 
@@ -653,7 +674,8 @@ def _process_game(
         opp_buried = _compute_opp_buried(t_fire, opp_boards, sim)
 
         # user 確定定義: taiou_success (対応成功) ラベル
-        # T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で猶予時間を計算
+        # T_guard = estimate_chain_anim_duration_sec(攻撃側連鎖数) + SEC_PER_HAND
+        # で猶予時間を計算 (2026-08-01 Step0 一本化)
         taiou_success, survived = _compute_taiou_success(
             t_fire, approx_chains,
             opp_rec.t_sec, opp_rec.score,
@@ -730,6 +752,14 @@ def _parse_args() -> "argparse.Namespace":
         "--output", type=Path, default=OUTPUT_PATH,
         help=f"出力 CSV パス (既定: {OUTPUT_PATH})",
     )
+    parser.add_argument(
+        "--exclude-videos", type=str, default="",
+        help=(
+            "除外する動画 ID をカンマ区切りで指定 (例: c26,c30,c58,c69)。"
+            " 既定は空文字列 = 除外なし(旧挙動と完全一致)。"
+            f" score OCR 破綻動画の定数は SCORE_OCR_BROKEN_VIDEOS を参照。"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -739,7 +769,15 @@ def main() -> None:
     args = _parse_args()
     npz_dir: Path = args.npz_dir
     output_path: Path = args.output
+    exclude_ids: set[str] = {
+        v.strip() for v in args.exclude_videos.split(",") if v.strip()
+    }
     npz_paths = sorted(npz_dir.glob("c*.npz"))
+    if exclude_ids:
+        before = len(npz_paths)
+        npz_paths = [p for p in npz_paths if p.stem not in exclude_ids]
+        print(f"[INFO] --exclude-videos で {before - len(npz_paths)} 本除外: "
+              f"{sorted(exclude_ids)}")
     if not npz_paths:
         print(f"[ERROR] npz が見つかりません: {npz_dir}", file=sys.stderr)
         sys.exit(1)
