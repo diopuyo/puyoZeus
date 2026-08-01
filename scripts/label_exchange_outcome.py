@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -70,6 +71,15 @@ SCORE_OCR_BROKEN_VIDEOS: frozenset[str] = frozenset({"c26", "c30", "c58", "c69"}
 # (=40) と不一致 (本ファイルは80)。Step0では意図的に触らない
 # (user/アーキ判断待ち、統一するかは別途要判断)。
 SCORE_DELTA_FIRE: int = 80
+
+# 発火イベント分裂統合 (測定器事故5件目、2026-08-02 main検品で確定):
+# 連鎖アニメ中もスコアOCRが部分合計を拾える瞬間があり、1つの連鎖が
+# _detect_fire_events で複数イベントに分裂する (実データ c27.npz 1P game12:
+# 1269.2秒score=27590の"326個イベント"と1271.3秒score=35274の"109個イベント"が
+# 実際は同一9連鎖、実画面確認済み)。
+# 副信号: 連鎖終了→次の実連鎖には設置1手+連鎖アニメが必要で物理的に
+# ≈2.5秒以上かかる (user/アーキ確定)。この秒数以下の隣接検出は同一連鎖の疑い濃厚。
+FIRE_EVENT_MERGE_GAP_SEC: float = 2.5
 
 # 返し窓: score=-1 補間なし。連鎖数不明時のデフォルト秒数
 RETURN_WINDOW_DEFAULT_SEC: float = 6.0
@@ -199,6 +209,70 @@ def _detect_fire_events(
                 fire_indices.append(i)
         prev_score = s
     return fire_indices
+
+
+@dataclass(frozen=True)
+class FireEventCluster:
+    """分裂した発火検出インデックスを1連鎖に統合したクラスタ (測定器事故5件目対策)。
+
+    Attributes:
+        fire_index: クラスタ最後の検出インデックス (連鎖終了時点、t_fire・opp側
+            突合の基準に使う)。
+        board_ref_index: クラスタ先頭の検出インデックスの1つ前 (真の連鎖開始前
+            盤面、連鎖中の中間/凍結スナップショットではない点に注意)。
+        baseline_score: クラスタ先頭直前の有効スコア (部分加算を合算した
+            delta_score 計算の基準値)。
+    """
+    fire_index: int
+    board_ref_index: int
+    baseline_score: int
+
+
+def _last_valid_score_before(score: np.ndarray, index: int) -> int:
+    """index より前で最後に有効 (>=0) だったスコアを返す (無ければ-1)。"""
+    for j in range(index - 1, -1, -1):
+        if score[j] >= 0:
+            return int(score[j])
+    return -1
+
+
+def _merge_fire_event_clusters(
+    t_sec: np.ndarray,
+    score: np.ndarray,
+    grids: np.ndarray,
+    fire_indices: list[int],
+) -> list[FireEventCluster]:
+    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策)。
+
+    2つの信号のいずれかを満たせば直前の検出と同一クラスタとする:
+      1. 主信号 (盤面凍結): 連鎖中は state machine が盤面を凍結するため、
+         隣接する検出間で grids が完全一致するなら同一連鎖とみなす。
+      2. 副信号 (短ギャップ): 隣接検出間の時間差が FIRE_EVENT_MERGE_GAP_SEC
+         以下なら (連鎖終了→次の実連鎖の物理的最短所要時間を下回るため)
+         同一連鎖とみなす (主信号が抜けるケース [連鎖後の新STABLE盤面に
+         既に更新済み] の保険)。
+    """
+    if not fire_indices:
+        return []
+    clusters: list[list[int]] = [[fire_indices[0]]]
+    for idx in fire_indices[1:]:
+        prev_idx = clusters[-1][-1]
+        same_grid = np.array_equal(grids[prev_idx], grids[idx])
+        gap_sec = float(t_sec[idx] - t_sec[prev_idx])
+        if same_grid or gap_sec <= FIRE_EVENT_MERGE_GAP_SEC:
+            clusters[-1].append(idx)
+        else:
+            clusters.append([idx])
+
+    result: list[FireEventCluster] = []
+    for cluster in clusters:
+        first_idx, last_idx = cluster[0], cluster[-1]
+        result.append(FireEventCluster(
+            fire_index=last_idx,
+            board_ref_index=max(0, first_idx - 1),
+            baseline_score=_last_valid_score_before(score, first_idx),
+        ))
+    return result
 
 
 def _board_from_grid(grid: np.ndarray) -> Board:
@@ -586,9 +660,15 @@ def _process_game(
         fire_rec = game_2p
         opp_rec = game_1p
 
-    fire_events = _detect_fire_events(fire_rec.t_sec, fire_rec.score)
-    if not fire_events:
+    fire_indices = _detect_fire_events(fire_rec.t_sec, fire_rec.score)
+    if not fire_indices:
         return []
+    # 測定器事故5件目対策: 連鎖アニメ中の分裂検出を連鎖単位に統合する
+    # (_detect_fire_events 自体は他スクリプト [proto_net_threat.py 等] からも
+    # 呼ばれる共有関数のため無改変、統合は本関数内でのみ行う)。
+    fire_clusters = _merge_fire_event_clusters(
+        fire_rec.t_sec, fire_rec.score, fire_rec.grids, fire_indices,
+    )
 
     # 試合開始時刻の近似 = この (video_id, game_idx, fire_side) で
     # 記録された最初のフレーム時刻(マージンタイム計算の基準点、バグ修正)
@@ -603,25 +683,21 @@ def _process_game(
     rows: list[dict] = []
     prev_fire_score = -1
 
-    for fi in fire_events:
+    for cluster in fire_clusters:
+        fi = cluster.fire_index
         t_fire = float(fire_rec.t_sec[fi])
         s_fire = int(fire_rec.score[fi])
-        # ΔscoreはSTABLE前の有効scoreとの差
-        # 直前有効score
-        prev_valid = -1
-        for j in range(fi - 1, -1, -1):
-            if fire_rec.score[j] >= 0:
-                prev_valid = int(fire_rec.score[j])
-                break
+        # Δscoreはクラスタ先頭直前の有効scoreとの差 (分裂した部分加算の合算)
+        prev_valid = cluster.baseline_score
         if prev_valid < 0:
             continue
         delta_score = s_fire - prev_valid
         if delta_score < SCORE_DELTA_FIRE:
             continue
 
-        # 発火直前盤面
-        fi_board_idx = max(0, fi - 1)
-        fire_board = _board_from_grid(fire_rec.grids[fi_board_idx])
+        # 発火直前盤面 (クラスタ先頭直前=真の連鎖開始前盤面。連鎖終了時点
+        # [fi] の1つ前は連鎖中の中間/凍結スナップショットの場合があり不適)
+        fire_board = _board_from_grid(fire_rec.grids[cluster.board_ref_index])
 
         # 相手の発火直前盤面(時刻が最も近いもの)
         opp_t_arr = np.array([x[0] for x in opp_boards])
