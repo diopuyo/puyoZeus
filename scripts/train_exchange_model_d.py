@@ -137,8 +137,16 @@ def get_indicator_base_names(df: pd.DataFrame) -> list[str]:
 
 def build_feature_matrix(
     df: pd.DataFrame, indicator_bases: list[str],
+    extra_feature_cols: list[str] | None = None,
 ) -> tuple[np.ndarray, list[str]]:
-    """fire_/opp_/diff_ 3つ組 + phase one-hot + fire_side one-hot の特徴量行列を作る。"""
+    """fire_/opp_/diff_ 3つ組 + phase one-hot + fire_side one-hot の特徴量行列を作る。
+
+    Args:
+        extra_feature_cols: 追加でそのまま特徴量に含める列名 (任意、既定 None)。
+            三つ巴比較のスタッキング版 (併用) が sim_* 3列を追加するために
+            後方互換 (optional 引数のみ) で拡張したもの。既存呼び出し元
+            (train_exchange_model_d.main 等) は None のまま呼ぶため挙動は不変。
+    """
     cols: list[str] = []
     parts: list[np.ndarray] = []
     for prefix in ("fire_", "opp_", "diff_"):
@@ -152,6 +160,9 @@ def build_feature_matrix(
     for side in ("1P", "2P"):
         cols.append(f"fire_side_{side}")
         parts.append((df["fire_side"].values == side).astype(float))
+    for col in extra_feature_cols or []:
+        cols.append(col)
+        parts.append(df[col].astype(float).values)
     X = np.column_stack(parts)
     return X, cols
 
@@ -313,7 +324,7 @@ def main() -> None:
     )
     compare_predictors(df, [pred_d], out_dir)
     print(f"\n出力先: {out_dir}")
-    print("=== 完了 (数値は暫定、旧データでのスモーク実行) ===")
+    print(f"=== 完了 (入力: {args.labels}) ===")
 
 
 if __name__ == "__main__":
