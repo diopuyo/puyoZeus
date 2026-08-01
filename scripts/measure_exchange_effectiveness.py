@@ -240,7 +240,7 @@ def judge_exchange_effectiveness(
 
 
 # ============================
-# Step5: 修正シミュの評価用関数 (2026-08-01)
+# Step5: 修正シミュの評価用関数 (2026-08-01、2026-08-02符号バグ修正)
 # ============================
 #
 # 既存資産の組み替えのみ (新規ロジック最小): estimate_available_hands
@@ -249,6 +249,13 @@ def judge_exchange_effectiveness(
 # ojama_damage (折れ点12個/18個の非線形構造、user伝授の暫定実装) に通して
 # 最終ダメージスコアを返す。較正定数の再フィットは行わない
 # (CHAIN_ANIM_PER_STEP_SEC=0.4 を外部較正値としてそのまま流用)。
+#
+# ⚠️ 2026-08-02 バグ修正 (main精査済み・実バグ確定):
+# net_expected は相殺ルール上「相手側に着弾する」正味おじゃまなのに、旧実装は
+# ojama_damage(attacker_board_after_fire, ...) と**攻撃側自身の盤面**で威力評価
+# していた。user伝授ドメインルール (memory reference_ojama_damage_nonlinear:
+# 威力は受け側の残り容量に依存) に反するため、ojama_damage(opp_board, ...) に
+# 修正した (受け側=相手の盤面で評価)。
 
 
 def estimate_expected_net_damage(
@@ -270,8 +277,11 @@ def estimate_expected_net_damage(
          raw (お邪魔換算の平均ツモ期待火力) を期待反撃量とする。
       4. net_expected = attacker_ojama_sent − 期待反撃量 (負値は0にクランプ、
          「相手が攻撃側より多く返す見込み」を負のダメージにしない)。
-      5. ojama_damage(attacker_board_after_fire, net_expected) のスコア
-         (0〜1、折れ点12個/18個の非線形構造は再利用・再実装しない) を返す。
+      5. ojama_damage(opp_board, net_expected) のスコア (0〜1、折れ点
+         12個/18個の非線形構造は再利用・再実装しない) を返す。net_expected
+         は相手側に着弾する正味おじゃまのため、受け側=相手の盤面
+         (opp_board) で評価する (2026-08-02 修正、旧実装は attacker_board_
+         after_fire で評価しておりバグだった)。
 
     ⚠️ 正直な注記: mode="fast" は counter_reach_probability_fast のような
     高速版が expected_fire_power にはまだ存在しない (2026-08-01時点)。
@@ -282,15 +292,24 @@ def estimate_expected_net_damage(
     Args:
         attacker_ojama_sent: 攻撃側が実際に送ったお邪魔量 (個数)。
         opp_board: 相手側の STABLE 確定盤面 (発火時点、破壊しない)。
+            net_expected の ojama_damage 評価にもこの盤面を使う
+            (2026-08-02修正、受け側=相手基準に統一)。
         opp_coverage_status: Step1 の OppCoverageStatus。
         attacker_chain_count: 攻撃側の連鎖数 (着弾遅延見積もり用)。
-        attacker_board_after_fire: 攻撃側の発火直後(または発火直前)盤面
-            (おじゃまを受ける側=攻撃側自身が次に受ける想定で評価する)。
+        attacker_board_after_fire: 現在未使用 (2026-08-02のバグ修正で
+            ojama_damage の評価基準を opp_board に変更したため)。
+            backwards compat のため引数は削除せず保持する (既存呼び出し元
+            scripts/augment_exchange_labels_with_sim.py 等のシグネチャを
+            壊さないため)。
         elapsed_sec: 試合相対経過秒 (マージンタイム換算用)。
         mode: "precise" または "fast" (現状は挙動同一、上記注記参照)。
 
     Returns:
-        float: 正味ダメージスコア (0〜1、大きいほど攻撃側に不利)。
+        float: 正味ダメージスコア (0〜1、大きいほど攻撃側に有利
+            [相手が受ける期待正味ダメージが大きいほど攻撃側に有利]。
+            2026-08-02修正: 旧docstringは「大きいほど攻撃側に不利」と
+            誤記していた、実装意図 [Step5=期待正味ダメージ=攻撃の価値]
+            に照らして訂正)。
     """
     k_hands = estimate_available_hands(attacker_chain_count)
     if opp_coverage_status == OppCoverageStatus.OPP_CHAINING:
@@ -301,5 +320,5 @@ def estimate_expected_net_damage(
         )
         expected_counter_ojama = result.values[k_hands].raw
     net_expected = max(0.0, attacker_ojama_sent - expected_counter_ojama)
-    damage = ojama_damage(attacker_board_after_fire, ojama_count=net_expected)
+    damage = ojama_damage(opp_board, ojama_count=net_expected)
     return float(damage.score)
