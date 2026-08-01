@@ -37,6 +37,8 @@ from src.indicators_v2 import (
     counter_reach_probability,
     counter_reach_probability_fast,
     estimate_chain_anim_duration_sec,
+    expected_fire_power,
+    ojama_damage,
 )
 from src.indicators_v2 import SEC_PER_HAND as EXISTING_SEC_PER_HAND
 from scripts.measure_exchange_dynamics import (
@@ -235,3 +237,69 @@ def judge_exchange_effectiveness(
         advantage_label=classify_exchange_advantage(prob_one, prob_two),
         coverage_status=coverage_status,
     )
+
+
+# ============================
+# Step5: 修正シミュの評価用関数 (2026-08-01)
+# ============================
+#
+# 既存資産の組み替えのみ (新規ロジック最小): estimate_available_hands
+# (Step0で+1修正済み) で相手の残り手数を見積もり、expected_fire_power で
+# 相手の期待反撃量を求め、攻撃側が送ったお邪魔から差し引いた正味を
+# ojama_damage (折れ点12個/18個の非線形構造、user伝授の暫定実装) に通して
+# 最終ダメージスコアを返す。較正定数の再フィットは行わない
+# (CHAIN_ANIM_PER_STEP_SEC=0.4 を外部較正値としてそのまま流用)。
+
+
+def estimate_expected_net_damage(
+    attacker_ojama_sent: float,
+    opp_board: Board,
+    opp_coverage_status: OppCoverageStatus,
+    attacker_chain_count: int,
+    attacker_board_after_fire: Board,
+    elapsed_sec: float = 0.0,
+    mode: str = "precise",
+) -> float:
+    """発火1件分の「相手の反撃を差し引いた正味ダメージ」スコアを計算する。
+
+    手順 (既存資産の組み替えのみ):
+      1. k_hands = estimate_available_hands(attacker_chain_count)
+         (着弾までに相手が打てる手数、Step0で+1修正済み=常に1以上)。
+      2. 相手が OPP_CHAINING (連鎖中=応手不能) なら期待反撃量は0固定。
+      3. それ以外は expected_fire_power(opp_board, k_levels=(k_hands,)) の
+         raw (お邪魔換算の平均ツモ期待火力) を期待反撃量とする。
+      4. net_expected = attacker_ojama_sent − 期待反撃量 (負値は0にクランプ、
+         「相手が攻撃側より多く返す見込み」を負のダメージにしない)。
+      5. ojama_damage(attacker_board_after_fire, net_expected) のスコア
+         (0〜1、折れ点12個/18個の非線形構造は再利用・再実装しない) を返す。
+
+    ⚠️ 正直な注記: mode="fast" は counter_reach_probability_fast のような
+    高速版が expected_fire_power にはまだ存在しない (2026-08-01時点)。
+    interface 統一 (project_dual_mode_indicator_design_2026-07-22) のため
+    引数は受け取るが、現状は "precise"/"fast" どちらでも同じ計算になる
+    (将来 expected_fire_power_fast が実装されたら差し替える窓口として残す)。
+
+    Args:
+        attacker_ojama_sent: 攻撃側が実際に送ったお邪魔量 (個数)。
+        opp_board: 相手側の STABLE 確定盤面 (発火時点、破壊しない)。
+        opp_coverage_status: Step1 の OppCoverageStatus。
+        attacker_chain_count: 攻撃側の連鎖数 (着弾遅延見積もり用)。
+        attacker_board_after_fire: 攻撃側の発火直後(または発火直前)盤面
+            (おじゃまを受ける側=攻撃側自身が次に受ける想定で評価する)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム換算用)。
+        mode: "precise" または "fast" (現状は挙動同一、上記注記参照)。
+
+    Returns:
+        float: 正味ダメージスコア (0〜1、大きいほど攻撃側に不利)。
+    """
+    k_hands = estimate_available_hands(attacker_chain_count)
+    if opp_coverage_status == OppCoverageStatus.OPP_CHAINING:
+        expected_counter_ojama = 0.0
+    else:
+        result = expected_fire_power(
+            opp_board, k_levels=(k_hands,), elapsed_sec=elapsed_sec,
+        )
+        expected_counter_ojama = result.values[k_hands].raw
+    net_expected = max(0.0, attacker_ojama_sent - expected_counter_ojama)
+    damage = ojama_damage(attacker_board_after_fire, ojama_count=net_expected)
+    return float(damage.score)
