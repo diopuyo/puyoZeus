@@ -30,9 +30,22 @@ attacker_chain_count は CSV 列 approx_fire_chains をそのまま使う
 重い指標 (expected_fire_power の K=3,4 モンテカルロ) を1行ごとに呼ぶため、
 イベント数が多い CSV では長時間かかる (行数に比例)。10分おき進捗ログ
 (feedback_progress_notify_10min 準拠) を出す。
+
+## 並列化 (--workers、2026-08-02 追加)
+23,716件で423分かかり律速だったため、video_id単位で並列化した (feedback_
+parallelize_evals_by_default)。既定 --workers=1 は旧実装と完全に同じコード
+パス (_run_sequential) を通るため挙動不変。--workers>1 では動画をイベント
+件数降順に貪欲(LPT)割当し、multiprocessing.Pool で並列処理する。
+
+expected_fire_power の K=3,4 モンテカルロは盤面内容から決定論的に導出した
+シードを使う (乱数不使用の厳密解ではなくMCだが、同一盤面には常に同一結果、
+壁時計やプロセスIDに依存しない)。そのため --workers=1 と --workers>1 の
+出力は理論上ビット一致する (行の計算順序・プロセスに依存する状態を持たない)。
 """
 from __future__ import annotations
 
+import multiprocessing
+import os
 import sys
 import time
 import warnings
@@ -76,6 +89,23 @@ PROGRESS_LOG_EVERY_SEC: float = 600.0
 # sim_* 列が計算不能 (delta_score 欠損等) だった場合の埋め値
 SIM_NAN: float = float("nan")
 
+# ============================
+# 並列化 (--workers、2026-08-02 追加)
+# ============================
+# 既定=1 (逐次処理、旧挙動と完全一致)。行単位の計算は独立だが npz キャッシュ
+# (_VideoCache) を worker ごとに開き直すコストがあるため video_id 単位で分割する。
+DEFAULT_WORKERS: int = 1
+
+# worker内スレッド数制限 (feedback_subprocess_env_propagation: 環境変数は
+# {**os.environ, ...} でマージし他の変数を消さない。project_collect_indicators_v2_perf
+# の「cv2.setNumThreads(1)×N並列」と同じ思想=1プロセス1コアでBLAS等の
+# オーバーサブスクリプションを防ぐ)。
+WORKER_THREAD_ENV_VARS: tuple[str, ...] = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+WORKER_THREAD_LIMIT: str = "1"
+
+# 進捗をカウンタに反映するバッチサイズ (行ごとにロックを取ると重いためまとめる)
+PROGRESS_REPORT_BATCH: int = 20
+
 
 class _VideoCache:
     """1動画分の npz 由来データをまとめて保持する (side別 NpzRecord + Board化済み配列)。"""
@@ -114,6 +144,21 @@ def _video_id_to_npz_stem(video_id: str) -> str:
     if video_id.startswith(_VIDEO_ID_NPZ_PREFIX):
         return video_id[len(_VIDEO_ID_NPZ_PREFIX):]
     return video_id
+
+
+def _load_video_cache(video_id: str, npz_dir: Path) -> "_VideoCache | None":
+    """1動画分の npz を読み込み _VideoCache を構築する (無ければ None + 警告ログ)。
+
+    逐次実行 (--workers=1) と並列実行 (--workers>1) の両方から呼ばれる共通処理
+    (元は main() 内に直書きされていたロジックをそのまま抽出、挙動は不変)。
+    """
+    npz_stem = _video_id_to_npz_stem(str(video_id))
+    npz_path = npz_dir / f"{npz_stem}.npz"
+    if not npz_path.exists():
+        print(f"[WARN] npz が見つかりません: {npz_path} (video_id={video_id} 全行NaN)",
+              file=sys.stderr)
+        return None
+    return _VideoCache(_load_npz(npz_path))
 
 
 def _compute_sim_columns_for_row(
@@ -190,6 +235,186 @@ def _compute_sim_columns_for_row(
     return float(k_hands), expected_counter_ojama, damage_score
 
 
+# ============================
+# 並列化: video_id単位の貪欲バランス割当 (--workers>1)
+# ============================
+
+def balance_videos_by_event_count(
+    video_counts: "dict[str, int]", n_workers: int,
+) -> list[list[str]]:
+    """動画をイベント件数降順に貪欲(LPT: Longest Processing Time)割当する。
+
+    件数が最も多い動画から順に、その時点で合計件数が最小の worker に割り当てる
+    ことで worker 間の負荷 (行数) をバランスさせる。n_workers 個の video_id
+    リストを返す (動画本数が worker 数より少なければ末尾の一部は空リスト)。
+    """
+    videos_desc = sorted(video_counts.items(), key=lambda kv: kv[1], reverse=True)
+    assigned: list[list[str]] = [[] for _ in range(n_workers)]
+    loads = [0] * n_workers
+    for video_id, count in videos_desc:
+        target = loads.index(min(loads))
+        assigned[target].append(video_id)
+        loads[target] += count
+    return assigned
+
+
+def _apply_worker_thread_limits() -> None:
+    """worker内のBLAS等のスレッド数を1に制限する (1プロセス1コアでオーバー
+
+    サブスクリプションを防ぐ、project_collect_indicators_v2_perf と同じ思想)。
+    feedback_subprocess_env_propagation 準拠: 既存の環境変数を消さず
+    {**os.environ, ...} でマージする。
+    """
+    os.environ.update({**os.environ, **{k: WORKER_THREAD_LIMIT for k in WORKER_THREAD_ENV_VARS}})
+
+
+# Pool worker 内でのみ設定される進捗共有カウンタ (initializer 経由でグローバル登録)。
+_worker_progress_counter: "multiprocessing.sharedctypes.Synchronized | None" = None
+
+
+def _init_worker(progress_counter: "multiprocessing.sharedctypes.Synchronized") -> None:
+    """Pool worker 初期化 (スレッド数制限 + 進捗共有カウンタの登録)。"""
+    global _worker_progress_counter
+    _worker_progress_counter = progress_counter
+    _apply_worker_thread_limits()
+
+
+def _process_video_chunk(
+    task: "tuple[list[tuple[str, pd.DataFrame]], Path, str]",
+) -> list[tuple[int, float, float, float]]:
+    """1 worker が担当する動画群の sim_* 列をまとめて計算する。
+
+    npz は担当動画ごとに1回だけ読み込む (_VideoCache 構築コストを分割数だけ
+    払わないため)。進捗はグローバル共有カウンタに PROGRESS_REPORT_BATCH 件
+    単位でまとめて反映する (行ごとのロック取得コストを避ける)。
+    """
+    video_subdfs, npz_dir, mode = task
+    results: list[tuple[int, float, float, float]] = []
+    pending = 0
+    for video_id, sub_df in video_subdfs:
+        cache = _load_video_cache(video_id, npz_dir)
+        for idx, row in sub_df.iterrows():
+            if cache is not None:
+                k_hands, exp_counter, damage = _compute_sim_columns_for_row(row, cache, mode)
+            else:
+                k_hands, exp_counter, damage = SIM_NAN, SIM_NAN, SIM_NAN
+            results.append((idx, k_hands, exp_counter, damage))
+            pending += 1
+            if pending >= PROGRESS_REPORT_BATCH and _worker_progress_counter is not None:
+                with _worker_progress_counter.get_lock():
+                    _worker_progress_counter.value += pending
+                pending = 0
+    if pending and _worker_progress_counter is not None:
+        with _worker_progress_counter.get_lock():
+            _worker_progress_counter.value += pending
+    return results
+
+
+def _build_parallel_tasks(
+    df: pd.DataFrame, npz_dir: Path, mode: str, n_workers: int,
+) -> "tuple[list[tuple], list[int]]":
+    """video_id単位で貪欲バランス割当し、workerタスクのリストと件数内訳を作る。"""
+    video_groups: dict[str, pd.DataFrame] = dict(iter(df.groupby("video_id", sort=False)))
+    video_counts = {vid: len(g) for vid, g in video_groups.items()}
+    assignments = balance_videos_by_event_count(video_counts, n_workers)
+    tasks = [
+        ([(vid, video_groups[vid]) for vid in vids], npz_dir, mode)
+        for vids in assignments if vids
+    ]
+    task_counts = [sum(video_counts[vid] for vid in vids) for vids in assignments if vids]
+    return tasks, task_counts
+
+
+def _poll_and_log_progress(async_result, progress_counter, n_total: int) -> None:
+    """完了待ちの間、完了イベント数を約10分おきにログする (feedback_progress_notify_10min)。"""
+    start_t = time.monotonic()
+    last_log_t = start_t
+    while not async_result.ready():
+        async_result.wait(timeout=10.0)
+        now = time.monotonic()
+        if now - last_log_t >= PROGRESS_LOG_EVERY_SEC:
+            n_done = progress_counter.value
+            elapsed_min = (now - start_t) / 60.0
+            rate = n_done / max(1e-6, now - start_t)
+            remain_sec = (n_total - n_done) / max(1e-6, rate)
+            print(f"[PROGRESS] {n_done}/{n_total} 行完了 "
+                  f"(経過{elapsed_min:.1f}分、残り約{remain_sec / 60.0:.1f}分)")
+            last_log_t = now
+
+
+def _merge_chunk_results(
+    results_per_task: "list[list[tuple[int, float, float, float]]]", n_total: int,
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
+    """各workerの結果 [(idx,k_hands,exp_counter,damage),...] を元の行順の配列にマージする。"""
+    sim_k_hands = np.full(n_total, SIM_NAN, dtype=np.float64)
+    sim_expected_counter_ojama = np.full(n_total, SIM_NAN, dtype=np.float64)
+    sim_damage_score = np.full(n_total, SIM_NAN, dtype=np.float64)
+    for chunk in results_per_task:
+        for idx, k_hands, exp_counter, damage in chunk:
+            sim_k_hands[idx] = k_hands
+            sim_expected_counter_ojama[idx] = exp_counter
+            sim_damage_score[idx] = damage
+    return sim_k_hands, sim_expected_counter_ojama, sim_damage_score
+
+
+def _run_sequential(
+    df: pd.DataFrame, npz_dir: Path, mode: str,
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
+    """--workers=1 (既定) の逐次実行。旧実装と完全に同じ処理内容 (挙動不変)。"""
+    sim_k_hands = np.full(len(df), SIM_NAN, dtype=np.float64)
+    sim_expected_counter_ojama = np.full(len(df), SIM_NAN, dtype=np.float64)
+    sim_damage_score = np.full(len(df), SIM_NAN, dtype=np.float64)
+
+    video_cache: "dict[str, _VideoCache | None]" = {}
+    start_t = time.monotonic()
+    last_log_t = start_t
+    n_done = 0
+    n_total = len(df)
+
+    for video_id, group in df.groupby("video_id", sort=False):
+        if video_id not in video_cache:
+            video_cache[video_id] = _load_video_cache(video_id, npz_dir)
+        cache = video_cache[video_id]
+
+        for idx, row in group.iterrows():
+            if cache is not None:
+                k_hands, exp_counter, damage = _compute_sim_columns_for_row(row, cache, mode)
+            else:
+                k_hands, exp_counter, damage = SIM_NAN, SIM_NAN, SIM_NAN
+            sim_k_hands[idx] = k_hands
+            sim_expected_counter_ojama[idx] = exp_counter
+            sim_damage_score[idx] = damage
+            n_done += 1
+
+            now = time.monotonic()
+            if now - last_log_t >= PROGRESS_LOG_EVERY_SEC:
+                elapsed_min = (now - start_t) / 60.0
+                rate = n_done / max(1e-6, now - start_t)
+                remain_sec = (n_total - n_done) / max(1e-6, rate)
+                print(f"[PROGRESS] {n_done}/{n_total} 行完了 "
+                      f"(経過{elapsed_min:.1f}分、残り約{remain_sec / 60.0:.1f}分)")
+                last_log_t = now
+
+    return sim_k_hands, sim_expected_counter_ojama, sim_damage_score
+
+
+def _run_parallel(
+    df: pd.DataFrame, npz_dir: Path, mode: str, n_workers: int,
+) -> "tuple[np.ndarray, np.ndarray, np.ndarray]":
+    """--workers>1 時の並列実行本体 (video_id単位の貪欲バランス割当 + 進捗集計)。"""
+    tasks, task_counts = _build_parallel_tasks(df, npz_dir, mode, n_workers)
+    print(f"[INFO] workers={n_workers}  動画{df['video_id'].nunique()}本 -> "
+          f"{len(tasks)}タスクに割当 (各タスク件数: {task_counts})")
+    progress_counter = multiprocessing.Value("L", 0)
+    with multiprocessing.Pool(
+        processes=len(tasks), initializer=_init_worker, initargs=(progress_counter,),
+    ) as pool:
+        async_result = pool.map_async(_process_video_chunk, tasks)
+        _poll_and_log_progress(async_result, progress_counter, len(df))
+        results_per_task = async_result.get()
+    return _merge_chunk_results(results_per_task, len(df))
+
+
 def _parse_args() -> "argparse.Namespace":
     """CLI 引数をパースする。"""
     import argparse
@@ -204,6 +429,9 @@ def _parse_args() -> "argparse.Namespace":
                          help="estimate_expected_net_damage に渡す mode (既定: precise)")
     parser.add_argument("--limit", type=int, default=None,
                          help="先頭 N 行だけ処理する (動作確認・タイミング測定用、既定は全件)")
+    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
+                         help=f"並列worker数 (既定={DEFAULT_WORKERS}=逐次実行、旧挙動と完全一致。"
+                              "2以上でvideo_id単位の並列処理)")
     return parser.parse_args()
 
 
@@ -223,46 +451,15 @@ def main() -> None:
         df = df.head(args.limit)
     print(f"[INFO] 入力 {len(df)} 行 ({input_csv})")
 
-    sim_k_hands = np.full(len(df), SIM_NAN, dtype=np.float64)
-    sim_expected_counter_ojama = np.full(len(df), SIM_NAN, dtype=np.float64)
-    sim_damage_score = np.full(len(df), SIM_NAN, dtype=np.float64)
-
-    video_cache: dict[str, _VideoCache] = {}
     start_t = time.monotonic()
-    last_log_t = start_t
-    n_done = 0
-    n_total = len(df)
-
-    for video_id, group in df.groupby("video_id", sort=False):
-        if video_id not in video_cache:
-            npz_stem = _video_id_to_npz_stem(str(video_id))
-            npz_path = npz_dir / f"{npz_stem}.npz"
-            if not npz_path.exists():
-                print(f"[WARN] npz が見つかりません: {npz_path} (video_id={video_id} 全行NaN)",
-                      file=sys.stderr)
-                video_cache[video_id] = None  # type: ignore[assignment]
-            else:
-                video_cache[video_id] = _VideoCache(_load_npz(npz_path))
-        cache = video_cache[video_id]
-
-        for idx, row in group.iterrows():
-            if cache is not None:
-                k_hands, exp_counter, damage = _compute_sim_columns_for_row(row, cache, args.mode)
-            else:
-                k_hands, exp_counter, damage = SIM_NAN, SIM_NAN, SIM_NAN
-            sim_k_hands[idx] = k_hands
-            sim_expected_counter_ojama[idx] = exp_counter
-            sim_damage_score[idx] = damage
-            n_done += 1
-
-            now = time.monotonic()
-            if now - last_log_t >= PROGRESS_LOG_EVERY_SEC:
-                elapsed_min = (now - start_t) / 60.0
-                rate = n_done / max(1e-6, now - start_t)
-                remain_sec = (n_total - n_done) / max(1e-6, rate)
-                print(f"[PROGRESS] {n_done}/{n_total} 行完了 "
-                      f"(経過{elapsed_min:.1f}分、残り約{remain_sec / 60.0:.1f}分)")
-                last_log_t = now
+    if args.workers <= 1:
+        sim_k_hands, sim_expected_counter_ojama, sim_damage_score = _run_sequential(
+            df, npz_dir, args.mode,
+        )
+    else:
+        sim_k_hands, sim_expected_counter_ojama, sim_damage_score = _run_parallel(
+            df, npz_dir, args.mode, args.workers,
+        )
 
     df["sim_k_hands"] = sim_k_hands
     df["sim_expected_counter_ojama"] = sim_expected_counter_ojama
