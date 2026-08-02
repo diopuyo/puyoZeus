@@ -203,6 +203,14 @@ class TestBuildToolCandidates:
         cands = build_tool_candidates(rows, tmp_path)
         assert len({c.key for c in cands}) == 2
 
+    def test_full_rel_path_points_to_existing_full_frame(self, tmp_path) -> None:
+        row = _make_csv_row(video_id="video_c1", t_sec="1.0", side="1P")
+        self._write_full_frame(tmp_path, "c1_t1.0_1P")
+        cand = build_tool_candidate(row, tmp_path)
+        assert cand is not None
+        assert cand.full_rel_path == "frames/c1_t1.0_1P_full.png"
+        assert (tmp_path / "c1_t1.0_1P_full.png").exists()
+
 
 # =============================================================================
 # 色パレット・サイクル順 (既存凡例との整合)
@@ -235,7 +243,8 @@ def _sample_candidate(key: str = "video_c1|1.0|1P") -> ToolCandidate:
     return ToolCandidate(
         key=key, video_id="video_c1", t_sec="1.0", side="1P", game_idx="0",
         occupancy="20", tier="primary", phase="終盤",
-        image_rel_path="frames/c1_t1.0_1P_board_crop.png", init_grid=grid,
+        image_rel_path="frames/c1_t1.0_1P_board_crop.png",
+        full_rel_path="frames/c1_t1.0_1P_full.png", init_grid=grid,
     )
 
 
@@ -264,6 +273,26 @@ class TestRenderHtmlDocument:
         html = render_html_document([_sample_candidate()], "test_key")
         assert "隠し段" in html
         assert "画面外" in html
+
+    def test_two_pane_layout_present(self) -> None:
+        # user要望「html の横に画像置いてよ」対応: 左=素の盤面クロップ、右=クリック用グリッド
+        html = render_html_document([_sample_candidate()], "test_key")
+        assert 'class="pane-row"' in html
+        assert 'class="board-wrap plain"' in html
+        assert 'class="grid-pane"' in html
+
+    def test_full_frame_thumbnail_link_present(self) -> None:
+        html = render_html_document([_sample_candidate()], "test_key")
+        assert 'href="frames/c1_t1.0_1P_full.png"' in html
+        assert 'src="frames/c1_t1.0_1P_full.png"' in html
+        assert 'target="_blank"' in html
+
+    def test_opacity_toggle_uses_translucent_class_not_hidden(self) -> None:
+        # 旧実装は overlay を display:none する hidden-mode だったが、2ペイン化に
+        # 伴い右ペインは常時表示のグリッド専用領域になったため opacity切替に変更
+        html = render_html_document([_sample_candidate()], "test_key")
+        assert "translucent" in html
+        assert "hidden-mode" not in html
 
     def test_download_button_present(self) -> None:
         html = render_html_document([_sample_candidate()], "test_key")
@@ -296,11 +325,25 @@ class TestValidateGeneratedHtml:
         (tmp_path / "frames").mkdir()
         cv2.imwrite(str(tmp_path / "frames" / "c1_t1.0_1P_board_crop.png"),
                     np.zeros((ROI_H, ROI_W, 3), dtype=np.uint8))
+        cv2.imwrite(str(tmp_path / "frames" / "c1_t1.0_1P_full.png"),
+                    np.zeros((1080, 1920, 3), dtype=np.uint8))
         cand = _sample_candidate()
         html = render_html_document([cand], "test_key")
         html_path = tmp_path / "label_tool.html"
         html_path.write_text(html, encoding="utf-8")
         validate_generated_html(html_path, [cand], tmp_path)  # 例外なしを確認
+
+    def test_raises_when_full_frame_missing(self, tmp_path) -> None:
+        import cv2
+        (tmp_path / "frames").mkdir()
+        cv2.imwrite(str(tmp_path / "frames" / "c1_t1.0_1P_board_crop.png"),
+                    np.zeros((ROI_H, ROI_W, 3), dtype=np.uint8))
+        cand = _sample_candidate()
+        html = render_html_document([cand], "test_key")
+        html_path = tmp_path / "label_tool.html"
+        html_path.write_text(html, encoding="utf-8")
+        with pytest.raises(AssertionError):
+            validate_generated_html(html_path, [cand], tmp_path)
 
     def test_raises_when_image_missing(self, tmp_path) -> None:
         cand = _sample_candidate()
