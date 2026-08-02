@@ -35,7 +35,7 @@ for _env_key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 PROJ_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJ_ROOT))
 
-from src.board import Board  # noqa: E402
+from src.board import Board, COLOR_EMPTY, COLOR_UNKNOWN  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.indicators_v2 import (  # noqa: E402
     absorption_capacity,
@@ -51,6 +51,7 @@ from src.indicators_v2 import (  # noqa: E402
     potential_fire_power,
     second_chain_potential,
     estimate_chain_anim_duration_sec,
+    SEC_PER_HAND,
 )
 from src.scoring import score_to_ojama  # noqa: E402
 
@@ -82,17 +83,33 @@ SCORE_DELTA_FIRE: int = 80
 # v2 (2026-08-02): user確定回答「同一プレイヤーの連鎖の最短間隔は2秒くらい」を
 # 受け、副信号のgap閾値を2.5秒→1.5秒に引き下げ (物理最短2秒を確実に下回る
 # 保険のみに限定、2.0-2.5秒帯域の本物の連続発火 [高速の撃ち合い] を誤マージ
-# しないため)。主判定は「盤面凍結走査」(gapの大きさによらず、クラスタ先頭の
-# 凍結盤面と中間フレーム全てが一致するかで判定) に格上げ。
+# しないため)。
+#
+# v3 (2026-08-02、main実測診断で確定): v2の主判定「盤面凍結走査」(候補検出j
+# 自身の盤面が参照と完全一致するか) は、連鎖終了→盤面が連鎖後STABLEに更新
+# →最終スコア確定 (=検出j) という正当な順序でも j の盤面が参照と変わる
+# ため、gap1.5-2.2秒帯域152件中148件を誤って分離していた (main実測)。
+# v3は主判定を「設置の署名 (ぷよ総数が+2以上増え、かつ自己修復せず持続する
+# 瞬間) の有無」に全面変更する。増加が無い (凍結のまま or 連鎖後の減少のみ)
+# なら盤面が参照と異なっていてもマージする。gap≤1.5秒の無条件マージ (副信号)
+# は維持する。
 FIRE_EVENT_MERGE_GAP_SEC: float = 1.5
 
-# 盤面凍結走査の認識ノイズ許容秒数 (memory project_yardstick_first_results_
-# 2026-07-31: 持続的な誤りはゼロ、誤りは全て遷移瞬間の一時汚染で≤1秒以内に
-# 自己修復する既知パターン)。実データ c27.npz 1P game12 で確認: 連鎖中の
-# t=1269.33-1269.53 (0.2秒間) だけ余分なぷよが一時的に写り込み、0.53秒後には
-# 参照盤面へ復帰する。この既知の自己修復ノイズを「設置が入った証拠」と
-# 誤判定しないよう、連続不一致区間の時間幅がこの秒数以下なら許容する。
-FROZEN_SCAN_NOISE_TOLERANCE_SEC: float = 1.0
+# 設置の署名: ぷよ総数がこの個数以上増えたら「新しい手が置かれた」証拠とする
+# (1手=2ぷよ、user確定「ぷよ総数+2以上」)。
+PLACEMENT_SIGNATURE_MIN_INCREASE: int = 2
+
+# 設置署名の持続判定秒数。
+# ⚠️ 実装検証中に発見した重要な補正: 「認識ノイズの自己修復秒数 (project_
+# yardstick_first_results_2026-07-31 の≤1秒)」をそのまま流用すると、実データ
+# c27.npz 1P game12 の index47→52 区間 (本物の設置+連鎖: ぷよ数49→53が0.9秒
+# かけて増加した直後、連鎖が発火して37まで急減する) を「1秒以内に解消した
+# ノイズ」と誤判定し、本物の別イベントをマージしてしまう回帰が発生した
+# (自己テストで発見)。設置は連鎖発火より先に完了するはずなので、判定秒数は
+# 「1手の所要時間」(SEC_PER_HAND、実測中央値) を使うのが物理的に正しい
+# (1手分の設置動作が完了する前に連鎖でぷよが消えることは無い)。実データの
+# 認識ノイズ (0.2秒で解消) はこの秒数を大きく下回るため誤判定しない。
+PLACEMENT_SIGNATURE_PERSIST_SEC: float = SEC_PER_HAND
 
 # 返し窓: score=-1 補間なし。連鎖数不明時のデフォルト秒数
 RETURN_WINDOW_DEFAULT_SEC: float = 6.0
@@ -249,38 +266,55 @@ def _last_valid_score_before(score: np.ndarray, index: int) -> int:
     return -1
 
 
-def _frozen_board_matches_reference(
+def _count_concrete_puyos(grid: np.ndarray) -> int:
+    """gridの「確定した色」セル数を返す (空(0)とUNKNOWN(10)を除外)。
+
+    Board.height_of() と同じ方針 (UNKNOWNは判定不能につき除外)。遷移汚染で
+    UNKNOWNセルが湧いても、それを非ゼロ扱いして偽の増加署名を作らないため
+    (main指摘事項、v3で追加検討)。
+    """
+    return int(np.sum((grid != COLOR_EMPTY) & (grid != COLOR_UNKNOWN)))
+
+
+def _has_placement_signature(
     t_sec: np.ndarray,
     grids: np.ndarray,
-    from_idx_exclusive: int,
-    to_idx_inclusive: int,
-    reference_grid: np.ndarray,
+    prev_idx: int,
+    idx: int,
 ) -> bool:
-    """(from_idx_exclusive, to_idx_inclusive] の全フレームが reference_grid と
+    """prev_idx と idx の間で「設置の署名」(ぷよ総数の持続的な+2以上増加) が
 
-    一致するか (v2主判定「盤面凍結走査」)。to_idx_inclusive (=候補検出自身)
-    も走査範囲に含む点に注意 (候補自身の盤面が変わっていれば設置の証拠)。
+    あったか判定する (v3主判定、測定器事故5件目の再修正)。
 
-    認識ノイズによる短時間 (FROZEN_SCAN_NOISE_TOLERANCE_SEC 以下) の一時的な
-    不一致は許容する (連続不一致区間の時間幅で判定、既知の自己修復パターン
-    project_yardstick_first_results_2026-07-31 に対応、実データ c27.npz
-    1P game12 で確認済み)。不一致が解消せずこの秒数を超えたら設置ありとみなす。
+    v2の反省 (main実測診断で確定): 候補検出 idx 自身の盤面が参照盤面と
+    一致するかで判定すると、連鎖終了→盤面が連鎖後STABLEに更新→最終スコア
+    確定 (=検出idx) という正当な順序でも「不一致」と誤判定してしまう
+    (gap1.5-2.2秒帯域152件中148件が誤って分離されていた)。v3はぷよ総数の
+    「増加」のみに着目する (連鎖後の更新は通常ぷよが減る側なので誤判定しない)。
 
-    ⚠️ 走査範囲の末尾 (候補検出自身、to_idx_inclusive) まで不一致が解消しない
-    まま終わった場合は、自己修復の確証が無いため許容せず False を返す
-    (「経過0秒だから許容」という誤判定を避けるため、単純な経過秒数だけでなく
-    「範囲末尾で解消しているか」も必須条件とする)。
+    認識ノイズによる短時間 (PLACEMENT_SIGNATURE_PERSIST_SEC 以下) の一時的な
+    増加 (写り込み) は無視する (project_yardstick_first_results_2026-07-31の
+    既知の自己修復パターン、実データ c27.npz 1P game12 で確認済み: +5個の
+    一時的な写り込みが0.53秒で解消)。増加がこの秒数を超えて持続して初めて
+    設置ありと確定する。走査範囲が終わるまで確定できなければ (=証拠不十分)
+    保守的に「設置なし (マージ)」側に倒す (v2で「候補自身の差分を安易に
+    確定証拠にした」反省を踏まえ、あえて逆方向の既定値にする)。
     """
-    mismatch_run_start_t: "float | None" = None
-    for k in range(from_idx_exclusive + 1, to_idx_inclusive + 1):
-        if np.array_equal(grids[k], reference_grid):
-            mismatch_run_start_t = None
-            continue
-        if mismatch_run_start_t is None:
-            mismatch_run_start_t = float(t_sec[k])
-        elif float(t_sec[k]) - mismatch_run_start_t > FROZEN_SCAN_NOISE_TOLERANCE_SEC:
-            return False
-    return mismatch_run_start_t is None
+    counts = [_count_concrete_puyos(grids[k]) for k in range(prev_idx, idx + 1)]
+    baseline = counts[0]
+    jump_start_t: "float | None" = None
+    for offset in range(1, len(counts)):
+        k = prev_idx + offset
+        increase = counts[offset] - baseline
+        if increase >= PLACEMENT_SIGNATURE_MIN_INCREASE:
+            if jump_start_t is None:
+                jump_start_t = float(t_sec[k])
+            elif float(t_sec[k]) - jump_start_t > PLACEMENT_SIGNATURE_PERSIST_SEC:
+                return True
+        else:
+            jump_start_t = None
+            baseline = counts[offset]
+    return False
 
 
 def _merge_fire_event_clusters(
@@ -289,33 +323,30 @@ def _merge_fire_event_clusters(
     grids: np.ndarray,
     fire_indices: list[int],
 ) -> list[FireEventCluster]:
-    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策、v2)。
+    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策、v3)。
 
-    2つの信号のいずれかを満たせば直前の検出と同一クラスタとする:
-      1. 主信号 (盤面凍結走査、gapの大きさによらず適用): 検出 i (直前に採用
-         した検出) と検出 j (候補) の間の全フレームが「クラスタ参照盤面」
-         (=クラスタ先頭検出の盤面、クラスタ生成時に固定) と一致するなら
-         同一連鎖とみなす (_frozen_board_matches_reference、ノイズ許容込み)。
-         これにより長ギャップの分裂 (部分スコアが連鎖序盤/終盤で数秒空く
-         ケース) も拾える。
-      2. 副信号 (短ギャップ、v2でuser確定回答により2.5秒→1.5秒に引き下げ):
+    分離 (=別イベント) と判定するのは、副信号 (短ギャップ) に該当せず、かつ
+    検出 i (直前に採用した検出) と検出 j (候補) の間に「設置の署名」
+    (_has_placement_signature、ぷよ総数の持続的な+2以上増加) がある場合のみ。
+    署名が無ければ (凍結のまま、または連鎖後の更新で盤面が変わっていても)
+    同一連鎖としてマージする。
+      1. 副信号 (短ギャップ、v2でuser確定回答により2.5秒→1.5秒に引き下げ):
          同一プレイヤーの連鎖最短間隔は約2秒 (user確定) のため、それを
-         確実に下回る1.5秒以下の隣接検出のみ保険的に同一連鎖とみなす
-         (主信号が抜けるケース [連鎖後の新STABLE盤面に既に更新済み] の保険)。
+         確実に下回る1.5秒以下の隣接検出は無条件マージ。
+      2. 主判定 (設置の署名の有無): 副信号に該当しない場合、設置の署名が
+         無ければマージ、あれば分離する。
     """
     if not fire_indices:
         return []
     clusters: list[list[int]] = [[fire_indices[0]]]
-    cluster_ref_grid = grids[fire_indices[0]]
     for idx in fire_indices[1:]:
         prev_idx = clusters[-1][-1]
-        frozen_ok = _frozen_board_matches_reference(t_sec, grids, prev_idx, idx, cluster_ref_grid)
         gap_sec = float(t_sec[idx] - t_sec[prev_idx])
-        if frozen_ok or gap_sec <= FIRE_EVENT_MERGE_GAP_SEC:
+        placement_found = _has_placement_signature(t_sec, grids, prev_idx, idx)
+        if gap_sec <= FIRE_EVENT_MERGE_GAP_SEC or not placement_found:
             clusters[-1].append(idx)
         else:
             clusters.append([idx])
-            cluster_ref_grid = grids[idx]
 
     result: list[FireEventCluster] = []
     for cluster in clusters:
