@@ -1,13 +1,22 @@
-"""発火イベント分裂統合 (測定器事故5件目、2026-08-02) の回帰テスト。
+"""発火イベント分裂統合 (測定器事故5件目、2026-08-02 v2) の回帰テスト。
 
 scripts/label_exchange_outcome.py の _merge_fire_event_clusters /
 _last_valid_score_before / _process_game への配線を、軽量な合成データのみで
 検証する (実動画・実npzは使わない、tests/test_exchange_effectiveness_step2.py
 と同じ方針)。
 
+v2 (2026-08-02、user確定回答2件を反映):
+  - 主信号=盤面凍結走査 (gapの大きさによらず、中間フレーム全てがクラスタ
+    参照盤面と一致するかで判定。認識ノイズ [≤1秒] は許容)
+  - 副信号=gap≤1.5秒 (旧2.5秒から引き下げ、同一プレイヤー連鎖の最短間隔
+    「約2秒」を確実に下回る保険のみに限定)
+
 検収基準:
   1. 分裂パターン (部分加算2回、盤面凍結 or 短ギャップ) が1イベントに統合される
-  2. 正当な連続発火 (盤面変化あり・gap>2.5秒) は2イベントのまま分離される
+  2. 正当な連続発火 (盤面変化あり・gap>1.5秒) は2イベントのまま分離される
+  2'. v2新規: 長ギャップ(5秒)だが完全凍結の分裂は主信号でマージされる (a)。
+      gap=2.2秒 (旧v1なら2.5秒以下の副信号で誤マージされていた帯域) だが
+      盤面変化が持続する本物の連続発火は分離を維持する (b、回帰ガード)。
 """
 from __future__ import annotations
 
@@ -115,6 +124,54 @@ class TestMergeFireEventClusters:
         score = np.array([0, 100])
         grids = _empty_grids(2)
         assert _merge_fire_event_clusters(t_sec, score, grids, []) == []
+
+    def test_v2_long_gap_frozen_split_merges_via_primary_signal(self) -> None:
+        """v2新規 (検収基準2'a): 長ギャップ (5秒、旧v1副信号2.5秒は勿論、新v2副信号
+
+        1.5秒も大幅に超える) だが盤面が完全凍結したままの分裂は、主信号
+        (盤面凍結走査、gapの大きさによらず適用) でマージされる。
+        """
+        t_sec = np.array([0.0, 1.0, 3.0, 6.0])
+        score = np.array([100, 4658, 4658, 35274])
+        grids = _empty_grids(4)  # 中間フレーム含め完全凍結 (ノイズなし)
+        fire_indices = [1, 3]  # gap = 6.0-1.0 = 5.0秒
+        clusters = _merge_fire_event_clusters(t_sec, score, grids, fire_indices)
+        assert len(clusters) == 1
+        assert clusters[0].fire_index == 3
+
+    def test_v2_short_gap_with_persisting_board_change_stays_separate(self) -> None:
+        """v2回帰ガード (検収基準2'b): gap=2.2秒 (新v2副信号1.5秒は超えるが旧v1副信号
+
+        2.5秒以下=旧規則なら誤マージされていた帯域) かつ盤面変化が
+        ノイズ許容 (1.0秒) を超えて持続する本物の連続発火は分離を維持する。
+        user確定回答「同一プレイヤー連鎖の最短間隔は約2秒」を踏まえた
+        高速の撃ち合い場面を模擬 (旧v1規則ではここが必ず誤マージされていた)。
+        """
+        t_sec = np.array([0.0, 1.0, 1.5, 2.8, 3.2])
+        score = np.array([100, 500, 580, 650, 900])
+        grids = _empty_grids(5)
+        grids[2, 0, 0] = COLOR_RED  # t=1.5: 盤面変化 (設置) が発生
+        grids[3, 0, 0] = COLOR_RED  # t=2.8: 変化が1.3秒間持続 (ノイズ許容1.0秒超え)
+        grids[4, 0, 0] = COLOR_RED
+        fire_indices = [1, 4]  # gap = 3.2-1.0 = 2.2秒
+        clusters = _merge_fire_event_clusters(t_sec, score, grids, fire_indices)
+        assert len(clusters) == 2
+        assert [c.fire_index for c in clusters] == [1, 4]
+
+    def test_v2_transient_noise_within_tolerance_still_merges(self) -> None:
+        """v2ノイズ許容: 0.2秒程度の一時的な盤面の写り込み (実データ c27 game12 1P で
+
+        確認済みの自己修復パターン) は「設置」と誤判定せず、frozen_ok=Trueで
+        マージされる (project_yardstick_first_results_2026-07-31 準拠)。
+        """
+        t_sec = np.array([0.0, 1.0, 1.2, 1.4, 2.0])
+        score = np.array([100, 27590, 27590, 27590, 35274])
+        grids = _empty_grids(5)
+        grids[2, 0, 0] = COLOR_RED  # t=1.2: 一時的なノイズ (0.2秒後に自己修復)
+        # grids[3] (t=1.4) は参照盤面に復帰 (デフォルトの全ゼロのまま)
+        fire_indices = [1, 4]
+        clusters = _merge_fire_event_clusters(t_sec, score, grids, fire_indices)
+        assert len(clusters) == 1
 
 
 # =============================================================================

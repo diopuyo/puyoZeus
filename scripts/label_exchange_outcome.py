@@ -72,14 +72,27 @@ SCORE_OCR_BROKEN_VIDEOS: frozenset[str] = frozenset({"c26", "c30", "c58", "c69"}
 # (user/アーキ判断待ち、統一するかは別途要判断)。
 SCORE_DELTA_FIRE: int = 80
 
-# 発火イベント分裂統合 (測定器事故5件目、2026-08-02 main検品で確定):
+# 発火イベント分裂統合 (測定器事故5件目、2026-08-02 v2: user確定回答2件を反映)
 # 連鎖アニメ中もスコアOCRが部分合計を拾える瞬間があり、1つの連鎖が
 # _detect_fire_events で複数イベントに分裂する (実データ c27.npz 1P game12:
 # 1269.2秒score=27590の"326個イベント"と1271.3秒score=35274の"109個イベント"が
-# 実際は同一9連鎖、実画面確認済み)。
-# 副信号: 連鎖終了→次の実連鎖には設置1手+連鎖アニメが必要で物理的に
-# ≈2.5秒以上かかる (user/アーキ確定)。この秒数以下の隣接検出は同一連鎖の疑い濃厚。
-FIRE_EVENT_MERGE_GAP_SEC: float = 2.5
+# 実際は同一9連鎖、実画面確認済み。「連鎖中に一瞬通常表示のスコアが出るのは
+# ゲーム仕様」とuser確定)。
+#
+# v2 (2026-08-02): user確定回答「同一プレイヤーの連鎖の最短間隔は2秒くらい」を
+# 受け、副信号のgap閾値を2.5秒→1.5秒に引き下げ (物理最短2秒を確実に下回る
+# 保険のみに限定、2.0-2.5秒帯域の本物の連続発火 [高速の撃ち合い] を誤マージ
+# しないため)。主判定は「盤面凍結走査」(gapの大きさによらず、クラスタ先頭の
+# 凍結盤面と中間フレーム全てが一致するかで判定) に格上げ。
+FIRE_EVENT_MERGE_GAP_SEC: float = 1.5
+
+# 盤面凍結走査の認識ノイズ許容秒数 (memory project_yardstick_first_results_
+# 2026-07-31: 持続的な誤りはゼロ、誤りは全て遷移瞬間の一時汚染で≤1秒以内に
+# 自己修復する既知パターン)。実データ c27.npz 1P game12 で確認: 連鎖中の
+# t=1269.33-1269.53 (0.2秒間) だけ余分なぷよが一時的に写り込み、0.53秒後には
+# 参照盤面へ復帰する。この既知の自己修復ノイズを「設置が入った証拠」と
+# 誤判定しないよう、連続不一致区間の時間幅がこの秒数以下なら許容する。
+FROZEN_SCAN_NOISE_TOLERANCE_SEC: float = 1.0
 
 # 返し窓: score=-1 補間なし。連鎖数不明時のデフォルト秒数
 RETURN_WINDOW_DEFAULT_SEC: float = 6.0
@@ -236,33 +249,73 @@ def _last_valid_score_before(score: np.ndarray, index: int) -> int:
     return -1
 
 
+def _frozen_board_matches_reference(
+    t_sec: np.ndarray,
+    grids: np.ndarray,
+    from_idx_exclusive: int,
+    to_idx_inclusive: int,
+    reference_grid: np.ndarray,
+) -> bool:
+    """(from_idx_exclusive, to_idx_inclusive] の全フレームが reference_grid と
+
+    一致するか (v2主判定「盤面凍結走査」)。to_idx_inclusive (=候補検出自身)
+    も走査範囲に含む点に注意 (候補自身の盤面が変わっていれば設置の証拠)。
+
+    認識ノイズによる短時間 (FROZEN_SCAN_NOISE_TOLERANCE_SEC 以下) の一時的な
+    不一致は許容する (連続不一致区間の時間幅で判定、既知の自己修復パターン
+    project_yardstick_first_results_2026-07-31 に対応、実データ c27.npz
+    1P game12 で確認済み)。不一致が解消せずこの秒数を超えたら設置ありとみなす。
+
+    ⚠️ 走査範囲の末尾 (候補検出自身、to_idx_inclusive) まで不一致が解消しない
+    まま終わった場合は、自己修復の確証が無いため許容せず False を返す
+    (「経過0秒だから許容」という誤判定を避けるため、単純な経過秒数だけでなく
+    「範囲末尾で解消しているか」も必須条件とする)。
+    """
+    mismatch_run_start_t: "float | None" = None
+    for k in range(from_idx_exclusive + 1, to_idx_inclusive + 1):
+        if np.array_equal(grids[k], reference_grid):
+            mismatch_run_start_t = None
+            continue
+        if mismatch_run_start_t is None:
+            mismatch_run_start_t = float(t_sec[k])
+        elif float(t_sec[k]) - mismatch_run_start_t > FROZEN_SCAN_NOISE_TOLERANCE_SEC:
+            return False
+    return mismatch_run_start_t is None
+
+
 def _merge_fire_event_clusters(
     t_sec: np.ndarray,
     score: np.ndarray,
     grids: np.ndarray,
     fire_indices: list[int],
 ) -> list[FireEventCluster]:
-    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策)。
+    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策、v2)。
 
     2つの信号のいずれかを満たせば直前の検出と同一クラスタとする:
-      1. 主信号 (盤面凍結): 連鎖中は state machine が盤面を凍結するため、
-         隣接する検出間で grids が完全一致するなら同一連鎖とみなす。
-      2. 副信号 (短ギャップ): 隣接検出間の時間差が FIRE_EVENT_MERGE_GAP_SEC
-         以下なら (連鎖終了→次の実連鎖の物理的最短所要時間を下回るため)
-         同一連鎖とみなす (主信号が抜けるケース [連鎖後の新STABLE盤面に
-         既に更新済み] の保険)。
+      1. 主信号 (盤面凍結走査、gapの大きさによらず適用): 検出 i (直前に採用
+         した検出) と検出 j (候補) の間の全フレームが「クラスタ参照盤面」
+         (=クラスタ先頭検出の盤面、クラスタ生成時に固定) と一致するなら
+         同一連鎖とみなす (_frozen_board_matches_reference、ノイズ許容込み)。
+         これにより長ギャップの分裂 (部分スコアが連鎖序盤/終盤で数秒空く
+         ケース) も拾える。
+      2. 副信号 (短ギャップ、v2でuser確定回答により2.5秒→1.5秒に引き下げ):
+         同一プレイヤーの連鎖最短間隔は約2秒 (user確定) のため、それを
+         確実に下回る1.5秒以下の隣接検出のみ保険的に同一連鎖とみなす
+         (主信号が抜けるケース [連鎖後の新STABLE盤面に既に更新済み] の保険)。
     """
     if not fire_indices:
         return []
     clusters: list[list[int]] = [[fire_indices[0]]]
+    cluster_ref_grid = grids[fire_indices[0]]
     for idx in fire_indices[1:]:
         prev_idx = clusters[-1][-1]
-        same_grid = np.array_equal(grids[prev_idx], grids[idx])
+        frozen_ok = _frozen_board_matches_reference(t_sec, grids, prev_idx, idx, cluster_ref_grid)
         gap_sec = float(t_sec[idx] - t_sec[prev_idx])
-        if same_grid or gap_sec <= FIRE_EVENT_MERGE_GAP_SEC:
+        if frozen_ok or gap_sec <= FIRE_EVENT_MERGE_GAP_SEC:
             clusters[-1].append(idx)
         else:
             clusters.append([idx])
+            cluster_ref_grid = grids[idx]
 
     result: list[FireEventCluster] = []
     for cluster in clusters:
