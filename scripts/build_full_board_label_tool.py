@@ -10,6 +10,14 @@ frames/*_full.png (40候補) から、user が「13x6文字列の手書き」を
 - 隠し段 (row0) は実画面に写らないため、可視12行の画像とは別に上部の
   独立パネルとして表示する (クリック自体は同じサイクル関数を共有)
 
+## レイアウト (2026-08-02 修正、user要望「html の横に画像置いてよ」対応)
+- 各候補は横並び2ペイン: 左=素の盤面クロップ (オーバーレイ無し、見比べ専用)、
+  右=クリック用グリッド (色パッチ+記号、クリックで循環)。
+  両ペインは同じ表示幅・表示高さ (BOARD_DISPLAY_HEIGHT_PX) にして行の高さを
+  揃え、目線を水平移動するだけで実画面とグリッドを見比べられるようにする。
+- 実画面フルショット (*_full.png) のサムネイルリンクを各候補に追加
+  (相手盤面・ネクスト等の文脈確認用、クリックで別タブに原寸表示)。
+
 ## 出力
     data/verify/full_board_label_sheet_2026-08-02/label_tool.html
     data/verify/full_board_label_sheet_2026-08-02/frames/<base>_board_crop.png
@@ -73,9 +81,13 @@ STORAGE_KEY_PREFIX: str = "puyo_full_board_label_tool::"
 
 # 表示用の見やすさ設定 (座標系には影響しない、CSS表示幅のみ)
 DISPLAY_WIDTH_PX: int = 480
-# 表示スケール (実ROI幅 -> 表示幅) と、隠し段パネルの表示高さ (アスペクト比維持)
+# 表示スケール (実ROI幅 -> 表示幅) と、隠し段パネル/盤面ペインの表示高さ
+# (アスペクト比維持、左右ペインを同じ高さにして行を揃えるために使う)
 _DISPLAY_SCALE: float = DISPLAY_WIDTH_PX / ROI_W
 HIDDEN_PANEL_HEIGHT_PX: int = round(CELL_H * HIDDEN_ROWS * _DISPLAY_SCALE)
+BOARD_DISPLAY_HEIGHT_PX: int = round(ROI_H * _DISPLAY_SCALE)
+# 実画面フルショットのサムネイル表示幅 (原寸1920pxを縮小、文脈確認用の副次情報)
+FULL_THUMB_WIDTH_PX: int = 220
 
 STATUS_OK: str = "ok"
 STATUS_FIXED: str = "fixed"
@@ -104,6 +116,7 @@ class ToolCandidate:
     tier: str
     phase: str
     image_rel_path: str        # "frames/xxx_board_crop.png" (常にposix区切り)
+    full_rel_path: str         # "frames/xxx_full.png" (実画面フルショット、サムネイル用)
     init_grid: list            # 13行×6列 int のネストリスト
 
 
@@ -178,12 +191,13 @@ def build_tool_candidate(row: dict, frames_dir: Path) -> "ToolCandidate | None":
         return None
     grid = decode_grid_string(row["recognized_grid"])
     rel_path = (Path(FRAMES_SUBDIR_NAME) / crop_path.name).as_posix()
+    full_rel_path = (Path(FRAMES_SUBDIR_NAME) / f"{base}{FULL_FRAME_SUFFIX}").as_posix()
     return ToolCandidate(
         key=f"{row['video_id']}|{row['t_sec']}|{row['side']}",
         video_id=row["video_id"], t_sec=row["t_sec"], side=row["side"],
         game_idx=row.get("game_idx", ""), occupancy=row.get("occupancy", ""),
         tier=row.get("tier", ""), phase=row.get("phase", ""),
-        image_rel_path=rel_path, init_grid=grid.tolist(),
+        image_rel_path=rel_path, full_rel_path=full_rel_path, init_grid=grid.tolist(),
     )
 
 
@@ -264,7 +278,7 @@ def _render_candidate_sections_html(candidates: list[ToolCandidate]) -> str:
 
 
 def _render_one_candidate_html(index: int, c: ToolCandidate) -> str:
-    """1候補分の <section> (見出し+隠し段パネル+画像+グリッド+ボタン群) を組み立てる。"""
+    """1候補分の <section> (見出し+隠し段パネル+2ペイン+サムネ+ボタン群) を組み立てる。"""
     title = (
         f"#{index + 1} {c.video_id} {c.side} t={c.t_sec}秒 "
         f"(位相:{c.phase} / 非空セル:{c.occupancy} / tier:{c.tier})"
@@ -272,16 +286,25 @@ def _render_one_candidate_html(index: int, c: ToolCandidate) -> str:
     return f'''
 <section class="candidate" id="cand-{index}" data-key="{_html_escape(c.key)}">
   <h2>{_html_escape(title)}</h2>
+  <a class="full-thumb-link" href="{_html_escape(c.full_rel_path)}" target="_blank"
+     title="実画面フルショット (別タブで原寸表示、相手盤面・ネクスト確認用)">
+    <img class="full-thumb" src="{_html_escape(c.full_rel_path)}" alt="full frame"
+         style="width:{FULL_THUMB_WIDTH_PX}px">
+  </a>
   <div class="hidden-row-note">隠し段(行0・画面外): 見えないため「不明」のままでOKです</div>
   <div class="hidden-row-panel" data-index="{index}"
        style="width:{DISPLAY_WIDTH_PX}px;height:{HIDDEN_PANEL_HEIGHT_PX}px"></div>
-  <div class="board-wrap" style="width:{DISPLAY_WIDTH_PX}px">
-    <img src="{_html_escape(c.image_rel_path)}" alt="board crop">
-    <div class="grid-overlay" data-index="{index}"></div>
+  <div class="pane-row">
+    <div class="board-wrap plain" style="width:{DISPLAY_WIDTH_PX}px;height:{BOARD_DISPLAY_HEIGHT_PX}px">
+      <img src="{_html_escape(c.image_rel_path)}" alt="board crop (raw)">
+    </div>
+    <div class="grid-pane" style="width:{DISPLAY_WIDTH_PX}px;height:{BOARD_DISPLAY_HEIGHT_PX}px">
+      <div class="grid-overlay" data-index="{index}"></div>
+    </div>
   </div>
   <div class="controls">
     <label class="opacity-toggle">
-      <input type="checkbox" class="opacity-chk" data-index="{index}" checked> グリッド表示
+      <input type="checkbox" class="opacity-chk" data-index="{index}" checked> グリッド色を濃く表示
     </label>
     <button class="btn-ok" data-index="{index}">認識通りでOK</button>
     <button class="btn-fixed" data-index="{index}">修正完了</button>
@@ -313,7 +336,9 @@ def validate_generated_html(html_path: Path, candidates: list[ToolCandidate], ou
     assert len(parsed) == len(candidates), "埋め込みJSON件数が候補数と不一致"
     for c in candidates:
         img_path = out_dir / c.image_rel_path
+        full_path = out_dir / c.full_rel_path
         assert img_path.exists(), f"画像が見つからない: {img_path}"
+        assert full_path.exists(), f"フルショットが見つからない: {full_path}"
         assert len(c.init_grid) == BOARD_ROWS, f"grid行数不正: {c.key}"
         assert all(len(r) == BOARD_COLS for r in c.init_grid), f"grid列数不正: {c.key}"
     print(f"  [OK] 静的整合チェック通過 ({len(candidates)}件)")
@@ -366,17 +391,23 @@ header { position: sticky; top: 0; background: #111; padding: 10px 16px; z-index
 #download-btn { margin-left: 16px; padding: 6px 14px; background: #2a6; color: #fff;
   border: none; border-radius: 4px; cursor: pointer; }
 .candidate { padding: 16px; border-bottom: 1px solid #444; }
-.hidden-row-note { color: #999; font-size: 0.85em; margin-bottom: 4px; }
+.full-thumb-link { display: inline-block; float: right; margin-left: 12px; }
+.full-thumb { border: 1px solid #555; border-radius: 4px; display: block; }
+.hidden-row-note { color: #999; font-size: 0.85em; margin-bottom: 4px; clear: both; }
 .hidden-row-panel { display: grid; gap: 1px; margin-bottom: 6px; width: fit-content; }
-.board-wrap { position: relative; }
-.board-wrap img { width: 100%; display: block; }
+/* 左右2ペイン (左=素の盤面クロップ、右=クリック用グリッド)。同じ幅・高さで
+   行の高さを揃え、水平に目線移動するだけで見比べられるようにする。 */
+.pane-row { display: flex; gap: 8px; align-items: flex-start; }
+.board-wrap.plain { position: relative; overflow: hidden; }
+.board-wrap.plain img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.grid-pane { position: relative; background: #1e1e1e; border: 1px solid #444; box-sizing: border-box; }
 .grid-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: grid; gap: 0; }
 .cell, .hidden-cell { border: 1px solid rgba(255,255,255,0.35); cursor: pointer;
   display: flex; align-items: center; justify-content: center; font-weight: bold;
   color: #000; text-shadow: 0 0 2px #fff; user-select: none; box-sizing: border-box; }
 .hidden-cell { width: 100%; height: 100%; }
 .cell.changed { border: 3px solid #ff0; }
-.grid-overlay.hidden-mode { display: none; }
+.grid-overlay.translucent { opacity: 0.35; }
 .controls { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .controls button { padding: 6px 12px; border-radius: 4px; border: none; cursor: pointer; }
 .btn-ok { background: #2a6; color: #fff; }
@@ -593,7 +624,7 @@ function initCandidate(index) {{
   document.querySelector(`.btn-skip[data-index="${{index}}"]`).addEventListener(
     "click", () => setStatus(index, STATUS_SKIP));
   document.querySelector(`.opacity-chk[data-index="${{index}}"]`).addEventListener(
-    "change", (e) => gridOverlay.classList.toggle("hidden-mode", !e.target.checked));
+    "change", (e) => gridOverlay.classList.toggle("translucent", !e.target.checked));
 }}
 
 function init() {{
