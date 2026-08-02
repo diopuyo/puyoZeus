@@ -148,6 +148,10 @@ NEXT_COLOR_UNKNOWN: int = -1
 # (2026-07-29 追加)。t_sec は常に >= 0 のため NaN は安全な sentinel。
 CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
 
+# chain_mechanism (発火検知経路、2026-08-02 Step2 追加) が未検知/取得不能の
+# 場合の埋め値。空文字列は CHAIN_MECHANISM_* のどの値とも衝突しないため安全。
+CHAIN_MECHANISM_UNKNOWN: str = ""
+
 
 # ============================
 # 蓄積バッファ
@@ -183,6 +187,11 @@ class _LeanNpzAccumulator:
     # CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で埋める。既存呼び出し (引数省略) では
     # 常に NaN のまま保存される (後方互換: 挙動不変)。
     chain_trigger_secs: list[float] = field(default_factory=list)
+    # 発火検知経路 (CHAIN_MECHANISM_*、2026-08-02 Step2 追加)。
+    # 既存呼び出し (mechanism 省略) では CHAIN_MECHANISM_UNKNOWN ("") のまま
+    # 蓄積され、save() 時に一度も実値が入らなければ npz キー自体を書かない
+    # (後方互換: 既存 npz 読み出し側のキー集合を変えない)。
+    chain_mechanisms: list[str] = field(default_factory=list)
 
     def append(
         self,
@@ -196,6 +205,7 @@ class _LeanNpzAccumulator:
         next_pair: tuple[int, int] | None = None,
         dnext_pair: tuple[int, int] | None = None,
         chain_trigger_sec: float | None = None,
+        mechanism: str | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -214,6 +224,10 @@ class _LeanNpzAccumulator:
                 (RecognitionPipeline.SideResult.chain_event.trigger_sec)。
                 None は CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で保存する
                 (後方互換: 省略時は既存呼び出しと同じ挙動、2026-07-29 追加)。
+            mechanism: この snapshot 時点で有効な chain_event.mechanism
+                (CHAIN_MECHANISM_* のいずれか)。None は
+                CHAIN_MECHANISM_UNKNOWN ("") で保存する (後方互換、
+                2026-08-02 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -231,6 +245,9 @@ class _LeanNpzAccumulator:
         self.dnext_bs.append(int(d_b))
         self.chain_trigger_secs.append(
             chain_trigger_sec if chain_trigger_sec is not None else CHAIN_TRIGGER_SEC_UNKNOWN
+        )
+        self.chain_mechanisms.append(
+            mechanism if mechanism is not None else CHAIN_MECHANISM_UNKNOWN
         )
 
     def assign_won_labels(
@@ -273,10 +290,15 @@ class _LeanNpzAccumulator:
         機能D 検知時刻を記録しないだけの既存呼び出しでは全て NaN
         (CHAIN_TRIGGER_SEC_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
         挙動には影響しない新規キー)。
+
+        chain_mechanism (str、2026-08-02 追加) は一度でも実値
+        (CHAIN_MECHANISM_UNKNOWN 以外) が記録された場合のみキーを書く。
+        一度も記録されなかった (mechanism 未指定の呼び出しのみ、または
+        ChainEvent.mechanism が全て None) 場合はキー自体を省略する
+        (後方互換: 既存 npz 読み出し側の `set(d.keys())` 依存コードを壊さない)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            str(path),
+        save_kwargs: dict[str, np.ndarray] = dict(
             grids=np.array(self.grids, dtype=np.int8) if self.grids
                   else np.array([], dtype=np.int8),
             video_id=np.array(self.video_ids),
@@ -292,6 +314,9 @@ class _LeanNpzAccumulator:
             dnext_b=np.array(self.dnext_bs, dtype=np.int8),
             chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
         )
+        if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
+            save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
+        np.savez_compressed(str(path), **save_kwargs)
 
 
 # ============================
@@ -638,6 +663,8 @@ def _process_side_lean(
             ChainEvent | None、循環import回避のため object 型ヒント)。
             機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
             (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
+            .mechanism (CHAIN_MECHANISM_* | None) を chain_mechanism として
+            記録する (2026-08-02 Step2 追加、同様に省略可・挙動不変)。
         shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
             渡すと片側の score OCR 破綻でも game_idx がずれない。
             None なら従来の side 独立カウンタ (後方互換)。
@@ -646,11 +673,12 @@ def _process_side_lean(
     if board is None or not _should_emit(state, board, bstate):
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
+    mechanism = getattr(chain_event, "mechanism", None) if chain_event is not None else None
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
-        chain_trigger_sec=trigger_sec,
+        chain_trigger_sec=trigger_sec, mechanism=mechanism,
     )
     state.last_emitted_grid = board._grid.tobytes()
 

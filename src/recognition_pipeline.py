@@ -186,7 +186,14 @@ from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
     capture_patch_pair_robust,
 )
-from src.chain_detector import DEBOUNCE_CONFIRM_FRAMES, ChainEvent, VideoChainTracker
+from src.chain_detector import (
+    CHAIN_MECHANISM_FORMULA,
+    CHAIN_MECHANISM_LANDING,
+    CHAIN_MECHANISM_SCORE_JUMP,
+    DEBOUNCE_CONFIRM_FRAMES,
+    ChainEvent,
+    VideoChainTracker,
+)
 from src.drift_detector import DriftDetector, DriftResult
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
@@ -4162,6 +4169,7 @@ class RecognitionPipeline:
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
+            mechanism=CHAIN_MECHANISM_SCORE_JUMP,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
@@ -4342,6 +4350,7 @@ class RecognitionPipeline:
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
+            mechanism=CHAIN_MECHANISM_FORMULA,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec
@@ -5206,6 +5215,7 @@ class RecognitionPipeline:
                         all_clear_bonus_applied=0,
                         ojama_sent=0, leftover_score=0,
                         is_all_clear=False,
+                        mechanism=CHAIN_MECHANISM_LANDING,
                     )
                     chain_until = (
                         time_sec
