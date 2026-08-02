@@ -38,9 +38,11 @@ exchange_labels.csv の fire_*/opp_*/diff_* 3つ組 (各指標の攻撃側値/�
 from __future__ import annotations
 
 import argparse
+import datetime
 import time
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor
@@ -246,6 +248,66 @@ def compute_perm_importance(
 
 
 # =============================================================================
+# RT推論用モデル永続化 (--save-model、2026-08-02 追加)
+# =============================================================================
+# ΔWinProb接続アーキ設計 (案C=仮想盤面2回評価) の Step1: RT (リアルタイム)
+# モードでは sim_* 3列のMC計算 (平均1秒/件) が予算オーバーのため、
+# 「案D単体 (41特徴量、AUC 0.786/rho 0.694)」をRT層のモデルとして永続化する。
+# src/exchange_predictor.py がこの joblib バンドルを読み込む。
+
+def fit_final_models(
+    X: np.ndarray, y_cls: np.ndarray, y_reg: np.ndarray,
+) -> tuple[HistGradientBoostingClassifier, HistGradientBoostingRegressor]:
+    """全データで最終モデル (cls+reg) を学習する (OOF評価とは別、RT推論用の本番モデル)。
+
+    OOF学習 (run_oof_classifier/run_oof_regressor) は評価専用でfold毎に別モデルを
+    使い捨てるため、RT推論に使う「全データで学習した1本のモデル」はここで別途
+    学習する (ハイパラは同一のCLS_PARAMS/REG_PARAMSを再利用、コピペ再実装しない)。
+    """
+    cls_model = HistGradientBoostingClassifier(**CLS_PARAMS)
+    cls_model.fit(X, y_cls)
+    reg_model = HistGradientBoostingRegressor(**REG_PARAMS)
+    reg_model.fit(X, y_reg)
+    return cls_model, reg_model
+
+
+def save_model_bundle(
+    cls_model: HistGradientBoostingClassifier,
+    reg_model: HistGradientBoostingRegressor,
+    indicator_bases: list[str],
+    feature_names: list[str],
+    labels_path: str,
+    model_date: str,
+    n_samples: int,
+    save_path: Path,
+) -> None:
+    """RT推論用モデルバンドルを joblib で保存する (src/exchange_predictor.py が読む形式)。
+
+    src/exchange_predictor.py は scripts/ への依存を持たない設計のため、
+    推論時に必要なメタ情報 (indicator_bases・phase一覧・fire_side一覧) を
+    全てバンドルに埋め込む (self-contained にする)。
+    """
+    bundle = {
+        "cls_model": cls_model,
+        "reg_model": reg_model,
+        "indicator_bases": indicator_bases,
+        "feature_names": feature_names,
+        "phases": EXCHANGE_PHASES,
+        "fire_sides": ("1P", "2P"),
+        "metadata": {
+            "labels_csv": labels_path,
+            "model_date": model_date,
+            "n_samples": n_samples,
+            "cls_params": CLS_PARAMS,
+            "reg_params": REG_PARAMS,
+        },
+    }
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bundle, save_path)
+    print(f"  RT推論用モデル保存: {save_path}")
+
+
+# =============================================================================
 # メイン
 # =============================================================================
 
@@ -255,6 +317,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--labels", default="data/indicators_v2/exchange_labels.csv")
     parser.add_argument("--out-dir", default="data/verify/exchange_model_d_2026-08-01")
     parser.add_argument("--n-folds", type=int, default=N_FOLDS)
+    parser.add_argument("--save-model", type=Path, default=None,
+                         help="RT推論用に全データで学習した最終モデルをjoblib保存するパス"
+                              " (既定=None=保存しない、旧挙動と完全一致)")
+    parser.add_argument("--model-date", type=str, default=None,
+                         help="保存モデルのメタ情報に記録する日時 (既定=実行時刻の自動生成)")
     return parser.parse_args()
 
 
@@ -323,6 +390,16 @@ def main() -> None:
         name="案D", prob_taiou_success=oof_proba, net_ojama_after_pred=oof_pred,
     )
     compare_predictors(df, [pred_d], out_dir)
+
+    if args.save_model is not None:
+        print("\n=== 6. RT推論用モデル永続化 (--save-model) ===")
+        model_date = args.model_date or datetime.date.today().isoformat()
+        cls_final, reg_final = fit_final_models(X, y_cls, y_reg)
+        save_model_bundle(
+            cls_final, reg_final, indicator_bases, feature_names,
+            args.labels, model_date, len(df), args.save_model,
+        )
+
     print(f"\n出力先: {out_dir}")
     print(f"=== 完了 (入力: {args.labels}) ===")
 
