@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_RED, Board
+from src.scoring import OJAMA_MAX_DROP_PER_TURN
 from scripts.compute_exchange_delta_winprob import (
     BOARD_ONLY_INDICATOR_BASES,
     CHAIN_WINDOW_FALLBACK_TAIL_SEC,
@@ -25,8 +26,10 @@ from scripts.compute_exchange_delta_winprob import (
     _assign_phase_by_puyo_tertile,
     _build_mirror_paired,
     _build_stable_timeline,
+    HYSTERESIS_MARGIN_OJAMA,
     LETHAL_CLAMP_FAVOR_PCT,
     _aggregate_known_pending_net_ojama,
+    _clamp_severity,
     _find_active_chain_window,
     _is_airborne_at,
     _lethal_readout_clamp,
@@ -1013,41 +1016,51 @@ class TestLethalReadoutClamp:
     def test_no_airborne_events_returns_model_value_unchanged(self) -> None:
         empty1, empty2 = Board(), Board()
         sim = ChainSimulator()
-        result = _lethal_readout_clamp([], 3.0, empty1, empty2, model_winprob_1p=62.0, simulator=sim)
+        result, is_active = _lethal_readout_clamp([], 3.0, empty1, empty2, model_winprob_1p=62.0, simulator=sim)
         assert result == pytest.approx(62.0)
+        assert is_active is False
 
     def test_pending_within_capacity_does_not_clamp(self) -> None:
         """空盤面 (room=72) に対し pending=50 は容量内 -> 通常評価のまま。"""
         empty1, empty2 = Board(), Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=50.0)]
-        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
+        result, is_active = _lethal_readout_clamp(
+            windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
         assert result == pytest.approx(55.0)
+        assert is_active is False
 
     def test_pending_exceeds_capacity_clamps_toward_survivor_1p_favor(self) -> None:
-        """2P発火の pending=200 が1Pの空盤面容量(72)を大幅超過 -> 2P有利にクランプしない
-        (1Pが脅威を受ける側なので2P有利 = 1P視点は低いクランプになるはず)。
+        """2P発火の pending=200 が1Pの空盤面容量(72)を大幅超過 (severity=1.0飽和)
+        -> 2P有利にクランプしない (1Pが脅威を受ける側なので2P有利 = 1P視点は
+        低いクランプになるはず)。raw_excess=200-0-72=128>=30なのでsevrity=1.0
+        (旧クランプ相当) に飽和する。
         """
         empty1, empty2 = Board(), Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
-        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
+        result, is_active = _lethal_readout_clamp(
+            windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
         assert result == pytest.approx(100.0 - LETHAL_CLAMP_FAVOR_PCT)
+        assert is_active is True
 
     def test_pending_exceeds_capacity_clamps_toward_1p_when_2p_threatened(self) -> None:
         """1P発火の pending=200 が2Pの空盤面容量を大幅超過 -> 1P有利に強くクランプ。"""
         empty1, empty2 = Board(), Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("1P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
-        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=45.0, simulator=sim)
+        result, is_active = _lethal_readout_clamp(
+            windows, 2.0, empty1, empty2, model_winprob_1p=45.0, simulator=sim)
         assert result == pytest.approx(LETHAL_CLAMP_FAVOR_PCT)
+        assert is_active is True
 
     def test_clamp_never_weakens_an_already_more_extreme_model_output(self) -> None:
         """モデル出力がクランプ値より既に極端な場合はそちらを維持する (max/minの意図)。"""
         empty1, empty2 = Board(), Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("1P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
-        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=99.0, simulator=sim)
+        result, _is_active = _lethal_readout_clamp(
+            windows, 2.0, empty1, empty2, model_winprob_1p=99.0, simulator=sim)
         assert result == pytest.approx(99.0)
 
 
@@ -1098,9 +1111,10 @@ class TestLethalReadoutClampCounterDeduction:
         empty_attacker = Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
-        result = _lethal_readout_clamp(
+        result, is_active = _lethal_readout_clamp(
             windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
         assert result == pytest.approx(100.0 - LETHAL_CLAMP_FAVOR_PCT)
+        assert is_active is True
 
     def test_p_prime_within_room_does_not_clamp_even_though_raw_p_exceeds_room(self) -> None:
         """match_04 (main実測) の核心: 返し控除前は room を超えていても
@@ -1111,9 +1125,10 @@ class TestLethalReadoutClampCounterDeduction:
         empty_attacker = Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=67.0)]
-        result = _lethal_readout_clamp(
+        result, is_active = _lethal_readout_clamp(
             windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
         assert result == pytest.approx(55.0)  # 通常評価のまま (クランプなし)
+        assert is_active is False
 
     def test_p_prime_non_positive_short_circuits_before_room_check(self) -> None:
         """返しだけで完全に相殺できる (P<=返し能力) 場合は room 比較すら行わず
@@ -1123,6 +1138,75 @@ class TestLethalReadoutClampCounterDeduction:
         empty_attacker = Board()
         sim = ChainSimulator()
         windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=1.0)]
-        result = _lethal_readout_clamp(
+        result, is_active = _lethal_readout_clamp(
             windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
         assert result == pytest.approx(55.0)
+        assert is_active is False
+
+    def test_partial_severity_blends_smoothly_instead_of_jumping(self) -> None:
+        """2026-08-04 連続化の核心: raw_excess が0-30の中間 (=23) だと、
+        model_winprob_1p とクランプ目標値の間の線形ブレンドになる (崖なし)。
+        pending=90, 返し能力=1.0, room=66 -> raw_excess=90-1-66=23,
+        severity=23/30=0.7667。
+        """
+        seed_defender = _seed_board_with_small_counter()  # room=66, 返し能力=1.0
+        empty_attacker = Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=90.0)]
+        result, is_active = _lethal_readout_clamp(
+            windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
+        target = 100.0 - LETHAL_CLAMP_FAVOR_PCT
+        severity = 23.0 / OJAMA_MAX_DROP_PER_TURN
+        expected = min(55.0, (1.0 - severity) * 55.0 + severity * target)
+        assert result == pytest.approx(expected)
+        assert 5.0 < result < 55.0  # 崖 (55->5直行) でなく中間値であることの確認
+        assert is_active is True
+
+
+class TestClampSeverity:
+    """_clamp_severity: 連続ブレンド係数 + ヒステリシス (2026-08-04)。"""
+
+    def test_negative_excess_inactive_gives_zero_severity(self) -> None:
+        severity, is_active = _clamp_severity(raw_excess=-10.0, was_active=False)
+        assert severity == pytest.approx(0.0)
+        assert is_active is False
+
+    def test_excess_saturates_at_one_beyond_full_turn(self) -> None:
+        severity, is_active = _clamp_severity(raw_excess=OJAMA_MAX_DROP_PER_TURN * 2, was_active=False)
+        assert severity == pytest.approx(1.0)
+        assert is_active is True
+
+    def test_partial_excess_gives_linear_severity(self) -> None:
+        severity, is_active = _clamp_severity(raw_excess=15.0, was_active=False)
+        assert severity == pytest.approx(15.0 / OJAMA_MAX_DROP_PER_TURN)
+        assert is_active is True
+
+    def test_boundary_zero_excess_not_active_when_was_inactive(self) -> None:
+        """was_active=Falseなら raw_excess=0 (境界) はまだ活性化しない (>0が条件)。"""
+        severity, is_active = _clamp_severity(raw_excess=0.0, was_active=False)
+        assert severity == pytest.approx(0.0)
+        assert is_active is False
+
+    def test_hysteresis_keeps_active_within_margin_after_dropping_below_zero(self) -> None:
+        """was_active=True なら raw_excess が -HYSTERESIS_MARGIN_OJAMA まで
+        (それより浅ければ) 発動状態を維持する (小刻みな往復による点滅防止)。
+        """
+        raw_excess = -(HYSTERESIS_MARGIN_OJAMA - 1.0)  # マージン未満の後退
+        severity, is_active = _clamp_severity(raw_excess=raw_excess, was_active=True)
+        assert is_active is True
+        assert severity == pytest.approx(0.0)  # severity自体は0未満をクリップして0
+
+    def test_hysteresis_deactivates_once_beyond_margin(self) -> None:
+        """was_active=True でも raw_excess が -HYSTERESIS_MARGIN_OJAMA を
+        下回れば非活性化する。
+        """
+        raw_excess = -(HYSTERESIS_MARGIN_OJAMA + 1.0)
+        severity, is_active = _clamp_severity(raw_excess=raw_excess, was_active=True)
+        assert is_active is False
+        assert severity == pytest.approx(0.0)
+
+    def test_was_active_false_ignores_hysteresis_margin(self) -> None:
+        """was_active=False (非活性から) の場合はマージン無しで raw_excess>0 のみで判定する。"""
+        raw_excess = -(HYSTERESIS_MARGIN_OJAMA - 1.0)  # マージン内でも非活性のまま
+        severity, is_active = _clamp_severity(raw_excess=raw_excess, was_active=False)
+        assert is_active is False
