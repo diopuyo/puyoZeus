@@ -277,5 +277,14 @@ class Board:
             return NotImplemented
         return bool(np.array_equal(self._grid, other._grid))
 
+    def grid_bytes(self) -> bytes:
+        """盤面内容のハッシュ可能なバイト表現を返す (キャッシュキー用途)。
+
+        内部 numpy 配列を直接晒さず、同一盤面内容なら常に同一バイト列を
+        返すことだけを保証する (呼び出し側で盤面同値判定・辞書キー等に使う、
+        例: scripts/compute_exchange_delta_winprob.py の重い指標計算キャッシュ)。
+        """
+        return self._grid.tobytes()
+
     def __repr__(self) -> str:
         return f"Board(puyos={self.count_puyos()}, dead={self.is_dead()})"

@@ -19,26 +19,13 @@ from scripts.render_delta_winprob_demo import (
     _to_1p_view,
     build_fire_event_views,
     compute_display_state,
-    ignition_time_for_event,
     select_video_segment,
     stable_value_at,
 )
 
-
-# =============================================================================
-# ignition_time_for_event
-# =============================================================================
-
-def test_ignition_time_subtracts_chain_anim_duration() -> None:
-    """t_sec から CHAIN_ANIM_PER_STEP_SEC(=0.4)*連鎖数 を引いた値になる。"""
-    t = ignition_time_for_event(t_sec=100.0, approx_fire_chains=5.0)
-    assert t == pytest.approx(100.0 - 0.4 * 5.0)
-
-
-def test_ignition_time_zero_chains_clamped() -> None:
-    """連鎖数0以下でも例外にならず t_sec そのまま(クランプ)を返す。"""
-    t = ignition_time_for_event(t_sec=50.0, approx_fire_chains=0.0)
-    assert t == pytest.approx(50.0)
+# ignition_time_for_event (Fix C、データ駆動版) 自体の単体テストは
+# tests/test_compute_exchange_delta_winprob.py に集約済み (2026-08-03移設、
+# 重複実装しない)。本ファイルは build_fire_event_views 経由の呼び出しのみ検証。
 
 
 # =============================================================================
@@ -82,15 +69,25 @@ def test_stable_value_at_after_last_sample_holds_last() -> None:
 
 def _make_events_df() -> pd.DataFrame:
     return pd.DataFrame([
-        {"t_sec": 100.0, "approx_fire_chains": 5.0, "fire_side": "1P",
+        {"t_sec": 100.0, "approx_fire_chains": 5.0, "fire_side": "1P", "game_idx": 0,
          "winprob_before": 45.0, "winprob_after": 70.0, "delta_winprob": 25.0},
-        {"t_sec": 120.0, "approx_fire_chains": 3.0, "fire_side": "2P",
+        {"t_sec": 120.0, "approx_fire_chains": 3.0, "fire_side": "2P", "game_idx": 0,
          "winprob_before": 60.0, "winprob_after": 30.0, "delta_winprob": 30.0},
     ])
 
 
+def _make_ignition_cache() -> SimpleNamespace:
+    """ignition_time_for_event (Fix C) 用の最小限の偽 npz キャッシュ。
+
+    1P: t_sec=100 の直前STABLEは t=95。2P: t_sec=120 の直前STABLEは t=115。
+    """
+    r1p = SimpleNamespace(game_idx=np.array([0, 0, 0]), t_sec=np.array([80.0, 95.0, 140.0]))
+    r2p = SimpleNamespace(game_idx=np.array([0, 0, 0]), t_sec=np.array([110.0, 115.0, 150.0]))
+    return SimpleNamespace(r1p=r1p, r2p=r2p)
+
+
 def test_build_fire_event_views_sorted_by_ignition_and_1p_normalized() -> None:
-    views = build_fire_event_views(_make_events_df())
+    views = build_fire_event_views(_make_events_df(), _make_ignition_cache())
     assert len(views) == 2
     # ignition_sec 昇順であること
     assert views[0].ignition_sec < views[1].ignition_sec
@@ -106,7 +103,7 @@ def test_build_fire_event_views_sorted_by_ignition_and_1p_normalized() -> None:
 
 @pytest.fixture()
 def sample_events() -> list[FireEventView]:
-    return build_fire_event_views(_make_events_df())
+    return build_fire_event_views(_make_events_df(), _make_ignition_cache())
 
 
 @pytest.fixture()
@@ -131,14 +128,23 @@ def test_before_ignition_shows_old_stale_value(sample_events, sample_timeline) -
     assert state.winprob_1p == pytest.approx(45.0)
 
 
-def test_during_chain_animation_jumps_to_predicted_after(sample_events, sample_timeline) -> None:
-    """発火検知後〜連鎖終了前は予測後勝率へ即座にジャンプして保持する。"""
+def test_jump_active_flag_true_during_ignition_to_fire_end_window(sample_events, sample_timeline) -> None:
+    """jump_active フラグ (演出用、バーの黄色マーカー等) はignition~fire_end間で立つ。
+
+    2026-08-03 指摘 欠陥E-2 対処: 数値表示 (winprob_1p) はここではもう
+    上書きしない (常に timeline の値、_build_stable_timeline が
+    chain_windows込みで構築していれば発火側固定+相手側liveの値がそのまま
+    出る)。本テストの sample_timeline は plain な2点配列 (chain_windows
+    未使用) のため forward-fill 値がそのまま出ることを確認する
+    (「別上書きが無い」ことの検証、ジャンプの実現自体は
+    build_chain_in_progress_windows 経由のテストで別途検証済み)。
+    """
     t_arr, v_arr = sample_timeline
     ev0 = sample_events[0]
     mid_t = (ev0.ignition_sec + ev0.fire_end_sec) / 2.0
     state = compute_display_state(sample_events, t_arr, v_arr, t=mid_t)
     assert state.jump_active is True
-    assert state.winprob_1p == pytest.approx(ev0.winprob_after_1p)
+    assert state.winprob_1p == pytest.approx(stable_value_at(t_arr, v_arr, mid_t))
     assert state.badge is not None
     assert state.badge.fire_side == "1P"
 
@@ -163,14 +169,13 @@ def test_after_chain_end_falls_back_to_real_stable_line(sample_events, sample_ti
     assert state.winprob_1p == pytest.approx(45.0)
 
 
-def test_second_event_overrides_first_when_later(sample_events, sample_timeline) -> None:
-    """2件目(2P発火)の検知後は2件目が最新イベントとして選ばれる。"""
+def test_second_event_selected_as_badge_when_later(sample_events, sample_timeline) -> None:
+    """2件目(2P発火)の検知後は2件目が最新イベントとしてbadgeに選ばれる。"""
     t_arr, v_arr = sample_timeline
     ev1 = sample_events[1]
     mid_t = (ev1.ignition_sec + ev1.fire_end_sec) / 2.0
     state = compute_display_state(sample_events, t_arr, v_arr, t=mid_t)
     assert state.jump_active is True
-    assert state.winprob_1p == pytest.approx(ev1.winprob_after_1p)
     assert state.badge.fire_side == "2P"
 
 

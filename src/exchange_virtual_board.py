@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 from src.board import Board
 from src.chain import ChainResult, ChainSimulator
+from src.scoring import OJAMA_MAX_DROP_PER_TURN
 
 # ============================
 # 定数定義
@@ -40,6 +41,18 @@ from src.chain import ChainResult, ChainSimulator
 # 一致しないようにするためのマジックナンバー回避定数。
 _OJAMA_SEED_SALT_TO_OPPONENT: int = 0xA11
 _OJAMA_SEED_SALT_TO_ATTACKER: int = 0xB22
+
+# 2026-08-03 指摘 (欠陥E-1): 仮想着弾の1ターン上限。
+# 実ゲームでは1ターンに降るおじゃまは最大 OJAMA_MAX_DROP_PER_TURN (=30個、
+# 5段×6列、src/scoring.py で既定義・docs/PUYO_RULES_CONFIRMED_2026-07-22.md
+# L17で確定済み) であり、超過分は複数ターンに分割して降る (即死ではない)。
+# 旧実装は net_ojama_after_pred (連続値、時に300〜450個規模) を1回で全量
+# 投下しており、単独盤面容量(72セル)を超える大型連鎖ほど不当に
+# opponent_dead を True 判定していた (main実測 match_02 2992.93s イベント:
+# 予測448個を2Pの空き36セルへ全量投下→即窒息判定、実際は2Pは生存し続けた)。
+# 本定数を超える分は「まだ空中(次ターン以降に降る予定)」として扱い、
+# 本関数の1回評価では物理配置しない (VirtualBoardPair の ojama_to_* は
+# 実際に配置した個数=上限適用後の値を返す)。
 
 # net_ojama_after_pred の丸め方式: 予測値は連続値 (期待値) だが実際の着弾は
 # 整数個のため四捨五入する。0.5 を挟む境界での偏りは無視できる規模
@@ -142,7 +155,11 @@ def reconstruct_virtual_board_pair(
     attacker_after = chain_result.final_board.copy()
     opponent_after = opponent_board.copy()
 
-    ojama_count = int(round(abs(net_ojama_after_pred)))
+    # 欠陥E-1: 1ターンで物理配置するのは OJAMA_MAX_DROP_PER_TURN (=30個) まで
+    # (超過分はまだ空中、本関数の1回評価では配置しない、モジュール冒頭の
+    # 定数コメント参照)。seed もこの「実際に配置する個数」から導出する
+    # (物理的に同じ配置結果になる入力は同じシードになるのが自然なため)。
+    ojama_count = min(int(round(abs(net_ojama_after_pred))), OJAMA_MAX_DROP_PER_TURN)
     ojama_to_opponent = 0
     ojama_to_attacker = 0
     if ojama_count > 0:
