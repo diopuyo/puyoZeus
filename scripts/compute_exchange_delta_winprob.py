@@ -830,6 +830,28 @@ def apply_mutual_exchange_adjustment(
 # 通常評価がこれを超えていればクランプは効かない=より強い方を採用)。
 LETHAL_CLAMP_FAVOR_PCT: float = 95.0
 
+# =============================================================================
+# 4e. 表示側「凍結検知」による判定保留 (2026-08-03 main指示・方針(b))
+# =============================================================================
+#
+# 背景: match_02終盤 (2P実7連鎖、実画面確認済み) で、2P側のSTABLEスナップ
+# ショットが試合区間の残り13秒以上一切更新されなかった (掛け算式スコア表示が
+# 連鎖完了まで続くためOCR/盤面確定が正しく凍結する、feedback_chain_phase_
+# physics_only通りの正しい挙動)。この間、forward-fillされた「凍結した2P盤面」
+# を確定情報として使い続けると、model_rawが5%台に固定される実害があった
+# (真因は _diag_match02_underclamp_2026-08-03.py で確定、クランプ機構自体は
+# 無罪)。対処として、相手側データが一定秒数以上更新されない場合は数値を
+# 確定表示せず、判定保留 (凍結直前の最終確定値を淡色維持) に切り替える。
+#
+# 閾値の物理根拠 (シーン逆算禁止、_measure_freeze_threshold_2026-08-03.py で
+# 導出): 66動画70本npzの通常設置イベント24.6万件 (measure_placement_speed_
+# by_row_2026-08-03.py の資産を再利用、再実装しない) の全段プールdt分布で
+# p99.99=4.212秒 (=1万件に1件しか超えない極端な例)。実測される本物の連鎖
+# アニメ時間 (user実測8連鎖=14.5秒、本タスクで実画面確認した7連鎖=約10秒)
+# との間に十分なマージンがあるため、安全側に切り上げて6.0秒とする。
+NORMAL_PLACEMENT_GAP_P9999_SEC: float = 4.212  # 実測値 (再フィット禁止、ログ参照)
+FREEZE_DETECTION_THRESHOLD_SEC: float = 6.0    # 上記+安全マージン、通常プレイでは到達しない
+
 
 def _aggregate_known_pending_net_ojama(
     activity_windows: list[EventActivityWindow], t: float, board_1p: Board, board_2p: Board,
@@ -1141,7 +1163,7 @@ def _build_stable_timeline(
     t1, g1 = video_cache.r1p.t_sec[mask1], video_cache.r1p.grids[mask1]
     t2, g2 = video_cache.r2p.t_sec[mask2], video_cache.r2p.grids[mask2]
     if len(t1) == 0 or len(t2) == 0:
-        return pd.DataFrame(columns=["t_sec", "winprob_1p"])
+        return pd.DataFrame(columns=["t_sec", "winprob_1p", "is_uncertain"])
     puyo_totals = np.array([int((g != 0).sum()) for g in g1], dtype=float)
     q_low, q_high = np.quantile(puyo_totals, 0.33), np.quantile(puyo_totals, 0.67)
     windows = chain_windows or []
@@ -1149,6 +1171,7 @@ def _build_stable_timeline(
 
     eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
+    last_good_winprob = 50.0  # 凍結中に表示保持する「最後の確定値」(方針(b))
     for t in eval_times:
         idx1 = int(np.searchsorted(t1, t, side="right")) - 1
         idx2 = int(np.searchsorted(t2, t, side="right")) - 1
@@ -1170,7 +1193,19 @@ def _build_stable_timeline(
         winprob_1p = winprob_to_score100(p1)
         if activity:
             winprob_1p = _lethal_readout_clamp(activity, float(t), b1, b2, winprob_1p, simulator)
-        rows.append({"t_sec": float(t), "winprob_1p": winprob_1p})
+
+        # 方針(b): どちらかの側のSTABLE更新がFREEZE_DETECTION_THRESHOLD_SEC秒
+        # 以上途絶していれば、その盤面は連鎖進行中等で凍結中とみなし、
+        # 新しく計算した値でなく「凍結直前の最後の確定値」を表示保持する。
+        staleness_1p = float(t) - float(t1[idx1])
+        staleness_2p = float(t) - float(t2[idx2])
+        is_uncertain = (staleness_1p > FREEZE_DETECTION_THRESHOLD_SEC
+                         or staleness_2p > FREEZE_DETECTION_THRESHOLD_SEC)
+        if is_uncertain:
+            winprob_1p = last_good_winprob
+        else:
+            last_good_winprob = winprob_1p
+        rows.append({"t_sec": float(t), "winprob_1p": winprob_1p, "is_uncertain": is_uncertain})
     return pd.DataFrame(rows)
 
 

@@ -550,7 +550,68 @@ def test_build_stable_timeline_empty_side_returns_empty_df():
     sim = ChainSimulator()
     df = _build_stable_timeline(cache, game_idx=999, models=models, simulator=sim)
     assert len(df) == 0
-    assert list(df.columns) == ["t_sec", "winprob_1p"]
+    assert list(df.columns) == ["t_sec", "winprob_1p", "is_uncertain"]
+
+
+# =============================================================================
+# 2026-08-03 方針(b): 表示側「凍結検知」による判定保留
+# =============================================================================
+
+def _make_video_cache_with_2p_freeze() -> _VideoNpzCache:
+    """1Pは2秒刻みで20秒まで継続、2Pはt=4.5で更新が完全に止まる合成キャッシュ。
+
+    FREEZE_DETECTION_THRESHOLD_SEC(=6.0秒)超の沈黙を作るための固定具。
+    """
+    n1 = 11
+    t1 = np.arange(n1, dtype=np.float32) * 2.0  # 0,2,4,...,20
+    grids1 = np.stack([_make_distinct_board(i).to_dict()["grid"] for i in range(n1)]).astype(np.int8)
+    t2 = np.array([0.5, 2.5, 4.5], dtype=np.float32)  # ここで更新が止まる (=凍結)
+    grids2 = np.stack([_make_distinct_board(100 + i).to_dict()["grid"] for i in range(3)]).astype(np.int8)
+    r1p = NpzRecord(video_id="video_freeze", side="1P", t_sec=t1,
+                    game_idx=np.zeros(n1, dtype=np.int32), grids=grids1,
+                    won=np.zeros(n1, dtype=np.float32), score=np.zeros(n1, dtype=np.int32))
+    r2p = NpzRecord(video_id="video_freeze", side="2P", t_sec=t2,
+                    game_idx=np.zeros(3, dtype=np.int32), grids=grids2,
+                    won=np.ones(3, dtype=np.float32), score=np.zeros(3, dtype=np.int32))
+    return _VideoNpzCache(r1p=r1p, r2p=r2p)
+
+
+def test_build_stable_timeline_flags_uncertain_after_freeze_threshold():
+    """相手側(2P)がFREEZE_DETECTION_THRESHOLD_SEC秒を超えて更新が無い評価点は
+    is_uncertain=True になる (方針(b))。
+    """
+    cache = _make_video_cache_with_2p_freeze()
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
+    before = df.loc[df["t_sec"] == 10.0, "is_uncertain"].iloc[0]   # staleness=5.5<=6.0
+    after = df.loc[df["t_sec"] == 12.0, "is_uncertain"].iloc[0]    # staleness=7.5>6.0
+    assert bool(before) is False
+    assert bool(after) is True
+
+
+def test_build_stable_timeline_holds_last_good_value_during_freeze():
+    """凍結中は新規計算値でなく凍結直前の最後の確定値を保持する (方針(b))。"""
+    cache = _make_video_cache_with_2p_freeze()
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
+    # t=10.0 (staleness=5.5<=6.0) が判定保留に入る直前の最後の確定値。
+    last_good = float(df.loc[df["t_sec"] == 10.0, "winprob_1p"].iloc[0])
+    frozen_values = df.loc[df["t_sec"] > 10.0, "winprob_1p"].to_numpy()
+    assert len(frozen_values) > 0
+    assert np.allclose(frozen_values, last_good)
+
+
+def test_build_stable_timeline_no_freeze_never_uncertain():
+    """両サイドとも通常更新が続く (_make_dense_video_cache) 場合は
+    is_uncertain が常にFalse (誤検知しないことの確認)。
+    """
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
+    assert not df["is_uncertain"].any()
 
 
 # =============================================================================

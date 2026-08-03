@@ -34,12 +34,14 @@ from scripts.label_exchange_outcome import (
     FIRE_EVENT_MERGE_GAP_SEC,
     PLACEMENT_SIGNATURE_MIN_INCREASE,
     PLACEMENT_SIGNATURE_PERSIST_SEC,
+    SCORE_DELTA_FIRE,
     NpzRecord,
     _count_concrete_puyos,
     _has_placement_signature,
     _last_valid_score_before,
     _merge_fire_event_clusters,
     _process_game,
+    _synthesize_terminal_event_row,
 )
 
 
@@ -309,3 +311,89 @@ class TestProcessGameFireMergeIntegration:
         sim = ChainSimulator()
         rows = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0)
         assert len(rows) == 2
+
+
+# =============================================================================
+# 終局イベント合成 (2026-08-03 main発注、方針(a)、既定OFF)
+# =============================================================================
+
+class TestSynthesizeTerminalEvents:
+    """既定OFF(後方互換) + --synthesize-terminal-events 相当 (flag=True) の挙動。"""
+
+    def test_default_off_does_not_add_synthetic_row(self) -> None:
+        """既定 (synthesize_terminal_events=False) では追加行なし (後方互換)。"""
+        t_sec = [0.0, 1.0, 2.0, 3.0, 4.0]
+        score = [0, 100, 100, 100, 200]  # index1で検出発火、その後さらに+100の欠落
+        grids = np.zeros((5, BOARD_ROWS, BOARD_COLS), dtype=np.int8)
+        fire_rec = _make_record("video_test", "1P", t_sec, score, grids)
+        opp_rec = _make_record("video_test", "2P", t_sec, [0] * 5, grids)
+        sim = ChainSimulator()
+        rows = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0)
+        assert len(rows) == 1
+        assert rows[0]["is_synthetic_terminal_event"] == 0
+
+    def test_flag_on_adds_synthetic_row_when_gap_after_last_cluster(self) -> None:
+        """既検出クラスタの後に閾値相当の増分が残っていれば1行追加される。
+
+        index1で1回検出発火 (delta=100>=80)。以降は各ステップ+30 (単発では
+        閾値未満のため新規検出されない) が3回続き、蓄積すると閾値相当になる
+        (=「小刻みな増分の後に一切イベント化されない」終局漏れの再現)。
+        """
+        t_sec = [0.0, 1.0, 2.0, 3.0, 4.0]
+        score = [0, 100, 130, 160, 190]
+        grids = np.zeros((5, BOARD_ROWS, BOARD_COLS), dtype=np.int8)
+        fire_rec = _make_record("video_test", "1P", t_sec, score, grids)
+        opp_rec = _make_record("video_test", "2P", t_sec, [0] * 5, grids)
+        sim = ChainSimulator()
+        rows = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0,
+                              synthesize_terminal_events=True)
+        assert len(rows) == 2
+        synth = [r for r in rows if r["is_synthetic_terminal_event"] == 1]
+        assert len(synth) == 1
+        assert synth[0]["t_sec"] == pytest.approx(4.0)
+        assert synth[0]["net_ojama_after"] == pytest.approx(float((190 - 100) // 70))
+
+    def test_flag_on_no_gap_after_last_cluster_adds_nothing(self) -> None:
+        """既検出クラスタの後に増分が無ければ合成行は追加されない。"""
+        t_sec = [0.0, 1.0, 2.0, 3.0]
+        score = [0, 100, 100, 105]  # 105-100=5 < SCORE_DELTA_FIRE
+        grids = np.zeros((4, BOARD_ROWS, BOARD_COLS), dtype=np.int8)
+        fire_rec = _make_record("video_test", "1P", t_sec, score, grids)
+        opp_rec = _make_record("video_test", "2P", t_sec, [0] * 4, grids)
+        sim = ChainSimulator()
+        rows = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0,
+                              synthesize_terminal_events=True)
+        assert len(rows) == 1
+        assert rows[0]["is_synthetic_terminal_event"] == 0
+
+    def test_flag_on_zero_detected_events_still_can_synthesize(self) -> None:
+        """試合中一度も発火が検出されなかった場合でも終局漏れがあれば合成される
+        (has_prior_event=False の経路、早期return分岐のテスト)。
+        """
+        t_sec = [0.0, 1.0, 2.0, 3.0]
+        score = [0, 30, 60, 90]  # 単発の検出発火は無い (各差分30<80) が累積90>=80
+        grids = np.zeros((4, BOARD_ROWS, BOARD_COLS), dtype=np.int8)
+        fire_rec = _make_record("video_test", "1P", t_sec, score, grids)
+        opp_rec = _make_record("video_test", "2P", t_sec, [0] * 4, grids)
+        sim = ChainSimulator()
+        rows_off = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0)
+        assert rows_off == []  # 既定は変わらず0行 (後方互換)
+
+        rows_on = _process_game(fire_rec, opp_rec, "1P", sim, puyo_q_low=10.0, puyo_q_high=30.0,
+                                 synthesize_terminal_events=True)
+        assert len(rows_on) == 1
+        assert rows_on[0]["is_synthetic_terminal_event"] == 1
+        assert rows_on[0]["net_ojama_after"] == pytest.approx(float(90 // 70))
+
+    def test_synthesize_terminal_event_row_returns_none_when_no_gap(self) -> None:
+        """単体呼び出しでも欠落が無ければNoneを返す。"""
+        t_sec = [0.0, 1.0]
+        score = [0, 10]
+        grids = np.zeros((2, BOARD_ROWS, BOARD_COLS), dtype=np.int8)
+        fire_rec = _make_record("video_test", "1P", t_sec, score, grids)
+        opp_rec = _make_record("video_test", "2P", t_sec, [0, 0], grids)
+        sim = ChainSimulator()
+        result = _synthesize_terminal_event_row(
+            fire_rec, opp_rec, "1P", [], sim, game_start_t=0.0,
+            puyo_q_low=10.0, puyo_q_high=30.0)
+        assert result is None
