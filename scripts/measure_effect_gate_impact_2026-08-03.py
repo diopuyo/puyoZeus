@@ -20,6 +20,23 @@
 3. **U セル除外**: correct_grid が 'U' (未検証) のセルは分母から除外
    (既存ロジックのまま、検証の結果これで OFF=47 が再現することを確認済み)。
 
+## v2 からの修正 (c26 型の1セル混同の根治)
+c26 t=287.0 で OFF=48 (真値47+1) となった原因は、アンカー (ラベル元 npz)
+の逆引きが t_sec 近傍 (許容1.0秒、最も近い時刻の行を採用) のみに頼っていた
+ため。真因を追跡したところ、build_full_board_label_sheet.py の CSV 出力が
+t_sec を小数第1位に丸めているせいで、**別々の実 t_sec (286.967 と 287.000)
+が偶然どちらも "287.0" に丸まる**衝突が発生しており、「287.0 に最も近い
+生 t_sec」を採用すると本来のアンカー行 (286.967, frame_idx=8609) ではなく
+隣の行 (287.000, frame_idx=8610、col1 が 2→9 と別物) を掴んでいた。
+本修正では labeling_sheet.csv に全行 (ok/fixed 問わず) 存在する
+recognized_grid 列 (= アンカーの文字列表現そのもの) を使い、
+**(video_id, side, game_idx, t_sec近傍窓) で候補を絞った上で
+recognized_grid と bit 一致する行**を一意に確定する (「最も時刻が近い」
+ではなく「文字列表現と完全一致する」を優先条件にすることで丸め誤差の
+影響を受けない)。確定したアンカー行の frame_idx を OFF 再収集 npz の
+**frame_idx 完全一致検索**に使う (認識は決定論的なので同一動画・同一
+pipeline 設定なら frame_idx は bit-for-bit 再現されるはず)。
+
 ## 検収基準
 OFF 側の誤りセル合計が 47 (fixed 12 枚の既知誤り) に一致すること。
 一致しなければ突合がまだ壊れている。
@@ -89,6 +106,14 @@ class LabelSample:
     side: str            # "1P" / "2P"
     status: str          # "ok" / "fixed"
     correct_grid: "np.ndarray"  # (13, 6) int、U は COLOR_UNKNOWN
+    # c26 型の1セル混同根治 (2026-08-03): アンカー逆引きを game_idx でも
+    # 絞り込むための追加キー。labeling_sheet.csv 由来、無ければ None
+    # (その場合は従来通り t_sec 近傍のみで逆引きする、backwards compat)。
+    game_idx: "int | None" = None
+    # アンカー行を一意確定するための検証用 grid (labeling_sheet.csv の
+    # recognized_grid をデコードしたもの、ok/fixed 問わず全行に存在)。
+    # None なら従来通り時刻近傍のみで逆引きする (backwards compat)。
+    anchor_recognized_grid: "np.ndarray | None" = None
 
 
 @dataclass
@@ -121,12 +146,17 @@ def decode_grid_string(s: str) -> "np.ndarray":
 
 def _load_recognized_grid_lookup(
     csv_path: Path = LABEL_SHEET_CSV,
-) -> "dict[tuple[str, str, str], str]":
-    """(video_id, t_sec文字列, side) -> recognized_grid の辞書 (「ok」行の真値用)。"""
-    lookup: dict[tuple[str, str, str], str] = {}
+) -> "dict[tuple[str, str, str], tuple[str, int]]":
+    """(video_id, t_sec文字列, side) -> (recognized_grid, game_idx) の辞書。
+
+    「ok」行の真値取得用。game_idx も併せて返す (c26 型の1セル混同根治用、
+    アンカー逆引きを t_sec 近傍だけでなく game_idx でも絞り込むため)。
+    """
+    lookup: dict[tuple[str, str, str], tuple[str, int]] = {}
     with csv_path.open(encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
-            lookup[(row["video_id"], row["t_sec"], row["side"])] = row["recognized_grid"]
+            key = (row["video_id"], row["t_sec"], row["side"])
+            lookup[key] = (row["recognized_grid"], int(row["game_idx"]))
     return lookup
 
 
@@ -139,13 +169,10 @@ def load_label_samples(csv_path: Path = LABEL_RESULT_CSV) -> list[LabelSample]:
             status = row["status"]
             if status not in ("ok", "fixed"):
                 continue
-            if status == "fixed":
-                grid_str = row["correct_grid"]
-            else:
-                grid_str = recognized_lookup.get(
-                    (row["video_id"], row["t_sec"], row["side"]), "",
-                )
-            if not grid_str:
+            key = (row["video_id"], row["t_sec"], row["side"])
+            recognized_str, game_idx = recognized_lookup.get(key, ("", None))
+            grid_str = row["correct_grid"] if status == "fixed" else recognized_str
+            if not grid_str or not recognized_str:
                 continue
             samples.append(LabelSample(
                 video_stem=row["video_id"].replace("video_", ""),
@@ -153,6 +180,8 @@ def load_label_samples(csv_path: Path = LABEL_RESULT_CSV) -> list[LabelSample]:
                 side=row["side"],
                 status=status,
                 correct_grid=decode_grid_string(grid_str),
+                game_idx=game_idx,
+                anchor_recognized_grid=decode_grid_string(recognized_str),
             ))
     return samples
 
@@ -169,6 +198,8 @@ class _NpzIndex:
     t_secs: "np.ndarray"
     sides: "np.ndarray"
     grids: "np.ndarray"
+    frame_idxs: "np.ndarray"
+    game_idxs: "np.ndarray"
 
 
 def _load_npz_index(npz_path: Path) -> "_NpzIndex | None":
@@ -179,23 +210,79 @@ def _load_npz_index(npz_path: Path) -> "_NpzIndex | None":
         t_secs=data["t_sec"].astype(np.float64),
         sides=data["side"],
         grids=data["grids"],
+        frame_idxs=data["frame_idx"].astype(np.int64),
+        game_idxs=data["game_idx"].astype(np.int64),
     )
 
 
-def _lookup_anchor_grid(
-    idx: "_NpzIndex | None", side: str, t_sec: float,
-) -> "np.ndarray | None":
-    """ラベル元 npz から (side, t_sec) に最も近いアンカー grid を取得する。"""
+@dataclass
+class _AnchorRow:
+    """アンカー (ラベル元 npz) の該当行。"""
+
+    grid: "np.ndarray"
+    frame_idx: int
+    t_sec: float
+
+
+def _lookup_anchor_row(
+    idx: "_NpzIndex | None", side: str, t_sec: float, game_idx: "int | None",
+    expected_grid: "np.ndarray | None",
+) -> "_AnchorRow | None":
+    """ラベル元 npz から (side, game_idx, t_sec近傍) でアンカー行を一意に確定する。
+
+    c26 型の1セル混同根治 (2026-08-03): build_full_board_label_sheet.py の
+    CSV 出力は t_sec を小数第1位に丸めているため、別々の実 t_sec が同じ
+    表示値に丸まる衝突が起こりうる (実例: 286.967 と 287.000 が共に
+    "287.0")。「最も時刻が近い行」を採用すると丸め誤差で隣の行を掴む
+    ことがあるため、expected_grid (labeling_sheet.csv の recognized_grid を
+    デコードしたもの) と **grid が bit 一致する行**を優先して探す。
+    見つからない場合のみ (expected_grid が None、または一致行なしの場合)
+    従来通り時刻近傍の最近傍行にフォールバックする。
+    """
     if idx is None:
         return None
     mask = idx.sides == side
+    if game_idx is not None:
+        mask = mask & (idx.game_idxs == game_idx)
     if not mask.any():
         return None
-    diffs = np.abs(idx.t_secs[mask] - t_sec)
-    best_i = int(np.argmin(diffs))
-    if diffs[best_i] > ANCHOR_LOOKUP_TOLERANCE_SEC:
+    cand = np.where(mask)[0]
+    diffs = np.abs(idx.t_secs[cand] - t_sec)
+    within = cand[diffs <= ANCHOR_LOOKUP_TOLERANCE_SEC]
+    if len(within) == 0:
         return None
-    return idx.grids[mask][best_i]
+    if expected_grid is not None:
+        exact = [i for i in within if np.array_equal(idx.grids[i], expected_grid)]
+        if exact:
+            best = min(exact, key=lambda i: abs(idx.t_secs[i] - t_sec))
+            return _AnchorRow(
+                grid=idx.grids[best], frame_idx=int(idx.frame_idxs[best]),
+                t_sec=float(idx.t_secs[best]),
+            )
+    # フォールバック: 従来通り最も時刻が近い行 (bit 一致行が見つからない場合)。
+    diffs_within = np.abs(idx.t_secs[within] - t_sec)
+    best = within[int(np.argmin(diffs_within))]
+    return _AnchorRow(
+        grid=idx.grids[best], frame_idx=int(idx.frame_idxs[best]),
+        t_sec=float(idx.t_secs[best]),
+    )
+
+
+def _find_by_frame_idx_exact(
+    idx: "_NpzIndex", side: str, frame_idx: int,
+) -> "tuple[np.ndarray, float] | None":
+    """side 一致 + frame_idx 完全一致の行を探す (c26 型の1セル混同根治)。
+
+    認識は決定論的なので、同一動画・同一 pipeline 設定で処理すれば同じ
+    実フレームは同じ frame_idx を得るはずで、これなら曖昧さが生じない。
+    """
+    mask = (idx.sides == side) & (idx.frame_idxs == frame_idx)
+    cand = np.where(mask)[0]
+    if len(cand) == 0:
+        return None
+    # 同一 frame_idx が複数 (通常は無いはずだが安全のため) あれば先頭を採用。
+    best = int(cand[0])
+    return idx.grids[best], float(idx.t_secs[best])
 
 
 def _find_bit_exact_match(
@@ -204,8 +291,9 @@ def _find_bit_exact_match(
 ) -> "tuple[np.ndarray, float] | None":
     """side 一致 + anchor_grid と bit 一致する行を、center_t_sec に最も近い順に探す。
 
-    複数の完全一致 (盤面が変化しない区間) がありうるため、時刻窓内に
-    絞った上で center_t_sec に最も近いものを採用する。
+    frame_idx 完全一致検索のフォールバック (何らかの理由で frame_idx が
+    ずれていた場合の保険)。複数の完全一致 (盤面が変化しない区間) が
+    ありうるため、時刻窓内に絞った上で center_t_sec に最も近いものを採用する。
     """
     mask = (idx.sides == side) & (np.abs(idx.t_secs - center_t_sec) <= window_sec)
     cand_idx = np.where(mask)[0]
@@ -249,14 +337,26 @@ def compare_one_sample(
     off_idx: "_NpzIndex | None",
     on_idx: "_NpzIndex | None",
 ) -> CompareResult:
-    """アンカー方式で1サンプル分の OFF/ON 誤りセル数を確定する。"""
-    anchor_grid = _lookup_anchor_grid(anchor_idx, s.side, s.t_sec)
-    if anchor_grid is None or off_idx is None:
+    """アンカー方式で1サンプル分の OFF/ON 誤りセル数を確定する。
+
+    c26 型の1セル混同根治 (2026-08-03): まず game_idx で絞り込んだアンカー行
+    の frame_idx 完全一致で OFF 側を探す (曖昧さ無し)。何らかの理由で
+    frame_idx がずれていた場合のみ、旧来の bit-exact 時刻窓探索にフォールバック
+    する (フォールバック発生自体を検知できるよう、別扱いはしない=フラグは
+    出力しないが、通常運用では発生しないはず)。
+    """
+    anchor = _lookup_anchor_row(
+        anchor_idx, s.side, s.t_sec, s.game_idx, s.anchor_recognized_grid,
+    )
+    if anchor is None or off_idx is None:
         return CompareResult(s, False, None, None, None)
 
-    off_match = _find_bit_exact_match(
-        off_idx, s.side, anchor_grid, s.t_sec, ANCHOR_MATCH_WINDOW_SEC,
-    )
+    off_match = _find_by_frame_idx_exact(off_idx, s.side, anchor.frame_idx)
+    if off_match is None:
+        # フォールバック: frame_idx 不一致時のみ、旧来の bit-exact 時刻窓探索。
+        off_match = _find_bit_exact_match(
+            off_idx, s.side, anchor.grid, s.t_sec, ANCHOR_MATCH_WINDOW_SEC,
+        )
     if off_match is None:
         return CompareResult(s, False, None, None, None)
     off_grid, verified_t = off_match
