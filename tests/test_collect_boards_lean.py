@@ -900,8 +900,9 @@ class TestChainTriggerSecColumn:
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
     """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker /
 
-    normalize_fps_30 が末尾に順次 optional 追加され、既存引数の並び・
-    デフォルト値が一切変わっていないこと (backwards compat)。
+    normalize_fps_30 / enable_effect_gate / effect_gate_persist_sec が末尾に
+    順次 optional 追加され、既存引数の並び・デフォルト値が一切変わっていない
+    こと (backwards compat)。
     """
     import inspect
     mod = _import_lean()
@@ -915,9 +916,14 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     assert sig.parameters["sample_interval_frames"].default is None
     assert params[7] == "enable_chain_tracker"
     assert sig.parameters["enable_chain_tracker"].default is False
-    assert params[-1] == "normalize_fps_30"
+    assert params[8] == "normalize_fps_30"
     # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
     assert sig.parameters["normalize_fps_30"].default is True
+    # エフェクト時間ゲート (2026-08-03、A/B 計測用): 末尾に追加、既定 OFF。
+    assert params[-2] == "enable_effect_gate"
+    assert sig.parameters["enable_effect_gate"].default is False
+    assert params[-1] == "effect_gate_persist_sec"
+    assert sig.parameters["effect_gate_persist_sec"].default is None
 
 
 def test_collect_lean_enable_chain_tracker_default_false_backward_compat() -> None:
