@@ -513,6 +513,107 @@ def compute_delta_winprob_for_event(
 
 
 # =============================================================================
+# 4b. 連鎖中の仮想盤面ウィンドウ (2026-08-03 指摘2/Fix B)
+# =============================================================================
+#
+# 背景 (main実測、userレビュー match_02 2996.5s〜3006.9s): _build_stable_timeline
+# (従来ライン) は各サイドの「直近STABLE盤面」を前方保持するだけのため、発火側が
+# 連鎖実行中(非STABLE)の間、その側の直近STABLE値は「連鎖発火**前**の盤面
+# (=消化していない満載の連鎖がまだ乗っている状態)」のまま据え置かれる。
+# これは (a) 発火側の火力を「まだ使っていない」ものとして二重計上し、
+# (b) 相手側への着弾 (お邪魔) もまだ反映しない、という2つの誤りを生む。
+# 修正: 発火検知〜(発火側自身の次のSTABLE確定)の間は、Step2の仮想盤面
+# (reconstruct_virtual_board_pair: 連鎖消化後+予測正味おじゃま着弾済み) を
+# 両サイドの評価に使う。
+
+# ウィンドウ終端のフォールバック (発火側の「次のSTABLE」が試合終了まで
+# 見つからない場合の打ち切り秒数、マジックナンバー回避)
+CHAIN_WINDOW_FALLBACK_TAIL_SEC: float = 20.0
+
+
+def ignition_time_for_event(t_sec: float, approx_fire_chains: float) -> float:
+    """連鎖終了時刻(t_sec)から発火検知(近似)時刻を逆算する (既存資産の再利用)。
+
+    src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+    =0.4秒/連鎖、23動画418イベント実測ベース) を使う。npz に実際の掛け算式
+    検知時刻が無い場合の近似 (画面注記が必須、詳細は呼出元 docstring 参照)。
+    scripts.render_delta_winprob_demo と共有するためここに定義する
+    (両モジュールでの重複実装を避ける、2026-08-03 移設)。
+    """
+    return t_sec - iv.estimate_chain_anim_duration_sec(approx_fire_chains)
+
+
+@dataclass(frozen=True)
+class ChainInProgressWindow:
+    """連鎖中(発火検知〜発火側の次のSTABLE確定)に従来ラインが使うべき仮想盤面ペア。"""
+    ignition_sec: float
+    window_end_sec: float
+    board_1p: Board
+    board_2p: Board
+
+
+def _next_own_stable_time(
+    video_cache: _VideoNpzCache, fire_side: str, game_idx: int, t_fire: float,
+) -> float:
+    """発火側自身の「次のSTABLE確定時刻」(=連鎖後に実際に落ち着いた時刻) を返す。
+
+    見つからなければ CHAIN_WINDOW_FALLBACK_TAIL_SEC 後で打ち切る (末尾ガード、
+    試合末尾のイベント等で「次」が存在しないケースの安全弁)。
+    """
+    own_rec = video_cache.r1p if fire_side == "1P" else video_cache.r2p
+    own_mask = own_rec.game_idx == game_idx
+    own_t = own_rec.t_sec[own_mask]
+    later = own_t[own_t > t_fire]
+    if len(later) == 0:
+        return t_fire + CHAIN_WINDOW_FALLBACK_TAIL_SEC
+    return float(later.min())
+
+
+def build_chain_in_progress_windows(
+    events_df: pd.DataFrame, video_cache: _VideoNpzCache, simulator: ChainSimulator,
+) -> list[ChainInProgressWindow]:
+    """1試合分のΔWinProbイベントから、連鎖中に使う仮想盤面ウィンドウ一覧を作る。
+
+    events_df は最低限 t_sec/fire_side/approx_fire_chains/game_idx/
+    stack_net_ojama_after_pred 列を持つこと (match_failed 行は除外済みで渡す)。
+    ignition_sec 昇順にソートして返す (_find_active_chain_window の探索前提)。
+    """
+    windows: list[ChainInProgressWindow] = []
+    for _, ev in events_df.iterrows():
+        fire_side = str(ev["fire_side"])
+        game_idx = int(ev["game_idx"])
+        t_fire = float(ev["t_sec"])
+        pair = reconstruct_event_board_pair(video_cache, game_idx, t_fire, fire_side)
+        if pair is None:
+            continue
+        fire_board, opp_board = pair
+        net_ojama_pred = float(ev["stack_net_ojama_after_pred"])
+        vpair = reconstruct_virtual_board_pair(fire_board, opp_board, net_ojama_pred, simulator=simulator)
+        if fire_side == "1P":
+            board_1p, board_2p = vpair.attacker_board_after, vpair.opponent_board_after
+        else:
+            board_1p, board_2p = vpair.opponent_board_after, vpair.attacker_board_after
+        window_end = _next_own_stable_time(video_cache, fire_side, game_idx, t_fire)
+        windows.append(ChainInProgressWindow(
+            ignition_sec=ignition_time_for_event(t_fire, float(ev["approx_fire_chains"])),
+            window_end_sec=window_end, board_1p=board_1p, board_2p=board_2p,
+        ))
+    windows.sort(key=lambda w: w.ignition_sec)
+    return windows
+
+
+def _find_active_chain_window(
+    windows: list[ChainInProgressWindow], t: float,
+) -> "ChainInProgressWindow | None":
+    """時刻tを含む最新のウィンドウを返す (ignition_sec昇順ソート済み前提、無ければNone)。"""
+    active: "ChainInProgressWindow | None" = None
+    for w in windows:
+        if w.ignition_sec <= t < w.window_end_sec:
+            active = w
+    return active
+
+
+# =============================================================================
 # 5. 全イベント処理 (動画単位でグルーピングし並列化)
 # =============================================================================
 
@@ -642,6 +743,7 @@ def print_sanity_checks(df: pd.DataFrame) -> None:
 def _build_stable_timeline(
     video_cache: _VideoNpzCache, game_idx: int, models: dict[str, PhaseWinprobModel],
     simulator: ChainSimulator,
+    chain_windows: "list[ChainInProgressWindow] | None" = None,
 ) -> pd.DataFrame:
     """1試合分、両サイドの全STABLEスナップショット時刻の和集合で勝率推移を作る。
 
@@ -656,6 +758,13 @@ def _build_stable_timeline(
     時刻の和集合の各点で評価する (設置のたびに動く連続的なラインになる)。
     どちらか一方がまだ最初のSTABLEに達していない時刻 (前方保持不能) は
     スキップする。
+
+    chain_windows: optional (2026-08-03 指摘2/Fix B)。渡すと、評価時刻が
+    いずれかのウィンドウ内にある場合、その両盤面を素の前方保持グリッドでは
+    なく Step2 仮想盤面 (連鎖消化後+予測正味おじゃま着弾済み) に差し替える
+    (発火側の「使用済み連鎖をまだ持っている」二重計上を防ぐ、
+    build_chain_in_progress_windows docstring 参照)。既定 None = 従来通り
+    素の前方保持のみ (後方互換)。
     """
     mask1, mask2 = video_cache.r1p.game_idx == game_idx, video_cache.r2p.game_idx == game_idx
     t1, g1 = video_cache.r1p.t_sec[mask1], video_cache.r1p.grids[mask1]
@@ -664,6 +773,7 @@ def _build_stable_timeline(
         return pd.DataFrame(columns=["t_sec", "winprob_1p"])
     puyo_totals = np.array([int((g != 0).sum()) for g in g1], dtype=float)
     q_low, q_high = np.quantile(puyo_totals, 0.33), np.quantile(puyo_totals, 0.67)
+    windows = chain_windows or []
 
     eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
@@ -675,7 +785,11 @@ def _build_stable_timeline(
         phase = "序" if puyo_totals[idx1] <= q_low else ("終" if puyo_totals[idx1] > q_high else "中")
         if phase not in models:
             continue
-        b1, b2 = _board_from_grid(g1[idx1]), _board_from_grid(g2[idx2])
+        active = _find_active_chain_window(windows, float(t))
+        if active is not None:
+            b1, b2 = active.board_1p, active.board_2p
+        else:
+            b1, b2 = _board_from_grid(g1[idx1]), _board_from_grid(g2[idx2])
         f1, f2 = compute_board_only_features(b1, simulator), compute_board_only_features(b2, simulator)
         p1 = winprob_attacker(models, phase, f1, f2)
         rows.append({"t_sec": float(t), "winprob_1p": winprob_to_score100(p1)})

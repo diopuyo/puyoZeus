@@ -50,6 +50,13 @@ class ExchangeModelBundle:
         phases: phase one-hot の展開順 (序/中/終)。
         fire_sides: fire_side one-hot の展開順 (1P/2P)。
         metadata: 学習時メタ情報 (ラベルCSV名・日時・サンプル数・ハイパラ等)。
+        sim_feature_cols: 併用スタッキング版が使う sim_* 追加特徴量の列名
+            (学習時の並び順、fire_/opp_/diff_ 3つ組 + phase/fire_side one-hot
+            の**後**に連結される、scripts.train_exchange_model_d.build_feature_matrix
+            の extra_feature_cols と同じ並び)。既定は空タプル (=案D単体、
+            2026-08-03 追加。旧バンドル (このキーを持たない joblib) は
+            load_exchange_model 側で空タプルにフォールバックするため
+            後方互換に影響しない)。
     """
     cls_model: Any
     reg_model: Any
@@ -58,10 +65,16 @@ class ExchangeModelBundle:
     phases: tuple[str, ...]
     fire_sides: tuple[str, ...]
     metadata: dict[str, Any]
+    sim_feature_cols: tuple[str, ...] = ()
 
 
 def load_exchange_model(path: "str | Path") -> ExchangeModelBundle:
-    """joblib 保存済みのモデルバンドルを読み込む。"""
+    """joblib 保存済みのモデルバンドルを読み込む。
+
+    sim_feature_cols は 2026-08-03 追加のキーのため、旧バンドル (このキーを
+    含まない joblib ファイル) を読む場合は空タプルにフォールバックする
+    (後方互換、KeyError にしない)。
+    """
     raw: dict[str, Any] = joblib.load(Path(path))
     return ExchangeModelBundle(
         cls_model=raw["cls_model"],
@@ -71,6 +84,7 @@ def load_exchange_model(path: "str | Path") -> ExchangeModelBundle:
         phases=tuple(raw["phases"]),
         fire_sides=tuple(raw["fire_sides"]),
         metadata=dict(raw["metadata"]),
+        sim_feature_cols=tuple(raw.get("sim_feature_cols", ())),
     )
 
 
@@ -78,8 +92,10 @@ def _build_feature_vector(model: ExchangeModelBundle, features: dict[str, Any]) 
     """features dict から学習時と同じ列順の特徴量ベクトル (shape=(1, n_features)) を組む。
 
     scripts/train_exchange_model_d.build_feature_matrix と同一の列順
-    (fire_/opp_/diff_ 3つ組 → phase one-hot → fire_side one-hot) を、
-    scripts/ に依存せずバンドルに埋め込まれたメタ情報だけで再現する。
+    (fire_/opp_/diff_ 3つ組 → phase one-hot → fire_side one-hot → 任意で
+    sim_feature_cols) を、scripts/ に依存せずバンドルに埋め込まれた
+    メタ情報だけで再現する。sim_feature_cols が空 (案D単体バンドル) の場合は
+    従来通り41特徴量のまま (後方互換)。
     """
     values: list[float] = []
     for prefix in ("fire_", "opp_", "diff_"):
@@ -89,6 +105,8 @@ def _build_feature_vector(model: ExchangeModelBundle, features: dict[str, Any]) 
         values.append(1.0 if features["phase"] == phase else 0.0)
     for side in model.fire_sides:
         values.append(1.0 if features["fire_side"] == side else 0.0)
+    for col in model.sim_feature_cols:
+        values.append(float(features[col]))
     return np.asarray(values, dtype=np.float64).reshape(1, -1)
 
 

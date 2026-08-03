@@ -16,15 +16,21 @@ import pytest
 from src.board import BOARD_COLS, BOARD_ROWS, Board
 from scripts.compute_exchange_delta_winprob import (
     BOARD_ONLY_INDICATOR_BASES,
+    CHAIN_WINDOW_FALLBACK_TAIL_SEC,
+    ChainInProgressWindow,
     PhaseWinprobModel,
     T_SEC_MATCH_TOL_SEC,
     _VideoNpzCache,
     _assign_phase_by_puyo_tertile,
     _build_mirror_paired,
     _build_stable_timeline,
+    _find_active_chain_window,
+    _next_own_stable_time,
     _npz_stem_from_video_id,
+    build_chain_in_progress_windows,
     compute_board_only_features,
     compute_delta_winprob_for_event,
+    ignition_time_for_event,
     print_sanity_checks,
     reconstruct_event_board_pair,
     train_winprob_models,
@@ -34,6 +40,7 @@ from scripts.compute_exchange_delta_winprob import (
 from scripts.label_exchange_outcome import NpzRecord
 from scripts.model_indicator_win import build_features
 from src.chain import ChainSimulator
+from src.exchange_virtual_board import reconstruct_virtual_board_pair
 
 
 # =============================================================================
@@ -534,3 +541,113 @@ def test_build_stable_timeline_empty_side_returns_empty_df():
     df = _build_stable_timeline(cache, game_idx=999, models=models, simulator=sim)
     assert len(df) == 0
     assert list(df.columns) == ["t_sec", "winprob_1p"]
+
+
+# =============================================================================
+# 2026-08-03 指摘2/Fix B: 連鎖中の仮想盤面ウィンドウ
+# =============================================================================
+
+def _make_events_df_for_chain_window(
+    t_sec: float = 3.0, fire_side: str = "1P", approx_fire_chains: float = 2.0,
+    net_ojama_pred: float = 40.0, game_idx: int = 0,
+) -> pd.DataFrame:
+    """_make_video_cache() (t=[0,1,2,3,4] 1P / t=[0.5,1.5,2.5,3.4,4.5] 2P、
+    index3で+200スコア発火) と対になる1発火イベント分の DataFrame を作る。
+    """
+    return pd.DataFrame([{
+        "t_sec": t_sec, "fire_side": fire_side, "approx_fire_chains": approx_fire_chains,
+        "game_idx": game_idx, "stack_net_ojama_after_pred": net_ojama_pred,
+    }])
+
+
+def test_ignition_time_for_event_subtracts_chain_anim_duration():
+    """t_sec から CHAIN_ANIM_PER_STEP_SEC(=0.4)*連鎖数 を引いた値になる。"""
+    assert ignition_time_for_event(100.0, 5.0) == pytest.approx(100.0 - 0.4 * 5.0)
+
+
+def test_next_own_stable_time_finds_strictly_later_snapshot():
+    """発火側自身の「次の(t_fireより厳密に後の)STABLE時刻」を返す。"""
+    cache = _make_video_cache()  # r1p.t_sec = [0,1,2,3,4]
+    t = _next_own_stable_time(cache, "1P", game_idx=0, t_fire=3.0)
+    assert t == pytest.approx(4.0)
+
+
+def test_next_own_stable_time_falls_back_when_no_later_snapshot():
+    """次のSTABLEが無ければ CHAIN_WINDOW_FALLBACK_TAIL_SEC 後で打ち切る。"""
+    cache = _make_video_cache()
+    t = _next_own_stable_time(cache, "1P", game_idx=0, t_fire=4.0)
+    assert t == pytest.approx(4.0 + CHAIN_WINDOW_FALLBACK_TAIL_SEC)
+
+
+def test_build_chain_in_progress_windows_uses_virtual_board_pair():
+    """ウィンドウの盤面が reconstruct_virtual_board_pair の出力と一致すること。"""
+    cache = _make_video_cache()
+    sim = ChainSimulator()
+    events_df = _make_events_df_for_chain_window()
+    windows = build_chain_in_progress_windows(events_df, cache, sim)
+    assert len(windows) == 1
+    w = windows[0]
+    assert w.ignition_sec == pytest.approx(ignition_time_for_event(3.0, 2.0))
+    assert w.window_end_sec == pytest.approx(4.0)
+
+    pair = reconstruct_event_board_pair(cache, 0, 3.0, "1P")
+    fire_board, opp_board = pair
+    vpair = reconstruct_virtual_board_pair(fire_board, opp_board, 40.0, simulator=sim)
+    assert w.board_1p == vpair.attacker_board_after
+    assert w.board_2p == vpair.opponent_board_after
+
+
+def test_find_active_chain_window_returns_none_outside_range():
+    windows = [ChainInProgressWindow(ignition_sec=2.0, window_end_sec=4.0,
+                                     board_1p=Board(), board_2p=Board())]
+    assert _find_active_chain_window(windows, 1.9) is None
+    assert _find_active_chain_window(windows, 4.0) is None  # 終端は排他的
+
+
+def test_find_active_chain_window_returns_window_inside_range():
+    w = ChainInProgressWindow(ignition_sec=2.0, window_end_sec=4.0, board_1p=Board(), board_2p=Board())
+    assert _find_active_chain_window([w], 3.0) is w
+
+
+def test_build_stable_timeline_uses_virtual_board_inside_window():
+    """指摘2の受け入れテスト: ウィンドウ内の評価時刻は仮想盤面の特徴量で計算されること。"""
+    cache = _make_video_cache()
+    sim = ChainSimulator()
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    events_df = _make_events_df_for_chain_window()
+    windows = build_chain_in_progress_windows(events_df, cache, sim)
+
+    df_with_windows = _build_stable_timeline(cache, 0, models, sim, chain_windows=windows)
+    df_without_windows = _build_stable_timeline(cache, 0, models, sim, chain_windows=None)
+
+    # ウィンドウ [ignition≈2.2, 4.0) に入る評価時刻 (2.5, 3.0, 3.4) は
+    # 仮想盤面特徴量から計算した期待値と一致すること。
+    def _row_at(df: pd.DataFrame, t: float) -> pd.Series:
+        matches = df.loc[np.isclose(df["t_sec"].values, t)]
+        assert len(matches) == 1, f"t={t} の行が見つからない: {df['t_sec'].tolist()}"
+        return matches.iloc[0]
+
+    w = windows[0]
+    f1, f2 = compute_board_only_features(w.board_1p, sim), compute_board_only_features(w.board_2p, sim)
+    expected_in_window = winprob_to_score100(winprob_attacker(models, "中", f1, f2))
+    assert _row_at(df_with_windows, 2.5)["winprob_1p"] == pytest.approx(expected_in_window)
+
+    # ウィンドウ外 (t=0.5、両サイド最初のSTABLE時刻) は素の前方保持と一致
+    # (差し替え無し版と同じ値)。
+    assert _row_at(df_with_windows, 0.5)["winprob_1p"] == pytest.approx(
+        _row_at(df_without_windows, 0.5)["winprob_1p"])
+
+    # ウィンドウ内 (t=3.0) は差し替え無し版と異なる値になっているはず
+    # (=前方保持の凍結盤面でなく仮想盤面が使われている証拠)。
+    assert _row_at(df_with_windows, 3.0)["winprob_1p"] != pytest.approx(
+        _row_at(df_without_windows, 3.0)["winprob_1p"])
+
+
+def test_build_stable_timeline_chain_windows_default_none_backward_compat():
+    """chain_windows 省略時は従来通り (既存呼出元の後方互換)。"""
+    cache = _make_video_cache()
+    sim = ChainSimulator()
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    df_explicit_none = _build_stable_timeline(cache, 0, models, sim, None)
+    df_omitted = _build_stable_timeline(cache, 0, models, sim)
+    pd.testing.assert_frame_equal(df_explicit_none, df_omitted)

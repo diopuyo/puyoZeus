@@ -280,12 +280,18 @@ def save_model_bundle(
     model_date: str,
     n_samples: int,
     save_path: Path,
+    sim_feature_cols: tuple[str, ...] = (),
 ) -> None:
-    """RT推論用モデルバンドルを joblib で保存する (src/exchange_predictor.py が読む形式)。
+    """推論用モデルバンドルを joblib で保存する (src/exchange_predictor.py が読む形式)。
 
     src/exchange_predictor.py は scripts/ への依存を持たない設計のため、
     推論時に必要なメタ情報 (indicator_bases・phase一覧・fire_side一覧) を
     全てバンドルに埋め込む (self-contained にする)。
+
+    sim_feature_cols: optional。非空を渡すと「併用スタッキング」版
+    (案D特徴量 + sim_* 3列) のバンドルになる (2026-08-03 追加、
+    scripts/train_exchange_stacking_rt.py が使う)。既定は空タプルで
+    従来の案D単体バンドルと完全に同じ形式 (後方互換)。
     """
     bundle = {
         "cls_model": cls_model,
@@ -294,6 +300,7 @@ def save_model_bundle(
         "feature_names": feature_names,
         "phases": EXCHANGE_PHASES,
         "fire_sides": ("1P", "2P"),
+        "sim_feature_cols": tuple(sim_feature_cols),
         "metadata": {
             "labels_csv": labels_path,
             "model_date": model_date,
@@ -304,7 +311,8 @@ def save_model_bundle(
     }
     save_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, save_path)
-    print(f"  RT推論用モデル保存: {save_path}")
+    print(f"  推論用モデル保存: {save_path}"
+          f" (sim_feature_cols={list(sim_feature_cols) if sim_feature_cols else 'なし(案D単体)'})")
 
 
 # =============================================================================
