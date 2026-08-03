@@ -251,39 +251,100 @@ def _nested_fit_one_phase(X: np.ndarray, y: np.ndarray, groups: np.ndarray) -> P
                               oof_auc=oof_auc, n_train=len(y))
 
 
-def _assign_phase_by_puyo_tertile(board_puyo_total_1p: np.ndarray) -> tuple[np.ndarray, float, float]:
-    """board_puyo_total (1P正規化スコア) の3分位で 序/中/終 を割り当てる。
+def _assign_phase_by_puyo_tertile(phase_metric: np.ndarray) -> tuple[np.ndarray, float, float]:
+    """盤面の埋まり具合を表す指標の3分位で 序/中/終 を割り当てる。
 
     label_exchange_outcome.py の phase 定義 (盤面ぷよ合計の3分位) と同じ
     「盤面の埋まり具合」の考え方を、labeled_win データセット側で独立に
     再定義したもの (元データが別収集のため分位境界値は一致しない、
     どちらも「盤面ぷよ合計3分位」という同一コンセプトである点は共通)。
+
+    2026-08-03 指摘1対処: 呼び出し側 (train_winprob_models) は 1P+2P の
+    合計値 (1P/2P入替に対して不変な対称量) を渡す。1P単独の値を渡すと
+    鏡像複製後に元サンプルと鏡像とで異なる位相バケツに分かれてしまい
+    (元: 1P値が低いので「序」、鏡像: その値が2P側に回るため「序」と
+    判定されない、等)、位相別モデルごとの対称化が崩れて空盤面が
+    ちょうど50%にならない実害が out (テストで確認済み)。引数名を
+    board_puyo_total_1p から phase_metric に変更 (呼び出し側は位置引数の
+    ため後方互換に影響なし)。
     """
-    q_low = float(np.quantile(board_puyo_total_1p, 0.33))
-    q_high = float(np.quantile(board_puyo_total_1p, 0.67))
-    labels = np.full(len(board_puyo_total_1p), "中", dtype=object)
-    labels[board_puyo_total_1p <= q_low] = "序"
-    labels[board_puyo_total_1p > q_high] = "終"
+    q_low = float(np.quantile(phase_metric, 0.33))
+    q_high = float(np.quantile(phase_metric, 0.67))
+    labels = np.full(len(phase_metric), "中", dtype=object)
+    labels[phase_metric <= q_low] = "序"
+    labels[phase_metric > q_high] = "終"
     return labels, q_low, q_high
+
+
+def _build_mirror_paired(paired: pd.DataFrame) -> pd.DataFrame:
+    """1P/2P の `_1p`/`_2p` 列を丸ごと入れ替えた鏡像複製 DataFrame を作る。
+
+    2026-08-03 userレビュー指摘1 (空盤面で1P勝率52%から始まる) 対処。
+    671試合の1P勝率52.0% (二項検定 p=0.32、偶然の範囲、userドメイン確認済み
+    「1P有利の実在事情は無い」) をモデルが事前確率として学習してしまって
+    いたため、学習データを対称化する。`build_features` は列名の `_1p`/`_2p`
+    suffix のみを見て `_diff` (=1p-2p) を機械的に再構築するため、全列を
+    丸ごと入れ替えるだけで「2P視点から見た対称サンプル」が自動的に手に入る
+    (diff の符号反転も build_features 側で自然に起きる、二重実装しない)。
+    video_id_1p/2p 等の非指標列も入れ替わるが、呼び出し側は fold 分割に
+    元の (非入れ替え) video_id_1p を使うため実害はない。
+
+    数学的根拠 (テストで検証): 鏡像複製込みで学習した L2正則化ロジスティック
+    回帰は、1P/2P 入替 + ラベル反転で損失関数が不変になるため、一意最適解は
+    この対称変換の不動点になる (w_1p = -w_2p, bias = 0)。この結果、
+    1P/2P の指標値が完全に一致する対称局面 (空盤面等) の予測確率は
+    厳密に 0.5 になる。
+    """
+    mirror = paired.copy()
+    for col in paired.columns:
+        if not col.endswith("_1p"):
+            continue
+        col_2p = f"{col[:-3]}_2p"
+        if col_2p in paired.columns:
+            mirror[col] = paired[col_2p].values
+            mirror[col_2p] = paired[col].values
+    return mirror
 
 
 def train_winprob_models(labeled_win_csv: Path) -> dict[str, PhaseWinprobModel]:
     """labeled_win CSV から位相別の勝率モデル (LR + isotonic校正) を学習する。
 
     「45指標→勝率」の代わりに BOARD_ONLY_INDICATOR_BASES (23指標) に限定する
-    (モジュール冒頭のスコープ決定を参照)。
+    (モジュール冒頭のスコープ決定を参照)。2026-08-03 指摘1対処: 学習データを
+    1P/2P鏡像複製で対称化する (_build_mirror_paired docstring 参照)。
     """
     print(f"[winprob] labeled_win読込: {labeled_win_csv}")
     df = load_labeled_csv(str(labeled_win_csv))
     paired = pair_sides_for_win(df, PAIR_MAX_TDIFF_SEC)
     feat_df = build_features(paired, list(BOARD_ONLY_INDICATOR_BASES))
-    X_all = feat_df.fillna(0.0).values.astype(float)
-    y_all = paired["won_1p"].astype(int).values
-    groups_all = paired["video_id_1p"].values
-    phase_labels, q_low, q_high = _assign_phase_by_puyo_tertile(
-        paired["board_puyo_total_1p"].astype(float).values
-    )
-    print(f"[winprob] 位相境界 (board_puyo_total正規化スコア): 序<={q_low:.3f} 終>{q_high:.3f}")
+    X_orig = feat_df.fillna(0.0).values.astype(float)
+    y_orig = paired["won_1p"].astype(int).values
+    groups_orig = paired["video_id_1p"].values
+    # 位相判定量: 1P+2P合計 (1P/2P入替に対して不変な対称量、
+    # _assign_phase_by_puyo_tertile docstring の実害説明を参照)。
+    phase_metric_orig = (paired["board_puyo_total_1p"].astype(float).values
+                         + paired["board_puyo_total_2p"].astype(float).values)
+
+    # 対称化 (指摘1修正): 1P/2P入替鏡像複製を追加する。fold分割は video_id
+    # 単位のまま保つため groups は元の video_id を鏡像側にもそのまま使う
+    # (鏡像は必ず元サンプルと同じfoldに入る = GroupKFoldはユニークな group
+    # 値単位で分割するため自動的に満たされる)。
+    paired_mirror = _build_mirror_paired(paired)
+    feat_df_mirror = build_features(paired_mirror, list(BOARD_ONLY_INDICATOR_BASES))
+    X_mirror = feat_df_mirror.fillna(0.0).values.astype(float)
+    y_mirror = 1 - y_orig
+    # 合計値は入替で不変なので鏡像でも同じ値 (=元と必ず同じ位相バケツに入る)。
+    phase_metric_mirror = phase_metric_orig
+
+    X_all = np.vstack([X_orig, X_mirror])
+    y_all = np.concatenate([y_orig, y_mirror])
+    groups_all = np.concatenate([groups_orig, groups_orig])
+    phase_metric_all = np.concatenate([phase_metric_orig, phase_metric_mirror])
+    print(f"[winprob] 対称化 (指摘1対処): {len(y_orig)}行 -> {len(y_all)}行"
+          f" (1P勝率 元={y_orig.mean():.3f} 対称化後={y_all.mean():.3f})")
+
+    phase_labels, q_low, q_high = _assign_phase_by_puyo_tertile(phase_metric_all)
+    print(f"[winprob] 位相境界 (board_puyo_total 1P+2P合計): 序<={q_low:.3f} 終>{q_high:.3f}")
 
     models: dict[str, PhaseWinprobModel] = {}
     for phase in PHASES:
@@ -578,39 +639,43 @@ def print_sanity_checks(df: pd.DataFrame) -> None:
 # 8. デモviz (従来STABLE推移 vs 発火直後速報の重ね書き)
 # =============================================================================
 
-# タイムライン再構成のフレーム間引き (全フレーム評価は重いため、指標計算
-# コストと見た目の滑らかさのバランスを取った間引き数、マジックナンバー回避)
-DEMO_FRAME_STRIDE: int = 15
-
-
 def _build_stable_timeline(
     video_cache: _VideoNpzCache, game_idx: int, models: dict[str, PhaseWinprobModel],
     simulator: ChainSimulator,
 ) -> pd.DataFrame:
-    """1試合分、1P/2Pを時刻近傍でペアリングしSTABLE盤面のみで勝率推移を作る。
+    """1試合分、両サイドの全STABLEスナップショット時刻の和集合で勝率推移を作る。
 
-    位相は各フレームの1P盤面ぷよ合計から動的に決めず、簡略化のため
-    game全体を通して最も出現数が多い位相 (中盤想定) を使わず、
-    _assign_phase_by_puyo_tertile と同じ考え方を都度使うのはコスト増のため、
-    ここでは学習済み位相境界を再利用せず「中」モデルで代表させず、
-    フレームごとに board_puyo_total スコアから最寄りの学習位相境界と同じ
-    3値 (序/中/終) をこの動画内で独立に3分位判定する (デモ表示専用の簡易化)。
+    2026-08-03 userレビュー指摘2 (発火時しか指標値が動かない) 対処。
+    旧実装は npz が既に「STABLE確定時のみ記録される疎な配列」であるにも
+    関わらず、さらに DEMO_FRAME_STRIDE=15 の間引きを二重適用しており、
+    実測 c61 game_idx=16 (84秒) でわずか7点にしかならないバグだった
+    (main実測、scratchpad/diag_timeline_granularity2.py 参照)。
+
+    新実装は間引きを行わず、各サイドの「直近STABLE盤面」を前方保持
+    (forward-fill) で独立に組み合わせ、両サイドの全STABLEスナップショット
+    時刻の和集合の各点で評価する (設置のたびに動く連続的なラインになる)。
+    どちらか一方がまだ最初のSTABLEに達していない時刻 (前方保持不能) は
+    スキップする。
     """
     mask1, mask2 = video_cache.r1p.game_idx == game_idx, video_cache.r2p.game_idx == game_idx
-    t1, g1 = video_cache.r1p.t_sec[mask1][::DEMO_FRAME_STRIDE], video_cache.r1p.grids[mask1][::DEMO_FRAME_STRIDE]
+    t1, g1 = video_cache.r1p.t_sec[mask1], video_cache.r1p.grids[mask1]
     t2, g2 = video_cache.r2p.t_sec[mask2], video_cache.r2p.grids[mask2]
+    if len(t1) == 0 or len(t2) == 0:
+        return pd.DataFrame(columns=["t_sec", "winprob_1p"])
     puyo_totals = np.array([int((g != 0).sum()) for g in g1], dtype=float)
     q_low, q_high = np.quantile(puyo_totals, 0.33), np.quantile(puyo_totals, 0.67)
 
+    eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
-    for t, grid, total in zip(t1, g1, puyo_totals):
-        idx2 = int(np.argmin(np.abs(t2 - t)))
-        if abs(float(t2[idx2]) - t) > T_SEC_MATCH_TOL_SEC * 50:  # デモ表示は粗い間引きのため緩め
+    for t in eval_times:
+        idx1 = int(np.searchsorted(t1, t, side="right")) - 1
+        idx2 = int(np.searchsorted(t2, t, side="right")) - 1
+        if idx1 < 0 or idx2 < 0:
             continue
-        phase = "序" if total <= q_low else ("終" if total > q_high else "中")
+        phase = "序" if puyo_totals[idx1] <= q_low else ("終" if puyo_totals[idx1] > q_high else "中")
         if phase not in models:
             continue
-        b1, b2 = _board_from_grid(grid), _board_from_grid(g2[idx2])
+        b1, b2 = _board_from_grid(g1[idx1]), _board_from_grid(g2[idx2])
         f1, f2 = compute_board_only_features(b1, simulator), compute_board_only_features(b2, simulator)
         p1 = winprob_attacker(models, phase, f1, f2)
         rows.append({"t_sec": float(t), "winprob_1p": winprob_to_score100(p1)})
