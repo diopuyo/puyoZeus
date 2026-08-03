@@ -9,6 +9,10 @@ import numpy as np
 import pytest
 
 from scripts.build_full_board_label_sheet import (
+    DEFAULT_OCCUPANCY_MAX,
+    DEFAULT_OCCUPANCY_MIN,
+    MIN_GAME_ELAPSED_SEC_FOR_CUTSCENE_FILTER,
+    MIN_SNAPSHOTS_PER_GAME,
     GameCandidate,
     PHASE_EARLY,
     PHASE_LATE,
@@ -17,11 +21,15 @@ from scripts.build_full_board_label_sheet import (
     SECONDARY_MIN_OCCUPANCY,
     TIER_PRIMARY,
     TIER_SECONDARY,
+    TOTAL_CELLS,
     build_game_time_bounds,
     classify_phase,
     classify_tier,
     compute_occupancy,
+    count_snapshots_per_group,
     encode_grid_string,
+    extract_game_peak_candidates,
+    is_probable_cutscene_snapshot,
     select_candidates,
 )
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, COLOR_RED, COLOR_UNKNOWN
@@ -221,3 +229,131 @@ class TestSelectCandidates:
 
     def test_empty_pool_returns_empty(self) -> None:
         assert select_candidates([], target_total=10) == []
+
+
+# =============================================================================
+# classify_tier の occupancy帯拡張 (--occupancy-min/--occupancy-max、後方互換確認)
+# =============================================================================
+
+class TestClassifyTierOccupancyBand:
+    def test_default_band_matches_old_constants(self) -> None:
+        # 既定値が旧来の定数と一致していること (後方互換のドリフト検知用)
+        assert DEFAULT_OCCUPANCY_MIN == SECONDARY_MIN_OCCUPANCY
+        assert DEFAULT_OCCUPANCY_MAX == TOTAL_CELLS
+
+    def test_custom_band_excludes_below_min(self) -> None:
+        assert classify_tier(64, occupancy_min=65, occupancy_max=72) is None
+
+    def test_custom_band_excludes_above_max(self) -> None:
+        assert classify_tier(73, occupancy_min=65, occupancy_max=72) is None
+
+    def test_custom_band_includes_within_range(self) -> None:
+        assert classify_tier(70, occupancy_min=65, occupancy_max=72) == TIER_PRIMARY
+
+    def test_custom_band_boundary_inclusive(self) -> None:
+        assert classify_tier(65, occupancy_min=65, occupancy_max=72) == TIER_PRIMARY
+        assert classify_tier(72, occupancy_min=65, occupancy_max=72) == TIER_PRIMARY
+
+
+# =============================================================================
+# 選定バグ修正 (2026-08-03): game_idx=0試合前演出画面の誤爆除外
+# =============================================================================
+
+class TestCountSnapshotsPerGroup:
+    def test_counts_by_side_and_game_idx(self) -> None:
+        sides = np.array(["1P", "1P", "2P", "1P"])
+        game_idxs = np.array([0, 0, 0, 1])
+        counts = count_snapshots_per_group(sides, game_idxs)
+        assert counts[("1P", 0)] == 2
+        assert counts[("2P", 0)] == 1
+        assert counts[("1P", 1)] == 1
+
+
+class TestIsProbableCutsceneSnapshot:
+    def _counts(self, n: int) -> dict[tuple[str, int], int]:
+        return {("1P", 0): n}
+
+    def test_too_early_is_flagged_even_with_enough_snapshots(self) -> None:
+        assert is_probable_cutscene_snapshot(
+            t_sec=5.0, game_lo_t_sec=0.0, side="1P", game_idx=0,
+            snapshot_counts=self._counts(MIN_SNAPSHOTS_PER_GAME),
+        )
+
+    def test_too_few_snapshots_is_flagged_even_when_late_enough(self) -> None:
+        assert is_probable_cutscene_snapshot(
+            t_sec=100.0, game_lo_t_sec=0.0, side="1P", game_idx=0,
+            snapshot_counts=self._counts(MIN_SNAPSHOTS_PER_GAME - 1),
+        )
+
+    def test_late_and_enough_snapshots_is_not_flagged(self) -> None:
+        assert not is_probable_cutscene_snapshot(
+            t_sec=100.0, game_lo_t_sec=0.0, side="1P", game_idx=0,
+            snapshot_counts=self._counts(MIN_SNAPSHOTS_PER_GAME),
+        )
+
+    def test_elapsed_boundary_is_not_too_early(self) -> None:
+        assert not is_probable_cutscene_snapshot(
+            t_sec=MIN_GAME_ELAPSED_SEC_FOR_CUTSCENE_FILTER, game_lo_t_sec=0.0,
+            side="1P", game_idx=0, snapshot_counts=self._counts(MIN_SNAPSHOTS_PER_GAME),
+        )
+
+    def test_snapshot_count_boundary_is_not_too_few(self) -> None:
+        assert not is_probable_cutscene_snapshot(
+            t_sec=100.0, game_lo_t_sec=0.0, side="1P", game_idx=0,
+            snapshot_counts=self._counts(MIN_SNAPSHOTS_PER_GAME),
+        )
+
+
+class TestExtractGamePeakCandidatesCutsceneFilter:
+    """試合前演出画面の誤爆が実際に除外され、正当な満杯瞬間は残ることを確認する。"""
+
+    def _write_npz(self, tmp_path, rows: list[dict]) -> "object":
+        grids = np.stack([_make_grid(r["occupancy"]) for r in rows])
+        path = tmp_path / "video_ctest.npz"
+        np.savez(
+            path,
+            grids=grids,
+            video_id=np.array([r.get("video_id", "video_ctest") for r in rows]),
+            side=np.array([r.get("side", "1P") for r in rows]),
+            game_idx=np.array([r["game_idx"] for r in rows]),
+            t_sec=np.array([r["t_sec"] for r in rows], dtype=np.float64),
+            frame_idx=np.array([r.get("frame_idx", 0) for r in rows], dtype=np.int64),
+        )
+        return path
+
+    def test_few_snapshot_game_is_excluded(self, tmp_path) -> None:
+        # game_idx=0: 2スナップショットのみ (時間は十分離れていても除外されるはず)
+        rows = [
+            {"game_idx": 0, "t_sec": 1.0, "occupancy": 60},
+            {"game_idx": 0, "t_sec": 100.0, "occupancy": 65},
+        ]
+        path = self._write_npz(tmp_path, rows)
+        candidates = extract_game_peak_candidates(path)
+        assert not any(c.game_idx == 0 for c in candidates)
+
+    def test_early_cluster_game_is_excluded(self, tmp_path) -> None:
+        # game_idx=1: 6スナップショット(件数十分)だが全て試合開始5秒以内に密集
+        rows = [
+            {"game_idx": 1, "t_sec": float(i), "occupancy": 60 + i}
+            for i in range(6)
+        ]
+        path = self._write_npz(tmp_path, rows)
+        candidates = extract_game_peak_candidates(path)
+        assert not any(c.game_idx == 1 for c in candidates)
+
+    def test_genuine_late_game_peak_is_kept(self, tmp_path) -> None:
+        # game_idx=2: 件数十分・時間も十分離れている正当な満杯瞬間 -> 残るはず
+        rows = [
+            {"game_idx": 2, "t_sec": 0.0, "occupancy": 50},  # tier対象外(参考値)
+            {"game_idx": 2, "t_sec": 20.0, "occupancy": 61},
+            {"game_idx": 2, "t_sec": 40.0, "occupancy": 62},
+            {"game_idx": 2, "t_sec": 60.0, "occupancy": 63},
+            {"game_idx": 2, "t_sec": 80.0, "occupancy": 64},
+            {"game_idx": 2, "t_sec": 100.0, "occupancy": 70},
+        ]
+        path = self._write_npz(tmp_path, rows)
+        candidates = extract_game_peak_candidates(path)
+        matches = [c for c in candidates if c.game_idx == 2]
+        assert len(matches) == 1
+        assert matches[0].occupancy == 70
+        assert matches[0].t_sec == 100.0

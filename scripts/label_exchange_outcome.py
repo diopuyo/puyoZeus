@@ -728,6 +728,91 @@ def _classify_phase(puyo_total: float, q_low: float, q_high: float) -> str:
     return "終"
 
 
+# =============================================================================
+# 終局イベント合成 (2026-08-03 main発注、方針(a)、既定OFF)
+# =============================================================================
+#
+# 背景 (main実測 match_02、_diag_match02_underclamp_2026-08-03.py / _measure_
+# terminal_chain_gap_2026-08-03.py で確定): 試合終了直前の大型連鎖は、連鎖
+# アニメ中に「掛け算式」スコア表示が続いてOCRできず、その確定フレーム
+# (=次の有効数値スコア) が記録区間の終端後に来ることがある。この場合、
+# 発火検出器 (_detect_fire_events、スコア差分ベース) は最後に検出した
+# クラスタ以降のスコア増分を一切イベント化できず、66動画で18.9%
+# (試合×サイド) の「明確な終局連鎖の欠落」が定量化されている。
+#
+# 本関数は「最後に検出したクラスタ以降、試合末尾側の最後に有効なscoreまで
+# の差分がSCORE_DELTA_FIRE以上」の場合に、1件の合成イベントを追加する。
+# 盤面特徴は「最後に記録された実STABLE盤面」(=連鎖確定より前、最大で
+# 試合終了までの全期間ぶん古い可能性がある) を使うしかないため、
+# is_synthetic_terminal_event=1 列で必ず明示し、盤面特徴の信頼性が低い旨を
+# 呼び出し側が判別できるようにする (fail-silent回避、CLAUDE.md原則)。
+
+def _last_valid_score_index(score: np.ndarray) -> "int | None":
+    """score配列内で最後に有効 (>=0) だったインデックスを返す (無ければNone)。"""
+    valid_idx = np.where(score >= 0)[0]
+    return int(valid_idx[-1]) if len(valid_idx) > 0 else None
+
+
+def _synthesize_terminal_event_row(
+    fire_rec: NpzRecord, opp_rec: NpzRecord, fire_side: str,
+    fire_clusters: list[FireEventCluster], sim: ChainSimulator,
+    game_start_t: float, puyo_q_low: float, puyo_q_high: float,
+) -> "dict | None":
+    """終局連鎖の欠落を1件の合成イベント行として補完する (検出できなければNone)。
+
+    net_ojama_after は「相殺なしの全量」(_delta_to_ojama_standard) とする
+    (試合終了直後で相手の反撃猶予窓を定義できないため)。taiou_success 等の
+    「その後の相手の応手」に依存するラベルは判定不能として0/NaNにする
+    (盤面特徴も古いため、合成行はモデル学習で除外/層別することを想定)。
+    """
+    last_valid_idx = _last_valid_score_index(fire_rec.score)
+    if last_valid_idx is None:
+        return None
+    last_event_idx = fire_clusters[-1].fire_index if fire_clusters else -1
+    baseline_score = (int(fire_rec.score[last_event_idx]) if fire_clusters
+                       else int(fire_rec.score[np.where(fire_rec.score >= 0)[0][0]]))
+    last_valid_score = int(fire_rec.score[last_valid_idx])
+    gap = last_valid_score - baseline_score
+    if gap < SCORE_DELTA_FIRE or last_valid_idx <= last_event_idx:
+        return None
+
+    t_fire = float(fire_rec.t_sec[last_valid_idx])
+    fire_board = _board_from_grid(fire_rec.grids[last_valid_idx])
+    opp_t_arr = opp_rec.t_sec
+    nearest_opp = int(np.argmin(np.abs(opp_t_arr - t_fire)))
+    opp_board = _board_from_grid(opp_rec.grids[nearest_opp])
+    elapsed_in_game = _game_relative_elapsed(t_fire, game_start_t)
+    fire_feats = _compute_features(fire_board, elapsed_in_game, sim)
+    opp_feats = _compute_features(opp_board, elapsed_in_game, sim)
+    fire_puyo = fire_board.count_puyos()
+    phase = _classify_phase(float(fire_puyo), puyo_q_low, puyo_q_high)
+    net_ojama_after = float(_delta_to_ojama_standard(gap))
+
+    return {
+        "video_id": fire_rec.video_id, "game_idx": int(fire_rec.game_idx[last_valid_idx]),
+        "t_sec": t_fire, "fire_side": fire_side, "phase": phase,
+        "won": float(fire_rec.won[last_valid_idx]),
+        **{f"fire_{k}": v for k, v in fire_feats.items()},
+        "fire_honsen_tempo_output": float("nan"),
+        **{f"opp_{k}": v for k, v in opp_feats.items()},
+        "opp_honsen_tempo_output": float("nan"),
+        **{f"diff_{k}": fire_feats[k] - opp_feats[k] for k in fire_feats},
+        "diff_honsen_tempo_output": float("nan"),
+        "net_ojama": float(_delta_to_ojama_standard(gap)),
+        "returned": 0, "returned_competitive": 0,
+        "return_window_sec": float("nan"),
+        # approx_fire_chains: 合成行は真の連鎖数が不明 (盤面が古いため
+        # current_max_chain を実測できない) だが、augment_exchange_labels_
+        # with_sim.py が estimate_available_hands(int(round(NaN))) で例外に
+        # なるためNaNは使えない。fire_feats["current_max_chain"] (古い盤面
+        # からの近似、通常行と同じ下限1.0のフォールバック) を代用する。
+        "approx_fire_chains": max(1.0, fire_feats["current_max_chain"]),
+        "opp_buried": 0, "taiou_success": 0, "survived": 0,
+        "net_ojama_after": net_ojama_after,
+        "is_synthetic_terminal_event": 1,
+    }
+
+
 def _process_game(
     game_1p: NpzRecord,
     game_2p: NpzRecord,
@@ -735,8 +820,13 @@ def _process_game(
     sim: ChainSimulator,
     puyo_q_low: float,
     puyo_q_high: float,
+    synthesize_terminal_events: bool = False,
 ) -> list[dict]:
-    """1ゲーム・1サイドの発火イベントを処理してレコードリストを返す。"""
+    """1ゲーム・1サイドの発火イベントを処理してレコードリストを返す。
+
+    synthesize_terminal_events: optional (既定False、後方互換)。Trueなら
+    終局連鎖の欠落 (_synthesize_terminal_event_row) を1件追加で補完する。
+    """
     if fire_side == "1P":
         fire_rec = game_1p
         opp_rec = game_2p
@@ -744,19 +834,24 @@ def _process_game(
         fire_rec = game_2p
         opp_rec = game_1p
 
+    game_start_t = float(fire_rec.t_sec[0]) if len(fire_rec.t_sec) > 0 else 0.0
     fire_indices = _detect_fire_events(fire_rec.t_sec, fire_rec.score)
     if not fire_indices:
-        return []
+        if not synthesize_terminal_events:
+            return []
+        # 発火が一度も検出されなかった試合でも終局連鎖が欠落している
+        # 可能性はある (has_prior_event=False、_measure_terminal_chain_gap_
+        # 2026-08-03.py の誠実性チェック参照、小刻み蓄積との混同に注意)。
+        synth = _synthesize_terminal_event_row(
+            fire_rec, opp_rec, fire_side, [], sim, game_start_t, puyo_q_low, puyo_q_high,
+        )
+        return [synth] if synth is not None else []
     # 測定器事故5件目対策: 連鎖アニメ中の分裂検出を連鎖単位に統合する
     # (_detect_fire_events 自体は他スクリプト [proto_net_threat.py 等] からも
     # 呼ばれる共有関数のため無改変、統合は本関数内でのみ行う)。
     fire_clusters = _merge_fire_event_clusters(
         fire_rec.t_sec, fire_rec.score, fire_rec.grids, fire_indices,
     )
-
-    # 試合開始時刻の近似 = この (video_id, game_idx, fire_side) で
-    # 記録された最初のフレーム時刻(マージンタイム計算の基準点、バグ修正)
-    game_start_t = float(fire_rec.t_sec[0])
 
     # 相手盤面を (t, Board) ペアで保持(重い計算は発火時点のみ)
     opp_boards: list[tuple[float, Board]] = []
@@ -882,8 +977,16 @@ def _process_game(
             "taiou_success": taiou_success,
             "survived": survived,
             "net_ojama_after": net_ojama_after,
+            "is_synthetic_terminal_event": 0,
         }
         rows.append(row)
+
+    if synthesize_terminal_events:
+        synth = _synthesize_terminal_event_row(
+            fire_rec, opp_rec, fire_side, fire_clusters, sim, game_start_t, puyo_q_low, puyo_q_high,
+        )
+        if synth is not None:
+            rows.append(synth)
     return rows
 
 
@@ -926,6 +1029,15 @@ def _parse_args() -> "argparse.Namespace":
             "npz ファイル名の glob パターン (既定 'c*.npz' = 従来のc系動画命名"
             "規約、後方互換)。2026-08-03 追加: c系以外の命名 (未知動画の汎化"
             "テスト等) の npz を処理する場合に '*.npz' 等へ変更する。"
+        ),
+    )
+    parser.add_argument(
+        "--synthesize-terminal-events", action="store_true", default=False,
+        help=(
+            "終局連鎖の欠落 (2026-08-03 main発注、方針(a)) を1件の合成イベント"
+            "として補完する (既定OFF、後方互換)。合成行は is_synthetic_"
+            "terminal_event=1 列で明示される (盤面特徴は最後の実STABLE盤面"
+            "由来のため信頼性が低い、docstring参照)。"
         ),
     )
     return parser.parse_args()
@@ -993,7 +1105,8 @@ def main() -> None:
             )
             for side in ("1P", "2P"):
                 try:
-                    rows = _process_game(g1p, g2p, side, sim, q_low, q_high)
+                    rows = _process_game(g1p, g2p, side, sim, q_low, q_high,
+                                          synthesize_terminal_events=args.synthesize_terminal_events)
                     all_rows.extend(rows)
                 except Exception as e:
                     print(f"[WARN] {npz_path.stem} game={gid} side={side}: {e}", file=sys.stderr)
@@ -1008,6 +1121,9 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
     print(f"[DONE] {len(df)} 行を {output_path} に保存しました")
+    if args.synthesize_terminal_events:
+        n_synth = int(df["is_synthetic_terminal_event"].sum())
+        print(f"  [方針(a)] 合成した終局イベント: {n_synth} 行 ({n_synth / len(df):.1%})")
     print(f"  位相別: {df['phase'].value_counts().to_dict()}")
     print(f"  fire_side: {df['fire_side'].value_counts().to_dict()}")
     print(f"  net_ojama mean={df['net_ojama'].mean():.2f}  returned={df['returned'].mean():.2f}"

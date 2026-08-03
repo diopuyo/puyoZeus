@@ -220,6 +220,19 @@ def stable_value_at(timeline_t: np.ndarray, timeline_v: np.ndarray, t: float) ->
     return float(timeline_v[idx])
 
 
+def uncertain_value_at(timeline_t: np.ndarray, timeline_uncertain: "np.ndarray | None", t: float) -> bool:
+    """t 時点が「凍結検知による判定保留」(方針(b)) 中かを前方保持で返す。
+
+    timeline_uncertain が None (旧タイムライン、is_uncertain列なし) の場合は
+    常に False (後方互換、判定保留機能を使わない旧経路)。
+    """
+    if timeline_uncertain is None or len(timeline_t) == 0 or t < timeline_t[0]:
+        return False
+    idx = int(np.searchsorted(timeline_t, t, side="right")) - 1
+    idx = max(0, min(idx, len(timeline_t) - 1))
+    return bool(timeline_uncertain[idx])
+
+
 def _latest_event_at_or_before(events: list[FireEventView], t: float) -> "FireEventView | None":
     """t 時点で最も直近に発火検知された(ignition_sec<=t)イベントを返す。"""
     latest: "FireEventView | None" = None
@@ -238,10 +251,12 @@ class DisplayState:
     waiting: bool                      # STABLE待ち(未確定)
     badge: "FireEventView | None"       # 速報バッジ表示対象 (Noneなら非表示)
     jump_active: bool                  # バーが速報側にジャンプ中か
+    uncertain_frozen: bool = False      # 方針(b): 相手側データ凍結中の判定保留 (後方互換デフォルトFalse)
 
 
 def compute_display_state(
     events: list[FireEventView], timeline_t: np.ndarray, timeline_v: np.ndarray, t: float,
+    timeline_uncertain: "np.ndarray | None" = None,
 ) -> DisplayState:
     """t 時点の表示状態を求める (純関数、state を一切持たない)。
 
@@ -258,10 +273,19 @@ def compute_display_state(
     自然に実現される (合成的なブレンドは行わない)。
     jump_active は演出上のフラグ (バーの黄色マーカー等の表示切替用) として
     残すが、数値には影響しない。
+
+    timeline_uncertain: optional (2026-08-03 方針(b))。_build_stable_timeline
+    が返す is_uncertain 列 (相手側データが FREEZE_DETECTION_THRESHOLD_SEC 秒
+    以上更新されていない=連鎖進行中等で判定保留すべき時間帯) を渡すと、
+    winprob_1p はタイムライン側で既に「凍結直前の最後の確定値」に保持済み
+    (_build_stable_timeline 側の処理) のためそのまま使い、uncertain_frozen
+    フラグのみ立てて描画側の視覚表現 (淡色化・注記) を切り替える。既定 None
+    = 常に False (後方互換、旧タイムラインでも動作)。
     """
     stable_v = stable_value_at(timeline_t, timeline_v, t)
     waiting = stable_v is None
     display_v = stable_v if stable_v is not None else 50.0
+    uncertain_frozen = (not waiting) and uncertain_value_at(timeline_t, timeline_uncertain, t)
 
     ev = _latest_event_at_or_before(events, t)
     jump_active = ev is not None and t < ev.fire_end_sec
@@ -269,12 +293,17 @@ def compute_display_state(
     badge = (
         ev if ev is not None and t <= ev.ignition_sec + BADGE_TEXT_DISPLAY_SEC else None
     )
-    return DisplayState(winprob_1p=display_v, waiting=waiting, badge=badge, jump_active=jump_active)
+    return DisplayState(winprob_1p=display_v, waiting=waiting, badge=badge,
+                         jump_active=jump_active, uncertain_frozen=uncertain_frozen)
 
 
 # =============================================================================
 # 4. 描画 (上部パネル + 下部グラフ帯)
 # =============================================================================
+
+UNCERTAIN_BAR_ALPHA: int = 90   # 方針(b): 判定保留中はバーを淡色化 (通常200の半分未満)
+UNCERTAIN_OVERLAY_RGBA: tuple[int, int, int, int] = (120, 120, 120, 140)  # 灰色オーバーレイ
+
 
 def _draw_bar(d: "ImageDraw.ImageDraw", state: DisplayState, cx: int, x0: int) -> None:
     """1P/2P 勝率バー本体を描画する。"""
@@ -283,10 +312,19 @@ def _draw_bar(d: "ImageDraw.ImageDraw", state: DisplayState, cx: int, x0: int) -
         d.rectangle([x0, top, x0 + bar_w, top + bar_h], outline=(255, 255, 255), width=2)
         d.text((cx - 90, top + 4), "STABLE 待ち", font=_font(20), fill=(255, 255, 255))
         return
+    bar_alpha = UNCERTAIN_BAR_ALPHA if state.uncertain_frozen else 200
     split_x = int(x0 + (state.winprob_1p / 100.0) * bar_w)
-    d.rectangle([x0, top, split_x, top + bar_h], fill=(*COLOR_1P, 200))
-    d.rectangle([split_x, top, x0 + bar_w, top + bar_h], fill=(*COLOR_2P, 200))
+    d.rectangle([x0, top, split_x, top + bar_h], fill=(*COLOR_1P, bar_alpha))
+    d.rectangle([split_x, top, x0 + bar_w, top + bar_h], fill=(*COLOR_2P, bar_alpha))
     d.rectangle([x0, top, x0 + bar_w, top + bar_h], outline=(255, 255, 255), width=2)
+    if state.uncertain_frozen:
+        # 方針(b): 相手側データ凍結中 (連鎖進行中等) は灰色オーバーレイ+注記で
+        # 「保留中の最後の確定値」であることを明示する (シーンに合わせた
+        # 誇張表示はしない、既存トーンのまま淡色化するだけ)。
+        d.rectangle([x0, top, x0 + bar_w, top + bar_h], fill=UNCERTAIN_OVERLAY_RGBA)
+        label = f"判定保留 (相手 大連鎖進行中・直前確定値を維持: 1P {state.winprob_1p:.0f}%)"
+        d.text((cx - 220, top + 5), label, font=_font(18), fill=(230, 230, 230))
+        return
     label = f"1P 勝率 {state.winprob_1p:.0f}%   /   2P 勝率 {100.0 - state.winprob_1p:.0f}%"
     d.text((cx - 140, top + 5), label, font=_font(18), fill=(255, 255, 255))
     if state.jump_active:
@@ -420,6 +458,7 @@ def mux_audio_for_segment(
 def render_video(
     video_path: Path, out_silent_path: Path, start_sec: float, end_sec: float,
     events: list[FireEventView], timeline_t: np.ndarray, timeline_v: np.ndarray,
+    timeline_uncertain: "np.ndarray | None" = None,
 ) -> int:
     """対象区間を読み込み、合成フレームを書き出す。書き出しフレーム数を返す。"""
     cap = cv2.VideoCapture(str(video_path))
@@ -449,7 +488,7 @@ def render_video(
         t_abs = fi / fps
         if frame.shape[:2] != (OUT_H, OUT_W):
             frame = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
-        state = compute_display_state(events, timeline_t, timeline_v, t_abs)
+        state = compute_display_state(events, timeline_t, timeline_v, t_abs, timeline_uncertain)
         t_rel = t_abs - start_sec
         if not state.waiting:
             history.append((t_rel, state.winprob_1p))
@@ -565,10 +604,13 @@ def main() -> None:
         raise RuntimeError(f"{args.video_id} game={args.game_idx} のタイムライン生成に失敗")
     timeline_t = timeline_df["t_sec"].values.astype(float)
     timeline_v = timeline_df["winprob_1p"].values.astype(float)
+    timeline_uncertain = (timeline_df["is_uncertain"].values.astype(bool)
+                           if "is_uncertain" in timeline_df.columns else None)
 
     print("\n=== 5. 動画レンダー (無音) ===")
     silent_path = args.out_dir / f"delta_winprob_demo_{args.video_id}_g{args.game_idx}_silent.mp4"
-    written = render_video(video_path, silent_path, start_sec, end_sec, events, timeline_t, timeline_v)
+    written = render_video(video_path, silent_path, start_sec, end_sec, events, timeline_t, timeline_v,
+                            timeline_uncertain)
     print(f"[render] {written} frames -> {silent_path}")
 
     print("\n=== 6. 音声結合 ===")

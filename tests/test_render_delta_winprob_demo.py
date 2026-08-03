@@ -21,6 +21,7 @@ from scripts.render_delta_winprob_demo import (
     compute_display_state,
     select_video_segment,
     stable_value_at,
+    uncertain_value_at,
 )
 
 # ignition_time_for_event (Fix C、データ駆動版) 自体の単体テストは
@@ -177,6 +178,55 @@ def test_second_event_selected_as_badge_when_later(sample_events, sample_timelin
     state = compute_display_state(sample_events, t_arr, v_arr, t=mid_t)
     assert state.jump_active is True
     assert state.badge.fire_side == "2P"
+
+
+# =============================================================================
+# 2026-08-03 方針(b): 判定保留 (uncertain_value_at / compute_display_state)
+# =============================================================================
+
+def test_uncertain_value_at_none_array_is_always_false() -> None:
+    """timeline_uncertain=None (旧タイムライン、後方互換) は常にFalse。"""
+    t_arr = np.array([90.0, 130.0])
+    assert uncertain_value_at(t_arr, None, 100.0) is False
+
+
+def test_uncertain_value_at_before_first_sample_is_false() -> None:
+    t_arr = np.array([90.0, 130.0])
+    u_arr = np.array([True, True])
+    assert uncertain_value_at(t_arr, u_arr, 50.0) is False
+
+
+def test_uncertain_value_at_forward_fill() -> None:
+    t_arr = np.array([90.0, 130.0])
+    u_arr = np.array([False, True])
+    assert uncertain_value_at(t_arr, u_arr, 100.0) is False
+    assert uncertain_value_at(t_arr, u_arr, 200.0) is True
+
+
+def test_compute_display_state_uncertain_frozen_flag_default_false(sample_events, sample_timeline) -> None:
+    """timeline_uncertain 未指定 (後方互換) では uncertain_frozen は常にFalse。"""
+    t_arr, v_arr = sample_timeline
+    state = compute_display_state(sample_events, t_arr, v_arr, t=100.0)
+    assert state.uncertain_frozen is False
+
+
+def test_compute_display_state_uncertain_frozen_flag_true_when_flagged(sample_events, sample_timeline) -> None:
+    """timeline_uncertain がTrueの区間では uncertain_frozen が立つ (waiting中は除く)。"""
+    t_arr, v_arr = sample_timeline
+    u_arr = np.array([False, True])  # t=130以降は判定保留
+    state = compute_display_state(sample_events, t_arr, v_arr, t=200.0, timeline_uncertain=u_arr)
+    assert state.uncertain_frozen is True
+    state_before = compute_display_state(sample_events, t_arr, v_arr, t=100.0, timeline_uncertain=u_arr)
+    assert state_before.uncertain_frozen is False
+
+
+def test_compute_display_state_uncertain_frozen_false_while_waiting(sample_events, sample_timeline) -> None:
+    """STABLE待ち(waiting)中はuncertain_frozenも立てない (waitingの表示が優先)。"""
+    t_arr, v_arr = sample_timeline
+    u_arr = np.array([True, True])
+    state = compute_display_state(sample_events, t_arr, v_arr, t=50.0, timeline_uncertain=u_arr)
+    assert state.waiting is True
+    assert state.uncertain_frozen is False
 
 
 def test_latest_event_at_or_before_returns_none_when_too_early(sample_events) -> None:

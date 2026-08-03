@@ -69,6 +69,23 @@ TOTAL_CELLS: int = BOARD_ROWS * BOARD_COLS  # 13*6=78
 PRIMARY_MIN_OCCUPANCY: int = 60
 SECONDARY_MIN_OCCUPANCY: int = 55
 
+# 選定対象の非空セル数「帯」の既定値 (--occupancy-min/--occupancy-max の既定値、
+# 未指定なら旧来と完全に同じ挙動になる = 後方互換)。バッチ2 (準満杯帯 65-72) は
+# CLIでこれらを上書きして使う (memory project_full_board_error_taxonomy_2026-08-02
+# 「次バッチは occupancy 65-72 の準満杯帯」)。
+DEFAULT_OCCUPANCY_MIN: int = SECONDARY_MIN_OCCUPANCY
+DEFAULT_OCCUPANCY_MAX: int = TOTAL_CELLS
+
+# 選定バグ修正 (2026-08-03): 満杯盤面ラベル第1バッチの skip13件中12件が
+# game_idx=0付近の試合前演出画面 (色鮮やかな非ゲーム画面) だった。「そのゲームに
+# 複数スナップショットが存在する」「ゲーム内相対時刻が一定以上」のいずれかを
+# 満たさない候補は演出画面の疑いとして除外する (memory
+# project_full_board_error_taxonomy_2026-08-02)。
+MIN_SNAPSHOTS_PER_GAME: int = 5
+# 上級者でも60セル埋めるには相応の手数(30組以上)を要するため、ゲーム開始から
+# この秒数未満で高occupancyに達するのは物理的に非ゲーム画面の疑いが濃い。
+MIN_GAME_ELAPSED_SEC_FOR_CUTSCENE_FILTER: float = 15.0
+
 # 選定件数・偏り抑制パラメータ
 TARGET_TOTAL_CANDIDATES: int = 40
 MAX_CANDIDATES_PER_VIDEO: int = 2
@@ -142,13 +159,22 @@ def compute_occupancy(grid: np.ndarray) -> int:
     return int(np.count_nonzero(grid != COLOR_EMPTY))
 
 
-def classify_tier(occupancy: int) -> "str | None":
-    """非空セル数から tier を判定する (閾値未満は None = 候補対象外)。"""
-    if occupancy >= PRIMARY_MIN_OCCUPANCY:
-        return TIER_PRIMARY
-    if occupancy >= SECONDARY_MIN_OCCUPANCY:
-        return TIER_SECONDARY
-    return None
+def classify_tier(
+    occupancy: int,
+    occupancy_min: int = DEFAULT_OCCUPANCY_MIN,
+    occupancy_max: int = DEFAULT_OCCUPANCY_MAX,
+    primary_min: int = PRIMARY_MIN_OCCUPANCY,
+) -> "str | None":
+    """非空セル数から tier を判定する ([occupancy_min, occupancy_max] 帯外は None)。
+
+    occupancy_min/occupancy_max は既定値なら旧来 (>=55、上限なし) と完全に
+    同じ挙動になる (後方互換)。バッチ2 (準満杯帯 65-72) 等は呼び出し側で
+    上書きする。primary_min は帯内での tier 表示ラベルの区切り (旧来の
+    PRIMARY_MIN_OCCUPANCY=60 の役割を維持)。
+    """
+    if occupancy < occupancy_min or occupancy > occupancy_max:
+        return None
+    return TIER_PRIMARY if occupancy >= primary_min else TIER_SECONDARY
 
 
 def build_game_time_bounds(
@@ -175,19 +201,62 @@ def classify_phase(t_sec: float, lo: float, hi: float) -> tuple[str, float]:
     return PHASE_EARLY, frac
 
 
-def extract_game_peak_candidates(npz_path: Path) -> list[GameCandidate]:
-    """1動画分の npz から (side, game_idx) ごとの最満杯瞬間の候補を抽出する。"""
+def count_snapshots_per_group(sides: np.ndarray, game_idxs: np.ndarray) -> dict[tuple[str, int], int]:
+    """(side, game_idx) ごとの全npzスナップショット数 (tier閾値に関わらず全件) を数える。
+
+    「そのゲームに複数スナップショットが存在する」判定の元データ (選定バグ修正用)。
+    """
+    counts: dict[tuple[str, int], int] = {}
+    for side, gidx in zip(sides, game_idxs):
+        key = (str(side), int(gidx))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def is_probable_cutscene_snapshot(
+    t_sec: float, game_lo_t_sec: float, side: str, game_idx: int,
+    snapshot_counts: dict[tuple[str, int], int],
+) -> bool:
+    """試合前演出画面 (色鮮やかな非ゲーム画面) の誤爆候補かどうかを判定する。
+
+    memory project_full_board_error_taxonomy_2026-08-02: 満杯盤面ラベル第1バッチの
+    skip13件中12件が game_idx=0 付近の試合前演出画面だった (選定ロジックのバグ)。
+    「そのゲームに複数スナップショットが存在する」「ゲーム内相対時刻が一定以上」の
+    いずれかを満たさない場合は演出画面の疑いとして除外する。
+    """
+    elapsed_sec = t_sec - game_lo_t_sec
+    too_early = elapsed_sec < MIN_GAME_ELAPSED_SEC_FOR_CUTSCENE_FILTER
+    too_few_snapshots = snapshot_counts.get((side, game_idx), 0) < MIN_SNAPSHOTS_PER_GAME
+    return too_early or too_few_snapshots
+
+
+def extract_game_peak_candidates(
+    npz_path: Path,
+    occupancy_min: int = DEFAULT_OCCUPANCY_MIN,
+    occupancy_max: int = DEFAULT_OCCUPANCY_MAX,
+) -> list[GameCandidate]:
+    """1動画分の npz から (side, game_idx) ごとの最満杯瞬間の候補を抽出する。
+
+    occupancy_min/occupancy_max は既定値なら旧来と同じ挙動 (後方互換)。
+    試合前演出画面の疑いがある候補は is_probable_cutscene_snapshot で除外する。
+    """
     data = np.load(npz_path, allow_pickle=True)
     grids, video_ids = data["grids"], data["video_id"]
     sides, game_idxs = data["side"], data["game_idx"]
     t_secs, frame_idxs = data["t_sec"], data["frame_idx"]
     occupancies = np.count_nonzero(grids != COLOR_EMPTY, axis=(1, 2))
     bounds = build_game_time_bounds(video_ids, game_idxs, t_secs)
+    snapshot_counts = count_snapshots_per_group(sides, game_idxs)
 
     best_by_group: dict[tuple[str, int], int] = {}
     for i in range(len(grids)):
-        tier = classify_tier(int(occupancies[i]))
+        tier = classify_tier(int(occupancies[i]), occupancy_min, occupancy_max)
         if tier is None:
+            continue
+        lo, _hi = bounds[(str(video_ids[i]), int(game_idxs[i]))]
+        if is_probable_cutscene_snapshot(
+            float(t_secs[i]), lo, str(sides[i]), int(game_idxs[i]), snapshot_counts,
+        ):
             continue
         key = (str(sides[i]), int(game_idxs[i]))
         cur = best_by_group.get(key)
@@ -202,17 +271,21 @@ def extract_game_peak_candidates(npz_path: Path) -> list[GameCandidate]:
             video_id=str(video_ids[i]), side=side, game_idx=gidx,
             frame_idx=int(frame_idxs[i]), t_sec=float(t_secs[i]),
             grid=grids[i].astype(np.int64), occupancy=int(occupancies[i]),
-            tier=classify_tier(int(occupancies[i])) or TIER_SECONDARY,
+            tier=classify_tier(int(occupancies[i]), occupancy_min, occupancy_max) or TIER_SECONDARY,
             phase=phase, game_progress_frac=frac,
         ))
     return candidates
 
 
-def load_candidate_pool(npz_dir: Path) -> list[GameCandidate]:
-    """npz_dir 配下の全 npz から候補プールを構築する。"""
+def load_candidate_pool(
+    npz_dir: Path,
+    occupancy_min: int = DEFAULT_OCCUPANCY_MIN,
+    occupancy_max: int = DEFAULT_OCCUPANCY_MAX,
+) -> list[GameCandidate]:
+    """npz_dir 配下の全 npz から候補プールを構築する (occupancy帯は呼び出し側指定)。"""
     pool: list[GameCandidate] = []
     for npz_path in sorted(npz_dir.glob("*.npz")):
-        pool.extend(extract_game_peak_candidates(npz_path))
+        pool.extend(extract_game_peak_candidates(npz_path, occupancy_min, occupancy_max))
     return pool
 
 
@@ -504,6 +577,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--npz-dir", type=Path, default=NPZ_DIR)
     parser.add_argument("--out-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--target-total", type=int, default=TARGET_TOTAL_CANDIDATES)
+    parser.add_argument(
+        "--occupancy-min", type=int, default=DEFAULT_OCCUPANCY_MIN,
+        help="選定対象の非空セル数下限 (既定55=旧来と同じ)",
+    )
+    parser.add_argument(
+        "--occupancy-max", type=int, default=DEFAULT_OCCUPANCY_MAX,
+        help="選定対象の非空セル数上限 (既定78=旧来と同じ上限なし)",
+    )
     return parser.parse_args()
 
 
@@ -511,8 +592,8 @@ def main() -> None:
     """メイン処理: 候補抽出 -> 選定 -> 画像生成 -> CSV/md出力。"""
     cv2.setNumThreads(1)  # 熱対策・並列しない (アーキ指定)
     args = _parse_args()
-    print(f"[1/4] 候補抽出: {args.npz_dir}")
-    pool = load_candidate_pool(args.npz_dir)
+    print(f"[1/4] 候補抽出: {args.npz_dir} (occupancy帯: {args.occupancy_min}-{args.occupancy_max})")
+    pool = load_candidate_pool(args.npz_dir, args.occupancy_min, args.occupancy_max)
     print(f"  候補プール(ゲームごとの最満杯瞬間): {len(pool)} 件")
 
     print("[2/4] 選定 (動画上限2枚・位相配分)")
