@@ -61,6 +61,7 @@ from src.board import Board
 from src.chain import ChainSimulator
 import src.indicators_v2 as iv
 from src.exchange_virtual_board import reconstruct_virtual_board_pair
+from src.scoring import OJAMA_MAX_DROP_PER_TURN
 from src.ojama_accounting import cancel_own_pending_then_send_surplus
 from scripts.label_exchange_outcome import (
     NpzRecord,
@@ -953,47 +954,88 @@ def _realizable_counter_ojama(defender_board: Board, attacker_chain_count: float
     return value
 
 
+# =============================================================================
+# 4f. クランプの連続化 (2026-08-04 user指摘: 二値の崖→連続ブレンド+ヒステリシス)
+# =============================================================================
+#
+# 背景 (完全トレース scripts/_trace_3scenes_full_2026-08-04.py で確定): 旧実装
+# は「room超過ならクランプ全開・そうでなければ無効」の二値判定だったため、
+# realizable_counter (expected_fire_power のK=3,4 MC近似) がわずかに閾値を
+# 跨ぐだけで表示が数十pt跳ねる崖が生じていた
+# (match_02 t=2978.0->2978.2秒: 45.7%->5.0%、t=2981.2->2981.4秒: 5.0%->58.9%、
+#  match_04 に同型2件、いずれも realizable_counter が pending をわずかに
+#  跨いだ瞬間の二値切替が原因、トレース表で確認済み)。
+#
+# 連続化: severity = (pending − realizable_counter − room) を
+# OJAMA_MAX_DROP_PER_TURN (=30、1ターンに落ちるお邪魔の上限、既存
+# src.scoring定数、再利用) で正規化した「物理マージン」とする。
+# severity<=0 で無効果、severity>=1 で旧クランプ相当、間は線形ブレンド。
+#
+# ヒステリシス: 6列均等着弾 (reference_ojama_landing_pattern、1周分=6個) を
+# 「開放」判定の物理的マージンとする。前回発動中だった場合は raw_excess が
+# -HYSTERESIS_MARGIN_OJAMA を下回るまで発動状態を維持する (小さな振動での
+# 高速な行き来を防ぐ、user指摘のヒステリシス要件)。
+HYSTERESIS_MARGIN_OJAMA: float = 6.0  # 6列均等着弾1周分 (reference_ojama_landing_pattern)
+
+
+def _clamp_severity(raw_excess: float, was_active: bool) -> tuple[float, bool]:
+    """raw_excess (=pending-realizable_counter-room) から連続severity(0-1)と
+    次回呼び出しに渡す is_active 状態を返す (Schmitt trigger式ヒステリシス)。
+
+    was_active=True (前回発動中) の場合は raw_excess が -HYSTERESIS_MARGIN_
+    OJAMA を下回るまで非活性化しない (小刻みな閾値往復による点滅を防ぐ)。
+    was_active=False の場合は raw_excess>0 で即座に活性化する (入口側は
+    連続ブレンド自体が緩やかな立ち上がりを担保するため追加マージン不要)。
+    """
+    is_active = (raw_excess > -HYSTERESIS_MARGIN_OJAMA) if was_active else (raw_excess > 0.0)
+    if not is_active:
+        return 0.0, False
+    severity = max(0.0, min(1.0, raw_excess / OJAMA_MAX_DROP_PER_TURN))
+    return severity, True
+
+
 def _lethal_readout_clamp(
     activity_windows: list[EventActivityWindow], t: float,
     board_1p: Board, board_2p: Board, model_winprob_1p: float, simulator: ChainSimulator,
-) -> float:
-    """受け切れ判定 (欠陥G2)。通常評価 (model_winprob_1p) をそのまま返すか、
-    受け切れないと判定した側に不利なクランプを適用して返す。
+    was_active: bool = False,
+) -> tuple[float, bool]:
+    """受け切れ判定 (欠陥G2→2026-08-04連続化)。通常評価 (model_winprob_1p) を
+    そのまま返すか、severity に応じて連続的にブレンドした値を返す。
 
     正味予告 P (相殺後、_net_pending_after_cancellation) から、受け側の
-    構築済み返し能力 realizable_counter (_realizable_counter_ojama) を
-    控除した P' を room と比較する (欠陥G改の「room単独」判定に、反撃力を
-    容量側でなく**台帳側の控除**として組み込んだもの、main承認済み設計)。
-    P' <= 0 (完全に返せる) なら容量比較すら行わずクランプしない。
-    容量内 (受け切れる) の場合や空中おじゃまが無い場合は model_winprob_1p を
-    そのまま返す (上書きしない、既存の盤面ライブ評価=欠陥E-2の結果を優先)。
-    simulator は将来拡張用の引数として残すが、本関数では未使用。
+    構築済み返し能力 realizable_counter (_realizable_counter_ojama) と
+    空き容量 room を引いた raw_excess を _clamp_severity で連続化する。
+    戻り値は (表示すべきwinprob_1p, 次回呼び出しに渡すis_active状態) の
+    タプル (2026-08-04 ヒステリシス対応で戻り値をタプル化、呼び出し元
+    [_build_stable_timeline] が状態を維持する、私自身は stateless)。
+    was_active の既定値Falseは「前回発動していなかった」扱いで後方互換
+    (旧テスト・旧呼び出しはヒステリシスなしの初回評価として動作する)。
     """
     attack_from_1p, attack_from_2p, chain_from_1p, chain_from_2p = _aggregate_known_pending_net_ojama(
         activity_windows, t, board_1p, board_2p,
     )
     if attack_from_1p == 0.0 and attack_from_2p == 0.0:
-        return model_winprob_1p
+        return model_winprob_1p, False
     pending_on_1p, pending_on_2p = _net_pending_after_cancellation(attack_from_1p, attack_from_2p)
     if pending_on_1p <= 0.0 and pending_on_2p <= 0.0:
-        return model_winprob_1p  # 完全相殺、脅威側なし
+        return model_winprob_1p, False  # 完全相殺、脅威側なし
 
     if pending_on_1p > 0.0:
         threatened_board, pending, attacker_chain = board_1p, pending_on_1p, chain_from_2p
     else:
         threatened_board, pending, attacker_chain = board_2p, pending_on_2p, chain_from_1p
     realizable_counter = _realizable_counter_ojama(threatened_board, attacker_chain)
-    net_pending = pending - realizable_counter
-    if net_pending <= 0.0:
-        return model_winprob_1p  # 構築済み返しだけで完全に返せる、通常評価のまま
     room = board_room(threatened_board)
-    if net_pending <= room:
-        return model_winprob_1p  # 容量内 = 受け切れる、通常評価のまま
+    raw_excess = pending - realizable_counter - room
+    severity, is_active = _clamp_severity(raw_excess, was_active)
+    if severity <= 0.0:
+        return model_winprob_1p, is_active
 
-    # 受け切れない: 予告を送った側 (脅かされていない側) へ強くクランプする。
+    target = (100.0 - LETHAL_CLAMP_FAVOR_PCT) if pending_on_1p > 0.0 else LETHAL_CLAMP_FAVOR_PCT
+    blended = (1.0 - severity) * model_winprob_1p + severity * target
     if pending_on_1p > 0.0:
-        return min(model_winprob_1p, 100.0 - LETHAL_CLAMP_FAVOR_PCT)  # 1P脅威 -> 2P有利
-    return max(model_winprob_1p, LETHAL_CLAMP_FAVOR_PCT)  # 2P脅威 -> 1P有利
+        return min(model_winprob_1p, blended), is_active  # 1P脅威 -> 2P有利方向にブレンド
+    return max(model_winprob_1p, blended), is_active  # 2P脅威 -> 1P有利方向にブレンド
 
 
 # =============================================================================
@@ -1172,6 +1214,7 @@ def _build_stable_timeline(
     eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
     last_good_winprob = 50.0  # 凍結中に表示保持する「最後の確定値」(方針(b))
+    clamp_was_active = False  # 連続クランプのヒステリシス状態 (2026-08-04)
     for t in eval_times:
         idx1 = int(np.searchsorted(t1, t, side="right")) - 1
         idx2 = int(np.searchsorted(t2, t, side="right")) - 1
@@ -1192,7 +1235,8 @@ def _build_stable_timeline(
         p1 = winprob_attacker(models, phase, f1, f2)
         winprob_1p = winprob_to_score100(p1)
         if activity:
-            winprob_1p = _lethal_readout_clamp(activity, float(t), b1, b2, winprob_1p, simulator)
+            winprob_1p, clamp_was_active = _lethal_readout_clamp(
+                activity, float(t), b1, b2, winprob_1p, simulator, clamp_was_active)
 
         # 方針(b): どちらかの側のSTABLE更新がFREEZE_DETECTION_THRESHOLD_SEC秒
         # 以上途絶していれば、その盤面は連鎖進行中等で凍結中とみなし、
