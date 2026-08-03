@@ -61,6 +61,7 @@ from src.board import Board
 from src.chain import ChainSimulator
 import src.indicators_v2 as iv
 from src.exchange_virtual_board import reconstruct_virtual_board_pair
+from src.ojama_accounting import cancel_own_pending_then_send_surplus
 from scripts.label_exchange_outcome import (
     NpzRecord,
     _board_from_grid,
@@ -68,6 +69,7 @@ from scripts.label_exchange_outcome import (
     _load_npz,
     _merge_fire_event_clusters,
 )
+from scripts.measure_exchange_effectiveness import estimate_available_hands
 from scripts.model_indicator_win import (
     LR_PARAMS,
     build_features,
@@ -81,6 +83,7 @@ from scripts.run_exchange_triple_comparison import (
     load_model_d_oof,
 )
 from scripts.train_exchange_model_d import load_exchange_labels
+from scripts.visualize_advantage_overlay import board_room
 
 # =============================================================================
 # 定数定義
@@ -531,25 +534,58 @@ def compute_delta_winprob_for_event(
 CHAIN_WINDOW_FALLBACK_TAIL_SEC: float = 20.0
 
 
-def ignition_time_for_event(t_sec: float, approx_fire_chains: float) -> float:
-    """連鎖終了時刻(t_sec)から発火検知(近似)時刻を逆算する (既存資産の再利用)。
+def _prev_own_stable_time(
+    video_cache: _VideoNpzCache, fire_side: str, game_idx: int, t_fire: float,
+) -> float:
+    """発火側自身の「直前の(t_fireより厳密に前の)STABLE確定時刻」を返す。
 
+    見つからなければ t_fire そのものを返す (連鎖前STABLEが記録されていない
+    境界ケースの安全弁、ウィンドウ長ゼロ相当)。
+    """
+    own_rec = video_cache.r1p if fire_side == "1P" else video_cache.r2p
+    own_mask = own_rec.game_idx == game_idx
+    own_t = own_rec.t_sec[own_mask]
+    earlier = own_t[own_t < t_fire]
+    if len(earlier) == 0:
+        return t_fire
+    return float(earlier.max())
+
+
+def ignition_time_for_event(
+    video_cache: _VideoNpzCache, fire_side: str, game_idx: int, t_sec: float,
+) -> float:
+    """発火側自身の直前STABLE確定時刻を「発火検知(近似)時刻」として返す (データ駆動)。
+
+    2026-08-03 指摘 (欠陥C) 対処: 旧実装は
     src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
-    =0.4秒/連鎖、23動画418イベント実測ベース) を使う。npz に実際の掛け算式
-    検知時刻が無い場合の近似 (画面注記が必須、詳細は呼出元 docstring 参照)。
+    =0.4秒/連鎖) による近似式だったが、これは「着弾遅延の物差し」であり
+    「連鎖アニメの実時間」ではない (memory
+    project_exchange_measurement_foundation_2026-07-22: 8連鎖実測14.5秒、
+    0.4秒/連鎖=3.2秒は大幅な過小評価)。main実測 (match_01) で大型連鎖ほど
+    最大9秒近似が遅れることが確認されたため、近似式を廃止し
+    「発火側自身の直前STABLE行の実時刻」で置き換える (連鎖構築完了直後の
+    確定盤面がそのまま連鎖開始点になる、というデータ駆動の定義)。
     scripts.render_delta_winprob_demo と共有するためここに定義する
     (両モジュールでの重複実装を避ける、2026-08-03 移設)。
     """
-    return t_sec - iv.estimate_chain_anim_duration_sec(approx_fire_chains)
+    return _prev_own_stable_time(video_cache, fire_side, game_idx, t_sec)
 
 
 @dataclass(frozen=True)
 class ChainInProgressWindow:
-    """連鎖中(発火検知〜発火側の次のSTABLE確定)に従来ラインが使うべき仮想盤面ペア。"""
+    """連鎖中(発火検知〜発火側の次のSTABLE確定)に従来ラインが使うべき仮想盤面。
+
+    2026-08-03 指摘 (欠陥E-2) 対処: 固定するのは**発火側自身**の仮想盤面
+    (連鎖消化後+Fix E-1で1ターン上限適用済みの着弾) のみ。相手側は
+    「連鎖中も自由に積んでいる」(userレビュー実況: 「1Pの連鎖の時間で
+    2Pがぷよ量有利を取る」) ため、ウィンドウ内でも各評価時点の最新実測
+    STABLE盤面を使う (_build_stable_timeline 側で live 参照する、
+    本データクラスは相手側盤面を保持しない)。
+    """
+    fire_side: str      # "1P" or "2P" (この仮想盤面がどちら側のものか)
     ignition_sec: float
     window_end_sec: float
-    board_1p: Board
-    board_2p: Board
+    board_after: Board  # 発火側自身の仮想盤面 (固定表示対象)
 
 
 def _next_own_stable_time(
@@ -577,6 +613,13 @@ def build_chain_in_progress_windows(
     events_df は最低限 t_sec/fire_side/approx_fire_chains/game_idx/
     stack_net_ojama_after_pred 列を持つこと (match_failed 行は除外済みで渡す)。
     ignition_sec 昇順にソートして返す (_find_active_chain_window の探索前提)。
+
+    2026-08-03 指摘 (欠陥E-2) 対処: 固定表示するのは発火側自身の仮想盤面
+    (vpair.attacker_board_after) だけであり、相手側 (vpair.opponent_board_after)
+    はここでは使わない (_build_stable_timeline 側で相手側は毎回 live 参照
+    する、ChainInProgressWindow docstring 参照)。相手側盤面はそれでも
+    `reconstruct_virtual_board_pair` の入力として必要 (連鎖消化計算とは
+    独立だが、ojama_after_pred が負値=攻撃側が受け取る場合の計算に使う)。
     """
     windows: list[ChainInProgressWindow] = []
     for _, ev in events_df.iterrows():
@@ -589,14 +632,11 @@ def build_chain_in_progress_windows(
         fire_board, opp_board = pair
         net_ojama_pred = float(ev["stack_net_ojama_after_pred"])
         vpair = reconstruct_virtual_board_pair(fire_board, opp_board, net_ojama_pred, simulator=simulator)
-        if fire_side == "1P":
-            board_1p, board_2p = vpair.attacker_board_after, vpair.opponent_board_after
-        else:
-            board_1p, board_2p = vpair.opponent_board_after, vpair.attacker_board_after
         window_end = _next_own_stable_time(video_cache, fire_side, game_idx, t_fire)
         windows.append(ChainInProgressWindow(
-            ignition_sec=ignition_time_for_event(t_fire, float(ev["approx_fire_chains"])),
-            window_end_sec=window_end, board_1p=board_1p, board_2p=board_2p,
+            fire_side=fire_side,
+            ignition_sec=ignition_time_for_event(video_cache, fire_side, game_idx, t_fire),
+            window_end_sec=window_end, board_after=vpair.attacker_board_after,
         ))
     windows.sort(key=lambda w: w.ignition_sec)
     return windows
@@ -611,6 +651,327 @@ def _find_active_chain_window(
         if w.ignition_sec <= t < w.window_end_sec:
             active = w
     return active
+
+
+# =============================================================================
+# 4c. 相打ち (時間的因果関係のある発火) の相殺 (2026-08-03 指摘 欠陥D/Fix F)
+# =============================================================================
+#
+# 背景 (main実測、match_01 2939.17s): 2P発火の瞬間、1Pの8連鎖が進行中
+# (OPP_CHAINING) だったため sim は「相手の反撃力=0」として2P火力を丸ごと
+# 加点していた。しかし1Pの連鎖は既に実測データとして分かっている(オフライン
+# レンダでは両イベントとも既知)ため、実測 net_ojama_after を相殺した正味を使う。
+#
+# 2026-08-03 指摘 欠陥F: 初版は「活動窓 [ignition_sec, window_end_sec) が
+# 重なっていれば相殺」という対称な判定だったが、window_end_sec (=次の自分の
+# STABLE確定、Fix B/E-2の表示用の概念) を終端に使うと、実際にはほぼ逐次的な
+# 2発火 (match_05 3168.73s/3175.53s、重なりはわずか0.6秒) まで相打ちと
+# 誤判定し、「まだ起きていない未来の反撃」を先取りして相殺してしまう
+# (時間的因果に反する)。修正: 「自分の点火時刻に、相手の連鎖が既に
+# 空中にある (点火済みだが未完了) 場合のみ」相殺対象とする一方向の因果判定
+# に変更する。相手の飛行区間は [相手のignition_sec, 相手のt_sec) (=点火から
+# 実際の完了(スコア確定)まで、window_end_sec ではない) とする。
+
+@dataclass(frozen=True)
+class EventActivityWindow:
+    """1発火イベント分の「非STABLE活動窓」(相打ち検出用 + 欠陥G改の予告台帳用)。"""
+    row_index: object  # DataFrame の元インデックス (突合用)
+    fire_side: str
+    t_sec: float             # 発火完了(スコア確定)時刻
+    ignition_sec: float      # 発火検知(=直前STABLE、Fix C)時刻
+    window_end_sec: float    # 次の自分のSTABLE確定時刻 (Fix B)
+    net_ojama_after: float   # 実測(ground truth) 正味お邪魔
+    receiver_baseline_ojama: float = 0.0  # t_sec時点の受け手盤面の実測おじゃま数
+    #   (欠陥G改「着弾済み分の控除」用基準値。受け手が t_sec 以降に実際に
+    #   受け取ったおじゃま数 = 評価時点の受け手盤面おじゃま数 - この基準値、
+    #   として二重計上を防ぐ、_aggregate_known_pending_net_ojama 参照)
+    fire_chain_count: float = 0.0  # 発火側の連鎖数 (欠陥G2「構築済み返し能力」用。
+    #   着弾までの遅延 = estimate_available_hands(この値) から、受け側が
+    #   何手分の応手時間を持つかを見積もる、_realizable_counter_ojama 参照)
+
+
+def build_event_activity_windows(
+    game_events: pd.DataFrame, video_cache: _VideoNpzCache,
+) -> list[EventActivityWindow]:
+    """1試合(1 game_idx)分の全発火イベントの活動窓一覧を作る。
+
+    receiver_baseline_ojama は「発火完了(t_sec)時点で、受け手側の盤面に
+    実測で何個のおじゃまが既にあったか」(時刻最近傍で復元、
+    reconstruct_event_board_pair と同じ突合方式)。評価時点の受け手盤面の
+    おじゃま数からこの基準値を引いた分だけが「この発火が着弾済み」とみなせる
+    (欠陥G改、main実測 match_02 の再現に必要な会計修正)。
+    """
+    windows: list[EventActivityWindow] = []
+    for idx, ev in game_events.iterrows():
+        fire_side = str(ev["fire_side"])
+        game_idx = int(ev["game_idx"])
+        t_fire = float(ev["t_sec"])
+        receiver_side = "2P" if fire_side == "1P" else "1P"
+        receiver_rec = video_cache.r2p if receiver_side == "2P" else video_cache.r1p
+        receiver_mask = receiver_rec.game_idx == game_idx
+        receiver_t = receiver_rec.t_sec[receiver_mask]
+        receiver_grids = receiver_rec.grids[receiver_mask]
+        baseline_ojama = 0.0
+        if len(receiver_t) > 0:
+            nearest = int(np.argmin(np.abs(receiver_t - t_fire)))
+            baseline_board = _board_from_grid(receiver_grids[nearest])
+            baseline_ojama = float(iv.board_ojama_count(baseline_board).raw)
+        windows.append(EventActivityWindow(
+            row_index=idx, fire_side=fire_side, t_sec=t_fire,
+            ignition_sec=ignition_time_for_event(video_cache, fire_side, game_idx, t_fire),
+            window_end_sec=_next_own_stable_time(video_cache, fire_side, game_idx, t_fire),
+            net_ojama_after=float(ev["net_ojama_after"]),
+            receiver_baseline_ojama=baseline_ojama,
+            fire_chain_count=float(ev["approx_fire_chains"])
+            if "approx_fire_chains" in game_events.columns and pd.notna(ev["approx_fire_chains"])
+            else 0.0,
+        ))
+    return windows
+
+
+def _is_airborne_at(window: EventActivityWindow, moment: float) -> bool:
+    """momentの時点で window (発火イベント) が「まだ空中」(点火済み・未完了) か。
+
+    飛行区間は [ignition_sec, t_sec) (点火から実際の完了=スコア確定まで)。
+    window_end_sec (次の自分のSTABLE確定、Fix B/E-2の表示用) は使わない
+    (欠陥Fの根因、モジュール冒頭コメント参照)。
+    """
+    return window.ignition_sec <= moment < window.t_sec
+
+
+def find_mutual_exchange_partner(
+    target: EventActivityWindow, all_windows: list[EventActivityWindow],
+) -> "EventActivityWindow | None":
+    """target の点火時刻に、既に空中にある「相手側 (fire_side が異なる)」の
+    イベントを返す (時間的因果制約、欠陥F対処)。
+
+    「自分の点火時刻に相手の連鎖が既に空中にある」場合のみを対象とする
+    一方向判定 (対称な重なり判定ではない、_is_airborne_at 参照)。
+    未来にまだ起きていない相手の反撃を先取りして相殺することはない。
+    複数該当する場合は ignition_sec が最も近い(直近に点火した)ものを採用する
+    (無ければ None、= 相打ちではない通常イベント)。
+    """
+    candidates = [
+        w for w in all_windows
+        if w.row_index != target.row_index and w.fire_side != target.fire_side
+        and _is_airborne_at(w, target.ignition_sec)
+    ]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda w: abs(w.ignition_sec - target.ignition_sec))
+
+
+def apply_mutual_exchange_adjustment(
+    events_df: pd.DataFrame, video_cache: _VideoNpzCache,
+    net_ojama_pred_col: str = "stack_net_ojama_after_pred",
+) -> pd.DataFrame:
+    """相打ちを検出し、実測 net_ojama_after の相殺値で net_ojama_pred_col を上書きする。
+
+    上書き対象は呼び出し時点で net_ojama_pred_col に入っている値 (通常は
+    モデル予測値) で、相打ちが検出された行のみ「自分の実測net_ojama_after −
+    相手の実測net_ojama_after」に置き換える (相打ちが無い行は既存の予測値の
+    まま、後方互換)。新規列 is_mutual_exchange (bool) / mutual_partner_t_sec
+    (float、無ければNaN) を追加する。events_df は t_sec/fire_side/game_idx/
+    net_ojama_after 列を持つこと (呼び出し前提、無ければ KeyError で早期検出)。
+    """
+    out = events_df.copy()
+    out["is_mutual_exchange"] = False
+    out["mutual_partner_t_sec"] = np.nan
+    for _game_idx, game_events in out.groupby("game_idx"):
+        windows = build_event_activity_windows(game_events, video_cache)
+        for w in windows:
+            partner = find_mutual_exchange_partner(w, windows)
+            if partner is None:
+                continue
+            net = w.net_ojama_after - partner.net_ojama_after
+            out.at[w.row_index, net_ojama_pred_col] = net
+            out.at[w.row_index, "is_mutual_exchange"] = True
+            out.at[w.row_index, "mutual_partner_t_sec"] = partner.t_sec
+    return out
+
+
+# =============================================================================
+# 4d. 予告台帳の相殺会計 + 受け切れ判定 (2026-08-03 指摘 欠陥G→欠陥G改→欠陥G2)
+# =============================================================================
+#
+# 背景 (main実測 match_01/match_02): 欠陥D/Fの相打ち相殺は「重なる2イベント
+# ペアのみ」を対象にしていたが、実際の勝率へは反映されず (欠陥E-2で相手側は
+# live評価にしたのみ)、かつ「受け切れない (物理的に埋まる)」ケースを明示的に
+# 判定していなかった。
+#
+# 初版 (欠陥G) は「点火済み・未着弾 (=t_sec未到達) の空中イベントのみ」を
+# 相殺対象にしていたが、これは「送付済み・着弾待ちの予告 (=t_sec到達後、
+# 受け手がまだ物理的に受け取っていない分)」を勘定に入れておらず、
+# match_02 (2988s、2Pの349は送付済み・未着弾なのに勘定から漏れて
+# 1Pの317がそのまま2Pへの脅威になった) で誤判定した。
+#
+# 修正 (欠陥G改): 「点火済み (ignition_sec<=t)」の全イベントを対象に、
+# t < t_sec (未生成・空中) は実測net_ojama_afterを全額、t >= t_sec
+# (生成済み・着弾待ち) は「受け手盤面の実測おじゃま増分」を観測して
+# 着弾済み分を控除した残りを「予告台帳」として集計する (二重計上防止)。
+# 台帳を src.ojama_accounting.cancel_own_pending_then_send_surplus (既存の
+# 会計ロジックそのまま再利用) で相殺し、正味予告が残る側の空き容量のみと
+# 比較して「受け切れない」と判定していたが、match_04 (3093-3101、2Pの217
+# を受けた1Pが実は既に8連鎖相当を構築済みで即座に返せる状況) で
+# 「5%平坦→3101で90pt垂直反転」という不自然な挙動になった (main実測、
+# 受け切れない判定が「構築済みの返し能力」を無視していたため)。
+#
+# 修正 (欠陥G2): 受け切れ判定に「受け側の構築済み返し能力」を**台帳側の
+# 控除**として組み込む (容量側への加算ではない、以前の懸念の解消)。
+# realizable_counter = expected_fire_power(受け側の現在ライブ盤面,
+# k_hands=estimate_available_hands(攻撃側連鎖数)) の raw値 (#24 sim部品の
+# 再利用、estimate_expected_net_damage と同じ構造)。P' = P - realizable_
+# counter を room と比較する (P'<=0 なら完全に返せる、P'>room なら
+# 受け切れない)。
+# =============================================================================
+
+# 受け切れない判定時の勝率クランプ値 (生存側=予告を送った側の視点、%)。
+# user指定「例:92-97%帯」の中央値を採用 (isotonic出力とのmaxで下限として使う、
+# 通常評価がこれを超えていればクランプは効かない=より強い方を採用)。
+LETHAL_CLAMP_FAVOR_PCT: float = 95.0
+
+
+def _aggregate_known_pending_net_ojama(
+    activity_windows: list[EventActivityWindow], t: float, board_1p: Board, board_2p: Board,
+) -> tuple[float, float, float, float]:
+    """時刻tまでに点火済み(ignition_sec<=t)の全イベントについて、実測
+    net_ojama_after から「着弾済み分」を控除した残存予告を両側で集計する
+    (欠陥G改)。
+
+    t < event.t_sec (まだ生成されていない、空中): 全額をそのまま計上する
+    (オフラインでは将来の確定値が既知のため先取りする、Fix C/Eと同じ思想)。
+    t >= event.t_sec (生成済み、着弾待ち): 受け手盤面 (board_1p/board_2p、
+    E-2のライブ評価と同じもの) の実測おじゃま数から
+    event.receiver_baseline_ojama (発火完了時点の基準値) を引いた増分を
+    「着弾済み」とみなし、実測net_ojama_afterから控除した残りだけを計上する
+    (二重計上防止: E-2で既にライブ盤面に反映されている分を台帳からも
+    引かないと過大評価になる)。
+
+    まだ残存予告のある (remaining>0) イベントに限り、その発火側の
+    fire_chain_count の最大値も併せて追跡する (欠陥G2、_realizable_counter_
+    ojama で「着弾までに受け側が持てる手数」の見積もりに使う)。
+
+    Returns:
+        (1P発火分の残存予告合計, 2P発火分の残存予告合計,
+         1P発火分の最大連鎖数(remaining>0限定), 2P発火分の最大連鎖数) の4値。
+    """
+    current_ojama_1p = float(iv.board_ojama_count(board_1p).raw)
+    current_ojama_2p = float(iv.board_ojama_count(board_2p).raw)
+    pending_from_1p = 0.0
+    pending_from_2p = 0.0
+    chain_from_1p = 0.0
+    chain_from_2p = 0.0
+    for w in activity_windows:
+        if w.ignition_sec > t:
+            continue  # まだ点火していない (時間的因果、Fix F と同じ考え方)
+        if t < w.t_sec:
+            remaining = max(0.0, w.net_ojama_after)
+        else:
+            receiver_current = current_ojama_2p if w.fire_side == "1P" else current_ojama_1p
+            landed = max(0.0, receiver_current - w.receiver_baseline_ojama)
+            remaining = max(0.0, w.net_ojama_after - landed)
+        if w.fire_side == "1P":
+            pending_from_1p += remaining
+            if remaining > 0.0:
+                chain_from_1p = max(chain_from_1p, w.fire_chain_count)
+        else:
+            pending_from_2p += remaining
+            if remaining > 0.0:
+                chain_from_2p = max(chain_from_2p, w.fire_chain_count)
+    return pending_from_1p, pending_from_2p, chain_from_1p, chain_from_2p
+
+
+def _net_pending_after_cancellation(
+    attack_from_1p: float, attack_from_2p: float,
+) -> tuple[float, float]:
+    """両側の予告台帳を相殺し、高々片側にのみ残る正味予告を返す。
+
+    src.ojama_accounting.cancel_own_pending_then_send_surplus をそのまま
+    再利用する (「1Pの生成が1P自身の受信中pending(=2P発火分)を相殺し、
+    余剰を2Pのpendingへ送る」という既存の会計モデルを、オフライン集計値に
+    適用する)。整数専用の関数のため四捨五入してから渡す。
+
+    Returns:
+        (1Pが最終的に受ける正味予告, 2Pが最終的に受ける正味予告) のタプル
+        (どちらか一方は必ず0)。
+    """
+    pending_on_1p, pending_on_2p = cancel_own_pending_then_send_surplus(
+        gen=int(round(attack_from_1p)), own_pending=int(round(attack_from_2p)), other_pending=0,
+    )
+    return float(pending_on_1p), float(pending_on_2p)
+
+
+# expected_fire_power は K=3,4 でモンテカルロ近似 (重い) のため、
+# タイムライン評価 (0.2秒刻み) で同一盤面×同一k_handsを何度も再計算しない
+# ようにメモ化する (main指摘「発火イベント近傍窓のみ計算で可」への対処、
+# 値は変えず計算回数だけ減らす)。盤面内容が同じなら結果は必ず同じ
+# (stateless、Board.grid_bytes() で内容ベースのキーを作る)。
+_REALIZABLE_COUNTER_CACHE: dict[tuple[bytes, int], float] = {}
+
+
+def _realizable_counter_ojama(defender_board: Board, attacker_chain_count: float) -> float:
+    """受け側の「構築済み返し能力」(欠陥G2)。既存 #24 sim 部品の組み替えのみ
+    (新規ロジック最小、estimate_expected_net_damage と同じ構造)。
+
+    k_hands = estimate_available_hands(攻撃側連鎖数) で「着弾までに受け側が
+    打てる手数」を見積もり、受け側の現在ライブ盤面から
+    expected_fire_power(k_hands) の raw 値 (お邪魔換算の期待火力) を返す。
+    未来の情報は使わない (受け側の現在盤面のみで判定する、時間的因果を
+    満たす)。attacker_chain_count=0.0 (連鎖数不明) の場合は
+    estimate_available_hands(0)>=1 が返るため常に有効な k_hands になる。
+    """
+    k_hands = estimate_available_hands(int(round(attacker_chain_count)))
+    cache_key = (defender_board.grid_bytes(), k_hands)
+    cached = _REALIZABLE_COUNTER_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    result = iv.expected_fire_power(defender_board, k_levels=(k_hands,))
+    value = float(result.values[k_hands].raw)
+    _REALIZABLE_COUNTER_CACHE[cache_key] = value
+    return value
+
+
+def _lethal_readout_clamp(
+    activity_windows: list[EventActivityWindow], t: float,
+    board_1p: Board, board_2p: Board, model_winprob_1p: float, simulator: ChainSimulator,
+) -> float:
+    """受け切れ判定 (欠陥G2)。通常評価 (model_winprob_1p) をそのまま返すか、
+    受け切れないと判定した側に不利なクランプを適用して返す。
+
+    正味予告 P (相殺後、_net_pending_after_cancellation) から、受け側の
+    構築済み返し能力 realizable_counter (_realizable_counter_ojama) を
+    控除した P' を room と比較する (欠陥G改の「room単独」判定に、反撃力を
+    容量側でなく**台帳側の控除**として組み込んだもの、main承認済み設計)。
+    P' <= 0 (完全に返せる) なら容量比較すら行わずクランプしない。
+    容量内 (受け切れる) の場合や空中おじゃまが無い場合は model_winprob_1p を
+    そのまま返す (上書きしない、既存の盤面ライブ評価=欠陥E-2の結果を優先)。
+    simulator は将来拡張用の引数として残すが、本関数では未使用。
+    """
+    attack_from_1p, attack_from_2p, chain_from_1p, chain_from_2p = _aggregate_known_pending_net_ojama(
+        activity_windows, t, board_1p, board_2p,
+    )
+    if attack_from_1p == 0.0 and attack_from_2p == 0.0:
+        return model_winprob_1p
+    pending_on_1p, pending_on_2p = _net_pending_after_cancellation(attack_from_1p, attack_from_2p)
+    if pending_on_1p <= 0.0 and pending_on_2p <= 0.0:
+        return model_winprob_1p  # 完全相殺、脅威側なし
+
+    if pending_on_1p > 0.0:
+        threatened_board, pending, attacker_chain = board_1p, pending_on_1p, chain_from_2p
+    else:
+        threatened_board, pending, attacker_chain = board_2p, pending_on_2p, chain_from_1p
+    realizable_counter = _realizable_counter_ojama(threatened_board, attacker_chain)
+    net_pending = pending - realizable_counter
+    if net_pending <= 0.0:
+        return model_winprob_1p  # 構築済み返しだけで完全に返せる、通常評価のまま
+    room = board_room(threatened_board)
+    if net_pending <= room:
+        return model_winprob_1p  # 容量内 = 受け切れる、通常評価のまま
+
+    # 受け切れない: 予告を送った側 (脅かされていない側) へ強くクランプする。
+    if pending_on_1p > 0.0:
+        return min(model_winprob_1p, 100.0 - LETHAL_CLAMP_FAVOR_PCT)  # 1P脅威 -> 2P有利
+    return max(model_winprob_1p, LETHAL_CLAMP_FAVOR_PCT)  # 2P脅威 -> 1P有利
 
 
 # =============================================================================
@@ -744,6 +1105,7 @@ def _build_stable_timeline(
     video_cache: _VideoNpzCache, game_idx: int, models: dict[str, PhaseWinprobModel],
     simulator: ChainSimulator,
     chain_windows: "list[ChainInProgressWindow] | None" = None,
+    activity_windows: "list[EventActivityWindow] | None" = None,
 ) -> pd.DataFrame:
     """1試合分、両サイドの全STABLEスナップショット時刻の和集合で勝率推移を作る。
 
@@ -759,12 +1121,21 @@ def _build_stable_timeline(
     どちらか一方がまだ最初のSTABLEに達していない時刻 (前方保持不能) は
     スキップする。
 
-    chain_windows: optional (2026-08-03 指摘2/Fix B)。渡すと、評価時刻が
-    いずれかのウィンドウ内にある場合、その両盤面を素の前方保持グリッドでは
-    なく Step2 仮想盤面 (連鎖消化後+予測正味おじゃま着弾済み) に差し替える
-    (発火側の「使用済み連鎖をまだ持っている」二重計上を防ぐ、
-    build_chain_in_progress_windows docstring 参照)。既定 None = 従来通り
-    素の前方保持のみ (後方互換)。
+    chain_windows: optional (2026-08-03 指摘2/Fix B、指摘 欠陥E-2 で修正)。
+    渡すと、評価時刻がいずれかのウィンドウ内にある場合、**発火側自身のみ**
+    素の前方保持グリッドではなく Step2 仮想盤面 (連鎖消化後+1ターン上限
+    適用済み着弾、build_chain_in_progress_windows docstring 参照) に
+    差し替える (発火側の「使用済み連鎖をまだ持っている」二重計上を防ぐ)。
+    **相手側は常に素の前方保持 (live) を使う** (相手は連鎖中も自由に積んで
+    いるため、固定盤面では反映できない、欠陥E-2)。既定 None = 従来通り
+    両側とも素の前方保持のみ (後方互換)。
+
+    activity_windows: optional (2026-08-03 指摘 欠陥G)。渡すと、各評価時刻で
+    「点火済み・未着弾」の全イベントの実測 net_ojama_after を相殺会計し、
+    受け切れない (空き容量+近い将来の返し能力を超える) と判定した場合、
+    盤面ライブ評価の結果を予告側 (攻撃側) へ強くクランプする
+    (_lethal_readout_clamp docstring 参照)。既定 None = クランプ無効
+    (後方互換)。
     """
     mask1, mask2 = video_cache.r1p.game_idx == game_idx, video_cache.r2p.game_idx == game_idx
     t1, g1 = video_cache.r1p.t_sec[mask1], video_cache.r1p.grids[mask1]
@@ -774,6 +1145,7 @@ def _build_stable_timeline(
     puyo_totals = np.array([int((g != 0).sum()) for g in g1], dtype=float)
     q_low, q_high = np.quantile(puyo_totals, 0.33), np.quantile(puyo_totals, 0.67)
     windows = chain_windows or []
+    activity = activity_windows or []
 
     eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
@@ -785,14 +1157,20 @@ def _build_stable_timeline(
         phase = "序" if puyo_totals[idx1] <= q_low else ("終" if puyo_totals[idx1] > q_high else "中")
         if phase not in models:
             continue
+        b1, b2 = _board_from_grid(g1[idx1]), _board_from_grid(g2[idx2])
         active = _find_active_chain_window(windows, float(t))
         if active is not None:
-            b1, b2 = active.board_1p, active.board_2p
-        else:
-            b1, b2 = _board_from_grid(g1[idx1]), _board_from_grid(g2[idx2])
+            # 発火側自身のみ仮想盤面に差し替える (相手側は live のまま、欠陥E-2)。
+            if active.fire_side == "1P":
+                b1 = active.board_after
+            else:
+                b2 = active.board_after
         f1, f2 = compute_board_only_features(b1, simulator), compute_board_only_features(b2, simulator)
         p1 = winprob_attacker(models, phase, f1, f2)
-        rows.append({"t_sec": float(t), "winprob_1p": winprob_to_score100(p1)})
+        winprob_1p = winprob_to_score100(p1)
+        if activity:
+            winprob_1p = _lethal_readout_clamp(activity, float(t), b1, b2, winprob_1p, simulator)
+        rows.append({"t_sec": float(t), "winprob_1p": winprob_1p})
     return pd.DataFrame(rows)
 
 

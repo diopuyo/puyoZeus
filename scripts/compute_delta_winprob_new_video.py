@@ -42,6 +42,7 @@ from scripts.augment_exchange_labels_with_sim import _VideoCache, _compute_sim_c
 from scripts.compute_exchange_delta_winprob import (
     DEFAULT_LABELED_WIN_CSV,
     _load_video_npz,
+    apply_mutual_exchange_adjustment,
     compute_delta_winprob_for_event,
     reconstruct_event_board_pair,
     train_winprob_models,
@@ -90,6 +91,8 @@ def compute_events_for_new_video(
     npz_caches: dict[str, "object"] = {}
     sim_caches: dict[str, "_VideoCache | None"] = {}
     sim = ChainSimulator()
+
+    # --- Pass 1: 盤面突合 + 併用スタッキング予測 (相打ち相殺前の一次値) ---
     rows: list[dict] = []
     for _, row in labels_df.iterrows():
         video_id = str(row["video_id"])
@@ -108,15 +111,11 @@ def compute_events_for_new_video(
             out["match_failed"] = True
             rows.append(out)
             continue
-        fire_board, opp_board = pair
         sim_k_hands, sim_expected_counter_ojama, sim_damage_score = _compute_sim_columns_for_row(
             row, sim_cache, SIM_MODE)
         features = _build_features(
             row, stack_model, (sim_k_hands, sim_expected_counter_ojama, sim_damage_score))
         _prob_taiou, net_ojama_after_pred = predict_exchange_event(stack_model, features)
-        delta = compute_delta_winprob_for_event(
-            fire_board, opp_board, str(row["phase"]), net_ojama_after_pred, winprob_models, sim,
-        )
         out.update(
             match_failed=False,
             sim_k_hands=sim_k_hands,
@@ -124,14 +123,53 @@ def compute_events_for_new_video(
             sim_damage_score=sim_damage_score,
             stack_prob_taiou_success=_prob_taiou,
             stack_net_ojama_after_pred=net_ojama_after_pred,
-            winprob_before=delta.winprob_before,
-            winprob_after=delta.winprob_after,
-            delta_winprob=delta.delta_winprob,
-            attacker_dead_after=delta.attacker_dead_after,
-            opponent_dead_after=delta.opponent_dead_after,
         )
         rows.append(out)
     out_df = pd.DataFrame(rows)
+
+    # --- Pass 2: 相打ち(欠陥D)検出・実測net_ojama_after相殺で上書き ---
+    # (動画1本前提のスクリプトのため video_id 単位のループは不要、対象動画の
+    # cache をそのまま使う。match_failed 行は突合済み盤面が無いため対象外)
+    valid_mask = ~out_df["match_failed"]
+    for video_id, cache in npz_caches.items():
+        if cache is None:
+            continue
+        sub_mask = valid_mask & (out_df["video_id"] == video_id)
+        if not sub_mask.any():
+            continue
+        adjusted_sub = apply_mutual_exchange_adjustment(out_df.loc[sub_mask], cache)
+        out_df.loc[sub_mask, ["stack_net_ojama_after_pred", "is_mutual_exchange", "mutual_partner_t_sec"]] = (
+            adjusted_sub[["stack_net_ojama_after_pred", "is_mutual_exchange", "mutual_partner_t_sec"]]
+        )
+    if "is_mutual_exchange" not in out_df.columns:
+        out_df["is_mutual_exchange"] = False
+        out_df["mutual_partner_t_sec"] = float("nan")
+    n_mutual = int(out_df.loc[valid_mask, "is_mutual_exchange"].sum())
+    print(f"[new_video] 相打ち(欠陥D)検出: {n_mutual}/{int(valid_mask.sum())}行")
+
+    # --- Pass 3: (相打ち相殺後の) net_ojama_after_pred で ΔWinProb を計算 ---
+    delta_rows: list[dict] = []
+    for _, row in out_df.iterrows():
+        if row["match_failed"]:
+            delta_rows.append({"winprob_before": float("nan"), "winprob_after": float("nan"),
+                               "delta_winprob": float("nan"), "attacker_dead_after": False,
+                               "opponent_dead_after": False})
+            continue
+        cache = npz_caches[str(row["video_id"])]
+        pair = reconstruct_event_board_pair(cache, int(row["game_idx"]), float(row["t_sec"]), str(row["fire_side"]))
+        fire_board, opp_board = pair
+        delta = compute_delta_winprob_for_event(
+            fire_board, opp_board, str(row["phase"]), float(row["stack_net_ojama_after_pred"]),
+            winprob_models, sim,
+        )
+        delta_rows.append({
+            "winprob_before": delta.winprob_before, "winprob_after": delta.winprob_after,
+            "delta_winprob": delta.delta_winprob, "attacker_dead_after": delta.attacker_dead_after,
+            "opponent_dead_after": delta.opponent_dead_after,
+        })
+    delta_df = pd.DataFrame(delta_rows, index=out_df.index)
+    out_df = pd.concat([out_df, delta_df], axis=1)
+
     n_failed = int(out_df["match_failed"].sum())
     print(f"[new_video] 盤面突合失敗={n_failed}/{len(out_df)}行")
     return out_df

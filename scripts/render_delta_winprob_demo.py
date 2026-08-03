@@ -58,11 +58,13 @@ from scripts.compute_exchange_delta_winprob import (
     DEFAULT_OUT_DIR as DEFAULT_DELTA_WINPROB_DIR,
     VIDEO_ID_NPZ_PREFIX,
     ChainInProgressWindow,
+    EventActivityWindow,
     PhaseWinprobModel,
     _build_stable_timeline,
     _load_video_npz,
     _npz_stem_from_video_id,
     build_chain_in_progress_windows,
+    build_event_activity_windows,
     compute_all_delta_winprob,
     ignition_time_for_event,
     load_aug_with_stacking_predictions,
@@ -158,12 +160,14 @@ def select_video_segment(
 @dataclass(frozen=True)
 class FireEventView:
     """1発火イベント分の描画用ビュー (1P視点に正規化済み)。"""
-    ignition_sec: float       # 発火検知(近似)時刻
+    ignition_sec: float       # 発火検知(=発火側直前STABLE、Fix C)時刻
     fire_end_sec: float       # 連鎖終了(t_sec、旧方式が追いつく時刻)
     fire_side: str            # "1P" or "2P"
     winprob_before_1p: float  # 発火直前の1P視点勝率(0-100%)
     winprob_after_1p: float   # 発火後(予測)の1P視点勝率(0-100%)
     delta_winprob: float      # 発火側視点のΔ (attacker視点、符号そのまま)
+    is_mutual_exchange: bool = False   # 相打ち(Fix D)判定済みか
+    mutual_partner_t_sec: float = float("nan")  # 相打ち相手イベントのt_sec
 
 
 def _to_1p_view(value: float, fire_side: str) -> float:
@@ -171,16 +175,21 @@ def _to_1p_view(value: float, fire_side: str) -> float:
     return value if fire_side == "1P" else 100.0 - value
 
 
-def build_fire_event_views(events_df: pd.DataFrame) -> list[FireEventView]:
+def build_fire_event_views(events_df: pd.DataFrame, video_cache) -> list[FireEventView]:
     """ΔWinProb イベント DataFrame (1試合分) から描画用ビュー一覧を作る。
 
     ignition_sec 昇順にソートして返す (表示ロジック側の探索を単純化するため)。
+    video_cache: ignition_time_for_event (Fix C、データ駆動) が発火側自身の
+    直前STABLE時刻を求めるために必要。
+    is_mutual_exchange/mutual_partner_t_sec (Fix D) は events_df に列が
+    存在する場合のみ読む (無ければ False/NaN、後方互換)。
     """
+    has_mutual_cols = "is_mutual_exchange" in events_df.columns
     views: list[FireEventView] = []
     for _, ev in events_df.iterrows():
-        ignition_sec = ignition_time_for_event(
-            float(ev["t_sec"]), float(ev["approx_fire_chains"]))
         fire_side = str(ev["fire_side"])
+        ignition_sec = ignition_time_for_event(
+            video_cache, fire_side, int(ev["game_idx"]), float(ev["t_sec"]))
         views.append(FireEventView(
             ignition_sec=ignition_sec,
             fire_end_sec=float(ev["t_sec"]),
@@ -188,6 +197,8 @@ def build_fire_event_views(events_df: pd.DataFrame) -> list[FireEventView]:
             winprob_before_1p=_to_1p_view(float(ev["winprob_before"]), fire_side),
             winprob_after_1p=_to_1p_view(float(ev["winprob_after"]), fire_side),
             delta_winprob=float(ev["delta_winprob"]),
+            is_mutual_exchange=bool(ev["is_mutual_exchange"]) if has_mutual_cols else False,
+            mutual_partner_t_sec=float(ev["mutual_partner_t_sec"]) if has_mutual_cols else float("nan"),
         ))
     views.sort(key=lambda v: v.ignition_sec)
     return views
@@ -234,11 +245,19 @@ def compute_display_state(
 ) -> DisplayState:
     """t 時点の表示状態を求める (純関数、state を一切持たない)。
 
-    「即時ジャンプ」: 発火検知(ignition_sec)〜連鎖終了(fire_end_sec)の間は
-    予測後勝率(winprob_after_1p)を即座に表示し続ける(旧方式はこの間まだ
-    STABLE待ちで動かない=対比が生まれる)。連鎖終了後は実測 STABLE 推移
-    (stable_value_at) にそのまま切り替える(データ駆動の自然な収束、
-    合成的なブレンドは行わない)。
+    2026-08-03 指摘 欠陥E-2 対処 (main実測 match_02 で発覚): 数値表示
+    (winprob_1p) は常に timeline (呼出元が chain_windows 込みで構築した
+    _build_stable_timeline の結果) の値をそのまま使う。旧実装はここで
+    `ev.winprob_after_1p` (発火側固定+相手側も発火直前で固定した1回だけの
+    予測値) に上書きしており、Fix Bのタイムライン側で「相手側はlive」に
+    修正した (欠陥E-2) 効果がこの上書きによって画面に反映されない実害が
+    あった (相手が連鎖中も自由に積んでいる情報が速報バッジの間ずっと
+    無視される)。「即時ジャンプ」自体は timeline 構築時に発火側の直前
+    STABLE行そのものが仮想盤面込みの評価点になる (Fix C: ignition_sec は
+    発火側の実STABLE行) ため、この関数を経由せずタイムライン側で
+    自然に実現される (合成的なブレンドは行わない)。
+    jump_active は演出上のフラグ (バーの黄色マーカー等の表示切替用) として
+    残すが、数値には影響しない。
     """
     stable_v = stable_value_at(timeline_t, timeline_v, t)
     waiting = stable_v is None
@@ -246,9 +265,6 @@ def compute_display_state(
 
     ev = _latest_event_at_or_before(events, t)
     jump_active = ev is not None and t < ev.fire_end_sec
-    if jump_active:
-        display_v = ev.winprob_after_1p
-        waiting = False
 
     badge = (
         ev if ev is not None and t <= ev.ignition_sec + BADGE_TEXT_DISPLAY_SEC else None
@@ -278,12 +294,20 @@ def _draw_bar(d: "ImageDraw.ImageDraw", state: DisplayState, cx: int, x0: int) -
 
 
 def _draw_badge(d: "ImageDraw.ImageDraw", badge: "FireEventView | None", x0: int) -> None:
-    """速報バッジ (「1P/2P 発火速報 Δ+XX%」) を描画する。badge=None なら何も描かない。"""
+    """速報バッジ (「1P/2P 発火速報 Δ+XX%」) を描画する。badge=None なら何も描かない。
+
+    is_mutual_exchange (Fix D) の場合は「相打ち」であることを明記する
+    (相手の同時進行中の連鎖と実測ベースで相殺した正味である旨)。
+    """
     if badge is None:
         return
     color = COLOR_1P if badge.fire_side == "1P" else COLOR_2P
-    text = (f"[速報] {badge.fire_side} が発火 → 予測勝率 "
-            f"{badge.delta_winprob:+.0f}pt 変化 (連鎖終了前に先行表示・近似値)")
+    if badge.is_mutual_exchange:
+        text = (f"[相打ち] {badge.fire_side} 側視点の正味勝率 "
+                f"{badge.delta_winprob:+.0f}pt 変化 (相手の同時連鎖と実測相殺済み)")
+    else:
+        text = (f"[速報] {badge.fire_side} が発火 → 予測勝率 "
+                f"{badge.delta_winprob:+.0f}pt 変化 (連鎖終了前に先行表示・近似値)")
     d.rectangle([x0 - 6, PANEL_BADGE_Y - 4, x0 + 760, PANEL_BADGE_Y + 22],
                 fill=(*COLOR_BADGE_BG, 210))
     d.text((x0, PANEL_BADGE_Y), text, font=_font(16), fill=color)
@@ -519,17 +543,24 @@ def main() -> None:
     events_df = load_events_for_video(
         args.video_id, args.game_idx, args.delta_winprob_csv,
         args.recompute, args.npz_dir, args.aug_csv, args.model_d_dir, models)
-    events = build_fire_event_views(events_df)
+    events = build_fire_event_views(events_df, cache)
     print(f"[events] 速報バッジ対象イベント数: {len(events)}")
 
-    print("\n=== 4. STABLE 従来推移タイムライン構築 (連鎖中は仮想盤面, Fix B) ===")
+    print("\n=== 4. STABLE 従来推移タイムライン構築 (連鎖中は仮想盤面, Fix B/E-2/G) ===")
     chain_windows: "list[ChainInProgressWindow]" = []
     if "stack_net_ojama_after_pred" in events_df.columns:
         chain_windows = build_chain_in_progress_windows(events_df, cache, sim)
     else:
         print("[warn] events_df に stack_net_ojama_after_pred が無いため"
               "連鎖中仮想盤面差し替え(Fix B)をスキップします")
-    timeline_df = _build_stable_timeline(cache, args.game_idx, models, sim, chain_windows)
+    activity_windows: "list[EventActivityWindow]" = []
+    if "net_ojama_after" in events_df.columns:
+        activity_windows = build_event_activity_windows(events_df, cache)
+    else:
+        print("[warn] events_df に net_ojama_after が無いため"
+              "受け切れ判定(Fix G)をスキップします")
+    timeline_df = _build_stable_timeline(
+        cache, args.game_idx, models, sim, chain_windows, activity_windows)
     if len(timeline_df) == 0:
         raise RuntimeError(f"{args.video_id} game={args.game_idx} のタイムライン生成に失敗")
     timeline_t = timeline_df["t_sec"].values.astype(float)

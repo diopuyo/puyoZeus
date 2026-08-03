@@ -200,6 +200,49 @@ def test_opponent_dead_flag_after_large_ojama_drop():
     assert result.opponent_dead is True
 
 
+def test_large_net_ojama_capped_at_max_drop_per_turn():
+    """2026-08-03 指摘 欠陥E-1: 448個等の大型予測値でも実配置は30個 (1ターン上限) まで。"""
+    from src.exchange_virtual_board import OJAMA_MAX_DROP_PER_TURN
+
+    before = make_no_chain_board()
+    opp = Board()  # 空盤面 (十分な空きあり)
+    result = reconstruct_virtual_board_pair(before, opp, net_ojama_after_pred=448.0)
+    assert result.ojama_to_opponent == OJAMA_MAX_DROP_PER_TURN
+    placed = sum(1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+                if result.opponent_board_after.get(r, c) == COLOR_OJAMA)
+    assert placed == OJAMA_MAX_DROP_PER_TURN
+
+
+def test_large_net_ojama_does_not_force_instant_death_on_spacious_board():
+    """main実測 match_02 の再現: 448個予測でも空きが十分あれば即死判定にならない
+    (旧実装は全量投下で単独盤面容量超過→不当に opponent_dead=True になっていた)。
+    """
+    before = make_no_chain_board()
+    opp = Board()  # 空盤面、30個程度なら窒息しない
+    result = reconstruct_virtual_board_pair(before, opp, net_ojama_after_pred=448.0)
+    assert result.opponent_dead is False
+
+
+def test_capped_and_exact_max_drop_produce_identical_result():
+    """448個予測と30個予測(=上限そのもの)の結果が一致する (上限適用の一貫性)。"""
+    from src.exchange_virtual_board import OJAMA_MAX_DROP_PER_TURN
+
+    before = make_no_chain_board()
+    opp = Board()
+    result_large = reconstruct_virtual_board_pair(before, opp, net_ojama_after_pred=448.0)
+    result_exact = reconstruct_virtual_board_pair(
+        before, opp, net_ojama_after_pred=float(OJAMA_MAX_DROP_PER_TURN))
+    assert result_large.opponent_board_after == result_exact.opponent_board_after
+
+
+def test_small_net_ojama_below_cap_unaffected():
+    """30個以下の予測は従来通り全量配置される (後方互換、既存挙動を破壊しない)。"""
+    before = make_no_chain_board()
+    opp = Board()
+    result = reconstruct_virtual_board_pair(before, opp, net_ojama_after_pred=20.0)
+    assert result.ojama_to_opponent == 20
+
+
 def test_custom_simulator_reused():
     """呼び出し側が渡した ChainSimulator インスタンスでも同じ結果になる。"""
     before = make_4connect_board()

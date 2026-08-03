@@ -13,23 +13,33 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.board import BOARD_COLS, BOARD_ROWS, Board
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_RED, Board
 from scripts.compute_exchange_delta_winprob import (
     BOARD_ONLY_INDICATOR_BASES,
     CHAIN_WINDOW_FALLBACK_TAIL_SEC,
     ChainInProgressWindow,
+    EventActivityWindow,
     PhaseWinprobModel,
     T_SEC_MATCH_TOL_SEC,
     _VideoNpzCache,
     _assign_phase_by_puyo_tertile,
     _build_mirror_paired,
     _build_stable_timeline,
+    LETHAL_CLAMP_FAVOR_PCT,
+    _aggregate_known_pending_net_ojama,
     _find_active_chain_window,
+    _is_airborne_at,
+    _lethal_readout_clamp,
+    _net_pending_after_cancellation,
+    _realizable_counter_ojama,
     _next_own_stable_time,
     _npz_stem_from_video_id,
+    apply_mutual_exchange_adjustment,
     build_chain_in_progress_windows,
+    build_event_activity_windows,
     compute_board_only_features,
     compute_delta_winprob_for_event,
+    find_mutual_exchange_partner,
     ignition_time_for_event,
     print_sanity_checks,
     reconstruct_event_board_pair,
@@ -560,9 +570,18 @@ def _make_events_df_for_chain_window(
     }])
 
 
-def test_ignition_time_for_event_subtracts_chain_anim_duration():
-    """t_sec から CHAIN_ANIM_PER_STEP_SEC(=0.4)*連鎖数 を引いた値になる。"""
-    assert ignition_time_for_event(100.0, 5.0) == pytest.approx(100.0 - 0.4 * 5.0)
+def test_ignition_time_for_event_uses_prev_own_stable_time():
+    """発火側自身の直前STABLE時刻を返す (Fix C、近似式は廃止済み)。"""
+    cache = _make_video_cache()  # r1p.t_sec = [0,1,2,3,4]
+    t = ignition_time_for_event(cache, "1P", game_idx=0, t_sec=3.0)
+    assert t == pytest.approx(2.0)
+
+
+def test_ignition_time_for_event_returns_t_sec_when_no_earlier_snapshot():
+    """直前STABLEが無ければ t_sec そのもの (ウィンドウ長ゼロの安全弁)。"""
+    cache = _make_video_cache()
+    t = ignition_time_for_event(cache, "1P", game_idx=0, t_sec=0.0)
+    assert t == pytest.approx(0.0)
 
 
 def test_next_own_stable_time_finds_strictly_later_snapshot():
@@ -587,48 +606,58 @@ def test_build_chain_in_progress_windows_uses_virtual_board_pair():
     windows = build_chain_in_progress_windows(events_df, cache, sim)
     assert len(windows) == 1
     w = windows[0]
-    assert w.ignition_sec == pytest.approx(ignition_time_for_event(3.0, 2.0))
+    assert w.ignition_sec == pytest.approx(2.0)  # 発火側自身の直前STABLE (t=2.0)
     assert w.window_end_sec == pytest.approx(4.0)
 
     pair = reconstruct_event_board_pair(cache, 0, 3.0, "1P")
     fire_board, opp_board = pair
     vpair = reconstruct_virtual_board_pair(fire_board, opp_board, 40.0, simulator=sim)
-    assert w.board_1p == vpair.attacker_board_after
-    assert w.board_2p == vpair.opponent_board_after
+    assert w.fire_side == "1P"
+    assert w.board_after == vpair.attacker_board_after
 
 
 def test_find_active_chain_window_returns_none_outside_range():
-    windows = [ChainInProgressWindow(ignition_sec=2.0, window_end_sec=4.0,
-                                     board_1p=Board(), board_2p=Board())]
+    windows = [ChainInProgressWindow(fire_side="1P", ignition_sec=2.0, window_end_sec=4.0,
+                                     board_after=Board())]
     assert _find_active_chain_window(windows, 1.9) is None
     assert _find_active_chain_window(windows, 4.0) is None  # 終端は排他的
 
 
 def test_find_active_chain_window_returns_window_inside_range():
-    w = ChainInProgressWindow(ignition_sec=2.0, window_end_sec=4.0, board_1p=Board(), board_2p=Board())
+    w = ChainInProgressWindow(fire_side="1P", ignition_sec=2.0, window_end_sec=4.0, board_after=Board())
     assert _find_active_chain_window([w], 3.0) is w
 
 
 def test_build_stable_timeline_uses_virtual_board_inside_window():
-    """指摘2の受け入れテスト: ウィンドウ内の評価時刻は仮想盤面の特徴量で計算されること。"""
+    """指摘2の受け入れテスト: ウィンドウ内の評価時刻は仮想盤面の特徴量で計算されること。
+
+    net_ojama_pred=-6.0 (負値=攻撃側自身が着弾を受ける想定) を使う。
+    _make_distinct_board は全て単一セル(puyo数=1)のため、素の前方保持
+    (差し替え無し) では board_puyo_total 差が常に0になり見分けが付かない
+    (欠陥E-2修正で相手側は live のため、攻撃側の変化で区別する必要がある)。
+    """
     cache = _make_video_cache()
     sim = ChainSimulator()
     models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
-    events_df = _make_events_df_for_chain_window()
+    events_df = _make_events_df_for_chain_window(net_ojama_pred=-6.0)
     windows = build_chain_in_progress_windows(events_df, cache, sim)
 
     df_with_windows = _build_stable_timeline(cache, 0, models, sim, chain_windows=windows)
     df_without_windows = _build_stable_timeline(cache, 0, models, sim, chain_windows=None)
 
-    # ウィンドウ [ignition≈2.2, 4.0) に入る評価時刻 (2.5, 3.0, 3.4) は
+    # ウィンドウ [ignition=2.0, 4.0) に入る評価時刻 (2.5, 3.0, 3.4) は
     # 仮想盤面特徴量から計算した期待値と一致すること。
     def _row_at(df: pd.DataFrame, t: float) -> pd.Series:
         matches = df.loc[np.isclose(df["t_sec"].values, t)]
         assert len(matches) == 1, f"t={t} の行が見つからない: {df['t_sec'].tolist()}"
         return matches.iloc[0]
 
+    # 発火側(1P)は固定仮想盤面、相手側(2P)はt=2.5時点のlive実測盤面
+    # (=_make_distinct_board(12)、_make_video_cache のr2p.grids[2]) を使う
+    # (欠陥E-2: 相手側は固定しない)。
     w = windows[0]
-    f1, f2 = compute_board_only_features(w.board_1p, sim), compute_board_only_features(w.board_2p, sim)
+    f1 = compute_board_only_features(w.board_after, sim)
+    f2 = compute_board_only_features(_make_distinct_board(12), sim)
     expected_in_window = winprob_to_score100(winprob_attacker(models, "中", f1, f2))
     assert _row_at(df_with_windows, 2.5)["winprob_1p"] == pytest.approx(expected_in_window)
 
@@ -651,3 +680,388 @@ def test_build_stable_timeline_chain_windows_default_none_backward_compat():
     df_explicit_none = _build_stable_timeline(cache, 0, models, sim, None)
     df_omitted = _build_stable_timeline(cache, 0, models, sim)
     pd.testing.assert_frame_equal(df_explicit_none, df_omitted)
+
+
+# =============================================================================
+# 2026-08-03 指摘 欠陥D/Fix F: 相打ち (時間的因果関係のある発火) の相殺
+# =============================================================================
+#
+# _make_video_cache() (r1p.t_sec=[0,1,2,3,4] / r2p.t_sec=[0.5,1.5,2.5,3.4,4.5])
+# を使う。1P発火(t=3.0, ignition=2.0) は 2P発火(t=2.5, ignition=1.5) の
+# 飛行区間 [1.5, 2.5) の**外** (2.0 は 1.5〜2.5 の間ではあるので実は内側!
+# 逆に 2P の点火(1.5)は1Pの飛行 [2.0,3.0) の外) — 一方向の因果:
+#   1P点火(2.0) は 2P飛行中[1.5,2.5) に含まれる → 1P→2Pの相殺が成立
+#   2P点火(1.5) は 1P飛行(まだ点火前、[2.0,3.0)) に含まれない → 相殺不成立
+# つまり「1Pイベントのみ相殺され、2Pイベントは相殺されない」非対称な結果に
+# なることを検証する (match_01/match_05 の実測パターンと同型)。
+
+def _make_causal_events_df(net_1p: float = 100.0, net_2p: float = 30.0) -> pd.DataFrame:
+    return pd.DataFrame([
+        {"t_sec": 3.0, "fire_side": "1P", "game_idx": 0, "net_ojama_after": net_1p},
+        {"t_sec": 2.5, "fire_side": "2P", "game_idx": 0, "net_ojama_after": net_2p},
+    ])
+
+
+def _make_non_overlapping_events_df() -> pd.DataFrame:
+    """1P(t=3.0, ignition=2.0) と 2P(t=0.5, ignition=0.5未満=t_secに等しい)
+    は因果的に絡まない (2Pの発火は1Pの点火より遥かに前に完了している)。
+    """
+    return pd.DataFrame([
+        {"t_sec": 3.0, "fire_side": "1P", "game_idx": 0, "net_ojama_after": 100.0},
+        {"t_sec": 0.5, "fire_side": "2P", "game_idx": 0, "net_ojama_after": 30.0},
+    ])
+
+
+def test_build_event_activity_windows_matches_fix_b_and_c_boundaries():
+    """活動窓の開始/終了が Fix C(直前STABLE)/Fix B(次の自分STABLE)と一致すること。"""
+    cache = _make_video_cache()
+    events_df = _make_causal_events_df()
+    windows = build_event_activity_windows(events_df, cache)
+    by_side = {w.fire_side: w for w in windows}
+    assert by_side["1P"].ignition_sec == pytest.approx(2.0)
+    assert by_side["1P"].window_end_sec == pytest.approx(4.0)
+    assert by_side["2P"].ignition_sec == pytest.approx(1.5)
+    assert by_side["2P"].window_end_sec == pytest.approx(3.4)
+
+
+def test_build_event_activity_windows_populates_fire_chain_count_from_approx_fire_chains():
+    """approx_fire_chains 列があれば fire_chain_count に反映される (欠陥G2)。"""
+    cache = _make_video_cache()
+    events_df = _make_causal_events_df()
+    events_df["approx_fire_chains"] = [8.0, 6.0]
+    windows = build_event_activity_windows(events_df, cache)
+    by_side = {w.fire_side: w for w in windows}
+    assert by_side["1P"].fire_chain_count == pytest.approx(8.0)
+    assert by_side["2P"].fire_chain_count == pytest.approx(6.0)
+
+
+def test_build_event_activity_windows_defaults_fire_chain_count_when_column_missing_or_nan():
+    """列が無い場合・NaNの場合は 0.0 既定値になる (後方互換、旧CSVでも動く)。"""
+    cache = _make_video_cache()
+    events_df_no_col = _make_causal_events_df()
+    windows_no_col = build_event_activity_windows(events_df_no_col, cache)
+    assert all(w.fire_chain_count == pytest.approx(0.0) for w in windows_no_col)
+
+    events_df_with_nan = _make_causal_events_df()
+    events_df_with_nan["approx_fire_chains"] = [np.nan, 6.0]
+    windows_with_nan = build_event_activity_windows(events_df_with_nan, cache)
+    by_side = {w.fire_side: w for w in windows_with_nan}
+    assert by_side["1P"].fire_chain_count == pytest.approx(0.0)
+    assert by_side["2P"].fire_chain_count == pytest.approx(6.0)
+
+
+def test_is_airborne_at_true_when_moment_inside_ignition_to_completion():
+    cache = _make_video_cache()
+    windows = build_event_activity_windows(_make_causal_events_df(), cache)
+    w2p = next(w for w in windows if w.fire_side == "2P")  # ignition=1.5, t_sec=2.5
+    assert _is_airborne_at(w2p, 2.0) is True   # 1Pの点火時刻(2.0)は2Pの飛行中
+
+
+def test_is_airborne_at_false_when_moment_before_ignition_or_after_completion():
+    cache = _make_video_cache()
+    windows = build_event_activity_windows(_make_causal_events_df(), cache)
+    w1p = next(w for w in windows if w.fire_side == "1P")  # ignition=2.0, t_sec=3.0
+    assert _is_airborne_at(w1p, 1.5) is False  # 2Pの点火時刻(1.5)はまだ1P点火前
+    assert _is_airborne_at(w1p, 3.0) is False  # 終端は排他的 (完了後は空中でない)
+
+
+def test_find_mutual_exchange_partner_one_directional_causality():
+    """1Pの点火時刻には2Pが空中(партнер成立)、2Pの点火時刻には1Pは未点火(不成立)。"""
+    cache = _make_video_cache()
+    windows = build_event_activity_windows(_make_causal_events_df(), cache)
+    target_1p = next(w for w in windows if w.fire_side == "1P")
+    target_2p = next(w for w in windows if w.fire_side == "2P")
+
+    partner_for_1p = find_mutual_exchange_partner(target_1p, windows)
+    assert partner_for_1p is not None
+    assert partner_for_1p.fire_side == "2P"
+
+    partner_for_2p = find_mutual_exchange_partner(target_2p, windows)
+    assert partner_for_2p is None  # 欠陥F: 未来の反撃を先取りしない
+
+
+def test_find_mutual_exchange_partner_returns_none_when_causally_unrelated():
+    cache = _make_video_cache()
+    windows = build_event_activity_windows(_make_non_overlapping_events_df(), cache)
+    target = next(w for w in windows if w.fire_side == "1P")
+    assert find_mutual_exchange_partner(target, windows) is None
+
+
+def test_find_mutual_exchange_partner_ignores_same_side():
+    """fire_side が同じイベントは相打ち相手にならない (自分自身との誤検出防止)。"""
+    a = EventActivityWindow(row_index=0, fire_side="1P", t_sec=3.0,
+                            ignition_sec=2.0, window_end_sec=4.0, net_ojama_after=100.0)
+    b = EventActivityWindow(row_index=1, fire_side="1P", t_sec=3.5,
+                            ignition_sec=2.5, window_end_sec=4.5, net_ojama_after=50.0)
+    assert find_mutual_exchange_partner(a, [a, b]) is None
+
+
+def test_apply_mutual_exchange_adjustment_nets_only_the_causally_later_igniter():
+    """指摘 欠陥F の受け入れテスト: 相殺されるのは「相手が既に空中だった側」
+    (1P、point_1p=100-30=+70) のみで、先に点火した側(2P)は相殺されない
+    (未来の反撃の先取り禁止、モデル予測値のまま)。
+    """
+    cache = _make_video_cache()
+    events_df = _make_causal_events_df(net_1p=100.0, net_2p=30.0)
+    events_df["stack_net_ojama_after_pred"] = [999.0, 888.0]  # 上書き対象(モデル予測の代わり)
+    out = apply_mutual_exchange_adjustment(events_df, cache)
+
+    row_1p = out.loc[out["fire_side"] == "1P"].iloc[0]
+    row_2p = out.loc[out["fire_side"] == "2P"].iloc[0]
+    assert bool(row_1p["is_mutual_exchange"]) is True
+    assert row_1p["stack_net_ojama_after_pred"] == pytest.approx(70.0)
+    assert row_1p["mutual_partner_t_sec"] == pytest.approx(2.5)
+
+    assert bool(row_2p["is_mutual_exchange"]) is False
+    assert row_2p["stack_net_ojama_after_pred"] == pytest.approx(888.0)  # 元の予測値のまま
+    assert pd.isna(row_2p["mutual_partner_t_sec"])
+
+
+def test_apply_mutual_exchange_adjustment_leaves_non_overlapping_rows_unchanged():
+    """因果的に絡まない行は既存の予測値のまま (後方互換)。"""
+    cache = _make_video_cache()
+    events_df = _make_non_overlapping_events_df()
+    events_df["stack_net_ojama_after_pred"] = [999.0, 888.0]
+    out = apply_mutual_exchange_adjustment(events_df, cache)
+    assert (~out["is_mutual_exchange"]).all()
+    assert out["stack_net_ojama_after_pred"].tolist() == [999.0, 888.0]
+    assert out["mutual_partner_t_sec"].isna().all()
+
+
+# =============================================================================
+# 2026-08-03 指摘 欠陥G→欠陥G改: 予告台帳の相殺会計 + 受け切れ判定
+# =============================================================================
+
+def _make_activity_window(
+    fire_side: str, ignition_sec: float, t_sec: float, net_ojama_after: float,
+    row_index: int = 0, receiver_baseline_ojama: float = 0.0, fire_chain_count: float = 0.0,
+) -> EventActivityWindow:
+    return EventActivityWindow(
+        row_index=row_index, fire_side=fire_side, t_sec=t_sec, ignition_sec=ignition_sec,
+        window_end_sec=t_sec + 100.0,  # 本テストでは Fix G は t_sec/ignition のみ見るため任意値
+        net_ojama_after=net_ojama_after, receiver_baseline_ojama=receiver_baseline_ojama,
+        fire_chain_count=fire_chain_count,
+    )
+
+
+class TestAggregateKnownPendingNetOjama:
+    """予告台帳の集計 (空中/着弾待ち/着弾済み控除/因果整合)。"""
+
+    def test_both_sides_in_flight_are_summed_separately(self) -> None:
+        """t < t_sec (未生成・空中) は全額をそのまま計上する。"""
+        empty1, empty2 = Board(), Board()
+        windows = [
+            _make_activity_window("1P", ignition_sec=1.0, t_sec=5.0, net_ojama_after=40.0, row_index=0),
+            _make_activity_window("2P", ignition_sec=2.0, t_sec=6.0, net_ojama_after=15.0, row_index=1),
+        ]
+        attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(windows, 3.0, empty1, empty2)
+        assert attack_1p == pytest.approx(40.0)
+        assert attack_2p == pytest.approx(15.0)
+
+    def test_only_one_side_known(self) -> None:
+        empty1, empty2 = Board(), Board()
+        windows = [
+            _make_activity_window("1P", ignition_sec=1.0, t_sec=5.0, net_ojama_after=40.0, row_index=0),
+            _make_activity_window("2P", ignition_sec=10.0, t_sec=12.0, net_ojama_after=15.0, row_index=1),
+        ]
+        attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(windows, 3.0, empty1, empty2)
+        assert attack_1p == pytest.approx(40.0)
+        assert attack_2p == pytest.approx(0.0)
+
+    def test_no_events_known_gives_zero(self) -> None:
+        empty1, empty2 = Board(), Board()
+        windows = [_make_activity_window("1P", ignition_sec=1.0, t_sec=5.0, net_ojama_after=40.0)]
+        attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(windows, 0.5, empty1, empty2)
+        assert (attack_1p, attack_2p) == (0.0, 0.0)
+
+    def test_respects_time_causality_before_ignition(self) -> None:
+        """点火前 (t < ignition_sec) は勘定に入れない (Fix F の因果を維持)。"""
+        empty1, empty2 = Board(), Board()
+        windows = [_make_activity_window("1P", ignition_sec=5.0, t_sec=8.0, net_ojama_after=40.0)]
+        attack_1p, _c2, _ch1, _ch2 = _aggregate_known_pending_net_ojama(windows, 4.9, empty1, empty2)
+        assert attack_1p == pytest.approx(0.0)
+
+    def test_completed_event_still_counts_as_pending_if_not_yet_landed(self) -> None:
+        """指摘 欠陥G改の核心: t_sec到達後(着弾待ち)でも、受け手盤面のおじゃまが
+        まだ増えていなければ (=まだ着弾していない) 全額を予告台帳に残す
+        (旧実装はここを0にしていたバグ)。
+        """
+        empty1, empty2 = Board(), Board()  # 1Pのおじゃまは基準値と同じ(未着弾)
+        windows = [_make_activity_window(
+            "2P", ignition_sec=0.0, t_sec=1.0, net_ojama_after=349.0, receiver_baseline_ojama=0.0)]
+        # t=3.0 は t_sec(1.0) を過ぎている(着弾待ち) が、1Pの盤面おじゃま数(0)は
+        # 基準値(0)から変化していない = まだ着弾していない
+        _attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(windows, 3.0, empty1, empty2)
+        assert attack_2p == pytest.approx(349.0)
+
+    def test_landed_amount_is_deducted_from_pending(self) -> None:
+        """受け手盤面のおじゃまが基準値より増えていれば、その分だけ控除する
+        (二重計上防止、E-2のライブ評価と整合させる)。
+        """
+        receiver_board = Board.from_list(
+            [[0] * 6 for _ in range(12)] + [[9, 9, 9, 0, 0, 0]])  # おじゃま3個
+        windows = [_make_activity_window(
+            "2P", ignition_sec=0.0, t_sec=1.0, net_ojama_after=349.0, receiver_baseline_ojama=0.0)]
+        _attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(
+            windows, 3.0, receiver_board, Board())
+        assert attack_2p == pytest.approx(349.0 - 3.0)
+
+    def test_main_worked_example_match02_2988s(self) -> None:
+        """main実測 match_02 (2988s) の数値例をユニットレベルで再現する。
+
+        2Pの349は送付済み・未着弾 (t_sec=2982.07到達済みだが1P盤面は未変化)、
+        1Pの317は飛行中 (t_sec=2992.93未到達)。両方とも t=2988 で「点火済み」
+        として台帳に乗ることを確認する (相殺自体は別関数で検証)。
+        """
+        board_1p, board_2p = Board(), Board()  # 単純化: おじゃま増分なし
+        windows = [
+            _make_activity_window("2P", ignition_sec=2975.0, t_sec=2982.07, net_ojama_after=349.0),
+            _make_activity_window("1P", ignition_sec=2987.13, t_sec=2992.93, net_ojama_after=317.0),
+        ]
+        attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(
+            windows, 2988.0, board_1p, board_2p)
+        assert attack_1p == pytest.approx(317.0)  # 1P発火分(飛行中、全額)
+        assert attack_2p == pytest.approx(349.0)  # 2P発火分(着弾待ち、未着弾なので全額)
+        # 相殺すると 1P に 32 残り、2P への正味送付は 0 になるはず (次のクラスで検証)。
+        pending_1p, pending_2p = _net_pending_after_cancellation(attack_1p, attack_2p)
+        assert pending_1p == pytest.approx(32.0)
+        assert pending_2p == pytest.approx(0.0)
+
+
+class TestNetPendingAfterCancellation:
+    """相殺会計 (cancel_own_pending_then_send_surplus の再利用) の3方向。"""
+
+    def test_1p_attack_larger_leaves_surplus_on_2p(self) -> None:
+        pending_1p, pending_2p = _net_pending_after_cancellation(100.0, 30.0)
+        assert pending_1p == pytest.approx(0.0)
+        assert pending_2p == pytest.approx(70.0)
+
+    def test_2p_attack_larger_leaves_surplus_on_1p(self) -> None:
+        pending_1p, pending_2p = _net_pending_after_cancellation(30.0, 100.0)
+        assert pending_1p == pytest.approx(70.0)
+        assert pending_2p == pytest.approx(0.0)
+
+    def test_equal_attacks_cancel_completely(self) -> None:
+        pending_1p, pending_2p = _net_pending_after_cancellation(50.0, 50.0)
+        assert (pending_1p, pending_2p) == (0.0, 0.0)
+
+
+class TestLethalReadoutClamp:
+    """受け切れ判定 (容量超/内、空中なし)。"""
+
+    def test_no_airborne_events_returns_model_value_unchanged(self) -> None:
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        result = _lethal_readout_clamp([], 3.0, empty1, empty2, model_winprob_1p=62.0, simulator=sim)
+        assert result == pytest.approx(62.0)
+
+    def test_pending_within_capacity_does_not_clamp(self) -> None:
+        """空盤面 (room=72) に対し pending=50 は容量内 -> 通常評価のまま。"""
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=50.0)]
+        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
+        assert result == pytest.approx(55.0)
+
+    def test_pending_exceeds_capacity_clamps_toward_survivor_1p_favor(self) -> None:
+        """2P発火の pending=200 が1Pの空盤面容量(72)を大幅超過 -> 2P有利にクランプしない
+        (1Pが脅威を受ける側なので2P有利 = 1P視点は低いクランプになるはず)。
+        """
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=55.0, simulator=sim)
+        assert result == pytest.approx(100.0 - LETHAL_CLAMP_FAVOR_PCT)
+
+    def test_pending_exceeds_capacity_clamps_toward_1p_when_2p_threatened(self) -> None:
+        """1P発火の pending=200 が2Pの空盤面容量を大幅超過 -> 1P有利に強くクランプ。"""
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("1P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=45.0, simulator=sim)
+        assert result == pytest.approx(LETHAL_CLAMP_FAVOR_PCT)
+
+    def test_clamp_never_weakens_an_already_more_extreme_model_output(self) -> None:
+        """モデル出力がクランプ値より既に極端な場合はそちらを維持する (max/minの意図)。"""
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("1P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        result = _lethal_readout_clamp(windows, 2.0, empty1, empty2, model_winprob_1p=99.0, simulator=sim)
+        assert result == pytest.approx(99.0)
+
+
+def _seed_board_with_small_counter() -> Board:
+    """4連結1つ+未参加色ぷよ少量 (欠陥G2テスト用、expected_fire_power>0を保証)。
+
+    tests/test_indicators_v2.py の _near_future_seed_board と同じ構図
+    (盤面構築のみ、ロジックは再実装しない)。この盤面は k_hands=1..4 いずれでも
+    raw=1.0 (お邪魔換算) の返し能力を持つ (2026-08-03 実測)。
+    """
+    g = [[0] * 6 for _ in range(BOARD_ROWS)]
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    g[12][3] = COLOR_BLUE
+    g[12][4] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+class TestRealizableCounterOjama:
+    """受け側の構築済み返し能力の計算 (欠陥G2、#24 sim部品の再利用確認)。"""
+
+    def test_empty_board_has_zero_counter_regardless_of_chain_count(self) -> None:
+        empty = Board()
+        for chain in (0.0, 4.0, 8.0, 13.0):
+            assert _realizable_counter_ojama(empty, chain) == pytest.approx(0.0)
+
+    def test_board_with_built_groups_has_positive_counter(self) -> None:
+        seed = _seed_board_with_small_counter()
+        assert _realizable_counter_ojama(seed, attacker_chain_count=6.0) > 0.0
+
+    def test_unknown_chain_count_default_still_returns_valid_hands(self) -> None:
+        """fire_chain_count=0.0 (旧データ・列欠損時の既定値) でも例外にならない
+        (estimate_available_hands(0)>=1 が保証、後方互換)。
+        """
+        seed = _seed_board_with_small_counter()
+        result = _realizable_counter_ojama(seed, attacker_chain_count=0.0)
+        assert result == result  # NaN でない
+
+
+class TestLethalReadoutClampCounterDeduction:
+    """受け切れ判定への返し控除の反映 (欠陥G2、P'>room / 0<P'<=room / P'<=0 の3方向)。"""
+
+    def test_p_prime_exceeds_room_still_clamps(self) -> None:
+        """返しを引いても十分大きい (P'>room) 場合はクランプが維持される。"""
+        seed_defender = _seed_board_with_small_counter()  # room=66, 返し能力=1.0
+        empty_attacker = Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        result = _lethal_readout_clamp(
+            windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
+        assert result == pytest.approx(100.0 - LETHAL_CLAMP_FAVOR_PCT)
+
+    def test_p_prime_within_room_does_not_clamp_even_though_raw_p_exceeds_room(self) -> None:
+        """match_04 (main実測) の核心: 返し控除前は room を超えていても
+        (P=67 > room=66)、構築済み返し (1.0) を引くと P'=66<=room となり
+        クランプしない (main実測「構築済み連鎖を無視した誤クランプ」の再現+修正確認)。
+        """
+        seed_defender = _seed_board_with_small_counter()  # room=66, 返し能力=1.0
+        empty_attacker = Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=67.0)]
+        result = _lethal_readout_clamp(
+            windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
+        assert result == pytest.approx(55.0)  # 通常評価のまま (クランプなし)
+
+    def test_p_prime_non_positive_short_circuits_before_room_check(self) -> None:
+        """返しだけで完全に相殺できる (P<=返し能力) 場合は room 比較すら行わず
+        通常評価のまま (P'<=0 の早期リターン経路)。
+        """
+        seed_defender = _seed_board_with_small_counter()
+        empty_attacker = Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=1.0)]
+        result = _lethal_readout_clamp(
+            windows, 2.0, seed_defender, empty_attacker, model_winprob_1p=55.0, simulator=sim)
+        assert result == pytest.approx(55.0)
