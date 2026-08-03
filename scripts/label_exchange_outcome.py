@@ -920,6 +920,14 @@ def _parse_args() -> "argparse.Namespace":
             f" score OCR 破綻動画の定数は SCORE_OCR_BROKEN_VIDEOS を参照。"
         ),
     )
+    parser.add_argument(
+        "--glob-pattern", type=str, default="c*.npz",
+        help=(
+            "npz ファイル名の glob パターン (既定 'c*.npz' = 従来のc系動画命名"
+            "規約、後方互換)。2026-08-03 追加: c系以外の命名 (未知動画の汎化"
+            "テスト等) の npz を処理する場合に '*.npz' 等へ変更する。"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -932,7 +940,7 @@ def main() -> None:
     exclude_ids: set[str] = {
         v.strip() for v in args.exclude_videos.split(",") if v.strip()
     }
-    npz_paths = sorted(npz_dir.glob("c*.npz"))
+    npz_paths = sorted(npz_dir.glob(args.glob_pattern))
     if exclude_ids:
         before = len(npz_paths)
         npz_paths = [p for p in npz_paths if p.stem not in exclude_ids]

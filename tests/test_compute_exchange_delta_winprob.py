@@ -20,15 +20,19 @@ from scripts.compute_exchange_delta_winprob import (
     T_SEC_MATCH_TOL_SEC,
     _VideoNpzCache,
     _assign_phase_by_puyo_tertile,
+    _build_mirror_paired,
+    _build_stable_timeline,
     _npz_stem_from_video_id,
     compute_board_only_features,
     compute_delta_winprob_for_event,
     print_sanity_checks,
     reconstruct_event_board_pair,
+    train_winprob_models,
     winprob_attacker,
     winprob_to_score100,
 )
 from scripts.label_exchange_outcome import NpzRecord
+from scripts.model_indicator_win import build_features
 from src.chain import ChainSimulator
 
 
@@ -352,3 +356,181 @@ def test_print_sanity_checks_handles_all_match_failed():
     with redirect_stdout(buf):
         print_sanity_checks(df)
     assert "突合成功 0/20" in buf.getvalue()
+
+
+# =============================================================================
+# 2026-08-03 指摘1: 学習データ対称化 (_build_mirror_paired / train_winprob_models)
+# =============================================================================
+
+def test_build_mirror_paired_swaps_1p_2p_columns():
+    """`_1p`/`_2p` suffix の列が丸ごと入れ替わること。"""
+    paired = pd.DataFrame({"foo_1p": [1.0, 2.0], "foo_2p": [3.0, 4.0]})
+    mirror = _build_mirror_paired(paired)
+    assert list(mirror["foo_1p"]) == [3.0, 4.0]
+    assert list(mirror["foo_2p"]) == [1.0, 2.0]
+
+
+def test_build_mirror_paired_leaves_unpaired_columns_untouched():
+    """対応する `_2p` 列が無い列 (t_diff等) はそのまま保持されること。"""
+    paired = pd.DataFrame({"foo_1p": [1.0], "foo_2p": [2.0], "t_diff": [0.05]})
+    mirror = _build_mirror_paired(paired)
+    assert list(mirror["t_diff"]) == [0.05]
+
+
+def test_build_features_diff_sign_flips_after_mirror():
+    """鏡像複製後は diff (=1p-2p) の符号が反転すること (build_features経由)。"""
+    paired = pd.DataFrame({"board_puyo_total_1p": [0.2], "board_puyo_total_2p": [0.7]})
+    mirror = _build_mirror_paired(paired)
+    feat_orig = build_features(paired, ["board_puyo_total"])
+    feat_mirror = build_features(mirror, ["board_puyo_total"])
+    assert feat_orig["board_puyo_total_diff"].iloc[0] == pytest.approx(
+        -feat_mirror["board_puyo_total_diff"].iloc[0])
+    # 1p/2p 自体も入れ替わっていること
+    assert feat_mirror["board_puyo_total_1p"].iloc[0] == pytest.approx(0.7)
+    assert feat_mirror["board_puyo_total_2p"].iloc[0] == pytest.approx(0.2)
+
+
+def test_phase_metric_1p_plus_2p_sum_is_swap_invariant():
+    """位相判定量 (1P+2P合計) は入替に対して不変であること (指摘1の実害根因の回帰テスト)。
+
+    1P単独の値を位相判定に使うと、鏡像複製後に元サンプルと鏡像とで
+    異なる位相バケツに分かれてしまい (train_winprob_models docstring
+    参照)、位相別モデルの対称化が崩れて空盤面が50%にならない実害が
+    出ていた (main実測で確認)。1P+2P合計ならこの実害が原理的に起きない
+    ことを固定する。
+    """
+    paired = pd.DataFrame({
+        "board_puyo_total_1p": [0.1, 0.9, 0.5],
+        "board_puyo_total_2p": [0.8, 0.05, 0.5],
+    })
+    mirror = _build_mirror_paired(paired)
+    combined_orig = (paired["board_puyo_total_1p"] + paired["board_puyo_total_2p"]).values
+    combined_mirror = (mirror["board_puyo_total_1p"] + mirror["board_puyo_total_2p"]).values
+    np.testing.assert_allclose(combined_orig, combined_mirror)
+
+
+def _make_synthetic_labeled_win_csv(tmp_path, n_videos: int = 40, rows_per_video: int = 8,
+                                    seed: int = 0):
+    """train_winprob_models を実際に走らせる軽量な合成 labeled_win.csv を作る。
+
+    691試合フル学習(数十秒)を避けるため、23 board-only 指標全てを持つ
+    ランダムな合成データ (video_id 単位でグルーピング可能) を生成する。
+    won の整合性 (won_1p + won_2p == 1) は pair_sides_for_win の要件。
+    """
+    rng = np.random.default_rng(seed)
+    records: list[dict] = []
+    for v in range(n_videos):
+        vid = f"synthv{v}"
+        for r in range(rows_per_video):
+            t = r * 5.0
+            won1 = int(rng.uniform() < 0.5)
+            row1 = {"video_id": vid, "side": "1P", "t_sec": t, "won": won1}
+            row2 = {"video_id": vid, "side": "2P", "t_sec": t + 0.05, "won": 1 - won1}
+            for base in BOARD_ONLY_INDICATOR_BASES:
+                row1[base] = float(rng.uniform(0.0, 1.0))
+                row2[base] = float(rng.uniform(0.0, 1.0))
+            records.append(row1)
+            records.append(row2)
+    df = pd.DataFrame(records)
+    path = tmp_path / "synthetic_labeled_win.csv"
+    df.to_csv(path, index=False)
+    return path
+
+
+def test_train_winprob_models_symmetric_board_gives_exactly_50pct(tmp_path):
+    """対称化学習後、完全に対称な局面 (空盤面) の予測勝率がちょうど50%になること。
+
+    2026-08-03 userレビュー指摘1 の受け入れテスト (main実測: 671試合の
+    1P勝率52.0%をモデルが事前確率として学習していた)。数学的根拠は
+    _build_mirror_paired docstring 参照。
+    """
+    csv_path = _make_synthetic_labeled_win_csv(tmp_path)
+    models = train_winprob_models(csv_path)
+    assert len(models) > 0
+    sim = ChainSimulator()
+    empty = Board.from_list([[0] * BOARD_COLS for _ in range(BOARD_ROWS)])
+    feats = compute_board_only_features(empty, sim)
+    for phase, _model in models.items():
+        p = winprob_attacker(models, phase, feats, feats)
+        assert p == pytest.approx(0.5, abs=1e-6), f"位相{phase}で対称局面が50%にならない: p={p}"
+
+
+def test_train_winprob_models_nonempty_symmetric_board_gives_50pct(tmp_path):
+    """空盤面に限らず、両者が全く同じ非空盤面でも50%になること。"""
+    csv_path = _make_synthetic_labeled_win_csv(tmp_path)
+    models = train_winprob_models(csv_path)
+    sim = ChainSimulator()
+    grid = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    grid[BOARD_ROWS - 1] = [1, 1, 2, 2, 3, 3]
+    grid[BOARD_ROWS - 2] = [1, 1, 2, 2, 3, 3]
+    board = Board.from_list(grid)
+    feats = compute_board_only_features(board, sim)
+    for phase in models:
+        p = winprob_attacker(models, phase, feats, feats)
+        assert p == pytest.approx(0.5, abs=1e-6)
+
+
+# =============================================================================
+# 2026-08-03 指摘2: タイムライン評価密度 (_build_stable_timeline)
+# =============================================================================
+
+def _make_dense_video_cache(n1: int = 20, n2: int = 15) -> _VideoNpzCache:
+    """1P n1点・2P n2点、時刻が互いにずれた合成 npz キャッシュ (密度検証用)。"""
+    grids1 = np.stack(
+        [_make_distinct_board(i).to_dict()["grid"] for i in range(n1)]).astype(np.int8)
+    grids2 = np.stack(
+        [_make_distinct_board(100 + i).to_dict()["grid"] for i in range(n2)]).astype(np.int8)
+    r1p = NpzRecord(
+        video_id="video_dense", side="1P",
+        t_sec=np.arange(n1, dtype=np.float32) * 1.0,
+        game_idx=np.zeros(n1, dtype=np.int32), grids=grids1,
+        won=np.zeros(n1, dtype=np.float32), score=np.zeros(n1, dtype=np.int32),
+    )
+    r2p = NpzRecord(
+        video_id="video_dense", side="2P",
+        t_sec=np.arange(n2, dtype=np.float32) * 1.3 + 0.4,
+        game_idx=np.zeros(n2, dtype=np.int32), grids=grids2,
+        won=np.ones(n2, dtype=np.float32), score=np.zeros(n2, dtype=np.int32),
+    )
+    return _VideoNpzCache(r1p=r1p, r2p=r2p)
+
+
+def test_build_stable_timeline_no_longer_over_decimates():
+    """旧実装は DEMO_FRAME_STRIDE=15 の二重間引きで n1点が n1/15点まで
+    減っていた (main実測: c61 g16 で84秒中7点)。新実装は間引きせず、
+    両サイドの和集合点数に近い点数を返すこと。
+    """
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
+    # 和集合は最大 n1+n2=35点 (重複時刻ぶん減る可能性はあるが、少なくとも
+    # 旧実装の 20/15≈1点 とは桁違いに多いはず)。
+    assert len(df) >= 20, f"間引きが再発している可能性: {len(df)}点"
+    assert len(df) <= 20 + 15
+
+
+def test_build_stable_timeline_covers_union_of_both_sides_times():
+    """評価時刻が両サイドの全STABLE時刻の和集合に含まれること (前方保持不能な
+    最初の欠落区間を除く)。
+    """
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
+    t_min_valid = max(cache.r1p.t_sec.min(), cache.r2p.t_sec.min())
+    expected_times = sorted(
+        t for t in set(cache.r1p.t_sec.tolist()) | set(cache.r2p.t_sec.tolist())
+        if t >= t_min_valid
+    )
+    assert df["t_sec"].tolist() == pytest.approx(expected_times)
+
+
+def test_build_stable_timeline_empty_side_returns_empty_df():
+    """片側にフレームが無い場合は空 DataFrame を返す (例外を出さない)。"""
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"中": _make_fake_model()}
+    sim = ChainSimulator()
+    df = _build_stable_timeline(cache, game_idx=999, models=models, simulator=sim)
+    assert len(df) == 0
+    assert list(df.columns) == ["t_sec", "winprob_1p"]
