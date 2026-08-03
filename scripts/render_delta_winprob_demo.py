@@ -48,7 +48,6 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw
 
-import src.indicators_v2 as iv
 from src.chain import ChainSimulator
 from src.video_compositer import VideoCompositor
 from scripts.compute_exchange_delta_winprob import (
@@ -58,11 +57,14 @@ from scripts.compute_exchange_delta_winprob import (
     DEFAULT_NPZ_DIR,
     DEFAULT_OUT_DIR as DEFAULT_DELTA_WINPROB_DIR,
     VIDEO_ID_NPZ_PREFIX,
+    ChainInProgressWindow,
     PhaseWinprobModel,
     _build_stable_timeline,
     _load_video_npz,
     _npz_stem_from_video_id,
+    build_chain_in_progress_windows,
     compute_all_delta_winprob,
+    ignition_time_for_event,
     load_aug_with_stacking_predictions,
     train_winprob_models,
 )
@@ -167,16 +169,6 @@ class FireEventView:
 def _to_1p_view(value: float, fire_side: str) -> float:
     """attacker(発火側)視点の値を1P視点へ変換する (2P発火なら補数を取る)。"""
     return value if fire_side == "1P" else 100.0 - value
-
-
-def ignition_time_for_event(t_sec: float, approx_fire_chains: float) -> float:
-    """連鎖終了時刻(t_sec)から発火検知(近似)時刻を逆算する。
-
-    src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
-    =0.4秒/連鎖、23動画418イベント実測ベース) を使う既存資産の再利用。
-    npz に実際の掛け算式検知時刻が無い場合の近似 (画面注記が必須)。
-    """
-    return t_sec - iv.estimate_chain_anim_duration_sec(approx_fire_chains)
 
 
 def build_fire_event_views(events_df: pd.DataFrame) -> list[FireEventView]:
@@ -521,20 +513,27 @@ def main() -> None:
 
     print("\n=== 2. 勝率モデル学習 (board-only指標 + 位相別isotonic校正) ===")
     models = train_winprob_models(args.labeled_win_csv)
+    sim = ChainSimulator()
 
-    print("\n=== 3. STABLE 従来推移タイムライン構築 ===")
-    timeline_df = _build_stable_timeline(cache, args.game_idx, models, ChainSimulator())
-    if len(timeline_df) == 0:
-        raise RuntimeError(f"{args.video_id} game={args.game_idx} のタイムライン生成に失敗")
-    timeline_t = timeline_df["t_sec"].values.astype(float)
-    timeline_v = timeline_df["winprob_1p"].values.astype(float)
-
-    print("\n=== 4. ΔWinProb イベント読込 ===")
+    print("\n=== 3. ΔWinProb イベント読込 ===")
     events_df = load_events_for_video(
         args.video_id, args.game_idx, args.delta_winprob_csv,
         args.recompute, args.npz_dir, args.aug_csv, args.model_d_dir, models)
     events = build_fire_event_views(events_df)
     print(f"[events] 速報バッジ対象イベント数: {len(events)}")
+
+    print("\n=== 4. STABLE 従来推移タイムライン構築 (連鎖中は仮想盤面, Fix B) ===")
+    chain_windows: "list[ChainInProgressWindow]" = []
+    if "stack_net_ojama_after_pred" in events_df.columns:
+        chain_windows = build_chain_in_progress_windows(events_df, cache, sim)
+    else:
+        print("[warn] events_df に stack_net_ojama_after_pred が無いため"
+              "連鎖中仮想盤面差し替え(Fix B)をスキップします")
+    timeline_df = _build_stable_timeline(cache, args.game_idx, models, sim, chain_windows)
+    if len(timeline_df) == 0:
+        raise RuntimeError(f"{args.video_id} game={args.game_idx} のタイムライン生成に失敗")
+    timeline_t = timeline_df["t_sec"].values.astype(float)
+    timeline_v = timeline_df["winprob_1p"].values.astype(float)
 
     print("\n=== 5. 動画レンダー (無音) ===")
     silent_path = args.out_dir / f"delta_winprob_demo_{args.video_id}_g{args.game_idx}_silent.mp4"

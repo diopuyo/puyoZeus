@@ -128,6 +128,83 @@ class TestPredictExchangeEventBasics:
             predict_exchange_event(model, features)
 
 
+SIM_FEATURE_COLS = ("sim_k_hands", "sim_expected_counter_ojama", "sim_damage_score")
+
+
+def _make_synthetic_df_with_sim(n: int = 100, n_videos: int = 8, seed: int = 11) -> pd.DataFrame:
+    """sim_* 3列付きの合成 DataFrame (併用スタッキング版バンドルのテスト用)。"""
+    df = _make_synthetic_df(n=n, n_videos=n_videos, seed=seed)
+    rng = np.random.default_rng(seed + 1)
+    df["sim_k_hands"] = rng.integers(1, 5, size=n).astype(float)
+    df["sim_expected_counter_ojama"] = rng.normal(loc=100.0, scale=50.0, size=n)
+    df["sim_damage_score"] = rng.uniform(0.0, 1.0, size=n)
+    return df
+
+
+def _train_and_save_stacking_bundle(tmp_path, df: pd.DataFrame):
+    """sim_feature_cols 付きの「併用スタッキング」版バンドルを学習・保存する。"""
+    X, cols = build_feature_matrix(df, INDICATOR_BASES, extra_feature_cols=list(SIM_FEATURE_COLS))
+    y_cls = df["taiou_success"].astype(int).values
+    y_reg = df["net_ojama_after"].astype(float).values
+    cls_model, reg_model = fit_final_models(X, y_cls, y_reg)
+    save_path = tmp_path / "stacking_model.joblib"
+    save_model_bundle(
+        cls_model, reg_model, INDICATOR_BASES, cols, "aug.csv", "2026-08-03", len(df), save_path,
+        sim_feature_cols=SIM_FEATURE_COLS,
+    )
+    return save_path, cls_model, reg_model, X, cols
+
+
+def _row_to_features_with_sim(df: pd.DataFrame, row_idx: int) -> dict:
+    features = _row_to_features(df, row_idx)
+    row = df.iloc[row_idx]
+    for col in SIM_FEATURE_COLS:
+        features[col] = float(row[col])
+    return features
+
+
+class TestStackingBundleSimFeatureCols:
+    """2026-08-03 追加: sim_feature_cols 付き併用スタッキング版バンドルの検収。"""
+
+    def test_bundle_persists_sim_feature_cols(self, tmp_path) -> None:
+        df = _make_synthetic_df_with_sim()
+        save_path, *_ = _train_and_save_stacking_bundle(tmp_path, df)
+        model = load_exchange_model(save_path)
+        assert model.sim_feature_cols == SIM_FEATURE_COLS
+
+    def test_legacy_bundle_without_sim_feature_cols_defaults_to_empty(self, tmp_path) -> None:
+        """sim_feature_cols キーの無い旧バンドル (joblib) も後方互換で読める。"""
+        df = _make_synthetic_df()
+        save_path, *_ = _train_and_save_bundle(tmp_path, df)  # 旧経路 (sim無し)
+        model = load_exchange_model(save_path)
+        assert model.sim_feature_cols == ()
+
+    def test_stacking_prediction_bit_matches_in_memory_model(self, tmp_path) -> None:
+        """指摘: スタッキング束の保存/ロードでも bit一致すること。"""
+        df = _make_synthetic_df_with_sim()
+        save_path, cls_model, reg_model, X, _cols = _train_and_save_stacking_bundle(tmp_path, df)
+        model = load_exchange_model(save_path)
+        for row_idx in (0, 1, 5, 42):
+            features = _row_to_features_with_sim(df, row_idx)
+            prob, pred = predict_exchange_event(model, features)
+            expected_prob = float(cls_model.predict_proba(X[row_idx:row_idx + 1])[0, 1])
+            expected_pred = float(reg_model.predict(X[row_idx:row_idx + 1])[0])
+            assert prob == expected_prob
+            assert pred == expected_pred
+
+    def test_stacking_feature_vector_appends_sim_cols_after_onehot(self, tmp_path) -> None:
+        """特徴量ベクトルの並びが fire/opp/diff→phase→fire_side→sim_* の順であること。"""
+        df = _make_synthetic_df_with_sim()
+        save_path, _cls, _reg, X, _cols = _train_and_save_stacking_bundle(tmp_path, df)
+        model = load_exchange_model(save_path)
+        from src.exchange_predictor import _build_feature_vector
+
+        features = _row_to_features_with_sim(df, 3)
+        x_vec = _build_feature_vector(model, features)
+        assert np.allclose(x_vec, X[3:4])
+        assert x_vec.shape[1] == len(INDICATOR_BASES) * 3 + 3 + 2 + len(SIM_FEATURE_COLS)
+
+
 class TestPredictionSpeed:
     """速度検収 (実測は報告のみ、CIでのフレーキー回避のため閾値は緩め)。"""
 
