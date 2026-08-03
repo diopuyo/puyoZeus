@@ -490,6 +490,8 @@ def collect_lean(
     sample_interval_frames: Optional[int] = None,
     enable_chain_tracker: bool = False,
     normalize_fps_30: bool = True,
+    enable_effect_gate: bool = False,
+    effect_gate_persist_sec: Optional[float] = None,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -535,6 +537,14 @@ def collect_lean(
             を防ぐ)。無効化するには明示 --no-normalize-fps-30 (または本関数を
             呼ぶ側で normalize_fps_30=False) を指定する。False 指定時は
             従来挙動・bit-identical (30fps未満動画では stride=1 で常に無変化)。
+        enable_effect_gate: エフェクト時間ゲート (2026-08-03、A/B 計測用)。
+            True で相手連鎖中/自お邪魔着弾直後 window の間、自盤面上段
+            (board_state_machine.EFFECT_GATE_TOP_ROWS) の cell 更新に実秒
+            ベース持続確認を要求する (満杯盤面 47 セル誤り根治の検証用)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        effect_gate_persist_sec: 上記ゲートの確定に必要な持続秒数。
+            None (既定) なら RecognitionPipeline 既定値 (EFFECT_PERSIST_SEC
+            =0.4秒) を使う。enable_effect_gate=False の間は無視される。
 
     Returns:
         蓄積した snapshot 数。
@@ -588,6 +598,8 @@ def collect_lean(
         temporal_smoothing=1,
         load_next_detector=capture_next,
         force_in_match=True,
+        enable_effect_gate=enable_effect_gate,
+        effect_gate_persist_sec=effect_gate_persist_sec,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -776,6 +788,18 @@ def main() -> int:
             "基準データ収集等、既定 ON では困る用途で使う。"
         ),
     )
+    parser.add_argument(
+        "--enable-effect-gate", action="store_true", dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03、A/B 計測用) を有効化する。"
+            "満杯盤面 47 セル誤り根治の効果測定に使う。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--effect-gate-persist-sec", type=float, default=None,
+        dest="effect_gate_persist_sec",
+        help="エフェクト時間ゲートの確定に必要な持続秒数 (既定 0.4秒)。",
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -790,6 +814,8 @@ def main() -> int:
         sample_interval_frames=args.sample_interval_frames,
         enable_chain_tracker=args.enable_chain_tracker,
         normalize_fps_30=normalize_fps_30,
+        enable_effect_gate=args.enable_effect_gate,
+        effect_gate_persist_sec=args.effect_gate_persist_sec,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

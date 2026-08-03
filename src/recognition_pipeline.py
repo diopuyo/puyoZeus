@@ -38,6 +38,7 @@ from src.board_state_machine import (
     BoardStateMachine,
     DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
+    EFFECT_PERSIST_SEC,
     NON_STABLE_STATES,
     STABLE_RECOVERY_ADD_MIN_FRAMES,
     StateContext,
@@ -98,6 +99,20 @@ CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 # 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
 # bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
 LARGE_ROI_THROTTLE_FRAMES: int = 8
+
+# エフェクト時間ゲート (enable_effect_gate, 2026-08-03):
+# 満杯盤面 47 セル誤りの真因確定 (memory
+# `project_full_board_error_taxonomy_2026-08-02`)。相手の連鎖中 (=
+# chain_event が相手 side で有効な間) は既存の `active_chain_Xp is not None`
+# 窓をそのまま「相手連鎖中」window として使う (新規追跡不要)。
+# お邪魔着弾側は OJAMA_FALL state 自体が 1 frame で STABLE に抜けてしまう
+# (state_detectors.OjamaPhaseDetector) ため、退出後もこの秒数だけ window を
+# 継続する (お邪魔落下時の煙が残る実測に基づく安全マージン)。
+# ojama は 6 列均等 floor(N/6)+端数ランダムで着弾するため
+# (`reference_ojama_landing_pattern`)、「着弾列近傍」を特定の列に絞らず
+# 全列を対象にする設計上の判断 (要 user/アーキ確認、ドメイン確定事実ではない)。
+# default False (enable_effect_gate) = 従来挙動完全維持 (backwards compat)。
+EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC: float = 1.0
 
 
 class _ScoreValNotCached:
@@ -1151,6 +1166,16 @@ class RecognitionPipeline:
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03、A/B 計測用): 満杯盤面 47 セル誤り
+        # 根治。True にすると相手連鎖中 / 自お邪魔着弾直後 window の間、
+        # 自盤面上段 (board_state_machine.EFFECT_GATE_TOP_ROWS) の cell 更新に
+        # effect_gate_persist_sec 秒の実秒ベース持続確認を要求する
+        # (board_state_machine._apply_stable_recovery_gate 経由)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float | None = None,
+        effect_gate_ojama_window_sec: float | None = None,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1552,6 +1577,22 @@ class RecognitionPipeline:
             enable_asymmetric_recovery_min_frames
         )
         self._recovery_add_min_frames: int = int(recovery_add_min_frames)
+        # エフェクト時間ゲート (2026-08-03): _build_state_machine 呼び出し前に
+        # 格納が必要 (引数として渡すため)。None は各クラス定数を使う
+        # (既存の chain_hold_per_step_sec 等と同じ「None=既定値」パターン)。
+        self._enable_effect_gate: bool = bool(enable_effect_gate)
+        self._effect_gate_persist_sec: float = (
+            float(effect_gate_persist_sec)
+            if effect_gate_persist_sec is not None else EFFECT_PERSIST_SEC
+        )
+        self._effect_gate_ojama_window_sec: float = (
+            float(effect_gate_ojama_window_sec)
+            if effect_gate_ojama_window_sec is not None
+            else EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC
+        )
+        # お邪魔着弾直後 window の終了時刻 (time_sec)。未着弾は -inf (window 非活性)。
+        self._effect_gate_ojama_until_1p: float = float("-inf")
+        self._effect_gate_ojama_until_2p: float = float("-inf")
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1606,6 +1647,8 @@ class RecognitionPipeline:
                 self._enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=self._recovery_add_min_frames,
+            enable_effect_gate=self._enable_effect_gate,
+            effect_gate_persist_sec=self._effect_gate_persist_sec,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1632,6 +1675,8 @@ class RecognitionPipeline:
                 self._enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=self._recovery_add_min_frames,
+            enable_effect_gate=self._enable_effect_gate,
+            effect_gate_persist_sec=self._effect_gate_persist_sec,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1969,6 +2014,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2041,6 +2090,8 @@ class RecognitionPipeline:
                 enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=recovery_add_min_frames,
+            enable_effect_gate=enable_effect_gate,
+            effect_gate_persist_sec=effect_gate_persist_sec,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2227,6 +2278,13 @@ class RecognitionPipeline:
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03、A/B 計測用): 満杯盤面 47 セル誤り
+        # 根治 (memory `project_full_board_error_taxonomy_2026-08-02`)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float | None = None,
+        effect_gate_ojama_window_sec: float | None = None,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2443,6 +2501,9 @@ class RecognitionPipeline:
                 enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=recovery_add_min_frames,
+            enable_effect_gate=enable_effect_gate,
+            effect_gate_persist_sec=effect_gate_persist_sec,
+            effect_gate_ojama_window_sec=effect_gate_ojama_window_sec,
         )
 
     # ------------------------------------------------------------------
@@ -3504,6 +3565,9 @@ class RecognitionPipeline:
             frame_bgr=frame,  # cycle 71l β2' = HSV 距離による NEXT 色順序確定
             score_d_for_self=score_d_1p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_1p,  # 案P3
+            # エフェクト時間ゲート: 1P の「相手」は 2P (2P 連鎖の予告おじゃま
+            # エフェクトが 1P 盤面上段に混入する)。
+            opponent_chain_active=chain_ev_2p is not None,
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -3516,6 +3580,7 @@ class RecognitionPipeline:
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
+            opponent_chain_active=chain_ev_1p is not None,
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -3544,6 +3609,26 @@ class RecognitionPipeline:
                 p_state=p2.state,
                 remaining=self._ojama_tier1_warmup_remaining_2p,
             )
+        # エフェクト時間ゲート (2026-08-03): お邪魔着弾 window の更新。
+        # OJAMA_FALL は 1 frame で STABLE に抜けるため (state_detectors.
+        # OjamaPhaseDetector)、退出時刻から effect_gate_ojama_window_sec 秒だけ
+        # window を継続する (次フレームの signals.effect_gate_window_active
+        # 計算に使う、_step_side 冒頭参照)。
+        if self._enable_effect_gate:
+            if (
+                _pre_state_1p == BoardState.OJAMA_FALL
+                and p1.state == BoardState.STABLE
+            ):
+                self._effect_gate_ojama_until_1p = (
+                    time_sec + self._effect_gate_ojama_window_sec
+                )
+            if (
+                _pre_state_2p == BoardState.OJAMA_FALL
+                and p2.state == BoardState.STABLE
+            ):
+                self._effect_gate_ojama_until_2p = (
+                    time_sec + self._effect_gate_ojama_window_sec
+                )
 
         # cycle 71d (案 D8): VideoChainTracker 次 frame 入力用に confirmed_board を保存.
         # None (= STABLE 以外) なら前回値を維持し、 直近の安定 board を提供し続ける.
@@ -4793,6 +4878,7 @@ class RecognitionPipeline:
         frame_bgr: np.ndarray | None = None,  # cycle 71l β2'
         score_d_for_self: int = 0,  # cycle 71n 案 ε
         chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
+        opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
@@ -4882,6 +4968,20 @@ class RecognitionPipeline:
         if self._enable_ojama_visual_detection:
             from src.ojama_visual_detector import _count_top_ojama as _cnt_oj
             _ojama_top_positive = _cnt_oj(cnn_board, _hsv_board_for_signals) > 0
+        # エフェクト時間ゲート (2026-08-03): 「相手連鎖中」または「自身お邪魔
+        # 着弾直後 window」なら True。相手連鎖中は opponent_chain_active
+        # (= 相手 side の ChainEvent 有効期間、既存 chain_until_Xp 窓をそのまま
+        # 流用) をそのまま使う。お邪魔着弾窓は _effect_gate_ojama_until_Xp
+        # (前フレームまでの OJAMA_FALL→STABLE 遷移で更新、_step_side 後段参照)。
+        _effect_gate_window_active = False
+        if self._enable_effect_gate:
+            _ojama_until = (
+                self._effect_gate_ojama_until_1p if side == "1P"
+                else self._effect_gate_ojama_until_2p
+            )
+            _effect_gate_window_active = (
+                opponent_chain_active or time_sec < _ojama_until
+            )
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -4896,6 +4996,7 @@ class RecognitionPipeline:
             hsv_board=_hsv_board_for_signals,
             ojama_top_positive=_ojama_top_positive,
             chain_max_hold_expired=chain_max_hold_expired,  # 案P3
+            effect_gate_window_active=_effect_gate_window_active,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
