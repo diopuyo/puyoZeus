@@ -62,6 +62,27 @@ on_v2/` に着弾させる想定 (未着弾動画は既存 (c) と同様に STAG
 `CompareResult` に layer別カウントを追加した (既存フィールドは変更なし、
 新規フィールドは全て default 付きで末尾追加、backwards compat)。
 
+## 7. (v2) 突合の穴2点への対応 (2026-08-05、Stage1.5+0.954 最終判定用)
+
+早期シグナル (`scripts/_score_v2_nomatch_2026-08-05.py`) で見つかった2つの
+測定手法の穴に対応する。**(b)/(c) の突合ロジック・出力は一切変更しない**
+(`compute_stage_result` は無改変、専用の `compute_v2_stage_result` を新設)。
+
+- **穴1 (frame_idxの穴)**: ガードが認識を変えた盤面はスナップショット集合が
+  変わり frame_idx 完全一致/bit-exactフォールバックの両方が失敗し no_match に
+  落ちる (=効果が出た盤面ほど集計から抜ける)。(v2) に限り、両方失敗時のみ
+  「実効盤面」(anchor の t_sec 以前・15秒以内の最新スナップショット、
+  `scripts/_score_v2_nomatch_2026-08-05.py` の LOOKBACK_SEC/EPS_SEC と同一
+  定義) にフォールバックする (`_find_effective_row`)。採用した方式は
+  `v2_match_mode` (exact/effective/none) に記録する。
+- **穴2 (確定遅延の混入)**: 実効盤面はガードの確定遅延分だけ古いため、その間
+  の正当な設置が「誤り」として混ざる。誤りセルを「既知 (OFF時点で既に
+  誤っていたセル、93セルリスト相当、真の誤読の残存)」と「新規 (リスト外、
+  遅延起因の可能性)」に分け、`v2_err_known`/`v2_err_new` として記録する
+  (`_known_error_cells`/`_split_known_new_errors`)。
+  **最終的な採否の主数値は v2_err_known の減少 (OFF比)、副数値が
+  v2_err_new (遅延コスト+row0型副作用) である。**
+
 ## 検収基準
 
 OFF 側の誤りセル合計が **93** (batch1=47 / batch2=46) に一致すること
@@ -74,6 +95,9 @@ Usage:
     PYTHONPATH=. ./venv/bin/python -m scripts.measure_effect_gate_c_2026-08-04
     PYTHONPATH=. ./venv/bin/python -m scripts.measure_effect_gate_c_2026-08-04 \\
         --v2-npz-dir data/verify/burst_guard_2026-08-05/on_v2
+    # 本命構成 (Stage1.5+0.954) の最終判定用:
+    PYTHONPATH=. ./venv/bin/python -m scripts.measure_effect_gate_c_2026-08-04 \\
+        --v2-npz-dir data/verify/burst_guard_2026-08-05/on_v2_full
 """
 from __future__ import annotations
 
@@ -162,6 +186,32 @@ STAGE_MATCHED: str = "matched"        # frame_idx 完全一致行が見つかっ
 STAGE_UNAVAILABLE: str = "unavailable"  # npz ファイル自体が存在しない (N/A)
 STAGE_NO_MATCH: str = "no_match"      # npz は存在するが該当 frame_idx がない (要調査)
 
+# =============================================================================
+# (v2) 専用拡張 (2026-08-05): 実効盤面フォールバック + 既知/新規誤り分類
+#
+# 穴1 (frame_idx一致方式は「効いた盤面」を no_match に落とす): ガードが認識を
+# 変えた盤面はスナップショット集合が変わり frame_idx 完全一致 / bit-exact
+# フォールバックの両方が失敗する。これは (b)/(c) と同じ既存ロジックのままだと
+# 効果が出た盤面ほど集計から抜ける不整合を生むため、(v2) に限り
+# 「実効盤面」(anchor の t_sec 以前の最新スナップショット、
+# scripts/_score_v2_nomatch_2026-08-05.py と同一定義) にフォールバックする。
+# (b)/(c) の既存ロジック・出力は一切変更しない (検収要件、下記関数参照)。
+#
+# 穴2 (確定遅延の混入): 実効盤面はガードの確定遅延分だけ古いため、その間の
+# 正当な設置が「誤り」として混ざる。誤りセルを「既知(93セルリスト該当) =
+# 真の誤読の残存」と「新規 = 遅延起因の可能性」に分けて記録する。
+# =============================================================================
+
+# 実効盤面フォールバックの探索窓 (scripts/_score_v2_nomatch_2026-08-05.py の
+# LOOKBACK_SEC/EPS_SEC と同一値、根拠もそこに準ずる)。
+EFFECTIVE_BOARD_LOOKBACK_SEC: float = 15.0
+EFFECTIVE_BOARD_EPS_SEC: float = 0.05
+
+# (v2) の突合方式ラベル。
+V2_MATCH_MODE_EXACT: str = "exact"          # frame_idx完全一致 or bit-exactフォールバック
+V2_MATCH_MODE_EFFECTIVE: str = "effective"  # 実効盤面 (lookback) フォールバック
+V2_MATCH_MODE_NONE: str = "none"            # 実効盤面も見つからない (要調査)
+
 
 # =============================================================================
 # データ構造
@@ -194,6 +244,10 @@ class StageResult:
     # layer別誤りセル数 (2026-08-05 追加、末尾 default 付きで backwards compat)。
     errors_burst: "int | None" = None  # burst layer (row1-3)
     errors_smoke: "int | None" = None  # smoke layer (row4-12)
+    # (v2) 専用拡張 (2026-08-05、末尾 default 付きで backwards compat、(b)/(c) では未使用=None)。
+    match_mode: "str | None" = None    # V2_MATCH_MODE_EXACT/EFFECTIVE/NONE
+    err_known: "int | None" = None     # 93セルリスト該当 (真の誤読の残存)
+    err_new: "int | None" = None       # リスト外の新規mismatch (遅延起因の可能性)
 
 
 @dataclass
@@ -505,6 +559,109 @@ def compute_stage_result(
     )
 
 
+def _find_effective_row(
+    idx: "_NpzIndex", side: str, anchor_t_sec: float,
+    lookback_sec: float = EFFECTIVE_BOARD_LOOKBACK_SEC,
+    eps_sec: float = EFFECTIVE_BOARD_EPS_SEC,
+) -> "tuple[np.ndarray, float] | None":
+    """anchor_t_sec 時点で有効だったはずの実効盤面 (最新スナップショット) を返す。
+
+    [anchor_t_sec - lookback_sec, anchor_t_sec + eps_sec] 窓内で t_sec が
+    最大の行を採用する (scripts/_score_v2_nomatch_2026-08-05.py と同一定義、
+    穴1対応: frame_idx一致に失敗した「ガードが認識を変えた盤面」を
+    no_match として落とさず、実効的な盤面内容で採点できるようにする)。
+    """
+    mask = (
+        (idx.sides == side)
+        & (idx.t_secs <= anchor_t_sec + eps_sec)
+        & (idx.t_secs >= anchor_t_sec - lookback_sec)
+    )
+    cand = np.where(mask)[0]
+    if len(cand) == 0:
+        return None
+    best = int(cand[np.argmax(idx.t_secs[cand])])
+    return idx.grids[best], float(idx.t_secs[best])
+
+
+def _known_error_cells(
+    off_grid: "np.ndarray", correct_grid: "np.ndarray",
+) -> "frozenset[tuple[int, int]]":
+    """OFF(=アンカー)時点で既に誤っていたセル位置の集合 (=93セルリスト相当)。
+
+    build_error_onset_sheet_2026-08-04.py の mismatched_cells_all と同じ
+    ロジックだが、当該ファイルは本ファイルを importlib 経由で参照するため
+    (循環import回避)、この小さな判定ループのみ本ファイルにも保持する。
+    """
+    cells: set[tuple[int, int]] = set()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            cv = int(correct_grid[r, c])
+            if cv == COLOR_UNKNOWN:
+                continue
+            if int(off_grid[r, c]) != cv:
+                cells.add((r, c))
+    return frozenset(cells)
+
+
+def _split_known_new_errors(
+    grid: "np.ndarray", correct_grid: "np.ndarray",
+    known_cells: "frozenset[tuple[int, int]]",
+) -> "tuple[int, int]":
+    """grid の誤りセルを「既知 (93セルリスト該当、真の誤読の残存)」と
+    「新規 (リスト外、遅延起因の可能性)」に分ける (穴2対応)。
+    """
+    known = new = 0
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            cv = int(correct_grid[r, c])
+            if cv == COLOR_UNKNOWN or int(grid[r, c]) == cv:
+                continue
+            if (r, c) in known_cells:
+                known += 1
+            else:
+                new += 1
+    return known, new
+
+
+def compute_v2_stage_result(
+    idx: "_NpzIndex | None", side: str, anchor: "_AnchorRow",
+    correct_grid: "np.ndarray", known_cells: "frozenset[tuple[int, int]]",
+) -> StageResult:
+    """(v2) 専用の突合 (2026-08-05 拡張、穴1/穴2対応)。
+
+    ① frame_idx完全一致 → ② bit-exact時刻窓フォールバック (compute_stage_result
+    と同一技法・一致優先) → ③ 両方失敗時のみ実効盤面 (lookback) にフォールバック
+    する。(b)/(c) の compute_stage_result は無改変 (検収要件)。
+    """
+    if idx is None:
+        return StageResult(STAGE_UNAVAILABLE, None, None)
+    match = _find_by_frame_idx_exact(idx, side, anchor.frame_idx)
+    matched_via: "str | None" = "frame_idx"
+    match_mode = V2_MATCH_MODE_EXACT
+    if match is None:
+        match = _find_bit_exact_match(
+            idx, side, anchor.grid, anchor.t_sec, ANCHOR_MATCH_WINDOW_SEC,
+        )
+        matched_via = "bit_exact_fallback"
+    if match is None:
+        match = _find_effective_row(idx, side, anchor.t_sec)
+        matched_via = None
+        match_mode = V2_MATCH_MODE_EFFECTIVE
+    if match is None:
+        return StageResult(STAGE_NO_MATCH, None, None, match_mode=V2_MATCH_MODE_NONE)
+    grid, _t = match
+    err_known, err_new = _split_known_new_errors(grid, correct_grid, known_cells)
+    return StageResult(
+        STAGE_MATCHED,
+        count_cell_errors(grid, correct_grid),
+        count_error_categories(grid, correct_grid),
+        matched_via,
+        count_cell_errors(grid, correct_grid, rows=LAYER_BURST_ROWS),
+        count_cell_errors(grid, correct_grid, rows=LAYER_SMOKE_ROWS),
+        match_mode, err_known, err_new,
+    )
+
+
 def compare_one_sample(
     s: LabelSample,
     anchor_idx: "_NpzIndex | None",
@@ -528,7 +685,10 @@ def compare_one_sample(
     off_errors_smoke = count_cell_errors(anchor.grid, s.correct_grid, rows=LAYER_SMOKE_ROWS)
     b_result = compute_stage_result(b_idx, s.side, anchor, s.correct_grid)
     c_result = compute_stage_result(c_idx, s.side, anchor, s.correct_grid)
-    v2_result = compute_stage_result(v2_idx, s.side, anchor, s.correct_grid)
+    known_cells = _known_error_cells(anchor.grid, s.correct_grid)
+    v2_result = compute_v2_stage_result(
+        v2_idx, s.side, anchor, s.correct_grid, known_cells,
+    )
     return CompareResult(
         s, True, off_errors, off_categories, anchor.t_sec, b_result, c_result,
         v2_result, off_errors_burst, off_errors_smoke,
@@ -761,6 +921,57 @@ def build_landing_report(results: list[CompareResult]) -> str:
     return "\n".join(lines)
 
 
+def build_v2_match_mode_report(results: list[CompareResult]) -> str:
+    """(v2) の突合方式別件数 (exact/effective/none、穴1対応の効果を示す指標)。"""
+    lines = ["--- (v2) 突合方式別件数 (穴1対応: 実効盤面フォールバック) ---"]
+    counts: dict[str, int] = {
+        V2_MATCH_MODE_EXACT: 0, V2_MATCH_MODE_EFFECTIVE: 0, V2_MATCH_MODE_NONE: 0,
+    }
+    for r in results:
+        mode = r.v2.match_mode
+        if mode is not None:
+            counts[mode] = counts.get(mode, 0) + 1
+    lines.append(
+        f"exact(従来一致): {counts[V2_MATCH_MODE_EXACT]} 件 / "
+        f"effective(実効盤面フォールバック): {counts[V2_MATCH_MODE_EFFECTIVE]} 件 / "
+        f"none(実効盤面も無し、要調査): {counts[V2_MATCH_MODE_NONE]} 件"
+    )
+    for r in results:
+        if r.v2.match_mode == V2_MATCH_MODE_EFFECTIVE:
+            s = r.sample
+            lines.append(
+                f"  [effective] {s.batch} video_{s.video_stem} t={s.t_sec:.1f} {s.side}: "
+                f"known={r.v2.err_known} new={r.v2.err_new}"
+            )
+    return "\n".join(lines)
+
+
+def build_v2_known_new_report(results: list[CompareResult]) -> str:
+    """93セルリスト該当 (既知=真の誤読残存) と新規 (遅延起因の可能性) の集計。
+
+    最終的な採否の主数値は err_known の減少 (OFF比)、副数値が err_new
+    (遅延コスト+row0型副作用)。(coordinator 指示の主/副数値定義)。
+    """
+    lines = ["--- (v2) 既知/新規誤りセル集計 (主数値=err_known、副数値=err_new) ---"]
+    matched = [r for r in results if r.v2.status == STAGE_MATCHED]
+    total_known = sum(r.v2.err_known or 0 for r in matched)
+    total_new = sum(r.v2.err_new or 0 for r in matched)
+    off_total_for_matched = sum(r.off_errors or 0 for r in matched)
+    lines.append(
+        f"matched盤面 {len(matched)} 件: OFF誤り合計={off_total_for_matched} → "
+        f"v2_err_known合計={total_known} (真の誤読残存) / "
+        f"v2_err_new合計={total_new} (遅延起因の可能性)"
+    )
+    for r in matched:
+        s = r.sample
+        lines.append(
+            f"  {s.batch} video_{s.video_stem} t={s.t_sec:.1f} {s.side} "
+            f"[{r.v2.match_mode}]: OFF={r.off_errors} known={r.v2.err_known} "
+            f"new={r.v2.err_new}"
+        )
+    return "\n".join(lines)
+
+
 # =============================================================================
 # 7. 盤面単位の内訳 CSV
 # =============================================================================
@@ -796,6 +1007,7 @@ def write_breakdown_csv(results: list[CompareResult], out_path: Path) -> None:
         "v2_err", "v2_color_to_ojama",
         "off_err_burst", "off_err_smoke",
         "v2_err_burst", "v2_err_smoke",
+        "v2_match_mode", "v2_err_known", "v2_err_new",
     ]
     with out_path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -826,6 +1038,9 @@ def _breakdown_row(r: CompareResult) -> "dict[str, str]":
         "off_err_smoke": _int_or_na(r.off_errors_smoke),
         "v2_err_burst": _int_or_na(r.v2.errors_burst),
         "v2_err_smoke": _int_or_na(r.v2.errors_smoke),
+        "v2_match_mode": r.v2.match_mode or "",
+        "v2_err_known": _int_or_na(r.v2.err_known),
+        "v2_err_new": _int_or_na(r.v2.err_new),
     }
 
 
@@ -877,6 +1092,11 @@ def main() -> None:
         print(build_stratified_table(results, layer))
         print()
     print(build_category_reduction_report(results))
+    print()
+    # 穴1/穴2対応 (2026-08-05): (v2) の実効盤面フォールバック + 既知/新規分類。
+    print(build_v2_match_mode_report(results))
+    print()
+    print(build_v2_known_new_report(results))
 
 
 if __name__ == "__main__":
