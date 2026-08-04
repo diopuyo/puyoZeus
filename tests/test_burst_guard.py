@@ -378,4 +378,199 @@ def test_burst_guard_v2_explicit_false_restores_legacy_pipeline_output() -> None
         assert r1.p2.confirmed_board == r2.p2.confirmed_board
     # burst-gate 属性は一切書き込まれない (経路自体に入らない、backwards compat)
     assert pipe_explicit._burst_gate_open_1p is False
-    assert pipe_explicit._burst_gate_open_2p is False
+
+
+# ============================
+# 6. Stage1.5: _filter_transition_new_cnn_for_burst_guard (遷移merge時フィルタ)
+# ============================
+
+
+def _board_all(color: int) -> Board:
+    """全セルを color で埋めた盤面 (テスト用、対象セル以外は同一値で差分ゼロにする)。"""
+    b = Board()
+    for r in range(BOARD_ROWS):
+        for c in range(6):
+            b.set(r, c, color)
+    return b
+
+
+def test_filter_transition_noop_for_out_of_scope_from_states() -> None:
+    """【最優先】GRAVITY_SETTLE/CHAIN/EFFECT では完全no-op (恒等、過剰介入防止の安全網)。"""
+    from src.board_state_machine import _filter_transition_new_cnn_for_burst_guard
+
+    baseline = _board_all(COLOR_EMPTY)
+    new_cnn = _board_all(COLOR_RED)  # 大量差分 (連鎖後の正当な変化を模す)
+    for state in (BoardState.GRAVITY_SETTLE, BoardState.CHAIN, BoardState.EFFECT):
+        result = _filter_transition_new_cnn_for_burst_guard(baseline, new_cnn, state)
+        assert result is new_cnn  # 恒等 (コピーもしない)
+
+
+def test_filter_transition_noop_when_baseline_is_none() -> None:
+    """baseline is None (初回STABLE確定) は対象 from_state でも完全no-op。"""
+    from src.board_state_machine import _filter_transition_new_cnn_for_burst_guard
+
+    new_cnn = _board_all(COLOR_RED)
+    for state in (BoardState.TSUMO_FALL, BoardState.OJAMA_FALL):
+        result = _filter_transition_new_cnn_for_burst_guard(None, new_cnn, state)
+        assert result is new_cnn
+
+
+# c18の10セルパターン (§10.1): from_state別に「物理的に説明可能な diff」
+# 以外は全て COLOR_UNKNOWN に棄却されることを表形式で網羅する。
+# (from_state, base_v, cnn_v, expected_v, 説明)
+_TRANSITION_FILTER_CASES: "tuple[tuple[BoardState, int, int, int, str], ...]" = (
+    # TSUMO_FALL: 空→色(1-5)のみ説明可能。
+    (BoardState.TSUMO_FALL, 0, 4, 4, "空→黄、正当な設置"),
+    (BoardState.TSUMO_FALL, 0, 1, 1, "空→赤、正当な設置"),
+    (BoardState.TSUMO_FALL, 1, 4, 10, "既存赤がバーストで黄に化ける (c18型)"),
+    (BoardState.TSUMO_FALL, 5, 9, 10, "既存紫がバーストで9に化ける (c18本命パターン)"),
+    (BoardState.TSUMO_FALL, 0, 9, 10, "空セルに9出現 (TSUMO_FALL中はおじゃま落下しない)"),
+    (BoardState.TSUMO_FALL, 2, 2, 2, "差分なし (base==cnn、そもそも棄却対象外)"),
+    # OJAMA_FALL: 空→9(おじゃま)のみ説明可能。
+    (BoardState.OJAMA_FALL, 0, 9, 9, "空→9、正当なおじゃま着弾"),
+    (BoardState.OJAMA_FALL, 1, 4, 10, "既存赤がバーストで黄に化ける"),
+    (BoardState.OJAMA_FALL, 1, 9, 10, "既存赤がバーストで9に化ける"),
+    (BoardState.OJAMA_FALL, 5, 9, 10, "既存紫がバーストで9に化ける (c18型)"),
+    (BoardState.OJAMA_FALL, 0, 4, 10, "空セルに色出現 (OJAMA_FALL中は色puyoが降らない)"),
+)
+
+
+@pytest.mark.parametrize(
+    "from_state,base_v,cnn_v,expected_v,_desc", _TRANSITION_FILTER_CASES,
+)
+def test_filter_transition_c18_pattern_table(
+    from_state: BoardState, base_v: int, cnn_v: int, expected_v: int, _desc: str,
+) -> None:
+    """c18の10セルパターンを表形式で網羅し、説明不可能な diff が全て棄却されることを確認する。"""
+    from src.board_state_machine import _filter_transition_new_cnn_for_burst_guard
+
+    target = (0, 0)
+    baseline = _board_all(COLOR_EMPTY)
+    baseline.set(*target, base_v)
+    new_cnn = _board_all(COLOR_EMPTY)
+    new_cnn.set(*target, cnn_v)
+    result = _filter_transition_new_cnn_for_burst_guard(baseline, new_cnn, from_state)
+    assert result.get(*target) == expected_v, _desc
+
+
+def _gated_transition_signal(cnn: Board, window_active: bool) -> DetectorSignals:
+    """遷移merge検証用の signals (hsv_board=None、_apply_transition のみ関与)。"""
+    return DetectorSignals(
+        time_sec=0.0, cnn_board=cnn, is_match_active=True,
+        effect_gate_window_active=window_active,
+    )
+
+
+def _make_transition_guard_sm(
+    *, enable_transition_merge_guard: bool, confirmed: Board,
+) -> BoardStateMachine:
+    sm = BoardStateMachine(enable_transition_merge_guard=enable_transition_merge_guard)
+    sm._ctx.state = BoardState.TSUMO_FALL
+    sm._ctx.confirmed_board = confirmed
+    return sm
+
+
+_BOTTOM_ROW: int = BOARD_ROWS - 1  # 最下段 (gravity filterの浮きぷよ判定を避けるため使用)
+
+
+def test_transition_guard_rejects_unexplainable_diff_when_window_active() -> None:
+    """enable_transition_merge_guard=True かつ window活性中: 説明不可能な diff は棄却される。"""
+    baseline = _board_all(COLOR_EMPTY)
+    baseline.set(_BOTTOM_ROW, 0, COLOR_RED)  # 既存の赤puyo (最下段=支えあり)
+    sm = _make_transition_guard_sm(
+        enable_transition_merge_guard=True, confirmed=baseline.copy(),
+    )
+    new_cnn = _board_all(COLOR_EMPTY)
+    new_cnn.set(_BOTTOM_ROW, 0, COLOR_BLUE)  # バースト誤読: 赤→青に化ける (説明不可能)
+    sm._apply_transition(BoardState.STABLE, _gated_transition_signal(new_cnn, True))
+    assert sm.context.confirmed_board.get(_BOTTOM_ROW, 0) == COLOR_RED  # baseline維持
+
+
+def test_transition_guard_is_identity_when_window_inactive() -> None:
+    """window非活性中は恒等 (フィルタ未適用、従来通り cnn 値がそのまま書き込まれる)。"""
+    baseline = _board_all(COLOR_EMPTY)
+    baseline.set(_BOTTOM_ROW, 0, COLOR_RED)
+    sm = _make_transition_guard_sm(
+        enable_transition_merge_guard=True, confirmed=baseline.copy(),
+    )
+    new_cnn = _board_all(COLOR_EMPTY)
+    new_cnn.set(_BOTTOM_ROW, 0, COLOR_BLUE)
+    sm._apply_transition(BoardState.STABLE, _gated_transition_signal(new_cnn, False))
+    assert sm.context.confirmed_board.get(_BOTTOM_ROW, 0) == COLOR_BLUE  # フィルタ未適用、素通り
+
+
+def test_transition_guard_disabled_is_bit_identical_to_legacy() -> None:
+    """enable_transition_merge_guard=False (既定): window活性中でも従来通り素通りする。"""
+    baseline = _board_all(COLOR_EMPTY)
+    baseline.set(_BOTTOM_ROW, 0, COLOR_RED)
+    sm = _make_transition_guard_sm(
+        enable_transition_merge_guard=False, confirmed=baseline.copy(),
+    )
+    new_cnn = _board_all(COLOR_EMPTY)
+    new_cnn.set(_BOTTOM_ROW, 0, COLOR_BLUE)
+    sm._apply_transition(BoardState.STABLE, _gated_transition_signal(new_cnn, True))
+    assert sm.context.confirmed_board.get(_BOTTOM_ROW, 0) == COLOR_BLUE  # 従来挙動 (bit-identical)
+
+
+def test_transition_guard_flag_stored_default_false() -> None:
+    """enable_transition_merge_guard 未指定時は既定 False (backwards compat)。"""
+    sm = BoardStateMachine()
+    assert sm._enable_transition_merge_guard is False
+
+
+# ============================
+# 7. RecognitionPipeline 統合: enable_transition_merge_guard / burst_gate_open_threshold
+# ============================
+
+
+def test_enable_transition_merge_guard_default_false_and_propagates() -> None:
+    """既定False + 明示True時に BoardStateMachine 側へ正しく伝播する。"""
+    pipe = _make_burst_pipe()
+    assert pipe._enable_transition_merge_guard is False
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe2 = _make_burst_pipe(
+            enable_burst_guard_v2=True, enable_transition_merge_guard=True,
+        )
+    assert pipe2._enable_transition_merge_guard is True
+    assert pipe2._sm_1p._enable_transition_merge_guard is True  # noqa: SLF001
+    assert pipe2._sm_2p._enable_transition_merge_guard is True  # noqa: SLF001
+
+
+def test_enable_transition_merge_guard_without_burst_guard_v2_warns() -> None:
+    """enable_transition_merge_guard=True かつ enable_burst_guard_v2=False は no-op 警告。"""
+    with pytest.warns(UserWarning, match="no-op"):
+        _make_burst_pipe(
+            enable_transition_merge_guard=True, enable_burst_guard_v2=False,
+        )
+
+
+def test_burst_gate_open_threshold_default_is_module_constant() -> None:
+    """burst_gate_open_threshold 未指定時は既存定数 (0.97) を使う (bit-identical)。"""
+    from src.recognition_pipeline import BURST_GATE_OPEN_THRESHOLD
+    pipe = _make_burst_pipe()
+    assert pipe._burst_gate_open_threshold == BURST_GATE_OPEN_THRESHOLD
+
+
+def test_burst_gate_open_threshold_explicit_value_stored() -> None:
+    """明示指定した閾値が格納される。"""
+    pipe = _make_burst_pipe(burst_gate_open_threshold=0.85)
+    assert pipe._burst_gate_open_threshold == 0.85
+
+
+def test_burst_gate_open_threshold_passed_to_schmitt_trigger() -> None:
+    """_resolve_burst_gate_state に閾値が実際に渡り、開窓判定が変わることを確認する。"""
+    frame = _bright_top_row_frame()
+    # 実測スコアは1.0 (全白パッチ)。閾値0.999でも開くが、比較のため極端な
+    # 高閾値 (1.5、スコアの取り得る範囲外) では開かないことを確認する。
+    new_open_default, _, _ = _resolve_burst_gate_state(
+        frame, DEFAULT_P1_REGION, EFFECT_GATE_TOP_ROWS,
+        False, None, None, time_sec=1.0, force_close=False,
+    )
+    new_open_high_threshold, _, _ = _resolve_burst_gate_state(
+        frame, DEFAULT_P1_REGION, EFFECT_GATE_TOP_ROWS,
+        False, None, None, time_sec=1.0, force_close=False,
+        open_threshold=1.5, close_threshold=1.5,
+    )
+    assert new_open_default is True
+    assert new_open_high_threshold is False

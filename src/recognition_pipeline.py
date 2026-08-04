@@ -1223,6 +1223,18 @@ class RecognitionPipeline:
         # enable_effect_gate=False の場合は no-op (警告ログ、§5 参照)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_burst_guard_v2: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §10。True で NON-STABLE→STABLE
+        # 遷移時の merge に物理的期待値フィルタを適用する
+        # (`_filter_transition_new_cnn_for_burst_guard`、BoardStateMachine 側)。
+        # enable_burst_guard_v2=False の場合は no-op (警告ログ)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
+        # バーストガード緊急較正 (2026-08-05、factorialバックテスト用):
+        # Schmitt trigger の開窓閾値オーバーライド。None (既定) なら
+        # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
+        # CLOSE も同値運用のため同じ値を渡す (docs §4 Stage1方針)。
+        burst_gate_open_threshold: "float | None" = None,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1666,6 +1678,27 @@ class RecognitionPipeline:
         self._burst_gate_opened_at_2p: float | None = None
         self._burst_gate_quiet_since_1p: float | None = None
         self._burst_gate_quiet_since_2p: float | None = None
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補): _build_state_machine
+        # 呼び出し前に格納が必要 (BoardStateMachine へそのまま伝播するため)。
+        self._enable_transition_merge_guard: bool = bool(
+            enable_transition_merge_guard
+        )
+        if self._enable_transition_merge_guard and not self._enable_burst_guard_v2:
+            warnings.warn(
+                "enable_transition_merge_guard=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(遷移merge時の物理的期待値フィルタは effect_gate_window_active "
+                "中のみ働くため、Stage1本体が無効だと発火機会がありません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # バーストガード緊急較正 (2026-08-05): None なら既存定数
+        # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
+        self._burst_gate_open_threshold: float = (
+            float(burst_gate_open_threshold)
+            if burst_gate_open_threshold is not None
+            else BURST_GATE_OPEN_THRESHOLD
+        )
         # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
         # is_all_clear() で再評価し、次の連鎖発火でクリアする
         # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
@@ -1728,6 +1761,7 @@ class RecognitionPipeline:
             enable_effect_gate=self._enable_effect_gate,
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
+            enable_transition_merge_guard=self._enable_transition_merge_guard,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1757,6 +1791,7 @@ class RecognitionPipeline:
             enable_effect_gate=self._enable_effect_gate,
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
+            enable_transition_merge_guard=self._enable_transition_merge_guard,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2101,6 +2136,9 @@ class RecognitionPipeline:
         # バーストガード再設計 Stage1 (2026-08-05, A/B 計測用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         effect_gate_hard_freeze: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2176,6 +2214,7 @@ class RecognitionPipeline:
             enable_effect_gate=enable_effect_gate,
             effect_gate_persist_sec=effect_gate_persist_sec,
             effect_gate_hard_freeze=effect_gate_hard_freeze,
+            enable_transition_merge_guard=enable_transition_merge_guard,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2376,6 +2415,12 @@ class RecognitionPipeline:
         # docs/BURST_GUARD_DESIGN_2026-08-05.md。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_burst_guard_v2: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
+        # バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。
+        # None (既定) = BURST_GATE_OPEN_THRESHOLD (0.97、bit-identical)。
+        burst_gate_open_threshold: "float | None" = None,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2597,6 +2642,8 @@ class RecognitionPipeline:
             effect_gate_ojama_window_sec=effect_gate_ojama_window_sec,
             enable_effect_visual_gate=enable_effect_visual_gate,
             enable_burst_guard_v2=enable_burst_guard_v2,
+            enable_transition_merge_guard=enable_transition_merge_guard,
+            burst_gate_open_threshold=burst_gate_open_threshold,
         )
 
     # ------------------------------------------------------------------
@@ -5124,6 +5171,8 @@ class RecognitionPipeline:
                 frame_bgr, _burst_region, EFFECT_GATE_TOP_ROWS,
                 _prev_open, _prev_opened_at, _prev_quiet, time_sec,
                 force_close=(own_chain_active or _all_clear_pending_for_side),
+                open_threshold=self._burst_gate_open_threshold,
+                close_threshold=self._burst_gate_open_threshold,
             )
             if side == "1P":
                 self._burst_gate_open_1p = _new_open
@@ -6877,22 +6926,22 @@ def _resolve_burst_gate_state(
     prev_quiet: "float | None",
     time_sec: float,
     force_close: bool,
+    open_threshold: float = BURST_GATE_OPEN_THRESHOLD,
+    close_threshold: float = BURST_GATE_CLOSE_THRESHOLD,
 ) -> "tuple[bool, float | None, float | None]":
     """バーストガード Stage1: 1frame分の Schmitt trigger 状態解決 (stateless純関数)。
 
-    docs/BURST_GUARD_DESIGN_2026-08-05.md §2.2 の安全弁を実装する:
-    frame_bgr が None (画像取得不能) の場合は `_update_burst_visual_gate` を
-    呼ばず直前状態をそのまま維持する (無情報を「静穏」と誤認しない、
-    安全弁A の既存方針を踏襲)。force_close 条件と max_window_sec 安全弁だけは
-    画像の有無に関係なく効かせる。
+    docs/BURST_GUARD_DESIGN_2026-08-05.md §2.2 の安全弁: frame_bgr が None
+    (画像取得不能) の場合は `_update_burst_visual_gate` を呼ばず直前状態を
+    維持する (無情報を「静穏」と誤認しない)。force_close / max_window_sec
+    安全弁だけは画像の有無に関係なく効かせる。
 
     Args:
-        frame_bgr: 1920x1080 リサイズ済みフルフレーム (BGR)。None なら視覚判定不能。
-        region: 判定対象 side の BoardRegion。
-        rows: 判定対象の abs_row 集合 (既定 EFFECT_GATE_TOP_ROWS)。
-        prev_open, prev_opened_at, prev_quiet: 直前frameの Window 状態。
-        time_sec: 今frameの時刻。
-        force_close: own_chain_active / all_clear_pending 等の外部安全条件。
+        frame_bgr/region/rows: 視覚スコア計算の入力 (None なら視覚判定不能)。
+        prev_open/prev_opened_at/prev_quiet: 直前frameの Window 状態。
+        time_sec: 今frameの時刻。force_close: 外部安全条件。
+        open_threshold/close_threshold: 開窓閾値のオーバーライド (2026-08-05
+            緊急較正用)。既定は既存定数 (=0.97、bit-identical)。
 
     Returns:
         (new_is_open, new_opened_at, new_quiet_since)
@@ -6901,8 +6950,8 @@ def _resolve_burst_gate_state(
         score = compute_effect_glow_score(frame_bgr, region, rows)
         return _update_burst_visual_gate(
             prev_open, prev_opened_at, prev_quiet, score, time_sec,
-            open_threshold=BURST_GATE_OPEN_THRESHOLD,
-            close_threshold=BURST_GATE_CLOSE_THRESHOLD,
+            open_threshold=open_threshold,
+            close_threshold=close_threshold,
             min_window_sec=BURST_GATE_MIN_WINDOW_SEC,
             max_window_sec=BURST_GATE_MAX_WINDOW_SEC,
             quiescence_min_sec=BURST_GATE_QUIESCENCE_MIN_SEC,

@@ -494,6 +494,8 @@ def collect_lean(
     effect_gate_persist_sec: Optional[float] = None,
     enable_effect_visual_gate: bool = False,
     enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -558,6 +560,16 @@ def collect_lean(
             + ハード凍結方式に切り替える (案Bの enable_effect_visual_gate
             経路とは排他)。enable_effect_gate=False の間は no-op (警告ログ)。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_transition_merge_guard: バーストガード Stage1.5 (2026-08-05
+            アーキ追補、A/B 計測用)。True で NON-STABLE→STABLE 遷移merge
+            (`_merge_diff_only`) の直前に、物理的期待値フィルタ
+            (`_filter_transition_new_cnn_for_burst_guard`) を
+            effect_gate_window_active 中のみ適用する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_gate_open_threshold: バーストガード緊急較正 (2026-08-05、
+            factorialバックテスト用)。None (既定) なら BURST_GATE_OPEN_
+            THRESHOLD (=0.97) を使う (bit-identical)。CLOSE も同値運用。
 
     Returns:
         蓄積した snapshot 数。
@@ -615,6 +627,8 @@ def collect_lean(
         effect_gate_persist_sec=effect_gate_persist_sec,
         enable_effect_visual_gate=enable_effect_visual_gate,
         enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -836,6 +850,27 @@ def main() -> int:
             "無効の間は no-op (警告ログ)。既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-transition-merge-guard", action="store_true",
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §10。"
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを"
+            "effect_gate_window_active 中のみ適用する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。"
+            "Schmitt trigger の開窓閾値を上書きする (CLOSE も同値運用)。"
+            "既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -854,6 +889,8 @@ def main() -> int:
         effect_gate_persist_sec=args.effect_gate_persist_sec,
         enable_effect_visual_gate=args.enable_effect_visual_gate,
         enable_burst_guard_v2=args.enable_burst_guard_v2,
+        enable_transition_merge_guard=args.enable_transition_merge_guard,
+        burst_gate_open_threshold=args.burst_gate_open_threshold,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
