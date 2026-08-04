@@ -643,6 +643,59 @@ def _merge_diff_only(
     return merged
 
 
+# バーストガード Stage1.5 (2026-08-05 アーキ追補、
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §10)。from_state ごとに
+# 「この遷移で物理的に説明可能な新規値クラス」を静的に定義する。
+# TSUMO_FALL: ツモ設置は空セルへの色puyo(1-5)出現のみ説明可能。
+# OJAMA_FALL: おじゃまは空セルにのみ落下する (reference_ojama_landing_pattern)。
+# 対象外 from_state (CHAIN/GRAVITY_SETTLE/EFFECT等) は §10.2 により
+# 明示的にスコープ外 (無条件no-op)。
+_TRANSITION_MERGE_GUARD_SCOPE: "dict[BoardState, frozenset[int]]" = {
+    BoardState.TSUMO_FALL: frozenset({1, 2, 3, 4, 5}),
+    BoardState.OJAMA_FALL: frozenset({9}),  # COLOR_OJAMA
+}
+
+
+def _filter_transition_new_cnn_for_burst_guard(
+    baseline: "Board | None", new_cnn: "Board", from_state: "BoardState",
+) -> "Board":
+    """遷移merge直前のバースト対策フィルタ (stateless純関数、Stage1.5 §10.4)。
+
+    from_state ごとに `_TRANSITION_MERGE_GUARD_SCOPE` で定義した「物理的に
+    説明可能な diff」以外は COLOR_UNKNOWN に差し替える。`_merge_diff_only`
+    の既存 D guard (605-608行、cnn_v==COLOR_UNKNOWN は baseline維持) が
+    そのまま棄却処理を担うため、`_merge_diff_only` 自体は一切変更しない。
+
+    対象外 from_state (`_TRANSITION_MERGE_GUARD_SCOPE` に無い state) と
+    baseline is None (初回STABLE確定、§10.3) は new_cnn をそのまま返す
+    (恒等、コピーもしない = 呼び出し側で `is` 比較できる)。
+
+    Args:
+        baseline: 直前の確定盤面 (= confirmed_board、遷移前の from_state 時点)。
+        new_cnn: 遷移フレームの CNN 認識盤面。
+        from_state: 遷移前の BoardState (呼び出し側は state 再代入前に読むこと)。
+
+    Returns:
+        フィルタ後の new_cnn (説明不可能な diff は COLOR_UNKNOWN に差し替え済み)。
+    """
+    allowed_colors = _TRANSITION_MERGE_GUARD_SCOPE.get(from_state)
+    if allowed_colors is None or baseline is None:
+        return new_cnn
+    from src.board import COLOR_UNKNOWN
+
+    filtered = new_cnn.copy()
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            base_v = baseline.get(r, c)
+            cnn_v = new_cnn.get(r, c)
+            if base_v == cnn_v:
+                continue
+            if base_v == COLOR_EMPTY and cnn_v in allowed_colors:
+                continue  # 物理的に説明可能な diff (設置/おじゃま着弾)
+            filtered.set(r, c, COLOR_UNKNOWN)  # 説明不可能 → baseline維持 (D guard)
+    return filtered
+
+
 def _apply_gravity_filter(
     board: Board, *, support_board: Board | None = None,
 ) -> None:
@@ -759,6 +812,14 @@ class BoardStateMachine:
         # (`_update_effect_gate_hold` の persist逆転を構造的に排除する)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         effect_gate_hard_freeze: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §10。True で NON-STABLE→STABLE
+        # 遷移時の `_merge_diff_only` 呼び出しに渡す new_cnn を、
+        # signals.effect_gate_window_active 中のみ物理的期待値フィルタ
+        # (`_filter_transition_new_cnn_for_burst_guard`) 経由に切り替える。
+        # `_merge_diff_only` 自体・既存引数は一切変更しない。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -855,6 +916,8 @@ class BoardStateMachine:
         self._effect_gate_persist_sec = max(0.0, float(effect_gate_persist_sec))
         # バーストガード再設計 (2026-08-05): default False = 従来挙動完全維持。
         self._effect_gate_hard_freeze = bool(effect_gate_hard_freeze)
+        # バーストガード Stage1.5 (2026-08-05): default False = 従来挙動完全維持。
+        self._enable_transition_merge_guard = bool(enable_transition_merge_guard)
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -1040,8 +1103,21 @@ class BoardStateMachine:
                 if self._enable_initial_confirm_vote
                 else None
             )
+            # バーストガード Stage1.5 (2026-08-05 §10.4): Window ON 中のみ
+            # 遷移merge直前の new_cnn を物理的期待値フィルタに通す。
+            # self._ctx.state はこの時点でまだ from_state (再代入は後段)。
+            # `_merge_diff_only` 自体・既存引数 (signals.cnn_board) は不変、
+            # ローカル変数 new_cnn_for_merge を新たに merge の入力に使うのみ。
+            new_cnn_for_merge = signals.cnn_board
+            if (
+                self._enable_transition_merge_guard
+                and signals.effect_gate_window_active
+            ):
+                new_cnn_for_merge = _filter_transition_new_cnn_for_burst_guard(
+                    self._ctx.confirmed_board, signals.cnn_board, self._ctx.state,
+                )
             self._ctx.confirmed_board = _merge_diff_only(
-                self._ctx.confirmed_board, signals.cnn_board,
+                self._ctx.confirmed_board, new_cnn_for_merge,
                 empty_to_color_guard=empty_guard,
                 enable_gravity_filter_support=self._enable_gravity_filter_support,
                 merge_use_majority_value=self._merge_use_majority_value,
@@ -1812,4 +1888,7 @@ __all__ = [
     "_recovery_or_effect_gate_pass",
     # バーストガード再設計 (2026-08-05)
     "_update_burst_visual_gate",
+    # バーストガード Stage1.5 (2026-08-05 アーキ追補)
+    "_TRANSITION_MERGE_GUARD_SCOPE",
+    "_filter_transition_new_cnn_for_burst_guard",
 ]
