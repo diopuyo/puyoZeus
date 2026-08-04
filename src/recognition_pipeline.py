@@ -22,6 +22,7 @@ state == STABLE 時の confirmed_board が「公式の確定盤面」として�
 from __future__ import annotations
 
 import os
+import warnings
 from collections import Counter, deque
 from dataclasses import dataclass
 
@@ -38,10 +39,12 @@ from src.board_state_machine import (
     BoardStateMachine,
     DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
+    EFFECT_GATE_TOP_ROWS,
     EFFECT_PERSIST_SEC,
     NON_STABLE_STATES,
     STABLE_RECOVERY_ADD_MIN_FRAMES,
     StateContext,
+    _update_burst_visual_gate,
 )
 
 # W-α (Phase G C-1): STABLE 確定時に prob_board を埋めるかのフラグ。
@@ -113,6 +116,31 @@ LARGE_ROI_THROTTLE_FRAMES: int = 8
 # 全列を対象にする設計上の判断 (要 user/アーキ確認、ドメイン確定事実ではない)。
 # default False (enable_effect_gate) = 従来挙動完全維持 (backwards compat)。
 EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC: float = 1.0
+
+# バーストガード再設計 Stage1 (enable_burst_guard_v2, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §4 の定数表そのまま (全て物理量・
+# 較正データ根拠、シーン逆算禁止)。案B (enable_effect_gate+enable_effect_
+# visual_gate) の3敗因 (ChainEvent見逃し・persist逆転・守備範囲固定) を
+# Schmitt trigger視覚トリガー + ハード凍結で構造的に解消する。
+# 較正出典: data/verify/effect_detector_calibration_v3_2026-08-04/
+# calibration_report_v3.md §3 (v1+v3統合136枚、AUC=0.811、zero_fp動作点0.97)。
+BURST_GATE_OPEN_THRESHOLD: float = 0.97
+# Stage1 は値ベースのヒステリシス幅の較正データが無いため OPEN と同値にし、
+# 時間ベースのヒステリシス (BURST_GATE_QUIESCENCE_MIN_SEC) のみに依拠する
+# (Stage2 で ROC 全体を計算し CLOSE<OPEN の真のヒステリシス帯を較正する)。
+BURST_GATE_CLOSE_THRESHOLD: float = 0.97
+# 1リンクの演出持続時間の実測記述 (約0.2秒、effect_glow_detector.py docstring
+# / project_full_board_error_taxonomy_2026-08-02)。単発frameでのopen直後
+# close振動を防ぐ下限。
+BURST_GATE_MIN_WINDOW_SEC: float = 0.2
+# リンク間flicker gap実測 ≒0.1秒 (c5) の2.5倍マージン。1回のリンク間隙だけ
+# では閉じないことを保証する安全マージン (c5への逆算較正は禁止、汎化確認は
+# バックテストで行う)。
+BURST_GATE_QUIESCENCE_MIN_SEC: float = 0.25
+# 安全弁。8連鎖実測14.5秒 (project_chain_count_both_untrustworthy_2026-07-30)
+# の約2倍マージン。永久凍結 (recognition完全停止) リスクの方が多少長い保留
+# より重大なため寛容側に倒す。
+BURST_GATE_MAX_WINDOW_SEC: float = 30.0
 
 
 class _ScoreValNotCached:
@@ -211,7 +239,7 @@ from src.chain_detector import (
     VideoChainTracker,
 )
 from src.drift_detector import DriftDetector, DriftResult
-from src.effect_glow_detector import is_effect_glow_active
+from src.effect_glow_detector import compute_effect_glow_score, is_effect_glow_active
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
 from src.match_end_detector import MatchEndDetector
@@ -1185,6 +1213,16 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_effect_visual_gate: bool = False,
+        # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md。案B の3敗因 (ChainEvent見逃し・
+        # persist逆転・守備範囲固定) を構造的に解消する Schmitt trigger
+        # 視覚トリガー + ハード凍結方式。True にすると `_step_side` 内の
+        # effect_gate_window_active 計算が enable_effect_gate/
+        # enable_effect_visual_gate 経路 (案B) から本方式に切り替わり、
+        # BoardStateMachine 側の effect_gate_hard_freeze も同時に有効化する。
+        # enable_effect_gate=False の場合は no-op (警告ログ、§5 参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_guard_v2: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1605,6 +1643,29 @@ class RecognitionPipeline:
         # 案B (2026-08-04): 4条件AND拡張フラグ。BoardStateMachine には伝播
         # しない (AND合成は RecognitionPipeline._step_side 内で完結するため)。
         self._enable_effect_visual_gate: bool = bool(enable_effect_visual_gate)
+        # バーストガード再設計 Stage1 (2026-08-05): _build_state_machine
+        # 呼び出し前に格納が必要 (effect_gate_hard_freeze として伝播するため)。
+        self._enable_burst_guard_v2: bool = bool(enable_burst_guard_v2)
+        if self._enable_burst_guard_v2 and not self._enable_effect_gate:
+            # §5: enable_effect_gate=False では BoardStateMachine 側の行ゲー
+            # ティングが有効化されず、Schmitt trigger 計算のみ行われて凍結には
+            # 一切使われない (no-op)。設定ミスの早期発見のため警告する。
+            warnings.warn(
+                "enable_burst_guard_v2=True ですが enable_effect_gate=False "
+                "のため no-op です (BoardStateMachine 側の行ゲーティングが"
+                "有効化されないため、バーストガードは凍結に反映されません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # Schmitt trigger 状態 (1P/2P別、_update_burst_visual_gate が更新する)。
+        # 試合境界で必ずクリアする (reset() 参照、project_match_boundary_
+        # residue_leak と同種の残留バグを防ぐ)。
+        self._burst_gate_open_1p: bool = False
+        self._burst_gate_open_2p: bool = False
+        self._burst_gate_opened_at_1p: float | None = None
+        self._burst_gate_opened_at_2p: float | None = None
+        self._burst_gate_quiet_since_1p: float | None = None
+        self._burst_gate_quiet_since_2p: float | None = None
         # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
         # is_all_clear() で再評価し、次の連鎖発火でクリアする
         # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
@@ -1666,6 +1727,7 @@ class RecognitionPipeline:
             recovery_add_min_frames=self._recovery_add_min_frames,
             enable_effect_gate=self._enable_effect_gate,
             effect_gate_persist_sec=self._effect_gate_persist_sec,
+            effect_gate_hard_freeze=self._enable_burst_guard_v2,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1694,6 +1756,7 @@ class RecognitionPipeline:
             recovery_add_min_frames=self._recovery_add_min_frames,
             enable_effect_gate=self._enable_effect_gate,
             effect_gate_persist_sec=self._effect_gate_persist_sec,
+            effect_gate_hard_freeze=self._enable_burst_guard_v2,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2035,6 +2098,9 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_effect_gate: bool = False,
         effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
+        # バーストガード再設計 Stage1 (2026-08-05, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        effect_gate_hard_freeze: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2109,6 +2175,7 @@ class RecognitionPipeline:
             recovery_add_min_frames=recovery_add_min_frames,
             enable_effect_gate=enable_effect_gate,
             effect_gate_persist_sec=effect_gate_persist_sec,
+            effect_gate_hard_freeze=effect_gate_hard_freeze,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2305,6 +2372,10 @@ class RecognitionPipeline:
         # 案B (2026-08-04、A/B 計測用): effect_gate_window_active 4条件AND拡張。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_effect_visual_gate: bool = False,
+        # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用)。
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_guard_v2: bool = False,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2525,6 +2596,7 @@ class RecognitionPipeline:
             effect_gate_persist_sec=effect_gate_persist_sec,
             effect_gate_ojama_window_sec=effect_gate_ojama_window_sec,
             enable_effect_visual_gate=enable_effect_visual_gate,
+            enable_burst_guard_v2=enable_burst_guard_v2,
         )
 
     # ------------------------------------------------------------------
@@ -2644,6 +2716,15 @@ class RecognitionPipeline:
         # (前試合の全消し状態が次試合に持ち越されるのを防ぐ)。
         self._all_clear_pending_1p = False
         self._all_clear_pending_2p = False
+        # バーストガード再設計 Stage1 (2026-08-05): Schmitt trigger 状態も
+        # 試合切替時にクリアする (前試合の burst 状態が次試合に残留し
+        # project_match_boundary_residue_leak_2026-07-25 と同種の罠になるのを防ぐ)。
+        self._burst_gate_open_1p = False
+        self._burst_gate_open_2p = False
+        self._burst_gate_opened_at_1p = None
+        self._burst_gate_opened_at_2p = None
+        self._burst_gate_quiet_since_1p = None
+        self._burst_gate_quiet_since_2p = None
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
@@ -5015,7 +5096,45 @@ class RecognitionPipeline:
         # 流用) をそのまま使う。お邪魔着弾窓は _effect_gate_ojama_until_Xp
         # (前フレームまでの OJAMA_FALL→STABLE 遷移で更新、_step_side 後段参照)。
         _effect_gate_window_active = False
-        if self._enable_effect_gate:
+        if self._enable_burst_guard_v2:
+            # バーストガード再設計 Stage1 (2026-08-05、
+            # docs/BURST_GUARD_DESIGN_2026-08-05.md §2.3): Schmitt trigger
+            # 視覚トリガーのみで判定する。ChainEvent (opponent_chain_active) は
+            # トリガーの OR 条件から意図的に除外する (大連鎖見逃しバグ issue a を
+            # 引き継がないため)。own_chain_active / 全消しラッチのみ
+            # force_close 条件として維持する (較正済みの唯一の実効ゲート)。
+            _all_clear_pending_for_side = (
+                self._all_clear_pending_1p if side == "1P"
+                else self._all_clear_pending_2p
+            )
+            _burst_region = (
+                DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+            )
+            _prev_open, _prev_opened_at, _prev_quiet = (
+                (
+                    self._burst_gate_open_1p, self._burst_gate_opened_at_1p,
+                    self._burst_gate_quiet_since_1p,
+                ) if side == "1P" else
+                (
+                    self._burst_gate_open_2p, self._burst_gate_opened_at_2p,
+                    self._burst_gate_quiet_since_2p,
+                )
+            )
+            _new_open, _new_opened_at, _new_quiet = _resolve_burst_gate_state(
+                frame_bgr, _burst_region, EFFECT_GATE_TOP_ROWS,
+                _prev_open, _prev_opened_at, _prev_quiet, time_sec,
+                force_close=(own_chain_active or _all_clear_pending_for_side),
+            )
+            if side == "1P":
+                self._burst_gate_open_1p = _new_open
+                self._burst_gate_opened_at_1p = _new_opened_at
+                self._burst_gate_quiet_since_1p = _new_quiet
+            else:
+                self._burst_gate_open_2p = _new_open
+                self._burst_gate_opened_at_2p = _new_opened_at
+                self._burst_gate_quiet_since_2p = _new_quiet
+            _effect_gate_window_active = _new_open
+        elif self._enable_effect_gate:
             _ojama_until = (
                 self._effect_gate_ojama_until_1p if side == "1P"
                 else self._effect_gate_ojama_until_2p
@@ -6747,3 +6866,53 @@ def _compute_effect_gate_window_active(
     if frame_bgr is None:
         return False  # 安全弁: 画像なしは不発 (従来 frame ベース確定に戻る)
     return is_effect_glow_active(frame_bgr, region)
+
+
+def _resolve_burst_gate_state(
+    frame_bgr: "np.ndarray | None",
+    region: "object",
+    rows: "frozenset[int]",
+    prev_open: bool,
+    prev_opened_at: "float | None",
+    prev_quiet: "float | None",
+    time_sec: float,
+    force_close: bool,
+) -> "tuple[bool, float | None, float | None]":
+    """バーストガード Stage1: 1frame分の Schmitt trigger 状態解決 (stateless純関数)。
+
+    docs/BURST_GUARD_DESIGN_2026-08-05.md §2.2 の安全弁を実装する:
+    frame_bgr が None (画像取得不能) の場合は `_update_burst_visual_gate` を
+    呼ばず直前状態をそのまま維持する (無情報を「静穏」と誤認しない、
+    安全弁A の既存方針を踏襲)。force_close 条件と max_window_sec 安全弁だけは
+    画像の有無に関係なく効かせる。
+
+    Args:
+        frame_bgr: 1920x1080 リサイズ済みフルフレーム (BGR)。None なら視覚判定不能。
+        region: 判定対象 side の BoardRegion。
+        rows: 判定対象の abs_row 集合 (既定 EFFECT_GATE_TOP_ROWS)。
+        prev_open, prev_opened_at, prev_quiet: 直前frameの Window 状態。
+        time_sec: 今frameの時刻。
+        force_close: own_chain_active / all_clear_pending 等の外部安全条件。
+
+    Returns:
+        (new_is_open, new_opened_at, new_quiet_since)
+    """
+    if frame_bgr is not None:
+        score = compute_effect_glow_score(frame_bgr, region, rows)
+        return _update_burst_visual_gate(
+            prev_open, prev_opened_at, prev_quiet, score, time_sec,
+            open_threshold=BURST_GATE_OPEN_THRESHOLD,
+            close_threshold=BURST_GATE_CLOSE_THRESHOLD,
+            min_window_sec=BURST_GATE_MIN_WINDOW_SEC,
+            max_window_sec=BURST_GATE_MAX_WINDOW_SEC,
+            quiescence_min_sec=BURST_GATE_QUIESCENCE_MIN_SEC,
+            force_close=force_close,
+        )
+    if force_close:
+        return False, None, None
+    if (
+        prev_open and prev_opened_at is not None
+        and (time_sec - prev_opened_at) >= BURST_GATE_MAX_WINDOW_SEC
+    ):
+        return False, None, None  # 安全弁: 画像なしでも max_window は効かせる
+    return prev_open, prev_opened_at, prev_quiet

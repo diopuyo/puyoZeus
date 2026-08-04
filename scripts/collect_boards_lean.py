@@ -493,6 +493,7 @@ def collect_lean(
     enable_effect_gate: bool = False,
     effect_gate_persist_sec: Optional[float] = None,
     enable_effect_visual_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -551,6 +552,12 @@ def collect_lean(
             連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)」に拡張する。
             enable_effect_gate=False の間は無視される (時間窓自体が発生しない
             ため)。既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_guard_v2: バーストガード再設計 Stage1 (2026-08-05、A/B
+            計測用、docs/BURST_GUARD_DESIGN_2026-08-05.md)。True で
+            effect_gate_window_active の計算を Schmitt trigger 視覚トリガー
+            + ハード凍結方式に切り替える (案Bの enable_effect_visual_gate
+            経路とは排他)。enable_effect_gate=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -607,6 +614,7 @@ def collect_lean(
         enable_effect_gate=enable_effect_gate,
         effect_gate_persist_sec=effect_gate_persist_sec,
         enable_effect_visual_gate=enable_effect_visual_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -817,6 +825,17 @@ def main() -> int:
         dest="effect_gate_persist_sec",
         help="エフェクト時間ゲートの確定に必要な持続秒数 (既定 0.4秒)。",
     )
+    parser.add_argument(
+        "--enable-burst-guard-v2", action="store_true",
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05、A/B 計測用) を有効化する。"
+            "docs/BURST_GUARD_DESIGN_2026-08-05.md。Schmitt trigger視覚トリガー"
+            "+ハード凍結方式に effect_gate_window_active の計算を切り替える"
+            "(--enable-effect-visual-gate とは排他)。--enable-effect-gate が"
+            "無効の間は no-op (警告ログ)。既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -834,6 +853,7 @@ def main() -> int:
         enable_effect_gate=args.enable_effect_gate,
         effect_gate_persist_sec=args.effect_gate_persist_sec,
         enable_effect_visual_gate=args.enable_effect_visual_gate,
+        enable_burst_guard_v2=args.enable_burst_guard_v2,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
