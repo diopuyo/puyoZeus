@@ -752,6 +752,13 @@ class BoardStateMachine:
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_effect_gate: bool = False,
         effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
+        # バーストガード再設計 (2026-08-05、Stage1、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §3。True で
+        # `_apply_stable_recovery_gate` のゲート対象 cell が持続確認を行わず
+        # Window ON 中は無条件で発火しないハード凍結に切り替わる
+        # (`_update_effect_gate_hold` の persist逆転を構造的に排除する)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        effect_gate_hard_freeze: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -846,6 +853,8 @@ class BoardStateMachine:
         # (backwards compat)。
         self._enable_effect_gate = bool(enable_effect_gate)
         self._effect_gate_persist_sec = max(0.0, float(effect_gate_persist_sec))
+        # バーストガード再設計 (2026-08-05): default False = 従来挙動完全維持。
+        self._effect_gate_hard_freeze = bool(effect_gate_hard_freeze)
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -1208,6 +1217,7 @@ class BoardStateMachine:
                 cnn_flicker_min_changes=self._cnn_flicker_min_changes,
                 enable_effect_gate=self._enable_effect_gate,
                 effect_gate_persist_sec=self._effect_gate_persist_sec,
+                effect_gate_hard_freeze=self._effect_gate_hard_freeze,
             )
 
 
@@ -1342,6 +1352,74 @@ def _update_effect_gate_hold(
     return (time_sec - prev[1]) >= persist_sec
 
 
+def _update_burst_visual_gate(
+    is_open: bool,
+    opened_at: "float | None",
+    quiet_since: "float | None",
+    score: float,
+    time_sec: float,
+    *,
+    open_threshold: float,
+    close_threshold: float,
+    min_window_sec: float,
+    max_window_sec: float,
+    quiescence_min_sec: float,
+    force_close: bool = False,
+) -> "tuple[bool, float | None, float | None]":
+    """バースト視覚検出の Schmitt trigger 1frame更新 (stateless純関数)。
+
+    2026-08-05 バーストガード再設計 (docs/BURST_GUARD_DESIGN_2026-08-05.md §2.2)。
+    Window ON 中は無条件凍結 (呼び出し側が is_open を effect_gate_active な
+    行の凍結条件として使う)。旧 `_update_effect_gate_hold` の persist逆転
+    (issue b: バーストが0.4秒超続くと誤値が「安定」として採用されてしまう)
+    を構造的に排除するため、「確定に必要な持続」ではなく「解除に必要な静穏」
+    を計測する設計にする (§1.3)。
+
+    Args:
+        is_open: 直前frameのWindow状態。
+        opened_at: Window が開いた time_sec (open中のみ値を持つ)。
+        quiet_since: score が close_threshold 未満に落ちた最初の time_sec
+            (close中に再びopen_threshold以上に戻ったらNoneにリセット)。
+        score: 今frameの視覚スコア (compute_effect_glow_score の戻り値)。
+        time_sec: 今frameの時刻。
+        open_threshold: Window を開く閾値 (score >= で即時open)。
+        close_threshold: 静穏判定の閾値 (score < が続くことを要求、
+            open_threshold 以下の値を推奨 = ヒステリシス帯を作る)。
+        min_window_sec: 一度開いたら最低この秒数は維持する
+            (1リンクの演出持続時間 ≒0.2秒に対応、単発frameでの開閉振動防止)。
+        max_window_sec: 安全弁。この秒数を超えたら score に関係なく強制close
+            (視覚検出が誤って張り付いた場合の永久凍結防止)。
+        quiescence_min_sec: close確定に必要な連続静穏秒数
+            (リンク間flicker gap ≒0.1秒 の1回だけでは閉じないマージンを持たせる)。
+        force_close: True の場合、他条件を無視して即時close
+            (own_chain_active / all_clear_pending 等の外部安全条件)。
+
+    Returns:
+        (new_is_open, new_opened_at, new_quiet_since)
+    """
+    if force_close:
+        return False, None, None
+
+    if not is_open:
+        if score >= open_threshold:
+            return True, time_sec, None
+        return False, None, None
+
+    # is_open == True
+    if opened_at is not None and (time_sec - opened_at) >= max_window_sec:
+        return False, None, None  # 安全弁: 強制close
+
+    if score < close_threshold:
+        _quiet_since = quiet_since if quiet_since is not None else time_sec
+        elapsed_open = time_sec - opened_at if opened_at is not None else 0.0
+        quiescent = time_sec - _quiet_since
+        if elapsed_open >= min_window_sec and quiescent >= quiescence_min_sec:
+            return False, None, None
+        return True, opened_at, _quiet_since
+    # score >= close_threshold: まだバースト中、静穏タイマーをリセット
+    return True, opened_at, None
+
+
 def _recovery_or_effect_gate_pass(
     ctx: "StateContext",
     cell: "tuple[int, int]",
@@ -1352,6 +1430,7 @@ def _recovery_or_effect_gate_pass(
     add_min_frames: "int | None",
     effect_gate_active_rows: "frozenset[int] | None",
     effect_gate_persist_sec: float,
+    effect_gate_hard_freeze: bool = False,
 ) -> bool:
     """1 cell 分の発火判定 (通常フレームカウント or エフェクト時間ゲート).
 
@@ -1360,6 +1439,11 @@ def _recovery_or_effect_gate_pass(
     外なら従来のフレームカウント判定 (bit-identical、backwards compat)。
     ゲート対象なら stable_recovery_counters でなく ctx.effect_gate_hold の
     実秒ベース持続確認に切り替える (2 つのカウンタは排他的に使う、単位混在防止)。
+
+    effect_gate_hard_freeze=True (2026-08-05 バーストガード再設計 §3):
+    ゲート対象 cell は持続確認を一切行わず、Window ON の間は無条件で発火
+    させない (persist逆転の構造的排除)。既定 False では従来動作と
+    bit-identical。
     """
     r, c = cell
     is_gated = (
@@ -1367,6 +1451,9 @@ def _recovery_or_effect_gate_pass(
     )
     if is_gated:
         recovery_counters.pop(cell, None)
+        if effect_gate_hard_freeze:
+            ctx.effect_gate_hold.pop(cell, None)
+            return False
         return _update_effect_gate_hold(
             ctx.effect_gate_hold, cell, agreed_v,
             ctx.time_sec, effect_gate_persist_sec,
@@ -1395,6 +1482,7 @@ def _collect_recovery_candidates(
     cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
     effect_gate_active_rows: "frozenset[int] | None" = None,
     effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
+    effect_gate_hard_freeze: bool = False,
 ) -> tuple[list[tuple[int, int, int]], list[tuple[int, int, int]]]:
     """各セルの合意値チェックとカウンタ更新を行い、候補を方向別に返す.
 
@@ -1430,6 +1518,9 @@ def _collect_recovery_candidates(
             ctx.effect_gate_hold の実秒ベース持続確認で判定する
             (`_recovery_or_effect_gate_pass` 参照)。
         effect_gate_persist_sec: エフェクト時間ゲートの確定に必要な持続秒数。
+        effect_gate_hard_freeze: 2026-08-05 バーストガード再設計 §3。True で
+            ゲート対象 cell の持続確認を無効化し、Window ON 中は無条件で
+            発火させない。既定 False = 従来動作と bit-identical。
 
     Returns:
         (add_candidates, fix_candidates) のタプル。
@@ -1490,6 +1581,7 @@ def _collect_recovery_candidates(
                 ctx, (r, c), confirmed_v, agreed_v, recovery_counters,
                 min_frames, add_min_frames,
                 effect_gate_active_rows, effect_gate_persist_sec,
+                effect_gate_hard_freeze,
             )
             if not passed:
                 continue
@@ -1547,6 +1639,7 @@ def _apply_stable_recovery_gate(
     cnn_flicker_min_changes: int = CNN_FLICKER_MIN_CHANGES,
     enable_effect_gate: bool = False,
     effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
+    effect_gate_hard_freeze: bool = False,
 ) -> None:
     """設計C 事後復旧ゲート本体 (in-place で confirmed_board を更新).
 
@@ -1584,6 +1677,9 @@ def _apply_stable_recovery_gate(
             の cell は frame カウントでなく実秒ベース持続確認に切り替わる。
             default False = 従来挙動完全維持 (backwards compat)。
         effect_gate_persist_sec: エフェクト時間ゲートの確定に必要な持続秒数。
+        effect_gate_hard_freeze: 2026-08-05 バーストガード再設計 §3。True で
+            `_collect_recovery_candidates` の持続確認を無効化しハード凍結する。
+            既定 False = 従来動作と bit-identical。
     """
     if ctx.confirmed_board is None:
         return
@@ -1611,6 +1707,7 @@ def _apply_stable_recovery_gate(
         cnn_flicker_min_changes=cnn_flicker_min_changes,
         effect_gate_active_rows=_effect_gate_rows,
         effect_gate_persist_sec=effect_gate_persist_sec,
+        effect_gate_hard_freeze=effect_gate_hard_freeze,
     )
 
     if not add_candidates and not fix_candidates:
@@ -1713,4 +1810,6 @@ __all__ = [
     "EFFECT_PERSIST_SEC",
     "_update_effect_gate_hold",
     "_recovery_or_effect_gate_pass",
+    # バーストガード再設計 (2026-08-05)
+    "_update_burst_visual_gate",
 ]

@@ -51,6 +51,38 @@ def compute_cell_bright_ratio(patch_bgr: np.ndarray) -> float:
     return float(np.mean(v_channel >= BRIGHT_V_THRESHOLD))
 
 
+def compute_effect_glow_score(
+    frame_bgr: np.ndarray,
+    region: BoardRegion,
+    rows: "frozenset[int]" = EFFECT_GATE_TOP_ROWS,
+) -> float:
+    """指定行帯 (既定 row1-3) 内の bright_ratio 最大値を返す (stateless純関数)。
+
+    2026-08-05 バーストガード再設計 (docs/BURST_GUARD_DESIGN_2026-08-05.md §2.1):
+    `is_effect_glow_active` の閾値判定ロジックをスコア計算部分から分離した
+    もの。ロジック・数値は完全に同一 (bright_ratio_max 較正済み方式、
+    calibration_report_v3.md §3)。Schmitt trigger (`_update_burst_visual_gate`)
+    はこの連続値スコアを入力として使う。
+
+    Args:
+        frame_bgr: 1920x1080 リサイズ済みフルフレーム (BGR)。
+        region: 判定対象 side の BoardRegion (DEFAULT_P1_REGION/P2_REGION)。
+        rows: 判定対象の abs_row 集合 (既定 EFFECT_GATE_TOP_ROWS={1,2,3})。
+
+    Returns:
+        窓内の全セル (rows × BOARD_COLS) の bright_ratio 最大値 (0.0〜1.0)。
+    """
+    max_ratio = 0.0
+    for row in rows:
+        for col in range(BOARD_COLS):
+            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+            patch = frame_bgr[y1:y2, x1:x2]
+            ratio = compute_cell_bright_ratio(patch)
+            if ratio > max_ratio:
+                max_ratio = ratio
+    return max_ratio
+
+
 def is_effect_glow_active(
     frame_bgr: np.ndarray,
     region: BoardRegion,
@@ -63,6 +95,10 @@ def is_effect_glow_active(
     超えたら True。単セル最大値方式 (較正レポートの `bright_ratio_max` と
     同一集約方法、AUC=0.811・zero_fp_threshold=0.97 の較正済み動作点)。
 
+    2026-08-05: 内部実装を `compute_effect_glow_score` 呼び出しに変更した
+    (バーストガード再設計 §2.1、薄いラッパー化)。戻り値・数値は
+    完全に bit-identical (score計算ロジックを1文字も変えていない)。
+
     Args:
         frame_bgr: 1920x1080 リサイズ済みフルフレーム (BGR)。
         region: 判定対象 side の BoardRegion (DEFAULT_P1_REGION/P2_REGION)。
@@ -72,20 +108,13 @@ def is_effect_glow_active(
     Returns:
         True ならエフェクトグロー (予告おじゃま送付バースト) を検出。
     """
-    max_ratio = 0.0
-    for row in rows:
-        for col in range(BOARD_COLS):
-            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
-            patch = frame_bgr[y1:y2, x1:x2]
-            ratio = compute_cell_bright_ratio(patch)
-            if ratio > max_ratio:
-                max_ratio = ratio
-    return max_ratio > threshold
+    return compute_effect_glow_score(frame_bgr, region, rows) > threshold
 
 
 __all__ = [
     "BRIGHT_V_THRESHOLD",
     "EFFECT_BRIGHT_RATIO_MAX_THRESHOLD",
     "compute_cell_bright_ratio",
+    "compute_effect_glow_score",
     "is_effect_glow_active",
 ]
