@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 from src.board import BOARD_ROWS, COLOR_BLUE, COLOR_EMPTY, COLOR_RED, Board
 from src.board_state_machine import (
     BoardState,
@@ -23,6 +25,13 @@ from src.board_state_machine import (
     DetectorSignals,
     EFFECT_GATE_TOP_ROWS,
     _update_effect_gate_hold,
+)
+from src.image_reader import DEFAULT_P1_REGION
+from src.match_state import MatchState
+from src.recognition_pipeline import (
+    RecognitionPipeline,
+    _compute_effect_gate_window_active,
+    _update_all_clear_pending,
 )
 
 # テスト用の短い持続秒数 (本番既定 EFFECT_PERSIST_SEC=0.4 相当の挙動を
@@ -244,3 +253,210 @@ def test_update_effect_gate_hold_fires_after_persist_sec() -> None:
     assert _update_effect_gate_hold(hold, cell, 4, 10.0, 0.4) is False
     assert _update_effect_gate_hold(hold, cell, 4, 10.39, 0.4) is False  # 僅かに未達
     assert _update_effect_gate_hold(hold, cell, 4, 10.40, 0.4) is True  # ちょうど到達
+
+
+# ============================
+# 案B (2026-08-04): _update_all_clear_pending 単体テスト
+# ============================
+
+
+def test_update_all_clear_pending_chain_fired_forces_false() -> None:
+    """chain_fired=True なら prev_pending の値に関わらず必ず False にクリアする。"""
+    empty_all_clear_board = _empty_board()  # 完全に空 = 全消し形状
+    assert _update_all_clear_pending(
+        True, empty_all_clear_board, 1000, chain_fired=True,
+    ) is False
+    assert _update_all_clear_pending(
+        False, empty_all_clear_board, 1000, chain_fired=True,
+    ) is False
+
+
+def test_update_all_clear_pending_keeps_prev_when_not_confirmed() -> None:
+    """confirmed_board=None (STABLE 以外) では直前ラッチ状態を維持する。"""
+    assert _update_all_clear_pending(
+        True, None, 1000, chain_fired=False,
+    ) is True
+    assert _update_all_clear_pending(
+        False, None, 1000, chain_fired=False,
+    ) is False
+
+
+def test_update_all_clear_pending_true_on_all_clear_board() -> None:
+    """STABLE 確定 + 全消し盤面 (完全に空 + score>0) では True にセットする。"""
+    empty_board = _empty_board()
+    assert _update_all_clear_pending(
+        False, empty_board, 1000, chain_fired=False,
+    ) is True
+
+
+def test_update_all_clear_pending_false_on_non_all_clear_board() -> None:
+    """STABLE 確定でも全消し形状でなければ False。"""
+    non_all_clear = _board_with_puyo(6, 0, COLOR_RED)
+    assert _update_all_clear_pending(
+        True, non_all_clear, 1000, chain_fired=False,
+    ) is False
+
+
+def _board_with_puyo(row: int, col: int, color: int) -> Board:
+    b = Board()
+    b.set(row, col, color)
+    return b
+
+
+# ============================
+# 案B (2026-08-04): _compute_effect_gate_window_active 単体テスト
+# ============================
+
+
+def _black_frame() -> np.ndarray:
+    return np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+
+def _bright_top_row_frame() -> np.ndarray:
+    """DEFAULT_P1_REGION の EFFECT_GATE_TOP_ROWS 内セルを高輝度で塗った合成フレーム。"""
+    frame = _black_frame()
+    row = next(iter(EFFECT_GATE_TOP_ROWS))
+    x1, y1, x2, y2 = DEFAULT_P1_REGION.cell_sample_rect(row, 0)
+    frame[y1:y2, x1:x2] = (255, 255, 255)
+    return frame
+
+
+def test_compute_effect_gate_window_active_disabled_passes_through() -> None:
+    """enable_visual_gate=False なら time_window_active をそのまま返す (両値)。"""
+    for tw in (True, False):
+        assert _compute_effect_gate_window_active(
+            time_window_active=tw,
+            own_chain_active=True,  # 他条件が False 側でも無視されるはず
+            all_clear_pending=True,
+            frame_bgr=None,
+            region=DEFAULT_P1_REGION,
+            enable_visual_gate=False,
+        ) is tw
+
+
+def test_compute_effect_gate_window_active_own_chain_active_blocks() -> None:
+    """own_chain_active=True (自連鎖中) なら他条件が全部クリアでも False。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=True,
+        own_chain_active=True,
+        all_clear_pending=False,
+        frame_bgr=_bright_top_row_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is False
+
+
+def test_compute_effect_gate_window_active_all_clear_pending_blocks() -> None:
+    """all_clear_pending=True (全消しラッチ) なら他条件が全部クリアでも False。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=True,
+        own_chain_active=False,
+        all_clear_pending=True,
+        frame_bgr=_bright_top_row_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is False
+
+
+def test_compute_effect_gate_window_active_frame_none_blocks() -> None:
+    """frame_bgr=None (画像なし) は安全弁として False。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=True,
+        own_chain_active=False,
+        all_clear_pending=False,
+        frame_bgr=None,
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is False
+
+
+def test_compute_effect_gate_window_active_time_window_inactive_blocks() -> None:
+    """time_window_active=False (既存時間窓が不発) なら他条件に関わらず False。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=False,
+        own_chain_active=False,
+        all_clear_pending=False,
+        frame_bgr=_bright_top_row_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is False
+
+
+def test_compute_effect_gate_window_active_all_clear_conditions_true() -> None:
+    """4条件すべてクリア (時間窓True・自連鎖なし・全消しなし・高輝度検出) で True。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=True,
+        own_chain_active=False,
+        all_clear_pending=False,
+        frame_bgr=_bright_top_row_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is True
+
+
+def test_compute_effect_gate_window_active_no_visual_glow_is_false() -> None:
+    """3条件クリアでも視覚グロー未検出 (黒フレーム) なら False。"""
+    assert _compute_effect_gate_window_active(
+        time_window_active=True,
+        own_chain_active=False,
+        all_clear_pending=False,
+        frame_bgr=_black_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_visual_gate=True,
+    ) is False
+
+
+# ============================
+# 案B (2026-08-04): RecognitionPipeline 統合レベル
+# ============================
+
+
+class _StubMatchDetectorForGate:
+    """常に IN_MATCH を返す MatchStateDetector スタブ (統合テスト専用最小版)。"""
+
+    def detect(self, frame: np.ndarray) -> object:
+        class _R:
+            state = MatchState.IN_MATCH
+            bg_value = 100.0
+            bg_saturation = 50.0
+            samples = 1
+        return _R()
+
+
+class _StubImageReaderForGate:
+    """固定の空盤面を返す ImageReader スタブ (統合テスト専用最小版)。"""
+
+    def read_both_boards(
+        self, frame: np.ndarray, **_kwargs: object,
+    ) -> tuple[Board, Board]:
+        return _empty_board(), _empty_board()
+
+
+def _make_gate_pipe(**kwargs: object) -> RecognitionPipeline:
+    return RecognitionPipeline(
+        image_reader=_StubImageReaderForGate(),  # type: ignore[arg-type]
+        match_state_detector=_StubMatchDetectorForGate(),  # type: ignore[arg-type]
+        **kwargs,
+    )
+
+
+def test_enable_effect_visual_gate_default_is_false() -> None:
+    """enable_effect_visual_gate 未指定時は既定 False (backwards compat)。"""
+    pipe = _make_gate_pipe()
+    assert pipe._enable_effect_visual_gate is False
+
+
+def test_enable_effect_visual_gate_flag_is_accepted_and_stored() -> None:
+    """enable_effect_visual_gate=True を渡すと self._enable_effect_visual_gate に反映される。"""
+    pipe = _make_gate_pipe(enable_effect_visual_gate=True)
+    assert pipe._enable_effect_visual_gate is True
+
+
+def test_reset_clears_all_clear_pending_latches() -> None:
+    """reset() で _all_clear_pending_1p/_2p が False に戻る (試合切替時クリア)。"""
+    pipe = _make_gate_pipe()
+    pipe._all_clear_pending_1p = True
+    pipe._all_clear_pending_2p = True
+    pipe.reset()
+    assert pipe._all_clear_pending_1p is False
+    assert pipe._all_clear_pending_2p is False
