@@ -1,0 +1,425 @@
+# バースト焼き付き対策 設計仕様 (2026-08-05)
+
+> 対象読者: 実装エージェント (コーダ) / テスターエージェント。
+> 前提知識: `docs/CYCLE_FINDINGS.md`、memory `project_effect_gate_v1_failure_2026-08-03`、
+> `data/verify/effect_detector_calibration_v3_2026-08-04/calibration_report_v3.md`、
+> `data/verify/error_onset_sheet_2026-08-04/index_refined.md`。
+
+## 0. 背景 (確定済み証拠の要約)
+
+1. user目視確定: 満杯盤面帯の誤り93セルは全て「相手のお邪魔送付バースト演出」起因 (5色半透明レイヤーの重畳)。
+2. 案B (4条件ANDゲート、`enable_effect_gate` + `enable_effect_visual_gate`) は93セルに改善ゼロ。敗因3点:
+   - (a) 窓トリガーの `ChainEvent` (`self._active_chain_2p` 経由) が大連鎖を丸ごと見逃す (c18: お邪魔131個級で検出0件)。リンク間で0.1秒明滅し、谷の内側で誤値確定 (c5)。
+   - (b) `EFFECT_PERSIST_SEC=0.4` の「持続確認」が逆転する: バーストが0.4秒超続くと誤値が「安定」として設計通り採用される (c12 実測0.467秒)。
+   - (c) 守備範囲 `EFFECT_GATE_TOP_ROWS={1,2,3}` 限定、着弾煙は全行に及ぶ (c19: row7-12, opp_supply_ojama=79 で範囲外)。
+3. userの難所: 「バーストの光の間にもプレイヤーはぷよを置ける」→ 全面凍結は正当な設置反映を遅らせる。
+4. user承認済み方向: 「演出が終わってから書き込む」方式。unmix (半透明レイヤー除去) は別エージェントが実現可能性を並行検証済み (`scripts/_probe_burst_unmix_2026-08-05.py`、結論=代替不可・補完候補)、本設計はこれを前提にしない。将来の差し替え点としてのみ言及する。
+
+## 1. アーキテクチャ上の最重要発見 (実装前に必ず理解すること)
+
+### 1.1 「設置追跡は継続」は新規実装が不要 — 既存の経路分離を壊さないことが答え
+
+`src/board_state_machine.py` の `_apply_transition()` (994-1056行) は NON-STABLE→STABLE 遷移時に
+`_merge_diff_only()` (1034行) を呼んで新規設置を confirmed_board に書き込む。この呼び出しは
+`effect_gate_active_rows` / `effect_gate_persist_sec` などのエフェクトゲート系引数を **一切受け取らない**。
+
+一方、本ドキュメントが再設計する対象は `_collect_recovery_candidates()` (1386-1501行) — これは
+STABLE 状態に留まったまま confirmed_board と CNN/HSV合意値の差分を「復旧」するための、
+別経路 (STABLE内ドリフト補正) である。
+
+**結論**: 通常の設置 (TSUMO_FALL→STABLE 遷移で検知される設置) は、バーストWindowの影響を
+最初から受けない。実装エージェントは **この2経路を混同させる変更を絶対にしてはならない**
+(= `_merge_diff_only` 呼び出しに `effect_gate_*` 系引数を新たに混ぜ込むことを明示的に禁止する)。
+
+**残存リスク (バックテストで必ず確認)**: state遷移検知が失敗した設置 (何らかの理由で
+TSUMO_FALL 遷移が検知されず、STABLE のまま新規ぷよが出現するケース) は fallback として
+`_collect_recovery_candidates` の方向1 (空→色、重力整合チェック付き) 経由でも反映される。
+この fallback 経路がバーストWindow中に発生した場合のみ、新設計が遅延の影響を与える。
+バックテスト計画 §7.2 でこのケースの発生頻度と遅延を必ず計測する。
+
+### 1.2 「バースト」と「煙」は別の物理イベントで、既存の2つの時間窓にそれぞれ対応する
+
+`calibration_report_v3.md` §2 の row 分布表 (layer別) と §4 の out_of_scope 表を突き合わせると:
+
+- `burst` レイヤー (row1-3 に集中、`bright_ratio_max` AUC=0.811 で高精度検出可能)
+  = 相手の連鎖中に発生する「予告おじゃま送付エフェクト」(1リンク約0.2秒)。
+  既存コードの `opponent_chain_active` 窓 (`chain_ev_2p is not None`、
+  `src/recognition_pipeline.py:3595` 相当) に対応する。
+- `smoke` レイヤー (全12行にほぼ一様分布、固定窓不成立、視覚検出困難) の out_of_scope note は
+  全て「おじゃま実増加±1秒」= 自分の盤面におじゃまが着弾する瞬間。既存コードの
+  `_effect_gate_ojama_until_Xp` 窓 (score差分ベースで既に信頼できる時刻確定済み、
+  `EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC=1.0` 秒、`src/recognition_pipeline.py:115`) に対応する。
+
+**設計上の単純化**: 2層のスコープ切替は「視覚強度に応じた動的な行範囲判定」ではなく、
+「窓の出自 (種別) による静的な行範囲の割り当て」でよい。これにより n=1 (c19のみ) の
+severity閾値を発明する必要がなくなる (過学習回避)。
+
+- 相手連鎖窓 (`opponent_chain_active` 起源) → 行スコープ = `EFFECT_GATE_TOP_ROWS` (row1-3) を維持。
+- 自分お邪魔着弾窓 (`_effect_gate_ojama_until_Xp` 起源) → 行スコープ = 全行 (`range(BOARD_ROWS)`)。
+  根拠: (i) 既存コードのコメント (`src/recognition_pipeline.py:111-113`) が「着弾列近傍を
+  特定の列に絞らず全列対象」とする設計判断を既に列軸で行っている (floor(N/6)+端数ランダム、
+  `reference_ojama_landing_pattern`)。行軸も同様に「おじゃまは6列全域・盤面高さ全域に降る」
+  という物理と整合させるのが妥当。(ii) `smoke` レイヤーの row 分布が既にこれを支持する。
+  (iii) c19 (opp_supply_ojama=79, landing_confirmed) の row7-12 汚染はこの窓で説明がつく。
+
+### 1.3 persist逆転の構造的な殺し方: 「持続確認の対象」を反転する
+
+現行 `_update_effect_gate_hold()` (1314-1343行) は「候補色が0.4秒持続したら確定」という
+ロジック。これは Window ON 中 (= バースト表示中) でも時間が経過すれば確定してしまう
+(issue b)。
+
+修正方針: Window ON の間は **無条件凍結** (frame count も persist timer も一切進めない)。
+Window が閾値未満に落ちて `QUIESCENCE_MIN_SEC` 継続して初めて、対象セルは通常の
+`STABLE_RECOVERY_MIN_FRAMES` (frame count方式) にゼロから再エントリーする。
+「持続を要求する対象」が「バーストがある」ではなく「バーストが無い (静穏)」に完全に
+反転しているため、バーストがどれだけ長く続いても誤確定は原理的に発生しない。
+
+## 2. Layer 1: 視覚トリガーの Schmitt hysteresis 化
+
+### 2.1 score関数の抽出 (`src/effect_glow_detector.py`)
+
+既存 `is_effect_glow_active()` (54-83行) は bool のみを返す。内部の `max_ratio` 計算を
+独立関数として抽出し、`is_effect_glow_active` は薄いラッパーとして残す (bit-identical 維持)。
+
+```python
+def compute_effect_glow_score(
+    frame_bgr: np.ndarray,
+    region: "BoardRegion",
+    rows: "frozenset[int]" = EFFECT_GATE_TOP_ROWS,
+) -> float:
+    """指定行帯のセル bright_ratio 最大値を返す (stateless純関数)。
+
+    is_effect_glow_active の閾値判定ロジックをスコア計算部分から分離した
+    もの (2026-08-05 バーストガード再設計)。ロジック・数値は完全に同一
+    (bright_ratio_max 較正済み方式、calibration_report_v3.md §3)。
+    """
+    max_ratio = 0.0
+    for row in rows:
+        for col in range(BOARD_COLS):
+            x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+            patch = frame_bgr[y1:y2, x1:x2]
+            ratio = compute_cell_bright_ratio(patch)
+            if ratio > max_ratio:
+                max_ratio = ratio
+    return max_ratio
+
+
+def is_effect_glow_active(
+    frame_bgr: np.ndarray,
+    region: "BoardRegion",
+    rows: "frozenset[int]" = EFFECT_GATE_TOP_ROWS,
+    threshold: float = EFFECT_BRIGHT_RATIO_MAX_THRESHOLD,
+) -> bool:
+    """(既存 docstring 維持。実装を compute_effect_glow_score 呼び出しに変更するのみ、
+    戻り値・数値は完全に bit-identical)"""
+    return compute_effect_glow_score(frame_bgr, region, rows) > threshold
+```
+
+### 2.2 Schmitt trigger 状態遷移関数 (新規、`src/board_state_machine.py` に追加)
+
+**状態の格納場所**: `RecognitionPipeline` インスタンス属性 (1P/2P別、既存の
+`self._effect_gate_ojama_until_1p/2p` と同じパターン)。理由: この信号の入力
+(`frame_bgr`, `region`) は `RecognitionPipeline._step_side` が既に保持しており、
+`BoardStateMachine` は相手sideの情報 (frame_bgr等) を持たない設計 (既存の
+`opponent_chain_active` も同じ理由で外部注入)。計算関数自体は stateless
+(前状態を引数で受け取り新状態を返す純関数) にし、「観測指標はstateless」原則を守る。
+
+```python
+def _update_burst_visual_gate(
+    is_open: bool,
+    opened_at: "float | None",
+    quiet_since: "float | None",
+    score: float,
+    time_sec: float,
+    *,
+    open_threshold: float,
+    close_threshold: float,
+    min_window_sec: float,
+    max_window_sec: float,
+    quiescence_min_sec: float,
+    force_close: bool = False,
+) -> "tuple[bool, float | None, float | None]":
+    """バースト視覚検出の Schmitt trigger 1frame更新 (stateless純関数)。
+
+    Window ON 中は無条件凍結 (呼び出し側が is_open を effect_gate_active な
+    行の凍結条件として使う)。issue (b) の persist逆転を構造的に排除するため、
+    「確定に必要な持続」ではなく「解除に必要な静穏」を計測する設計にする
+    (2026-08-05 バーストガード再設計 §1.3)。
+
+    Args:
+        is_open: 直前frameのWindow状態。
+        opened_at: Window が開いた time_sec (open中のみ値を持つ)。
+        quiet_since: score が close_threshold 未満に落ちた最初の time_sec
+            (close中に再びopen_threshold以上に戻ったらNoneにリセット)。
+        score: 今frameの視覚スコア (compute_effect_glow_score の戻り値)。
+        time_sec: 今frameの時刻。
+        open_threshold: Window を開く閾値 (score >= で即時open)。
+        close_threshold: 静穏判定の閾値 (score < が続くことを要求、
+            open_threshold 以下の値を推奨 = ヒステリシス帯を作る)。
+        min_window_sec: 一度開いたら最低この秒数は維持する
+            (1リンクの演出持続時間 ≒0.2秒に対応、単発frameでの開閉振動防止)。
+        max_window_sec: 安全弁。この秒数を超えたら score に関係なく強制close
+            (視覚検出が誤って張り付いた場合の永久凍結防止)。
+        quiescence_min_sec: close確定に必要な連続静穏秒数
+            (リンク間flicker gap ≒0.1秒 の1回だけでは閉じないマージンを持たせる)。
+        force_close: True の場合、他条件を無視して即時close
+            (own_chain_active / all_clear_pending 等の外部安全条件)。
+
+    Returns:
+        (new_is_open, new_opened_at, new_quiet_since)
+    """
+    if force_close:
+        return False, None, None
+
+    if not is_open:
+        if score >= open_threshold:
+            return True, time_sec, None
+        return False, None, None
+
+    # is_open == True
+    if opened_at is not None and (time_sec - opened_at) >= max_window_sec:
+        return False, None, None  # 安全弁: 強制close
+
+    if score < close_threshold:
+        _quiet_since = quiet_since if quiet_since is not None else time_sec
+        elapsed_open = time_sec - opened_at if opened_at is not None else 0.0
+        quiescent = time_sec - _quiet_since
+        if elapsed_open >= min_window_sec and quiescent >= quiescence_min_sec:
+            return False, None, None
+        return True, opened_at, _quiet_since
+    # score >= close_threshold: まだバースト中、静穏タイマーをリセット
+    return True, opened_at, None
+```
+
+`frame_bgr is None` (画像取得不能フレーム) の場合は本関数を呼ばず、直前状態をそのまま
+維持する (安全弁A の既存方針を踏襲。無情報を「静穏」と誤認しない)。ただし
+`max_window_sec` の安全弁チェックだけは `frame_bgr is None` でも time_sec 経過で
+効かせる (呼び出し側で別途チェックするか、score を直前値のまま関数を呼んで良い)。
+
+### 2.3 呼び出し箇所 (`src/recognition_pipeline.py`)
+
+`_step_side()` (4901行) 内、既存の `_effect_gate_window_active` 計算部分
+(5012-5040行) を新フラグ `enable_burst_guard_v2` (仮称) で分岐する。既存
+`enable_effect_gate`/`enable_effect_visual_gate` の経路は完全に無改変で残す。
+
+```python
+if self._enable_burst_guard_v2:
+    _score = 0.0
+    if frame_bgr is not None:
+        _region = DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+        _score = compute_effect_glow_score(frame_bgr, _region, EFFECT_GATE_TOP_ROWS)
+    _prev_open, _prev_opened_at, _prev_quiet = (
+        (self._burst_gate_open_1p, self._burst_gate_opened_at_1p, self._burst_gate_quiet_since_1p)
+        if side == "1P" else
+        (self._burst_gate_open_2p, self._burst_gate_opened_at_2p, self._burst_gate_quiet_since_2p)
+    )
+    _new_open, _new_opened_at, _new_quiet = _update_burst_visual_gate(
+        _prev_open, _prev_opened_at, _prev_quiet, _score, time_sec,
+        open_threshold=BURST_GATE_OPEN_THRESHOLD,
+        close_threshold=BURST_GATE_CLOSE_THRESHOLD,
+        min_window_sec=BURST_GATE_MIN_WINDOW_SEC,
+        max_window_sec=BURST_GATE_MAX_WINDOW_SEC,
+        quiescence_min_sec=BURST_GATE_QUIESCENCE_MIN_SEC,
+        force_close=(own_chain_active or all_clear_pending_for_side),
+    )
+    if side == "1P":
+        self._burst_gate_open_1p, self._burst_gate_opened_at_1p, self._burst_gate_quiet_since_1p = _new_open, _new_opened_at, _new_quiet
+    else:
+        self._burst_gate_open_2p, self._burst_gate_opened_at_2p, self._burst_gate_quiet_since_2p = _new_open, _new_opened_at, _new_quiet
+    _effect_gate_window_active = _new_open
+    _effect_gate_scope = EFFECT_GATE_TOP_ROWS  # Stage1: 相手連鎖窓相当のスコープのみ
+elif self._enable_effect_gate:
+    # (既存 案B 経路、完全無改変)
+    ...
+```
+
+`chain_event`/`opponent_chain_active` は **トリガーの OR 条件からは除外** (=「捨てる」)。
+Stage 1 では補助情報としても使わない (要求 §1「ChainEvent 依存を捨てるか補助に格下げ」
+の「捨てる」を採用。理由: 較正データが `bright_ratio_max` 単独で AUC=0.811・
+zero_fp動作点0.97を既に持っており、ChainEventを混ぜるAND/OR条件を追加すると
+「大連鎖見逃し」バグ (issue a) をそのまま引き継いでしまうため)。
+`own_chain_active`/`all_clear_pending` は `force_close` 条件として維持する
+(較正レポート §5 で確認済みの唯一の実効ゲート、テロップ誤発火7件を防ぐ)。
+
+## 3. Window ON 中の凍結ロジック (`src/board_state_machine.py`)
+
+`_apply_stable_recovery_gate()` (1538行) / `_recovery_or_effect_gate_pass()`
+(1345-1383行) に新パラメータ `effect_gate_hard_freeze: bool = False` を追加する
+(既存 `enable_effect_gate` の sibling flag、既存動作は変更しない)。
+
+```python
+def _recovery_or_effect_gate_pass(
+    ctx, cell, confirmed_v, agreed_v, recovery_counters,
+    min_frames, add_min_frames, effect_gate_active_rows,
+    effect_gate_persist_sec,
+    effect_gate_hard_freeze: bool = False,  # 新規、既定False=既存動作維持
+) -> bool:
+    r, c = cell
+    is_gated = (
+        effect_gate_active_rows is not None and r in effect_gate_active_rows
+    )
+    if is_gated:
+        recovery_counters.pop(cell, None)
+        if effect_gate_hard_freeze:
+            # 2026-08-05 バーストガード再設計: 持続確認を一切行わず、
+            # Window ON の間は無条件で発火させない (issue b の構造的排除)。
+            ctx.effect_gate_hold.pop(cell, None)
+            return False
+        return _update_effect_gate_hold(
+            ctx.effect_gate_hold, cell, agreed_v,
+            ctx.time_sec, effect_gate_persist_sec,
+        )
+    ...  # 既存の frame count 経路 (無改変)
+```
+
+`effect_gate_hard_freeze=True` の場合、`effect_gate_hold` dict は使われない
+(dead pathになるが 案B 利用者向けに削除しない、backwards compat)。Window が
+close した frame から、対象セルは `recovery_counters` が既に pop されているため
+自動的に0から数え直しになる (既存コードの `_reset_counters`/`pop` 呼び出しが
+既にこの「ゼロから再エントリー」を保証している。追加実装不要、既存の副産物)。
+
+## 4. 定数表 (全て物理量・較正データ根拠、シーン逆算禁止)
+
+| 定数 | Stage | 値 | 根拠 |
+|---|---|---|---|
+| `BURST_GATE_OPEN_THRESHOLD` | 1 | `0.97` | 既存 `EFFECT_BRIGHT_RATIO_MAX_THRESHOLD` を再利用。v1+v3統合136枚較正の zero_fp 動作点 (AUC=0.811, n_pos=17/n_neg=87)。窓トリガー用途はFPコストが低いため理論上下げられるが、今夜のデータにはこの1点しかROC上に無く、根拠なく下げるのは禁止 (Stage2で新規較正)。 |
+| `BURST_GATE_CLOSE_THRESHOLD` | 1 | `0.97` (Stage1は`OPEN`と同値) | 値ベースのヒステリシス幅は現時点で較正データが無い。Stage1は時間ベースのヒステリシス (`QUIESCENCE_MIN_SEC`) のみに依拠し、値の二重閾値は同値にして安全側に倒す。Stage2でROC全体を計算し `CLOSE < OPEN` の真のヒステリシス帯を較正する。 |
+| `BURST_GATE_MIN_WINDOW_SEC` | 1 | `0.2` | 1リンクの演出持続時間の実測記述 (`effect_glow_detector.py` docstring「約0.2秒」、`project_full_board_error_taxonomy_2026-08-02`)。単発frameでのopen直後close振動を防ぐ下限。 |
+| `BURST_GATE_QUIESCENCE_MIN_SEC` | 1 | `0.25` | リンク間flicker gap実測 ≒0.1秒 (c5, issue 2a) の2.5倍マージン。1回のリンク間隙だけでは閉じない (=誤って途中で凍結解除しない) ことを保証する安全マージン。**c5 は現象の発見元であり、閾値をc5に一致させるための逆算は禁止** (`feedback_overfitting_awareness_2026-08-04`)。バックテストではc5含む全域で汎化を確認する。 |
+| `BURST_GATE_MAX_WINDOW_SEC` | 1 | `30.0` | 安全弁 (滅多に発火しない前提)。8連鎖実測14.5秒 (`project_chain_count_both_untrustworthy_2026-07-30`) の約2倍マージン、より大きな連鎖 (12+連鎖) にも対応させる。誤って永久凍結するリスク (=recognitionの完全停止) の方が、多少長い保留より重大であるため寛容側に倒す。 |
+| `EFFECT_GATE_TOP_ROWS` | 1 (既存) | `frozenset({1,2,3})` | Stage1では相手連鎖窓のスコープとして無改変で流用。 |
+| Stage2: 自分お邪魔着弾窓の行スコープ | 2 | `frozenset(range(BOARD_ROWS))` (全行) | §1.2 の物理的対応関係 (お邪魔は6列全域・盤面高さ全域に降る) + `smoke` レイヤーの row 分布較正結果。既存 `EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC=1.0`秒窓 (`src/recognition_pipeline.py:115`) と組み合わせて使う (窓の長さ自体はStage1で変更しない)。 |
+
+## 5. StateContext / DetectorSignals / コンストラクタ変更点 (backward compat 確認)
+
+- `StateContext` (`src/board_state_machine.py:209`): 変更不要。Window状態は
+  `RecognitionPipeline` 側インスタンス属性で管理するため (§2.2 の理由)、
+  StateContext への新規フィールド追加は不要。
+- `DetectorSignals.effect_gate_window_active` (357行): **既存フィールドを再利用**。
+  新規フィールド追加はしない (Stage1のセマンティクス「Windowが今アクティブか」は
+  ChainEvent方式と視覚方式で変わらないため、同じフィールドに異なる計算方法の
+  結果を代入するだけで済む。ただし両方式は `_step_side` 内で `enable_burst_guard_v2`
+  により排他的に分岐し、混ざらないようにする)。
+- `_apply_stable_recovery_gate()` / `_collect_recovery_candidates()` /
+  `_recovery_or_effect_gate_pass()`: 新パラメータ `effect_gate_hard_freeze: bool = False`
+  を追加 (既定False、既存呼び出し元は無改修でbit-identical)。
+- `BoardStateMachine.__init__()`: 新パラメータ `effect_gate_hard_freeze: bool = False`
+  を追加し `_apply_stable_recovery_gate` 呼び出しに配線 (既存 `effect_gate_persist_sec`
+  と同じ配線パターン、707-755行付近)。
+- `RecognitionPipeline.__init__()`: 新パラメータ `enable_burst_guard_v2: bool = False`
+  を追加。新規インスタンス属性6個: `_burst_gate_open_1p/2p: bool = False`,
+  `_burst_gate_opened_at_1p/2p: float | None = None`,
+  `_burst_gate_quiet_since_1p/2p: float | None = None`。試合境界リセット処理
+  (`force_match_boundary_reset` 相当の箇所、既存の `_effect_gate_ojama_until_1p/2p`
+  リセットと同じ場所) にこれら6属性のリセットも追加すること (前試合の burst 状態が
+  次試合に残留するバグを防ぐ、`project_match_boundary_residue_leak_2026-07-25` と
+  同種の罠に注意)。
+- `enable_burst_guard_v2=True` かつ `enable_effect_gate=False` の組み合わせは
+  no-op として警告ログを出す (安全側、意図しない設定ミスの早期発見)。
+
+## 6. Non-goals (今回やらないこと)
+
+- ChainEvent (`self._active_chain_2p`) が大連鎖を見逃す根本原因の修正。本設計は
+  トリガーをChainEventから切り離すことで問題を回避するのみで、ChainEvent自体は
+  他の消費者 (連鎖式検知、打ち合い計測器等) のために別途直す必要があるが対象外。
+- unmix (半透明レイヤー除去、`scripts/_probe_burst_unmix_2026-08-05.py`) の実装。
+  本設計の `_update_burst_visual_gate` が返す bool 信号は「凍結するか」以外の
+  用途にも使える設計になっている (= Window信号と「Window中に何をするか」を分離済み)。
+  unmix が実現可能と判明したら、`effect_gate_hard_freeze` 分岐の代わりに
+  「unmix補正した値を書き込む」分岐を追加するだけで済む拡張点として残す。
+- Stage2の「自分お邪魔着弾窓の全行スコープ」実装そのもの (設計のみ本書に記載、
+  実装はStage2として別途着手)。
+- `BURST_GATE_CLOSE_THRESHOLD` の真のヒステリシス値較正 (新規ROC計算が必要)。
+
+## 7. バックテスト計画
+
+### 7.1 93セル再測定
+`scripts/measure_effect_gate_c_2026-08-04.py` と同じ方式 (OFF基準=93セル一致を
+前提条件として確認してから効果集計、`feedback_overfitting_awareness_2026-08-04`
+準拠) で、比較対象を3系統に拡張:
+- OFF (ゲート無し、真のbaseline)
+- 案B (`enable_effect_gate` + `enable_effect_visual_gate`、既存、参考=ゼロ改善実績)
+- 新設計 (`enable_burst_guard_v2`、Stage1構成)
+
+layer別 (burst row1-3 / smoke row4-12) に分けて集計すること (層別必須、
+`feedback_stratify_before_pooling_2026-07-29`)。smoke分は Stage1 (row1-3スコープ
+のみ) では改善しない見込みを事前に明記し、「Stage1は burst分のみ改善確認・
+smoke分はStage2待ち」を正直に報告する。
+
+### 7.2 反映遅延分布 (1P/2P別)
+`feedback_placement_reflection_8frames_2026-07-25` の既存手法で、設置→confirmed色
+確定までのフレーム遅延を計測。以下を必ず分けて報告:
+- 通常設置 (バーストWindow非活性中の設置): OFF/新設計で不変であることを確認
+  (§1.1 の「経路分離は壊れていない」ことの直接的な検証)。
+- バーストWindow活性中に発生した設置 (§1.1 「残存リスク」の fallback 経路が
+  発火したケース): 発生頻度と遅延分布を報告。8フレーム基準からの超過があれば
+  超過量とその原因 (fallback経路か否か) を明示する。
+
+### 7.3 全域無悪化
+`docs/CYCLE_FINDINGS.md` §4.2-quater/quinquies の I1 (`per_col_unknown_rate` /
+`non_stable_consecutive_frames` / `per_col_midgame_empty_rate`)、C1
+(`avg_puyo_count` baseline比 >=0.85)、D1 (`postprocess_corruption` rate <0.1%)
+を全評価対象動画で確認。`feedback_overfitting_awareness_2026-08-04` の
+「5シーン合格+全域無悪化で初めて合格」を厳守し、以下を最低限含める:
+- viz目視: `error_onset_sheet_2026-08-04` の12動画 (c5/c11/c12/c13/c15/c18/c19/c21/c23/c29/c31/c36)
+- viz目視: バースト無関係の通常プレイシーンを最低2-3本 (凍結ロジックの
+  副作用が通常プレイに漏れ出していないかの確認、対象は未使用動画から選定
+  `feedback_review_video_full_match.md` 準拠)
+- 数値・viz双方の承認をuserから得るまでPR化しない (`feedback_viz_eval_required.md`)
+
+## 8. 段階分割・工数見積もり
+
+### Stage 0 (今夜、~0.5-1h): score関数の抽出
+`src/effect_glow_detector.py` に `compute_effect_glow_score()` を追加、
+`is_effect_glow_active()` を薄いラッパーに変更 (bit-identical維持)。
+既存テスト全パス確認のみで完了。
+
+### Stage 1 (今夜〜明日午前、~5-6h): 視覚トリガー + ハード凍結 (最小構成)
+1. `src/board_state_machine.py`: `_update_burst_visual_gate()` 追加、
+   `_recovery_or_effect_gate_pass()` に `effect_gate_hard_freeze` パラメータ追加
+   (~1.5h実装 + ~1.5hテスト: open/維持/close/max_window強制close/
+   frame_bgr None時の状態維持、の遷移表を網羅するunit test)。
+2. `src/recognition_pipeline.py`: `enable_burst_guard_v2` フラグ + 6インスタンス
+   属性 + `_step_side` 内の分岐 + 試合境界リセット処理への追加
+   (~1.5h実装 + ~1hテスト)。
+3. 既存フラグの backwards compat 確認テスト (新フラグ全てFalse時に既存挙動と
+   bit-identical であることを assert するテスト、既存の
+   `test_ojama_dropout_fix_flags_explicit_false_restores_legacy` と同パターン、~0.5h)。
+4. §7 のバックテスト実行 (計測スクリプト自体は既存流用のため実装コストは低いが、
+   全域実行の待ち時間が入るため別枠で見積もる、~1-2h待ち時間)。
+
+**Stage1完了条件**: 93セットの burst layer 分 (row1-3) が案B比で有意に改善、
+smoke layer分は不変で正直に報告、全域I1/C1/D1ゲート通過、viz目視レビューで
+「設置反映が遅れていない」ことをuserが確認。
+
+### Stage 2 (明日以降、~1日): 自分お邪魔着弾窓の全行スコープ + 較正強化
+1. `BURST_GATE_CLOSE_THRESHOLD` の真のヒステリシス値較正: 新規スクリプトで
+   `labeled_cell_features_v3.csv` から完全ROC曲線を計算し、FPR予算 (窓トリガー
+   用途向け、要user/アーキ合意で予算%を決定) に基づく点を選定 (~2h)。
+2. `_effect_gate_ojama_until_Xp` 窓の行スコープを全行にする実装
+   (`_apply_stable_recovery_gate` 内の `_effect_gate_rows` 計算を「窓の出自」で
+   分岐、§1.2 参照) (~2h実装 + ~1hテスト)。
+3. c19 (opp_supply_ojama=79) を含む smoke layer 分のバックテスト、全域無悪化確認
+   (~3-4h、viz含む)。
+
+### Stage 3 (研究軌道、時期未定): unmix への差し替え
+実現可能性検証済み (復元73.1%だがburst色推定が脆弱、負例誤変換16.2%、
+結論=代替不可・補完候補)。将来必要になれば `effect_gate_hard_freeze` 分岐に
+「unmix補正値を書き込む」経路を追加する形で差し替え可能な設計になっている
+(§6 Non-goals 参照)。
+
+## 9. 参照ファイル一覧 (実装エージェント向け)
+
+- `src/effect_glow_detector.py` (score関数抽出対象)
+- `src/board_state_machine.py`: `EFFECT_GATE_TOP_ROWS`(169行), `EFFECT_PERSIST_SEC`(170行),
+  `_update_effect_gate_hold`(1314-1343行), `_recovery_or_effect_gate_pass`(1345-1383行),
+  `_collect_recovery_candidates`(1386-1501行), `_apply_stable_recovery_gate`(1538-1639行),
+  `_apply_transition`(994-1056行, 変更禁止領域として理解すること),
+  `StateContext`(209-286行), `DetectorSignals`(294-357行)
+- `src/recognition_pipeline.py`: `EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC`(115行),
+  `_compute_effect_gate_window_active`(6714-6749行, Stage1では新設計と並存させる),
+  `_step_side`(4901行〜), Window計算箇所(5012-5040行), `_effect_gate_ojama_until_1p/2p`
+  更新箇所(3649-3660行), `opponent_chain_active`/`own_chain_active` 受け渡し(3582-3613行)
+- `data/verify/effect_detector_calibration_v3_2026-08-04/calibration_report_v3.md`
+- `data/verify/error_onset_sheet_2026-08-04/index_refined.md`
+- `scripts/measure_effect_gate_c_2026-08-04.py` (バックテスト流用元)
