@@ -197,6 +197,7 @@ def _is_score_reset_boundary(
 
 from pathlib import Path
 
+from src.all_clear_detector import is_all_clear
 from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
     capture_patch_pair_robust,
@@ -210,6 +211,7 @@ from src.chain_detector import (
     VideoChainTracker,
 )
 from src.drift_detector import DriftDetector, DriftResult
+from src.effect_glow_detector import is_effect_glow_active
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
 from src.match_end_detector import MatchEndDetector
@@ -1176,6 +1178,13 @@ class RecognitionPipeline:
         enable_effect_gate: bool = False,
         effect_gate_persist_sec: float | None = None,
         effect_gate_ojama_window_sec: float | None = None,
+        # 案B (2026-08-04、A/B 計測用): effect_gate_window_active を
+        # 「(既存時間窓) AND (not 自連鎖中) AND (not 全消しラッチ) AND
+        # (視覚グロー検出)」の4条件AND式に拡張する。enable_effect_gate=False
+        # の間は無視される (時間窓自体が発生しないため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_visual_gate: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1593,6 +1602,14 @@ class RecognitionPipeline:
         # お邪魔着弾直後 window の終了時刻 (time_sec)。未着弾は -inf (window 非活性)。
         self._effect_gate_ojama_until_1p: float = float("-inf")
         self._effect_gate_ojama_until_2p: float = float("-inf")
+        # 案B (2026-08-04): 4条件AND拡張フラグ。BoardStateMachine には伝播
+        # しない (AND合成は RecognitionPipeline._step_side 内で完結するため)。
+        self._enable_effect_visual_gate: bool = bool(enable_effect_visual_gate)
+        # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
+        # is_all_clear() で再評価し、次の連鎖発火でクリアする
+        # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
+        self._all_clear_pending_1p: bool = False
+        self._all_clear_pending_2p: bool = False
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -2285,6 +2302,9 @@ class RecognitionPipeline:
         enable_effect_gate: bool = False,
         effect_gate_persist_sec: float | None = None,
         effect_gate_ojama_window_sec: float | None = None,
+        # 案B (2026-08-04、A/B 計測用): effect_gate_window_active 4条件AND拡張。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_effect_visual_gate: bool = False,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2504,6 +2524,7 @@ class RecognitionPipeline:
             enable_effect_gate=enable_effect_gate,
             effect_gate_persist_sec=effect_gate_persist_sec,
             effect_gate_ojama_window_sec=effect_gate_ojama_window_sec,
+            enable_effect_visual_gate=enable_effect_visual_gate,
         )
 
     # ------------------------------------------------------------------
@@ -2619,6 +2640,10 @@ class RecognitionPipeline:
         # cycle 71d (案 D8): VideoChainTracker 入力 cache もリセット.
         self._prev_confirmed_1p = None
         self._prev_confirmed_2p = None
+        # 案B (2026-08-04): 全消しラッチも試合切替時にクリア
+        # (前試合の全消し状態が次試合に持ち越されるのを防ぐ)。
+        self._all_clear_pending_1p = False
+        self._all_clear_pending_2p = False
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
@@ -3568,6 +3593,9 @@ class RecognitionPipeline:
             # エフェクト時間ゲート: 1P の「相手」は 2P (2P 連鎖の予告おじゃま
             # エフェクトが 1P 盤面上段に混入する)。
             opponent_chain_active=chain_ev_2p is not None,
+            # 案B (2026-08-04): 自連鎖中は視覚グロー判定 (連鎖数テロップ写り込み
+            # 誤発火対策) を抑制するため own_chain_active を渡す。
+            own_chain_active=chain_ev_1p is not None,
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -3581,6 +3609,7 @@ class RecognitionPipeline:
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
             opponent_chain_active=chain_ev_1p is not None,
+            own_chain_active=chain_ev_2p is not None,  # 案B (2026-08-04)
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -3636,6 +3665,17 @@ class RecognitionPipeline:
             self._prev_confirmed_1p = p1.confirmed_board.copy()
         if p2.confirmed_board is not None:
             self._prev_confirmed_2p = p2.confirmed_board.copy()
+
+        # 案B (2026-08-04): 全消しラッチ更新 (第3ゲート条件用)。
+        # STABLE 確定毎に is_all_clear() で再評価し、次の連鎖発火でクリアする。
+        self._all_clear_pending_1p = _update_all_clear_pending(
+            self._all_clear_pending_1p, p1.confirmed_board, cur_score_1p,
+            chain_fired=chain_ev_1p is not None,
+        )
+        self._all_clear_pending_2p = _update_all_clear_pending(
+            self._all_clear_pending_2p, p2.confirmed_board, cur_score_2p,
+            chain_fired=chain_ev_2p is not None,
+        )
 
         # Phase I.c: OnlineHsvCalibrator update (動画別 HSV 自動学習)
         # 1P/2P STABLE 中の信頼サンプルを蓄積、ready 後に ColorClassifier ranges
@@ -4879,6 +4919,7 @@ class RecognitionPipeline:
         score_d_for_self: int = 0,  # cycle 71n 案 ε
         chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
         opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
+        own_chain_active: bool = False,  # 案B 4条件AND拡張 (2026-08-04)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
@@ -4979,8 +5020,23 @@ class RecognitionPipeline:
                 self._effect_gate_ojama_until_1p if side == "1P"
                 else self._effect_gate_ojama_until_2p
             )
-            _effect_gate_window_active = (
+            _time_window_active = (
                 opponent_chain_active or time_sec < _ojama_until
+            )
+            # 案B (2026-08-04): 4条件AND拡張 (enable_effect_visual_gate=False
+            # なら _time_window_active をそのまま返す = bit-identical)。
+            _effect_gate_window_active = _compute_effect_gate_window_active(
+                time_window_active=_time_window_active,
+                own_chain_active=own_chain_active,
+                all_clear_pending=(
+                    self._all_clear_pending_1p if side == "1P"
+                    else self._all_clear_pending_2p
+                ),
+                frame_bgr=frame_bgr,
+                region=(
+                    DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+                ),
+                enable_visual_gate=self._enable_effect_visual_gate,
             )
         signals = DetectorSignals(
             time_sec=time_sec,
@@ -6622,3 +6678,72 @@ def _should_suppress_game_event_exit(
     if chain_count < chain_game_event_min_count:
         return True
     return False
+
+
+def _update_all_clear_pending(
+    prev_pending: bool,
+    confirmed_board: "Board | None",
+    score: "int | None",
+    *,
+    chain_fired: bool,
+) -> bool:
+    """全消しラッチの1frame更新 (stateless純関数、案B 2026-08-04)。
+
+    次の連鎖発火 (chain_fired=True) で確実にクリアする (「全消し状態を抜けた」
+    という物理的証拠を優先)。それ以外は STABLE 確定 (confirmed_board!=None)
+    毎に is_all_clear() で再評価する。未確定 (confirmed_board=None) の間は
+    直前状態を維持する (= 演出/連鎖中に誤ってラッチが揺れないようにする)。
+
+    Args:
+        prev_pending: 直前フレームのラッチ状態。
+        confirmed_board: 今フレームで新規に STABLE 確定した盤面 (None なら
+            STABLE 以外、直前状態を維持)。
+        score: 現在の score (all_clear_detector.is_all_clear に渡す)。
+        chain_fired: 今フレームで連鎖が発火したか (= 全消し状態を確実に抜けた)。
+
+    Returns:
+        更新後のラッチ状態。
+    """
+    if chain_fired:
+        return False
+    if confirmed_board is None:
+        return prev_pending
+    return is_all_clear(confirmed_board, score or 0).is_all_clear
+
+
+def _compute_effect_gate_window_active(
+    *,
+    time_window_active: bool,
+    own_chain_active: bool,
+    all_clear_pending: bool,
+    frame_bgr: "np.ndarray | None",
+    region: "object",
+    enable_visual_gate: bool,
+) -> bool:
+    """エフェクト時間ゲートの最終判定 (4条件AND、案B 2026-08-04、stateless)。
+
+    enable_visual_gate=False の場合は time_window_active をそのまま返す
+    (既存 enable_effect_gate 単体運用と bit-identical、backwards compat)。
+    enable_visual_gate=True の場合、以下4条件の AND:
+        (既存時間窓) AND (not 自連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)
+    視覚グロー検出 (is_effect_glow_active) はコスト高いため、他3条件が
+    先に真であることを確認してから評価する (遅延評価)。
+
+    Args:
+        time_window_active: 既存の時間窓判定 (相手連鎖中 or お邪魔着弾直後)。
+        own_chain_active: 観測対象 side 自身が連鎖中か (連鎖数テロップ写り込み対策)。
+        all_clear_pending: 観測対象 side の全消しラッチ状態。
+        frame_bgr: 現フレーム (1920x1080 リサイズ済み BGR)。None なら視覚判定不能。
+        region: 判定対象 side の BoardRegion。
+        enable_visual_gate: 本 AND 拡張の有効化フラグ。
+
+    Returns:
+        最終的な effect_gate_window_active。
+    """
+    if not enable_visual_gate:
+        return time_window_active
+    if not time_window_active or own_chain_active or all_clear_pending:
+        return False
+    if frame_bgr is None:
+        return False  # 安全弁: 画像なしは不発 (従来 frame ベース確定に戻る)
+    return is_effect_glow_active(frame_bgr, region)
