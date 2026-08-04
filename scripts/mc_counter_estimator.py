@@ -1,4 +1,4 @@
-"""#24 打ち合い計測器 K拡張: MCロールアウトによる反撃力推定器 (2026-08-04)。
+"""#24 打ち合い計測器 K拡張: MCロールアウトによる反撃力推定器 (2026-08-04, v2)。
 
 背景・課題:
     scripts.measure_exchange_effectiveness.MAX_SUPPORTED_K_HANDS=4 のため、
@@ -8,29 +8,39 @@
     (user承認方針: 「Kは近似値として出すのが正しい」、K上限を実時間手数まで
     モンテカルロ近似で拡張する)。
 
-設計方針 (既存資産の再利用優先、CLAUDE.md準拠、新規ロジック最小):
-    - 配置探索そのものは新規実装しない。src.indicators_v2._enumerate_placements
-      (22配置列挙、既存) と src.scoring.calculate_chain_score (既存) を
-      そのまま使う。1手ごとに「22配置のうち、打った場合の素点
-      (calculate_chain_score.total_score) が最大の配置」を選ぶ、既存の
-      expected_fire_power/counter_reach_probability のロールアウト
-      (src.indicators_v2._near_future_known_expand) と全く同じ選択則を
-      採用する (新しい貪欲ポリシーを新設せず、既存K=1..4と挙動が連続的に
-      繋がるようにする狙い)。
-    - 既存 K=3,4 のMC (_expected_fire_mc_k3k4等) はビーム幅2で分岐を保持
-      するが、本ロールアウトは1手先の最良候補のみを引き継ぐ単一パス
-      (ビーム幅1相当) にする。手数を4→最大20に増やすため分岐コストを
-      許容範囲に抑える設計判断 (計算コストは呼び出し側の実測ベンチ参照、
-      本ファイルはコスト計測は行わない)。
+## v2 ポリシー修正 (2026-08-04、main発注): 「積んで、期限に発火」
+v1 (コミットd1fa032) は既存 expected_fire_power/counter_reach_probability の
+選択則 (毎手、素点最大=即時発火優先) をそのまま流用したが、検収match_04で
+「溜めて大きく発火する」構図を再現できず系統的過小評価 (35 vs 実測319) と
+判明した (v1コミットログ参照)。反撃は「飛来お邪魔の着弾直前に撃つもの」
+なので、意味論として正しいのは **時間予算の終わりまで組み (発火しない)、
+期限に達したら最良の1手で発火する** モデルである。v2はこれに合わせて
+ロールアウトの内部ポリシーのみ変更する (公開API `estimate_counter_
+distribution` の引数・返り値の型は無変更、後方互換)。
 
-⚠️ 正直な注記 (H2改の教訓、2026-08-04 main判断で
-scripts.compute_exchange_delta_winprob.ENABLE_KNOWN_PAIR_COMPLETION は
-棚上げ済み): 既知ツモを使った「理論上組める最良形」は実測で系統的に
-過大評価することが確認されている (完成値413-418 vs 実際に発火した317、
-scripts/_trace_3scenes_full_2026-08-04.py実測)。本ロールアウトの理論値
-チャネル (p75) にも同種の過大評価バイアスが乗る可能性があるため、
-全域バックテストでの検証結果 (precision/recall) を必ず確認してから
-表示配線すること (本タスクのスコープ外、次段で判断)。
+v2 設計方針 (既存資産の再利用優先、CLAUDE.md準拠、新規ロジック最小):
+    - 「組む」フェーズ: 各手、22配置 (既存 _enumerate_placements、再実装
+      しない) のうち **消去が起きない (chain_count==0) 配置だけを候補**に
+      絞り (除外方式、理由は _select_build_placement docstring 参照)、その
+      中で盤面の潜在連鎖 (既存指標III-1 current_max_chain) が最大のものを
+      選ぶ。タイブレークは既存指標III-8 potential_fire_power (深い2手先
+      ビーム)。全22配置が消去を伴う (強制発火、板がほぼ発火待ちのみで
+      構成される極端なケース) 場合のみ、最小連鎖の配置に後退する。
+    - 「発火」フェーズ (期限到達時、1回のみ): 未消費の既知ツモが残って
+      いればその実ペアで22配置探索 (v1 _select_best_placement を再利用)
+      した最良得点、無ければ既存指標III-2 immediate_fire_power (「任意
+      1色の最良トリガー」を探す既存機構、再実装しない) にフォールバック
+      する。この1回だけが「発火」であり、ロールアウト中の他の手は一切
+      発火しない。
+
+⚠️ 正直な注記 (v1→v2の教訓の裏返し): v1のH2改由来の過大評価バイアス
+(既知ツモ単独完成値の理論値が実測を超える) と、v1自体が持っていた
+過小評価バイアス (即時発火優先で大型連鎖を再現できない) は逆方向だった。
+v2は「組んで最後に撃つ」ことで過小評価を緩和する狙いだが、逆に
+current_max_chain (=takapt定石、色を選べる前提の潜在力) を毎手のタイブレークに
+使うため、v1同様「色を自由に選べたら」という理論寄りの過大評価リスクを
+再び持ち込む可能性がある。検収 (match_01: P(>=416) が低いままか) で
+上振れの有無を必ず確認する。
 
 本モジュールは stateless (盤面を破壊しない、内部状態を持たない)。
 """
@@ -50,6 +60,9 @@ from src.indicators_v2 import (
     _near_future_active_colors,
     _near_future_is_valid_pair,
     _score_to_ojama_count,
+    current_max_chain,
+    immediate_fire_power,
+    potential_fire_power,
 )
 from src.scoring import calculate_chain_score
 
@@ -134,10 +147,13 @@ def _select_best_placement(
     current: Board, pair: "tuple[int, int]", sim: ChainSimulator,
 ) -> "tuple[float, Board, Board] | None":
     """22配置 (既存 _enumerate_placements、再実装しない) のうち、
-    calculate_chain_score (既存) の素点が最大の配置を選ぶ。
+    calculate_chain_score (既存) の素点が最大の配置を選ぶ (=即時発火優先、
+    v1の選択則そのもの)。v2では「発火フェーズ」(期限到達時に1回だけ撃つ、
+    _deadline_trigger_value) 専用に温存する (v2の「組むフェーズ」には
+    使わない、_select_build_placement を使うこと)。
 
-    既存 _near_future_known_expand と同じ選択則 (モジュール冒頭docstring
-    参照)。置き場所が無い (満杯・全滅) 場合は None を返す。
+    既存 _near_future_known_expand と同じ選択則。置き場所が無い
+    (満杯・全滅) 場合は None を返す。
 
     Returns:
         (素点, 設置直後[発火前]の盤面, 発火後の最終盤面) または None。
@@ -153,6 +169,73 @@ def _select_best_placement(
     return best
 
 
+def _select_build_placement(
+    current: Board, pair: "tuple[int, int]", sim: ChainSimulator,
+) -> "Board | None":
+    """v2「組むフェーズ」の配置選択: 消去を起こさず、潜在連鎖が最大の配置を選ぶ。
+
+    22配置 (既存 _enumerate_placements、再実装しない) のうち、消去が起きない
+    (chain_count==0) ものだけを候補とし (除外方式)、盤面の潜在連鎖 (既存
+    指標III-1 current_max_chain) が最大の配置を選ぶ。タイブレークは既存
+    指標III-8 potential_fire_power (より深い2手先ビーム探索)。
+
+    「除外」(ペナルティでなく候補から外す) を採る理由: 発火後の盤面で
+    current_max_chain を評価すると、消えたぶんだけ潜在力が失われた
+    **別の**盤面 (=もう積んでいない構造) を評価することになり、「組んで
+    まだ撃たない」という意味論と矛盾する。ペナルティ (スコアを下げて選び
+    にくくする) でも同じ順位付けの破綻は避けられないため、素直に候補から
+    除く方式を採用する。
+
+    全22配置が消去を伴う (強制発火、板がほぼ発火待ちのみで構成される極端
+    なケース) 場合のみ、最小連鎖の配置に後退し、実際に解決させる
+    (sim.simulate の final_board を返す。盤面状態を物理的に正しく保つため
+    であり、この事故的な発火分の得点はどこにも加算しない = 過小評価の
+    可能性を承知の上での単純化、正直な注記)。置き場所が全く無い場合は
+    None。
+    """
+    candidates = _enumerate_placements(current, pair, sim)
+    build_only = [(c, p) for c, p in candidates if c == 0 and not p.is_dead()]
+    if not build_only:
+        non_dead = [(c, p) for c, p in candidates if not p.is_dead()]
+        if not non_dead:
+            return None
+        _chain_count, placed = min(non_dead, key=lambda cp: cp[0])
+        return sim.simulate(placed).final_board
+    if len(build_only) == 1:
+        return build_only[0][1]
+    scored = [(float(current_max_chain(p, simulator=sim).raw), p) for _c, p in build_only]
+    best_potential = max(potential for potential, _p in scored)
+    tied = [p for potential, p in scored if potential == best_potential]
+    if len(tied) == 1:
+        return tied[0]
+    return max(tied, key=lambda p: float(potential_fire_power(p, simulator=sim).raw))
+
+
+def _deadline_trigger_value(
+    final_board: Board,
+    known_pairs: "tuple[tuple[int, int], ...]",
+    known_used: int,
+    sim: ChainSimulator,
+    elapsed_sec: float,
+) -> float:
+    """v2「発火フェーズ」: 期限到達時に「最良のトリガー1手」を撃った場合の
+    反撃値 (お邪魔換算) を返す。ロールアウト全体でこの1回だけが発火。
+
+    未消費の既知ツモ (known_pairs[known_used]) が有効なら、その実ペアを
+    22配置探索 (v1 _select_best_placement を再利用、実際に来る2色が分かって
+    いるのでこれを使う)。既知ツモが無い/使い切っている場合は、既存指標
+    III-2 immediate_fire_power (「任意1色の最良トリガー」を探す既存機構、
+    再実装しない) にフォールバックする。
+    """
+    if final_board.is_dead():
+        return 0.0
+    if known_used < len(known_pairs) and _near_future_is_valid_pair(known_pairs[known_used]):
+        best = _select_best_placement(final_board, known_pairs[known_used], sim)
+        score = best[0] if best is not None else 0.0
+        return float(_score_to_ojama_count(score, elapsed_sec))
+    return float(immediate_fire_power(final_board, elapsed_sec=elapsed_sec, simulator=sim).raw)
+
+
 def _rollout_once(
     board: Board,
     time_budget_sec: float,
@@ -162,41 +245,43 @@ def _rollout_once(
     rng: "random.Random",
     elapsed_sec: float,
 ) -> McRolloutOutcome:
-    """1本のロールアウト (既知ツモ→以降ランダム4色、時間予算を段別テーブルで
-    動的に消費する)。
+    """1本のロールアウト (v2: 「積んで、期限に発火」)。既知ツモ→以降ランダム
+    4色で、時間予算を段別テーブルで動的に消費しながら**発火せず組み続け**、
+    予算を使い切った盤面に対して最後に1回だけ最良のトリガーを撃つ。
 
     手数予算を事前に1回だけ計算するのではなく、各手ごとに「選んだ配置の
     段」を実測テーブルで引いて時間を消費する (盤面の埋まり具合に応じて
     段が変わり、それに応じて1手の時間も変わるため、静的な事前計算より
-    物理的に正確、というtask設計判断)。時間予算を使い切ったら
-    (=次の1手が間に合わない) その時点で打ち切る。
+    物理的に正確、というv1からの設計判断を継承)。
     """
     current = board
     elapsed = 0.0
-    best_score = 0.0
     hands_used = 0
-    for hand_index in range(MC_COUNTER_MAX_HANDS_HARD_CAP):
+    known_used = 0
+    for _hand_index in range(MC_COUNTER_MAX_HANDS_HARD_CAP):
         if current.is_dead():
             break
-        if hand_index < len(known_pairs) and _near_future_is_valid_pair(known_pairs[hand_index]):
-            pair = known_pairs[hand_index]
+        if known_used < len(known_pairs) and _near_future_is_valid_pair(known_pairs[known_used]):
+            pair = known_pairs[known_used]
+            using_known = True
         else:
             pair = (rng.choice(colors), rng.choice(colors))
+            using_known = False
 
-        best = _select_best_placement(current, pair, sim)
-        if best is None:
+        placed = _select_build_placement(current, pair, sim)
+        if placed is None:
             break  # 置き場所が無い (満杯)
-        score, placed_pre_fire, final_board = best
-        row_index = _placement_row_index(current._grid, placed_pre_fire._grid)
+        row_index = _placement_row_index(current._grid, placed._grid)
         step_time = PLACEMENT_SPEED_BY_ROW_SEC.get(row_index, PLACEMENT_SPEED_FALLBACK_SEC)
         if elapsed + step_time > time_budget_sec:
             break  # 時間予算超過 (この手は打てない)
         elapsed += step_time
         hands_used += 1
-        best_score = max(best_score, score)
-        current = final_board
+        if using_known:
+            known_used += 1
+        current = placed
 
-    achieved_ojama = float(_score_to_ojama_count(best_score, elapsed_sec))
+    achieved_ojama = _deadline_trigger_value(current, known_pairs, known_used, sim, elapsed_sec)
     return McRolloutOutcome(achieved_ojama=achieved_ojama, hands_used=hands_used, time_used_sec=elapsed)
 
 
