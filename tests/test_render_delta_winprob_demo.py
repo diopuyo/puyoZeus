@@ -21,6 +21,7 @@ from scripts.render_delta_winprob_demo import (
     compute_display_state,
     select_video_segment,
     stable_value_at,
+    theory_verdict_at,
     uncertain_value_at,
 )
 
@@ -227,6 +228,63 @@ def test_compute_display_state_uncertain_frozen_false_while_waiting(sample_event
     state = compute_display_state(sample_events, t_arr, v_arr, t=50.0, timeline_uncertain=u_arr)
     assert state.waiting is True
     assert state.uncertain_frozen is False
+
+
+# =============================================================================
+# 2026-08-04 実践値/理論値 二重化: theory_verdict_at / compute_display_state
+# =============================================================================
+
+def test_theory_verdict_at_none_arrays_is_always_no_verdict() -> None:
+    """timeline_theory_side/margin=None (旧タイムライン、後方互換) は常に決着なし。"""
+    t_arr = np.array([90.0, 130.0])
+    side, margin = theory_verdict_at(t_arr, None, None, 100.0)
+    assert side is None
+    assert margin == pytest.approx(0.0)
+
+
+def test_theory_verdict_at_before_first_sample_is_no_verdict() -> None:
+    t_arr = np.array([90.0, 130.0])
+    side_arr = np.array(["1P", "2P"], dtype=object)
+    margin_arr = np.array([10.0, 20.0])
+    side, margin = theory_verdict_at(t_arr, side_arr, margin_arr, 50.0)
+    assert side is None
+    assert margin == pytest.approx(0.0)
+
+
+def test_theory_verdict_at_forward_fill_and_empty_string_is_no_verdict() -> None:
+    """空文字列("" = _build_stable_timeline の「決着なし」表現) はNoneとして扱う。"""
+    t_arr = np.array([90.0, 130.0, 170.0])
+    side_arr = np.array(["", "2P", ""], dtype=object)
+    margin_arr = np.array([0.0, 45.0, 0.0])
+    assert theory_verdict_at(t_arr, side_arr, margin_arr, 100.0) == (None, 0.0)
+    side, margin = theory_verdict_at(t_arr, side_arr, margin_arr, 150.0)
+    assert side == "2P"
+    assert margin == pytest.approx(45.0)
+    assert theory_verdict_at(t_arr, side_arr, margin_arr, 200.0) == (None, 0.0)
+
+
+def test_compute_display_state_theory_fields_default_no_verdict(sample_events, sample_timeline) -> None:
+    """theory系配列未指定(後方互換)ではtheory_sideは常にNone・marginは0.0。"""
+    t_arr, v_arr = sample_timeline
+    state = compute_display_state(sample_events, t_arr, v_arr, t=100.0)
+    assert state.theory_side is None
+    assert state.theory_margin == pytest.approx(0.0)
+
+
+def test_compute_display_state_theory_fields_reflect_verdict(sample_events, sample_timeline) -> None:
+    """theory系配列を渡すと決着成立区間でtheory_side/marginが反映される。"""
+    t_arr, v_arr = sample_timeline
+    theory_side_arr = np.array(["", "1P"], dtype=object)
+    theory_margin_arr = np.array([0.0, 37.0])
+    state_before = compute_display_state(
+        sample_events, t_arr, v_arr, t=100.0,
+        timeline_theory_side=theory_side_arr, timeline_theory_margin=theory_margin_arr)
+    assert state_before.theory_side is None
+    state_after = compute_display_state(
+        sample_events, t_arr, v_arr, t=200.0,
+        timeline_theory_side=theory_side_arr, timeline_theory_margin=theory_margin_arr)
+    assert state_after.theory_side == "1P"
+    assert state_after.theory_margin == pytest.approx(37.0)
 
 
 def test_latest_event_at_or_before_returns_none_when_too_early(sample_events) -> None:

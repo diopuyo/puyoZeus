@@ -25,6 +25,7 @@ from scripts.compute_exchange_delta_winprob import (
     _load_video_npz,
     _net_pending_after_cancellation,
     _realizable_counter_ojama,
+    _safe_next_array,
     build_chain_in_progress_windows,
     build_event_activity_windows,
     train_winprob_models,
@@ -37,11 +38,14 @@ DELTA_CSV = Path("data/verify/delta_winprob_olRyxDGacbg_2026-08-03/exchange_delt
 GRID_STEP_SEC = 0.2
 
 # (シーン名, game_idx, t0, t1)
+# 2026-08-04 最終確認: scene5はmain指摘のt=3163 (色ぷよ量差+14相当、J-1実測で
+# 説明済みの正当値) を含むよう開始点を3163.0に前倒しした。
 SCENES = [
     ("scene1(match_01)", 1, 2925.0, 2945.0),
     ("scene2(match_02)", 2, 2977.0, 2995.0),
+    ("scene3(match_03)", 3, 3020.0, 3040.0),
     ("scene4(match_04)", 4, 3090.0, 3105.0),
-    ("scene5(match_05)", 5, 3165.0, 3172.0),
+    ("scene5(match_05)", 5, 3163.0, 3172.0),
 ]
 
 
@@ -78,6 +82,13 @@ def trace_scene(
     mask1, mask2 = cache.r1p.game_idx == game_idx, cache.r2p.game_idx == game_idx
     t1_arr, g1 = cache.r1p.t_sec[mask1], cache.r1p.grids[mask1]
     t2_arr, g2 = cache.r2p.t_sec[mask2], cache.r2p.grids[mask2]
+    # 修正H2 (2026-08-04): _build_stable_timeline と同じ既知ツモ抽出
+    # (診断列と実際の表示値を完全一致させるため必須、以前ここが欠落して
+    # 診断列が古い値のまま表示値だけ修正H2反映という不整合があった)。
+    n1a, n1b = _safe_next_array(cache.r1p.next1_a, mask1), _safe_next_array(cache.r1p.next1_b, mask1)
+    d1a, d1b = _safe_next_array(cache.r1p.dnext_a, mask1), _safe_next_array(cache.r1p.dnext_b, mask1)
+    n2a, n2b = _safe_next_array(cache.r2p.next1_a, mask2), _safe_next_array(cache.r2p.next1_b, mask2)
+    d2a, d2b = _safe_next_array(cache.r2p.dnext_a, mask2), _safe_next_array(cache.r2p.dnext_b, mask2)
 
     rows = []
     grid = np.arange(t0, t1, GRID_STEP_SEC)
@@ -100,14 +111,19 @@ def trace_scene(
             activity_windows, float(t), b1, b2)
         pending_on_1p, pending_on_2p = _net_pending_after_cancellation(attack_1p, attack_2p)
 
+        next_1p, dnext_1p = (int(n1a[idx1]), int(n1b[idx1])), (int(d1a[idx1]), int(d1b[idx1]))
+        next_2p, dnext_2p = (int(n2a[idx2]), int(n2b[idx2])), (int(d2a[idx2]), int(d2b[idx2]))
+
         clamp_state, p_prime, room_val, ef_raw, mutual_flag = "無効", np.nan, np.nan, np.nan, "-"
         severity = 0.0
         if pending_on_1p > 0.0 or pending_on_2p > 0.0:
             if pending_on_1p > 0.0:
                 threatened, pending, attacker_chain, attacker_side = b1, pending_on_1p, chain_2p, "2P"
+                next_pair, dnext_pair = next_1p, dnext_1p
             else:
                 threatened, pending, attacker_chain, attacker_side = b2, pending_on_2p, chain_1p, "1P"
-            ef_raw = _realizable_counter_ojama(threatened, attacker_chain)
+                next_pair, dnext_pair = next_2p, dnext_2p
+            ef_raw = _realizable_counter_ojama(threatened, attacker_chain, next_pair, dnext_pair)
             room_val = board_room(threatened)
             raw_excess = pending - ef_raw - room_val
             p_prime = pending - ef_raw
@@ -123,11 +139,13 @@ def trace_scene(
 
         state = compute_display_state(events, timeline_t, timeline_v, float(t), timeline_uncertain)
         display = np.nan if state.waiting else state.winprob_1p
+        threatened_next = f"next={next_1p if pending_on_1p > 0 else next_2p}"
         rows.append({
             "t_sec": float(t), "有効窓": active_desc,
             "pending_1p": pending_on_1p, "pending_2p": pending_on_2p,
             "realizable_counter": ef_raw, "P_prime": p_prime, "room": room_val,
-            "クランプ": clamp_state, "相打ち適用": mutual_flag,
+            "クランプ": clamp_state, "既知ネクスト(受け側)": threatened_next,
+            "相打ち適用": mutual_flag,
             "判定保留": bool(state.uncertain_frozen), "表示値": display,
         })
     df = pd.DataFrame(rows)

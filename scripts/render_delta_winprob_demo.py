@@ -107,6 +107,13 @@ PANEL_BAR_W: int = 760
 PANEL_NOTE_Y: int = PANEL_BAR_TOP + PANEL_BAR_H + 10
 PANEL_BADGE_Y: int = PANEL_NOTE_Y + 24
 
+# 決着インジケータ (理論値チャネル、2026-08-04 実践値/理論値 二重化) レイアウト。
+# メインバー (実践値) の右側に独立した箱として配置する (実践値の数値表示を
+# 一切変更しない、別チャネルであることを視覚的にも分離するため)。
+VERDICT_BOX_MARGIN_LEFT: int = 20   # メインバー右端からの間隔
+VERDICT_BOX_W: int = 220
+VERDICT_BOX_H: int = PANEL_BAR_H
+
 # 色 (1P=青、2P=赤。既存 visualize_advantage_overlay の配色を踏襲)
 COLOR_1P = (90, 140, 220)
 COLOR_2P = (210, 90, 90)
@@ -233,6 +240,29 @@ def uncertain_value_at(timeline_t: np.ndarray, timeline_uncertain: "np.ndarray |
     return bool(timeline_uncertain[idx])
 
 
+def theory_verdict_at(
+    timeline_t: np.ndarray,
+    timeline_theory_side: "np.ndarray | None", timeline_theory_margin: "np.ndarray | None",
+    t: float,
+) -> tuple["str | None", float]:
+    """t 時点の理論値チャネル (決着インジケータ) を前方保持で返す
+    (2026-08-04 実践値/理論値 二重化、_theory_verdict 参照)。
+
+    timeline_theory_side/timeline_theory_margin が None (旧タイムライン、
+    列なし) の場合は常に (None, 0.0) = 決着なし (後方互換)。空文字列
+    ("" = _build_stable_timeline の「決着なし」表現) も None として扱う。
+    """
+    if (timeline_theory_side is None or timeline_theory_margin is None
+            or len(timeline_t) == 0 or t < timeline_t[0]):
+        return None, 0.0
+    idx = int(np.searchsorted(timeline_t, t, side="right")) - 1
+    idx = max(0, min(idx, len(timeline_t) - 1))
+    side = timeline_theory_side[idx]
+    if side is None or side == "" or (isinstance(side, float) and side != side):
+        return None, 0.0
+    return str(side), float(timeline_theory_margin[idx])
+
+
 def _latest_event_at_or_before(events: list[FireEventView], t: float) -> "FireEventView | None":
     """t 時点で最も直近に発火検知された(ignition_sec<=t)イベントを返す。"""
     latest: "FireEventView | None" = None
@@ -247,16 +277,20 @@ def _latest_event_at_or_before(events: list[FireEventView], t: float) -> "FireEv
 @dataclass(frozen=True)
 class DisplayState:
     """1フレーム分の描画状態。"""
-    winprob_1p: float                  # 描画するべき1P視点勝率(0-100%)
+    winprob_1p: float                  # 描画するべき1P視点勝率(0-100%、実践値チャネル)
     waiting: bool                      # STABLE待ち(未確定)
     badge: "FireEventView | None"       # 速報バッジ表示対象 (Noneなら非表示)
     jump_active: bool                  # バーが速報側にジャンプ中か
     uncertain_frozen: bool = False      # 方針(b): 相手側データ凍結中の判定保留 (後方互換デフォルトFalse)
+    theory_side: "str | None" = None    # 2026-08-04 理論値チャネル: 決着した勝者側 ("1P"/"2P"、未決着はNone)
+    theory_margin: float = 0.0          # 同上、決着時のマージン (お邪魔換算の超過量)
 
 
 def compute_display_state(
     events: list[FireEventView], timeline_t: np.ndarray, timeline_v: np.ndarray, t: float,
     timeline_uncertain: "np.ndarray | None" = None,
+    timeline_theory_side: "np.ndarray | None" = None,
+    timeline_theory_margin: "np.ndarray | None" = None,
 ) -> DisplayState:
     """t 時点の表示状態を求める (純関数、state を一切持たない)。
 
@@ -281,11 +315,20 @@ def compute_display_state(
     (_build_stable_timeline 側の処理) のためそのまま使い、uncertain_frozen
     フラグのみ立てて描画側の視覚表現 (淡色化・注記) を切り替える。既定 None
     = 常に False (後方互換、旧タイムラインでも動作)。
+
+    timeline_theory_side/timeline_theory_margin: optional (2026-08-04
+    実践値/理論値 二重化)。_build_stable_timeline が返す
+    theory_verdict_side/theory_margin 列を渡すと、決着インジケータ用の
+    theory_side/theory_margin を state に含める (判定保留中は
+    _build_stable_timeline 側で既に凍結済みの値をそのまま使う、両チャネル
+    共通の凍結、user指示通り)。既定 None = 常に決着なし (後方互換)。
     """
     stable_v = stable_value_at(timeline_t, timeline_v, t)
     waiting = stable_v is None
     display_v = stable_v if stable_v is not None else 50.0
     uncertain_frozen = (not waiting) and uncertain_value_at(timeline_t, timeline_uncertain, t)
+    theory_side, theory_margin = theory_verdict_at(
+        timeline_t, timeline_theory_side, timeline_theory_margin, t)
 
     ev = _latest_event_at_or_before(events, t)
     jump_active = ev is not None and t < ev.fire_end_sec
@@ -294,7 +337,8 @@ def compute_display_state(
         ev if ev is not None and t <= ev.ignition_sec + BADGE_TEXT_DISPLAY_SEC else None
     )
     return DisplayState(winprob_1p=display_v, waiting=waiting, badge=badge,
-                         jump_active=jump_active, uncertain_frozen=uncertain_frozen)
+                         jump_active=jump_active, uncertain_frozen=uncertain_frozen,
+                         theory_side=theory_side, theory_margin=theory_margin)
 
 
 # =============================================================================
@@ -331,6 +375,29 @@ def _draw_bar(d: "ImageDraw.ImageDraw", state: DisplayState, cx: int, x0: int) -
         d.rectangle([split_x - 3, top - 5, split_x + 3, top + bar_h + 5], fill=(255, 255, 0))
 
 
+def _draw_verdict_indicator(d: "ImageDraw.ImageDraw", state: DisplayState, x0: int) -> None:
+    """決着インジケータ (理論値チャネル、2026-08-04 実践値/理論値 二重化) を描画する。
+
+    state.theory_side が None (決着なし) の間は暗く小さい枠のみ (「未決着」)。
+    成立時 (severity=1.0 飽和、_theory_verdict 参照) のみ勝者側の色で点灯し、
+    マージン (お邪魔換算の超過量) を表示する。judgement保留中 (state.
+    uncertain_frozen) は実践値と同様に凍結済みの値をそのまま表示する
+    (両チャネル共通の凍結、user指示)。
+    """
+    box_x0 = x0 + PANEL_BAR_W + VERDICT_BOX_MARGIN_LEFT
+    box_x1 = box_x0 + VERDICT_BOX_W
+    top, bot = PANEL_BAR_TOP, PANEL_BAR_TOP + VERDICT_BOX_H
+    if state.waiting or state.theory_side is None:
+        d.rectangle([box_x0, top, box_x1, bot], outline=(120, 120, 120), width=2)
+        d.text((box_x0 + 8, top + 5), "決着: 未成立", font=_font(14), fill=(150, 150, 150))
+        return
+    color = COLOR_1P if state.theory_side == "1P" else COLOR_2P
+    d.rectangle([box_x0, top, box_x1, bot], fill=(*color, 230))
+    d.rectangle([box_x0, top, box_x1, bot], outline=(255, 255, 0), width=2)
+    d.text((box_x0 + 8, top + 5), f"決着: {state.theory_side}有利 (+{state.theory_margin:.0f})",
+           font=_font(14), fill=(255, 255, 255))
+
+
 def _draw_badge(d: "ImageDraw.ImageDraw", badge: "FireEventView | None", x0: int) -> None:
     """速報バッジ (「1P/2P 発火速報 Δ+XX%」) を描画する。badge=None なら何も描かない。
 
@@ -359,8 +426,10 @@ def _draw_top_panel(frame_canvas: "Image.Image", state: DisplayState) -> None:
     d.text((x0, PANEL_TITLE_Y), "ΔWinProb 発火直後速報デモ (青=1P 赤=2P)",
            font=_font(18), fill=(255, 255, 0))
     _draw_bar(d, state, cx, x0)
+    _draw_verdict_indicator(d, state, x0)
     d.text((x0, PANEL_NOTE_Y),
-           "従来: 連鎖終了(両者STABLE)まで勝率は動かない → 新: 発火検知の瞬間に速報",
+           "従来: 連鎖終了(両者STABLE)まで勝率は動かない → 新: 発火検知の瞬間に速報"
+           " (メインバー=実践値、右の箱=決着インジケータ[理論値])",
            font=_font(14), fill=(200, 200, 200))
     _draw_badge(d, state.badge, x0)
 
@@ -459,6 +528,8 @@ def render_video(
     video_path: Path, out_silent_path: Path, start_sec: float, end_sec: float,
     events: list[FireEventView], timeline_t: np.ndarray, timeline_v: np.ndarray,
     timeline_uncertain: "np.ndarray | None" = None,
+    timeline_theory_side: "np.ndarray | None" = None,
+    timeline_theory_margin: "np.ndarray | None" = None,
 ) -> int:
     """対象区間を読み込み、合成フレームを書き出す。書き出しフレーム数を返す。"""
     cap = cv2.VideoCapture(str(video_path))
@@ -488,7 +559,9 @@ def render_video(
         t_abs = fi / fps
         if frame.shape[:2] != (OUT_H, OUT_W):
             frame = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
-        state = compute_display_state(events, timeline_t, timeline_v, t_abs, timeline_uncertain)
+        state = compute_display_state(
+            events, timeline_t, timeline_v, t_abs, timeline_uncertain,
+            timeline_theory_side, timeline_theory_margin)
         t_rel = t_abs - start_sec
         if not state.waiting:
             history.append((t_rel, state.winprob_1p))
@@ -606,11 +679,16 @@ def main() -> None:
     timeline_v = timeline_df["winprob_1p"].values.astype(float)
     timeline_uncertain = (timeline_df["is_uncertain"].values.astype(bool)
                            if "is_uncertain" in timeline_df.columns else None)
+    # 2026-08-04 実践値/理論値 二重化: 決着インジケータ用の列 (無ければ後方互換でNone)。
+    timeline_theory_side = (timeline_df["theory_verdict_side"].values
+                             if "theory_verdict_side" in timeline_df.columns else None)
+    timeline_theory_margin = (timeline_df["theory_margin"].values.astype(float)
+                               if "theory_margin" in timeline_df.columns else None)
 
     print("\n=== 5. 動画レンダー (無音) ===")
     silent_path = args.out_dir / f"delta_winprob_demo_{args.video_id}_g{args.game_idx}_silent.mp4"
     written = render_video(video_path, silent_path, start_sec, end_sec, events, timeline_t, timeline_v,
-                            timeline_uncertain)
+                            timeline_uncertain, timeline_theory_side, timeline_theory_margin)
     print(f"[render] {written} frames -> {silent_path}")
 
     print("\n=== 6. 音声結合 ===")
