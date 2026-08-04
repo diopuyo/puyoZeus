@@ -492,6 +492,7 @@ def collect_lean(
     normalize_fps_30: bool = True,
     enable_effect_gate: bool = False,
     effect_gate_persist_sec: Optional[float] = None,
+    enable_effect_visual_gate: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -545,6 +546,11 @@ def collect_lean(
         effect_gate_persist_sec: 上記ゲートの確定に必要な持続秒数。
             None (既定) なら RecognitionPipeline 既定値 (EFFECT_PERSIST_SEC
             =0.4秒) を使う。enable_effect_gate=False の間は無視される。
+        enable_effect_visual_gate: 案B 4条件AND拡張 (2026-08-04、A/B 計測用)。
+            True で effect_gate_window_active を「(既存時間窓) AND (not 自
+            連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)」に拡張する。
+            enable_effect_gate=False の間は無視される (時間窓自体が発生しない
+            ため)。既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -600,6 +606,7 @@ def collect_lean(
         force_in_match=True,
         enable_effect_gate=enable_effect_gate,
         effect_gate_persist_sec=effect_gate_persist_sec,
+        enable_effect_visual_gate=enable_effect_visual_gate,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -796,6 +803,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-effect-visual-gate", action="store_true",
+        dest="enable_effect_visual_gate",
+        help=(
+            "案B 4条件AND拡張 (2026-08-04、A/B 計測用) を有効化する。"
+            "--enable-effect-gate の時間窓に (not 自連鎖中) AND (not 全消し"
+            "ラッチ) AND (視覚グロー検出) を追加する。--enable-effect-gate が"
+            "無効の間は無視される。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
         "--effect-gate-persist-sec", type=float, default=None,
         dest="effect_gate_persist_sec",
         help="エフェクト時間ゲートの確定に必要な持続秒数 (既定 0.4秒)。",
@@ -816,6 +833,7 @@ def main() -> int:
         normalize_fps_30=normalize_fps_30,
         enable_effect_gate=args.enable_effect_gate,
         effect_gate_persist_sec=args.effect_gate_persist_sec,
+        enable_effect_visual_gate=args.enable_effect_visual_gate,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
