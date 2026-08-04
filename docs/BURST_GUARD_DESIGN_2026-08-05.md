@@ -423,3 +423,97 @@ smoke layer分は不変で正直に報告、全域I1/C1/D1ゲート通過、viz�
 - `data/verify/effect_detector_calibration_v3_2026-08-04/calibration_report_v3.md`
 - `data/verify/error_onset_sheet_2026-08-04/index_refined.md`
 - `scripts/measure_effect_gate_c_2026-08-04.py` (バックテスト流用元)
+
+## 10. Stage1.5: 遷移merge時の物理的期待値フィルタ (2026-08-05 アーキ追補)
+
+### 10.0 背景 (計装で確定した事実)
+`scripts/_verify_burst_write_path_2026-08-05.py` により、c18の10セル全焼き付きは
+`_apply_transition()` の NON-STABLE→STABLE 遷移時 `_merge_diff_only` 呼び出し
+(1043-1054行) を素通りしたバースト誤読と確定した。遷移フレームは `hsv=None`
+のため `_apply_stable_recovery_gate` は実行されず、Stage1のハード凍結
+(`effect_gate_hard_freeze`) はこの経路を全くカバーしない。自分の設置完了
+(TSUMO_FALL→STABLE) と相手バースト、相手のおじゃま着弾 (OJAMA_FALL→STABLE) と
+相手バーストは、おじゃまが相手連鎖完了後に降る物理 (`reference_ojama_landing_gated_by_placement_2026-07-29`)
+により構造的に同時発生するため、この経路が正門である必然性がある。
+
+### 10.1 判定法: 「新規設置セル推論」ではなく「from_state別・物理的期待値クラス」
+
+新規設置セルをnext_pair等から個別推論する方式は採用しない。設置ペア対応付けの
+信頼性は過去に否定されている (キュー対応付け正解無し57%、
+`project_color_flicker_p2_root_cause_2026-07-25`)。代わりに、from_stateごとに
+「この遷移で物理的に説明可能な新規値クラス」を静的に定義し、それ以外の diff は
+一律 `COLOR_UNKNOWN` に差し替える。
+
+| from_state | 物理的に説明可能な diff | 根拠 |
+|---|---|---|
+| `TSUMO_FALL` | `base_v == COLOR_EMPTY` かつ `cnn_v ∈ {1,2,3,4,5}` | ツモ設置は空セルへの色puyo出現のみ。既存puyoの色変化・9出現は説明不可 |
+| `OJAMA_FALL` | `base_v == COLOR_EMPTY` かつ `cnn_v == COLOR_OJAMA(9)` | おじゃまは空セルにのみ落下 (`reference_ojama_landing_pattern`)。既存puyoの上書き・9以外の新規値はバースト誤読の署名 |
+| その他 (`CHAIN`/`GRAVITY_SETTLE`/`EFFECT`) | フィルタ対象外 (no-op) | §10.2 参照 |
+
+`base_v != COLOR_EMPTY` の diff (既存puyoの値が変わるケース) は上記2 from_state
+では原理的に非説明的なため、cnn_vの値を問わず全て棄却する。これが c18 の
+(2,4,9,5) — 既存の紫puyoがバーストで9に化けた — を正しく捕捉する。
+
+### 10.2 スコープ限定: GRAVITY_SETTLE/CHAIN/EFFECT→STABLE は明示的に除外
+
+1137-1139行のコメントが示す通り、GRAVITY_SETTLE→STABLE は「連鎖後は全cellを
+新規STABLEで直接評価」する設計 (F guard不発、意図的に大量差分を無条件通過)。
+このタイミングは own_chain_active / all_clear_pending による force_close
+(§2.3) で Window が既に閉じているのがほぼ全ケースであり、フィルタを適用する
+根拠データが無い。連鎖後の正当な大量色変化・重力再配置をUNKNOWN化して壊す
+リスクの方が、想定外の稀なケースを取りこぼすリスクより重大。よって
+`_TRANSITION_MERGE_GUARD_SCOPE` に含めない (= 対象外 from_state は無条件no-op)。
+Stage1.5汎化バックテストで実測上問題が見つかった場合のみ、別Stageとして
+根拠データを揃えた上で再検討する。
+
+### 10.3 差し替え値: COLOR_UNKNOWN (baseline値の直接書き込みではない)
+
+`_merge_diff_only` 607-608行 (D guard, 2026-05-11) は既に
+`cnn_v == COLOR_UNKNOWN` を「baseline維持」として扱う。この既存の実証済み分岐
+を再利用することで `_merge_diff_only` 自体への変更を一切要さない。baseline値を
+new_cnn側に直接書き込む代替は数学的に同じ結果になるが実装上の理由がなく採用しない。
+
+**baseline is None (初回STABLE確定) の場合は本フィルタを完全skip** し
+new_cnn をそのまま返す。理由: `_build_initial_confirmed_board` は baseline
+概念を持たず、UNKNOWNがそのまま初回confirmed_boardに漏れ出す (試合開始直後の
+極端な edge case、burst windowが同時に開く可能性は実質ゼロだが、フィルタ関数
+の入力契約として明示的にガードする)。
+
+### 10.4 実装 (`src/board_state_machine.py`)
+
+`_TRANSITION_MERGE_GUARD_SCOPE` 定数 (TSUMO_FALL→{1..5} / OJAMA_FALL→{9}) と
+`_filter_transition_new_cnn_for_burst_guard(baseline, new_cnn, from_state)` 純関数を追加。
+対象外 from_state / baseline is None は new_cnn をそのまま返す (コピーもしない恒等)。
+説明不可能な diff は COLOR_UNKNOWN に差し替え (D guardでbaseline維持)。
+
+呼び出しは `_apply_transition()` の `_merge_diff_only` 呼び出し直前:
+
+```python
+new_cnn_for_merge = signals.cnn_board
+if self._enable_transition_merge_guard and signals.effect_gate_window_active:
+    new_cnn_for_merge = _filter_transition_new_cnn_for_burst_guard(
+        self._ctx.confirmed_board, signals.cnn_board, self._ctx.state,
+    )
+```
+
+`self._ctx.state` は再代入前に読めば常に from_state を指す。新パラメータ
+`enable_transition_merge_guard: bool = False` (default OFF、bit-identical)。
+`enable_transition_merge_guard=True` かつ `enable_burst_guard_v2=False` は警告ログ。
+
+### 10.5 棄却セルの事後記録: 記録なし (既存機構+使い捨て診断で足りる)
+
+棄却されたセルは baseline値のまま STABLE に留まり、Window close後に Stage1 の
+フレームカウント方式復旧が正常に拾う。永続的な棄却ログAPIは追加しない。
+
+### 10.6 バックテスト: 閾値0.954との同時検証は同一実行・factorial報告で許可
+
+Stage1.5 (`enable_transition_merge_guard`) と `BURST_GATE_OPEN_THRESHOLD`
+(0.97現行 / 0.954提案) は直交する軸であり、2×2 factorial (off/off, on/off,
+off/on, on/on) として計測してよい。§7.1 の93セル集計・§7.3 の全域ゲートは
+4象限それぞれで独立に報告 (プール相殺の禁止、feedback_stratify_before_pooling)。
+
+### 10.7 row0隠し段副作用: 別立て (Stage1.5には含めない)
+
+「row1-3凍結→隠し段推論が揺れてrow0に新規誤り」はStage1のper-frame凍結の
+副作用であり、Stage1.5 (遷移frameで1回だけのmerge時フィルタ) とは機構が別。
+別課題としてStage1のバックテスト結果 (§7.3) の中で扱う。
