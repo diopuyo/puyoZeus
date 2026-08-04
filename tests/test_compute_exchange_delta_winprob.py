@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import src.indicators_v2 as iv
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_RED, Board
 from src.scoring import OJAMA_MAX_DROP_PER_TURN
 from scripts.compute_exchange_delta_winprob import (
@@ -29,12 +30,15 @@ from scripts.compute_exchange_delta_winprob import (
     HYSTERESIS_MARGIN_OJAMA,
     LETHAL_CLAMP_FAVOR_PCT,
     _aggregate_known_pending_net_ojama,
+    _apply_pending_ojama_virtual_landing,
+    _board_from_grid,
     _clamp_severity,
     _find_active_chain_window,
     _is_airborne_at,
     _lethal_readout_clamp,
     _net_pending_after_cancellation,
     _realizable_counter_ojama,
+    _theory_verdict,
     _next_own_stable_time,
     _npz_stem_from_video_id,
     apply_mutual_exchange_adjustment,
@@ -51,6 +55,7 @@ from scripts.compute_exchange_delta_winprob import (
     winprob_to_score100,
 )
 from scripts.label_exchange_outcome import NpzRecord
+from scripts.measure_exchange_effectiveness import estimate_available_hands
 from scripts.model_indicator_win import build_features
 from src.chain import ChainSimulator
 from src.exchange_virtual_board import reconstruct_virtual_board_pair
@@ -86,15 +91,22 @@ class _FakeScaler:
 
 
 class _FakeLR:
-    """LogisticRegression の代わり: 先頭指標の diff (index=2、attacker-opponent) をロジットとみなす。
+    """LogisticRegression の代わり: 全指標の diff (index=2,5,8,...、
+    attacker-opponent) の合計をロジットとみなす。
 
     build_features / winprob_attacker の列順は base ごとに [v1, v2, v1-v2] の
-    3つ組のため、index=2 が「attacker視点の先頭指標の優劣差」になる
-    (attacker/opponent入れ替えテストで符号が反転することを検証するため)。
+    3つ組のため、index=2,5,8,... が「attacker視点の各指標の優劣差」になる。
+    2026-08-04 修正J-2 (board_puyo_total除去でBOARD_ONLY_INDICATOR_BASESの
+    先頭要素が変わった) を機に、特定の1指標(旧: 先頭のboard_puyo_total)のみに
+    依存する脆い実装から「全diffの合計」に変更した(どの指標が先頭かに
+    依存しない、より本物のLRに近い振る舞い)。対称局面(diff=0)では従来通り
+    ロジット0=50%になるため既存の対称性テストへの影響はない。
     """
 
     def predict_proba(self, x: np.ndarray) -> np.ndarray:
-        logit = np.asarray(x, dtype=float)[:, 2]
+        arr = np.asarray(x, dtype=float)
+        diff_cols = arr[:, 2::3]  # 各3つ組の3番目 (v1-v2) を全て集める
+        logit = diff_cols.sum(axis=1)
         p = 1.0 / (1.0 + np.exp(-logit))
         return np.stack([1.0 - p, p], axis=1)
 
@@ -433,9 +445,16 @@ def _make_synthetic_labeled_win_csv(tmp_path, n_videos: int = 40, rows_per_video
                                     seed: int = 0):
     """train_winprob_models を実際に走らせる軽量な合成 labeled_win.csv を作る。
 
-    691試合フル学習(数十秒)を避けるため、23 board-only 指標全てを持つ
+    691試合フル学習(数十秒)を避けるため、board-only 指標全てを持つ
     ランダムな合成データ (video_id 単位でグルーピング可能) を生成する。
     won の整合性 (won_1p + won_2p == 1) は pair_sides_for_win の要件。
+
+    2026-08-04 修正J-2: board_puyo_total は BOARD_ONLY_INDICATOR_BASES から
+    除去されたが、train_winprob_models の位相判定 (phase_metric_orig) は
+    実CSV (labeled_win_combined66.csv、45指標の元コレクションに含まれる
+    board_puyo_total 列を独立に保持) から直接この列を読む。合成CSVでも
+    同じ構造 (BOARD_ONLY_INDICATOR_BASESに入っていなくてもboard_puyo_total
+    列自体は存在する) を再現するため、明示的に追加する。
     """
     rng = np.random.default_rng(seed)
     records: list[dict] = []
@@ -446,7 +465,7 @@ def _make_synthetic_labeled_win_csv(tmp_path, n_videos: int = 40, rows_per_video
             won1 = int(rng.uniform() < 0.5)
             row1 = {"video_id": vid, "side": "1P", "t_sec": t, "won": won1}
             row2 = {"video_id": vid, "side": "2P", "t_sec": t + 0.05, "won": 1 - won1}
-            for base in BOARD_ONLY_INDICATOR_BASES:
+            for base in set(BOARD_ONLY_INDICATOR_BASES) | {"board_puyo_total"}:
                 row1[base] = float(rng.uniform(0.0, 1.0))
                 row2[base] = float(rng.uniform(0.0, 1.0))
             records.append(row1)
@@ -553,7 +572,8 @@ def test_build_stable_timeline_empty_side_returns_empty_df():
     sim = ChainSimulator()
     df = _build_stable_timeline(cache, game_idx=999, models=models, simulator=sim)
     assert len(df) == 0
-    assert list(df.columns) == ["t_sec", "winprob_1p", "is_uncertain"]
+    assert list(df.columns) == [
+        "t_sec", "winprob_1p", "theory_verdict_side", "theory_margin", "is_uncertain"]
 
 
 # =============================================================================
@@ -615,6 +635,94 @@ def test_build_stable_timeline_no_freeze_never_uncertain():
     sim = ChainSimulator()
     df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim)
     assert not df["is_uncertain"].any()
+
+
+# =============================================================================
+# 2026-08-04 実践値/理論値 二重化 (_build_stable_timeline レベルの統合検証)
+# =============================================================================
+
+def test_build_stable_timeline_winprob_is_not_post_hoc_blended():
+    """実践値チャネル (winprob_1p) はモデル出力を後付けでブレンドされない
+    (2026-08-04 userの明示裁定「クランプ=後付けの数値上書きをしない」)。
+
+    2026-08-04 修正K により、activity_windows 指定時は評価入力盤面自体に
+    正味予告を仮想着弾させるため with/without で値が変わりうる(この差は
+    「モデル入力盤面を物理的に正しくする」ためであり許容される)。ここで
+    検証すべきは「後付けの95%/5%ブレンド(旧クランプ)が起きていないこと」
+    であり、修正Kを織り込んだ手計算 (_apply_pending_ojama_virtual_landing +
+    compute_board_only_features + winprob_attacker) と _build_stable_timeline
+    の出力が完全一致することで確認する (途中でクランプ由来の後付け上書きが
+    入っていれば一致しなくなる)。
+    """
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    # 2P発火でnet_ojama_after=300という極端な予告 (旧設計なら確実に飽和クランプする水準)。
+    activity = [_make_activity_window("2P", ignition_sec=0.0, t_sec=1.0, net_ojama_after=300.0)]
+    df_with = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim,
+                                      activity_windows=activity)
+    assert len(df_with) > 0
+
+    # t=1.0 (ignition_sec=0.0<=t かつ pending が残っている評価点、t1配列の実時刻)
+    # を手計算で再現する。
+    t_check = 1.0
+    mask1 = cache.r1p.game_idx == 0
+    mask2 = cache.r2p.game_idx == 0
+    t1_arr, g1_arr = cache.r1p.t_sec[mask1], cache.r1p.grids[mask1]
+    t2_arr, g2_arr = cache.r2p.t_sec[mask2], cache.r2p.grids[mask2]
+    idx1 = int(np.searchsorted(t1_arr, t_check, side="right")) - 1
+    idx2 = int(np.searchsorted(t2_arr, t_check, side="right")) - 1
+    b1 = _board_from_grid(g1_arr[idx1])
+    b2 = _board_from_grid(g2_arr[idx2])
+    attack_1p, attack_2p, _c1, _c2 = _aggregate_known_pending_net_ojama(activity, t_check, b1, b2)
+    pending_1p, pending_2p = _net_pending_after_cancellation(attack_1p, attack_2p)
+    b1_expected = _apply_pending_ojama_virtual_landing(b1, pending_1p, sim)
+    b2_expected = _apply_pending_ojama_virtual_landing(b2, pending_2p, sim)
+    feats1 = compute_board_only_features(b1_expected, sim)
+    feats2 = compute_board_only_features(b2_expected, sim)
+    p1 = winprob_attacker(models, "中", feats1, feats2)
+    expected_winprob = winprob_to_score100(p1)
+
+    actual_row = df_with.loc[df_with["t_sec"] == t_check]
+    assert len(actual_row) == 1
+    assert float(actual_row["winprob_1p"].iloc[0]) == pytest.approx(expected_winprob)
+
+
+def test_build_stable_timeline_theory_verdict_fires_on_extreme_threat():
+    """理論値チャネルは同じ極端な予告 (net_ojama_after=300) で、少なくとも
+    一部の評価時刻において決着 (theory_verdict_side が空文字でない) を
+    主張する (severity=1.0飽和に達するはず、ほぼ空盤面なのでroomは大きいが
+    300はそれでも上回る)。
+    """
+    cache = _make_dense_video_cache(n1=20, n2=15)
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    # ignition_sec=1.5 (それ以前は「まだ点火していない」ため決着なし)。
+    activity = [_make_activity_window("2P", ignition_sec=1.5, t_sec=2.0, net_ojama_after=300.0)]
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim,
+                                 activity_windows=activity)
+    verdicts = df.loc[df["t_sec"] >= 1.5, "theory_verdict_side"]
+    assert (verdicts == "2P").any()
+    assert (df.loc[df["t_sec"] < 1.5, "theory_verdict_side"] == "").all()
+
+
+def test_build_stable_timeline_freeze_holds_both_channels():
+    """判定保留(凍結検知)は実践値/理論値の両チャネルに共通で適用される
+    (user指示「判定保留は両チャネル共通」)。凍結後は winprob_1p だけでなく
+    theory_verdict_side/theory_margin も凍結直前の値のまま変化しない。
+    """
+    cache = _make_video_cache_with_2p_freeze()
+    models = {"序": _make_fake_model(), "中": _make_fake_model(), "終": _make_fake_model()}
+    sim = ChainSimulator()
+    activity = [_make_activity_window("2P", ignition_sec=0.0, t_sec=1.0, net_ojama_after=300.0)]
+    df = _build_stable_timeline(cache, game_idx=0, models=models, simulator=sim,
+                                 activity_windows=activity)
+    last_good_side = df.loc[df["t_sec"] == 10.0, "theory_verdict_side"].iloc[0]
+    last_good_margin = float(df.loc[df["t_sec"] == 10.0, "theory_margin"].iloc[0])
+    frozen = df.loc[df["t_sec"] > 10.0]
+    assert len(frozen) > 0
+    assert (frozen["theory_verdict_side"] == last_good_side).all()
+    assert np.allclose(frozen["theory_margin"].to_numpy(), last_good_margin)
 
 
 # =============================================================================
@@ -1101,6 +1209,67 @@ class TestRealizableCounterOjama:
         result = _realizable_counter_ojama(seed, attacker_chain_count=0.0)
         assert result == result  # NaN でない
 
+    def test_completed_chain_takes_max_of_immediate_and_expected(self) -> None:
+        """2026-08-04 修正H: realizable_counter は immediate_fire_power (決定論的、
+        完成済みの構え) と expected_fire_power (確率的、K手先) の max を取る。
+        どちらが大きくなるかは盤面依存だが、常に大きい方が採用されることを確認する
+        (台帳の非対称是正の本体、新規定数を追加しないmaxのみの修正)。
+        """
+        g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+        g[12][0], g[12][1], g[11][0], g[10][0] = (COLOR_RED,) * 4
+        g[12][2], g[11][1], g[10][1], g[9][0] = (COLOR_BLUE,) * 4
+        completed_board = Board.from_list(g)
+        immediate = iv.immediate_fire_power(completed_board).raw
+        k_hands = estimate_available_hands(0)
+        expected_k = iv.expected_fire_power(completed_board, k_levels=(k_hands,)).values[k_hands].raw
+        result = _realizable_counter_ojama(completed_board, attacker_chain_count=0.0)
+        assert result == pytest.approx(max(immediate, expected_k))
+        assert result >= immediate  # 少なくとも即時発火力を下回らない (是正の要件)
+
+    def test_invalid_next_pair_matches_fix_h_behavior_exactly(self) -> None:
+        """2026-08-04 修正H2: next_pair が無効値 (未検出等) の場合は
+        修正H単体(next_pair省略時)と完全に同じ結果になる (後方互換)。
+        """
+        seed = _seed_board_with_small_counter()
+        without_next = _realizable_counter_ojama(seed, attacker_chain_count=6.0)
+        with_invalid_next = _realizable_counter_ojama(
+            seed, attacker_chain_count=6.0, next_pair=(-1, -1), dnext_pair=(-1, -1))
+        assert with_invalid_next == pytest.approx(without_next)
+
+    def test_valid_next_pair_without_dnext_does_not_crash(self) -> None:
+        """dnext_pair=None (2手目ネクスト未検出) でも1手目の既知ツモだけで
+        安全に動作する (_predicted_counter_ojama_v2 の1手目のみフォールバック)。
+        """
+        seed = _seed_board_with_small_counter()
+        result = _realizable_counter_ojama(
+            seed, attacker_chain_count=6.0, next_pair=(COLOR_RED, COLOR_BLUE), dnext_pair=None)
+        assert result == result  # NaNでない
+        assert result >= 0.0
+
+    def test_known_pair_default_disabled_ignores_next_pair(self) -> None:
+        """2026-08-04 H2改棚上げ: 既定 (enable_known_pair_completion 省略)では
+        next_pair/dnext_pair を渡しても修正Hのみと完全に同じ結果になる
+        (main判断: 全域検証でrecall悪化のため既定無効化、実装は温存)。
+        """
+        seed = _seed_board_with_small_counter()
+        fix_h_only = _realizable_counter_ojama(seed, attacker_chain_count=6.0)
+        with_known_queue_but_disabled = _realizable_counter_ojama(
+            seed, attacker_chain_count=6.0, next_pair=(COLOR_RED, COLOR_RED),
+            dnext_pair=(COLOR_BLUE, COLOR_BLUE))
+        assert with_known_queue_but_disabled == pytest.approx(fix_h_only)
+
+    def test_known_pair_completion_still_works_when_explicitly_enabled(self) -> None:
+        """H2改の実装自体は削除していないため、enable_known_pair_completion=True
+        を明示すれば従来通り「既知ツモを与えても修正Hの値より小さくなることは
+        ない」動作になる (将来のK拡張MCタスクへの引き継ぎ用、温存確認)。
+        """
+        seed = _seed_board_with_small_counter()
+        fix_h_only = _realizable_counter_ojama(seed, attacker_chain_count=6.0)
+        with_known_queue = _realizable_counter_ojama(
+            seed, attacker_chain_count=6.0, next_pair=(COLOR_RED, COLOR_RED),
+            dnext_pair=(COLOR_BLUE, COLOR_BLUE), enable_known_pair_completion=True)
+        assert with_known_queue >= fix_h_only
+
 
 class TestLethalReadoutClampCounterDeduction:
     """受け切れ判定への返し控除の反映 (欠陥G2、P'>room / 0<P'<=room / P'<=0 の3方向)。"""
@@ -1210,3 +1379,68 @@ class TestClampSeverity:
         raw_excess = -(HYSTERESIS_MARGIN_OJAMA - 1.0)  # マージン内でも非活性のまま
         severity, is_active = _clamp_severity(raw_excess=raw_excess, was_active=False)
         assert is_active is False
+
+
+class TestTheoryVerdict:
+    """理論値チャネル (決着インジケータ、2026-08-04 実践値/理論値 二重化)。
+
+    _lethal_readout_clamp と同じ台帳・同じ受け切れ推定器を使うが、severity が
+    完全飽和 (==1.0) の時のみ勝者側+マージンを主張する離散判定である点を検証する
+    (severity<1.0=まだ理論上返せる間は「決着なし」)。
+    """
+
+    def test_no_airborne_events_returns_no_verdict(self) -> None:
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        side, margin, is_active = _theory_verdict([], 3.0, empty1, empty2, sim)
+        assert side is None
+        assert margin == pytest.approx(0.0)
+        assert is_active is False
+
+    def test_pending_within_capacity_gives_no_verdict(self) -> None:
+        """容量内 (severity=0) は決着なし。"""
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=50.0)]
+        side, margin, is_active = _theory_verdict(windows, 2.0, empty1, empty2, sim)
+        assert side is None
+        assert margin == pytest.approx(0.0)
+        assert is_active is False
+
+    def test_partial_severity_still_gives_no_verdict(self) -> None:
+        """severity が 0<severity<1 (=まだ理論上返せる余地がある) の間は
+        _lethal_readout_clamp ならブレンドが起きる場面でも、理論値チャネルは
+        「決着」を主張しない (0/1判定、連続ブレンドしない)。
+        pending=90, room=72(空盤面) -> raw_excess=90-0-72=18<30 (severity=0.6)。
+        """
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=90.0)]
+        side, margin, is_active = _theory_verdict(windows, 2.0, empty1, empty2, sim)
+        assert side is None
+        assert margin == pytest.approx(0.0)
+        assert is_active is True  # ヒステリシス状態自体は _clamp_severity 通り活性
+
+    def test_full_saturation_asserts_verdict_for_threatened_side(self) -> None:
+        """raw_excess>=OJAMA_MAX_DROP_PER_TURN (severity=1.0飽和) の場合のみ
+        「相手最善でも返せない」と判定し、脅威を受けていない側 (=攻撃した側)
+        を勝者として margin とともに返す。2P発火のpending=200が1Pの空盤面
+        容量(72)を大幅超過 -> raw_excess=128、1Pが脅威を受ける側なので
+        winner="2P" (_lethal_readout_clamp の 1P有利/2P有利の向きと整合)。
+        """
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("2P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        side, margin, is_active = _theory_verdict(windows, 2.0, empty1, empty2, sim)
+        assert side == "2P"
+        assert margin == pytest.approx(128.0)
+        assert is_active is True
+
+    def test_full_saturation_winner_is_1p_when_2p_threatened(self) -> None:
+        empty1, empty2 = Board(), Board()
+        sim = ChainSimulator()
+        windows = [_make_activity_window("1P", ignition_sec=0.0, t_sec=5.0, net_ojama_after=200.0)]
+        side, margin, is_active = _theory_verdict(windows, 2.0, empty1, empty2, sim)
+        assert side == "1P"
+        assert margin == pytest.approx(128.0)
+        assert is_active is True
