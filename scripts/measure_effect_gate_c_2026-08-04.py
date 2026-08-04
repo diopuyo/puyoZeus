@@ -45,22 +45,43 @@
    の4分類に分けて OFF/(b)/(c) それぞれで集計し、色→おじゃま誤検出が
    ゲートでどれだけ減ったかを追跡する。
 
+## 6. 第3系統追加 (2026-08-05): バーストガード v2 (Stage1)
+`docs/BURST_GUARD_DESIGN_2026-08-05.md` §7.1 に対応する第3の比較系統
+`v2` (`enable_burst_guard_v2`、Schmitt trigger視覚トリガー + ハード凍結) を
+追加する。31動画再認識の裏走行結果を `data/verify/burst_guard_2026-08-05/
+on_v2/` に着弾させる想定 (未着弾動画は既存 (c) と同様に STAGE_UNAVAILABLE
+として明示スキップし、着弾分のみ集計する)。`--v2-npz-dir` で上書き可能
+(既定値は未指定時と同一、backwards compat)。
+
+同時に **layer別集計** (burst layer = row1-3 / smoke layer = row4-12) を
+追加する。Stage1 は burst layer (視覚トリガーの守備範囲) のみ改善する見込み
+で、smoke layer (お邪魔着弾由来、Stage2 で対応予定) は不変が正直な期待値
+(`feedback_overfitting_awareness_2026-08-04`: 都合の良い数字だけ見せない)。
+`count_cell_errors`/`count_error_categories` に `rows: frozenset[int]|None`
+を追加し (既定 None = 全行、既存呼び出しは bit-identical)、`StageResult`/
+`CompareResult` に layer別カウントを追加した (既存フィールドは変更なし、
+新規フィールドは全て default 付きで末尾追加、backwards compat)。
+
 ## 検収基準
 
-OFF 側の誤りセル合計が **93** (batch1=47 / batch2=46) に一致すること。
-一致しなければ突合ロジックが壊れている扱いとし、(b)/(c) の効果集計は
+OFF 側の誤りセル合計が **93** (batch1=47 / batch2=46) に一致すること
+(全行、layer 分割前の合計。この判定基準自体は変更しない)。
+一致しなければ突合ロジックが壊れている扱いとし、(b)/(c)/(v2) の効果集計は
 出力しない (`feedback_overfitting_awareness_2026-08-04`: 数字が合うまで
 採否集計を出さない)。
 
 Usage:
     PYTHONPATH=. ./venv/bin/python -m scripts.measure_effect_gate_c_2026-08-04
+    PYTHONPATH=. ./venv/bin/python -m scripts.measure_effect_gate_c_2026-08-04 \\
+        --v2-npz-dir data/verify/burst_guard_2026-08-05/on_v2
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +97,7 @@ from src.board import (  # noqa: E402
     COLOR_OJAMA,
     COLOR_UNKNOWN,
 )
+from src.board_state_machine import EFFECT_GATE_TOP_ROWS  # noqa: E402
 
 # =============================================================================
 # 定数 (マジックナンバー禁止のため全て定数化)
@@ -94,6 +116,18 @@ ANCHOR_NPZ_DIR: Path = Path("data/indicators_v2/boards_lean_regen_2026-07-31")
 NPZ_DIR_B: Path = Path("data/verify/effect_gate_2026-08-03_v2/on")
 # (c) 4条件フルAND (2026-08-04、31動画対象で裏走行中)。
 NPZ_DIR_C: Path = Path("data/verify/effect_gate_2026-08-04_c/on_full")
+# (v2) バーストガード Stage1 (2026-08-05、31動画対象で裏走行中、着弾予定)。
+NPZ_DIR_V2: Path = Path("data/verify/burst_guard_2026-08-05/on_v2")
+
+# layer別集計 (2026-08-05、docs/BURST_GUARD_DESIGN_2026-08-05.md §7.1)。
+# burst layer = 視覚トリガーの守備範囲 (既存 EFFECT_GATE_TOP_ROWS を再利用、
+# 再定義しない)。smoke layer = それ以外の可視行 (row4-12、お邪魔着弾由来、
+# Stage1 では不変が正直な期待値)。row0 は隠し段で常に U のため対象外。
+LAYER_BURST_ROWS: "frozenset[int]" = EFFECT_GATE_TOP_ROWS
+LAYER_SMOKE_ROWS: "frozenset[int]" = frozenset(range(4, BOARD_ROWS))
+LAYER_FULL: str = "full"
+LAYER_BURST: str = "burst"
+LAYER_SMOKE: str = "smoke"
 
 # アンカー行を自身の npz 内で一意確定するための時刻許容誤差 (秒)。
 # ラベルの t_sec は小数第1位に丸められているため、ごく小さい誤差で十分
@@ -150,18 +184,21 @@ class LabelSample:
 
 @dataclass
 class StageResult:
-    """(b) または (c) npz との突合結果 (1 サンプル分)。"""
+    """(b)/(c)/(v2) npz との突合結果 (1 サンプル分)。"""
 
     status: str  # STAGE_MATCHED / STAGE_UNAVAILABLE / STAGE_NO_MATCH
     errors: "int | None"
     categories: "dict[str, int] | None"
     # 一致した方式 ("frame_idx" / "bit_exact_fallback")。status!=matched では None。
     matched_via: "str | None" = None
+    # layer別誤りセル数 (2026-08-05 追加、末尾 default 付きで backwards compat)。
+    errors_burst: "int | None" = None  # burst layer (row1-3)
+    errors_smoke: "int | None" = None  # smoke layer (row4-12)
 
 
 @dataclass
 class CompareResult:
-    """アンカー(=OFF)突合 + (b)/(c) 誤りセル数比較結果 (1 サンプル分)。"""
+    """アンカー(=OFF)突合 + (b)/(c)/(v2) 誤りセル数比較結果 (1 サンプル分)。"""
 
     sample: LabelSample
     anchor_found: bool
@@ -170,6 +207,12 @@ class CompareResult:
     verified_t_sec: "float | None"
     b: StageResult
     c: StageResult
+    # (v2) バーストガード Stage1 (2026-08-05 追加、末尾 default 付きで backwards compat)。
+    v2: StageResult = field(
+        default_factory=lambda: StageResult(STAGE_UNAVAILABLE, None, None)
+    )
+    off_errors_burst: "int | None" = None
+    off_errors_smoke: "int | None" = None
 
 
 # =============================================================================
@@ -360,9 +403,31 @@ def _find_bit_exact_match(
 # =============================================================================
 
 
-def count_cell_errors(predicted: "np.ndarray", correct: "np.ndarray") -> int:
-    """正解ラベルが U (不明) でないセルのみを対象に誤りセル数を数える。"""
+def _row_mask(rows: "frozenset[int] | None") -> "np.ndarray | None":
+    """rows (対象行集合) から (BOARD_ROWS, BOARD_COLS) 形の bool mask を作る。
+
+    None なら None を返す (呼び出し側は「全行対象」として扱う、backwards compat)。
+    """
+    if rows is None:
+        return None
+    mask = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=bool)
+    mask[sorted(rows), :] = True
+    return mask
+
+
+def count_cell_errors(
+    predicted: "np.ndarray", correct: "np.ndarray",
+    rows: "frozenset[int] | None" = None,
+) -> int:
+    """正解ラベルが U (不明) でないセルのみを対象に誤りセル数を数える。
+
+    rows: 2026-08-05 追加。指定した行集合のみを対象にする (layer別集計用)。
+        None (既定) なら全行対象 (既存呼び出しと bit-identical、backwards compat)。
+    """
     known_mask = correct != COLOR_UNKNOWN
+    row_mask = _row_mask(rows)
+    if row_mask is not None:
+        known_mask = known_mask & row_mask
     return int(np.count_nonzero(
         (predicted.astype(np.int64) != correct.astype(np.int64)) & known_mask
     ))
@@ -386,10 +451,15 @@ def classify_error_category(predicted: int, correct: int) -> "str | None":
 
 def count_error_categories(
     predicted: "np.ndarray", correct: "np.ndarray",
+    rows: "frozenset[int] | None" = None,
 ) -> "dict[str, int]":
-    """盤面全体の誤りセルを罪の序列カテゴリ別に集計する (U セルは除外)。"""
+    """盤面 (または指定 rows のみ) の誤りセルを罪の序列カテゴリ別に集計する。
+
+    rows: 2026-08-05 追加。None (既定) なら全行対象 (bit-identical、backwards compat)。
+    """
     counts: dict[str, int] = {c: 0 for c in ERROR_CATEGORIES}
-    for r in range(BOARD_ROWS):
+    target_rows = range(BOARD_ROWS) if rows is None else sorted(rows)
+    for r in target_rows:
         for c in range(BOARD_COLS):
             cv = int(correct[r, c])
             if cv == COLOR_UNKNOWN:
@@ -408,10 +478,11 @@ def count_error_categories(
 def compute_stage_result(
     idx: "_NpzIndex | None", side: str, anchor: "_AnchorRow", correct_grid: "np.ndarray",
 ) -> StageResult:
-    """(b) または (c) npz との突合を行う (v3 と同一の2段構成)。
+    """(b)/(c)/(v2) npz との突合を行う (v3 と同一の2段構成)。
 
     ① frame_idx 完全一致 → ② bit-exact 時刻窓フォールバック。両方失敗なら
     STAGE_NO_MATCH として明示的に区別する (fail-silent 回避)。
+    layer別誤りセル数 (burst/smoke) も同時に計算する (2026-08-05 追加)。
     """
     if idx is None:
         return StageResult(STAGE_UNAVAILABLE, None, None)
@@ -427,7 +498,11 @@ def compute_stage_result(
     grid, _t = match
     errors = count_cell_errors(grid, correct_grid)
     categories = count_error_categories(grid, correct_grid)
-    return StageResult(STAGE_MATCHED, errors, categories, matched_via)
+    errors_burst = count_cell_errors(grid, correct_grid, rows=LAYER_BURST_ROWS)
+    errors_smoke = count_cell_errors(grid, correct_grid, rows=LAYER_SMOKE_ROWS)
+    return StageResult(
+        STAGE_MATCHED, errors, categories, matched_via, errors_burst, errors_smoke,
+    )
 
 
 def compare_one_sample(
@@ -435,29 +510,43 @@ def compare_one_sample(
     anchor_idx: "_NpzIndex | None",
     b_idx: "_NpzIndex | None",
     c_idx: "_NpzIndex | None",
+    v2_idx: "_NpzIndex | None" = None,
 ) -> CompareResult:
-    """1 サンプル分の OFF(=アンカー)/(b)/(c) 誤りセル数を確定する。"""
+    """1 サンプル分の OFF(=アンカー)/(b)/(c)/(v2) 誤りセル数を確定する。"""
     anchor = _lookup_anchor_row(
         anchor_idx, s.side, s.t_sec, s.game_idx, s.anchor_recognized_grid,
     )
     unavailable = StageResult(STAGE_UNAVAILABLE, None, None)
     if anchor is None:
-        return CompareResult(s, False, None, None, None, unavailable, unavailable)
+        return CompareResult(
+            s, False, None, None, None, unavailable, unavailable, unavailable,
+        )
 
     off_errors = count_cell_errors(anchor.grid, s.correct_grid)
     off_categories = count_error_categories(anchor.grid, s.correct_grid)
+    off_errors_burst = count_cell_errors(anchor.grid, s.correct_grid, rows=LAYER_BURST_ROWS)
+    off_errors_smoke = count_cell_errors(anchor.grid, s.correct_grid, rows=LAYER_SMOKE_ROWS)
     b_result = compute_stage_result(b_idx, s.side, anchor, s.correct_grid)
     c_result = compute_stage_result(c_idx, s.side, anchor, s.correct_grid)
+    v2_result = compute_stage_result(v2_idx, s.side, anchor, s.correct_grid)
     return CompareResult(
         s, True, off_errors, off_categories, anchor.t_sec, b_result, c_result,
+        v2_result, off_errors_burst, off_errors_smoke,
     )
 
 
-def compare_all_samples(samples: list[LabelSample]) -> list[CompareResult]:
-    """全サンプルについてアンカー突合 + OFF/(b)/(c) 誤りセル数を計算する。"""
+def compare_all_samples(
+    samples: list[LabelSample], v2_dir: Path = NPZ_DIR_V2,
+) -> list[CompareResult]:
+    """全サンプルについてアンカー突合 + OFF/(b)/(c)/(v2) 誤りセル数を計算する。
+
+    v2_dir: 2026-08-05 追加。既定値 (NPZ_DIR_V2) 未変更なら既存呼び出しと
+        bit-identical (backwards compat)。
+    """
     anchor_cache: dict[str, "_NpzIndex | None"] = {}
     b_cache: dict[str, "_NpzIndex | None"] = {}
     c_cache: dict[str, "_NpzIndex | None"] = {}
+    v2_cache: dict[str, "_NpzIndex | None"] = {}
     results: list[CompareResult] = []
     for s in samples:
         if s.video_stem not in anchor_cache:
@@ -466,8 +555,10 @@ def compare_all_samples(samples: list[LabelSample]) -> list[CompareResult]:
             )
             b_cache[s.video_stem] = _load_npz_index(NPZ_DIR_B / f"{s.video_stem}.npz")
             c_cache[s.video_stem] = _load_npz_index(NPZ_DIR_C / f"{s.video_stem}.npz")
+            v2_cache[s.video_stem] = _load_npz_index(v2_dir / f"{s.video_stem}.npz")
         results.append(compare_one_sample(
             s, anchor_cache[s.video_stem], b_cache[s.video_stem], c_cache[s.video_stem],
+            v2_cache[s.video_stem],
         ))
     return results
 
@@ -510,65 +601,112 @@ def verify_off_baseline(results: list[CompareResult]) -> tuple[bool, str]:
 # =============================================================================
 
 
-def _stage_error_sum(results: list[CompareResult], stage: str) -> "tuple[int, int, int]":
-    """stage ("b"/"c") の (matched件数, no_match件数, 誤りセル合計) を返す。"""
+_STAGE_LABELS: "tuple[str, ...]" = ("b", "c", "v2")
+_LAYER_LABELS: "dict[str, str]" = {
+    LAYER_FULL: "全体",
+    LAYER_BURST: "burstレイヤー(row1-3)",
+    LAYER_SMOKE: "smokeレイヤー(row4-12)",
+}
+
+
+def _stage_result_for(r: CompareResult, stage: str) -> StageResult:
+    """stage 名 ("b"/"c"/"v2") から対応する StageResult を取り出す。"""
+    return {"b": r.b, "c": r.c, "v2": r.v2}[stage]
+
+
+def _layer_value(sr: StageResult, layer: str) -> "int | None":
+    """StageResult から layer 別誤りセル数を取り出す (LAYER_FULL は全体)。"""
+    if layer == LAYER_BURST:
+        return sr.errors_burst
+    if layer == LAYER_SMOKE:
+        return sr.errors_smoke
+    return sr.errors
+
+
+def _off_layer_value(r: CompareResult, layer: str) -> "int | None":
+    """CompareResult から OFF の layer 別誤りセル数を取り出す。"""
+    if layer == LAYER_BURST:
+        return r.off_errors_burst
+    if layer == LAYER_SMOKE:
+        return r.off_errors_smoke
+    return r.off_errors
+
+
+def _stage_error_sum(
+    results: list[CompareResult], stage: str, layer: str = LAYER_FULL,
+) -> "tuple[int, int, int]":
+    """stage ("b"/"c"/"v2") の (matched件数, no_match件数, 誤りセル合計) を返す。
+
+    layer: 2026-08-05 追加。LAYER_FULL (既定) なら全行合計 (bit-identical)。
+    """
     matched = 0
     no_match = 0
     total_errors = 0
     for r in results:
-        sr = r.b if stage == "b" else r.c
+        sr = _stage_result_for(r, stage)
         if sr.status == STAGE_MATCHED:
             matched += 1
-            total_errors += sr.errors or 0
+            total_errors += _layer_value(sr, layer) or 0
         elif sr.status == STAGE_NO_MATCH:
             no_match += 1
     return matched, no_match, total_errors
 
 
-def build_stratified_table(results: list[CompareResult]) -> str:
-    """batch × side 層別の OFF/(b)/(c) 誤りセル数表 (feedback_stratify_before_pooling)。"""
-    lines = ["--- 層別集計 (batch × side) ---"]
+def _stratified_row(
+    batch: str, side: str, grp: list[CompareResult], layer: str,
+) -> str:
+    """batch × side 1グループ分の層別集計行 (OFF/(b)/(c)/(v2))。"""
+    off_sum = sum((_off_layer_value(r, layer) or 0) for r in grp)
+    cells = []
+    for stage in _STAGE_LABELS:
+        m, nm, err = _stage_error_sum(grp, stage, layer)
+        na = sum(1 for r in grp if _stage_result_for(r, stage).status == STAGE_UNAVAILABLE)
+        cells.append(f"{f'{m}/{na}/{nm}':>16} {err:>6}")
+    return f"{batch:8} {side:4} {len(grp):>3} {off_sum:>5} " + " ".join(cells)
+
+
+def build_stratified_table(
+    results: list[CompareResult], layer: str = LAYER_FULL,
+) -> str:
+    """batch × side 層別の OFF/(b)/(c)/(v2) 誤りセル数表 (feedback_stratify_before_pooling)。
+
+    layer: LAYER_FULL (既定、全行) / LAYER_BURST (row1-3) / LAYER_SMOKE (row4-12)。
+    """
+    lines = [f"--- 層別集計 (batch × side) [{_LAYER_LABELS[layer]}] ---"]
     groups: "dict[tuple[str, str], list[CompareResult]]" = defaultdict(list)
     for r in results:
         groups[(r.sample.batch, r.sample.side)].append(r)
     header = (
         f"{'batch':8} {'side':4} {'n':>3} {'OFF':>5} "
-        f"{'b(matched/na/no_match)':>24} {'b_err':>6} "
-        f"{'c(matched/na/no_match)':>24} {'c_err':>6}"
+        + " ".join(f"{f'{s}(m/na/nm)':>16} {s + '_err':>6}" for s in _STAGE_LABELS)
     )
     lines.append(header)
     for (batch, side), grp in sorted(groups.items()):
-        off_sum = sum(r.off_errors or 0 for r in grp)
-        b_m, b_nm, b_err = _stage_error_sum(grp, "b")
-        b_na = sum(1 for r in grp if r.b.status == STAGE_UNAVAILABLE)
-        c_m, c_nm, c_err = _stage_error_sum(grp, "c")
-        c_na = sum(1 for r in grp if r.c.status == STAGE_UNAVAILABLE)
-        lines.append(
-            f"{batch:8} {side:4} {len(grp):>3} {off_sum:>5} "
-            f"{f'{b_m}/{b_na}/{b_nm}':>24} {b_err:>6} "
-            f"{f'{c_m}/{c_na}/{c_nm}':>24} {c_err:>6}"
-        )
+        lines.append(_stratified_row(batch, side, grp, layer))
     return "\n".join(lines)
 
 
 def build_category_reduction_report(results: list[CompareResult]) -> str:
-    """罪の序列カテゴリ別の OFF→(b)→(c) 誤りセル数遷移 (色→9誤検出の減少が主目的)。"""
-    lines = ["--- 誤り分類別 OFF→(b)→(c) 遷移 (色→おじゃま誤検出=最重要) ---"]
+    """罪の序列カテゴリ別の OFF→(b)→(c)→(v2) 誤りセル数遷移 (色→9誤検出の減少が主目的)。"""
+    lines = ["--- 誤り分類別 OFF→(b)→(c)→(v2) 遷移 (色→おじゃま誤検出=最重要) ---"]
     off_totals: "Counter[str]" = Counter()
-    b_totals: "Counter[str]" = Counter()
-    c_totals: "Counter[str]" = Counter()
+    stage_totals: "dict[str, Counter[str]]" = {s: Counter() for s in _STAGE_LABELS}
     for r in results:
         if r.off_categories is not None:
             off_totals.update(r.off_categories)
-        if r.b.categories is not None:
-            b_totals.update(r.b.categories)
-        if r.c.categories is not None:
-            c_totals.update(r.c.categories)
-    lines.append(f"{'category':20} {'OFF':>6} {'b(matched分)':>14} {'c(matched分)':>14}")
+        for stage in _STAGE_LABELS:
+            sr = _stage_result_for(r, stage)
+            if sr.categories is not None:
+                stage_totals[stage].update(sr.categories)
+    header = f"{'category':20} {'OFF':>6}" + "".join(
+        f" {s + '(matched分)':>14}" for s in _STAGE_LABELS
+    )
+    lines.append(header)
     for cat in ERROR_CATEGORIES:
-        lines.append(
-            f"{cat:20} {off_totals[cat]:>6} {b_totals[cat]:>14} {c_totals[cat]:>14}"
+        row = f"{cat:20} {off_totals[cat]:>6}" + "".join(
+            f" {stage_totals[s][cat]:>14}" for s in _STAGE_LABELS
         )
+        lines.append(row)
     return "\n".join(lines)
 
 
@@ -576,31 +714,29 @@ def build_anomaly_report(results: list[CompareResult]) -> str:
     """明示報告すべき異常 (アンカー突合失敗 / no_match) の一覧。"""
     lines = ["--- 異常一覧 (fail-silent 回避のため必ず確認) ---"]
     n_anchor_fail = sum(1 for r in results if not r.anchor_found)
-    n_b_no_match = sum(1 for r in results if r.b.status == STAGE_NO_MATCH)
-    n_c_no_match = sum(1 for r in results if r.c.status == STAGE_NO_MATCH)
-    n_b_fallback = sum(
-        1 for r in results if r.b.matched_via == "bit_exact_fallback"
-    )
-    n_c_fallback = sum(
-        1 for r in results if r.c.matched_via == "bit_exact_fallback"
-    )
+    no_match_counts = {
+        s: sum(1 for r in results if _stage_result_for(r, s).status == STAGE_NO_MATCH)
+        for s in _STAGE_LABELS
+    }
+    fallback_counts = {
+        s: sum(1 for r in results if _stage_result_for(r, s).matched_via == "bit_exact_fallback")
+        for s in _STAGE_LABELS
+    }
     lines.append(
         f"アンカー突合失敗: {n_anchor_fail} 件 / "
-        f"(b) no_match: {n_b_no_match} 件 / (c) no_match: {n_c_no_match} 件"
+        + " / ".join(f"({s}) no_match: {no_match_counts[s]} 件" for s in _STAGE_LABELS)
     )
     lines.append(
-        f"bit-exact フォールバック使用 (frame_idx 不一致だが内容無変化で回収): "
-        f"(b) {n_b_fallback} 件 / (c) {n_c_fallback} 件"
+        "bit-exact フォールバック使用 (frame_idx 不一致だが内容無変化で回収): "
+        + " / ".join(f"({s}) {fallback_counts[s]} 件" for s in _STAGE_LABELS)
     )
     for r in results:
         s = r.sample
-        tags = []
-        if not r.anchor_found:
-            tags.append("anchor_fail")
-        if r.b.status == STAGE_NO_MATCH:
-            tags.append("b_no_match")
-        if r.c.status == STAGE_NO_MATCH:
-            tags.append("c_no_match")
+        tags = [] if r.anchor_found else ["anchor_fail"]
+        tags += [
+            f"{stage}_no_match" for stage in _STAGE_LABELS
+            if _stage_result_for(r, stage).status == STAGE_NO_MATCH
+        ]
         if tags:
             lines.append(
                 f"  {s.batch} video_{s.video_stem} t={s.t_sec:.1f} {s.side}: "
@@ -610,15 +746,19 @@ def build_anomaly_report(results: list[CompareResult]) -> str:
 
 
 def build_landing_report(results: list[CompareResult]) -> str:
-    """(c) npz の着弾状況 (何動画分が集計対象になっているか)。"""
+    """(c)/(v2) npz の着弾状況 (何動画分が集計対象になっているか)。"""
     all_videos = sorted({r.sample.video_stem for r in results})
-    landed = sorted({
-        r.sample.video_stem for r in results if r.c.status != STAGE_UNAVAILABLE
-    })
-    return (
-        f"[(c) 着弾状況] {len(landed)}/{len(all_videos)} 動画着弾済み "
-        f"(未着弾: {sorted(set(all_videos) - set(landed))})"
-    )
+    lines = []
+    for stage in ("c", "v2"):
+        landed = sorted({
+            r.sample.video_stem for r in results
+            if _stage_result_for(r, stage).status != STAGE_UNAVAILABLE
+        })
+        lines.append(
+            f"[({stage}) 着弾状況] {len(landed)}/{len(all_videos)} 動画着弾済み "
+            f"(未着弾: {sorted(set(all_videos) - set(landed))})"
+        )
+    return "\n".join(lines)
 
 
 # =============================================================================
@@ -635,34 +775,58 @@ def _stage_cell_for_csv(sr: StageResult) -> "tuple[str, str]":
     return err_str, cat_str
 
 
+def _int_or_na(value: "int | None") -> str:
+    """None を "N/A" 文字列にする (CSV セル用の小ヘルパー)。"""
+    return "N/A" if value is None else str(value)
+
+
 def write_breakdown_csv(results: list[CompareResult], out_path: Path) -> None:
-    """盤面単位の内訳 CSV を出力する (video/side/batch/t_sec/off_err/b_err/c_err等)。"""
+    """盤面単位の内訳 CSV を出力する。
+
+    既存列 (off_err/off_color_to_ojama/b_err/b_color_to_ojama/c_err/
+    c_color_to_ojama) は順序・内容とも変更しない (backwards compat)。
+    2026-08-05: v2列 + layer別列 (burst=row1-3/smoke=row4-12) を末尾に追加。
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "batch", "video", "side", "t_sec", "status",
         "off_err", "off_color_to_ojama",
         "b_err", "b_color_to_ojama",
         "c_err", "c_color_to_ojama",
+        "v2_err", "v2_color_to_ojama",
+        "off_err_burst", "off_err_smoke",
+        "v2_err_burst", "v2_err_smoke",
     ]
     with out_path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in results:
-            s = r.sample
-            off_err = "anchor_fail" if r.off_errors is None else str(r.off_errors)
-            off_cat = (
-                "anchor_fail" if r.off_categories is None
-                else str(r.off_categories.get(CATEGORY_COLOR_TO_OJAMA, 0))
-            )
-            b_err, b_cat = _stage_cell_for_csv(r.b)
-            c_err, c_cat = _stage_cell_for_csv(r.c)
-            writer.writerow({
-                "batch": s.batch, "video": s.video_stem, "side": s.side,
-                "t_sec": f"{s.t_sec:.1f}", "status": s.status,
-                "off_err": off_err, "off_color_to_ojama": off_cat,
-                "b_err": b_err, "b_color_to_ojama": b_cat,
-                "c_err": c_err, "c_color_to_ojama": c_cat,
-            })
+            writer.writerow(_breakdown_row(r))
+
+
+def _breakdown_row(r: CompareResult) -> "dict[str, str]":
+    """1サンプル分の CSV 行を組み立てる (50行規約回避のため分離)。"""
+    s = r.sample
+    off_err = "anchor_fail" if r.off_errors is None else str(r.off_errors)
+    off_cat = (
+        "anchor_fail" if r.off_categories is None
+        else str(r.off_categories.get(CATEGORY_COLOR_TO_OJAMA, 0))
+    )
+    b_err, b_cat = _stage_cell_for_csv(r.b)
+    c_err, c_cat = _stage_cell_for_csv(r.c)
+    v2_err, v2_cat = _stage_cell_for_csv(r.v2)
+    return {
+        "batch": s.batch, "video": s.video_stem, "side": s.side,
+        "t_sec": f"{s.t_sec:.1f}", "status": s.status,
+        "off_err": off_err, "off_color_to_ojama": off_cat,
+        "b_err": b_err, "b_color_to_ojama": b_cat,
+        "c_err": c_err, "c_color_to_ojama": c_cat,
+        "v2_err": v2_err, "v2_color_to_ojama": v2_cat,
+        "off_err_burst": _int_or_na(r.off_errors_burst),
+        "off_err_smoke": _int_or_na(r.off_errors_smoke),
+        "v2_err_burst": _int_or_na(r.v2.errors_burst),
+        "v2_err_smoke": _int_or_na(r.v2.errors_smoke),
+    }
 
 
 # =============================================================================
@@ -670,14 +834,25 @@ def write_breakdown_csv(results: list[CompareResult], out_path: Path) -> None:
 # =============================================================================
 
 
+def parse_args(argv: "list[str] | None" = None) -> argparse.Namespace:
+    """CLI引数を解析する (2026-08-05 追加、未指定時は既存挙動と bit-identical)。"""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--v2-npz-dir", type=Path, default=NPZ_DIR_V2,
+        help=f"バーストガード v2 npz ディレクトリ (既定: {NPZ_DIR_V2})",
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> None:
+    args = parse_args()
     samples = load_all_samples()
     n_batch1 = sum(1 for s in samples if s.batch == "batch1")
     n_batch2 = sum(1 for s in samples if s.batch == "batch2")
     print(f"[1/3] ラベル読込: {len(samples)} 件 (batch1={n_batch1} / batch2={n_batch2})")
 
-    results = compare_all_samples(samples)
-    print("[2/3] アンカー突合 + OFF/(b)/(c) 誤りセル数比較")
+    results = compare_all_samples(samples, v2_dir=args.v2_npz_dir)
+    print("[2/3] アンカー突合 + OFF/(b)/(c)/(v2) 誤りセル数比較")
     print(build_anomaly_report(results))
     print()
 
@@ -688,16 +863,19 @@ def main() -> None:
 
     if not ok:
         print(
-            "\n★★★ OFF 検収不合格のため (b)/(c) 効果集計は出力しません "
+            "\n★★★ OFF 検収不合格のため (b)/(c)/(v2) 効果集計は出力しません "
             "(feedback_overfitting_awareness_2026-08-04: 数字が合うまで採否集計を出さない) ★★★"
         )
         return
 
-    print("\n[3/3] (b)/(c) 効果集計 (層別必須)")
+    print("\n[3/3] (b)/(c)/(v2) 効果集計 (層別必須)")
     print(build_landing_report(results))
     print()
-    print(build_stratified_table(results))
-    print()
+    # docs/BURST_GUARD_DESIGN_2026-08-05.md §7.1: burst/smoke layer別に必ず分ける。
+    # Stage1 は burst layer のみ改善見込み、smoke layer は不変が正直な期待値。
+    for layer in (LAYER_FULL, LAYER_BURST, LAYER_SMOKE):
+        print(build_stratified_table(results, layer))
+        print()
     print(build_category_reduction_report(results))
 
 
