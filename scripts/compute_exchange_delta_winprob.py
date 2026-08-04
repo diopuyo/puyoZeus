@@ -71,7 +71,8 @@ from scripts.label_exchange_outcome import (
     _load_npz,
     _merge_fire_event_clusters,
 )
-from scripts.measure_exchange_effectiveness import estimate_available_hands
+from scripts.measure_exchange_effectiveness import estimate_available_hands, estimate_landing_delay_sec
+from scripts.mc_counter_estimator import estimate_counter_distribution
 from scripts.proto_net_threat_v2 import _enumerate_pair_placements, _is_valid_next_pair
 from scripts.model_indicator_win import (
     LR_PARAMS,
@@ -945,8 +946,11 @@ def _net_pending_after_cancellation(
 # 何度も再計算しないようにメモ化する (main指摘「発火イベント近傍窓のみ計算
 # で可」への対処、値は変えず計算回数だけ減らす)。盤面内容+既知ツモが同じ
 # なら結果は必ず同じ (stateless、Board.grid_bytes() で内容ベースのキーを作る)。
+# 2026-08-04 K拡張タスク: enable_mc_counter/mc_channel もキーに含める
+# (フラグ違いのキャッシュ衝突を防ぐ、既定値のみを使う既存呼び出しは
+# タプル形状が変わるだけでキャッシュミス→再計算になるのみで値は不変)。
 _REALIZABLE_COUNTER_CACHE: dict[
-    tuple[bytes, int, "tuple[int,int]|None", "tuple[int,int]|None", bool], float] = {}
+    tuple[bytes, int, "tuple[int,int]|None", "tuple[int,int]|None", bool, bool, str], float] = {}
 
 # 修正H2 (2026-08-04): 既知ツモ列は最大2組(4個)まで npz に実測記録されている
 # (--with-next 収集済み、NextDetector精度100%確認済み[project_next_detector_
@@ -973,14 +977,17 @@ def _realizable_counter_ojama(
     next_pair: "tuple[int, int] | None" = None, dnext_pair: "tuple[int, int] | None" = None,
     simulator: "ChainSimulator | None" = None,
     enable_known_pair_completion: bool = ENABLE_KNOWN_PAIR_COMPLETION,
+    enable_mc_counter: bool = False,
+    mc_channel: str = "p75",
 ) -> float:
-    """受け側の「構築済み返し能力」(欠陥G2→修正H→修正H2改→2026-08-04棚上げ)。
-    既存 #24 sim 部品+既存指標+既存の配置列挙器の組み替えのみ (新規ロジック
-    ・新規定数を追加しない、「見えている情報を使うだけ」)。
+    """受け側の「構築済み返し能力」(欠陥G2→修正H→修正H2改→2026-08-04棚上げ→
+    K拡張MC接続)。既存 #24 sim 部品+既存指標+既存の配置列挙器の組み替えのみ
+    (新規ロジック・新規定数を追加しない、「見えている情報を使うだけ」)。
 
-    修正H (2026-08-04、現行): realizable_counter = max(immediate_fire_power(
-    現在盤面、既存指標III-2、決定論的な「今すぐ打てる最良手」=完成済みの
-    構え), expected_fire_power(k_hands)(既存指標、K手先までの確率的期待火力))。
+    修正H (2026-08-04、現行の既定挙動): realizable_counter = max(
+    immediate_fire_power(現在盤面、既存指標III-2、決定論的な「今すぐ打てる
+    最良手」=完成済みの構え), expected_fire_power(k_hands)(既存指標、K手先
+    までの確率的期待火力、K<=4で飽和))。
 
     修正H2改 (2026-08-04、棚上げ済み、enable_known_pair_completion=Trueで
     有効化可能): 既知ツモ(next_pair/dnext_pair)それぞれを**単独で**現在盤面
@@ -991,13 +998,27 @@ def _realizable_counter_ojama(
     確認したため既定では使わない(モジュール冒頭のENABLE_KNOWN_PAIR_
     COMPLETIONコメント参照)。既知ツモが無効なら0扱い。
 
+    K拡張MC (2026-08-04、enable_mc_counter=Trueで有効化可能、既定False=
+    無効・完全後方互換): scripts.mc_counter_estimator.estimate_counter_
+    distribution が返す分布のうち mc_channel ("p75"=理論値決着判定用の
+    上側 / "p25"=実践値控除用の保守的下側、二重チャネルの意味論)を max に
+    含める。時間予算は既存 estimate_landing_delay_sec (CHAIN_ANIM_PER_
+    STEP_SEC=0.4秒/連鎖、物差し一本化済み) をそのまま使い、新規較正は
+    行わない。⚠️ 表示への配線は本タスクのスコープ外 (全域バックテストで
+    precision/recall 悪化が無いことを確認してから次段で判断する)。
+
     enable_known_pair_completion: 既定=ENABLE_KNOWN_PAIR_COMPLETION(=False、
     修正Hのみ)。True にするとH2改の構え完成値も max に含める(将来のK拡張
     MCタスクや過去挙動の再現用、後方互換のためoptional引数として温存)。
+    enable_mc_counter: 既定False (修正H/H2改のみ、挙動不変)。True にすると
+    K拡張MCのmc_channel値も max に含める。
+    mc_channel: enable_mc_counter=True の場合のみ使う分位チャネル選択
+    ("p75" または "p25"、既定"p75")。
     """
     k_hands = estimate_available_hands(int(round(attacker_chain_count)))
     cache_key = (
-        defender_board.grid_bytes(), k_hands, next_pair, dnext_pair, enable_known_pair_completion)
+        defender_board.grid_bytes(), k_hands, next_pair, dnext_pair,
+        enable_known_pair_completion, enable_mc_counter, mc_channel)
     cached = _REALIZABLE_COUNTER_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -1008,8 +1029,32 @@ def _realizable_counter_ojama(
     if enable_known_pair_completion:
         completion_value = _known_pair_completion_value(defender_board, next_pair, dnext_pair)
         value = max(value, completion_value)
+    if enable_mc_counter:
+        mc_value = _mc_counter_channel_value(
+            defender_board, attacker_chain_count, next_pair, dnext_pair, mc_channel)
+        value = max(value, mc_value)
     _REALIZABLE_COUNTER_CACHE[cache_key] = value
     return value
+
+
+def _mc_counter_channel_value(
+    defender_board: Board, attacker_chain_count: float,
+    next_pair: "tuple[int, int] | None", dnext_pair: "tuple[int, int] | None",
+    mc_channel: str,
+) -> float:
+    """K拡張MC (scripts.mc_counter_estimator) のp25/p75チャネル値を返す
+    (2026-08-04 K拡張タスク、_realizable_counter_ojama の enable_mc_counter=
+    True からのみ呼ばれる)。
+
+    時間予算は既存 estimate_landing_delay_sec (CHAIN_ANIM_PER_STEP_SEC=0.4
+    秒/連鎖、23動画418イベント実測、物差し一本化済み) をそのまま使う (新規
+    較正は行わない)。既知ツモは next_pair/dnext_pair をそのまま渡す (None・
+    無効値は estimate_counter_distribution 内部で自動的に無視される)。
+    """
+    time_budget_sec = estimate_landing_delay_sec(float(attacker_chain_count))
+    known_pairs = tuple(p for p in (next_pair, dnext_pair) if p is not None)
+    dist = estimate_counter_distribution(defender_board, time_budget_sec, known_pairs=known_pairs)
+    return dist.p75 if mc_channel == "p75" else dist.p25
 
 
 def _known_pair_completion_value(
