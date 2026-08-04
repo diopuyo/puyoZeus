@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing as mp
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -71,6 +72,7 @@ from scripts.label_exchange_outcome import (
     _merge_fire_event_clusters,
 )
 from scripts.measure_exchange_effectiveness import estimate_available_hands
+from scripts.proto_net_threat_v2 import _enumerate_pair_placements, _is_valid_next_pair
 from scripts.model_indicator_win import (
     LR_PARAMS,
     build_features,
@@ -159,9 +161,23 @@ DEMO_FIRE_LINE_ALPHA: float = 0.35
 # `simulator`) のみで呼べるものだけを採用 (absorption_capacity は
 # scripts/model_indicator_win.py REDUNDANT_COLS で board_puyo_total と完全重複と
 # 既知のため除外、既存の除外方針を踏襲)。
+#
+# 修正J-2 (2026-08-04 main設計指針、J-1実測+userドメイン絶対律「構造化に
+# 向かえば色ぷよの多さはそのまま強い構造化につながる」を反映): board_puyo_
+# total (=board_color_puyo_total + board_ojama_count、完全共線) を本モデルの
+# 特徴集合から除去する。旧実装では board_puyo_total_diff の学習係数が「総数
+# (お邪魔込み)=死亡リスク」方向の負符号を持ち、board_color_puyo_total_diff
+# の正符号 (材料=火力) と同一盤面差分の中で相殺し合っていた (main実測 t=3163
+# 相当のmatch_05シーンで寄与分解: board_puyo_total_diff=-0.080 vs
+# board_color_puyo_total_diff=+0.070 でほぼ相殺、_measure_puyo_lead_vs_
+# winrate_2026-08-04.py 参照)。除去後は「材料 (色ぷよ差)」と「危険度
+# (お邪魔差・高さ系)」が別特徴として素直に分離され、色ぷよ差の効果が
+# 死亡リスク解釈と相殺されずに反映される (新規指標追加ではなく既存の
+# 完全共線特徴の除去のみ、新規定数なし)。位相境界判定
+# (_assign_phase_by_puyo_tertile 呼び出し側) は paired["board_puyo_total_
+# {1p,2p}"] を CSV から直接読むため本変更の影響を受けない。
 
 _BOARD_ONLY_FUNCS: dict[str, Callable[[Board, ChainSimulator], "iv.IndicatorV2Value"]] = {
-    "board_puyo_total": lambda b, s: iv.board_puyo_total(b),
     "board_color_puyo_total": lambda b, s: iv.board_color_puyo_total(b),
     "max_column_height": lambda b, s: iv.max_column_height(b),
     "column_bumpiness": lambda b, s: iv.column_bumpiness(b),
@@ -925,33 +941,96 @@ def _net_pending_after_cancellation(
 
 
 # expected_fire_power は K=3,4 でモンテカルロ近似 (重い) のため、
-# タイムライン評価 (0.2秒刻み) で同一盤面×同一k_handsを何度も再計算しない
-# ようにメモ化する (main指摘「発火イベント近傍窓のみ計算で可」への対処、
-# 値は変えず計算回数だけ減らす)。盤面内容が同じなら結果は必ず同じ
-# (stateless、Board.grid_bytes() で内容ベースのキーを作る)。
-_REALIZABLE_COUNTER_CACHE: dict[tuple[bytes, int], float] = {}
+# タイムライン評価 (0.2秒刻み) で同一盤面×同一k_hands×同一next/dnextを
+# 何度も再計算しないようにメモ化する (main指摘「発火イベント近傍窓のみ計算
+# で可」への対処、値は変えず計算回数だけ減らす)。盤面内容+既知ツモが同じ
+# なら結果は必ず同じ (stateless、Board.grid_bytes() で内容ベースのキーを作る)。
+_REALIZABLE_COUNTER_CACHE: dict[
+    tuple[bytes, int, "tuple[int,int]|None", "tuple[int,int]|None", bool], float] = {}
+
+# 修正H2 (2026-08-04): 既知ツモ列は最大2組(4個)まで npz に実測記録されている
+# (--with-next 収集済み、NextDetector精度100%確認済み[project_next_detector_
+# perfect_accuracy])。これは main発注の「見えている情報を使うだけ」を体現する
+# 定数であり、既存 scripts.proto_net_threat_v2.MAX_REAL_PAIRS と同じ値
+# (新規定数ではなく既存資産の参照)。
+
+# 修正H2改 棚上げ (2026-08-04 main最終判断): 全域検証を「回避不能死」ラベルで
+# 再実施した結果、修正H2改はrecallが修正H比で一貫して悪化した (旧ラベル
+# 0.4191->0.3471、新ラベル0.4227->0.3501)。実測トレース(match_01 t=2929)でも
+# 「構え完成値」(_known_pair_completion_value) が実際の到達値を系統的に
+# 過大評価することを確認した (完成値413-418 vs 実際に発火して得た317、
+# scripts/_trace_3scenes_full_2026-08-04.py 実測)。教訓: 既知ツモ2組のみの
+# 「理論上組める最良形」は、プレイヤーが実際に選択する打ち筋を代表しない
+# (組む過程の手数コスト・より早い発火判断等が欠落する)。よってH2改は
+# 理論値チャネルの推定器として不採用と決定。実装(_known_pair_completion_
+# value)自体は削除せず温存し、本フラグで既定無効化する(将来のK拡張MC
+# タスク[K手先までの実現確率込み評価]へ引き継ぐ)。
+ENABLE_KNOWN_PAIR_COMPLETION: bool = False  # 既定False = 修正Hのみ (H2改は棚上げ)
 
 
-def _realizable_counter_ojama(defender_board: Board, attacker_chain_count: float) -> float:
-    """受け側の「構築済み返し能力」(欠陥G2)。既存 #24 sim 部品の組み替えのみ
-    (新規ロジック最小、estimate_expected_net_damage と同じ構造)。
+def _realizable_counter_ojama(
+    defender_board: Board, attacker_chain_count: float,
+    next_pair: "tuple[int, int] | None" = None, dnext_pair: "tuple[int, int] | None" = None,
+    simulator: "ChainSimulator | None" = None,
+    enable_known_pair_completion: bool = ENABLE_KNOWN_PAIR_COMPLETION,
+) -> float:
+    """受け側の「構築済み返し能力」(欠陥G2→修正H→修正H2改→2026-08-04棚上げ)。
+    既存 #24 sim 部品+既存指標+既存の配置列挙器の組み替えのみ (新規ロジック
+    ・新規定数を追加しない、「見えている情報を使うだけ」)。
 
-    k_hands = estimate_available_hands(攻撃側連鎖数) で「着弾までに受け側が
-    打てる手数」を見積もり、受け側の現在ライブ盤面から
-    expected_fire_power(k_hands) の raw 値 (お邪魔換算の期待火力) を返す。
-    未来の情報は使わない (受け側の現在盤面のみで判定する、時間的因果を
-    満たす)。attacker_chain_count=0.0 (連鎖数不明) の場合は
-    estimate_available_hands(0)>=1 が返るため常に有効な k_hands になる。
+    修正H (2026-08-04、現行): realizable_counter = max(immediate_fire_power(
+    現在盤面、既存指標III-2、決定論的な「今すぐ打てる最良手」=完成済みの
+    構え), expected_fire_power(k_hands)(既存指標、K手先までの確率的期待火力))。
+
+    修正H2改 (2026-08-04、棚上げ済み、enable_known_pair_completion=Trueで
+    有効化可能): 既知ツモ(next_pair/dnext_pair)それぞれを**単独で**現在盤面
+    に置いた場合の22通り(scripts.proto_net_threat_v2._enumerate_pair_
+    placements、再利用・再実装しない)を列挙し、各配置後の盤面に
+    immediate_fire_power(既存指標III-2)を適用した最大値を「構え完成値」
+    とする。全域検証(回避不能死ラベル)でrecall悪化・実測値の過大評価を
+    確認したため既定では使わない(モジュール冒頭のENABLE_KNOWN_PAIR_
+    COMPLETIONコメント参照)。既知ツモが無効なら0扱い。
+
+    enable_known_pair_completion: 既定=ENABLE_KNOWN_PAIR_COMPLETION(=False、
+    修正Hのみ)。True にするとH2改の構え完成値も max に含める(将来のK拡張
+    MCタスクや過去挙動の再現用、後方互換のためoptional引数として温存)。
     """
     k_hands = estimate_available_hands(int(round(attacker_chain_count)))
-    cache_key = (defender_board.grid_bytes(), k_hands)
+    cache_key = (
+        defender_board.grid_bytes(), k_hands, next_pair, dnext_pair, enable_known_pair_completion)
     cached = _REALIZABLE_COUNTER_CACHE.get(cache_key)
     if cached is not None:
         return cached
-    result = iv.expected_fire_power(defender_board, k_levels=(k_hands,))
-    value = float(result.values[k_hands].raw)
+    expected_result = iv.expected_fire_power(defender_board, k_levels=(k_hands,))
+    expected_value = float(expected_result.values[k_hands].raw)
+    immediate_value = float(iv.immediate_fire_power(defender_board).raw)
+    value = max(expected_value, immediate_value)
+    if enable_known_pair_completion:
+        completion_value = _known_pair_completion_value(defender_board, next_pair, dnext_pair)
+        value = max(value, completion_value)
     _REALIZABLE_COUNTER_CACHE[cache_key] = value
     return value
+
+
+def _known_pair_completion_value(
+    defender_board: Board,
+    next_pair: "tuple[int, int] | None", dnext_pair: "tuple[int, int] | None",
+) -> float:
+    """「構え完成値」(修正H2改)。既知ツモ (next_pair/dnext_pair) それぞれを
+    単独で現在盤面に置いた22通り (既存 _enumerate_pair_placements 再利用) の
+    うち、配置後盤面の immediate_fire_power (既存指標III-2) が最大のものを
+    返す。2組を連結する最適2手探索はしない (初版修正H2の過大評価対策、
+    main指示通り「小探索」に限定)。既知ツモが両方無効なら0.0。
+    """
+    best = 0.0
+    for pair in (next_pair, dnext_pair):
+        if not _is_valid_next_pair(pair):
+            continue
+        for placed in _enumerate_pair_placements(defender_board, pair[0], pair[1]):
+            value = float(iv.immediate_fire_power(placed).raw)
+            if value > best:
+                best = value
+    return best
 
 
 # =============================================================================
@@ -998,18 +1077,25 @@ def _lethal_readout_clamp(
     activity_windows: list[EventActivityWindow], t: float,
     board_1p: Board, board_2p: Board, model_winprob_1p: float, simulator: ChainSimulator,
     was_active: bool = False,
+    next_pair_1p: "tuple[int, int] | None" = None, dnext_pair_1p: "tuple[int, int] | None" = None,
+    next_pair_2p: "tuple[int, int] | None" = None, dnext_pair_2p: "tuple[int, int] | None" = None,
 ) -> tuple[float, bool]:
-    """受け切れ判定 (欠陥G2→2026-08-04連続化)。通常評価 (model_winprob_1p) を
-    そのまま返すか、severity に応じて連続的にブレンドした値を返す。
+    """受け切れ判定 (欠陥G2→2026-08-04連続化→修正H→修正H2)。通常評価
+    (model_winprob_1p) をそのまま返すか、severity に応じて連続的に
+    ブレンドした値を返す。
 
     正味予告 P (相殺後、_net_pending_after_cancellation) から、受け側の
-    構築済み返し能力 realizable_counter (_realizable_counter_ojama) と
-    空き容量 room を引いた raw_excess を _clamp_severity で連続化する。
-    戻り値は (表示すべきwinprob_1p, 次回呼び出しに渡すis_active状態) の
-    タプル (2026-08-04 ヒステリシス対応で戻り値をタプル化、呼び出し元
-    [_build_stable_timeline] が状態を維持する、私自身は stateless)。
-    was_active の既定値Falseは「前回発動していなかった」扱いで後方互換
-    (旧テスト・旧呼び出しはヒステリシスなしの初回評価として動作する)。
+    構築済み返し能力 realizable_counter (_realizable_counter_ojama、修正H2で
+    既知ツモも加味) と空き容量 room を引いた raw_excess を _clamp_severity
+    で連続化する。戻り値は (表示すべきwinprob_1p, 次回呼び出しに渡す
+    is_active状態) のタプル (2026-08-04 ヒステリシス対応で戻り値をタプル化、
+    呼び出し元 [_build_stable_timeline] が状態を維持する、私自身は
+    stateless)。was_active の既定値Falseは「前回発動していなかった」扱いで
+    後方互換 (旧テスト・旧呼び出しはヒステリシスなしの初回評価として動作)。
+
+    next_pair_1p/dnext_pair_1p/next_pair_2p/dnext_pair_2p: optional
+    (2026-08-04 修正H2、既定None=後方互換)。それぞれ1P/2P側が「受け側」に
+    なった場合に使う既知ツモ2組 (npz実測、--with-next収集)。
     """
     attack_from_1p, attack_from_2p, chain_from_1p, chain_from_2p = _aggregate_known_pending_net_ojama(
         activity_windows, t, board_1p, board_2p,
@@ -1022,9 +1108,12 @@ def _lethal_readout_clamp(
 
     if pending_on_1p > 0.0:
         threatened_board, pending, attacker_chain = board_1p, pending_on_1p, chain_from_2p
+        next_pair, dnext_pair = next_pair_1p, dnext_pair_1p
     else:
         threatened_board, pending, attacker_chain = board_2p, pending_on_2p, chain_from_1p
-    realizable_counter = _realizable_counter_ojama(threatened_board, attacker_chain)
+        next_pair, dnext_pair = next_pair_2p, dnext_pair_2p
+    realizable_counter = _realizable_counter_ojama(
+        threatened_board, attacker_chain, next_pair, dnext_pair, simulator)
     room = board_room(threatened_board)
     raw_excess = pending - realizable_counter - room
     severity, is_active = _clamp_severity(raw_excess, was_active)
@@ -1036,6 +1125,134 @@ def _lethal_readout_clamp(
     if pending_on_1p > 0.0:
         return min(model_winprob_1p, blended), is_active  # 1P脅威 -> 2P有利方向にブレンド
     return max(model_winprob_1p, blended), is_active  # 2P脅威 -> 1P有利方向にブレンド
+
+
+# =============================================================================
+# 4g. 実践値/理論値 二重チャネル (2026-08-04 user決定、project_dual_display_
+#     theory_practice_2026-08-04)
+# =============================================================================
+#
+# 従来の _lethal_readout_clamp は「モデル値へブレンドして表示する」単一チャネル
+# 設計だったが、user裁定によりこれを2チャネルへ分離する:
+#   実践値 = model_winprob_1p (統計モデル+校正) をそのまま。クランプで一切
+#            上書きしない「生の実戦形勢」(_build_stable_timeline の
+#            winprob_1p 列、以後クランプ非適用)。
+#   理論値 = 台帳(_aggregate_known_pending_net_ojama)+受け切れ判定
+#            (_realizable_counter_ojama、修正H2改のタイトな上限推定器が
+#            「このチャネル専用の推定器」)。「相手最善でも返せない」
+#            (severity が完全飽和=1.0) の場合のみ勝者側+マージンを主張する
+#            離散判定 (0/1の「決着」表明であり、連続ブレンドはしない)。
+#
+# _lethal_readout_clamp 自体は後方互換のため削除せず残す (直接呼ぶ既存
+# テスト・スクリプトあり)。_build_stable_timeline は本関数のみを呼ぶ。
+
+def _theory_verdict(
+    activity_windows: list[EventActivityWindow], t: float,
+    board_1p: Board, board_2p: Board, simulator: ChainSimulator,
+    was_active: bool = False,
+    next_pair_1p: "tuple[int, int] | None" = None, dnext_pair_1p: "tuple[int, int] | None" = None,
+    next_pair_2p: "tuple[int, int] | None" = None, dnext_pair_2p: "tuple[int, int] | None" = None,
+) -> tuple["str | None", float, bool]:
+    """理論値チャネル(決着インジケータ)。「相手最善でも返せない」場合のみ
+    勝者側+マージンを主張する離散判定を返す (2026-08-04 実践値/理論値 分離)。
+
+    _lethal_readout_clamp と全く同じ台帳・同じ受け切れ推定器
+    (_realizable_counter_ojama) を再利用するが、モデル値への
+    ブレンドは行わない。推定器は2026-08-04 main判断によりH2改を棚上げし
+    修正Hのみ (ENABLE_KNOWN_PAIR_COMPLETION=False) を使う (全域検証で
+    H2改がrecall悪化、実測でも構え完成値が実現値を過大評価と判明)。
+    severity が完全飽和 (==1.0、raw_excess>=
+    OJAMA_MAX_DROP_PER_TURN) に達した時のみ「決着」を主張する
+    (severity<1.0=まだ理論上返せる余地がある間は「保留」として None を返す、
+    user指示「相手最善でも返せない時のみ決着を主張」の直訳)。
+
+    _clamp_severity のヒステリシス (was_active/is_active) をそのまま流用し、
+    決着インジケータの小刻みな点滅を防ぐ (呼び出し元が状態を持つ、
+    本関数自体は stateless)。
+
+    Returns:
+        (勝者側 "1P"/"2P" (決着なしなら None), margin (raw_excess、お邪魔
+        換算の超過量。決着なしなら0.0), 次回呼び出しに渡す is_active) のタプル。
+    """
+    attack_from_1p, attack_from_2p, chain_from_1p, chain_from_2p = _aggregate_known_pending_net_ojama(
+        activity_windows, t, board_1p, board_2p,
+    )
+    if attack_from_1p == 0.0 and attack_from_2p == 0.0:
+        return None, 0.0, False
+    pending_on_1p, pending_on_2p = _net_pending_after_cancellation(attack_from_1p, attack_from_2p)
+    if pending_on_1p <= 0.0 and pending_on_2p <= 0.0:
+        return None, 0.0, False  # 完全相殺、脅威側なし
+
+    if pending_on_1p > 0.0:
+        threatened_board, pending, attacker_chain = board_1p, pending_on_1p, chain_from_2p
+        next_pair, dnext_pair, winner_if_verdict = next_pair_1p, dnext_pair_1p, "2P"
+    else:
+        threatened_board, pending, attacker_chain = board_2p, pending_on_2p, chain_from_1p
+        next_pair, dnext_pair, winner_if_verdict = next_pair_2p, dnext_pair_2p, "1P"
+
+    realizable_counter = _realizable_counter_ojama(
+        threatened_board, attacker_chain, next_pair, dnext_pair, simulator)
+    room = board_room(threatened_board)
+    raw_excess = pending - realizable_counter - room
+    severity, is_active = _clamp_severity(raw_excess, was_active)
+    if severity < 1.0:
+        return None, 0.0, is_active  # まだ理論上返せる余地がある間は決着を主張しない
+    return winner_if_verdict, raw_excess, is_active
+
+
+# =============================================================================
+# 4h. 修正K (2026-08-04): 実践値チャネルへの予告おじゃまの物理反映
+# =============================================================================
+#
+# 背景 (main実測 match_02 2980-2986s): 2Pが349を発火したが1Pはまだ返して
+# いない(net_ojama_after=349が正味予告として台帳に残ったまま)にも関わらず、
+# 「2Pの連鎖消化後の空き盤面」を統計モデルが単純に高評価し、実践値が
+# 35%->68%まで独力で上昇する現象を確認した(理論値チャネルの決着判定は
+# 「相手最善でも返せない」場合のみ作動する離散判定であり、この種の
+# 「まだ確定していないが物理的に既知の情報」を実践値へ反映する仕組みでは
+# ない、二重チャネル設計の意図的な帰結)。
+#
+# 修正K: 統計モデルへの入力盤面そのものに、相殺後の正味予告pendingを
+# placement-gated(1ターンOJAMA_MAX_DROP_PER_TURN=30個上限、
+# src.exchange_virtual_board の欠陥E-1と同じ考え方)で仮想着弾させた状態を
+# 使う。これは「決着」を主張するものではなく、確定済みの物理情報(相殺後の
+# 正味予告)をモデルの評価入力に反映するだけであり、二重チャネル原則
+# (実践値はクランプ=後付けの数値上書きをしない)と矛盾しない
+# — モデル出力そのものを後から動かすのではなく、モデルへの入力盤面を
+# 物理的に正しくする、という違いである。
+
+
+def _apply_pending_ojama_virtual_landing(
+    board: Board, pending: float, simulator: ChainSimulator,
+) -> Board:
+    """修正K: この盤面が受ける側の正味予告pending(非負)を、1ターンで物理配置
+    できる上限(OJAMA_MAX_DROP_PER_TURN=30個、超過分はまだ空中として配置
+    しない)まで仮想着弾させた盤面を返す。
+
+    着弾の物理 (6列均等floor(N/6)+端数ランダム) は既存
+    ChainSimulator.drop_ojama をそのまま使う (再実装しない、
+    src.exchange_virtual_board.reconstruct_virtual_board_pair と同じ資産)。
+    シードは盤面内容+着弾個数から決定論的に導出する (stateless、
+    同一入力には常に同一結果)。
+
+    Args:
+        board: 着弾前の盤面 (破壊しない、drop_ojamaはcopyを返す)。
+        pending: この盤面が受ける正味予告 (非負が前提。0以下ならboardを
+            そのまま返す=着弾なし、pending_on_1p/pending_on_2pのどちらかは
+            常に0であることが呼び出し元の _net_pending_after_cancellation
+            により保証されている)。
+        simulator: ChainSimulator インスタンス (drop_ojamaの実行に必要)。
+
+    Returns:
+        Board: 着弾後の仮想盤面 (pending<=0または配置数0ならboardそのもの)。
+    """
+    if pending <= 0.0:
+        return board
+    ojama_count = min(int(round(pending)), OJAMA_MAX_DROP_PER_TURN)
+    if ojama_count <= 0:
+        return board
+    seed = zlib.crc32(board.grid_bytes()) ^ zlib.crc32(ojama_count.to_bytes(8, "big", signed=True))
+    return simulator.drop_ojama(board, ojama_count, seed=seed)
 
 
 # =============================================================================
@@ -1165,6 +1382,16 @@ def print_sanity_checks(df: pd.DataFrame) -> None:
 # 8. デモviz (従来STABLE推移 vs 発火直後速報の重ね書き)
 # =============================================================================
 
+def _safe_next_array(arr: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """NpzRecordのnext系配列 (末尾optional、既定np.empty(0)) をmaskで安全に
+    絞り込む。空配列 (旧形式レコード・テスト等) の場合はmaskと同じ長さの
+    NEXT_COLOR_UNKNOWN(-1)埋め配列にフォールバックする (修正H2、後方互換)。
+    """
+    if len(arr) == 0:
+        return np.full(int(mask.sum()), -1, dtype=np.int8)
+    return arr[mask]
+
+
 def _build_stable_timeline(
     video_cache: _VideoNpzCache, game_idx: int, models: dict[str, PhaseWinprobModel],
     simulator: ChainSimulator,
@@ -1194,18 +1421,40 @@ def _build_stable_timeline(
     いるため、固定盤面では反映できない、欠陥E-2)。既定 None = 従来通り
     両側とも素の前方保持のみ (後方互換)。
 
-    activity_windows: optional (2026-08-03 指摘 欠陥G)。渡すと、各評価時刻で
+    activity_windows: optional (2026-08-03 指摘 欠陥G → 2026-08-04 実践値/
+    理論値 二重化で意味が変わった点に注意)。渡すと、各評価時刻で
     「点火済み・未着弾」の全イベントの実測 net_ojama_after を相殺会計し、
-    受け切れない (空き容量+近い将来の返し能力を超える) と判定した場合、
-    盤面ライブ評価の結果を予告側 (攻撃側) へ強くクランプする
-    (_lethal_readout_clamp docstring 参照)。既定 None = クランプ無効
-    (後方互換)。
+    受け切れない (空き容量+近い将来の返し能力を超える) 場合の判定を行うが、
+    2026-08-04 以降 winprob_1p (実践値、統計モデル+校正) はこの判定で
+    **一切上書きされない** (「生の実戦形勢」を常に表示する、userの明示裁定)。
+    代わりに理論値チャネル (theory_verdict_side/theory_margin 列、
+    _theory_verdict 参照) が「相手最善でも返せない」場合のみ決着を主張する
+    離散インジケータとして別列に出力される。既定 None = 理論値チャネル
+    無効 (常に決着なし、後方互換)。
+
+    また 2026-08-04 修正K により、activity_windows 指定時は実践値
+    (winprob_1p) 自体の**評価入力盤面**にも、相殺後の正味予告を
+    placement-gated で仮想着弾させた状態を使う
+    (_apply_pending_ojama_virtual_landing 参照)。これは理論値チャネルの
+    決着判定とは独立で、ChainInProgressWindow 中に限らず pending が
+    存在する全時間帯に適用される (main実測 match_02 の「返していないのに
+    勝率が上がる」現象への対処)。
     """
     mask1, mask2 = video_cache.r1p.game_idx == game_idx, video_cache.r2p.game_idx == game_idx
     t1, g1 = video_cache.r1p.t_sec[mask1], video_cache.r1p.grids[mask1]
     t2, g2 = video_cache.r2p.t_sec[mask2], video_cache.r2p.grids[mask2]
     if len(t1) == 0 or len(t2) == 0:
-        return pd.DataFrame(columns=["t_sec", "winprob_1p", "is_uncertain"])
+        return pd.DataFrame(columns=[
+            "t_sec", "winprob_1p", "theory_verdict_side", "theory_margin", "is_uncertain"])
+    # 修正H2 (2026-08-04): 既知ツモ2組 (--with-next 収集済み、無ければ
+    # NEXT_COLOR_UNKNOWN=-1 埋め、_realizable_counter_ojama 側で安全に
+    # フォールバックされる)。NpzRecord.next1_a 等は末尾の optional フィールド
+    # (既定 np.empty(0)) のため、位置引数で組み立てた旧形式レコード
+    # (テスト等) では空配列になりうる点に注意し _safe_next_array で防御する。
+    n1a, n1b = _safe_next_array(video_cache.r1p.next1_a, mask1), _safe_next_array(video_cache.r1p.next1_b, mask1)
+    d1a, d1b = _safe_next_array(video_cache.r1p.dnext_a, mask1), _safe_next_array(video_cache.r1p.dnext_b, mask1)
+    n2a, n2b = _safe_next_array(video_cache.r2p.next1_a, mask2), _safe_next_array(video_cache.r2p.next1_b, mask2)
+    d2a, d2b = _safe_next_array(video_cache.r2p.dnext_a, mask2), _safe_next_array(video_cache.r2p.dnext_b, mask2)
     puyo_totals = np.array([int((g != 0).sum()) for g in g1], dtype=float)
     q_low, q_high = np.quantile(puyo_totals, 0.33), np.quantile(puyo_totals, 0.67)
     windows = chain_windows or []
@@ -1213,8 +1462,10 @@ def _build_stable_timeline(
 
     eval_times = np.union1d(t1, t2)  # 両サイドの全STABLE時刻の和集合 (昇順・重複除去)
     rows: list[dict] = []
-    last_good_winprob = 50.0  # 凍結中に表示保持する「最後の確定値」(方針(b))
-    clamp_was_active = False  # 連続クランプのヒステリシス状態 (2026-08-04)
+    last_good_winprob = 50.0  # 凍結中に表示保持する「最後の確定値」(方針(b)、実践値チャネル)
+    last_good_theory_side: "str | None" = None  # 同上、理論値チャネル (2026-08-04)
+    last_good_theory_margin = 0.0
+    theory_was_active = False  # 理論値チャネルのヒステリシス状態 (2026-08-04)
     for t in eval_times:
         idx1 = int(np.searchsorted(t1, t, side="right")) - 1
         idx2 = int(np.searchsorted(t2, t, side="right")) - 1
@@ -1231,25 +1482,58 @@ def _build_stable_timeline(
                 b1 = active.board_after
             else:
                 b2 = active.board_after
-        f1, f2 = compute_board_only_features(b1, simulator), compute_board_only_features(b2, simulator)
-        p1 = winprob_attacker(models, phase, f1, f2)
-        winprob_1p = winprob_to_score100(p1)
+        # 修正K (2026-08-04): 実践値チャネルの評価入力盤面には、相殺後の
+        # 正味予告(pending)をplacement-gatedで仮想着弾させた状態を使う
+        # (確定済み物理情報の評価入力化、_apply_pending_ojama_virtual_landing
+        # docstring参照)。理論値チャネル (_theory_verdict) は着弾前の
+        # b1/b2 (素の live/chain_windows済み盤面) をそのまま使う (据え置き)。
+        b1_practical, b2_practical = b1, b2
         if activity:
-            winprob_1p, clamp_was_active = _lethal_readout_clamp(
-                activity, float(t), b1, b2, winprob_1p, simulator, clamp_was_active)
+            k_attack_1p, k_attack_2p, _kc1, _kc2 = _aggregate_known_pending_net_ojama(
+                activity, float(t), b1, b2)
+            k_pending_1p, k_pending_2p = _net_pending_after_cancellation(k_attack_1p, k_attack_2p)
+            b1_practical = _apply_pending_ojama_virtual_landing(b1, k_pending_1p, simulator)
+            b2_practical = _apply_pending_ojama_virtual_landing(b2, k_pending_2p, simulator)
+        f1, f2 = (compute_board_only_features(b1_practical, simulator),
+                  compute_board_only_features(b2_practical, simulator))
+        p1 = winprob_attacker(models, phase, f1, f2)
+        # 実践値チャネル (2026-08-04): 統計モデル+校正の生値。クランプでは
+        # 一切上書きしない (userの明示裁定「生の実戦形勢」)。評価入力盤面
+        # そのものへの物理反映 (修正K) は「後付けの数値上書き」とは別物。
+        winprob_1p = winprob_to_score100(p1)
+        # 理論値チャネル (2026-08-04): 台帳+受け切れ判定による離散「決着」
+        # インジケータ。実践値には影響しない別チャンネル。
+        theory_side: "str | None" = None
+        theory_margin = 0.0
+        if activity:
+            next_1p = (int(n1a[idx1]), int(n1b[idx1]))
+            dnext_1p = (int(d1a[idx1]), int(d1b[idx1]))
+            next_2p = (int(n2a[idx2]), int(n2b[idx2]))
+            dnext_2p = (int(d2a[idx2]), int(d2b[idx2]))
+            theory_side, theory_margin, theory_was_active = _theory_verdict(
+                activity, float(t), b1, b2, simulator, theory_was_active,
+                next_1p, dnext_1p, next_2p, dnext_2p)
 
         # 方針(b): どちらかの側のSTABLE更新がFREEZE_DETECTION_THRESHOLD_SEC秒
         # 以上途絶していれば、その盤面は連鎖進行中等で凍結中とみなし、
         # 新しく計算した値でなく「凍結直前の最後の確定値」を表示保持する。
+        # 2026-08-04: 判定保留(凍結検知)は実践値/理論値の両チャネル共通で
+        # 適用する (user指示)。
         staleness_1p = float(t) - float(t1[idx1])
         staleness_2p = float(t) - float(t2[idx2])
         is_uncertain = (staleness_1p > FREEZE_DETECTION_THRESHOLD_SEC
                          or staleness_2p > FREEZE_DETECTION_THRESHOLD_SEC)
         if is_uncertain:
             winprob_1p = last_good_winprob
+            theory_side, theory_margin = last_good_theory_side, last_good_theory_margin
         else:
             last_good_winprob = winprob_1p
-        rows.append({"t_sec": float(t), "winprob_1p": winprob_1p, "is_uncertain": is_uncertain})
+            last_good_theory_side, last_good_theory_margin = theory_side, theory_margin
+        rows.append({
+            "t_sec": float(t), "winprob_1p": winprob_1p,
+            "theory_verdict_side": theory_side or "", "theory_margin": theory_margin,
+            "is_uncertain": is_uncertain,
+        })
     return pd.DataFrame(rows)
 
 
