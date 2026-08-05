@@ -141,8 +141,13 @@ def load_yardstick_rows() -> list[YardstickRow]:
 
 def _reconstruct_correct_grid(
     row: YardstickRow, baseline_dir: Path,
-) -> "np.ndarray | None":
-    """旧基準npzから該当frameのグリッドを取り、wrong_cellsで上書きして正解を作る。"""
+) -> "tuple[np.ndarray, float] | None":
+    """旧基準npzから該当frameのグリッドを取り、wrong_cellsで上書きして正解を作る。
+
+    Returns:
+        (正解グリッド, ラベル時点のt_sec)。t_sec はv4側の実効盤面フォールバック
+        (frame_idx一致失敗時) のアンカーに使う。
+    """
     for npz_path in sorted(baseline_dir.glob(f"{row.video_stem}_g*.npz")):
         idx = _MC._load_npz_index(npz_path)
         if idx is None:
@@ -150,11 +155,11 @@ def _reconstruct_correct_grid(
         match = _MC._find_by_frame_idx_exact(idx, row.side, row.frame_idx)
         if match is None:
             continue
-        grid, _t = match
+        grid, t_sec = match
         correct = grid.copy()
         for (r, c), v in row.wrong_cells.items():
             correct[r, c] = v
-        return correct
+        return correct, float(t_sec)
     return None
 
 
@@ -163,11 +168,41 @@ def _reconstruct_correct_grid(
 # =============================================================================
 
 
+# 最近傍突合の許容時刻差 (秒)。STABLEスナップショットは毎秒数枚あるため、
+# ラベル瞬間の盤面は±この範囲に必ず存在するはず。これを超える最近傍は
+# 「その瞬間の盤面が無い」= no_match として正直に落とす (実効盤面方式は
+# ラベルが連鎖境界直後の場合に数秒前の盤面=別内容を掴む誤りがあり不採用、
+# 2026-08-05実測: c15 2P f15646 で26セルの偽誤りを生成した)。
+NEAREST_MATCH_TOLERANCE_SEC: float = 0.35
+
+
+def _find_nearest_in_time(
+    idx: "object", side: str, label_t: float,
+) -> "np.ndarray | None":
+    """ラベル時刻に最も近いスナップショットのグリッド (±許容内のみ) を返す。"""
+    mask = (idx.sides == side)
+    cand = np.where(mask)[0]
+    if len(cand) == 0:
+        return None
+    dt = np.abs(idx.t_secs[cand] - label_t)
+    best = int(np.argmin(dt))
+    if float(dt[best]) > NEAREST_MATCH_TOLERANCE_SEC:
+        return None
+    return idx.grids[cand[best]]
+
+
 def compare_one_row(row: YardstickRow, baseline_dir: Path, v4_dir: Path) -> BoardResult:
-    """1盤面分: 正解再構成 → v4グリッド取得 → セル単位diff。"""
-    correct = _reconstruct_correct_grid(row, baseline_dir)
-    if correct is None:
+    """1盤面分: 正解再構成 → v4グリッド取得 → セル単位diff。
+
+    v4側の突合は frame_idx 完全一致を優先し、失敗時は「ラベル時刻±0.35秒の
+    最近傍スナップショット」にフォールバックする (2026-08-05追記: 窓付き収集は
+    コールドスタートで確定タイミングの足並みが全編ずれ、exact一致がほぼ
+    失敗する。最近傍±許容はその瞬間の実内容を測る)。
+    """
+    rec = _reconstruct_correct_grid(row, baseline_dir)
+    if rec is None:
         return BoardResult(row, False, False, None, [])
+    correct, label_t = rec
     v4_grid = None
     for npz_path in sorted(v4_dir.glob(f"{row.video_stem}_g*.npz")):
         idx = _MC._load_npz_index(npz_path)
@@ -177,6 +212,9 @@ def compare_one_row(row: YardstickRow, baseline_dir: Path, v4_dir: Path) -> Boar
         if match is not None:
             v4_grid = match[0]
             break
+        near = _find_nearest_in_time(idx, row.side, label_t)
+        if near is not None and v4_grid is None:
+            v4_grid = near  # exact優先のためbreakしない (他npzのexactを探し続ける)
     if v4_grid is None:
         return BoardResult(row, True, False, None, [])
     mismatches = [
