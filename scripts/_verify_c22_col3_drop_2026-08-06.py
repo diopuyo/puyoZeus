@@ -89,6 +89,16 @@ FORCE_ALL_FRAMES: bool = True
 # runでも経験させる)。
 CROSS_BOUNDARY_START_T_SEC: "float | None" = 3050.0
 
+# 2026-08-06 機構確定実験 (docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md
+# アーキ設計、コーディネータ指示): 実験A/Bの切替。
+#   "A": OFF/v4 両方に enable_drift_resync_hsv_gate=False を明示指定
+#        (③ drift resync 安全弁の永久停止が主因なら解消するはず)。
+#   "B": RecognitionPipeline.reset() をラップし、末尾で
+#        _online_hsv/_online_hsv_injected/_online_hsv_injected_colors を
+#        追加クリアする診断monkeypatch (①②=凍結+reset未クリアが主因なら
+#        解消するはず)。src/本体は変更しない (このラップのみ)。
+EXPERIMENT: str = "A"
+
 TARGET_W: int = 1920
 TARGET_H: int = 1080
 
@@ -97,7 +107,7 @@ BURST_GATE_OPEN_THRESHOLD_V4: float = 0.954
 # baseline npz (correct) との直接diffで確定した12セル (row, col, correct_value)。
 TARGET_CELLS: "tuple[tuple[int, int, int], ...]" = (
     (3, 3, 1), (4, 3, 4), (5, 3, 3), (6, 3, 3), (7, 3, 4),
-    (8, 3, 4), (9, 3, 4), (10, 3, 4), (11, 3, 3),
+    (8, 3, 4), (9, 3, 4), (10, 3, 3), (11, 3, 3),  # 2026-08-06 修正: row10c3 correct=3 (誤記4→3)
     (5, 4, 1), (6, 4, 4), (7, 4, 3),
 )
 
@@ -285,13 +295,33 @@ def _wrapped_resolve_effective(
     return result
 
 
+_ORIG_PIPELINE_RESET: Callable = RecognitionPipeline.reset
+
+
+def _wrapped_reset_clear_calibration(self: RecognitionPipeline) -> None:
+    """実験B: `RecognitionPipeline.reset()` 診断ラップ (src/本体は変更しない)。
+
+    末尾で OnlineHsvCalibrator の較正状態を追加クリアする
+    (①凍結ガード+②reset未クリア、の2仮説を同時に無効化する診断パッチ)。
+    `self._online_hsv` は再構築せず `reset()` を呼ぶだけに留める (較正器
+    自体のAPIをそのまま使い、独自ロジックを再実装しないため)。
+    """
+    _ORIG_PIPELINE_RESET(self)
+    if getattr(self, "_online_hsv", None) is not None:
+        self._online_hsv.reset()
+    self._online_hsv_injected = False
+    self._online_hsv_injected_colors.clear()
+
+
 def install_probes() -> None:
-    """全5 monkeypatch をインストールする (src/ 本番ファイルは書き換えない)。"""
+    """全5 monkeypatch + 実験Bの追加パッチ (EXPERIMENT=="B" 時のみ) をインストールする。"""
     RecognitionPipeline._step_side = _wrapped_step_side
     bsm._filter_transition_new_cnn_for_burst_guard = _wrapped_filter
     bsm._recovery_or_effect_gate_pass = _wrapped_recovery_pass
     rp._resolve_burst_gate_state = _wrapped_resolve_burst_gate_state
     rp._resolve_effective_burst_gate_active = _wrapped_resolve_effective
+    if EXPERIMENT == "B":
+        RecognitionPipeline.reset = _wrapped_reset_clear_calibration
 
 
 def uninstall_probes() -> None:
@@ -301,6 +331,7 @@ def uninstall_probes() -> None:
     bsm._recovery_or_effect_gate_pass = _ORIG_RECOVERY_PASS
     rp._resolve_burst_gate_state = _ORIG_RESOLVE_BURST
     rp._resolve_effective_burst_gate_active = _ORIG_RESOLVE_EFFECTIVE
+    RecognitionPipeline.reset = _ORIG_PIPELINE_RESET
 
 
 # =============================================================================
@@ -309,15 +340,32 @@ def uninstall_probes() -> None:
 
 
 def _build_off_pipeline() -> RecognitionPipeline:
-    """OFF対照 (バーストガード系フラグ全て既定False)。"""
+    """OFF対照 (バーストガード系フラグ全て既定False)。
+
+    実験A (EXPERIMENT=="A") では `enable_drift_resync_hsv_gate=False` を
+    明示指定する (coordinator指示、③ドリフト再同期安全弁永久停止仮説の検証)。
+    実験B ("B") ではこの引数は既定True (無指定) のままとし、
+    `install_probes` がインストールする `reset()` 較正クリアパッチで
+    ①②仮説を検証する。
+    """
+    kwargs: dict = {}
+    if EXPERIMENT == "A":
+        kwargs["enable_drift_resync_hsv_gate"] = False
     return RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=True,
+        **kwargs,
     )
 
 
 def _build_v4_pipeline() -> RecognitionPipeline:
-    """v4確定構成 (scripts/_jobs_yardstick_v4prod_2026-08-05.txt と同一)。"""
+    """v4確定構成 (scripts/_jobs_yardstick_v4prod_2026-08-05.txt と同一)。
+
+    実験A/Bの分岐は `_build_off_pipeline` と同一方針。
+    """
+    kwargs: dict = {}
+    if EXPERIMENT == "A":
+        kwargs["enable_drift_resync_hsv_gate"] = False
     return RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=True,
@@ -325,6 +373,7 @@ def _build_v4_pipeline() -> RecognitionPipeline:
         enable_transition_merge_guard=True,
         burst_gate_open_threshold=BURST_GATE_OPEN_THRESHOLD_V4,
         enable_hidden_row_burst_guard=True,
+        **kwargs,
     )
 
 
@@ -459,6 +508,25 @@ def _v4_final_check(cell_rows: list[dict]) -> None:
     print(f"  v4最終frame ({last['t_sec']:.3f}秒) の12セル誤り: {len(mismatches)}件 {mismatches}")
 
 
+def _at_onset_check(cell_rows: list[dict], prefix: str) -> None:
+    """onset (f188154, t=3135.9) 瞬間ちょうどの値を確認する (最終frameでの
+
+    確認は後続の正当なクリアと混同するため、2026-08-06調査で判明した罠を
+    踏まないよう、ラベル瞬間そのものも別途チェックする)。
+    """
+    if not cell_rows:
+        return
+    nearest = min(cell_rows, key=lambda r: abs(r["t_sec"] - ONSET_T_SEC))
+    mismatches = [
+        (r, c) for r, c, correct in TARGET_CELLS
+        if nearest.get(f"{prefix}_r{r}c{c}") != correct
+    ]
+    print(
+        f"  {prefix} onset瞬間 (t={nearest['t_sec']:.3f}秒) の12セル誤り: "
+        f"{len(mismatches)}件 {mismatches}"
+    )
+
+
 def _duty_cycle_report() -> None:
     """報告窓内 (onset-60〜+10秒) のデューティ比・最長連続activeを報告する。"""
     recs = _STATE.gate_frames
@@ -499,11 +567,13 @@ def _filter_summary() -> None:
 
 def _report(cell_rows: list[dict]) -> None:
     """OFF対照・duty比・filter集計・最終誤りセル数を出力する。"""
-    print(f"\n=== {VIDEO_STEM} {TARGET_SIDE} 判定 (onset={ONSET_T_SEC}) ===")
+    print(f"\n=== {VIDEO_STEM} {TARGET_SIDE} 判定 (onset={ONSET_T_SEC}, EXPERIMENT={EXPERIMENT}) ===")
     print("\n[1] OFF対照確認 (正しく積み上がるはず)")
     _off_success_check(cell_rows)
+    _at_onset_check(cell_rows, "off")
     print("\n[2] v4結果確認")
     _v4_final_check(cell_rows)
+    _at_onset_check(cell_rows, "v4")
     print("\n[3] burst gate デューティ比・最長連続active")
     _duty_cycle_report()
     print("\n[4] filter拒否イベント集計")
