@@ -142,6 +142,17 @@ BURST_GATE_QUIESCENCE_MIN_SEC: float = 0.25
 # より重大なため寛容側に倒す。
 BURST_GATE_MAX_WINDOW_SEC: float = 30.0
 
+# バーストガード Stage1.5b (enable_hidden_row_burst_guard, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 の凍結中は prev_confirmed
+# が stale になり、infer_hidden_row の着地新規セル数の再カウントが狂って
+# row0 に「確信度100%の誤色」が書かれる (§11.0)。close 直後も row1-3 の
+# backlog 追いつきに数フレーム要するため、window close から本秒数が経過する
+# まで infer_hidden_row 呼び出し自体をスキップする猶予期間。
+# 初期値 0.4 は既存 EFFECT_PERSIST_SEC と同スケールの物理量 (演出残光の
+# 実秒規模を根拠とする暫定値)。全域バックテストで較正予定・シーン逆算禁止
+# (feedback_overfitting_awareness_2026-08-04)。
+HIDDEN_ROW_TRUST_COOLDOWN_SEC: float = 0.4
+
 
 class _ScoreValNotCached:
     """`_check_formula_detected` の cached_score_val 未指定を表す sentinel。
@@ -1235,6 +1246,15 @@ class RecognitionPipeline:
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         # CLOSE も同値運用のため同じ値を渡す (docs §4 Stage1方針)。
         burst_gate_open_threshold: "float | None" = None,
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): row1-3 凍結の
+        # 副作用で infer_hidden_row (row0 隠し段推論) が誤った着地セル数を
+        # 数えて確信度100%の誤色を row0 に書く問題への信頼性ゲート。True で
+        # 「window非活性 かつ close後 HIDDEN_ROW_TRUST_COOLDOWN_SEC 経過」を
+        # 満たさない限り infer_hidden_row 呼び出し自体をスキップする
+        # (row0 は直前値キャリーオーバー、既存フォールバックに自然委譲)。
+        # enable_burst_guard_v2=False の場合は no-op (警告ログ)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_hidden_row_burst_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1678,6 +1698,12 @@ class RecognitionPipeline:
         self._burst_gate_opened_at_2p: float | None = None
         self._burst_gate_quiet_since_1p: float | None = None
         self._burst_gate_quiet_since_2p: float | None = None
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): window が
+        # active だった最終 time_sec (-inf 初期 = 「まだ一度も open していない」)。
+        # enable_hidden_row_burst_guard のクールダウン判定に使う。試合境界で
+        # 必ずクリアする (reset() 参照)。
+        self._last_burst_open_time_1p: float = float("-inf")
+        self._last_burst_open_time_2p: float = float("-inf")
         # バーストガード Stage1.5 (2026-08-05 アーキ追補): _build_state_machine
         # 呼び出し前に格納が必要 (BoardStateMachine へそのまま伝播するため)。
         self._enable_transition_merge_guard: bool = bool(
@@ -1699,6 +1725,25 @@ class RecognitionPipeline:
             if burst_gate_open_threshold is not None
             else BURST_GATE_OPEN_THRESHOLD
         )
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): 隠し段推論
+        # 信頼性ゲート。row1-3 凍結副作用による row0 誤色を防ぐため、
+        # window 非活性 かつ close 後クールダウン明けでのみ infer_hidden_row
+        # を呼ぶ (_step_side 側で参照)。
+        self._enable_hidden_row_burst_guard: bool = bool(
+            enable_hidden_row_burst_guard
+        )
+        if (
+            self._enable_hidden_row_burst_guard
+            and not self._enable_burst_guard_v2
+        ):
+            warnings.warn(
+                "enable_hidden_row_burst_guard=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(window active 判定は Schmitt trigger 視覚トリガー方式が "
+                "前提のため、Stage1本体が無効だと信頼性ゲートが機能しません)。",
+                UserWarning,
+                stacklevel=2,
+            )
         # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
         # is_all_clear() で再評価し、次の連鎖発火でクリアする
         # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
@@ -2421,6 +2466,11 @@ class RecognitionPipeline:
         # バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。
         # None (既定) = BURST_GATE_OPEN_THRESHOLD (0.97、bit-identical)。
         burst_gate_open_threshold: "float | None" = None,
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
+        # 隠し段推論の信頼性ゲート。enable_burst_guard_v2=False の場合は
+        # no-op (警告ログ)。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_hidden_row_burst_guard: bool = False,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2644,6 +2694,7 @@ class RecognitionPipeline:
             enable_burst_guard_v2=enable_burst_guard_v2,
             enable_transition_merge_guard=enable_transition_merge_guard,
             burst_gate_open_threshold=burst_gate_open_threshold,
+            enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         )
 
     # ------------------------------------------------------------------
@@ -2772,6 +2823,11 @@ class RecognitionPipeline:
         self._burst_gate_opened_at_2p = None
         self._burst_gate_quiet_since_1p = None
         self._burst_gate_quiet_since_2p = None
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補): 隠し段推論クール
+        # ダウンの基準時刻も試合切替時にクリア (-inf に戻す、前試合の
+        # burst 履歴が次試合の判定に残留するのを防ぐ)。
+        self._last_burst_open_time_1p = float("-inf")
+        self._last_burst_open_time_2p = float("-inf")
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
@@ -5178,10 +5234,16 @@ class RecognitionPipeline:
                 self._burst_gate_open_1p = _new_open
                 self._burst_gate_opened_at_1p = _new_opened_at
                 self._burst_gate_quiet_since_1p = _new_quiet
+                # Stage1.5b (§11.1): window active な全フレームで基準時刻を
+                # 更新する (隠し段推論クールダウンの起点)。
+                if _new_open:
+                    self._last_burst_open_time_1p = time_sec
             else:
                 self._burst_gate_open_2p = _new_open
                 self._burst_gate_opened_at_2p = _new_opened_at
                 self._burst_gate_quiet_since_2p = _new_quiet
+                if _new_open:
+                    self._last_burst_open_time_2p = time_sec
             _effect_gate_window_active = _new_open
         elif self._enable_effect_gate:
             _ojama_until = (
@@ -5460,8 +5522,28 @@ class RecognitionPipeline:
                                 # NEXT 色以外が着地 → 認識誤り可能性 (alert のみ)
                                 pass  # 将来: alert 記録 or 棄却
                 # W-α: 隠し段 (row 0) の量子推論 (= 既存ロジック維持)
+                # バーストガード Stage1.5b (2026-08-05、docs/BURST_GUARD_
+                # DESIGN_2026-08-05.md §11): 信頼性ゲート。row1-3 凍結中は
+                # prev_confirmed が stale になり infer_hidden_row の着地
+                # 新規セル数の再カウントが狂う (§11.0)。window active 中、
+                # または close 直後 HIDDEN_ROW_TRUST_COOLDOWN_SEC 未満の間は
+                # 呼び出し自体をスキップし、row0 は直前値キャリーオーバーで
+                # 既存フォールバックに自然委譲する (新しい書き込みをしない)。
+                # enable_hidden_row_burst_guard=False (既定) では常に True
+                # (bit-identical)。
+                _last_burst_open_time_for_side = (
+                    self._last_burst_open_time_1p if side == "1P"
+                    else self._last_burst_open_time_2p
+                )
+                _hidden_row_trust_ok = _hidden_row_trust_gate_ok(
+                    self._enable_hidden_row_burst_guard,
+                    _effect_gate_window_active,
+                    _last_burst_open_time_for_side,
+                    time_sec,
+                )
                 if (
-                    falling_pair is not None
+                    _hidden_row_trust_ok
+                    and falling_pair is not None
                     and falling_pair[0] not in (
                         COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
                     )
@@ -6965,3 +7047,39 @@ def _resolve_burst_gate_state(
     ):
         return False, None, None  # 安全弁: 画像なしでも max_window は効かせる
     return prev_open, prev_opened_at, prev_quiet
+
+
+def _hidden_row_trust_gate_ok(
+    enable_guard: bool,
+    window_active: bool,
+    last_burst_open_time: float,
+    time_sec: float,
+    cooldown_sec: float = HIDDEN_ROW_TRUST_COOLDOWN_SEC,
+) -> bool:
+    """バーストガード Stage1.5b: 隠し段推論 (infer_hidden_row) の信頼性ゲート判定
+
+    (stateless純関数、docs/BURST_GUARD_DESIGN_2026-08-05.md §11)。
+
+    row1-3 凍結中は prev_confirmed が stale になり infer_hidden_row の着地
+    新規セル数の再カウントが狂う (§11.0)。window active 中、または close
+    直後 cooldown_sec 未満の間は False を返し、呼び出し側に infer_hidden_row
+    呼び出し自体をスキップさせる。
+
+    Args:
+        enable_guard: enable_hidden_row_burst_guard フラグ。False (既定) で
+            常に True を返す (bit-identical、backwards compat)。
+        window_active: 当該side・今frameの effect_gate_window_active。
+        last_burst_open_time: 当該sideで window が最後に active だった
+            time_sec (-inf 初期 = 一度も open していない)。
+        time_sec: 今frameの時刻。
+        cooldown_sec: close後に要求する猶予秒数 (HIDDEN_ROW_TRUST_COOLDOWN_SEC)。
+
+    Returns:
+        True なら infer_hidden_row 呼び出しを許可する。
+    """
+    if not enable_guard:
+        return True
+    return (
+        not window_active
+        and (time_sec - last_burst_open_time) >= cooldown_sec
+    )
