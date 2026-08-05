@@ -157,6 +157,21 @@ BURST_GATE_MAX_WINDOW_SEC: float = 30.0
 # (c29実測0.27〜0.33秒) から逆算した値ではなく、母集団分布のp90由来。
 BURST_GATE_POST_CLOSE_COOLDOWN_SEC: float = 0.9
 
+# バーストガード §12.2 相手連鎖延長の再点火間隔上限 (緊急修正、2026-08-05):
+# 「連鎖継続中の再点火間を繋ぐ」意図の完成に必須。上限なしだと
+# opponent_chain_active が一度でも真になった後は試合中ずっと凍結延長し続け、
+# 無傷盤面まで stale 化する退行を v3 バックテストで検出 (new=59/23、走行停止済)。
+# 根拠: burst_afterglow_events.csv を (video,side) でグルーピングし10秒以内で
+# 連続する onset 行間の gap を抽出した実測 (c5 1011.4→1014.5=3.13s が最大、
+# c29 2405.8→2408.6=2.77s、c29 611.4→612.8=1.37s)。**p90でなく最大値+量子化
+# マージン(0.1s)で寛容側に丸める**: §12.2の失敗非対称性より、延長のfalse
+# positive (gapを長めに見て凍結が延びる) は BURST_GATE_MAX_WINDOW_SEC が
+# 吸収するが、false negative (gapを短く見て連鎖持続型の再点火を取りこぼす)
+# は本機構の本来目的そのものを損なうため、安全側は必ず「長めに見る」方。
+# シーン逆算禁止 (feedback_overfitting_awareness_2026-08-04) — 母集団の
+# 実測最大値由来 (n=4、10秒以内gapの全数)。
+BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC: float = 3.3
+
 # バーストガード Stage1.5b (enable_hidden_row_burst_guard, 2026-08-05):
 # docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 の凍結中は prev_confirmed
 # が stale になり、infer_hidden_row の着地新規セル数の再カウントが狂って
@@ -7119,6 +7134,7 @@ def _resolve_effective_burst_gate_active(
     opponent_chain_active: bool,
     time_sec: float,
     cooldown_sec: float = BURST_GATE_POST_CLOSE_COOLDOWN_SEC,
+    chain_gap_max_sec: float = BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC,
 ) -> bool:
     """バーストガード §12: 生 is_open から実効active信号を合成する
 
@@ -7138,10 +7154,14 @@ def _resolve_effective_burst_gate_active(
             (Stage1.5b `_last_burst_open_time_Xp` を再利用、二重state化しない)。
             一度も open していなければ -inf。
         opponent_chain_active: 相手 side の ChainEvent 有効期間。延長のみに
-            使う (トリガー復活ではない) — 一度も open していない場合は
-            延長条件そのものを無効化し、cold-start トリガー化を防ぐ。
+            使う (トリガー復活ではない) — 一度も open していない場合、および
+            直近 open から chain_gap_max_sec を超えている場合は延長条件その
+            ものを無効化する (2026-08-05 緊急修正: 上限なしだと一度でも
+            open した後は試合中ずっと延長し続ける退行があった、v3で検出)。
         time_sec: 今フレームの時刻。
         cooldown_sec: BURST_GATE_POST_CLOSE_COOLDOWN_SEC。
+        chain_gap_max_sec: BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (連鎖再点火
+            間隔の実測上限、「継続中の連鎖の再点火間を繋ぐ」用途に限定)。
 
     Returns:
         実効active (= signals.effect_gate_window_active に代入する値)。
@@ -7154,8 +7174,10 @@ def _resolve_effective_burst_gate_active(
         return True
     if last_open_time == float("-inf"):
         return False  # 一度も open していない = 延長対象がない (トリガー化防止)
-    in_cooldown = (time_sec - last_open_time) < cooldown_sec
-    return in_cooldown or opponent_chain_active
+    elapsed = time_sec - last_open_time
+    in_cooldown = elapsed < cooldown_sec
+    extend_by_chain = opponent_chain_active and elapsed <= chain_gap_max_sec
+    return in_cooldown or extend_by_chain
 
 
 def _hidden_row_trust_gate_ok(
