@@ -903,9 +903,9 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     normalize_fps_30 / enable_effect_gate / effect_gate_persist_sec /
     enable_effect_visual_gate / enable_burst_guard_v2 /
     enable_transition_merge_guard / burst_gate_open_threshold /
-    enable_hidden_row_burst_guard / enable_burst_close_extension が末尾に
-    順次 optional 追加され、既存引数の並び・デフォルト値が一切変わっていない
-    こと (backwards compat)。
+    enable_hidden_row_burst_guard / enable_burst_close_extension /
+    burst_chain_gap_max_sec が末尾に順次 optional 追加され、既存引数の
+    並び・デフォルト値が一切変わっていないこと (backwards compat)。
     """
     import inspect
     mod = _import_lean()
@@ -923,30 +923,34 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
     assert sig.parameters["normalize_fps_30"].default is True
     # エフェクト時間ゲート (2026-08-03、A/B 計測用): 末尾に追加、既定 OFF。
-    assert params[-8] == "enable_effect_gate"
+    assert params[-9] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-7] == "effect_gate_persist_sec"
+    assert params[-8] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-6] == "enable_effect_visual_gate"
+    assert params[-7] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-5] == "enable_burst_guard_v2"
+    assert params[-6] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-4] == "enable_transition_merge_guard"
+    assert params[-5] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-3] == "burst_gate_open_threshold"
+    assert params[-4] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-2] == "enable_hidden_row_burst_guard"
+    assert params[-3] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-1] == "enable_burst_close_extension"
+    assert params[-2] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
+    # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
+    # さらに末尾に追加、既定 None。
+    assert params[-1] == "burst_chain_gap_max_sec"
+    assert sig.parameters["burst_chain_gap_max_sec"].default is None
     assert sig.parameters["enable_burst_guard_v2"].default is False
 
 
@@ -1032,6 +1036,18 @@ def test_main_cli_enable_burst_close_extension_flag_sets_true() -> None:
     """--enable-burst-close-extension 指定時は True が渡ること。"""
     captured = _run_fake_main_lean(["--enable-burst-close-extension"])
     assert captured["enable_burst_close_extension"] is True
+
+
+def test_main_cli_burst_chain_gap_max_sec_default_none() -> None:
+    """CLI で --burst-chain-gap-max 未指定なら None が渡ること (§12 緊急パラメータ化)。"""
+    captured = _run_fake_main_lean([])
+    assert captured["burst_chain_gap_max_sec"] is None
+
+
+def test_main_cli_burst_chain_gap_max_sec_zero_disables_extension() -> None:
+    """--burst-chain-gap-max 0 指定時は 0.0 が渡ること (延長無効化用途)。"""
+    captured = _run_fake_main_lean(["--burst-chain-gap-max", "0"])
+    assert captured["burst_chain_gap_max_sec"] == 0.0
 
 
 def test_main_cli_normalize_fps_30_default_true_when_no_flags() -> None:

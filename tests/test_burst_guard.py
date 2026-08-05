@@ -927,3 +927,75 @@ def test_burst_close_extension_wiring_inputs_yield_true_during_cooldown() -> Non
         True, pipe._burst_gate_open_1p, False,
         pipe._last_burst_open_time_1p, False, 3.7,
     ) is True
+
+
+# ============================
+# 11. バーストガード §12 緊急パラメータ化 (2026-08-05):
+#    burst_chain_gap_max_sec=0.0 で相手連鎖延長を無効化できること
+# ============================
+
+
+def test_effective_gate_chain_gap_max_zero_disables_extension() -> None:
+    """chain_gap_max_sec=0.0 は opponent_chain_active=True でも延長不成立
+
+    (elapsed は raw_is_open=False 確定後の経過秒なので常に >0、
+    `elapsed<=0.0` を満たさないため実質無効化、緊急パラメータ化2026-08-05)。
+    """
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 5.1 (cooldown 0.9s 超過想定・実際は下回るが
+    # cooldown_sec も 0.0 にして延長経路のみを単独で検証する)。
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 5.0, True, 5.1, cooldown_sec=0.0, chain_gap_max_sec=0.0,
+    ) is False
+
+
+def test_effective_gate_chain_gap_max_none_uses_module_default_33() -> None:
+    """chain_gap_max_sec を省略すると既定 3.3 (モジュール定数) が使われる。"""
+    from src.recognition_pipeline import (
+        BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC,
+        _resolve_effective_burst_gate_active,
+    )
+
+    assert BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC == 3.3
+    # 省略時 (=3.3) なら gap=2.0 は延長成立。
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 0.0, True, 2.0, cooldown_sec=0.0,
+    ) is True
+    # 同条件を明示的に 0.0 にすると不成立になる (デフォルト値との対比)。
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 0.0, True, 2.0, cooldown_sec=0.0, chain_gap_max_sec=0.0,
+    ) is False
+
+
+def test_burst_chain_gap_max_sec_pipeline_default_none_uses_module_constant() -> None:
+    """burst_chain_gap_max_sec 未指定時、パイプラインはモジュール定数 3.3 を格納する。"""
+    pipe = _make_burst_pipe()
+    assert pipe._burst_chain_gap_max_sec == 3.3
+
+
+def test_burst_chain_gap_max_sec_pipeline_explicit_zero_stored() -> None:
+    """burst_chain_gap_max_sec=0.0 を明示すると、その値がそのまま格納される。"""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe = _make_burst_pipe(
+            enable_burst_guard_v2=True, enable_burst_close_extension=True,
+            burst_chain_gap_max_sec=0.0,
+        )
+    assert pipe._burst_chain_gap_max_sec == 0.0
+
+
+def test_burst_chain_gap_max_sec_explicit_none_bit_identical_to_default() -> None:
+    """burst_chain_gap_max_sec=None を明示しても、未指定時と完全に同じ結果になる。"""
+    pipe_default = _make_burst_pipe(stable_frame_count=2)
+    pipe_explicit = _make_burst_pipe(
+        stable_frame_count=2, burst_chain_gap_max_sec=None,
+    )
+    for i in range(3):
+        r1 = pipe_default.update(i, 0.05 * i, _dummy_frame())
+        r2 = pipe_explicit.update(i, 0.05 * i, _dummy_frame())
+        assert r1.p1.state == r2.p1.state
+        assert r1.p2.state == r2.p2.state
+        assert r1.p1.confirmed_board == r2.p1.confirmed_board
+        assert r1.p2.confirmed_board == r2.p2.confirmed_board
+    assert pipe_explicit._burst_chain_gap_max_sec == 3.3

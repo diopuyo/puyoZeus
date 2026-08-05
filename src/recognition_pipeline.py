@@ -1296,6 +1296,13 @@ class RecognitionPipeline:
         # (_step_side 参照)。enable_burst_guard_v2=False の場合は no-op
         # (警告ログ)。default False = 従来挙動完全維持・bit-identical。
         enable_burst_close_extension: bool = False,
+        # バーストガード §12 緊急パラメータ化 (2026-08-05、差分実験で連鎖延長が
+        # busy局面の凍結連鎖の犯人と確定): BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC
+        # をA/B計測用に上書き可能にする。None (既定) = モジュール定数 3.3
+        # (bit-identical)。**0.0 を渡すと相手連鎖延長は常に不成立になる**
+        # (elapsed<=0.0 を満たすのは elapsed が負になる異常系のみなので実質
+        # 無効化、close後クールダウン0.9秒はこの値と無関係のため無改修で残る)。
+        burst_chain_gap_max_sec: "float | None" = None,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1804,6 +1811,15 @@ class RecognitionPipeline:
                 UserWarning,
                 stacklevel=2,
             )
+        # バーストガード §12 緊急パラメータ化 (2026-08-05): None (既定) は
+        # モジュール定数 BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (=3.3、
+        # bit-identical)。0.0 を渡すと相手連鎖延長を無効化できる (docstring
+        # 参照、busy局面の凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。
+        self._burst_chain_gap_max_sec: float = (
+            float(burst_chain_gap_max_sec)
+            if burst_chain_gap_max_sec is not None
+            else BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC
+        )
         # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
         # is_all_clear() で再評価し、次の連鎖発火でクリアする
         # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
@@ -2535,6 +2551,12 @@ class RecognitionPipeline:
         # docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_burst_close_extension: bool = False,
+        # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用): 相手
+        # 連鎖延長の再点火間隔上限を上書きする。None (既定) = モジュール定数
+        # BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (=3.3、bit-identical)。
+        # 0.0 を渡すと延長を無効化できる (docstring の RecognitionPipeline
+        # 側詳細参照)。
+        burst_chain_gap_max_sec: "float | None" = None,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2760,6 +2782,7 @@ class RecognitionPipeline:
             burst_gate_open_threshold=burst_gate_open_threshold,
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_burst_close_extension=enable_burst_close_extension,
+            burst_chain_gap_max_sec=burst_chain_gap_max_sec,
         )
 
     # ------------------------------------------------------------------
@@ -5321,6 +5344,7 @@ class RecognitionPipeline:
                 self._enable_burst_close_extension, _new_open,
                 _force_close_for_side, _last_burst_open_time_for_side,
                 opponent_chain_active, time_sec,
+                chain_gap_max_sec=self._burst_chain_gap_max_sec,
             )
         elif self._enable_effect_gate:
             _ojama_until = (
@@ -7136,35 +7160,18 @@ def _resolve_effective_burst_gate_active(
     cooldown_sec: float = BURST_GATE_POST_CLOSE_COOLDOWN_SEC,
     chain_gap_max_sec: float = BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC,
 ) -> bool:
-    """バーストガード §12: 生 is_open から実効active信号を合成する
+    """バーストガード §12: 生 is_open から実効active信号を合成する。
 
-    (stateless純関数、docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2)。
-    遷移mergeフィルタ+hard freeze はこの戻り値 (signals.effect_gate_
-    window_active) にそのまま従う (既存フィールド再利用、呼出側の変更不要)。
-
-    Args:
-        enable_extension: enable_burst_close_extension フラグ。False (既定)
-            では raw_is_open をそのまま返す (bit-identical)。
-        raw_is_open: 当該フレームの Schmitt trigger 生 is_open。
-            BURST_GATE_MAX_WINDOW_SEC 安全弁はこの値に既に反映済みであり、
-            本関数はそれに一切手を加えない (「実効側で延長しすぎない」)。
-        force_close: own_chain_active または全消しラッチ。クールダウン・
-            延長より優先し、実効側にも即時 False を適用する (§12.2)。
-        last_open_time: 当該sideで is_open が最後に True だった time_sec
-            (Stage1.5b `_last_burst_open_time_Xp` を再利用、二重state化しない)。
-            一度も open していなければ -inf。
-        opponent_chain_active: 相手 side の ChainEvent 有効期間。延長のみに
-            使う (トリガー復活ではない) — 一度も open していない場合、および
-            直近 open から chain_gap_max_sec を超えている場合は延長条件その
-            ものを無効化する (2026-08-05 緊急修正: 上限なしだと一度でも
-            open した後は試合中ずっと延長し続ける退行があった、v3で検出)。
-        time_sec: 今フレームの時刻。
-        cooldown_sec: BURST_GATE_POST_CLOSE_COOLDOWN_SEC。
-        chain_gap_max_sec: BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (連鎖再点火
-            間隔の実測上限、「継続中の連鎖の再点火間を繋ぐ」用途に限定)。
-
-    Returns:
-        実効active (= signals.effect_gate_window_active に代入する値)。
+    stateless純関数 (docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2)。戻り値
+    (signals.effect_gate_window_active) に遷移mergeフィルタ+hard freeze が
+    そのまま従う (既存フィールド再利用、呼出側の変更不要)。優先順位:
+    無効化(raw返却) > force_close(即False) > raw_is_open(True) >
+    クールダウン中(True) > 相手連鎖延長・gap_max内(True) > False。
+    引数の物理的根拠・退行修正の経緯は各定数のコメントを参照
+    (BURST_GATE_POST_CLOSE_COOLDOWN_SEC / BURST_GATE_OPPONENT_CHAIN_
+    GAP_MAX_SEC)。last_open_time=-inf (一度も open 経験なし) は延長も
+    クールダウンも対象外 (cold-start トリガー化防止)。chain_gap_max_sec=0.0
+    は相手連鎖延長を常に不成立化する (2026-08-05 緊急パラメータ化)。
     """
     if not enable_extension:
         return raw_is_open
