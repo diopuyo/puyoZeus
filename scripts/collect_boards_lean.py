@@ -499,6 +499,7 @@ def collect_lean(
     enable_hidden_row_burst_guard: bool = False,
     enable_burst_close_extension: bool = False,
     burst_chain_gap_max_sec: Optional[float] = None,
+    enable_online_hsv_refresh: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -593,6 +594,12 @@ def collect_lean(
             不成立にできる** (差分実験で busy局面の凍結連鎖の犯人と確定した
             延長機構をA/B測定で切る用途、close後クールダウン0.9秒は無関係
             のため無改修で残る)。
+        enable_online_hsv_refresh: 長時間劣化修正 A+B (2026-08-06、
+            docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4、
+            A/B 計測用)。True で (A)試合毎に OnlineHsvCalibrator の較正を
+            リセット、(B)inject後もupdate()+再inject判定を継続する
+            (凍結ガード撤廃)。詳細は RecognitionPipeline.__init__ 参照。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -655,6 +662,7 @@ def collect_lean(
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_burst_close_extension=enable_burst_close_extension,
         burst_chain_gap_max_sec=burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -932,6 +940,16 @@ def main() -> int:
             "凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。"
         ),
     )
+    parser.add_argument(
+        "--enable-online-hsv-refresh", action="store_true",
+        dest="enable_online_hsv_refresh",
+        help=(
+            "長時間劣化修正 A+B (2026-08-06) を有効化する。"
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4。"
+            "試合毎のOnlineHsvCalibrator較正リセット (A) + inject後の凍結"
+            "ガード撤廃 (B) の両方を有効にする。既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -955,6 +973,7 @@ def main() -> int:
         enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
         enable_burst_close_extension=args.enable_burst_close_extension,
         burst_chain_gap_max_sec=args.burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=args.enable_online_hsv_refresh,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
