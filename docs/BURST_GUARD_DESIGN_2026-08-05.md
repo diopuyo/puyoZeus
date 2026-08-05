@@ -517,3 +517,35 @@ off/on, on/on) として計測してよい。§7.1 の93セル集計・§7.3 の
 「row1-3凍結→隠し段推論が揺れてrow0に新規誤り」はStage1のper-frame凍結の
 副作用であり、Stage1.5 (遷移frameで1回だけのmerge時フィルタ) とは機構が別。
 別課題としてStage1のバックテスト結果 (§7.3) の中で扱う。
+
+## 11. Stage1.5b: 隠し段推論の信頼性ゲート (2026-08-05 アーキ追補)
+
+### 11.0 破損機序 (コード確認で確定)
+row0 の持続的新規誤りは EFFECT_GATE_TOP_ROWS 経由ではない。row0 が書かれる唯一の
+経路は recognition_pipeline._step_side 内の infer_hidden_row 呼び出し (L5462-5487、
+TSUMO_FALL→STABLE 着地確定時のみ、p>=0.95 で確定書き込み)。窓open中の row1-3 凍結で
+prev_confirmed が stale になり、着地の新規セル数の再カウントが狂う (真値2→1や3+)。
+n==1 分岐は候補列1つで p=1.0 になり「確信度100%の誤色」が row0 に書かれる。
+自己回復は次の n==2 正常着地 (Case A の全隠し段リセット) 待ちのため長引く。
+
+### 11.1 対策 (b修正版): ドア2側の推論を信頼性ゲートで停止
+新フラグ `enable_hidden_row_burst_guard: bool = False` (default OFF、bit-identical)。
+ゲート条件: `not window_active AND (time_sec - 最後にwindowがopenだった時刻) >= HIDDEN_ROW_TRUST_COOLDOWN_SEC`
+- 不成立時は infer_hidden_row 呼び出し自体をスキップ (row0 は直前値キャリーオーバー、
+  既存の STABLE中フォールバック経路に自然委譲)
+- `_last_burst_open_time_1p/2p` (float、-inf初期、windowActive全フレームで更新) を新設
+- クールダウンが必要な理由: close直後は row1-3 の backlog 追いつきに数フレームかかり、
+  その間の着地でも同じ誤カウントが再発するため
+- HIDDEN_ROW_TRUST_COOLDOWN_SEC は定数化、シーン逆算禁止・全域バックテストで較正
+
+### 11.2 検証法 (userレビュー投入の前提条件)
+1. row0 の新規誤り (37件中のrow0分) がゼロ化
+2. 既存の 93→33 (row0以外) が1件も変化しない (スコープ外のbit-identical確認)
+3. c13/c19/c24 の該当セル ±10秒タイムライン数値突合 + viz目視
+完了しない場合は Stage1.5 を row0既知課題付きで提示し、1.5b は持ち越し (未検証の
+「直った」報告は禁止)。
+
+### 11.3 却下した代替案 (診断記録)
+- (a) 可視行スナップショット固定: 同一window内の複数着地で差分が合算されn>=3に化け破綻
+- (c) row0 を EFFECT_GATE_TOP_ROWS に追加: 消費先が _apply_stable_recovery_gate であり
+  infer_hidden_row 呼び出しには一切効かないノーオペ (経路誤認)
