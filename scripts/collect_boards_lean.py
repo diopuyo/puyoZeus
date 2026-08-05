@@ -497,6 +497,7 @@ def collect_lean(
     enable_transition_merge_guard: bool = False,
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
+    enable_burst_close_extension: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -577,6 +578,13 @@ def collect_lean(
             (隠し段) の確信度100%誤色書き込みを防ぐ。
             enable_burst_guard_v2=False の間は no-op (警告ログ)。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_close_extension: バーストガード §12 close側再設計
+            (2026-08-05 アーキ確定、A/B 計測用)。True で生 is_open と実効
+            active信号 (遷移mergeフィルタ+hard freeze の適用条件) を分離し、
+            close後 BURST_GATE_POST_CLOSE_COOLDOWN_SEC のクールダウン、
+            および相手連鎖継続中の延長 (トリガーではない) を実効側に反映する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -637,6 +645,7 @@ def collect_lean(
         enable_transition_merge_guard=enable_transition_merge_guard,
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_burst_close_extension=enable_burst_close_extension,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -891,6 +900,19 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-burst-close-extension", action="store_true",
+        dest="enable_burst_close_extension",
+        help=(
+            "バーストガード §12 close側再設計 (2026-08-05 アーキ確定) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。"
+            "生 is_open と実効active信号 (遷移mergeフィルタ+hard freeze の"
+            "適用条件) を分離し、close後クールダウン (BURST_GATE_POST_"
+            "CLOSE_COOLDOWN_SEC) と相手連鎖継続中の延長を実効側に反映する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -912,6 +934,7 @@ def main() -> int:
         enable_transition_merge_guard=args.enable_transition_merge_guard,
         burst_gate_open_threshold=args.burst_gate_open_threshold,
         enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
+        enable_burst_close_extension=args.enable_burst_close_extension,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

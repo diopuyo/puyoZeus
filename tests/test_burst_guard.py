@@ -710,3 +710,187 @@ def test_hidden_row_burst_guard_explicit_false_restores_legacy_pipeline_output()
     # ゲート未使用時は _last_burst_open_time が一切更新されない
     # (enable_burst_guard_v2=False のため Schmitt trigger 自体が動かない)。
     assert pipe_explicit._last_burst_open_time_1p == float("-inf")
+
+
+# ============================
+# 9. バーストガード §12 close側再設計 (2026-08-05 アーキ確定):
+#    実効active信号 (_resolve_effective_burst_gate_active) の真理値表
+# ============================
+
+
+def test_effective_gate_disabled_returns_raw_open_true() -> None:
+    """enable_extension=False (既定) は raw_is_open=True をそのまま返す (bit-identical)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        False, True, False, float("-inf"), True, 100.0,
+    ) is True
+
+
+def test_effective_gate_disabled_returns_raw_open_false() -> None:
+    """enable_extension=False (既定) は raw_is_open=False をそのまま返す (延長/クールダウン無視)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        False, False, False, 0.0, True, 0.5, cooldown_sec=0.9,
+    ) is False
+
+
+def test_effective_gate_raw_open_true_stays_true_when_enabled() -> None:
+    """enable_extension=True でも raw_is_open=True なら常に True。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        True, True, False, float("-inf"), False, 0.0,
+    ) is True
+
+
+def test_effective_gate_force_close_overrides_raw_open() -> None:
+    """force_close は raw_is_open=True でも即時 False を強制する (§12.2 優先)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        True, True, True, 5.0, True, 5.0, cooldown_sec=0.9,
+    ) is False
+
+
+def test_effective_gate_force_close_overrides_cooldown() -> None:
+    """force_close はクールダウン中でも即時 False を強制する。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 5.3 (クールダウン0.9秒未満) だが force_close 優先。
+    assert _resolve_effective_burst_gate_active(
+        True, False, True, 5.0, False, 5.3, cooldown_sec=0.9,
+    ) is False
+
+
+def test_effective_gate_never_opened_ignores_opponent_chain_no_cold_trigger() -> None:
+    """一度も open していない (-inf) 場合、opponent_chain_active だけでは
+
+    True にならない (§12.2「トリガー復活ではない」、cold-start トリガー化防止)。
+    """
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, float("-inf"), True, 10.0, cooldown_sec=0.9,
+    ) is False
+
+
+def test_effective_gate_within_cooldown_after_close_is_true() -> None:
+    """close後 cooldown_sec 未満はクールダウンで True (opponent_chain_active 不要)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 5.5 → 経過0.5s < cooldown 0.9s
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 5.0, False, 5.5, cooldown_sec=0.9,
+    ) is True
+
+
+def test_effective_gate_cooldown_expired_without_chain_is_false() -> None:
+    """close後 cooldown_sec 以上経過し opponent_chain_active=False なら False。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 6.0 → 経過1.0s >= cooldown 0.9s
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 5.0, False, 6.0, cooldown_sec=0.9,
+    ) is False
+
+
+def test_effective_gate_cooldown_expired_with_opponent_chain_extends_true() -> None:
+    """cooldown 経過後も opponent_chain_active=True なら延長で True (§12.2 主眼)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 20.0 (cooldown 大幅超過) だが相手連鎖継続中。
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 5.0, True, 20.0, cooldown_sec=0.9,
+    ) is True
+
+
+def test_effective_gate_all_false_case_is_false() -> None:
+    """raw_open/force_close/cooldown内/opponent_chain_active が全て False/満了なら False。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 0.0, False, 100.0, cooldown_sec=0.9,
+    ) is False
+
+
+def test_burst_gate_post_close_cooldown_sec_is_module_constant_09() -> None:
+    """BURST_GATE_POST_CLOSE_COOLDOWN_SEC の既定値が 0.9 (afterglow p90 根拠)。"""
+    from src.recognition_pipeline import BURST_GATE_POST_CLOSE_COOLDOWN_SEC
+
+    assert BURST_GATE_POST_CLOSE_COOLDOWN_SEC == 0.9
+
+
+# ============================
+# 10. enable_burst_close_extension フラグ (RecognitionPipeline 統合)
+# ============================
+
+
+def test_enable_burst_close_extension_default_false() -> None:
+    """enable_burst_close_extension 未指定時は既定 False (backwards compat)。"""
+    pipe = _make_burst_pipe()
+    assert pipe._enable_burst_close_extension is False
+
+
+def test_enable_burst_close_extension_without_burst_guard_v2_warns() -> None:
+    """enable_burst_close_extension=True かつ enable_burst_guard_v2=False は no-op 警告。"""
+    with pytest.warns(UserWarning, match="no-op"):
+        _make_burst_pipe(
+            enable_burst_close_extension=True, enable_burst_guard_v2=False,
+        )
+
+
+def test_enable_burst_close_extension_with_burst_guard_v2_no_warning() -> None:
+    """enable_burst_close_extension=True かつ enable_burst_guard_v2=True では警告しない。"""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _make_burst_pipe(
+            enable_burst_close_extension=True,
+            enable_burst_guard_v2=True,
+            enable_effect_gate=True,
+        )
+
+
+def test_burst_close_extension_explicit_false_restores_legacy_pipeline_output() -> None:
+    """enable_burst_close_extension=False を明示しても、未指定時と完全に同じ結果になる。"""
+    pipe_default = _make_burst_pipe(stable_frame_count=2)
+    pipe_explicit = _make_burst_pipe(
+        stable_frame_count=2, enable_burst_close_extension=False,
+    )
+    for i in range(3):
+        r1 = pipe_default.update(i, 0.05 * i, _dummy_frame())
+        r2 = pipe_explicit.update(i, 0.05 * i, _dummy_frame())
+        assert r1.p1.state == r2.p1.state
+        assert r1.p2.state == r2.p2.state
+        assert r1.p1.confirmed_board == r2.p1.confirmed_board
+        assert r1.p2.confirmed_board == r2.p2.confirmed_board
+
+
+def test_burst_close_extension_wiring_inputs_yield_true_during_cooldown() -> None:
+    """実runtimeで観測した (raw_is_open, last_burst_open_time) を
+
+    _resolve_effective_burst_gate_active に通すと True になる (= _step_side
+    が読む instance 変数がクールダウン判定の入力として健全であることの
+    end-to-end 確認、関数自体の真理値表は上記セクション9で直接網羅済み)。
+    """
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe = _make_burst_pipe(
+            enable_effect_gate=True, enable_burst_guard_v2=True,
+            enable_burst_close_extension=True,
+        )
+    pipe.update(0, 3.0, _bright_top_row_frame())
+    assert pipe._burst_gate_open_1p is True
+    # quiescence_min_sec (0.25s) 以上の静穏で raw is_open は close する。
+    pipe.update(1, 3.3, _black_frame())
+    pipe.update(2, 3.7, _black_frame())
+    assert pipe._burst_gate_open_1p is False
+    assert pipe._last_burst_open_time_1p == 3.3
+    # close 起点 3.3 から 0.4s 後 (< cooldown 0.9s) は実効active=True のはず。
+    assert _resolve_effective_burst_gate_active(
+        True, pipe._burst_gate_open_1p, False,
+        pipe._last_burst_open_time_1p, False, 3.7,
+    ) is True

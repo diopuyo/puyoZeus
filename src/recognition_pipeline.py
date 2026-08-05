@@ -142,6 +142,21 @@ BURST_GATE_QUIESCENCE_MIN_SEC: float = 0.25
 # より重大なため寛容側に倒す。
 BURST_GATE_MAX_WINDOW_SEC: float = 30.0
 
+# バーストガード §12 close側再設計 (enable_burst_close_extension, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2 主機構。CLOSE_THRESHOLD の
+# 値ベースヒステリシス導入は較正データ (labeled_cell_features_v3.csv の
+# 平常フレーム約6割が bright_ratio_max>=0.5) によって明示的に否定済み
+# (§12.1、恒久記録、再提案禁止)。代わりに窓close後もこの秒数だけ実効ゲート
+# 信号 (遷移mergeフィルタ+hard freeze の適用条件) を維持する時間ベース機構
+# を採用する。値の根拠は scripts/_measure_burst_afterglow_2026-08-05.py の
+# 残光帯(0.5-0.954)滞在時間分布・非censored p90=0.8秒 + 量子化マージン0.1秒。
+# **保守的な下限であることに注意**: 母数中30%(9/30件)は8秒窓でも残光帯から
+# 戻らない連鎖持続型で、この定数では保護できない (対策は
+# enable_burst_close_extension の相手連鎖延長条件、§12.2 の2番目)。
+# シーン逆算禁止 (feedback_overfitting_awareness_2026-08-04) — 個別シーン
+# (c29実測0.27〜0.33秒) から逆算した値ではなく、母集団分布のp90由来。
+BURST_GATE_POST_CLOSE_COOLDOWN_SEC: float = 0.9
+
 # バーストガード Stage1.5b (enable_hidden_row_burst_guard, 2026-08-05):
 # docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 の凍結中は prev_confirmed
 # が stale になり、infer_hidden_row の着地新規セル数の再カウントが狂って
@@ -1255,6 +1270,17 @@ class RecognitionPipeline:
         # enable_burst_guard_v2=False の場合は no-op (警告ログ)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_hidden_row_burst_guard: bool = False,
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、§12.2):
+        # 生 is_open (Schmitt trigger) と、遷移mergeフィルタ+hard freeze が
+        # 実際に参照する「実効active」信号を分離する。実効active = is_open
+        # OR (close後 BURST_GATE_POST_CLOSE_COOLDOWN_SEC 未満) OR (相手連鎖
+        # 継続フラグ opponent_chain_active、延長のみ・トリガー復活ではない)。
+        # own_chain_active/全消しラッチによる force_close は実効側にも即時
+        # 適用する (延長・クールダウンより優先)。生 is_open 自体と
+        # BURST_GATE_MAX_WINDOW_SEC 安全弁はこのフラグの影響を受けない
+        # (_step_side 参照)。enable_burst_guard_v2=False の場合は no-op
+        # (警告ログ)。default False = 従来挙動完全維持・bit-identical。
+        enable_burst_close_extension: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1741,6 +1767,25 @@ class RecognitionPipeline:
                 "enable_burst_guard_v2=False のため no-op です "
                 "(window active 判定は Schmitt trigger 視覚トリガー方式が "
                 "前提のため、Stage1本体が無効だと信頼性ゲートが機能しません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定): 実効
+        # ゲート信号 (クールダウン+相手連鎖延長) の有効化フラグ。実際の合成
+        # ロジックは _step_side 側 (signals.effect_gate_window_active 代入部)
+        # で行う (既存フィールド再利用、遷移mergeフィルタ+hard freeze は自動追従)。
+        self._enable_burst_close_extension: bool = bool(
+            enable_burst_close_extension
+        )
+        if (
+            self._enable_burst_close_extension
+            and not self._enable_burst_guard_v2
+        ):
+            warnings.warn(
+                "enable_burst_close_extension=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(実効ゲート信号は Schmitt trigger の生 is_open を前提に "
+                "算出するため、Stage1本体が無効だと延長対象がありません)。",
                 UserWarning,
                 stacklevel=2,
             )
@@ -2471,6 +2516,10 @@ class RecognitionPipeline:
         # no-op (警告ログ)。default False = 従来挙動完全維持・bit-identical
         # (backwards compat)。
         enable_hidden_row_burst_guard: bool = False,
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用)。
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_close_extension: bool = False,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2695,6 +2744,7 @@ class RecognitionPipeline:
             enable_transition_merge_guard=enable_transition_merge_guard,
             burst_gate_open_threshold=burst_gate_open_threshold,
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+            enable_burst_close_extension=enable_burst_close_extension,
         )
 
     # ------------------------------------------------------------------
@@ -5223,10 +5273,11 @@ class RecognitionPipeline:
                     self._burst_gate_quiet_since_2p,
                 )
             )
+            _force_close_for_side = own_chain_active or _all_clear_pending_for_side
             _new_open, _new_opened_at, _new_quiet = _resolve_burst_gate_state(
                 frame_bgr, _burst_region, EFFECT_GATE_TOP_ROWS,
                 _prev_open, _prev_opened_at, _prev_quiet, time_sec,
-                force_close=(own_chain_active or _all_clear_pending_for_side),
+                force_close=_force_close_for_side,
                 open_threshold=self._burst_gate_open_threshold,
                 close_threshold=self._burst_gate_open_threshold,
             )
@@ -5235,16 +5286,27 @@ class RecognitionPipeline:
                 self._burst_gate_opened_at_1p = _new_opened_at
                 self._burst_gate_quiet_since_1p = _new_quiet
                 # Stage1.5b (§11.1): window active な全フレームで基準時刻を
-                # 更新する (隠し段推論クールダウンの起点)。
+                # 更新する (隠し段推論クールダウン、§12 close側延長の両方の
+                # 起点として再利用する、二重state化しない)。
                 if _new_open:
                     self._last_burst_open_time_1p = time_sec
+                _last_burst_open_time_for_side = self._last_burst_open_time_1p
             else:
                 self._burst_gate_open_2p = _new_open
                 self._burst_gate_opened_at_2p = _new_opened_at
                 self._burst_gate_quiet_since_2p = _new_quiet
                 if _new_open:
                     self._last_burst_open_time_2p = time_sec
-            _effect_gate_window_active = _new_open
+                _last_burst_open_time_for_side = self._last_burst_open_time_2p
+            # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、§12.2):
+            # 生 is_open と実効active信号を分離する。遷移mergeフィルタ+hard
+            # freeze は下記 _effect_gate_window_active にそのまま従うため
+            # (既存フィールド再利用)、ここでの合成だけで両方が自動追従する。
+            _effect_gate_window_active = _resolve_effective_burst_gate_active(
+                self._enable_burst_close_extension, _new_open,
+                _force_close_for_side, _last_burst_open_time_for_side,
+                opponent_chain_active, time_sec,
+            )
         elif self._enable_effect_gate:
             _ojama_until = (
                 self._effect_gate_ojama_until_1p if side == "1P"
@@ -7047,6 +7109,53 @@ def _resolve_burst_gate_state(
     ):
         return False, None, None  # 安全弁: 画像なしでも max_window は効かせる
     return prev_open, prev_opened_at, prev_quiet
+
+
+def _resolve_effective_burst_gate_active(
+    enable_extension: bool,
+    raw_is_open: bool,
+    force_close: bool,
+    last_open_time: float,
+    opponent_chain_active: bool,
+    time_sec: float,
+    cooldown_sec: float = BURST_GATE_POST_CLOSE_COOLDOWN_SEC,
+) -> bool:
+    """バーストガード §12: 生 is_open から実効active信号を合成する
+
+    (stateless純関数、docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2)。
+    遷移mergeフィルタ+hard freeze はこの戻り値 (signals.effect_gate_
+    window_active) にそのまま従う (既存フィールド再利用、呼出側の変更不要)。
+
+    Args:
+        enable_extension: enable_burst_close_extension フラグ。False (既定)
+            では raw_is_open をそのまま返す (bit-identical)。
+        raw_is_open: 当該フレームの Schmitt trigger 生 is_open。
+            BURST_GATE_MAX_WINDOW_SEC 安全弁はこの値に既に反映済みであり、
+            本関数はそれに一切手を加えない (「実効側で延長しすぎない」)。
+        force_close: own_chain_active または全消しラッチ。クールダウン・
+            延長より優先し、実効側にも即時 False を適用する (§12.2)。
+        last_open_time: 当該sideで is_open が最後に True だった time_sec
+            (Stage1.5b `_last_burst_open_time_Xp` を再利用、二重state化しない)。
+            一度も open していなければ -inf。
+        opponent_chain_active: 相手 side の ChainEvent 有効期間。延長のみに
+            使う (トリガー復活ではない) — 一度も open していない場合は
+            延長条件そのものを無効化し、cold-start トリガー化を防ぐ。
+        time_sec: 今フレームの時刻。
+        cooldown_sec: BURST_GATE_POST_CLOSE_COOLDOWN_SEC。
+
+    Returns:
+        実効active (= signals.effect_gate_window_active に代入する値)。
+    """
+    if not enable_extension:
+        return raw_is_open
+    if force_close:
+        return False
+    if raw_is_open:
+        return True
+    if last_open_time == float("-inf"):
+        return False  # 一度も open していない = 延長対象がない (トリガー化防止)
+    in_cooldown = (time_sec - last_open_time) < cooldown_sec
+    return in_cooldown or opponent_chain_active
 
 
 def _hidden_row_trust_gate_ok(
