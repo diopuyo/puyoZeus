@@ -574,3 +574,139 @@ def test_burst_gate_open_threshold_passed_to_schmitt_trigger() -> None:
     )
     assert new_open_default is True
     assert new_open_high_threshold is False
+
+
+# ============================
+# 8. バーストガード Stage1.5b (2026-08-05 アーキ追補、§11):
+#    隠し段推論 (infer_hidden_row) の信頼性ゲート
+# ============================
+
+
+def test_hidden_row_trust_gate_ok_disabled_always_true() -> None:
+    """enable_guard=False (既定) は window/時刻に関わらず常に True (bit-identical)。"""
+    from src.recognition_pipeline import _hidden_row_trust_gate_ok
+
+    assert _hidden_row_trust_gate_ok(False, True, 0.0, 0.0) is True
+    assert _hidden_row_trust_gate_ok(False, False, float("-inf"), 100.0) is True
+
+
+def test_hidden_row_trust_gate_ok_blocks_while_window_active() -> None:
+    """window active 中は enable_guard=True ならクールダウン経過時間に関わらず False。"""
+    from src.recognition_pipeline import _hidden_row_trust_gate_ok
+
+    assert _hidden_row_trust_gate_ok(True, True, 0.0, 100.0) is False
+
+
+def test_hidden_row_trust_gate_ok_blocks_during_cooldown_after_close() -> None:
+    """window close 直後、cooldown_sec 未満の間は False (backlog 追いつき待ち)。"""
+    from src.recognition_pipeline import _hidden_row_trust_gate_ok
+
+    # last_burst_open_time=1.0, time_sec=1.2 → 経過0.2s < cooldown 0.4s
+    assert _hidden_row_trust_gate_ok(
+        True, False, 1.0, 1.2, cooldown_sec=0.4,
+    ) is False
+
+
+def test_hidden_row_trust_gate_ok_allows_after_cooldown_elapsed() -> None:
+    """window close から cooldown_sec 以上経過していれば True (推論再開)。"""
+    from src.recognition_pipeline import _hidden_row_trust_gate_ok
+
+    # last_burst_open_time=1.0, time_sec=1.5 → 経過0.5s >= cooldown 0.4s
+    assert _hidden_row_trust_gate_ok(
+        True, False, 1.0, 1.5, cooldown_sec=0.4,
+    ) is True
+
+
+def test_hidden_row_trust_gate_ok_allows_when_never_opened() -> None:
+    """一度も window が open していない (-inf) 場合は初回から True。"""
+    from src.recognition_pipeline import _hidden_row_trust_gate_ok
+
+    assert _hidden_row_trust_gate_ok(
+        True, False, float("-inf"), 0.0, cooldown_sec=0.4,
+    ) is True
+
+
+def test_enable_hidden_row_burst_guard_default_false() -> None:
+    """enable_hidden_row_burst_guard 未指定時は既定 False (backwards compat)。"""
+    pipe = _make_burst_pipe()
+    assert pipe._enable_hidden_row_burst_guard is False
+
+
+def test_enable_hidden_row_burst_guard_without_burst_guard_v2_warns() -> None:
+    """enable_hidden_row_burst_guard=True かつ enable_burst_guard_v2=False は no-op 警告。"""
+    with pytest.warns(UserWarning, match="no-op"):
+        _make_burst_pipe(
+            enable_hidden_row_burst_guard=True, enable_burst_guard_v2=False,
+        )
+
+
+def test_enable_hidden_row_burst_guard_with_burst_guard_v2_no_warning() -> None:
+    """enable_hidden_row_burst_guard=True かつ enable_burst_guard_v2=True では警告しない。"""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _make_burst_pipe(
+            enable_hidden_row_burst_guard=True,
+            enable_burst_guard_v2=True,
+            enable_effect_gate=True,
+        )
+
+
+def test_reset_clears_last_burst_open_time() -> None:
+    """reset() で _last_burst_open_time_1p/2p が -inf にクリアされる (試合境界残留防止)。"""
+    pipe = _make_burst_pipe()
+    pipe._last_burst_open_time_1p = 12.3
+    pipe._last_burst_open_time_2p = 45.6
+    pipe.reset()
+    assert pipe._last_burst_open_time_1p == float("-inf")
+    assert pipe._last_burst_open_time_2p == float("-inf")
+
+
+def test_last_burst_open_time_inits_to_negative_infinity() -> None:
+    """新規インスタンスの _last_burst_open_time_1p/2p は -inf で初期化される。"""
+    pipe = _make_burst_pipe()
+    assert pipe._last_burst_open_time_1p == float("-inf")
+    assert pipe._last_burst_open_time_2p == float("-inf")
+
+
+def test_last_burst_open_time_updates_on_schmitt_window_open() -> None:
+    """burst window が active な frame で _last_burst_open_time_1p が
+
+    time_sec に更新される (Schmitt trigger 更新の直後、§11.1)。
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe = _make_burst_pipe(enable_effect_gate=True, enable_burst_guard_v2=True)
+    assert pipe._last_burst_open_time_1p == float("-inf")
+    pipe.update(0, 3.0, _bright_top_row_frame())
+    assert pipe._last_burst_open_time_1p == 3.0
+    # 1回の静穏フレームだけでは quiescence_min_sec (0.25s) 未達のため
+    # window はまだ open のまま → last_burst_open_time は最新 time_sec に
+    # 更新され続ける。
+    pipe.update(1, 3.3, _black_frame())
+    assert pipe._burst_gate_open_1p is True
+    assert pipe._last_burst_open_time_1p == 3.3
+    # quiescence_min_sec 以上の静穏が経過すると close し、以降は
+    # last_burst_open_time が更新されなくなる (直近 open 時刻を保持し続ける)。
+    pipe.update(2, 3.7, _black_frame())
+    assert pipe._burst_gate_open_1p is False
+    assert pipe._last_burst_open_time_1p == 3.3
+    pipe.update(3, 4.0, _black_frame())
+    assert pipe._last_burst_open_time_1p == 3.3
+
+
+def test_hidden_row_burst_guard_explicit_false_restores_legacy_pipeline_output() -> None:
+    """enable_hidden_row_burst_guard=False を明示しても、未指定時と完全に同じ結果になる。"""
+    pipe_default = _make_burst_pipe(stable_frame_count=2)
+    pipe_explicit = _make_burst_pipe(
+        stable_frame_count=2, enable_hidden_row_burst_guard=False,
+    )
+    for i in range(3):
+        r1 = pipe_default.update(i, 0.05 * i, _dummy_frame())
+        r2 = pipe_explicit.update(i, 0.05 * i, _dummy_frame())
+        assert r1.p1.state == r2.p1.state
+        assert r1.p2.state == r2.p2.state
+        assert r1.p1.confirmed_board == r2.p1.confirmed_board
+        assert r1.p2.confirmed_board == r2.p2.confirmed_board
+    # ゲート未使用時は _last_burst_open_time が一切更新されない
+    # (enable_burst_guard_v2=False のため Schmitt trigger 自体が動かない)。
+    assert pipe_explicit._last_burst_open_time_1p == float("-inf")
