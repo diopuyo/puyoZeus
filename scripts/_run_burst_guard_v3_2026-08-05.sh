@@ -7,10 +7,10 @@ cd "${PROJ_DIR}" || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 
-JOBS="scripts/_jobs_burst_guard_v3_2026-08-05.txt"
+JOBS="scripts/_jobs_burst_guard_v4_2026-08-05.txt"
 MAXPAR="${1:-8}"
 LOG="logs/burst_guard_v3_2026-08-05.log"
-mkdir -p data/verify/burst_guard_2026-08-05/on_v3 logs
+mkdir -p data/verify/burst_guard_2026-08-05/on_v4 logs
 
 echo "[burst_guard_v3] 開始 $(date) MAXPAR=${MAXPAR}" >> "${LOG}"
 n=0
