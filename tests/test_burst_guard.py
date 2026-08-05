@@ -797,13 +797,35 @@ def test_effective_gate_cooldown_expired_without_chain_is_false() -> None:
 
 
 def test_effective_gate_cooldown_expired_with_opponent_chain_extends_true() -> None:
-    """cooldown 経過後も opponent_chain_active=True なら延長で True (§12.2 主眼)。"""
+    """cooldown 経過後・gap_max 内なら opponent_chain_active=True で延長 True (§12.2 主眼)。"""
     from src.recognition_pipeline import _resolve_effective_burst_gate_active
 
-    # close 起点 5.0、現在 20.0 (cooldown 大幅超過) だが相手連鎖継続中。
+    # close 起点 5.0、現在 7.0 (cooldown 超過だが gap_max 3.3s 以内) で相手連鎖継続中。
     assert _resolve_effective_burst_gate_active(
-        True, False, False, 5.0, True, 20.0, cooldown_sec=0.9,
+        True, False, False, 5.0, True, 7.0, cooldown_sec=0.9, chain_gap_max_sec=3.3,
     ) is True
+
+
+def test_effective_gate_chain_extend_within_gap_max_boundary() -> None:
+    """elapsed == chain_gap_max_sec (境界値) は延長成立 (<=、緊急修正2026-08-05)。
+
+    last_open_time=0.0 起点にして浮動小数の減算誤差 (5.0+3.3の丸め) を回避する。
+    """
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 0.0, True, 3.3, cooldown_sec=0.9, chain_gap_max_sec=3.3,
+    ) is True
+
+
+def test_effective_gate_chain_extend_beyond_gap_max_does_not_extend() -> None:
+    """elapsed > chain_gap_max_sec は延長不成立 (退行修正の核心: 無限延長を防ぐ)。"""
+    from src.recognition_pipeline import _resolve_effective_burst_gate_active
+
+    # close 起点 5.0、現在 20.0 (gap_max 3.3s を大幅に超過) で相手連鎖継続中でも False。
+    assert _resolve_effective_burst_gate_active(
+        True, False, False, 5.0, True, 20.0, cooldown_sec=0.9, chain_gap_max_sec=3.3,
+    ) is False
 
 
 def test_effective_gate_all_false_case_is_false() -> None:
@@ -820,6 +842,17 @@ def test_burst_gate_post_close_cooldown_sec_is_module_constant_09() -> None:
     from src.recognition_pipeline import BURST_GATE_POST_CLOSE_COOLDOWN_SEC
 
     assert BURST_GATE_POST_CLOSE_COOLDOWN_SEC == 0.9
+
+
+def test_burst_gate_opponent_chain_gap_max_sec_is_module_constant_33() -> None:
+    """BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC の既定値が 3.3
+
+    (burst_afterglow_events.csv 実測最大gap 3.13s + 量子化マージン0.1s を
+    寛容側に丸めた値、緊急修正2026-08-05)。
+    """
+    from src.recognition_pipeline import BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC
+
+    assert BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC == 3.3
 
 
 # ============================
