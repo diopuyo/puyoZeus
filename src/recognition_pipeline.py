@@ -1133,6 +1133,24 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_drift_resync_hsv_gate: bool = True,
+        # 長時間劣化修正 A+B (2026-08-06、
+        # docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4):
+        # OnlineHsvCalibrator が初回inject後に完全凍結し (機構仮説①)、
+        # reset() もこの凍結状態をクリアしないため (仮説②) 動画内の全後続
+        # 試合に較正凍結が持続し、ガード2 (enable_drift_resync_hsv_gate) の
+        # 安全弁も同じ未クリア状態に依存して無効化される (仮説③、実験Aで
+        # 確定: ガード2をFalseにするだけでc22の12セル劣化が解消)。
+        # True で以下2点を有効化する:
+        #   A (試合毎リセット): reset() で OnlineHsvCalibrator の較正統計 +
+        #      _online_hsv_injected + _online_hsv_injected_colors をクリアし、
+        #      試合ごとに較正をフレッシュに始める。
+        #   B (凍結ガード撤廃=段階的inject化): inject後もupdate()と再inject
+        #      判定を継続する (コメント本来の「段階的inject」意図通り)。
+        #      既知リスク: OnlineHsvCalibrator のsliding window (200サンプル/色)
+        #      により、更新を止めなければ古いサンプルが窓外に出て「古い色を
+        #      忘れる」副作用がある (未検証、Lv2規模測定の対象)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_online_hsv_refresh: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
         # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
@@ -1845,6 +1863,9 @@ class RecognitionPipeline:
         self._enable_drift_resync_hsv_gate: bool = bool(
             enable_drift_resync_hsv_gate,
         )
+        # 長時間劣化修正 A+B (2026-08-06): reset() (Fix A) と inject凍結
+        # ガード撤廃 (Fix B、update() 内で参照) の両方がこのフラグ配下。
+        self._enable_online_hsv_refresh: bool = bool(enable_online_hsv_refresh)
         # デバッグカウンタ: 各ガードが needs_resync を抑制した回数 (1P/2P 別)。
         # 効果測定用 (_diag 系スクリプトから読み出す想定)。
         self._drift_resync_start_guard_suppressed_1p: int = 0
@@ -2466,6 +2487,10 @@ class RecognitionPipeline:
         # compat)。
         enable_drift_resync_match_start_guard: bool = True,
         enable_drift_resync_hsv_gate: bool = True,
+        # 長時間劣化修正 A+B (2026-08-06、§1/§4、A/B 計測用)。詳細は
+        # RecognitionPipeline.__init__ の同名引数コメント参照。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_online_hsv_refresh: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_reset: bool = True,
@@ -2756,6 +2781,7 @@ class RecognitionPipeline:
                 enable_drift_resync_match_start_guard
             ),
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_online_hsv_refresh=enable_online_hsv_refresh,
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
             enable_column_partial_support=enable_column_partial_support,
@@ -2993,6 +3019,18 @@ class RecognitionPipeline:
         self._match_start_boundary_latched = False
         # score-reset 境界誤発火修正 (2026-07-26): デバウンスカウンタもリセット。
         self._score_reset_boundary_streak = 0
+        # 長時間劣化修正 Fix A (2026-08-06、§1/§4): 試合毎に OnlineHsvCalibrator
+        # の較正状態をフレッシュにする。reset() に reset API が無い場合は
+        # 同じ設定で再生成する (較正器自体のロジックは変えない)。
+        # enable_online_hsv_refresh=False (既定) では従来通り不触
+        # (=動画内の較正状態が試合を跨いで持続、bit-identical)。
+        if self._enable_online_hsv_refresh and self._online_hsv is not None:
+            if hasattr(self._online_hsv, "reset"):
+                self._online_hsv.reset()
+            else:
+                self._online_hsv = type(self._online_hsv)()
+            self._online_hsv_injected = False
+            self._online_hsv_injected_colors.clear()
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -3956,7 +3994,14 @@ class RecognitionPipeline:
         # pre-inject 済の場合は OnlineHsv 段階的 inject ループを完全に skip する。
         # _online_hsv_injected = True は __init__ で False 初期化済のため、
         # 既存スクリプトのデフォルト挙動 (suppress なし) は変わらない。
-        if self._online_hsv is not None and is_active and not self._online_hsv_injected:
+        # 長時間劣化修正 Fix B (2026-08-06、§1/§4): enable_online_hsv_refresh=
+        # True では `not self._online_hsv_injected` を無視し、inject後も
+        # update()+再inject判定を継続する (コメント本来の「段階的inject」
+        # 意図通り、機構仮説①=初回inject後の完全凍結を撤廃)。既定Falseでは
+        # 従来通りinject後は完全凍結 (bit-identical)。
+        if self._online_hsv is not None and is_active and (
+            self._enable_online_hsv_refresh or not self._online_hsv_injected
+        ):
             try:
                 from src.hybrid_classifier import HybridClassifier
                 hc = self._reader._classifier

@@ -90,14 +90,22 @@ FORCE_ALL_FRAMES: bool = True
 CROSS_BOUNDARY_START_T_SEC: "float | None" = 3050.0
 
 # 2026-08-06 機構確定実験 (docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md
-# アーキ設計、コーディネータ指示): 実験A/Bの切替。
+# アーキ設計、コーディネータ指示): 実験A/B/Cの切替。
 #   "A": OFF/v4 両方に enable_drift_resync_hsv_gate=False を明示指定
 #        (③ drift resync 安全弁の永久停止が主因なら解消するはず)。
 #   "B": RecognitionPipeline.reset() をラップし、末尾で
 #        _online_hsv/_online_hsv_injected/_online_hsv_injected_colors を
 #        追加クリアする診断monkeypatch (①②=凍結+reset未クリアが主因なら
 #        解消するはず)。src/本体は変更しない (このラップのみ)。
-EXPERIMENT: str = "A"
+#   "C": 本命修正実装後の検証 (2026-08-06)。OFF/v4 両方に
+#        enable_online_hsv_refresh=True (本物の新フラグ、A+B実装) を指定し、
+#        enable_drift_resync_hsv_gate は既定Trueのまま (無指定)。
+#        A+B が③drift resync安全弁を経由して自然に直すことの確認。
+#   "NONE": 特別なフラグ無し (元のバグ再現、A/C比較の真の対照)。
+#   2026-08-06 実測: NONE/C いずれも onset瞬間0/12・最終frame12/12で完全一致
+#   (下記報告参照、この12セルは「正当なクリア」の疑いが強く本検証では
+#   NONE/C を判別できなかった)。既定はCのまま残すが要再検証。
+EXPERIMENT: str = "C"
 
 TARGET_W: int = 1920
 TARGET_H: int = 1080
@@ -347,10 +355,15 @@ def _build_off_pipeline() -> RecognitionPipeline:
     実験B ("B") ではこの引数は既定True (無指定) のままとし、
     `install_probes` がインストールする `reset()` 較正クリアパッチで
     ①②仮説を検証する。
+    実験C ("C") では本命修正 `enable_online_hsv_refresh=True` を指定し、
+    `enable_drift_resync_hsv_gate` は既定True(無指定)のまま。A+Bの実装が
+    ③安全弁を経由して自然に直すかを確認する (本番フラグでの最終確認)。
     """
     kwargs: dict = {}
     if EXPERIMENT == "A":
         kwargs["enable_drift_resync_hsv_gate"] = False
+    elif EXPERIMENT == "C":
+        kwargs["enable_online_hsv_refresh"] = True
     return RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=True,
@@ -361,11 +374,13 @@ def _build_off_pipeline() -> RecognitionPipeline:
 def _build_v4_pipeline() -> RecognitionPipeline:
     """v4確定構成 (scripts/_jobs_yardstick_v4prod_2026-08-05.txt と同一)。
 
-    実験A/Bの分岐は `_build_off_pipeline` と同一方針。
+    実験A/B/Cの分岐は `_build_off_pipeline` と同一方針。
     """
     kwargs: dict = {}
     if EXPERIMENT == "A":
         kwargs["enable_drift_resync_hsv_gate"] = False
+    elif EXPERIMENT == "C":
+        kwargs["enable_online_hsv_refresh"] = True
     return RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=True,
