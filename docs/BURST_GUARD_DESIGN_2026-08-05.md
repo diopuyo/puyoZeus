@@ -549,3 +549,31 @@ n==1 分岐は候補列1つで p=1.0 になり「確信度100%の誤色」が ro
 - (a) 可視行スナップショット固定: 同一window内の複数着地で差分が合算されn>=3に化け破綻
 - (c) row0 を EFFECT_GATE_TOP_ROWS に追加: 消費先が _apply_stable_recovery_gate であり
   infer_hidden_row 呼び出しには一切効かないノーオペ (経路誤認)
+
+## 12. close側の再設計 (2026-08-05 アーキ確定) — 値ベースヒステリシスの棄却記録
+
+### 12.1 CLOSE_THRESHOLD=0.5 案は較正データによって否定 (恒久記録)
+labeled_cell_features_v3.csv の平常フレーム (no_effect/baseline) は **約6割が
+bright_ratio_max >= 0.5**。実例: c55 2P no_effect=0.954、c68 1P no_effect=0.972
+(現行OPEN 0.97超の平常フレームが実在)。bright_ratio_max はぷよ自体の色・反射で
+平常時から高く、値を下げると quiescence (score<閾値 0.25秒) が常態的に不成立
+= 準永久凍結化する。**「較正データ不足」ではなく「較正データによって否定」** —
+将来の再提案時はこの記録を参照のこと。
+
+### 12.2 採用設計: 時間ベース2段構成
+1. **BURST_GATE_POST_CLOSE_COOLDOWN_SEC** (主機構): 窓close後もクールダウン中は
+   実効ゲート信号 (遷移mergeフィルタ+hard freeze の適用条件) を維持。値は
+   burst_afterglow_events.csv の非censored p90=0.8s + 量子化マージン = **0.9秒**
+   (censored除外の保守的下限である旨を定数コメントに明記)
+2. **相手連鎖継続による close延長 (extend-only)**: 相手連鎖継続フラグ
+   (ChainPhaseDetector/score OCR由来、視覚scoreと独立) が立っている間は窓を
+   閉じない。連鎖持続型30% (固定クールダウンで不可能と実測済み) への対策。
+   **§2.3「ChainEventをトリガーから捨てる」の上書きではない**: trigger役 (false
+   negative=保護されない) と extend役 (false negative=時間ベースにフォールバック
+   するだけで無害、false positive=凍結が延びるだけでMAX_WINDOW=30秒が吸収) は
+   失敗の非対称性が全く違う
+3. CLOSE_THRESHOLD は導入しない (OPEN=CLOSE=0.954 維持)。QUIESCENCE_MIN_SEC=0.25 不変
+
+### 12.3 バックテスト規律
+Stage1.5b (隠し段ゲート) と本§12は**別軸として分離実装・分離検証**: 本日は
+1.5b単独 (close現行のまま) を先行、§12実装後に両者揃いの factorial (§10.6規律)。
