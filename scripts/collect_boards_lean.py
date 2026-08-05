@@ -498,6 +498,7 @@ def collect_lean(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_burst_close_extension: bool = False,
+    burst_chain_gap_max_sec: Optional[float] = None,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -585,6 +586,13 @@ def collect_lean(
             および相手連鎖継続中の延長 (トリガーではない) を実効側に反映する。
             enable_burst_guard_v2=False の間は no-op (警告ログ)。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_chain_gap_max_sec: バーストガード §12 緊急パラメータ化
+            (2026-08-05、A/B 計測用)。相手連鎖延長の再点火間隔上限を上書き
+            する。None (既定) = モジュール定数 BURST_GATE_OPPONENT_CHAIN_
+            GAP_MAX_SEC (=3.3、bit-identical)。**0.0 を渡すと延長を常に
+            不成立にできる** (差分実験で busy局面の凍結連鎖の犯人と確定した
+            延長機構をA/B測定で切る用途、close後クールダウン0.9秒は無関係
+            のため無改修で残る)。
 
     Returns:
         蓄積した snapshot 数。
@@ -646,6 +654,7 @@ def collect_lean(
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_burst_close_extension=enable_burst_close_extension,
+        burst_chain_gap_max_sec=burst_chain_gap_max_sec,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -913,6 +922,16 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--burst-chain-gap-max", type=float, default=None,
+        dest="burst_chain_gap_max_sec",
+        help=(
+            "バーストガード §12 緊急パラメータ化 (2026-08-05)。相手連鎖延長の"
+            "再点火間隔上限を上書きする。既定 None = モジュール定数 3.3。"
+            "0.0 を渡すと延長を常に不成立にできる (差分実験で busy局面の"
+            "凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -935,6 +954,7 @@ def main() -> int:
         burst_gate_open_threshold=args.burst_gate_open_threshold,
         enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
         enable_burst_close_extension=args.enable_burst_close_extension,
+        burst_chain_gap_max_sec=args.burst_chain_gap_max_sec,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
