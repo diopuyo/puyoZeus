@@ -1426,3 +1426,66 @@ def test_make_pipeline_hsv_only_default_backward_compat(
     assert len(inject_called) == 1, (
         "_make_pipeline_hsv_only: 引数省略 (backwards compat) なのに _inject_hsv が呼ばれなかった"
     )
+
+
+# ============================
+# 全域無悪化ゲート (2026-08-06): バーストガード系フラグ配線の legacy テスト
+# ============================
+
+
+def test_make_pipeline_cnn_burst_guard_flags_default_off_bit_identical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """バーストガード系6フラグを省略した呼出と、全て明示的にOFF値
+
+    (False/False/False/None/False/False) を渡した呼出で、
+    `RecognitionPipeline.load_default` に渡る kwargs が完全一致すること
+    (scripts/collect_boards_lean.py と同一パターンの配線、既定OFFで
+    bit-identical であることの確認)。
+    """
+    from scripts.measure_stable_cell_acc import _make_pipeline_cnn
+    from src.recognition_pipeline import RecognitionPipeline
+
+    captured_kwargs: list[dict] = []
+
+    def _fake_load_default(**kwargs: object) -> object:
+        captured_kwargs.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        "scripts.measure_stable_cell_acc._inject_hsv", lambda pipe, hsv_path: None,
+    )
+    monkeypatch.setattr(RecognitionPipeline, "load_default", staticmethod(_fake_load_default))
+
+    _make_pipeline_cnn("v99")
+    _make_pipeline_cnn(
+        "v99",
+        enable_effect_gate=False,
+        enable_burst_guard_v2=False,
+        enable_transition_merge_guard=False,
+        burst_gate_open_threshold=None,
+        enable_hidden_row_burst_guard=False,
+        enable_online_hsv_refresh=False,
+    )
+
+    assert len(captured_kwargs) == 2
+    assert captured_kwargs[0] == captured_kwargs[1], (
+        "引数省略時と全フラグ明示OFF時で load_default への kwargs が不一致 "
+        "(bit-identical であるべき)"
+    )
+    # 新6フラグが実際に load_default まで到達していることも確認する
+    # (burst_gate_open_threshold は None のとき kwargs から除外される設計
+    # のため、bool 5個のみ直接キーとして存在することを確認する)。
+    for flag_name in (
+        "enable_effect_gate", "enable_burst_guard_v2",
+        "enable_transition_merge_guard", "enable_hidden_row_burst_guard",
+        "enable_online_hsv_refresh",
+    ):
+        assert captured_kwargs[0].get(flag_name) is False, (
+            f"{flag_name} が load_default へ False で伝播していない: "
+            f"{captured_kwargs[0].get(flag_name)!r}"
+        )
+    assert "burst_gate_open_threshold" not in captured_kwargs[0], (
+        "burst_gate_open_threshold=None は _none_aware_flags 方式により "
+        "kwargs から除外される設計のはず (ライブラリ既定値委譲)"
+    )

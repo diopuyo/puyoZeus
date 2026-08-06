@@ -412,6 +412,14 @@ def _make_pipeline_cnn(
     # 本体既定値 (False) とローカル既定値が一致するため、他の #51 系と同様
     # _none_aware_flags (本体既定値に委譲) パターンを使う。
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグの配線。
+    # scripts/collect_boards_lean.py と同一パターン (末尾追加、bit-identical)。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -511,6 +519,12 @@ def _make_pipeline_cnn(
         enable_chain_exit_next_signal=enable_chain_exit_next_signal,
         enable_gravity_settle_state=enable_gravity_settle_state,
         enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+        # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ (bool 5 個)。
+        enable_effect_gate=enable_effect_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -525,6 +539,8 @@ def _make_pipeline_cnn(
         "enable_recovery_counter_carryover": enable_recovery_counter_carryover,
         "enable_cnn_flicker_hsv_fallback": enable_cnn_flicker_hsv_fallback,
         "enable_initial_confirm_vote": enable_initial_confirm_vote,
+        # 全域無悪化ゲート (2026-08-06): None = ライブラリ既定値 (0.97) に従う。
+        "burst_gate_open_threshold": burst_gate_open_threshold,
     }
     load_kwargs.update(
         {k: v for k, v in _none_aware_flags.items() if v is not None}
@@ -777,6 +793,14 @@ def _process_video(
     # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
     # None = 本体既定値 (False) に従う。
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグの配線。
+    # scripts/collect_boards_lean.py と同一パターン (末尾追加、bit-identical)。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -859,6 +883,12 @@ def _process_video(
         disable_per_video_hsv=disable_per_video_hsv,
         force_in_match=force_in_match,
         enable_initial_confirm_vote=enable_initial_confirm_vote,
+        enable_effect_gate=enable_effect_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -939,6 +969,14 @@ def _process_video_worker(
     # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
     # None = 本体既定値 (False) に従う。末尾追加 (同上の理由)。
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ。末尾追加
+    # (同上の理由、executor.submit の位置引数タプルにも同じ末尾位置で追加)。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -996,6 +1034,12 @@ def _process_video_worker(
         disable_per_video_hsv=disable_per_video_hsv,
         force_in_match=force_in_match,
         enable_initial_confirm_vote=enable_initial_confirm_vote,
+        enable_effect_gate=enable_effect_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2528,6 +2572,61 @@ def _parse_args() -> argparse.Namespace:
             "デフォルト True = 従来挙動完全一致 (backwards compat)。"
         ),
     )
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ 6 個。
+    # scripts/collect_boards_lean.py と同一パターン (dest 名も同一、
+    # デフォルト全 OFF で bit-identical)。
+    p.add_argument(
+        "--enable-effect-gate", action="store_true", default=False,
+        dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03) を有効化する。満杯盤面 誤り根治用。 "
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-burst-guard-v2", action="store_true", default=False,
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05) を有効化する。 "
+            "Schmitt trigger 視覚トリガー + ハード凍結。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-transition-merge-guard", action="store_true", default=False,
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05) を有効化する。 "
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを適用する。 "
+            "--enable-burst-guard-v2 が無効の間は no-op。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード Schmitt trigger の開窓閾値を上書きする "
+            "(CLOSE も同値運用)。既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-hidden-row-burst-guard", action="store_true", default=False,
+        dest="enable_hidden_row_burst_guard",
+        help=(
+            "バーストガード Stage1.5b (2026-08-05、§11) を有効化する。 "
+            "row1-3 凍結中/close直後クールダウン中の infer_hidden_row 呼び出しを "
+            "スキップし row0 誤色書き込みを防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-online-hsv-refresh", action="store_true", default=False,
+        dest="enable_online_hsv_refresh",
+        help=(
+            "長時間劣化修正 A+B (2026-08-06) を有効化する。 "
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4。 "
+            "試合毎の較正リセット (A) + inject後の凍結ガード撤廃 (B)。 "
+            "既定は無効 (後方互換)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -2596,6 +2695,14 @@ def _collect_results(
     # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
     # None = 本体既定値 (False) に従う。
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグの配線。
+    # scripts/collect_boards_lean.py と同一パターン (末尾追加、bit-identical)。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -2682,6 +2789,12 @@ def _collect_results(
             disable_per_video_hsv=disable_per_video_hsv,
             force_in_match=force_in_match,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
+            enable_effect_gate=enable_effect_gate,
+            enable_burst_guard_v2=enable_burst_guard_v2,
+            enable_transition_merge_guard=enable_transition_merge_guard,
+            burst_gate_open_threshold=burst_gate_open_threshold,
+            enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+            enable_online_hsv_refresh=enable_online_hsv_refresh,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -2721,6 +2834,12 @@ def _collect_results(
         disable_per_video_hsv=disable_per_video_hsv,
         force_in_match=force_in_match,
         enable_initial_confirm_vote=enable_initial_confirm_vote,
+        enable_effect_gate=enable_effect_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
 
 
@@ -2774,6 +2893,13 @@ def _collect_serial(
     disable_per_video_hsv: bool = False,
     force_in_match: bool = True,
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグの配線。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2883,6 +3009,14 @@ def _collect_parallel(
     # 色→空凍結の修正3点セット③ (2026-07-27): 初回STABLE確定の多数決ガード。
     # None = 本体既定値 (False) に従う。末尾追加 (同上の理由)。
     enable_initial_confirm_vote: Optional[bool] = None,
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ。末尾追加
+    # (同上の理由、下の executor.submit 位置引数タプルにも同じ末尾位置で追加)。
+    enable_effect_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_online_hsv_refresh: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -2943,6 +3077,14 @@ def _collect_parallel(
                 disable_per_video_hsv,
                 force_in_match,
                 enable_initial_confirm_vote,
+                # 全域無悪化ゲート (2026-08-06): _process_video_worker の
+                # 引数順と完全一致させること (末尾6個、順序ズレ厳禁)。
+                enable_effect_gate,
+                enable_burst_guard_v2,
+                enable_transition_merge_guard,
+                burst_gate_open_threshold,
+                enable_hidden_row_burst_guard,
+                enable_online_hsv_refresh,
             )
             futures[fut] = vid
 
@@ -3178,6 +3320,22 @@ def main() -> int:
     # 色→空凍結の修正3点セット② (2026-07-27): force_in_match ハードコード optional化。
     # デフォルト True = 従来挙動完全一致 (backwards compat)。
     force_in_match: bool = bool(getattr(args, "force_in_match", True))
+    # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ 6 個。
+    # 既定は全 OFF = 従来挙動完全一致 (backwards compat)。
+    enable_effect_gate: bool = bool(getattr(args, "enable_effect_gate", False))
+    enable_burst_guard_v2: bool = bool(getattr(args, "enable_burst_guard_v2", False))
+    enable_transition_merge_guard: bool = bool(
+        getattr(args, "enable_transition_merge_guard", False)
+    )
+    burst_gate_open_threshold: Optional[float] = getattr(
+        args, "burst_gate_open_threshold", None
+    )
+    enable_hidden_row_burst_guard: bool = bool(
+        getattr(args, "enable_hidden_row_burst_guard", False)
+    )
+    enable_online_hsv_refresh: bool = bool(
+        getattr(args, "enable_online_hsv_refresh", False)
+    )
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
@@ -3284,6 +3442,12 @@ def main() -> int:
         disable_per_video_hsv=disable_per_video_hsv,
         force_in_match=force_in_match,
         enable_initial_confirm_vote=enable_initial_confirm_vote,
+        enable_effect_gate=enable_effect_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
