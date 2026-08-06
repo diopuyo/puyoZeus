@@ -172,6 +172,26 @@ BURST_GATE_POST_CLOSE_COOLDOWN_SEC: float = 0.9
 # 実測最大値由来 (n=4、10秒以内gapの全数)。
 BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC: float = 3.3
 
+# 長時間劣化修正A' (enable_match_transition_debounce, 2026-08-06):
+# docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §4追補 (第4機構)。
+# _match_active_started_time が is_active の遷移で無条件に再アーム/リセット
+# され、試合中の短時間MENU誤検知のたびに DRIFT_RESYNC_MATCH_START_GUARD_SEC
+# (15秒) 安全弁が二重再起動し無防備窓を生んでいた。「直前状態と異なる新状態が
+# N秒以上継続して初めて遷移を確定する」対称デバウンスで解消する。
+#
+# N の導出根拠 (data/verify/c22_reset_trace_2026-08-06、シーン逆算禁止):
+#   (a) 試合中フリッカーの実測: c22_detail_frames.csv (t=3090-3150窓) で
+#       孤立した False run = 0.30秒 (t=3125.4, 直前の実境界から15秒以上
+#       経過した孤立ブリップ)。設計書追補記載の実測値0.34秒と同オーダー。
+#   (b) 真の試合間MENU期間の実測: 同窓内の実境界 (t=3106, winners_panel
+#       video_c22.json の game境界と対応) での False run = 2.77秒
+#       (境界直後の主要部分)。加えて c22_reset_events.csv の44イベント中
+#       42件がwinners_panelの59試合境界と1s〜2.6s以内で対応 (=真の遷移由来)
+#       と確認、残り2件も3.03秒差で同一境界の遅延許容内。
+#   → 0.34 < N < 2.77 の範囲で両側に十分なマージンを残し N=1.0 に固定
+#     (フリッカー側に約3倍、MENU側に約2.8倍の安全マージン)。
+MATCH_TRANSITION_DEBOUNCE_SEC: float = 1.0
+
 # バーストガード Stage1.5b (enable_hidden_row_burst_guard, 2026-08-05):
 # docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 の凍結中は prev_confirmed
 # が stale になり、infer_hidden_row の着地新規セル数の再カウントが狂って
@@ -1151,6 +1171,12 @@ class RecognitionPipeline:
         #      忘れる」副作用がある (未検証、Lv2規模測定の対象)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_online_hsv_refresh: bool = False,
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): is_active の
+        # True/False遷移を対称デバウンスする (MATCH_TRANSITION_DEBOUNCE_SEC
+        # 秒未満のフリッカーを無視、_match_active_started_frame/_time の
+        # 書き込みのみが対象。他の副作用は raw is_active のまま不変)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_transition_debounce: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
         # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
@@ -1866,6 +1892,14 @@ class RecognitionPipeline:
         # 長時間劣化修正 A+B (2026-08-06): reset() (Fix A) と inject凍結
         # ガード撤廃 (Fix B、update() 内で参照) の両方がこのフラグ配下。
         self._enable_online_hsv_refresh: bool = bool(enable_online_hsv_refresh)
+        # 長時間劣化修正 A' (2026-08-06、§4追補): is_active 対称デバウンス。
+        # 1P/2P共通の試合状態のため state は1組のみ保持する。
+        self._enable_match_transition_debounce: bool = bool(
+            enable_match_transition_debounce,
+        )
+        self._match_active_debounce_state: MatchActiveDebounceState = (
+            MatchActiveDebounceState()
+        )
         # デバッグカウンタ: 各ガードが needs_resync を抑制した回数 (1P/2P 別)。
         # 効果測定用 (_diag 系スクリプトから読み出す想定)。
         self._drift_resync_start_guard_suppressed_1p: int = 0
@@ -2491,6 +2525,12 @@ class RecognitionPipeline:
         # RecognitionPipeline.__init__ の同名引数コメント参照。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_online_hsv_refresh: bool = False,
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): is_active の
+        # True/False遷移を対称デバウンスする (MATCH_TRANSITION_DEBOUNCE_SEC
+        # 秒未満のフリッカーを無視、_match_active_started_frame/_time の
+        # 書き込みのみが対象。他の副作用は raw is_active のまま不変)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_transition_debounce: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_reset: bool = True,
@@ -2782,6 +2822,7 @@ class RecognitionPipeline:
             ),
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
             enable_online_hsv_refresh=enable_online_hsv_refresh,
+            enable_match_transition_debounce=enable_match_transition_debounce,
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
             enable_column_partial_support=enable_column_partial_support,
@@ -2901,6 +2942,9 @@ class RecognitionPipeline:
         self._match_active_started_frame = -1
         self._last_active_frame_time = -1.0
         self._match_active_started_time = -1.0
+        # 長時間劣化修正 A' (2026-08-06): デバウンスのpending状態も試合切替時に
+        # クリアする (前試合のpending観測が次試合に残留するのを防ぐ)。
+        self._match_active_debounce_state = MatchActiveDebounceState()
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -3219,17 +3263,40 @@ class RecognitionPipeline:
             and not effective_hard_off
         )
 
-        # 試合 active 開始 frame の記録 (chain ban の起点)
-        if is_active:
+        # 試合 active 開始 frame の記録 (chain ban の起点)。
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): _match_active_
+        # started_frame/_time の書き込みのみ対称デバウンスする (試合中の
+        # 短時間MENU誤検知が無条件に再アーム/リセットし、15秒安全弁窓の
+        # 二重再起動→無防備窓を生んでいた)。他の副作用 (下記 raw is_active
+        # 駆動ブロック) はデバウンス対象外・従来通り即時。
+        # 既定False (enable_match_transition_debounce) では elif/else が
+        # 従来ロジックと bit-identical。
+        if self._enable_match_transition_debounce:
+            (
+                self._match_active_debounce_state, _match_transitioned,
+                _confirmed_fi, _confirmed_ts,
+            ) = _resolve_match_active_debounce(
+                self._match_active_debounce_state, is_active, frame_idx, time_sec,
+            )
+            if _match_transitioned:
+                if self._match_active_debounce_state.confirmed_active:
+                    self._match_active_started_frame = _confirmed_fi
+                    self._match_active_started_time = _confirmed_ts
+                else:
+                    self._match_active_started_frame = -1
+                    self._match_active_started_time = -1.0
+        elif is_active:
             if self._match_active_started_frame < 0:
                 self._match_active_started_frame = frame_idx
                 self._match_active_started_time = time_sec
+        else:
+            self._match_active_started_frame = -1
+            self._match_active_started_time = -1.0
+        # 以下は raw is_active のまま (デバウンス対象外、既存挙動を維持)。
+        if is_active:
             self._last_active_frame_idx = frame_idx
             self._last_active_frame_time = time_sec
         else:
-            # 試合 active が完全に切れたら start もリセット
-            self._match_active_started_frame = -1
-            self._match_active_started_time = -1.0
             self._bg_fp_captured = False
             self._bg_frame_buffer.clear()
             if hasattr(self._reader, "set_background_fingerprints"):
@@ -7266,3 +7333,60 @@ def _hidden_row_trust_gate_ok(
         not window_active
         and (time_sec - last_burst_open_time) >= cooldown_sec
     )
+
+
+@dataclass(frozen=True)
+class MatchActiveDebounceState:
+    """is_active 対称デバウンスの可変状態 (1P/2P共通、試合全体で1組のみ保持)。
+
+    長時間劣化修正A' (2026-08-06、docs/LONGRUN_DEGRADATION_INVESTIGATION_
+    2026-08-06.md §4追補)。confirmed_active が「デバウンス確定済みの
+    is_active」、pending_* が「観測中だがまだ確定していない新状態」。
+    """
+
+    confirmed_active: bool = False
+    pending_active: "bool | None" = None
+    pending_since_frame: "int | None" = None
+    pending_since_time: "float | None" = None
+
+
+def _resolve_match_active_debounce(
+    state: MatchActiveDebounceState,
+    raw_is_active: bool,
+    frame_idx: int,
+    time_sec: float,
+    debounce_sec: float = MATCH_TRANSITION_DEBOUNCE_SEC,
+) -> "tuple[MatchActiveDebounceState, bool, int, float]":
+    """is_active の True/False遷移を対称デバウンスする (stateless純関数)。
+
+    「直前の確定状態と異なる新状態が debounce_sec 秒以上連続して観測されて
+    初めて遷移を確定する」。未満で元に戻るフリッカーは無視 (confirmed_active
+    不変)。確定時刻の意味論: 遷移確定時、そのイベントは「raw値が最初に変化
+    した瞬間 (pending_since_frame/time)」に起きたとみなす (デバウンス確認の
+    待機時間は含めない=真の物理的変化の瞬間を記録、確認完了時刻ではない)。
+    呼び出し側はこの値で _match_active_started_frame/_time を更新する。
+
+    Returns:
+        (new_state, transitioned, confirmed_frame_idx, confirmed_time_sec)。
+        transitioned=True の場合のみ確定frame_idx/time_secで更新する。
+    """
+    if raw_is_active == state.confirmed_active:
+        # 既に確定済みの状態と一致 → pending をクリアして終了。
+        return (
+            MatchActiveDebounceState(state.confirmed_active, None, None, None),
+            False, frame_idx, time_sec,
+        )
+    if state.pending_active != raw_is_active:
+        # 新しい変化の観測開始 (前回と異なる方向、または pending 無し)。
+        return (
+            MatchActiveDebounceState(state.confirmed_active, raw_is_active, frame_idx, time_sec),
+            False, frame_idx, time_sec,
+        )
+    # pending が同方向で継続中 → 経過時間を確認する。
+    elapsed = time_sec - state.pending_since_time
+    if elapsed >= debounce_sec:
+        return (
+            MatchActiveDebounceState(raw_is_active, None, None, None),
+            True, state.pending_since_frame, state.pending_since_time,
+        )
+    return state, False, frame_idx, time_sec

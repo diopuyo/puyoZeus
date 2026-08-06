@@ -420,6 +420,7 @@ def _make_pipeline_cnn(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -525,6 +526,7 @@ def _make_pipeline_cnn(
         enable_transition_merge_guard=enable_transition_merge_guard,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -801,6 +803,7 @@ def _process_video(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -889,6 +892,7 @@ def _process_video(
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -977,6 +981,7 @@ def _process_video_worker(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1040,6 +1045,7 @@ def _process_video_worker(
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2627,6 +2633,18 @@ def _parse_args() -> argparse.Namespace:
             "既定は無効 (後方互換)。"
         ),
     )
+    p.add_argument(
+        "--enable-match-transition-debounce", action="store_true", default=False,
+        dest="enable_match_transition_debounce",
+        help=(
+            "長時間劣化修正 A' (2026-08-06、§4追補) を有効化する。 "
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md。 "
+            "is_active の True/False遷移を対称デバウンスし、"
+            "MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる "
+            "_match_active_started_frame/_time の誤再アーム/リセットを防ぐ。 "
+            "既定は無効 (後方互換)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -2703,6 +2721,7 @@ def _collect_results(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -2795,6 +2814,7 @@ def _collect_results(
             burst_gate_open_threshold=burst_gate_open_threshold,
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_online_hsv_refresh=enable_online_hsv_refresh,
+            enable_match_transition_debounce=enable_match_transition_debounce,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -2840,6 +2860,7 @@ def _collect_results(
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
 
 
@@ -2900,6 +2921,7 @@ def _collect_serial(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2946,6 +2968,15 @@ def _collect_serial(
             disable_per_video_hsv=disable_per_video_hsv,
             force_in_match=force_in_match,
             enable_initial_confirm_vote=enable_initial_confirm_vote,
+            # 全域無悪化ゲート (2026-08-06): 前タスクで本呼出しへの配線が
+            # 漏れていたため今回追加で修正する (シグネチャには追加済だった)。
+            enable_effect_gate=enable_effect_gate,
+            enable_burst_guard_v2=enable_burst_guard_v2,
+            enable_transition_merge_guard=enable_transition_merge_guard,
+            burst_gate_open_threshold=burst_gate_open_threshold,
+            enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+            enable_online_hsv_refresh=enable_online_hsv_refresh,
+            enable_match_transition_debounce=enable_match_transition_debounce,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3017,6 +3048,7 @@ def _collect_parallel(
     burst_gate_open_threshold: Optional[float] = None,
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3085,6 +3117,7 @@ def _collect_parallel(
                 burst_gate_open_threshold,
                 enable_hidden_row_burst_guard,
                 enable_online_hsv_refresh,
+                enable_match_transition_debounce,
             )
             futures[fut] = vid
 
@@ -3336,6 +3369,9 @@ def main() -> int:
     enable_online_hsv_refresh: bool = bool(
         getattr(args, "enable_online_hsv_refresh", False)
     )
+    enable_match_transition_debounce: bool = bool(
+        getattr(args, "enable_match_transition_debounce", False)
+    )
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
@@ -3448,6 +3484,7 @@ def main() -> int:
         burst_gate_open_threshold=burst_gate_open_threshold,
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
