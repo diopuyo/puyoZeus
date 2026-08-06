@@ -204,7 +204,10 @@ def compare_one_row(row: YardstickRow, baseline_dir: Path, v4_dir: Path) -> Boar
         return BoardResult(row, False, False, None, [])
     correct, label_t = rec
     v4_grid = None
-    for npz_path in sorted(v4_dir.glob(f"{row.video_stem}_g*.npz")):
+    for npz_path in sorted(
+        list(v4_dir.glob(f"{row.video_stem}_g*.npz"))
+        + list(v4_dir.glob(f"{row.video_stem}.npz"))
+    ):  # 窓付き ({stem}_gN.npz) と全編 ({stem}.npz) の両命名に対応
         idx = _MC._load_npz_index(npz_path)
         if idx is None:
             continue
