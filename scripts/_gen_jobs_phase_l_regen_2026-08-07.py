@@ -5,10 +5,17 @@ scripts/build_video_tier_index.py の統合台帳から regen 対象
 scripts/_collect_lean_1t.py 呼び出しコマンドを1行1本ずつ書き出す。
 
 新標準構成 (第4機構修正A' 含む) を既定フラグとして採用する。
-出力: scripts/_jobs_phase_l_regen_2026-08-07.txt
+既定出力: scripts/_jobs_phase_l_regen_2026-08-07.txt
+
+第二波(2026-08-07 追加): --exclude-jobs <file> --out <file> を optional で
+渡すと、既存ジョブファイルに含まれる動画を除外した差分のみを別ファイルに
+書き出せる (第一波 scripts/_jobs_phase_l_regen_2026-08-07.txt は走行中のため
+無引数実行では一切変更しない、後方互換)。
 """
 from __future__ import annotations
 
+import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -77,11 +84,53 @@ def select_target_video_names() -> list[str]:
     )
 
 
+def extract_video_names_from_jobs_file(path: Path) -> set[str]:
+    """既存ジョブファイルの `--video <path>` 引数から video_name 集合を返す。
+
+    第二波の差分抽出用 (第一波ジョブファイルに既に含まれる動画を除外する)。
+    ファイル不在時は空集合 (除外なし)。
+    """
+    pattern = re.compile(r"--video\s+(\S+)")
+    names: set[str] = set()
+    if not path.exists():
+        return names
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = pattern.search(line)
+        if m:
+            names.add(Path(m.group(1)).stem)
+    return names
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """CLI引数を解析する。両方 optional、既定は従来動作 (後方互換)。"""
+    parser = argparse.ArgumentParser(description="Phase L regen ジョブ一覧生成")
+    parser.add_argument(
+        "--exclude-jobs", type=Path, default=None,
+        help="このジョブファイルに含まれる動画を除外して差分のみ出力する "
+             "(optional、既定=除外なし)",
+    )
+    parser.add_argument(
+        "--out", type=Path, default=None,
+        help="出力先パス (optional、既定 = scripts/_jobs_phase_l_regen_"
+             "2026-08-07.txt)",
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> int:
+    args = parse_args()
     targets = select_target_video_names()
+    if args.exclude_jobs is not None:
+        excluded_names = extract_video_names_from_jobs_file(args.exclude_jobs)
+        targets = [n for n in targets if n not in excluded_names]
+        print(f"[gen_jobs] --exclude-jobs={args.exclude_jobs} "
+              f"除外={len(excluded_names)}件")
+
+    out_path = args.out if args.out is not None else OUT_JOBS_TXT
     lines = [build_job_command(name) for name in targets]
-    OUT_JOBS_TXT.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"[gen_jobs] targets={len(targets)} -> {OUT_JOBS_TXT}")
+    content = "\n".join(lines) + ("\n" if lines else "")
+    out_path.write_text(content, encoding="utf-8")
+    print(f"[gen_jobs] targets={len(targets)} -> {out_path}")
     return 0
 
 
