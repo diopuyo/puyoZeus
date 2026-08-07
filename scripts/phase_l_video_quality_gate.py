@@ -73,6 +73,12 @@ MATCH_START_NONEMPTY_FAIL_RATE: float = 0.005
 # median=0.28%, p75=0.37%)。「FAILの半分」等の機械的値でなく実測分布から
 # 導出 (過学習防止則: シーン逆算禁止、母集団の上位1/4を注意喚起帯とする)。
 MATCH_START_NONEMPTY_WARN_RATE: float = 0.0037
+# REVIEW 閾値 (2026-08-08 coordinator指摘対応): 検査1の評価対象セル数が
+# この値未満なら「試合開始+1〜3秒窓に該当STABLEスナップショットが無い」
+# = 判定不能とみなし REVIEW にする。0除算回避のための nan→PASS 誤魔化しは
+# 誤PASS事故 (olRyxDGacbg 先頭10分クリップ、game境界0件→NaN→PASS化) の
+# 直接原因だったため廃止する。
+MATCH_START_MIN_EVAL_CELLS: int = 1
 
 # --- 検査2: 列別・色別の系統偏り ---
 # row0 (隠し段) 〜 row4 (上から4行目の可視段) を「上部帯」として評価する。
@@ -305,9 +311,20 @@ def compute_avg_puyo_count(arrays: VideoArrays) -> float:
 # 総合判定
 # ============================
 
-def _judge_match_start(rate: float) -> tuple[str, list[str]]:
-    if np.isnan(rate):
-        return "PASS", []
+def _judge_match_start(rate: float, n_cells: int) -> tuple[str, list[str]]:
+    """検査1の判定を返す。
+
+    2026-08-08 修正: n_cells が MATCH_START_MIN_EVAL_CELLS 未満 (= 試合開始
+    +1〜3秒窓に該当 STABLE スナップショットが無い、game_idx 境界不足の疑い)
+    の場合は PASS でなく REVIEW を返す。以前は nan→PASS だったため
+    olRyxDGacbg 先頭10分クリップ (game境界0件) を誤PASSさせた事故があった。
+    """
+    if n_cells < MATCH_START_MIN_EVAL_CELLS or np.isnan(rate):
+        return "REVIEW", [
+            f"match_start_nonempty_rate 判定不能 (評価セル数={n_cells}、"
+            "試合開始+1〜3秒窓に該当STABLEスナップショット無し。"
+            "game_idx境界不足 or score OCR破綻の疑い、要目視確認)"
+        ]
     if rate > MATCH_START_NONEMPTY_FAIL_RATE:
         return "FAIL", [f"match_start_nonempty_rate={rate:.4%} > {MATCH_START_NONEMPTY_FAIL_RATE:.2%}"]
     if rate > MATCH_START_NONEMPTY_WARN_RATE:
@@ -340,7 +357,10 @@ def _judge_i1_c1(col_unknown_max: float, avg_puyo: float) -> tuple[str, list[str
     return verdict, reasons
 
 
-_VERDICT_RANK = {"PASS": 0, "WARN": 1, "FAIL": 2}
+# REVIEW (2026-08-08 追加): 検査1が判定不能な場合の第3区分。
+# 「判定不能=良好」ではないため WARN より重く扱うが、確定 FAIL より軽い
+# (人間の目視確認待ちという意味合い)。
+_VERDICT_RANK = {"PASS": 0, "WARN": 1, "REVIEW": 2, "FAIL": 3}
 
 
 def _combine_verdicts(verdicts: list[str]) -> str:
@@ -353,7 +373,7 @@ def evaluate_video(
 ) -> VideoGateResult:
     """1 動画分の全検査を実行し VideoGateResult を返す。"""
     ms_rate, ms_n = compute_match_start_nonempty(arrays)
-    ms_verdict, ms_reasons = _judge_match_start(ms_rate)
+    ms_verdict, ms_reasons = _judge_match_start(ms_rate, ms_n)
 
     target_rates = compute_color_col_rates(arrays)
     z_matrix = leave_one_out_z(target_rates, library_rates, arrays.video_id)
@@ -405,10 +425,20 @@ def _format_scorecard_row(r: VideoGateResult) -> str:
     ])
 
 
-def write_scorecard(results: list[VideoGateResult], out_dir: Path) -> Path:
-    """全動画分の scorecard.tsv を書き出す。"""
+def write_scorecard(
+    results: list[VideoGateResult], out_dir: Path, filename: str = "scorecard.tsv",
+) -> Path:
+    """全動画分の scorecard を書き出す。
+
+    Args:
+        filename: 出力ファイル名。デフォルト "scorecard.tsv" (--all 実行時)。
+            2026-08-08 追加: --video 単発実行時にライブラリ全体の
+            scorecard.tsv を誤って1行に上書きする事故 (olRyxDGacbg 陰性対照
+            regen 完了時に発生) の再発防止として、呼出元 (main) は単発モード
+            では別名を渡す。backwards compat: 省略時は従来どおり scorecard.tsv。
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "scorecard.tsv"
+    path = out_dir / filename
     lines = [_SCORECARD_HEADER] + [_format_scorecard_row(r) for r in results]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -499,13 +529,18 @@ def main() -> int:
 
     for r in results:
         write_video_detail_md(r, args.out_dir)
-    scorecard_path = write_scorecard(results, args.out_dir)
+    # 2026-08-08 修正: --video 単発実行時はライブラリ全体の scorecard.tsv を
+    # 上書きしない (別名ファイルに書く)。--all のときのみ scorecard.tsv。
+    scorecard_filename = "scorecard.tsv" if args.all else f"single_{args.video}.tsv"
+    scorecard_path = write_scorecard(results, args.out_dir, filename=scorecard_filename)
 
     n_fail = sum(1 for r in results if r.verdict == "FAIL")
     n_warn = sum(1 for r in results if r.verdict == "WARN")
+    n_review = sum(1 for r in results if r.verdict == "REVIEW")
+    n_pass = len(results) - n_fail - n_warn - n_review
     print(
         f"[gate] 完了: {len(results)} 動画 (FAIL={n_fail} WARN={n_warn} "
-        f"PASS={len(results) - n_fail - n_warn}) -> {scorecard_path}"
+        f"REVIEW={n_review} PASS={n_pass}) -> {scorecard_path}"
     )
     return 0
 

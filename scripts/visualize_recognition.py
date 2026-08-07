@@ -95,16 +95,24 @@ DEFAULT_SAMPLE_INTERVAL = 0.033  # 30 fps 認識 (= cycle 71p 2026-05-13 ユー�
 
 def draw_cell_overlay(
     frame: np.ndarray, board: Board, roi_x: int, roi_y: int,
+    hide_mask: np.ndarray | None = None,
 ) -> None:
     """盤面 1 つに対し、各 cell の色 symbol を重畳する.
 
     可視 12 行のみ描画 (隠し段 row 0 は省略)。
     文字色は常に白、黒太縁で puyo 背景と同色化を回避。
+
+    Args:
+        hide_mask: shape=(BOARD_ROWS, BOARD_COLS) の bool 配列。True のセルは
+            描画をスキップする (--overlay-cell-stability-frames 用、2026-08-08
+            追加)。None の場合は従来通り全セル描画 (後方互換)。
     """
     if board is None:
         return
     for row in range(HIDDEN_ROWS, BOARD_ROWS):
         for col in range(BOARD_COLS):
+            if hide_mask is not None and hide_mask[row, col]:
+                continue
             color = int(board.get(row, col))
             symbol = COLOR_SYMBOLS.get(color, "?")
             if not symbol:
@@ -148,6 +156,84 @@ def should_draw_cell_overlay(
     if overlay_stable_only:
         return state == BoardState.STABLE
     return True
+
+
+def should_draw_cell_overlay_debounced(
+    state: BoardState,
+    overlay_stable_only: bool,
+    overlay_show_states: frozenset[BoardState] | None,
+    hide_candidate_start_frame: int | None,
+    debounce_frames: int,
+    fi: int,
+) -> bool:
+    """状態ゲート判定の「非表示への切替」を K フレーム継続後にのみ発動させる (2026-08-08 追加).
+
+    短時間の CHAIN/OJAMA_FALL フリッカーで通常プレイ中のオーバーレイが
+    常時消える問題への対処 (--overlay-state-debounce-frames)。
+    表示 (True) への復帰は即時。非表示 (False) への切替は
+    hide_candidate_start_frame (= 非表示対象状態に連続して入り始めた frame idx、
+    呼び出し元がフレーム毎に更新) から fi までの経過フレーム数が
+    debounce_frames 未満の間は表示を維持する。
+
+    Args:
+        state: 判定対象プレイヤーの現在 state。
+        overlay_stable_only: --overlay-stable-only。
+        overlay_show_states: --overlay-show-states の解決済み集合 (None=無効)。
+        hide_candidate_start_frame: 非表示対象状態に連続して入り始めた frame idx
+            (表示中は None)。呼び出し元が sample フレーム毎に更新する。
+        debounce_frames: デバウンスに必要な連続フレーム数 (0=無効・即時非表示、後方互換)。
+        fi: 現在の frame idx。
+
+    Returns:
+        bool: True ならセル文字オーバーレイを描画する。
+    """
+    if should_draw_cell_overlay(state, overlay_stable_only, overlay_show_states):
+        return True
+    if debounce_frames <= 0:
+        return False
+    if hide_candidate_start_frame is None:
+        # 継続開始が未記録 = デバウンス判定未成立、安全側で表示維持
+        return True
+    return (fi - hide_candidate_start_frame) < debounce_frames
+
+
+def update_cell_stability_hide_mask(
+    board: Board | None,
+    prev_grid: np.ndarray | None,
+    change_frame: np.ndarray,
+    fi: int,
+    stability_frames: int,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """セル単位の直近安定フレーム数を追跡し、非表示 mask を返す (2026-08-08 追加).
+
+    per-player・per-cell で「最後に値が変わった frame idx」を追跡し、直近
+    stability_frames フレーム連続で同一値のセルのみ描画対象とする
+    (--overlay-cell-stability-frames)。stability_frames<=0 なら追跡自体を
+    行わず常に (None, prev_grid) を返す (無効時オーバーヘッドゼロ、後方互換)。
+
+    Args:
+        board: 現在描画対象の確定盤面 (None なら判定しない)。
+        prev_grid: 前回呼び出し時に保存した grid (shape=(BOARD_ROWS, BOARD_COLS))。
+        change_frame: 各セルが最後に値変化した frame idx (呼び出し元が保持、in-place 更新)。
+        fi: 現在の frame idx。
+        stability_frames: 安定判定に必要な連続フレーム数 (0=無効)。
+
+    Returns:
+        (hide_mask, new_prev_grid): hide_mask は True=まだ安定不足で非表示にすべき
+        セル (stability_frames<=0 または board is None のとき None)。new_prev_grid
+        は次回呼び出しの prev_grid としてそのまま渡す値。
+    """
+    if stability_frames <= 0 or board is None:
+        return None, prev_grid
+    grid = board._grid  # noqa: SLF001 盤面全体比較専用、numpy 比較で軽量化のため直接アクセス
+    if prev_grid is None or prev_grid.shape != grid.shape:
+        change_frame[:] = fi
+    else:
+        changed = grid != prev_grid
+        if np.any(changed):
+            change_frame[changed] = fi
+    hide_mask = (fi - change_frame) < stability_frames
+    return hide_mask, grid.copy()
 
 
 def draw_state_label(
@@ -1498,6 +1584,30 @@ def main() -> int:
             "防ぐ。既定は無効 (後方互換)。"
         ),
     )
+    # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
+    # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
+    # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
+    # 汚染量小と確認済み (デモ動画生成用)。既定は無効 (後方互換)。
+    parser.add_argument(
+        "--enable-asymmetric-recovery-min-frames", action="store_true", default=False,
+        dest="enable_asymmetric_recovery_min_frames",
+        help=(
+            "復旧ゲート方向別しきい値の非対称化 (2026-07-30) を有効化する。 "
+            "方向1 (空→色) のみ --recovery-add-min-frames で発火させ、"
+            "方向2/3 (色→空/色→色) は STABLE_RECOVERY_MIN_FRAMES (既定8) を"
+            "維持する。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--recovery-add-min-frames", type=int, default=None,
+        dest="recovery_add_min_frames",
+        help=(
+            "--enable-asymmetric-recovery-min-frames 有効時の方向1 (空→色) "
+            "発火に必要な連続フレーム数。既定 None = ライブラリ既定 "
+            "(STABLE_RECOVERY_ADD_MIN_FRAMES=4)。--enable-asymmetric-recovery-"
+            "min-frames が無効なら no-op。"
+        ),
+    )
     # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字オーバーレイを
     # 非表示にする表示モード。状態ラベル (1P=chain 等) や盤面枠色は維持する。
     parser.add_argument(
@@ -1535,6 +1645,33 @@ def main() -> int:
             "する追加ガード)。ホールド中に再度 CHAIN/OJAMA_FALL に入るとカウンタは"
             "リセットされ、次に抜けた時点から改めてホールドが始まる。左右は独立判定。"
             "既定 0 = 無効 (後方互換)。"
+        ),
+    )
+    # フリッカー対策 (2026-08-08 追加、既存 --overlay-transition-hold-frames とは独立):
+    # セル単位の安定フィルタ。確定盤面の値が直近 N フレーム連続で同一の場合のみ
+    # そのセルの文字を描画する (per-player・per-cell 判定)。
+    parser.add_argument(
+        "--overlay-cell-stability-frames", type=int, default=0,
+        dest="overlay_cell_stability_frames",
+        help=(
+            "各プレイヤー・各セルについて、確定盤面の値が直近指定フレーム数の間"
+            "変化していない場合のみそのセルの文字オーバーレイを描画する。値が"
+            "変化した直後の N フレームは (state ゲートの判定に関わらず) 描画しない"
+            "AND 条件として働く。左右・セル毎に独立判定。既定 0 = 無効"
+            "(後方互換、従来通り常時描画)。"
+        ),
+    )
+    # フリッカー対策 (2026-08-08 追加): --overlay-stable-only / --overlay-show-states
+    # による「非表示への切替」を K フレーム継続後にのみ発動させる (瞬間フリッカーでは
+    # 表示を維持)。表示への復帰は即時。
+    parser.add_argument(
+        "--overlay-state-debounce-frames", type=int, default=0,
+        dest="overlay_state_debounce_frames",
+        help=(
+            "--overlay-stable-only / --overlay-show-states による state ゲートの"
+            "非表示切替を、非表示対象状態が指定フレーム数連続した場合のみ発動させる"
+            "(瞬間的な chain/ojama_fall フリッカーでは表示を維持)。表示への復帰は"
+            "即時。左右は独立判定。既定 0 = 無効 (後方互換、従来通り即時非表示)。"
         ),
     )
     args = parser.parse_args()
@@ -1683,6 +1820,18 @@ def main() -> int:
         burst_gate_open_threshold=args.burst_gate_open_threshold,
         enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
         enable_match_transition_debounce=args.enable_match_transition_debounce,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
+        # --enable-asymmetric-recovery-min-frames で有効化。
+        # --recovery-add-min-frames は None ならライブラリ既定
+        # (STABLE_RECOVERY_ADD_MIN_FRAMES) を使うため kwarg 自体を渡さない
+        # (load_default 側の型は int で None 非対応、後方互換の要)。
+        enable_asymmetric_recovery_min_frames=(
+            args.enable_asymmetric_recovery_min_frames
+        ),
+        **(
+            {} if args.recovery_add_min_frames is None
+            else {"recovery_add_min_frames": args.recovery_add_min_frames}
+        ),
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1894,6 +2043,21 @@ def main() -> int:
     # 各プレイヤーが最後に _TRANSITION_HOLD_STATES から抜けた frame index (未発生時 None)
     last_p1_transition_exit_frame: int | None = None
     last_p2_transition_exit_frame: int | None = None
+    # フリッカー対策2種 (2026-08-08 追加、独立フラグ・既存ホールドと共存可):
+    # (1) セル単位安定フィルタ: per-cell 変化 frame idx を追跡
+    overlay_cell_stability_frames = max(
+        0, int(getattr(args, "overlay_cell_stability_frames", 0) or 0)
+    )
+    last_p1_cell_prev_grid: np.ndarray | None = None
+    last_p2_cell_prev_grid: np.ndarray | None = None
+    last_p1_cell_change_frame = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=np.int64)
+    last_p2_cell_change_frame = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=np.int64)
+    # (2) state ゲート非表示のデバウンス: 非表示対象状態への連続突入 frame idx
+    overlay_state_debounce_frames = max(
+        0, int(getattr(args, "overlay_state_debounce_frames", 0) or 0)
+    )
+    last_p1_hide_candidate_start_frame: int | None = None
+    last_p2_hide_candidate_start_frame: int | None = None
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -1960,6 +2124,16 @@ def main() -> int:
                 last_p2_transition_exit_frame = fi
             elif last_p2_state in _TRANSITION_HOLD_STATES:
                 last_p2_transition_exit_frame = None
+            # state ゲート非表示デバウンス (2026-08-08 追加): 非表示対象状態への
+            # 連続突入開始 frame idx を記録。表示対象状態に戻ったら即時クリア。
+            if should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states):
+                last_p1_hide_candidate_start_frame = None
+            elif last_p1_hide_candidate_start_frame is None:
+                last_p1_hide_candidate_start_frame = fi
+            if should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states):
+                last_p2_hide_candidate_start_frame = None
+            elif last_p2_hide_candidate_start_frame is None:
+                last_p2_hide_candidate_start_frame = fi
             # STABLE 時のみ確定盤面を取得 (= indicator 評価で使うのと同じ条件)
             if (result.p1.state == BoardState.STABLE
                     and result.p1.confirmed_board is not None):
@@ -2120,9 +2294,23 @@ def main() -> int:
         last_p1_board = last_p1_eval_board
         last_p2_board = last_p2_eval_board
 
+        # セル単位安定フィルタ (2026-08-08 追加): --overlay-cell-stability-frames。
+        # 毎フレーム numpy 比較で変化 frame idx を更新し、直近 N フレーム未変化の
+        # セルのみ描画対象とする hide_mask を得る (無効時は None、オーバーヘッドゼロ)。
+        _p1_cell_hide_mask, last_p1_cell_prev_grid = update_cell_stability_hide_mask(
+            last_p1_board, last_p1_cell_prev_grid, last_p1_cell_change_frame,
+            fi, overlay_cell_stability_frames,
+        )
+        _p2_cell_hide_mask, last_p2_cell_prev_grid = update_cell_stability_hide_mask(
+            last_p2_board, last_p2_cell_prev_grid, last_p2_cell_change_frame,
+            fi, overlay_cell_stability_frames,
+        )
+
         # 描画: 6 要素 (フィールド状態・ぷよ色・score・next・OJ送出・隠し段)
         # --overlay-stable-only / --overlay-show-states: 各プレイヤー独立判定で
         # 対象外 state のセル文字を隠す (状態ラベル・盤面枠色は維持、2026-08-07 追加)。
+        # --overlay-state-debounce-frames: 上記の非表示判定を K フレーム継続後に
+        # のみ発動させる (瞬間フリッカーでは表示維持、2026-08-08 追加)。
         # --overlay-transition-hold-frames: chain/ojama_fall 脱出直後 N フレームは
         # 上記判定が True でも AND で追加抑制する (幽霊セル対策、2026-08-07 追加)。
         _p1_in_hold = (
@@ -2135,12 +2323,20 @@ def main() -> int:
             and last_p2_transition_exit_frame is not None
             and (fi - last_p2_transition_exit_frame) < overlay_transition_hold_frames
         )
-        if (should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states)
-                and not _p1_in_hold):
-            draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
-        if (should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states)
-                and not _p2_in_hold):
-            draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
+        if (should_draw_cell_overlay_debounced(
+                last_p1_state, overlay_stable_only, overlay_show_states,
+                last_p1_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
+            ) and not _p1_in_hold):
+            draw_cell_overlay(
+                frame, last_p1_board, P1_ROI_X, P1_ROI_Y, hide_mask=_p1_cell_hide_mask,
+            )
+        if (should_draw_cell_overlay_debounced(
+                last_p2_state, overlay_stable_only, overlay_show_states,
+                last_p2_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
+            ) and not _p2_in_hold):
+            draw_cell_overlay(
+                frame, last_p2_board, P2_ROI_X, P2_ROI_Y, hide_mask=_p2_cell_hide_mask,
+            )
         draw_state_label(
             frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
             score=last_p1_score or 0, label_prefix="1P:",
