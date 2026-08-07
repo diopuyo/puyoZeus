@@ -231,6 +231,7 @@ def _collect_records(
     stable_frame_count: int | None = None,
     recovery_min_frames: int | None = None,
     enable_side_sat_calibration: bool = False,
+    enable_effect_gate: bool = False,
     pipeline_out: dict | None = None,
 ) -> tuple[list[_FrameRec], list[_FrameRec], float]:
     """video を走査し、1P/2P それぞれの frame 記録を返す (現行既定構成)。
@@ -262,6 +263,10 @@ def _collect_records(
     enable_cnn_flicker_hsv_fallback: CNN 乱高下セル HSV フォールバック
     (#51 後半, 2026-07-26) の A/B 計測用に追加。既定 False = 従来通り
     (bit-identical)。
+    enable_effect_gate: エフェクト時間ゲート (2026-08-03) の A/B 計測用に追加。
+    既定 False = 従来通り (bit-identical)。満杯盤面 47 セル誤り根治の
+    反映遅延 (設置→confirmed_board 反映 8 フレーム基準) への副作用有無を
+    確認するために使う。RecognitionPipeline.load_default へそのまま透過する。
     pipeline_out: 抑制カウンタ (_drift_resync_*_suppressed_*) 観測用。
     既定 None = 従来通り (副作用なし)。dict を渡すと呼び出し後に
     pipeline_out["pipeline"] へ構築済み RecognitionPipeline を格納する。
@@ -304,6 +309,7 @@ def _collect_records(
             else {"stable_frame_count": int(stable_frame_count)}
         ),
         enable_side_sat_calibration=enable_side_sat_calibration,
+        enable_effect_gate=enable_effect_gate,
     )
     # 復旧ゲート閾値 (STABLE_RECOVERY_MIN_FRAMES) は load_default から届かないので
     # 構築後の state machine に直接差し込む (2026-07-31 掃引用、read-only 診断)。
@@ -872,6 +878,7 @@ def _process_one(
     stable_frame_count: int | None = None,
     recovery_min_frames: int | None = None,
     enable_side_sat_calibration: bool = False,
+    enable_effect_gate: bool = False,
 ) -> dict:
     """1 動画分の走査 + イベント構築 + 集計。
 
@@ -912,6 +919,7 @@ def _process_one(
         stable_frame_count=stable_frame_count,
         recovery_min_frames=recovery_min_frames,
         enable_side_sat_calibration=enable_side_sat_calibration,
+        enable_effect_gate=enable_effect_gate,
         pipeline_out=pipeline_out,
     )
     _print_progress(f"[{video}] 走査完了 ({time.time() - t0:.1f}s) fps={fps:.2f}")
@@ -1232,6 +1240,16 @@ def _parse_args() -> argparse.Namespace:
         help="既定None(data/verify/placement_confirm_frames_2026-07-25、"
              "従来通り)。指定時は出力先ディレクトリを切り替える。",
     )
+    # エフェクト時間ゲート (2026-08-03、A/B 計測用)。既定 False = 従来通り
+    # (bit-identical)。満杯盤面 47 セル誤り根治の反映遅延への副作用測定用。
+    ap.add_argument(
+        "--enable-effect-gate",
+        dest="enable_effect_gate",
+        action="store_true", default=False,
+        help="既定False。指定時は RecognitionPipeline の "
+             "enable_effect_gate を有効化する "
+             "(相手連鎖中/お邪魔着弾直後 window の上段セルに実秒ベース持続確認を要求)。",
+    )
     return ap.parse_args()
 
 
@@ -1264,6 +1282,7 @@ def main() -> None:
         "stable_frame_count": args.stable_frame_count,
         "recovery_min_frames": args.recovery_min_frames,
         "enable_side_sat_calibration": args.enable_side_sat_calibration,
+        "enable_effect_gate": args.enable_effect_gate,
     }
 
     # 任意動画・任意窓モード (2026-07-25 汎化監査用に追加)。既定 (--video 未指定)

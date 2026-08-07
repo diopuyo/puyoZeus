@@ -35,7 +35,7 @@
 - **6 列 × 13 行** の `numpy.ndarray`
 - 行: 0=最上段(隠し段), 12=最下段 / 列: 0=左端, 5=右端
 - 色: `0`=空, `1`=赤, `2`=青, `3`=緑, `4`=黄, `5`=紫, `9`=おじゃま, `10`=COLOR_UNKNOWN
-- 窒息判定: 3 列目 (index:2) 最上段にぷよがあれば DEAD
+- 窒息判定: 3 列目 (index:2) の可視最上段 (row=1、12段目) にぷよがあれば DEAD。隠し段 (row=0、13段目) は判定に含まない (DEATH_ROW=1、2026-07-22是正)
 - **ProbabilisticBoard** (`src/probabilistic_board.py`): 各 cell に確率分布
 
 ## 設計思想 (絶対遵守)
@@ -55,8 +55,10 @@ GTR / サブマリン / 階段 等の形分類は二次的。火力・中盤厚�
 指標評価は **両者 STABLE 時の `confirmed_board` のみ** で実行。NON-STABLE 中は
 前回 STABLE 盤面を凍結 (memory `feedback_chain_phase_physics_only.md`)。
 
-### 5. 認識精度 99.99% 達成まで他 phase 凍結
-memory `recognition_target_995.md` 方針。Phase I (自己教師あり学習) で達成目標。
+### 5. 認識精度目標 (2026-08-06 user改定)
+Phase I の合格ライン = **99.5%** (STABLE確定盤面・物差し測定、2026-08-06実測99.54%でクリア)。
+**99.99% は全体完了後の仕上げ目標に後置** (Stage2バックログ: 弱光較正/煙/素通り/row0/一般単発誤読)。
+長時間劣化 (第4機構) の修正はデータ品質要件として合格ラインと独立に必須。
 
 ## 学習データ条件 (徹底)
 
@@ -160,7 +162,7 @@ puyo_analyzer プロジェクトでは許可確認なしで自律実行。長時
 
 ## 現在のフェーズ
 
-🔄 **Phase I 進行中** (最優先): 認識精度 99.99% 達成
+🔄 **Phase I 最終盤** (合格ライン99.5%は実測99.54%でクリア済み、2026-08-06 user改定): 残条件=長時間劣化修正A'の検証+全域無悪化ゲート → 合格で Phase L 解禁。99.99%は全体完了後の仕上げ目標
 - 自己教師あり学習: Score OCR + Next/dnext + ChainEvent + Hidden row
 - 共通 framework + 4 validator + online fine-tune
 - OnlineHsvCalibrator 統合

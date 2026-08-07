@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
@@ -34,7 +35,7 @@ for _env_key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 PROJ_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJ_ROOT))
 
-from src.board import Board  # noqa: E402
+from src.board import Board, COLOR_EMPTY, COLOR_UNKNOWN  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.indicators_v2 import (  # noqa: E402
     absorption_capacity,
@@ -49,7 +50,8 @@ from src.indicators_v2 import (  # noqa: E402
     max_column_height,
     potential_fire_power,
     second_chain_potential,
-    chain_to_time,
+    estimate_chain_anim_duration_sec,
+    SEC_PER_HAND,
 )
 from src.scoring import score_to_ojama  # noqa: E402
 
@@ -59,8 +61,55 @@ from src.scoring import score_to_ojama  # noqa: E402
 NPZ_DIR = PROJ_ROOT / "data" / "indicators_v2" / "boards_lean_fixed"
 OUTPUT_PATH = PROJ_ROOT / "data" / "indicators_v2" / "exchange_labels.csv"
 
+# score OCR が完全破綻し発火検出(スコア増分ベース)が信用できない動画
+# (memory project_video_difficulty_3broken_2026-07-29 + c69 追加確認、
+#  build_board_pairs_lean.py の won=NaN 全滅動画と一致)。
+# --exclude-videos 省略時はこの定数を使わず全動画処理する(既定=旧挙動と完全一致)。
+SCORE_OCR_BROKEN_VIDEOS: frozenset[str] = frozenset({"c26", "c30", "c58", "c69"})
+
 # 発火検出: 短窓でのスコア増分閾値
+# TODO(2026-08-01 Step0): scripts/measure_exchange_dynamics.py 側の同種閾値
+# (=40) と不一致 (本ファイルは80)。Step0では意図的に触らない
+# (user/アーキ判断待ち、統一するかは別途要判断)。
 SCORE_DELTA_FIRE: int = 80
+
+# 発火イベント分裂統合 (測定器事故5件目、2026-08-02 v2: user確定回答2件を反映)
+# 連鎖アニメ中もスコアOCRが部分合計を拾える瞬間があり、1つの連鎖が
+# _detect_fire_events で複数イベントに分裂する (実データ c27.npz 1P game12:
+# 1269.2秒score=27590の"326個イベント"と1271.3秒score=35274の"109個イベント"が
+# 実際は同一9連鎖、実画面確認済み。「連鎖中に一瞬通常表示のスコアが出るのは
+# ゲーム仕様」とuser確定)。
+#
+# v2 (2026-08-02): user確定回答「同一プレイヤーの連鎖の最短間隔は2秒くらい」を
+# 受け、副信号のgap閾値を2.5秒→1.5秒に引き下げ (物理最短2秒を確実に下回る
+# 保険のみに限定、2.0-2.5秒帯域の本物の連続発火 [高速の撃ち合い] を誤マージ
+# しないため)。
+#
+# v3 (2026-08-02、main実測診断で確定): v2の主判定「盤面凍結走査」(候補検出j
+# 自身の盤面が参照と完全一致するか) は、連鎖終了→盤面が連鎖後STABLEに更新
+# →最終スコア確定 (=検出j) という正当な順序でも j の盤面が参照と変わる
+# ため、gap1.5-2.2秒帯域152件中148件を誤って分離していた (main実測)。
+# v3は主判定を「設置の署名 (ぷよ総数が+2以上増え、かつ自己修復せず持続する
+# 瞬間) の有無」に全面変更する。増加が無い (凍結のまま or 連鎖後の減少のみ)
+# なら盤面が参照と異なっていてもマージする。gap≤1.5秒の無条件マージ (副信号)
+# は維持する。
+FIRE_EVENT_MERGE_GAP_SEC: float = 1.5
+
+# 設置の署名: ぷよ総数がこの個数以上増えたら「新しい手が置かれた」証拠とする
+# (1手=2ぷよ、user確定「ぷよ総数+2以上」)。
+PLACEMENT_SIGNATURE_MIN_INCREASE: int = 2
+
+# 設置署名の持続判定秒数。
+# ⚠️ 実装検証中に発見した重要な補正: 「認識ノイズの自己修復秒数 (project_
+# yardstick_first_results_2026-07-31 の≤1秒)」をそのまま流用すると、実データ
+# c27.npz 1P game12 の index47→52 区間 (本物の設置+連鎖: ぷよ数49→53が0.9秒
+# かけて増加した直後、連鎖が発火して37まで急減する) を「1秒以内に解消した
+# ノイズ」と誤判定し、本物の別イベントをマージしてしまう回帰が発生した
+# (自己テストで発見)。設置は連鎖発火より先に完了するはずなので、判定秒数は
+# 「1手の所要時間」(SEC_PER_HAND、実測中央値) を使うのが物理的に正しい
+# (1手分の設置動作が完了する前に連鎖でぷよが消えることは無い)。実データの
+# 認識ノイズ (0.2秒で解消) はこの秒数を大きく下回るため誤判定しない。
+PLACEMENT_SIGNATURE_PERSIST_SEC: float = SEC_PER_HAND
 
 # 返し窓: score=-1 補間なし。連鎖数不明時のデフォルト秒数
 RETURN_WINDOW_DEFAULT_SEC: float = 6.0
@@ -79,7 +128,8 @@ DEATH_MARGIN_DANGER_THRESHOLD: float = 0.2
 RETURN_FACTOR: float = 0.8
 
 # taiou_success (対応成功) 判定用定数
-# T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で定義
+# T_guard = estimate_chain_anim_duration_sec(攻撃側連鎖数) + SEC_PER_HAND で定義
+# (2026-08-01 Step0: 旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 から一本化)
 # SEC_PER_HAND は indicators_v2 から import するが、念のため本スクリプト内にも定義
 _SEC_PER_HAND_LOCAL: float = 0.733  # indicators_v2.SEC_PER_HAND と同値(実測中央値)
 # T_guard 終端から何秒後まで「埋まっていないか」を確認する窓(秒)
@@ -189,6 +239,124 @@ def _detect_fire_events(
                 fire_indices.append(i)
         prev_score = s
     return fire_indices
+
+
+@dataclass(frozen=True)
+class FireEventCluster:
+    """分裂した発火検出インデックスを1連鎖に統合したクラスタ (測定器事故5件目対策)。
+
+    Attributes:
+        fire_index: クラスタ最後の検出インデックス (連鎖終了時点、t_fire・opp側
+            突合の基準に使う)。
+        board_ref_index: クラスタ先頭の検出インデックスの1つ前 (真の連鎖開始前
+            盤面、連鎖中の中間/凍結スナップショットではない点に注意)。
+        baseline_score: クラスタ先頭直前の有効スコア (部分加算を合算した
+            delta_score 計算の基準値)。
+    """
+    fire_index: int
+    board_ref_index: int
+    baseline_score: int
+
+
+def _last_valid_score_before(score: np.ndarray, index: int) -> int:
+    """index より前で最後に有効 (>=0) だったスコアを返す (無ければ-1)。"""
+    for j in range(index - 1, -1, -1):
+        if score[j] >= 0:
+            return int(score[j])
+    return -1
+
+
+def _count_concrete_puyos(grid: np.ndarray) -> int:
+    """gridの「確定した色」セル数を返す (空(0)とUNKNOWN(10)を除外)。
+
+    Board.height_of() と同じ方針 (UNKNOWNは判定不能につき除外)。遷移汚染で
+    UNKNOWNセルが湧いても、それを非ゼロ扱いして偽の増加署名を作らないため
+    (main指摘事項、v3で追加検討)。
+    """
+    return int(np.sum((grid != COLOR_EMPTY) & (grid != COLOR_UNKNOWN)))
+
+
+def _has_placement_signature(
+    t_sec: np.ndarray,
+    grids: np.ndarray,
+    prev_idx: int,
+    idx: int,
+) -> bool:
+    """prev_idx と idx の間で「設置の署名」(ぷよ総数の持続的な+2以上増加) が
+
+    あったか判定する (v3主判定、測定器事故5件目の再修正)。
+
+    v2の反省 (main実測診断で確定): 候補検出 idx 自身の盤面が参照盤面と
+    一致するかで判定すると、連鎖終了→盤面が連鎖後STABLEに更新→最終スコア
+    確定 (=検出idx) という正当な順序でも「不一致」と誤判定してしまう
+    (gap1.5-2.2秒帯域152件中148件が誤って分離されていた)。v3はぷよ総数の
+    「増加」のみに着目する (連鎖後の更新は通常ぷよが減る側なので誤判定しない)。
+
+    認識ノイズによる短時間 (PLACEMENT_SIGNATURE_PERSIST_SEC 以下) の一時的な
+    増加 (写り込み) は無視する (project_yardstick_first_results_2026-07-31の
+    既知の自己修復パターン、実データ c27.npz 1P game12 で確認済み: +5個の
+    一時的な写り込みが0.53秒で解消)。増加がこの秒数を超えて持続して初めて
+    設置ありと確定する。走査範囲が終わるまで確定できなければ (=証拠不十分)
+    保守的に「設置なし (マージ)」側に倒す (v2で「候補自身の差分を安易に
+    確定証拠にした」反省を踏まえ、あえて逆方向の既定値にする)。
+    """
+    counts = [_count_concrete_puyos(grids[k]) for k in range(prev_idx, idx + 1)]
+    baseline = counts[0]
+    jump_start_t: "float | None" = None
+    for offset in range(1, len(counts)):
+        k = prev_idx + offset
+        increase = counts[offset] - baseline
+        if increase >= PLACEMENT_SIGNATURE_MIN_INCREASE:
+            if jump_start_t is None:
+                jump_start_t = float(t_sec[k])
+            elif float(t_sec[k]) - jump_start_t > PLACEMENT_SIGNATURE_PERSIST_SEC:
+                return True
+        else:
+            jump_start_t = None
+            baseline = counts[offset]
+    return False
+
+
+def _merge_fire_event_clusters(
+    t_sec: np.ndarray,
+    score: np.ndarray,
+    grids: np.ndarray,
+    fire_indices: list[int],
+) -> list[FireEventCluster]:
+    """分裂した発火検出を連鎖単位にクラスタリングする (測定器事故5件目対策、v3)。
+
+    分離 (=別イベント) と判定するのは、副信号 (短ギャップ) に該当せず、かつ
+    検出 i (直前に採用した検出) と検出 j (候補) の間に「設置の署名」
+    (_has_placement_signature、ぷよ総数の持続的な+2以上増加) がある場合のみ。
+    署名が無ければ (凍結のまま、または連鎖後の更新で盤面が変わっていても)
+    同一連鎖としてマージする。
+      1. 副信号 (短ギャップ、v2でuser確定回答により2.5秒→1.5秒に引き下げ):
+         同一プレイヤーの連鎖最短間隔は約2秒 (user確定) のため、それを
+         確実に下回る1.5秒以下の隣接検出は無条件マージ。
+      2. 主判定 (設置の署名の有無): 副信号に該当しない場合、設置の署名が
+         無ければマージ、あれば分離する。
+    """
+    if not fire_indices:
+        return []
+    clusters: list[list[int]] = [[fire_indices[0]]]
+    for idx in fire_indices[1:]:
+        prev_idx = clusters[-1][-1]
+        gap_sec = float(t_sec[idx] - t_sec[prev_idx])
+        placement_found = _has_placement_signature(t_sec, grids, prev_idx, idx)
+        if gap_sec <= FIRE_EVENT_MERGE_GAP_SEC or not placement_found:
+            clusters[-1].append(idx)
+        else:
+            clusters.append([idx])
+
+    result: list[FireEventCluster] = []
+    for cluster in clusters:
+        first_idx, last_idx = cluster[0], cluster[-1]
+        result.append(FireEventCluster(
+            fire_index=last_idx,
+            board_ref_index=max(0, first_idx - 1),
+            baseline_score=_last_valid_score_before(score, first_idx),
+        ))
+    return result
 
 
 def _board_from_grid(grid: np.ndarray) -> Board:
@@ -359,12 +527,14 @@ def _compute_returned_competitive(
 ) -> int:
     """A-1: 競合返し判定。
 
-    相手が返し窓 W = chain_to_time(発火側連鎖数) 内に発火し、
+    相手が返し窓 W = estimate_chain_anim_duration_sec(発火側連鎖数) 内に発火し、
     かつ 返しお邪魔 >= 発火側お邪魔 × RETURN_FACTOR を満たすか。
+    (2026-08-01 Step0: 旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 から一本化)
 
     - お邪魔換算は標準レート固定(マージン補正バグ回避)。
     - 発火側の連鎖数は current_max_chain.raw で近似(呼び出し元で渡す)。
-    - return_window_sec = chain_to_time(approx_chains) が呼び出し元で計算済み。
+    - return_window_sec = estimate_chain_anim_duration_sec(approx_chains) が
+      呼び出し元で計算済み。
     """
     fire_ojama = _delta_score_to_ojama_count(fire_delta_score)
 
@@ -492,7 +662,10 @@ def _compute_taiou_success(
         (taiou_success, survived) の 2値タプル。
     """
     from src.indicators_v2 import SEC_PER_HAND
-    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+    # 2026-08-01 Step0: 着弾遅延は estimate_chain_anim_duration_sec
+    # (CHAIN_ANIM_PER_STEP_SEC=0.4秒/連鎖、23動画418イベント実測ベース) に
+    # 一本化 (旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 は過小評価と判明済み)。
+    t_guard = estimate_chain_anim_duration_sec(max(1.0, approx_chains)) + SEC_PER_HAND
     fired = _opp_fired_in_tguard(fire_t, t_guard, opp_t_sec, opp_score)
     safe = _opp_is_safe_after_tguard(fire_t, t_guard, opp_boards)
     taiou_success = int(fired and safe)
@@ -523,7 +696,10 @@ def _compute_net_ojama_after(
         正味お邪魔個数(float)。攻撃−相殺。負値=相殺超過。
     """
     from src.indicators_v2 import SEC_PER_HAND
-    t_guard = chain_to_time(max(1.0, approx_chains)) + SEC_PER_HAND
+    # 2026-08-01 Step0: 着弾遅延は estimate_chain_anim_duration_sec
+    # (CHAIN_ANIM_PER_STEP_SEC=0.4秒/連鎖、23動画418イベント実測ベース) に
+    # 一本化 (旧 chain_to_time=TIME_PER_CHAIN_SEC=0.30 は過小評価と判明済み)。
+    t_guard = estimate_chain_anim_duration_sec(max(1.0, approx_chains)) + SEC_PER_HAND
 
     attack_ojama = _delta_to_ojama_standard(fire_delta_score)
 
@@ -552,6 +728,91 @@ def _classify_phase(puyo_total: float, q_low: float, q_high: float) -> str:
     return "終"
 
 
+# =============================================================================
+# 終局イベント合成 (2026-08-03 main発注、方針(a)、既定OFF)
+# =============================================================================
+#
+# 背景 (main実測 match_02、_diag_match02_underclamp_2026-08-03.py / _measure_
+# terminal_chain_gap_2026-08-03.py で確定): 試合終了直前の大型連鎖は、連鎖
+# アニメ中に「掛け算式」スコア表示が続いてOCRできず、その確定フレーム
+# (=次の有効数値スコア) が記録区間の終端後に来ることがある。この場合、
+# 発火検出器 (_detect_fire_events、スコア差分ベース) は最後に検出した
+# クラスタ以降のスコア増分を一切イベント化できず、66動画で18.9%
+# (試合×サイド) の「明確な終局連鎖の欠落」が定量化されている。
+#
+# 本関数は「最後に検出したクラスタ以降、試合末尾側の最後に有効なscoreまで
+# の差分がSCORE_DELTA_FIRE以上」の場合に、1件の合成イベントを追加する。
+# 盤面特徴は「最後に記録された実STABLE盤面」(=連鎖確定より前、最大で
+# 試合終了までの全期間ぶん古い可能性がある) を使うしかないため、
+# is_synthetic_terminal_event=1 列で必ず明示し、盤面特徴の信頼性が低い旨を
+# 呼び出し側が判別できるようにする (fail-silent回避、CLAUDE.md原則)。
+
+def _last_valid_score_index(score: np.ndarray) -> "int | None":
+    """score配列内で最後に有効 (>=0) だったインデックスを返す (無ければNone)。"""
+    valid_idx = np.where(score >= 0)[0]
+    return int(valid_idx[-1]) if len(valid_idx) > 0 else None
+
+
+def _synthesize_terminal_event_row(
+    fire_rec: NpzRecord, opp_rec: NpzRecord, fire_side: str,
+    fire_clusters: list[FireEventCluster], sim: ChainSimulator,
+    game_start_t: float, puyo_q_low: float, puyo_q_high: float,
+) -> "dict | None":
+    """終局連鎖の欠落を1件の合成イベント行として補完する (検出できなければNone)。
+
+    net_ojama_after は「相殺なしの全量」(_delta_to_ojama_standard) とする
+    (試合終了直後で相手の反撃猶予窓を定義できないため)。taiou_success 等の
+    「その後の相手の応手」に依存するラベルは判定不能として0/NaNにする
+    (盤面特徴も古いため、合成行はモデル学習で除外/層別することを想定)。
+    """
+    last_valid_idx = _last_valid_score_index(fire_rec.score)
+    if last_valid_idx is None:
+        return None
+    last_event_idx = fire_clusters[-1].fire_index if fire_clusters else -1
+    baseline_score = (int(fire_rec.score[last_event_idx]) if fire_clusters
+                       else int(fire_rec.score[np.where(fire_rec.score >= 0)[0][0]]))
+    last_valid_score = int(fire_rec.score[last_valid_idx])
+    gap = last_valid_score - baseline_score
+    if gap < SCORE_DELTA_FIRE or last_valid_idx <= last_event_idx:
+        return None
+
+    t_fire = float(fire_rec.t_sec[last_valid_idx])
+    fire_board = _board_from_grid(fire_rec.grids[last_valid_idx])
+    opp_t_arr = opp_rec.t_sec
+    nearest_opp = int(np.argmin(np.abs(opp_t_arr - t_fire)))
+    opp_board = _board_from_grid(opp_rec.grids[nearest_opp])
+    elapsed_in_game = _game_relative_elapsed(t_fire, game_start_t)
+    fire_feats = _compute_features(fire_board, elapsed_in_game, sim)
+    opp_feats = _compute_features(opp_board, elapsed_in_game, sim)
+    fire_puyo = fire_board.count_puyos()
+    phase = _classify_phase(float(fire_puyo), puyo_q_low, puyo_q_high)
+    net_ojama_after = float(_delta_to_ojama_standard(gap))
+
+    return {
+        "video_id": fire_rec.video_id, "game_idx": int(fire_rec.game_idx[last_valid_idx]),
+        "t_sec": t_fire, "fire_side": fire_side, "phase": phase,
+        "won": float(fire_rec.won[last_valid_idx]),
+        **{f"fire_{k}": v for k, v in fire_feats.items()},
+        "fire_honsen_tempo_output": float("nan"),
+        **{f"opp_{k}": v for k, v in opp_feats.items()},
+        "opp_honsen_tempo_output": float("nan"),
+        **{f"diff_{k}": fire_feats[k] - opp_feats[k] for k in fire_feats},
+        "diff_honsen_tempo_output": float("nan"),
+        "net_ojama": float(_delta_to_ojama_standard(gap)),
+        "returned": 0, "returned_competitive": 0,
+        "return_window_sec": float("nan"),
+        # approx_fire_chains: 合成行は真の連鎖数が不明 (盤面が古いため
+        # current_max_chain を実測できない) だが、augment_exchange_labels_
+        # with_sim.py が estimate_available_hands(int(round(NaN))) で例外に
+        # なるためNaNは使えない。fire_feats["current_max_chain"] (古い盤面
+        # からの近似、通常行と同じ下限1.0のフォールバック) を代用する。
+        "approx_fire_chains": max(1.0, fire_feats["current_max_chain"]),
+        "opp_buried": 0, "taiou_success": 0, "survived": 0,
+        "net_ojama_after": net_ojama_after,
+        "is_synthetic_terminal_event": 1,
+    }
+
+
 def _process_game(
     game_1p: NpzRecord,
     game_2p: NpzRecord,
@@ -559,8 +820,13 @@ def _process_game(
     sim: ChainSimulator,
     puyo_q_low: float,
     puyo_q_high: float,
+    synthesize_terminal_events: bool = False,
 ) -> list[dict]:
-    """1ゲーム・1サイドの発火イベントを処理してレコードリストを返す。"""
+    """1ゲーム・1サイドの発火イベントを処理してレコードリストを返す。
+
+    synthesize_terminal_events: optional (既定False、後方互換)。Trueなら
+    終局連鎖の欠落 (_synthesize_terminal_event_row) を1件追加で補完する。
+    """
     if fire_side == "1P":
         fire_rec = game_1p
         opp_rec = game_2p
@@ -568,13 +834,24 @@ def _process_game(
         fire_rec = game_2p
         opp_rec = game_1p
 
-    fire_events = _detect_fire_events(fire_rec.t_sec, fire_rec.score)
-    if not fire_events:
-        return []
-
-    # 試合開始時刻の近似 = この (video_id, game_idx, fire_side) で
-    # 記録された最初のフレーム時刻(マージンタイム計算の基準点、バグ修正)
-    game_start_t = float(fire_rec.t_sec[0])
+    game_start_t = float(fire_rec.t_sec[0]) if len(fire_rec.t_sec) > 0 else 0.0
+    fire_indices = _detect_fire_events(fire_rec.t_sec, fire_rec.score)
+    if not fire_indices:
+        if not synthesize_terminal_events:
+            return []
+        # 発火が一度も検出されなかった試合でも終局連鎖が欠落している
+        # 可能性はある (has_prior_event=False、_measure_terminal_chain_gap_
+        # 2026-08-03.py の誠実性チェック参照、小刻み蓄積との混同に注意)。
+        synth = _synthesize_terminal_event_row(
+            fire_rec, opp_rec, fire_side, [], sim, game_start_t, puyo_q_low, puyo_q_high,
+        )
+        return [synth] if synth is not None else []
+    # 測定器事故5件目対策: 連鎖アニメ中の分裂検出を連鎖単位に統合する
+    # (_detect_fire_events 自体は他スクリプト [proto_net_threat.py 等] からも
+    # 呼ばれる共有関数のため無改変、統合は本関数内でのみ行う)。
+    fire_clusters = _merge_fire_event_clusters(
+        fire_rec.t_sec, fire_rec.score, fire_rec.grids, fire_indices,
+    )
 
     # 相手盤面を (t, Board) ペアで保持(重い計算は発火時点のみ)
     opp_boards: list[tuple[float, Board]] = []
@@ -585,25 +862,21 @@ def _process_game(
     rows: list[dict] = []
     prev_fire_score = -1
 
-    for fi in fire_events:
+    for cluster in fire_clusters:
+        fi = cluster.fire_index
         t_fire = float(fire_rec.t_sec[fi])
         s_fire = int(fire_rec.score[fi])
-        # ΔscoreはSTABLE前の有効scoreとの差
-        # 直前有効score
-        prev_valid = -1
-        for j in range(fi - 1, -1, -1):
-            if fire_rec.score[j] >= 0:
-                prev_valid = int(fire_rec.score[j])
-                break
+        # Δscoreはクラスタ先頭直前の有効scoreとの差 (分裂した部分加算の合算)
+        prev_valid = cluster.baseline_score
         if prev_valid < 0:
             continue
         delta_score = s_fire - prev_valid
         if delta_score < SCORE_DELTA_FIRE:
             continue
 
-        # 発火直前盤面
-        fi_board_idx = max(0, fi - 1)
-        fire_board = _board_from_grid(fire_rec.grids[fi_board_idx])
+        # 発火直前盤面 (クラスタ先頭直前=真の連鎖開始前盤面。連鎖終了時点
+        # [fi] の1つ前は連鎖中の中間/凍結スナップショットの場合があり不適)
+        fire_board = _board_from_grid(fire_rec.grids[cluster.board_ref_index])
 
         # 相手の発火直前盤面(時刻が最も近いもの)
         opp_t_arr = np.array([x[0] for x in opp_boards])
@@ -631,8 +904,11 @@ def _process_game(
         )
 
         # 返し窓: 発火連鎖数から推定(current_max_chain を近似として使用)
+        # 2026-08-01 Step0: chain_to_time (TIME_PER_CHAIN_SEC=0.30、過小評価
+        # 判明済み) から estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+        # =0.4、23動画418イベント実測ベース) に一本化。
         approx_chains = max(1.0, fire_feats["current_max_chain"])
-        return_window = chain_to_time(approx_chains)
+        return_window = estimate_chain_anim_duration_sec(approx_chains)
         if return_window <= 0:
             return_window = RETURN_WINDOW_DEFAULT_SEC
 
@@ -653,7 +929,8 @@ def _process_game(
         opp_buried = _compute_opp_buried(t_fire, opp_boards, sim)
 
         # user 確定定義: taiou_success (対応成功) ラベル
-        # T_guard = chain_to_time(攻撃側連鎖数) + SEC_PER_HAND で猶予時間を計算
+        # T_guard = estimate_chain_anim_duration_sec(攻撃側連鎖数) + SEC_PER_HAND
+        # で猶予時間を計算 (2026-08-01 Step0 一本化)
         taiou_success, survived = _compute_taiou_success(
             t_fire, approx_chains,
             opp_rec.t_sec, opp_rec.score,
@@ -700,8 +977,16 @@ def _process_game(
             "taiou_success": taiou_success,
             "survived": survived,
             "net_ojama_after": net_ojama_after,
+            "is_synthetic_terminal_event": 0,
         }
         rows.append(row)
+
+    if synthesize_terminal_events:
+        synth = _synthesize_terminal_event_row(
+            fire_rec, opp_rec, fire_side, fire_clusters, sim, game_start_t, puyo_q_low, puyo_q_high,
+        )
+        if synth is not None:
+            rows.append(synth)
     return rows
 
 
@@ -730,6 +1015,31 @@ def _parse_args() -> "argparse.Namespace":
         "--output", type=Path, default=OUTPUT_PATH,
         help=f"出力 CSV パス (既定: {OUTPUT_PATH})",
     )
+    parser.add_argument(
+        "--exclude-videos", type=str, default="",
+        help=(
+            "除外する動画 ID をカンマ区切りで指定 (例: c26,c30,c58,c69)。"
+            " 既定は空文字列 = 除外なし(旧挙動と完全一致)。"
+            f" score OCR 破綻動画の定数は SCORE_OCR_BROKEN_VIDEOS を参照。"
+        ),
+    )
+    parser.add_argument(
+        "--glob-pattern", type=str, default="c*.npz",
+        help=(
+            "npz ファイル名の glob パターン (既定 'c*.npz' = 従来のc系動画命名"
+            "規約、後方互換)。2026-08-03 追加: c系以外の命名 (未知動画の汎化"
+            "テスト等) の npz を処理する場合に '*.npz' 等へ変更する。"
+        ),
+    )
+    parser.add_argument(
+        "--synthesize-terminal-events", action="store_true", default=False,
+        help=(
+            "終局連鎖の欠落 (2026-08-03 main発注、方針(a)) を1件の合成イベント"
+            "として補完する (既定OFF、後方互換)。合成行は is_synthetic_"
+            "terminal_event=1 列で明示される (盤面特徴は最後の実STABLE盤面"
+            "由来のため信頼性が低い、docstring参照)。"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -739,7 +1049,15 @@ def main() -> None:
     args = _parse_args()
     npz_dir: Path = args.npz_dir
     output_path: Path = args.output
-    npz_paths = sorted(npz_dir.glob("c*.npz"))
+    exclude_ids: set[str] = {
+        v.strip() for v in args.exclude_videos.split(",") if v.strip()
+    }
+    npz_paths = sorted(npz_dir.glob(args.glob_pattern))
+    if exclude_ids:
+        before = len(npz_paths)
+        npz_paths = [p for p in npz_paths if p.stem not in exclude_ids]
+        print(f"[INFO] --exclude-videos で {before - len(npz_paths)} 本除外: "
+              f"{sorted(exclude_ids)}")
     if not npz_paths:
         print(f"[ERROR] npz が見つかりません: {npz_dir}", file=sys.stderr)
         sys.exit(1)
@@ -787,7 +1105,8 @@ def main() -> None:
             )
             for side in ("1P", "2P"):
                 try:
-                    rows = _process_game(g1p, g2p, side, sim, q_low, q_high)
+                    rows = _process_game(g1p, g2p, side, sim, q_low, q_high,
+                                          synthesize_terminal_events=args.synthesize_terminal_events)
                     all_rows.extend(rows)
                 except Exception as e:
                     print(f"[WARN] {npz_path.stem} game={gid} side={side}: {e}", file=sys.stderr)
@@ -802,6 +1121,9 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
     print(f"[DONE] {len(df)} 行を {output_path} に保存しました")
+    if args.synthesize_terminal_events:
+        n_synth = int(df["is_synthetic_terminal_event"].sum())
+        print(f"  [方針(a)] 合成した終局イベント: {n_synth} 行 ({n_synth / len(df):.1%})")
     print(f"  位相別: {df['phase'].value_counts().to_dict()}")
     print(f"  fire_side: {df['fire_side'].value_counts().to_dict()}")
     print(f"  net_ojama mean={df['net_ojama'].mean():.2f}  returned={df['returned'].mean():.2f}"

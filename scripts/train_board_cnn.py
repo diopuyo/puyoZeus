@@ -177,24 +177,37 @@ def _phase_label(puyo_count: np.ndarray) -> np.ndarray:
 
 
 def _compute_auc(y_true: np.ndarray, y_score: np.ndarray) -> float:
-    """AUC-ROC を NumPy のみで計算する (sklearn 非依存)。"""
+    """AUC-ROC を厳密に計算する (rank ベース、O(n log n))。
+
+    【2026-08-01 修正】旧実装は 224x224 のランダムサブサンプル近似で、
+    val 24,497 ペアに対して実測 0.6874 (近似) vs 0.6023 (厳密) と
+    +0.085 も過大な値を出していた (seed 固定なので同じ偏ったサブセットを
+    毎エポック使用)。学習ログの過去の AUC (旧データの 0.630 含む) は
+    すべてこの近似値なので、絶対値の比較には使えない。
+    early stop の best epoch 選択もこのノイズで行われていた。
+    → 全ペアの厳密 AUC (Mann-Whitney U / rank 法) に置き換える。
+    """
     if len(np.unique(y_true)) < 2:
         return float("nan")
-    # 陽性・陰性ペアの正答率 = AUC
-    pos = y_score[y_true == 1]
-    neg = y_score[y_true == 0]
-    if len(pos) == 0 or len(neg) == 0:
+    pos_mask = y_true == 1
+    n_pos = int(pos_mask.sum())
+    n_neg = len(y_true) - n_pos
+    if n_pos == 0 or n_neg == 0:
         return float("nan")
-    # ランダムサブサンプル (大規模対策: 最大 50000 ペア)
-    n_max = 50000
-    rng = np.random.default_rng(0)
-    if len(pos) * len(neg) > n_max:
-        pi = rng.choice(len(pos), min(len(pos), 224), replace=False)
-        ni = rng.choice(len(neg), min(len(neg), 224), replace=False)
-        pos, neg = pos[pi], neg[ni]
-    wins = np.sum(pos[:, None] > neg[None, :])
-    ties = np.sum(pos[:, None] == neg[None, :])
-    return float((wins + 0.5 * ties) / (len(pos) * len(neg)))
+    # rank 法: 同順位は平均ランク (ties を 0.5 扱いするのと等価)
+    order = np.argsort(y_score, kind="mergesort")
+    ranks = np.empty(len(y_score), dtype=np.float64)
+    sorted_scores = y_score[order]
+    i = 0
+    while i < len(sorted_scores):
+        j = i
+        while j + 1 < len(sorted_scores) and sorted_scores[j + 1] == sorted_scores[i]:
+            j += 1
+        ranks[order[i:j + 1]] = 0.5 * (i + j) + 1.0
+        i = j + 1
+    sum_pos_ranks = float(ranks[pos_mask].sum())
+    u = sum_pos_ranks - n_pos * (n_pos + 1) / 2.0
+    return float(u / (n_pos * n_neg))
 
 
 def _train_one_epoch(

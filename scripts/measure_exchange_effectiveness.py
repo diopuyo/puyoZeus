@@ -36,6 +36,9 @@ from src.indicators_v2 import (
     CounterReachResult,
     counter_reach_probability,
     counter_reach_probability_fast,
+    estimate_chain_anim_duration_sec,
+    expected_fire_power,
+    ojama_damage,
 )
 from src.indicators_v2 import SEC_PER_HAND as EXISTING_SEC_PER_HAND
 from scripts.measure_exchange_dynamics import (
@@ -46,28 +49,14 @@ from scripts.measure_exchange_dynamics import (
 )
 
 # ============================
-# 着弾遅延 -> 相手の手数見積もり (要再計測、独立定数)
+# 着弾遅延 -> 相手の手数見積もり (物差し一本化、2026-08-01 Step0)
 # ============================
 #
-# memory project_exchange_measurement_foundation_2026-07-22 の実測2点
-# (8連鎖=14.5秒, 13連鎖=18秒、n極小=20件で確定不可だが唯一の実測値) から
-# 線形補間する。既存 TIME_PER_CHAIN_SEC(0.30秒/連鎖、大幅な過小評価と判明
-# 済み) とは無関係の専用定数として分離する (どちらか一方の再検証が他方に
-# 影響しないようにするため)。
-
-LANDING_DELAY_ANCHOR_CHAIN_LOW: int = 8
-LANDING_DELAY_ANCHOR_SEC_LOW: float = 14.5
-LANDING_DELAY_ANCHOR_CHAIN_HIGH: int = 13
-LANDING_DELAY_ANCHOR_SEC_HIGH: float = 18.0
-
-LANDING_DELAY_SLOPE_SEC_PER_CHAIN: float = (
-    (LANDING_DELAY_ANCHOR_SEC_HIGH - LANDING_DELAY_ANCHOR_SEC_LOW)
-    / (LANDING_DELAY_ANCHOR_CHAIN_HIGH - LANDING_DELAY_ANCHOR_CHAIN_LOW)
-)
-LANDING_DELAY_INTERCEPT_SEC: float = (
-    LANDING_DELAY_ANCHOR_SEC_LOW
-    - LANDING_DELAY_SLOPE_SEC_PER_CHAIN * LANDING_DELAY_ANCHOR_CHAIN_LOW
-)
+# 旧実装は本モジュール専用の2アンカー点線形補間 (memory
+# project_exchange_measurement_foundation_2026-07-22、n=2の暫定値) を
+# 使っていたが、23動画418イベント実測ベースで最も検証件数が多い
+# src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+# =0.4秒/連鎖) に一本化した (2026-08-01、user/アーキ確定)。
 
 # counter_reach_probability系がサポートするK水準の上限 (src/indicators_v2.py
 # EXPECTED_FIRE_K_LEVELS と同じ 1..4)。着弾遅延から逆算した手数がこれを
@@ -76,29 +65,30 @@ MAX_SUPPORTED_K_HANDS: int = 4
 
 
 def estimate_landing_delay_sec(chain_count: int) -> float:
-    """連鎖数から着弾遅延秒数を推定する (2アンカー点の線形補間、要再計測)。
+    """連鎖数から着弾遅延秒数を推定する (物差し一本化版)。
 
-    ⚠️ n極小 (実測20件) の粗い推定であることに注意。連鎖数が負・0の場合は
-    0.0 にクランプする。
+    src.indicators_v2.estimate_chain_anim_duration_sec (CHAIN_ANIM_PER_STEP_SEC
+    =0.4秒/連鎖、23動画418イベント実測ベース) に委譲する。連鎖数が負・0の
+    場合は0.0にクランプする (委譲先の関数が保証)。
     """
-    delay = (
-        LANDING_DELAY_INTERCEPT_SEC
-        + LANDING_DELAY_SLOPE_SEC_PER_CHAIN * max(0, chain_count)
-    )
-    return max(0.0, delay)
+    return estimate_chain_anim_duration_sec(float(chain_count))
 
 
 def estimate_available_hands(chain_count: int) -> int:
-    """着弾までに相手が打てる手数 (K) を概算する (SEC_PER_HAND換算、切り捨て)。
+    """着弾までに相手が打てる手数 (K) を概算する。
 
-    既存 SEC_PER_HAND (実測中央値、src/indicators_v2.py) をそのまま使う
-    (新規のマジックナンバーを増やさない)。1未満に切り捨たっても最低1手は
-    打てると仮定せず、0 (=応手する暇がない) を許容する。
-    counter_reach_probability の対応レンジ (K=1..4) にクランプする。
+    user伝授 (reference_ojama_landing_gated_by_placement_2026-07-29):
+    「おじゃまは連鎖完了後に受け側のツモが着地した時に降る」ため、
+    floor(連鎖アニメ時間 ÷ 1手時間) + 1 手 (受け側の着地1手分) が正しい
+    見積もりとなる。+1 により最低手数は常に1以上になる
+    (旧実装の「0手=応手する暇がない」を許容する設計は、この修正で
+    到達しなくなる: delay_sec>=0 なら floor(delay/hand)>=0 なので
+    +1 後は必ず>=1)。
+    counter_reach_probability の対応レンジ (K=1..4) に上限クランプする。
     """
     delay_sec = estimate_landing_delay_sec(chain_count)
-    hands = int(delay_sec // EXISTING_SEC_PER_HAND)
-    return max(0, min(MAX_SUPPORTED_K_HANDS, hands))
+    hands = int(delay_sec // EXISTING_SEC_PER_HAND) + 1
+    return min(MAX_SUPPORTED_K_HANDS, hands)
 
 
 # ============================
@@ -223,13 +213,14 @@ def judge_exchange_effectiveness(
         )
 
     k_hands = estimate_available_hands(chain_count)
-    if k_hands <= 0:
-        # 相手が1手も打てない見込み (着弾が速すぎる) = 応手不能に準ずる。
-        return EffectivenessJudgement(
-            reach_probability=0.0, is_effective=True,
-            advantage_label=ExchangeAdvantageLabel.ADVANTAGE,
-            coverage_status=coverage_status,
-        )
+    # 2026-08-01 Step0: estimate_available_hands は
+    # floor(遅延/1手時間)+1 のため必ず 1 以上を返す (受け側の着地1手分を
+    # 必ず含むため)。旧実装は k_hands<=0 (=応手する暇がない) を許容する
+    # 分岐を持っていたが、+1 修正後はこの分岐に到達しない。dead code を
+    # 放置せず assert で到達不能を明示する (回帰テスト:
+    # tests/test_landing_delay_unification.py
+    # test_k_hands_never_reaches_zero_branch)。
+    assert k_hands >= 1, "estimate_available_hands は常に1以上を返す設計 (Step0)"
 
     fn = counter_reach_probability_fast if mode == "fast" else counter_reach_probability
     result_one: CounterReachResult = fn(
@@ -246,3 +237,88 @@ def judge_exchange_effectiveness(
         advantage_label=classify_exchange_advantage(prob_one, prob_two),
         coverage_status=coverage_status,
     )
+
+
+# ============================
+# Step5: 修正シミュの評価用関数 (2026-08-01、2026-08-02符号バグ修正)
+# ============================
+#
+# 既存資産の組み替えのみ (新規ロジック最小): estimate_available_hands
+# (Step0で+1修正済み) で相手の残り手数を見積もり、expected_fire_power で
+# 相手の期待反撃量を求め、攻撃側が送ったお邪魔から差し引いた正味を
+# ojama_damage (折れ点12個/18個の非線形構造、user伝授の暫定実装) に通して
+# 最終ダメージスコアを返す。較正定数の再フィットは行わない
+# (CHAIN_ANIM_PER_STEP_SEC=0.4 を外部較正値としてそのまま流用)。
+#
+# ⚠️ 2026-08-02 バグ修正 (main精査済み・実バグ確定):
+# net_expected は相殺ルール上「相手側に着弾する」正味おじゃまなのに、旧実装は
+# ojama_damage(attacker_board_after_fire, ...) と**攻撃側自身の盤面**で威力評価
+# していた。user伝授ドメインルール (memory reference_ojama_damage_nonlinear:
+# 威力は受け側の残り容量に依存) に反するため、ojama_damage(opp_board, ...) に
+# 修正した (受け側=相手の盤面で評価)。
+
+
+def estimate_expected_net_damage(
+    attacker_ojama_sent: float,
+    opp_board: Board,
+    opp_coverage_status: OppCoverageStatus,
+    attacker_chain_count: int,
+    attacker_board_after_fire: Board,
+    elapsed_sec: float = 0.0,
+    mode: str = "precise",
+) -> float:
+    """発火1件分の「相手の反撃を差し引いた正味ダメージ」スコアを計算する。
+
+    手順 (既存資産の組み替えのみ):
+      1. k_hands = estimate_available_hands(attacker_chain_count)
+         (着弾までに相手が打てる手数、Step0で+1修正済み=常に1以上)。
+      2. 相手が OPP_CHAINING (連鎖中=応手不能) なら期待反撃量は0固定。
+      3. それ以外は expected_fire_power(opp_board, k_levels=(k_hands,)) の
+         raw (お邪魔換算の平均ツモ期待火力) を期待反撃量とする。
+      4. net_expected = attacker_ojama_sent − 期待反撃量 (負値は0にクランプ、
+         「相手が攻撃側より多く返す見込み」を負のダメージにしない)。
+      5. ojama_damage(opp_board, net_expected) のスコア (0〜1、折れ点
+         12個/18個の非線形構造は再利用・再実装しない) を返す。net_expected
+         は相手側に着弾する正味おじゃまのため、受け側=相手の盤面
+         (opp_board) で評価する (2026-08-02 修正、旧実装は attacker_board_
+         after_fire で評価しておりバグだった)。
+
+    ⚠️ 正直な注記: mode="fast" は counter_reach_probability_fast のような
+    高速版が expected_fire_power にはまだ存在しない (2026-08-01時点)。
+    interface 統一 (project_dual_mode_indicator_design_2026-07-22) のため
+    引数は受け取るが、現状は "precise"/"fast" どちらでも同じ計算になる
+    (将来 expected_fire_power_fast が実装されたら差し替える窓口として残す)。
+
+    Args:
+        attacker_ojama_sent: 攻撃側が実際に送ったお邪魔量 (個数)。
+        opp_board: 相手側の STABLE 確定盤面 (発火時点、破壊しない)。
+            net_expected の ojama_damage 評価にもこの盤面を使う
+            (2026-08-02修正、受け側=相手基準に統一)。
+        opp_coverage_status: Step1 の OppCoverageStatus。
+        attacker_chain_count: 攻撃側の連鎖数 (着弾遅延見積もり用)。
+        attacker_board_after_fire: 現在未使用 (2026-08-02のバグ修正で
+            ojama_damage の評価基準を opp_board に変更したため)。
+            backwards compat のため引数は削除せず保持する (既存呼び出し元
+            scripts/augment_exchange_labels_with_sim.py 等のシグネチャを
+            壊さないため)。
+        elapsed_sec: 試合相対経過秒 (マージンタイム換算用)。
+        mode: "precise" または "fast" (現状は挙動同一、上記注記参照)。
+
+    Returns:
+        float: 正味ダメージスコア (0〜1、大きいほど攻撃側に有利
+            [相手が受ける期待正味ダメージが大きいほど攻撃側に有利]。
+            2026-08-02修正: 旧docstringは「大きいほど攻撃側に不利」と
+            誤記していた、実装意図 [Step5=期待正味ダメージ=攻撃の価値]
+            に照らして訂正)。
+    """
+    k_hands = estimate_available_hands(attacker_chain_count)
+    if opp_coverage_status == OppCoverageStatus.OPP_CHAINING:
+        expected_counter_ojama = 0.0
+    else:
+        result = expected_fire_power(
+            opp_board, k_levels=(k_hands,), elapsed_sec=elapsed_sec,
+        )
+        expected_counter_ojama = result.values[k_hands].raw
+    net_expected = max(0.0, attacker_ojama_sent - expected_counter_ojama)
+    damage = ojama_damage(opp_board, ojama_count=net_expected)
+    return float(damage.score)

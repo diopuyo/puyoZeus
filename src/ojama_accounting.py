@@ -121,6 +121,37 @@ CHAIN_COALESCE_WINDOW_SEC: float = 2.5
 
 
 # ============================
+# 相殺の純関数 (stateless、2026-08-03 抽出)
+# ============================
+#
+# _finalize_chain_end 内でインライン実装されていた「相殺の正しい向き」
+# (1. 生成 gen で自分の incoming を相殺 2. 余剰を相手の incoming に加算)
+# を、状態を持たない純関数として抽出したもの。scripts側 (打ち合い計測器の
+# 「空中おじゃまの相殺会計」欠陥G対処) が同じ計算をオフライン評価で再利用
+# できるようにする (コピペ再実装しない、_finalize_chain_end もこの関数を
+# 呼ぶよう更新済み)。
+
+def cancel_own_pending_then_send_surplus(
+    gen: int, own_pending: int, other_pending: int,
+) -> tuple[int, int]:
+    """自分の生成量 gen で自分の pending を相殺し、余剰を相手の pending に送る。
+
+    Args:
+        gen: 今回の連鎖で生成したお邪魔数 (0以上)。
+        own_pending: 自分に対して既に確定している pending (=forecast_incoming)。
+        other_pending: 相手に対して既に確定している pending。
+
+    Returns:
+        (相殺後の own_pending, 余剰加算後の other_pending) のタプル。
+    """
+    canceled = min(gen, own_pending)
+    new_own_pending = own_pending - canceled
+    surplus = gen - canceled
+    new_other_pending = other_pending + surplus
+    return new_own_pending, new_other_pending
+
+
+# ============================
 # スナップショット (stateless)
 # ============================
 
@@ -667,14 +698,13 @@ class OjamaAccountingTracker:
             leftover_before, gen, s.leftover,
             forecast_before, other_forecast_before, t_sec,
         )
-        # --- 相殺(正しい向き) ---
-        # 1. gen で自分の incoming を相殺
-        canceled = min(gen, s.forecast_incoming)
-        s.forecast_incoming -= canceled
+        # --- 相殺(正しい向き、cancel_own_pending_then_send_surplus に集約) ---
+        canceled = min(gen, s.forecast_incoming)  # total_offset 集計用に維持
+        s.forecast_incoming, other.forecast_incoming = cancel_own_pending_then_send_surplus(
+            gen, s.forecast_incoming, other.forecast_incoming,
+        )
         s.total_offset += canceled
         surplus = gen - canceled
-        # 2. 余剰を相手の incoming に追加
-        other.forecast_incoming += surplus
         logger.info(
             "offset[%s]: gen=%d canceled=%d surplus=%d "
             "self.forecast=%d other.forecast=%d t=%.2f",

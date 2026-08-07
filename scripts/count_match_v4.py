@@ -55,8 +55,16 @@ def scan_video(
     video_path: Path,
     interval: float,
     confirm: int,
+    start_sec: float = 0.0,
+    end_sec: float = 0.0,
 ) -> list[Match]:
-    """動画を走査して raw 試合列を返す（フィルタ前）。"""
+    """動画を走査して raw 試合列を返す（フィルタ前）。
+
+    start_sec/end_sec: optional。指定すると当該区間のみスキャンする
+    (2026-08-03 追加、長尺動画で対象区間が既知の場合の高速化用。
+    既定 0.0/0.0 は従来通り動画全体、後方互換維持)。end_sec<=0 は
+    動画末尾までを意味する。
+    """
     zero_det = ScoreZeroDetector.load_default()
     panel_det = WinPanelDetector.load_default()
 
@@ -64,6 +72,7 @@ def scan_video(
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total_frames / fps
+    scan_end = min(duration, end_sec) if end_sec > 0 else duration
 
     confirmed = "none"
     pending: str | None = None
@@ -71,8 +80,8 @@ def scan_video(
     matches: list[Match] = []
     match_start: float | None = None
 
-    t = 0.0
-    while t < duration:
+    t = max(0.0, start_sec)
+    while t < scan_end:
         cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -155,6 +164,14 @@ def main() -> int:
         "--intro-skip-min-duration", type=float, default=100.0,
         help="intro 候補のうちこの秒数以上の長尺は intro と判定して skip",
     )
+    parser.add_argument(
+        "--start-sec", type=float, default=0.0,
+        help="スキャン開始秒 (省略時0=動画先頭、2026-08-03追加、対象区間既知の長尺動画高速化用)",
+    )
+    parser.add_argument(
+        "--end-sec", type=float, default=0.0,
+        help="スキャン終了秒 (0以下は動画末尾まで、2026-08-03追加)",
+    )
     args = parser.parse_args()
 
     video_path = Path(args.video)
@@ -162,8 +179,9 @@ def main() -> int:
         print(f"動画なし: {video_path}", file=sys.stderr)
         return 1
 
-    print(f"scan: confirm={args.confirm} interval={args.interval}s")
-    raw = scan_video(video_path, args.interval, args.confirm)
+    print(f"scan: confirm={args.confirm} interval={args.interval}s "
+          f"区間=({args.start_sec:.1f}, {args.end_sec if args.end_sec > 0 else '末尾'})")
+    raw = scan_video(video_path, args.interval, args.confirm, args.start_sec, args.end_sec)
     print(f"raw 検出: {len(raw)} 試合")
 
     valid, short, long = filter_matches(raw, args.min_duration, args.max_duration)

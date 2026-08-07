@@ -42,6 +42,7 @@ from src.ojama_accounting import (
     THEORY_DROP_PER_TURN,
     OjamaAccountSnapshot,
     OjamaAccountingTracker,
+    cancel_own_pending_then_send_surplus,
 )
 from src.scoring import (
     OJAMA_MAX_DROP_PER_TURN,
@@ -2955,3 +2956,26 @@ def test_tsumo_fall_score_still_rising_does_not_finalize() -> None:
         f"forecast_p2={snap.forecast_p2} != {expected_g} "
         f"(1P大連鎖 score上昇中に OJAMA_FALL が来ても誤分割しない)"
     )
+
+
+# =============================================================================
+# 2026-08-03 抽出: cancel_own_pending_then_send_surplus (欠陥G対処で
+# scripts側からも再利用するため純関数として切り出した相殺ロジック)
+# =============================================================================
+
+class TestCancelOwnPendingThenSendSurplus:
+    def test_generation_fully_cancels_own_pending_with_surplus(self) -> None:
+        own, other = cancel_own_pending_then_send_surplus(gen=100, own_pending=30, other_pending=0)
+        assert (own, other) == (0, 70)
+
+    def test_generation_partially_cancels_own_pending(self) -> None:
+        own, other = cancel_own_pending_then_send_surplus(gen=10, own_pending=30, other_pending=0)
+        assert (own, other) == (20, 0)
+
+    def test_zero_generation_leaves_pending_unchanged(self) -> None:
+        own, other = cancel_own_pending_then_send_surplus(gen=0, own_pending=30, other_pending=5)
+        assert (own, other) == (30, 5)
+
+    def test_surplus_adds_onto_existing_other_pending(self) -> None:
+        own, other = cancel_own_pending_then_send_surplus(gen=100, own_pending=30, other_pending=20)
+        assert (own, other) == (0, 90)
