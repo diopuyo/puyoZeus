@@ -44,7 +44,21 @@ class BoardPairResult(NamedTuple):
     game_idx: np.ndarray   # (N,) int32
 
 
-def _load_npz_dir_lean(npz_dir: Path) -> tuple[pd.DataFrame, np.ndarray]:
+# 連鎖汚染フィルタ (2026-08-01)。外部正解の物差しで、認識誤りの全てが
+# 「連鎖/相殺エフェクトの遷移瞬間の一時汚染」(≤1秒で自己修復) と判明した
+# (memory project_yardstick_first_results_2026-07-31)。
+# 相殺光は**相手の連鎖でも自陣に被る** (c15 f18294 で実証: 自陣は CHAIN を
+# 経ずに光だけ被った) ため、両 side の chain_trigger_sec を統合して使う。
+# 窓: 検知の CHAIN_TAINT_PRE_SEC 前 〜 CHAIN_TAINT_POST_SEC 後の行を除外。
+# 検知は連鎖開始近く (掛け算表示) で、相殺光は連鎖終了時に出るため後ろを長く取る。
+CHAIN_TAINT_PRE_SEC: float = 1.0
+CHAIN_TAINT_POST_SEC: float = 5.0
+
+
+def _load_npz_dir_lean(
+    npz_dir: Path,
+    exclude_chain_taint: bool = False,
+) -> tuple[pd.DataFrame, np.ndarray]:
     """boards_lean_fixed ディレクトリ内 npz を全読み込みし DataFrame + grids を返す。
 
     各 npz は won フィールドを内蔵しているため labeled_win.csv は不要。
@@ -55,6 +69,8 @@ def _load_npz_dir_lean(npz_dir: Path) -> tuple[pd.DataFrame, np.ndarray]:
     records: list[dict] = []
     all_grids: list[np.ndarray] = []
     offset = 0
+    n_tainted = 0
+    n_total_rows = 0
 
     for npz_path in sorted(npz_dir.glob("*.npz")):
         d = np.load(str(npz_path), allow_pickle=True)
@@ -68,7 +84,21 @@ def _load_npz_dir_lean(npz_dir: Path) -> tuple[pd.DataFrame, np.ndarray]:
         t_secs = d["t_sec"].tolist()
         game_idxs = d["game_idx"].tolist()
         wons = d["won"].tolist()  # float32 (NaN 含む可)
+        # 連鎖汚染フィルタ: 両 side の検知時刻を統合した除外窓を作る
+        taint_windows: list[tuple[float, float]] = []
+        if exclude_chain_taint and "chain_trigger_sec" in d.files:
+            cts = np.asarray(d["chain_trigger_sec"]).astype(float)
+            for ct in sorted(set(float(x) for x in cts if not np.isnan(x))):
+                taint_windows.append(
+                    (ct - CHAIN_TAINT_PRE_SEC, ct + CHAIN_TAINT_POST_SEC),
+                )
         for i in range(n):
+            n_total_rows += 1
+            if taint_windows:
+                t = float(t_secs[i])
+                if any(lo <= t <= hi for lo, hi in taint_windows):
+                    n_tainted += 1
+                    continue  # 汚染窓内の行はペア構成から除外
             records.append({
                 "video_id": str(video_ids[i]),
                 "side": str(sides[i]),
@@ -84,6 +114,9 @@ def _load_npz_dir_lean(npz_dir: Path) -> tuple[pd.DataFrame, np.ndarray]:
 
     grids_all = np.concatenate(all_grids, axis=0)
     df = pd.DataFrame(records)
+    if exclude_chain_taint:
+        pct = 100.0 * n_tainted / max(1, n_total_rows)
+        print(f"[pairs] 連鎖汚染フィルタ: {n_tainted}/{n_total_rows} 行を除外 ({pct:.1f}%)")
     return df, grids_all
 
 
@@ -130,9 +163,13 @@ def _pair_within_group(
     return pairs
 
 
-def build_pairs_lean(npz_dir: Path) -> BoardPairResult:
+def build_pairs_lean(
+    npz_dir: Path, exclude_chain_taint: bool = False,
+) -> BoardPairResult:
     """boards_lean_fixed ディレクトリからペア配列を構築して返す。"""
-    df, grids_all = _load_npz_dir_lean(npz_dir)
+    df, grids_all = _load_npz_dir_lean(
+        npz_dir, exclude_chain_taint=exclude_chain_taint,
+    )
     all_pairs: list[dict] = []
 
     for (vid, game), grp in df.groupby(["video_id", "game_idx"]):
@@ -203,9 +240,16 @@ def main() -> int:
         default=Path("data/indicators_v2/board_pairs_fixed.npz"),
         help="出力 npz パス (既定: data/indicators_v2/board_pairs_fixed.npz)",
     )
+    parser.add_argument(
+        "--exclude-chain-taint", action="store_true", default=False,
+        help="連鎖汚染フィルタ: 両sideの連鎖検知の-1〜+5秒の行を除外 "
+             "(2026-08-01。認識誤りは全て遷移瞬間の一時汚染と実証済み)。",
+    )
     args = parser.parse_args()
 
-    result = build_pairs_lean(args.npz_dir)
+    result = build_pairs_lean(
+        args.npz_dir, exclude_chain_taint=args.exclude_chain_taint,
+    )
     _print_summary(result, args.out if len(result.board_1p) > 0 else None)
 
     if len(result.board_1p) > 0:

@@ -22,6 +22,7 @@ state == STABLE 時の confirmed_board が「公式の確定盤面」として�
 from __future__ import annotations
 
 import os
+import warnings
 from collections import Counter, deque
 from dataclasses import dataclass
 
@@ -38,9 +39,12 @@ from src.board_state_machine import (
     BoardStateMachine,
     DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     DetectorSignals,
+    EFFECT_GATE_TOP_ROWS,
+    EFFECT_PERSIST_SEC,
     NON_STABLE_STATES,
     STABLE_RECOVERY_ADD_MIN_FRAMES,
     StateContext,
+    _update_burst_visual_gate,
 )
 
 # W-α (Phase G C-1): STABLE 確定時に prob_board を埋めるかのフラグ。
@@ -98,6 +102,106 @@ CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 # 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
 # bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
 LARGE_ROI_THROTTLE_FRAMES: int = 8
+
+# エフェクト時間ゲート (enable_effect_gate, 2026-08-03):
+# 満杯盤面 47 セル誤りの真因確定 (memory
+# `project_full_board_error_taxonomy_2026-08-02`)。相手の連鎖中 (=
+# chain_event が相手 side で有効な間) は既存の `active_chain_Xp is not None`
+# 窓をそのまま「相手連鎖中」window として使う (新規追跡不要)。
+# お邪魔着弾側は OJAMA_FALL state 自体が 1 frame で STABLE に抜けてしまう
+# (state_detectors.OjamaPhaseDetector) ため、退出後もこの秒数だけ window を
+# 継続する (お邪魔落下時の煙が残る実測に基づく安全マージン)。
+# ojama は 6 列均等 floor(N/6)+端数ランダムで着弾するため
+# (`reference_ojama_landing_pattern`)、「着弾列近傍」を特定の列に絞らず
+# 全列を対象にする設計上の判断 (要 user/アーキ確認、ドメイン確定事実ではない)。
+# default False (enable_effect_gate) = 従来挙動完全維持 (backwards compat)。
+EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC: float = 1.0
+
+# バーストガード再設計 Stage1 (enable_burst_guard_v2, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §4 の定数表そのまま (全て物理量・
+# 較正データ根拠、シーン逆算禁止)。案B (enable_effect_gate+enable_effect_
+# visual_gate) の3敗因 (ChainEvent見逃し・persist逆転・守備範囲固定) を
+# Schmitt trigger視覚トリガー + ハード凍結で構造的に解消する。
+# 較正出典: data/verify/effect_detector_calibration_v3_2026-08-04/
+# calibration_report_v3.md §3 (v1+v3統合136枚、AUC=0.811、zero_fp動作点0.97)。
+BURST_GATE_OPEN_THRESHOLD: float = 0.97
+# Stage1 は値ベースのヒステリシス幅の較正データが無いため OPEN と同値にし、
+# 時間ベースのヒステリシス (BURST_GATE_QUIESCENCE_MIN_SEC) のみに依拠する
+# (Stage2 で ROC 全体を計算し CLOSE<OPEN の真のヒステリシス帯を較正する)。
+BURST_GATE_CLOSE_THRESHOLD: float = 0.97
+# 1リンクの演出持続時間の実測記述 (約0.2秒、effect_glow_detector.py docstring
+# / project_full_board_error_taxonomy_2026-08-02)。単発frameでのopen直後
+# close振動を防ぐ下限。
+BURST_GATE_MIN_WINDOW_SEC: float = 0.2
+# リンク間flicker gap実測 ≒0.1秒 (c5) の2.5倍マージン。1回のリンク間隙だけ
+# では閉じないことを保証する安全マージン (c5への逆算較正は禁止、汎化確認は
+# バックテストで行う)。
+BURST_GATE_QUIESCENCE_MIN_SEC: float = 0.25
+# 安全弁。8連鎖実測14.5秒 (project_chain_count_both_untrustworthy_2026-07-30)
+# の約2倍マージン。永久凍結 (recognition完全停止) リスクの方が多少長い保留
+# より重大なため寛容側に倒す。
+BURST_GATE_MAX_WINDOW_SEC: float = 30.0
+
+# バーストガード §12 close側再設計 (enable_burst_close_extension, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2 主機構。CLOSE_THRESHOLD の
+# 値ベースヒステリシス導入は較正データ (labeled_cell_features_v3.csv の
+# 平常フレーム約6割が bright_ratio_max>=0.5) によって明示的に否定済み
+# (§12.1、恒久記録、再提案禁止)。代わりに窓close後もこの秒数だけ実効ゲート
+# 信号 (遷移mergeフィルタ+hard freeze の適用条件) を維持する時間ベース機構
+# を採用する。値の根拠は scripts/_measure_burst_afterglow_2026-08-05.py の
+# 残光帯(0.5-0.954)滞在時間分布・非censored p90=0.8秒 + 量子化マージン0.1秒。
+# **保守的な下限であることに注意**: 母数中30%(9/30件)は8秒窓でも残光帯から
+# 戻らない連鎖持続型で、この定数では保護できない (対策は
+# enable_burst_close_extension の相手連鎖延長条件、§12.2 の2番目)。
+# シーン逆算禁止 (feedback_overfitting_awareness_2026-08-04) — 個別シーン
+# (c29実測0.27〜0.33秒) から逆算した値ではなく、母集団分布のp90由来。
+BURST_GATE_POST_CLOSE_COOLDOWN_SEC: float = 0.9
+
+# バーストガード §12.2 相手連鎖延長の再点火間隔上限 (緊急修正、2026-08-05):
+# 「連鎖継続中の再点火間を繋ぐ」意図の完成に必須。上限なしだと
+# opponent_chain_active が一度でも真になった後は試合中ずっと凍結延長し続け、
+# 無傷盤面まで stale 化する退行を v3 バックテストで検出 (new=59/23、走行停止済)。
+# 根拠: burst_afterglow_events.csv を (video,side) でグルーピングし10秒以内で
+# 連続する onset 行間の gap を抽出した実測 (c5 1011.4→1014.5=3.13s が最大、
+# c29 2405.8→2408.6=2.77s、c29 611.4→612.8=1.37s)。**p90でなく最大値+量子化
+# マージン(0.1s)で寛容側に丸める**: §12.2の失敗非対称性より、延長のfalse
+# positive (gapを長めに見て凍結が延びる) は BURST_GATE_MAX_WINDOW_SEC が
+# 吸収するが、false negative (gapを短く見て連鎖持続型の再点火を取りこぼす)
+# は本機構の本来目的そのものを損なうため、安全側は必ず「長めに見る」方。
+# シーン逆算禁止 (feedback_overfitting_awareness_2026-08-04) — 母集団の
+# 実測最大値由来 (n=4、10秒以内gapの全数)。
+BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC: float = 3.3
+
+# 長時間劣化修正A' (enable_match_transition_debounce, 2026-08-06):
+# docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §4追補 (第4機構)。
+# _match_active_started_time が is_active の遷移で無条件に再アーム/リセット
+# され、試合中の短時間MENU誤検知のたびに DRIFT_RESYNC_MATCH_START_GUARD_SEC
+# (15秒) 安全弁が二重再起動し無防備窓を生んでいた。「直前状態と異なる新状態が
+# N秒以上継続して初めて遷移を確定する」対称デバウンスで解消する。
+#
+# N の導出根拠 (data/verify/c22_reset_trace_2026-08-06、シーン逆算禁止):
+#   (a) 試合中フリッカーの実測: c22_detail_frames.csv (t=3090-3150窓) で
+#       孤立した False run = 0.30秒 (t=3125.4, 直前の実境界から15秒以上
+#       経過した孤立ブリップ)。設計書追補記載の実測値0.34秒と同オーダー。
+#   (b) 真の試合間MENU期間の実測: 同窓内の実境界 (t=3106, winners_panel
+#       video_c22.json の game境界と対応) での False run = 2.77秒
+#       (境界直後の主要部分)。加えて c22_reset_events.csv の44イベント中
+#       42件がwinners_panelの59試合境界と1s〜2.6s以内で対応 (=真の遷移由来)
+#       と確認、残り2件も3.03秒差で同一境界の遅延許容内。
+#   → 0.34 < N < 2.77 の範囲で両側に十分なマージンを残し N=1.0 に固定
+#     (フリッカー側に約3倍、MENU側に約2.8倍の安全マージン)。
+MATCH_TRANSITION_DEBOUNCE_SEC: float = 1.0
+
+# バーストガード Stage1.5b (enable_hidden_row_burst_guard, 2026-08-05):
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 の凍結中は prev_confirmed
+# が stale になり、infer_hidden_row の着地新規セル数の再カウントが狂って
+# row0 に「確信度100%の誤色」が書かれる (§11.0)。close 直後も row1-3 の
+# backlog 追いつきに数フレーム要するため、window close から本秒数が経過する
+# まで infer_hidden_row 呼び出し自体をスキップする猶予期間。
+# 初期値 0.4 は既存 EFFECT_PERSIST_SEC と同スケールの物理量 (演出残光の
+# 実秒規模を根拠とする暫定値)。全域バックテストで較正予定・シーン逆算禁止
+# (feedback_overfitting_awareness_2026-08-04)。
+HIDDEN_ROW_TRUST_COOLDOWN_SEC: float = 0.4
 
 
 class _ScoreValNotCached:
@@ -182,12 +286,21 @@ def _is_score_reset_boundary(
 
 from pathlib import Path
 
+from src.all_clear_detector import is_all_clear
 from src.background_fingerprint import (
     BackgroundFingerprint, capture_robust_fingerprint,
     capture_patch_pair_robust,
 )
-from src.chain_detector import DEBOUNCE_CONFIRM_FRAMES, ChainEvent, VideoChainTracker
+from src.chain_detector import (
+    CHAIN_MECHANISM_FORMULA,
+    CHAIN_MECHANISM_LANDING,
+    CHAIN_MECHANISM_SCORE_JUMP,
+    DEBOUNCE_CONFIRM_FRAMES,
+    ChainEvent,
+    VideoChainTracker,
+)
 from src.drift_detector import DriftDetector, DriftResult
+from src.effect_glow_detector import compute_effect_glow_score, is_effect_glow_active
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION, ImageReader
 from src.inference_board import InferenceBoardGenerator
 from src.match_end_detector import MatchEndDetector
@@ -1040,6 +1153,30 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_drift_resync_hsv_gate: bool = True,
+        # 長時間劣化修正 A+B (2026-08-06、
+        # docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4):
+        # OnlineHsvCalibrator が初回inject後に完全凍結し (機構仮説①)、
+        # reset() もこの凍結状態をクリアしないため (仮説②) 動画内の全後続
+        # 試合に較正凍結が持続し、ガード2 (enable_drift_resync_hsv_gate) の
+        # 安全弁も同じ未クリア状態に依存して無効化される (仮説③、実験Aで
+        # 確定: ガード2をFalseにするだけでc22の12セル劣化が解消)。
+        # True で以下2点を有効化する:
+        #   A (試合毎リセット): reset() で OnlineHsvCalibrator の較正統計 +
+        #      _online_hsv_injected + _online_hsv_injected_colors をクリアし、
+        #      試合ごとに較正をフレッシュに始める。
+        #   B (凍結ガード撤廃=段階的inject化): inject後もupdate()と再inject
+        #      判定を継続する (コメント本来の「段階的inject」意図通り)。
+        #      既知リスク: OnlineHsvCalibrator のsliding window (200サンプル/色)
+        #      により、更新を止めなければ古いサンプルが窓外に出て「古い色を
+        #      忘れる」副作用がある (未検証、Lv2規模測定の対象)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_online_hsv_refresh: bool = False,
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): is_active の
+        # True/False遷移を対称デバウンスする (MATCH_TRANSITION_DEBOUNCE_SEC
+        # 秒未満のフリッカーを無視、_match_active_started_frame/_time の
+        # 書き込みのみが対象。他の副作用は raw is_active のまま不変)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_transition_debounce: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。False にすると block 全体 (_check_baseline_broken_reset)
         # をスキップする。default True = 従来挙動完全維持 (backwards compat)。
@@ -1144,6 +1281,72 @@ class RecognitionPipeline:
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03、A/B 計測用): 満杯盤面 47 セル誤り
+        # 根治。True にすると相手連鎖中 / 自お邪魔着弾直後 window の間、
+        # 自盤面上段 (board_state_machine.EFFECT_GATE_TOP_ROWS) の cell 更新に
+        # effect_gate_persist_sec 秒の実秒ベース持続確認を要求する
+        # (board_state_machine._apply_stable_recovery_gate 経由)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float | None = None,
+        effect_gate_ojama_window_sec: float | None = None,
+        # 案B (2026-08-04、A/B 計測用): effect_gate_window_active を
+        # 「(既存時間窓) AND (not 自連鎖中) AND (not 全消しラッチ) AND
+        # (視覚グロー検出)」の4条件AND式に拡張する。enable_effect_gate=False
+        # の間は無視される (時間窓自体が発生しないため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_visual_gate: bool = False,
+        # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md。案B の3敗因 (ChainEvent見逃し・
+        # persist逆転・守備範囲固定) を構造的に解消する Schmitt trigger
+        # 視覚トリガー + ハード凍結方式。True にすると `_step_side` 内の
+        # effect_gate_window_active 計算が enable_effect_gate/
+        # enable_effect_visual_gate 経路 (案B) から本方式に切り替わり、
+        # BoardStateMachine 側の effect_gate_hard_freeze も同時に有効化する。
+        # enable_effect_gate=False の場合は no-op (警告ログ、§5 参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_guard_v2: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用):
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §10。True で NON-STABLE→STABLE
+        # 遷移時の merge に物理的期待値フィルタを適用する
+        # (`_filter_transition_new_cnn_for_burst_guard`、BoardStateMachine 側)。
+        # enable_burst_guard_v2=False の場合は no-op (警告ログ)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
+        # バーストガード緊急較正 (2026-08-05、factorialバックテスト用):
+        # Schmitt trigger の開窓閾値オーバーライド。None (既定) なら
+        # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
+        # CLOSE も同値運用のため同じ値を渡す (docs §4 Stage1方針)。
+        burst_gate_open_threshold: "float | None" = None,
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): row1-3 凍結の
+        # 副作用で infer_hidden_row (row0 隠し段推論) が誤った着地セル数を
+        # 数えて確信度100%の誤色を row0 に書く問題への信頼性ゲート。True で
+        # 「window非活性 かつ close後 HIDDEN_ROW_TRUST_COOLDOWN_SEC 経過」を
+        # 満たさない限り infer_hidden_row 呼び出し自体をスキップする
+        # (row0 は直前値キャリーオーバー、既存フォールバックに自然委譲)。
+        # enable_burst_guard_v2=False の場合は no-op (警告ログ)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_hidden_row_burst_guard: bool = False,
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、§12.2):
+        # 生 is_open (Schmitt trigger) と、遷移mergeフィルタ+hard freeze が
+        # 実際に参照する「実効active」信号を分離する。実効active = is_open
+        # OR (close後 BURST_GATE_POST_CLOSE_COOLDOWN_SEC 未満) OR (相手連鎖
+        # 継続フラグ opponent_chain_active、延長のみ・トリガー復活ではない)。
+        # own_chain_active/全消しラッチによる force_close は実効側にも即時
+        # 適用する (延長・クールダウンより優先)。生 is_open 自体と
+        # BURST_GATE_MAX_WINDOW_SEC 安全弁はこのフラグの影響を受けない
+        # (_step_side 参照)。enable_burst_guard_v2=False の場合は no-op
+        # (警告ログ)。default False = 従来挙動完全維持・bit-identical。
+        enable_burst_close_extension: bool = False,
+        # バーストガード §12 緊急パラメータ化 (2026-08-05、差分実験で連鎖延長が
+        # busy局面の凍結連鎖の犯人と確定): BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC
+        # をA/B計測用に上書き可能にする。None (既定) = モジュール定数 3.3
+        # (bit-identical)。**0.0 を渡すと相手連鎖延長は常に不成立になる**
+        # (elapsed<=0.0 を満たすのは elapsed が負になる異常系のみなので実質
+        # 無効化、close後クールダウン0.9秒はこの値と無関係のため無改修で残る)。
+        burst_chain_gap_max_sec: "float | None" = None,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1545,6 +1748,127 @@ class RecognitionPipeline:
             enable_asymmetric_recovery_min_frames
         )
         self._recovery_add_min_frames: int = int(recovery_add_min_frames)
+        # エフェクト時間ゲート (2026-08-03): _build_state_machine 呼び出し前に
+        # 格納が必要 (引数として渡すため)。None は各クラス定数を使う
+        # (既存の chain_hold_per_step_sec 等と同じ「None=既定値」パターン)。
+        self._enable_effect_gate: bool = bool(enable_effect_gate)
+        self._effect_gate_persist_sec: float = (
+            float(effect_gate_persist_sec)
+            if effect_gate_persist_sec is not None else EFFECT_PERSIST_SEC
+        )
+        self._effect_gate_ojama_window_sec: float = (
+            float(effect_gate_ojama_window_sec)
+            if effect_gate_ojama_window_sec is not None
+            else EFFECT_GATE_OJAMA_EXIT_WINDOW_SEC
+        )
+        # お邪魔着弾直後 window の終了時刻 (time_sec)。未着弾は -inf (window 非活性)。
+        self._effect_gate_ojama_until_1p: float = float("-inf")
+        self._effect_gate_ojama_until_2p: float = float("-inf")
+        # 案B (2026-08-04): 4条件AND拡張フラグ。BoardStateMachine には伝播
+        # しない (AND合成は RecognitionPipeline._step_side 内で完結するため)。
+        self._enable_effect_visual_gate: bool = bool(enable_effect_visual_gate)
+        # バーストガード再設計 Stage1 (2026-08-05): _build_state_machine
+        # 呼び出し前に格納が必要 (effect_gate_hard_freeze として伝播するため)。
+        self._enable_burst_guard_v2: bool = bool(enable_burst_guard_v2)
+        if self._enable_burst_guard_v2 and not self._enable_effect_gate:
+            # §5: enable_effect_gate=False では BoardStateMachine 側の行ゲー
+            # ティングが有効化されず、Schmitt trigger 計算のみ行われて凍結には
+            # 一切使われない (no-op)。設定ミスの早期発見のため警告する。
+            warnings.warn(
+                "enable_burst_guard_v2=True ですが enable_effect_gate=False "
+                "のため no-op です (BoardStateMachine 側の行ゲーティングが"
+                "有効化されないため、バーストガードは凍結に反映されません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # Schmitt trigger 状態 (1P/2P別、_update_burst_visual_gate が更新する)。
+        # 試合境界で必ずクリアする (reset() 参照、project_match_boundary_
+        # residue_leak と同種の残留バグを防ぐ)。
+        self._burst_gate_open_1p: bool = False
+        self._burst_gate_open_2p: bool = False
+        self._burst_gate_opened_at_1p: float | None = None
+        self._burst_gate_opened_at_2p: float | None = None
+        self._burst_gate_quiet_since_1p: float | None = None
+        self._burst_gate_quiet_since_2p: float | None = None
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): window が
+        # active だった最終 time_sec (-inf 初期 = 「まだ一度も open していない」)。
+        # enable_hidden_row_burst_guard のクールダウン判定に使う。試合境界で
+        # 必ずクリアする (reset() 参照)。
+        self._last_burst_open_time_1p: float = float("-inf")
+        self._last_burst_open_time_2p: float = float("-inf")
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補): _build_state_machine
+        # 呼び出し前に格納が必要 (BoardStateMachine へそのまま伝播するため)。
+        self._enable_transition_merge_guard: bool = bool(
+            enable_transition_merge_guard
+        )
+        if self._enable_transition_merge_guard and not self._enable_burst_guard_v2:
+            warnings.warn(
+                "enable_transition_merge_guard=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(遷移merge時の物理的期待値フィルタは effect_gate_window_active "
+                "中のみ働くため、Stage1本体が無効だと発火機会がありません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # バーストガード緊急較正 (2026-08-05): None なら既存定数
+        # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
+        self._burst_gate_open_threshold: float = (
+            float(burst_gate_open_threshold)
+            if burst_gate_open_threshold is not None
+            else BURST_GATE_OPEN_THRESHOLD
+        )
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11): 隠し段推論
+        # 信頼性ゲート。row1-3 凍結副作用による row0 誤色を防ぐため、
+        # window 非活性 かつ close 後クールダウン明けでのみ infer_hidden_row
+        # を呼ぶ (_step_side 側で参照)。
+        self._enable_hidden_row_burst_guard: bool = bool(
+            enable_hidden_row_burst_guard
+        )
+        if (
+            self._enable_hidden_row_burst_guard
+            and not self._enable_burst_guard_v2
+        ):
+            warnings.warn(
+                "enable_hidden_row_burst_guard=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(window active 判定は Schmitt trigger 視覚トリガー方式が "
+                "前提のため、Stage1本体が無効だと信頼性ゲートが機能しません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定): 実効
+        # ゲート信号 (クールダウン+相手連鎖延長) の有効化フラグ。実際の合成
+        # ロジックは _step_side 側 (signals.effect_gate_window_active 代入部)
+        # で行う (既存フィールド再利用、遷移mergeフィルタ+hard freeze は自動追従)。
+        self._enable_burst_close_extension: bool = bool(
+            enable_burst_close_extension
+        )
+        if (
+            self._enable_burst_close_extension
+            and not self._enable_burst_guard_v2
+        ):
+            warnings.warn(
+                "enable_burst_close_extension=True ですが "
+                "enable_burst_guard_v2=False のため no-op です "
+                "(実効ゲート信号は Schmitt trigger の生 is_open を前提に "
+                "算出するため、Stage1本体が無効だと延長対象がありません)。",
+                UserWarning,
+                stacklevel=2,
+            )
+        # バーストガード §12 緊急パラメータ化 (2026-08-05): None (既定) は
+        # モジュール定数 BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (=3.3、
+        # bit-identical)。0.0 を渡すと相手連鎖延長を無効化できる (docstring
+        # 参照、busy局面の凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。
+        self._burst_chain_gap_max_sec: float = (
+            float(burst_chain_gap_max_sec)
+            if burst_chain_gap_max_sec is not None
+            else BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC
+        )
+        # 全消しラッチ (案B 第3ゲート、2026-08-04): STABLE 確定毎に
+        # is_all_clear() で再評価し、次の連鎖発火でクリアする
+        # (_update_all_clear_pending 参照)。試合切替時は reset() でクリア。
+        self._all_clear_pending_1p: bool = False
+        self._all_clear_pending_2p: bool = False
         # 追修 (2026-07-25): force_in_match=True 構成用の score リセット境界
         # 検知に使う前フレームスコアキャッシュ (enable_match_start_full_clear
         # 時のみ参照)。
@@ -1564,6 +1888,17 @@ class RecognitionPipeline:
         )
         self._enable_drift_resync_hsv_gate: bool = bool(
             enable_drift_resync_hsv_gate,
+        )
+        # 長時間劣化修正 A+B (2026-08-06): reset() (Fix A) と inject凍結
+        # ガード撤廃 (Fix B、update() 内で参照) の両方がこのフラグ配下。
+        self._enable_online_hsv_refresh: bool = bool(enable_online_hsv_refresh)
+        # 長時間劣化修正 A' (2026-08-06、§4追補): is_active 対称デバウンス。
+        # 1P/2P共通の試合状態のため state は1組のみ保持する。
+        self._enable_match_transition_debounce: bool = bool(
+            enable_match_transition_debounce,
+        )
+        self._match_active_debounce_state: MatchActiveDebounceState = (
+            MatchActiveDebounceState()
         )
         # デバッグカウンタ: 各ガードが needs_resync を抑制した回数 (1P/2P 別)。
         # 効果測定用 (_diag 系スクリプトから読み出す想定)。
@@ -1599,6 +1934,10 @@ class RecognitionPipeline:
                 self._enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=self._recovery_add_min_frames,
+            enable_effect_gate=self._enable_effect_gate,
+            effect_gate_persist_sec=self._effect_gate_persist_sec,
+            effect_gate_hard_freeze=self._enable_burst_guard_v2,
+            enable_transition_merge_guard=self._enable_transition_merge_guard,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -1625,6 +1964,10 @@ class RecognitionPipeline:
                 self._enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=self._recovery_add_min_frames,
+            enable_effect_gate=self._enable_effect_gate,
+            effect_gate_persist_sec=self._effect_gate_persist_sec,
+            effect_gate_hard_freeze=self._enable_burst_guard_v2,
+            enable_transition_merge_guard=self._enable_transition_merge_guard,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -1962,6 +2305,16 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float = EFFECT_PERSIST_SEC,
+        # バーストガード再設計 Stage1 (2026-08-05, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        effect_gate_hard_freeze: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補, A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2034,6 +2387,10 @@ class RecognitionPipeline:
                 enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=recovery_add_min_frames,
+            enable_effect_gate=enable_effect_gate,
+            effect_gate_persist_sec=effect_gate_persist_sec,
+            effect_gate_hard_freeze=effect_gate_hard_freeze,
+            enable_transition_merge_guard=enable_transition_merge_guard,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2164,6 +2521,16 @@ class RecognitionPipeline:
         # compat)。
         enable_drift_resync_match_start_guard: bool = True,
         enable_drift_resync_hsv_gate: bool = True,
+        # 長時間劣化修正 A+B (2026-08-06、§1/§4、A/B 計測用)。詳細は
+        # RecognitionPipeline.__init__ の同名引数コメント参照。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_online_hsv_refresh: bool = False,
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): is_active の
+        # True/False遷移を対称デバウンスする (MATCH_TRANSITION_DEBOUNCE_SEC
+        # 秒未満のフリッカーを無視、_match_active_started_frame/_time の
+        # 書き込みのみが対象。他の副作用は raw is_active のまま不変)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_match_transition_debounce: bool = False,
         # cycle 31 baseline_broken 自己リセット 制御フラグ (2026-07-25,
         # A/B 計測用)。default True/False = 従来挙動完全維持 (backwards compat)。
         enable_baseline_broken_reset: bool = True,
@@ -2220,6 +2587,41 @@ class RecognitionPipeline:
         # user 承認前の savepoint 実装のため default OFF 固定。
         enable_asymmetric_recovery_min_frames: bool = False,
         recovery_add_min_frames: int = STABLE_RECOVERY_ADD_MIN_FRAMES,
+        # エフェクト時間ゲート (2026-08-03、A/B 計測用): 満杯盤面 47 セル誤り
+        # 根治 (memory `project_full_board_error_taxonomy_2026-08-02`)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # user 承認前の savepoint 実装のため default OFF 固定。
+        enable_effect_gate: bool = False,
+        effect_gate_persist_sec: float | None = None,
+        effect_gate_ojama_window_sec: float | None = None,
+        # 案B (2026-08-04、A/B 計測用): effect_gate_window_active 4条件AND拡張。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_effect_visual_gate: bool = False,
+        # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用)。
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_guard_v2: bool = False,
+        # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_transition_merge_guard: bool = False,
+        # バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。
+        # None (既定) = BURST_GATE_OPEN_THRESHOLD (0.97、bit-identical)。
+        burst_gate_open_threshold: "float | None" = None,
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
+        # 隠し段推論の信頼性ゲート。enable_burst_guard_v2=False の場合は
+        # no-op (警告ログ)。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_hidden_row_burst_guard: bool = False,
+        # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用)。
+        # docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_burst_close_extension: bool = False,
+        # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用): 相手
+        # 連鎖延長の再点火間隔上限を上書きする。None (既定) = モジュール定数
+        # BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC (=3.3、bit-identical)。
+        # 0.0 を渡すと延長を無効化できる (docstring の RecognitionPipeline
+        # 側詳細参照)。
+        burst_chain_gap_max_sec: "float | None" = None,
         # 案B (2026-07-30): UI マスク判定 (is_ui 呼出) をセル限定する高速化フラグ。
         # None (既定) = 従来通り全セルで判定 (backwards compat、bit-identical)。
         # 既定 ON 化 (2026-07-30)。それまで既定 None のため **本番の収集・レンダで
@@ -2419,6 +2821,8 @@ class RecognitionPipeline:
                 enable_drift_resync_match_start_guard
             ),
             enable_drift_resync_hsv_gate=enable_drift_resync_hsv_gate,
+            enable_online_hsv_refresh=enable_online_hsv_refresh,
+            enable_match_transition_debounce=enable_match_transition_debounce,
             enable_baseline_broken_reset=enable_baseline_broken_reset,
             enable_baseline_broken_grace=enable_baseline_broken_grace,
             enable_column_partial_support=enable_column_partial_support,
@@ -2436,6 +2840,16 @@ class RecognitionPipeline:
                 enable_asymmetric_recovery_min_frames
             ),
             recovery_add_min_frames=recovery_add_min_frames,
+            enable_effect_gate=enable_effect_gate,
+            effect_gate_persist_sec=effect_gate_persist_sec,
+            effect_gate_ojama_window_sec=effect_gate_ojama_window_sec,
+            enable_effect_visual_gate=enable_effect_visual_gate,
+            enable_burst_guard_v2=enable_burst_guard_v2,
+            enable_transition_merge_guard=enable_transition_merge_guard,
+            burst_gate_open_threshold=burst_gate_open_threshold,
+            enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+            enable_burst_close_extension=enable_burst_close_extension,
+            burst_chain_gap_max_sec=burst_chain_gap_max_sec,
         )
 
     # ------------------------------------------------------------------
@@ -2528,6 +2942,9 @@ class RecognitionPipeline:
         self._match_active_started_frame = -1
         self._last_active_frame_time = -1.0
         self._match_active_started_time = -1.0
+        # 長時間劣化修正 A' (2026-08-06): デバウンスのpending状態も試合切替時に
+        # クリアする (前試合のpending観測が次試合に残留するのを防ぐ)。
+        self._match_active_debounce_state = MatchActiveDebounceState()
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -2551,6 +2968,24 @@ class RecognitionPipeline:
         # cycle 71d (案 D8): VideoChainTracker 入力 cache もリセット.
         self._prev_confirmed_1p = None
         self._prev_confirmed_2p = None
+        # 案B (2026-08-04): 全消しラッチも試合切替時にクリア
+        # (前試合の全消し状態が次試合に持ち越されるのを防ぐ)。
+        self._all_clear_pending_1p = False
+        self._all_clear_pending_2p = False
+        # バーストガード再設計 Stage1 (2026-08-05): Schmitt trigger 状態も
+        # 試合切替時にクリアする (前試合の burst 状態が次試合に残留し
+        # project_match_boundary_residue_leak_2026-07-25 と同種の罠になるのを防ぐ)。
+        self._burst_gate_open_1p = False
+        self._burst_gate_open_2p = False
+        self._burst_gate_opened_at_1p = None
+        self._burst_gate_opened_at_2p = None
+        self._burst_gate_quiet_since_1p = None
+        self._burst_gate_quiet_since_2p = None
+        # バーストガード Stage1.5b (2026-08-05 アーキ追補): 隠し段推論クール
+        # ダウンの基準時刻も試合切替時にクリア (-inf に戻す、前試合の
+        # burst 履歴が次試合の判定に残留するのを防ぐ)。
+        self._last_burst_open_time_1p = float("-inf")
+        self._last_burst_open_time_2p = float("-inf")
         # cycle 71f (提案 A): score 履歴もリセット.
         self._recent_scores_1p = []
         self._recent_scores_2p = []
@@ -2628,6 +3063,18 @@ class RecognitionPipeline:
         self._match_start_boundary_latched = False
         # score-reset 境界誤発火修正 (2026-07-26): デバウンスカウンタもリセット。
         self._score_reset_boundary_streak = 0
+        # 長時間劣化修正 Fix A (2026-08-06、§1/§4): 試合毎に OnlineHsvCalibrator
+        # の較正状態をフレッシュにする。reset() に reset API が無い場合は
+        # 同じ設定で再生成する (較正器自体のロジックは変えない)。
+        # enable_online_hsv_refresh=False (既定) では従来通り不触
+        # (=動画内の較正状態が試合を跨いで持続、bit-identical)。
+        if self._enable_online_hsv_refresh and self._online_hsv is not None:
+            if hasattr(self._online_hsv, "reset"):
+                self._online_hsv.reset()
+            else:
+                self._online_hsv = type(self._online_hsv)()
+            self._online_hsv_injected = False
+            self._online_hsv_injected_colors.clear()
 
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
@@ -2816,17 +3263,40 @@ class RecognitionPipeline:
             and not effective_hard_off
         )
 
-        # 試合 active 開始 frame の記録 (chain ban の起点)
-        if is_active:
+        # 試合 active 開始 frame の記録 (chain ban の起点)。
+        # 長時間劣化修正 A' (2026-08-06、§4追補、第4機構): _match_active_
+        # started_frame/_time の書き込みのみ対称デバウンスする (試合中の
+        # 短時間MENU誤検知が無条件に再アーム/リセットし、15秒安全弁窓の
+        # 二重再起動→無防備窓を生んでいた)。他の副作用 (下記 raw is_active
+        # 駆動ブロック) はデバウンス対象外・従来通り即時。
+        # 既定False (enable_match_transition_debounce) では elif/else が
+        # 従来ロジックと bit-identical。
+        if self._enable_match_transition_debounce:
+            (
+                self._match_active_debounce_state, _match_transitioned,
+                _confirmed_fi, _confirmed_ts,
+            ) = _resolve_match_active_debounce(
+                self._match_active_debounce_state, is_active, frame_idx, time_sec,
+            )
+            if _match_transitioned:
+                if self._match_active_debounce_state.confirmed_active:
+                    self._match_active_started_frame = _confirmed_fi
+                    self._match_active_started_time = _confirmed_ts
+                else:
+                    self._match_active_started_frame = -1
+                    self._match_active_started_time = -1.0
+        elif is_active:
             if self._match_active_started_frame < 0:
                 self._match_active_started_frame = frame_idx
                 self._match_active_started_time = time_sec
+        else:
+            self._match_active_started_frame = -1
+            self._match_active_started_time = -1.0
+        # 以下は raw is_active のまま (デバウンス対象外、既存挙動を維持)。
+        if is_active:
             self._last_active_frame_idx = frame_idx
             self._last_active_frame_time = time_sec
         else:
-            # 試合 active が完全に切れたら start もリセット
-            self._match_active_started_frame = -1
-            self._match_active_started_time = -1.0
             self._bg_fp_captured = False
             self._bg_frame_buffer.clear()
             if hasattr(self._reader, "set_background_fingerprints"):
@@ -3497,6 +3967,12 @@ class RecognitionPipeline:
             frame_bgr=frame,  # cycle 71l β2' = HSV 距離による NEXT 色順序確定
             score_d_for_self=score_d_1p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_1p,  # 案P3
+            # エフェクト時間ゲート: 1P の「相手」は 2P (2P 連鎖の予告おじゃま
+            # エフェクトが 1P 盤面上段に混入する)。
+            opponent_chain_active=chain_ev_2p is not None,
+            # 案B (2026-08-04): 自連鎖中は視覚グロー判定 (連鎖数テロップ写り込み
+            # 誤発火対策) を抑制するため own_chain_active を渡す。
+            own_chain_active=chain_ev_1p is not None,
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -3509,6 +3985,8 @@ class RecognitionPipeline:
             frame_bgr=frame,  # cycle 71l β2'
             score_d_for_self=score_d_2p,  # cycle 71n 案 ε
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
+            opponent_chain_active=chain_ev_1p is not None,
+            own_chain_active=chain_ev_2p is not None,  # 案B (2026-08-04)
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -3537,6 +4015,26 @@ class RecognitionPipeline:
                 p_state=p2.state,
                 remaining=self._ojama_tier1_warmup_remaining_2p,
             )
+        # エフェクト時間ゲート (2026-08-03): お邪魔着弾 window の更新。
+        # OJAMA_FALL は 1 frame で STABLE に抜けるため (state_detectors.
+        # OjamaPhaseDetector)、退出時刻から effect_gate_ojama_window_sec 秒だけ
+        # window を継続する (次フレームの signals.effect_gate_window_active
+        # 計算に使う、_step_side 冒頭参照)。
+        if self._enable_effect_gate:
+            if (
+                _pre_state_1p == BoardState.OJAMA_FALL
+                and p1.state == BoardState.STABLE
+            ):
+                self._effect_gate_ojama_until_1p = (
+                    time_sec + self._effect_gate_ojama_window_sec
+                )
+            if (
+                _pre_state_2p == BoardState.OJAMA_FALL
+                and p2.state == BoardState.STABLE
+            ):
+                self._effect_gate_ojama_until_2p = (
+                    time_sec + self._effect_gate_ojama_window_sec
+                )
 
         # cycle 71d (案 D8): VideoChainTracker 次 frame 入力用に confirmed_board を保存.
         # None (= STABLE 以外) なら前回値を維持し、 直近の安定 board を提供し続ける.
@@ -3545,6 +4043,17 @@ class RecognitionPipeline:
         if p2.confirmed_board is not None:
             self._prev_confirmed_2p = p2.confirmed_board.copy()
 
+        # 案B (2026-08-04): 全消しラッチ更新 (第3ゲート条件用)。
+        # STABLE 確定毎に is_all_clear() で再評価し、次の連鎖発火でクリアする。
+        self._all_clear_pending_1p = _update_all_clear_pending(
+            self._all_clear_pending_1p, p1.confirmed_board, cur_score_1p,
+            chain_fired=chain_ev_1p is not None,
+        )
+        self._all_clear_pending_2p = _update_all_clear_pending(
+            self._all_clear_pending_2p, p2.confirmed_board, cur_score_2p,
+            chain_fired=chain_ev_2p is not None,
+        )
+
         # Phase I.c: OnlineHsvCalibrator update (動画別 HSV 自動学習)
         # 1P/2P STABLE 中の信頼サンプルを蓄積、ready 後に ColorClassifier ranges
         # を 1 度だけ上書きする。連鎖中はスキップ (puyo HSV 変動)。
@@ -3552,7 +4061,14 @@ class RecognitionPipeline:
         # pre-inject 済の場合は OnlineHsv 段階的 inject ループを完全に skip する。
         # _online_hsv_injected = True は __init__ で False 初期化済のため、
         # 既存スクリプトのデフォルト挙動 (suppress なし) は変わらない。
-        if self._online_hsv is not None and is_active and not self._online_hsv_injected:
+        # 長時間劣化修正 Fix B (2026-08-06、§1/§4): enable_online_hsv_refresh=
+        # True では `not self._online_hsv_injected` を無視し、inject後も
+        # update()+再inject判定を継続する (コメント本来の「段階的inject」
+        # 意図通り、機構仮説①=初回inject後の完全凍結を撤廃)。既定Falseでは
+        # 従来通りinject後は完全凍結 (bit-identical)。
+        if self._online_hsv is not None and is_active and (
+            self._enable_online_hsv_refresh or not self._online_hsv_injected
+        ):
             try:
                 from src.hybrid_classifier import HybridClassifier
                 hc = self._reader._classifier
@@ -4162,6 +4678,7 @@ class RecognitionPipeline:
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
+            mechanism=CHAIN_MECHANISM_SCORE_JUMP,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec + self._chain_hold_per_step_sec
@@ -4342,6 +4859,7 @@ class RecognitionPipeline:
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
+            mechanism=CHAIN_MECHANISM_FORMULA,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec
@@ -4784,6 +5302,8 @@ class RecognitionPipeline:
         frame_bgr: np.ndarray | None = None,  # cycle 71l β2'
         score_d_for_self: int = 0,  # cycle 71n 案 ε
         chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
+        opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
+        own_chain_active: bool = False,  # 案B 4条件AND拡張 (2026-08-04)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
@@ -4873,6 +5393,94 @@ class RecognitionPipeline:
         if self._enable_ojama_visual_detection:
             from src.ojama_visual_detector import _count_top_ojama as _cnt_oj
             _ojama_top_positive = _cnt_oj(cnn_board, _hsv_board_for_signals) > 0
+        # エフェクト時間ゲート (2026-08-03): 「相手連鎖中」または「自身お邪魔
+        # 着弾直後 window」なら True。相手連鎖中は opponent_chain_active
+        # (= 相手 side の ChainEvent 有効期間、既存 chain_until_Xp 窓をそのまま
+        # 流用) をそのまま使う。お邪魔着弾窓は _effect_gate_ojama_until_Xp
+        # (前フレームまでの OJAMA_FALL→STABLE 遷移で更新、_step_side 後段参照)。
+        _effect_gate_window_active = False
+        if self._enable_burst_guard_v2:
+            # バーストガード再設計 Stage1 (2026-08-05、
+            # docs/BURST_GUARD_DESIGN_2026-08-05.md §2.3): Schmitt trigger
+            # 視覚トリガーのみで判定する。ChainEvent (opponent_chain_active) は
+            # トリガーの OR 条件から意図的に除外する (大連鎖見逃しバグ issue a を
+            # 引き継がないため)。own_chain_active / 全消しラッチのみ
+            # force_close 条件として維持する (較正済みの唯一の実効ゲート)。
+            _all_clear_pending_for_side = (
+                self._all_clear_pending_1p if side == "1P"
+                else self._all_clear_pending_2p
+            )
+            _burst_region = (
+                DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+            )
+            _prev_open, _prev_opened_at, _prev_quiet = (
+                (
+                    self._burst_gate_open_1p, self._burst_gate_opened_at_1p,
+                    self._burst_gate_quiet_since_1p,
+                ) if side == "1P" else
+                (
+                    self._burst_gate_open_2p, self._burst_gate_opened_at_2p,
+                    self._burst_gate_quiet_since_2p,
+                )
+            )
+            _force_close_for_side = own_chain_active or _all_clear_pending_for_side
+            _new_open, _new_opened_at, _new_quiet = _resolve_burst_gate_state(
+                frame_bgr, _burst_region, EFFECT_GATE_TOP_ROWS,
+                _prev_open, _prev_opened_at, _prev_quiet, time_sec,
+                force_close=_force_close_for_side,
+                open_threshold=self._burst_gate_open_threshold,
+                close_threshold=self._burst_gate_open_threshold,
+            )
+            if side == "1P":
+                self._burst_gate_open_1p = _new_open
+                self._burst_gate_opened_at_1p = _new_opened_at
+                self._burst_gate_quiet_since_1p = _new_quiet
+                # Stage1.5b (§11.1): window active な全フレームで基準時刻を
+                # 更新する (隠し段推論クールダウン、§12 close側延長の両方の
+                # 起点として再利用する、二重state化しない)。
+                if _new_open:
+                    self._last_burst_open_time_1p = time_sec
+                _last_burst_open_time_for_side = self._last_burst_open_time_1p
+            else:
+                self._burst_gate_open_2p = _new_open
+                self._burst_gate_opened_at_2p = _new_opened_at
+                self._burst_gate_quiet_since_2p = _new_quiet
+                if _new_open:
+                    self._last_burst_open_time_2p = time_sec
+                _last_burst_open_time_for_side = self._last_burst_open_time_2p
+            # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、§12.2):
+            # 生 is_open と実効active信号を分離する。遷移mergeフィルタ+hard
+            # freeze は下記 _effect_gate_window_active にそのまま従うため
+            # (既存フィールド再利用)、ここでの合成だけで両方が自動追従する。
+            _effect_gate_window_active = _resolve_effective_burst_gate_active(
+                self._enable_burst_close_extension, _new_open,
+                _force_close_for_side, _last_burst_open_time_for_side,
+                opponent_chain_active, time_sec,
+                chain_gap_max_sec=self._burst_chain_gap_max_sec,
+            )
+        elif self._enable_effect_gate:
+            _ojama_until = (
+                self._effect_gate_ojama_until_1p if side == "1P"
+                else self._effect_gate_ojama_until_2p
+            )
+            _time_window_active = (
+                opponent_chain_active or time_sec < _ojama_until
+            )
+            # 案B (2026-08-04): 4条件AND拡張 (enable_effect_visual_gate=False
+            # なら _time_window_active をそのまま返す = bit-identical)。
+            _effect_gate_window_active = _compute_effect_gate_window_active(
+                time_window_active=_time_window_active,
+                own_chain_active=own_chain_active,
+                all_clear_pending=(
+                    self._all_clear_pending_1p if side == "1P"
+                    else self._all_clear_pending_2p
+                ),
+                frame_bgr=frame_bgr,
+                region=(
+                    DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+                ),
+                enable_visual_gate=self._enable_effect_visual_gate,
+            )
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -4887,6 +5495,7 @@ class RecognitionPipeline:
             hsv_board=_hsv_board_for_signals,
             ojama_top_positive=_ojama_top_positive,
             chain_max_hold_expired=chain_max_hold_expired,  # 案P3
+            effect_gate_window_active=_effect_gate_window_active,
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -5126,8 +5735,28 @@ class RecognitionPipeline:
                                 # NEXT 色以外が着地 → 認識誤り可能性 (alert のみ)
                                 pass  # 将来: alert 記録 or 棄却
                 # W-α: 隠し段 (row 0) の量子推論 (= 既存ロジック維持)
+                # バーストガード Stage1.5b (2026-08-05、docs/BURST_GUARD_
+                # DESIGN_2026-08-05.md §11): 信頼性ゲート。row1-3 凍結中は
+                # prev_confirmed が stale になり infer_hidden_row の着地
+                # 新規セル数の再カウントが狂う (§11.0)。window active 中、
+                # または close 直後 HIDDEN_ROW_TRUST_COOLDOWN_SEC 未満の間は
+                # 呼び出し自体をスキップし、row0 は直前値キャリーオーバーで
+                # 既存フォールバックに自然委譲する (新しい書き込みをしない)。
+                # enable_hidden_row_burst_guard=False (既定) では常に True
+                # (bit-identical)。
+                _last_burst_open_time_for_side = (
+                    self._last_burst_open_time_1p if side == "1P"
+                    else self._last_burst_open_time_2p
+                )
+                _hidden_row_trust_ok = _hidden_row_trust_gate_ok(
+                    self._enable_hidden_row_burst_guard,
+                    _effect_gate_window_active,
+                    _last_burst_open_time_for_side,
+                    time_sec,
+                )
                 if (
-                    falling_pair is not None
+                    _hidden_row_trust_ok
+                    and falling_pair is not None
                     and falling_pair[0] not in (
                         COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
                     )
@@ -5206,6 +5835,7 @@ class RecognitionPipeline:
                         all_clear_bonus_applied=0,
                         ojama_sent=0, leftover_score=0,
                         is_all_clear=False,
+                        mechanism=CHAIN_MECHANISM_LANDING,
                     )
                     chain_until = (
                         time_sec
@@ -6511,3 +7141,252 @@ def _should_suppress_game_event_exit(
     if chain_count < chain_game_event_min_count:
         return True
     return False
+
+
+def _update_all_clear_pending(
+    prev_pending: bool,
+    confirmed_board: "Board | None",
+    score: "int | None",
+    *,
+    chain_fired: bool,
+) -> bool:
+    """全消しラッチの1frame更新 (stateless純関数、案B 2026-08-04)。
+
+    次の連鎖発火 (chain_fired=True) で確実にクリアする (「全消し状態を抜けた」
+    という物理的証拠を優先)。それ以外は STABLE 確定 (confirmed_board!=None)
+    毎に is_all_clear() で再評価する。未確定 (confirmed_board=None) の間は
+    直前状態を維持する (= 演出/連鎖中に誤ってラッチが揺れないようにする)。
+
+    Args:
+        prev_pending: 直前フレームのラッチ状態。
+        confirmed_board: 今フレームで新規に STABLE 確定した盤面 (None なら
+            STABLE 以外、直前状態を維持)。
+        score: 現在の score (all_clear_detector.is_all_clear に渡す)。
+        chain_fired: 今フレームで連鎖が発火したか (= 全消し状態を確実に抜けた)。
+
+    Returns:
+        更新後のラッチ状態。
+    """
+    if chain_fired:
+        return False
+    if confirmed_board is None:
+        return prev_pending
+    return is_all_clear(confirmed_board, score or 0).is_all_clear
+
+
+def _compute_effect_gate_window_active(
+    *,
+    time_window_active: bool,
+    own_chain_active: bool,
+    all_clear_pending: bool,
+    frame_bgr: "np.ndarray | None",
+    region: "object",
+    enable_visual_gate: bool,
+) -> bool:
+    """エフェクト時間ゲートの最終判定 (4条件AND、案B 2026-08-04、stateless)。
+
+    enable_visual_gate=False の場合は time_window_active をそのまま返す
+    (既存 enable_effect_gate 単体運用と bit-identical、backwards compat)。
+    enable_visual_gate=True の場合、以下4条件の AND:
+        (既存時間窓) AND (not 自連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)
+    視覚グロー検出 (is_effect_glow_active) はコスト高いため、他3条件が
+    先に真であることを確認してから評価する (遅延評価)。
+
+    Args:
+        time_window_active: 既存の時間窓判定 (相手連鎖中 or お邪魔着弾直後)。
+        own_chain_active: 観測対象 side 自身が連鎖中か (連鎖数テロップ写り込み対策)。
+        all_clear_pending: 観測対象 side の全消しラッチ状態。
+        frame_bgr: 現フレーム (1920x1080 リサイズ済み BGR)。None なら視覚判定不能。
+        region: 判定対象 side の BoardRegion。
+        enable_visual_gate: 本 AND 拡張の有効化フラグ。
+
+    Returns:
+        最終的な effect_gate_window_active。
+    """
+    if not enable_visual_gate:
+        return time_window_active
+    if not time_window_active or own_chain_active or all_clear_pending:
+        return False
+    if frame_bgr is None:
+        return False  # 安全弁: 画像なしは不発 (従来 frame ベース確定に戻る)
+    return is_effect_glow_active(frame_bgr, region)
+
+
+def _resolve_burst_gate_state(
+    frame_bgr: "np.ndarray | None",
+    region: "object",
+    rows: "frozenset[int]",
+    prev_open: bool,
+    prev_opened_at: "float | None",
+    prev_quiet: "float | None",
+    time_sec: float,
+    force_close: bool,
+    open_threshold: float = BURST_GATE_OPEN_THRESHOLD,
+    close_threshold: float = BURST_GATE_CLOSE_THRESHOLD,
+) -> "tuple[bool, float | None, float | None]":
+    """バーストガード Stage1: 1frame分の Schmitt trigger 状態解決 (stateless純関数)。
+
+    docs/BURST_GUARD_DESIGN_2026-08-05.md §2.2 の安全弁: frame_bgr が None
+    (画像取得不能) の場合は `_update_burst_visual_gate` を呼ばず直前状態を
+    維持する (無情報を「静穏」と誤認しない)。force_close / max_window_sec
+    安全弁だけは画像の有無に関係なく効かせる。
+
+    Args:
+        frame_bgr/region/rows: 視覚スコア計算の入力 (None なら視覚判定不能)。
+        prev_open/prev_opened_at/prev_quiet: 直前frameの Window 状態。
+        time_sec: 今frameの時刻。force_close: 外部安全条件。
+        open_threshold/close_threshold: 開窓閾値のオーバーライド (2026-08-05
+            緊急較正用)。既定は既存定数 (=0.97、bit-identical)。
+
+    Returns:
+        (new_is_open, new_opened_at, new_quiet_since)
+    """
+    if frame_bgr is not None:
+        score = compute_effect_glow_score(frame_bgr, region, rows)
+        return _update_burst_visual_gate(
+            prev_open, prev_opened_at, prev_quiet, score, time_sec,
+            open_threshold=open_threshold,
+            close_threshold=close_threshold,
+            min_window_sec=BURST_GATE_MIN_WINDOW_SEC,
+            max_window_sec=BURST_GATE_MAX_WINDOW_SEC,
+            quiescence_min_sec=BURST_GATE_QUIESCENCE_MIN_SEC,
+            force_close=force_close,
+        )
+    if force_close:
+        return False, None, None
+    if (
+        prev_open and prev_opened_at is not None
+        and (time_sec - prev_opened_at) >= BURST_GATE_MAX_WINDOW_SEC
+    ):
+        return False, None, None  # 安全弁: 画像なしでも max_window は効かせる
+    return prev_open, prev_opened_at, prev_quiet
+
+
+def _resolve_effective_burst_gate_active(
+    enable_extension: bool,
+    raw_is_open: bool,
+    force_close: bool,
+    last_open_time: float,
+    opponent_chain_active: bool,
+    time_sec: float,
+    cooldown_sec: float = BURST_GATE_POST_CLOSE_COOLDOWN_SEC,
+    chain_gap_max_sec: float = BURST_GATE_OPPONENT_CHAIN_GAP_MAX_SEC,
+) -> bool:
+    """バーストガード §12: 生 is_open から実効active信号を合成する。
+
+    stateless純関数 (docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2)。戻り値
+    (signals.effect_gate_window_active) に遷移mergeフィルタ+hard freeze が
+    そのまま従う (既存フィールド再利用、呼出側の変更不要)。優先順位:
+    無効化(raw返却) > force_close(即False) > raw_is_open(True) >
+    クールダウン中(True) > 相手連鎖延長・gap_max内(True) > False。
+    引数の物理的根拠・退行修正の経緯は各定数のコメントを参照
+    (BURST_GATE_POST_CLOSE_COOLDOWN_SEC / BURST_GATE_OPPONENT_CHAIN_
+    GAP_MAX_SEC)。last_open_time=-inf (一度も open 経験なし) は延長も
+    クールダウンも対象外 (cold-start トリガー化防止)。chain_gap_max_sec=0.0
+    は相手連鎖延長を常に不成立化する (2026-08-05 緊急パラメータ化)。
+    """
+    if not enable_extension:
+        return raw_is_open
+    if force_close:
+        return False
+    if raw_is_open:
+        return True
+    if last_open_time == float("-inf"):
+        return False  # 一度も open していない = 延長対象がない (トリガー化防止)
+    elapsed = time_sec - last_open_time
+    in_cooldown = elapsed < cooldown_sec
+    extend_by_chain = opponent_chain_active and elapsed <= chain_gap_max_sec
+    return in_cooldown or extend_by_chain
+
+
+def _hidden_row_trust_gate_ok(
+    enable_guard: bool,
+    window_active: bool,
+    last_burst_open_time: float,
+    time_sec: float,
+    cooldown_sec: float = HIDDEN_ROW_TRUST_COOLDOWN_SEC,
+) -> bool:
+    """バーストガード Stage1.5b: 隠し段推論 (infer_hidden_row) の信頼性ゲート判定
+
+    (stateless純関数、docs/BURST_GUARD_DESIGN_2026-08-05.md §11)。
+
+    row1-3 凍結中は prev_confirmed が stale になり infer_hidden_row の着地
+    新規セル数の再カウントが狂う (§11.0)。window active 中、または close
+    直後 cooldown_sec 未満の間は False を返し、呼び出し側に infer_hidden_row
+    呼び出し自体をスキップさせる。
+
+    Args:
+        enable_guard: enable_hidden_row_burst_guard フラグ。False (既定) で
+            常に True を返す (bit-identical、backwards compat)。
+        window_active: 当該side・今frameの effect_gate_window_active。
+        last_burst_open_time: 当該sideで window が最後に active だった
+            time_sec (-inf 初期 = 一度も open していない)。
+        time_sec: 今frameの時刻。
+        cooldown_sec: close後に要求する猶予秒数 (HIDDEN_ROW_TRUST_COOLDOWN_SEC)。
+
+    Returns:
+        True なら infer_hidden_row 呼び出しを許可する。
+    """
+    if not enable_guard:
+        return True
+    return (
+        not window_active
+        and (time_sec - last_burst_open_time) >= cooldown_sec
+    )
+
+
+@dataclass(frozen=True)
+class MatchActiveDebounceState:
+    """is_active 対称デバウンスの可変状態 (1P/2P共通、試合全体で1組のみ保持)。
+
+    長時間劣化修正A' (2026-08-06、docs/LONGRUN_DEGRADATION_INVESTIGATION_
+    2026-08-06.md §4追補)。confirmed_active が「デバウンス確定済みの
+    is_active」、pending_* が「観測中だがまだ確定していない新状態」。
+    """
+
+    confirmed_active: bool = False
+    pending_active: "bool | None" = None
+    pending_since_frame: "int | None" = None
+    pending_since_time: "float | None" = None
+
+
+def _resolve_match_active_debounce(
+    state: MatchActiveDebounceState,
+    raw_is_active: bool,
+    frame_idx: int,
+    time_sec: float,
+    debounce_sec: float = MATCH_TRANSITION_DEBOUNCE_SEC,
+) -> "tuple[MatchActiveDebounceState, bool, int, float]":
+    """is_active の True/False遷移を対称デバウンスする (stateless純関数)。
+
+    「直前の確定状態と異なる新状態が debounce_sec 秒以上連続して観測されて
+    初めて遷移を確定する」。未満で元に戻るフリッカーは無視 (confirmed_active
+    不変)。確定時刻の意味論: 遷移確定時、そのイベントは「raw値が最初に変化
+    した瞬間 (pending_since_frame/time)」に起きたとみなす (デバウンス確認の
+    待機時間は含めない=真の物理的変化の瞬間を記録、確認完了時刻ではない)。
+    呼び出し側はこの値で _match_active_started_frame/_time を更新する。
+
+    Returns:
+        (new_state, transitioned, confirmed_frame_idx, confirmed_time_sec)。
+        transitioned=True の場合のみ確定frame_idx/time_secで更新する。
+    """
+    if raw_is_active == state.confirmed_active:
+        # 既に確定済みの状態と一致 → pending をクリアして終了。
+        return (
+            MatchActiveDebounceState(state.confirmed_active, None, None, None),
+            False, frame_idx, time_sec,
+        )
+    if state.pending_active != raw_is_active:
+        # 新しい変化の観測開始 (前回と異なる方向、または pending 無し)。
+        return (
+            MatchActiveDebounceState(state.confirmed_active, raw_is_active, frame_idx, time_sec),
+            False, frame_idx, time_sec,
+        )
+    # pending が同方向で継続中 → 経過時間を確認する。
+    elapsed = time_sec - state.pending_since_time
+    if elapsed >= debounce_sec:
+        return (
+            MatchActiveDebounceState(raw_is_active, None, None, None),
+            True, state.pending_since_frame, state.pending_since_time,
+        )
+    return state, False, frame_idx, time_sec

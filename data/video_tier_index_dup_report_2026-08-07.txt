@@ -1,0 +1,141 @@
+[dup] 検出された video_id 重複グループ数: 35
+
+video_id=175kntUk2xA
+  採用: video_51 (source=data/phase_e_dl_index.tsv)
+  除外: video_c38 (source=data/_dl_expand.tsv)
+
+video_id=3DhPCYMdlAE
+  採用: video_52 (source=data/phase_e_dl_index.tsv)
+  除外: video_c39 (source=data/_dl_expand.tsv)
+
+video_id=al2ayeqbxyI
+  採用: video_c34 (source=data/_dl_expand.tsv)
+  除外: video_95 (source=data/phase_e_dl_index.tsv)
+
+video_id=JvvJQcL7iR4
+  採用: video_c35 (source=data/_dl_expand.tsv)
+  除外: video_48 (source=data/phase_e_dl_index.tsv)
+
+video_id=GqBH999cQyU
+  採用: video_c36 (source=data/_dl_expand.tsv)
+  除外: video_49 (source=data/phase_e_dl_index.tsv)
+
+video_id=enHxRrKeAAs
+  採用: video_c37 (source=data/_dl_expand.tsv)
+  除外: video_50 (source=data/phase_e_dl_index.tsv)
+
+video_id=QHLwBYhUppg
+  採用: video_c41 (source=data/_dl_expand.tsv)
+  除外: video_54 (source=data/phase_e_dl_index.tsv)
+
+video_id=iR75tB73Pps
+  採用: video_c44 (source=data/_dl_expand.tsv)
+  除外: video_57 (source=data/phase_e_dl_index.tsv)
+
+video_id=8pVEmxvEQ18
+  採用: video_c48 (source=data/_dl_expand.tsv)
+  除外: video_61 (source=data/phase_e_dl_index.tsv)
+
+video_id=DSsxaZk2ckI
+  採用: video_c50 (source=data/_dl_expand.tsv)
+  除外: video_63 (source=data/phase_e_dl_index.tsv)
+
+video_id=gzDjjWFL_Qo
+  採用: video_c51 (source=data/_dl_expand.tsv)
+  除外: video_64 (source=data/phase_e_dl_index.tsv)
+
+video_id=g_bFvlXeJks
+  採用: video_c52 (source=data/_dl_expand.tsv)
+  除外: video_65 (source=data/phase_e_dl_index.tsv)
+
+video_id=krlszUFRO-Y
+  採用: video_c53 (source=data/_dl_expand.tsv)
+  除外: video_66 (source=data/phase_e_dl_index.tsv)
+
+video_id=YuF9QarQra4
+  採用: video_c57 (source=data/_dl_expand.tsv)
+  除外: video_70 (source=data/phase_e_dl_index.tsv)
+
+video_id=MLQuKjTWrdw
+  採用: video_c58 (source=data/_dl_expand.tsv)
+  除外: video_71 (source=data/phase_e_dl_index.tsv)
+
+video_id=DuEjyy3w3CI
+  採用: video_c60 (source=data/_dl_expand.tsv)
+  除外: video_73 (source=data/phase_e_dl_index.tsv)
+
+video_id=7GzyjbnMJYs
+  採用: video_c61 (source=data/_dl_expand.tsv)
+  除外: video_74 (source=data/phase_e_dl_index.tsv)
+
+video_id=Ju76d7CJ46U
+  採用: video_c62 (source=data/_dl_expand.tsv)
+  除外: video_75 (source=data/phase_e_dl_index.tsv)
+
+video_id=h1GpiHbFgR4
+  採用: video_c64 (source=data/_dl_expand.tsv)
+  除外: video_77 (source=data/phase_e_dl_index.tsv)
+
+video_id=1QoAmAQsROs
+  採用: video_c65 (source=data/_dl_expand.tsv)
+  除外: video_78 (source=data/phase_e_dl_index.tsv)
+
+video_id=cYiFD-jlFBc
+  採用: video_c66 (source=data/_dl_expand.tsv)
+  除外: video_79 (source=data/phase_e_dl_index.tsv)
+
+video_id=lGFYrIe65ps
+  採用: video_c67 (source=data/_dl_expand.tsv)
+  除外: video_80 (source=data/phase_e_dl_index.tsv)
+
+video_id=DBfHe3dA244
+  採用: video_c68 (source=data/_dl_expand.tsv)
+  除外: video_81 (source=data/phase_e_dl_index.tsv)
+
+video_id=-mCImzUDQkQ
+  採用: video_c69 (source=data/_dl_expand.tsv)
+  除外: video_82 (source=data/phase_e_dl_index.tsv)
+
+video_id=lcMK9XEFx5o
+  採用: video_c71 (source=data/_dl_expand.tsv)
+  除外: video_84 (source=data/phase_e_dl_index.tsv)
+
+video_id=HSy0Kj8HNoI
+  採用: video_c73 (source=data/_dl_expand.tsv)
+  除外: video_86 (source=data/phase_e_dl_index.tsv)
+
+video_id=H9uHCNGqBqk
+  採用: video_c76 (source=data/_dl_expand.tsv)
+  除外: video_89 (source=data/phase_e_dl_index.tsv)
+
+video_id=dWchqPaeEc4
+  採用: video_c77 (source=data/_dl_expand.tsv)
+  除外: video_90 (source=data/phase_e_dl_index.tsv)
+
+video_id=IrCNnxwWa1o
+  採用: video_c78 (source=data/_dl_expand.tsv)
+  除外: video_91 (source=data/phase_e_dl_index.tsv)
+
+video_id=Hl2QlK8dAwo
+  採用: video_c79 (source=data/_dl_expand.tsv)
+  除外: video_92 (source=data/phase_e_dl_index.tsv)
+
+video_id=6asLcTglLQI
+  採用: video_c80 (source=data/_dl_expand.tsv)
+  除外: video_93 (source=data/phase_e_dl_index.tsv)
+
+video_id=UsMva_S3LAQ
+  採用: video_c81 (source=data/_dl_expand.tsv)
+  除外: video_94 (source=data/phase_e_dl_index.tsv)
+
+video_id=04Lb9BZCpP0
+  採用: video_c82 (source=data/_dl_expand.tsv)
+  除外: video_s1 (source=scripts/_dl_tier_avc1.sh)
+
+video_id=UpnGj22itdA
+  採用: video_c83 (source=data/_dl_expand.tsv)
+  除外: video_s2 (source=scripts/_dl_tier_avc1.sh)
+
+video_id=GDfVPnyrfwU
+  採用: video_c84 (source=data/_dl_expand.tsv)
+  除外: video_s3 (source=scripts/_dl_tier_avc1.sh)

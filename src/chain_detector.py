@@ -61,6 +61,16 @@ DEBOUNCE_CONFIRM_FRAMES: int = 1
 # ChainFineTuner が出力する calibration ファイル (Phase I)
 DEFAULT_CALIBRATION_PATH: Path = Path("data/verify/chain_tracker_calibration.json")
 
+# 発火検知経路識別子 (ChainEvent.mechanism、2026-08-02 Step0検証を受けて追加)。
+# Step0 実測 (logs/step0_diag/aggregate_result.log): formula が大半 (89.7%) を
+# 先着検知するが、baseline のみが捕まえる「難しい連鎖」(5.9%) は
+# オフライン発火クラスタリング側の board_ref_index と grid_match 0% だった。
+# mechanism を記録し Step2 (仮想盤面再構成) で経路別の信頼度を扱えるようにする。
+CHAIN_MECHANISM_BASELINE: str = "baseline"      # ① VideoChainTracker (puyo数減少検知)
+CHAIN_MECHANISM_SCORE_JUMP: str = "score_jump"  # ② score急増早期発火 (機能B)
+CHAIN_MECHANISM_FORMULA: str = "formula"        # ③ 掛け算式検知早期発火 (機能D)
+CHAIN_MECHANISM_LANDING: str = "landing"        # ④ 着地直後即時連鎖判定
+
 # calibration cache: (path, mtime) -> dict
 _CALIBRATION_CACHE: dict[tuple[str, float], dict] = {}
 
@@ -116,6 +126,10 @@ class ChainEvent:
         ojama_sent: 相手に送るおじゃま数
         leftover_score: 繰越余り
         is_all_clear: 連鎖終了後盤面が全消し（次回ボーナスフラグ）
+        mechanism: 発火を捕まえた検知経路 (CHAIN_MECHANISM_* のいずれか)。
+            2026-08-02 追加、既定 None (後方互換)。既存呼び出し (mechanism 未指定)
+            は None のままで挙動不変。Step2 (仮想盤面再構成) で経路別の
+            信頼度を扱うために追加した optional 属性。
     """
     trigger_sec: float
     end_sec: float
@@ -128,6 +142,7 @@ class ChainEvent:
     ojama_sent: int
     leftover_score: int
     is_all_clear: bool
+    mechanism: str | None = None
 
 
 class VideoChainTracker:
@@ -275,6 +290,7 @@ class VideoChainTracker:
             ojama_sent=ojama_r.ojama_count,
             leftover_score=ojama_r.leftover_score,
             is_all_clear=scored.is_all_clear,
+            mechanism=CHAIN_MECHANISM_BASELINE,
         )
         self._leftover = ojama_r.leftover_score
         return event

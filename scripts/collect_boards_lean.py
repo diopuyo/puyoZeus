@@ -148,6 +148,10 @@ NEXT_COLOR_UNKNOWN: int = -1
 # (2026-07-29 追加)。t_sec は常に >= 0 のため NaN は安全な sentinel。
 CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
 
+# chain_mechanism (発火検知経路、2026-08-02 Step2 追加) が未検知/取得不能の
+# 場合の埋め値。空文字列は CHAIN_MECHANISM_* のどの値とも衝突しないため安全。
+CHAIN_MECHANISM_UNKNOWN: str = ""
+
 
 # ============================
 # 蓄積バッファ
@@ -183,6 +187,11 @@ class _LeanNpzAccumulator:
     # CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で埋める。既存呼び出し (引数省略) では
     # 常に NaN のまま保存される (後方互換: 挙動不変)。
     chain_trigger_secs: list[float] = field(default_factory=list)
+    # 発火検知経路 (CHAIN_MECHANISM_*、2026-08-02 Step2 追加)。
+    # 既存呼び出し (mechanism 省略) では CHAIN_MECHANISM_UNKNOWN ("") のまま
+    # 蓄積され、save() 時に一度も実値が入らなければ npz キー自体を書かない
+    # (後方互換: 既存 npz 読み出し側のキー集合を変えない)。
+    chain_mechanisms: list[str] = field(default_factory=list)
 
     def append(
         self,
@@ -196,6 +205,7 @@ class _LeanNpzAccumulator:
         next_pair: tuple[int, int] | None = None,
         dnext_pair: tuple[int, int] | None = None,
         chain_trigger_sec: float | None = None,
+        mechanism: str | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -214,6 +224,10 @@ class _LeanNpzAccumulator:
                 (RecognitionPipeline.SideResult.chain_event.trigger_sec)。
                 None は CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で保存する
                 (後方互換: 省略時は既存呼び出しと同じ挙動、2026-07-29 追加)。
+            mechanism: この snapshot 時点で有効な chain_event.mechanism
+                (CHAIN_MECHANISM_* のいずれか)。None は
+                CHAIN_MECHANISM_UNKNOWN ("") で保存する (後方互換、
+                2026-08-02 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -231,6 +245,9 @@ class _LeanNpzAccumulator:
         self.dnext_bs.append(int(d_b))
         self.chain_trigger_secs.append(
             chain_trigger_sec if chain_trigger_sec is not None else CHAIN_TRIGGER_SEC_UNKNOWN
+        )
+        self.chain_mechanisms.append(
+            mechanism if mechanism is not None else CHAIN_MECHANISM_UNKNOWN
         )
 
     def assign_won_labels(
@@ -273,10 +290,15 @@ class _LeanNpzAccumulator:
         機能D 検知時刻を記録しないだけの既存呼び出しでは全て NaN
         (CHAIN_TRIGGER_SEC_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
         挙動には影響しない新規キー)。
+
+        chain_mechanism (str、2026-08-02 追加) は一度でも実値
+        (CHAIN_MECHANISM_UNKNOWN 以外) が記録された場合のみキーを書く。
+        一度も記録されなかった (mechanism 未指定の呼び出しのみ、または
+        ChainEvent.mechanism が全て None) 場合はキー自体を省略する
+        (後方互換: 既存 npz 読み出し側の `set(d.keys())` 依存コードを壊さない)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            str(path),
+        save_kwargs: dict[str, np.ndarray] = dict(
             grids=np.array(self.grids, dtype=np.int8) if self.grids
                   else np.array([], dtype=np.int8),
             video_id=np.array(self.video_ids),
@@ -292,6 +314,9 @@ class _LeanNpzAccumulator:
             dnext_b=np.array(self.dnext_bs, dtype=np.int8),
             chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
         )
+        if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
+            save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
+        np.savez_compressed(str(path), **save_kwargs)
 
 
 # ============================
@@ -465,6 +490,17 @@ def collect_lean(
     sample_interval_frames: Optional[int] = None,
     enable_chain_tracker: bool = False,
     normalize_fps_30: bool = True,
+    enable_effect_gate: bool = False,
+    effect_gate_persist_sec: Optional[float] = None,
+    enable_effect_visual_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_burst_close_extension: bool = False,
+    burst_chain_gap_max_sec: Optional[float] = None,
+    enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -510,6 +546,67 @@ def collect_lean(
             を防ぐ)。無効化するには明示 --no-normalize-fps-30 (または本関数を
             呼ぶ側で normalize_fps_30=False) を指定する。False 指定時は
             従来挙動・bit-identical (30fps未満動画では stride=1 で常に無変化)。
+        enable_effect_gate: エフェクト時間ゲート (2026-08-03、A/B 計測用)。
+            True で相手連鎖中/自お邪魔着弾直後 window の間、自盤面上段
+            (board_state_machine.EFFECT_GATE_TOP_ROWS) の cell 更新に実秒
+            ベース持続確認を要求する (満杯盤面 47 セル誤り根治の検証用)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        effect_gate_persist_sec: 上記ゲートの確定に必要な持続秒数。
+            None (既定) なら RecognitionPipeline 既定値 (EFFECT_PERSIST_SEC
+            =0.4秒) を使う。enable_effect_gate=False の間は無視される。
+        enable_effect_visual_gate: 案B 4条件AND拡張 (2026-08-04、A/B 計測用)。
+            True で effect_gate_window_active を「(既存時間窓) AND (not 自
+            連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)」に拡張する。
+            enable_effect_gate=False の間は無視される (時間窓自体が発生しない
+            ため)。既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_guard_v2: バーストガード再設計 Stage1 (2026-08-05、A/B
+            計測用、docs/BURST_GUARD_DESIGN_2026-08-05.md)。True で
+            effect_gate_window_active の計算を Schmitt trigger 視覚トリガー
+            + ハード凍結方式に切り替える (案Bの enable_effect_visual_gate
+            経路とは排他)。enable_effect_gate=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_transition_merge_guard: バーストガード Stage1.5 (2026-08-05
+            アーキ追補、A/B 計測用)。True で NON-STABLE→STABLE 遷移merge
+            (`_merge_diff_only`) の直前に、物理的期待値フィルタ
+            (`_filter_transition_new_cnn_for_burst_guard`) を
+            effect_gate_window_active 中のみ適用する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_gate_open_threshold: バーストガード緊急較正 (2026-08-05、
+            factorialバックテスト用)。None (既定) なら BURST_GATE_OPEN_
+            THRESHOLD (=0.97) を使う (bit-identical)。CLOSE も同値運用。
+        enable_hidden_row_burst_guard: バーストガード Stage1.5b (2026-08-05
+            アーキ追補、§11、A/B 計測用)。True で row1-3 凍結中/close直後
+            クールダウン中の infer_hidden_row 呼び出しをスキップし、row0
+            (隠し段) の確信度100%誤色書き込みを防ぐ。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_close_extension: バーストガード §12 close側再設計
+            (2026-08-05 アーキ確定、A/B 計測用)。True で生 is_open と実効
+            active信号 (遷移mergeフィルタ+hard freeze の適用条件) を分離し、
+            close後 BURST_GATE_POST_CLOSE_COOLDOWN_SEC のクールダウン、
+            および相手連鎖継続中の延長 (トリガーではない) を実効側に反映する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_chain_gap_max_sec: バーストガード §12 緊急パラメータ化
+            (2026-08-05、A/B 計測用)。相手連鎖延長の再点火間隔上限を上書き
+            する。None (既定) = モジュール定数 BURST_GATE_OPPONENT_CHAIN_
+            GAP_MAX_SEC (=3.3、bit-identical)。**0.0 を渡すと延長を常に
+            不成立にできる** (差分実験で busy局面の凍結連鎖の犯人と確定した
+            延長機構をA/B測定で切る用途、close後クールダウン0.9秒は無関係
+            のため無改修で残る)。
+        enable_online_hsv_refresh: 長時間劣化修正 A+B (2026-08-06、
+            docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4、
+            A/B 計測用)。True で (A)試合毎に OnlineHsvCalibrator の較正を
+            リセット、(B)inject後もupdate()+再inject判定を継続する
+            (凍結ガード撤廃)。詳細は RecognitionPipeline.__init__ 参照。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_match_transition_debounce: 長時間劣化修正 A' (2026-08-06、
+            docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §4追補)。
+            True で is_active の True/False遷移を対称デバウンスし、
+            MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる
+            _match_active_started_frame/_time の誤再アーム/リセットを防ぐ。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -563,6 +660,17 @@ def collect_lean(
         temporal_smoothing=1,
         load_next_detector=capture_next,
         force_in_match=True,
+        enable_effect_gate=enable_effect_gate,
+        effect_gate_persist_sec=effect_gate_persist_sec,
+        enable_effect_visual_gate=enable_effect_visual_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_burst_close_extension=enable_burst_close_extension,
+        burst_chain_gap_max_sec=burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -638,6 +746,8 @@ def _process_side_lean(
             ChainEvent | None、循環import回避のため object 型ヒント)。
             機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
             (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
+            .mechanism (CHAIN_MECHANISM_* | None) を chain_mechanism として
+            記録する (2026-08-02 Step2 追加、同様に省略可・挙動不変)。
         shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
             渡すと片側の score OCR 破綻でも game_idx がずれない。
             None なら従来の side 独立カウンタ (後方互換)。
@@ -646,11 +756,12 @@ def _process_side_lean(
     if board is None or not _should_emit(state, board, bstate):
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
+    mechanism = getattr(chain_event, "mechanism", None) if chain_event is not None else None
     acc.append(
         board._grid, video_id, side_label,
         round(t_sec, 3), state.game_idx, frame_idx,
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
-        chain_trigger_sec=trigger_sec,
+        chain_trigger_sec=trigger_sec, mechanism=mechanism,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
@@ -748,6 +859,117 @@ def main() -> int:
             "基準データ収集等、既定 ON では困る用途で使う。"
         ),
     )
+    parser.add_argument(
+        "--enable-effect-gate", action="store_true", dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03、A/B 計測用) を有効化する。"
+            "満杯盤面 47 セル誤り根治の効果測定に使う。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-effect-visual-gate", action="store_true",
+        dest="enable_effect_visual_gate",
+        help=(
+            "案B 4条件AND拡張 (2026-08-04、A/B 計測用) を有効化する。"
+            "--enable-effect-gate の時間窓に (not 自連鎖中) AND (not 全消し"
+            "ラッチ) AND (視覚グロー検出) を追加する。--enable-effect-gate が"
+            "無効の間は無視される。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--effect-gate-persist-sec", type=float, default=None,
+        dest="effect_gate_persist_sec",
+        help="エフェクト時間ゲートの確定に必要な持続秒数 (既定 0.4秒)。",
+    )
+    parser.add_argument(
+        "--enable-burst-guard-v2", action="store_true",
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05、A/B 計測用) を有効化する。"
+            "docs/BURST_GUARD_DESIGN_2026-08-05.md。Schmitt trigger視覚トリガー"
+            "+ハード凍結方式に effect_gate_window_active の計算を切り替える"
+            "(--enable-effect-visual-gate とは排他)。--enable-effect-gate が"
+            "無効の間は no-op (警告ログ)。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-transition-merge-guard", action="store_true",
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §10。"
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを"
+            "effect_gate_window_active 中のみ適用する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。"
+            "Schmitt trigger の開窓閾値を上書きする (CLOSE も同値運用)。"
+            "既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-hidden-row-burst-guard", action="store_true",
+        dest="enable_hidden_row_burst_guard",
+        help=(
+            "バーストガード Stage1.5b (2026-08-05 アーキ追補、§11) を有効化"
+            "する。docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 凍結"
+            "中/close直後クールダウン中の infer_hidden_row 呼び出しをスキップし"
+            "row0 (隠し段) の確信度100%%誤色書き込みを防ぐ。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-burst-close-extension", action="store_true",
+        dest="enable_burst_close_extension",
+        help=(
+            "バーストガード §12 close側再設計 (2026-08-05 アーキ確定) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。"
+            "生 is_open と実効active信号 (遷移mergeフィルタ+hard freeze の"
+            "適用条件) を分離し、close後クールダウン (BURST_GATE_POST_"
+            "CLOSE_COOLDOWN_SEC) と相手連鎖継続中の延長を実効側に反映する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-chain-gap-max", type=float, default=None,
+        dest="burst_chain_gap_max_sec",
+        help=(
+            "バーストガード §12 緊急パラメータ化 (2026-08-05)。相手連鎖延長の"
+            "再点火間隔上限を上書きする。既定 None = モジュール定数 3.3。"
+            "0.0 を渡すと延長を常に不成立にできる (差分実験で busy局面の"
+            "凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-online-hsv-refresh", action="store_true",
+        dest="enable_online_hsv_refresh",
+        help=(
+            "長時間劣化修正 A+B (2026-08-06) を有効化する。"
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4。"
+            "試合毎のOnlineHsvCalibrator較正リセット (A) + inject後の凍結"
+            "ガード撤廃 (B) の両方を有効にする。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-transition-debounce", action="store_true",
+        dest="enable_match_transition_debounce",
+        help=(
+            "長時間劣化修正 A' (2026-08-06、§4追補) を有効化する。"
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md。"
+            "is_active の True/False遷移を対称デバウンスし、"
+            "MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる "
+            "_match_active_started_frame/_time の誤再アーム/リセットを防ぐ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -762,6 +984,17 @@ def main() -> int:
         sample_interval_frames=args.sample_interval_frames,
         enable_chain_tracker=args.enable_chain_tracker,
         normalize_fps_30=normalize_fps_30,
+        enable_effect_gate=args.enable_effect_gate,
+        effect_gate_persist_sec=args.effect_gate_persist_sec,
+        enable_effect_visual_gate=args.enable_effect_visual_gate,
+        enable_burst_guard_v2=args.enable_burst_guard_v2,
+        enable_transition_merge_guard=args.enable_transition_merge_guard,
+        burst_gate_open_threshold=args.burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
+        enable_burst_close_extension=args.enable_burst_close_extension,
+        burst_chain_gap_max_sec=args.burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=args.enable_online_hsv_refresh,
+        enable_match_transition_debounce=args.enable_match_transition_debounce,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
