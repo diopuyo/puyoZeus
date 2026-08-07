@@ -1523,6 +1523,20 @@ def main() -> int:
             "(後方互換)。"
         ),
     )
+    # 幽霊セル対策 (2026-08-07): chain/ojama_fall から抜けた直後 N フレームは
+    # セル文字オーバーレイを描画しない (一時汚染の自己修復待ち)。0=無効 (既定・後方互換)。
+    parser.add_argument(
+        "--overlay-transition-hold-frames", type=int, default=0,
+        dest="overlay_transition_hold_frames",
+        help=(
+            "各プレイヤーの状態が CHAIN または OJAMA_FALL から抜けた時点を起点に、"
+            "指定フレーム数の間はそのプレイヤー側のセル文字オーバーレイを描画しない "
+            "(既存の --overlay-stable-only / --overlay-show-states の判定結果に AND "
+            "する追加ガード)。ホールド中に再度 CHAIN/OJAMA_FALL に入るとカウンタは"
+            "リセットされ、次に抜けた時点から改めてホールドが始まる。左右は独立判定。"
+            "既定 0 = 無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # --overlay-show-states の検証・解決 (BoardState への変換、不正値は起動時エラー)
     overlay_show_states: frozenset[BoardState] | None = None
@@ -1871,6 +1885,15 @@ def main() -> int:
     last_p2_state = BoardState.MENU
     # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字を隠す表示モード。
     overlay_stable_only = bool(getattr(args, "overlay_stable_only", False))
+    # 幽霊セル対策 (2026-08-07): chain/ojama_fall 脱出直後の描画ホールド (フレーム数)。
+    overlay_transition_hold_frames = max(
+        0, int(getattr(args, "overlay_transition_hold_frames", 0) or 0)
+    )
+    # ホールド判定対象の state (連鎖中・おじゃま落下中): 抜けた瞬間がホールド起点
+    _TRANSITION_HOLD_STATES = frozenset({BoardState.CHAIN, BoardState.OJAMA_FALL})
+    # 各プレイヤーが最後に _TRANSITION_HOLD_STATES から抜けた frame index (未発生時 None)
+    last_p1_transition_exit_frame: int | None = None
+    last_p2_transition_exit_frame: int | None = None
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -1920,8 +1943,23 @@ def main() -> int:
         # 認識実行 (sample_interval_frames ごと)
         if fi % sample_interval_frames == 0:
             result = pipeline.update(fi, t_sec, frame)
+            # 幽霊セル対策: 更新前の state (= 遷移元) を保持してから上書きする
+            _prev_hold_state_p1 = last_p1_state
+            _prev_hold_state_p2 = last_p2_state
             last_p1_state = result.p1.state
             last_p2_state = result.p2.state
+            # chain/ojama_fall から抜けた瞬間を記録 (ホールド起点)。
+            # 再突入時はカウンタをリセット (次に抜けた時点から改めてホールド)。
+            if (_prev_hold_state_p1 in _TRANSITION_HOLD_STATES
+                    and last_p1_state not in _TRANSITION_HOLD_STATES):
+                last_p1_transition_exit_frame = fi
+            elif last_p1_state in _TRANSITION_HOLD_STATES:
+                last_p1_transition_exit_frame = None
+            if (_prev_hold_state_p2 in _TRANSITION_HOLD_STATES
+                    and last_p2_state not in _TRANSITION_HOLD_STATES):
+                last_p2_transition_exit_frame = fi
+            elif last_p2_state in _TRANSITION_HOLD_STATES:
+                last_p2_transition_exit_frame = None
             # STABLE 時のみ確定盤面を取得 (= indicator 評価で使うのと同じ条件)
             if (result.p1.state == BoardState.STABLE
                     and result.p1.confirmed_board is not None):
@@ -2085,9 +2123,23 @@ def main() -> int:
         # 描画: 6 要素 (フィールド状態・ぷよ色・score・next・OJ送出・隠し段)
         # --overlay-stable-only / --overlay-show-states: 各プレイヤー独立判定で
         # 対象外 state のセル文字を隠す (状態ラベル・盤面枠色は維持、2026-08-07 追加)。
-        if should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states):
+        # --overlay-transition-hold-frames: chain/ojama_fall 脱出直後 N フレームは
+        # 上記判定が True でも AND で追加抑制する (幽霊セル対策、2026-08-07 追加)。
+        _p1_in_hold = (
+            overlay_transition_hold_frames > 0
+            and last_p1_transition_exit_frame is not None
+            and (fi - last_p1_transition_exit_frame) < overlay_transition_hold_frames
+        )
+        _p2_in_hold = (
+            overlay_transition_hold_frames > 0
+            and last_p2_transition_exit_frame is not None
+            and (fi - last_p2_transition_exit_frame) < overlay_transition_hold_frames
+        )
+        if (should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states)
+                and not _p1_in_hold):
             draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
-        if should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states):
+        if (should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states)
+                and not _p2_in_hold):
             draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
         draw_state_label(
             frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
