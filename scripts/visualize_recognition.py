@@ -132,6 +132,24 @@ def draw_cell_overlay(
             )
 
 
+def should_draw_cell_overlay(
+    state: BoardState,
+    overlay_stable_only: bool,
+    overlay_show_states: frozenset[BoardState] | None,
+) -> bool:
+    """セル文字オーバーレイを描画すべきか判定する (2026-08-07 追加).
+
+    --overlay-show-states と --overlay-stable-only は argparse 側で併用禁止のため
+    ここでは overlay_show_states を優先判定するだけでよい。両方未指定なら常時描画
+    (既定・後方互換)。
+    """
+    if overlay_show_states is not None:
+        return state in overlay_show_states
+    if overlay_stable_only:
+        return state == BoardState.STABLE
+    return True
+
+
 def draw_state_label(
     frame: np.ndarray, state: BoardState, roi_x: int, roi_y: int,
     score: int = 0, label_prefix: str = "",
@@ -1480,7 +1498,50 @@ def main() -> int:
             "防ぐ。既定は無効 (後方互換)。"
         ),
     )
+    # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字オーバーレイを
+    # 非表示にする表示モード。状態ラベル (1P=chain 等) や盤面枠色は維持する。
+    parser.add_argument(
+        "--overlay-stable-only", action="store_true", default=False,
+        dest="overlay_stable_only",
+        help=(
+            "各プレイヤーの状態が STABLE でない間、そのプレイヤー側のセル文字"
+            "オーバーレイ (R/G/B/Y/O/? 等) を描画しない。左右は独立判定 "
+            "(1PがCHAINでもP2がSTABLEならP2側は描画する)。状態表示テキストは "
+            "維持する。既定は無効 (後方互換、従来通り常時描画)。"
+        ),
+    )
+    # YouTubeデモ素材用 (2026-08-07): 任意の state 集合でセル文字オーバーレイの
+    # 表示/非表示を切り替える汎用モード。--overlay-stable-only の一般化。
+    parser.add_argument(
+        "--overlay-show-states", type=str, default=None,
+        dest="overlay_show_states",
+        help=(
+            "カンマ区切りの BoardState 名 (小文字、例: stable,tsumo_fall) を指定する。"
+            "各プレイヤーの現在状態がこの集合に含まれる場合のみそのプレイヤー側の"
+            "セル文字オーバーレイを描画する (左右は独立判定)。状態表示テキストは"
+            "維持する。--overlay-stable-only とは併用不可。未指定時は従来動作"
+            "(後方互換)。"
+        ),
+    )
     args = parser.parse_args()
+    # --overlay-show-states の検証・解決 (BoardState への変換、不正値は起動時エラー)
+    overlay_show_states: frozenset[BoardState] | None = None
+    if args.overlay_show_states is not None:
+        if getattr(args, "overlay_stable_only", False):
+            parser.error(
+                "--overlay-show-states と --overlay-stable-only は併用不可"
+            )
+        _state_by_name = {s.name.lower(): s for s in BoardState}
+        _requested_names = [
+            n.strip().lower() for n in args.overlay_show_states.split(",") if n.strip()
+        ]
+        _invalid_names = [n for n in _requested_names if n not in _state_by_name]
+        if _invalid_names:
+            parser.error(
+                f"--overlay-show-states に不正な状態名: {_invalid_names} "
+                f"(有効値: {sorted(_state_by_name)})"
+            )
+        overlay_show_states = frozenset(_state_by_name[n] for n in _requested_names)
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
         args.hsv_state = resolve_hsv_path(args.video)
@@ -1808,6 +1869,8 @@ def main() -> int:
     sample_interval_frames = max(1, int(round(args.sample_interval * fps)))
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
+    # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字を隠す表示モード。
+    overlay_stable_only = bool(getattr(args, "overlay_stable_only", False))
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -2020,8 +2083,12 @@ def main() -> int:
         last_p2_board = last_p2_eval_board
 
         # 描画: 6 要素 (フィールド状態・ぷよ色・score・next・OJ送出・隠し段)
-        draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
-        draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
+        # --overlay-stable-only / --overlay-show-states: 各プレイヤー独立判定で
+        # 対象外 state のセル文字を隠す (状態ラベル・盤面枠色は維持、2026-08-07 追加)。
+        if should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states):
+            draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
+        if should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states):
+            draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
         draw_state_label(
             frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
             score=last_p1_score or 0, label_prefix="1P:",
