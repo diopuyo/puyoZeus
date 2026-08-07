@@ -1423,6 +1423,63 @@ def main() -> int:
              "t_sec / p1_state / p2_state / score_p1/p2 / pending / net_balance / "
              "total_dropped / confidence を記録。 省略時は保存しない。",
     )
+    # 全域無悪化ゲート (2026-08-07): バーストガード系フラグ6個の配線。
+    # scripts/collect_boards_lean.py / scripts/measure_stable_cell_acc.py
+    # (7335c24) と同一パターン (dest 名も同一、デフォルト全 OFF で
+    # bit-identical、YouTubeデモ素材作成用)。
+    parser.add_argument(
+        "--enable-effect-gate", action="store_true", default=False,
+        dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03) を有効化する。満杯盤面 誤り根治用。 "
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-burst-guard-v2", action="store_true", default=False,
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05) を有効化する。 "
+            "Schmitt trigger 視覚トリガー + ハード凍結。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-transition-merge-guard", action="store_true", default=False,
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05) を有効化する。 "
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを適用する。 "
+            "--enable-burst-guard-v2 が無効の間は no-op。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード Schmitt trigger の開窓閾値を上書きする "
+            "(CLOSE も同値運用)。既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+            "全域無悪化ゲート採用値は 0.954。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-hidden-row-burst-guard", action="store_true", default=False,
+        dest="enable_hidden_row_burst_guard",
+        help=(
+            "バーストガード Stage1.5b (2026-08-05、§11) を有効化する。 "
+            "row1-3 凍結中/close直後クールダウン中の infer_hidden_row 呼び出しを "
+            "スキップし row0 誤色書き込みを防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-transition-debounce", action="store_true", default=False,
+        dest="enable_match_transition_debounce",
+        help=(
+            "長時間劣化修正 A' (2026-08-06) を有効化する。 "
+            "is_active の True/False遷移を対称デバウンスし、MATCH_TRANSITION_"
+            "DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる誤再アーム/リセットを"
+            "防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
@@ -1543,6 +1600,14 @@ def main() -> int:
         enable_gravity_settle_state=args.enable_gravity_settle_state,
         # 案γ (2026-06-06): --slide-override-ojama-hold で有効化
         enable_slide_override_ojama_hold=args.enable_slide_override_ojama_hold,
+        # 全域無悪化ゲート (2026-08-07): バーストガード系フラグ6個。
+        # scripts/collect_boards_lean.py と同一パターン (末尾追加)。
+        enable_effect_gate=args.enable_effect_gate,
+        enable_burst_guard_v2=args.enable_burst_guard_v2,
+        enable_transition_merge_guard=args.enable_transition_merge_guard,
+        burst_gate_open_threshold=args.burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
+        enable_match_transition_debounce=args.enable_match_transition_debounce,
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
