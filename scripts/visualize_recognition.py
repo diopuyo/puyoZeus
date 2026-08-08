@@ -238,14 +238,21 @@ def update_cell_stability_hide_mask(
 
 def draw_state_label(
     frame: np.ndarray, state: BoardState, roi_x: int, roi_y: int,
-    score: int = 0, label_prefix: str = "",
+    score: int = 0, label_prefix: str = "", chain_count: int | None = None,
 ) -> None:
     """ROI 上方に state ラベルを描画する.
 
     隠し段帯 (HIDDEN_BAND_HEIGHT) の上方に配置し帯と被らないようオフセットを取る。
+
+    Args:
+        chain_count: 連鎖数 (物理推論側の ChainEvent.chain_count)。
+            CHAIN 表示中かつ非 None のときだけ "chain 9れんさ" のように
+            併記する (2026-08-08 追加、 省略時は従来通りの表示)。
     """
     color = STATE_COLOR.get(state, (255, 255, 255))
     text = f"{label_prefix}{state.value}"
+    if chain_count is not None and state == BoardState.CHAIN and chain_count > 0:
+        text += f" {chain_count}renza"
     if score > 0:
         text += f" score={score}"
     # 隠し段帯より上にラベルを配置
@@ -264,6 +271,48 @@ def draw_state_label(
         frame, (roi_x, roi_y), (roi_x + ROI_W, roi_y + ROI_H),
         color, 2,
     )
+
+
+# 連鎖表示ホールド (2026-08-08、user要望「連鎖中はずっと chain であってほしい」)。
+# GRAVITY_SETTLE は連鎖の段間で重力落下を待つ状態であり、 連鎖の一部である。
+# 実測 (dio_vs_ts_m01_clip t=45-75s) では連鎖中の離脱 18 回が **全て**
+# GRAVITY_SETTLE 起点で、 うち 6 回はそこから OJAMA_FALL へ抜けていた
+# (自連鎖中に自盤面へおじゃまは降らないので誤判定)。
+_CHAIN_DISPLAY_STATES: frozenset[BoardState] = frozenset({
+    BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+})
+
+
+def resolve_chain_display_state(
+    state: BoardState,
+    chain_end_sec: float | None,
+    time_sec: float,
+    enabled: bool,
+) -> BoardState:
+    """連鎖中の表示 state を CHAIN に固定して返す (表示専用).
+
+    連鎖の継続判定はヒューリスティックな時間ホールドではなく、 物理推論側が
+    出す ChainEvent.end_sec (連鎖終了予測時刻) を使う。 連鎖中に再検知が
+    起きると end_sec は延びるため、 多段連鎖でも取りこぼさない。
+
+    Args:
+        state: 認識が返した実 state。
+        chain_end_sec: 直近 ChainEvent の end_sec (None = 連鎖情報なし)。
+        time_sec: 現在時刻 [秒]。
+        enabled: False なら実 state をそのまま返す (既定・後方互換)。
+
+    Returns:
+        表示に使う BoardState。
+    """
+    if not enabled:
+        return state
+    # GRAVITY_SETTLE は連鎖の一部なので常に CHAIN として見せる
+    if state in _CHAIN_DISPLAY_STATES:
+        return BoardState.CHAIN
+    # 物理推論の連鎖終了時刻までは、 途中で別 state に落ちても CHAIN を維持する
+    if chain_end_sec is not None and time_sec <= chain_end_sec:
+        return BoardState.CHAIN
+    return state
 
 
 def draw_next_overlay(
@@ -1677,6 +1726,27 @@ def main() -> int:
     # デモ動画用 (2026-08-08 追加): おじゃま予告オーバーレイ (盤面下部パネル 1P/2P +
     # 中央おじゃま優勢バー) を非表示にする。有利不利判定の表示 (state label / score 等)
     # には影響しない。既定 False = 従来通り表示 (後方互換)。
+    # 連鎖表示ホールド (2026-08-08、user要望「連鎖中はずっと chain であってほしい」)。
+    # 連鎖の段間重力待ち (GRAVITY_SETTLE) を CHAIN として表示し、さらに物理推論
+    # 側の ChainEvent.end_sec (連鎖終了予測時刻) までは途中で別 state に落ちても
+    # CHAIN 表示を維持する。実測では連鎖中の離脱 18 回が全て GRAVITY_SETTLE 起点。
+    parser.add_argument(
+        "--overlay-chain-hold-until-end", action="store_true", default=False,
+        dest="overlay_chain_hold_until_end",
+        help=(
+            "連鎖中は状態ラベルを chain のまま維持する。GRAVITY_SETTLE を chain "
+            "として表示し、物理推論の連鎖終了時刻 (ChainEvent.end_sec) までは "
+            "途中の誤遷移でも chain を保つ。既定 False = 従来通り実 state 表示。"
+        ),
+    )
+    parser.add_argument(
+        "--overlay-show-chain-count", action="store_true", default=False,
+        dest="overlay_show_chain_count",
+        help=(
+            "chain 表示中に物理推論側の連鎖数を併記する (例: 1P:chain 9renza)。"
+            "既定 False = 従来通り連鎖数なし。"
+        ),
+    )
     parser.add_argument(
         "--hide-ojama-forecast", action="store_true", default=False,
         dest="hide_ojama_forecast",
@@ -2076,6 +2146,11 @@ def main() -> int:
         print(f"[viz] ojama_accounting log → {args.dump_ojama_accounting}")
 
     sample_interval_frames = max(1, int(round(args.sample_interval * fps)))
+    # 連鎖表示ホールド用 (2026-08-08): 直近 ChainEvent の終了予測時刻と連鎖数。
+    last_p1_chain_end_sec: float | None = None
+    last_p2_chain_end_sec: float | None = None
+    last_p1_chain_count: int | None = None
+    last_p2_chain_count: int | None = None
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
     # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字を隠す表示モード。
@@ -2107,6 +2182,13 @@ def main() -> int:
     # デモ動画用 (2026-08-08 追加): おじゃま予告パネル + 優勢バーの非表示フラグ。
     # 有利不利判定系の描画 (draw_state_label 等) には適用しない。
     hide_ojama_forecast = bool(getattr(args, "hide_ojama_forecast", False))
+    # 連鎖表示ホールド / 連鎖数併記 (2026-08-08、表示専用・認識には影響しない)
+    overlay_chain_hold_until_end = bool(
+        getattr(args, "overlay_chain_hold_until_end", False)
+    )
+    overlay_show_chain_count = bool(
+        getattr(args, "overlay_show_chain_count", False)
+    )
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -2161,6 +2243,44 @@ def main() -> int:
             _prev_hold_state_p2 = last_p2_state
             last_p1_state = result.p1.state
             last_p2_state = result.p2.state
+            # 連鎖表示ホールド (2026-08-08): 物理推論側の ChainEvent から
+            # 連鎖終了予測時刻と連鎖数を拾う。連鎖中の再検知で end_sec が
+            # 延びるため、多段連鎖でも最後まで CHAIN 表示を保てる。
+            # 連鎖が終わっていれば次の連鎖に備えて連鎖数をリセットする。
+            # (リセットしないと前の連鎖の値が次の連鎖に持ち越される)
+            if (last_p1_chain_end_sec is not None
+                    and t_sec > last_p1_chain_end_sec):
+                last_p1_chain_count = None
+            if (last_p2_chain_end_sec is not None
+                    and t_sec > last_p2_chain_end_sec):
+                last_p2_chain_count = None
+            _ev1 = getattr(result.p1, "chain_event", None)
+            if _ev1 is not None:
+                _end1 = getattr(_ev1, "end_sec", None)
+                if _end1 is not None and (
+                    last_p1_chain_end_sec is None or _end1 > last_p1_chain_end_sec
+                ):
+                    last_p1_chain_end_sec = float(_end1)
+                # 連鎖中は最大値を保持する。 発火イベントは連鎖中に何度も
+                # 再検知され、 後発イベントが chain_count=1 を持つことがある
+                # ため、 単純な上書きだと 9 連鎖が 1 に化ける (2026-08-08 実測)。
+                _cnt1 = getattr(_ev1, "chain_count", None)
+                if _cnt1 is not None and (
+                    last_p1_chain_count is None or int(_cnt1) > last_p1_chain_count
+                ):
+                    last_p1_chain_count = int(_cnt1)
+            _ev2 = getattr(result.p2, "chain_event", None)
+            if _ev2 is not None:
+                _end2 = getattr(_ev2, "end_sec", None)
+                if _end2 is not None and (
+                    last_p2_chain_end_sec is None or _end2 > last_p2_chain_end_sec
+                ):
+                    last_p2_chain_end_sec = float(_end2)
+                _cnt2 = getattr(_ev2, "chain_count", None)
+                if _cnt2 is not None and (
+                    last_p2_chain_count is None or int(_cnt2) > last_p2_chain_count
+                ):
+                    last_p2_chain_count = int(_cnt2)
             # chain/ojama_fall から抜けた瞬間を記録 (ホールド起点)。
             # 再突入時はカウンタをリセット (次に抜けた時点から改めてホールド)。
             if (_prev_hold_state_p1 in _TRANSITION_HOLD_STATES
@@ -2386,13 +2506,24 @@ def main() -> int:
             draw_cell_overlay(
                 frame, last_p2_board, P2_ROI_X, P2_ROI_Y, hide_mask=_p2_cell_hide_mask,
             )
-        draw_state_label(
-            frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
-            score=last_p1_score or 0, label_prefix="1P:",
+        # 連鎖表示ホールド (2026-08-08): --overlay-chain-hold-until-end。
+        # GRAVITY_SETTLE を CHAIN として見せ、物理推論の連鎖終了時刻までは
+        # 途中で別 state に落ちても CHAIN 表示を維持する (既定 OFF)。
+        _disp_p1_state = resolve_chain_display_state(
+            last_p1_state, last_p1_chain_end_sec, t_sec, overlay_chain_hold_until_end,
+        )
+        _disp_p2_state = resolve_chain_display_state(
+            last_p2_state, last_p2_chain_end_sec, t_sec, overlay_chain_hold_until_end,
         )
         draw_state_label(
-            frame, last_p2_state, P2_ROI_X, P2_ROI_Y,
+            frame, _disp_p1_state, P1_ROI_X, P1_ROI_Y,
+            score=last_p1_score or 0, label_prefix="1P:",
+            chain_count=last_p1_chain_count if overlay_show_chain_count else None,
+        )
+        draw_state_label(
+            frame, _disp_p2_state, P2_ROI_X, P2_ROI_Y,
             score=last_p2_score or 0, label_prefix="2P:",
+            chain_count=last_p2_chain_count if overlay_show_chain_count else None,
         )
         draw_next_overlay(
             frame, last_p1_next, last_p1_dnext, P1_ROI_X, P1_ROI_Y, label_prefix="1P:",
