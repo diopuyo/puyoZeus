@@ -8,7 +8,9 @@ export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 IN=data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4
 MODEL=models/cnn_finetune_olRyxDGacbg_demo_v3_2026-08-07.pt
-BASEFLAGS="--cnn-model $MODEL --enable-effect-gate --enable-burst-guard-v2 --enable-transition-merge-guard --burst-gate-open-threshold 0.954 --enable-hidden-row-burst-guard --enable-match-transition-debounce --enable-asymmetric-recovery-min-frames --recovery-add-min-frames 3 --overlay-cell-stability-frames 14"
+# 2026-08-08 追記: --hide-ojama-forecast でおじゃま予告パネル(1P/2P)+優勢バーを非表示
+# (userレビュー要望、フィールド下部のお邪魔オーバーレイ削除。有利不利判定表示は影響なし)
+BASEFLAGS="--cnn-model $MODEL --enable-effect-gate --enable-burst-guard-v2 --enable-transition-merge-guard --burst-gate-open-threshold 0.954 --enable-hidden-row-burst-guard --enable-match-transition-debounce --enable-asymmetric-recovery-min-frames --recovery-add-min-frames 3 --overlay-cell-stability-frames 14 --hide-ojama-forecast"
 
 CMD_A="nice -n 19 ./venv/bin/python -u -m scripts.visualize_recognition --video $IN --output data/verify/youtube_demo_2026-08-07/dio_vs_ts_FINAL5a_all_states_viz.mp4 $BASEFLAGS"
 CMD_B="nice -n 19 ./venv/bin/python -u -m scripts.visualize_recognition --video $IN --output data/verify/youtube_demo_2026-08-07/dio_vs_ts_FINAL5b_stable_tsumo_viz.mp4 $BASEFLAGS --overlay-show-states stable,tsumo_fall --overlay-state-debounce-frames 10"

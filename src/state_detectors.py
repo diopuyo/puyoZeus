@@ -392,7 +392,24 @@ class GravitySettleDetector:
         本 detector は GRAVITY_SETTLE state を返さないため遷移は起きない。
         本 detector が登録されていても GRAVITY_SETTLE state に入らなければ
         detect は常に None を返し、既存挙動に影響なし。
+
+    バグC 修正 (2026-08-08):
+        `_reset_settle()` は本 detector 自身の STABLE 返却分岐 (settle 完了)
+        とタイムアウト分岐でしか呼ばれない。 他 detector (例: OjamaVisualDetector
+        のバグB) に GRAVITY_SETTLE を横取りされて弾き出された場合、
+        内部カウンタ (_settle_start_frame 等) が残留し、次回 GRAVITY_SETTLE
+        再進入時に古い開始時刻で elapsed を計算し 1 frame で誤って STABLE 化
+        する (連鎖途中の中途半端な盤面が確定 → 4連結ゲートが本物の
+        chain_event を誤拒否)。
+        enable_gravity_settle_reset_on_exit=True でこの残留を防ぐ。
+        default False = 既存挙動と完全 bit-identical。
     """
+
+    # 外部フラグ: RecognitionPipeline 側から __init__ 後に代入する。
+    # バグC 修正 (2026-08-08): GRAVITY_SETTLE を追跡中のまま他 detector に
+    # 横取りされて state が抜けたことを検知したら内部カウンタをリセットする。
+    # default False = 既存挙動と完全 bit-identical (backwards compat)。
+    enable_gravity_settle_reset_on_exit: bool = False
 
     # 内部 state (init から除外)
     _settle_start_time: float = field(default=0.0, init=False, repr=False)
@@ -420,6 +437,19 @@ class GravitySettleDetector:
             # ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返した翌 frame
             # で ctx.state == GRAVITY_SETTLE になる。
             # ここでは GRAVITY_SETTLE 以外のときリセットは不要 (state 管理は reset() 担当)。
+            #
+            # バグC 修正 (2026-08-08): ただし他 detector に横取りされて
+            # GRAVITY_SETTLE から弾き出された場合 (= 自身の成功パス
+            # _reset_settle() を経由せず _settle_start_frame が残留したまま
+            # ctx.state が変わった場合) は、ここで検知してリセットする。
+            # 検知しないと次回 GRAVITY_SETTLE 再進入時に古い開始時刻で
+            # elapsed を計算し、1 frame で誤って STABLE 化する。
+            # default False = 既存挙動と完全 bit-identical (backwards compat)。
+            if (
+                self.enable_gravity_settle_reset_on_exit
+                and self._settle_start_frame >= 0
+            ):
+                self._reset_settle()
             return None
 
         # GRAVITY_SETTLE state に初めて入ったフレームを記録

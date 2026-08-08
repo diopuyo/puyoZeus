@@ -738,3 +738,54 @@ def test_board_settle_timeout_exit_preserves_prev_top_ojama_count_no_reentry() -
         assert det.detect(ctx, sig) is None, (
             f"frame {frame_idx}: timeout-exit 後に誤って OJAMA_FALL へ再突入した"
         )
+
+
+# ============================
+# 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火ガード
+# ============================
+
+
+def test_bugfix_b_gravity_settle_guard_blocks_entry_when_enabled() -> None:
+    """バグB 修正: enable_ojama_entry_gravity_settle_guard=True なら
+    GRAVITY_SETTLE 中に ROI お邪魔が観測されても OJAMA_FALL に遷移しない。
+
+    連鎖の段間重力待ち (GRAVITY_SETTLE) 中の乗っ取りを防ぐことで、
+    GravitySettleDetector の内部カウンタ残留 (バグC) を誘発しない。
+    """
+    det = OjamaVisualDetector(enable_ojama_entry_gravity_settle_guard=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    # OJAMA_CONSEC_THRESH を超える frame 数を投入しても発火しないはず
+    # (フラグ OFF なら test_bugfix_b_gravity_settle_guard_disabled_reproduces_bug
+    # で同条件が OJAMA_FALL を返すことを確認する)。
+    for i in range(OJAMA_CONSEC_THRESH + 3):
+        ctx = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=i)
+        sig = DetectorSignals(
+            time_sec=float(i) / 30.0, cnn_board=ojama_board, is_match_active=True,
+        )
+        result = det.detect(ctx, sig)
+        assert result is None, (
+            f"frame {i}: ガード有効時は GRAVITY_SETTLE 中に OJAMA_FALL へ"
+            " 遷移してはならない"
+        )
+
+
+def test_bugfix_b_gravity_settle_guard_disabled_reproduces_bug() -> None:
+    """回帰防止 (backwards compat): フラグ default False (未指定) では
+    従来通り GRAVITY_SETTLE 中でも OJAMA_FALL へ発火する (旧挙動 bit-identical)。
+    """
+    det = OjamaVisualDetector()  # enable_ojama_entry_gravity_settle_guard=False (既定)
+    ojama_board = _board_with_ojama_top(2)
+
+    results = []
+    for i in range(OJAMA_CONSEC_THRESH + 1):
+        ctx = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=i)
+        sig = DetectorSignals(
+            time_sec=float(i) / 30.0, cnn_board=ojama_board, is_match_active=True,
+        )
+        results.append(det.detect(ctx, sig))
+
+    assert BoardState.OJAMA_FALL in results, (
+        "フラグ OFF (既定) では GRAVITY_SETTLE 中でも旧挙動通り OJAMA_FALL へ"
+        " 発火するはず (backwards compat 回帰防止)"
+    )
