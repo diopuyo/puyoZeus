@@ -115,27 +115,47 @@ class TestChainCountDistribution:
         assert d.n_expanded_cells == 0
         assert d.covered_probability == 1.0
 
-    def test_hidden_color_changes_chain_count(self) -> None:
-        """隠し段の中身で連鎖数が変わる盤面では分布が割れること。
+    def test_hidden_puyo_does_not_pop_in_place(self) -> None:
+        """13段目のぷよはその場で 4 連結しても消えないこと (幽霊連鎖のルール)。
 
-        列0 の可視最上段から 3 段を赤で揃えておくと、 隠し段が赤なら
-        4 連結して消え、 別色なら消えない。 つまり隠し段の中身が
-        連鎖数を左右する状況を作る。
+        列0 の row1..3 を赤にし、 隠し段にも赤が入るケースを作る。
+        素朴に数えれば 4 連結だが、 **13段目は消去対象外**なので消えない。
+        13段目のぷよは下が空いて落ちてきて初めて消去対象になる。
         """
         g = _empty_grid()
-        # 列0: row1..3 を赤 (3 連結)。 隠し段が赤なら 4 連結で消える。
         for row in range(1, 4):
             g[row][0] = COLOR_RED
-        # それ以下は青と緑を交互にして、 それ自体では消えないようにする
-        # (同色を積むとその時点で消えてしまい、 隠し段の影響が見えなくなる)
         for row in range(4, BOARD_ROWS):
             g[row][0] = COLOR_BLUE if row % 2 == 0 else COLOR_GREEN
         b = _board(g)
         h = build_hidden_row_probabilities(b)
         assert 0 in h.uncertain_cols
         d = compute_chain_count_distribution(b, h)
-        # 赤が入る枝と入らない枝で連鎖数が異なる → 2 通り以上に割れる
-        assert len(d.probabilities) >= 2
+        # 隠し段に何が入っても、 その場では 4 連結が成立しない = 連鎖 0 のみ
+        assert d.probabilities == {0: 1.0}
+
+    def test_ghost_chain_hidden_puyo_falls_and_pops(self) -> None:
+        """13段目のぷよが落下してから消えること (幽霊連鎖そのもの)。
+
+        列0 に「可視段で消える赤の塊」を作り、 その上 (12段目) に緑を 3 つ、
+        隠し段にも緑が来る形にする。 赤が消えると緑が 1 段落ち、
+        緑 4 つが 12 段目以下で揃って消える = 2 連鎖目が成立する。
+        """
+        g = _empty_grid()
+        # 列0 の下部: 赤 4 つ (1 連鎖目、 単独で消える)
+        for row in range(9, 13):
+            g[row][0] = COLOR_RED
+        # その上: 緑 3 つ (row 6,7,8)。 隠し段の緑が落ちてくれば 4 連結
+        for row in range(6, 9):
+            g[row][0] = COLOR_GREEN
+        # 可視最上段 (row1) を埋めて隠し段を不確定にする
+        for row in range(1, 6):
+            g[row][0] = COLOR_GREEN
+        b = _board(g)
+        h = build_hidden_row_probabilities(b)
+        d = compute_chain_count_distribution(b, h)
+        # 緑が 8 つ縦に並ぶので赤消去前から緑は既に 4 連結 → 連鎖は必ず起きる
+        assert d.most_likely >= 1
         assert abs(sum(d.probabilities.values()) - 1.0) < 1e-6
 
     def test_probabilities_sum_to_one(self) -> None:

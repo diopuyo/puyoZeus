@@ -1747,6 +1747,17 @@ def main() -> int:
             "既定 False = 従来通り連鎖数なし。"
         ),
     )
+    # デモ用 (2026-08-08 user要望): 盤面セルの色記号 (R/B/G/Y/P/おじゃま) を
+    # 一切描かない。 状態ラベル・連鎖数・盤面枠は従来通り出るので「認識が
+    # 追従していること」は見せつつ、 元の試合映像を見やすく保てる。
+    parser.add_argument(
+        "--hide-cell-overlay", action="store_true", default=False,
+        dest="hide_cell_overlay",
+        help=(
+            "盤面セルの色記号オーバーレイを描画しない (状態ラベル・連鎖数・"
+            "枠は維持)。既定 False = 従来通り描画。"
+        ),
+    )
     parser.add_argument(
         "--hide-ojama-forecast", action="store_true", default=False,
         dest="hide_ojama_forecast",
@@ -2151,6 +2162,9 @@ def main() -> int:
     last_p2_chain_end_sec: float | None = None
     last_p1_chain_count: int | None = None
     last_p2_chain_count: int | None = None
+    # 前フレームの表示状態 (連鎖数リセットの基準に使う)
+    last_p1_display_state: BoardState | None = None
+    last_p2_display_state: BoardState | None = None
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
     # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字を隠す表示モード。
@@ -2182,6 +2196,8 @@ def main() -> int:
     # デモ動画用 (2026-08-08 追加): おじゃま予告パネル + 優勢バーの非表示フラグ。
     # 有利不利判定系の描画 (draw_state_label 等) には適用しない。
     hide_ojama_forecast = bool(getattr(args, "hide_ojama_forecast", False))
+    # 盤面セルの色記号を一切描かないモード (2026-08-08 user要望)
+    hide_cell_overlay = bool(getattr(args, "hide_cell_overlay", False))
     # 連鎖表示ホールド / 連鎖数併記 (2026-08-08、表示専用・認識には影響しない)
     overlay_chain_hold_until_end = bool(
         getattr(args, "overlay_chain_hold_until_end", False)
@@ -2246,14 +2262,21 @@ def main() -> int:
             # 連鎖表示ホールド (2026-08-08): 物理推論側の ChainEvent から
             # 連鎖終了予測時刻と連鎖数を拾う。連鎖中の再検知で end_sec が
             # 延びるため、多段連鎖でも最後まで CHAIN 表示を保てる。
-            # 連鎖が終わっていれば次の連鎖に備えて連鎖数をリセットする。
-            # (リセットしないと前の連鎖の値が次の連鎖に持ち越される)
-            if (last_p1_chain_end_sec is not None
-                    and t_sec > last_p1_chain_end_sec):
+            # 連鎖数のリセットは **表示上の連鎖が終わった時点** に紐づける
+            # (2026-08-08 修正)。 当初は ChainEvent.end_sec (連鎖終了の
+            # 予測時刻) だけを基準にしていたが、 実測で end_sec は実際の連鎖
+            # より短く出る (t=24.70 発火・end=25.30 に対し状態機械は 27.43 まで
+            # chain を維持) ため、 連鎖の途中で連鎖数が消える不整合が出た。
+            # 前フレームの表示状態が chain でなくなった = 連鎖が終わった、
+            # と判断する (end_sec と状態機械のどちらか長い方まで保持される)。
+            if (last_p1_display_state is not None
+                    and last_p1_display_state != BoardState.CHAIN):
                 last_p1_chain_count = None
-            if (last_p2_chain_end_sec is not None
-                    and t_sec > last_p2_chain_end_sec):
+                last_p1_chain_end_sec = None
+            if (last_p2_display_state is not None
+                    and last_p2_display_state != BoardState.CHAIN):
                 last_p2_chain_count = None
+                last_p2_chain_end_sec = None
             _ev1 = getattr(result.p1, "chain_event", None)
             if _ev1 is not None:
                 _end1 = getattr(_ev1, "end_sec", None)
@@ -2492,14 +2515,14 @@ def main() -> int:
             and last_p2_transition_exit_frame is not None
             and (fi - last_p2_transition_exit_frame) < overlay_transition_hold_frames
         )
-        if (should_draw_cell_overlay_debounced(
+        if (not hide_cell_overlay and should_draw_cell_overlay_debounced(
                 last_p1_state, overlay_stable_only, overlay_show_states,
                 last_p1_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
             ) and not _p1_in_hold):
             draw_cell_overlay(
                 frame, last_p1_board, P1_ROI_X, P1_ROI_Y, hide_mask=_p1_cell_hide_mask,
             )
-        if (should_draw_cell_overlay_debounced(
+        if (not hide_cell_overlay and should_draw_cell_overlay_debounced(
                 last_p2_state, overlay_stable_only, overlay_show_states,
                 last_p2_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
             ) and not _p2_in_hold):
@@ -2525,6 +2548,9 @@ def main() -> int:
             score=last_p2_score or 0, label_prefix="2P:",
             chain_count=last_p2_chain_count if overlay_show_chain_count else None,
         )
+        # 次フレームの連鎖数リセット判定に使うため表示状態を保持する
+        last_p1_display_state = _disp_p1_state
+        last_p2_display_state = _disp_p2_state
         draw_next_overlay(
             frame, last_p1_next, last_p1_dnext, P1_ROI_X, P1_ROI_Y, label_prefix="1P:",
         )
