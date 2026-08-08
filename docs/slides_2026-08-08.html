@@ -1,0 +1,464 @@
+<title>ぷよぷよ有利不利判定システム — 発表スライド</title>
+<style>
+  /* ============================================================
+     配色: 盤面の暗い紫紺を地とし、1P=青 / 2P=紅 という
+     ゲーム画面そのものの対立色を意味色として使う。
+     強調の黄は連鎖テロップ「◯れんさ!」の色から取った。
+     ニュートラルは紫に寄せた灰 (無彩色の既製グレーは使わない)。
+     ============================================================ */
+  :root {
+    --ground: #F7F5FA;
+    --surface: #FFFFFF;
+    --surface-2: #EFEBF5;
+    --ink: #191327;
+    --ink-2: #4A4160;
+    --muted: #7C7192;
+    --line: #DCD5E8;
+    --p1: #1F6FD0;
+    --p2: #D62B58;
+    --accent: #B8860B;
+    --accent-ink: #6B4E00;
+    --good: #1B7A4B;
+    --warn: #A85A00;
+    --grid-dot: rgba(25, 19, 39, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #100C1A;
+      --surface: #191330;
+      --surface-2: #221A3D;
+      --ink: #F2EEF9;
+      --ink-2: #C7BEDC;
+      --muted: #9187A8;
+      --line: #2E2549;
+      --p1: #5EA8FF;
+      --p2: #FF6E90;
+      --accent: #F5C542;
+      --accent-ink: #F5C542;
+      --good: #4ED08A;
+      --warn: #FFA94D;
+      --grid-dot: rgba(242, 238, 249, 0.09);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #100C1A;
+    --surface: #191330;
+    --surface-2: #221A3D;
+    --ink: #F2EEF9;
+    --ink-2: #C7BEDC;
+    --muted: #9187A8;
+    --line: #2E2549;
+    --p1: #5EA8FF;
+    --p2: #FF6E90;
+    --accent: #F5C542;
+    --accent-ink: #F5C542;
+    --good: #4ED08A;
+    --warn: #FFA94D;
+    --grid-dot: rgba(242, 238, 249, 0.09);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+      "Yu Gothic Medium", "Yu Gothic", Meiryo, system-ui, sans-serif;
+    font-feature-settings: "palt" 1;
+    line-height: 1.75;
+    overflow-x: hidden;
+  }
+
+  .deck {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 56px);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(28px, 5vw, 64px);
+  }
+
+  /* --- スライド枠。盤面のドット格子を地紋に敷く --- */
+  .slide {
+    position: relative;
+    background:
+      radial-gradient(var(--grid-dot) 1.5px, transparent 1.6px) 0 0 / 34px 34px,
+      var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: clamp(28px, 4.5vw, 60px);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 2.4vw, 28px);
+    min-height: 0;
+  }
+  .slide:first-child { margin-top: clamp(28px, 5vw, 64px); }
+  .slide:last-child { margin-bottom: clamp(40px, 7vw, 96px); }
+
+  /* 左端の細い色帯 = そのスライドが誰の話か (1P側/2P側/中立) */
+  .slide::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--line);
+    border-radius: 3px 0 0 3px;
+  }
+  .slide[data-side="p1"]::before { background: var(--p1); }
+  .slide[data-side="p2"]::before { background: var(--p2); }
+  .slide[data-side="key"]::before { background: var(--accent); }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 0.9em;
+  }
+  .eyebrow .num {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 5.2vw, 3.4rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin: 0;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: clamp(1.4rem, 3.1vw, 2.1rem);
+    line-height: 1.35;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  h3 {
+    font-size: 1rem;
+    margin: 0;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+  .lead { font-size: clamp(1rem, 1.6vw, 1.15rem); color: var(--ink); }
+  strong { color: var(--ink); font-weight: 700; }
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: clamp(16px, 2.4vw, 28px);
+  }
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .card p { font-size: 0.92rem; }
+
+  /* --- 数値の見せ場 --- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: clamp(14px, 2vw, 24px);
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 0 0;
+    border-top: 2px solid var(--line);
+  }
+  .stat .v {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(1.9rem, 4.2vw, 2.9rem);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .stat .v.hl { color: var(--accent-ink); }
+  .stat .k { font-size: 0.82rem; color: var(--muted); }
+  .stat.on-p1 { border-top-color: var(--p1); }
+  .stat.on-p2 { border-top-color: var(--p2); }
+  .stat.on-key { border-top-color: var(--accent); }
+
+  /* --- 状態のならび --- */
+  .states { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 0.85rem;
+    padding: 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .chip.live {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+  }
+
+  /* --- 表 --- */
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  th {
+    font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  td.n {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .hit { color: var(--good); font-weight: 700; }
+  .miss { color: var(--warn); font-weight: 700; }
+
+  /* --- 二者対比 --- */
+  .versus { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(14px, 2vw, 24px); }
+  @media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
+  .versus > div { display: flex; flex-direction: column; gap: 8px; }
+  .versus .tag {
+    font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+  }
+  .versus .a .tag { color: var(--good); }
+  .versus .b .tag { color: var(--warn); }
+  ul { margin: 0; padding-left: 1.15em; color: var(--ink-2); }
+  li { margin: 3px 0; }
+
+  .note {
+    font-size: 0.86rem;
+    color: var(--muted);
+    border-left: 2px solid var(--line);
+    padding-left: 14px;
+  }
+  .foot {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding-bottom: clamp(30px, 6vw, 70px);
+  }
+</style>
+
+<div class="deck">
+
+  <!-- 1 -->
+  <section class="slide" data-side="key">
+    <div class="eyebrow"><span class="num">01</span><span>ぷよぷよ eスポーツ 対戦解析</span></div>
+    <h1>対戦動画だけを見て<br>どちらが有利かを判定する</h1>
+    <p class="lead">ゲームの内部データは使わない。配信されている映像そのものから盤面を読み取り、
+      過去の試合データから学んだ基準で有利不利を出す。</p>
+    <div class="stat-row">
+      <div class="stat on-key"><span class="v">99.54<span style="font-size:0.5em">%</span></span><span class="k">盤面認識の精度 (人手ラベル比較)</span></div>
+      <div class="stat on-p1"><span class="v">148</span><span class="k">学習対象の試合数 (処理中)</span></div>
+      <div class="stat on-p2"><span class="v">45</span><span class="k">盤面から測る指標の数</span></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="eyebrow"><span class="num">02</span><span>できること</span></div>
+    <h2>やることは単純。動画を入れると、どちらが有利かが出る。</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>入力は映像だけ</h3>
+        <p>ゲームのメモリやAPIには一切触れない。だから理屈の上では、どんな配信にも後から乗せられる。</p>
+      </div>
+      <div class="card">
+        <h3>基準は人が決めない</h3>
+        <p>「何が有利か」は与えず、勝敗データから機械に発見させる。強者の思い込みを持ち込まないため。</p>
+      </div>
+      <div class="card">
+        <h3>連鎖の途中で判定が動く</h3>
+        <p>連鎖が終わってから「有利でした」では遅い。発火した瞬間に見積もって反映する。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide" data-side="key">
+    <div class="eyebrow"><span class="num">03</span><span>設計の芯</span></div>
+    <h2>形は手段、機能が本質</h2>
+    <p class="lead">GTR や階段積みといった<strong>形の分類は、あえて一次的な判断材料にしていない</strong>。
+      形は手段であって、本質は「その盤面が何をできるか」だから。</p>
+    <div class="versus">
+      <div class="a">
+        <span class="tag">測るもの — 機能</span>
+        <ul>
+          <li>どれだけの火力を出せるか</li>
+          <li>中盤にどれだけ厚みがあるか</li>
+          <li>おじゃまを受けきれるか</li>
+          <li>相手より先に撃てるか</li>
+        </ul>
+      </div>
+      <div class="b">
+        <span class="tag">測らないもの — 形の名前</span>
+        <ul>
+          <li>GTR / サブマリン / 階段</li>
+          <li>定型かどうかの分類</li>
+          <li>見た目の美しさ</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">観測できる軸だけを用意し、どれが実際に効くかは学習結果のランキングで発見する。</p>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide" data-side="p1">
+    <div class="eyebrow"><span class="num">04</span><span>技術 — 盤面を読む</span></div>
+    <h2>色の見分けは、二つの方法を併用する</h2>
+    <div class="versus">
+      <div class="a">
+        <span class="tag">色そのものを見る</span>
+        <p>色相で赤・青・緑・黄・紫を分ける。単純で速い。</p>
+        <p><strong>弱点:</strong> ぷよの光沢。白いハイライトが乗ると彩度が落ち、「空っぽ」と誤読する。</p>
+      </div>
+      <div class="b">
+        <span class="tag">小さなニューラルネット</span>
+        <p>セル画像を学習して分類する。光沢に強い。</p>
+        <p><strong>弱点:</strong> 学習していないものに弱い。未知の背景をぷよと言い張ることがある。</p>
+      </div>
+    </div>
+    <p>片方が弱い場面をもう片方が補う。<strong>ただし、色を見るだけでは足りない。</strong></p>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide" data-side="p1">
+    <div class="eyebrow"><span class="num">05</span><span>技術 — 状態の判定</span></div>
+    <h2>動いている間は、目を閉じる</h2>
+    <p class="lead">ぷよぷよの画面はほとんどの時間、何かが動いている。落下中・連鎖中・発光中の画面を
+      そのまま読めば必ず間違える。だから<strong>今どういう状況かを別に判定する</strong>。</p>
+    <div class="states">
+      <span class="chip live">盤面が止まっている</span>
+      <span class="chip">ツモ落下中</span>
+      <span class="chip">連鎖中</span>
+      <span class="chip">連鎖の段間・重力待ち</span>
+      <span class="chip">おじゃま落下中</span>
+      <span class="chip">演出中</span>
+    </div>
+    <p><strong>盤面が止まっている時だけ、読んだ結果を確定する。</strong>
+      動いている間は直前の確定盤面を凍結して持ち続ける。中途半端な盤面を信じると、
+      そこから先の判断が全部狂うため。</p>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide" data-side="p2">
+    <div class="eyebrow"><span class="num">06</span><span>技術 — 精度の測り方</span></div>
+    <h2>自分で採点すると、必ず高得点になる</h2>
+    <p class="lead">最初にやった失敗。<strong>二つの分類器が同じ間違いをすると、突き合わせても一致する。</strong>
+      「一致率99%」と出るが、それは仲良く間違えているだけかもしれない。</p>
+    <div class="stat-row">
+      <div class="stat on-p2"><span class="v">3,744</span><span class="k">人手で正解を付けたセル数</span></div>
+      <div class="stat on-key"><span class="v hl">99.54<span style="font-size:0.5em">%</span></span><span class="k">その物差しで測った現在の精度</span></div>
+      <div class="stat"><span class="v">0</span><span class="k">持続的な誤りの件数 (残りは一時的な汚れ)</span></div>
+    </div>
+    <p class="note">欠けている 0.46% は、連鎖や設置の瞬間に一時的に汚れ、1秒以内に自力で戻るもの。
+      居座り続ける誤りはゼロだった。</p>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide" data-side="key">
+    <div class="eyebrow"><span class="num">07</span><span>技術 — 新しい検証方法</span></div>
+    <h2>画面が答えを教えてくれる</h2>
+    <p class="lead">連鎖が始まる直前の盤面をシミュレートすれば「何連鎖起きるはず」が出る。
+      一方、実際の連鎖数は<strong>画面に表示される</strong>。
+      この二つを突き合わせれば、人手ラベルなしで認識の正しさを検証できる。</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>実際の連鎖数</th><th>件数</th><th>予測が一致</th><th>結果</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="n">9 連鎖</td><td class="n">8</td><td class="n">7</td><td class="hit">ほぼ完全一致</td></tr>
+          <tr><td class="n">7 連鎖</td><td class="n">9</td><td class="n">8</td><td class="hit">ほぼ完全一致</td></tr>
+          <tr><td class="n">2 連鎖</td><td class="n">15</td><td class="n">10</td><td>—</td></tr>
+          <tr><td class="n">1 連鎖</td><td class="n">9</td><td class="n">6</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>1週間前は、実際8連鎖なのに予測1連鎖という壊滅的な状態だった。</strong>
+      原因は盤面に宙に浮いたぷよが混じっていたこと — 落下中のフレームを「止まっている」と
+      誤判定していた。そこを直した結果が上の一致。</p>
+    <p class="note">人手ラベルと違い全動画に自動適用できる。ズレた箇所がそのまま読み間違いの在り処になる。</p>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide" data-side="p2">
+    <div class="eyebrow"><span class="num">08</span><span>技術 — 有利不利を学ぶ</span></div>
+    <h2>正解は、試合の結末から逆算する</h2>
+    <p class="lead">「この盤面は有利」という正解は誰も教えてくれない。だから勝った側の盤面に「勝ち」、
+      負けた側に「負け」を付ける。勝敗は画面の勝利数表示から自動で読むので、<strong>人手はゼロ</strong>。</p>
+    <div class="versus">
+      <div class="a">
+        <span class="tag">効いている</span>
+        <ul>
+          <li>おじゃまの差</li>
+          <li>連結の数</li>
+          <li>盤面の密度</li>
+          <li>最大連鎖数の差</li>
+        </ul>
+      </div>
+      <div class="b">
+        <span class="tag">効いていない</span>
+        <ul>
+          <li>火力の生の数値</li>
+          <li>その瞬間に組める最大連鎖だけを見ること</li>
+        </ul>
+      </div>
+    </div>
+    <p><strong>強さは瞬間の火力ではなく、やり取りの中にあるらしい。</strong>
+      先に撃つのか、受けてから返すのか。そこを測る指標を今つくっている。</p>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide" data-side="p2">
+    <div class="eyebrow"><span class="num">09</span><span>正直な弱点</span></div>
+    <h2>判定は自信過剰だと分かっている</h2>
+    <div class="stat-row">
+      <div class="stat on-p2"><span class="v">80<span style="font-size:0.5em">%</span></span><span class="k">システムが表示した有利度</span></div>
+      <div class="stat on-key"><span class="v hl">64<span style="font-size:0.5em">%</span></span><span class="k">その場面の実際の勝率</span></div>
+    </div>
+    <p class="lead">大きく出すぎている。表示する数字が実態とズレていたらツールとして意味がないので、
+      配信に出す前に必ず較正する。</p>
+    <p class="note">ほかにも把握している課題: 試合をしていない画面 (ロビー・順位表・演出) を
+      盤面と誤読して記録していた件は、実測 0.875% の混入を検出し、除外の仕組みを入れた。</p>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide" data-side="key">
+    <div class="eyebrow"><span class="num">10</span><span>現在地とこれから</span></div>
+    <h2>目標は、配信にそのまま乗るツール</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>できている</h3>
+        <p>盤面認識 99.54%。連鎖の予測と実測の一致。148試合分のデータ処理。</p>
+      </div>
+      <div class="card">
+        <h3>いま直している</h3>
+        <p>判定の数字の較正。試合外画面の除外。連鎖中の状態表示の安定化。</p>
+      </div>
+      <div class="card">
+        <h3>これから</h3>
+        <p>OBS のブラウザソースとしてリアルタイム動作。そして本命 —
+          人が気づいていない評価軸の発見。</p>
+      </div>
+    </div>
+    <p class="lead">データが十分に集まったら「何が実際に勝敗を決めているのか」を改めて調べ、
+      その結果をまた公開する。</p>
+  </section>
+
+</div>
+
+<p class="foot">ぷよぷよ eスポーツ 有利不利判定システム — 2026年8月8日時点の実測値に基づく</p>
