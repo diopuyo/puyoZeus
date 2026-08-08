@@ -71,6 +71,14 @@ from src.scoring import (
 
 # 盤面は 13 行 (BOARD_ROWS) 全体を使う。ama の 12bit 制限は採用しない (上記docstring参照)。
 FULL_MASK_13BIT: int = (1 << BOARD_ROWS) - 1  # = 0x1FFF = 8191
+# 隠し段 (row0 = 13段目) を除いた 12 段分のマスク。
+# **ゲームルール (2026-08-08 user伝授 + 公開資料で確認)**: 13段目に置かれた
+# ぷよは 4 つ繋がっても消えない。 この性質を利用した積み方が「幽霊連鎖」で、
+# 上級者が実際に使う。 13段目のぷよは下が空けば落下し、 12段目以下に降りて
+# きて初めて消去対象になる。
+# bit12 が row0 (隠し段) に対応するため、 それを落としたマスクを消去判定に使う。
+HIDDEN_ROW_BIT: int = 1 << (BOARD_ROWS - 1)  # bit12 = row0 (隠し段)
+POP_MASK_12BIT: int = FULL_MASK_13BIT & ~HIDDEN_ROW_BIT  # = 0x0FFF
 
 # 連結判定対象の色 (お邪魔・空・UNKNOWN を除く5色)。
 TRACKED_COLORS: tuple[int, ...] = (
@@ -299,15 +307,26 @@ def _pext_batch(values: np.ndarray, keep_masks: np.ndarray) -> np.ndarray:
 
 def simulate_batch(
     planes: "dict[int, np.ndarray]",
+    exclude_hidden_row_from_pop: bool = False,
 ) -> "list[BitboardChainResult]":
     """複数盤面を一括で連鎖シミュレートする。
 
     Args:
         planes: `batch_from_boards` で得た dict[color, (N,6)uint16配列]。
+        exclude_hidden_row_from_pop: True で隠し段 (row0 = 13段目) を
+            **消去判定から除外**する (2026-08-08 追加)。
+            ゲームルール上、13段目に置かれたぷよは 4 つ繋がっても消えない
+            (この性質を使う積み方が「幽霊連鎖」)。 13段目のぷよは下が空けば
+            落下し、 12段目以下に降りてから消去対象になる — 落下の扱いは
+            変えないので本フラグは消去判定のみに効く。
+            既定 False = 従来挙動を完全維持 (既存の指標・学習済み重み・
+            過去 cycle の再現性を壊さないため。 backwards compat)。
 
     Returns:
         list[BitboardChainResult]: バッチ内各盤面の結果 (順序保持)。
     """
+    pop_mask = _UINT16(POP_MASK_12BIT if exclude_hidden_row_from_pop
+                       else FULL_MASK_13BIT)
     n = next(iter(planes.values())).shape[0]
     current = {color: arr.copy() for color, arr in planes.items()}
     ojama = current[COLOR_OJAMA]
@@ -321,8 +340,17 @@ def simulate_batch(
         if not active.any():
             break
 
-        # 色ごとの pop mask を計算し OR で統合
-        color_pop_masks = [_get_mask_pop_batch(current[c]) for c in TRACKED_COLORS]
+        # 隠し段 (13段目) のぷよは消えないルール (2026-08-08)。
+        # **連結判定に参加させてはいけない**。 参加させてからビットを落とすと、
+        # 13段目 + 下 3 つの塊を 4 連結と数えて下の 3 つだけ消してしまう。
+        # 正しくは 13段目を除いた 12 段だけで連結を数えるので、 下 3 つは
+        # 4 連結に届かず消えない。 13段目のぷよは落下 (PEXT) の対象では
+        # あり続けるため、 下が空けば降りてきて次ステップから消去対象になる
+        # (= 幽霊連鎖の挙動)。
+        planes_for_pop = {c: current[c] & pop_mask for c in TRACKED_COLORS}
+        color_pop_masks = [
+            _get_mask_pop_batch(planes_for_pop[c]) for c in TRACKED_COLORS
+        ]
         color_union = color_pop_masks[0]
         for m in color_pop_masks[1:]:
             color_union = color_union | m
@@ -369,10 +397,18 @@ def simulate_batch(
     return results
 
 
-def simulate_single(board: Board) -> BitboardChainResult:
-    """1 盤面のみを判定する薄いラッパー (バッチ API のテスト・単発呼び出し用)。"""
+def simulate_single(
+    board: Board, exclude_hidden_row_from_pop: bool = False,
+) -> BitboardChainResult:
+    """1 盤面のみを判定する薄いラッパー (バッチ API のテスト・単発呼び出し用)。
+
+    exclude_hidden_row_from_pop の意味は `simulate_batch` を参照
+    (既定 False = 従来挙動維持)。
+    """
     batch = batch_from_boards([board])
-    return simulate_batch(batch)[0]
+    return simulate_batch(
+        batch, exclude_hidden_row_from_pop=exclude_hidden_row_from_pop,
+    )[0]
 
 
 # ============================

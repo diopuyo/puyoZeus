@@ -13,6 +13,12 @@
 隠し段は最大 6 セル。 各セル 5 通りなら 15,625 通りになりリアルタイムに
 乗らないため枝刈りするが、 **打ち切った事実と網羅できた確率を必ず結果に持たせる**。
 「全部見た」と誤解させないため (measure した範囲を明示する規律)。
+
+## 13段目のぷよは消えない
+ゲームルール上、 隠し段 (13段目) に置かれたぷよは 4 つ繋がっても消えない
+(この性質を使う積み方が「幽霊連鎖」)。 よって本モジュールは
+simulate_single に exclude_hidden_row_from_pop=True を渡す。 隠し段のぷよは
+下が空けば落下し、 12段目以下に降りてから消去対象になる。
 """
 from __future__ import annotations
 
@@ -142,7 +148,10 @@ def compute_chain_count_distribution(
 
     if not expand_cols:
         # 全セル確定 → 従来と同じ単一値
-        result = simulate_single(_apply_assignment(board, fixed))
+        result = simulate_single(
+            _apply_assignment(board, fixed),
+            exclude_hidden_row_from_pop=True,
+        )
         return ChainCountDistribution(
             probabilities={int(result.chain_count): 1.0},
             truncated=False,
@@ -168,7 +177,10 @@ def compute_chain_count_distribution(
         assignment = dict(fixed)
         for col, (color, _) in zip(expand_cols, combo):
             assignment[col] = color
-        result = simulate_single(_apply_assignment(board, assignment))
+        result = simulate_single(
+            _apply_assignment(board, assignment),
+            exclude_hidden_row_from_pop=True,
+        )
         n = int(result.chain_count)
         dist[n] = dist.get(n, 0.0) + prob
         covered += prob
@@ -180,7 +192,10 @@ def compute_chain_count_distribution(
             cell = hidden.get(col)
             if cell is not None:
                 assignment[col] = cell.cell.most_likely()[0]
-        result = simulate_single(_apply_assignment(board, assignment))
+        result = simulate_single(
+            _apply_assignment(board, assignment),
+            exclude_hidden_row_from_pop=True,
+        )
         return ChainCountDistribution(
             probabilities={int(result.chain_count): 1.0},
             truncated=True,

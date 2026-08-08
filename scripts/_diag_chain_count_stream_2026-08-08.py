@@ -5,7 +5,7 @@ FINAL7/8 で「画面は 3れんさ! なのに 1P のラベルが 1renza のま�
 変わったフレームだけ**を記録しているため、 連鎖中の大半のフレームで
 chain_event が何を返しているかが見えていなかった。
 
-出力: data/verify/youtube_demo_2026-08-07/_diag_chain_count_stream_2026-08-08.tsv
+出力: data/verify/youtube_demo_2026-08-07/_diag_chain_count_stream_t26_2026-08-08.tsv
       (frame, t_sec, side, state, chain_count, trigger_sec, end_sec, mechanism)
 """
 from __future__ import annotations
@@ -29,11 +29,11 @@ VIDEO = _ROOT / "data/verify/youtube_demo_2026-08-07/dio_vs_ts_m01_clip.mp4"
 MODEL = _ROOT / "models/cnn_finetune_olRyxDGacbg_demo_v3_2026-08-07.pt"
 OUT_TSV = (
     _ROOT / "data/verify/youtube_demo_2026-08-07"
-    / "_diag_chain_count_stream_2026-08-08.tsv"
+    / "_diag_chain_count_stream_t26_2026-08-08.tsv"
 )
 # 1P が 9 連鎖を撃っている区間を含む窓。
-T_START: float = 53.0
-T_END: float = 70.0
+T_START: float = 20.0
+T_END: float = 35.0
 
 
 def main() -> int:
