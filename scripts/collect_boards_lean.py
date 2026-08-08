@@ -501,6 +501,8 @@ def collect_lean(
     burst_chain_gap_max_sec: Optional[float] = None,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -607,6 +609,18 @@ def collect_lean(
             MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる
             _match_active_started_frame/_time の誤再アーム/リセットを防ぐ。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: 修正B (2026-08-08、
+            振動バグB+C の修正)。True で GRAVITY_SETTLE 中の OJAMA_FALL
+            新規発火を禁止する。連鎖の段間重力待ちを横取りされると
+            GravitySettleDetector 内部カウンタが残留し、次回進入時に誤って
+            1 frame で STABLE 化するバグ (バグC) を誘発する。
+            enable_gravity_settle_reset_on_exit と対で使う。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_gravity_settle_reset_on_exit: 修正C (2026-08-08、
+            振動バグB+C の修正)。True で GRAVITY_SETTLE が他 detector に
+            横取りされて弾き出された際、GravitySettleDetector の内部
+            カウンタ (_settle_start_frame 等) をその場でリセットする。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -671,6 +685,10 @@ def collect_lean(
         burst_chain_gap_max_sec=burst_chain_gap_max_sec,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_entry_gravity_settle_guard=(
+            enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -970,6 +988,26 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-entry-gravity-settle-guard", action="store_true",
+        dest="enable_ojama_entry_gravity_settle_guard",
+        help=(
+            "修正B (2026-08-08、状態機械振動バグB+C の修正) を有効化する。"
+            "GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を禁止する。"
+            "--enable-gravity-settle-reset-on-exit と対で使う。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-gravity-settle-reset-on-exit", action="store_true",
+        dest="enable_gravity_settle_reset_on_exit",
+        help=(
+            "修正C (2026-08-08、状態機械振動バグB+C の修正) を有効化する。"
+            "GRAVITY_SETTLE が他 detector に横取りされて弾き出された際、"
+            "GravitySettleDetector の内部カウンタをその場でリセットする。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -995,6 +1033,10 @@ def main() -> int:
         burst_chain_gap_max_sec=args.burst_chain_gap_max_sec,
         enable_online_hsv_refresh=args.enable_online_hsv_refresh,
         enable_match_transition_debounce=args.enable_match_transition_debounce,
+        enable_ojama_entry_gravity_settle_guard=(
+            args.enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=args.enable_gravity_settle_reset_on_exit,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

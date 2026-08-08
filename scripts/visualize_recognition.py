@@ -1674,6 +1674,43 @@ def main() -> int:
             "即時。左右は独立判定。既定 0 = 無効 (後方互換、従来通り即時非表示)。"
         ),
     )
+    # デモ動画用 (2026-08-08 追加): おじゃま予告オーバーレイ (盤面下部パネル 1P/2P +
+    # 中央おじゃま優勢バー) を非表示にする。有利不利判定の表示 (state label / score 等)
+    # には影響しない。既定 False = 従来通り表示 (後方互換)。
+    parser.add_argument(
+        "--hide-ojama-forecast", action="store_true", default=False,
+        dest="hide_ojama_forecast",
+        help=(
+            "盤面下部のおじゃま予告パネル (1P/2P) + 中央のおじゃま優勢バーを"
+            "非表示にする。既定 False = 従来通り表示。有利不利判定の表示には"
+            "影響しない (対象外)。"
+        ),
+    )
+    # 状態機械振動バグB+C の修正 (2026-08-08、A/B 計測用)。
+    # docs/CYCLE_FINDINGS.md 系: GRAVITY_SETTLE 中の OJAMA_FALL 横取り
+    # (バグB) → GravitySettleDetector 内部カウンタ残留 (バグC) → 次回
+    # 進入時の 1 frame 誤 STABLE 化 という振動ループを止める。
+    # 両フラグとも既定 False = 従来挙動完全維持 (backwards compat)。
+    parser.add_argument(
+        "--enable-ojama-entry-gravity-settle-guard", action="store_true",
+        default=False, dest="enable_ojama_entry_gravity_settle_guard",
+        help=(
+            "修正B (2026-08-08、状態機械振動バグB+C) を有効化する。"
+            "GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を禁止する。"
+            "--enable-gravity-settle-reset-on-exit と対で使う。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-gravity-settle-reset-on-exit", action="store_true",
+        default=False, dest="enable_gravity_settle_reset_on_exit",
+        help=(
+            "修正C (2026-08-08、状態機械振動バグB+C) を有効化する。"
+            "GRAVITY_SETTLE が他 detector に横取りされて弾き出された際、"
+            "GravitySettleDetector の内部カウンタをその場でリセットする。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # --overlay-show-states の検証・解決 (BoardState への変換、不正値は起動時エラー)
     overlay_show_states: frozenset[BoardState] | None = None
@@ -1827,6 +1864,15 @@ def main() -> int:
         # (load_default 側の型は int で None 非対応、後方互換の要)。
         enable_asymmetric_recovery_min_frames=(
             args.enable_asymmetric_recovery_min_frames
+        ),
+        # 状態機械振動バグB+C の修正 (2026-08-08):
+        # --enable-ojama-entry-gravity-settle-guard /
+        # --enable-gravity-settle-reset-on-exit で有効化。
+        enable_ojama_entry_gravity_settle_guard=(
+            args.enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=(
+            args.enable_gravity_settle_reset_on_exit
         ),
         **(
             {} if args.recovery_add_min_frames is None
@@ -2058,6 +2104,9 @@ def main() -> int:
     )
     last_p1_hide_candidate_start_frame: int | None = None
     last_p2_hide_candidate_start_frame: int | None = None
+    # デモ動画用 (2026-08-08 追加): おじゃま予告パネル + 優勢バーの非表示フラグ。
+    # 有利不利判定系の描画 (draw_state_label 等) には適用しない。
+    hide_ojama_forecast = bool(getattr(args, "hide_ojama_forecast", False))
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -2355,13 +2404,14 @@ def main() -> int:
         # 本番 overlay から除去 (日本語?化・雑然) し、下の大きな新パネルに一本化。
         # 関数 draw_ojama_accounting_overlay は後方互換のため定義のみ残置。
         # 予告お邪魔 直感UI (2026-06-10 刷新・拡大): 大きな数字 + 単位アイコン分解 + 優勢バー
-        draw_ojama_forecast_panel(
-            frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
-        )
-        draw_ojama_forecast_panel(
-            frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
-        )
-        draw_ojama_advantage_bar(frame, _last_snap)
+        if not hide_ojama_forecast:
+            draw_ojama_forecast_panel(
+                frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
+            )
+            draw_ojama_forecast_panel(
+                frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
+            )
+            draw_ojama_advantage_bar(frame, _last_snap)
         # 第6要素: 隠し段 (row 0) 確率 overlay + 画面外 O 個数
         # offboard は OjamaAccountingTracker の会計値 (pending - 72) から取得
         # 試合境界で pending がresetされるため O 表示も自動的に 0 に戻る

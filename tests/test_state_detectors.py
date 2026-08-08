@@ -476,3 +476,73 @@ def test_tsumo_then_back_to_stable_via_state_machine() -> None:
     # ただし confirmed_board を新盤面に更新するには連続多数決が必要
     # state_machine は CHAIN→STABLE のみ即時更新、TSUMO→STABLE は多数決経由
     assert sm.context.state in {BoardState.STABLE, BoardState.TSUMO_FALL}
+
+
+# ============================
+# 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の内部カウンタ残留修正
+# ============================
+
+
+def test_bugfix_c_reset_on_exit_prevents_stale_timeout_on_reentry() -> None:
+    """バグC 修正: 横取りされて GRAVITY_SETTLE から弾き出された後、
+    enable_gravity_settle_reset_on_exit=True なら内部カウンタがリセットされ、
+    次回 GRAVITY_SETTLE 再進入時に古い開始時刻で誤タイムアウトしない。
+    """
+    from src.board_state_machine import GRAVITY_SETTLE_MAX_SEC
+    from src.state_detectors import GravitySettleDetector
+
+    det = GravitySettleDetector(enable_gravity_settle_reset_on_exit=True)
+    board = _empty_board()
+
+    # 1. GRAVITY_SETTLE に新規進入 (fresh init)
+    ctx0 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=0)
+    assert det.detect(ctx0, _signal(0.0, board)) is None
+    assert det._settle_start_frame == 0
+
+    # 2. 数フレーム継続 (最低待機未達、 内部カウンタはまだ生きている)
+    ctx1 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=1)
+    assert det.detect(ctx1, _signal(0.02, board)) is None
+
+    # 3. 他 detector に横取りされ GRAVITY_SETTLE から弾き出される
+    #    (例: バグB=OjamaVisualDetector が OJAMA_FALL を返した場合)
+    ctx_hijack = StateContext(state=BoardState.OJAMA_FALL, frame_idx=2)
+    assert det.detect(ctx_hijack, _signal(0.05, board)) is None
+    # 修正済み: 内部カウンタがリセットされている
+    assert det._settle_start_frame == -1
+    assert det._settle_start_time == 0.0
+
+    # 4. 十分な時間が経過した後、GRAVITY_SETTLE に再進入
+    #    (旧開始時刻が残っていれば elapsed が MAX_SEC を超えて即 STABLE 化する)
+    ctx_reentry = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=200)
+    reentry_t = GRAVITY_SETTLE_MAX_SEC + 1.0
+    result = det.detect(ctx_reentry, _signal(reentry_t, board))
+    # 修正済み: fresh init として扱われ即 STABLE 化しない
+    assert result is None
+    assert det._settle_start_frame == 200
+
+
+def test_bugfix_c_disabled_reproduces_stale_timeout_bug() -> None:
+    """回帰防止 (backwards compat): フラグ default False (未指定) では
+    横取り退出後もカウンタが残留し、再進入時に旧開始時刻で誤タイムアウト
+    → 1 frame で STABLE 化する旧挙動 (バグC) が再現されることを確認する。
+    """
+    from src.board_state_machine import GRAVITY_SETTLE_MAX_SEC
+    from src.state_detectors import GravitySettleDetector
+
+    det = GravitySettleDetector()  # enable_gravity_settle_reset_on_exit=False (既定)
+    board = _empty_board()
+
+    ctx0 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=0)
+    assert det.detect(ctx0, _signal(0.0, board)) is None
+
+    ctx_hijack = StateContext(state=BoardState.OJAMA_FALL, frame_idx=2)
+    assert det.detect(ctx_hijack, _signal(0.05, board)) is None
+    # フラグ OFF (旧挙動): カウンタは残留する
+    assert det._settle_start_frame == 0
+
+    ctx_reentry = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=200)
+    reentry_t = GRAVITY_SETTLE_MAX_SEC + 1.0
+    result = det.detect(ctx_reentry, _signal(reentry_t, board))
+    # 旧開始時刻 (0.0) から MAX_SEC 超過分の時間が経過 → 誤って即 STABLE 化
+    # (連鎖途中の中途半端な盤面が確定してしまう旧挙動、バグC 本体)
+    assert result == BoardState.STABLE

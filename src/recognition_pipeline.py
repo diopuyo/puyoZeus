@@ -1023,6 +1023,19 @@ class RecognitionPipeline:
         # 品質高い」承認)。False を明示指定すれば旧挙動 (bit-identical) に戻せる
         # (backwards compat)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を
+        # 禁止するガード。連鎖の段間重力待ち中に本 detector が横取りすると、
+        # GravitySettleDetector 内部カウンタが残留し次回誤 STABLE 化 (バグC) を
+        # 誘発する (振動バグ)。enable_gravity_settle_reset_on_exit と対で使う。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE が他 detector に横取り
+        # されて弾き出された際、GravitySettleDetector の内部カウンタ
+        # (_settle_start_frame 等) をその場でリセットする。残留したまま
+        # 次回 GRAVITY_SETTLE 再進入すると古い開始時刻で 1 frame 誤 STABLE
+        # 化する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_gravity_settle_reset_on_exit: bool = False,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -1674,6 +1687,19 @@ class RecognitionPipeline:
         self._enable_ojama_fall_board_settle: bool = bool(
             enable_ojama_fall_board_settle
         )
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード。_build_state_machine 呼び出し前に格納が必要。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_ojama_entry_gravity_settle_guard: bool = bool(
+            enable_ojama_entry_gravity_settle_guard
+        )
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # _build_state_machine 呼び出し前に格納が必要。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_gravity_settle_reset_on_exit: bool = bool(
+            enable_gravity_settle_reset_on_exit
+        )
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
@@ -1916,6 +1942,12 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                self._enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                self._enable_gravity_settle_reset_on_exit
+            ),
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1946,6 +1978,12 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                self._enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                self._enable_gravity_settle_reset_on_exit
+            ),
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -2275,6 +2313,13 @@ class RecognitionPipeline:
         # 渡すため実運用では未使用だが、直接呼び出し時も採用済み挙動を
         # 既定にする (__init__ の既定値と同期)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード。default False = 従来挙動完全維持・bit-identical。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # default False = 従来挙動完全維持・bit-identical。
+        enable_gravity_settle_reset_on_exit: bool = False,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
@@ -2355,6 +2400,9 @@ class RecognitionPipeline:
                 enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
                 enable_ojama_settle_detection=enable_ojama_settle_detection,
                 enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
+                enable_ojama_entry_gravity_settle_guard=(
+                    enable_ojama_entry_gravity_settle_guard
+                ),
             )
             detectors.append(ovd)
         detectors.append(
@@ -2367,7 +2415,13 @@ class RecognitionPipeline:
         # CHAIN より低優先 → settle 中に次連鎖 drop 検知で CHAIN detector が優先発火し
         # 多段連鎖に対応する。
         if enable_gravity_settle_state:
-            detectors.append(GravitySettleDetector())
+            detectors.append(
+                GravitySettleDetector(
+                    enable_gravity_settle_reset_on_exit=(
+                        enable_gravity_settle_reset_on_exit
+                    ),
+                )
+            )
         return BoardStateMachine(
             detectors=detectors,
             stable_frame_count=stable_n,
@@ -2458,6 +2512,15 @@ class RecognitionPipeline:
         # 浮き誤消去 -28%・採用 +38、user viz 全画像レビュー承認) で採用。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード (振動バグ B+C の修正、data/verify/youtube_demo_2026-08-07/
+        # _diag_2p_osc_transitions_2026-08-08.jsonl)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_gravity_settle_reset_on_exit: bool = False,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -2801,6 +2864,12 @@ class RecognitionPipeline:
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                enable_gravity_settle_reset_on_exit
+            ),
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
