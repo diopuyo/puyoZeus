@@ -10,7 +10,7 @@ OUT="$DEMO/final6_vs_7"
 mkdir -p "$OUT"
 FF=$(./venv/bin/python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")
 for T in 56.2 57.6 59.0 60.35 61.7 63.0; do
-  for V in FINAL9a_all_states; do
+  for V in FINAL10a_all_states; do
     "$FF" -nostdin -hide_banner -loglevel error -y -ss "$T" \
       -i "$DEMO/dio_vs_ts_${V}_viz.mp4" -frames:v 1 "$OUT/${V}_t${T}.png"
   done
