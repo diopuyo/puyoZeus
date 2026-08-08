@@ -83,6 +83,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import Board  # noqa: E402
+from src.board_quality import is_phantom_board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
@@ -462,12 +463,30 @@ def _update_game_boundary(
     state.prev_score = score
 
 
-def _should_emit(state: _SideState, board: Board, bstate: BoardState) -> bool:
-    """STABLE かつ重複でない盤面かを判定する。"""
+def _should_emit(
+    state: _SideState, board: Board, bstate: BoardState,
+    exclude_phantom: bool = False,
+) -> bool:
+    """STABLE かつ重複でない盤面かを判定する。
+
+    Args:
+        exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面
+            (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま盤面を
+            記録対象から外す。 collect 側は force_in_match=True で
+            MatchStateDetector を無効化しているため、 これらの画面が
+            素通りして npz に混入している (実測 0.875%、全 123 本)。
+            背景明度による分離は実測で不可能と判明したため
+            (幻 min=0.0 / 正常 max=226.9 で完全に重なる)、 盤面の物理的
+            整合 (src/board_quality.py) で弾く。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+    """
     if bstate != BoardState.STABLE or board is None:
         return False
     # 全消し直後 / 試合開始直後 (盤面ぷよ 0) は除外
     if board.count_puyos() == 0:
+        return False
+    # 幻盤面ガード: 実戦なら窒息死が目前で安定継続し得ない盤面を弾く
+    if exclude_phantom and is_phantom_board(board._grid):
         return False
     # 直前と同一盤面なら間引き
     grid_bytes = board._grid.tobytes()
@@ -503,6 +522,7 @@ def collect_lean(
     enable_match_transition_debounce: bool = False,
     enable_ojama_entry_gravity_settle_guard: bool = False,
     enable_gravity_settle_reset_on_exit: bool = False,
+    enable_phantom_board_guard: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -621,6 +641,16 @@ def collect_lean(
             横取りされて弾き出された際、GravitySettleDetector の内部
             カウンタ (_settle_start_frame 等) をその場でリセットする。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_phantom_board_guard: 幻盤面ガード (2026-08-08)。True で
+            非試合画面 (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま
+            盤面を snapshot として記録しない。本スクリプトは
+            force_in_match=True で MatchStateDetector を無効化しているため
+            これらの画面が素通りしており、実測で全 123 本・0.875% の
+            スナップショットが該当した (実画面 4/4 で真陽性)。背景明度に
+            よる分離は実測不可能と判明したため (幻 min=0.0 / 正常
+            max=226.9 で完全に重なる)、盤面の物理的整合
+            (src/board_quality.py) で弾く。
+            既定 False = 従来挙動完全維持 (backwards compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -722,12 +752,14 @@ def collect_lean(
             result.p1.state, result.p1.score, video_id, t_sec, fi,
             next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
             chain_event=result.p1.chain_event, shared_game=shared_game,
+            exclude_phantom=enable_phantom_board_guard,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
             result.p2.state, result.p2.score, video_id, t_sec, fi,
             next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
             chain_event=result.p2.chain_event, shared_game=shared_game,
+            exclude_phantom=enable_phantom_board_guard,
         )
     cap.release()
 
@@ -752,6 +784,7 @@ def _process_side_lean(
     dnext_pair: tuple[int, int] | None = None,
     chain_event: object | None = None,
     shared_game: "_SharedGameCounter | None" = None,
+    exclude_phantom: bool = False,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -769,9 +802,13 @@ def _process_side_lean(
         shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
             渡すと片側の score OCR 破綻でも game_idx がずれない。
             None なら従来の side 独立カウンタ (後方互換)。
+        exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
+            満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
     """
     _update_game_boundary(state, score, shared=shared_game, t_sec=t_sec)
-    if board is None or not _should_emit(state, board, bstate):
+    if board is None or not _should_emit(
+        state, board, bstate, exclude_phantom=exclude_phantom,
+    ):
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
     mechanism = getattr(chain_event, "mechanism", None) if chain_event is not None else None
@@ -1008,6 +1045,16 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-phantom-board-guard", action="store_true",
+        dest="enable_phantom_board_guard",
+        help=(
+            "幻盤面ガード (2026-08-08) を有効化する。非試合画面 (対戦カード"
+            "紹介・ロビー・順位表) で誤認識された満杯おじゃま盤面を snapshot "
+            "として記録しない。実測で全123本・0.875%% が該当。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -1037,6 +1084,7 @@ def main() -> int:
             args.enable_ojama_entry_gravity_settle_guard
         ),
         enable_gravity_settle_reset_on_exit=args.enable_gravity_settle_reset_on_exit,
+        enable_phantom_board_guard=args.enable_phantom_board_guard,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
