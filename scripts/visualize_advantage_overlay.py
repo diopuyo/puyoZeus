@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import src.indicators_v2 as iv  # noqa: E402
-from src.board import Board  # noqa: E402
+from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
@@ -60,6 +60,11 @@ EMA_ALPHA = 0.25      # 有利不利の時間平滑
 # (B) 持続圧力信号: board_ojama の増加を減衰累積 (着弾ダメージの記憶)
 PRESSURE_DECAY = 0.985    # 毎フレーム減衰 (半減期 ~1.5s @30fps)
 PRESSURE_SCALE = 6.0      # 圧力 → 有利不利[-100,100] 換算
+# 能力低下ベースの圧力のスケール (2026-08-09)。 能力スコアは 0〜1 強の正規化値
+# なので、 個数ベース (1 個 = 1.0) とは桁が違う。 「飽和連鎖量が 0.1 落ちる」
+# = 「有利不利で 10 ポイント相当」を目安に 100 を置く (シーン逆算ではなく
+# 指標の値域から決めた換算)。
+CAPABILITY_PRESSURE_SCALE = 100.0
 PRESSURE_BLEND_W = 0.6    # (旧2成分) 有利不利 = W×圧力 + (1-W)×現モデル
 # (M3) お邪魔予告(incoming)信号: 相手に降る予告が多い=相手が埋まる=有利。
 #   得点リード(結果)を廃し、予告(位置=これから相手が埋まる)へ置換(2026-07-14 user方針)。
@@ -313,6 +318,8 @@ JP_LABEL: dict[str, str] = {
     "board_ojama_count": "盤面お邪魔数", "death_margin": "窒息余裕",
     "max_column_height": "最大列高", "current_max_chain": "現在最大連鎖",
     "board_color_puyo_total": "色ぷよ総数", "ojama_forecast": "お邪魔予告",
+    "color_puyo_x_ojama_flat": "色ぷよ差×おじゃまフラット度",
+    "ojama_flat_score": "おじゃまフラット度",
     "saturated_chain_count": "飽和連鎖量",
     "ukeyasusa": "受けやすさ", "sub_chain_count": "副砲連鎖数",
     "near_future_fire_k1": "近未来火力K1", "near_future_fire_k2": "近未来火力K2",
@@ -361,6 +368,107 @@ def _resolve_features(df: pd.DataFrame) -> list[str]:
     return [c for c in FEATURE_CANDIDATES if c in df.columns]
 
 
+# ============================
+# 学習データ (2026-08-09 切り替え)
+# ============================
+# 従来は data/indicators_v2/study/labeled_win.csv (2026-07-22 時点・**10 動画**)
+# を使っていた。 その後 2026-07-29 に 66 動画版が作られていたが参照先が
+# 更新されておらず、 デモは 2 週間以上前の 10 動画で学習したモデルで
+# 動いていた (2026-08-09 発覚)。
+#   - 行数    40,112 -> 193,623 (4.8 倍)
+#   - 動画数  10 -> 66
+#   - 列      88 -> 96 (上位互換。 現行の全列を含む)
+# ペア数は 6,049 -> 73,416。
+TRAIN_CSV_PATH: str = (
+    "data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv"
+)
+
+# ============================
+# 交互作用特徴: 色ぷよ差 × おじゃまフラット度 (2026-08-09 user伝授)
+# ============================
+# user 伝授:
+#   「色ぷよはお邪魔状況や予告お邪魔などがフラットな時に特に有利不利に
+#     優位にうごきます」
+# つまり色ぷよ差は **単独で常に効くのではなく、おじゃま状況が両者フラットな
+# 局面で特に強く効く**。 色ぷよ差を単独特徴としてだけ持たせると、 おじゃまが
+# 絡む局面のデータに引きずられて重みが薄まり、 フラット局面で効かなくなる。
+#
+# 実際 t=29 (1P の色ぷよが明らかに多い場面) では主因が
+# 「副砲連鎖数差 +0.42 / 最大列高差 +0.17」= 1P 優位を示しているのに
+# 総合は 2P有利80% と逆を向いていた。
+#
+# CLAUDE.md の原則「観測軸を提供 → 学習で重要度を発見」に従い、
+# **フラット度を人が閾値で切らず連続量として与え、重要度は学習に決めさせる**。
+COLOR_OJAMA_INTERACTION_COL: str = "color_puyo_x_ojama_flat"
+# フラット度の減衰スケール。
+# **指標は 0〜1 に正規化済み** (CLAUDE.md 規約) なので、 差の値域は概ね
+# [-1, 1]。 当初これを「おじゃま個数」と誤解して 12.0 を置き、 全サンプルが
+# フラット判定になる不具合を出した (2026-08-09)。
+# ダメージ関数の第1折れ点 12 個 (memory `reference_ojama_damage_function`) を
+# 正規化スケールへ写すと、 board_ojama_count の実測平均が 0.059 であることから
+# 「1 段ぶん (6個) 前後の差」は正規化値でおよそ 0.1 に対応する。
+# よって 0.1 を採用する (デモのシーンからの逆算ではなく、 物理量と実測分布から
+# 導いた値)。
+OJAMA_FLAT_SCALE: float = 0.1
+
+
+def _ojama_flat_score(
+    ojama_diff: "pd.Series | float", forecast_diff: "pd.Series | float",
+) -> "pd.Series | float":
+    """おじゃま状況のフラット度 (0〜1) を返す。
+
+    盤面おじゃま差と予告おじゃま差の両方を見る (user 表現の
+    「お邪魔状況や予告お邪魔など」)。 どちらの差も小さいほど 1 に近づく。
+
+    Args:
+        ojama_diff: 盤面おじゃま数の差 (自 - 相手)。
+        forecast_diff: 予告おじゃまの差 (自 - 相手)。
+
+    Returns:
+        フラット度。 差が 0 なら 1.0、 差が大きいほど 0 に近づく。
+    """
+    total = np.abs(ojama_diff) + np.abs(forecast_diff)
+    return np.exp(-total / OJAMA_FLAT_SCALE)
+
+
+# おじゃまフラット度そのものを特徴量に加えるための列名 (2026-08-09)。
+# HistGradientBoosting は木なので、 **フラット度を 1 列渡すだけで
+# 「フラットなら色ぷよを見る / そうでなければ効率を見る」という分岐を
+# 自力で学習できる**。 掛け算の交互作用を人が作り込む必要がない。
+# 実測 (73,416ペア) で、 おじゃまフラット局面では効率系指標が全て AUC
+# 0.49〜0.50 (無相関) になり、 色ぷよ総数だけが 0.5380 で効く。 逆に
+# おじゃま差が大きい局面では効率系が 0.65〜0.75 で効く。 **局面によって
+# 効く軸が入れ替わる**ため、 モデルに局面を教える列が要る。
+OJAMA_FLAT_COL: str = "ojama_flat_score"
+
+
+def _add_interaction_columns(
+    feat: "pd.DataFrame", feat_cols: list[str],
+) -> tuple["pd.DataFrame", list[str]]:
+    """差分特徴に交互作用列を追加する (列が揃っていない場合は何もしない)。
+
+    Returns:
+        (列を追加した DataFrame, 交互作用列名を含む列名リスト)
+    """
+    need = ("board_color_puyo_total_diff", "board_ojama_count_diff",
+            "ojama_forecast_diff")
+    if not all(c in feat.columns for c in need):
+        return feat, [f"{c}_diff" for c in feat_cols]
+    flat = _ojama_flat_score(
+        feat["board_ojama_count_diff"], feat["ojama_forecast_diff"],
+    )
+    feat = feat.copy()
+    feat[f"{COLOR_OJAMA_INTERACTION_COL}_diff"] = (
+        feat["board_color_puyo_total_diff"] * flat
+    )
+    # フラット度そのものも渡す (木が局面別の分岐を学習できるようにする)
+    feat[f"{OJAMA_FLAT_COL}_diff"] = flat
+    cols = [f"{c}_diff" for c in feat_cols]
+    cols.append(f"{COLOR_OJAMA_INTERACTION_COL}_diff")
+    cols.append(f"{OJAMA_FLAT_COL}_diff")
+    return feat, cols
+
+
 def _train_model(exclude_video: str | None = None):
     """study データの差分特徴で HistGBC を学習して返す。
 
@@ -370,7 +478,7 @@ def _train_model(exclude_video: str | None = None):
     互換を維持。_score_advantage 側がこの属性を参照して自動整合する)。
     """
     from sklearn.ensemble import HistGradientBoostingClassifier
-    df = load_labeled_csv("data/indicators_v2/study/labeled_win.csv")
+    df = load_labeled_csv(TRAIN_CSV_PATH)
     if exclude_video is not None:
         before = len(df)
         df = df[df["video_id"].astype(str) != exclude_video].reset_index(drop=True)
@@ -378,7 +486,9 @@ def _train_model(exclude_video: str | None = None):
     feat_cols = _resolve_features(df)
     paired = pair_sides_for_win(df, max_tdiff=1.0)
     feat = build_features(paired, feat_cols)
-    cols = [f"{c}_diff" for c in feat_cols]
+    # 交互作用 (色ぷよ差 × おじゃまフラット度) を追加。フラグ既定 ON だが
+    # 必要列が揃わない場合は自動的に無効化される (列存在ガードと同じ思想)。
+    feat, cols = _add_interaction_columns(feat, feat_cols)
     X = feat[cols].fillna(0.0).values
     y = paired["won_1p"].astype(int).values
     # 対称化: 差分を反転しラベルも反転したミラー標本を追加。
@@ -389,6 +499,10 @@ def _train_model(exclude_video: str | None = None):
     model = HistGradientBoostingClassifier(**GBC_PARAMS)
     model.fit(X_sym, y_sym)
     model._puyo_feature_cols = feat_cols  # 列存在ガード後の実特徴量 (推論側で参照)
+    # 交互作用列を使ったかを推論側へ伝える (使っていなければ推論も足さない)
+    model._puyo_uses_interaction = (
+        f"{COLOR_OJAMA_INTERACTION_COL}_diff" in cols
+    )
     print(f"[train] 元n={len(y)} (1P勝ち{int(y.sum())}) -> 対称化後 {len(y_sym)}")
     return model
 
@@ -407,6 +521,54 @@ class PressureTracker:
         self.pressure += max(0.0, ojama_2p - self._prev2) - max(0.0, ojama_1p - self._prev1)
         self._prev1, self._prev2 = ojama_1p, ojama_2p
         return float(max(-100.0, min(100.0, self.pressure * PRESSURE_SCALE)))
+
+
+class CapabilityPressureTracker:
+    """(2026-08-09 user伝授) 攻撃の効果を **相手の盤面能力の低下量** で測る圧力。
+
+    従来の `PressureTracker` は「相手盤面のおじゃま個数が何個増えたか」だけを
+    減衰累積していた。 しかし user 伝授の通り、 評価すべきは個数ではなく
+    **おじゃまによって盤面の機能がどれだけ落ちたか**である:
+
+      - 飽和連鎖量が減った (組める最大の連鎖が小さくなった)
+      - 連鎖がつながりづらくなった (連結が分断された)
+
+    同じ 10 個でも土台を割られた場合と上に乗っただけでは損害がまったく違う。
+    個数だけで測ると同じ扱いになってしまう
+    (CLAUDE.md「形は手段、機能が本質」の直接の適用)。
+
+    本トラッカーは各 side の能力スコア
+        capability = 飽和連鎖量 + 連結(pair/triple の正規化和)
+    を毎回計算し、 **その低下量** を減衰累積する。 相手の能力が落ちれば
+    1P 側にプラス、 自分の能力が落ちればマイナス。
+    """
+
+    def __init__(self) -> None:
+        self.pressure = 0.0
+        self._prev1: float | None = None
+        self._prev2: float | None = None
+
+    @staticmethod
+    def _capability(board: Board) -> float:
+        """盤面の攻撃能力を 0〜1 スケール相当で返す (指標は正規化済み)。"""
+        co, _ = iv.connectivity_observation(board)
+        # 連結は個数なので盤面セル数で割って 0〜1 に寄せる (指標規約に合わせる)
+        conn = (co.pair_count + co.triple_count) / float(BOARD_ROWS * BOARD_COLS)
+        return float(iv.saturated_chain_count(board).score) + conn
+
+    def update(self, b1: Board, b2: Board) -> float:
+        """毎フレーム。1P視点の圧力を [-100,100] で返す (正=1P攻勢)。"""
+        c1 = self._capability(b1)
+        c2 = self._capability(b2)
+        if self._prev1 is None or self._prev2 is None:
+            self._prev1, self._prev2 = c1, c2
+            return 0.0
+        self.pressure *= PRESSURE_DECAY
+        # 相手の能力が落ちた分 = こちらの攻撃が効いた分
+        self.pressure += max(0.0, self._prev2 - c2) - max(0.0, self._prev1 - c1)
+        self._prev1, self._prev2 = c1, c2
+        return float(max(-100.0, min(100.0,
+                                     self.pressure * CAPABILITY_PRESSURE_SCALE)))
 
 
 class ScoreLeadTracker:
@@ -550,7 +712,22 @@ def _score_advantage(
     _fill_fire_stability_candidate(f1, f2, b1, b2, cols)
     _fill_expected_fire_candidate(f1, f2, b1, b2, cols)
     diff = {c: f1[c] - f2[c] for c in cols}
-    x = np.array([[diff[c] for c in cols]], dtype=float)
+    # 交互作用 (色ぷよ差 × おじゃまフラット度) を学習時と同じ順序で末尾に足す。
+    # 学習側が使っていなければ足さない (model._puyo_uses_interaction で判定)。
+    x_cols = list(cols)
+    if getattr(model, "_puyo_uses_interaction", False):
+        flat = float(_ojama_flat_score(
+            diff.get("board_ojama_count", 0.0),
+            diff.get("ojama_forecast", 0.0),
+        ))
+        diff[COLOR_OJAMA_INTERACTION_COL] = (
+            diff.get("board_color_puyo_total", 0.0) * flat
+        )
+        x_cols.append(COLOR_OJAMA_INTERACTION_COL)
+        # フラット度そのもの (学習時と同じ順序で末尾に付ける)
+        diff[OJAMA_FLAT_COL] = flat
+        x_cols.append(OJAMA_FLAT_COL)
+    x = np.array([[diff[c] for c in x_cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])
     adv = (p1 - 0.5) * 200.0
     drivers = sorted(
@@ -928,6 +1105,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_initial_confirm_vote: bool | None = None,
              enable_platt_calibration: bool = False,
              enable_early_fire_reaction: bool = False,
+             enable_per_side_settled: bool = False,
+             disable_score_lead_bias: bool = False,
+             enable_capability_pressure: bool = False,
+             disable_pressure: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -996,6 +1177,16 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         docstring 参照)。adv_ema/p1_last 自体 (EMA 内部状態) には混ぜず、表示直前
         (グラフ点・バー・勝率テキスト) にのみ加算するため、無効時は完全に従来経路と
         ビット一致する。
+    enable_per_side_settled: True で「片側でも STABLE なら再計算」に切り替える
+        (2026-08-08 追加)。従来の「両者同時 STABLE」ゲートは実測で試合時間の
+        72.3%・最長 13.97 秒も評価を凍結させており、大連鎖の撃ち合い中に
+        盤面が激変しても判定が動かない原因だった。b1/b2 は片側ずつ更新される
+        凍結盤面なので、片側 STABLE でも最新同士で計算できる。
+        既定 False = 従来挙動と完全一致 (backwards compat)。
+    disable_score_lead_bias: True で得点タイブレーク (ScoreLeadTracker) を
+        無効化する (2026-08-09 user伝授)。スコアはおじゃまを送る手段であり、
+        送った時点で意味を失う (送ったぶんは予告おじゃま/盤面おじゃまとして
+        既に観測できるため二重計上になる)。既定 False = 従来挙動維持。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -1078,6 +1269,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
+    # 能力低下ベースの圧力 (2026-08-09)。 enable_capability_pressure=True の
+    # ときだけ使う。 リセットは _fresh_trackers と同じタイミングで行う。
+    cap_ptracker = CapabilityPressureTracker()
     hcache = HeavyAdvCache(model)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
@@ -1108,6 +1302,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             history.clear()
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
              efire_tracker) = _fresh_trackers(model)
+            cap_ptracker = CapabilityPressureTracker()
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -1126,17 +1321,63 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
         # _drive_ojama で毎フレーム密に駆動済みのため、ここで止めても会計は失われない。
-        settled = r.p1.state == BoardState.STABLE and r.p2.state == BoardState.STABLE
+        # (2026-08-08) 片側独立更新モード。
+        # 従来は「両者同時 STABLE」でしか再計算せず、 実測で **試合時間の 72.3%、
+        # 最長 13.97 秒** 評価が凍結していた (scripts/_measure_settled_freeze_
+        # 2026-08-08.py)。 片方が連鎖中・おじゃま落下中だと両者とも止まるため、
+        # 1P が撃ち切って空・2P がおじゃまで埋まって窒息寸前でも「互角 54%」の
+        # まま動かない (user 指摘)。
+        # b1/b2 は上で **片側ずつ** STABLE 時に更新される凍結盤面なので、
+        # 片側でも STABLE なら「最新の凍結盤面同士」で再計算できる。 生値では
+        # ないため、 元の設計意図 (連鎖中に生値で乱高下させない) は保たれる。
+        # 既定 False = 従来挙動と完全一致 (backwards compat)。
+        if enable_per_side_settled:
+            settled = (
+                r.p1.state == BoardState.STABLE
+                or r.p2.state == BoardState.STABLE
+            )
+        else:
+            settled = (
+                r.p1.state == BoardState.STABLE
+                and r.p2.state == BoardState.STABLE
+            )
         if b1 is not None and b2 is not None and settled:
             # 重い盤面由来(モデルadv/threat/ukeyasusa/飽和連鎖)はキャッシュ間引き、安価な圧力/リードは毎フレーム
             model_adv, threat, drivers, ukey1, ukey2, sat1, sat2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
-            pres = ptracker.update(iv.board_ojama_count(b1).raw,
-                                   iv.board_ojama_count(b2).raw)
+            # 圧力の測り方 (2026-08-09 user伝授)。
+            # 従来: 相手のおじゃま「個数」の増加を累積 → 個数は現象であって
+            #       盤面がどれだけ壊れたかを表さない (同じ10個でも土台を割られた
+            #       場合と上に乗っただけでは損害が違う)。
+            # 新  : 相手の盤面「能力」(飽和連鎖量 + 連結) の低下量を累積する。
+            if disable_pressure:
+                # 圧力成分そのものを外す (2026-08-09 user要望)。
+                # 圧力は「攻撃を通した履歴」だが、 その効果は既に相手の盤面
+                # (おじゃま数・連結・飽和連鎖量) としてモデルが見ている。
+                # 本当に独立した情報を足しているのかを確かめるための版。
+                pres = 0.0
+            elif enable_capability_pressure:
+                pres = cap_ptracker.update(b1, b2)
+            else:
+                pres = ptracker.update(iv.board_ojama_count(b1).raw,
+                                       iv.board_ojama_count(b2).raw)
             fc = fctracker.update(r.p1.score, r.p2.score,
                                   pipe.tsumo_count("1P"), pipe.tsumo_count("2P"))  # (M3改B)配送予告
-            sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP,  # (b)得点タイブレーク(±15頭打ち)
-                                            svtracker.update(r.p1.score, r.p2.score)))
+            # (b) 得点タイブレーク。
+            # **2026-08-09 user伝授: スコア差そのものに意味はない**。
+            # スコアはおじゃまを送るための手段であり、 送った時点で意味を失う
+            # (送ったぶんは相手の予告おじゃま/盤面おじゃまとして既に観測できる
+            #  ので、 スコアでも数えると二重計上になる)。 しかもスコアは累積
+            # なので一度差がつくと残り続け、 連鎖中は伸び続けるため
+            # 「同時に連鎖しているのに一方へ寄り続ける」症状の原因になる。
+            # 意味があるのは「おじゃまに変換されていない繰越 (落下ボーナス・
+            # 全消しボーナスのスタック)」だけ。
+            # 評価は予告おじゃま + フィールド状況で行うのが正しい。
+            if disable_score_lead_bias:
+                sl_bias = 0.0
+            else:
+                sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP,
+                                                svtracker.update(r.p1.score, r.p2.score)))
             adv = (W_PRESSURE * pres + W_FORECAST * fc
                    + W_MODEL * model_adv + W_THREAT * threat) + sl_bias
             adv = max(-100.0, min(100.0, adv))
@@ -1299,6 +1540,33 @@ def main() -> None:
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
+        "--no-pressure", action="store_true", default=False,
+        dest="disable_pressure",
+        help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
+             "既に相手の盤面としてモデルが見ているため、独立した情報を足して"
+             "いるのか検証するための版。既定は外さない。",
+    )
+    ap.add_argument(
+        "--capability-pressure", action="store_true", default=False,
+        dest="enable_capability_pressure",
+        help="圧力を「おじゃま個数の増加」でなく「相手の盤面能力(飽和連鎖量+連結)"
+             "の低下量」で測る (2026-08-09 user伝授)。既定は従来の個数ベース。",
+    )
+    ap.add_argument(
+        "--no-score-lead-bias", action="store_true", default=False,
+        dest="disable_score_lead_bias",
+        help="得点タイブレークを無効化する (2026-08-09)。スコア差はおじゃまを"
+             "送る手段の中間値にすぎず、送ったぶんは予告/盤面で既に観測できる"
+             "ため二重計上になる。既定は無効化しない (後方互換)。",
+    )
+    ap.add_argument(
+        "--per-side-settled", action="store_true", default=False,
+        dest="enable_per_side_settled",
+        help="片側でも STABLE なら有利不利を再計算する (2026-08-08)。"
+             "従来の両者同時 STABLE ゲートは試合時間の 72.3%% を凍結させていた。"
+             "既定は無効 (後方互換)。",
+    )
+    ap.add_argument(
         "--puyo-to-empty-hsv-guard", action=argparse.BooleanOptionalAction, default=None,
         dest="enable_puyo_to_empty_hsv_guard",
         help="色→空 HSV 照合ガードを有効化 (RecognitionPipeline.load_default に転送、"
@@ -1320,6 +1588,10 @@ def main() -> None:
              enable_initial_confirm_vote=a.enable_initial_confirm_vote,
              enable_platt_calibration=a.enable_platt_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
+             enable_per_side_settled=a.enable_per_side_settled,
+             disable_score_lead_bias=a.disable_score_lead_bias,
+             enable_capability_pressure=a.enable_capability_pressure,
+             disable_pressure=a.disable_pressure,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard)
 
 

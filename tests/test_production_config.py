@@ -99,16 +99,21 @@ class TestGeneratorsUseProductionFlags:
     フラグを並べると必ず抜けるため、 機械的に突き合わせる。
     """
 
-    def test_demo_advantage_generator_has_all_adopted_flags(self) -> None:
-        """有利不利デモの生成スクリプトが採用済みフラグを全て含むこと。"""
-        text = _script_text(
-            "scripts/_gen_demo_advantage_pair_efire_2026-08-08.sh"
-        )
-        assert text, "デモ生成スクリプトが見つからない"
-        missing = [
-            f.flag for f in ADVANTAGE_ADOPTED if _flag_name(f.flag) not in text
-        ]
-        assert not missing, f"採用済みフラグが漏れている: {missing}"
+    def test_demo_generator_pulls_flags_from_production_config(self) -> None:
+        """最終デモの生成スクリプトが production_config からフラグを取得すること。
+
+        フラグを直書きすると採用漏れが起きる (これが 2026-08-08 の退行の
+        入口だった)。 よって「直書きしていないこと」自体をテストする。
+        """
+        for rel in (
+            "scripts/_gen_demo_final_2026-08-08.sh",
+            "scripts/_gen_demo_final_cd_2026-08-08.sh",
+        ):
+            text = _script_text(rel)
+            assert text, f"{rel} が見つからない"
+            assert "production_config" in text, (
+                f"{rel} が production_config を参照していない (直書きの疑い)"
+            )
 
     def test_helpers_return_all_flags(self) -> None:
         """ヘルパ関数が登録済みフラグを全て返すこと。"""

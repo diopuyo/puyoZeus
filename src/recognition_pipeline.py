@@ -1036,6 +1036,10 @@ class RecognitionPipeline:
         # 化する。default False = 従来挙動完全維持・bit-identical
         # (backwards compat)。
         enable_gravity_settle_reset_on_exit: bool = False,
+        # マージンタイム逓減 (2026-08-09)。 True でおじゃま判定の閾値を
+        # 経過時間に応じた実効レートにする (最初の1手から 95.5 秒で減衰開始)。
+        # 既定 False = 固定 70 のまま (backwards compat)。
+        enable_margin_time_rate: bool = False,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -1540,6 +1544,12 @@ class RecognitionPipeline:
         # サイクル66: 累積確定 tsumo (= TSUMO_FALL→STABLE 後に commit)
         self._tsumo_count_1p: _Counter = _Counter()
         self._tsumo_count_2p: _Counter = _Counter()
+        # マージンタイム逓減の起点 (2026-08-09 user伝授)。
+        # 「試合開始」は演出があり実装で正確に取れないため、
+        # **最初の1手 (最初のツモ設置)** の時刻を起点にする。
+        # None = まだ 1 手も置かれていない (この間はレート減衰しない)。
+        self._first_move_sec_1p: float | None = None
+        self._first_move_sec_2p: float | None = None
         # サイクル67: in-flight tsumo (= NEXT 消費後、 着地完了前)
         # ペア (color1, color2) を queue 化、 TSUMO_FALL→STABLE で pop して commit
         self._pending_tsumo_1p: _deque = _deque()
@@ -1700,6 +1710,8 @@ class RecognitionPipeline:
         self._enable_gravity_settle_reset_on_exit: bool = bool(
             enable_gravity_settle_reset_on_exit
         )
+        # マージンタイム逓減 (2026-08-09)。_build_state_machine 呼び出し前に格納。
+        self._enable_margin_time_rate: bool = bool(enable_margin_time_rate)
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
@@ -1948,6 +1960,7 @@ class RecognitionPipeline:
             enable_gravity_settle_reset_on_exit=(
                 self._enable_gravity_settle_reset_on_exit
             ),
+            enable_margin_time_rate=self._enable_margin_time_rate,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1984,6 +1997,7 @@ class RecognitionPipeline:
             enable_gravity_settle_reset_on_exit=(
                 self._enable_gravity_settle_reset_on_exit
             ),
+            enable_margin_time_rate=self._enable_margin_time_rate,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -2320,6 +2334,7 @@ class RecognitionPipeline:
         # GravitySettleDetector 内部カウンタリセット。
         # default False = 従来挙動完全維持・bit-identical。
         enable_gravity_settle_reset_on_exit: bool = False,
+        enable_margin_time_rate: bool = False,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
@@ -2408,6 +2423,7 @@ class RecognitionPipeline:
         detectors.append(
             OjamaPhaseDetector(
                 defer_ojama_fall_exit_to_visual=enable_ojama_fall_board_settle,
+                enable_margin_time_rate=enable_margin_time_rate,
             )
         )
         detectors.append(TsumoPhaseDetector())
@@ -2521,6 +2537,8 @@ class RecognitionPipeline:
         # GravitySettleDetector 内部カウンタリセット。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_gravity_settle_reset_on_exit: bool = False,
+        # マージンタイム逓減 (2026-08-09)。既定 False = 従来挙動維持。
+        enable_margin_time_rate: bool = False,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -2870,6 +2888,7 @@ class RecognitionPipeline:
             enable_gravity_settle_reset_on_exit=(
                 enable_gravity_settle_reset_on_exit
             ),
+            enable_margin_time_rate=enable_margin_time_rate,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
@@ -3376,6 +3395,9 @@ class RecognitionPipeline:
             # サイクル66: NEXT 累積制約も試合切り替えでリセット
             self._tsumo_count_1p.clear()
             self._tsumo_count_2p.clear()
+            # 試合が変わったらマージンタイムの起点も捨てる
+            self._first_move_sec_1p = None
+            self._first_move_sec_2p = None
             self._pending_tsumo_1p.clear()
             self._pending_tsumo_2p.clear()
             self._last_seen_next_1p = None
@@ -5550,10 +5572,19 @@ class RecognitionPipeline:
                 ),
                 enable_visual_gate=self._enable_effect_visual_gate,
             )
+        # マージンタイム逓減用の経過秒 (最初の1手からの経過)。
+        # 最初の1手がまだ無ければ None のままにして、 推測で減衰させない。
+        _first_move = (
+            self._first_move_sec_1p if side == "1P" else self._first_move_sec_2p
+        )
+        _elapsed_since_first_move = (
+            None if _first_move is None else max(0.0, time_sec - _first_move)
+        )
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
             is_match_active=is_active,
+            elapsed_since_first_move_sec=_elapsed_since_first_move,
             chain_event=chain_event,
             score_delta=score_d_2p_for_ojama,
             next_pair=next_pair,
@@ -5623,6 +5654,14 @@ class RecognitionPipeline:
                 committed = pending.popleft()
                 tsumo_count_target[committed[0]] += 1
                 tsumo_count_target[committed[1]] += 1
+                # マージンタイム逓減の起点 = **最初の1手が着地した時刻**
+                # (2026-08-09 user伝授)。 試合開始は演出があり実装で正確に
+                # 取れないが、 ツモ着地は確実に取れるのでこちらを起点にする。
+                if side == "1P":
+                    if self._first_move_sec_1p is None:
+                        self._first_move_sec_1p = float(signals.time_sec)
+                elif self._first_move_sec_2p is None:
+                    self._first_move_sec_2p = float(signals.time_sec)
         # 2026-05-11 サイクル71 Phase 1a: 物理推論主軸化.
         # 旧 _compute_landing_inferred (= CNN 差分位置採用) を廃止し、
         # placement_inferrer.infer_placement (= 物理パターン全列挙 + NEXT 色固定
