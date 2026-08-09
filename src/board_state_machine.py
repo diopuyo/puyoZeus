@@ -355,6 +355,14 @@ class DetectorSignals:
     # でなく実秒ベースの持続確認 (EFFECT_PERSIST_SEC) を経由する。
     # backwards compat: default False で既存動作と完全同一。
     effect_gate_window_active: bool = False
+    # マージンタイム逓減用 (2026-08-09): **最初の1手 (最初のツモ設置)** からの
+    # 経過秒。 おじゃまレートは一定時間後に 16 秒ごと ×0.75 で下がるため、
+    # OjamaPhaseDetector の閾値をこの経過時間から算出する。
+    # 起点を試合開始でなく最初の1手にするのは user 伝授 (試合開始時刻は演出が
+    # あり実装で正確に取れないが、 最初のツモ設置は認識で確実に取れる)。
+    # None = 未取得 (この場合は従来の固定レートへフォールバックし、
+    # 推測で減衰させない)。 backwards compat: default None で既存動作と同一。
+    elapsed_since_first_move_sec: float | None = None
 
 
 class StateTransitionDetector(Protocol):
