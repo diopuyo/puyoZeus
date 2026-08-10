@@ -18,6 +18,7 @@ from src.board import (
     COLOR_EMPTY,
     COLOR_OJAMA,
     COLOR_UNKNOWN,
+    HIDDEN_ROWS,
     Board,
 )
 
@@ -129,15 +130,31 @@ class ChainSimulator:
         Tier B 指標 (planning_entropy 等) で 1 frame あたり数十回
         simulate が呼ばれるため、盤面 grid をキーとした LRU キャッシュ
         を導入。同一盤面の simulate を高速化 (~10 倍)。
+
+    幽霊連鎖ルール (2026-08-09 user伝授):
+        ぷよぷよeスポーツでは 13段目 (隠し段、row=0) のぷよは 4つ繋がっても
+        消えない ("幽霊連鎖" として上級者が利用する公式仕様)。
+        `exclude_hidden_row_from_pop=True` でこの正しいルールを有効化できる。
+        既定は False (従来挙動維持、backwards compat)。
+        参考実装: `src/chain_bitboard.py` の `exclude_hidden_row_from_pop`
+        (`simulate_batch` / `simulate_single`)。
     """
 
     # キャッシュサイズ上限 (盤面パターンの種類)
     _CACHE_MAX_SIZE: int = 50_000
 
-    def __init__(self, cache_enabled: bool = True) -> None:
+    def __init__(
+        self,
+        cache_enabled: bool = True,
+        exclude_hidden_row_from_pop: bool = False,
+    ) -> None:
         # bytes キー (board._grid.tobytes()) → ChainResult のメモ化
         self._cache: dict[bytes, "ChainResult"] = {}
         self._cache_enabled = cache_enabled
+        # 幽霊連鎖ルール切替 (2026-08-09、既定 False = 従来挙動維持)。
+        # 既存指標・学習済み重み・過去 cycle の再現性を壊さないための
+        # backwards compat フラグ (呼び出し元での切替判断は別途行う)。
+        self._exclude_hidden_row_from_pop = exclude_hidden_row_from_pop
 
     # ============================
     # 公開メソッド
@@ -220,6 +237,11 @@ class ChainSimulator:
         おじゃまはグループを形成しない。隣接おじゃまは
         PuyoGroup.ojama_adjacent に収集される。
 
+        幽霊連鎖ルール (self._exclude_hidden_row_from_pop=True 時):
+        13段目 (隠し段、row < HIDDEN_ROWS) のセルはグループを形成しない
+        (このセルを起点にグループを作らない。可視セル側からの取り込み
+        防止は `_flood_fill` 側で行う)。
+
         Args:
             board: 検索対象の盤面。
 
@@ -236,6 +258,9 @@ class ChainSimulator:
                 color = board.get(row, col)
                 # UNKNOWN (隠し段・量子状態) はグループ対象外
                 if color in (COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN):
+                    continue
+                # 幽霊連鎖ルール: 13段目は連結判定の対象外 (ON時のみ)
+                if self._exclude_hidden_row_from_pop and row < HIDDEN_ROWS:
                     continue
                 if visited[row][col]:
                     continue
@@ -359,6 +384,16 @@ class ChainSimulator:
         """
         BFS フラッドフィルで同色グループを検出する。
 
+        幽霊連鎖ルール (self._exclude_hidden_row_from_pop=True 時):
+        隣接セルが13段目 (row < HIDDEN_ROWS) の場合、同色であっても
+        グループに取り込まない (連結対象外)。ここで除外しないと
+        「13段目1個+可視3個」を4連結と誤判定し、判定後に13段目分を
+        差し引いて可視3個だけ消してしまう (誤り)。連結判定の前に
+        除外することで、可視3個だけでは4連結不成立=何も消えない、
+        という正しい挙動になる。隣接おじゃまの収集 (ojama_adjacent) は
+        13段目かどうかに関わらず従来通り行う (`src/chain_bitboard.py`
+        の `_expand` が全13行を対象にする実装と挙動を揃えるため)。
+
         Args:
             board: 対象の盤面。
             start_row: 開始行。
@@ -382,8 +417,15 @@ class ChainSimulator:
                 nr, nc = row + dr, col + dc
                 if not (0 <= nr < BOARD_ROWS and 0 <= nc < BOARD_COLS):
                     continue
+                is_hidden_neighbor = (
+                    self._exclude_hidden_row_from_pop and nr < HIDDEN_ROWS
+                )
                 neighbor_color = board.get(nr, nc)
-                if neighbor_color == color and not visited[nr][nc]:
+                if (
+                    neighbor_color == color
+                    and not visited[nr][nc]
+                    and not is_hidden_neighbor
+                ):
                     visited[nr][nc] = True
                     queue.append((nr, nc))
                 elif neighbor_color == COLOR_OJAMA:

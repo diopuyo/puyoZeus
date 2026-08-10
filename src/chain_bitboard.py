@@ -549,3 +549,62 @@ def simulate_single_with_approx_score(board: Board) -> BitboardChainScoreResult:
     """1 盤面のみを判定する薄いラッパー (近似得点版、単発呼び出し・テスト用)。"""
     batch = batch_from_boards([board])
     return simulate_batch_with_approx_score(batch)[0]
+
+
+# ============================
+# 同点タイブレーク用 軽量連結プロキシ (near_future_fire_power 用, 2026-08-09)
+# ============================
+#
+# simulate_batch / simulate_batch_with_approx_score は一切変更しない
+# (新規追加のみ、backwards compat)。
+#
+# 背景: near_future_fire_power のビーム枝刈りは得点降順ソートのみで、
+# 実測 (scripts/_diag_beam_ties_2026-08-09.py) では候補2,816通り中
+# 異なる得点は4〜62種類・最大同点群234〜1,928件だった。つまり枝刈りは
+# 「同点から列挙順で先頭 beam_width 件」= 実質ランダム選択になっている。
+#
+# 対策: 同点候補を「後で伸びる形か」で並べ替える第二キーを提供する。
+# 厳密な連結成分数え上げ (src.indicators_v2.connectivity_observation の
+# Python flood fill、ChainSimulator.find_groups) は 1 盤面あたり約0.05ms
+# だが、候補ごとに逐次呼ぶと N に比例して増える (実測: N=1000で約48.8ms)。
+# 本関数はビットボードの numpy バッチ演算で同等の「繋がり具合」を近似し、
+# 候補全件をまとめて1回の numpy 呼び出しで処理する (実測: N=1000で約1.7ms、
+# 約28倍高速)。ただし exact な「2連結/3連結グループ数」ではなく
+# 「同色隣接ペア(エッジ)数」「同色近傍2方向以上を持つセル数」という
+# 近似プロキシである点に注意 (task 指示: 厳密性より軽量性を優先)。
+
+
+def batch_adjacency_tiebreak(boards: "list[Board]") -> "tuple[np.ndarray, np.ndarray]":
+    """複数盤面の「伸びしろ」軽量プロキシをバッチ計算する (ビット演算)。
+
+    Args:
+        boards: 評価対象の盤面リスト (破壊しない)。
+
+    Returns:
+        (pair_proxy, triple_proxy): shape=(len(boards),) int64 配列。
+        pair_proxy: 全色合計の同色隣接ペア(エッジ)数 (「2連結」の近似、
+            群が大きいほど過大に出るが単調な繋がり具合の代理として使う)。
+        triple_proxy: 全色合計の「同色近傍を2方向以上持つセル」数
+            (L字/I字型、「あと1個で消える」形の芽の近似)。
+    """
+    if not boards:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    planes = batch_from_boards(boards)
+    n = len(boards)
+    pair_proxy = np.zeros(n, dtype=np.int64)
+    triple_proxy = np.zeros(n, dtype=np.int64)
+    for color in TRACKED_COLORS:
+        m = planes[color]
+        u = _shift_vertical(m, toward_lsb=True) & m
+        d = _shift_vertical(m, toward_lsb=False) & m
+        l = _shift_horizontal(m, toward_low_col=False) & m
+        r = _shift_horizontal(m, toward_low_col=True) & m
+        # エッジは1方向のみ (u, r) で数え、二重カウントを防ぐ。
+        pair_proxy += (
+            _POPCOUNT_TABLE_16BIT[u].sum(axis=-1) + _POPCOUNT_TABLE_16BIT[r].sum(axis=-1)
+        ).astype(np.int64)
+        ud_and, lr_and = u & d, l & r
+        ud_or, lr_or = u | d, l | r
+        m2 = ud_and | lr_and | (ud_or & lr_or)  # 同色近傍2方向以上のセル
+        triple_proxy += _POPCOUNT_TABLE_16BIT[m2].sum(axis=-1).astype(np.int64)
+    return pair_proxy, triple_proxy

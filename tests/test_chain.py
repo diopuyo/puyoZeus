@@ -6,6 +6,7 @@ chain.py のテスト
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from src.board import (
@@ -26,6 +27,7 @@ from src.chain import (
     ChainStep,
     PuyoGroup,
 )
+from src.chain_bitboard import planes_to_board, simulate_single
 
 
 # ============================
@@ -536,3 +538,94 @@ class TestIntegration:
         result = sim.simulate(board)
         assert result.chain_count == 2
         assert result.total_ojama == 3
+
+
+# ============================
+# TestGhostChainRule (幽霊連鎖ルール, 2026-08-09 user伝授)
+# ============================
+#
+# ぷよぷよeスポーツでは13段目 (隠し段、row=0) のぷよは4つ繋がっても消えない。
+# ChainSimulator(exclude_hidden_row_from_pop=True) で有効化する新ルール。
+# 既定 (exclude_hidden_row_from_pop=False) は従来挙動を完全維持する。
+
+
+class TestGhostChainRule:
+    def test_hidden_plus_visible_four_does_not_erase_when_on(self) -> None:
+        """13段目1個+可視12段目3個の縦4連結 → ON時は何も消えない。"""
+        grid = empty_grid()
+        place_vertical(grid, 0, 0, COLOR_RED, 4)  # row0(隠し段)+row1-3(可視)
+        board = board_from_grid(grid)
+
+        sim_on = ChainSimulator(exclude_hidden_row_from_pop=True)
+        result = sim_on.simulate(board)
+
+        assert result.chain_count == 0
+        assert result.total_erased == 0
+        # 4個とも消えずに残っていること (隠し段1個+可視3個)
+        assert result.final_board.count_puyos() == 4
+
+    def test_hidden_plus_visible_four_erases_when_off(self) -> None:
+        """同じ盤面で OFF (既定・従来挙動) なら4連結として消えること。"""
+        grid = empty_grid()
+        place_vertical(grid, 0, 0, COLOR_RED, 4)
+        board = board_from_grid(grid)
+
+        sim_off = ChainSimulator(exclude_hidden_row_from_pop=False)
+        result = sim_off.simulate(board)
+
+        assert result.chain_count == 1
+        assert result.total_erased == 4
+        assert result.final_board.count_puyos() == 0
+
+    def test_visible_only_four_unaffected_by_flag(self) -> None:
+        """13段目が無関係な可視のみの4連結は ON/OFF で結果が同じであること。"""
+        grid = empty_grid()
+        place_horizontal(grid, 12, 0, COLOR_RED, MIN_ERASE_COUNT)
+        board = board_from_grid(grid)
+
+        result_on = ChainSimulator(exclude_hidden_row_from_pop=True).simulate(board)
+        result_off = ChainSimulator(exclude_hidden_row_from_pop=False).simulate(board)
+
+        assert result_on.chain_count == result_off.chain_count == 1
+        assert result_on.total_erased == result_off.total_erased == 4
+
+    def test_ghost_puyo_erases_normally_after_falling_to_visible_area(self) -> None:
+        """
+        13段目のぷよが下段消去→重力で可視域へ落下した後は普通に消えること。
+
+        配置 (col0):
+          row0: R (隠し段、単独で孤立)
+          row1-4: B (縦4連結、可視、無条件でstep1に消える)
+        配置 (row12):
+          col1-3: R (3個、col0のRが落ちてくるのを待つ)
+
+        step1: 青4連結が消える → col0の重力で隠し段の赤が最下段まで落下
+        step2: row12の赤4連結 (col0-3) が成立 → 消える
+        """
+        grid = empty_grid()
+        place_vertical(grid, 0, 0, COLOR_RED, 1)   # row0のみ (隠し段の幽霊ぷよ)
+        place_vertical(grid, 1, 0, COLOR_BLUE, 4)  # row1-4 (可視4連結)
+        for col in (1, 2, 3):
+            grid[12][col] = COLOR_RED
+        board = board_from_grid(grid)
+
+        sim_on = ChainSimulator(exclude_hidden_row_from_pop=True)
+        result = sim_on.simulate(board)
+
+        assert result.chain_count == 2
+        assert result.total_erased == 8  # 青4個 + 赤4個 (落下後に可視で成立)
+
+    def test_matches_chain_bitboard_reference_implementation(self) -> None:
+        """chain_bitboard.simulate_single(exclude_hidden_row_from_pop=True) と一致すること。"""
+        grid = empty_grid()
+        place_vertical(grid, 0, 0, COLOR_RED, 4)  # 隠し段1個+可視3個 (何も消えない想定)
+        board = board_from_grid(grid)
+
+        expected = ChainSimulator(exclude_hidden_row_from_pop=True).simulate(board)
+        got = simulate_single(board, exclude_hidden_row_from_pop=True)
+
+        assert expected.chain_count == got.chain_count
+        assert expected.total_erased == got.total_erased
+        assert expected.total_ojama == got.total_ojama
+        got_final_board = planes_to_board(got.final_planes)
+        assert np.array_equal(expected.final_board._grid, got_final_board._grid)

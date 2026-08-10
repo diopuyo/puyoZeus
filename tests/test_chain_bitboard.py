@@ -22,6 +22,7 @@ from src.board import (
 )
 from src.chain import ChainSimulator
 from src.chain_bitboard import (
+    batch_adjacency_tiebreak,
     board_to_planes,
     planes_to_board,
     simulate_single,
@@ -175,3 +176,74 @@ def test_matches_chain_simulator_on_real_boards(video_id: str) -> None:
         if board.is_dead():
             continue
         _assert_matches(board)
+
+
+# ============================
+# batch_adjacency_tiebreak (near_future_fire_power 同点タイブレーク用, 2026-08-09)
+# ============================
+
+
+def test_batch_adjacency_tiebreak_empty_boards_list() -> None:
+    """空リストを渡すと長さ0の配列を返すこと (境界ケース)。"""
+    pair_proxy, triple_proxy = batch_adjacency_tiebreak([])
+    assert pair_proxy.shape == (0,)
+    assert triple_proxy.shape == (0,)
+
+
+def test_batch_adjacency_tiebreak_empty_board_is_zero() -> None:
+    """空盤面は隣接ペア・近傍2方向以上のセルともに0であること。"""
+    pair_proxy, triple_proxy = batch_adjacency_tiebreak([Board()])
+    assert pair_proxy[0] == 0
+    assert triple_proxy[0] == 0
+
+
+def test_batch_adjacency_tiebreak_isolated_cells_are_zero() -> None:
+    """互いに隣接しない同色セルのみの盤面は pair_proxy が0であること。"""
+    board = Board()
+    board.set(12, 0, COLOR_RED)
+    board.set(12, 2, COLOR_RED)
+    board.set(12, 4, COLOR_RED)
+    pair_proxy, triple_proxy = batch_adjacency_tiebreak([board])
+    assert pair_proxy[0] == 0
+    assert triple_proxy[0] == 0
+
+
+def test_batch_adjacency_tiebreak_l_shape_has_pair_and_triple() -> None:
+    """L字3連結 (あと1個で消える形) は pair_proxy>0・triple_proxy>0 になること。"""
+    board = Board()
+    board.set(12, 0, COLOR_GREEN)
+    board.set(12, 1, COLOR_GREEN)
+    board.set(11, 0, COLOR_GREEN)
+    pair_proxy, triple_proxy = batch_adjacency_tiebreak([board])
+    assert pair_proxy[0] == 2  # (12,0)-(12,1) の横エッジ + (12,0)-(11,0) の縦エッジ
+    assert triple_proxy[0] == 1  # (12,0) が2方向に同色近傍を持つ
+
+
+def test_batch_adjacency_tiebreak_batch_matches_single_calls() -> None:
+    """複数盤面をバッチで渡した結果が、1件ずつ渡した結果の連結と一致すること。"""
+    isolated = Board()
+    isolated.set(12, 0, COLOR_RED)
+
+    l_shape = Board()
+    l_shape.set(12, 0, COLOR_GREEN)
+    l_shape.set(12, 1, COLOR_GREEN)
+    l_shape.set(11, 0, COLOR_GREEN)
+
+    batch_pair, batch_triple = batch_adjacency_tiebreak([isolated, l_shape])
+    single_pair_0, single_triple_0 = batch_adjacency_tiebreak([isolated])
+    single_pair_1, single_triple_1 = batch_adjacency_tiebreak([l_shape])
+
+    assert batch_pair[0] == single_pair_0[0]
+    assert batch_triple[0] == single_triple_0[0]
+    assert batch_pair[1] == single_pair_1[0]
+    assert batch_triple[1] == single_triple_1[0]
+
+
+def test_batch_adjacency_tiebreak_does_not_mutate_boards() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しないこと。"""
+    board = Board()
+    board.set(12, 0, COLOR_BLUE)
+    board.set(12, 1, COLOR_BLUE)
+    before = board.copy()
+    batch_adjacency_tiebreak([board])
+    assert np.array_equal(board._grid, before._grid)
