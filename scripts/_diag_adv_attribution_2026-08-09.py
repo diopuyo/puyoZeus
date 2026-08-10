@@ -36,11 +36,15 @@ init_console()
 
 import src.indicators_v2 as iv  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
+    COLOR_EARLINESS_INTERACTION_COL,
     COLOR_OJAMA_INTERACTION_COL,
     JP_LABEL,
+    MATCH_PROGRESS_COL,
+    OJAMA_FLAT_COL,
     _fill_expected_fire_candidate,
     _fill_fire_stability_candidate,
     _fill_near_future_candidate,
+    _match_progress_from_totals,
     _ojama_flat_score,
     _side_feats,
     _train_model,
@@ -67,6 +71,23 @@ def _attribution(model, f1: dict, f2: dict, cols: list[str]) -> list[tuple]:
             diff.get("board_color_puyo_total", 0.0) * flat
         )
         x_cols.append(COLOR_OJAMA_INTERACTION_COL)
+        # フラット度そのもの (2026-08-10 修正: 学習時 _train_model / 推論時
+        # _score_advantage は共にこの列を末尾に足しており、これが漏れていると
+        # 特徴量数が1個ずれてモデルに渡せなくなる — 本スクリプトの既存バグ、
+        # Phase1-1 B-2 の進行度列追加で列数が変わり初めて顕在化した)
+        diff[OJAMA_FLAT_COL] = flat
+        x_cols.append(OJAMA_FLAT_COL)
+    # 進行度文脈列 (2026-08-10 Phase1-1 B-2)。_score_advantage と同じ判定方式。
+    if getattr(model, "_puyo_uses_progress", False):
+        progress = float(_match_progress_from_totals(
+            f1.get("board_puyo_total", 0.0), f2.get("board_puyo_total", 0.0),
+        ))
+        diff[MATCH_PROGRESS_COL] = progress
+        x_cols.append(MATCH_PROGRESS_COL)
+        diff[COLOR_EARLINESS_INTERACTION_COL] = (
+            diff.get("board_color_puyo_total", 0.0) * (1.0 - progress)
+        )
+        x_cols.append(COLOR_EARLINESS_INTERACTION_COL)
     base_x = np.array([[diff[c] for c in x_cols]], dtype=float)
     base_p = float(model.predict_proba(base_x)[0, 1])
     rows = []
