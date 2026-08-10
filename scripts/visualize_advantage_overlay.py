@@ -327,6 +327,7 @@ JP_LABEL: dict[str, str] = {
     "board_color_puyo_total": "色ぷよ総数", "ojama_forecast": "お邪魔予告",
     "color_puyo_x_ojama_flat": "色ぷよ差×おじゃまフラット度",
     "ojama_flat_score": "おじゃまフラット度",
+    "match_progress": "進行度", "color_puyo_x_earliness": "色ぷよ差×序盤度",
     "saturated_chain_count": "飽和連鎖量",
     "ukeyasusa": "受けやすさ", "sub_chain_count": "副砲連鎖数",
     "near_future_fire_k1": "近未来火力K1", "near_future_fire_k2": "近未来火力K2",
@@ -508,30 +509,103 @@ def _ojama_flat_score(
 OJAMA_FLAT_COL: str = "ojama_flat_score"
 
 
+# ============================
+# 進行度の文脈列 (2026-08-10 Phase1-1 B-2、user承認済み・アーキ設計)
+# ============================
+# 確定事実 (data/verify/j1_color_lead_clean_noinflight_2026-08-10.txt): 発火
+# ±12s 除外のクリーン盤面で色ぷよ+8〜15リード側の実勝率は 序盤79.7% /
+# 中盤65.2% (中立48.1%)。 色ぷよ差は序盤ほど強く効くが、 本モデルには
+# 試合進行度を示す特徴列が一切無かった (アーキ設計が特定した第2の穴。
+# B-1 対称化バグ修正とは独立)。
+#
+# 進行度は「位相は試合内相対進行率で切るべき」(memory
+# `project_win_eval_regen_2026-07-26` 確定知見) に従い、 両者の盤面ぷよ総数
+# (お邪魔含む。 src.indicators_v2.board_puyo_total、 既に ON_FIELD_CAP=72 で
+# 正規化済み) の平均を使う。 時刻でなく盤面状態量そのものから出るため
+# RT でも使える (二層設計思想、 memory
+# `project_dual_mode_indicator_design_2026-07-22`)。
+# _assign_phase_by_puyo_tertile (scripts/compute_exchange_delta_winprob.py)
+# が使う「1P+2P盤面ぷよ合計の3分位」と同一コンセプト (2で割って[0,1]に
+# 正規化した点のみ異なる)。
+#
+# board_puyo_total は「自−相手」の差分ではなく両者の合計から作る絶対量
+# なので、 通常の FEATURES/FEATURE_CANDIDATES 経由で `_diff` 化すると
+# 意味が壊れる。 また board_puyo_total_diff (=board_color_puyo_total_diff+
+# board_ojama_count_diff、 完全共線) をそのままモデル特徴量に混ぜると
+# 「材料」と「危険度」が相殺し合う既知の問題がある (修正J-2の教訓、
+# scripts/compute_exchange_delta_winprob.py 冒頭コメント参照)。 そのため
+# board_puyo_total 自体は FEATURE_CANDIDATES に追加せず、 本ブロック限定で
+# 「両者の合計 (=進行度)」としてのみ使う。
+MATCH_PROGRESS_COL: str = "match_progress"
+# 「序盤ほど色ぷよ差が効く」を列にした交互作用 (色ぷよ差 × 早さ)。
+# match_progress=0 (序盤) で係数最大、 1 (終盤) で 0 へ減衰する。
+COLOR_EARLINESS_INTERACTION_COL: str = "color_puyo_x_earliness"
+
+
+def _match_progress_from_totals(total_1p: "pd.Series | np.ndarray",
+                                 total_2p: "pd.Series | np.ndarray") -> np.ndarray:
+    """両者の正規化済み盤面ぷよ総数から進行度 (0〜1) を返す (stateless)。
+
+    total_1p/total_2p は既に ON_FIELD_CAP で正規化済みの値
+    (src.indicators_v2.board_puyo_total の score) を想定。 平均を取るだけで
+    追加の学習データ由来定数を持たない (物理量の正規化のみ)。
+    浮動小数の丸めで僅かに [0,1] を超えうるため clip で安全側に倒す。
+    """
+    total = (np.asarray(total_1p, dtype=float) + np.asarray(total_2p, dtype=float)) / 2.0
+    return np.clip(total, 0.0, 1.0)
+
+
 def _add_interaction_columns(
     feat: "pd.DataFrame", feat_cols: list[str],
+    paired: "pd.DataFrame | None" = None,
 ) -> tuple["pd.DataFrame", list[str]]:
     """差分特徴に交互作用列を追加する (列が揃っていない場合は何もしない)。
+
+    Args:
+        paired: 1P/2P ペア済みの生データ (pair_sides_for_win の戻り値)。
+            match_progress は「自−相手」の差分でなく両者の合計から作る
+            絶対量のため、 build_features 後の feat には含まれない
+            board_puyo_total_{1p,2p} をここから直接参照する。 省略時
+            (既存呼出元との後方互換) は進行度列の追加をスキップする
+            (列存在ガード、 呼出側は無変更で動作継続)。
 
     Returns:
         (列を追加した DataFrame, 交互作用列名を含む列名リスト)
     """
-    need = ("board_color_puyo_total_diff", "board_ojama_count_diff",
-            "ojama_forecast_diff")
-    if not all(c in feat.columns for c in need):
-        return feat, [f"{c}_diff" for c in feat_cols]
-    flat = _ojama_flat_score(
-        feat["board_ojama_count_diff"], feat["ojama_forecast_diff"],
-    )
     feat = feat.copy()
-    feat[f"{COLOR_OJAMA_INTERACTION_COL}_diff"] = (
-        feat["board_color_puyo_total_diff"] * flat
-    )
-    # フラット度そのものも渡す (木が局面別の分岐を学習できるようにする)
-    feat[f"{OJAMA_FLAT_COL}_diff"] = flat
     cols = [f"{c}_diff" for c in feat_cols]
-    cols.append(f"{COLOR_OJAMA_INTERACTION_COL}_diff")
-    cols.append(f"{OJAMA_FLAT_COL}_diff")
+
+    # ① 色ぷよ差 × おじゃまフラット度 (2026-08-09)
+    ojama_need = ("board_color_puyo_total_diff", "board_ojama_count_diff",
+                  "ojama_forecast_diff")
+    if all(c in feat.columns for c in ojama_need):
+        flat = _ojama_flat_score(
+            feat["board_ojama_count_diff"], feat["ojama_forecast_diff"],
+        )
+        feat[f"{COLOR_OJAMA_INTERACTION_COL}_diff"] = (
+            feat["board_color_puyo_total_diff"] * flat
+        )
+        # フラット度そのものも渡す (木が局面別の分岐を学習できるようにする)
+        feat[f"{OJAMA_FLAT_COL}_diff"] = flat
+        cols.append(f"{COLOR_OJAMA_INTERACTION_COL}_diff")
+        cols.append(f"{OJAMA_FLAT_COL}_diff")
+
+    # ② 進行度 + 色ぷよ差×早さ (2026-08-10 Phase1-1 B-2)
+    progress_need = ("board_puyo_total_1p", "board_puyo_total_2p")
+    has_progress_input = (
+        paired is not None and all(c in paired.columns for c in progress_need)
+    )
+    if has_progress_input and "board_color_puyo_total_diff" in feat.columns:
+        progress = _match_progress_from_totals(
+            paired["board_puyo_total_1p"], paired["board_puyo_total_2p"],
+        )
+        feat[f"{MATCH_PROGRESS_COL}_diff"] = progress
+        feat[f"{COLOR_EARLINESS_INTERACTION_COL}_diff"] = (
+            feat["board_color_puyo_total_diff"] * (1.0 - progress)
+        )
+        cols.append(f"{MATCH_PROGRESS_COL}_diff")
+        cols.append(f"{COLOR_EARLINESS_INTERACTION_COL}_diff")
+
     return feat, cols
 
 
@@ -561,6 +635,11 @@ def _add_interaction_columns(
 SIDE_INVARIANT_COLS: tuple[str, ...] = (
     # おじゃまフラット度 (np.abs ベースの絶対量。 1P/2P 非依存)
     f"{OJAMA_FLAT_COL}_diff",
+    # 進行度 (両者の盤面ぷよ総数の平均。 1P/2P を入れ替えても平均は不変。
+    # 2026-08-10 Phase1-1 B-2 追加)。 一方 color_puyo_x_earliness_diff は
+    # 「符号可変(色ぷよ差) × 符号不変(1-進行度)」なので符号可変 → 未登録
+    # (登録しないのが正しい、 反転して良い)。
+    f"{MATCH_PROGRESS_COL}_diff",
 )
 
 
@@ -593,9 +672,12 @@ def _train_model(exclude_video: str | None = None):
     feat_cols = _resolve_features(df)
     paired = pair_sides_for_win(df, max_tdiff=1.0)
     feat = build_features(paired, feat_cols)
-    # 交互作用 (色ぷよ差 × おじゃまフラット度) を追加。フラグ既定 ON だが
-    # 必要列が揃わない場合は自動的に無効化される (列存在ガードと同じ思想)。
-    feat, cols = _add_interaction_columns(feat, feat_cols)
+    # 交互作用 (色ぷよ差 × おじゃまフラット度、色ぷよ差 × 進行度の早さ) を
+    # 追加。フラグ既定 ON だが必要列が揃わない場合は自動的に無効化される
+    # (列存在ガードと同じ思想)。paired を渡すのは進行度列 (match_progress)
+    # が board_puyo_total_{1p,2p} という build_features 後の feat には
+    # 含まれない生列を必要とするため (_add_interaction_columns docstring 参照)。
+    feat, cols = _add_interaction_columns(feat, feat_cols, paired)
     X = feat[cols].fillna(0.0).values
     y = paired["won_1p"].astype(int).values
     # 対称化: 差分を反転しラベルも反転したミラー標本を追加。
@@ -611,6 +693,11 @@ def _train_model(exclude_video: str | None = None):
     # 交互作用列を使ったかを推論側へ伝える (使っていなければ推論も足さない)
     model._puyo_uses_interaction = (
         f"{COLOR_OJAMA_INTERACTION_COL}_diff" in cols
+    )
+    # 進行度文脈列 (match_progress / color_puyo_x_earliness) を使ったかを
+    # 推論側へ伝える (2026-08-10 Phase1-1 B-2、既存の interaction フラグと同じ方式)
+    model._puyo_uses_progress = (
+        f"{MATCH_PROGRESS_COL}_diff" in cols
     )
     print(f"[train] 元n={len(y)} (1P勝ち{int(y.sum())}) -> 対称化後 {len(y_sym)}")
     return model
@@ -812,6 +899,10 @@ def _side_feats(board: Board, net: int, forecast: int) -> dict[str, float]:
         "ojama_forecast": iv.ojama_forecast(forecast).score,
         "board_ojama_count": iv.board_ojama_count(board).score,
         "dig_resistance": iv.dig_resistance(board).score,
+        # モデル入力 (cols) には含めない (FEATURES/FEATURE_CANDIDATES 未登録)。
+        # match_progress (進行度) を算出するためだけに保持する軽量な値
+        # (count_puyos()/72 のみ、simulate 不要で他指標と同程度に安価)。
+        "board_puyo_total": iv.board_puyo_total(board).score,
     }
 
 
@@ -928,6 +1019,19 @@ def _score_advantage(
         # フラット度そのもの (学習時と同じ順序で末尾に付ける)
         diff[OJAMA_FLAT_COL] = flat
         x_cols.append(OJAMA_FLAT_COL)
+    # 進行度文脈列 (match_progress / color_puyo_x_earliness) を学習時と
+    # 同じ順序で末尾に足す (2026-08-10 Phase1-1 B-2)。学習側が使っていなければ
+    # 足さない (model._puyo_uses_progress で判定、既存 interaction と同じ方式)。
+    if getattr(model, "_puyo_uses_progress", False):
+        progress = float(_match_progress_from_totals(
+            f1.get("board_puyo_total", 0.0), f2.get("board_puyo_total", 0.0),
+        ))
+        diff[MATCH_PROGRESS_COL] = progress
+        x_cols.append(MATCH_PROGRESS_COL)
+        diff[COLOR_EARLINESS_INTERACTION_COL] = (
+            diff.get("board_color_puyo_total", 0.0) * (1.0 - progress)
+        )
+        x_cols.append(COLOR_EARLINESS_INTERACTION_COL)
     x = np.array([[diff[c] for c in x_cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])
     adv = (p1 - 0.5) * 200.0
