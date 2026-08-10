@@ -523,6 +523,7 @@ def collect_lean(
     enable_ojama_entry_gravity_settle_guard: bool = False,
     enable_gravity_settle_reset_on_exit: bool = False,
     enable_phantom_board_guard: bool = False,
+    enable_margin_time_rate: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -641,6 +642,12 @@ def collect_lean(
             横取りされて弾き出された際、GravitySettleDetector の内部
             カウンタ (_settle_start_frame 等) をその場でリセットする。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_margin_time_rate: マージンタイム逓減 (2026-08-09)。True で
+            おじゃま判定の閾値を経過時間に応じた実効レートにする。
+            従来は 70 点固定で、長い試合の後半 (実レートが 22 点まで下がる)
+            では着弾を丸ごと見逃していた (npz 実測で全着弾の 6.27%)。
+            起点は最初の1手から 95.5 秒 (user伝授)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
         enable_phantom_board_guard: 幻盤面ガード (2026-08-08)。True で
             非試合画面 (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま
             盤面を snapshot として記録しない。本スクリプトは
@@ -719,6 +726,7 @@ def collect_lean(
             enable_ojama_entry_gravity_settle_guard
         ),
         enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
+        enable_margin_time_rate=enable_margin_time_rate,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1046,6 +1054,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--margin-time-rate", action="store_true",
+        dest="enable_margin_time_rate",
+        help=(
+            "マージンタイム逓減 (2026-08-09) を有効化する。おじゃま判定の閾値を"
+            "経過時間に応じた実効レートにする (最初の1手から95.5秒で減衰開始)。"
+            "従来の固定70では長い試合の後半で着弾の6.27%%を見逃していた。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-phantom-board-guard", action="store_true",
         dest="enable_phantom_board_guard",
         help=(
@@ -1085,6 +1103,7 @@ def main() -> int:
         ),
         enable_gravity_settle_reset_on_exit=args.enable_gravity_settle_reset_on_exit,
         enable_phantom_board_guard=args.enable_phantom_board_guard,
+        enable_margin_time_rate=args.enable_margin_time_rate,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
