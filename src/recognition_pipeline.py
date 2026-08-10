@@ -1023,6 +1023,23 @@ class RecognitionPipeline:
         # 品質高い」承認)。False を明示指定すれば旧挙動 (bit-identical) に戻せる
         # (backwards compat)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を
+        # 禁止するガード。連鎖の段間重力待ち中に本 detector が横取りすると、
+        # GravitySettleDetector 内部カウンタが残留し次回誤 STABLE 化 (バグC) を
+        # 誘発する (振動バグ)。enable_gravity_settle_reset_on_exit と対で使う。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE が他 detector に横取り
+        # されて弾き出された際、GravitySettleDetector の内部カウンタ
+        # (_settle_start_frame 等) をその場でリセットする。残留したまま
+        # 次回 GRAVITY_SETTLE 再進入すると古い開始時刻で 1 frame 誤 STABLE
+        # 化する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_gravity_settle_reset_on_exit: bool = False,
+        # マージンタイム逓減 (2026-08-09)。 True でおじゃま判定の閾値を
+        # 経過時間に応じた実効レートにする (最初の1手から 95.5 秒で減衰開始)。
+        # 既定 False = 固定 70 のまま (backwards compat)。
+        enable_margin_time_rate: bool = False,
         # 機能B: score 急増で即 CHAIN 突入する早期発火 (2026-06-02)。
         # True にすると自 side の score_delta >= CHAIN_SCORE_EARLY_FIRE_DELTA の frame で
         # VideoChainTracker の puyo 減少検知を待たずに即 CHAIN state に突入する。
@@ -1527,6 +1544,12 @@ class RecognitionPipeline:
         # サイクル66: 累積確定 tsumo (= TSUMO_FALL→STABLE 後に commit)
         self._tsumo_count_1p: _Counter = _Counter()
         self._tsumo_count_2p: _Counter = _Counter()
+        # マージンタイム逓減の起点 (2026-08-09 user伝授)。
+        # 「試合開始」は演出があり実装で正確に取れないため、
+        # **最初の1手 (最初のツモ設置)** の時刻を起点にする。
+        # None = まだ 1 手も置かれていない (この間はレート減衰しない)。
+        self._first_move_sec_1p: float | None = None
+        self._first_move_sec_2p: float | None = None
         # サイクル67: in-flight tsumo (= NEXT 消費後、 着地完了前)
         # ペア (color1, color2) を queue 化、 TSUMO_FALL→STABLE で pop して commit
         self._pending_tsumo_1p: _deque = _deque()
@@ -1674,6 +1697,21 @@ class RecognitionPipeline:
         self._enable_ojama_fall_board_settle: bool = bool(
             enable_ojama_fall_board_settle
         )
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード。_build_state_machine 呼び出し前に格納が必要。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_ojama_entry_gravity_settle_guard: bool = bool(
+            enable_ojama_entry_gravity_settle_guard
+        )
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # _build_state_machine 呼び出し前に格納が必要。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_gravity_settle_reset_on_exit: bool = bool(
+            enable_gravity_settle_reset_on_exit
+        )
+        # マージンタイム逓減 (2026-08-09)。_build_state_machine 呼び出し前に格納。
+        self._enable_margin_time_rate: bool = bool(enable_margin_time_rate)
         # 案P3: CHAIN_MAX_HOLD_SEC 超過 ojama 保留無効化フラグ。
         # _build_state_machine 呼び出し前に格納が必要 (self.* 参照のため)。
         self._enable_chain_max_hold_override: bool = bool(enable_chain_max_hold_override)
@@ -1916,6 +1954,13 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                self._enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                self._enable_gravity_settle_reset_on_exit
+            ),
+            enable_margin_time_rate=self._enable_margin_time_rate,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1946,6 +1991,13 @@ class RecognitionPipeline:
             enable_ojama_visual_chain_exit=self._enable_ojama_visual_chain_exit,
             enable_ojama_settle_detection=self._enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=self._enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                self._enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                self._enable_gravity_settle_reset_on_exit
+            ),
+            enable_margin_time_rate=self._enable_margin_time_rate,
             enable_chain_max_hold_override=self._enable_chain_max_hold_override,
             enable_gravity_settle_state=self._enable_gravity_settle_state,
             enable_slide_override_ojama_hold=self._enable_slide_override_ojama_hold,
@@ -1983,7 +2035,11 @@ class RecognitionPipeline:
         # 2026-05-11 サイクル71 Phase 1a: 物理推論主軸用 ChainSimulator.
         # 旧実装は遅延初期化していたが、 着地時に毎回呼ぶため事前構築.
         from src.chain import ChainSimulator as _ChainSimulator
-        self._chain_sim: _ChainSimulator = _ChainSimulator()
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._chain_sim: _ChainSimulator = _ChainSimulator(
+            exclude_hidden_row_from_pop=_GHOST_RULE,
+        )
         # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」 遷移を自動検知。
         # 1P/2P 独立 instance。試合切替時は reset() で消去。
         from src.puyo_erasure_monitor import PuyoErasureMonitor as _PEM
@@ -2275,6 +2331,14 @@ class RecognitionPipeline:
         # 渡すため実運用では未使用だが、直接呼び出し時も採用済み挙動を
         # 既定にする (__init__ の既定値と同期)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード。default False = 従来挙動完全維持・bit-identical。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # default False = 従来挙動完全維持・bit-identical。
+        enable_gravity_settle_reset_on_exit: bool = False,
+        enable_margin_time_rate: bool = False,
         enable_chain_max_hold_override: bool = False,
         enable_gravity_settle_state: bool = False,
         enable_slide_override_ojama_hold: bool = False,
@@ -2337,9 +2401,11 @@ class RecognitionPipeline:
         #   BoardStateMachine にそのまま伝播する (独立 flag)。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
         # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE + 案γ フラグを伝播する
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
         chain_det = ChainPhaseDetector(
-            chain_sim=ChainSimulator(),
+            chain_sim=ChainSimulator(exclude_hidden_row_from_pop=_GHOST_RULE),
             enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_gravity_settle_state=enable_gravity_settle_state,
@@ -2355,11 +2421,15 @@ class RecognitionPipeline:
                 enable_ojama_visual_chain_exit=enable_ojama_visual_chain_exit,
                 enable_ojama_settle_detection=enable_ojama_settle_detection,
                 enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
+                enable_ojama_entry_gravity_settle_guard=(
+                    enable_ojama_entry_gravity_settle_guard
+                ),
             )
             detectors.append(ovd)
         detectors.append(
             OjamaPhaseDetector(
                 defer_ojama_fall_exit_to_visual=enable_ojama_fall_board_settle,
+                enable_margin_time_rate=enable_margin_time_rate,
             )
         )
         detectors.append(TsumoPhaseDetector())
@@ -2367,7 +2437,13 @@ class RecognitionPipeline:
         # CHAIN より低優先 → settle 中に次連鎖 drop 検知で CHAIN detector が優先発火し
         # 多段連鎖に対応する。
         if enable_gravity_settle_state:
-            detectors.append(GravitySettleDetector())
+            detectors.append(
+                GravitySettleDetector(
+                    enable_gravity_settle_reset_on_exit=(
+                        enable_gravity_settle_reset_on_exit
+                    ),
+                )
+            )
         return BoardStateMachine(
             detectors=detectors,
             stable_frame_count=stable_n,
@@ -2458,6 +2534,17 @@ class RecognitionPipeline:
         # 浮き誤消去 -28%・採用 +38、user viz 全画像レビュー承認) で採用。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_ojama_fall_board_settle: bool = True,
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火
+        # 禁止ガード (振動バグ B+C の修正、data/verify/youtube_demo_2026-08-07/
+        # _diag_2p_osc_transitions_2026-08-08.jsonl)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: bool = False,
+        # 修正C (2026-08-08、バグC): GRAVITY_SETTLE 横取り退出時の
+        # GravitySettleDetector 内部カウンタリセット。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_gravity_settle_reset_on_exit: bool = False,
+        # マージンタイム逓減 (2026-08-09)。既定 False = 従来挙動維持。
+        enable_margin_time_rate: bool = False,
         # 機能B: score 急増 CHAIN 早期発火 (2026-06-02)。
         # デフォルト False = 従来挙動完全維持 (backwards compat)。
         enable_chain_score_early_fire: bool = False,
@@ -2801,6 +2888,13 @@ class RecognitionPipeline:
             enable_ojama_infer_guard=enable_ojama_infer_guard,
             enable_ojama_settle_detection=enable_ojama_settle_detection,
             enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
+            enable_ojama_entry_gravity_settle_guard=(
+                enable_ojama_entry_gravity_settle_guard
+            ),
+            enable_gravity_settle_reset_on_exit=(
+                enable_gravity_settle_reset_on_exit
+            ),
+            enable_margin_time_rate=enable_margin_time_rate,
             enable_chain_score_early_fire=enable_chain_score_early_fire,
             enable_chain_exit_warmup=enable_chain_exit_warmup,
             enable_chain_formula_detection=enable_chain_formula_detection,
@@ -3307,6 +3401,9 @@ class RecognitionPipeline:
             # サイクル66: NEXT 累積制約も試合切り替えでリセット
             self._tsumo_count_1p.clear()
             self._tsumo_count_2p.clear()
+            # 試合が変わったらマージンタイムの起点も捨てる
+            self._first_move_sec_1p = None
+            self._first_move_sec_2p = None
             self._pending_tsumo_1p.clear()
             self._pending_tsumo_2p.clear()
             self._last_seen_next_1p = None
@@ -4777,8 +4874,12 @@ class RecognitionPipeline:
             ChainSimulator.simulate の結果。simulate 失敗時は None。
         """
         from src.chain import ChainSimulator
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
         if not hasattr(self, "_chain_sim"):
-            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+            # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+            self._chain_sim = ChainSimulator(  # type: ignore[attr-defined]
+                exclude_hidden_row_from_pop=_GHOST_RULE,
+            )
         try:
             return self._chain_sim.simulate(before_board)  # type: ignore[attr-defined]
         except Exception:
@@ -5481,10 +5582,19 @@ class RecognitionPipeline:
                 ),
                 enable_visual_gate=self._enable_effect_visual_gate,
             )
+        # マージンタイム逓減用の経過秒 (最初の1手からの経過)。
+        # 最初の1手がまだ無ければ None のままにして、 推測で減衰させない。
+        _first_move = (
+            self._first_move_sec_1p if side == "1P" else self._first_move_sec_2p
+        )
+        _elapsed_since_first_move = (
+            None if _first_move is None else max(0.0, time_sec - _first_move)
+        )
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
             is_match_active=is_active,
+            elapsed_since_first_move_sec=_elapsed_since_first_move,
             chain_event=chain_event,
             score_delta=score_d_2p_for_ojama,
             next_pair=next_pair,
@@ -5554,6 +5664,14 @@ class RecognitionPipeline:
                 committed = pending.popleft()
                 tsumo_count_target[committed[0]] += 1
                 tsumo_count_target[committed[1]] += 1
+                # マージンタイム逓減の起点 = **最初の1手が着地した時刻**
+                # (2026-08-09 user伝授)。 試合開始は演出があり実装で正確に
+                # 取れないが、 ツモ着地は確実に取れるのでこちらを起点にする。
+                if side == "1P":
+                    if self._first_move_sec_1p is None:
+                        self._first_move_sec_1p = float(signals.time_sec)
+                elif self._first_move_sec_2p is None:
+                    self._first_move_sec_2p = float(signals.time_sec)
         # 2026-05-11 サイクル71 Phase 1a: 物理推論主軸化.
         # 旧 _compute_landing_inferred (= CNN 差分位置採用) を廃止し、
         # placement_inferrer.infer_placement (= 物理パターン全列挙 + NEXT 色固定
@@ -5989,8 +6107,12 @@ class RecognitionPipeline:
             try:
                 from src.board_state_machine import _apply_gravity_filter
                 from src.chain import ChainSimulator
+                from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
                 if not hasattr(self, "_chain_sim"):
-                    self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+                    # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+                    self._chain_sim = ChainSimulator(  # type: ignore[attr-defined]
+                        exclude_hidden_row_from_pop=_GHOST_RULE,
+                    )
                 cr = self._chain_sim.simulate(  # type: ignore[attr-defined]
                     _effective_chain_event.before_board,
                 )

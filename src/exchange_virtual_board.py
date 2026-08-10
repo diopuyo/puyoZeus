@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 from src.board import Board
 from src.chain import ChainResult, ChainSimulator
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 from src.scoring import OJAMA_MAX_DROP_PER_TURN
 
 # ============================
@@ -150,7 +151,10 @@ def reconstruct_virtual_board_pair(
             "か、明示的な既定値を選んでから渡してください (silent fallback 禁止)。"
         )
 
-    sim = simulator if simulator is not None else ChainSimulator()
+    # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+    sim = simulator if simulator is not None else ChainSimulator(
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
     chain_result = sim.simulate(before_board)
     attacker_after = chain_result.final_board.copy()
     opponent_after = opponent_board.copy()

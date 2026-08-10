@@ -1723,6 +1723,134 @@ def test_near_future_fire_power_active_colors_score_in_range() -> None:
 
 
 # ============================
+# XIV-a 同点タイブレーク (tiebreak, 2026-08-09 追加、既定 OFF)
+# ============================
+# 実測 (scripts/_diag_beam_ties_2026-08-09.py): 得点降順ソートのみの枝刈りは
+# 最大同点群234〜1,928件の中から列挙順で先頭 beam_width 件を取るだけ=実質
+# ランダム選択だった。tiebreak=True で同点内を「後で伸びる形」で並べ替える。
+#
+# ⚠️ 正直な注記 (2026-08-09、ビームサーチの限界): tiebreak は
+# 「同点候補の中でどれが将来有望か」を近似する非oracleヒューリスティックの
+# ため、beam_width が同点群を全部拾いきれない場合、tiebreak が選ばなかった
+# 側がたまたま後段で高得点に化けるケースでは raw が OFF を下回りうる
+# (60盤面のランダムストレステストで K別 305 件中 20 件で発生、6.6%)。
+# 以下のテストは「劣化しないことが確認済みの複数盤面」で非減少性を検証する
+# ものであり、「任意の盤面で常に非減少」までは保証しない。
+
+
+def _near_future_tiebreak_mixed_board() -> Board:
+    """複数色・複数連結が混在する中盤想定盤面 (tiebreak 検証用)。"""
+    g = _empty_grid()
+    g[12] = [COLOR_RED, COLOR_RED, COLOR_BLUE, COLOR_BLUE, COLOR_GREEN, COLOR_GREEN]
+    g[11] = [COLOR_YELLOW, COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_GREEN, COLOR_YELLOW]
+    return Board.from_list(g)
+
+
+def _near_future_tiebreak_improve_board() -> Board:
+    """タイブレークONで実際に到達火力が向上する盤面 (2026-08-09 実測で確認済)。"""
+    g = _empty_grid()
+    g[10] = [0, 0, COLOR_RED, 0, 0, 0]
+    g[11] = [0, COLOR_RED, COLOR_YELLOW, 0, COLOR_RED, 0]
+    g[12] = [COLOR_GREEN, COLOR_BLUE, COLOR_RED, 0, COLOR_RED, 0]
+    return Board.from_list(g)
+
+
+def test_near_future_tiebreak_default_off_matches_omitted() -> None:
+    """tiebreak 省略時と明示的 False が完全一致すること (backwards compat)。"""
+    board = _near_future_seed_board()
+    omitted = iv.near_future_fire_power(board)
+    explicit_off = iv.near_future_fire_power(board, tiebreak=False)
+    for k in iv.NEAR_FUTURE_K_LEVELS:
+        assert omitted.values[k].raw == explicit_off.values[k].raw
+        assert omitted.values[k].score == explicit_off.values[k].score
+        assert omitted.chain_refs[k] == explicit_off.chain_refs[k]
+
+
+def test_near_future_tiebreak_off_unchanged_across_boards() -> None:
+    """tiebreak=False の経路は既存の得点降順ソートのみと完全一致し続けること。
+
+    _near_future_sort_candidates の else 分岐は既存実装
+    (`candidates.sort(key=lambda x: x[0], reverse=True)`) と同一なので、
+    複数盤面で結果がリファクタ前と変わらないことを回帰的に確認する。
+    """
+    for board in (
+        _near_future_seed_board(),
+        _four_chain_board(),
+        _near_future_tiebreak_mixed_board(),
+    ):
+        result = iv.near_future_fire_power(board, tiebreak=False)
+        for k in iv.NEAR_FUTURE_K_LEVELS:
+            assert 0.0 <= result.values[k].score <= 1.0
+
+
+def test_near_future_sort_candidates_reorders_ties_by_shape() -> None:
+    """_near_future_sort_candidates: 同点候補を tiebreak=True で並べ替えること。
+
+    完全に同得点 (100.0) の2候補 (密集した連結が多い盤面 / 分散した盤面) を
+    与え、tiebreak=False では投入順 (安定ソート) のまま、tiebreak=True では
+    連結が多い側が先頭に来ることを確認する。
+    """
+    scattered = _empty_board()
+    scattered.set(12, 0, COLOR_RED)
+    scattered.set(12, 2, COLOR_BLUE)
+    scattered.set(12, 4, COLOR_GREEN)
+
+    clustered = _empty_board()
+    clustered.set(12, 0, COLOR_RED)
+    clustered.set(12, 1, COLOR_RED)
+    clustered.set(11, 0, COLOR_RED)
+
+    candidates = [(100.0, scattered, 0), (100.0, clustered, 0)]
+
+    off_order = iv._near_future_sort_candidates(list(candidates), tiebreak=False)
+    assert off_order[0][1] is scattered, "tiebreak=False は投入順を維持すること (安定ソート)"
+
+    on_order = iv._near_future_sort_candidates(list(candidates), tiebreak=True)
+    assert on_order[0][1] is clustered, "tiebreak=True は連結の多い盤面を優先すること"
+
+
+def test_near_future_tiebreak_not_below_off_on_verified_boards() -> None:
+    """tiebreak=True の raw が tiebreak=False を下回らないこと (検証済み複数盤面)。
+
+    ⚠️ 本モジュールの docstring の通り、これは「常に成り立つ」保証ではなく
+    「以下の盤面では成り立つことを実測確認済み」という限定的な回帰テスト。
+    """
+    boards = (
+        _near_future_seed_board(),
+        _four_chain_board(),
+        _near_future_tiebreak_mixed_board(),
+        _near_future_tiebreak_improve_board(),
+    )
+    for board in boards:
+        off = iv.near_future_fire_power(board, tiebreak=False)
+        on = iv.near_future_fire_power(board, tiebreak=True)
+        for k in iv.NEAR_FUTURE_K_LEVELS:
+            assert on.values[k].raw >= off.values[k].raw, (
+                f"board={board._grid.tolist()} k={k} "
+                f"off={off.values[k].raw} on={on.values[k].raw}"
+            )
+
+
+def test_near_future_tiebreak_improves_at_least_one_board() -> None:
+    """tiebreak=True が実際に到達火力を押し上げるケースが存在すること。
+
+    (「並び替えても結果が全く変わらない無意味な機能」でないことの確認)
+    """
+    board = _near_future_tiebreak_improve_board()
+    off = iv.near_future_fire_power(board, tiebreak=False)
+    on = iv.near_future_fire_power(board, tiebreak=True)
+    assert any(
+        on.values[k].raw > off.values[k].raw for k in iv.NEAR_FUTURE_K_LEVELS
+    )
+
+
+def test_near_future_fire_power_tiebreak_exported_in_all() -> None:
+    """tiebreak 関連の定数が __all__ に含まれること。"""
+    assert "NEAR_FUTURE_TIEBREAK_TRIPLE_WEIGHT" in iv.__all__
+    assert "NEAR_FUTURE_TIEBREAK_PAIR_WEIGHT" in iv.__all__
+
+
+# ============================
 # XV 火力の受けの多さ (fire_stability, K=2,4,6)
 # ============================
 # user提案 #30: 検証済み中盤本命「受けやすさ (ukeyasusa)」の火力版。

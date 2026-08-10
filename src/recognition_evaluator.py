@@ -42,6 +42,7 @@ from src.board import (
     Board,
 )
 from src.chain import ChainSimulator, MIN_ERASE_COUNT
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 
 
 # ============================
@@ -234,7 +235,10 @@ class RecognitionEvaluator:
 
     def __init__(self) -> None:
         self.entries: list[FrameEntry] = []
-        self._chain_sim = ChainSimulator()
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._chain_sim = ChainSimulator(
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
 
     # ========================
     # 入力読み込み

@@ -308,15 +308,46 @@ class OjamaPhaseDetector:
     """
 
     score_threshold: int = 70
+    # マージンタイム逓減の反映 (2026-08-09)。
+    # ルール上、 おじゃまレートは一定時間後に 16 秒ごと ×0.75 で下がる
+    # (docs/PUYO_RULES_CONFIRMED_2026-07-22.md、 計算は
+    # src/scoring.py:compute_effective_rate に実装済み)。 しかし本 detector は
+    # 閾値 70 を固定で使っており、 **長い試合の後半では実レートが 70 を大きく
+    # 下回る** (144 秒地点で 22 点)。 その結果、 相手が実際におじゃまを送って
+    # いるのに score_delta が 70 未満で OJAMA_FALL に遷移せず、
+    # **着弾を丸ごと見逃す** fail-silent な欠損が構造的に存在していた。
+    # True で経過時間に応じた実効レートを閾値に使う。
+    # 起点は **最初の1手から 95.5 秒** (2026-08-09 user伝授。 試合開始時刻は
+    # 演出があり実装で正確に取れないため、 認識で確実に取れる最初のツモ設置を
+    # 起点にする方が計測が安定する)。
+    # 既定 False = 従来の固定 70 (backwards compat)。
+    enable_margin_time_rate: bool = False
     # 案B (2026-07-24): True で OJAMA_FALL 退出判定を OjamaVisualDetector に委譲
     # (= 本 detector は STABLE に戻さず None を返す)。
     # default False = 従来の無条件 STABLE 復帰ロジックを完全維持 (backwards compat)。
     defer_ojama_fall_exit_to_visual: bool = False
 
+    def _effective_threshold(self, signals: DetectorSignals) -> int:
+        """その時点の実効レート (= おじゃま 1 個分の点数) を返す。
+
+        enable_margin_time_rate=False なら従来の固定値をそのまま返す。
+        最初の1手からの経過秒が取れない場合も固定値へフォールバックする
+        (推測で減衰させない)。
+        """
+        if not self.enable_margin_time_rate:
+            return self.score_threshold
+        elapsed = getattr(signals, "elapsed_since_first_move_sec", None)
+        if elapsed is None:
+            return self.score_threshold
+        from src.scoring import compute_effective_rate
+        return compute_effective_rate(
+            float(elapsed), self.score_threshold, from_first_move=True,
+        )
+
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
     ) -> BoardState | None:
-        if signals.score_delta >= self.score_threshold:
+        if signals.score_delta >= self._effective_threshold(signals):
             return BoardState.OJAMA_FALL
         # OJAMA_FALL に居て新たな score 増加が無くなったら STABLE へ復帰。
         # ChainPhase/Tsumo と同じ責任分界: 「自分が発火させた state は
@@ -392,7 +423,24 @@ class GravitySettleDetector:
         本 detector は GRAVITY_SETTLE state を返さないため遷移は起きない。
         本 detector が登録されていても GRAVITY_SETTLE state に入らなければ
         detect は常に None を返し、既存挙動に影響なし。
+
+    バグC 修正 (2026-08-08):
+        `_reset_settle()` は本 detector 自身の STABLE 返却分岐 (settle 完了)
+        とタイムアウト分岐でしか呼ばれない。 他 detector (例: OjamaVisualDetector
+        のバグB) に GRAVITY_SETTLE を横取りされて弾き出された場合、
+        内部カウンタ (_settle_start_frame 等) が残留し、次回 GRAVITY_SETTLE
+        再進入時に古い開始時刻で elapsed を計算し 1 frame で誤って STABLE 化
+        する (連鎖途中の中途半端な盤面が確定 → 4連結ゲートが本物の
+        chain_event を誤拒否)。
+        enable_gravity_settle_reset_on_exit=True でこの残留を防ぐ。
+        default False = 既存挙動と完全 bit-identical。
     """
+
+    # 外部フラグ: RecognitionPipeline 側から __init__ 後に代入する。
+    # バグC 修正 (2026-08-08): GRAVITY_SETTLE を追跡中のまま他 detector に
+    # 横取りされて state が抜けたことを検知したら内部カウンタをリセットする。
+    # default False = 既存挙動と完全 bit-identical (backwards compat)。
+    enable_gravity_settle_reset_on_exit: bool = False
 
     # 内部 state (init から除外)
     _settle_start_time: float = field(default=0.0, init=False, repr=False)
@@ -420,6 +468,19 @@ class GravitySettleDetector:
             # ChainPhaseDetector が CHAIN → GRAVITY_SETTLE を返した翌 frame
             # で ctx.state == GRAVITY_SETTLE になる。
             # ここでは GRAVITY_SETTLE 以外のときリセットは不要 (state 管理は reset() 担当)。
+            #
+            # バグC 修正 (2026-08-08): ただし他 detector に横取りされて
+            # GRAVITY_SETTLE から弾き出された場合 (= 自身の成功パス
+            # _reset_settle() を経由せず _settle_start_frame が残留したまま
+            # ctx.state が変わった場合) は、ここで検知してリセットする。
+            # 検知しないと次回 GRAVITY_SETTLE 再進入時に古い開始時刻で
+            # elapsed を計算し、1 frame で誤って STABLE 化する。
+            # default False = 既存挙動と完全 bit-identical (backwards compat)。
+            if (
+                self.enable_gravity_settle_reset_on_exit
+                and self._settle_start_frame >= 0
+            ):
+                self._reset_settle()
             return None
 
         # GRAVITY_SETTLE state に初めて入ったフレームを記録

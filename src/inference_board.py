@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from src.board import Board
 from src.board_state_machine import BoardState, NON_STABLE_STATES, StateContext
 from src.chain import ChainResult, ChainSimulator
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 
 
 # ============================
@@ -59,7 +60,10 @@ class InferenceBoardGenerator:
     """
 
     def __init__(self, simulator: ChainSimulator | None = None) -> None:
-        self._sim = simulator or ChainSimulator()
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._sim = simulator or ChainSimulator(
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
         self._chain_playback: _ChainPlayback | None = None
 
     def reset(self) -> None:

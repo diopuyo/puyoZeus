@@ -54,14 +54,30 @@ class BoardPairResult(NamedTuple):
 CHAIN_TAINT_PRE_SEC: float = 1.0
 CHAIN_TAINT_POST_SEC: float = 5.0
 
+# 幻盤面フィルタ (2026-08-08): 非試合画面由来の満杯おじゃま盤面の判定は
+# src/board_quality.py に集約する (認識側の根治とは独立した stateless 判定)。
+from src.board_quality import phantom_board_mask  # noqa: E402
+
 
 def _load_npz_dir_lean(
     npz_dir: Path,
     exclude_chain_taint: bool = False,
+    exclude_phantom_boards: bool = False,
 ) -> tuple[pd.DataFrame, np.ndarray]:
     """boards_lean_fixed ディレクトリ内 npz を全読み込みし DataFrame + grids を返す。
 
     各 npz は won フィールドを内蔵しているため labeled_win.csv は不要。
+
+    Args:
+        npz_dir: boards_lean 系 npz のディレクトリ。
+        exclude_chain_taint: 連鎖前後の一時汚染窓を除外する (2026-08-01)。
+        exclude_phantom_boards: 非試合画面由来の幻満杯盤面を除外する
+            (2026-08-08、 src/board_quality.py)。 collect 側が
+            force_in_match=True で MatchStateDetector を無効化しているため、
+            対戦カード紹介・ロビー・順位表画面の誤認識盤面が npz に混入
+            している (実測 0.875%、 全 123 本)。 既定 False = 従来挙動
+            完全維持 (backwards compat)。
+
     Returns:
         df: columns = [video_id, side, t_sec, game_idx, won, grid_idx]
         grids_all: (N_total, 13, 6) int8
@@ -70,6 +86,7 @@ def _load_npz_dir_lean(
     all_grids: list[np.ndarray] = []
     offset = 0
     n_tainted = 0
+    n_phantom = 0
     n_total_rows = 0
 
     for npz_path in sorted(npz_dir.glob("*.npz")):
@@ -92,8 +109,17 @@ def _load_npz_dir_lean(
                 taint_windows.append(
                     (ct - CHAIN_TAINT_PRE_SEC, ct + CHAIN_TAINT_POST_SEC),
                 )
+        # 幻盤面フィルタ (2026-08-08): 非試合画面由来の満杯おじゃま盤面を除外。
+        # 盤面そのものの物理的整合だけで判定するため npz キーに依存しない。
+        phantom_mask = (
+            phantom_board_mask(grids) if exclude_phantom_boards
+            else np.zeros(n, dtype=bool)
+        )
         for i in range(n):
             n_total_rows += 1
+            if phantom_mask[i]:
+                n_phantom += 1
+                continue  # 非試合画面の幻盤面はペア構成から除外
             if taint_windows:
                 t = float(t_secs[i])
                 if any(lo <= t <= hi for lo, hi in taint_windows):
@@ -117,6 +143,12 @@ def _load_npz_dir_lean(
     if exclude_chain_taint:
         pct = 100.0 * n_tainted / max(1, n_total_rows)
         print(f"[pairs] 連鎖汚染フィルタ: {n_tainted}/{n_total_rows} 行を除外 ({pct:.1f}%)")
+    if exclude_phantom_boards:
+        pct = 100.0 * n_phantom / max(1, n_total_rows)
+        print(
+            f"[pairs] 幻盤面フィルタ (非試合画面): {n_phantom}/{n_total_rows} 行を除外 "
+            f"({pct:.2f}%)"
+        )
     return df, grids_all
 
 
@@ -165,10 +197,16 @@ def _pair_within_group(
 
 def build_pairs_lean(
     npz_dir: Path, exclude_chain_taint: bool = False,
+    exclude_phantom_boards: bool = False,
 ) -> BoardPairResult:
-    """boards_lean_fixed ディレクトリからペア配列を構築して返す。"""
+    """boards_lean_fixed ディレクトリからペア配列を構築して返す。
+
+    exclude_phantom_boards=True で非試合画面由来の幻満杯盤面を除外する
+    (2026-08-08 追加、 既定 False = 従来挙動完全維持)。
+    """
     df, grids_all = _load_npz_dir_lean(
         npz_dir, exclude_chain_taint=exclude_chain_taint,
+        exclude_phantom_boards=exclude_phantom_boards,
     )
     all_pairs: list[dict] = []
 
@@ -245,10 +283,17 @@ def main() -> int:
         help="連鎖汚染フィルタ: 両sideの連鎖検知の-1〜+5秒の行を除外 "
              "(2026-08-01。認識誤りは全て遷移瞬間の一時汚染と実証済み)。",
     )
+    parser.add_argument(
+        "--exclude-phantom-boards", action="store_true", default=False,
+        help="幻盤面フィルタ: 非試合画面 (対戦カード紹介・ロビー・順位表) で"
+             "誤認識された満杯おじゃま盤面を除外する (2026-08-08。実測 0.875%%、"
+             "全 123 本に混入)。既定は無効 (後方互換)。",
+    )
     args = parser.parse_args()
 
     result = build_pairs_lean(
         args.npz_dir, exclude_chain_taint=args.exclude_chain_taint,
+        exclude_phantom_boards=args.exclude_phantom_boards,
     )
     _print_summary(result, args.out if len(result.board_1p) > 0 else None)
 
