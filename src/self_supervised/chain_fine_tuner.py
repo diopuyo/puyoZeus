@@ -54,6 +54,7 @@ from typing import Any, Iterable
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, Board, VALID_COLORS
 from src.chain import ChainSimulator
 from src.chain_detector import ERASURE_MIN_DROP, SNAPSHOT_LOOKBACK
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 from src.self_supervised.online_fine_tuner import OnlineFineTuner
 from src.self_supervised.pseudo_label import (
     COMPONENT_CHAIN,
@@ -147,7 +148,10 @@ class ChainFineTuner(OnlineFineTuner):
         self._backup_suffix = str(backup_suffix)
         self._backup_done: bool = False
         # ChainSimulator は再利用 (キャッシュ効果)
-        self._simulator = ChainSimulator()
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._simulator = ChainSimulator(
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
 
     # ------------------------------------------------------------------
     # OnlineFineTuner API

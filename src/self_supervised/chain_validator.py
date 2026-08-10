@@ -29,6 +29,7 @@ import numpy as np
 from src.board import BOARD_COLS, BOARD_ROWS, Board
 from src.board_state_machine import BoardState
 from src.chain import ChainSimulator
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 from src.scoring import calculate_chain_score
 from src.self_supervised.cross_validator import CrossValidator
 from src.self_supervised.pseudo_label import (
@@ -64,7 +65,10 @@ class ChainValidator(CrossValidator):
         super().__init__()
         self._track_1p = _ChainTracking()
         self._track_2p = _ChainTracking()
-        self._sim = ChainSimulator()
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._sim = ChainSimulator(
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
 
     def reset(self) -> None:
         super().reset()

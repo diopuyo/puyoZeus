@@ -1,0 +1,24 @@
+サンプル 1: video_id=38 side=2P t_sec=1479.33 game_idx=22
+
+== 入力盤面 (発火前) ==
+row 0: ...R.. <- row0(隠し段/幽霊連鎖対象)
+row 1: ...RB.
+row 2: ...RRP
+row 3: .GBBBR
+row 4: RGPBRB
+row 5: BBRRGB
+row 6: PGPRPP
+row 7: GPPBRR
+row 8: PGGBRP
+row 9: PPGPBB
+row10: BRPRGB
+row11: BBRPPG
+row12: RRPGGB
+
+== OFF (従来挙動、幽霊連鎖ルール無効) ==
+連鎖数: 1  消去数: 8  おじゃま消去: 0  得点(概算): 240
+
+== ON (幽霊連鎖ルール有効、2026-08-10 本番採用) ==
+連鎖数: 12  消去数: 61  おじゃま消去: 0  得点(概算): 77250
+
+差分: 連鎖数 1 -> 12 (+11)、得点 240 -> 77250 (+77010)

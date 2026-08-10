@@ -140,6 +140,26 @@ VISUALIZATION_ADOPTED: tuple[AdoptedFlag, ...] = (
 )
 
 
+# ============================
+# 連鎖シミュレーション — 物理ルール採用 (CLI フラグでなく Python 既定値の
+# 単一情報源。src.chain.ChainSimulator(exclude_hidden_row_from_pop=...) の
+# 呼び出し側は本フラグを import して使うこと。個別に True を書き散らさない)
+# ============================
+CHAIN_SIM_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        "exclude_hidden_row_from_pop=True", "2026-08-10",
+        "幽霊連鎖ルール (13段目/隠し段のぷよは4つ繋がっても消えない、"
+        "user伝授2026-08-09、実装・単体テストはコミット991fa80で完了済)。"
+        "全域バックテスト (boards_lean_phase_l_2026-08-07 148動画) の結果を"
+        "docs/verify 配下に記録。詳細は data/verify/ghost_chain_backtest_2026-08-10/",
+    ),
+)
+
+# 上記フラグの真偽値そのもの。本番構築箇所はこれを import して
+# `ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)` の形で使う。
+GHOST_CHAIN_RULE_ENABLED: bool = True
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)
@@ -173,6 +193,7 @@ def describe() -> str:
         ("認識(収集専用)", COLLECT_ONLY_ADOPTED),
         ("有利不利", ADVANTAGE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
+        ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
     ):
         lines.append(f"[{title}]")
         for f in flags:
