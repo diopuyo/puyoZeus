@@ -42,6 +42,7 @@ from src.probability_calibration import (  # noqa: E402
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
+import scripts.mc_counter_estimator as mc_counter  # noqa: E402
 from scripts.model_indicator_win import (  # noqa: E402
     GBC_PARAMS, load_labeled_csv, pair_sides_for_win, build_features,
 )
@@ -79,6 +80,12 @@ W_PRESSURE = 0.35
 W_FORECAST = 0.30
 W_MODEL = 0.20
 W_THREAT = 0.15
+# 打ち合い応手確率の重み (2026-08-09 user採用)。
+# #24 の三つ巴比較で「併用スタッキングが全位相で有意勝ち」(rho 0.808 /
+# AUC 0.837、中盤 0.856) と出ていた機構を有利不利へ接続する。
+# ただし MC は 4 手先までしか読まず相手の応手を過小評価する既知バイアスが
+# あるため、 モデル (0.20) と同程度に抑えて主役にはしない。
+W_COUNTER = 0.20
 THREAT_SCALE = 0.22       # 到達火力差(お邪魔個) → 有利不利換算
 # 勝率較正: 有利不利→勝率。scripts.calibrate_winprob が実データで学習した
 #   sigmoid(k×有利不利) を使う。ファイルが無ければ直線 0.5+adv/200 にフォールバック。
@@ -346,6 +353,65 @@ PANEL_UKEY_Y = PANEL_DRIVERS_Y + 26                       # 受けやすさ行
 PANEL_SAT_Y = PANEL_UKEY_Y + SATURATED_ROW_Y_OFFSET_PX    # 飽和連鎖行 (既存offset流用)
 
 
+# ============================
+# パネルレイアウト (2026-08-10 user指示、同日字幕余白追記) — 1920x1080 canvas
+# ============================
+# 左上に映像、左下にタイムライングラフ、右に縦長の情報パネル、下端に全幅の
+# 字幕帯 (何も描画しない無地) を配置する新レイアウト。既存の overlay レイアウト
+# (盤面に直接バー等を重ねる従来レイアウト、上記 PANEL_BAR_* 等) とは完全に
+# 別経路であり、 --layout panel 指定時のみ使う (既定 layout=overlay は本ブロック
+# を一切参照せず、既存出力は不変)。
+# 字幕帯 (2026-08-10 追記): userが編集ソフトで字幕を載せるための余白。
+# 下端 140px は video/graph/info のいずれの描画対象にも含めず、
+# _draw_panel_layout が背景色で塗るだけで文字・図形を一切描かない
+# (userの絶対要求「下端の帯には情報を一切描かない」)。
+VALID_LAYOUTS: tuple[str, ...] = ("overlay", "panel")
+PANEL_CANVAS_W = 1920                                  # 出力キャンバス全体
+PANEL_CANVAS_H = 1080
+PANEL_SUBTITLE_H = 140                                 # 下端字幕帯の高さ (無描画)
+PANEL_CONTENT_H = PANEL_CANVAS_H - PANEL_SUBTITLE_H    # 映像+グラフ+情報パネルの高さ (940)
+PANEL_VIDEO_W = 1408                                   # 左上の映像 (16:9 維持)
+PANEL_VIDEO_H = 792
+PANEL_INFO_W = PANEL_CANVAS_W - PANEL_VIDEO_W          # 右の情報パネル幅 (512)
+PANEL_GRAPH_H = PANEL_CONTENT_H - PANEL_VIDEO_H        # 左下グラフ高さ (148)
+PANEL_SUBTITLE_BG_COLOR = (10, 10, 12)                 # 字幕帯の背景色 (黒〜濃グレー)
+# 情報パネル内の余白・行送り (マジックナンバー禁止 → 定数化)
+PANEL_INFO_PAD = 24            # 左右余白
+# _draw_bar は「1P」「2P」ラベルをバー本体の外側 (左へ34px/右へ6px+文字幅) に
+# 描く (overlay レイアウトでは横幅720pxの余裕があり問題にならなかった)。
+# 512px幅の情報パネルでは PANEL_INFO_PAD だけではラベルが左は映像領域に、
+# 右はキャンバス外にクリップする (2026-08-10 自己検収 PNG で実測発見)。
+# バー本体をさらに内側へ寄せてラベル分の余白を確保する。
+PANEL_INFO_BAR_LABEL_MARGIN = 40
+PANEL_INFO_BAR_TOP_OFFSET = 40  # パネル上端からバーまでの距離
+PANEL_INFO_BAR_H = 54           # バー高さ (overlay版 34 より太くしてスマホ視認性を上げる)
+PANEL_INFO_WINPROB_Y1 = 130     # 1P勝率%行
+PANEL_INFO_WINPROB_Y2 = 190     # 2P勝率%行
+PANEL_INFO_DRIVERS_Y = 260      # 主因見出し行
+PANEL_INFO_DRIVER_LINE_H = 26   # 主因1件あたりの行送り
+PANEL_INFO_STATE1_Y = 420       # 1P状態行
+PANEL_INFO_STATE2_Y = 450       # 2P状態行
+PANEL_INFO_COUNTER_Y = 490      # 応手情報行 (counter-reach有効時のみ)
+PANEL_INFO_ELAPSED_BOTTOM_MARGIN = 50  # 経過時刻行 (情報パネル下端からの距離)
+
+
+def panel_layout_regions() -> dict[str, tuple[int, int, int, int]]:
+    """パネルレイアウトの4領域 (video/graph/info/subtitle) を (x0, y0, w, h) で返す。
+
+    stateless な純関数 (座標計算のみ、副作用なし)。generate() と
+    _draw_panel_layout() の両方が本関数を参照することで、座標がずれる
+    バグ (二重管理) を構造的に防ぐ。4領域は 1920x1080 を隙間・重複なく分割する
+    (video+graph の左列と info の右列が上部 940px を占め、下端 140px は
+    subtitle が全幅で占める)。
+    """
+    return {
+        "video": (0, 0, PANEL_VIDEO_W, PANEL_VIDEO_H),
+        "graph": (0, PANEL_VIDEO_H, PANEL_VIDEO_W, PANEL_GRAPH_H),
+        "info": (PANEL_VIDEO_W, 0, PANEL_INFO_W, PANEL_CONTENT_H),
+        "subtitle": (0, PANEL_CONTENT_H, PANEL_CANVAS_W, PANEL_SUBTITLE_H),
+    }
+
+
 def _font(size: int) -> ImageFont.ImageFont:
     """meiryo を取得 (無ければ default)。"""
     for p in FONT_CANDIDATES:
@@ -469,6 +535,47 @@ def _add_interaction_columns(
     return feat, cols
 
 
+# ============================
+# 対称化 (side入れ替えミラー標本) の符号反転リスト (2026-08-10 バグ修正)
+# ============================
+# _train_model は side 入れ替え対称性 (「1P/2P を入れ替えたら予測も反転する
+# べき」) を学習データに強制するため、 全特徴量を符号反転したミラー標本を
+# 追加している。 しかしこれは **「自−相手」型の真の差分列にのみ正しい**。
+#
+# 一部の列は「side を入れ替えても値が変わらない」side非依存の絶対量であり、
+# これを無条件反転すると本来あり得ない値 (例: フラット度が負) がミラー標本に
+# 混入する。 具体的には:
+#   - `ojama_flat_score_diff` (= _ojama_flat_score() の出力。 定義が
+#     np.abs(おじゃま差) + np.abs(予告差) の減衰関数) は 1P/2P を入れ替えても
+#     abs() の中身は符号だけ変わり絶対値は不変 → 出力は不変。 列名は
+#     パイプライン都合で "_diff" サフィックスが付くが実体は「自−相手」の
+#     差分ではないので反転してはいけない。
+#   - 一方 `color_puyo_x_ojama_flat_diff` (交互作用列 = 色ぷよ差×フラット度)
+#     は「符号可変量 × 符号不変量」なので side 入れ替えで符号が変わる。
+#     これは反転が正しい (登録不要)。
+#
+# 新しい列を追加する際は、 1P/2P を入れ替えたときに符号が変わるかどうかを
+# 必ず確認し、 変わらない (side非依存の絶対量・abs/exp/count等) 列だけを
+# ここに追記すること。 登録漏れは「あり得ない値の学習データ混入」という
+# サイレントバグを生む (2026-08-10 発見、 アーキ設計 案B-1)。
+SIDE_INVARIANT_COLS: tuple[str, ...] = (
+    # おじゃまフラット度 (np.abs ベースの絶対量。 1P/2P 非依存)
+    f"{OJAMA_FLAT_COL}_diff",
+)
+
+
+def _mirror_sign(cols: list[str]) -> np.ndarray:
+    """対称化ミラー標本用の列別符号ベクトルを返す (+1=そのまま複製, -1=反転)。
+
+    SIDE_INVARIANT_COLS に登録された列は +1 (不変)、 それ以外は -1 (可変・
+    「自−相手」差分は side 入れ替えで符号反転が正しい)。 テストで直接検証
+    できるよう _train_model から切り出した (stateless、副作用なし)。
+    """
+    return np.array(
+        [1.0 if c in SIDE_INVARIANT_COLS else -1.0 for c in cols], dtype=float,
+    )
+
+
 def _train_model(exclude_video: str | None = None):
     """study データの差分特徴で HistGBC を学習して返す。
 
@@ -494,7 +601,9 @@ def _train_model(exclude_video: str | None = None):
     # 対称化: 差分を反転しラベルも反転したミラー標本を追加。
     # 有利不利は「側を入れ替えると符号反転」する反対称関数であるべきで、
     # これにより互角(差=0)の予測が厳密に 50% になり、勝ち数の偏りバイアスを除去。
-    X_sym = np.vstack([X, -X])
+    # ただし列ごとに符号可変/不変が異なる (SIDE_INVARIANT_COLS 参照) ため、
+    # 全列一律の `-X` は誤り (2026-08-10 修正: 列別符号ベクトルを使う)。
+    X_sym = np.vstack([X, X * _mirror_sign(cols)])
     y_sym = np.concatenate([y, 1 - y])
     model = HistGradientBoostingClassifier(**GBC_PARAMS)
     model.fit(X_sym, y_sym)
@@ -521,6 +630,98 @@ class PressureTracker:
         self.pressure += max(0.0, ojama_2p - self._prev2) - max(0.0, ojama_1p - self._prev1)
         self._prev1, self._prev2 = ojama_1p, ojama_2p
         return float(max(-100.0, min(100.0, self.pressure * PRESSURE_SCALE)))
+
+
+# ============================
+# 打ち合い応手 (モンテカルロ) — 2026-08-09 user採用
+# ============================
+# user 確定定義 (memory reference_saisoku_exchange_model_2026-07-22):
+#   「有効な催促 = 着弾までに相手が返せる見込みが 50% 以下」
+#
+# **相手が打てる手数は固定値ではない** (2026-08-09 user指摘)。 確定知見
+# (memory reference_ojama_landing_gated_by_placement_2026-07-29) の通り、
+# おじゃまは「連鎖完了後・受け側のツモが着地したとき」に降るため、
+#     相手が打てる手数 ≒ floor(連鎖アニメ時間 ÷ 1手時間) + 1
+# であり、 局面ごとに変わる。
+#
+# 使う実装: `scripts/mc_counter_estimator.estimate_counter_distribution`。
+# これは **時間予算 (秒) を渡すと、 その中で打てるだけ手を進める**ロールアウト
+# で、 K=4 の頭打ちが無い (#24 K拡張、 user承認方針「K は近似値として出すのが
+# 正しい」)。 既知ネクスト (Next 表示) も渡せる。
+# 当初 `counter_reach_probability_fast` を K 固定で呼ぶ実装を書いたが、
+# **既に上限を外した実装があった**ため差し替えた。
+
+# 応手判定に使う「返し」の閾値 (お邪魔換算個数)。
+# ダメージ関数の第1折れ点 12 個 (2段ぶん、
+# memory reference_ojama_damage_function) を採用する物理由来の値。
+COUNTER_THRESHOLD_OJAMA: float = 12.0
+# 応手優位 → 有利不利[-100,100] への換算。 確率差 (最大 1.0) をフルスケールに
+# はせず控えめに置く (MC の近似誤差を主役にしないため)。
+COUNTER_SCALE: float = 40.0
+# ロールアウト本数 (既定 200 は重いので表示用に減らす)。
+COUNTER_N_ROLLOUTS: int = 60
+
+
+class CounterReachTracker:
+    """相手が返せるかを時間予算ベースのモンテカルロで見る打ち合い優位。
+
+    盤面 + 時間予算が同じなら結果も同じ (実装が決定論的) なのでキャッシュする。
+    """
+
+    def __init__(self) -> None:
+        self._cache: dict[bytes, float] = {}
+        # 直近に使った時間予算と平均打手数 (デバッグ・表示用)
+        self.last_budget_sec: float = 0.0
+        self.last_hands: float = 0.0
+
+    def _reach(
+        self, board: Board, budget_sec: float,
+        known_pairs: "tuple[tuple[int, int], ...]",
+    ) -> tuple[float, float]:
+        """(閾値以上を返せる確率, 平均打手数) を返す。"""
+        dist = mc_counter.estimate_counter_distribution(
+            board, budget_sec,
+            known_pairs=known_pairs,
+            thresholds_ojama=(COUNTER_THRESHOLD_OJAMA,),
+            n_rollouts=COUNTER_N_ROLLOUTS,
+        )
+        return (
+            float(dist.prob_at_least.get(COUNTER_THRESHOLD_OJAMA, 0.0)),
+            float(dist.mean_hands_used),
+        )
+
+    def update(
+        self, b1: Board, b2: Board, budget_sec: float = 0.0,
+        next1: "tuple[int, int] | None" = None,
+        next2: "tuple[int, int] | None" = None,
+    ) -> tuple[float, float, float]:
+        """(1P視点の優位[-100,100], 1Pの応手確率, 2Pの応手確率) を返す。
+
+        budget_sec: 着弾までの時間予算 [秒]。 **手数はこの予算から決まる**
+            (固定値を使わない)。 0 以下なら判定不能として 0 を返す。
+        next1/next2: 各 side の既知ネクスト (あれば精度が上がる)。
+        """
+        if budget_sec <= 0.0:
+            return 0.0, float("nan"), float("nan")
+        self.last_budget_sec = budget_sec
+        out: list[float] = []
+        hands: list[float] = []
+        for b, nx in ((b1, next1), (b2, next2)):
+            known = (nx,) if nx and nx[0] > 0 and nx[1] > 0 else ()
+            base = b.grid_bytes() if hasattr(b, "grid_bytes") else b._grid.tobytes()
+            key = base + f"|{budget_sec:.2f}|{known}".encode()
+            if key not in self._cache:
+                if len(self._cache) > 256:
+                    self._cache.clear()
+                self._cache[key] = self._reach(b, budget_sec, known)
+            p, h = self._cache[key]
+            out.append(p)
+            hands.append(h)
+        p1, p2 = out
+        self.last_hands = float(np.mean(hands)) if hands else 0.0
+        # 相手が返せないほど 1P 有利
+        adv = ((1.0 - p2) - (1.0 - p1)) * COUNTER_SCALE
+        return float(max(-100.0, min(100.0, adv))), p1, p2
 
 
 class CapabilityPressureTracker:
@@ -921,21 +1122,44 @@ def _pick_recog_display_board(
     return frozen_board, False
 
 
+def _graph_geometry(
+    render_area: tuple[int, int, int, int] | None,
+) -> tuple[int, int, int, int, int]:
+    """グラフ描画領域 (gx0, gx1, gy0, gy1, title_y) を返す (stateless・単体テスト対象)。
+
+    render_area が None なら従来の overlay レイアウト (ゲーム画面の下の黒帯、
+    TOP_H/OUT_W/OUT_H/CANVAS_H から算出) を計算する (後方互換、値は既存と
+    完全一致)。render_area=(x0, y0, w, h) を指定した場合は、その矩形内に
+    タイトル+枠+プロットを収める (panel レイアウト用)。
+    """
+    if render_area is None:
+        game_bottom = TOP_H + OUT_H  # ゲーム画面の下端 y 座標
+        gx0, gx1 = 40, OUT_W - 40
+        gy0, gy1 = game_bottom + 26, CANVAS_H - 12
+        return gx0, gx1, gy0, gy1, gy0 - 20
+    x0, y0, w, h = render_area
+    margin_x = 40
+    gx0, gx1 = x0 + margin_x, x0 + w - margin_x
+    gy0, gy1 = y0 + 30, y0 + h - 12
+    return gx0, gx1, gy0, gy1, y0 + 6
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
+    render_area: tuple[int, int, int, int] | None = None,
 ) -> None:
-    """リアルタイム評価値グラフ (将棋風) をゲーム画面の下の黒帯に描画。進行に合わせ伸びる。
+    """リアルタイム評価値グラフ (将棋風) を描画する。進行に合わせ伸びる。
 
-    ゲーム画面は y∈[TOP_H, TOP_H+OUT_H) にあるため、グラフ帯はその下端
-    (TOP_H+OUT_H) を基準にオフセットする(盤面に被らない)。
+    render_area: optional。省略時は従来通りゲーム画面下の黒帯に描く
+    (後方互換、既存呼出元は挙動不変)。panel レイアウトでは (x0,y0,w,h) の
+    矩形を明示して左下グラフ領域に描く (_draw_panel_layout 参照)。
     """
-    game_bottom = TOP_H + OUT_H  # ゲーム画面の下端 y 座標
-    gx0, gx1, gy0, gy1 = 40, OUT_W - 40, game_bottom + 26, CANVAS_H - 12
+    gx0, gx1, gy0, gy1, title_y = _graph_geometry(render_area)
     gyc = (gy0 + gy1) // 2
     gw, gh = gx1 - gx0, gy1 - gy0
-    d.rectangle([gx0 - 4, gy0 - 20, gx1 + 4, gy1 + 4], fill=(0, 0, 0, 150))
-    d.text((gx0, gy0 - 20), "有利不利グラフ (0=互角 上1P/下2P)", font=_font(15),
+    d.rectangle([gx0 - 4, title_y, gx1 + 4, gy1 + 4], fill=(0, 0, 0, 150))
+    d.text((gx0, title_y), "有利不利グラフ (0=互角 上1P/下2P)", font=_font(15),
            fill=(255, 255, 255))
     total = max(total, 1.0)
 
@@ -994,26 +1218,31 @@ def _draw_saturated(
 
 def _draw_bar(
     d: "ImageDraw.ImageDraw", adv: float, waiting: bool, cx: int, x0: int,
+    top: int = PANEL_BAR_TOP, bar_w: int = PANEL_BAR_W, bar_h: int = PANEL_BAR_H,
+    label_font_size: int = 22, verdict_font_size: int = 24,
 ) -> None:
     """有利不利バー本体(色分け矩形 + 判定テキスト + 1P/2Pラベル)を描画するサブ関数。
 
-    _draw_overlay から分離 (1関数50行以内の規約対応)。座標は全て
-    上部情報パネル (y∈[0, TOP_H)) 内の PANEL_BAR_* 定数を使う。
+    _draw_overlay から分離 (1関数50行以内の規約対応)。top/bar_w/bar_h/
+    label_font_size/verdict_font_size は既定値が従来の PANEL_BAR_* 定数と
+    一致するため、呼出元が指定しなければ従来の overlay レイアウトと完全に
+    同じ描画になる (backwards compat)。panel レイアウトは _draw_panel_info
+    から異なる座標・サイズを明示的に渡す。
     """
-    top, bar_w, bar_h = PANEL_BAR_TOP, PANEL_BAR_W, PANEL_BAR_H
     d.rectangle([x0, top, cx, top + bar_h], fill=(70, 110, 200, 180))   # 1P側(青)
     d.rectangle([cx, top, x0 + bar_w, top + bar_h], fill=(200, 80, 80, 180))  # 2P側(赤)
     d.rectangle([x0, top, x0 + bar_w, top + bar_h], outline=(255, 255, 255), width=2)
     if waiting:
-        d.text((cx - 90, top + 4), "STABLE 待ち", font=_font(22), fill=(255, 255, 255))
+        d.text((cx - 90, top + 4), "STABLE 待ち", font=_font(label_font_size),
+               fill=(255, 255, 255))
         return
     mx = int(cx - (max(-100, min(100, adv)) / 100.0) * (bar_w // 2))  # adv>0=1P=左
     d.rectangle([mx - 3, top - 6, mx + 3, top + bar_h + 6], fill=(255, 255, 255))
     verdict = ("互角" if abs(adv) < EVEN_THRESHOLD
                else f"{'1P' if adv > 0 else '2P'} 有利  {abs(adv):.0f}")
-    d.text((cx - 70, top + 4), verdict, font=_font(24), fill=(0, 0, 0))
-    d.text((x0 - 34, top + 4), "1P", font=_font(22), fill=(150, 200, 255))
-    d.text((x0 + bar_w + 6, top + 4), "2P", font=_font(22), fill=(255, 180, 180))
+    d.text((cx - 70, top + 4), verdict, font=_font(verdict_font_size), fill=(0, 0, 0))
+    d.text((x0 - 34, top + 4), "1P", font=_font(label_font_size), fill=(150, 200, 255))
+    d.text((x0 + bar_w + 6, top + 4), "2P", font=_font(label_font_size), fill=(255, 180, 180))
 
 
 def _draw_overlay(
@@ -1057,6 +1286,95 @@ def _draw_overlay(
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
+def _draw_panel_drivers(
+    d: "ImageDraw.ImageDraw", drivers: list[tuple[str, float]],
+    x0: int, y_top: int,
+) -> None:
+    """主因を1行1項目で縦に並べて描画する (情報パネルの狭い幅向けの折り返し)。
+
+    _score_advantage が返す drivers は既に上位3件に絞られているため、
+    1件ずつ改行して描くだけで480px幅パネル内に収まる (横一列連結だと
+    従来の overlay レイアウトでは横幅720pxを使えたが、パネルはそれより
+    狭いため折り返しが必須)。
+    """
+    d.text((x0, y_top), "主因:", font=_font(18), fill=(230, 230, 180))
+    for i, (c, v) in enumerate(drivers):
+        label = f"{JP_LABEL[c]}差 {v:+.2f}"
+        d.text((x0, y_top + 24 + i * PANEL_INFO_DRIVER_LINE_H), label,
+               font=_font(18), fill=(230, 230, 180))
+
+
+def _draw_panel_info(
+    d: "ImageDraw.ImageDraw", box: tuple[int, int, int, int],
+    adv: float, p1: float, waiting: bool, drivers: list[tuple[str, float]],
+    state1: str, state2: str, counter_text: str, elapsed_sec: float,
+) -> None:
+    """右側縦長情報パネル (バー/勝率/主因/状態/経過時刻) を描画する。
+
+    box: (x0, y0, w, h) の矩形 (panel_layout_regions()["info"])。
+    バー描画は既存 _draw_bar を座標だけ差し替えて再利用する
+    (「読みやすさ優先」のため overlay 版よりバー太め・勝率フォント大きめ)。
+    """
+    x0, y0, w, h = box
+    d.rectangle([x0, y0, x0 + w, y0 + h], fill=(18, 18, 24))
+    pad = PANEL_INFO_PAD
+    cx = x0 + w // 2
+    # バー本体は「1P」「2P」ラベル分の余白 (PANEL_INFO_BAR_LABEL_MARGIN) を
+    # さらに内側へ寄せて確保する (パネル外・映像領域へのラベル溢れ防止)。
+    bar_inset = pad + PANEL_INFO_BAR_LABEL_MARGIN
+    bar_w = w - bar_inset * 2
+    _draw_bar(d, adv, waiting, cx, x0 + bar_inset,
+              top=y0 + PANEL_INFO_BAR_TOP_OFFSET, bar_w=bar_w, bar_h=PANEL_INFO_BAR_H,
+              label_font_size=20, verdict_font_size=26)
+    if waiting:
+        return
+    d.text((x0 + pad, y0 + PANEL_INFO_WINPROB_Y1), f"1P {p1 * 100:.0f}%",
+           font=_font(52), fill=(150, 200, 255))
+    d.text((x0 + pad, y0 + PANEL_INFO_WINPROB_Y2), f"2P {(1 - p1) * 100:.0f}%",
+           font=_font(52), fill=(255, 180, 180))
+    _draw_panel_drivers(d, drivers, x0 + pad, y0 + PANEL_INFO_DRIVERS_Y)
+    d.text((x0 + pad, y0 + PANEL_INFO_STATE1_Y), f"1P状態: {state1}",
+           font=_font(22), fill=(200, 220, 255))
+    d.text((x0 + pad, y0 + PANEL_INFO_STATE2_Y), f"2P状態: {state2}",
+           font=_font(22), fill=(255, 210, 210))
+    if counter_text:
+        d.text((x0 + pad, y0 + PANEL_INFO_COUNTER_Y), counter_text,
+               font=_font(18), fill=(220, 220, 150))
+    d.text((x0 + pad, y0 + h - PANEL_INFO_ELAPSED_BOTTOM_MARGIN),
+           f"経過 {elapsed_sec:.0f} 秒", font=_font(20), fill=(200, 200, 200))
+
+
+def _draw_panel_layout(
+    frame: np.ndarray, adv: float, p1: float,
+    drivers: list[tuple[str, float]], waiting: bool,
+    history: list[tuple[float, float]], t_rel: float, total: float,
+    state1: str, state2: str, counter_text: str, elapsed_sec: float,
+) -> np.ndarray:
+    """パネルレイアウト (左上映像+左下グラフ+右情報パネル+下端字幕帯、1920x1080)
+    で1フレーム描画する。
+
+    2026-08-10 user指示の新レイアウト (同日、下端字幕帯の追記込み)。既存の
+    _draw_overlay (盤面上に直接バー等を重ねる従来レイアウト) とは完全に独立
+    した経路であり、 --layout panel 指定時のみ呼ばれる (既定 layout=overlay
+    では未使用、既存出力は一切変わらない)。下端の字幕帯 (regions["subtitle"])
+    には背景色を塗るだけで文字・図形を一切描かない (user要求の絶対条件)。
+    """
+    regions = panel_layout_regions()
+    canvas = Image.new("RGB", (PANEL_CANVAS_W, PANEL_CANVAS_H), (12, 12, 16))
+    vx, vy, vw, vh = regions["video"]
+    video_rgb = cv2.cvtColor(
+        cv2.resize(frame, (vw, vh), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
+    canvas.paste(Image.fromarray(video_rgb), (vx, vy))
+    d = ImageDraw.Draw(canvas, "RGBA")
+    sx, sy, sw, sh = regions["subtitle"]
+    d.rectangle([sx, sy, sx + sw, sy + sh], fill=PANEL_SUBTITLE_BG_COLOR)  # 字幕帯: 無描画
+    if history:
+        _draw_graph(d, history, t_rel, total, render_area=regions["graph"])
+    _draw_panel_info(d, regions["info"], adv, p1, waiting, drivers,
+                     state1, state2, counter_text, elapsed_sec)
+    return cv2.cvtColor(np.array(canvas), cv2.COLOR_RGB2BGR)
+
+
 # ============================
 # 認識フラグの既定値解決 (2026-07-31)
 # ============================
@@ -1092,6 +1410,17 @@ def _resolve_flag(name: str, value: "bool | None") -> bool:
     return _pipeline_default(name) if value is None else bool(value)
 
 
+def _build_counter_text(counter_p1: float, counter_p2: float) -> str:
+    """panel レイアウトの応手情報行の文字列を作る (無効/未計算時は空文字)。
+
+    counter-reach 無効時 (enable_counter_reach=False) は counter_p1/p2 が
+    nan のままなので空文字を返し、_draw_panel_info 側で行自体を描かない。
+    """
+    if math.isnan(counter_p1) or math.isnan(counter_p2):
+        return ""
+    return f"応手確率  1P {counter_p1 * 100:.0f}%  /  2P {counter_p2 * 100:.0f}%"
+
+
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
@@ -1109,7 +1438,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              disable_score_lead_bias: bool = False,
              enable_capability_pressure: bool = False,
              disable_pressure: bool = False,
-             enable_puyo_to_empty_hsv_guard: bool | None = None) -> int:
+             enable_counter_reach: bool = False,
+             enable_puyo_to_empty_hsv_guard: bool | None = None,
+             layout: str = "overlay") -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -1194,7 +1525,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         scripts/_diag_column_deadlock_trace_2026-07-30.py 参照)。ただし 4動画測定で
         c58/c26 の 2P tail 悪化・c26/c69 の 1P 効果ゼロ、汎化未確認のため
         load_default 既定 OFF。既定 False = 従来挙動不変 (後方互換、A/B比較用)。
+    layout: "overlay"(既定、従来通り盤面に直接バー等を重ねるレイアウト)または
+        "panel"(2026-08-10 user指示。左上に映像、左下にタイムライングラフ、
+        右に縦長情報パネルを配置する新レイアウト、出力キャンバスは1920x1080)。
+        既定 "overlay" = 従来挙動不変 (backwards compat)。認識・有利不利の
+        計算経路は layout に関わらず完全に同一で、最終合成のみ分岐する。
     """
+    if layout not in VALID_LAYOUTS:
+        raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
         platt_params = load_platt_calibration(PLATT_CALIBRATION_PATH, required=True)
@@ -1228,8 +1566,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[seek] 処理開始 {proc_frame / fps:.1f}s / 書き出し開始 "
               f"{write_frame / fps:.1f}s (ウォームアップ {warmup_sec:.0f}s)")
     out.parent.mkdir(parents=True, exist_ok=True)
+    # layout="panel" は出力キャンバスサイズが異なる (1920x1080)。認識・有利不利の
+    # 計算経路 (OUT_W/OUT_H で処理するフレーム) は layout に関わらず不変。
+    canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
+                   else (OUT_W, CANVAS_H))
     writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"),
-                             fps, (OUT_W, CANVAS_H))
+                             fps, canvas_size)
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -1266,12 +1608,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     ukey2: float = 0.0
     sat1: float = 0.0
     sat2: float = 0.0
+    # 打ち合い応手確率 (panel レイアウトの応手情報行用。counter-reach 無効時は
+    # nan のままで counter_text が空文字になる、_score_advantage 系と同じ
+    # 「使われる時だけ意味を持つ」設計)。
+    counter_p1: float = float("nan")
+    counter_p2: float = float("nan")
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
     # 能力低下ベースの圧力 (2026-08-09)。 enable_capability_pressure=True の
     # ときだけ使う。 リセットは _fresh_trackers と同じタイミングで行う。
     cap_ptracker = CapabilityPressureTracker()
+    # 打ち合い応手確率 (2026-08-09 user採用)
+    counter_tracker = CounterReachTracker()
     hcache = HeavyAdvCache(model)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
@@ -1299,10 +1648,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             b1 = b2 = None
             adv_ema, p1_last, drivers = 0.0, 0.5, []
             ukey1 = ukey2 = sat1 = sat2 = 0.0
+            counter_p1 = counter_p2 = float("nan")
             history.clear()
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
              efire_tracker) = _fresh_trackers(model)
             cap_ptracker = CapabilityPressureTracker()
+            counter_tracker = CounterReachTracker()
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -1378,8 +1729,30 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             else:
                 sl_bias = max(-SL_BIAS_CAP, min(SL_BIAS_CAP,
                                                 svtracker.update(r.p1.score, r.p2.score)))
+            # 打ち合い応手確率 (2026-08-09 user採用)。
+            # 相手が返せない攻撃を持っている側を有利にする。
+            # 着弾までの時間予算を、 **そのときの連鎖数から** 出す。
+            # 固定値ではなく局面依存 (2026-08-09 user指摘)。
+            # estimate_chain_anim_duration_sec は 23 動画 418 イベントの実測
+            # ベース (0.4 秒/連鎖)。
+            _cc = 0
+            for _sr in (r.p1, r.p2):
+                _ev = getattr(_sr, "chain_event", None)
+                _n = getattr(_ev, "chain_count", None) if _ev is not None else None
+                if _n:
+                    _cc = max(_cc, int(_n))
+            _budget = iv.estimate_chain_anim_duration_sec(float(_cc)) if _cc else 0.0
+            counter_adv, counter_p1, counter_p2 = (
+                counter_tracker.update(
+                    b1, b2, _budget,
+                    next1=getattr(r.p1, "next_pair", None),
+                    next2=getattr(r.p2, "next_pair", None),
+                ) if enable_counter_reach
+                else (0.0, float("nan"), float("nan"))
+            )
             adv = (W_PRESSURE * pres + W_FORECAST * fc
-                   + W_MODEL * model_adv + W_THREAT * threat) + sl_bias
+                   + W_MODEL * model_adv + W_THREAT * threat
+                   + W_COUNTER * counter_adv) + sl_bias
             adv = max(-100.0, min(100.0, adv))
             adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
                                 board_room(b1), board_room(b2))
@@ -1434,9 +1807,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                                   (p2_x + roi_w, p2_y + roi_h), (0, 165, 255), 4)
             display_frame = cv2.resize(
                 raw_native, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
-        writer.write(_draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
-                                   history, t - start_sec, total_dur,
-                                   ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2))
+        if layout == "panel":
+            frame_out = _draw_panel_layout(
+                display_frame, disp_adv, disp_p1, drivers, waiting,
+                history, t - start_sec, total_dur,
+                state1=r.p1.state.name, state2=r.p2.state.name,
+                counter_text=_build_counter_text(counter_p1, counter_p2),
+                elapsed_sec=t - start_sec)
+        else:
+            frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
+                                      history, t - start_sec, total_dur,
+                                      ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2)
+        writer.write(frame_out)
         written += 1
         if written % 300 == 0:
             print(f"  ... {written} frames (t={t:.1f}s adv={disp_adv:+.0f})")
@@ -1540,6 +1922,13 @@ def main() -> None:
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
+        "--counter-reach", action="store_true", default=False,
+        dest="enable_counter_reach",
+        help="打ち合い応手確率 (モンテカルロ) を有利不利に加える (2026-08-09 "
+             "user採用)。相手が閾値以上を返せる確率を見て、返せない攻撃を"
+             "持っている側を有利にする。既定は無効 (後方互換)。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -1574,6 +1963,12 @@ def main() -> None:
              "c58/c26 の 2P で tail 悪化・c26/c69 の 1P で効果ゼロ (汎化未確認)。"
              "デフォルト OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
+    ap.add_argument(
+        "--layout", choices=VALID_LAYOUTS, default="overlay", dest="layout",
+        help="出力レイアウト (2026-08-10 user指示追加)。'overlay'(既定)は従来通り"
+             "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
+             "グラフ・右に縦長情報パネルを配置する新レイアウト (1920x1080)。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -1592,7 +1987,9 @@ def main() -> None:
              disable_score_lead_bias=a.disable_score_lead_bias,
              enable_capability_pressure=a.enable_capability_pressure,
              disable_pressure=a.disable_pressure,
-             enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard)
+             enable_counter_reach=a.enable_counter_reach,
+             enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
+             layout=a.layout)
 
 
 if __name__ == "__main__":
