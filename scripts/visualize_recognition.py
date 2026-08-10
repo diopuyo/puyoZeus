@@ -95,16 +95,24 @@ DEFAULT_SAMPLE_INTERVAL = 0.033  # 30 fps 認識 (= cycle 71p 2026-05-13 ユー�
 
 def draw_cell_overlay(
     frame: np.ndarray, board: Board, roi_x: int, roi_y: int,
+    hide_mask: np.ndarray | None = None,
 ) -> None:
     """盤面 1 つに対し、各 cell の色 symbol を重畳する.
 
     可視 12 行のみ描画 (隠し段 row 0 は省略)。
     文字色は常に白、黒太縁で puyo 背景と同色化を回避。
+
+    Args:
+        hide_mask: shape=(BOARD_ROWS, BOARD_COLS) の bool 配列。True のセルは
+            描画をスキップする (--overlay-cell-stability-frames 用、2026-08-08
+            追加)。None の場合は従来通り全セル描画 (後方互換)。
     """
     if board is None:
         return
     for row in range(HIDDEN_ROWS, BOARD_ROWS):
         for col in range(BOARD_COLS):
+            if hide_mask is not None and hide_mask[row, col]:
+                continue
             color = int(board.get(row, col))
             symbol = COLOR_SYMBOLS.get(color, "?")
             if not symbol:
@@ -132,16 +140,119 @@ def draw_cell_overlay(
             )
 
 
+def should_draw_cell_overlay(
+    state: BoardState,
+    overlay_stable_only: bool,
+    overlay_show_states: frozenset[BoardState] | None,
+) -> bool:
+    """セル文字オーバーレイを描画すべきか判定する (2026-08-07 追加).
+
+    --overlay-show-states と --overlay-stable-only は argparse 側で併用禁止のため
+    ここでは overlay_show_states を優先判定するだけでよい。両方未指定なら常時描画
+    (既定・後方互換)。
+    """
+    if overlay_show_states is not None:
+        return state in overlay_show_states
+    if overlay_stable_only:
+        return state == BoardState.STABLE
+    return True
+
+
+def should_draw_cell_overlay_debounced(
+    state: BoardState,
+    overlay_stable_only: bool,
+    overlay_show_states: frozenset[BoardState] | None,
+    hide_candidate_start_frame: int | None,
+    debounce_frames: int,
+    fi: int,
+) -> bool:
+    """状態ゲート判定の「非表示への切替」を K フレーム継続後にのみ発動させる (2026-08-08 追加).
+
+    短時間の CHAIN/OJAMA_FALL フリッカーで通常プレイ中のオーバーレイが
+    常時消える問題への対処 (--overlay-state-debounce-frames)。
+    表示 (True) への復帰は即時。非表示 (False) への切替は
+    hide_candidate_start_frame (= 非表示対象状態に連続して入り始めた frame idx、
+    呼び出し元がフレーム毎に更新) から fi までの経過フレーム数が
+    debounce_frames 未満の間は表示を維持する。
+
+    Args:
+        state: 判定対象プレイヤーの現在 state。
+        overlay_stable_only: --overlay-stable-only。
+        overlay_show_states: --overlay-show-states の解決済み集合 (None=無効)。
+        hide_candidate_start_frame: 非表示対象状態に連続して入り始めた frame idx
+            (表示中は None)。呼び出し元が sample フレーム毎に更新する。
+        debounce_frames: デバウンスに必要な連続フレーム数 (0=無効・即時非表示、後方互換)。
+        fi: 現在の frame idx。
+
+    Returns:
+        bool: True ならセル文字オーバーレイを描画する。
+    """
+    if should_draw_cell_overlay(state, overlay_stable_only, overlay_show_states):
+        return True
+    if debounce_frames <= 0:
+        return False
+    if hide_candidate_start_frame is None:
+        # 継続開始が未記録 = デバウンス判定未成立、安全側で表示維持
+        return True
+    return (fi - hide_candidate_start_frame) < debounce_frames
+
+
+def update_cell_stability_hide_mask(
+    board: Board | None,
+    prev_grid: np.ndarray | None,
+    change_frame: np.ndarray,
+    fi: int,
+    stability_frames: int,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """セル単位の直近安定フレーム数を追跡し、非表示 mask を返す (2026-08-08 追加).
+
+    per-player・per-cell で「最後に値が変わった frame idx」を追跡し、直近
+    stability_frames フレーム連続で同一値のセルのみ描画対象とする
+    (--overlay-cell-stability-frames)。stability_frames<=0 なら追跡自体を
+    行わず常に (None, prev_grid) を返す (無効時オーバーヘッドゼロ、後方互換)。
+
+    Args:
+        board: 現在描画対象の確定盤面 (None なら判定しない)。
+        prev_grid: 前回呼び出し時に保存した grid (shape=(BOARD_ROWS, BOARD_COLS))。
+        change_frame: 各セルが最後に値変化した frame idx (呼び出し元が保持、in-place 更新)。
+        fi: 現在の frame idx。
+        stability_frames: 安定判定に必要な連続フレーム数 (0=無効)。
+
+    Returns:
+        (hide_mask, new_prev_grid): hide_mask は True=まだ安定不足で非表示にすべき
+        セル (stability_frames<=0 または board is None のとき None)。new_prev_grid
+        は次回呼び出しの prev_grid としてそのまま渡す値。
+    """
+    if stability_frames <= 0 or board is None:
+        return None, prev_grid
+    grid = board._grid  # noqa: SLF001 盤面全体比較専用、numpy 比較で軽量化のため直接アクセス
+    if prev_grid is None or prev_grid.shape != grid.shape:
+        change_frame[:] = fi
+    else:
+        changed = grid != prev_grid
+        if np.any(changed):
+            change_frame[changed] = fi
+    hide_mask = (fi - change_frame) < stability_frames
+    return hide_mask, grid.copy()
+
+
 def draw_state_label(
     frame: np.ndarray, state: BoardState, roi_x: int, roi_y: int,
-    score: int = 0, label_prefix: str = "",
+    score: int = 0, label_prefix: str = "", chain_count: int | None = None,
 ) -> None:
     """ROI 上方に state ラベルを描画する.
 
     隠し段帯 (HIDDEN_BAND_HEIGHT) の上方に配置し帯と被らないようオフセットを取る。
+
+    Args:
+        chain_count: 連鎖数 (物理推論側の ChainEvent.chain_count)。
+            CHAIN 表示中かつ非 None のときだけ "chain 9れんさ" のように
+            併記する (2026-08-08 追加、 省略時は従来通りの表示)。
     """
     color = STATE_COLOR.get(state, (255, 255, 255))
     text = f"{label_prefix}{state.value}"
+    if chain_count is not None and state == BoardState.CHAIN and chain_count > 0:
+        text += f" {chain_count}renza"
     if score > 0:
         text += f" score={score}"
     # 隠し段帯より上にラベルを配置
@@ -160,6 +271,48 @@ def draw_state_label(
         frame, (roi_x, roi_y), (roi_x + ROI_W, roi_y + ROI_H),
         color, 2,
     )
+
+
+# 連鎖表示ホールド (2026-08-08、user要望「連鎖中はずっと chain であってほしい」)。
+# GRAVITY_SETTLE は連鎖の段間で重力落下を待つ状態であり、 連鎖の一部である。
+# 実測 (dio_vs_ts_m01_clip t=45-75s) では連鎖中の離脱 18 回が **全て**
+# GRAVITY_SETTLE 起点で、 うち 6 回はそこから OJAMA_FALL へ抜けていた
+# (自連鎖中に自盤面へおじゃまは降らないので誤判定)。
+_CHAIN_DISPLAY_STATES: frozenset[BoardState] = frozenset({
+    BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+})
+
+
+def resolve_chain_display_state(
+    state: BoardState,
+    chain_end_sec: float | None,
+    time_sec: float,
+    enabled: bool,
+) -> BoardState:
+    """連鎖中の表示 state を CHAIN に固定して返す (表示専用).
+
+    連鎖の継続判定はヒューリスティックな時間ホールドではなく、 物理推論側が
+    出す ChainEvent.end_sec (連鎖終了予測時刻) を使う。 連鎖中に再検知が
+    起きると end_sec は延びるため、 多段連鎖でも取りこぼさない。
+
+    Args:
+        state: 認識が返した実 state。
+        chain_end_sec: 直近 ChainEvent の end_sec (None = 連鎖情報なし)。
+        time_sec: 現在時刻 [秒]。
+        enabled: False なら実 state をそのまま返す (既定・後方互換)。
+
+    Returns:
+        表示に使う BoardState。
+    """
+    if not enabled:
+        return state
+    # GRAVITY_SETTLE は連鎖の一部なので常に CHAIN として見せる
+    if state in _CHAIN_DISPLAY_STATES:
+        return BoardState.CHAIN
+    # 物理推論の連鎖終了時刻までは、 途中で別 state に落ちても CHAIN を維持する
+    if chain_end_sec is not None and time_sec <= chain_end_sec:
+        return BoardState.CHAIN
+    return state
 
 
 def draw_next_overlay(
@@ -1423,7 +1576,241 @@ def main() -> int:
              "t_sec / p1_state / p2_state / score_p1/p2 / pending / net_balance / "
              "total_dropped / confidence を記録。 省略時は保存しない。",
     )
+    # 全域無悪化ゲート (2026-08-07): バーストガード系フラグ6個の配線。
+    # scripts/collect_boards_lean.py / scripts/measure_stable_cell_acc.py
+    # (7335c24) と同一パターン (dest 名も同一、デフォルト全 OFF で
+    # bit-identical、YouTubeデモ素材作成用)。
+    parser.add_argument(
+        "--enable-effect-gate", action="store_true", default=False,
+        dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03) を有効化する。満杯盤面 誤り根治用。 "
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-burst-guard-v2", action="store_true", default=False,
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05) を有効化する。 "
+            "Schmitt trigger 視覚トリガー + ハード凍結。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-transition-merge-guard", action="store_true", default=False,
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05) を有効化する。 "
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを適用する。 "
+            "--enable-burst-guard-v2 が無効の間は no-op。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード Schmitt trigger の開窓閾値を上書きする "
+            "(CLOSE も同値運用)。既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+            "全域無悪化ゲート採用値は 0.954。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-hidden-row-burst-guard", action="store_true", default=False,
+        dest="enable_hidden_row_burst_guard",
+        help=(
+            "バーストガード Stage1.5b (2026-08-05、§11) を有効化する。 "
+            "row1-3 凍結中/close直後クールダウン中の infer_hidden_row 呼び出しを "
+            "スキップし row0 誤色書き込みを防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-transition-debounce", action="store_true", default=False,
+        dest="enable_match_transition_debounce",
+        help=(
+            "長時間劣化修正 A' (2026-08-06) を有効化する。 "
+            "is_active の True/False遷移を対称デバウンスし、MATCH_TRANSITION_"
+            "DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる誤再アーム/リセットを"
+            "防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
+    # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
+    # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
+    # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
+    # 汚染量小と確認済み (デモ動画生成用)。既定は無効 (後方互換)。
+    parser.add_argument(
+        "--enable-asymmetric-recovery-min-frames", action="store_true", default=False,
+        dest="enable_asymmetric_recovery_min_frames",
+        help=(
+            "復旧ゲート方向別しきい値の非対称化 (2026-07-30) を有効化する。 "
+            "方向1 (空→色) のみ --recovery-add-min-frames で発火させ、"
+            "方向2/3 (色→空/色→色) は STABLE_RECOVERY_MIN_FRAMES (既定8) を"
+            "維持する。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--recovery-add-min-frames", type=int, default=None,
+        dest="recovery_add_min_frames",
+        help=(
+            "--enable-asymmetric-recovery-min-frames 有効時の方向1 (空→色) "
+            "発火に必要な連続フレーム数。既定 None = ライブラリ既定 "
+            "(STABLE_RECOVERY_ADD_MIN_FRAMES=4)。--enable-asymmetric-recovery-"
+            "min-frames が無効なら no-op。"
+        ),
+    )
+    # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字オーバーレイを
+    # 非表示にする表示モード。状態ラベル (1P=chain 等) や盤面枠色は維持する。
+    parser.add_argument(
+        "--overlay-stable-only", action="store_true", default=False,
+        dest="overlay_stable_only",
+        help=(
+            "各プレイヤーの状態が STABLE でない間、そのプレイヤー側のセル文字"
+            "オーバーレイ (R/G/B/Y/O/? 等) を描画しない。左右は独立判定 "
+            "(1PがCHAINでもP2がSTABLEならP2側は描画する)。状態表示テキストは "
+            "維持する。既定は無効 (後方互換、従来通り常時描画)。"
+        ),
+    )
+    # YouTubeデモ素材用 (2026-08-07): 任意の state 集合でセル文字オーバーレイの
+    # 表示/非表示を切り替える汎用モード。--overlay-stable-only の一般化。
+    parser.add_argument(
+        "--overlay-show-states", type=str, default=None,
+        dest="overlay_show_states",
+        help=(
+            "カンマ区切りの BoardState 名 (小文字、例: stable,tsumo_fall) を指定する。"
+            "各プレイヤーの現在状態がこの集合に含まれる場合のみそのプレイヤー側の"
+            "セル文字オーバーレイを描画する (左右は独立判定)。状態表示テキストは"
+            "維持する。--overlay-stable-only とは併用不可。未指定時は従来動作"
+            "(後方互換)。"
+        ),
+    )
+    # 幽霊セル対策 (2026-08-07): chain/ojama_fall から抜けた直後 N フレームは
+    # セル文字オーバーレイを描画しない (一時汚染の自己修復待ち)。0=無効 (既定・後方互換)。
+    parser.add_argument(
+        "--overlay-transition-hold-frames", type=int, default=0,
+        dest="overlay_transition_hold_frames",
+        help=(
+            "各プレイヤーの状態が CHAIN または OJAMA_FALL から抜けた時点を起点に、"
+            "指定フレーム数の間はそのプレイヤー側のセル文字オーバーレイを描画しない "
+            "(既存の --overlay-stable-only / --overlay-show-states の判定結果に AND "
+            "する追加ガード)。ホールド中に再度 CHAIN/OJAMA_FALL に入るとカウンタは"
+            "リセットされ、次に抜けた時点から改めてホールドが始まる。左右は独立判定。"
+            "既定 0 = 無効 (後方互換)。"
+        ),
+    )
+    # フリッカー対策 (2026-08-08 追加、既存 --overlay-transition-hold-frames とは独立):
+    # セル単位の安定フィルタ。確定盤面の値が直近 N フレーム連続で同一の場合のみ
+    # そのセルの文字を描画する (per-player・per-cell 判定)。
+    parser.add_argument(
+        "--overlay-cell-stability-frames", type=int, default=0,
+        dest="overlay_cell_stability_frames",
+        help=(
+            "各プレイヤー・各セルについて、確定盤面の値が直近指定フレーム数の間"
+            "変化していない場合のみそのセルの文字オーバーレイを描画する。値が"
+            "変化した直後の N フレームは (state ゲートの判定に関わらず) 描画しない"
+            "AND 条件として働く。左右・セル毎に独立判定。既定 0 = 無効"
+            "(後方互換、従来通り常時描画)。"
+        ),
+    )
+    # フリッカー対策 (2026-08-08 追加): --overlay-stable-only / --overlay-show-states
+    # による「非表示への切替」を K フレーム継続後にのみ発動させる (瞬間フリッカーでは
+    # 表示を維持)。表示への復帰は即時。
+    parser.add_argument(
+        "--overlay-state-debounce-frames", type=int, default=0,
+        dest="overlay_state_debounce_frames",
+        help=(
+            "--overlay-stable-only / --overlay-show-states による state ゲートの"
+            "非表示切替を、非表示対象状態が指定フレーム数連続した場合のみ発動させる"
+            "(瞬間的な chain/ojama_fall フリッカーでは表示を維持)。表示への復帰は"
+            "即時。左右は独立判定。既定 0 = 無効 (後方互換、従来通り即時非表示)。"
+        ),
+    )
+    # デモ動画用 (2026-08-08 追加): おじゃま予告オーバーレイ (盤面下部パネル 1P/2P +
+    # 中央おじゃま優勢バー) を非表示にする。有利不利判定の表示 (state label / score 等)
+    # には影響しない。既定 False = 従来通り表示 (後方互換)。
+    # 連鎖表示ホールド (2026-08-08、user要望「連鎖中はずっと chain であってほしい」)。
+    # 連鎖の段間重力待ち (GRAVITY_SETTLE) を CHAIN として表示し、さらに物理推論
+    # 側の ChainEvent.end_sec (連鎖終了予測時刻) までは途中で別 state に落ちても
+    # CHAIN 表示を維持する。実測では連鎖中の離脱 18 回が全て GRAVITY_SETTLE 起点。
+    parser.add_argument(
+        "--overlay-chain-hold-until-end", action="store_true", default=False,
+        dest="overlay_chain_hold_until_end",
+        help=(
+            "連鎖中は状態ラベルを chain のまま維持する。GRAVITY_SETTLE を chain "
+            "として表示し、物理推論の連鎖終了時刻 (ChainEvent.end_sec) までは "
+            "途中の誤遷移でも chain を保つ。既定 False = 従来通り実 state 表示。"
+        ),
+    )
+    parser.add_argument(
+        "--overlay-show-chain-count", action="store_true", default=False,
+        dest="overlay_show_chain_count",
+        help=(
+            "chain 表示中に物理推論側の連鎖数を併記する (例: 1P:chain 9renza)。"
+            "既定 False = 従来通り連鎖数なし。"
+        ),
+    )
+    # デモ用 (2026-08-08 user要望): 盤面セルの色記号 (R/B/G/Y/P/おじゃま) を
+    # 一切描かない。 状態ラベル・連鎖数・盤面枠は従来通り出るので「認識が
+    # 追従していること」は見せつつ、 元の試合映像を見やすく保てる。
+    parser.add_argument(
+        "--hide-cell-overlay", action="store_true", default=False,
+        dest="hide_cell_overlay",
+        help=(
+            "盤面セルの色記号オーバーレイを描画しない (状態ラベル・連鎖数・"
+            "枠は維持)。既定 False = 従来通り描画。"
+        ),
+    )
+    parser.add_argument(
+        "--hide-ojama-forecast", action="store_true", default=False,
+        dest="hide_ojama_forecast",
+        help=(
+            "盤面下部のおじゃま予告パネル (1P/2P) + 中央のおじゃま優勢バーを"
+            "非表示にする。既定 False = 従来通り表示。有利不利判定の表示には"
+            "影響しない (対象外)。"
+        ),
+    )
+    # 状態機械振動バグB+C の修正 (2026-08-08、A/B 計測用)。
+    # docs/CYCLE_FINDINGS.md 系: GRAVITY_SETTLE 中の OJAMA_FALL 横取り
+    # (バグB) → GravitySettleDetector 内部カウンタ残留 (バグC) → 次回
+    # 進入時の 1 frame 誤 STABLE 化 という振動ループを止める。
+    # 両フラグとも既定 False = 従来挙動完全維持 (backwards compat)。
+    parser.add_argument(
+        "--enable-ojama-entry-gravity-settle-guard", action="store_true",
+        default=False, dest="enable_ojama_entry_gravity_settle_guard",
+        help=(
+            "修正B (2026-08-08、状態機械振動バグB+C) を有効化する。"
+            "GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を禁止する。"
+            "--enable-gravity-settle-reset-on-exit と対で使う。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-gravity-settle-reset-on-exit", action="store_true",
+        default=False, dest="enable_gravity_settle_reset_on_exit",
+        help=(
+            "修正C (2026-08-08、状態機械振動バグB+C) を有効化する。"
+            "GRAVITY_SETTLE が他 detector に横取りされて弾き出された際、"
+            "GravitySettleDetector の内部カウンタをその場でリセットする。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
+    # --overlay-show-states の検証・解決 (BoardState への変換、不正値は起動時エラー)
+    overlay_show_states: frozenset[BoardState] | None = None
+    if args.overlay_show_states is not None:
+        if getattr(args, "overlay_stable_only", False):
+            parser.error(
+                "--overlay-show-states と --overlay-stable-only は併用不可"
+            )
+        _state_by_name = {s.name.lower(): s for s in BoardState}
+        _requested_names = [
+            n.strip().lower() for n in args.overlay_show_states.split(",") if n.strip()
+        ]
+        _invalid_names = [n for n in _requested_names if n not in _state_by_name]
+        if _invalid_names:
+            parser.error(
+                f"--overlay-show-states に不正な状態名: {_invalid_names} "
+                f"(有効値: {sorted(_state_by_name)})"
+            )
+        overlay_show_states = frozenset(_state_by_name[n] for n in _requested_names)
     # 案 K (2026-05-24): --hsv-state 省略時は動画 ID から自動選択
     if args.hsv_state is None:
         args.hsv_state = resolve_hsv_path(args.video)
@@ -1543,6 +1930,35 @@ def main() -> int:
         enable_gravity_settle_state=args.enable_gravity_settle_state,
         # 案γ (2026-06-06): --slide-override-ojama-hold で有効化
         enable_slide_override_ojama_hold=args.enable_slide_override_ojama_hold,
+        # 全域無悪化ゲート (2026-08-07): バーストガード系フラグ6個。
+        # scripts/collect_boards_lean.py と同一パターン (末尾追加)。
+        enable_effect_gate=args.enable_effect_gate,
+        enable_burst_guard_v2=args.enable_burst_guard_v2,
+        enable_transition_merge_guard=args.enable_transition_merge_guard,
+        burst_gate_open_threshold=args.burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
+        enable_match_transition_debounce=args.enable_match_transition_debounce,
+        # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
+        # --enable-asymmetric-recovery-min-frames で有効化。
+        # --recovery-add-min-frames は None ならライブラリ既定
+        # (STABLE_RECOVERY_ADD_MIN_FRAMES) を使うため kwarg 自体を渡さない
+        # (load_default 側の型は int で None 非対応、後方互換の要)。
+        enable_asymmetric_recovery_min_frames=(
+            args.enable_asymmetric_recovery_min_frames
+        ),
+        # 状態機械振動バグB+C の修正 (2026-08-08):
+        # --enable-ojama-entry-gravity-settle-guard /
+        # --enable-gravity-settle-reset-on-exit で有効化。
+        enable_ojama_entry_gravity_settle_guard=(
+            args.enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=(
+            args.enable_gravity_settle_reset_on_exit
+        ),
+        **(
+            {} if args.recovery_add_min_frames is None
+            else {"recovery_add_min_frames": args.recovery_add_min_frames}
+        ),
     )
     if args.patch_ncc_threshold is not None:
         print(f"[viz] patch_ncc_threshold={args.patch_ncc_threshold} (NCC sweep)")
@@ -1741,8 +2157,54 @@ def main() -> int:
         print(f"[viz] ojama_accounting log → {args.dump_ojama_accounting}")
 
     sample_interval_frames = max(1, int(round(args.sample_interval * fps)))
+    # 連鎖表示ホールド用 (2026-08-08): 直近 ChainEvent の終了予測時刻と連鎖数。
+    last_p1_chain_end_sec: float | None = None
+    last_p2_chain_end_sec: float | None = None
+    last_p1_chain_count: int | None = None
+    last_p2_chain_count: int | None = None
+    # 前フレームの表示状態 (連鎖数リセットの基準に使う)
+    last_p1_display_state: BoardState | None = None
+    last_p2_display_state: BoardState | None = None
     last_p1_state = BoardState.MENU
     last_p2_state = BoardState.MENU
+    # YouTubeデモ素材用 (2026-08-07): STABLE 以外はセル文字を隠す表示モード。
+    overlay_stable_only = bool(getattr(args, "overlay_stable_only", False))
+    # 幽霊セル対策 (2026-08-07): chain/ojama_fall 脱出直後の描画ホールド (フレーム数)。
+    overlay_transition_hold_frames = max(
+        0, int(getattr(args, "overlay_transition_hold_frames", 0) or 0)
+    )
+    # ホールド判定対象の state (連鎖中・おじゃま落下中): 抜けた瞬間がホールド起点
+    _TRANSITION_HOLD_STATES = frozenset({BoardState.CHAIN, BoardState.OJAMA_FALL})
+    # 各プレイヤーが最後に _TRANSITION_HOLD_STATES から抜けた frame index (未発生時 None)
+    last_p1_transition_exit_frame: int | None = None
+    last_p2_transition_exit_frame: int | None = None
+    # フリッカー対策2種 (2026-08-08 追加、独立フラグ・既存ホールドと共存可):
+    # (1) セル単位安定フィルタ: per-cell 変化 frame idx を追跡
+    overlay_cell_stability_frames = max(
+        0, int(getattr(args, "overlay_cell_stability_frames", 0) or 0)
+    )
+    last_p1_cell_prev_grid: np.ndarray | None = None
+    last_p2_cell_prev_grid: np.ndarray | None = None
+    last_p1_cell_change_frame = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=np.int64)
+    last_p2_cell_change_frame = np.zeros((BOARD_ROWS, BOARD_COLS), dtype=np.int64)
+    # (2) state ゲート非表示のデバウンス: 非表示対象状態への連続突入 frame idx
+    overlay_state_debounce_frames = max(
+        0, int(getattr(args, "overlay_state_debounce_frames", 0) or 0)
+    )
+    last_p1_hide_candidate_start_frame: int | None = None
+    last_p2_hide_candidate_start_frame: int | None = None
+    # デモ動画用 (2026-08-08 追加): おじゃま予告パネル + 優勢バーの非表示フラグ。
+    # 有利不利判定系の描画 (draw_state_label 等) には適用しない。
+    hide_ojama_forecast = bool(getattr(args, "hide_ojama_forecast", False))
+    # 盤面セルの色記号を一切描かないモード (2026-08-08 user要望)
+    hide_cell_overlay = bool(getattr(args, "hide_cell_overlay", False))
+    # 連鎖表示ホールド / 連鎖数併記 (2026-08-08、表示専用・認識には影響しない)
+    overlay_chain_hold_until_end = bool(
+        getattr(args, "overlay_chain_hold_until_end", False)
+    )
+    overlay_show_chain_count = bool(
+        getattr(args, "overlay_show_chain_count", False)
+    )
     # 評価で使う盤面 = STABLE 時の confirmed_board を凍結保持
     # NON-STABLE (chain/tsumo_fall/ojama_fall/effect) では更新せず、前回 STABLE 値維持
     last_p1_eval_board: Board | None = None
@@ -1792,8 +2254,78 @@ def main() -> int:
         # 認識実行 (sample_interval_frames ごと)
         if fi % sample_interval_frames == 0:
             result = pipeline.update(fi, t_sec, frame)
+            # 幽霊セル対策: 更新前の state (= 遷移元) を保持してから上書きする
+            _prev_hold_state_p1 = last_p1_state
+            _prev_hold_state_p2 = last_p2_state
             last_p1_state = result.p1.state
             last_p2_state = result.p2.state
+            # 連鎖表示ホールド (2026-08-08): 物理推論側の ChainEvent から
+            # 連鎖終了予測時刻と連鎖数を拾う。連鎖中の再検知で end_sec が
+            # 延びるため、多段連鎖でも最後まで CHAIN 表示を保てる。
+            # 連鎖数のリセットは **表示上の連鎖が終わった時点** に紐づける
+            # (2026-08-08 修正)。 当初は ChainEvent.end_sec (連鎖終了の
+            # 予測時刻) だけを基準にしていたが、 実測で end_sec は実際の連鎖
+            # より短く出る (t=24.70 発火・end=25.30 に対し状態機械は 27.43 まで
+            # chain を維持) ため、 連鎖の途中で連鎖数が消える不整合が出た。
+            # 前フレームの表示状態が chain でなくなった = 連鎖が終わった、
+            # と判断する (end_sec と状態機械のどちらか長い方まで保持される)。
+            if (last_p1_display_state is not None
+                    and last_p1_display_state != BoardState.CHAIN):
+                last_p1_chain_count = None
+                last_p1_chain_end_sec = None
+            if (last_p2_display_state is not None
+                    and last_p2_display_state != BoardState.CHAIN):
+                last_p2_chain_count = None
+                last_p2_chain_end_sec = None
+            _ev1 = getattr(result.p1, "chain_event", None)
+            if _ev1 is not None:
+                _end1 = getattr(_ev1, "end_sec", None)
+                if _end1 is not None and (
+                    last_p1_chain_end_sec is None or _end1 > last_p1_chain_end_sec
+                ):
+                    last_p1_chain_end_sec = float(_end1)
+                # 連鎖中は最大値を保持する。 発火イベントは連鎖中に何度も
+                # 再検知され、 後発イベントが chain_count=1 を持つことがある
+                # ため、 単純な上書きだと 9 連鎖が 1 に化ける (2026-08-08 実測)。
+                _cnt1 = getattr(_ev1, "chain_count", None)
+                if _cnt1 is not None and (
+                    last_p1_chain_count is None or int(_cnt1) > last_p1_chain_count
+                ):
+                    last_p1_chain_count = int(_cnt1)
+            _ev2 = getattr(result.p2, "chain_event", None)
+            if _ev2 is not None:
+                _end2 = getattr(_ev2, "end_sec", None)
+                if _end2 is not None and (
+                    last_p2_chain_end_sec is None or _end2 > last_p2_chain_end_sec
+                ):
+                    last_p2_chain_end_sec = float(_end2)
+                _cnt2 = getattr(_ev2, "chain_count", None)
+                if _cnt2 is not None and (
+                    last_p2_chain_count is None or int(_cnt2) > last_p2_chain_count
+                ):
+                    last_p2_chain_count = int(_cnt2)
+            # chain/ojama_fall から抜けた瞬間を記録 (ホールド起点)。
+            # 再突入時はカウンタをリセット (次に抜けた時点から改めてホールド)。
+            if (_prev_hold_state_p1 in _TRANSITION_HOLD_STATES
+                    and last_p1_state not in _TRANSITION_HOLD_STATES):
+                last_p1_transition_exit_frame = fi
+            elif last_p1_state in _TRANSITION_HOLD_STATES:
+                last_p1_transition_exit_frame = None
+            if (_prev_hold_state_p2 in _TRANSITION_HOLD_STATES
+                    and last_p2_state not in _TRANSITION_HOLD_STATES):
+                last_p2_transition_exit_frame = fi
+            elif last_p2_state in _TRANSITION_HOLD_STATES:
+                last_p2_transition_exit_frame = None
+            # state ゲート非表示デバウンス (2026-08-08 追加): 非表示対象状態への
+            # 連続突入開始 frame idx を記録。表示対象状態に戻ったら即時クリア。
+            if should_draw_cell_overlay(last_p1_state, overlay_stable_only, overlay_show_states):
+                last_p1_hide_candidate_start_frame = None
+            elif last_p1_hide_candidate_start_frame is None:
+                last_p1_hide_candidate_start_frame = fi
+            if should_draw_cell_overlay(last_p2_state, overlay_stable_only, overlay_show_states):
+                last_p2_hide_candidate_start_frame = None
+            elif last_p2_hide_candidate_start_frame is None:
+                last_p2_hide_candidate_start_frame = fi
             # STABLE 時のみ確定盤面を取得 (= indicator 評価で使うのと同じ条件)
             if (result.p1.state == BoardState.STABLE
                     and result.p1.confirmed_board is not None):
@@ -1954,17 +2486,71 @@ def main() -> int:
         last_p1_board = last_p1_eval_board
         last_p2_board = last_p2_eval_board
 
+        # セル単位安定フィルタ (2026-08-08 追加): --overlay-cell-stability-frames。
+        # 毎フレーム numpy 比較で変化 frame idx を更新し、直近 N フレーム未変化の
+        # セルのみ描画対象とする hide_mask を得る (無効時は None、オーバーヘッドゼロ)。
+        _p1_cell_hide_mask, last_p1_cell_prev_grid = update_cell_stability_hide_mask(
+            last_p1_board, last_p1_cell_prev_grid, last_p1_cell_change_frame,
+            fi, overlay_cell_stability_frames,
+        )
+        _p2_cell_hide_mask, last_p2_cell_prev_grid = update_cell_stability_hide_mask(
+            last_p2_board, last_p2_cell_prev_grid, last_p2_cell_change_frame,
+            fi, overlay_cell_stability_frames,
+        )
+
         # 描画: 6 要素 (フィールド状態・ぷよ色・score・next・OJ送出・隠し段)
-        draw_cell_overlay(frame, last_p1_board, P1_ROI_X, P1_ROI_Y)
-        draw_cell_overlay(frame, last_p2_board, P2_ROI_X, P2_ROI_Y)
+        # --overlay-stable-only / --overlay-show-states: 各プレイヤー独立判定で
+        # 対象外 state のセル文字を隠す (状態ラベル・盤面枠色は維持、2026-08-07 追加)。
+        # --overlay-state-debounce-frames: 上記の非表示判定を K フレーム継続後に
+        # のみ発動させる (瞬間フリッカーでは表示維持、2026-08-08 追加)。
+        # --overlay-transition-hold-frames: chain/ojama_fall 脱出直後 N フレームは
+        # 上記判定が True でも AND で追加抑制する (幽霊セル対策、2026-08-07 追加)。
+        _p1_in_hold = (
+            overlay_transition_hold_frames > 0
+            and last_p1_transition_exit_frame is not None
+            and (fi - last_p1_transition_exit_frame) < overlay_transition_hold_frames
+        )
+        _p2_in_hold = (
+            overlay_transition_hold_frames > 0
+            and last_p2_transition_exit_frame is not None
+            and (fi - last_p2_transition_exit_frame) < overlay_transition_hold_frames
+        )
+        if (not hide_cell_overlay and should_draw_cell_overlay_debounced(
+                last_p1_state, overlay_stable_only, overlay_show_states,
+                last_p1_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
+            ) and not _p1_in_hold):
+            draw_cell_overlay(
+                frame, last_p1_board, P1_ROI_X, P1_ROI_Y, hide_mask=_p1_cell_hide_mask,
+            )
+        if (not hide_cell_overlay and should_draw_cell_overlay_debounced(
+                last_p2_state, overlay_stable_only, overlay_show_states,
+                last_p2_hide_candidate_start_frame, overlay_state_debounce_frames, fi,
+            ) and not _p2_in_hold):
+            draw_cell_overlay(
+                frame, last_p2_board, P2_ROI_X, P2_ROI_Y, hide_mask=_p2_cell_hide_mask,
+            )
+        # 連鎖表示ホールド (2026-08-08): --overlay-chain-hold-until-end。
+        # GRAVITY_SETTLE を CHAIN として見せ、物理推論の連鎖終了時刻までは
+        # 途中で別 state に落ちても CHAIN 表示を維持する (既定 OFF)。
+        _disp_p1_state = resolve_chain_display_state(
+            last_p1_state, last_p1_chain_end_sec, t_sec, overlay_chain_hold_until_end,
+        )
+        _disp_p2_state = resolve_chain_display_state(
+            last_p2_state, last_p2_chain_end_sec, t_sec, overlay_chain_hold_until_end,
+        )
         draw_state_label(
-            frame, last_p1_state, P1_ROI_X, P1_ROI_Y,
+            frame, _disp_p1_state, P1_ROI_X, P1_ROI_Y,
             score=last_p1_score or 0, label_prefix="1P:",
+            chain_count=last_p1_chain_count if overlay_show_chain_count else None,
         )
         draw_state_label(
-            frame, last_p2_state, P2_ROI_X, P2_ROI_Y,
+            frame, _disp_p2_state, P2_ROI_X, P2_ROI_Y,
             score=last_p2_score or 0, label_prefix="2P:",
+            chain_count=last_p2_chain_count if overlay_show_chain_count else None,
         )
+        # 次フレームの連鎖数リセット判定に使うため表示状態を保持する
+        last_p1_display_state = _disp_p1_state
+        last_p2_display_state = _disp_p2_state
         draw_next_overlay(
             frame, last_p1_next, last_p1_dnext, P1_ROI_X, P1_ROI_Y, label_prefix="1P:",
         )
@@ -1975,13 +2561,14 @@ def main() -> int:
         # 本番 overlay から除去 (日本語?化・雑然) し、下の大きな新パネルに一本化。
         # 関数 draw_ojama_accounting_overlay は後方互換のため定義のみ残置。
         # 予告お邪魔 直感UI (2026-06-10 刷新・拡大): 大きな数字 + 単位アイコン分解 + 優勢バー
-        draw_ojama_forecast_panel(
-            frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
-        )
-        draw_ojama_forecast_panel(
-            frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
-        )
-        draw_ojama_advantage_bar(frame, _last_snap)
+        if not hide_ojama_forecast:
+            draw_ojama_forecast_panel(
+                frame, _last_snap, "1P", P1_ROI_X, P1_ROI_Y,
+            )
+            draw_ojama_forecast_panel(
+                frame, _last_snap, "2P", P2_ROI_X, P2_ROI_Y,
+            )
+            draw_ojama_advantage_bar(frame, _last_snap)
         # 第6要素: 隠し段 (row 0) 確率 overlay + 画面外 O 個数
         # offboard は OjamaAccountingTracker の会計値 (pending - 72) から取得
         # 試合境界で pending がresetされるため O 表示も自動的に 0 に戻る

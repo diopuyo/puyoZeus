@@ -20,6 +20,7 @@ from src.board import (
     COLOR_RED,
     COLOR_BLUE,
     COLOR_GREEN,
+    COLOR_OJAMA,
     COLOR_YELLOW,
     Board,
 )
@@ -273,6 +274,35 @@ class TestShouldEmit:
         state = mod._SideState()
         board = _make_empty_board()
         assert not mod._should_emit(state, board, BoardState.STABLE)
+
+    def test_phantom_board_emitted_when_guard_off(self) -> None:
+        """幻盤面ガード OFF (既定) では従来通り emit される (bit-identical)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _make_board(COLOR_OJAMA, row_count=BOARD_ROWS)
+        assert mod._should_emit(state, board, BoardState.STABLE)
+
+    def test_phantom_board_blocked_when_guard_on(self) -> None:
+        """幻盤面ガード ON では全面おじゃま盤面が emit されない。
+
+        非試合画面 (対戦カード紹介・ロビー・順位表) 由来の誤認識盤面を
+        学習データに入れないための門番 (2026-08-08)。
+        """
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _make_board(COLOR_OJAMA, row_count=BOARD_ROWS)
+        assert not mod._should_emit(
+            state, board, BoardState.STABLE, exclude_phantom=True,
+        )
+
+    def test_normal_board_emitted_when_guard_on(self) -> None:
+        """幻盤面ガード ON でも実戦の色ぷよ盤面は emit される (偽陽性なし)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED, row_count=BOARD_ROWS)
+        assert mod._should_emit(
+            state, board, BoardState.STABLE, exclude_phantom=True,
+        )
 
     def test_same_grid_deduplicated(self) -> None:
         """直前と同一盤面は間引かれること。"""
@@ -905,7 +935,9 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     enable_transition_merge_guard / burst_gate_open_threshold /
     enable_hidden_row_burst_guard / enable_burst_close_extension /
     burst_chain_gap_max_sec / enable_online_hsv_refresh /
-    enable_match_transition_debounce が末尾に順次 optional 追加され、
+    enable_match_transition_debounce /
+    enable_ojama_entry_gravity_settle_guard /
+    enable_gravity_settle_reset_on_exit が末尾に順次 optional 追加され、
     既存引数の並び・デフォルト値が一切変わっていないこと (backwards compat)。
     """
     import inspect
@@ -924,40 +956,54 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
     assert sig.parameters["normalize_fps_30"].default is True
     # エフェクト時間ゲート (2026-08-03、A/B 計測用): 末尾に追加、既定 OFF。
-    assert params[-11] == "enable_effect_gate"
+    assert params[-15] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-10] == "effect_gate_persist_sec"
+    assert params[-14] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-9] == "enable_effect_visual_gate"
+    assert params[-13] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-8] == "enable_burst_guard_v2"
+    assert params[-12] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-7] == "enable_transition_merge_guard"
+    assert params[-11] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-6] == "burst_gate_open_threshold"
+    assert params[-10] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-5] == "enable_hidden_row_burst_guard"
+    assert params[-9] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-4] == "enable_burst_close_extension"
+    assert params[-8] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-3] == "burst_chain_gap_max_sec"
+    assert params[-7] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-2] == "enable_online_hsv_refresh"
+    assert params[-6] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-1] == "enable_match_transition_debounce"
+    assert params[-5] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
+    # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
+    # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
+    assert params[-4] == "enable_ojama_entry_gravity_settle_guard"
+    assert (
+        sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
+    )
+    assert params[-3] == "enable_gravity_settle_reset_on_exit"
+    assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
+    # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
+    assert params[-2] == "enable_phantom_board_guard"
+    assert sig.parameters["enable_phantom_board_guard"].default is False
+    # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
+    assert params[-1] == "enable_margin_time_rate"
+    assert sig.parameters["enable_margin_time_rate"].default is False
     assert sig.parameters["enable_burst_guard_v2"].default is False
 
 

@@ -34,6 +34,7 @@ from typing import Iterable, Iterator
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, Board
 from src.chain import ChainSimulator
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 from src.scoring import (
     ALL_CLEAR_BONUS,
     ChainScoreResult,
@@ -197,7 +198,10 @@ class VideoChainTracker:
         # 前試合からの全消し持ち越しがあれば True
         self._all_clear_pending = prev_all_clear_pending
 
-        self._simulator = ChainSimulator()
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._simulator = ChainSimulator(
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
         self._history: list[tuple[float, Board]] = []
         self._last_stable_count: int | None = None
         self._last_stable_board: Board | None = None

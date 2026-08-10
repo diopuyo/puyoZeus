@@ -130,6 +130,11 @@ OJAMA_RATE_FEVER: int = 120
 
 # マージンタイム設定（eスポーツ通常ルール、Puyo Nexus 公式準拠）
 MARGIN_TIME_START_SEC: float = 96.0
+# 実測起点版 (2026-08-09 user伝授)。
+# 「試合開始」の時刻は演出・カウントダウンがあり実装で正確に取りにくいため、
+# **最初の1手 (最初のツモ設置)** を起点にして 95.5 秒とする方が計測が安定する。
+# 認識側は最初のツモ設置イベントを確実に取れるので、こちらを実装の既定とする。
+MARGIN_TIME_START_FROM_FIRST_MOVE_SEC: float = 95.5
 MARGIN_TIME_DECAY_INTERVAL_SEC: float = 16.0
 MARGIN_TIME_DECAY_FACTOR: float = 0.75
 # 公式: 最大 14 回減衰、または rate=1 で停止のいずれか早い方
@@ -456,19 +461,29 @@ def is_score_consistent(
 def compute_effective_rate(
     elapsed_sec: float,
     rate_base: int = OJAMA_RATE_STANDARD,
+    from_first_move: bool = False,
 ) -> int:
     """
     マージンタイム経過後の有効レートを返す。
 
     仕様（Puyo Nexus 準拠）:
-        - 試合開始〜MARGIN_TIME_START_SEC (96s): rate_base
+        - 起点〜開始秒: rate_base
+          起点は from_first_move で切り替える:
+            False (既定) = 試合開始から MARGIN_TIME_START_SEC (96s)
+            True         = **最初の1手から** MARGIN_TIME_START_FROM_FIRST_MOVE_SEC
+                           (95.5s)。 試合開始時刻は演出があり取りにくいので、
+                           実測ではこちらの方が安定する (2026-08-09 user伝授)
         - 以降 MARGIN_TIME_DECAY_INTERVAL_SEC (16s) ごとに 0.75 倍
         - 最大 MARGIN_TIME_MAX_DECAYS (14) 回まで減衰、それ以降は固定
         - OJAMA_RATE_MIN (=1) で下限頭打ち（切り捨て）
     """
-    if elapsed_sec <= MARGIN_TIME_START_SEC:
+    start = (
+        MARGIN_TIME_START_FROM_FIRST_MOVE_SEC if from_first_move
+        else MARGIN_TIME_START_SEC
+    )
+    if elapsed_sec <= start:
         return rate_base
-    decay_steps = int((elapsed_sec - MARGIN_TIME_START_SEC) // MARGIN_TIME_DECAY_INTERVAL_SEC) + 1
+    decay_steps = int((elapsed_sec - start) // MARGIN_TIME_DECAY_INTERVAL_SEC) + 1
     decay_steps = min(decay_steps, MARGIN_TIME_MAX_DECAYS)
     factor = MARGIN_TIME_DECAY_FACTOR ** decay_steps
     rate = int(rate_base * factor)

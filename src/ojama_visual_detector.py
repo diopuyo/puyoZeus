@@ -127,6 +127,14 @@ class OjamaVisualDetector:
         enable_ojama_fall_board_settle: 案B (2026-07-24)。True で OJAMA_FALL
             退出条件を「全盤面ぷよ数が静止するまで待つ」方式 (GravitySettle と
             同型) に切替える。default False = 既存挙動と完全 bit-identical。
+        enable_ojama_entry_gravity_settle_guard: 修正B (2026-08-08、バグB)。
+            True で GRAVITY_SETTLE 中の新規 OJAMA_FALL 発火を禁止する。
+            連鎖の段間重力待ち (GRAVITY_SETTLE) 中に本 detector が横取りして
+            OJAMA_FALL に遷移すると、 GravitySettleDetector の内部カウンタが
+            残留し、 次回 GRAVITY_SETTLE 再進入時に誤って 1 frame で STABLE
+            化するバグ (バグC、 src/state_detectors.py 側の
+            enable_gravity_settle_reset_on_exit と対) を誘発する。
+            default False = 既存挙動と完全 bit-identical。
 
     いずれも False のままなら既存挙動に近い動作となる (= STABLE/TSUMO_FALL 時の
     新規お邪魔出現のみ OJAMA_FALL に遷移)。
@@ -138,6 +146,9 @@ class OjamaVisualDetector:
     # 案B (2026-07-24): OJAMA_FALL 退出を全盤面 settle 判定に置き換えるフラグ。
     # default False で `_detect_ojama_fall_exit` (既存ロジック) を完全維持する。
     enable_ojama_fall_board_settle: bool = False
+    # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を
+    # 禁止するガード。default False = 既存挙動と完全 bit-identical。
+    enable_ojama_entry_gravity_settle_guard: bool = False
 
     # 内部 state (dataclass field、 init=False)
     _consec_count: int = field(default=0, init=False, repr=False)
@@ -299,6 +310,18 @@ class OjamaVisualDetector:
 
         # MENU/EFFECT: 発火しない
         if ctx.state in (BoardState.MENU, BoardState.EFFECT):
+            self._reset_internal_state()
+            return None
+
+        # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中は発火しない
+        # (enable_ojama_entry_gravity_settle_guard=True 時のみ)。
+        # 連鎖の段間重力待ち中に本 detector が横取りすると、
+        # GravitySettleDetector 内部カウンタが残留し次回誤 STABLE 化を招く
+        # (バグC)。 default False = 既存挙動と完全 bit-identical。
+        if (
+            self.enable_ojama_entry_gravity_settle_guard
+            and ctx.state == BoardState.GRAVITY_SETTLE
+        ):
             self._reset_internal_state()
             return None
 

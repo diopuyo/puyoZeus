@@ -41,6 +41,7 @@ from src.board import (
 )
 from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
 from src.chain_bitboard import (
+    batch_adjacency_tiebreak,
     batch_from_boards,
     planes_to_board,
     simulate_batch_with_approx_score,
@@ -51,6 +52,7 @@ from src.scoring import (
     compute_effective_rate,
     score_to_ojama,
 )
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 
 # ============================
 # 正規化定数 (暫定: 実データ分布から後決定)
@@ -166,7 +168,11 @@ TAIOU_W_UKEY: float = 0.4
 TAIOU_MAX_CANDIDATES: int = 8
 
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
-_SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
+# 幽霊連鎖ルール (2026-08-10 本番ON採用): 実盤面の指標計算は全て
+# GHOST_CHAIN_RULE_ENABLED (src/production_config.py が単一情報源) に従う。
+_SHARED_SIMULATOR: ChainSimulator = ChainSimulator(
+    exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+)
 
 
 def _clamp01(value: float) -> float:
@@ -2300,6 +2306,17 @@ NEAR_FUTURE_MIN_OBSERVED_COLORS: int = 4
 # 正規化分母 (既存火力系 immediate_fire_power/reach_fire_power/potential_fire_power と統一)。
 NEAR_FUTURE_FIRE_NORM: int = ON_FIELD_CAP  # = 72
 
+# 同点タイブレーク (2026-08-09、既定 OFF、tiebreak=True で有効化)。
+# 実測 (scripts/_diag_beam_ties_2026-08-09.py): 候補2,816通り中、異なる得点は
+# 4〜62種類のみ・最大同点群は234〜1,928件 → 得点降順だけの枝刈りは同点群
+# 内で実質ランダム選択になっている。第二キーとして
+# batch_adjacency_tiebreak (chain_bitboard) の「3連結近似×大きい重み +
+# 2連結近似×小さい重み」を使い、「後で伸びる形」を優先する。
+# 3連結 (あと1個で消える) は 2連結より価値が高いと考え重みを3倍に設定
+# (経験則、データ後決定候補)。
+NEAR_FUTURE_TIEBREAK_TRIPLE_WEIGHT: float = 3.0
+NEAR_FUTURE_TIEBREAK_PAIR_WEIGHT: float = 1.0
+
 
 @dataclass(frozen=True)
 class NearFutureFireResult:
@@ -2337,8 +2354,38 @@ def _near_future_is_valid_pair(pair: "tuple[int, int] | None") -> bool:
     return all(c in IGNITION_TRIAL_COLORS for c in pair)
 
 
+def _near_future_sort_candidates(
+    candidates: "list[tuple[float, Board, int]]", tiebreak: bool,
+) -> "list[tuple[float, Board, int]]":
+    """候補リストを得点降順 (+ 任意でタイブレーク) にソートする共通処理。
+
+    tiebreak=False (既定) の場合は従来通り得点のみのキーでソートし、
+    ビット単位で既存挙動と同一になることを保証する (backwards compat)。
+    tiebreak=True の場合、同点内の並びを batch_adjacency_tiebreak
+    (chain_bitboard、numpy一括) の値で決める。候補全件をまとめて1回の
+    バッチ呼び出しで処理するため、候補ごとに逐次呼ぶより高速
+    (2026-08-09 実測、モジュール docstring 参照)。
+    """
+    if not tiebreak or not candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates
+    boards = [b for _, b, _ in candidates]
+    pair_proxy, triple_proxy = batch_adjacency_tiebreak(boards)
+    tiebreak_vals = (
+        NEAR_FUTURE_TIEBREAK_TRIPLE_WEIGHT * triple_proxy
+        + NEAR_FUTURE_TIEBREAK_PAIR_WEIGHT * pair_proxy
+    )
+    order = sorted(
+        range(len(candidates)),
+        key=lambda i: (candidates[i][0], float(tiebreak_vals[i])),
+        reverse=True,
+    )
+    return [candidates[i] for i in order]
+
+
 def _near_future_known_expand(
     frontier: "list[tuple[float, Board]]", pair: "tuple[int, int]", sim: ChainSimulator,
+    tiebreak: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """既知ペア (22配置、_enumerate_placements 流用) で1手展開する。
 
@@ -2348,6 +2395,10 @@ def _near_future_known_expand(
     `placed` をそのまま引き継いでおり、K手を重ねるほど物理的に誤った
     (本来消えているぷよが残存する) 盤面が複利的に蓄積し、Kが増えるほど
     プロトとの乖離が拡大する主因になっていた。
+
+    Args:
+        tiebreak: True で同点候補を「後で伸びる形」で並べ替える
+            (既定 False、backwards compat、_near_future_sort_candidates 参照)。
     """
     candidates: "list[tuple[float, Board, int]]" = []
     for _, base_board in frontier:
@@ -2357,17 +2408,20 @@ def _near_future_known_expand(
             result = sim.simulate(placed)
             score = calculate_chain_score(result).total_score
             candidates.append((float(score), result.final_board, result.chain_count))
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates
+    return _near_future_sort_candidates(candidates, tiebreak)
 
 
 def _near_future_free_expand(
     frontier: "list[tuple[float, Board]]", colors: "tuple[int, ...]", sim: ChainSimulator,
+    tiebreak: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """自由1個ずつ (6列×色数) で1手展開する (理想ツモ、_drop_one_color 流用)。
 
     ⚠️ バグ修正 (2026-07-22): _near_future_known_expand と同じ理由で、
     次の手へ引き継ぐ盤面は発火後の残骸 (result.final_board) を使う。
+
+    Args:
+        tiebreak: _near_future_known_expand と同じ (既定 False)。
     """
     candidates: "list[tuple[float, Board, int]]" = []
     for _, base_board in frontier:
@@ -2379,8 +2433,7 @@ def _near_future_free_expand(
                 result = sim.simulate(dropped)
                 score = calculate_chain_score(result).total_score
                 candidates.append((float(score), result.final_board, result.chain_count))
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    return candidates
+    return _near_future_sort_candidates(candidates, tiebreak)
 
 
 def _near_future_empty_result(k_levels: "tuple[int, ...]") -> NearFutureFireResult:
@@ -2402,6 +2455,7 @@ def near_future_fire_power(
     beam_width: int = NEAR_FUTURE_BEAM_WIDTH,
     k_levels: "tuple[int, ...]" = NEAR_FUTURE_K_LEVELS,
     active_colors: "tuple[int, ...] | None" = None,
+    tiebreak: bool = False,
 ) -> NearFutureFireResult:
     """XIV 近未来最大火力 (K=1..5)。
 
@@ -2434,6 +2488,8 @@ def near_future_fire_power(
         k_levels: 出力する K 水準 (既定 1..5)。
         active_colors: 呼び出し側が把握している試合別4色 (省略/None なら
             盤面出現色フォールバック)。
+        tiebreak: True で同点候補を「後で伸びる形」で並べ替える
+            (既定 False、backwards compat。NEAR_FUTURE_TIEBREAK_* 参照)。
 
     Returns:
         NearFutureFireResult: K別 IndicatorV2Value + 参考連鎖数 + used_real_next。
@@ -2444,6 +2500,7 @@ def near_future_fire_power(
     colors = active_colors if active_colors is not None else _near_future_active_colors(board)
     return _near_future_search(
         board, colors, next_pair, dnext_pair, elapsed_sec, sim, beam_width, k_levels,
+        tiebreak=tiebreak,
     )
 
 
@@ -2456,6 +2513,7 @@ def _near_future_search(
     sim: ChainSimulator,
     beam_width: int,
     k_levels: "tuple[int, ...]",
+    tiebreak: bool = False,
 ) -> NearFutureFireResult:
     """near_future_fire_power の本体探索ループ (ビーム + チェックポイント)。"""
     max_k = max(k_levels)
@@ -2468,13 +2526,13 @@ def _near_future_search(
 
     for hand_idx in range(total_hands):
         if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
-            expanded = _near_future_known_expand(frontier, next_pair, sim)
+            expanded = _near_future_known_expand(frontier, next_pair, sim, tiebreak=tiebreak)
             used_real_next = True
         elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
-            expanded = _near_future_known_expand(frontier, dnext_pair, sim)
+            expanded = _near_future_known_expand(frontier, dnext_pair, sim, tiebreak=tiebreak)
             used_real_next = True
         else:
-            expanded = _near_future_free_expand(frontier, colors, sim)
+            expanded = _near_future_free_expand(frontier, colors, sim, tiebreak=tiebreak)
         if not expanded:
             break
         frontier = [(s, b) for s, b, _c in expanded[:beam_width]]
@@ -3688,6 +3746,9 @@ __all__ = [
     "NEAR_FUTURE_BEAM_WIDTH",
     "NEAR_FUTURE_MIN_OBSERVED_COLORS",
     "NEAR_FUTURE_FIRE_NORM",
+    # XIV 同点タイブレーク (tiebreak=True, 既定OFF) — 2026-08-09 追加
+    "NEAR_FUTURE_TIEBREAK_TRIPLE_WEIGHT",
+    "NEAR_FUTURE_TIEBREAK_PAIR_WEIGHT",
     # XV 火力の受けの多さ (fire_stability, K=2,4,6)
     # — 2026-07-22 本番統合 (末尾追加、既存に非依存)
     "fire_stability",
