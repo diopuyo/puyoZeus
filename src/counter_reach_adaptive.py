@@ -164,8 +164,12 @@ def _reach_with_known_pairs(
         frontier = nxt
     # 最終盤面のどれかが閾値に届けば「返せる」
     sim = iv._SHARED_SIMULATOR if hasattr(iv, "_SHARED_SIMULATOR") else None
-    from src.chain import ChainSimulator
-    sim = sim or ChainSimulator()
+    if sim is None:
+        # フォールバック (通常到達しない、iv._SHARED_SIMULATOR が既に ON 済)。
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        from src.chain import ChainSimulator
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED
+        sim = ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
     for b in frontier:
         res = sim.simulate(b)
         if res.chain_count < 1:

@@ -52,6 +52,7 @@ from src.scoring import (
     compute_effective_rate,
     score_to_ojama,
 )
+from src.production_config import GHOST_CHAIN_RULE_ENABLED
 
 # ============================
 # 正規化定数 (暫定: 実データ分布から後決定)
@@ -167,7 +168,11 @@ TAIOU_W_UKEY: float = 0.4
 TAIOU_MAX_CANDIDATES: int = 8
 
 # 共有 simulator (LRU キャッシュ 5万件で高速化)。
-_SHARED_SIMULATOR: ChainSimulator = ChainSimulator()
+# 幽霊連鎖ルール (2026-08-10 本番ON採用): 実盤面の指標計算は全て
+# GHOST_CHAIN_RULE_ENABLED (src/production_config.py が単一情報源) に従う。
+_SHARED_SIMULATOR: ChainSimulator = ChainSimulator(
+    exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+)
 
 
 def _clamp01(value: float) -> float:

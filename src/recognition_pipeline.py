@@ -2035,7 +2035,11 @@ class RecognitionPipeline:
         # 2026-05-11 サイクル71 Phase 1a: 物理推論主軸用 ChainSimulator.
         # 旧実装は遅延初期化していたが、 着地時に毎回呼ぶため事前構築.
         from src.chain import ChainSimulator as _ChainSimulator
-        self._chain_sim: _ChainSimulator = _ChainSimulator()
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+        self._chain_sim: _ChainSimulator = _ChainSimulator(
+            exclude_hidden_row_from_pop=_GHOST_RULE,
+        )
         # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」 遷移を自動検知。
         # 1P/2P 独立 instance。試合切替時は reset() で消去。
         from src.puyo_erasure_monitor import PuyoErasureMonitor as _PEM
@@ -2397,9 +2401,11 @@ class RecognitionPipeline:
         #   BoardStateMachine にそのまま伝播する (独立 flag)。
         from src.chain import ChainSimulator
         from src.board_state_machine import STABLE_WARMUP_FRAMES
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
         # ChainPhaseDetector に chain_ojama_exit + 案P3 + GRAVITY_SETTLE + 案γ フラグを伝播する
+        # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
         chain_det = ChainPhaseDetector(
-            chain_sim=ChainSimulator(),
+            chain_sim=ChainSimulator(exclude_hidden_row_from_pop=_GHOST_RULE),
             enable_chain_ojama_exit=enable_ojama_visual_chain_exit,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_gravity_settle_state=enable_gravity_settle_state,
@@ -4868,8 +4874,12 @@ class RecognitionPipeline:
             ChainSimulator.simulate の結果。simulate 失敗時は None。
         """
         from src.chain import ChainSimulator
+        from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
         if not hasattr(self, "_chain_sim"):
-            self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+            # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+            self._chain_sim = ChainSimulator(  # type: ignore[attr-defined]
+                exclude_hidden_row_from_pop=_GHOST_RULE,
+            )
         try:
             return self._chain_sim.simulate(before_board)  # type: ignore[attr-defined]
         except Exception:
@@ -6097,8 +6107,12 @@ class RecognitionPipeline:
             try:
                 from src.board_state_machine import _apply_gravity_filter
                 from src.chain import ChainSimulator
+                from src.production_config import GHOST_CHAIN_RULE_ENABLED as _GHOST_RULE
                 if not hasattr(self, "_chain_sim"):
-                    self._chain_sim = ChainSimulator()  # type: ignore[attr-defined]
+                    # 幽霊連鎖ルール (2026-08-10 本番ON採用): production_config.py が単一情報源。
+                    self._chain_sim = ChainSimulator(  # type: ignore[attr-defined]
+                        exclude_hidden_row_from_pop=_GHOST_RULE,
+                    )
                 cr = self._chain_sim.simulate(  # type: ignore[attr-defined]
                     _effective_chain_event.before_board,
                 )
