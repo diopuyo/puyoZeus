@@ -13,6 +13,8 @@ from __future__ import annotations
 import pytest
 
 from src.indicators_v2 import (
+    CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11,
+    CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11,
     CHAIN_ANIM_PER_STEP_SEC,
     SEC_PER_HAND,
     estimate_chain_anim_duration_sec,
@@ -47,6 +49,67 @@ def test_estimate_chain_anim_duration_sec_table(chain_count: int, expected_sec: 
 def test_estimate_chain_anim_duration_sec_negative_clamped_to_zero() -> None:
     """連鎖数が負の場合は0.0にクランプする。"""
     assert estimate_chain_anim_duration_sec(-5) == 0.0
+
+
+# ============================
+# 較正 Phase 1 (2026-08-11、chain_end_sec_gap 全域再測定) 回帰テスト
+# ============================
+# calibration="v2026_08_11" は data/verify/chain_end_sec_gap_2026-08-09.jsonl
+# (11動画・7,324イベント、mechanism=formula・c109除く10動画) の固定バイアス
+# 較正 (CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11=0.17秒、event単位 LOVO で
+# 連鎖数依存の傾き変更より優れることを確認済み)。 詳細は
+# estimate_chain_anim_duration_sec 直前のコメントブロック参照。
+
+@pytest.mark.parametrize("chain_count", [0, 1, 4, 8, 13, 20])
+def test_estimate_chain_anim_duration_sec_default_unchanged(
+    chain_count: int,
+) -> None:
+    """calibration 省略時は従来 (calibration="legacy") と bit-identical。"""
+    assert (
+        estimate_chain_anim_duration_sec(chain_count)
+        == estimate_chain_anim_duration_sec(chain_count, calibration="legacy")
+    )
+
+
+def test_estimate_chain_anim_duration_sec_v2026_08_11_monotonic() -> None:
+    """calibration="v2026_08_11" は連鎖数が増えるほど単調非減少 (クランプ域含む)。"""
+    values = [
+        estimate_chain_anim_duration_sec(n, calibration="v2026_08_11")
+        for n in range(0, 25)
+    ]
+    for prev, cur in zip(values, values[1:]):
+        assert cur >= prev
+
+
+def test_estimate_chain_anim_duration_sec_v2026_08_11_clamped_beyond_max() -> None:
+    """実測連鎖数上限 (=15) を超える chain_count はクランプされ、上限値と一致する。"""
+    at_max = estimate_chain_anim_duration_sec(
+        CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11, calibration="v2026_08_11",
+    )
+    beyond_max = estimate_chain_anim_duration_sec(30, calibration="v2026_08_11")
+    assert beyond_max == pytest.approx(at_max)
+
+
+def test_estimate_chain_anim_duration_sec_v2026_08_11_formula() -> None:
+    """クランプ域内では CHAIN_ANIM_PER_STEP_SEC*n + バイアス と厳密一致する。"""
+    for n in (1, 4, 8, 15):
+        expected = CHAIN_ANIM_PER_STEP_SEC * n + CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11
+        assert (
+            estimate_chain_anim_duration_sec(n, calibration="v2026_08_11")
+            == pytest.approx(expected)
+        )
+
+
+def test_estimate_chain_anim_duration_sec_v2026_08_11_zero_or_negative() -> None:
+    """連鎖数が0以下ならバイアスも足さず0.0を返す (legacy と同じクランプ規約)。"""
+    assert estimate_chain_anim_duration_sec(0, calibration="v2026_08_11") == 0.0
+    assert estimate_chain_anim_duration_sec(-3, calibration="v2026_08_11") == 0.0
+
+
+def test_estimate_chain_anim_duration_sec_unknown_calibration_raises() -> None:
+    """未知の calibration 指定は ValueError で明示的に失敗する。"""
+    with pytest.raises(ValueError):
+        estimate_chain_anim_duration_sec(1, calibration="not_a_real_calibration")
 
 
 # ============================
