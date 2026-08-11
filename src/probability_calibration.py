@@ -136,3 +136,125 @@ def load_platt_calibration(
     return PlattCalibrationParams(
         a=float(d["a"]), b=float(d["b"]), meta=dict(d.get("meta", {}))
     )
+
+
+# =============================================================================
+# 位相別 Platt scaling (2026-08-11 Phase1-2 追加)
+# =============================================================================
+# 背景 (memory project_calibration_overconfident_2026-07-29): 全位相共通 Platt
+# (上記 PlattCalibrationParams 一式) は終盤の ECE が最も改善しにくい
+# (終盤0.0559→0.0354、序盤0.0398→0.0159 ほどは縮まらない)。B-1 (対称化修正)
+# + B-2 (進行度列 match_progress) で表示用モデル (tier1、
+# scripts/visualize_advantage_overlay.py) が変わったため、進行度に応じて
+# 3 つの Platt パラメータを切り替える構成を追加する (Phase1-2 ロードマップ)。
+#
+# 既存の PlattCalibrationParams / apply_platt_calibration / save/load 等は
+# 一切変更しない (完全後方互換、既存の単一 Platt 経路は本追加の影響を受けない)。
+# 学習は scripts/fit_phase_platt_calibration.py が担う (責務分離は単一Plattと同じ)。
+
+# 位相ラベル一覧 (この順で表示・保存する)
+PHASE_NAMES: tuple[str, ...] = ("序盤", "中盤", "終盤")
+
+# 進行度 [0,1] の位相境界。 match_progress は「両者の盤面ぷよ総数の平均」
+# という物理量 (学習データ由来の分位点ではない) なので、均等3分割という
+# 最も単純な境界を採用する (シーン逆算でなく値域そのものから決めた定数)。
+PHASE_BOUND_EARLY: float = 1.0 / 3.0
+PHASE_BOUND_LATE: float = 2.0 / 3.0
+
+
+def phase_label_for_progress(
+    progress: float,
+    early_bound: float = PHASE_BOUND_EARLY,
+    late_bound: float = PHASE_BOUND_LATE,
+) -> str:
+    """進行度 [0,1] から位相ラベル (序盤/中盤/終盤) を返す (stateless純関数)。"""
+    if progress <= early_bound:
+        return "序盤"
+    if progress <= late_bound:
+        return "中盤"
+    return "終盤"
+
+
+@dataclass(frozen=True)
+class PhaseCalibrationParams:
+    """位相別 Platt scaling の学習済みパラメータ一式。
+
+    Attributes:
+        phases: 位相ラベル (PHASE_NAMES の要素) → PlattCalibrationParams。
+        early_bound: 序盤/中盤の進行度境界。
+        late_bound: 中盤/終盤の進行度境界。
+        meta: 学習由来情報 (監査用)。
+    """
+
+    phases: dict[str, PlattCalibrationParams]
+    early_bound: float = PHASE_BOUND_EARLY
+    late_bound: float = PHASE_BOUND_LATE
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+def select_phase_platt(
+    progress: float, params: PhaseCalibrationParams
+) -> PlattCalibrationParams:
+    """進行度から適用すべき位相の PlattCalibrationParams を選ぶ (stateless)。"""
+    label = phase_label_for_progress(progress, params.early_bound, params.late_bound)
+    return params.phases[label]
+
+
+def apply_phase_platt_calibration(
+    raw_p: float, progress: float, params: PhaseCalibrationParams
+) -> float:
+    """進行度に応じた位相別 Platt scaling を適用する (0〜1 にクリップ、stateless)。"""
+    return apply_platt_calibration(raw_p, select_phase_platt(progress, params))
+
+
+def save_phase_platt_calibration(params: PhaseCalibrationParams, path: Path) -> None:
+    """位相別 Platt 係数一式を JSON で保存する (pickle 不使用)。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "kind": "platt_scaling_phase",
+        "early_bound": params.early_bound,
+        "late_bound": params.late_bound,
+        "phases": {
+            name: {"a": p.a, "b": p.b, "meta": p.meta}
+            for name, p in params.phases.items()
+        },
+        "meta": params.meta,
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def load_phase_platt_calibration(
+    path: Path, *, required: bool = True
+) -> PhaseCalibrationParams | None:
+    """位相別 Platt 校正器をロードする (欠損時の挙動は required で制御)。
+
+    required=True (既定): ファイルが無ければ CalibrationFileMissingError を送出。
+    required=False: ファイルが無ければ警告を出して None を返す。
+    """
+    if not path.exists():
+        msg = (
+            f"位相別Platt校正器ファイルが見つかりません: {path}"
+            " (校正なしで進める場合は enable_phase_calibration=False を指定)"
+        )
+        if required:
+            raise CalibrationFileMissingError(msg)
+        warnings.warn(msg, stacklevel=2)
+        return None
+    d = json.loads(path.read_text(encoding="utf-8"))
+    phases = {
+        name: PlattCalibrationParams(
+            a=float(v["a"]), b=float(v["b"]), meta=dict(v.get("meta", {})),
+        )
+        for name, v in d.get("phases", {}).items()
+    }
+    missing_phases = [p for p in PHASE_NAMES if p not in phases]
+    if missing_phases:
+        raise ValueError(f"位相別Platt校正器に不足位相があります: {missing_phases}")
+    return PhaseCalibrationParams(
+        phases=phases,
+        early_bound=float(d.get("early_bound", PHASE_BOUND_EARLY)),
+        late_bound=float(d.get("late_bound", PHASE_BOUND_LATE)),
+        meta=dict(d.get("meta", {})),
+    )

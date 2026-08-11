@@ -38,8 +38,11 @@ from src.ojama_accounting import (  # noqa: E402
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
 )
 from src.probability_calibration import (  # noqa: E402
-    PlattCalibrationParams, apply_platt_calibration, load_platt_calibration,
+    PhaseCalibrationParams, PlattCalibrationParams, apply_platt_calibration,
+    load_phase_platt_calibration, load_platt_calibration,
+    phase_label_for_progress,
 )
+from src.production_config import ATTRIBUTION_EXCLUDED_INDICATORS  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import scripts.mc_counter_estimator as mc_counter  # noqa: E402
@@ -100,6 +103,12 @@ WINPROB_CALIB_PATH = Path("data/indicators_v2/winprob_calib.json")
 #   生成過程が異なる。両者とも「HistGBCの予測確率」という共通点はあるが、
 #   厳密な分布一致は保証されない近似適用である(詳細は generate() docstring)。
 PLATT_CALIBRATION_PATH = Path("data/indicators_v2/platt_calibration.json")
+# 位相別 Platt scaling (2026-08-11 Phase1-2 追加、既存の全位相共通Plattと排他)。
+#   scripts.fit_phase_platt_calibration が本ファイルの tier1 モデル
+#   (B-1対称化修正+B-2進行度列込み) の OOF 予測から学習した位相別係数。
+#   全位相共通 Platt と同じ「適用先モデルの出力分布に対して直接学習した」
+#   校正器のため、単一Plattより近似度が高い (詳細は generate() docstring)。
+PHASE_CALIBRATION_PATH = Path("data/indicators_v2/phase_platt_calibration.json")
 
 
 def _load_winprob_k() -> float | None:
@@ -151,6 +160,39 @@ def _apply_platt_to_display(
     calibrated_p1 = apply_platt_calibration(p1, platt_params)
     calibrated_adv = max(-100.0, min(100.0, _winprob_to_adv(calibrated_p1)))
     return calibrated_adv, calibrated_p1
+
+
+def _match_progress_for_boards(b1: Board, b2: Board) -> float:
+    """両盤面から表示用の進行度 (match_progress、[0,1]) を計算する (stateless)。
+
+    学習時 (_add_interaction_columns / _match_progress_from_totals) と同じ
+    board_puyo_total ベースの定義を使い、RT でも学習時と一貫させる
+    (2026-08-11 Phase1-2、位相別 Platt scaling の位相選択に使用)。
+    """
+    total_1p = iv.board_puyo_total(b1).score
+    total_2p = iv.board_puyo_total(b2).score
+    return float(_match_progress_from_totals(total_1p, total_2p))
+
+
+def _resolve_display_platt(
+    progress: float,
+    platt_params: PlattCalibrationParams | None,
+    phase_platt_params: PhaseCalibrationParams | None,
+) -> PlattCalibrationParams | None:
+    """表示に適用する Platt パラメータを選ぶ (2026-08-11 Phase1-2 追加)。
+
+    位相別校正器 (phase_platt_params) が有効ならそちらを優先し、進行度から
+    位相を判定して該当パラメータを返す。位相別が無効 (None) なら従来通り
+    全位相共通の platt_params を返す (後方互換、既存経路と完全一致)。
+    generate() 側で両フラグの同時指定は禁止しているため、通常は片方のみ
+    非 None になる。
+    """
+    if phase_platt_params is not None:
+        label = phase_label_for_progress(
+            progress, phase_platt_params.early_bound, phase_platt_params.late_bound,
+        )
+        return phase_platt_params.phases[label]
+    return platt_params
 
 
 # (B) キル判定(near-future): 「降るお邪魔量 > 受け容量」なら死=生存側の勝ち。
@@ -977,12 +1019,21 @@ def _fill_expected_fire_candidate(
 def _score_advantage(
     model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
     feature_cols: tuple[str, ...] | list[str] | None = None,
+    attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
 ) -> tuple[float, float, list[tuple[str, float]]]:
     """両盤面 → (有利不利[-100..100], 1P勝率, 主要ドライバ)。
 
     feature_cols: optional。省略時は model._puyo_feature_cols (学習時に
     _train_model が格納した実特徴量列) を使い、無ければ従来通り FEATURES に
     フォールバックする。既存呼出元は本引数を渡さないため挙動は変わらない。
+
+    attribution_exclude: 「主因」候補から除外する指標名の集合 (2026-08-11
+    ロードマップ Phase1-3)。 既定は src.production_config.
+    ATTRIBUTION_EXCLUDED_INDICATORS (勝敗と無相関と実測済みの指標。根拠は
+    同定数のコメント参照)。 **予測 (adv/p1) には一切影響しない** — この関数は
+    adv/p1 を計算し終えた後の「表示候補の絞り込み」としてのみ使う。
+    デバッグ目的で除外前の全候補を見たい場合は空 tuple `()` を渡す
+    (--show-excluded-attribution 経由、scripts.visualize_advantage_overlay.main 参照)。
     """
     cols = list(feature_cols) if feature_cols is not None else list(
         getattr(model, "_puyo_feature_cols", FEATURES))
@@ -1035,9 +1086,13 @@ def _score_advantage(
     x = np.array([[diff[c] for c in x_cols]], dtype=float)
     p1 = float(model.predict_proba(x)[0, 1])
     adv = (p1 - 0.5) * 200.0
-    drivers = sorted(
+    # 主因候補: |差分| の大きい順。 attribution_exclude に含まれる指標は
+    # 「実際の予測寄与を測らず差分の大きさだけで選ぶ」現行方式では無情報でも
+    # 1位に出得るため、既定でここで弾く (adv/p1 の計算は上で完了済みで無関係)。
+    all_candidates = sorted(
         ((c, diff[c]) for c in JP_LABEL if c in diff),
-        key=lambda kv: -abs(kv[1]))[:3]
+        key=lambda kv: -abs(kv[1]))
+    drivers = [kv for kv in all_candidates if kv[0] not in attribution_exclude][:3]
     return adv, p1, drivers
 
 
@@ -1143,9 +1198,18 @@ class HeavyAdvCache:
     saturated_chain_count (飽和連鎖量) は依然コア adv 非混入の表示専用候補。
     """
 
-    def __init__(self, model, every: int = 9) -> None:  # ~0.3s @30fps
+    def __init__(
+        self, model, every: int = 9,
+        attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
+    ) -> None:  # ~0.3s @30fps
+        """attribution_exclude: `_score_advantage` に渡す主因除外リスト
+        (2026-08-11 追加、optional 引数)。既定は production_config の
+        ATTRIBUTION_EXCLUDED_INDICATORS。既存呼出元は本引数を渡さないため
+        挙動は変わらない (後方互換)。
+        """
         self._model = model
         self._every = max(1, every)
+        self._attribution_exclude = attribution_exclude
         self._n = 0
         self._adv = 0.0
         self._threat = 0.0
@@ -1167,7 +1231,9 @@ class HeavyAdvCache:
         伴うため同様に every 間引きで十分(盤面は STABLE 時しか変わらない)。
         """
         if self._n % self._every == 0:
-            self._adv, _, self._drivers = _score_advantage(self._model, b1, b2, snap)
+            self._adv, _, self._drivers = _score_advantage(
+                self._model, b1, b2, snap,
+                attribution_exclude=self._attribution_exclude)
             self._threat = _threat(b1, b2, sp1, sp2, elapsed)
             # 受けやすさ: dig_resistance を含むため every と同じタイミングで計算
             self._ukey1 = iv.ukeyasusa(b1).score
@@ -1182,6 +1248,7 @@ class HeavyAdvCache:
 
 def _fresh_trackers(
     model,
+    attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
 ) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
            PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
            EarlyFireTracker]:
@@ -1192,12 +1259,16 @@ def _fresh_trackers(
     (OjamaAccountingTracker のみ既存 reset() を呼び互換 API を維持する)。
     戻り値末尾に EarlyFireTracker を追加 (2026-07-29、既存呼出元は1箇所のみで
     アンパック先も同時更新済みのため後方互換上の実害なし)。
+
+    attribution_exclude: HeavyAdvCache へそのまま渡す主因除外リスト
+    (2026-08-11 追加、optional 引数。後方互換)。
     """
     tracker = OjamaAccountingTracker()
     tracker.reset()
     return (tracker, _SideTracker(), _SideTracker(),
             PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
-            HeavyAdvCache(model), EarlyFireTracker())
+            HeavyAdvCache(model, attribution_exclude=attribution_exclude),
+            EarlyFireTracker())
 
 
 def _pick_recog_display_board(
@@ -1537,6 +1608,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_cnn_flicker_hsv_fallback: bool | None = None,
              enable_initial_confirm_vote: bool | None = None,
              enable_platt_calibration: bool = False,
+             enable_phase_calibration: bool = False,
              enable_early_fire_reaction: bool = False,
              enable_per_side_settled: bool = False,
              disable_score_lead_bias: bool = False,
@@ -1544,7 +1616,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              disable_pressure: bool = False,
              enable_counter_reach: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
-             layout: str = "overlay") -> int:
+             layout: str = "overlay",
+             show_excluded_attribution: bool = False) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -1605,6 +1678,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         学習されたものであり、本スクリプトの4成分ブレンドモデルとは生成過程が
         異なるため近似適用である点に注意 (詳細は PLATT_CALIBRATION_PATH 定義部・
         _apply_platt_to_display のコメント参照)。
+    enable_phase_calibration: 表示用勝率に「進行度 (match_progress) 別」の
+        Platt scaling 後段校正を適用する (2026-08-11 Phase1-2 追加、
+        data/indicators_v2/phase_platt_calibration.json を読む)。既定 False
+        (後方互換、既存呼出元は挙動不変)。全位相共通の enable_platt_calibration
+        と同時 True は禁止 (ValueError、どちらを使うか呼出元が明示する設計)。
+        全位相共通 Platt は memory `project_calibration_overconfident_2026-07-29`
+        で終盤の ECE が改善しにくいと判明しており (終盤0.056→0.035程度)、
+        B-1(対称化修正)+B-2(進行度列)後の tier1 モデル自身の OOF 予測から
+        位相別に学習した校正器を使うことでより高い改善を狙う
+        (scripts/fit_phase_platt_calibration.py が学習・
+        data/verify/calibration_phase_2026-08-11 に効果測定値を保存)。
+        True かつ校正器ファイルが無い場合は CalibrationFileMissingError を
+        処理開始前に送出する (enable_platt_calibration と同じ fail-fast 設計)。
     enable_early_fire_reaction: True で EarlyFireTracker (chain_event 検知フレームで
         即座に反映する速報バイアス) を表示に加算する (2026-07-29 userレビュー指摘1/2
         対処、追加)。既定 False = 従来挙動 (settled ゲートのみ、後方互換、既存呼出元は
@@ -1634,12 +1720,29 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         右に縦長情報パネルを配置する新レイアウト、出力キャンバスは1920x1080)。
         既定 "overlay" = 従来挙動不変 (backwards compat)。認識・有利不利の
         計算経路は layout に関わらず完全に同一で、最終合成のみ分岐する。
+    show_excluded_attribution: True で「主因」候補から
+        src.production_config.ATTRIBUTION_EXCLUDED_INDICATORS
+        (勝敗と無相関と実測済みの指標、根拠は同定数コメント参照) を除外**しない**
+        デバッグ表示に切り替える (2026-08-11 ロードマップ Phase1-3 追加)。
+        既定 False = 除外リストを適用 (通常表示、2026-08-11 から既定挙動)。
+        adv/p1 (有利不利の判定値そのもの) には一切影響しない
+        (主因欄の表示候補を絞り込むだけ)。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
+    if enable_platt_calibration and enable_phase_calibration:
+        raise ValueError(
+            "enable_platt_calibration と enable_phase_calibration は同時指定不可"
+            " (どちらを使うか呼出元が明示すること)"
+        )
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
         platt_params = load_platt_calibration(PLATT_CALIBRATION_PATH, required=True)
+    phase_platt_params: PhaseCalibrationParams | None = None
+    if enable_phase_calibration:
+        phase_platt_params = load_phase_platt_calibration(
+            PHASE_CALIBRATION_PATH, required=True,
+        )
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
     _vr_rois: tuple[int, int, int, int] | None = None
@@ -1725,7 +1828,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     cap_ptracker = CapabilityPressureTracker()
     # 打ち合い応手確率 (2026-08-09 user採用)
     counter_tracker = CounterReachTracker()
-    hcache = HeavyAdvCache(model)
+    # 主因除外リスト (2026-08-11 Phase1-3)。show_excluded_attribution=True の
+    # ときだけ空にしてデバッグ表示 (除外前の全候補) に切り替える。
+    attribution_exclude = () if show_excluded_attribution else ATTRIBUTION_EXCLUDED_INDICATORS
+    hcache = HeavyAdvCache(model, attribution_exclude=attribution_exclude)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
@@ -1755,7 +1861,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             counter_p1 = counter_p2 = float("nan")
             history.clear()
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
-             efire_tracker) = _fresh_trackers(model)
+             efire_tracker) = _fresh_trackers(
+                model, attribution_exclude=attribution_exclude)
             cap_ptracker = CapabilityPressureTracker()
             counter_tracker = CounterReachTracker()
         prev_score1, prev_score2 = r.p1.score, r.p2.score
@@ -1861,7 +1968,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
                                 board_room(b1), board_room(b2))
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
-            adv, p1 = _apply_platt_to_display(adv, p1, platt_params)  # Platt後段校正
+            # Platt後段校正 (全位相共通 or 位相別、2026-08-11 Phase1-2)。
+            # 両方 False (既定) なら progress 計算自体を省き従来経路とビット一致させる。
+            if platt_params is not None or phase_platt_params is not None:
+                progress = _match_progress_for_boards(b1, b2)
+                _chosen_platt = _resolve_display_platt(
+                    progress, platt_params, phase_platt_params)
+                adv, p1 = _apply_platt_to_display(adv, p1, _chosen_platt)
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
             if enable_early_fire_reaction:
@@ -2016,6 +2129,16 @@ def main() -> None:
         dest="enable_platt_calibration",
         help="(後方互換) 校正を明示的に無効化する。既定が OFF なので通常は不要。",
     )
+    # 位相別 Platt (2026-08-11 Phase1-2 追加)。--platt-calibration と排他
+    # (generate() 側で同時指定を ValueError にする)。
+    ap.add_argument(
+        "--phase-calibration", action="store_true", default=False,
+        dest="enable_phase_calibration",
+        help="表示用勝率へ「進行度 (match_progress) 別」の Platt scaling 後段校正を"
+             "適用する (2026-08-11 追加)。既定 OFF = 従来挙動 (校正なし)。"
+             "data/indicators_v2/phase_platt_calibration.json が必要で、無い場合は"
+             "動画を読む前に例外になる。--platt-calibration とは同時指定不可。",
+    )
     ap.add_argument(
         "--early-fire-reaction", action="store_true", default=False,
         dest="enable_early_fire_reaction",
@@ -2073,6 +2196,15 @@ def main() -> None:
              "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
              "グラフ・右に縦長情報パネルを配置する新レイアウト (1920x1080)。",
     )
+    ap.add_argument(
+        "--show-excluded-attribution", action="store_true", default=False,
+        dest="show_excluded_attribution",
+        help="デバッグ専用。「主因」欄から通常除外している指標 "
+             "(src.production_config.ATTRIBUTION_EXCLUDED_INDICATORS、勝敗と"
+             "無相関と実測済み) も候補に含めた、除外前の表示に戻す "
+             "(2026-08-11 ロードマップ Phase1-3 追加)。既定 OFF = 除外リスト適用"
+             " (通常表示)。adv/p1 の判定値には無関係 (表示候補の絞り込みのみ)。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -2086,6 +2218,7 @@ def main() -> None:
              enable_cnn_flicker_hsv_fallback=a.enable_cnn_flicker_hsv_fallback,
              enable_initial_confirm_vote=a.enable_initial_confirm_vote,
              enable_platt_calibration=a.enable_platt_calibration,
+             enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
              enable_per_side_settled=a.enable_per_side_settled,
              disable_score_lead_bias=a.disable_score_lead_bias,
@@ -2093,7 +2226,8 @@ def main() -> None:
              disable_pressure=a.disable_pressure,
              enable_counter_reach=a.enable_counter_reach,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
-             layout=a.layout)
+             layout=a.layout,
+             show_excluded_attribution=a.show_excluded_attribution)
 
 
 if __name__ == "__main__":
