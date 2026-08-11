@@ -20,6 +20,8 @@ import inspect
 import json
 import math
 import sys
+import zlib
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -212,6 +214,19 @@ def board_room(board) -> int:
     return max(0, PLAYABLE_CELLS - int(np.count_nonzero(board._grid[1:])))
 
 
+def _board_hash(board: "Board | None") -> int:
+    """盤面グリッドの決定論的ハッシュ (タイムラインdump用、2026-08-11 追加)。
+
+    組込み `hash()` は文字列/バイト列でハッシュランダム化 (PYTHONHASHSEED) の
+    影響を受け実行のたびに値が変わるため使わない。dump はある1回の生成プロセスの
+    出力を後で別プロセス (走査器) が読むため、決定論的である必要がある。
+    None (未確定盤面) は 0 を返す。
+    """
+    if board is None:
+        return 0
+    return int(zlib.crc32(board._grid.tobytes()))
+
+
 def kill_override(adv: float, inc1: float, inc2: float,
                   room1: int, room2: int) -> float:
     """致死量を受ける側があれば有利不利を生存側へ寄せる(非致死なら不変)。
@@ -297,6 +312,14 @@ class EarlyFireTracker:
 #   差分(例: 最大列高差)を表示し続ける「幻の差」バグの根治用。
 #   drop 側の閾値は OjamaAccountingTracker が内部で使う既存定数を流用し重複させない。
 SCORE_NEAR_ZERO_THRESHOLD = 20  # 両者スコアがこれ以下なら「0付近」とみなす(OCRノイズ許容)
+# タイムラインdump (2026-08-11 追加) の game_idx 用デバウンス。スコアが0付近に
+# 留まる間 _detect_score_reset は毎フレーム True になりうるため、それを都度
+# game_idx += 1 すると境界1回につき数十〜数百回進んでしまう。実試合は最短でも
+# 14秒あるため、直前の進行から5秒未満は再進行させない
+# (scripts/collect_boards_lean.py の GAME_BOUNDARY_DEBOUNCE_SEC と同値、
+# 意図的に同じ値を保つ。import で結合させず定数を独立定義するに留める理由は
+# collect_boards_lean.py が別用途の重い収集スクリプトであるため)。
+GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
 
 
 def _detect_score_reset(
@@ -1271,6 +1294,164 @@ def _fresh_trackers(
             EarlyFireTracker())
 
 
+# ============================
+# タイムラインdump (2026-08-11 追加)
+# ============================
+# 背景: scripts/scan_judgment_anomalies.py のフル走査 (148動画・全 settled
+# 更新を再計算) は実測で約39日かかる (同スクリプトのモジュール docstring
+# 「性能の発見」参照)。判定計算は generate() 内で1回しか行わない設計に変え、
+# その結果を npz に保存して走査器はそれを読むだけにする (本モジュールがその
+# 「1回だけ回す」側、走査器が「読むだけ」側)。
+#
+# adv_raw / p1 の意味論 (重要、恒久記録):
+#   adv_raw = HeavyAdvCache.update() が返す model_adv (= _score_advantage() の
+#     生モデル出力、drivers と同じ呼び出しから出るため自己無矛盾)。
+#     4成分ブレンド(pressure/forecast/threat/counter)や kill_override・
+#     Platt較正・EMA は一切含まない。scan_judgment_anomalies.py の D0
+#     (主因⇔結論の符号矛盾) は「モデル自身が出した diff と adv の符号一致」
+#     という自己無矛盾性の検査であり、npz 再計算モード (ダミー会計だが同じ
+#     _score_advantage() 直呼び) と同じ量を比較できるよう、意図的に
+#     4成分ブレンド後の値ではなくこちらを採用する。
+#   adv_ema = 4成分ブレンド + kill_override + 校正 + EMA を経た、実際に画面に
+#     表示される値 (generate() 内のローカル変数 adv_ema そのもの)。
+#   p1 = adv_ema に対応する EMA 後の表示用勝率 (ローカル変数 p1_last)。
+#     adv_raw と対になる「生モデルの勝率」は HeavyAdvCache が破棄しており
+#     dump スキーマにも含まれない (アーキ設計のレコード項目に無い) ため、
+#     D1a/D1b (「これだけ無視できない状況なのに有利判定」検出) は
+#     adv_raw と p1 という異なるステージのフィールドを OR 条件で使う
+#     非対称な設計になる (scripts.scan_judgment_anomalies.JudgmentRecord
+#     docstring 参照)。むしろ kill_override 等の後付け補正でマスクされる前の
+#     生モデルの矛盾を拾える利点がある。
+TIMELINE_DUMP_SCORE_NONE_SENTINEL: int = -1  # score OCR失敗(None)の npz 格納値
+
+
+@dataclass(frozen=True)
+class TimelineDumpRow:
+    """タイムラインdump 1レコード (1回の settled 更新に対応)。"""
+
+    t_sec: float
+    game_idx: int
+    adv_raw: float
+    adv_ema: float
+    p1: float
+    pending_p1: int
+    pending_p2: int
+    room1: int
+    room2: int
+    is_dead1: bool
+    is_dead2: bool
+    drivers_top1_name: str
+    drivers_top1_val: float
+    drivers_top3_names: tuple[str, str, str]
+    drivers_top3_vals: tuple[float, float, float]
+    score1: int
+    score2: int
+    b1_hash: int
+    b2_hash: int
+    state1: str
+    state2: str
+
+
+def _pad_drivers_top3(
+    drivers: list[tuple[str, float]],
+) -> tuple[tuple[str, str, str], tuple[float, float, float]]:
+    """drivers (最大3件、既に上位3件に絞られている前提) を固定長3に0埋め整形する。"""
+    names = [d[0] for d in drivers[:3]]
+    vals = [d[1] for d in drivers[:3]]
+    while len(names) < 3:
+        names.append("")
+        vals.append(0.0)
+    return (names[0], names[1], names[2]), (vals[0], vals[1], vals[2])
+
+
+def _build_timeline_dump_row(
+    t_sec: float, game_idx: int, adv_raw: float, adv_ema: float, p1: float,
+    pending_p1: int, pending_p2: int, room1: int, room2: int,
+    b1: Board, b2: Board, drivers: list[tuple[str, float]],
+    score1: int | None, score2: int | None, state1: str, state2: str,
+) -> TimelineDumpRow:
+    """1回分の settled 更新から TimelineDumpRow を組み立てる (純関数)。"""
+    top1_name, top1_val = drivers[0] if drivers else ("", 0.0)
+    top3_names, top3_vals = _pad_drivers_top3(list(drivers))
+    return TimelineDumpRow(
+        t_sec=t_sec, game_idx=game_idx, adv_raw=adv_raw, adv_ema=adv_ema, p1=p1,
+        pending_p1=pending_p1, pending_p2=pending_p2, room1=room1, room2=room2,
+        is_dead1=b1.is_dead(), is_dead2=b2.is_dead(),
+        drivers_top1_name=top1_name, drivers_top1_val=top1_val,
+        drivers_top3_names=top3_names, drivers_top3_vals=top3_vals,
+        score1=score1 if score1 is not None else TIMELINE_DUMP_SCORE_NONE_SENTINEL,
+        score2=score2 if score2 is not None else TIMELINE_DUMP_SCORE_NONE_SENTINEL,
+        b1_hash=_board_hash(b1), b2_hash=_board_hash(b2),
+        state1=state1, state2=state2,
+    )
+
+
+def save_timeline_dump(path: Path, video_id: str, rows: list[TimelineDumpRow]) -> None:
+    """タイムラインdump (1動画分) を npz に保存する。
+
+    走査器 (scripts/scan_judgment_anomalies.py --from-dump) はこのファイルを
+    読むだけで D0/D1a/D1b を検出でき、_score_advantage の再計算・モデル学習が
+    一切不要になる。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = len(rows)
+    names3 = np.empty((n, 3), dtype=object)
+    vals3 = np.empty((n, 3), dtype=np.float64)
+    for i, row in enumerate(rows):
+        names3[i] = row.drivers_top3_names
+        vals3[i] = row.drivers_top3_vals
+    np.savez_compressed(
+        str(path),
+        video_id=np.array(video_id),
+        t_sec=np.array([r.t_sec for r in rows], dtype=np.float64),
+        game_idx=np.array([r.game_idx for r in rows], dtype=np.int32),
+        adv_raw=np.array([r.adv_raw for r in rows], dtype=np.float64),
+        adv_ema=np.array([r.adv_ema for r in rows], dtype=np.float64),
+        p1=np.array([r.p1 for r in rows], dtype=np.float64),
+        pending_p1=np.array([r.pending_p1 for r in rows], dtype=np.int32),
+        pending_p2=np.array([r.pending_p2 for r in rows], dtype=np.int32),
+        room1=np.array([r.room1 for r in rows], dtype=np.int32),
+        room2=np.array([r.room2 for r in rows], dtype=np.int32),
+        is_dead1=np.array([r.is_dead1 for r in rows], dtype=bool),
+        is_dead2=np.array([r.is_dead2 for r in rows], dtype=bool),
+        drivers_top1_name=np.array([r.drivers_top1_name for r in rows], dtype=object),
+        drivers_top1_val=np.array([r.drivers_top1_val for r in rows], dtype=np.float64),
+        drivers_top3_names=names3,
+        drivers_top3_vals=vals3,
+        score1=np.array([r.score1 for r in rows], dtype=np.int32),
+        score2=np.array([r.score2 for r in rows], dtype=np.int32),
+        b1_hash=np.array([r.b1_hash for r in rows], dtype=np.int64),
+        b2_hash=np.array([r.b2_hash for r in rows], dtype=np.int64),
+        state1=np.array([r.state1 for r in rows], dtype=object),
+        state2=np.array([r.state2 for r in rows], dtype=object),
+    )
+
+
+def load_timeline_dump(path: Path) -> tuple[str, list[TimelineDumpRow]]:
+    """save_timeline_dump() が書いた npz を (video_id, レコード列) に復元する。"""
+    d = np.load(str(path), allow_pickle=True)
+    video_id = str(d["video_id"])
+    n = int(d["t_sec"].shape[0])
+    rows: list[TimelineDumpRow] = []
+    for i in range(n):
+        rows.append(TimelineDumpRow(
+            t_sec=float(d["t_sec"][i]), game_idx=int(d["game_idx"][i]),
+            adv_raw=float(d["adv_raw"][i]), adv_ema=float(d["adv_ema"][i]),
+            p1=float(d["p1"][i]),
+            pending_p1=int(d["pending_p1"][i]), pending_p2=int(d["pending_p2"][i]),
+            room1=int(d["room1"][i]), room2=int(d["room2"][i]),
+            is_dead1=bool(d["is_dead1"][i]), is_dead2=bool(d["is_dead2"][i]),
+            drivers_top1_name=str(d["drivers_top1_name"][i]),
+            drivers_top1_val=float(d["drivers_top1_val"][i]),
+            drivers_top3_names=tuple(str(x) for x in d["drivers_top3_names"][i]),
+            drivers_top3_vals=tuple(float(x) for x in d["drivers_top3_vals"][i]),
+            score1=int(d["score1"][i]), score2=int(d["score2"][i]),
+            b1_hash=int(d["b1_hash"][i]), b2_hash=int(d["b2_hash"][i]),
+            state1=str(d["state1"][i]), state2=str(d["state2"][i]),
+        ))
+    return video_id, rows
+
+
 def _pick_recog_display_board(
     side_result: object, frozen_board: "Board | None",
 ) -> tuple["Board | None", bool]:
@@ -1617,7 +1798,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_counter_reach: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              layout: str = "overlay",
-             show_excluded_attribution: bool = False) -> int:
+             show_excluded_attribution: bool = False,
+             render: bool = True,
+             dump_timeline_path: Path | None = None) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -1727,6 +1910,22 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         既定 False = 除外リストを適用 (通常表示、2026-08-11 から既定挙動)。
         adv/p1 (有利不利の判定値そのもの) には一切影響しない
         (主因欄の表示候補を絞り込むだけ)。
+    render: False で動画の合成・書き出し (VideoWriter生成・描画・writer.write)
+        を一切行わず、判定計算だけ実行する (2026-08-11 タイムラインdump工事で
+        追加)。認識 (RecognitionPipeline) と有利不利判定は render に関わらず
+        完全に同一の経路・同一の間引き (HeavyAdvCache.every 等) で動作する
+        (dump は本番が実際に出す判定の記録であるべきため、間引きも本番のまま
+        温存する設計)。既定 True = 従来通り描画・書き出しする (backwards
+        compat、既存呼出元は挙動不変)。
+    dump_timeline_path: 指定すると、settled 更新 (有利不利判定が再計算される
+        瞬間) のたびに1レコードを収集し、終了時に npz として保存する
+        (2026-08-11 タイムラインdump工事で追加。スキーマは
+        `TimelineDumpRow` 参照)。
+        `scripts/scan_judgment_anomalies.py --from-dump` がこれを読むだけで
+        「ありえない判定」検出でき、判定の再計算 (148動画で約39日と実測済み、
+        同スクリプトのモジュール docstring 参照) が不要になる。
+        既定 None = dump しない (backwards compat、既存呼出元は挙動不変)。
+        `render=False` と併用すると計算のみを最速で回せる。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -1772,13 +1971,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         cap.set(cv2.CAP_PROP_POS_FRAMES, proc_frame)
         print(f"[seek] 処理開始 {proc_frame / fps:.1f}s / 書き出し開始 "
               f"{write_frame / fps:.1f}s (ウォームアップ {warmup_sec:.0f}s)")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    # layout="panel" は出力キャンバスサイズが異なる (1920x1080)。認識・有利不利の
-    # 計算経路 (OUT_W/OUT_H で処理するフレーム) は layout に関わらず不変。
-    canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
-                   else (OUT_W, CANVAS_H))
-    writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"),
-                             fps, canvas_size)
+    # render=False (2026-08-11 タイムラインdump工事) は動画出力を一切行わない
+    # ため、出力先ディレクトリの作成も VideoWriter の生成も行わない
+    # (計算のみを最速で回す用途、backwards compat: render 既定 True)。
+    writer: cv2.VideoWriter | None = None
+    if render:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        # layout="panel" は出力キャンバスサイズが異なる (1920x1080)。認識・有利不利の
+        # 計算経路 (OUT_W/OUT_H で処理するフレーム) は layout に関わらず不変。
+        canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
+                       else (OUT_W, CANVAS_H))
+        writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"),
+                                 fps, canvas_size)
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -1839,13 +2043,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
     step = max(1, int(round(sample_interval * fps)))
     written = 0
+    # タイムラインdump (2026-08-11 追加)。dump_timeline_path が None の間引き
+    # 判定は「常に空リストを回すだけ」で済むよう、dump_rows は常に生成する
+    # (dump 無効時のコストは空リスト append 判定1回のみ、無視できる)。
+    game_idx = 0  # スコアリセット検知で進む試合境界カウンタ (video 内ローカル)
+    _last_boundary_advance_t: float | None = None
+    dump_rows: list[TimelineDumpRow] = []
     for fi in range(start_frame, n):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
-        # show_recognition=True 時のみネイティブ解像度のコピーを保持
-        # (認識色 overlay 描画用。推論には使わないため計算経路は不変)。
-        raw_native = frame.copy() if show_recognition else None
+        # show_recognition=True かつ render=True の時のみネイティブ解像度の
+        # コピーを保持する (認識色 overlay 描画用。推論には使わないため計算
+        # 経路は不変。render=False では描画自体を行わないため無駄なコピーを
+        # 避ける、2026-08-11 追加)。
+        raw_native = frame.copy() if (show_recognition and render) else None
         if frame.shape[:2] != (OUT_H, OUT_W):
             frame = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
         t = fi / fps
@@ -1855,6 +2067,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # トラッカー・表示状態を全て初期化する(前試合の「幻の差」持ち越し防止)。
         if _detect_score_reset(r.p1.score, r.p2.score, prev_score1, prev_score2):
             print(f"[reset] t={t:.1f}s score大幅減少/0付近を検知 -> 評価を互角にリセット")
+            # タイムラインdump用の試合境界カウンタ (2026-08-11 追加)。スコアが
+            # 0付近に留まる間は毎フレーム検知されうるため、デバウンス
+            # (GAME_BOUNDARY_DEBOUNCE_SEC 秒未満の再進行を抑制) してから進める
+            # (collect_boards_lean.py の _SharedGameCounter と同じ設計)。
+            if (_last_boundary_advance_t is None
+                    or t - _last_boundary_advance_t >= GAME_BOUNDARY_DEBOUNCE_SEC):
+                game_idx += 1
+                _last_boundary_advance_t = t
             b1 = b2 = None
             adv_ema, p1_last, drivers = 0.0, 0.5, []
             ukey1 = ukey2 = sat1 = sat2 = 0.0
@@ -1965,8 +2185,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                    + W_MODEL * model_adv + W_THREAT * threat
                    + W_COUNTER * counter_adv) + sl_bias
             adv = max(-100.0, min(100.0, adv))
+            # room1/room2 はタイムラインdump (2026-08-11) でも再利用するため
+            # ローカル変数に保持する (値は従来の board_room(b1)/board_room(b2)
+            # 直呼び出しと完全に同一、キャッシュしただけで挙動不変)。
+            room1, room2 = board_room(b1), board_room(b2)
             adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
-                                board_room(b1), board_room(b2))
+                                room1, room2)
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
             # Platt後段校正 (全位相共通 or 位相別、2026-08-11 Phase1-2)。
             # 両方 False (既定) なら progress 計算自体を省き従来経路とビット一致させる。
@@ -1979,6 +2203,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
             if enable_early_fire_reaction:
                 efire_tracker.on_settled()  # 確定計算が入ったので速報バイアスをクリア
+            if dump_timeline_path is not None:
+                # settled 更新のたびに1レコード追記する (本番の間引き
+                # HeavyAdvCache.every はそのまま=dump は本番が実際に出す
+                # 判定の記録、2026-08-11 タイムラインdump工事)。
+                dump_rows.append(_build_timeline_dump_row(
+                    t_sec=t, game_idx=game_idx, adv_raw=model_adv,
+                    adv_ema=adv_ema, p1=p1_last,
+                    pending_p1=snap.pending_p1, pending_p2=snap.pending_p2,
+                    room1=room1, room2=room2, b1=b1, b2=b2, drivers=drivers,
+                    score1=r.p1.score, score2=r.p2.score,
+                    state1=r.p1.state.name, state2=r.p2.state.name,
+                ))
         # (早期発火) 表示直前にのみ bias を加算する (adv_ema/p1_last の EMA 内部状態
         # 自体には混ぜない = 無効時は従来経路とビット一致)。
         disp_adv, disp_p1 = adv_ema, p1_last
@@ -1990,6 +2226,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             history.append((t - start_sec, disp_adv))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
+        if not render:
+            # 判定計算のみ (2026-08-11 追加)。描画・エンコードを一切行わない。
+            written += 1
+            if written % 300 == 0:
+                print(f"  ... {written} frames (t={t:.1f}s adv={disp_adv:+.0f}) [no-render]")
+            continue
         waiting = b1 is None or b2 is None
         display_frame = frame
         if show_recognition:
@@ -2039,8 +2281,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         written += 1
         if written % 300 == 0:
             print(f"  ... {written} frames (t={t:.1f}s adv={disp_adv:+.0f})")
-    cap.release(); writer.release()
-    print(f"[done] {written} frames -> {out}")
+    cap.release()
+    if writer is not None:
+        writer.release()
+    if dump_timeline_path is not None:
+        video_id = video.stem
+        save_timeline_dump(dump_timeline_path, video_id, dump_rows)
+        print(f"[dump] {len(dump_rows)} records -> {dump_timeline_path}")
+    if render:
+        print(f"[done] {written} frames -> {out}")
+    else:
+        print(f"[done] {written} frames (no-render)")
     return written
 
 
@@ -2205,6 +2456,20 @@ def main() -> None:
              "(2026-08-11 ロードマップ Phase1-3 追加)。既定 OFF = 除外リスト適用"
              " (通常表示)。adv/p1 の判定値には無関係 (表示候補の絞り込みのみ)。",
     )
+    ap.add_argument(
+        "--no-render", action="store_false", default=True, dest="render",
+        help="動画の合成・書き出しを行わず判定計算だけ行う (2026-08-11 "
+             "タイムラインdump工事で追加)。--dump-timeline と併用して"
+             "dump生成を高速化する用途。既定 (指定なし) は従来通りレンダリングする。",
+    )
+    ap.add_argument(
+        "--dump-timeline", type=Path, default=None, dest="dump_timeline_path",
+        help="settled 更新 (有利不利判定の再計算) のたびに1レコードを収集し、"
+             "終了時に npz として保存する (2026-08-11 追加)。"
+             "scripts/scan_judgment_anomalies.py --from-dump がこれを読むだけで"
+             "検出でき、判定の再計算(148動画で約39日と実測済み)が不要になる。"
+             "既定 None = 保存しない。",
+    )
     a = ap.parse_args()
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
@@ -2227,7 +2492,9 @@ def main() -> None:
              enable_counter_reach=a.enable_counter_reach,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              layout=a.layout,
-             show_excluded_attribution=a.show_excluded_attribution)
+             show_excluded_attribution=a.show_excluded_attribution,
+             render=a.render,
+             dump_timeline_path=a.dump_timeline_path)
 
 
 if __name__ == "__main__":

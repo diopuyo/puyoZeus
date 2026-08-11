@@ -1,12 +1,12 @@
-"""「ありえない判定」走査器 — 最優先2検出器 (2026-08-11)。
+"""「ありえない判定」走査器 — D0/D1a/D1b (2026-08-11、タイムラインdump対応)。
 
 ## 背景
 `scripts/visualize_advantage_overlay.py` の有利不利判定は 45 指標 + 学習済
 HistGBC の合成値で、局所的に「見た目には説明のつかない」判定を出すことが
 過去のレビューで複数回確認されている (memory
 `project_youtube_demo_advantage_issues_2026-08-08` t=29 等)。本スクリプトは
-そのうち **閾値不要の論理矛盾 2 種** を全動画横断で機械的に検出する
-「走査器」の第一弾 (D0 + D1a のみ)。
+そのうち **閾値不要の論理矛盾 3 種** を全動画横断で機械的に検出する
+「走査器」(D0 + D1a + D1b)。
 
 ## D0: 主因⇔結論の符号矛盾
 `_score_advantage()` が組み立てる主因 (drivers、`ATTRIBUTION_EXCLUDED_
@@ -22,29 +22,50 @@ STABLE の confirmed_board が `Board.is_dead()==True` (DEATH_ROW=1 直読み)
 `GAME_BOUNDARY_GUARD_SEC` 秒は除外する (物理的ガード、閾値でなく試合境界
 という実在イベントからの相対時間)。
 
+## D1b: 致死確定 (pending/room) の無視 (2026-08-11 追加)
+D1a が「盤面が既に窒息済み」を対象にするのに対し、D1b は「まだ盤面上は
+窒息していないが、これから降る pending お邪魔だけで受け容量を超えることが
+確定している」側を対象にする。`kill_override()` が生存側へ 100% 寄せる
+基準と同じ `KILL_RATIO_FULL` (=1.5) を再利用し、
+`pending / max(KILL_ROOM_FLOOR, room) >= KILL_RATIO_FULL` の側が有利判定
+されていれば矛盾とする。D1a と同じゲーム境界ガードを適用する。
+
 ## 計算経路と既知の近似 (重要、恒久記録)
 `visualize_advantage_overlay.py` の `generate()` は 4 成分ブレンド
 (pressure/forecast/model/threat + kill_override + EMA + Platt較正) を
-動画のライブ認識ループで組み立てるが、本走査器は **npz (STABLE snapshot
-のみ、盤面グリッド+score+t_sec+game_idx) から `_score_advantage()` の
-生モデル出力 (adv, p1, drivers) だけ** を計算する軽量版である。理由:
-  - npz には BoardState 遷移履歴が無く (STABLE snapshot のみ記録、
-    `scripts/collect_boards_lean.py` 参照)、OjamaAccountingTracker の
-    本物の会計 (連鎖終了イベント駆動) を再構築できない。そのため
-    `ojama_net_balance`/`ojama_forecast` は **常に 0 のダミー会計**
-    (`_dummy_snapshot`) で代用する。
-  - pressure/forecast/threat/kill_override/EMA/Platt較正は行わない
-    (`_score_advantage()` の生 adv/p1 のみを使う)。
-D0 は「モデル自身が出した diff と adv の符号一致」という自己無矛盾性の
-検査であり、ダミー会計を使っても検査の妥当性は変わらない (同一関数呼び出し
-内で同じ diff から adv も drivers も算出されるため)。D1a は adv/p1 の
-「有利側」判定にモデル出力を使うため、本物の会計より粗い近似である点に
-留意 (is_dead 自体は npz の生盤面から直接判定するため近似ではない)。
+動画のライブ認識ループで組み立てる。本走査器には2つの動作モードがある:
 
-将来、判定計算をタイムライン dump に一元化するアーキ工事が入った時点で、
-本ファイルの `scan_video()` 相当は dump 読み出しに置き換わる想定。
-検出ロジック本体 (`detect_d0`/`detect_d1a`) は npz/model に一切依存しない
-純関数として分離してあるため、置き換えの影響を受けない。
+  - **npz 再計算モード** (`scan_video()`, `--npz-dir`): npz (STABLE snapshot
+    のみ、盤面グリッド+score+t_sec+game_idx) から `_score_advantage()` の
+    生モデル出力 (adv, p1, drivers) だけを再計算する軽量版。npz には
+    BoardState 遷移履歴が無く、OjamaAccountingTracker の本物の会計
+    (連鎖終了イベント駆動) を再構築できないため、`ojama_net_balance`/
+    `ojama_forecast` は常に 0 のダミー会計 (`_dummy_snapshot`) で代用する
+    (pending も常に 0)。room はダミーではなく盤面グリッドから実値を計算する
+    (`board_room()` は盤面の空きセル数のみに依存し会計非依存のため)。
+    148動画のフル再計算で **約39日** かかることが実測され (`scripts/
+    _diag_scan_speed_2026-08-11.py` 等)、非現実的と判明した。
+  - **dump 読み出しモード** (`scan_video_from_dump()`, `--from-dump`):
+    `visualize_advantage_overlay.generate(..., dump_timeline_path=...)` が
+    settled 更新のたびに書き出した npz (`TimelineDumpRow`) を読むだけ。
+    モデル学習・盤面再計算が一切不要なため大幅に高速。
+
+  `JudgmentRecord.adv`/`.drivers` は両モードとも「`_score_advantage()` の
+  生モデル出力 (model_adv)」を表す (dump モードでは `TimelineDumpRow.adv_raw`)
+  ため、D0 (「モデル自身が出した diff と adv の符号一致」という自己無矛盾性
+  の検査) は両モードで意味論が揃い、比較可能である。一方 `JudgmentRecord.p1`
+  は dump モードでは **4成分ブレンド+kill_override+校正+EMA を経た実際の
+  表示値** (`TimelineDumpRow.p1`、model_adv とはステージが異なる) であり、
+  npz 再計算モードの p1 (model_adv と対の生確率) とは異なる量である。
+  D1a/D1b は `adv`(生モデル) と `p1`(dump モードでは表示値) を OR 条件で
+  見るため、この非対称性により **D1a/D1b は両モード間で一致するとは限らない**
+  (会計がダミーな npz 再計算モードでは pending が常に 0 のため D1b はほぼ
+  発火しない、という違いも重なる)。D0 のみが両モード比較に適する
+  (`visualize_advantage_overlay.TimelineDumpRow` docstring 併記も参照)。
+
+検出ロジック本体 (`detect_d0`/`detect_d1a`/`detect_d1b`) は npz/model/dump
+のいずれにも直接依存しない純関数として分離してあり、`JudgmentRecord` という
+共通の中間表現だけを介して両モードから呼べる。
 
 ## CPU 使用に関する注記 (2026-08-11 実測に基づく追記)
 `_train_model()` の `HistGradientBoostingClassifier.fit()` は既定で論理
@@ -83,7 +104,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.board import Board  # noqa: E402
 from src.ojama_accounting import OjamaAccountSnapshot  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    JP_LABEL, _score_advantage, _train_model,
+    JP_LABEL, KILL_RATIO_FULL, KILL_ROOM_FLOOR, _score_advantage, _train_model,
+    board_room, load_timeline_dump,
 )
 
 # 既定スレッド上限 (2026-08-11 実測に基づく、モジュール docstring 参照)。
@@ -100,8 +122,13 @@ DEFAULT_MAX_THREADS: int = 2
 # 「境界時刻との絶対差」で判定する)。
 GAME_BOUNDARY_GUARD_SEC: float = 2.0
 
-# 検出器の重大度 (D0/D1a はどちらも閾値不要の論理矛盾のため固定)
+# 検出器の重大度 (D0/D1a/D1b はどれも閾値不要の論理矛盾のため固定)
 SEVERITY_CRITICAL: str = "CRITICAL"
+
+# dump モードで trigger_side を特定できない (settled 更新は片側/両側どちらの
+# 更新でも起こりうり、dump は「誰の更新か」を記録しないため) ときのプレース
+# ホルダ。npz 再計算モードの "1P"/"2P" とは異なる第三の値として明示する。
+TRIGGER_SIDE_UNKNOWN: str = "dump"
 
 # デフォルト npz ディレクトリの探索パターン (Phase L 系の全域盤面収集)
 _PHASE_L_GLOB: str = "boards_lean_phase_l_*"
@@ -115,20 +142,32 @@ _PHASE_L_GLOB: str = "boards_lean_phase_l_*"
 class JudgmentRecord:
     """1 判定断面 (両者の盤面が両方判明している瞬間)。
 
-    将来のタイムライン dump 一元化で本クラスの生成元 (`scan_video`) だけが
-    置き換わり、`detect_d0`/`detect_d1a` はそのまま流用できる設計。
+    npz 再計算モード (`scan_video`) と dump 読み出しモード
+    (`scan_video_from_dump`) の両方がこの共通中間表現を生成する設計。
+    `detect_d0`/`detect_d1a`/`detect_d1b` はどちらの生成元にも依存しない。
+
+    pending_p1/pending_p2/room1/room2 は D1b 専用 (2026-08-11 追加、
+    デフォルト値ありのため既存コンストラクタ呼び出しは変更不要=後方互換)。
+    npz 再計算モードでは会計がダミーのため pending は常に 0 (D1b はほぼ
+    発火しない)、room は盤面グリッドから実値を計算する
+    (モジュール docstring「計算経路と既知の近似」参照)。
     """
 
     video_id: str
     t_sec: float
     game_idx: int
-    trigger_side: str  # このレコードを生んだ側の更新 ("1P" / "2P")
-    adv: float  # (p1-0.5)*200、_score_advantage の生出力
-    p1: float  # 1P 勝率 (0-1)、_score_advantage の生出力
+    trigger_side: str  # このレコードを生んだ側の更新 ("1P" / "2P" / dump時は"dump")
+    adv: float  # _score_advantage の生モデル出力 (model_adv、drivers と対)
+    p1: float  # 1P 勝率 (0-1)。npz再計算モードは model_adv と対の生確率、
+               # dump モードは表示用 EMA 後勝率 (モジュール docstring 参照)
     drivers: tuple[tuple[str, float], ...]  # 表示用主因 (除外後、|差分|降順)
     is_dead_p1: bool
     is_dead_p2: bool
     near_game_boundary: bool
+    pending_p1: int = 0  # D1b用: 1P に向かう pending お邪魔 (npz再計算は常に0)
+    pending_p2: int = 0  # D1b用: 2P に向かう pending お邪魔 (npz再計算は常に0)
+    room1: int = 0       # D1b用: 1P の空き容量 (board_room、両モードとも実値)
+    room2: int = 0       # D1b用: 2P の空き容量 (board_room、両モードとも実値)
 
 
 @dataclass(frozen=True)
@@ -210,6 +249,41 @@ def detect_d1a(record: JudgmentRecord) -> list[Suspect]:
         suspects.append(Suspect(
             video_id=record.video_id, t_sec=record.t_sec, game_idx=record.game_idx,
             detector="D1a", severity=SEVERITY_CRITICAL, evidence=evidence,
+        ))
+    return suspects
+
+
+def detect_d1b(record: JudgmentRecord) -> list[Suspect]:
+    """D1b: 致死確定 (pending/room 比が KILL_RATIO_FULL 以上) の無視を検出する。
+
+    D1a (盤面が既に is_dead=True) と異なり、こちらは「まだ盤面上は窒息して
+    いないが、これから降る pending お邪魔だけで受け容量を超えることが確定
+    している」側を対象にする。`kill_override()` が生存側へ完全に寄せる基準
+    (`KILL_RATIO_FULL`) と同じ閾値を再利用するため、本来 kill_override が
+    是正しているはずの状況を検出する (=kill_override 自体の抜け漏れ発見用)。
+    D1a と同じくゲーム境界近傍は既知の正当例外としてガードする。
+    """
+    if record.near_game_boundary:
+        return []
+    suspects: list[Suspect] = []
+    checks = (
+        ("1P", record.pending_p1, record.room1, record.adv > 0.0, record.p1 > 0.5, record.p1),
+        ("2P", record.pending_p2, record.room2, record.adv < 0.0, record.p1 < 0.5, 1.0 - record.p1),
+    )
+    for side, pending, room, adv_favors_side, p1_favors_side, winprob_side in checks:
+        ratio = pending / max(KILL_ROOM_FLOOR, room)
+        if ratio < KILL_RATIO_FULL:
+            continue
+        if not (adv_favors_side or p1_favors_side):
+            continue
+        evidence = (
+            f"{side} は致死確定 (pending={pending} / room={room} = 比{ratio:.2f} "
+            f"≥ KILL_RATIO_FULL={KILL_RATIO_FULL}) なのに "
+            f"adv={record.adv:+.1f} / 勝率{side}={winprob_side:.1%} で有利判定"
+        )
+        suspects.append(Suspect(
+            video_id=record.video_id, t_sec=record.t_sec, game_idx=record.game_idx,
+            detector="D1b", severity=SEVERITY_CRITICAL, evidence=evidence,
         ))
     return suspects
 
@@ -377,8 +451,49 @@ def scan_video(
             adv=adv, p1=p1, drivers=tuple(drivers),
             is_dead_p1=b1.is_dead(), is_dead_p2=b2.is_dead(),
             near_game_boundary=_is_near_boundary(t, boundary_times),
+            # D1b用 (2026-08-11 追加)。会計はダミー (pending は常に0=モジュール
+            # docstring 参照) だが room は盤面グリッドの実値 (会計非依存)。
+            pending_p1=0, pending_p2=0,
+            room1=board_room(b1), room2=board_room(b2),
         ))
     records.sort(key=lambda r: r.t_sec)
+    return records
+
+
+# ============================
+# dump 読み出しモード (2026-08-11 追加)
+# ============================
+
+def scan_video_from_dump(dump_path: Path) -> list[JudgmentRecord]:
+    """1 動画分のタイムラインdump npz を JudgmentRecord 列に変換する。
+
+    `visualize_advantage_overlay.generate(..., dump_timeline_path=...)` が
+    settled 更新のたびに書き出した値をそのまま読むだけで、モデル学習・
+    `_score_advantage` の再計算が一切不要 (npz 再計算モード `scan_video` の
+    148動画で約39日という実測に対し、これは読み出しのみで数分オーダー)。
+    `adv`/`p1` の意味論の非対称性はモジュール docstring 参照。
+    """
+    video_id, rows = load_timeline_dump(dump_path)
+    if not rows:
+        return []
+    t_sec_arr = np.array([row.t_sec for row in rows], dtype=float)
+    game_idx_arr = np.array([row.game_idx for row in rows], dtype=int)
+    boundary_times = _game_start_times(t_sec_arr, game_idx_arr)
+    records: list[JudgmentRecord] = []
+    for row in rows:
+        drivers = (
+            ((row.drivers_top1_name, row.drivers_top1_val),)
+            if row.drivers_top1_name else ()
+        )
+        records.append(JudgmentRecord(
+            video_id=video_id, t_sec=row.t_sec, game_idx=row.game_idx,
+            trigger_side=TRIGGER_SIDE_UNKNOWN,
+            adv=row.adv_raw, p1=row.p1, drivers=drivers,
+            is_dead_p1=row.is_dead1, is_dead_p2=row.is_dead2,
+            near_game_boundary=_is_near_boundary(row.t_sec, boundary_times),
+            pending_p1=row.pending_p1, pending_p2=row.pending_p2,
+            room1=row.room1, room2=row.room2,
+        ))
     return records
 
 
@@ -410,12 +525,70 @@ def _write_suspects_tsv(suspects: list[Suspect], out_path: Path) -> None:
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _run_from_dump(args: argparse.Namespace) -> int:
+    """--from-dump モード: dump npz 群を読むだけで D0/D1a/D1b を検出する。
+
+    モデル学習・盤面再計算が一切不要なため、npz 再計算モード (`main()` の
+    既定経路、148動画で約39日と実測) に比べ大幅に高速 (モジュール docstring
+    参照)。
+    """
+    out_dir = args.out_dir or Path(f"data/verify/judgment_scan_{date.today().isoformat()}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = sorted(args.from_dump_dir.glob("*.npz"))
+    if args.limit_videos > 0:
+        files = files[: args.limit_videos]
+    print(f"[scan] from-dump dir={args.from_dump_dir} ({len(files)} 動画)", flush=True)
+
+    t0 = time.time()
+    suspects: list[Suspect] = []
+    counts = {"D0": 0, "D1a": 0, "D1b": 0}
+    for i, fpath in enumerate(files):
+        vt0 = time.time()
+        records = scan_video_from_dump(fpath)
+        for rec in records:
+            s0 = detect_d0(rec)
+            if s0 is not None:
+                suspects.append(s0)
+                counts["D0"] += 1
+            for s1 in detect_d1a(rec):
+                suspects.append(s1)
+                counts["D1a"] += 1
+            for s2 in detect_d1b(rec):
+                suspects.append(s2)
+                counts["D1b"] += 1
+        print(
+            f"  [{i + 1}/{len(files)}] {fpath.stem}: {len(records)} records, "
+            f"{time.time() - vt0:.2f}s, 累計 D0={counts['D0']} D1a={counts['D1a']} "
+            f"D1b={counts['D1b']}",
+            flush=True,
+        )
+
+    out_path = out_dir / "suspects.tsv"
+    _write_suspects_tsv(suspects, out_path)
+    print(
+        f"[scan] 完了(from-dump): 動画={len(files)} suspects={len(suspects)} "
+        f"(D0={counts['D0']} D1a={counts['D1a']} D1b={counts['D1b']}) -> {out_path}\n"
+        f"[scan] 所要時間 合計={time.time() - t0:.1f}s (モデル学習不要)",
+        flush=True,
+    )
+    return 0
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="「ありえない判定」走査器 (D0+D1a)")
+    ap = argparse.ArgumentParser(description="「ありえない判定」走査器 (D0+D1a+D1b)")
     ap.add_argument(
         "--npz-dir", type=Path, default=None,
         help="入力 npz ディレクトリ (既定: data/indicators_v2/boards_lean_phase_l_* "
-             "のうち最も npz 件数が多いもの)",
+             "のうち最も npz 件数が多いもの)。--from-dump 指定時は無視される。",
+    )
+    ap.add_argument(
+        "--from-dump", type=Path, default=None, dest="from_dump_dir",
+        help="npz 再計算の代わりに、visualize_advantage_overlay.py "
+             "--dump-timeline が書き出したタイムラインdump群 (ディレクトリ) を"
+             "読むだけで検出する (2026-08-11 追加)。モデル学習・盤面再計算が"
+             "不要になり大幅高速化する (148動画で約39日→dump読み出しのみへ、"
+             "モジュール docstring 参照)。指定時は --npz-dir/--exclude-video-"
+             "for-training/--max-threads/--max-records-per-video は無視される。",
     )
     ap.add_argument(
         "--out-dir", type=Path, default=None,
@@ -448,6 +621,9 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    if args.from_dump_dir is not None:
+        return _run_from_dump(args)
+
     npz_dir = args.npz_dir or _resolve_default_npz_dir(Path("data/indicators_v2"))
     out_dir = args.out_dir or Path(f"data/verify/judgment_scan_{date.today().isoformat()}")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -467,6 +643,7 @@ def main() -> int:
         suspects: list[Suspect] = []
         d0_count = 0
         d1a_count = 0
+        d1b_count = 0
         per_video_sec: list[float] = []
         for i, fpath in enumerate(files):
             vt0 = time.time()
@@ -479,11 +656,14 @@ def main() -> int:
                 for s1 in detect_d1a(rec):
                     suspects.append(s1)
                     d1a_count += 1
+                for s1b in detect_d1b(rec):
+                    suspects.append(s1b)
+                    d1b_count += 1
             dt = time.time() - vt0
             per_video_sec.append(dt)
             print(
                 f"  [{i + 1}/{len(files)}] {fpath.stem}: {len(records)} records, "
-                f"{dt:.1f}s, 累計 D0={d0_count} D1a={d1a_count}",
+                f"{dt:.1f}s, 累計 D0={d0_count} D1a={d1a_count} D1b={d1b_count}",
                 flush=True,
             )
 
@@ -493,7 +673,7 @@ def main() -> int:
     avg = float(np.mean(per_video_sec)) if per_video_sec else 0.0
     print(
         f"[scan] 完了: 動画={len(files)} suspects={len(suspects)} "
-        f"(D0={d0_count} D1a={d1a_count}) -> {out_path}\n"
+        f"(D0={d0_count} D1a={d1a_count} D1b={d1b_count}) -> {out_path}\n"
         f"[scan] 所要時間 合計={total_dt:.1f}s (学習含む) "
         f"動画あたり平均={avg:.2f}s",
         flush=True,

@@ -1,7 +1,8 @@
-"""「ありえない判定」走査器 D0 (主因⇔結論の符号矛盾) + D1a (確定死の無視) テスト.
+"""「ありえない判定」走査器 D0/D1a/D1b + dump 読み出しモードのテスト.
 
-- 純関数 detect_d0/detect_d1a の陽性/陰性/境界ガード (単体テスト、npz非依存)
+- 純関数 detect_d0/detect_d1a/detect_d1b の陽性/陰性/境界ガード (単体テスト、npz非依存)
 - scan_video() を含む end-to-end 1 件 (合成 npz + 決定的な stub score_fn)
+- scan_video_from_dump() の end-to-end 1 件 (合成タイムラインdump npz)
 """
 from __future__ import annotations
 
@@ -16,16 +17,25 @@ from scripts.scan_judgment_anomalies import (
     JudgmentRecord,
     detect_d0,
     detect_d1a,
+    detect_d1b,
     scan_video,
+    scan_video_from_dump,
+)
+from scripts.visualize_advantage_overlay import (
+    KILL_RATIO_FULL,
+    KILL_ROOM_FLOOR,
+    TimelineDumpRow,
+    save_timeline_dump,
 )
 
 
 def _record(**overrides: object) -> JudgmentRecord:
-    """テスト用デフォルト JudgmentRecord (境界外・生存・矛盾なし)。"""
+    """テスト用デフォルト JudgmentRecord (境界外・生存・矛盾なし・pending/room 安全値)。"""
     base: dict[str, object] = dict(
         video_id="v_test", t_sec=100.0, game_idx=0, trigger_side="1P",
         adv=10.0, p1=0.55, drivers=(("board_color_puyo_total", 0.3),),
         is_dead_p1=False, is_dead_p2=False, near_game_boundary=False,
+        pending_p1=0, pending_p2=0, room1=72, room2=72,
     )
     base.update(overrides)
     return JudgmentRecord(**base)  # type: ignore[arg-type]
@@ -192,3 +202,118 @@ class TestScanVideoEndToEnd:
         assert d1a_suspects[0].t_sec == pytest.approx(10.0)
         assert d1a_suspects[0].video_id == "v_e2e"
         assert "1P" in d1a_suspects[0].evidence
+
+
+# ============================
+# D1b: 致死確定 (pending/room) の無視
+# ============================
+
+class TestDetectD1b:
+    def test_positive_1p_certain_death_favored_by_adv(self) -> None:
+        """1P: pending/room が KILL_RATIO_FULL 以上 (致死確定) なのに adv が1P有利 → 検出。"""
+        rec = _record(
+            pending_p1=100, room1=40, pending_p2=0, room2=72,  # 100/40=2.5 >= 1.5
+            adv=30.0, p1=0.7,
+        )
+        suspects = detect_d1b(rec)
+        assert len(suspects) == 1
+        assert suspects[0].detector == "D1b"
+        assert "1P" in suspects[0].evidence
+
+    def test_negative_below_kill_ratio_full_not_flagged(self) -> None:
+        """比が KILL_RATIO_FULL 未満 (致死確定ではない) → 検出しない。"""
+        rec = _record(
+            pending_p1=40, room1=40, pending_p2=0, room2=72,  # 40/40=1.0 < 1.5
+            adv=30.0, p1=0.7,
+        )
+        assert detect_d1b(rec) == []
+
+    def test_negative_correctly_unfavored(self) -> None:
+        """致死確定でも adv/p1 が正しく生存側(2P)を favor → 検出しない。"""
+        rec = _record(
+            pending_p1=100, room1=40, pending_p2=0, room2=72,
+            adv=-30.0, p1=0.2,
+        )
+        assert detect_d1b(rec) == []
+
+    def test_negative_near_boundary_suppressed(self) -> None:
+        """D1a と同じ境界ガードが効く。"""
+        rec = _record(
+            pending_p1=100, room1=40, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7, near_game_boundary=True,
+        )
+        assert detect_d1b(rec) == []
+
+    def test_boundary_ratio_uses_kill_room_floor(self) -> None:
+        """room が KILL_ROOM_FLOOR 未満でも 0 除算せず、下限で丸められる
+        (kill_override() と同じ規約)。"""
+        rec = _record(
+            pending_p1=KILL_ROOM_FLOOR * KILL_RATIO_FULL, room1=1, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7,
+        )
+        # room=1 < KILL_ROOM_FLOOR なので分母は KILL_ROOM_FLOOR に丸められ、
+        # ratio = KILL_RATIO_FULL ちょうど (>= 判定なので検出される)
+        assert len(detect_d1b(rec)) == 1
+
+
+# ============================
+# dump 読み出しモード: scan_video_from_dump (合成タイムラインdump npz)
+# ============================
+
+def _dump_row(**overrides: object) -> TimelineDumpRow:
+    base: dict[str, object] = dict(
+        t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5,
+        pending_p1=0, pending_p2=0, room1=72, room2=72,
+        is_dead1=False, is_dead2=False,
+        drivers_top1_name="board_color_puyo_total", drivers_top1_val=0.0,
+        drivers_top3_names=("board_color_puyo_total", "", ""),
+        drivers_top3_vals=(0.0, 0.0, 0.0),
+        score1=0, score2=0, b1_hash=0, b2_hash=0,
+        state1="STABLE", state2="STABLE",
+    )
+    base.update(overrides)
+    return TimelineDumpRow(**base)  # type: ignore[arg-type]
+
+
+class TestScanVideoFromDumpEndToEnd:
+    def test_d0_detected_from_dump_record(self, tmp_path: Path) -> None:
+        """dump 由来の adv_raw/drivers から D0 (符号矛盾) を検出できる。"""
+        rows = [
+            _dump_row(
+                t_sec=20.0, game_idx=1,
+                drivers_top1_name="board_color_puyo_total", drivers_top1_val=0.67,
+                adv_raw=-20.0,
+            ),
+        ]
+        dump_path = tmp_path / "v_dump.npz"
+        save_timeline_dump(dump_path, "v_dump", rows)
+
+        records = scan_video_from_dump(dump_path)
+        assert len(records) == 1
+        assert records[0].video_id == "v_dump"
+        suspects = [s for r in records for s in ([detect_d0(r)] if detect_d0(r) else [])]
+        assert len(suspects) == 1
+        assert suspects[0].detector == "D0"
+
+    def test_d1a_detected_from_dump_record(self, tmp_path: Path) -> None:
+        """dump 由来の is_dead1 + p1 (表示用EMA後勝率) から D1a を検出できる
+        (scan_video_from_dump は record.p1 <- row.p1 にマッピングする)。
+        ゲーム境界ガード (±GAME_BOUNDARY_GUARD_SEC秒) に触れないよう、
+        同じ game_idx 内に t=0.0 のアンカー行も加えて境界を離しておく。
+        """
+        rows = [
+            _dump_row(t_sec=0.0, game_idx=2),
+            _dump_row(t_sec=50.0, game_idx=2, is_dead1=True, adv_raw=0.0, p1=0.7),
+        ]
+        dump_path = tmp_path / "v_dump_d1a.npz"
+        save_timeline_dump(dump_path, "v_dump_d1a", rows)
+
+        records = scan_video_from_dump(dump_path)
+        suspects = [s for r in records for s in detect_d1a(r)]
+        assert len(suspects) == 1
+        assert "1P" in suspects[0].evidence
+
+    def test_empty_dump_yields_no_records(self, tmp_path: Path) -> None:
+        dump_path = tmp_path / "v_dump_empty.npz"
+        save_timeline_dump(dump_path, "v_dump_empty", [])
+        assert scan_video_from_dump(dump_path) == []
