@@ -16,11 +16,17 @@ adv は 2P有利)。
 
 ## D1a: 確定死の無視
 STABLE の confirmed_board が `Board.is_dead()==True` (DEATH_ROW=1 直読み)
-の側を、その瞬間に有利判定 (adv 符号がその側 or 勝率>0.5) している場合に
-矛盾とする。ただし判定タイミングと勝敗確定の間で正当に is_dead=True が
-一瞬出うる (試合境界直後の残存フレーム等) ため、ゲーム境界 ±
-`GAME_BOUNDARY_GUARD_SEC` 秒は除外する (物理的ガード、閾値でなく試合境界
-という実在イベントからの相対時間)。
+の側を、その瞬間に有利判定している場合に矛盾とする。ただし判定タイミングと
+勝敗確定の間で正当に is_dead=True が一瞬出うる (試合境界直後の残存フレーム等)
+ため、ゲーム境界 ± `GAME_BOUNDARY_GUARD_SEC` 秒は除外する (物理的ガード、
+閾値でなく試合境界という実在イベントからの相対時間)。
+
+2026-08-11 アーキ審査により **raw (生モデル) と display (表示値) を別々に
+判定**するよう変更した (「計算経路と既知の近似」節参照)。raw のみで矛盾する
+場合は `kill_override()` 等の後付け補正で実際の表示は是正されている可能性が
+高く、内部品質バックログ (`Suspect.stage="raw_only"`)。display で矛盾する
+場合はユーザーが実際に見る値がおかしいためリリースブロッカー
+(`stage="display"` または両方矛盾なら `"both"`)。
 
 ## D1b: 致死確定 (pending/room) の無視 (2026-08-11 追加)
 D1a が「盤面が既に窒息済み」を対象にするのに対し、D1b は「まだ盤面上は
@@ -28,7 +34,7 @@ D1a が「盤面が既に窒息済み」を対象にするのに対し、D1b は
 確定している」側を対象にする。`kill_override()` が生存側へ 100% 寄せる
 基準と同じ `KILL_RATIO_FULL` (=1.5) を再利用し、
 `pending / max(KILL_ROOM_FLOOR, room) >= KILL_RATIO_FULL` の側が有利判定
-されていれば矛盾とする。D1a と同じゲーム境界ガードを適用する。
+されていれば矛盾とする。D1a と同じゲーム境界ガード・raw/display 分離を適用する。
 
 ## 計算経路と既知の近似 (重要、恒久記録)
 `visualize_advantage_overlay.py` の `generate()` は 4 成分ブレンド
@@ -45,27 +51,40 @@ D1a が「盤面が既に窒息済み」を対象にするのに対し、D1b は
     (`board_room()` は盤面の空きセル数のみに依存し会計非依存のため)。
     148動画のフル再計算で **約39日** かかることが実測され (`scripts/
     _diag_scan_speed_2026-08-11.py` 等)、非現実的と判明した。
+    このモードには 4成分ブレンド/kill_override/校正/EMA が一切無く
+    「display」段階が存在しないため、`JudgmentRecord.adv_ema`/`.p1` は
+    raw と同値 (`adv`/`.p1_raw` と同じ) を設定する (display を観測できない
+    ことの誠実な表現。D1a/D1b の raw_only/display/both 判定は raw==display
+    となるため必ず `"both"` に分類される=このモードの構造的限界)。
   - **dump 読み出しモード** (`scan_video_from_dump()`, `--from-dump`):
     `visualize_advantage_overlay.generate(..., dump_timeline_path=...)` が
     settled 更新のたびに書き出した npz (`TimelineDumpRow`) を読むだけ。
-    モデル学習・盤面再計算が一切不要なため大幅に高速。
+    モデル学習・盤面再計算が一切不要なため大幅に高速。raw
+    (`TimelineDumpRow.adv_raw`/`.p1_raw`) と display
+    (`TimelineDumpRow.adv_ema`/`.p1`) が両方本物として揃う唯一のモード。
 
   `JudgmentRecord.adv`/`.drivers` は両モードとも「`_score_advantage()` の
   生モデル出力 (model_adv)」を表す (dump モードでは `TimelineDumpRow.adv_raw`)
   ため、D0 (「モデル自身が出した diff と adv の符号一致」という自己無矛盾性
-  の検査) は両モードで意味論が揃い、比較可能である。一方 `JudgmentRecord.p1`
-  は dump モードでは **4成分ブレンド+kill_override+校正+EMA を経た実際の
-  表示値** (`TimelineDumpRow.p1`、model_adv とはステージが異なる) であり、
-  npz 再計算モードの p1 (model_adv と対の生確率) とは異なる量である。
-  D1a/D1b は `adv`(生モデル) と `p1`(dump モードでは表示値) を OR 条件で
-  見るため、この非対称性により **D1a/D1b は両モード間で一致するとは限らない**
-  (会計がダミーな npz 再計算モードでは pending が常に 0 のため D1b はほぼ
-  発火しない、という違いも重なる)。D0 のみが両モード比較に適する
-  (`visualize_advantage_overlay.TimelineDumpRow` docstring 併記も参照)。
+  の検査) は両モードで意味論が揃い、比較可能である。D0 は raw 固定のまま
+  (`.adv`/`.drivers` のみ使用、display は見ない) が正しい設計と
+  2026-08-11 アーキ判定された (kill_override の正当な符号反転を D0 が
+  誤検知しないため)。一方 D1a/D1b は raw/display を分離して両方見るため、
+  npz 再計算モードでは (会計がダミーで pending が常に 0 のため D1b はほぼ
+  発火しない、かつ display が観測できない) 上記の構造的限界により
+  **D1a/D1b は両モード間で一致するとは限らない**。D0 のみが両モード比較に
+  適する (`visualize_advantage_overlay.TimelineDumpRow` docstring 併記も参照)。
 
 検出ロジック本体 (`detect_d0`/`detect_d1a`/`detect_d1b`) は npz/model/dump
 のいずれにも直接依存しない純関数として分離してあり、`JudgmentRecord` という
 共通の中間表現だけを介して両モードから呼べる。
+
+## 将来の D4 (判定振動) に向けた注意書き (2026-08-11 アーキ審査)
+将来 D4 (短時間での有利不利判定の激しい往復=振動を検出する検出器) を追加する
+場合、**EMA 後 (`adv_ema`/`p1`) ではなく EMA 前の raw 系列 (`adv`/`p1_raw`) で
+振動を測ること**。EMA 自体が振動を平滑化する目的の処理のため、EMA 後の系列で
+「振動」を測ると、対策済みの平滑化がどれだけ効いたか (=自分自身の平滑化) を
+測るだけになり、平滑化前の真の判定不安定性を見誤る。
 
 ## CPU 使用に関する注記 (2026-08-11 実測に基づく追記)
 `_train_model()` の `HistGradientBoostingClassifier.fit()` は既定で論理
@@ -151,15 +170,24 @@ class JudgmentRecord:
     npz 再計算モードでは会計がダミーのため pending は常に 0 (D1b はほぼ
     発火しない)、room は盤面グリッドから実値を計算する
     (モジュール docstring「計算経路と既知の近似」参照)。
+
+    raw/display 分離 (2026-08-11 アーキ審査):
+    `adv`/`p1_raw` が raw (生モデル、kill_override/4成分ブレンド/校正/EMA
+    適用前)、`adv_ema`/`p1` が display (実際の画面表示値) を表す。D0 は
+    raw (`adv`/`drivers`) のみを見る (display は見ない、アーキ判定)。
+    D1a/D1b は raw ペア (`adv`/`p1_raw`) と display ペア (`adv_ema`/`p1`)
+    を別々に判定し `Suspect.stage` で区別する。npz 再計算モードには
+    display 段階が存在しないため `adv_ema=adv`/`p1_raw=p1` (raw と同値) を
+    構築側 (`scan_video`) が設定する (モジュール docstring 参照、この
+    モードの D1a/D1b は構造的に必ず stage="both" になる)。
     """
 
     video_id: str
     t_sec: float
     game_idx: int
     trigger_side: str  # このレコードを生んだ側の更新 ("1P" / "2P" / dump時は"dump")
-    adv: float  # _score_advantage の生モデル出力 (model_adv、drivers と対)
-    p1: float  # 1P 勝率 (0-1)。npz再計算モードは model_adv と対の生確率、
-               # dump モードは表示用 EMA 後勝率 (モジュール docstring 参照)
+    adv: float  # _score_advantage の生モデル出力 (model_adv、drivers と対、D0用)
+    p1: float  # 1P 勝率 (0-1)。display (表示用、EMA後) 段階。D1a/D1bのdisplay判定用
     drivers: tuple[tuple[str, float], ...]  # 表示用主因 (除外後、|差分|降順)
     is_dead_p1: bool
     is_dead_p2: bool
@@ -168,26 +196,61 @@ class JudgmentRecord:
     pending_p2: int = 0  # D1b用: 2P に向かう pending お邪魔 (npz再計算は常に0)
     room1: int = 0       # D1b用: 1P の空き容量 (board_room、両モードとも実値)
     room2: int = 0       # D1b用: 2P の空き容量 (board_room、両モードとも実値)
+    p1_raw: float = 0.5  # D1a/D1bのraw判定用。adv と対の生勝率 (kill_override等適用前)
+    adv_ema: float = 0.0  # D1a/D1bのdisplay判定用。4成分ブレンド+kill_override+校正+EMA後
+
+
+# Suspect.stage の3値 (2026-08-11 アーキ審査で追加)。
+STAGE_RAW_ONLY: str = "raw_only"  # 生モデルのみ矛盾、表示は是正済み=内部品質バックログ
+STAGE_DISPLAY: str = "display"    # 表示自体が矛盾=リリースブロッカー
+STAGE_BOTH: str = "both"          # 生モデル・表示とも矛盾=リリースブロッカー
+
+# stage 別のトリアージ注記 (evidence 文字列に埋め込む、コーディネーター指定文言の要旨)。
+_STAGE_NOTE: dict[str, str] = {
+    STAGE_RAW_ONLY: "kill_override等で是正済み・表示は無害 (内部品質バックログ)",
+    STAGE_DISPLAY: "生モデルは正常・表示側のみ矛盾 (要調査、リリースブロッカー)",
+    STAGE_BOTH: "生モデル・表示とも矛盾 (リリースブロッカー)",
+}
+
+
+def _classify_stage(raw_hit: bool, display_hit: bool) -> str:
+    """raw/display それぞれの矛盾有無から Suspect.stage を導出する。
+
+    呼出側は raw_hit or display_hit が True のときのみ呼ぶ想定
+    (両方 False は「矛盾なし」であり Suspect を作らない)。
+    """
+    if raw_hit and display_hit:
+        return STAGE_BOTH
+    return STAGE_DISPLAY if display_hit else STAGE_RAW_ONLY
 
 
 @dataclass(frozen=True)
 class Suspect:
-    """走査器が検出した 1 件の疑わしい判定。"""
+    """走査器が検出した 1 件の疑わしい判定。
+
+    stage (2026-08-11 アーキ審査追加): "raw_only"/"display"/"both"。
+    D0 は raw 固定の検出器のため常に "raw_only" を設定する (display 概念を
+    持たないための形式的値、モジュール docstring 参照)。D1a/D1b は
+    `_classify_stage()` で raw/display 判定結果から動的に決める。
+    集計・合否ゲートは "display"/"both" のみを基準にし、"raw_only" は
+    別集計で記録する (コーディネーター 2026-08-11 決定)。
+    """
 
     video_id: str
     t_sec: float
     game_idx: int
     detector: str
     severity: str
+    stage: str
     evidence: str
 
     def to_tsv_row(self) -> str:
-        """TSV 1 行を返す (video_id, t_sec, detector, severity, evidence,
-        game_idx の順。game_idx は指令書の必須列に無いがトリアージ用に末尾
-        追加、後方互換上の懸念なし=新規ファイルのため)。"""
+        """TSV 1 行を返す (video_id, t_sec, detector, severity, stage,
+        evidence, game_idx の順。game_idx は指令書の必須列に無いがトリアージ
+        用に末尾追加、後方互換上の懸念なし=新規ファイルのため)。"""
         return (
             f"{self.video_id}\t{self.t_sec:.3f}\t{self.detector}\t"
-            f"{self.severity}\t{self.evidence}\t{self.game_idx}"
+            f"{self.severity}\t{self.stage}\t{self.evidence}\t{self.game_idx}"
         )
 
 
@@ -201,6 +264,9 @@ def detect_d0(record: JudgmentRecord) -> Optional[Suspect]:
     閾値不要の論理矛盾のため severity は常に CRITICAL。
     主因が無い/符号が定義できない (差分または adv がちょうど 0) 場合は
     「矛盾を主張できる根拠が無い」として None を返す。
+    raw (`record.adv`/`.drivers`) 固定で判定する (display は見ない、
+    2026-08-11 アーキ判定。kill_override の正当な符号反転を誤検知しない
+    ため)。stage は形式的に常に "raw_only" (D0 に display 概念は無い)。
     """
     if not record.drivers:
         return None
@@ -220,7 +286,8 @@ def detect_d0(record: JudgmentRecord) -> Optional[Suspect]:
     )
     return Suspect(
         video_id=record.video_id, t_sec=record.t_sec, game_idx=record.game_idx,
-        detector="D0", severity=SEVERITY_CRITICAL, evidence=evidence,
+        detector="D0", severity=SEVERITY_CRITICAL, stage=STAGE_RAW_ONLY,
+        evidence=evidence,
     )
 
 
@@ -229,26 +296,37 @@ def detect_d1a(record: JudgmentRecord) -> list[Suspect]:
 
     ゲーム境界近傍 (`record.near_game_boundary`) は既知の正当例外
     (試合境界直後の残存フレーム) としてガードし、対象外にする。
+    raw (`adv`/`p1_raw`) と display (`adv_ema`/`p1`) を別々に判定し、
+    どちらか一方でも矛盾すれば Suspect を作る (`_classify_stage()` 参照、
+    2026-08-11 アーキ審査)。
     """
     if record.near_game_boundary:
         return []
     suspects: list[Suspect] = []
     checks = (
-        ("1P", record.is_dead_p1, record.adv > 0.0, record.p1 > 0.5, record.p1),
-        ("2P", record.is_dead_p2, record.adv < 0.0, record.p1 < 0.5, 1.0 - record.p1),
+        ("1P", record.is_dead_p1, record.adv > 0.0, record.p1_raw > 0.5,
+         record.adv_ema > 0.0, record.p1 > 0.5, record.p1, record.p1_raw),
+        ("2P", record.is_dead_p2, record.adv < 0.0, record.p1_raw < 0.5,
+         record.adv_ema < 0.0, record.p1 < 0.5, 1.0 - record.p1, 1.0 - record.p1_raw),
     )
-    for side, is_dead, adv_favors_side, p1_favors_side, winprob_side in checks:
+    for (side, is_dead, raw_adv_fav, raw_p1_fav, disp_adv_fav, disp_p1_fav,
+         winprob_disp, winprob_raw) in checks:
         if not is_dead:
             continue
-        if not (adv_favors_side or p1_favors_side):
+        raw_hit = raw_adv_fav or raw_p1_fav
+        display_hit = disp_adv_fav or disp_p1_fav
+        if not (raw_hit or display_hit):
             continue
+        stage = _classify_stage(raw_hit, display_hit)
         evidence = (
             f"{side} は窒息確定 (is_dead=True, DEATH_ROW/DEATH_COL 直読み) "
-            f"なのに adv={record.adv:+.1f} / 勝率{side}={winprob_side:.1%} で有利判定"
+            f"なのに adv_raw={record.adv:+.1f}/勝率{side}(raw)={winprob_raw:.1%}, "
+            f"adv_disp={record.adv_ema:+.1f}/勝率{side}(表示)={winprob_disp:.1%} "
+            f"で有利判定 [{stage}] {_STAGE_NOTE[stage]}"
         )
         suspects.append(Suspect(
             video_id=record.video_id, t_sec=record.t_sec, game_idx=record.game_idx,
-            detector="D1a", severity=SEVERITY_CRITICAL, evidence=evidence,
+            detector="D1a", severity=SEVERITY_CRITICAL, stage=stage, evidence=evidence,
         ))
     return suspects
 
@@ -261,29 +339,39 @@ def detect_d1b(record: JudgmentRecord) -> list[Suspect]:
     している」側を対象にする。`kill_override()` が生存側へ完全に寄せる基準
     (`KILL_RATIO_FULL`) と同じ閾値を再利用するため、本来 kill_override が
     是正しているはずの状況を検出する (=kill_override 自体の抜け漏れ発見用)。
-    D1a と同じくゲーム境界近傍は既知の正当例外としてガードする。
+    D1a と同じくゲーム境界近傍は既知の正当例外としてガードし、raw
+    (`adv`/`p1_raw`) と display (`adv_ema`/`p1`) を別々に判定する
+    (`_classify_stage()` 参照、2026-08-11 アーキ審査)。
     """
     if record.near_game_boundary:
         return []
     suspects: list[Suspect] = []
     checks = (
-        ("1P", record.pending_p1, record.room1, record.adv > 0.0, record.p1 > 0.5, record.p1),
-        ("2P", record.pending_p2, record.room2, record.adv < 0.0, record.p1 < 0.5, 1.0 - record.p1),
+        ("1P", record.pending_p1, record.room1, record.adv > 0.0, record.p1_raw > 0.5,
+         record.adv_ema > 0.0, record.p1 > 0.5, record.p1, record.p1_raw),
+        ("2P", record.pending_p2, record.room2, record.adv < 0.0, record.p1_raw < 0.5,
+         record.adv_ema < 0.0, record.p1 < 0.5, 1.0 - record.p1, 1.0 - record.p1_raw),
     )
-    for side, pending, room, adv_favors_side, p1_favors_side, winprob_side in checks:
+    for (side, pending, room, raw_adv_fav, raw_p1_fav, disp_adv_fav, disp_p1_fav,
+         winprob_disp, winprob_raw) in checks:
         ratio = pending / max(KILL_ROOM_FLOOR, room)
         if ratio < KILL_RATIO_FULL:
             continue
-        if not (adv_favors_side or p1_favors_side):
+        raw_hit = raw_adv_fav or raw_p1_fav
+        display_hit = disp_adv_fav or disp_p1_fav
+        if not (raw_hit or display_hit):
             continue
+        stage = _classify_stage(raw_hit, display_hit)
         evidence = (
             f"{side} は致死確定 (pending={pending} / room={room} = 比{ratio:.2f} "
             f"≥ KILL_RATIO_FULL={KILL_RATIO_FULL}) なのに "
-            f"adv={record.adv:+.1f} / 勝率{side}={winprob_side:.1%} で有利判定"
+            f"adv_raw={record.adv:+.1f}/勝率{side}(raw)={winprob_raw:.1%}, "
+            f"adv_disp={record.adv_ema:+.1f}/勝率{side}(表示)={winprob_disp:.1%} "
+            f"で有利判定 [{stage}] {_STAGE_NOTE[stage]}"
         )
         suspects.append(Suspect(
             video_id=record.video_id, t_sec=record.t_sec, game_idx=record.game_idx,
-            detector="D1b", severity=SEVERITY_CRITICAL, evidence=evidence,
+            detector="D1b", severity=SEVERITY_CRITICAL, stage=stage, evidence=evidence,
         ))
     return suspects
 
@@ -455,6 +543,10 @@ def scan_video(
             # docstring 参照) だが room は盤面グリッドの実値 (会計非依存)。
             pending_p1=0, pending_p2=0,
             room1=board_room(b1), room2=board_room(b2),
+            # raw/display 分離 (2026-08-11 アーキ審査): このモードには display
+            # 段階が存在しないため raw と同値を設定する (モジュール docstring
+            # 「計算経路と既知の近似」参照、D1a/D1b は構造的に必ず stage="both")。
+            p1_raw=p1, adv_ema=adv,
         ))
     records.sort(key=lambda r: r.t_sec)
     return records
@@ -493,6 +585,9 @@ def scan_video_from_dump(dump_path: Path) -> list[JudgmentRecord]:
             near_game_boundary=_is_near_boundary(row.t_sec, boundary_times),
             pending_p1=row.pending_p1, pending_p2=row.pending_p2,
             room1=row.room1, room2=row.room2,
+            # raw/display 分離 (2026-08-11 アーキ審査)。dump モードは両方が
+            # 本物として揃う唯一のモード (モジュール docstring 参照)。
+            p1_raw=row.p1_raw, adv_ema=row.adv_ema,
         ))
     return records
 
@@ -519,10 +614,47 @@ def _resolve_default_npz_dir(base: Path) -> Path:
 
 
 def _write_suspects_tsv(suspects: list[Suspect], out_path: Path) -> None:
-    header = "video_id\tt_sec\tdetector\tseverity\tevidence\tgame_idx"
+    header = "video_id\tt_sec\tdetector\tseverity\tstage\tevidence\tgame_idx"
     lines = [header] + [s.to_tsv_row() for s in suspects]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _tally_suspects(suspects: list[Suspect]) -> dict[str, int]:
+    """検出器別の集計。D1a/D1b はさらに display(+both) と raw_only に分ける
+    (2026-08-11 コーディネーター決定: 合否ゲートは display のみを基準にし、
+    raw_only は内部品質バックログとして別集計する)。D0 は stage 概念を
+    持たない (常に "raw_only" の形式値、モジュール docstring 参照) ため
+    常に1つのバケツのまま。
+    """
+    tally = {
+        "D0": 0,
+        "D1a_display": 0, "D1a_raw_only": 0,
+        "D1b_display": 0, "D1b_raw_only": 0,
+    }
+    for s in suspects:
+        if s.detector == "D0":
+            tally["D0"] += 1
+        elif s.detector in ("D1a", "D1b"):
+            bucket = "raw_only" if s.stage == STAGE_RAW_ONLY else "display"
+            tally[f"{s.detector}_{bucket}"] += 1
+    return tally
+
+
+def _gate_count(tally: dict[str, int]) -> int:
+    """合否ゲート対象の合計 (D0 全件 + D1a/D1b の display+both のみ)。
+    raw_only は含めない (2026-08-11 コーディネーター決定)。
+    """
+    return tally["D0"] + tally["D1a_display"] + tally["D1b_display"]
+
+
+def _format_tally(tally: dict[str, int]) -> str:
+    """ログ表示用の集計文字列 (main()/_run_from_dump() 共通)。"""
+    return (
+        f"D0={tally['D0']} "
+        f"D1a(display+both)={tally['D1a_display']} D1a(raw_only)={tally['D1a_raw_only']} "
+        f"D1b(display+both)={tally['D1b_display']} D1b(raw_only)={tally['D1b_raw_only']}"
+    )
 
 
 def _run_from_dump(args: argparse.Namespace) -> int:
@@ -541,7 +673,6 @@ def _run_from_dump(args: argparse.Namespace) -> int:
 
     t0 = time.time()
     suspects: list[Suspect] = []
-    counts = {"D0": 0, "D1a": 0, "D1b": 0}
     for i, fpath in enumerate(files):
         vt0 = time.time()
         records = scan_video_from_dump(fpath)
@@ -549,25 +680,22 @@ def _run_from_dump(args: argparse.Namespace) -> int:
             s0 = detect_d0(rec)
             if s0 is not None:
                 suspects.append(s0)
-                counts["D0"] += 1
-            for s1 in detect_d1a(rec):
-                suspects.append(s1)
-                counts["D1a"] += 1
-            for s2 in detect_d1b(rec):
-                suspects.append(s2)
-                counts["D1b"] += 1
+            suspects.extend(detect_d1a(rec))
+            suspects.extend(detect_d1b(rec))
         print(
             f"  [{i + 1}/{len(files)}] {fpath.stem}: {len(records)} records, "
-            f"{time.time() - vt0:.2f}s, 累計 D0={counts['D0']} D1a={counts['D1a']} "
-            f"D1b={counts['D1b']}",
+            f"{time.time() - vt0:.2f}s, 累計suspects={len(suspects)}",
             flush=True,
         )
 
     out_path = out_dir / "suspects.tsv"
     _write_suspects_tsv(suspects, out_path)
+    tally = _tally_suspects(suspects)
     print(
         f"[scan] 完了(from-dump): 動画={len(files)} suspects={len(suspects)} "
-        f"(D0={counts['D0']} D1a={counts['D1a']} D1b={counts['D1b']}) -> {out_path}\n"
+        f"{_format_tally(tally)} -> {out_path}\n"
+        f"[scan] ゲート対象合計(D0+D1a/D1b display系)={_gate_count(tally)} "
+        f"(raw_only は別集計・内部品質バックログ)\n"
         f"[scan] 所要時間 合計={time.time() - t0:.1f}s (モデル学習不要)",
         flush=True,
     )
@@ -641,9 +769,6 @@ def main() -> int:
         score_fn = make_score_fn(model)
 
         suspects: list[Suspect] = []
-        d0_count = 0
-        d1a_count = 0
-        d1b_count = 0
         per_video_sec: list[float] = []
         for i, fpath in enumerate(files):
             vt0 = time.time()
@@ -652,18 +777,13 @@ def main() -> int:
                 s0 = detect_d0(rec)
                 if s0 is not None:
                     suspects.append(s0)
-                    d0_count += 1
-                for s1 in detect_d1a(rec):
-                    suspects.append(s1)
-                    d1a_count += 1
-                for s1b in detect_d1b(rec):
-                    suspects.append(s1b)
-                    d1b_count += 1
+                suspects.extend(detect_d1a(rec))
+                suspects.extend(detect_d1b(rec))
             dt = time.time() - vt0
             per_video_sec.append(dt)
             print(
                 f"  [{i + 1}/{len(files)}] {fpath.stem}: {len(records)} records, "
-                f"{dt:.1f}s, 累計 D0={d0_count} D1a={d1a_count} D1b={d1b_count}",
+                f"{dt:.1f}s, 累計suspects={len(suspects)}",
                 flush=True,
             )
 
@@ -671,9 +791,13 @@ def main() -> int:
     _write_suspects_tsv(suspects, out_path)
     total_dt = time.time() - t0
     avg = float(np.mean(per_video_sec)) if per_video_sec else 0.0
+    tally = _tally_suspects(suspects)
     print(
         f"[scan] 完了: 動画={len(files)} suspects={len(suspects)} "
-        f"(D0={d0_count} D1a={d1a_count} D1b={d1b_count}) -> {out_path}\n"
+        f"{_format_tally(tally)} -> {out_path}\n"
+        f"[scan] ゲート対象合計(D0+D1a/D1b display系)={_gate_count(tally)} "
+        f"(raw_only は別集計・内部品質バックログ。npz再計算モードは display 段階が"
+        f"存在しないため D1a/D1b は構造的に常に both、モジュール docstring 参照)\n"
         f"[scan] 所要時間 合計={total_dt:.1f}s (学習含む) "
         f"動画あたり平均={avg:.2f}s",
         flush=True,

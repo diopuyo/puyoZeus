@@ -1303,7 +1303,8 @@ def _fresh_trackers(
 # その結果を npz に保存して走査器はそれを読むだけにする (本モジュールがその
 # 「1回だけ回す」側、走査器が「読むだけ」側)。
 #
-# adv_raw / p1 の意味論 (重要、恒久記録):
+# adv_raw / adv_ema / p1 / p1_raw の意味論 (重要、恒久記録。2026-08-11
+# アーキ審査で p1_raw 追加・raw/display 分離を決定):
 #   adv_raw = HeavyAdvCache.update() が返す model_adv (= _score_advantage() の
 #     生モデル出力、drivers と同じ呼び出しから出るため自己無矛盾)。
 #     4成分ブレンド(pressure/forecast/threat/counter)や kill_override・
@@ -1311,17 +1312,22 @@ def _fresh_trackers(
 #     (主因⇔結論の符号矛盾) は「モデル自身が出した diff と adv の符号一致」
 #     という自己無矛盾性の検査であり、npz 再計算モード (ダミー会計だが同じ
 #     _score_advantage() 直呼び) と同じ量を比較できるよう、意図的に
-#     4成分ブレンド後の値ではなくこちらを採用する。
+#     4成分ブレンド後の値ではなくこちらを採用する。D0 はこの raw 段階に
+#     固定したままで正しい (kill_override の正当な符号反転を誤検知しない
+#     ため、2026-08-11 アーキ判定)。
+#   p1_raw = adv_to_winprob(adv_raw)。adv_raw と対になる「生モデルの勝率」
+#     (kill_override/4成分ブレンド/校正/EMA 適用前)。
 #   adv_ema = 4成分ブレンド + kill_override + 校正 + EMA を経た、実際に画面に
 #     表示される値 (generate() 内のローカル変数 adv_ema そのもの)。
 #   p1 = adv_ema に対応する EMA 後の表示用勝率 (ローカル変数 p1_last)。
-#     adv_raw と対になる「生モデルの勝率」は HeavyAdvCache が破棄しており
-#     dump スキーマにも含まれない (アーキ設計のレコード項目に無い) ため、
-#     D1a/D1b (「これだけ無視できない状況なのに有利判定」検出) は
-#     adv_raw と p1 という異なるステージのフィールドを OR 条件で使う
-#     非対称な設計になる (scripts.scan_judgment_anomalies.JudgmentRecord
-#     docstring 参照)。むしろ kill_override 等の後付け補正でマスクされる前の
-#     生モデルの矛盾を拾える利点がある。
+#   D1a/D1b (「これだけ無視できない状況なのに有利判定」検出) は raw
+#     (adv_raw/p1_raw) と display (adv_ema/p1) を**別々に**判定し、
+#     Suspect.stage で "raw_only"(内部品質バックログ、kill_override 等で
+#     是正済みのため表示は無害)/"display"(表示自体が矛盾=リリースブロッカー)/
+#     "both" を区別する (scripts.scan_judgment_anomalies の detect_d1a/
+#     detect_d1b・JudgmentRecord docstring 参照)。集計・合否ゲートは
+#     display(+both) のみを基準にする (raw_only は別集計、コーディネーター
+#     2026-08-11 決定)。
 TIMELINE_DUMP_SCORE_NONE_SENTINEL: int = -1  # score OCR失敗(None)の npz 格納値
 
 
@@ -1334,6 +1340,9 @@ class TimelineDumpRow:
     adv_raw: float
     adv_ema: float
     p1: float
+    p1_raw: float  # adv_to_winprob(adv_raw)。kill_override/4成分ブレンド/校正/EMA
+                    # 適用前 (2026-08-11 アーキ審査追加)。adv_raw と対で D1a/D1b の
+                    # 「生モデル段階」判定に使う (drivers と同じ呼び出しに由来)。
     pending_p1: int
     pending_p2: int
     room1: int
@@ -1366,6 +1375,7 @@ def _pad_drivers_top3(
 
 def _build_timeline_dump_row(
     t_sec: float, game_idx: int, adv_raw: float, adv_ema: float, p1: float,
+    p1_raw: float,
     pending_p1: int, pending_p2: int, room1: int, room2: int,
     b1: Board, b2: Board, drivers: list[tuple[str, float]],
     score1: int | None, score2: int | None, state1: str, state2: str,
@@ -1375,6 +1385,7 @@ def _build_timeline_dump_row(
     top3_names, top3_vals = _pad_drivers_top3(list(drivers))
     return TimelineDumpRow(
         t_sec=t_sec, game_idx=game_idx, adv_raw=adv_raw, adv_ema=adv_ema, p1=p1,
+        p1_raw=p1_raw,
         pending_p1=pending_p1, pending_p2=pending_p2, room1=room1, room2=room2,
         is_dead1=b1.is_dead(), is_dead2=b2.is_dead(),
         drivers_top1_name=top1_name, drivers_top1_val=top1_val,
@@ -1408,6 +1419,7 @@ def save_timeline_dump(path: Path, video_id: str, rows: list[TimelineDumpRow]) -
         adv_raw=np.array([r.adv_raw for r in rows], dtype=np.float64),
         adv_ema=np.array([r.adv_ema for r in rows], dtype=np.float64),
         p1=np.array([r.p1 for r in rows], dtype=np.float64),
+        p1_raw=np.array([r.p1_raw for r in rows], dtype=np.float64),
         pending_p1=np.array([r.pending_p1 for r in rows], dtype=np.int32),
         pending_p2=np.array([r.pending_p2 for r in rows], dtype=np.int32),
         room1=np.array([r.room1 for r in rows], dtype=np.int32),
@@ -1437,7 +1449,7 @@ def load_timeline_dump(path: Path) -> tuple[str, list[TimelineDumpRow]]:
         rows.append(TimelineDumpRow(
             t_sec=float(d["t_sec"][i]), game_idx=int(d["game_idx"][i]),
             adv_raw=float(d["adv_raw"][i]), adv_ema=float(d["adv_ema"][i]),
-            p1=float(d["p1"][i]),
+            p1=float(d["p1"][i]), p1_raw=float(d["p1_raw"][i]),
             pending_p1=int(d["pending_p1"][i]), pending_p2=int(d["pending_p2"][i]),
             room1=int(d["room1"][i]), room2=int(d["room2"][i]),
             is_dead1=bool(d["is_dead1"][i]), is_dead2=bool(d["is_dead2"][i]),
@@ -2207,9 +2219,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 # settled 更新のたびに1レコード追記する (本番の間引き
                 # HeavyAdvCache.every はそのまま=dump は本番が実際に出す
                 # 判定の記録、2026-08-11 タイムラインdump工事)。
+                # p1_raw: adv_to_winprob(model_adv)。kill_override/4成分
+                # ブレンド/校正/EMA を一切通していない生モデル勝率
+                # (2026-08-11 アーキ審査追加、D1a/D1b の raw 段階判定に使う)。
                 dump_rows.append(_build_timeline_dump_row(
                     t_sec=t, game_idx=game_idx, adv_raw=model_adv,
-                    adv_ema=adv_ema, p1=p1_last,
+                    adv_ema=adv_ema, p1=p1_last, p1_raw=adv_to_winprob(model_adv),
                     pending_p1=snap.pending_p1, pending_p2=snap.pending_p2,
                     room1=room1, room2=room2, b1=b1, b2=b2, drivers=drivers,
                     score1=r.p1.score, score2=r.p2.score,
