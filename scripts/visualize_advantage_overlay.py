@@ -38,7 +38,9 @@ from src.ojama_accounting import (  # noqa: E402
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
 )
 from src.probability_calibration import (  # noqa: E402
-    PlattCalibrationParams, apply_platt_calibration, load_platt_calibration,
+    PhaseCalibrationParams, PlattCalibrationParams, apply_platt_calibration,
+    load_phase_platt_calibration, load_platt_calibration,
+    phase_label_for_progress,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
@@ -100,6 +102,12 @@ WINPROB_CALIB_PATH = Path("data/indicators_v2/winprob_calib.json")
 #   生成過程が異なる。両者とも「HistGBCの予測確率」という共通点はあるが、
 #   厳密な分布一致は保証されない近似適用である(詳細は generate() docstring)。
 PLATT_CALIBRATION_PATH = Path("data/indicators_v2/platt_calibration.json")
+# 位相別 Platt scaling (2026-08-11 Phase1-2 追加、既存の全位相共通Plattと排他)。
+#   scripts.fit_phase_platt_calibration が本ファイルの tier1 モデル
+#   (B-1対称化修正+B-2進行度列込み) の OOF 予測から学習した位相別係数。
+#   全位相共通 Platt と同じ「適用先モデルの出力分布に対して直接学習した」
+#   校正器のため、単一Plattより近似度が高い (詳細は generate() docstring)。
+PHASE_CALIBRATION_PATH = Path("data/indicators_v2/phase_platt_calibration.json")
 
 
 def _load_winprob_k() -> float | None:
@@ -151,6 +159,39 @@ def _apply_platt_to_display(
     calibrated_p1 = apply_platt_calibration(p1, platt_params)
     calibrated_adv = max(-100.0, min(100.0, _winprob_to_adv(calibrated_p1)))
     return calibrated_adv, calibrated_p1
+
+
+def _match_progress_for_boards(b1: Board, b2: Board) -> float:
+    """両盤面から表示用の進行度 (match_progress、[0,1]) を計算する (stateless)。
+
+    学習時 (_add_interaction_columns / _match_progress_from_totals) と同じ
+    board_puyo_total ベースの定義を使い、RT でも学習時と一貫させる
+    (2026-08-11 Phase1-2、位相別 Platt scaling の位相選択に使用)。
+    """
+    total_1p = iv.board_puyo_total(b1).score
+    total_2p = iv.board_puyo_total(b2).score
+    return float(_match_progress_from_totals(total_1p, total_2p))
+
+
+def _resolve_display_platt(
+    progress: float,
+    platt_params: PlattCalibrationParams | None,
+    phase_platt_params: PhaseCalibrationParams | None,
+) -> PlattCalibrationParams | None:
+    """表示に適用する Platt パラメータを選ぶ (2026-08-11 Phase1-2 追加)。
+
+    位相別校正器 (phase_platt_params) が有効ならそちらを優先し、進行度から
+    位相を判定して該当パラメータを返す。位相別が無効 (None) なら従来通り
+    全位相共通の platt_params を返す (後方互換、既存経路と完全一致)。
+    generate() 側で両フラグの同時指定は禁止しているため、通常は片方のみ
+    非 None になる。
+    """
+    if phase_platt_params is not None:
+        label = phase_label_for_progress(
+            progress, phase_platt_params.early_bound, phase_platt_params.late_bound,
+        )
+        return phase_platt_params.phases[label]
+    return platt_params
 
 
 # (B) キル判定(near-future): 「降るお邪魔量 > 受け容量」なら死=生存側の勝ち。
@@ -1537,6 +1578,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_cnn_flicker_hsv_fallback: bool | None = None,
              enable_initial_confirm_vote: bool | None = None,
              enable_platt_calibration: bool = False,
+             enable_phase_calibration: bool = False,
              enable_early_fire_reaction: bool = False,
              enable_per_side_settled: bool = False,
              disable_score_lead_bias: bool = False,
@@ -1605,6 +1647,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         学習されたものであり、本スクリプトの4成分ブレンドモデルとは生成過程が
         異なるため近似適用である点に注意 (詳細は PLATT_CALIBRATION_PATH 定義部・
         _apply_platt_to_display のコメント参照)。
+    enable_phase_calibration: 表示用勝率に「進行度 (match_progress) 別」の
+        Platt scaling 後段校正を適用する (2026-08-11 Phase1-2 追加、
+        data/indicators_v2/phase_platt_calibration.json を読む)。既定 False
+        (後方互換、既存呼出元は挙動不変)。全位相共通の enable_platt_calibration
+        と同時 True は禁止 (ValueError、どちらを使うか呼出元が明示する設計)。
+        全位相共通 Platt は memory `project_calibration_overconfident_2026-07-29`
+        で終盤の ECE が改善しにくいと判明しており (終盤0.056→0.035程度)、
+        B-1(対称化修正)+B-2(進行度列)後の tier1 モデル自身の OOF 予測から
+        位相別に学習した校正器を使うことでより高い改善を狙う
+        (scripts/fit_phase_platt_calibration.py が学習・
+        data/verify/calibration_phase_2026-08-11 に効果測定値を保存)。
+        True かつ校正器ファイルが無い場合は CalibrationFileMissingError を
+        処理開始前に送出する (enable_platt_calibration と同じ fail-fast 設計)。
     enable_early_fire_reaction: True で EarlyFireTracker (chain_event 検知フレームで
         即座に反映する速報バイアス) を表示に加算する (2026-07-29 userレビュー指摘1/2
         対処、追加)。既定 False = 従来挙動 (settled ゲートのみ、後方互換、既存呼出元は
@@ -1637,9 +1692,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
+    if enable_platt_calibration and enable_phase_calibration:
+        raise ValueError(
+            "enable_platt_calibration と enable_phase_calibration は同時指定不可"
+            " (どちらを使うか呼出元が明示すること)"
+        )
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
         platt_params = load_platt_calibration(PLATT_CALIBRATION_PATH, required=True)
+    phase_platt_params: PhaseCalibrationParams | None = None
+    if enable_phase_calibration:
+        phase_platt_params = load_phase_platt_calibration(
+            PHASE_CALIBRATION_PATH, required=True,
+        )
     model = _train_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
     _vr_rois: tuple[int, int, int, int] | None = None
@@ -1861,7 +1926,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
                                 board_room(b1), board_room(b2))
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
-            adv, p1 = _apply_platt_to_display(adv, p1, platt_params)  # Platt後段校正
+            # Platt後段校正 (全位相共通 or 位相別、2026-08-11 Phase1-2)。
+            # 両方 False (既定) なら progress 計算自体を省き従来経路とビット一致させる。
+            if platt_params is not None or phase_platt_params is not None:
+                progress = _match_progress_for_boards(b1, b2)
+                _chosen_platt = _resolve_display_platt(
+                    progress, platt_params, phase_platt_params)
+                adv, p1 = _apply_platt_to_display(adv, p1, _chosen_platt)
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
             if enable_early_fire_reaction:
@@ -2016,6 +2087,16 @@ def main() -> None:
         dest="enable_platt_calibration",
         help="(後方互換) 校正を明示的に無効化する。既定が OFF なので通常は不要。",
     )
+    # 位相別 Platt (2026-08-11 Phase1-2 追加)。--platt-calibration と排他
+    # (generate() 側で同時指定を ValueError にする)。
+    ap.add_argument(
+        "--phase-calibration", action="store_true", default=False,
+        dest="enable_phase_calibration",
+        help="表示用勝率へ「進行度 (match_progress) 別」の Platt scaling 後段校正を"
+             "適用する (2026-08-11 追加)。既定 OFF = 従来挙動 (校正なし)。"
+             "data/indicators_v2/phase_platt_calibration.json が必要で、無い場合は"
+             "動画を読む前に例外になる。--platt-calibration とは同時指定不可。",
+    )
     ap.add_argument(
         "--early-fire-reaction", action="store_true", default=False,
         dest="enable_early_fire_reaction",
@@ -2086,6 +2167,7 @@ def main() -> None:
              enable_cnn_flicker_hsv_fallback=a.enable_cnn_flicker_hsv_fallback,
              enable_initial_confirm_vote=a.enable_initial_confirm_vote,
              enable_platt_calibration=a.enable_platt_calibration,
+             enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
              enable_per_side_settled=a.enable_per_side_settled,
              disable_score_lead_bias=a.disable_score_lead_bias,

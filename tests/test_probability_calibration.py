@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import json
 import sys
 import warnings
 from pathlib import Path
@@ -18,9 +19,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.probability_calibration import (  # noqa: E402
-    CalibrationFileMissingError, PlattCalibrationParams,
-    apply_platt_calibration, is_identity_calibration,
-    load_platt_calibration, save_platt_calibration,
+    CalibrationFileMissingError, PhaseCalibrationParams, PlattCalibrationParams,
+    apply_phase_platt_calibration, apply_platt_calibration,
+    is_identity_calibration, load_phase_platt_calibration,
+    load_platt_calibration, phase_label_for_progress, save_phase_platt_calibration,
+    save_platt_calibration, select_phase_platt,
 )
 
 
@@ -97,3 +100,111 @@ def test_save_creates_parent_directory(tmp_path: Path) -> None:
     path = tmp_path / "nested" / "dir" / "platt.json"
     save_platt_calibration(PlattCalibrationParams(a=1.0, b=0.0), path)
     assert path.exists()
+
+
+# =============================================================================
+# 位相別 Platt scaling (2026-08-11 Phase1-2 追加)
+# =============================================================================
+
+
+def _make_phase_params() -> PhaseCalibrationParams:
+    """3位相それぞれ異なる係数を持つテスト用 PhaseCalibrationParams。"""
+    return PhaseCalibrationParams(phases={
+        "序盤": PlattCalibrationParams(a=0.6, b=0.0),
+        "中盤": PlattCalibrationParams(a=0.75, b=0.0),
+        "終盤": PlattCalibrationParams(a=0.5, b=0.0),
+    })
+
+
+def test_phase_label_for_progress_boundaries() -> None:
+    """進行度の境界値で正しい位相ラベルに分類される。"""
+    assert phase_label_for_progress(0.0) == "序盤"
+    assert phase_label_for_progress(1.0 / 3.0) == "序盤"
+    assert phase_label_for_progress(1.0 / 3.0 + 1e-6) == "中盤"
+    assert phase_label_for_progress(2.0 / 3.0) == "中盤"
+    assert phase_label_for_progress(2.0 / 3.0 + 1e-6) == "終盤"
+    assert phase_label_for_progress(1.0) == "終盤"
+
+
+def test_select_phase_platt_returns_matching_phase_params() -> None:
+    """進行度に応じて対応する位相の PlattCalibrationParams が選ばれる。"""
+    params = _make_phase_params()
+    assert select_phase_platt(0.1, params).a == pytest.approx(0.6)
+    assert select_phase_platt(0.5, params).a == pytest.approx(0.75)
+    assert select_phase_platt(0.9, params).a == pytest.approx(0.5)
+
+
+def test_apply_phase_platt_calibration_monotonic_within_phase() -> None:
+    """位相を固定すれば apply_phase_platt_calibration も単調増加を保つ。"""
+    params = _make_phase_params()
+    ps = [0.05, 0.2, 0.4, 0.6, 0.8, 0.95]
+    calibrated = [apply_phase_platt_calibration(p, 0.5, params) for p in ps]
+    assert calibrated == sorted(calibrated)
+
+
+def test_apply_phase_platt_calibration_output_in_unit_interval() -> None:
+    """位相別校正でも出力は常に [0,1] に収まる。"""
+    params = _make_phase_params()
+    for progress in (0.0, 0.3, 0.34, 0.5, 0.7, 1.0):
+        v = apply_phase_platt_calibration(0.95, progress, params)
+        assert 0.0 <= v <= 1.0
+
+
+def test_phase_platt_boundary_does_not_jump_excessively() -> None:
+    """位相境界を跨いでも校正後確率の段差が過大でないこと (連続性の目安チェック)。
+
+    位相ごとに独立な Platt 係数を使う設計上、境界での完全な連続性は保証
+    されないが、実運用データ (data/verify/calibration_phase_2026-08-11) では
+    近傍位相の係数が近い値になる想定。ここでは「境界を跨いだ瞬間に極端な
+    段差 (0.3 以上) が出ない」ことをテスト用の緩い係数で確認する
+    (MAX_ACCEPTABLE_BOUNDARY_JUMP はテスト用の許容閾値であり本番定数ではない)。
+    """
+    MAX_ACCEPTABLE_BOUNDARY_JUMP = 0.3
+    params = _make_phase_params()
+    boundary_eps = 1e-4
+    for boundary in (1.0 / 3.0, 2.0 / 3.0):
+        before = apply_phase_platt_calibration(0.8, boundary - boundary_eps, params)
+        after = apply_phase_platt_calibration(0.8, boundary + boundary_eps, params)
+        assert abs(before - after) < MAX_ACCEPTABLE_BOUNDARY_JUMP
+
+
+def test_phase_platt_save_and_load_round_trip(tmp_path: Path) -> None:
+    """位相別校正器を保存→読込すると全位相の係数が復元される。"""
+    path = tmp_path / "phase_platt.json"
+    params = _make_phase_params()
+    save_phase_platt_calibration(params, path)
+    loaded = load_phase_platt_calibration(path)
+    assert loaded is not None
+    for phase in ("序盤", "中盤", "終盤"):
+        assert loaded.phases[phase].a == pytest.approx(params.phases[phase].a)
+    assert loaded.early_bound == pytest.approx(params.early_bound)
+    assert loaded.late_bound == pytest.approx(params.late_bound)
+
+
+def test_phase_platt_load_missing_required_raises(tmp_path: Path) -> None:
+    """required=True (既定) で欠損なら例外 (黙って未校正で通さない)。"""
+    missing = tmp_path / "no_such_phase_platt.json"
+    with pytest.raises(CalibrationFileMissingError):
+        load_phase_platt_calibration(missing)
+
+
+def test_phase_platt_load_missing_optional_returns_none(tmp_path: Path) -> None:
+    """required=False なら警告付きで None を返す。"""
+    missing = tmp_path / "no_such_phase_platt.json"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = load_phase_platt_calibration(missing, required=False)
+    assert result is None
+    assert len(caught) == 1
+
+
+def test_phase_platt_load_missing_phase_raises_value_error(tmp_path: Path) -> None:
+    """一部位相の係数が欠けたファイルは ValueError (壊れた校正器を黙認しない)。"""
+    path = tmp_path / "incomplete_phase_platt.json"
+    path.write_text(
+        json.dumps({"kind": "platt_scaling_phase",
+                    "phases": {"序盤": {"a": 1.0, "b": 0.0}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        load_phase_platt_calibration(path)

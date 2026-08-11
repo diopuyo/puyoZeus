@@ -13,15 +13,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import types
 
 import numpy as np
+import pytest
 
 from src.board import Board  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.indicators_v2 import IndicatorV2Value  # noqa: E402
-from src.probability_calibration import PlattCalibrationParams  # noqa: E402
+from src.probability_calibration import (  # noqa: E402
+    PhaseCalibrationParams, PlattCalibrationParams,
+)
 from scripts.visualize_advantage_overlay import (  # noqa: E402
     PressureTracker, ScoreLeadTracker, RealtimeForecastTracker, adv_to_winprob,
     kill_override, board_room, _detect_score_reset, _apply_platt_to_display,
     EarlyFireTracker, EARLY_FIRE_CAP,
+    _match_progress_for_boards, _resolve_display_platt,
 )
 
 
@@ -249,6 +253,51 @@ def test_platt_display_clamped_to_range() -> None:
     adv, p1 = _apply_platt_to_display(90.0, 0.95, params)
     assert -100.0 <= adv <= 100.0
     assert 0.0 <= p1 <= 1.0
+
+
+# ============================
+# 位相別 Platt 選択 (2026-08-11 Phase1-2 追加)
+# ============================
+
+def _make_phase_params_for_display() -> PhaseCalibrationParams:
+    return PhaseCalibrationParams(phases={
+        "序盤": PlattCalibrationParams(a=0.6, b=0.0),
+        "中盤": PlattCalibrationParams(a=0.75, b=0.0),
+        "終盤": PlattCalibrationParams(a=0.5, b=0.0),
+    })
+
+
+def test_match_progress_for_boards_empty_boards_is_zero() -> None:
+    """両者空盤面 (試合開始直後相当) は進行度 0 (序盤) になる。"""
+    assert _match_progress_for_boards(Board(), Board()) == 0.0
+
+
+def test_resolve_display_platt_falls_back_to_common_when_phase_none() -> None:
+    """位相別パラメータが無い (None) 場合は従来通り全位相共通の platt_params を返す。"""
+    common = PlattCalibrationParams(a=0.8, b=-0.1)
+    chosen = _resolve_display_platt(0.5, common, None)
+    assert chosen is common
+
+
+def test_resolve_display_platt_both_none_returns_none() -> None:
+    """両方 None (校正無効) なら None を返す (=無変換、後方互換)。"""
+    assert _resolve_display_platt(0.5, None, None) is None
+
+
+def test_resolve_display_platt_prefers_phase_over_common() -> None:
+    """位相別パラメータがあれば、共通パラメータより優先して使われる。"""
+    common = PlattCalibrationParams(a=0.8, b=-0.1)
+    phase_params = _make_phase_params_for_display()
+    chosen = _resolve_display_platt(0.1, common, phase_params)
+    assert chosen.a == pytest.approx(0.6)  # 序盤の係数
+
+
+def test_resolve_display_platt_selects_correct_phase_by_progress() -> None:
+    """進行度に応じて序盤/中盤/終盤いずれかの係数が選ばれる。"""
+    phase_params = _make_phase_params_for_display()
+    assert _resolve_display_platt(0.0, None, phase_params).a == pytest.approx(0.6)
+    assert _resolve_display_platt(0.5, None, phase_params).a == pytest.approx(0.75)
+    assert _resolve_display_platt(0.99, None, phase_params).a == pytest.approx(0.5)
 
 
 # ============================
