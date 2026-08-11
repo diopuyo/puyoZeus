@@ -80,6 +80,26 @@ MATCH_START_NONEMPTY_WARN_RATE: float = 0.0037
 # 直接原因だったため廃止する。
 MATCH_START_MIN_EVAL_CELLS: int = 1
 
+# --- 検査1 頑健化 (2026-08-11、パターンB=検査器誤検知の対策) ---
+# 「各 game_idx の最小 t_sec = 試合開始」という代理値は、score リセット
+# 検知の誤発火 (OCR誤読・勝敗確定直後の残存表示の巻き込み等) により実際は
+# 試合中盤を指してしまうことがある (実画面 c57 t=1278s 満杯盤面で確定)。
+# 見分け方: 真の試合開始なら両 side とも score は 0 近傍のはず。誤発火なら
+# score は既存の(非ゼロの)値のまま、あるいは別の非ゼロ値になる。
+#
+# 根拠 (2026-08-11 実測、data/indicators_v2/boards_lean_phase_l_2026-08-07/
+# 148 動画ライブラリ全 game_idx×side の有効 score (>0) エントリ 13,226 件):
+# score<=13 に 13,161 件 (99.5%) が密集し、score∈[14,73] は完全に空白
+# (該当0件、境界の1件のみ score=14)、次の実測値は score=74 から。
+# 過学習防止則 (シーン逆算禁止) に従い、この空白域の中間にカットオフを置く
+# (特定動画から逆算した値ではなく population のギャップから導出)。
+MATCH_START_ANCHOR_SCORE_MAX: int = 50
+# npz "score" 列の未読み取り sentinel (collect_boards_lean.py 準拠)。
+# 未読み取り (-1) は「非試合画面でスコア UI 自体が存在しない」パターンA
+# (本物の学習データ汚染) の代表的な特徴でもあるため除外対象にしない
+# (厳格判定を維持、Aまで通してしまう過修正を避ける)。
+SCORE_UNREADABLE: int = -1
+
 # --- 検査2: 列別・色別の系統偏り ---
 # row0 (隠し段) 〜 row4 (上から4行目の可視段) を「上部帯」として評価する。
 SYSTEMIC_BIAS_ROW_LO: int = 0
@@ -123,6 +143,10 @@ class VideoArrays:
     side: np.ndarray
     game_idx: np.ndarray
     chain_mechanism: np.ndarray = field(default_factory=lambda: np.array([]))
+    # 2026-08-11 追加 (検査1 頑健化用、後方互換のため末尾・デフォルト付き)。
+    # score 列が無い npz (旧形式) では空配列のままとなり、
+    # compute_match_start_nonempty は従来通りの判定にフォールバックする。
+    score: np.ndarray = field(default_factory=lambda: np.array([]))
 
 
 @dataclass
@@ -139,6 +163,9 @@ class VideoGateResult:
     ojama_diag_decrease_no_chain_rate: float
     verdict: str  # "PASS" / "WARN" / "FAIL"
     reasons: list[str] = field(default_factory=list)
+    # 2026-08-11 追加 (末尾・デフォルト付きで後方互換維持): 検査1で
+    # 「試合開始でない」と判定して除外した game_idx×side 窓数 (診断用)。
+    match_start_excluded_windows: int = 0
 
 
 # ============================
@@ -159,6 +186,7 @@ def load_video_arrays(npz_path: Path) -> VideoArrays:
         side=d["side"],
         game_idx=d["game_idx"],
         chain_mechanism=d["chain_mechanism"] if "chain_mechanism" in d else np.array([]),
+        score=d["score"] if "score" in d else np.array([]),
     )
 
 
@@ -166,7 +194,35 @@ def load_video_arrays(npz_path: Path) -> VideoArrays:
 # 検査1: 試合開始直後の空盤面
 # ============================
 
-def compute_match_start_nonempty(arrays: VideoArrays) -> tuple[float, int]:
+def _anchor_score(arrays: VideoArrays, side_game_mask: np.ndarray, start_sec: float) -> int | None:
+    """side_game_mask 内で start_sec に最も近い score 値を返す。
+
+    score 列が無い npz (旧形式) や該当エントリが無い場合は None
+    (= 判定不能、頑健化チェックをスキップして従来通り評価する) を返す。
+    """
+    if arrays.score.size == 0 or not side_game_mask.any():
+        return None
+    tt = arrays.t_sec[side_game_mask]
+    idx_nearest = int(np.argmin(np.abs(tt - start_sec)))
+    return int(arrays.score[side_game_mask][idx_nearest])
+
+
+def _is_untrustworthy_start(anchor_score: int | None) -> bool:
+    """anchor_score が「本当の試合開始でない」ことを示すか判定する。
+
+    真の試合開始は score が 0 近傍のはず。score が読めている
+    (SCORE_UNREADABLE でない) のに MATCH_START_ANCHOR_SCORE_MAX を
+    超える場合のみ「代理値がズレている」と判定する。
+    SCORE_UNREADABLE (-1) や score 列欠如 (None) はパターンA
+    (非試合画面でスコアUI自体が無い) の可能性を残すため除外しない
+    (= 厳格判定を維持し、過修正を避ける)。
+    """
+    if anchor_score is None or anchor_score == SCORE_UNREADABLE:
+        return False
+    return anchor_score > MATCH_START_ANCHOR_SCORE_MAX
+
+
+def compute_match_start_nonempty(arrays: VideoArrays) -> tuple[float, int, int]:
     """試合開始+1〜3秒の STABLE スナップショットにおける非空セル率を返す。
 
     各 game_idx の最小 t_sec を試合開始の代理値とし、その +1.0〜+3.0 秒
@@ -175,10 +231,17 @@ def compute_match_start_nonempty(arrays: VideoArrays) -> tuple[float, int]:
     game_idx/side は分母に加算しない (dedup npz のため「差分が無い=
     直前と同じ空盤面が継続」を意味し、誤検知の心配がないケース)。
 
-    戻り値: (非空率, 評価対象セル総数)。セル総数 0 の場合は (nan, 0)。
+    2026-08-11 追加 (パターンB=検査器誤検知対策): 代理値の起点で score が
+    読めているのに 0 近傍でない (`_is_untrustworthy_start`) 場合、その
+    game_idx×side の窓は「試合開始でない」とみなして評価対象から除外する
+    (分子・分母どちらにも加算しない)。
+
+    戻り値: (非空率, 評価対象セル総数, 除外した窓数)。
+        セル総数 0 の場合は (nan, 0, 除外窓数)。
     """
     nonempty_total = 0
     cell_total = 0
+    excluded_windows = 0
     for g in np.unique(arrays.game_idx):
         game_mask = arrays.game_idx == g
         if not game_mask.any():
@@ -190,12 +253,17 @@ def compute_match_start_nonempty(arrays: VideoArrays) -> tuple[float, int]:
             m = game_mask & (arrays.side == s) & (arrays.t_sec >= lo) & (arrays.t_sec <= hi)
             if not m.any():
                 continue
+            side_game_mask = game_mask & (arrays.side == s)
+            anchor_score = _anchor_score(arrays, side_game_mask, start_sec)
+            if _is_untrustworthy_start(anchor_score):
+                excluded_windows += 1
+                continue
             sub = arrays.grids[m][:, MATCH_START_ROW_LO:MATCH_START_ROW_HI_EXCLUSIVE, :]
             nonempty_total += int((sub != COLOR_EMPTY).sum())
             cell_total += int(sub.size)
     if cell_total == 0:
-        return float("nan"), 0
-    return nonempty_total / cell_total, cell_total
+        return float("nan"), 0, excluded_windows
+    return nonempty_total / cell_total, cell_total, excluded_windows
 
 
 # ============================
@@ -372,7 +440,7 @@ def evaluate_video(
     library_rates: dict[str, np.ndarray],
 ) -> VideoGateResult:
     """1 動画分の全検査を実行し VideoGateResult を返す。"""
-    ms_rate, ms_n = compute_match_start_nonempty(arrays)
+    ms_rate, ms_n, ms_excluded = compute_match_start_nonempty(arrays)
     ms_verdict, ms_reasons = _judge_match_start(ms_rate, ms_n)
 
     target_rates = compute_color_col_rates(arrays)
@@ -400,6 +468,7 @@ def evaluate_video(
         ojama_diag_decrease_no_chain_rate=ojama_diag,
         verdict=verdict,
         reasons=reasons,
+        match_start_excluded_windows=ms_excluded,
     )
 
 
@@ -410,7 +479,7 @@ def evaluate_video(
 _SCORECARD_HEADER = (
     "video_id\tverdict\tmatch_start_nonempty_rate\tsystemic_bias_max_z\t"
     "systemic_bias_worst_combo\tcol_unknown_max_rate\tavg_puyo_count\t"
-    "ojama_diag_decrease_no_chain_rate\treasons"
+    "ojama_diag_decrease_no_chain_rate\tmatch_start_excluded_windows\treasons"
 )
 
 
@@ -421,6 +490,7 @@ def _format_scorecard_row(r: VideoGateResult) -> str:
         f"{r.match_start_nonempty_rate:.6f}", f"{r.systemic_bias_max_z:.3f}",
         r.systemic_bias_worst_combo, f"{r.col_unknown_max_rate:.6f}",
         f"{r.avg_puyo_count:.2f}", f"{r.ojama_diag_decrease_no_chain_rate:.4f}",
+        str(r.match_start_excluded_windows),
         reasons_str,
     ])
 
@@ -456,6 +526,8 @@ def write_video_detail_md(r: VideoGateResult, out_dir: Path) -> Path:
         "## 検査1: 試合開始直後の空盤面",
         f"- 非空率: {r.match_start_nonempty_rate:.4%} (評価セル数 {r.match_start_n_cells})",
         f"- FAIL閾値: {MATCH_START_NONEMPTY_FAIL_RATE:.2%} / WARN閾値: {MATCH_START_NONEMPTY_WARN_RATE:.2%}",
+        f"- 除外した窓数 (score非ゼロ=代理値ズレ疑い、2026-08-11追加): "
+        f"{r.match_start_excluded_windows}",
         "",
         "## 検査2: 列別・色別の系統偏り (row0-4, library z-score)",
         f"- 最大 |z|: {r.systemic_bias_max_z:.2f} ({r.systemic_bias_worst_combo})",
