@@ -24,7 +24,7 @@
 - **言語**: Python 3.11+ (実環境は 3.12)
 - **GPU**: NVIDIA RTX 4060 Laptop (CUDA 12.x)、8GB VRAM
 - **画像処理**: opencv-python, numpy, Pillow
-- **テスト**: pytest (現在 1,400+ tests pass)
+- **テスト**: pytest (現在 4,400+ tests pass)
 - **動画 DL**: yt-dlp
 - **機械学習**: scikit-learn 1.8.0 + statsmodels 0.14.6 (Mixed-effects)
 - **CNN**: torch, torchvision
@@ -86,6 +86,8 @@ Phase I の合格ライン = **99.5%** (STABLE確定盤面・物差し測定、2
 - **新指標追加時は `EXTRA_INDICATOR_NAMES` の末尾に追加** (順序保持)
 - **backwards compat 必須**: 既存 API シグネチャに optional 引数のみ追加可、削除不可
 - 観測指標は **stateless 実装** を原則 (state-holding は外部 wrapper)
+- **新特徴量列の追加時は、通る変換パイプライン全部をレビュー** (対称化反転・正規化等。side非依存の絶対量を無条件反転したバグの教訓、2026-08-10 user恒久指示)
+- **採用フラグは `src/production_config.py` が単一情報源** (採用日+根拠を必須記録、退行防止)
 
 ## プロセス管理ルール
 
@@ -133,7 +135,7 @@ puyo_analyzer プロジェクトでは許可確認なしで自律実行。長時
 
 ## テスト
 - `python -m pytest tests/ -v`
-- 現在 **1,400+ テスト** 全パス
+- 現在 **4,400+ テスト** 全パス
 - 1 ファイル実装 → テスト通過 → 次のファイルへ
 - 各 Phase で 30-50 新規テスト追加
 
@@ -160,16 +162,16 @@ puyo_analyzer プロジェクトでは許可確認なしで自律実行。長時
 - `recognition_strategy_pivot.md` — state machine 主軸
 - `realtime_hsv` — Online HSV calibrator 段階 2 (Phase I 統合対象)
 
-## 現在のフェーズ
+## 現在のフェーズ (2026-08-11 更新)
 
-🔄 **Phase I 最終盤** (合格ライン99.5%は実測99.54%でクリア済み、2026-08-06 user改定): 残条件=長時間劣化修正A'の検証+全域無悪化ゲート → 合格で Phase L 解禁。99.99%は全体完了後の仕上げ目標
-- 自己教師あり学習: Score OCR + Next/dnext + ChainEvent + Hidden row
-- 共通 framework + 4 validator + online fine-tune
-- OnlineHsvCalibrator 統合
-- 完了見込み: 翌朝 02:00-04:00
+✅ **Phase I 完了** (物差し99.54% ≥ ライン99.5%、PR#21)。**Phase L データ収集完了** (148動画)。
 
-⏸️ **Phase L 凍結中**: 本番化 (Phase I 完了後)
-- yt-dlp で動画追加 DL (66 → 100-150)、ティア filter 厳守
-- 全動画 regen + CNN 事前学習 + 蒸留
+🔄 **Phase 1: 評価の土台再構築** (`docs/ROADMAP_2026-08-09.md` が最新ロードマップ):
+- 完了: 対称化修正 / B-2進行度列 (AUC 0.6688) / 幽霊連鎖本番ON / 主因表示健全化 /
+  較正判定 (後段較正は不要と実測) / 品質ゲート検査器修正 / 序盤ターゲット方式決着 (最終勝敗直接が勝ち)
+- 進行中: 148動画の再生成 (幻盤面ガードON、DL→収集→削除パイプライン)
+- 次: 148動画で再学習 → 色ぷよ系指標の深掘り
 
-詳細: `docs/INDICATOR_ROADMAP.md`、`docs/PROJECT_STATE.md`
+⏭️ **並行レーン: 動画公開** (フェーズ外、user作業主体)。素材納品済み (デモ5本+スライド11枚+台本)
+
+詳細: `docs/ROADMAP_2026-08-09.md`、`docs/PROJECT_STATE.md`。採用フラグの単一情報源: `src/production_config.py`
