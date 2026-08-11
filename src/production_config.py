@@ -160,6 +160,45 @@ CHAIN_SIM_ADOPTED: tuple[AdoptedFlag, ...] = (
 GHOST_CHAIN_RULE_ENABLED: bool = True
 
 
+# ============================
+# 有利不利オーバーレイ — 主因表示の除外リスト (2026-08-11、ロードマップ Phase 1-3)
+# ============================
+# 背景: scripts/visualize_advantage_overlay.py の `_score_advantage()` が
+# 組み立てる「主因」欄は、単に **|差分| の大きい順** で上位3件を選んでいるだけで、
+# 実際にモデルの予測 (p1/adv) へどれだけ寄与しているか (=真の attribution、
+# scripts/_diag_adv_attribution_2026-08-09.py の `_attribution()` が計算する
+# ablation ベースの寄与) は一切見ていない。 そのため **勝敗と無相関な指標**でも、
+# たまたま差分の絶対値が大きいと主因1位に選ばれてしまう。
+#
+# 以下は 2026-08-09/11 の層別 AUC 実測 (labeled_win_combined66.csv、66動画・
+# 73,416 ペア、全体/おじゃまフラット/おじゃま差大の3層。
+# scripts/_verify_efficiency_vs_material_2026-08-09.py +
+# scripts/_verify_attribution_exclusion_2026-08-11.py) で「主因として表示する
+# 根拠が無い」と確定した指標。
+#
+# **重要: モデルの特徴量からは外さない** (予測 adv/p1 には一切影響しない、
+# 表示だけの修正)。 特徴量そのものの除去は別途「全域無悪化ゲート」を伴う
+# 検証が要るためスコープ外 (feedback_overfitting_awareness_2026-08-04)。
+ATTRIBUTION_EXCLUDED_INDICATORS: tuple[str, ...] = (
+    # AUC 0.5000 (全体/おじゃまフラット/おじゃま差大の全層で寸分違わず一致)。
+    # 根本原因は学習データ labeled_win_combined66.csv 上で本列が 100% NaN
+    # (未収集) であること (2026-08-11 実測、193,623 行全て NaN)。学習された
+    # 重みは実質ゼロだが、推論時 (_fill_expected_fire_candidate) は実盤面から
+    # 都度計算するため差分値自体は大きくなり得て、「差分が大きい順」の現行
+    # ロジックだと無情報にもかかわらず主因1位に出る (2026-08-09 デモ実測で
+    # 「期待火力K1差 +0.64」が主因1位表示された事例)。
+    "expected_fire_k1",
+    "expected_fire_k2",  # 同上 (AUC 0.5000、全層一致、学習データ上も100% NaN)
+    # 過去に「信頼不可」と判定済み (memory
+    # project_saturation_ceiling_untrustworthy_2026-07-22: 「理想ツモ天井は
+    # 空き空間量と同じで無相関」)。 加えて 2026-08-11 再検証で学習データ上
+    # current_max_chain (現在最大連鎖) と 100% 完全一致 (193,623 行、
+    # 平均/分散/AUC 全て同値) と判明 — 「現在最大連鎖」と同じ信号を
+    # 「飽和連鎖量」という別名で二重表示しているだけで独立情報が無い。
+    "saturated_chain_count",
+)
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)

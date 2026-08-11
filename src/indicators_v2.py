@@ -1160,19 +1160,104 @@ def chain_completion_from_formula(
 # CHAIN_ANIM_PER_STEP_SEC に一本化する窓口として追加する (user/アーキ確定、
 # 2026-08-01)。既存 chain_to_time / chain_completion_from_formula は
 # 用途が異なる別ロジックのため変更しない (backwards compat)。
-def estimate_chain_anim_duration_sec(chain_count: float) -> float:
+#
+# ============================
+# 較正 Phase 1 (2026-08-11、chain_end_sec_gap 全域再測定)
+# ============================
+#
+# 背景: end_sec (連鎖終了予測) が実際の状態機械 CHAIN/GRAVITY_SETTLE 離脱より
+# 過小 (実測1事例で約2秒) という既知問題を受け、
+# scripts/_measure_chain_end_sec_gap_2026-08-09.py で全域再測定した
+# (data/verify/chain_end_sec_gap_2026-08-09.jsonl)。
+#
+# ## データ検分で判明した重要な限界 (較正値を鵜呑みにしないための注記)
+# 1. **母数**: 意図した ~148 動画中、動画削除運用 (ストレージ節約) の影響で
+#    実際に走ったのは 11 動画・7,324 イベントのみ (7.4%)。全て "c" 系
+#    (チャレンジャー3本+S級8本、ティア filter 上は使用可) かつ全て 60fps
+#    (frame 量子化での実測確認済み)。**30fps 動画の代表が皆無**。
+# 2. **mechanism 混在バグ**: ChainEvent.mechanism="baseline"
+#    (VideoChainTracker 直接検知、12.3%) の end_sec は
+#    「予測値」ではなく「drop 検知フレーム時刻そのもの」
+#    (src/chain_detector.py 内 `end_sec=t_sec`) であり、
+#    mechanism="formula"/"landing" (trigger_sec + hold式) と意味論が異なる。
+#    本較正は mechanism="formula" (本番の主経路、87.5%) のみを対象にした。
+# 3. **enable_game_event_chain_exit=True が既定** (src/recognition_pipeline.py)
+#    のため、実測した「状態機械が実際に CHAIN を離脱する時刻」は純粋な
+#    消去演出時間ではなく、「発火した側 **自身** の次ツモが確定する
+#    (=もう1手打つ) まで」または「お邪魔新規着弾まで」を待つ
+#    game-event 待ちを含む。つまり実測値は「消去演出+発火側の次アクション
+#    までの待ち時間」であり、催促応手予算等の実用途 (=盤面が次に動くまでの
+#    時間) には合致するが、関数名が示す「純粋な演出時間」とは意味がずれる。
+# 4. **動画間異質性**: 動画1本 (2試合連続収録のオフライン特別大会、他10本は
+#    通常の1試合)を含めて全数フィットすると連鎖数依存の傾き・切片が
+#    大きく振れる (LOVO でこの1本を除いた場合と傾き0.15〜0.23の幅で変動)。
+#    このため較正はこの1本を除いた10動画のみで行った。
+# 5. **event 単位のホールドアウト検証** (動画単位 leave-one-video-out、
+#    上記10動画): 連鎖数依存の傾き+切片モデルは中央値バケット当てはめでは
+#    見かけ R²=0.66〜0.88 だが、**event 単位の予測誤差では旧定数
+#    (0.4秒/連鎖) を有意に上回らない** (LOVO 平均 median 誤差
+#    0.650s→0.642s、誤差改善はノイズの範囲)。「代表値プールは相殺で
+#    見かけ倒し」という既知の教訓が再現した。連鎖数依存の傾き変更は
+#    採用しない。
+# 6. 一方、**旧定数 (0.4×連鎖数) からの残差 (bias) は連鎖数に依らずほぼ
+#    一定** (10動画・4,600イベント: 中央値+0.166秒、LOVO 各 fold でも
+#    +0.150〜+0.167秒の狭い範囲で安定) だった。これは項目3の
+#    「発火側自身の次アクション待ち」に相当する固定オーバーヘッドと解釈
+#    でき、連鎖数非依存の固定バイアス加算として採用する
+#    (CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11=0.17、四捨五入)。
+#
+# **注意**: この固定バイアスは「典型的な過小」の補正に過ぎず、元の問題
+# 報告にあった tail (p90 以上、最大2秒超) の乖離までは解消しない。
+# tail はハードウェア的に「発火側の次手が遅れる」ケース (思考時間・複雑な
+# 盤面) に起因すると推測されるが、chain_count からは予測不能。真に
+# 解消するには exit_reason (timing_hold / next_piece_event /
+# ojama_event / max_hold_safety_valve) を測定器に追加し、
+# 経路別に「純粋演出時間」を分離する再測定が必要 (フォローアップ課題、
+# 本 Phase のスコープ外)。
+CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11: float = 0.17
+
+# 較正データの実測連鎖数上限 (n=15 が最大の実測サンプル)。これを超える
+# chain_count は較正対象外としてクランプする (外挿しない、CLAUDE.md
+# 「定数は物理量から導く」原則)。
+CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11: int = 15
+
+
+def estimate_chain_anim_duration_sec(
+    chain_count: float,
+    calibration: str = "legacy",
+) -> float:
     """連鎖数から連鎖アニメ(消去演出)所要秒数を推定する (物差し一本化版)。
 
-    CHAIN_ANIM_PER_STEP_SEC (=0.4秒/連鎖、23動画418イベント実測ベース) を
-    使う。連鎖数が0以下の場合は0.0にクランプする。
+    既定 (calibration="legacy") は CHAIN_ANIM_PER_STEP_SEC (=0.4秒/連鎖、
+    23動画418イベント実測ベース) を使う、従来と bit-identical な経路。
+    連鎖数が0以下の場合は0.0にクランプする。
 
     Args:
         chain_count: 連鎖数 (0以下は0として扱う)。
+        calibration: "legacy" (既定、従来通り bit-identical) または
+            "v2026_08_11" (chain_end_sec_gap 全域再測定ベースの固定バイアス
+            較正、CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11 のコメント参照。
+            chain_count は CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11
+            でクランプする)。既存呼び出し (省略時) は影響を受けない。
 
     Returns:
         推定所要秒数 (float, >= 0)。
+
+    Raises:
+        ValueError: calibration が未知の値の場合。
     """
-    return max(0.0, CHAIN_ANIM_PER_STEP_SEC * chain_count)
+    n = max(0.0, float(chain_count))
+    if calibration == "legacy":
+        return CHAIN_ANIM_PER_STEP_SEC * n
+    if calibration == "v2026_08_11":
+        if n <= 0.0:
+            return 0.0
+        n_clamped = min(n, float(CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11))
+        return (
+            CHAIN_ANIM_PER_STEP_SEC * n_clamped
+            + CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11
+        )
+    raise ValueError(f"未知の calibration 指定: {calibration!r}")
 
 
 def honsen_output(
@@ -3687,6 +3772,9 @@ __all__ = [
     "CHAIN_ANIM_PER_STEP_SEC",
     # VII-4 着弾遅延の物差し一本化 (2026-08-01 Step0)
     "estimate_chain_anim_duration_sec",
+    # VII-4b 較正 Phase 1 (2026-08-11、chain_end_sec_gap 全域再測定)
+    "CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11",
+    "CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",

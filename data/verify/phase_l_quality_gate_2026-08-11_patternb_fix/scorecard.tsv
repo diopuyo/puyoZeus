@@ -1,0 +1,149 @@
+video_id	verdict	match_start_nonempty_rate	systemic_bias_max_z	systemic_bias_worst_combo	col_unknown_max_rate	avg_puyo_count	ojama_diag_decrease_no_chain_rate	match_start_excluded_windows	reasons
+29	PASS	0.001450	1.767	col=3,color=2	0.000075	30.98	0.9459	0	-
+30	PASS	0.003233	-1.455	col=0,color=3	0.000103	30.09	0.9217	0	-
+31	PASS	0.002440	-2.084	col=0,color=5	0.000120	28.71	0.9348	0	-
+32	PASS	0.002794	-2.093	col=2,color=5	0.000229	29.69	0.9125	0	-
+33	PASS	0.002235	-1.491	col=4,color=1	0.000075	31.47	0.9310	0	-
+34	PASS	0.001921	-2.032	col=2,color=3	0.000110	31.04	0.9181	0	-
+35	PASS	0.001876	-2.218	col=2,color=5	0.000108	30.75	0.8955	0	-
+36	PASS	0.001643	1.589	col=5,color=3	0.000099	32.97	0.9271	1	-
+37	WARN	0.003728	2.724	col=2,color=2	0.000155	32.33	0.9088	0	match_start_nonempty_rate=0.3728% > 0.37% (warn)
+38	PASS	0.003367	1.710	col=3,color=1	0.000147	32.55	0.9066	0	-
+39	PASS	0.002515	2.491	col=2,color=5	0.000098	32.81	0.9257	5	-
+40	PASS	0.002765	2.426	col=2,color=4	0.000147	32.29	0.9112	0	-
+51	WARN	0.001289	3.627	col=2,color=2	0.000070	31.30	0.9142	0	systemic_bias max|z|=3.63 (col=2,color=2) > 3.5 (warn)
+52	PASS	0.002018	1.948	col=1,color=5	0.000097	32.67	0.9393	0	-
+c1	PASS	0.001782	-1.385	col=2,color=3	0.000105	30.28	0.8887	0	-
+c10	WARN	0.003776	2.858	col=0,color=5	0.000198	34.21	0.9340	0	match_start_nonempty_rate=0.3776% > 0.37% (warn)
+c100	PASS	0.002354	1.868	col=3,color=2	0.000054	32.54	0.9283	0	-
+c101	PASS	0.003566	2.912	col=1,color=1	0.000107	34.05	0.9186	0	-
+c102	PASS	0.002049	2.211	col=2,color=2	0.000161	33.63	0.9062	0	-
+c103	WARN	0.003704	2.778	col=1,color=2	0.000150	33.67	0.8914	0	match_start_nonempty_rate=0.3704% > 0.37% (warn)
+c104	FAIL	0.006645	1.737	col=1,color=4	0.000175	32.34	0.9149	0	match_start_nonempty_rate=0.6645% > 0.50%
+c105	PASS	0.002950	2.976	col=5,color=3	0.000146	34.31	0.9038	0	-
+c106	PASS	0.001936	-2.179	col=0,color=5	0.000098	29.41	0.9451	0	-
+c107	PASS	0.002479	2.481	col=3,color=3	0.000108	33.42	0.9177	0	-
+c108	PASS	0.002623	2.084	col=1,color=3	0.000223	34.82	0.9174	0	-
+c109	WARN	0.004840	0.871	col=5,color=3	0.000110	31.21	0.9682	0	match_start_nonempty_rate=0.4840% > 0.37% (warn)
+c11	PASS	0.002099	3.372	col=1,color=5	0.000195	35.80	0.8995	0	-
+c110	PASS	0.003440	1.251	col=1,color=4	0.000076	31.87	0.9094	0	-
+c111	WARN	0.004610	3.741	col=0,color=1	0.000167	35.85	0.9158	0	match_start_nonempty_rate=0.4610% > 0.37% (warn); systemic_bias max|z|=3.74 (col=0,color=1) > 3.5 (warn)
+c112	PASS	0.002985	-1.277	col=1,color=3	0.000092	31.60	0.9223	0	-
+c113	FAIL	0.007049	3.315	col=3,color=1	0.000150	34.99	0.9087	0	match_start_nonempty_rate=0.7049% > 0.50%
+c114	PASS	0.002475	2.091	col=2,color=3	0.000113	32.92	0.9276	0	-
+c115	FAIL	0.005022	-2.398	col=4,color=5	0.000067	30.20	0.9368	0	match_start_nonempty_rate=0.5022% > 0.50%
+c116	PASS	0.001715	-1.926	col=1,color=4	0.000105	29.69	0.9390	0	-
+c117	WARN	0.003792	-2.211	col=1,color=5	0.000182	30.63	0.9126	0	match_start_nonempty_rate=0.3792% > 0.37% (warn)
+c118	PASS	0.002861	2.033	col=2,color=2	0.000209	32.81	0.8939	0	-
+c119	PASS	0.002355	-1.751	col=3,color=4	0.000110	32.64	0.9333	0	-
+c12	FAIL	0.054646	2.780	col=2,color=4	0.000135	33.50	0.9258	0	match_start_nonempty_rate=5.4646% > 0.50%
+c120	PASS	0.001277	1.880	col=2,color=3	0.000116	32.30	0.9024	0	-
+c121	WARN	0.003746	-1.939	col=4,color=1	0.000061	30.04	0.8940	2	match_start_nonempty_rate=0.3746% > 0.37% (warn)
+c122	WARN	0.003770	1.431	col=5,color=3	0.000087	32.64	0.9036	0	match_start_nonempty_rate=0.3770% > 0.37% (warn)
+c123	PASS	0.002202	-2.200	col=5,color=2	0.000047	28.65	0.9084	0	-
+c124	WARN	0.004843	-1.784	col=1,color=2	0.000047	30.44	0.8988	0	match_start_nonempty_rate=0.4843% > 0.37% (warn)
+c125	PASS	0.003086	1.519	col=2,color=3	0.000070	32.92	0.9369	0	-
+c126	PASS	0.002281	2.767	col=3,color=1	0.000187	32.23	0.8852	0	-
+c127	PASS	0.003132	2.827	col=4,color=1	0.000137	35.70	0.9078	0	-
+c128	FAIL	0.010797	-1.943	col=4,color=4	0.000041	29.96	0.9183	0	match_start_nonempty_rate=1.0797% > 0.50%
+c129	PASS	0.003075	-2.409	col=1,color=3	0.000091	30.47	0.8939	0	-
+c13	PASS	0.002048	2.170	col=2,color=4	0.000107	33.84	0.9086	0	-
+c130	WARN	0.003760	-1.814	col=1,color=5	0.000085	30.35	0.8914	0	match_start_nonempty_rate=0.3760% > 0.37% (warn)
+c131	WARN	0.003975	-1.732	col=4,color=4	0.000089	32.94	0.9091	11	match_start_nonempty_rate=0.3975% > 0.37% (warn)
+c132	PASS	0.003531	-2.033	col=2,color=2	0.000152	32.34	0.9139	0	-
+c133	PASS	0.002591	-1.714	col=0,color=5	0.000109	29.17	0.9049	0	-
+c134	PASS	0.001852	2.248	col=0,color=3	0.000113	33.39	0.8882	0	-
+c135	PASS	0.002392	-1.257	col=4,color=5	0.000124	32.88	0.9434	0	-
+c136	FAIL	0.005843	2.421	col=1,color=4	0.000145	33.63	0.8932	0	match_start_nonempty_rate=0.5843% > 0.50%
+c137	PASS	0.002993	1.704	col=2,color=5	0.000086	32.25	0.9012	0	-
+c138	WARN	0.004630	-1.428	col=3,color=3	0.000072	32.33	0.9184	3	match_start_nonempty_rate=0.4630% > 0.37% (warn)
+c139	FAIL	0.005262	2.321	col=5,color=1	0.000162	32.49	0.9207	0	match_start_nonempty_rate=0.5262% > 0.50%
+c14	PASS	0.001666	-1.384	col=5,color=3	0.000092	31.97	0.8964	0	-
+c140	WARN	0.003958	-2.566	col=5,color=3	0.000061	28.68	0.9325	0	match_start_nonempty_rate=0.3958% > 0.37% (warn)
+c141	PASS	0.002657	1.305	col=0,color=3	0.000147	33.65	0.9217	0	-
+c142	PASS	0.002792	2.401	col=0,color=1	0.000102	31.91	0.8917	9	-
+c143	WARN	0.004149	1.928	col=4,color=5	0.000114	30.91	0.9376	0	match_start_nonempty_rate=0.4149% > 0.37% (warn)
+c144	WARN	0.004448	2.914	col=0,color=5	0.000070	31.36	0.9229	0	match_start_nonempty_rate=0.4448% > 0.37% (warn)
+c15	PASS	0.002258	2.697	col=2,color=4	0.000139	33.66	0.9076	0	-
+c16	PASS	0.002598	1.343	col=4,color=3	0.000178	32.55	0.8894	0	-
+c17	PASS	0.002089	3.392	col=2,color=3	0.000062	34.28	0.9321	0	-
+c18	FAIL	0.008592	2.657	col=1,color=2	0.000094	33.61	0.9190	0	match_start_nonempty_rate=0.8592% > 0.50%
+c19	PASS	0.001675	-1.366	col=0,color=5	0.000108	32.05	0.9194	0	-
+c2	WARN	0.004383	2.508	col=0,color=3	0.000101	33.21	0.8998	0	match_start_nonempty_rate=0.4383% > 0.37% (warn)
+c20	PASS	0.002043	2.138	col=5,color=2	0.000059	30.40	0.9164	0	-
+c21	PASS	0.001840	1.377	col=3,color=5	0.000058	31.53	0.9269	0	-
+c22	PASS	0.003360	1.798	col=4,color=3	0.000208	32.04	0.9352	0	-
+c23	WARN	0.003621	4.204	col=3,color=5	0.000197	36.31	0.9278	1	systemic_bias max|z|=4.20 (col=3,color=5) > 3.5 (warn)
+c24	FAIL	0.006438	2.660	col=3,color=4	0.000128	33.03	0.8925	0	match_start_nonempty_rate=0.6438% > 0.50%
+c25	PASS	0.003367	-2.413	col=4,color=3	0.000087	29.91	0.9375	0	-
+c26	REVIEW	nan	1.973	col=4,color=1	0.000067	33.34	0.9023	0	match_start_nonempty_rate 判定不能 (評価セル数=0、試合開始+1〜3秒窓に該当STABLEスナップショット無し。game_idx境界不足 or score OCR破綻の疑い、要目視確認)
+c27	FAIL	0.012370	2.392	col=4,color=1	0.000153	32.91	0.9025	0	match_start_nonempty_rate=1.2370% > 0.50%
+c28	PASS	0.001649	3.150	col=2,color=5	0.000052	33.51	0.9289	0	-
+c29	PASS	0.003098	2.141	col=1,color=3	0.000102	32.55	0.9018	2	-
+c3	PASS	0.002497	2.323	col=0,color=2	0.000115	33.91	0.9184	0	-
+c30	FAIL	nan	10.052	col=2,color=1	0.000088	35.33	0.8817	0	match_start_nonempty_rate 判定不能 (評価セル数=0、試合開始+1〜3秒窓に該当STABLEスナップショット無し。game_idx境界不足 or score OCR破綻の疑い、要目視確認); systemic_bias max|z|=10.05 (col=2,color=1) > 5.0
+c31	PASS	0.002387	-1.792	col=5,color=3	0.000067	31.39	0.9101	0	-
+c32	PASS	0.002858	3.492	col=2,color=4	0.000147	34.50	0.9419	0	-
+c33	PASS	0.001549	2.686	col=4,color=5	0.000105	33.68	0.9049	0	-
+c34	PASS	0.003690	-2.479	col=1,color=3	0.000092	25.80	0.9422	0	-
+c35	PASS	0.001554	-1.513	col=4,color=4	0.000239	31.11	0.9370	0	-
+c36	PASS	0.002460	1.970	col=5,color=3	0.000082	31.86	0.9097	0	-
+c37	PASS	0.002233	-1.943	col=2,color=4	0.000099	32.14	0.9224	0	-
+c4	PASS	0.002574	1.649	col=4,color=1	0.000071	31.85	0.9217	0	-
+c40	PASS	0.002506	-1.343	col=5,color=2	0.000106	32.68	0.9513	0	-
+c41	WARN	0.003982	1.413	col=2,color=5	0.000086	30.87	0.9125	0	match_start_nonempty_rate=0.3982% > 0.37% (warn)
+c42	PASS	0.003086	-2.482	col=4,color=5	0.000098	28.14	0.9098	0	-
+c43	WARN	0.004433	-1.914	col=5,color=4	0.000075	31.05	0.9246	0	match_start_nonempty_rate=0.4433% > 0.37% (warn)
+c44	WARN	0.003902	-1.683	col=1,color=5	0.000112	30.97	0.8929	0	match_start_nonempty_rate=0.3902% > 0.37% (warn)
+c45	WARN	0.003824	-1.674	col=5,color=4	0.000054	31.72	0.9418	0	match_start_nonempty_rate=0.3824% > 0.37% (warn)
+c46	WARN	0.004413	-1.603	col=4,color=4	0.000130	29.54	0.9188	0	match_start_nonempty_rate=0.4413% > 0.37% (warn)
+c47	PASS	0.003373	-1.908	col=0,color=3	0.000068	31.17	0.9297	0	-
+c48	PASS	0.001556	2.001	col=5,color=2	0.000105	32.39	0.9289	0	-
+c49	PASS	0.001936	1.286	col=0,color=5	0.000114	32.34	0.9364	0	-
+c5	PASS	0.002425	2.282	col=5,color=4	0.000136	34.15	0.9067	0	-
+c50	WARN	0.004537	-2.433	col=4,color=5	0.000060	27.97	0.9585	0	match_start_nonempty_rate=0.4537% > 0.37% (warn)
+c51	PASS	0.003076	1.802	col=4,color=3	0.000144	31.15	0.9514	0	-
+c52	WARN	0.004165	-2.059	col=1,color=2	0.000098	29.51	0.9270	0	match_start_nonempty_rate=0.4165% > 0.37% (warn)
+c53	PASS	0.003625	-1.867	col=5,color=4	0.000066	30.75	0.9521	0	-
+c54	WARN	0.003756	-2.469	col=3,color=2	0.000097	31.58	0.9292	0	match_start_nonempty_rate=0.3756% > 0.37% (warn)
+c55	PASS	0.003635	1.606	col=3,color=2	0.000090	30.41	0.9456	0	-
+c56	PASS	0.001890	1.707	col=1,color=2	0.000114	32.02	0.9295	0	-
+c57	PASS	0.002712	-1.549	col=1,color=4	0.000121	31.27	0.9212	2	-
+c58	PASS	0.000000	1.833	col=5,color=5	0.000056	33.81	0.9049	0	-
+c59	PASS	0.002058	1.757	col=5,color=4	0.000186	33.92	0.9259	0	-
+c6	WARN	0.002392	4.422	col=5,color=4	0.000172	34.61	0.9000	0	systemic_bias max|z|=4.42 (col=5,color=4) > 3.5 (warn)
+c60	PASS	0.002802	2.704	col=0,color=5	0.000141	33.46	0.9194	0	-
+c61	PASS	0.003290	2.156	col=3,color=4	0.000144	32.29	0.9243	0	-
+c62	PASS	0.003120	-1.631	col=0,color=1	0.000064	29.84	0.9362	0	-
+c63	PASS	0.003559	1.401	col=4,color=3	0.000155	32.06	0.9511	0	-
+c64	PASS	0.003098	-1.380	col=4,color=2	0.000118	31.20	0.9450	0	-
+c65	PASS	0.002692	-1.387	col=5,color=4	0.000059	31.30	0.9132	0	-
+c66	PASS	0.001239	1.350	col=2,color=4	0.000129	32.54	0.9128	0	-
+c67	WARN	0.004193	-1.950	col=5,color=3	0.000081	29.84	0.9160	0	match_start_nonempty_rate=0.4193% > 0.37% (warn)
+c68	WARN	0.003968	-2.206	col=4,color=4	0.000068	29.03	0.9124	0	match_start_nonempty_rate=0.3968% > 0.37% (warn)
+c69	PASS	0.000000	-2.237	col=2,color=4	0.000020	31.76	0.9048	0	-
+c7	PASS	0.003010	1.846	col=5,color=2	0.000128	32.17	0.8935	0	-
+c70	PASS	0.001381	-2.165	col=1,color=2	0.000110	29.62	0.9459	0	-
+c71	PASS	0.001575	1.689	col=2,color=3	0.000155	31.06	0.9312	0	-
+c72	WARN	0.004353	1.483	col=2,color=4	0.000058	30.17	0.9298	0	match_start_nonempty_rate=0.4353% > 0.37% (warn)
+c73	PASS	0.002761	1.438	col=1,color=4	0.000126	32.32	0.9346	0	-
+c74	PASS	0.002532	-1.880	col=2,color=5	0.000101	30.27	0.9435	0	-
+c75	PASS	0.002823	2.006	col=0,color=3	0.000113	33.54	0.9268	0	-
+c76	PASS	0.001036	1.447	col=1,color=3	0.000097	33.52	0.9119	0	-
+c77	PASS	0.002370	-2.202	col=4,color=2	0.000095	30.04	0.9312	10	-
+c78	PASS	0.002842	-2.122	col=0,color=4	0.000093	29.36	0.9300	0	-
+c79	PASS	0.001618	1.819	col=3,color=5	0.000111	31.38	0.9441	0	-
+c8	PASS	0.001937	2.890	col=3,color=3	0.000103	33.78	0.9108	0	-
+c80	PASS	0.003342	-1.891	col=4,color=1	0.000084	30.67	0.9197	0	-
+c81	PASS	0.003221	-1.243	col=0,color=4	0.000182	30.83	0.8978	12	-
+c82	PASS	0.002825	-1.806	col=4,color=3	0.000078	30.09	0.9455	0	-
+c83	PASS	0.002174	-2.101	col=0,color=4	0.000092	29.42	0.9309	0	-
+c84	PASS	0.002273	-1.477	col=1,color=5	0.000128	32.50	0.8643	7	-
+c9	PASS	0.003279	1.895	col=2,color=3	0.000117	30.82	0.9190	0	-
+c95	PASS	0.002888	-1.130	col=5,color=1	0.000076	32.16	0.9050	0	-
+c96s1	FAIL	0.017122	3.033	col=0,color=4	0.000161	34.43	0.8982	0	match_start_nonempty_rate=1.7122% > 0.50%
+c96s2	PASS	0.002179	-1.185	col=4,color=4	0.000069	31.95	0.9146	0	-
+c96s3	FAIL	0.005916	2.605	col=4,color=5	0.000123	33.39	0.8818	0	match_start_nonempty_rate=0.5916% > 0.50%
+c97	PASS	0.003546	3.262	col=4,color=1	0.000175	34.66	0.9222	0	-
+c98	PASS	0.003186	3.293	col=3,color=2	0.000153	33.80	0.9332	0	-
+c99	PASS	0.002599	1.396	col=4,color=4	0.000164	32.77	0.9220	0	-
