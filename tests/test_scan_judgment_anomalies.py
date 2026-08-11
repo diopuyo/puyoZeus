@@ -1,8 +1,10 @@
 """「ありえない判定」走査器 D0/D1a/D1b + dump 読み出しモードのテスト.
 
 - 純関数 detect_d0/detect_d1a/detect_d1b の陽性/陰性/境界ガード (単体テスト、npz非依存)
+- raw/display 分離 (Suspect.stage、2026-08-11 アーキ審査追加) の分岐網羅
 - scan_video() を含む end-to-end 1 件 (合成 npz + 決定的な stub score_fn)
 - scan_video_from_dump() の end-to-end 1 件 (合成タイムラインdump npz)
+- 集計ヘルパー _tally_suspects/_gate_count の単体テスト
 """
 from __future__ import annotations
 
@@ -14,7 +16,13 @@ import pytest
 from src.board import DEATH_COL, DEATH_ROW, Board
 from scripts.scan_judgment_anomalies import (
     GAME_BOUNDARY_GUARD_SEC,
+    STAGE_BOTH,
+    STAGE_DISPLAY,
+    STAGE_RAW_ONLY,
     JudgmentRecord,
+    Suspect,
+    _gate_count,
+    _tally_suspects,
     detect_d0,
     detect_d1a,
     detect_d1b,
@@ -30,7 +38,13 @@ from scripts.visualize_advantage_overlay import (
 
 
 def _record(**overrides: object) -> JudgmentRecord:
-    """テスト用デフォルト JudgmentRecord (境界外・生存・矛盾なし・pending/room 安全値)。"""
+    """テスト用デフォルト JudgmentRecord (境界外・生存・矛盾なし・pending/room 安全値)。
+
+    p1_raw/adv_ema を明示指定しなければ p1/adv と同値にする (raw==display の
+    「both」ケースとして振る舞う)。2026-08-11 のraw/display分離追加前から
+    存在するテストが adv/p1 のみ指定していても結果が変わらないようにするため。
+    stage を明示的に検証したいテストは p1_raw/adv_ema を個別に上書きする。
+    """
     base: dict[str, object] = dict(
         video_id="v_test", t_sec=100.0, game_idx=0, trigger_side="1P",
         adv=10.0, p1=0.55, drivers=(("board_color_puyo_total", 0.3),),
@@ -38,6 +52,8 @@ def _record(**overrides: object) -> JudgmentRecord:
         pending_p1=0, pending_p2=0, room1=72, room2=72,
     )
     base.update(overrides)
+    base.setdefault("p1_raw", base["p1"])
+    base.setdefault("adv_ema", base["adv"])
     return JudgmentRecord(**base)  # type: ignore[arg-type]
 
 
@@ -47,12 +63,13 @@ def _record(**overrides: object) -> JudgmentRecord:
 
 class TestDetectD0:
     def test_positive_sign_mismatch(self) -> None:
-        """主因1位が1P有利(+)なのに adv が2P有利(-) → 検出する。"""
+        """主因1位が1P有利(+)なのに adv が2P有利(-) → 検出する。stage は D0 固定で raw_only。"""
         rec = _record(drivers=(("board_color_puyo_total", 0.67),), adv=-20.0)
         s = detect_d0(rec)
         assert s is not None
         assert s.detector == "D0"
         assert s.severity == "CRITICAL"
+        assert s.stage == STAGE_RAW_ONLY
         assert "色ぷよ総数差" in s.evidence
         assert "+0.670" in s.evidence
 
@@ -85,29 +102,41 @@ class TestDetectD0:
         # 1位 (-0.1) と adv(-5.0) は同符号 → 矛盾なし
         assert detect_d0(rec) is None
 
+    def test_ignores_display_fields_entirely(self) -> None:
+        """D0 は raw (adv/drivers) 固定。adv_ema/p1_raw をどう変えても結果不変
+        (kill_override の正当な符号反転を D0 が誤検知しないための設計、
+        2026-08-11 アーキ判定)。"""
+        rec = _record(
+            drivers=(("board_color_puyo_total", 0.67),), adv=-20.0,
+            adv_ema=99.0, p1_raw=0.99, p1=0.99,
+        )
+        s = detect_d0(rec)
+        assert s is not None and s.stage == STAGE_RAW_ONLY
+
 
 # ============================
-# D1a: 確定死の無視
+# D1a: 確定死の無視 (raw/display 分離)
 # ============================
 
 class TestDetectD1a:
-    def test_positive_dead_1p_favored_by_adv(self) -> None:
-        """1P窒息確定なのに adv が1P有利 → 検出する。"""
+    def test_positive_dead_1p_favored_by_adv_both_stage(self) -> None:
+        """1P窒息確定なのに adv(raw)/adv_ema(display) 双方が1P有利 → both で検出。"""
         rec = _record(is_dead_p1=True, is_dead_p2=False, adv=30.0, p1=0.65)
         suspects = detect_d1a(rec)
         assert len(suspects) == 1
         assert suspects[0].detector == "D1a"
+        assert suspects[0].stage == STAGE_BOTH
         assert "1P" in suspects[0].evidence
 
     def test_positive_dead_2p_favored_by_p1_only(self) -> None:
         """2P窒息確定・adv自体は2P有利を示していなくても p1<0.5(2P有利)なら検出する
 
-        (OR条件の p1 分岐を単独で踏むケース。adv/p1 は本来同じ量から出るため
-        実運用では乖離しないが、OR ロジック自体の健全性を確認する)。
+        (OR条件の p1 分岐を単独で踏むケース。raw/display とも同値指定のため both)。
         """
         rec = _record(is_dead_p1=False, is_dead_p2=True, adv=2.0, p1=0.49)
         suspects = detect_d1a(rec)
         assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_BOTH
         assert "2P" in suspects[0].evidence
 
     def test_negative_dead_but_correctly_unfavored(self) -> None:
@@ -134,6 +163,35 @@ class TestDetectD1a:
         suspects = detect_d1a(rec)
         sides = {"1P" if "1P" in s.evidence else "2P" for s in suspects}
         assert "1P" in sides
+
+    def test_stage_raw_only_when_display_corrected(self) -> None:
+        """raw (adv/p1_raw) は1P窒息を無視して1P有利だが、display (adv_ema/p1) は
+        kill_override 等で正しく2P有利に是正されている → raw_only (内部品質バックログ)。
+        """
+        rec = _record(
+            is_dead_p1=True, is_dead_p2=False,
+            adv=30.0, p1_raw=0.65,       # raw: 1P有利 (矛盾)
+            adv_ema=-30.0, p1=0.35,      # display: 2P有利 (正しい)
+        )
+        suspects = detect_d1a(rec)
+        assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_RAW_ONLY
+        assert "[raw_only]" in suspects[0].evidence  # stage が evidence にも明記される
+        assert "内部品質バックログ" in suspects[0].evidence
+
+    def test_stage_display_only_when_raw_was_fine(self) -> None:
+        """raw は正しく2P有利を示すが、display だけが1P有利に矛盾している
+        (何らかの後段処理が矛盾を持ち込んだケース) → display (リリースブロッカー)。
+        """
+        rec = _record(
+            is_dead_p1=True, is_dead_p2=False,
+            adv=-30.0, p1_raw=0.35,      # raw: 2P有利 (正しい)
+            adv_ema=30.0, p1=0.65,       # display: 1P有利 (矛盾)
+        )
+        suspects = detect_d1a(rec)
+        assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_DISPLAY
+        assert "リリースブロッカー" in suspects[0].evidence
 
 
 # ============================
@@ -202,14 +260,17 @@ class TestScanVideoEndToEnd:
         assert d1a_suspects[0].t_sec == pytest.approx(10.0)
         assert d1a_suspects[0].video_id == "v_e2e"
         assert "1P" in d1a_suspects[0].evidence
+        # npz 再計算モードには display 段階が存在しないため raw==display と
+        # なり、構造的に必ず both になる (モジュール docstring 参照)。
+        assert d1a_suspects[0].stage == STAGE_BOTH
 
 
 # ============================
-# D1b: 致死確定 (pending/room) の無視
+# D1b: 致死確定 (pending/room) の無視 (raw/display 分離)
 # ============================
 
 class TestDetectD1b:
-    def test_positive_1p_certain_death_favored_by_adv(self) -> None:
+    def test_positive_1p_certain_death_favored_by_adv_both_stage(self) -> None:
         """1P: pending/room が KILL_RATIO_FULL 以上 (致死確定) なのに adv が1P有利 → 検出。"""
         rec = _record(
             pending_p1=100, room1=40, pending_p2=0, room2=72,  # 100/40=2.5 >= 1.5
@@ -218,6 +279,7 @@ class TestDetectD1b:
         suspects = detect_d1b(rec)
         assert len(suspects) == 1
         assert suspects[0].detector == "D1b"
+        assert suspects[0].stage == STAGE_BOTH
         assert "1P" in suspects[0].evidence
 
     def test_negative_below_kill_ratio_full_not_flagged(self) -> None:
@@ -255,6 +317,30 @@ class TestDetectD1b:
         # ratio = KILL_RATIO_FULL ちょうど (>= 判定なので検出される)
         assert len(detect_d1b(rec)) == 1
 
+    def test_stage_raw_only_when_kill_override_corrected(self) -> None:
+        """raw は致死無視で1P有利だが、display は kill_override で2P有利に
+        是正済み → raw_only (内部品質バックログ、kill_override 自体は機能している)。
+        """
+        rec = _record(
+            pending_p1=100, room1=40, pending_p2=0, room2=72,
+            adv=30.0, p1_raw=0.7,      # raw: 1P有利 (矛盾)
+            adv_ema=-30.0, p1=0.3,     # display: 2P有利 (kill_overrideで是正済み)
+        )
+        suspects = detect_d1b(rec)
+        assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_RAW_ONLY
+
+    def test_stage_display_only_when_raw_was_fine(self) -> None:
+        """raw は正しいが display だけ矛盾 → display (リリースブロッカー)。"""
+        rec = _record(
+            pending_p1=100, room1=40, pending_p2=0, room2=72,
+            adv=-30.0, p1_raw=0.3,     # raw: 2P有利 (正しい)
+            adv_ema=30.0, p1=0.7,      # display: 1P有利 (矛盾)
+        )
+        suspects = detect_d1b(rec)
+        assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_DISPLAY
+
 
 # ============================
 # dump 読み出しモード: scan_video_from_dump (合成タイムラインdump npz)
@@ -262,7 +348,7 @@ class TestDetectD1b:
 
 def _dump_row(**overrides: object) -> TimelineDumpRow:
     base: dict[str, object] = dict(
-        t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5,
+        t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5, p1_raw=0.5,
         pending_p1=0, pending_p2=0, room1=72, room2=72,
         is_dead1=False, is_dead2=False,
         drivers_top1_name="board_color_puyo_total", drivers_top1_val=0.0,
@@ -294,10 +380,13 @@ class TestScanVideoFromDumpEndToEnd:
         suspects = [s for r in records for s in ([detect_d0(r)] if detect_d0(r) else [])]
         assert len(suspects) == 1
         assert suspects[0].detector == "D0"
+        assert suspects[0].stage == STAGE_RAW_ONLY
 
-    def test_d1a_detected_from_dump_record(self, tmp_path: Path) -> None:
+    def test_d1a_display_only_detected_from_dump_record(self, tmp_path: Path) -> None:
         """dump 由来の is_dead1 + p1 (表示用EMA後勝率) から D1a を検出できる
-        (scan_video_from_dump は record.p1 <- row.p1 にマッピングする)。
+        (scan_video_from_dump は record.p1 <- row.p1、record.p1_raw <- row.p1_raw
+        にマッピングする)。raw (adv_raw/p1_raw の既定値0.0/0.5) は無害寄りだが
+        display (p1=0.7) だけが1P有利に矛盾 → stage="display" (リリースブロッカー)。
         ゲーム境界ガード (±GAME_BOUNDARY_GUARD_SEC秒) に触れないよう、
         同じ game_idx 内に t=0.0 のアンカー行も加えて境界を離しておく。
         """
@@ -312,8 +401,85 @@ class TestScanVideoFromDumpEndToEnd:
         suspects = [s for r in records for s in detect_d1a(r)]
         assert len(suspects) == 1
         assert "1P" in suspects[0].evidence
+        assert suspects[0].stage == STAGE_DISPLAY
+
+    def test_d1a_raw_only_detected_from_dump_record(self, tmp_path: Path) -> None:
+        """raw (p1_raw=0.7) が1P有利に矛盾するが display (p1=0.3) は2P有利に
+        正しく是正されている → stage="raw_only" (内部品質バックログ)。
+        """
+        rows = [
+            _dump_row(t_sec=0.0, game_idx=3),
+            _dump_row(
+                t_sec=50.0, game_idx=3, is_dead1=True,
+                adv_raw=30.0, p1_raw=0.7, adv_ema=-30.0, p1=0.3,
+            ),
+        ]
+        dump_path = tmp_path / "v_dump_d1a_raw.npz"
+        save_timeline_dump(dump_path, "v_dump_d1a_raw", rows)
+
+        records = scan_video_from_dump(dump_path)
+        suspects = [s for r in records for s in detect_d1a(r)]
+        assert len(suspects) == 1
+        assert suspects[0].stage == STAGE_RAW_ONLY
 
     def test_empty_dump_yields_no_records(self, tmp_path: Path) -> None:
         dump_path = tmp_path / "v_dump_empty.npz"
         save_timeline_dump(dump_path, "v_dump_empty", [])
         assert scan_video_from_dump(dump_path) == []
+
+
+# ============================
+# 集計ヘルパー: _tally_suspects / _gate_count
+# ============================
+
+def _suspect(detector: str, stage: str) -> Suspect:
+    return Suspect(
+        video_id="v", t_sec=0.0, game_idx=0, detector=detector,
+        severity="CRITICAL", stage=stage, evidence="dummy",
+    )
+
+
+class TestTallyAndGate:
+    def test_d0_always_counted_regardless_of_stage(self) -> None:
+        """D0 は stage を問わず D0 バケツに数える (D0 は常に raw_only 形式値)。"""
+        tally = _tally_suspects([_suspect("D0", STAGE_RAW_ONLY)])
+        assert tally["D0"] == 1
+        assert _gate_count(tally) == 1
+
+    def test_d1a_raw_only_excluded_from_gate(self) -> None:
+        """D1a の raw_only はゲート対象から除外される (内部品質バックログ)。"""
+        tally = _tally_suspects([_suspect("D1a", STAGE_RAW_ONLY)])
+        assert tally["D1a_raw_only"] == 1
+        assert tally["D1a_display"] == 0
+        assert _gate_count(tally) == 0
+
+    def test_d1a_display_and_both_counted_in_gate(self) -> None:
+        """D1a の display/both はどちらもゲート対象 ("display+both" バケツ)。"""
+        tally = _tally_suspects([
+            _suspect("D1a", STAGE_DISPLAY), _suspect("D1a", STAGE_BOTH),
+        ])
+        assert tally["D1a_display"] == 2
+        assert _gate_count(tally) == 2
+
+    def test_d1b_raw_only_excluded_from_gate(self) -> None:
+        tally = _tally_suspects([_suspect("D1b", STAGE_RAW_ONLY)])
+        assert tally["D1b_raw_only"] == 1
+        assert _gate_count(tally) == 0
+
+    def test_mixed_tally(self) -> None:
+        """D0 1件 + D1a display 1件 + D1a raw_only 1件 + D1b both 1件
+        → ゲート対象 = D0(1) + D1a display(1) + D1b display+both(1) = 3。
+        raw_only(D1a 1件) はゲートに含まれない。
+        """
+        suspects = [
+            _suspect("D0", STAGE_RAW_ONLY),
+            _suspect("D1a", STAGE_DISPLAY),
+            _suspect("D1a", STAGE_RAW_ONLY),
+            _suspect("D1b", STAGE_BOTH),
+        ]
+        tally = _tally_suspects(suspects)
+        assert tally == {
+            "D0": 1, "D1a_display": 1, "D1a_raw_only": 1,
+            "D1b_display": 1, "D1b_raw_only": 0,
+        }
+        assert _gate_count(tally) == 3

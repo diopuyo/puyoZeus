@@ -28,6 +28,7 @@ def _sample_rows() -> list[vao.TimelineDumpRow]:
     return [
         vao.TimelineDumpRow(
             t_sec=1.5, game_idx=0, adv_raw=12.3, adv_ema=10.1, p1=0.6,
+            p1_raw=0.55,
             pending_p1=5, pending_p2=0, room1=60, room2=72,
             is_dead1=False, is_dead2=False,
             drivers_top1_name="board_color_puyo_total", drivers_top1_val=0.4,
@@ -38,6 +39,7 @@ def _sample_rows() -> list[vao.TimelineDumpRow]:
         ),
         vao.TimelineDumpRow(
             t_sec=3.25, game_idx=1, adv_raw=-40.0, adv_ema=-38.2, p1=0.1,
+            p1_raw=0.15,
             pending_p1=0, pending_p2=80, room1=72, room2=4,
             is_dead1=False, is_dead2=True,
             drivers_top1_name="", drivers_top1_val=0.0,
@@ -73,7 +75,7 @@ class TestTimelineDumpRoundTrip:
         """
         board = _empty_board()
         row = vao._build_timeline_dump_row(
-            t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5,
+            t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5, p1_raw=0.5,
             pending_p1=0, pending_p2=0, room1=72, room2=72,
             b1=board, b2=board,
             drivers=[], score1=None, score2=None, state1="MENU", state2="MENU",
