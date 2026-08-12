@@ -436,3 +436,185 @@ def test_approx_tsumo_is_rank_within_group() -> None:
     assert by_t[1.0] == 0
     assert by_t[2.0] == 1
     assert by_t[3.0] == 2
+
+
+# ============================
+# Rust ネイティブ拡張 (puyo_core) 載せ替え パリティ (2026-08-13 追加)
+# ============================
+# full profile 重い4列 (current_max_chain/dig_resistance/ukeyasusa/
+# sub_chain_count) の native 分岐が既存 Python 実装と完全一致することを
+# 実盤面 (data/indicators_v2/boards_lean_phase_l_2026-08-11/*.npz) 1,000件超
+# で検証する。tests/test_puyo_core_parity.py と同じ「実データ+skip設計」を
+# 踏襲する (拡張未導入・データ不足環境では skip、フォールバック同士の
+# 自明一致を「パリティ確認」と誤認しないため)。
+
+from src.board import Board  # noqa: E402
+from src.board import COLOR_UNKNOWN as _COLOR_UNKNOWN  # noqa: E402
+from src.chain import ChainSimulator as _ChainSimulator  # noqa: E402
+
+_NATIVE_PARITY_DATA_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "data" / "indicators_v2" / "boards_lean_phase_l_2026-08-11"
+)
+_NATIVE_PARITY_TARGET_BOARDS: int = 1000
+_NATIVE_PARITY_RNG_SEED: int = 20260813
+
+pytestmark_native_parity = pytest.mark.skipif(
+    not blwn._PUYO_CORE_AVAILABLE,
+    reason="puyo_core ネイティブ拡張が未ビルド (maturin develop 要)",
+)
+
+
+def _load_native_parity_sample_boards() -> "list":
+    """複数 npz から実盤面をサンプルして Board リストを返す (UNKNOWN含む盤面は除外、
+    tests/test_puyo_core_parity.py::_load_sample_boards と同一方針)。
+    """
+    npz_files = sorted(_NATIVE_PARITY_DATA_DIR.glob("*.npz"))
+    if not npz_files:
+        pytest.skip(f"評価データが見つからない: {_NATIVE_PARITY_DATA_DIR}")
+    rng = np.random.RandomState(_NATIVE_PARITY_RNG_SEED)
+    order = rng.permutation(len(npz_files))
+    boards: "list" = []
+    per_file = max(1, _NATIVE_PARITY_TARGET_BOARDS // 10)
+    for idx in order:
+        data = np.load(str(npz_files[idx]), allow_pickle=True)
+        grids = data["grids"]
+        n = grids.shape[0]
+        if n == 0:
+            continue
+        picked = rng.choice(n, size=min(per_file, n), replace=False)
+        for i in picked:
+            grid = grids[i].astype(np.uint8)
+            if np.any(grid == _COLOR_UNKNOWN):
+                continue
+            board = Board()
+            board._grid = grid
+            boards.append(board)
+        if len(boards) >= _NATIVE_PARITY_TARGET_BOARDS:
+            break
+    return boards
+
+
+@pytest.fixture(scope="module")
+def native_parity_boards() -> "list":
+    boards = _load_native_parity_sample_boards()
+    if len(boards) < 1000:
+        pytest.skip(f"実盤面サンプルが1000未満 ({len(boards)}件)。データ不足のためスキップ")
+    return boards
+
+
+@pytest.fixture()
+def deterministic_drop_ojama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ChainSimulator.drop_ojama` の端数列選択をテスト内で決定的にする。
+
+    本番コード (dig_resistance/ukeyasusa) は `drop_ojama(board, n_ojama)` を
+    seed無しで呼ぶため、おじゃま個数が6の倍数でない限り毎回OS乱数由来の
+    非決定的な結果になる (既存の既知の性質、この載せ替えでは変えない)。
+    Python版/native版のどちらも `ChainSimulator.drop_ojama` を通るため、
+    同一 n_ojama に対して決定的な seed を強制すれば両者は同一の
+    おじゃま落下盤面を得る (パリティ検証のための一時パッチ、本番動作は
+    無変更)。
+    """
+    original = _ChainSimulator.drop_ojama
+
+    def _patched(self: "_ChainSimulator", board: Board, ojama_count: int, seed=None):
+        del seed  # テスト用に無視し、ojama_countのみに依存する決定的seedへ差替え
+        return original(self, board, ojama_count, seed=1_000_000 + ojama_count)
+
+    monkeypatch.setattr(_ChainSimulator, "drop_ojama", _patched)
+
+
+@pytestmark_native_parity
+class TestNativeHeavyIndicatorParity:
+    """full profile 重い4列 native 分岐 vs 既存 Python 実装の完全一致確認。"""
+
+    def test_current_max_chain_matches(self, native_parity_boards: "list") -> None:
+        """current_max_chain: 乱数を含まないため無条件で完全一致するはず。"""
+        mismatches = []
+        for i, board in enumerate(native_parity_boards):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["current_max_chain"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["current_max_chain"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"{len(mismatches)}/{len(native_parity_boards)} 件不一致 (先頭5件): "
+            f"{mismatches[:5]}"
+        )
+
+    def test_sub_chain_count_matches(self, native_parity_boards: "list") -> None:
+        """sub_chain_count: 乱数を含まないため無条件で完全一致するはず。"""
+        mismatches = []
+        for i, board in enumerate(native_parity_boards):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["sub_chain_count"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["sub_chain_count"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"{len(mismatches)}/{len(native_parity_boards)} 件不一致 (先頭5件): "
+            f"{mismatches[:5]}"
+        )
+
+    def test_dig_resistance_matches_with_fixed_ojama_seed(
+        self, native_parity_boards: "list", deterministic_drop_ojama: None,
+    ) -> None:
+        """dig_resistance: おじゃま落下の乱数を固定した上で完全一致するはず。"""
+        mismatches = []
+        for i, board in enumerate(native_parity_boards):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["dig_resistance"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["dig_resistance"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score:
+                mismatches.append((i, py_val.score, native_val.score))
+        assert not mismatches, (
+            f"{len(mismatches)}/{len(native_parity_boards)} 件不一致 (先頭5件): "
+            f"{mismatches[:5]}"
+        )
+
+    def test_ukeyasusa_matches_with_fixed_ojama_seed(
+        self, native_parity_boards: "list", deterministic_drop_ojama: None,
+    ) -> None:
+        """ukeyasusa: 内部で dig_resistance を使うため同様に乱数固定で検証。"""
+        mismatches = []
+        for i, board in enumerate(native_parity_boards):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["ukeyasusa"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["ukeyasusa"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score:
+                mismatches.append((i, py_val.score, native_val.score))
+        assert not mismatches, (
+            f"{len(mismatches)}/{len(native_parity_boards)} 件不一致 (先頭5件): "
+            f"{mismatches[:5]}"
+        )
+
+    def test_use_native_false_delegates_to_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """use_native=False で native 分岐が完全無効化されること
+        (current_max_chain のみ代表確認、乱数なしで安全に検証可能)。
+        """
+        board = native_parity_boards[0]
+        py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["current_max_chain"](board)
+        native_off = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["current_max_chain"](
+            board, use_native=False,
+        )
+        assert py_val.score == native_off.score
+        assert py_val.raw == native_off.raw
+
+    def test_resolve_indicator_registry_use_native_false_matches_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """`_resolve_indicator_registry("full", use_native=False)` が
+        既存 Python 実装のみのレジストリと同値を返すこと (統合経路確認)。
+        """
+        board = native_parity_boards[0]
+        registry_off = blwn._resolve_indicator_registry("full", use_native=False)
+        assert (
+            registry_off["current_max_chain"](board).score
+            == blwn.GRID_ONLY_HEAVY_INDICATORS["current_max_chain"](board).score
+        )
