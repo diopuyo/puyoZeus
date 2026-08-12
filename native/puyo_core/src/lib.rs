@@ -21,7 +21,7 @@ use pyo3::prelude::*;
 use rayon::ThreadPool;
 
 use bitboard::{
-    board_from_grid, board_to_grid, enumerate_placements, is_dead as bitboard_is_dead,
+    board_from_grid, board_to_grid, drop_one, enumerate_placements, is_dead as bitboard_is_dead,
     simulate_chain, BOARD_COLS, BOARD_ROWS,
 };
 
@@ -72,6 +72,9 @@ pub struct ChainSimResultPy {
     pub total_ojama: i64,
     #[pyo3(get)]
     pub score_approx: i64,
+    /// 厳密得点 (連結ボーナス反映、2026-08-13 追加、後方互換: 既存フィールド無変更)。
+    #[pyo3(get)]
+    pub exact_score: i64,
     #[pyo3(get)]
     pub final_grid: Vec<u8>,
 }
@@ -98,8 +101,114 @@ fn simulate_chain_py(
         total_erased: result.total_erased,
         total_ojama: result.total_ojama,
         score_approx: result.score_approx,
+        exact_score: result.exact_score,
         final_grid: board_to_grid(&result.final_board),
     })
+}
+
+/// `simulate_after_drops_py` 専用の結果型 (Python から属性アクセス可能)。
+///
+/// `ChainSimResultPy` に加え、消去解決前 (連鎖シミュレート前) の「落下直後」
+/// 盤面 `dropped_grid` を持つ。呼び出し側 (`scripts/mc_counter_estimator.py`
+/// の潜在火力ビーム探索) が2手目探索の起点として「未解決の落下直後盤面」を
+/// 必要とするため (既存 `src.indicators_v2._pfp_first_pass` の意味論保存、
+/// 連鎖解決後の盤面ではない点に注意)。
+#[pyclass]
+#[derive(Clone)]
+pub struct DropSimResultPy {
+    #[pyo3(get)]
+    pub dropped_grid: Vec<u8>,
+    #[pyo3(get)]
+    pub chain_count: i32,
+    #[pyo3(get)]
+    pub total_erased: i64,
+    #[pyo3(get)]
+    pub total_ojama: i64,
+    #[pyo3(get)]
+    pub score_approx: i64,
+    #[pyo3(get)]
+    pub exact_score: i64,
+    #[pyo3(get)]
+    pub final_grid: Vec<u8>,
+}
+
+/// 1 個ぷよを複数パターン (col, color) 落としてそれぞれ連鎖シミュレートする
+/// (`scripts/mc_counter_estimator.py` の takapt定石探索 [列×色30通り] /
+/// 潜在火力ビーム探索用、2026-08-13 追加)。1 回の PyO3 呼び出しで複数候補を
+/// まとめて処理することで、候補ごとに Python<->Rust 境界を跨ぐ変換コスト
+/// (グリッド flatten/reshape 等) を償却する (task 指示「バッチ化できる箇所は
+/// バッチで」)。列が満杯で置けない場合はその要素のみ None。
+///
+/// Args:
+///     grid: 落とす前の基準盤面 (13x6 flatten、長さ78)。
+///     drops: `[(col, color), ...]` の候補リスト。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール。
+///
+/// Returns:
+///     `drops` と同じ長さの `Option<ChainSimResultPy>` リスト
+///     (None=列が満杯で置けなかった候補)。
+#[pyfunction]
+fn simulate_after_drops_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    drops: Vec<(u8, u8)>,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Vec<Option<DropSimResultPy>>> {
+    let arr = grid_from_pylist(grid)?;
+    let results = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        drops
+            .into_iter()
+            .map(|(col, color)| {
+                let dropped = drop_one(&board, col as usize, color)?;
+                let r = simulate_chain(&dropped, exclude_hidden_row_from_pop);
+                Some(DropSimResultPy {
+                    dropped_grid: board_to_grid(&dropped),
+                    chain_count: r.chain_count,
+                    total_erased: r.total_erased,
+                    total_ojama: r.total_ojama,
+                    score_approx: r.score_approx,
+                    exact_score: r.exact_score,
+                    final_grid: board_to_grid(&r.final_board),
+                })
+            })
+            .collect::<Vec<_>>()
+    });
+    Ok(results)
+}
+
+/// `simulate_after_drops_py` の軽量版: 盤面 (グリッド) を一切返さず
+/// `(chain_count, exact_score)` のみ返す (2026-08-13 追加)。
+///
+/// 呼び出し側が盤面そのものを必要としない場面 (`current_max_chain`/
+/// `potential_fire_power` の2手目お邪魔換算等) 向け。`DropSimResultPy` の
+/// `dropped_grid`/`final_grid` (各78要素の Vec<u8> をPythonリストへ変換する
+/// コスト) を完全に無くすことで、`simulate_after_drops_py` よりさらに
+/// Python<->Rust 境界のコストを下げる。値は `simulate_after_drops_py` の
+/// 対応要素と完全一致する (パリティは `tests/test_puyo_core_parity.py`)。
+///
+/// Returns:
+///     `drops` と同じ長さの `Option<(chain_count, exact_score)>` リスト。
+#[pyfunction]
+fn chain_metrics_after_drops_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    drops: Vec<(u8, u8)>,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Vec<Option<(i32, i64)>>> {
+    let arr = grid_from_pylist(grid)?;
+    let results = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        drops
+            .into_iter()
+            .map(|(col, color)| {
+                let dropped = drop_one(&board, col as usize, color)?;
+                let r = simulate_chain(&dropped, exclude_hidden_row_from_pop);
+                Some((r.chain_count, r.exact_score))
+            })
+            .collect::<Vec<_>>()
+    });
+    Ok(results)
 }
 
 /// 22 配置 (4回転×6列、横置きは5列) を列挙し、配置後盤面 (発火前) を返す。
@@ -215,9 +324,12 @@ fn beam_search_py(
 #[pymodule]
 fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(simulate_chain_py, m)?)?;
+    m.add_function(wrap_pyfunction!(simulate_after_drops_py, m)?)?;
+    m.add_function(wrap_pyfunction!(chain_metrics_after_drops_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_py, m)?)?;
     m.add_class::<ChainSimResultPy>()?;
+    m.add_class::<DropSimResultPy>()?;
     m.add_class::<BeamSearchResultPy>()?;
     Ok(())
 }

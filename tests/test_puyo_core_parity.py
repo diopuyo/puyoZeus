@@ -28,7 +28,9 @@ from src.chain_bitboard import (
 from src.puyo_core_bridge import (
     NATIVE_AVAILABLE,
     beam_search,
+    chain_metrics_after_drops,
     enumerate_placements,
+    simulate_after_drops,
     simulate_chain,
 )
 
@@ -121,6 +123,121 @@ def test_simulate_chain_parity_with_chain_bitboard(sample_boards: "list[Board]")
     assert not mismatches, (
         f"{n_bad}/{n} 件で chain_bitboard と不一致:\n" + "\n".join(mismatches[:20])
     )
+
+
+def test_exact_score_parity_with_chain_simulator(sample_boards: "list[Board]") -> None:
+    """厳密得点 `exact_score` (2026-08-13追加、連結ボーナス反映) が
+    `src.chain.ChainSimulator` + `src.scoring.calculate_chain_score` (本番の
+    正解経路) と完全一致するか (scripts/mc_counter_estimator.py Rust載せ替え
+    タスクの前提となるパリティ)。score_approx (連結ボーナス0近似) とは
+    異なる値になり得る点に注意 (連結ボーナスが乗る盤面でのみ差が出る)。
+    """
+    from src.chain import ChainSimulator
+    from src.scoring import calculate_chain_score
+
+    sim = ChainSimulator()
+    mismatches: "list[str]" = []
+    for i, board in enumerate(sample_boards):
+        native_exact = simulate_chain(board, exclude_hidden_row_from_pop=False).exact_score
+        py_exact = calculate_chain_score(sim.simulate(board)).total_score
+        if native_exact != py_exact:
+            mismatches.append(
+                f"[{i}] exact_score: native={native_exact} py={py_exact}",
+            )
+
+    n = len(sample_boards)
+    n_bad = len(mismatches)
+    assert not mismatches, (
+        f"{n_bad}/{n} 件で ChainSimulator の厳密得点と不一致:\n"
+        + "\n".join(mismatches[:20])
+    )
+
+
+def test_simulate_after_drops_parity_with_individual_calls(
+    sample_boards: "list[Board]",
+) -> None:
+    """バッチ版 `simulate_after_drops` (2026-08-13追加) が、同じ候補を1件ずつ
+    `simulate_chain` で個別に呼んだ結果と完全一致するか
+    (`scripts/mc_counter_estimator.py` の native載せ替えタスクの前提)。
+    """
+    from src.board import BOARD_COLS
+
+    drops = [(col, color) for col in range(BOARD_COLS) for color in (1, 2, 3, 4, 5)]
+    subset = sample_boards[:80]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        batch_results = simulate_after_drops(board, drops)
+        for (col, color), batch_r in zip(drops, batch_results):
+            dropped = _drop_one_reference(board, col, color)
+            if dropped is None:
+                if batch_r is not None:
+                    mismatches.append(f"[{i}] col={col} color={color}: 満杯なのにNoneでない")
+                continue
+            individual_r = simulate_chain(dropped)
+            if batch_r is None:
+                mismatches.append(f"[{i}] col={col} color={color}: 置けるはずがNone")
+                continue
+            if not np.array_equal(batch_r.dropped_board._grid, dropped._grid):
+                mismatches.append(f"[{i}] col={col} color={color}: dropped_board不一致")
+            if batch_r.chain_result.chain_count != individual_r.chain_count:
+                mismatches.append(
+                    f"[{i}] col={col} color={color} chain_count不一致: "
+                    f"batch={batch_r.chain_result.chain_count} individual={individual_r.chain_count}",
+                )
+            if batch_r.chain_result.exact_score != individual_r.exact_score:
+                mismatches.append(
+                    f"[{i}] col={col} color={color} exact_score不一致: "
+                    f"batch={batch_r.chain_result.exact_score} individual={individual_r.exact_score}",
+                )
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件でバッチ版が個別呼び出しと不一致:\n"
+        + "\n".join(mismatches[:20])
+    )
+
+
+def test_chain_metrics_after_drops_parity_with_simulate_after_drops(
+    sample_boards: "list[Board]",
+) -> None:
+    """軽量版 `chain_metrics_after_drops` (2026-08-13追加、盤面を返さない版) が
+    `simulate_after_drops` の (chain_count, exact_score) と完全一致するか。
+    """
+    from src.board import BOARD_COLS
+
+    drops = [(col, color) for col in range(BOARD_COLS) for color in (1, 2, 3, 4, 5)]
+    subset = sample_boards[:80]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        lean = chain_metrics_after_drops(board, drops)
+        full = simulate_after_drops(board, drops)
+        for (col, color), lean_r, full_r in zip(drops, lean, full):
+            if (lean_r is None) != (full_r is None):
+                mismatches.append(f"[{i}] col={col} color={color}: None判定が不一致")
+                continue
+            if lean_r is None:
+                continue
+            expected = (full_r.chain_result.chain_count, full_r.chain_result.exact_score)
+            if lean_r != expected:
+                mismatches.append(
+                    f"[{i}] col={col} color={color}: lean={lean_r} full={expected}",
+                )
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件で軽量版が不一致:\n" + "\n".join(mismatches[:20])
+    )
+
+
+def _drop_one_reference(board: Board, col: int, color: int) -> "Board | None":
+    """`simulate_after_drops_parity` テスト専用の1個落下リファレンス実装
+    (`src.puyo_core_bridge._drop_row_fallback` と同一仕様、テストの
+    独立性を保つため複製)。"""
+    height = board.height_of(col)
+    if height >= BOARD_ROWS:
+        return None
+    row = BOARD_ROWS - 1 - height
+    work = board.copy()
+    work.set(row, col, color)
+    return work
 
 
 def test_simulate_chain_parity_ghost_rule(sample_boards: "list[Board]") -> None:
