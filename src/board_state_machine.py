@@ -169,6 +169,22 @@ CNN_FLICKER_MIN_CHANGES: int = 3
 EFFECT_GATE_TOP_ROWS: "frozenset[int]" = frozenset({1, 2, 3})
 EFFECT_PERSIST_SEC: float = 0.4
 
+# 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認):
+# 現行の初回STABLE確定窓 (`_update_within_current_state` の pending_count/
+# pending_board、stable_frame_count=3 連続で厳密一致) は 1 フレームのノイズ
+# 混入で連続カウンタが 1 に戻り、2値交互ノイズには原理的に無限に弱い
+# (実測: scripts/_measure_stable_window_restart_2026-08-13.py、
+# logs/stable_window_restart_measure_2026-08-13.json。確定の 8.3% で延び
+# 発生・最悪 9.05 秒、3中2多数決の反実仮想で超過時間 -99.6%)。
+# 本フラグ ON 時は直近 STABLE_MAJORITY_WINDOW_FRAMES 観測 (raw cnn_board) の
+# うち STABLE_MAJORITY_MIN_VOTES 以上一致した盤面を、その場で確定候補として
+# 採用する (`_majority_window_vote` 参照)。認識精度の物差し (99.5%基準)
+# 回帰検証を条件に採用確定 (2026-08-13)。
+# default False (stable_majority_window) = 従来の厳密連続一致を完全維持
+# (backwards compat、148動画収集走行中のため既定OFF必須)。
+STABLE_MAJORITY_WINDOW_FRAMES: int = 3
+STABLE_MAJORITY_MIN_VOTES: int = 2
+
 
 class BoardState(Enum):
     """1 プレイヤー側盤面の状態。"""
@@ -276,6 +292,13 @@ class StateContext:
     effect_gate_hold: "dict[tuple[int, int], tuple[int, float]]" = field(
         default_factory=dict,
     )
+    # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13): 直近
+    # STABLE_MAJORITY_WINDOW_FRAMES 分の raw cnn_board 履歴 (最新が末尾)。
+    # `_majority_window_vote` の入力。state 遷移 (`_apply_transition`) の
+    # pending リセットに合わせてクリアする。
+    # backwards compat: stable_majority_window=False (default) の間は
+    # 一切書き込まれない (常に空リストのまま)。
+    confirm_window_history: "list[Board]" = field(default_factory=list)
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -464,6 +487,44 @@ def _vote_majority_board(
                 result.set(r, c, fallback.get(r, c))
             # else: EMPTY (= Board default、 観測不足、fallback 未指定)
     return result
+
+
+def _majority_window_vote(
+    history: "list[Board]", min_votes: int,
+) -> "Board | None":
+    """直近 history (最大 window frame) 中で min_votes 以上一致する盤面を返す.
+
+    盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13) のコア判定。
+    厳密な N 連続一致 (pending_count 方式) は 1 フレームのノイズ混入で連続
+    カウンタが 1 に戻ってしまい、2値交互ノイズには原理的に無限に弱い
+    (実測: scripts/_measure_stable_window_restart_2026-08-13.py)。
+    本関数は window 内の raw cnn_board を厳密一致 (`Board.grid_bytes()` を
+    キーにした投票) で集計し、最多得票の盤面が min_votes 以上ならそれを
+    返す (= 過半数でなくても「window 中で最も支持された盤面」を採用する)。
+
+    Args:
+        history: 直近 window frame 分の raw cnn_board (append 順、最新が末尾)。
+        min_votes: 採用に必要な最低一致票数。
+
+    Returns:
+        多数決で選ばれた盤面 (票数最多)。history が min_votes 未満、または
+        全 window 内で min_votes に達する盤面が無い場合は None
+        (= 未確定、呼び出し側は従来通り継続観測する)。
+    """
+    if len(history) < min_votes:
+        return None
+    counts: "dict[bytes, tuple[Board, int]]" = {}
+    for b in history:
+        key = b.grid_bytes()
+        prev = counts.get(key)
+        if prev is None:
+            counts[key] = (b, 1)
+        else:
+            counts[key] = (prev[0], prev[1] + 1)
+    best_board, best_n = max(counts.values(), key=lambda item: item[1])
+    if best_n >= min_votes:
+        return best_board
+    return None
 
 
 def _build_initial_confirmed_board(
@@ -828,6 +889,16 @@ class BoardStateMachine:
         # `_merge_diff_only` 自体・既存引数は一切変更しない。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_transition_merge_guard: bool = False,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用)。True にすると `_update_within_current_state`
+        # の初回STABLE確定窓が「stable_frame_count 連続厳密一致」から
+        # 「直近 stable_majority_window_frames 観測中 stable_majority_min_votes
+        # 以上一致」に切り替わる (`_majority_window_vote` 参照)。
+        # default False = 従来の厳密連続一致を完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
+        stable_majority_window_frames: int = STABLE_MAJORITY_WINDOW_FRAMES,
+        stable_majority_min_votes: int = STABLE_MAJORITY_MIN_VOTES,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -926,6 +997,12 @@ class BoardStateMachine:
         self._effect_gate_hard_freeze = bool(effect_gate_hard_freeze)
         # バーストガード Stage1.5 (2026-08-05): default False = 従来挙動完全維持。
         self._enable_transition_merge_guard = bool(enable_transition_merge_guard)
+        # 盤面確定窓 3中2多数決 (2026-08-13): default False = 従来挙動完全維持。
+        self._enable_stable_majority_window = bool(stable_majority_window)
+        self._stable_majority_window_frames = max(
+            2, int(stable_majority_window_frames),
+        )
+        self._stable_majority_min_votes = max(1, int(stable_majority_min_votes))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -1081,6 +1158,10 @@ class BoardStateMachine:
         # state 切り替えで pending をリセット
         self._ctx.pending_board = None
         self._ctx.pending_count = 0
+        # 盤面確定窓 3中2多数決 (2026-08-13): pending リセットと同じタイミングで
+        # window 履歴もクリアする (前 state の観測を次 window に持ち込まない)。
+        if self._enable_stable_majority_window:
+            self._ctx.confirm_window_history = []
         # NON-STABLE → STABLE 復帰時: 差分のみ反映で baseline 維持
         # (Phase C-5: 全 cell コピーは CNN ぶれを取り込むため廃止)
         if (
@@ -1204,6 +1285,44 @@ class BoardStateMachine:
             self._ctx.cnn_flicker_history.clear()
             self._ctx.non_stable_entry_time_sec = None
 
+    def _update_pending_confirmation(self, cnn_board: "Board") -> None:
+        """初回STABLE確定窓の pending_board/pending_count を1frame分更新する.
+
+        盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認):
+        True 時は直近 window 観測 (`confirm_window_history`) の多数決
+        (`_majority_window_vote`) で判定し、多数決が成立した瞬間に
+        pending_count を self._stable_n まで進めて即時確定させる
+        (呼び出し元の `pending_count >= self._stable_n` 判定を変更せずに
+        再利用するため)。不成立なら pending を未確定 (None/0) にリセットする。
+        False (default) 時は従来の厳密連続一致を維持する
+        (backwards compat、bit-identical)。
+
+        Args:
+            cnn_board: 現フレームの raw CNN 観測盤面。
+        """
+        if self._enable_stable_majority_window:
+            self._ctx.confirm_window_history.append(cnn_board.copy())
+            if (
+                len(self._ctx.confirm_window_history)
+                > self._stable_majority_window_frames
+            ):
+                self._ctx.confirm_window_history.pop(0)
+            majority_board = _majority_window_vote(
+                self._ctx.confirm_window_history, self._stable_majority_min_votes,
+            )
+            if majority_board is not None:
+                self._ctx.pending_board = majority_board
+                self._ctx.pending_count = self._stable_n
+            else:
+                self._ctx.pending_board = None
+                self._ctx.pending_count = 0
+            return
+        if _boards_equal(self._ctx.pending_board, cnn_board):
+            self._ctx.pending_count += 1
+        else:
+            self._ctx.pending_board = cnn_board.copy()
+            self._ctx.pending_count = 1
+
     def _update_within_current_state(
         self, signals: DetectorSignals,
     ) -> None:
@@ -1248,11 +1367,7 @@ class BoardStateMachine:
         # MENU (試合復帰直後) または STABLE: 連続多数決で confirmed を更新。
         # MENU から N 連続一致で STABLE へ自動遷移する。
         cnn_board = signals.cnn_board
-        if _boards_equal(self._ctx.pending_board, cnn_board):
-            self._ctx.pending_count += 1
-        else:
-            self._ctx.pending_board = cnn_board.copy()
-            self._ctx.pending_count = 1
+        self._update_pending_confirmation(cnn_board)
 
         if self._ctx.pending_count >= self._stable_n:
             # Phase C-7 (E-1): CNN を盤面更新ソースから完全排除

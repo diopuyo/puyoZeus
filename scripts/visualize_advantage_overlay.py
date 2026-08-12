@@ -1871,6 +1871,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              disable_pressure: bool = False,
              enable_counter_reach: bool = COUNTER_REACH_ENABLED_BY_DEFAULT,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
+             stable_majority_window: bool | None = None,
              layout: str = "overlay",
              show_excluded_attribution: bool = False,
              render: bool = True,
@@ -1974,6 +1975,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         scripts/_diag_column_deadlock_trace_2026-07-30.py 参照)。ただし 4動画測定で
         c58/c26 の 2P tail 悪化・c26/c69 の 1P 効果ゼロ、汎化未確認のため
         load_default 既定 OFF。既定 False = 従来挙動不変 (後方互換、A/B比較用)。
+    stable_majority_window: RecognitionPipeline.load_default に渡す盤面確定窓
+        3中2多数決 (2026-08-13 user承認、認識99.5%物差し条件付き採用)。True で
+        初回STABLE確定窓が「stable_frame_count 連続厳密一致」から「直近3観測中
+        2一致」に切り替わる (src/board_state_machine.py 参照)。
+        None (既定) = load_default 本体の既定値 (False) に従う
+        (後方互換、A/B比較用)。
     layout: "overlay"(既定、従来通り盤面に直接バー等を重ねるレイアウト)または
         "panel"(2026-08-10 user指示。左上に映像、左下にタイムライングラフ、
         右に縦長情報パネルを配置する新レイアウト、出力キャンバスは1920x1080)。
@@ -2104,7 +2111,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_initial_confirm_vote=_resolve_flag(
             "enable_initial_confirm_vote", enable_initial_confirm_vote),
         enable_puyo_to_empty_hsv_guard=_resolve_flag(
-            "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard))
+            "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard),
+        stable_majority_window=_resolve_flag(
+            "stable_majority_window", stable_majority_window))
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -2562,6 +2571,14 @@ def main() -> None:
              "デフォルト OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
+        "--stable-majority-window", action=argparse.BooleanOptionalAction, default=None,
+        dest="stable_majority_window",
+        help="盤面確定窓 3中2多数決を有効化 (RecognitionPipeline.load_default に転送、"
+             "2026-08-13 user承認、認識99.5%%物差し条件付き採用)。初回STABLE確定窓を"
+             "「stable_frame_count 連続厳密一致」から「直近3観測中2一致」に切り替える。"
+             "デフォルト None = load_default 本体の既定値 (False) に従う。A/B比較用。",
+    )
+    ap.add_argument(
         "--layout", choices=VALID_LAYOUTS, default="overlay", dest="layout",
         help="出力レイアウト (2026-08-10 user指示追加)。'overlay'(既定)は従来通り"
              "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
@@ -2637,6 +2654,7 @@ def main() -> None:
              disable_pressure=a.disable_pressure,
              enable_counter_reach=a.enable_counter_reach,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
+             stable_majority_window=a.stable_majority_window,
              layout=a.layout,
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
