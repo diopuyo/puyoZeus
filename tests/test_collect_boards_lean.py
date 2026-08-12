@@ -25,6 +25,7 @@ from src.board import (
     Board,
 )
 from src.board_state_machine import BoardState
+from src.ojama_accounting import OjamaAccountSnapshot
 from src.recognition_pipeline import RecognitionPipeline
 
 
@@ -1245,6 +1246,212 @@ class TestAllClearPendingColumn:
             out_npz = tmp_path / "no_chain_tracker.npz"
             n = mod.collect_lean(Path("dummy_video.mp4"), out_npz)
         assert n == 0  # MENU 状態のため snapshot は 0 件だが例外なく完了
+
+
+# ============================
+# ojama_net_balance / ojama_forecast 保存テスト (2026-08-12 追加。
+# npz からの事後復元が不可能と確定したため (score近似v1/v2は相関0.33-0.38で
+# 不合格、tsumo_countゲートv3も不可判定)、収集中に OjamaAccountingTracker を
+# 実際に駆動して真値を記録する。own-perspective (自分視点) の値)
+# ============================
+
+
+class TestOjamaAccountingColumns:
+    """ojama_net_balance / ojama_forecast の保存・後方互換・駆動を検証する。"""
+
+    def test_ojama_columns_saved_in_npz(self, tmp_path: Path) -> None:
+        """値を渡すと npz に float32 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            ojama_net_balance=5.0, ojama_forecast=3.0,
+        )
+        out = tmp_path / "ojama_columns_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "ojama_net_balance" in data
+        assert "ojama_forecast" in data
+        assert data["ojama_net_balance"].dtype == np.float32
+        assert data["ojama_forecast"].dtype == np.float32
+        assert float(data["ojama_net_balance"][0]) == pytest.approx(5.0)
+        assert float(data["ojama_forecast"][0]) == pytest.approx(3.0)
+
+    def test_ojama_columns_none_saved_as_nan(self, tmp_path: Path) -> None:
+        """ojama_net_balance/ojama_forecast=None は NaN として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "ojama_columns_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert math.isnan(float(data["ojama_net_balance"][0]))
+        assert math.isnan(float(data["ojama_forecast"][0]))
+
+    def test_ojama_columns_backward_compat_omitted_kwarg(
+        self, tmp_path: Path,
+    ) -> None:
+        """ojama_* 引数を省略した既存呼び出しでも NaN 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "ojama_columns_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        assert math.isnan(float(data["ojama_net_balance"][0]))
+        assert math.isnan(float(data["ojama_forecast"][0]))
+
+    def test_existing_npz_keys_unchanged_after_ojama_columns_addition(
+        self, tmp_path: Path,
+    ) -> None:
+        """ojama_* 追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "ojama_columns_compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in (
+            "grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won",
+            "score", "next1_a", "next1_b", "dnext_a", "dnext_b",
+            "chain_trigger_sec", "tsumo_count", "all_clear_pending",
+        ):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        assert "ojama_net_balance" in data
+        assert "ojama_forecast" in data
+
+    def test_process_side_lean_passes_through_ojama_columns(self) -> None:
+        """_process_side_lean が ojama_net_balance/ojama_forecast を
+        acc.append に伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            ojama_net_balance=2.5, ojama_forecast=1.5,
+        )
+        assert acc.ojama_net_balances[0] == pytest.approx(2.5)
+        assert acc.ojama_forecasts[0] == pytest.approx(1.5)
+
+    def test_process_side_lean_default_ojama_columns_is_nan(self) -> None:
+        """ojama_* を渡さない場合 (既定 None) は NaN 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert math.isnan(acc.ojama_net_balances[0])
+        assert math.isnan(acc.ojama_forecasts[0])
+
+    def test_drive_ojama_accounting_lean_moves_net_balance_on_chain_fire(
+        self,
+    ) -> None:
+        """1P が連鎖を撃つと own-perspective net_balance/forecast が正しく
+        動くこと (物理妥当性チェック: score跳躍→2P forecast 増加→net反転)。
+
+        src/ojama_accounting.py の on_state_transition 駆動シーケンス
+        (tests/test_ojama_accounting.py の _fire_chain と同じ組み立て) を
+        _drive_ojama_accounting_lean 経由で再現する。
+        """
+        from src.ojama_accounting import K_SETTLE_FRAMES
+        mod = _import_lean()
+        tracker = mod.OjamaAccountingTracker()
+        tracker.reset()
+        state_p1 = mod._SideState()
+        state_p2 = mod._SideState()
+        prev = {"p1": BoardState.STABLE, "p2": BoardState.STABLE}
+
+        def _drive(
+            state1: BoardState, score1: int, state2: BoardState, score2: int,
+            t: float,
+        ) -> OjamaAccountSnapshot:
+            p1 = SimpleNamespace(state=state1, score=score1)
+            p2 = SimpleNamespace(state=state2, score=score2)
+            snap = mod._drive_ojama_accounting_lean(
+                tracker, state_p1, state_p2, prev["p1"], prev["p2"],
+                p1, p2, None, None, t,
+            )
+            prev["p1"], prev["p2"] = state1, state2
+            return snap
+
+        # 1P 連鎖開始 (350点 = 5個お邪魔 // 70) → 終了 → settle 確定
+        _drive(BoardState.CHAIN, 0, BoardState.STABLE, 0, 5.0)
+        snap = _drive(BoardState.STABLE, 350, BoardState.STABLE, 0, 7.0)
+        for i in range(K_SETTLE_FRAMES):
+            snap = _drive(
+                BoardState.STABLE, 350, BoardState.STABLE, 0,
+                7.0 + (i + 1) * 0.001,
+            )
+
+        net_1p, fc_1p, net_2p, fc_2p = mod._ojama_snapshot_to_own_perspective(
+            snap,
+        )
+        assert fc_2p == pytest.approx(5.0)  # 2P に 5個の予告が来ている
+        assert fc_1p == pytest.approx(0.0)
+        assert net_1p > 0.0  # 1P 有利方向
+        assert net_2p == pytest.approx(-net_1p)  # 符号反転で own-perspective
+
+    def test_collect_lean_ojama_columns_finite_for_stable_snapshot(
+        self, tmp_path: Path,
+    ) -> None:
+        """collect_lean の主ループが ojama_net_balance/ojama_forecast を
+        npz まで伝搬し、有限値 (非NaN) で own-perspective 符号反転が
+        成立すること (2026-08-12 追加)。
+        """
+        mod = _import_lean()
+        fake_cap = _FakeCaptureLean(1, fps=30.0)
+        fake_pipeline = _FakeLeanPipelineStableAllClear(
+            pending_1p=False, pending_2p=False,
+        )
+
+        def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+            return fake_cap
+
+        def _fake_load_default(
+            *args: object, **kwargs: object,
+        ) -> "_FakeLeanPipelineStableAllClear":
+            return fake_pipeline
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+            mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+            out_npz = tmp_path / "ojama_columns_flow.npz"
+            n = mod.collect_lean(Path("dummy_video.mp4"), out_npz)
+        assert n == 2  # 1P/2P それぞれ 1 snapshot
+        data = np.load(str(out_npz), allow_pickle=True)
+        assert "ojama_net_balance" in data
+        assert "ojama_forecast" in data
+        by_side_net = dict(
+            zip(data["side"].tolist(), data["ojama_net_balance"].tolist()),
+        )
+        # 1 フレームのみ・連鎖なしのため net は 0 かつ 1P/2P で符号反転一致
+        assert not math.isnan(by_side_net["1P"])
+        assert not math.isnan(by_side_net["2P"])
+        assert by_side_net["1P"] == pytest.approx(-by_side_net["2P"])
+
+    def test_drain_ojama_by_tsumo_delta_lean_does_not_call_pipeline(
+        self,
+    ) -> None:
+        """_drain_ojama_by_tsumo_delta_lean は pipeline.tsumo_count() を
+        再度呼ばず、渡された値のみを使うこと (main loop の呼び出し回数を
+        変えないための設計、2026-08-12 追加)。tsumo_count=None なら何もしない。
+        """
+        mod = _import_lean()
+        tracker = mod.OjamaAccountingTracker()
+        tracker.reset()
+        state = mod._SideState()
+        # None のときは drain しない (呼び出し不能でも例外にならない)
+        mod._drain_ojama_by_tsumo_delta_lean(tracker, "p1", state, None, 1.0)
+        assert state.ojama_prev_tsumo == 0
+        # 増分ありのときは on_tsumo_settled が delta 回呼ばれ prev_tsumo が更新される
+        mod._drain_ojama_by_tsumo_delta_lean(tracker, "p1", state, 3, 2.0)
+        assert state.ojama_prev_tsumo == 3
 
 
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
