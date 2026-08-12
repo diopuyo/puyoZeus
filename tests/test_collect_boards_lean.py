@@ -1080,6 +1080,173 @@ class TestTsumoCountColumn:
         assert n == 0  # MENU 状態のため snapshot は 0 件だが例外なく完了
 
 
+# ============================
+# all_clear_pending 保存テスト (2026-08-12 追加、全消しボーナス予約中フラグ。
+# post-hoc の score 跳ね検出近似は過検出気味 (c143実測 ON率6.7%) だったため、
+# src.chain_detector.VideoChainTracker.all_clear_pending が実運用パイプラインで
+# 厳密に追跡済みの値をそのまま npz へ記録する)
+# ============================
+
+
+class TestAllClearPendingColumn:
+    """all_clear_pending の保存・後方互換を検証する。"""
+
+    def test_all_clear_pending_saved_in_npz(self, tmp_path: Path) -> None:
+        """all_clear_pending を渡すと npz に int8 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            all_clear_pending=1,
+        )
+        out = tmp_path / "all_clear_pending_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "all_clear_pending" in data
+        assert data["all_clear_pending"].dtype == np.int8
+        assert int(data["all_clear_pending"][0]) == 1
+
+    def test_all_clear_pending_none_saved_as_unknown(self, tmp_path: Path) -> None:
+        """all_clear_pending=None は ALL_CLEAR_PENDING_UNKNOWN (-1) として
+        保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "all_clear_pending_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["all_clear_pending"][0]) == mod.ALL_CLEAR_PENDING_UNKNOWN
+
+    def test_all_clear_pending_backward_compat_omitted_kwarg(
+        self, tmp_path: Path,
+    ) -> None:
+        """all_clear_pending 引数を省略した既存呼び出しでも -1 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "all_clear_pending_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        assert int(data["all_clear_pending"][0]) == mod.ALL_CLEAR_PENDING_UNKNOWN
+
+    def test_all_clear_pending_roundtrip_multiple(self, tmp_path: Path) -> None:
+        """複数 snapshot の all_clear_pending が往復 (save → load) で
+        一致すること (bool / int / None を混在させる)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        expected = [1, 0, -1, 1, 0]
+        raw = [True, False, None, 1, 0]
+        for i, v in enumerate(raw):
+            acc.append(
+                _make_board()._grid, "v29", "1P", float(i), 0, i,
+                all_clear_pending=v,
+            )
+        out = tmp_path / "all_clear_pending_roundtrip.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert data["all_clear_pending"].tolist() == expected
+
+    def test_existing_npz_keys_unchanged_after_all_clear_pending_addition(
+        self, tmp_path: Path,
+    ) -> None:
+        """all_clear_pending 追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "all_clear_pending_compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in (
+            "grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won",
+            "score", "next1_a", "next1_b", "dnext_a", "dnext_b",
+            "chain_trigger_sec", "tsumo_count",
+        ):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        assert "all_clear_pending" in data
+
+    def test_process_side_lean_passes_through_all_clear_pending(self) -> None:
+        """_process_side_lean が all_clear_pending を acc.append に伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            all_clear_pending=1,
+        )
+        assert acc.all_clear_pendings[0] == 1
+
+    def test_process_side_lean_default_all_clear_pending_is_unknown(self) -> None:
+        """all_clear_pending を渡さない場合 (既定 None) は -1 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert acc.all_clear_pendings[0] == mod.ALL_CLEAR_PENDING_UNKNOWN
+
+    def test_collect_lean_all_clear_pending_flows_from_chain_tracker_to_npz(
+        self, tmp_path: Path,
+    ) -> None:
+        """collect_lean の主ループが pipeline の side別 VideoChainTracker
+        (_chain_tracker_1p / _chain_tracker_2p) の all_clear_pending を読み取り、
+        npz まで正しく伝搬すること (2026-08-12 追加)。
+        """
+        mod = _import_lean()
+        fake_cap = _FakeCaptureLean(1, fps=30.0)
+        fake_pipeline = _FakeLeanPipelineStableAllClear(
+            pending_1p=True, pending_2p=False,
+        )
+
+        def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+            return fake_cap
+
+        def _fake_load_default(
+            *args: object, **kwargs: object,
+        ) -> "_FakeLeanPipelineStableAllClear":
+            return fake_pipeline
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+            mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+            out_npz = tmp_path / "all_clear_pending_flow.npz"
+            n = mod.collect_lean(Path("dummy_video.mp4"), out_npz)
+        assert n == 2  # 1P/2P それぞれ 1 snapshot
+        data = np.load(str(out_npz), allow_pickle=True)
+        by_side = dict(zip(data["side"].tolist(), data["all_clear_pending"].tolist()))
+        assert by_side["1P"] == 1
+        assert by_side["2P"] == 0
+
+    def test_collect_lean_tolerates_pipeline_without_chain_tracker_attrs(
+        self, tmp_path: Path,
+    ) -> None:
+        """pipeline が _chain_tracker_1p / _chain_tracker_2p を持たなくても
+        collect_lean は例外を出さないこと (後方互換: 古いフェイク/差し替え
+        オブジェクトでも動く、2026-08-12 追加)。
+        """
+        mod = _import_lean()
+        fake_cap = _FakeCaptureLean(4, fps=30.0)
+        fake_pipeline = _FakeLeanPipeline()  # _chain_tracker_1p/2p 属性なし
+
+        def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+            return fake_cap
+
+        def _fake_load_default(*args: object, **kwargs: object) -> _FakeLeanPipeline:
+            return fake_pipeline
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+            mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+            out_npz = tmp_path / "no_chain_tracker.npz"
+            n = mod.collect_lean(Path("dummy_video.mp4"), out_npz)
+        assert n == 0  # MENU 状態のため snapshot は 0 件だが例外なく完了
+
+
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
     """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker /
 
@@ -1377,6 +1544,43 @@ class _FakeLeanPipeline:
         """
         self.tsumo_count_calls.append(side)
         return 0
+
+
+class _FakeChainTrackerAllClear:
+    """VideoChainTracker の all_clear_pending 部分だけを模擬する最小フェイク
+    (2026-08-12 追加、collect_lean の main loop 配線確認用)。"""
+
+    def __init__(self, pending: bool) -> None:
+        self._pending = pending
+
+    @property
+    def all_clear_pending(self) -> bool:
+        return self._pending
+
+
+class _FakeLeanPipelineStableAllClear(_FakeLeanPipeline):
+    """side別 VideoChainTracker (_chain_tracker_1p/2p) を保持し、1 フレームだけ
+    STABLE を返すフェイク (2026-08-12 追加)。all_clear_pending が npz まで
+    伝搬することを検証するための専用フェイク。
+    """
+
+    def __init__(self, *, pending_1p: bool, pending_2p: bool) -> None:
+        super().__init__()
+        self._chain_tracker_1p = _FakeChainTrackerAllClear(pending_1p)
+        self._chain_tracker_2p = _FakeChainTrackerAllClear(pending_2p)
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        board = _make_board(COLOR_RED)
+        side_1p = SimpleNamespace(
+            state=BoardState.STABLE, score=100, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        side_2p = SimpleNamespace(
+            state=BoardState.STABLE, score=200, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(p1=side_1p, p2=side_2p)
 
 
 def _run_fake_collect_lean(
