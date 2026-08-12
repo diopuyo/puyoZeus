@@ -1,0 +1,21 @@
+[package]
+name = "puyo_core"
+version = "0.1.0"
+edition = "2021"
+# ぷよぷよ連鎖シミュレーション + ビームサーチ Rust ネイティブ拡張
+# (user確定指示 2026-08-12、src/chain_bitboard.py とビット一致のパリティが正解基準)
+
+[lib]
+name = "puyo_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+# extension-module: Python 側の libpython にリンクしない (maturin 標準構成)
+pyo3 = { version = "0.22", features = ["extension-module"] }
+rayon = "1.10"
+
+[profile.release]
+# リアルタイム応手探索用途なので最適化を強めに掛ける
+opt-level = 3
+lto = true
+codegen-units = 1

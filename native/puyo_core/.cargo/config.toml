@@ -1,0 +1,8 @@
+# WSL に build-essential (gcc) が未導入 + sudo がパスワード要求で使えないため、
+# pip 配布の ziglang (zig の cc 互換ドライバ) を C リンカ代わりに使う
+# (2026-08-12、native/puyo_core/zigcc.sh 参照)。
+# ⚠️ 開発環境固有の回避策: 本ファイルはこの WSL 環境のホームパス
+# (/home/ryouj/.local/bin/zigcc) に依存する。将来 gcc が導入できたら
+# 本セクションは削除してよい (cargo は標準で system cc を探す)。
+[target.x86_64-unknown-linux-gnu]
+linker = "/home/ryouj/.local/bin/zigcc"
