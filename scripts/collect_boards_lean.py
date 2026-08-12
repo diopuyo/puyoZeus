@@ -32,6 +32,16 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
                        (2026-07-29 追加、連鎖完了時刻の新方式較正用。
                         既存 boards_lean_fixed 系 npz には存在しない新規キー
                         であり、次回の再収集で初めて実値が入る)
+  tsumo_count : (N,) int32   試合開始からの確定ツモ設置数 (手数)。
+                       RecognitionPipeline.tsumo_count(side) の値をそのまま
+                       記録する (2026-08-12 追加、おじゃま収支近似復元 v3 の
+                       着地イベントゲート用。dedup済み STABLE snapshot は
+                       1着地に対応しないため、この列の増分を「着地イベント」
+                       の代理指標として使う)。取得不能時は -1
+                       (TSUMO_COUNT_UNKNOWN)。既存 boards_lean_fixed 系 npz
+                       には存在しない新規キーであり、次回の再収集で初めて
+                       実値が入る (後方互換: 既存 npz 読み出し側のキー集合
+                       には影響しない)。
 
   ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
   未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
@@ -153,6 +163,11 @@ CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
 # 場合の埋め値。空文字列は CHAIN_MECHANISM_* のどの値とも衝突しないため安全。
 CHAIN_MECHANISM_UNKNOWN: str = ""
 
+# tsumo_count (試合開始からの確定ツモ設置数、2026-08-12 追加) が未取得の場合の
+# 埋め値。RecognitionPipeline.tsumo_count(side) は常に 0 以上の整数を返すため
+# -1 は安全な sentinel。
+TSUMO_COUNT_UNKNOWN: int = -1
+
 
 # ============================
 # 蓄積バッファ
@@ -193,6 +208,13 @@ class _LeanNpzAccumulator:
     # 蓄積され、save() 時に一度も実値が入らなければ npz キー自体を書かない
     # (後方互換: 既存 npz 読み出し側のキー集合を変えない)。
     chain_mechanisms: list[str] = field(default_factory=list)
+    # 試合開始からの確定ツモ設置数 (手数、2026-08-12 追加)。
+    # RecognitionPipeline.tsumo_count(side) をそのまま記録する。おじゃま収支
+    # 近似復元 v3 の着地イベントゲート用 (dedup済み STABLE snapshot は
+    # 1着地に対応しないため、この列の増分を着地イベントの代理指標として使う)。
+    # None は TSUMO_COUNT_UNKNOWN (-1) として保存する。既存呼び出し
+    # (tsumo_count 省略) では常に -1 のまま保存される (後方互換: 挙動不変)。
+    tsumo_counts: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -207,6 +229,7 @@ class _LeanNpzAccumulator:
         dnext_pair: tuple[int, int] | None = None,
         chain_trigger_sec: float | None = None,
         mechanism: str | None = None,
+        tsumo_count: int | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -229,6 +252,10 @@ class _LeanNpzAccumulator:
                 (CHAIN_MECHANISM_* のいずれか)。None は
                 CHAIN_MECHANISM_UNKNOWN ("") で保存する (後方互換、
                 2026-08-02 追加)。
+            tsumo_count: この snapshot 時点の RecognitionPipeline.tsumo_count
+                (side) の値 (試合開始からの確定ツモ設置数)。None は
+                TSUMO_COUNT_UNKNOWN (-1) で保存する (後方互換: 省略時は既存
+                呼び出しと同じ挙動、2026-08-12 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -249,6 +276,9 @@ class _LeanNpzAccumulator:
         )
         self.chain_mechanisms.append(
             mechanism if mechanism is not None else CHAIN_MECHANISM_UNKNOWN
+        )
+        self.tsumo_counts.append(
+            int(tsumo_count) if tsumo_count is not None else TSUMO_COUNT_UNKNOWN
         )
 
     def assign_won_labels(
@@ -297,6 +327,11 @@ class _LeanNpzAccumulator:
         一度も記録されなかった (mechanism 未指定の呼び出しのみ、または
         ChainEvent.mechanism が全て None) 場合はキー自体を省略する
         (後方互換: 既存 npz 読み出し側の `set(d.keys())` 依存コードを壊さない)。
+
+        tsumo_count (int32、2026-08-12 追加) は next1_a 等と同様に常に
+        追加保存する (既存キーは不変、後方互換)。tsumo_count 未指定の
+        既存呼び出しでは全て TSUMO_COUNT_UNKNOWN (-1) になる (後方互換、
+        既存 npz 読み出し側の挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         save_kwargs: dict[str, np.ndarray] = dict(
@@ -314,6 +349,7 @@ class _LeanNpzAccumulator:
             dnext_a=np.array(self.dnext_as, dtype=np.int8),
             dnext_b=np.array(self.dnext_bs, dtype=np.int8),
             chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
+            tsumo_count=np.array(self.tsumo_counts, dtype=np.int32),
         )
         if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
             save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
@@ -755,12 +791,20 @@ def collect_lean(
         t_sec = fi / fps
         result = pipeline.update(fi, t_sec, frame)
 
+        # 試合開始からの確定ツモ設置数 (2026-08-12 追加、着地イベント代理指標用)。
+        # pipeline が tsumo_count 未対応 (フェイク等) の場合は None のまま
+        # (後方互換: _process_side_lean 側で TSUMO_COUNT_UNKNOWN に埋められる)。
+        get_tsumo_count = getattr(pipeline, "tsumo_count", None)
+        tsumo_count_1p = get_tsumo_count("1P") if callable(get_tsumo_count) else None
+        tsumo_count_2p = get_tsumo_count("2P") if callable(get_tsumo_count) else None
+
         _process_side_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
             next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
             chain_event=result.p1.chain_event, shared_game=shared_game,
             exclude_phantom=enable_phantom_board_guard,
+            tsumo_count=tsumo_count_1p,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -768,6 +812,7 @@ def collect_lean(
             next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
             chain_event=result.p2.chain_event, shared_game=shared_game,
             exclude_phantom=enable_phantom_board_guard,
+            tsumo_count=tsumo_count_2p,
         )
     cap.release()
 
@@ -793,6 +838,7 @@ def _process_side_lean(
     chain_event: object | None = None,
     shared_game: "_SharedGameCounter | None" = None,
     exclude_phantom: bool = False,
+    tsumo_count: int | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -810,6 +856,10 @@ def _process_side_lean(
         shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
             渡すと片側の score OCR 破綻でも game_idx がずれない。
             None なら従来の side 独立カウンタ (後方互換)。
+        tsumo_count: RecognitionPipeline.tsumo_count(side) の値 (この
+            snapshot 時点の試合開始からの確定ツモ設置数)。None は
+            acc.append 側で TSUMO_COUNT_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
         exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
             満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
     """
@@ -825,6 +875,7 @@ def _process_side_lean(
         round(t_sec, 3), state.game_idx, frame_idx,
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
         chain_trigger_sec=trigger_sec, mechanism=mechanism,
+        tsumo_count=tsumo_count,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
