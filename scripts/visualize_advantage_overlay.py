@@ -35,6 +35,7 @@ import src.indicators_v2 as iv  # noqa: E402
 from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
+from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker, OjamaAccountSnapshot,
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
@@ -47,6 +48,7 @@ from src.probability_calibration import (  # noqa: E402
 from src.production_config import (  # noqa: E402
     ATTRIBUTION_EXCLUDED_INDICATORS,
     COUNTER_REACH_ENABLED_BY_DEFAULT,
+    OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
@@ -1269,12 +1271,22 @@ class HeavyAdvCache:
     2026-07 正式採用によりモデル特徴量 (FEATURE_CANDIDATES) としても
     _score_advantage 側で使われる(こちらは表示専用の重複計算)。
     saturated_chain_count (飽和連鎖量) は依然コア adv 非混入の表示専用候補。
+
+    `every=9 (~0.3s @30fps)` という見積りは「1回の update() 呼び出し =
+    処理対象になった1フレーム」という前提に立つ (2026-08-12 補足)。
+    normalize_fps_30=True (既定) で 60fps 動画を stride=2 に間引くと、
+    generate() のメインループは stride 対象フレームでしか update() を呼ばない
+    ため、update() 呼び出し1回あたりに進む実時間も 2/60s (=1/30s) になり、
+    「9回=0.3秒」という近似は 60fps 動画でも 30fps 動画と同じ**実時間**を
+    指すようになる (stride 導入前は 60fps 動画で誤って 9/60=0.15秒 相当しか
+    間引けていなかった=フレーム数ベース定数の意図が半分の実時間で発火する
+    問題と同根)。
     """
 
     def __init__(
         self, model, every: int = 9,
         attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
-    ) -> None:  # ~0.3s @30fps
+    ) -> None:  # ~0.3s @30fps (normalize_fps_30=True なら 60fps 動画でも同じ実時間)
         """attribution_exclude: `_score_advantage` に渡す主因除外リスト
         (2026-08-11 追加、optional 引数)。既定は production_config の
         ATTRIBUTION_EXCLUDED_INDICATORS。既存呼出元は本引数を渡さないため
@@ -1862,7 +1874,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              layout: str = "overlay",
              show_excluded_attribution: bool = False,
              render: bool = True,
-             dump_timeline_path: Path | None = None) -> int:
+             dump_timeline_path: Path | None = None,
+             normalize_fps_30: bool = OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
+             ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
@@ -1988,6 +2002,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         同スクリプトのモジュール docstring 参照) が不要になる。
         既定 None = dump しない (backwards compat、既存呼出元は挙動不変)。
         `render=False` と併用すると計算のみを最速で回せる。
+    normalize_fps_30: True (既定、2026-08-12 追加) で 60fps 等の動画を
+        stride 相当 (実効30fps) に間引く
+        (src.fps_normalize.resolve_normalize_fps_30_stride)。
+        collect_boards_lean.py (収集) が 2026-07-30 から既定採用している
+        正規化と**同一関数**であり、CLI フラグ名・既定値も対称にしてある
+        (`--normalize-fps-30` / `--no-normalize-fps-30`)。
+        認識状態機械のフレーム数定数 (STABLE_RECOVERY_MIN_FRAMES=8 等) は
+        「30fps で1フレーム進む=1/30秒」を前提にコメントされているため、
+        60fps 動画を全フレーム処理すると実時間がその半分になり STABLE 遷移が
+        過多になる (A/B実測 +23%)。本フラグにより収集・学習データと同じ
+        認識意味論で動く。30fps 以下の動画は stride=1 に丸まり挙動不変。
+        既定 True = 収集側 (normalize_fps_30 既定 True) と揃える
+        (OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT、
+        src.production_config が単一情報源)。False にすると従来の全フレーム
+        処理を完全再現する (A/B比較・基準データ収集で全フレームが必須な場合用)。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -2021,6 +2050,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[ERROR] open失敗: {video}", file=sys.stderr)
         return 0
     fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
+    # 60fps→実効30fps 正規化 (2026-08-12 追加)。stride=1 (30fps 以下の動画、
+    # または normalize_fps_30=False) では以下の間引き分岐は常にスキップされ、
+    # 挙動は従来と完全一致する (backwards compat)。t (時刻) は絶対フレーム
+    # 番号 fi から計算する (下記ループの `t = fi / fps`) ため stride の値に
+    # 関わらず実時間 (収集側 collect_boards_lean.py:831 と同じ方式)。
+    stride = resolve_normalize_fps_30_stride(fps) if normalize_fps_30 else 1
+    effective_fps = fps / stride  # VideoWriter に渡す実効fps (再生時間を保つ)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     proc_frame = int(max(0.0, start_sec - warmup_sec) * fps)  # 処理開始 (ウォームアップ込み)
     write_frame = int(start_sec * fps)                        # 書き出し開始 (ゲーム頭)
@@ -2043,8 +2079,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 計算経路 (OUT_W/OUT_H で処理するフレーム) は layout に関わらず不変。
         canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
                        else (OUT_W, CANVAS_H))
+        # stride 間引き後は書き出しフレーム数が 1/stride になるため、出力fps も
+        # effective_fps (= fps/stride) にして再生時間 (実時間) を保つ
+        # (normalize_fps_30=False/30fps以下入力なら stride=1 で fps と同値、
+        # 従来挙動と完全一致)。
         writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"),
-                                 fps, canvas_size)
+                                 effective_fps, canvas_size)
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -2115,6 +2155,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         ok, frame = cap.read()
         if not ok or frame is None:
             break
+        # --- 60fps→30fps 正規化 (2026-08-12 追加) ---
+        # cap.read() は毎フレーム呼んでデコードし (シーク禁止、収集側
+        # collect_boards_lean.py:819-827 と同じ方式)、stride 非対象フレームは
+        # pipe.update() もオーバーレイ計算も一切行わず出力動画にも書かない
+        # (stride=1 の時は常に False で従来挙動と完全一致、backwards compat)。
+        if (fi - start_frame) % stride != 0:
+            continue
         # show_recognition=True かつ render=True の時のみネイティブ解像度の
         # コピーを保持する (認識色 overlay 描画用。推論には使わないため計算
         # 経路は不変。render=False では描画自体を行わないため無駄なコピーを
@@ -2543,7 +2590,33 @@ def main() -> None:
              "検出でき、判定の再計算(148動画で約39日と実測済み)が不要になる。"
              "既定 None = 保存しない。",
     )
+    # collect_boards_lean.py と同名・同既定 (2026-08-12 追加、対称化)。
+    ap.add_argument(
+        "--normalize-fps-30", action="store_true", dest="normalize_fps_30",
+        help=(
+            "60fps 等の動画を stride-2 相当 (実効30fps) に間引く "
+            "(src.fps_normalize.resolve_normalize_fps_30_stride、2026-08-12 追加。"
+            "collect_boards_lean.py が2026-07-30から既定採用している正規化と"
+            "同一関数)。"
+            "2026-08-12 既定 True 化により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-normalize-fps-30 を使う。"
+        ),
+    )
+    ap.add_argument(
+        "--no-normalize-fps-30", action="store_true", dest="no_normalize_fps_30",
+        help=(
+            "60fps stride 正規化を明示的に無効化する (2026-08-12 追加、既定 "
+            "True 化に伴う逃げ道)。--normalize-fps-30 と同時指定した場合は本"
+            "フラグ (無効化) が優先される。全フレームであることが要件の"
+            "基準データ収集等、既定 ON では困る用途で使う。"
+        ),
+    )
     a = ap.parse_args()
+    # 既定値解決 (collect_boards_lean.py と同じ方式): 明示 --no-normalize-fps-30 が
+    # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず既定 True
+    # (generate() 関数側の既定と一致させる)。
+    normalize_fps_30 = not a.no_normalize_fps_30
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
              exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
@@ -2567,7 +2640,8 @@ def main() -> None:
              layout=a.layout,
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
-             dump_timeline_path=a.dump_timeline_path)
+             dump_timeline_path=a.dump_timeline_path,
+             normalize_fps_30=normalize_fps_30)
 
 
 if __name__ == "__main__":
