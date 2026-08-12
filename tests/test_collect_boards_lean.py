@@ -927,6 +927,159 @@ class TestChainTriggerSecColumn:
         assert math.isnan(acc.chain_trigger_secs[0])
 
 
+# ============================
+# tsumo_count 保存テスト (2026-08-12 追加、おじゃま収支近似復元 v3 の
+# 着地イベントゲート用。dedup済み STABLE snapshot は1着地に対応しないため、
+# RecognitionPipeline.tsumo_count(side) の増分を着地イベントの代理指標に使う)
+# ============================
+
+
+class TestTsumoCountColumn:
+    """tsumo_count の保存・後方互換を検証する。"""
+
+    def test_tsumo_count_saved_in_npz(self, tmp_path: Path) -> None:
+        """tsumo_count を渡すと npz に int32 で保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(
+            _make_board(COLOR_RED)._grid, "v29", "1P", 1.0, 0, 1,
+            tsumo_count=7,
+        )
+        out = tmp_path / "tsumo_count_test.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert "tsumo_count" in data
+        assert data["tsumo_count"].dtype == np.int32
+        assert int(data["tsumo_count"][0]) == 7
+
+    def test_tsumo_count_none_saved_as_unknown(self, tmp_path: Path) -> None:
+        """tsumo_count=None は TSUMO_COUNT_UNKNOWN (-1) として保存されること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1)
+        out = tmp_path / "tsumo_count_none.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["tsumo_count"][0]) == mod.TSUMO_COUNT_UNKNOWN
+
+    def test_tsumo_count_backward_compat_omitted_kwarg(self, tmp_path: Path) -> None:
+        """tsumo_count 引数を省略した既存呼び出しでも -1 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=1234)
+        out = tmp_path / "tsumo_count_compat.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert int(data["score"][0]) == 1234
+        assert int(data["tsumo_count"][0]) == mod.TSUMO_COUNT_UNKNOWN
+
+    def test_tsumo_count_roundtrip_multiple(self, tmp_path: Path) -> None:
+        """複数 snapshot の tsumo_count が往復 (save → load) で一致すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        expected = [0, 3, 5, -1, 12]
+        raw = [0, 3, 5, None, 12]
+        for i, tc in enumerate(raw):
+            acc.append(
+                _make_board()._grid, "v29", "1P", float(i), 0, i,
+                tsumo_count=tc,
+            )
+        out = tmp_path / "tsumo_count_roundtrip.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        assert data["tsumo_count"].tolist() == expected
+
+    def test_existing_npz_keys_unchanged_after_tsumo_count_addition(
+        self, tmp_path: Path,
+    ) -> None:
+        """tsumo_count 追加後も既存キーが全て維持されること (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board()._grid, "v29", "1P", 1.0, 0, 1, score=5000)
+        out = tmp_path / "tsumo_count_compat_keys.npz"
+        acc.save(out)
+        data = np.load(str(out), allow_pickle=True)
+        for key in (
+            "grids", "video_id", "side", "t_sec", "game_idx", "frame_idx", "won",
+            "score", "next1_a", "next1_b", "dnext_a", "dnext_b",
+            "chain_trigger_sec",
+        ):
+            assert key in data, f"後方互換キー '{key}' が消えた"
+        assert "tsumo_count" in data
+
+    def test_process_side_lean_passes_through_tsumo_count(self) -> None:
+        """_process_side_lean が tsumo_count を acc.append に伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            tsumo_count=9,
+        )
+        assert acc.tsumo_counts[0] == 9
+
+    def test_process_side_lean_default_tsumo_count_is_unknown(self) -> None:
+        """tsumo_count を渡さない場合 (既定 None) は -1 埋めされること
+        (後方互換: 既存呼び出しコードは一切変更不要)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert acc.tsumo_counts[0] == mod.TSUMO_COUNT_UNKNOWN
+
+    def test_collect_lean_calls_pipeline_tsumo_count_for_both_sides(
+        self, tmp_path: Path,
+    ) -> None:
+        """collect_lean の主ループが 1P/2P 双方の pipeline.tsumo_count を呼ぶこと。
+
+        RecognitionPipeline.tsumo_count(side) は stateless getter であり、
+        _process_side_lean 呼び出し前に main loop で取得して渡す設計
+        (2026-08-12 追加)。
+        """
+        n_frames = 4
+        _, fake_pipeline = _run_fake_collect_lean(tmp_path, n_frames, fps=30.0)
+        # MENU 状態で emit されないため tsumo_counts 自体は空だが、
+        # pipeline.tsumo_count は毎認識フレームで両 side 分呼ばれる。
+        assert fake_pipeline.tsumo_count_calls.count("1P") == n_frames
+        assert fake_pipeline.tsumo_count_calls.count("2P") == n_frames
+
+    def test_collect_lean_tolerates_pipeline_without_tsumo_count(
+        self, tmp_path: Path,
+    ) -> None:
+        """pipeline が tsumo_count 未対応でも collect_lean は例外を出さないこと
+        (後方互換: 古いフェイク/差し替えオブジェクトでも動く)。
+        """
+        mod = _import_lean()
+        fake_cap = _FakeCaptureLean(4, fps=30.0)
+
+        class _NoTsumoCountPipeline(_FakeLeanPipeline):
+            """tsumo_count メソッドを持たないフェイク。"""
+            def __getattribute__(self, name: str) -> object:
+                if name == "tsumo_count":
+                    raise AttributeError(name)
+                return super().__getattribute__(name)
+
+        fake_pipeline = _NoTsumoCountPipeline()
+
+        def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+            return fake_cap
+
+        def _fake_load_default(*args: object, **kwargs: object) -> _NoTsumoCountPipeline:
+            return fake_pipeline
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+            mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+            out_npz = tmp_path / "no_tsumo_count.npz"
+            n = mod.collect_lean(Path("dummy_video.mp4"), out_npz)
+        assert n == 0  # MENU 状態のため snapshot は 0 件だが例外なく完了
+
+
 def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() -> None:
     """collect_lean() の新引数 sample_interval_frames / enable_chain_tracker /
 
@@ -1201,6 +1354,8 @@ class _FakeLeanPipeline:
 
     def __init__(self) -> None:
         self.update_calls: list[int] = []
+        # tsumo_count(side) の呼び出し記録 (2026-08-12 追加、配線確認用)。
+        self.tsumo_count_calls: list[str] = []
 
     def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
         self.update_calls.append(fi)
@@ -1214,6 +1369,14 @@ class _FakeLeanPipeline:
 
     def set_video_id(self, video_id: str) -> None:
         pass
+
+    def tsumo_count(self, side: str) -> int:
+        """RecognitionPipeline.tsumo_count(side) のフェイク実装。
+
+        呼び出しを記録するだけで固定値 0 を返す (2026-08-12 追加)。
+        """
+        self.tsumo_count_calls.append(side)
+        return 0
 
 
 def _run_fake_collect_lean(
