@@ -134,6 +134,18 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "食い違いがあった (0-4 の確認依頼で発覚)。COUNTER_REACH_ENABLED_"
         "BY_DEFAULT=True で CLI 既定値も同時に ON 化する",
     ),
+    AdoptedFlag(
+        "--normalize-fps-30", "2026-08-12",
+        "60fps 動画を stride-2 相当 (実効30fps) に間引く "
+        "(src.fps_normalize.resolve_normalize_fps_30_stride、"
+        "collect_boards_lean.py が 2026-07-30 から既定採用済みの正規化と"
+        "同一関数)。従来オーバーレイのみ全フレーム処理のままで、認識状態機械の"
+        "フレーム数定数 (STABLE_RECOVERY_MIN_FRAMES 等、30fps前提でコメント"
+        "済み) が実時間半分で発火し STABLE 遷移が23%%過多になる非調整領域で"
+        "動いていた (収集・学習データと違う認識意味論の不一致)。"
+        "OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT=True で CLI 既定値も"
+        "同時に ON 化し、収集側と同じ意味論に揃える",
+    ),
 )
 
 # --counter-reach の CLI 既定値。visualize_advantage_overlay.py の argparse
@@ -141,6 +153,11 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
 # (CHAIN_SIM_ADOPTED の GHOST_CHAIN_RULE_ENABLED と同じパターン。
 # 「採用済みなのに初期値OFF」という食い違いの再発防止、2026-08-12)。
 COUNTER_REACH_ENABLED_BY_DEFAULT: bool = True
+
+# --normalize-fps-30 の CLI 既定値/generate() 既定値 (2026-08-12 追加、上記
+# ADVANTAGE_ADOPTED エントリ参照)。COUNTER_REACH_ENABLED_BY_DEFAULT と同じ
+# パターンで単一情報源化する。
+OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT: bool = True
 
 # ============================
 # 表示 (visualize_recognition の overlay 系)
