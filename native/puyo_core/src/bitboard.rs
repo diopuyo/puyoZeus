@@ -42,6 +42,15 @@ pub const DEATH_BIT_INDEX: u32 = (BOARD_ROWS - 1 - DEATH_ROW) as u32;
 /// 色コード (src/board.py と同一の値をそのまま使う)。
 pub const COLOR_EMPTY: u8 = 0;
 pub const COLOR_RED: u8 = 1;
+// COLOR_BLUE/GREEN/YELLOW は release ビルド本体では COLOR_RED..COLOR_PURPLE の
+// 範囲チェックのみで使うため直接参照されないが、単体テスト (#[cfg(test)]) や
+// 将来の呼び出し元での可読性のために名前付き定数として保持する。
+#[allow(dead_code)]
+pub const COLOR_BLUE: u8 = 2;
+#[allow(dead_code)]
+pub const COLOR_GREEN: u8 = 3;
+#[allow(dead_code)]
+pub const COLOR_YELLOW: u8 = 4;
 pub const COLOR_PURPLE: u8 = 5;
 pub const COLOR_OJAMA: u8 = 9;
 #[allow(dead_code)] // 参照用定数 (エンジンには入れない値である、という仕様の明示)
@@ -591,5 +600,88 @@ mod tests {
         let board = board_from_grid(&empty_grid());
         let results = enumerate_placements(&board, (COLOR_RED, COLOR_RED + 1), false);
         assert_eq!(results.len(), 22, "空盤面では4回転×6列(横は5列)=22通り");
+    }
+
+    #[test]
+    fn l_shape_connection_erases() {
+        // L字型 (4連結) も消える確認 (m2/m3 定式の縦横混在パス)
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED; // (row12,col0)
+        grid[11 * BOARD_COLS + 0] = COLOR_RED; // (row11,col0)
+        grid[10 * BOARD_COLS + 0] = COLOR_RED; // (row10,col0)
+        grid[10 * BOARD_COLS + 1] = COLOR_RED; // (row10,col1)
+        let board = board_from_grid(&grid);
+        let result = simulate_chain(&board, false);
+        assert_eq!(result.chain_count, 1);
+        assert_eq!(result.total_erased, 4);
+    }
+
+    #[test]
+    fn ojama_adjacent_to_erased_group_is_cleared() {
+        // 4連結の周囲に置いたお邪魔が巻き込み消去されるか
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 1] = COLOR_RED;
+        grid[11 * BOARD_COLS + 1] = COLOR_RED;
+        grid[12 * BOARD_COLS + 2] = COLOR_RED;
+        grid[11 * BOARD_COLS + 2] = COLOR_RED;
+        // 左隣 (col0) にお邪魔を隣接配置 (row12)
+        grid[12 * BOARD_COLS + 0] = COLOR_OJAMA;
+        // 消去グループから遠い (隣接しない) お邪魔は残るはず
+        grid[9 * BOARD_COLS + 5] = COLOR_OJAMA;
+        let board = board_from_grid(&grid);
+        let result = simulate_chain(&board, false);
+        assert_eq!(result.chain_count, 1);
+        assert_eq!(result.total_erased, 4);
+        assert_eq!(result.total_ojama, 1, "隣接お邪魔1個だけ巻き込み消去される");
+        let final_grid = board_to_grid(&result.final_board);
+        // 遠いお邪魔 (元 row9,col5) は落下して残っているはず (盤面全体でお邪魔1個)
+        let remaining_ojama = final_grid.iter().filter(|&&v| v == COLOR_OJAMA).count();
+        assert_eq!(remaining_ojama, 1);
+    }
+
+    #[test]
+    fn multi_step_chain_counts_two_steps() {
+        // 1段目の赤4連結消去 → col1 の青2個が落下 → col2 の青2個と
+        // 高さが揃って隣接し4連結になる (2段目発火)、という古典的な
+        // 「土台を抜いて上をつなげる」2連鎖の最小構成。
+        //
+        // col0: 高さ0,1 = R,R (それだけ)
+        // col1: 高さ0,1 = R,R / 高さ2,3 = B,B (1段目消去後に高さ0,1へ落下)
+        // col2: 高さ0,1 = B,B (最初から)
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED; // col0 高さ0
+        grid[11 * BOARD_COLS + 0] = COLOR_RED; // col0 高さ1
+        grid[12 * BOARD_COLS + 1] = COLOR_RED; // col1 高さ0
+        grid[11 * BOARD_COLS + 1] = COLOR_RED; // col1 高さ1
+        grid[10 * BOARD_COLS + 1] = COLOR_BLUE; // col1 高さ2
+        grid[9 * BOARD_COLS + 1] = COLOR_BLUE; // col1 高さ3
+        grid[12 * BOARD_COLS + 2] = COLOR_BLUE; // col2 高さ0
+        grid[11 * BOARD_COLS + 2] = COLOR_BLUE; // col2 高さ1
+        let board = board_from_grid(&grid);
+        let result = simulate_chain(&board, false);
+        assert_eq!(result.chain_count, 2, "1段目消去後に落下した青がcol2の青と繋がって2連鎖");
+        assert_eq!(result.total_erased, 8);
+    }
+
+    #[test]
+    fn enumerate_placements_filter_dead_excludes_death_placement() {
+        // col2 (DEATH_COL) を row2 (DEATH_ROWの1つ下、height=10) まで積んで
+        // 縦置きで積むと2つ目が DEATH_ROW に到達し窒息する配置を作る
+        let mut grid = empty_grid();
+        for row in 3..BOARD_ROWS {
+            grid[row * BOARD_COLS + DEATH_COL] = COLOR_RED;
+        }
+        let board = board_from_grid(&grid);
+        let all = enumerate_placements(&board, (COLOR_BLUE, COLOR_GREEN), false);
+        let filtered = enumerate_placements(&board, (COLOR_BLUE, COLOR_GREEN), true);
+        assert!(
+            filtered.len() < all.len(),
+            "filter_dead=true は窒息する配置を除外するはず (all={}, filtered={})",
+            all.len(),
+            filtered.len()
+        );
+        for (_placement, placed) in &filtered {
+            assert!(!is_dead(placed), "filter_dead=true の結果に窒息盤面が残っている");
+        }
     }
 }

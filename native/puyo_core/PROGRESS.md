@@ -20,8 +20,9 @@ user確定指示 (2026-08-12): ぷよぷよ連鎖シミュレーション+ビー
    (厳密版、幽霊連鎖ルール対応) とも一致確認済み。
    設置列挙 `enumerate_placements()` は `_enumerate_placement_boards`
    (indicators_v2.py:3389、窒息除外あり) 準拠。
-   Rust 単体テスト 6件 (`cargo test`) + Python パリティテスト 3件が
-   全通過 (下記参照)。
+   Rust 単体テスト 10件 (`cargo test`、L字連結・お邪魔巻き込み消去・
+   2段連鎖・窒息配置除外を含む) + Python パリティテスト 4件が全通過
+   (下記参照)。
 
 2. **ビームサーチ** (`src/beam.rs`): running-max 方式 (`_near_future_known_expand`
    と同じ意味論 = 置く→即発火→残骸を次の手へ引き継ぐ、発火するかどうかを
