@@ -828,11 +828,22 @@ COUNTER_SCALE: float = 40.0
 # ロールアウト本数 (既定 200 は重いので表示用に減らす)。
 COUNTER_N_ROLLOUTS: int = 60
 
+# 再計算の時間間引き間隔 [秒] (2026-08-12 追加)。
+# `_reach` は1回0.35〜数秒かかる MC 計算で、打ち合い場面では毎フレーム
+# (相手盤面が変わる度) キャッシュキーが変わり毎秒複数回走っていた
+# = デモ生成が遅い主犯。 表示更新はそもそも「1秒に2〜3回」の粒度で
+# 十分 (公開仕様) であり、 `HeavyAdvCache every=9 (~0.3s@30fps)` と同じ
+# 思想で 0.5 秒間引きを入れる。
+COUNTER_RECOMPUTE_INTERVAL_SEC: float = 0.5
+
 
 class CounterReachTracker:
     """相手が返せるかを時間予算ベースのモンテカルロで見る打ち合い優位。
 
     盤面 + 時間予算が同じなら結果も同じ (実装が決定論的) なのでキャッシュする。
+    さらに (2026-08-12) 呼び出し側が `t_sec` を渡した場合、
+    `COUNTER_RECOMPUTE_INTERVAL_SEC` 未満の間隔では前回の結果を再利用する
+    (t_sec 省略時は従来通り毎回計算=後方互換)。
     """
 
     def __init__(self) -> None:
@@ -840,6 +851,9 @@ class CounterReachTracker:
         # 直近に使った時間予算と平均打手数 (デバッグ・表示用)
         self.last_budget_sec: float = 0.0
         self.last_hands: float = 0.0
+        # 時間間引き用の直近状態 (2026-08-12 追加)
+        self._last_result: tuple[float, float, float] | None = None
+        self._last_t_sec: float | None = None
 
     def _reach(
         self, board: Board, budget_sec: float,
@@ -861,15 +875,32 @@ class CounterReachTracker:
         self, b1: Board, b2: Board, budget_sec: float = 0.0,
         next1: "tuple[int, int] | None" = None,
         next2: "tuple[int, int] | None" = None,
+        t_sec: float | None = None,
     ) -> tuple[float, float, float]:
         """(1P視点の優位[-100,100], 1Pの応手確率, 2Pの応手確率) を返す。
 
         budget_sec: 着弾までの時間予算 [秒]。 **手数はこの予算から決まる**
             (固定値を使わない)。 0 以下なら判定不能として 0 を返す。
         next1/next2: 各 side の既知ネクスト (あれば精度が上がる)。
+        t_sec: 呼び出し側の動画内時刻 [秒] (省略可、後方互換の optional 引数)。
+            指定した場合のみ `COUNTER_RECOMPUTE_INTERVAL_SEC` 間引きを適用する。
+            ただし budget_sec が 0↔正 で遷移した直後 (打ち合い開始/終了) は
+            反応遅れを避けるため間引きを無視して即計算する。
         """
+        budget_transitioned = (
+            (budget_sec <= 0.0) != (self.last_budget_sec <= 0.0)
+        )
         if budget_sec <= 0.0:
-            return 0.0, float("nan"), float("nan")
+            self.last_budget_sec = budget_sec
+            self._last_result = (0.0, float("nan"), float("nan"))
+            self._last_t_sec = t_sec
+            return self._last_result
+        if (
+            t_sec is not None and not budget_transitioned
+            and self._last_result is not None and self._last_t_sec is not None
+            and (t_sec - self._last_t_sec) < COUNTER_RECOMPUTE_INTERVAL_SEC
+        ):
+            return self._last_result
         self.last_budget_sec = budget_sec
         out: list[float] = []
         hands: list[float] = []
@@ -888,7 +919,10 @@ class CounterReachTracker:
         self.last_hands = float(np.mean(hands)) if hands else 0.0
         # 相手が返せないほど 1P 有利
         adv = ((1.0 - p2) - (1.0 - p1)) * COUNTER_SCALE
-        return float(max(-100.0, min(100.0, adv))), p1, p2
+        result = (float(max(-100.0, min(100.0, adv))), p1, p2)
+        self._last_result = result
+        self._last_t_sec = t_sec
+        return result
 
 
 class CapabilityPressureTracker:
@@ -2206,6 +2240,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     b1, b2, _budget,
                     next1=getattr(r.p1, "next_pair", None),
                     next2=getattr(r.p2, "next_pair", None),
+                    t_sec=t,  # 時間ベース間引き (2026-08-12、CounterReachTracker.update 参照)
                 ) if enable_counter_reach
                 else (0.0, float("nan"), float("nan"))
             )
