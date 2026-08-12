@@ -520,8 +520,11 @@ def _resolve_features(df: pd.DataFrame) -> list[str]:
 #   - 動画数  10 -> 66
 #   - 列      88 -> 96 (上位互換。 現行の全列を含む)
 # ペア数は 6,049 -> 73,416。
+# 2026-08-12 暫定切替: npz→CSV変換ツール (選択肢C) の初回産出物 (63本 light、
+# center_bulge入り) に向ける。148本フル版が出来たら差し替える。旧66本CSVは下記。
+#   旧: data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv
 TRAIN_CSV_PATH: str = (
-    "data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv"
+    "data/verify/npz_light_smoke_2026-08-12/labeled_win_light63.csv"
 )
 
 # ============================
