@@ -42,6 +42,18 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
                        には存在しない新規キーであり、次回の再収集で初めて
                        実値が入る (後方互換: 既存 npz 読み出し側のキー集合
                        には影響しない)。
+  all_clear_pending : (N,) int8  全消しボーナス予約中フラグ (0/1)。
+                       src.chain_detector.VideoChainTracker.all_clear_pending
+                       (公式ルール通りの全消しボーナス未消費ラッチ) をそのまま
+                       記録する (2026-08-12 追加。post-hoc の score 跳ね検出
+                       近似は過検出気味 (c143実測 ON率6.7%) と判明したため、
+                       実運用パイプラインが厳密追跡済みの値を直接保存する)。
+                       enable_chain_tracker=False (既定) の収集では
+                       VideoChainTracker 自体が無効化されており取得不能 → -1
+                       (ALL_CLEAR_PENDING_UNKNOWN)。既存 boards_lean_fixed 系
+                       npz には存在しない新規キーであり、次回の再収集で
+                       初めて実値が入る (後方互換: 既存 npz 読み出し側の
+                       キー集合には影響しない)。
 
   ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
   未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
@@ -168,6 +180,12 @@ CHAIN_MECHANISM_UNKNOWN: str = ""
 # -1 は安全な sentinel。
 TSUMO_COUNT_UNKNOWN: int = -1
 
+# all_clear_pending (全消しボーナス予約中フラグ、2026-08-12 追加) が未取得の
+# 場合の埋め値。値は 0 (予約なし) / 1 (予約中) の二値のため -1 は安全な
+# sentinel (enable_chain_tracker=False 等で VideoChainTracker 自体が無効な
+# 収集では常にこの値になる)。
+ALL_CLEAR_PENDING_UNKNOWN: int = -1
+
 
 # ============================
 # 蓄積バッファ
@@ -215,6 +233,12 @@ class _LeanNpzAccumulator:
     # None は TSUMO_COUNT_UNKNOWN (-1) として保存する。既存呼び出し
     # (tsumo_count 省略) では常に -1 のまま保存される (後方互換: 挙動不変)。
     tsumo_counts: list[int] = field(default_factory=list)
+    # 全消しボーナス予約中フラグ (0/1、2026-08-12 追加)。
+    # VideoChainTracker.all_clear_pending (chain_detector.py) をそのまま
+    # 記録する。None は ALL_CLEAR_PENDING_UNKNOWN (-1) として保存する。
+    # 既存呼び出し (all_clear_pending 省略) では常に -1 のまま保存される
+    # (後方互換: 挙動不変)。
+    all_clear_pendings: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -230,6 +254,7 @@ class _LeanNpzAccumulator:
         chain_trigger_sec: float | None = None,
         mechanism: str | None = None,
         tsumo_count: int | None = None,
+        all_clear_pending: int | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -256,6 +281,11 @@ class _LeanNpzAccumulator:
                 (side) の値 (試合開始からの確定ツモ設置数)。None は
                 TSUMO_COUNT_UNKNOWN (-1) で保存する (後方互換: 省略時は既存
                 呼び出しと同じ挙動、2026-08-12 追加)。
+            all_clear_pending: この snapshot 時点の
+                VideoChainTracker.all_clear_pending (bool、全消しボーナス
+                予約中フラグ) の値。0/1/None を受け付ける。None は
+                ALL_CLEAR_PENDING_UNKNOWN (-1) で保存する (後方互換: 省略時は
+                既存呼び出しと同じ挙動、2026-08-12 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -279,6 +309,10 @@ class _LeanNpzAccumulator:
         )
         self.tsumo_counts.append(
             int(tsumo_count) if tsumo_count is not None else TSUMO_COUNT_UNKNOWN
+        )
+        self.all_clear_pendings.append(
+            int(all_clear_pending) if all_clear_pending is not None
+            else ALL_CLEAR_PENDING_UNKNOWN
         )
 
     def assign_won_labels(
@@ -332,6 +366,11 @@ class _LeanNpzAccumulator:
         追加保存する (既存キーは不変、後方互換)。tsumo_count 未指定の
         既存呼び出しでは全て TSUMO_COUNT_UNKNOWN (-1) になる (後方互換、
         既存 npz 読み出し側の挙動には影響しない新規キー)。
+
+        all_clear_pending (int8、2026-08-12 追加) も同様に常に追加保存する
+        (既存キーは不変、後方互換)。all_clear_pending 未指定の既存呼び出し
+        では全て ALL_CLEAR_PENDING_UNKNOWN (-1) になる (後方互換、既存 npz
+        読み出し側の挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         save_kwargs: dict[str, np.ndarray] = dict(
@@ -350,6 +389,7 @@ class _LeanNpzAccumulator:
             dnext_b=np.array(self.dnext_bs, dtype=np.int8),
             chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
             tsumo_count=np.array(self.tsumo_counts, dtype=np.int32),
+            all_clear_pending=np.array(self.all_clear_pendings, dtype=np.int8),
         )
         if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
             save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
@@ -798,6 +838,19 @@ def collect_lean(
         tsumo_count_1p = get_tsumo_count("1P") if callable(get_tsumo_count) else None
         tsumo_count_2p = get_tsumo_count("2P") if callable(get_tsumo_count) else None
 
+        # 全消しボーナス予約中フラグ (2026-08-12 追加)。VideoChainTracker.
+        # all_clear_pending (chain_detector.py) が公式ルール通りの厳密ラッチを
+        # 保持しているためそのまま取得する。RecognitionPipeline は
+        # 現時点で side 別の公開 getter を持たないため、内部で保持する
+        # side 別 VideoChainTracker (_chain_tracker_1p / _chain_tracker_2p) に
+        # getattr で安全に参照する。enable_chain_tracker=False (既定) の
+        # 収集では tracker が None のため None のまま
+        # (後方互換: _process_side_lean 側で ALL_CLEAR_PENDING_UNKNOWN に埋める)。
+        chain_tracker_1p = getattr(pipeline, "_chain_tracker_1p", None)
+        chain_tracker_2p = getattr(pipeline, "_chain_tracker_2p", None)
+        all_clear_pending_1p = getattr(chain_tracker_1p, "all_clear_pending", None)
+        all_clear_pending_2p = getattr(chain_tracker_2p, "all_clear_pending", None)
+
         _process_side_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
@@ -805,6 +858,7 @@ def collect_lean(
             chain_event=result.p1.chain_event, shared_game=shared_game,
             exclude_phantom=enable_phantom_board_guard,
             tsumo_count=tsumo_count_1p,
+            all_clear_pending=all_clear_pending_1p,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -813,6 +867,7 @@ def collect_lean(
             chain_event=result.p2.chain_event, shared_game=shared_game,
             exclude_phantom=enable_phantom_board_guard,
             tsumo_count=tsumo_count_2p,
+            all_clear_pending=all_clear_pending_2p,
         )
     cap.release()
 
@@ -839,6 +894,7 @@ def _process_side_lean(
     shared_game: "_SharedGameCounter | None" = None,
     exclude_phantom: bool = False,
     tsumo_count: int | None = None,
+    all_clear_pending: int | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -860,6 +916,10 @@ def _process_side_lean(
             snapshot 時点の試合開始からの確定ツモ設置数)。None は
             acc.append 側で TSUMO_COUNT_UNKNOWN (-1) に埋められる
             (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        all_clear_pending: この snapshot 時点の VideoChainTracker.
+            all_clear_pending (全消しボーナス予約中フラグ) の値。None は
+            acc.append 側で ALL_CLEAR_PENDING_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
         exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
             満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
     """
@@ -875,7 +935,7 @@ def _process_side_lean(
         round(t_sec, 3), state.game_idx, frame_idx,
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
         chain_trigger_sec=trigger_sec, mechanism=mechanism,
-        tsumo_count=tsumo_count,
+        tsumo_count=tsumo_count, all_clear_pending=all_clear_pending,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
