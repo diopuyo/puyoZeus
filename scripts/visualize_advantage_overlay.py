@@ -44,7 +44,10 @@ from src.probability_calibration import (  # noqa: E402
     load_phase_platt_calibration, load_platt_calibration,
     phase_label_for_progress,
 )
-from src.production_config import ATTRIBUTION_EXCLUDED_INDICATORS  # noqa: E402
+from src.production_config import (  # noqa: E402
+    ATTRIBUTION_EXCLUDED_INDICATORS,
+    COUNTER_REACH_ENABLED_BY_DEFAULT,
+)
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import scripts.mc_counter_estimator as mc_counter  # noqa: E402
@@ -1820,7 +1823,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              disable_score_lead_bias: bool = False,
              enable_capability_pressure: bool = False,
              disable_pressure: bool = False,
-             enable_counter_reach: bool = False,
+             enable_counter_reach: bool = COUNTER_REACH_ENABLED_BY_DEFAULT,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              layout: str = "overlay",
              show_excluded_attribution: bool = False,
@@ -2428,11 +2431,18 @@ def main() -> None:
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
-        "--counter-reach", action="store_true", default=False,
+        "--counter-reach", action="store_true", default=COUNTER_REACH_ENABLED_BY_DEFAULT,
         dest="enable_counter_reach",
-        help="打ち合い応手確率 (モンテカルロ) を有利不利に加える (2026-08-09 "
-             "user採用)。相手が閾値以上を返せる確率を見て、返せない攻撃を"
-             "持っている側を有利にする。既定は無効 (後方互換)。",
+        help="打ち合い応手確率 (モンテカルロ) を有利不利に加える。相手が閾値"
+             "以上を返せる確率を見て、返せない攻撃を持っている側を有利にする。"
+             "src.production_config.COUNTER_REACH_ENABLED_BY_DEFAULT により"
+             "既定 ON (2026-08-12 正式採用、指標大整理提案書0-4)。無効化は"
+             "--no-counter-reach。",
+    )
+    ap.add_argument(
+        "--no-counter-reach", action="store_false", dest="enable_counter_reach",
+        help="(A/B比較用) --counter-reach を明示的に無効化する。既定が ON の"
+             "ため通常は不要。",
     )
     ap.add_argument(
         "--no-pressure", action="store_true", default=False,
