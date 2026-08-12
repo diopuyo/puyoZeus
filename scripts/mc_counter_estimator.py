@@ -73,6 +73,28 @@ test_exact_score_parity_with_chain_simulator` で実盤面600件、
 2026-08-13 追加) で30通りを1回のバッチ呼び出しにまとめている
 (`_current_max_chain_value`/`_pfp_first_pass_native`/
 `_pfp_second_pass_native` 参照)。
+
+## v3.1 重力違反盤面の安全弁 (2026-08-13 追加)
+
+`scripts/build_labeled_win_from_npz.py` の `_board_is_gravity_consistent`
+(同日発見) と同根の既知 native 制約: puyo_core の重力実装は入力盤面が
+既に重力一貫であることを前提にした定数時間最適化であり、認識由来の
+浮きぷよ盤面 (実測0.28%、`project_gravity_violation_regen_lead_2026-07-30`
+系の既知欠陥) を渡すと消去後の重力適用が不完全になり、2手目以降の
+連鎖判定がズレる (実例: 2連鎖と判定すべき盤面が1連鎖と誤判定、Pythonが
+正)。`estimate_counter_distribution` が受け取る「実盤面」(呼び出し元が
+渡す STABLE 確定盤面) は認識由来のためこの違反を持ち得るが、ロールアウト
+内部で `_select_build_placement`/`_deadline_trigger_value` 等が生成する
+盤面は全てシミュレーション産 (`ChainSimulator.simulate`/native
+`simulate_chain` の出力) であり、重力一貫は連鎖シミュレーションの後処理
+として保証される (シミュレータ自身が重力を適用してから返す) ため
+再チェック不要 (`build_labeled_win_from_npz.py` の全 native 呼び出し直前
+チェックとは異なり、本モジュールはロールアウトの**入口 1 箇所のみ**で
+チェックすれば十分)。よって `estimate_counter_distribution` の入口で
+`board` を1回だけ `_board_is_gravity_consistent` で判定し、違反時は
+そのロールアウト呼び出し全体 (`n_rollouts` 本すべて) を `use_native=False`
+(純Python経路) で実行することで「完全一致」を保証する (native の恒久修正
+は別課題、native/puyo_core 自体は本タスクで変更しない)。
 """
 from __future__ import annotations
 
@@ -82,7 +104,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.board import BOARD_COLS, COLOR_OJAMA, Board
+from src.board import BOARD_COLS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN, Board
 from src.chain import ChainSimulator
 from src.indicators_v2 import (
     IGNITION_TRIAL_COLORS,
@@ -187,6 +209,30 @@ class McRolloutOutcome:
 # モジュール docstring の「v3 Rust ネイティブ拡張載せ替え」参照。
 # 各関数は use_native=False (または NATIVE_AVAILABLE=False) で既存
 # src.indicators_v2 の実装にそのまま委譲する (完全一致・fail-safe)。
+
+
+def _board_is_gravity_consistent(board: Board) -> bool:
+    """各列に「浮きぷよ」由来のギャップが無いか判定する (native 載せ替えの
+    安全弁、モジュール docstring「v3.1 重力違反盤面の安全弁」参照)。
+
+    `scripts/build_labeled_win_from_npz.py::_board_is_gravity_consistent`
+    と全く同一の意味論・実装 (相互参照コメント: 両ファイルとも
+    scripts/ 直下のスクリプトであり、片方をもう片方から import すると
+    npz変換CLI一式 (argparse・pandas等の重い依存) が本番オーバーレイ経路
+    [`scripts/visualize_advantage_overlay.py` 等] に引き込まれてしまうため
+    複製している。ロジックを変える場合は両ファイル両方を修正すること)。
+    UNKNOWN セルは占有扱いしない (`Board.height_of`/Rust `occ` と同じ意味論)。
+    """
+    grid = board._grid
+    unoccupied = (grid == COLOR_EMPTY) | (grid == COLOR_UNKNOWN)
+    for col in range(BOARD_COLS):
+        occupied_rows = np.where(~unoccupied[:, col])[0]
+        if len(occupied_rows) == 0:
+            continue
+        top_row = int(occupied_rows[0])
+        if np.any(unoccupied[top_row:, col]):
+            return False
+    return True
 
 
 def _native_chain_count(board: Board) -> int:
@@ -558,7 +604,11 @@ def estimate_counter_distribution(
             拡張未導入環境では自動的に純Python実装へフォールバックする
             (`src.puyo_core_bridge.NATIVE_AVAILABLE` 判定、fail-safe)。
             False を明示すれば拡張の有無に関わらず常に純Python経路を使う
-            (パリティ検証用)。
+            (パリティ検証用)。**`board` が重力違反 (認識由来の浮きぷよ)
+            を含む場合、この値に関わらずこの呼び出し全体が自動的に純
+            Python経路に固定される** (モジュール docstring「v3.1 重力違反
+            盤面の安全弁」参照、`_board_is_gravity_consistent` で入口1回
+            のみ判定)。
 
     Returns:
         McCounterDistribution: mean/p25/p75/到達確率/平均打手数。
@@ -574,11 +624,20 @@ def estimate_counter_distribution(
     colors = active_colors if active_colors is not None else _near_future_active_colors(board)
     rng = random.Random(_mc_counter_seed(board, time_budget_sec))
 
+    # 重力違反盤面の安全弁 (モジュール docstring「v3.1」参照): 入口の実盤面
+    # (認識由来、認識起因の浮きぷよを持ち得る) をここで1回だけ判定する。
+    # ロールアウト内部で生成される盤面は全てシミュレーション産で重力一貫が
+    # 保証されるため再チェック不要 (再チェックすると全ロールアウトで
+    # O(BOARD_COLS)判定を毎手繰り返す無駄が生じる)。違反時はこの呼び出し
+    # 全体を純Python経路に固定し、native/Python混在による不整合を防ぐ。
+    effective_use_native = use_native and _board_is_gravity_consistent(board)
+
     ojama_values = np.empty(n_rollouts, dtype=float)
     hands_values = np.empty(n_rollouts, dtype=float)
     for i in range(n_rollouts):
         outcome = _rollout_once(
-            board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec, use_native,
+            board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec,
+            effective_use_native,
         )
         ojama_values[i] = outcome.achieved_ojama
         hands_values[i] = float(outcome.hands_used)

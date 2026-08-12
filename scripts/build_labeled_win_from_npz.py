@@ -203,6 +203,10 @@ def _board_is_gravity_consistent(board: Board) -> bool:
     (`indicators_v2.py`、常に正しい) へフォールバックする
     (「完全一致」要件を守るための安全弁、native の恒久修正は別課題)。
     UNKNOWN セルは占有扱いしない (`height_of`/Rust `occ` と同じ意味論)。
+
+    相互参照: `scripts/mc_counter_estimator.py::_board_is_gravity_consistent`
+    に同一の意味論・実装を複製している (2026-08-13 追加、循環依存回避の
+    ためscripts間import はせず複製、ロジックを変える場合は両ファイル修正)。
     """
     grid = board._grid
     unoccupied = (grid == COLOR_EMPTY) | (grid == COLOR_UNKNOWN)

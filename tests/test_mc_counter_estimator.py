@@ -20,6 +20,7 @@ from scripts.mc_counter_estimator import (
     MC_COUNTER_MAX_HANDS_HARD_CAP,
     PLACEMENT_SPEED_BY_ROW_SEC,
     PLACEMENT_SPEED_FALLBACK_SEC,
+    _board_is_gravity_consistent,
     _clamp_row_index,
     _deadline_trigger_value,
     _mc_counter_seed,
@@ -80,6 +81,61 @@ class TestPlacementSpeedTable:
         before = Board()._grid.copy()
         after = before.copy()  # 新規セル無し (満杯で置けなかった防御的ケース)
         assert _placement_row_index(before, after) == 12
+
+
+def _seed_gravity_violation_board() -> Board:
+    """列0に浮きぷよ (row10=赤の下、row11=空、row12=赤という重力違反) を
+    仕込んだ人工盤面 (native 安全弁テスト専用)。
+
+    認識由来の浮きぷよ欠陥
+    (`project_gravity_violation_regen_lead_2026-07-30`、実測0.28%)を模した
+    もの。列2-3には通常材料 (青2連結) も積んでおき、ロールアウトが実際に
+    手を打てる (組む/発火フェーズが両方動く) 構図にする。
+    """
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    g[10][0] = COLOR_RED  # 浮きぷよ (下に row11 の空きを挟む)
+    g[12][0] = COLOR_RED
+    g[12][2] = COLOR_BLUE
+    g[12][3] = COLOR_BLUE
+    g[11][2] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+class TestGravityViolationSafetyValve:
+    """重力違反盤面 (認識由来の浮きぷよ) に対する native 安全弁のテスト
+    (モジュール docstring「v3.1 重力違反盤面の安全弁」参照)。
+    """
+
+    def test_detects_floating_puyo_column(self) -> None:
+        board = _seed_gravity_violation_board()
+        assert not _board_is_gravity_consistent(board)
+
+    def test_normal_board_is_gravity_consistent(self) -> None:
+        board = _seed_board_ready_to_fire()
+        assert _board_is_gravity_consistent(board)
+
+    def test_empty_board_is_gravity_consistent(self) -> None:
+        assert _board_is_gravity_consistent(Board())
+
+    def test_native_default_matches_python_on_violation(self) -> None:
+        """重力違反盤面では use_native=True (既定) でも安全弁が働き、
+        呼び出し全体が純Python経路に固定される。use_native=False (明示的
+        純Python) と完全一致することで、native/Python混在による不整合が
+        起きないことを確認する (「完全一致」要件)。
+        """
+        board = _seed_gravity_violation_board()
+        native_default = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=3,
+        )
+        python_explicit = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=3, use_native=False,
+        )
+        assert native_default.mean == pytest.approx(python_explicit.mean)
+        assert native_default.p25 == pytest.approx(python_explicit.p25)
+        assert native_default.p75 == pytest.approx(python_explicit.p75)
+        assert native_default.mean_hands_used == pytest.approx(
+            python_explicit.mean_hands_used,
+        )
 
 
 class TestSeedDeterminism:
