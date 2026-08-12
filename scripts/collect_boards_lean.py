@@ -1,11 +1,20 @@
 """軽量 board 抽出パス — SiameseBoardCNN 学習用 npz を高速収集する。
 
-collect_indicators_v2 の重い処理(全指標計算・お邪魔会計・ojama_disruption 等)を
-省略し、confirmed_board グリッドと勝敗 won ラベルのみを蓄積する。
+collect_indicators_v2 の重い処理(全指標計算・ojama_disruption 等)を省略し、
+confirmed_board グリッドと勝敗 won ラベルのみを蓄積する。
+
+⚠️ 2026-08-12 追加: お邪魔会計 (OjamaAccountingTracker) は例外的に「軽量な
+真値記録」として常時駆動する (ojama_net_balance / ojama_forecast 列)。
+net収支/forecast は npz からの事後復元が不可能と確定した (score近似v1/v2は
+相関0.33-0.38で不合格、tsumo_countゲートv3も不可判定) ため、収集は認識
+パイプラインをフル実行しているという前提を活かし、追加コスト僅少 (会計は
+辞書演算のみで ChainSimulator 等の重い計算を含まない) な会計計算だけを
+本スクリプトに例外的に組み込んだ。全指標計算・ojama_disruption (モンテ
+カルロ) は依然として省略する。
 
 ## 省略する処理 (既定)
-- 全指標計算 (indicators_v2 モジュール呼び出しなし)
-- お邪魔会計 (OjamaAccountingTracker 不使用)
+- 全指標計算 (indicators_v2 モジュール呼び出しなし。お邪魔会計のみ例外的に
+  上記の通り常時駆動する)
 - ojama_disruption (モンテカルロ計算なし)
 - NextDetector (load_next_detector=False。--with-next 指定時のみ有効化)
 - VideoChainTracker (enable_chain_tracker=False。--enable-chain-tracker 指定時のみ有効化。
@@ -54,6 +63,33 @@ collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
                        npz には存在しない新規キーであり、次回の再収集で
                        初めて実値が入る (後方互換: 既存 npz 読み出し側の
                        キー集合には影響しない)。
+  ojama_net_balance : (N,) float32  お邪魔収支 net (own-perspective、
+                       2026-08-12 追加)。ojama_net_balance / ojama_forecast は
+                       予測貢献度1〜2位の主力指標だが、npz からの事後復元は
+                       不可能と確定した (score近似v1/v2は相関0.33-0.38で
+                       不合格、tsumo_countゲートv3も不可判定)。そのため収集
+                       中に src.ojama_accounting.OjamaAccountingTracker を
+                       実際に駆動し、STABLE snapshot ごとに真値を記録する。
+                       値は snapshot.net_balance_capped を own-perspective に
+                       変換したもの (1P はそのまま、2P は符号反転)。自分有利
+                       方向が正。取得不能時は NaN (OJAMA_NET_BALANCE_UNKNOWN)。
+                       ⚠️ 試合境界のリセットは OjamaAccountingTracker.
+                       on_state_transition が MENU 遷移/score 大幅減少を検知
+                       して内部で自動処理する。本スクリプト側では動画処理
+                       開始時に reset() を 1 回呼ぶだけでよく、game_idx が
+                       進むたびに外部から reset() してはならない (c系20本の
+                       学習データで判明した教訓: 収集を秒区間ごとに分割して
+                       都度 reset() すると、区間境界をまたぐ pending お邪魔が
+                       消えて会計が壊れる、2026-08-12発見)。既存
+                       boards_lean_fixed 系 npz には存在しない新規キーであり、
+                       次回の再収集で初めて実値が入る (後方互換)。
+  ojama_forecast    : (N,) float32  お邪魔予告 forecast (own-perspective、
+                       2026-08-12 追加)。ojama_net_balance と同じ tracker
+                       駆動で得る snapshot.forecast_p1/forecast_p2 (自分に
+                       向かう予告個数、負値は 0 にクリップ) を side 別に選択
+                       した値。取得不能時は NaN (OJAMA_FORECAST_UNKNOWN)。
+                       既存 boards_lean_fixed 系 npz には存在しない新規キー
+                       (後方互換)。
 
   ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
   未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
@@ -108,7 +144,11 @@ from src.board import Board  # noqa: E402
 from src.board_quality import is_phantom_board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
-from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
+from src.ojama_accounting import (  # noqa: E402
+    OjamaAccountingTracker,
+    OjamaAccountSnapshot,
+)
+from src.recognition_pipeline import RecognitionPipeline, SideResult  # noqa: E402
 
 # ============================
 # 定数
@@ -186,6 +226,13 @@ TSUMO_COUNT_UNKNOWN: int = -1
 # 収集では常にこの値になる)。
 ALL_CLEAR_PENDING_UNKNOWN: int = -1
 
+# ojama_net_balance / ojama_forecast (お邪魔会計の真値、2026-08-12 追加) が
+# 未取得の場合の埋め値。t_sec 等と同じ float32 系のため chain_trigger_sec と
+# 同方式で NaN sentinel を使う (0 は「収支ゼロ/予告ゼロ」という正当な実値と
+# 衝突するため sentinel に使えない)。
+OJAMA_NET_BALANCE_UNKNOWN: float = float("nan")
+OJAMA_FORECAST_UNKNOWN: float = float("nan")
+
 
 # ============================
 # 蓄積バッファ
@@ -239,6 +286,14 @@ class _LeanNpzAccumulator:
     # 既存呼び出し (all_clear_pending 省略) では常に -1 のまま保存される
     # (後方互換: 挙動不変)。
     all_clear_pendings: list[int] = field(default_factory=list)
+    # お邪魔会計の真値 (own-perspective、2026-08-12 追加)。
+    # OjamaAccountingTracker.get_snapshot() を毎処理フレーム駆動して得た
+    # net_balance_capped / forecast_p1・p2 を side 別 own-perspective に
+    # 変換した値。None は OJAMA_NET_BALANCE_UNKNOWN / OJAMA_FORECAST_UNKNOWN
+    # (NaN) として保存する。既存呼び出し (省略) では常に NaN のまま保存される
+    # (後方互換: 挙動不変)。
+    ojama_net_balances: list[float] = field(default_factory=list)
+    ojama_forecasts: list[float] = field(default_factory=list)
 
     def append(
         self,
@@ -255,6 +310,8 @@ class _LeanNpzAccumulator:
         mechanism: str | None = None,
         tsumo_count: int | None = None,
         all_clear_pending: int | None = None,
+        ojama_net_balance: float | None = None,
+        ojama_forecast: float | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -286,6 +343,14 @@ class _LeanNpzAccumulator:
                 予約中フラグ) の値。0/1/None を受け付ける。None は
                 ALL_CLEAR_PENDING_UNKNOWN (-1) で保存する (後方互換: 省略時は
                 既存呼び出しと同じ挙動、2026-08-12 追加)。
+            ojama_net_balance: この snapshot 時点の OjamaAccountingTracker
+                収支 (own-perspective、自分有利方向が正)。None は
+                OJAMA_NET_BALANCE_UNKNOWN (NaN) で保存する (後方互換: 省略時は
+                既存呼び出しと同じ挙動、2026-08-12 追加)。
+            ojama_forecast: この snapshot 時点の OjamaAccountingTracker 予告
+                個数 (own-perspective、自分に向かう予告個数)。None は
+                OJAMA_FORECAST_UNKNOWN (NaN) で保存する (後方互換、
+                2026-08-12 追加)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -313,6 +378,14 @@ class _LeanNpzAccumulator:
         self.all_clear_pendings.append(
             int(all_clear_pending) if all_clear_pending is not None
             else ALL_CLEAR_PENDING_UNKNOWN
+        )
+        self.ojama_net_balances.append(
+            float(ojama_net_balance) if ojama_net_balance is not None
+            else OJAMA_NET_BALANCE_UNKNOWN
+        )
+        self.ojama_forecasts.append(
+            float(ojama_forecast) if ojama_forecast is not None
+            else OJAMA_FORECAST_UNKNOWN
         )
 
     def assign_won_labels(
@@ -371,6 +444,12 @@ class _LeanNpzAccumulator:
         (既存キーは不変、後方互換)。all_clear_pending 未指定の既存呼び出し
         では全て ALL_CLEAR_PENDING_UNKNOWN (-1) になる (後方互換、既存 npz
         読み出し側の挙動には影響しない新規キー)。
+
+        ojama_net_balance / ojama_forecast (float32、2026-08-12 追加) も
+        同様に常に追加保存する (既存キーは不変、後方互換)。両方未指定の
+        既存呼び出しでは全て NaN (OJAMA_NET_BALANCE_UNKNOWN /
+        OJAMA_FORECAST_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
+        挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         save_kwargs: dict[str, np.ndarray] = dict(
@@ -390,6 +469,8 @@ class _LeanNpzAccumulator:
             chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
             tsumo_count=np.array(self.tsumo_counts, dtype=np.int32),
             all_clear_pending=np.array(self.all_clear_pendings, dtype=np.int8),
+            ojama_net_balance=np.array(self.ojama_net_balances, dtype=np.float32),
+            ojama_forecast=np.array(self.ojama_forecasts, dtype=np.float32),
         )
         if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
             save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
@@ -460,6 +541,11 @@ class _SideState:
     last_emitted_grid: bytes | None = None
     # game_idx ごとの最終 score を追跡
     final_scores: dict[int, int | None] = field(default_factory=dict)
+    # おじゃま会計 tsumo delta drain 用の前回手数 (2026-08-12 追加)。
+    # collect_indicators_v2._drain_by_tsumo_delta と同じ役割だが、
+    # pipeline.tsumo_count() を再度呼ばず main loop が既に取得済みの値を
+    # 再利用するための保持先 (呼び出し回数を変えないための設計)。
+    ojama_prev_tsumo: int = 0
 
 
 @dataclass
@@ -569,6 +655,101 @@ def _should_emit(
     if grid_bytes == state.last_emitted_grid:
         return False
     return True
+
+
+# ============================
+# おじゃま会計 (2026-08-12 追加)
+# ============================
+#
+# ojama_net_balance / ojama_forecast は npz からの事後復元が不可能と確定した
+# ため (score近似v1/v2は相関0.33-0.38で不合格、tsumo_countゲートv3も不可判定)、
+# 収集中に OjamaAccountingTracker を実際に駆動して真値を記録する。
+# collect_indicators_v2._drive_ojama / _drain_by_tsumo_delta と同じロジック
+# だが、以下の点で意図的に分離実装している:
+#   1. pipeline.tsumo_count() を再度呼ばない (main loop が tsumo_count npz
+#      列用に既に取得済みの値を再利用する。呼び出し回数を変えると既存
+#      _FakeLeanPipeline 系テストの呼び出し回数アサーションを壊すため)。
+#   2. tsumo_count 未対応 pipeline でも例外にならない (delta=None は skip)。
+
+
+def _drive_ojama_accounting_lean(
+    tracker: OjamaAccountingTracker,
+    state_p1: _SideState,
+    state_p2: _SideState,
+    prev_bstate_p1: BoardState,
+    prev_bstate_p2: BoardState,
+    p1: SideResult,
+    p2: SideResult,
+    tsumo_count_1p: int | None,
+    tsumo_count_2p: int | None,
+    t_sec: float,
+) -> OjamaAccountSnapshot:
+    """OjamaAccountingTracker を毎処理フレーム駆動し、現在の snapshot を返す。
+
+    試合境界のリセットは tracker.on_state_transition が MENU 遷移/score
+    大幅減少を検知して内部で自動処理する。呼び出し側 (collect_lean) は
+    動画処理開始時に reset() を 1 回呼ぶだけでよく、本関数からは reset() を
+    一切呼ばない (c系20本の学習データで判明した教訓: 収集を秒区間ごとに
+    分割して都度 reset() すると、区間境界をまたぐ pending お邪魔がリセット
+    で消えて会計が壊れる、2026-08-12発見)。
+
+    Args:
+        tracker: お邪魔会計追跡器 (動画 1 本につき 1 個、呼出元で保持)。
+        state_p1, state_p2: tsumo delta drain 用の前回手数を保持する状態。
+        prev_bstate_p1, prev_bstate_p2: 前フレームの各 side の状態。
+        p1, p2: 今フレームの pipeline.update() 結果 (side 別)。
+        tsumo_count_1p, tsumo_count_2p: 今フレームの
+            RecognitionPipeline.tsumo_count(side) の値 (main loop で既に
+            取得済み)。None は取得不能 (drain しない)。
+        t_sec: 現在時刻 (秒)。
+    """
+    tracker.on_state_transition("p1", prev_bstate_p1, p1.state, p1.score, t_sec)
+    tracker.on_state_transition("p2", prev_bstate_p2, p2.state, p2.score, t_sec)
+    _drain_ojama_by_tsumo_delta_lean(tracker, "p1", state_p1, tsumo_count_1p, t_sec)
+    _drain_ojama_by_tsumo_delta_lean(tracker, "p2", state_p2, tsumo_count_2p, t_sec)
+    return tracker.get_snapshot(t_sec)
+
+
+def _drain_ojama_by_tsumo_delta_lean(
+    tracker: OjamaAccountingTracker,
+    ojama_key: str,
+    state: _SideState,
+    tsumo_count: int | None,
+    t_sec: float,
+) -> None:
+    """tsumo_count の増分 delta 回 on_tsumo_settled を呼ぶ。
+
+    試合境界 (手数リセット) では delta < 0 になるため skip する
+    (会計は on_state_transition の MENU/score減少検知で既にリセット済み)。
+    tsumo_count=None (pipeline 未対応/未取得) の場合は何もしない。
+    """
+    if tsumo_count is None:
+        return
+    delta = tsumo_count - state.ojama_prev_tsumo
+    if delta > 0:
+        for _ in range(delta):
+            tracker.on_tsumo_settled(ojama_key, t_sec)
+    state.ojama_prev_tsumo = tsumo_count
+
+
+def _ojama_snapshot_to_own_perspective(
+    snap: OjamaAccountSnapshot,
+) -> tuple[float, float, float, float]:
+    """snapshot を 1P/2P 双方の own-perspective (net, forecast) に変換する。
+
+    net は snap.net_balance_capped の own-perspective 変換 (1P はそのまま、
+    2P は符号反転)。forecast は snap.forecast_p1/p2 を負値 0 クリップして
+    side 別に選択する (src.indicators_v2.ojama_net_balance/ojama_forecast の
+    .raw 定義と一致させ、収集後の値と学習時の値を一致させる)。
+
+    Returns:
+        (net_1p, forecast_1p, net_2p, forecast_2p) の 4 要素タプル。
+    """
+    net_1p = float(snap.net_balance_capped)
+    net_2p = -net_1p
+    forecast_1p = float(max(0, snap.forecast_p1))
+    forecast_2p = float(max(0, snap.forecast_p2))
+    return net_1p, forecast_1p, net_2p, forecast_2p
 
 
 # ============================
@@ -816,6 +997,14 @@ def collect_lean(
     # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
     shared_game = _SharedGameCounter()
 
+    # おじゃま会計 (2026-08-12 追加): 動画処理開始時に一度だけ生成・リセット
+    # する。試合 (game_idx) が進むたびに reset() してはならない
+    # (_drive_ojama_accounting_lean のコメント参照、c系20本の教訓)。
+    ojama_tracker = OjamaAccountingTracker()
+    ojama_tracker.reset()
+    prev_bstate_p1 = BoardState.MENU
+    prev_bstate_p2 = BoardState.MENU
+
     for local_i in range(n_frames):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -838,6 +1027,23 @@ def collect_lean(
         tsumo_count_1p = get_tsumo_count("1P") if callable(get_tsumo_count) else None
         tsumo_count_2p = get_tsumo_count("2P") if callable(get_tsumo_count) else None
 
+        # おじゃま会計 (2026-08-12 追加): dedup済み STABLE snapshot だけでなく
+        # 毎処理フレーム密に駆動する (スコア変化・連鎖終了の密な観測が必要
+        # なため、production_config の --sample-interval 0 採用根拠と同じ
+        # 理由)。tsumo_count_1p/2p は直前で取得済みの値を再利用し、
+        # pipeline.tsumo_count() を再度呼ばない (呼び出し回数を変えない)。
+        ojama_snap = _drive_ojama_accounting_lean(
+            ojama_tracker, state_p1, state_p2,
+            prev_bstate_p1, prev_bstate_p2,
+            result.p1, result.p2,
+            tsumo_count_1p, tsumo_count_2p, t_sec,
+        )
+        prev_bstate_p1 = result.p1.state
+        prev_bstate_p2 = result.p2.state
+        ojama_net_1p, ojama_forecast_1p, ojama_net_2p, ojama_forecast_2p = (
+            _ojama_snapshot_to_own_perspective(ojama_snap)
+        )
+
         # 全消しボーナス予約中フラグ (2026-08-12 追加)。VideoChainTracker.
         # all_clear_pending (chain_detector.py) が公式ルール通りの厳密ラッチを
         # 保持しているためそのまま取得する。RecognitionPipeline は
@@ -859,6 +1065,8 @@ def collect_lean(
             exclude_phantom=enable_phantom_board_guard,
             tsumo_count=tsumo_count_1p,
             all_clear_pending=all_clear_pending_1p,
+            ojama_net_balance=ojama_net_1p,
+            ojama_forecast=ojama_forecast_1p,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -868,6 +1076,8 @@ def collect_lean(
             exclude_phantom=enable_phantom_board_guard,
             tsumo_count=tsumo_count_2p,
             all_clear_pending=all_clear_pending_2p,
+            ojama_net_balance=ojama_net_2p,
+            ojama_forecast=ojama_forecast_2p,
         )
     cap.release()
 
@@ -895,6 +1105,8 @@ def _process_side_lean(
     exclude_phantom: bool = False,
     tsumo_count: int | None = None,
     all_clear_pending: int | None = None,
+    ojama_net_balance: float | None = None,
+    ojama_forecast: float | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -920,6 +1132,14 @@ def _process_side_lean(
             all_clear_pending (全消しボーナス予約中フラグ) の値。None は
             acc.append 側で ALL_CLEAR_PENDING_UNKNOWN (-1) に埋められる
             (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        ojama_net_balance: この snapshot 時点のお邪魔会計 net 収支
+            (own-perspective)。None は acc.append 側で
+            OJAMA_NET_BALANCE_UNKNOWN (NaN) に埋められる (後方互換: 既存
+            呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        ojama_forecast: この snapshot 時点のお邪魔会計予告個数
+            (own-perspective)。None は acc.append 側で
+            OJAMA_FORECAST_UNKNOWN (NaN) に埋められる (後方互換、
+            2026-08-12 追加)。
         exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
             満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
     """
@@ -936,6 +1156,7 @@ def _process_side_lean(
         score=score, next_pair=next_pair, dnext_pair=dnext_pair,
         chain_trigger_sec=trigger_sec, mechanism=mechanism,
         tsumo_count=tsumo_count, all_clear_pending=all_clear_pending,
+        ojama_net_balance=ojama_net_balance, ojama_forecast=ojama_forecast,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
