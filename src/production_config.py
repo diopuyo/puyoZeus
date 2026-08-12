@@ -123,7 +123,24 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "毎フレーム更新。0.5 秒間引きだとおじゃま会計がスコア変化・連鎖終了を"
         "取りこぼし net/forecast=0 になる (ADVANTAGE_OVERLAY_2026-07-13 §2-3)",
     ),
+    AdoptedFlag(
+        "--counter-reach", "2026-08-12",
+        "打ち合い応手確率 (モンテカルロ、mc_counter_estimator経由) の正式採用 "
+        "(指標大整理提案書 0-4)。三つ巴比較 (案D実データ学習 / 急所3修正シミュ / "
+        "併用) で全位相 (序盤/中盤/終盤) 有意勝ち (rho=0.808, AUC=0.837、"
+        "memory project_exchange_triple_comparison_results_2026-08-02)。"
+        "過去に「採用」とコードコメントのみ先行し、本ファイル未登録・"
+        "visualize_advantage_overlay.py の CLI 既定値も OFF のままという"
+        "食い違いがあった (0-4 の確認依頼で発覚)。COUNTER_REACH_ENABLED_"
+        "BY_DEFAULT=True で CLI 既定値も同時に ON 化する",
+    ),
 )
+
+# --counter-reach の CLI 既定値。visualize_advantage_overlay.py の argparse
+# default / generate() の関数既定値はここを import して使う
+# (CHAIN_SIM_ADOPTED の GHOST_CHAIN_RULE_ENABLED と同じパターン。
+# 「採用済みなのに初期値OFF」という食い違いの再発防止、2026-08-12)。
+COUNTER_REACH_ENABLED_BY_DEFAULT: bool = True
 
 # ============================
 # 表示 (visualize_recognition の overlay 系)
@@ -200,6 +217,42 @@ ATTRIBUTION_EXCLUDED_INDICATORS: tuple[str, ...] = (
 )
 
 
+# ============================
+# 指標大整理 (2026-08-12 user確定、docs/INDICATOR_REORG_PROPOSAL_2026-08-12.md
+# 「決定記録」節) — scripts/build_labeled_win_from_npz.py への実装
+# ============================
+# 実体の定数群 (DIFF_REPLACE_OWN_COLUMNS 等) は同ファイル側に置く
+# (npz→CSV変換ツール専用の分類のため)。ここには決定内容の記録のみ残す
+# (「採用日+根拠を必須記録」規約、production_config.py が単一情報源)。
+INDICATOR_REORG_DECISIONS: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        "a-1: *_raw列8種+saturated_chain_count を削除", "2026-08-12",
+        "*_raw は score の定数倍で完全重複 (記録・学習の両方から削除)。"
+        "saturated_chain_count は current_max_chain と19万場面で完全一致 "
+        "(作成時のバグで同じものを2回計算していた、"
+        "ATTRIBUTION_EXCLUDED_INDICATORS の根拠と同一)。absorption_capacity "
+        "は build_labeled_win_from_npz.py では元々未収集のため対応不要",
+    ),
+    AdoptedFlag(
+        "b-1: center_bulge を center_bulge_color/_ojama に分解", "2026-08-12",
+        "合成版は当てやすさ0.509でほぼ無価値だが、分解すると不利の大部分は"
+        "おじゃま由来 (影響は色ぷよの12倍) と判明。色ぷよ由来分は小さいが"
+        "本物の効果 (おじゃまゼロ33万場面でも検出)。indicators_v2.py の"
+        "center_bulge() 本体は backwards compat のため変更なし、"
+        "center_bulge_color/_ojama を新規追加",
+    ),
+    AdoptedFlag(
+        "b-2: 相手との差 (diff_) 列への置き換え", "2026-08-12",
+        "63動画実測: 11項目中10項目で「自分のみ」より「差」の方が当てやすい "
+        "(連結最大サイズは終盤0.508→0.567)。例外2つ (色ぷよ総数・3個連結) は"
+        "置き換えず own/diff の使い分けを列ごとに分類 (詳細は"
+        "scripts/build_labeled_win_from_npz.py の DIFF_* 定数群)。"
+        "色ぷよ総数は user指示8/12によりおじゃま総数とのペア特徴として"
+        "own+diff+比率+交互作用の4列で表現 (単純な差では向きが逆転する謎の答え)",
+    ),
+)
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)
@@ -234,6 +287,7 @@ def describe() -> str:
         ("有利不利", ADVANTAGE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
+        ("指標大整理", INDICATOR_REORG_DECISIONS),
     ):
         lines.append(f"[{title}]")
         for f in flags:

@@ -92,6 +92,8 @@ def test_all_scalar_indicators_in_range(board: Board) -> None:
         iv.death_margin(board),
         iv.death_margin_neighbor(board),
         iv.center_bulge(board),
+        iv.center_bulge_color(board),
+        iv.center_bulge_ojama(board),
         iv.current_max_chain(board),
         iv.immediate_fire_power(board),
         iv.chain_efficiency(board),
@@ -262,6 +264,72 @@ def test_center_bulge_score_matches_normalization_formula() -> None:
     v = iv.center_bulge(Board.from_list(g))
     expected = (v.raw + iv.CENTER_BULGE_RAW_ABS_MAX) / (2.0 * iv.CENTER_BULGE_RAW_ABS_MAX)
     assert v.score == pytest.approx(expected)
+
+
+# ============================
+# II-4' / II-4'' 中央凸度 分解版 (center_bulge_color / _ojama)
+# — b-1 (2026-08-12 user確定、指標大整理)
+# ============================
+
+
+def test_center_bulge_color_ignores_ojama_only_tower() -> None:
+    """中央列がおじゃまだけのタワーなら center_bulge_color はフラット (0.5)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    v = iv.center_bulge_color(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_ojama_ignores_color_only_tower() -> None:
+    """中央列が色ぷよだけのタワーなら center_bulge_ojama はフラット (0.5)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    v = iv.center_bulge_ojama(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_color_detects_color_tower() -> None:
+    """中央列が色ぷよタワーなら center_bulge_color は合成版と同じ値になる
+    (色のみの盤面なので分解しても値は変わらないはず)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    board = Board.from_list(g)
+    v_color = iv.center_bulge_color(board)
+    v_composite = iv.center_bulge(board)
+    assert v_color.raw == pytest.approx(v_composite.raw)
+    assert v_color.raw > 0.0
+
+
+def test_center_bulge_ojama_detects_ojama_tower() -> None:
+    """中央列がおじゃまタワーなら center_bulge_ojama は合成版と同じ値になる。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    board = Board.from_list(g)
+    v_ojama = iv.center_bulge_ojama(board)
+    v_composite = iv.center_bulge(board)
+    assert v_ojama.raw == pytest.approx(v_composite.raw)
+    assert v_ojama.raw > 0.0
+
+
+def test_center_bulge_color_and_ojama_are_independent_on_mixed_board() -> None:
+    """混在盤面 (中央=色ぷよタワー、外周=おじゃまタワー) では、色版は中央凸
+    (raw>0)・おじゃま版は外周の方が高いので raw<0 になる (独立に測れる)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    for col in iv.CENTER_BULGE_OUTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    board = Board.from_list(g)
+    v_color = iv.center_bulge_color(board)
+    v_ojama = iv.center_bulge_ojama(board)
+    assert v_color.raw > 0.0
+    assert v_ojama.raw < 0.0
 
 
 # ============================

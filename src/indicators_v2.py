@@ -310,9 +310,26 @@ def center_bulge(board: Board) -> IndicatorV2Value:
         IndicatorV2Value: score=0〜1 (0.5=フラット、1に近いほど中央凸)、
             raw=中央平均-外周平均 (クリップ後、範囲 [-9,+9])。
     """
-    clipped_heights = [
-        max(0.0, float(board.height_of(c)) - BASE_ROWS) for c in range(BOARD_COLS)
-    ]
+    heights = [float(board.height_of(c)) for c in range(BOARD_COLS)]
+    return _center_bulge_from_column_heights(heights)
+
+
+def _center_bulge_from_column_heights(heights: list[float]) -> IndicatorV2Value:
+    """中央凸度の共通計算 (center_bulge / center_bulge_color / _ojama で共有)。
+
+    b-1 分解 (2026-08-12 user確定、指標大整理提案書) に伴い、center_bulge()
+    本体からロジックを切り出した内部共通部品。center_bulge() の計算結果・
+    定数は変更しない (backwards compat)。
+
+    Args:
+        heights: 列ごとの高さ (計算基準はセル種別に応じて呼び出し側が決める。
+            例: 全種別なら height_of()、色ぷよのみなら
+            `_column_height_by_predicate(board, c, _is_color_puyo)`)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央平均-外周平均。
+    """
+    clipped_heights = [max(0.0, h - BASE_ROWS) for h in heights]
     center_mean = (
         sum(clipped_heights[c] for c in CENTER_BULGE_CENTER_COLS)
         / len(CENTER_BULGE_CENTER_COLS)
@@ -324,6 +341,81 @@ def center_bulge(board: Board) -> IndicatorV2Value:
     raw = center_mean - outer_mean
     score = (raw + CENTER_BULGE_RAW_ABS_MAX) / (2.0 * CENTER_BULGE_RAW_ABS_MAX)
     return IndicatorV2Value(score=_clamp01(score), raw=raw)
+
+
+def _is_color_puyo_cell(value: int) -> bool:
+    """色ぷよ (1〜5) セル判定 (お邪魔・空・UNKNOWN を除く)。"""
+    return value not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+
+
+def _is_ojama_cell(value: int) -> bool:
+    """おじゃまぷよセル判定。"""
+    return value == COLOR_OJAMA
+
+
+def _column_height_by_predicate(board: Board, col: int, is_match) -> int:
+    """height_of() と同じ「最上段からの距離」方式で、対象セルを is_match に
+    絞った部分高さを返す (b-1 分解、色ぷよのみ/おじゃまのみの高さ測定用)。
+
+    height_of() は「空・UNKNOWN以外」の最上段を基準にするが、本関数は
+    その基準セル集合を is_match で絞る。一致セルが列内に無ければ 0。
+    重なり (色ぷよの上におじゃまが乗る等) があっても、is_match に一致する
+    最上段セルの位置だけを見る単純な定義 (height_of と同じ精神)。
+
+    Args:
+        board: 対象盤面。
+        col: 列インデックス (0-5)。
+        is_match: セル色値 (int) -> bool の判定関数。
+
+    Returns:
+        int: is_match に一致する最上段セルの、最下段からの距離。0 なら一致
+            セルなし。
+    """
+    column = board._grid[:, col]
+    for row in range(BOARD_ROWS):
+        if is_match(int(column[row])):
+            return BOARD_ROWS - row
+    return 0
+
+
+def center_bulge_color(board: Board) -> IndicatorV2Value:
+    """II-4' 中央凸度・色ぷよ由来 (b-1 分解, 2026-08-12 user確定)。
+
+    center_bulge() と同じ式だが、高さの基準セルを色ぷよ (1〜5) のみに絞る。
+    指標大整理提案書 b-1 の検証結果 (中央凸度の不利の大部分はおじゃま由来、
+    色ぷよ由来は小さいが本物の効果) を受け、合成版を色ぷよ/おじゃまの2指標に
+    分解する。合成版 center_bulge() は backwards compat のため残す。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央-外周 (色ぷよのみ)。
+    """
+    heights = [
+        float(_column_height_by_predicate(board, c, _is_color_puyo_cell))
+        for c in range(BOARD_COLS)
+    ]
+    return _center_bulge_from_column_heights(heights)
+
+
+def center_bulge_ojama(board: Board) -> IndicatorV2Value:
+    """II-4'' 中央凸度・おじゃま由来 (b-1 分解, 2026-08-12 user確定)。
+
+    center_bulge_color() のおじゃま版。詳細は center_bulge_color() の
+    docstring を参照。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央-外周 (おじゃまのみ)。
+    """
+    heights = [
+        float(_column_height_by_predicate(board, c, _is_ojama_cell))
+        for c in range(BOARD_COLS)
+    ]
+    return _center_bulge_from_column_heights(heights)
 
 
 # ============================
@@ -3929,4 +4021,8 @@ __all__ = [
     "CENTER_BULGE_CENTER_COLS",
     "CENTER_BULGE_OUTER_COLS",
     "CENTER_BULGE_RAW_ABS_MAX",
+    # XIX' 中央凸度 分解版 (b-1, 2026-08-12 user確定 指標大整理)
+    # — 末尾追加・既存に非依存。center_bulge() 本体は変更なし。
+    "center_bulge_color",
+    "center_bulge_ojama",
 ]
