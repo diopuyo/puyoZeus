@@ -82,12 +82,17 @@ COLUMNS 末尾追加ルールと同じ精神)。
         --profile light
 
 --profile light: sub-ms 指標のみ (高速、反復開発向け)。
---profile full : current_max_chain 等の重い連鎖シミュ系も含む (低速)。
+--profile full : current_max_chain 等の重い連鎖シミュ系も含む。既定で
+    Rust拡張 puyo_core (`src/puyo_core_bridge.py`) に自動載せ替えられる
+    (2026-08-13 追加、未ビルド環境では自動的に既存 Python 実装へ
+    フォールバックする)。`--no-native` でこの載せ替えを強制的に無効化できる
+    (パリティ検証・デバッグ用)。
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import sys
 import time
 from pathlib import Path
@@ -98,8 +103,15 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.board import Board  # noqa: E402
+from src.board import BOARD_COLS, COLOR_EMPTY, COLOR_UNKNOWN, Board  # noqa: E402
 import src.indicators_v2 as iv  # noqa: E402
+from src.production_config import GHOST_CHAIN_RULE_ENABLED  # noqa: E402
+from src.puyo_core_bridge import NATIVE_AVAILABLE as _PUYO_CORE_AVAILABLE  # noqa: E402
+from src.puyo_core_bridge import (  # noqa: E402
+    chain_metrics_after_drops as _native_chain_metrics_after_drops,
+    simulate_after_drops as _native_simulate_after_drops,
+    simulate_chain as _native_simulate_chain,
+)
 from src.scoring import ALL_CLEAR_BONUS  # noqa: E402
 
 # ============================
@@ -138,6 +150,244 @@ GRID_ONLY_HEAVY_INDICATORS: dict[str, Callable[[Board], "iv.IndicatorV2Value"]] 
 }
 
 VALID_PROFILES: tuple[str, ...] = ("light", "full")
+
+# ============================
+# Rust ネイティブ拡張 (puyo_core) 載せ替え (2026-08-13 追加)
+# ============================
+# GRID_ONLY_HEAVY_INDICATORS (上記4列) は ChainSimulator.simulate の繰り返し
+# 呼び出しが支配的コスト (current_max_chain: 30回、dig_resistance: 4回、
+# ukeyasusa: dig_resistance丸ごと再利用、sub_chain_count: 最大61回、実測
+# 1〜19ms/行)。scripts/mc_counter_estimator.py と同じ「呼び出し側に native
+# 分岐を足す」パターンで src/puyo_core_bridge.py 経由の Rust 実装に載せ替える
+# (indicators_v2.py 自体は無変更、完全一致は
+# tests/test_build_labeled_win_from_npz.py::TestNativeHeavyIndicatorParity
+# で担保)。幽霊連鎖ルール (`_SHARED_SIMULATOR` の設定) と揃えるため、native
+# 呼び出しは必ず exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED を
+# 明示する。dig_resistance のおじゃま落下 (`ChainSimulator.drop_ojama`) は
+# 乱数 (端数列のランダム選択) を含むため native化せず既存 Python 実装のまま
+# 保持する (載せ替え対象は連鎖シミュレーション部分のみ、既存の非決定性は
+# この載せ替えでは変えない・直さない)。
+#
+# **既知の native 制約 (2026-08-13 発見、`_board_is_gravity_consistent`
+# 参照)**: puyo_core の重力実装は入力盤面が既に gravity一貫であることを
+# 前提にした最適化であり、認識由来の浮きぷよ (既存の重力違反、既知欠陥) を
+# 含む盤面では連鎖数がズレる場合がある (実測: 実盤面1,097件中1件で
+# current_max_chain の chain_count が 2→1 に食い違った)。全 native
+# 呼び出しの直前で `_board_is_gravity_consistent(board)` を確認し、違反時は
+# 既存 Python 実装へフォールバックすることで「完全一致」を保証する
+# (native の恒久修正は別課題、native/puyo_core 自体は本タスクで変更しない)。
+
+# takapt定石 (列×色30通り) の (col, color) 一覧。`iv._takapt_best_drop` と
+# 同一探索順 (col昇順→色昇順、scripts/mc_counter_estimator.py の
+# `_DROP_CANDIDATES_30` と同一定義を独立複製 — 両ファイルとも編集しない
+# 制約のため)。
+_NATIVE_DROP_CANDIDATES_30: tuple[tuple[int, int], ...] = tuple(
+    (col, color) for col in range(BOARD_COLS) for color in iv.IGNITION_TRIAL_COLORS
+)
+
+
+def _board_is_gravity_consistent(board: Board) -> bool:
+    """各列に「浮きぷよ」由来のギャップが無いか判定する (native 載せ替えの安全弁)。
+
+    **2026-08-13 実データ調査で発見した既知の native 制約**: puyo_core
+    (Rust) の重力実装は、消去後の各列シフト量を「その列で消えたセル数」
+    として計算するビット圧縮の定数時間実装であり、入力盤面が既に
+    gravity一貫 (各列で占有セルの下に空きが無い) であることを前提に
+    最適化されている。既に重力違反 (認識由来の浮きぷよ、
+    `project_gravity_violation_regen_lead_2026-07-30` 系の既知欠陥) を含む
+    盤面を渡すと、2手目以降の連鎖判定が食い違う場合がある (実測:
+    1,097件の実盤面サンプル中1件で current_max_chain の chain_count が
+    2→1 に食い違うことを確認済み。手動トレースで Python
+    ChainSimulator の chain_count=2 が正しいゲーム挙動と確認済み)。
+    この関数で事前検知し、違反時は呼び出し側が既存 Python 実装
+    (`indicators_v2.py`、常に正しい) へフォールバックする
+    (「完全一致」要件を守るための安全弁、native の恒久修正は別課題)。
+    UNKNOWN セルは占有扱いしない (`height_of`/Rust `occ` と同じ意味論)。
+    """
+    grid = board._grid
+    unoccupied = (grid == COLOR_EMPTY) | (grid == COLOR_UNKNOWN)
+    for col in range(BOARD_COLS):
+        occupied_rows = np.where(~unoccupied[:, col])[0]
+        if len(occupied_rows) == 0:
+            continue
+        top_row = int(occupied_rows[0])
+        if np.any(unoccupied[top_row:, col]):
+            return False
+    return True
+
+
+def _native_takapt_best_drop(
+    board: Board,
+) -> "tuple[int, Board | None, object | None]":
+    """takapt定石探索の native 版 (`iv._takapt_best_drop` と同一意味論)。
+
+    `sub_chain_count` が「本線発火後の final_board」を必要とするため、
+    盤面付きバッチAPI `simulate_after_drops` で候補ごとの ChainSimResult も
+    保持して返す (`iv._takapt_best_drop` 内で最良候補の simulate 結果を
+    使い捨てていた分の再計算を省く最適化)。
+
+    Returns:
+        (最大連鎖数, 1個追加後の盤面 [連鎖解決前] または None, その
+        ChainSimResult または None)。`>` による厳密な大小比較のため同値は
+        先に見つかった (col昇順→色昇順) 候補を保持する
+        (`iv._takapt_best_drop` の tie-break と同一)。
+    """
+    best_chain = 0
+    best_board: "Board | None" = None
+    best_result = None
+    for r in _native_simulate_after_drops(
+        board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    ):
+        if r is None:
+            continue
+        if r.chain_result.chain_count > best_chain:
+            best_chain = r.chain_result.chain_count
+            best_board = r.dropped_board
+            best_result = r.chain_result
+    return best_chain, best_board, best_result
+
+
+def _native_current_max_chain(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 III-1 `current_max_chain` の native 分岐版。
+
+    use_native=False または拡張未導入時は既存 `iv.current_max_chain` に
+    そのまま委譲する (完全一致、indicators_v2.py 自体は無変更)。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.current_max_chain(board)
+    best_chain = 0
+    for r in _native_chain_metrics_after_drops(
+        board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    ):
+        if r is None:
+            continue
+        chain_count, _exact_score = r
+        if chain_count > best_chain:
+            best_chain = chain_count
+    raw = float(best_chain)
+    return iv.IndicatorV2Value(score=iv._clamp01(raw / iv.NORM_MAX_CHAIN), raw=raw)
+
+
+def _native_dig_resistance_one(
+    board: Board, base_chain: int, n_ojama: int,
+) -> float:
+    """dig_resistance 1点分の native 版 (`iv._dig_resistance_one` と同一計算)。
+
+    おじゃま落下 (`drop_ojama`) は乱数を含むため既存 Python 実装
+    (`iv._SHARED_SIMULATOR`、上部コメント参照) をそのまま再利用し、連鎖
+    シミュレーションのみ native に置き換える。
+    """
+    try:
+        ojama_board = iv._SHARED_SIMULATOR.drop_ojama(board, n_ojama)
+    except Exception:
+        return 0.0
+    if ojama_board.is_dead():
+        return 0.0
+    try:
+        post_chain = _native_simulate_chain(
+            ojama_board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        ).chain_count
+    except Exception:
+        return 0.0
+    survival = min(1.0, post_chain / float(base_chain))
+    dig = 1.0 if post_chain >= iv.OJAMA_DEFENSE_DIG_MIN_CHAIN else 0.0
+    return (
+        iv.OJAMA_DEFENSE_SURVIVAL_WEIGHT * survival
+        + iv.OJAMA_DEFENSE_DIG_WEIGHT * dig
+    )
+
+
+def _native_dig_resistance(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 VI-1 `dig_resistance` の native 分岐版 (`_native_dig_resistance_one`
+    に3点分を委譲)。use_native=False または拡張未導入時は既存
+    `iv.dig_resistance` にそのまま委譲する (完全一致)。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.dig_resistance(board)
+    if board.is_dead():
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    base_chain = max(
+        1, _native_simulate_chain(
+            board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        ).chain_count,
+    )
+    scores = [
+        _native_dig_resistance_one(board, base_chain, n)
+        for n in iv.OJAMA_DEFENSE_TEST_COUNTS
+    ]
+    avg = sum(scores) / len(scores) if scores else 0.0
+    return iv.IndicatorV2Value(score=iv._clamp01(avg), raw=float(avg))
+
+
+def _native_ukeyasusa(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 X-1 `ukeyasusa` の native 分岐版 (dig_resistance 部分のみ
+    native化、absorption_capacity/death_margin は sim 不要のため既存関数を
+    直接使う)。use_native=False または拡張未導入時は既存 `iv.ukeyasusa` に
+    そのまま委譲する。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.ukeyasusa(board)
+    s_abs = iv.absorption_capacity(board).score
+    s_dig = _native_dig_resistance(board, use_native=True).score
+    s_death = iv.death_margin(board).score
+    score = (
+        iv.UKEYASUSA_W_ABSORPTION * s_abs
+        + iv.UKEYASUSA_W_DIG * s_dig
+        + iv.UKEYASUSA_W_DEATH * s_death
+    )
+    raw_abs = iv.absorption_capacity(board).raw
+    return iv.IndicatorV2Value(score=iv._clamp01(score), raw=raw_abs)
+
+
+def _native_sub_chain_count(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 XII-4 `sub_chain_count` の native 分岐版。
+
+    1手目探索の最良候補が保持する ChainSimResult (`_native_takapt_best_drop`)
+    をそのまま「本線発火結果」として再利用する (`iv.sub_chain_count` の
+    `sim.simulate(best_board)` 再計算と等価。ChainSimulator.simulate は
+    決定的関数のため同一盤面には常に同一結果、再計算を省く最適化)。
+    2手目探索は盤面を返さない軽量バッチAPIで行う。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.sub_chain_count(board)
+    best_chain, best_board, best_result = _native_takapt_best_drop(board)
+    if best_board is None or best_chain == 0 or best_result is None:
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    if best_result.chain_count == 0:
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    post_board = best_result.final_board
+    sub_best_chain = 0
+    for r in _native_chain_metrics_after_drops(
+        post_board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    ):
+        if r is None:
+            continue
+        chain_count, _exact_score = r
+        if chain_count > sub_best_chain:
+            sub_best_chain = chain_count
+    raw = float(sub_best_chain)
+    return iv.IndicatorV2Value(score=iv._clamp01(raw / iv.NORM_SUB_CHAIN), raw=raw)
+
+
+# full profile 重い4列の native 版レジストリ (use_native は呼び出し側が
+# functools.partial で bind する、`_resolve_indicator_registry` 参照)。
+GRID_ONLY_HEAVY_INDICATORS_NATIVE: dict[str, Callable[..., "iv.IndicatorV2Value"]] = {
+    "current_max_chain": _native_current_max_chain,
+    "dig_resistance": _native_dig_resistance,
+    "ukeyasusa": _native_ukeyasusa,
+    "sub_chain_count": _native_sub_chain_count,
+}
 
 # ============================
 # b-2: 「相手との差」列 (2026-08-12 user確定、決定記録参照)
@@ -274,12 +524,24 @@ PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
 
 
 def _resolve_indicator_registry(
-    profile: str,
+    profile: str, use_native: bool = True,
 ) -> dict[str, Callable[[Board], "iv.IndicatorV2Value"]]:
-    """profile に応じて使う指標レジストリを確定する (light はheavy除外)。"""
-    if profile == "full":
-        return {**GRID_ONLY_INDICATORS, **GRID_ONLY_HEAVY_INDICATORS}
-    return dict(GRID_ONLY_INDICATORS)
+    """profile に応じて使う指標レジストリを確定する (light はheavy除外)。
+
+    use_native (2026-08-13 追加、既定 True): full profile の重い4列を
+    Rust拡張 puyo_core 経由で計算する native 版レジストリ
+    (GRID_ONLY_HEAVY_INDICATORS_NATIVE) に切り替える。拡張未導入環境では
+    各関数が自動的に既存 Python 実装 (GRID_ONLY_HEAVY_INDICATORS 相当) へ
+    フォールバックするため、通常この引数は既定値のままでよい。False を
+    渡すと native 分岐を無条件で無効化する (パリティ検証・デバッグ用)。
+    """
+    if profile != "full":
+        return dict(GRID_ONLY_INDICATORS)
+    heavy = {
+        name: functools.partial(fn, use_native=use_native)
+        for name, fn in GRID_ONLY_HEAVY_INDICATORS_NATIVE.items()
+    }
+    return {**GRID_ONLY_INDICATORS, **heavy}
 
 
 def _resolve_diff_target_columns(
@@ -632,14 +894,19 @@ def convert_one_npz(
 
 
 def convert_dir(
-    npz_dir: Path, out_csv: Path, profile: str = "light",
+    npz_dir: Path, out_csv: Path, profile: str = "light", use_native: bool = True,
 ) -> tuple[int, float]:
     """npz_dir 内の全 npz を変換し out_csv に書き出す。
+
+    Args:
+        use_native: full profile の重い4列を Rust拡張 puyo_core 経由で計算
+            するか (2026-08-13 追加、既定 True、後方互換の optional 引数)。
+            `_resolve_indicator_registry` 参照。
 
     Returns:
         (書き出し行数, 所要秒数)。
     """
-    registry = _resolve_indicator_registry(profile)
+    registry = _resolve_indicator_registry(profile, use_native=use_native)
     t0 = time.time()
     all_rows: list[dict] = []
     npz_files = sorted(npz_dir.glob("*.npz"))
@@ -671,8 +938,16 @@ def main() -> int:
     ap.add_argument("--npz-dir", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--profile", choices=VALID_PROFILES, default="light")
+    ap.add_argument(
+        "--no-native", dest="use_native", action="store_false", default=True,
+        help=(
+            "full profile の重い4列で Rust拡張 puyo_core への載せ替えを"
+            "無効化し既存Python実装のみで計算する (2026-08-13追加、"
+            "パリティ検証・デバッグ用)。"
+        ),
+    )
     a = ap.parse_args()
-    convert_dir(a.npz_dir, a.out, profile=a.profile)
+    convert_dir(a.npz_dir, a.out, profile=a.profile, use_native=a.use_native)
     return 0
 
 
