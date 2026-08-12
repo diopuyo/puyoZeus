@@ -382,9 +382,17 @@ FIRE_STABILITY_COLS: tuple[str, ...] = tuple(
 EXPECTED_FIRE_COLS: tuple[str, ...] = tuple(
     f"expected_fire_k{k}" for k in (1, 2)
 )
+# center_bulge (中央凸度、2026-08-12 壁打ちuser仕様) は新指標のため FEATURES
+# 定数そのものは変更せず (直接 import する既存呼出元への影響回避、後方互換
+# 維持)、候補一覧 FEATURE_CANDIDATES の末尾に追加する。labeled_win.csv に
+# 列が無い間は _resolve_features() の列存在ガードで自動的に除外され、
+# 収集後に自動有効化される (saturated_chain_count 等と同じ方式)。
+CENTER_BULGE_COL: str = "center_bulge"
 FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + (
     "saturated_chain_count", "ukeyasusa", "sub_chain_count",
-) + NEAR_FUTURE_FIRE_COLS + FIRE_STABILITY_COLS + EXPECTED_FIRE_COLS
+) + NEAR_FUTURE_FIRE_COLS + FIRE_STABILITY_COLS + EXPECTED_FIRE_COLS + (
+    CENTER_BULGE_COL,
+)
 # 主要ドライバ表示用の日本語ラベル
 JP_LABEL: dict[str, str] = {
     "board_ojama_count": "盤面お邪魔数", "death_margin": "窒息余裕",
@@ -401,6 +409,7 @@ JP_LABEL: dict[str, str] = {
     "fire_stability_k2": "火力安定K2", "fire_stability_k4": "火力安定K4",
     "fire_stability_k6": "火力安定K6",
     "expected_fire_k1": "期待火力K1", "expected_fire_k2": "期待火力K2",
+    "center_bulge": "中央凸度",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
@@ -1069,6 +1078,7 @@ def _score_advantage(
         "saturated_chain_count": iv.saturated_chain_count,
         "ukeyasusa": iv.ukeyasusa,
         "sub_chain_count": iv.sub_chain_count,
+        CENTER_BULGE_COL: iv.center_bulge,
     }
     for name, fn in _candidate_fns.items():
         if name in cols and name not in f1:

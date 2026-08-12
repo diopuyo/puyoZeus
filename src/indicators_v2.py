@@ -70,6 +70,18 @@ NORM_BUMPINESS: float = 60.0
 # II-3 窒息余裕: 近接 3 列 = 1,2,3 列目 (0-indexed)。仕様書準拠。
 DEATH_NEIGHBOR_COLS: tuple[int, ...] = (1, 2, 3)
 
+# II-4 中央凸度 (2026-08-12 壁打ちuser仕様): 「真ん中(3,4列目)が外周より
+# 高いと不利」という定性認識をデータ検証するための観測軸。
+# 下 BASE_ROWS 段は土台なので無視 (クリップ)。user指示の固定値 3。
+BASE_ROWS: int = 3
+# 中央列 = 3,4列目 (0-indexed: 2,3)。DEATH_COL(=2, 3列目) と同じ数え方。
+CENTER_BULGE_CENTER_COLS: tuple[int, ...] = (2, 3)
+# 外周列 = 1,2,5,6列目 (0-indexed: 0,1,4,5)。
+CENTER_BULGE_OUTER_COLS: tuple[int, ...] = (0, 1, 4, 5)
+# raw の理論上限 |raw| (中央列が満杯・外周列が空 or 逆の極限)。
+# VISIBLE_ROWS(=12) - BASE_ROWS(=3) = 9。 仕様書の値域 [-9,+9] はこれで導出。
+CENTER_BULGE_RAW_ABS_MAX: float = float(VISIBLE_ROWS - BASE_ROWS)
+
 # III-1 現在の最大連鎖数: eスポーツ上級者の実用上限 ~19 連鎖。暫定。データ後決定。
 NORM_MAX_CHAIN: float = 19.0
 # III-4 連鎖効率 (即発火お邪魔 / 色ぷよ数) 正規化分母。暫定 2.0。データ後決定。
@@ -275,6 +287,43 @@ def death_margin_neighbor(board: Board) -> IndicatorV2Value:
     max_h = max(board.height_of(c) for c in DEATH_NEIGHBOR_COLS)
     raw = float(MAX_COL_HEIGHT - max_h)
     return IndicatorV2Value(score=_clamp01(raw / MAX_COL_HEIGHT), raw=raw)
+
+
+def center_bulge(board: Board) -> IndicatorV2Value:
+    """II-4 中央凸度 (2026-08-12 壁打ちuser仕様)。
+
+    プレイヤー共通認識「真ん中(3,4列目)が外周(1,2,5,6列目)より高いと不利」を
+    データ検証するための観測軸。「N段以上で不利」の閾値は決め打ちせず連続値
+    のみ提供し、重要度・閾値は学習(HistGBC)に発見させる (CLAUDE.md
+    「観測軸を提供→学習で重要度を発見」)。二値版は作らない。
+
+    h'[c] = max(0, height_of(c) - BASE_ROWS)  # 下3段は土台なので無視
+    raw   = mean(h'[中央2列]) - mean(h'[外周4列])  # 範囲 [-9, +9]
+    score = (raw + 9) / 18  # 0〜1、0.5 がフラット (中央=外周)
+
+    height_of() はお邪魔も高さに数える (Board.height_of の既存仕様を継承)。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット、1に近いほど中央凸)、
+            raw=中央平均-外周平均 (クリップ後、範囲 [-9,+9])。
+    """
+    clipped_heights = [
+        max(0.0, float(board.height_of(c)) - BASE_ROWS) for c in range(BOARD_COLS)
+    ]
+    center_mean = (
+        sum(clipped_heights[c] for c in CENTER_BULGE_CENTER_COLS)
+        / len(CENTER_BULGE_CENTER_COLS)
+    )
+    outer_mean = (
+        sum(clipped_heights[c] for c in CENTER_BULGE_OUTER_COLS)
+        / len(CENTER_BULGE_OUTER_COLS)
+    )
+    raw = center_mean - outer_mean
+    score = (raw + CENTER_BULGE_RAW_ABS_MAX) / (2.0 * CENTER_BULGE_RAW_ABS_MAX)
+    return IndicatorV2Value(score=_clamp01(score), raw=raw)
 
 
 # ============================
@@ -3873,4 +3922,11 @@ __all__ = [
     "OJAMA_DAMAGE_FLOOR",
     "OJAMA_DAMAGE_MID",
     "OJAMA_DAMAGE_CEIL",
+    # XIX 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+    # (末尾追加・既存に非依存、EXTRA_INDICATOR_NAMES 相当の追加規約に準拠)
+    "center_bulge",
+    "BASE_ROWS",
+    "CENTER_BULGE_CENTER_COLS",
+    "CENTER_BULGE_OUTER_COLS",
+    "CENTER_BULGE_RAW_ABS_MAX",
 ]
