@@ -1364,6 +1364,13 @@ class RecognitionPipeline:
         # (elapsed<=0.0 を満たすのは elapsed が負になる異常系のみなので実質
         # 無効化、close後クールダウン0.9秒はこの値と無関係のため無改修で残る)。
         burst_chain_gap_max_sec: "float | None" = None,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用): BoardStateMachine (1P/2P 両方) に
+        # そのまま伝播する。詳細は src/board_state_machine.py の
+        # STABLE_MAJORITY_WINDOW_FRAMES 定数コメント参照。
+        # default False = 従来の厳密連続一致を完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1848,6 +1855,10 @@ class RecognitionPipeline:
                 UserWarning,
                 stacklevel=2,
             )
+        # 盤面確定窓 3中2多数決 (2026-08-13): _build_state_machine 呼び出し前に
+        # 格納が必要 (BoardStateMachine へそのまま伝播するため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_stable_majority_window: bool = bool(stable_majority_window)
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -1983,6 +1994,7 @@ class RecognitionPipeline:
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
+            stable_majority_window=self._enable_stable_majority_window,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2020,6 +2032,7 @@ class RecognitionPipeline:
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
+            stable_majority_window=self._enable_stable_majority_window,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2379,6 +2392,9 @@ class RecognitionPipeline:
         # バーストガード Stage1.5 (2026-08-05 アーキ追補, A/B 計測用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_transition_merge_guard: bool = False,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        stable_majority_window: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2467,6 +2483,7 @@ class RecognitionPipeline:
             effect_gate_persist_sec=effect_gate_persist_sec,
             effect_gate_hard_freeze=effect_gate_hard_freeze,
             enable_transition_merge_guard=enable_transition_merge_guard,
+            stable_majority_window=stable_majority_window,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2730,6 +2747,11 @@ class RecognitionPipeline:
         # 既定 ON (速度 +23.5〜26.8%)。従来経路に戻すには False を渡す。
         enable_score_ocr_matmul: bool = True,
         ui_mask_cells: "frozenset[tuple[int, int]] | None" = UI_MASK_TARGET_CELLS,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用)。BoardStateMachine (1P/2P 両方) に
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2944,6 +2966,7 @@ class RecognitionPipeline:
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_burst_close_extension=enable_burst_close_extension,
             burst_chain_gap_max_sec=burst_chain_gap_max_sec,
+            stable_majority_window=stable_majority_window,
         )
 
     # ------------------------------------------------------------------

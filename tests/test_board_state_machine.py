@@ -174,6 +174,80 @@ def test_pending_count_resets_on_change() -> None:
 
 
 # ============================
+# 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13)
+# ============================
+
+
+def test_stable_majority_window_confirms_on_alternating_noise() -> None:
+    """2値交互ノイズ (A,B,A) でも window 中 2/3 一致すれば即時確定する (ON時の新機能)."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    a = _board_with_red(12, 0)
+    b = _board_with_red(12, 1)
+    sm.update(0, _signal(0.0, a.copy()))
+    sm.update(1, _signal(0.05, b.copy()))
+    ctx = sm.update(2, _signal(0.10, a.copy()))
+    assert ctx.state == BoardState.STABLE
+    assert ctx.confirmed_board is not None
+    assert ctx.confirmed_board == a
+
+
+def test_stable_majority_window_off_never_confirms_on_alternating_noise() -> None:
+    """既定 OFF (stable_majority_window=False) では2値交互ノイズは確定しない (回帰防止)."""
+    sm = BoardStateMachine(stable_frame_count=3)
+    a = _board_with_red(12, 0)
+    b = _board_with_red(12, 1)
+    ctx = None
+    for i in range(9):
+        board = a if i % 2 == 0 else b
+        ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert ctx is not None
+    assert ctx.state != BoardState.STABLE
+    assert ctx.confirmed_board is None
+
+
+def test_stable_majority_window_all_distinct_stays_unconfirmed() -> None:
+    """window 内が全て不一致 (3中2に達する組が無い) なら ON でも確定しない."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    boards = [_board_with_red(12, c) for c in range(BOARD_COLS)]
+    ctx = None
+    for i, board in enumerate(boards):
+        ctx = sm.update(i, _signal(0.05 * i, board))
+    assert ctx is not None
+    assert ctx.state != BoardState.STABLE
+    assert ctx.confirmed_board is None
+    assert ctx.pending_count == 0
+
+
+def test_stable_majority_window_confirms_uniform_sequence_like_strict() -> None:
+    """同一盤面が連続する通常ケースでは strict (OFF) と同じ挙動 (回帰防止)."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    board = _board_with_red(12, 0)
+    last_ctx = None
+    for i in range(3):
+        last_ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert last_ctx is not None
+    assert last_ctx.state == BoardState.STABLE
+    assert last_ctx.confirmed_board == board
+
+
+def test_stable_majority_window_skips_during_non_stable() -> None:
+    """NON-STABLE 中は ON でも window 履歴を積まない (認識を盤面確定に使わない)."""
+    sm = BoardStateMachine(
+        detectors=[_ForceState(BoardState.CHAIN, fire_at_frame=0)],
+        stable_frame_count=3, stable_majority_window=True,
+    )
+    board = _board_with_red(12, 0)
+    ctx = None
+    for i in range(5):
+        ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert ctx is not None
+    assert ctx.state == BoardState.CHAIN
+    assert ctx.pending_count == 0
+    assert ctx.confirmed_board is None
+    assert ctx.confirm_window_history == []
+
+
+# ============================
 # 強制遷移
 # ============================
 

@@ -781,6 +781,7 @@ def collect_lean(
     enable_gravity_settle_reset_on_exit: bool = False,
     enable_phantom_board_guard: bool = False,
     enable_margin_time_rate: bool = False,
+    enable_stable_majority_window: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -905,6 +906,11 @@ def collect_lean(
             では着弾を丸ごと見逃していた (npz 実測で全着弾の 6.27%)。
             起点は最初の1手から 95.5 秒 (user伝授)。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_stable_majority_window: 盤面確定窓 3中2多数決 (2026-08-13
+            user承認、認識99.5%物差し条件付き採用)。True で初回STABLE確定窓が
+            「stable_frame_count 連続厳密一致」から「直近3観測中2一致」に
+            切り替わる (src/board_state_machine.py 参照)。148動画収集走行中
+            のため既定 False 必須 (backwards compat)。
         enable_phantom_board_guard: 幻盤面ガード (2026-08-08)。True で
             非試合画面 (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま
             盤面を snapshot として記録しない。本スクリプトは
@@ -984,6 +990,7 @@ def collect_lean(
         ),
         enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
         enable_margin_time_rate=enable_margin_time_rate,
+        stable_majority_window=enable_stable_majority_window,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1405,6 +1412,17 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--stable-majority-window", action="store_true",
+        dest="enable_stable_majority_window",
+        help=(
+            "盤面確定窓 3中2多数決 (2026-08-13 user承認、認識99.5%%物差し"
+            "条件付き採用) を有効化する。初回STABLE確定窓を「stable_frame_count "
+            "連続厳密一致」から「直近3観測中2一致」に切り替える (1フレーム"
+            "ノイズで振り出しに戻る問題・2値交互ノイズへの弱さの対策)。"
+            "既定は無効 (後方互換、148動画収集走行中のため既定OFF必須)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -1436,6 +1454,7 @@ def main() -> int:
         enable_gravity_settle_reset_on_exit=args.enable_gravity_settle_reset_on_exit,
         enable_phantom_board_guard=args.enable_phantom_board_guard,
         enable_margin_time_rate=args.enable_margin_time_rate,
+        enable_stable_majority_window=args.enable_stable_majority_window,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
