@@ -25,7 +25,12 @@ from src.chain_bitboard import (
     planes_to_board,
     simulate_batch_with_approx_score,
 )
-from src.puyo_core_bridge import NATIVE_AVAILABLE, enumerate_placements, simulate_chain
+from src.puyo_core_bridge import (
+    NATIVE_AVAILABLE,
+    beam_search,
+    enumerate_placements,
+    simulate_chain,
+)
 
 _DATA_DIR = (
     Path(__file__).resolve().parent.parent
@@ -181,4 +186,63 @@ def test_enumerate_placements_parity_with_indicators_v2(
 
     assert not mismatches, (
         f"{len(mismatches)} 件で設置列挙が不一致:\n" + "\n".join(mismatches[:20])
+    )
+
+
+# ビームサーチが枝刈りされない幅 (22配置 × 22配置 = 484通り以下) で使う値。
+# `scripts/_verify_beam_miss_2026-08-09.py` と同じ全探索比較の考え方
+# (task指示: 接続可能な形にしておく)。
+_EXHAUSTIVE_BEAM_WIDTH: int = 500
+
+
+def _brute_force_best_score(
+    board: Board, pairs: "list[tuple[int, int]]",
+) -> int:
+    """ツモ列を全探索して到達できる最大 score_approx (running max) を返す (真値)。"""
+    frontier = [board]
+    best = 0
+    for pair in pairs:
+        nxt: "list[Board]" = []
+        for b in frontier:
+            for _col, _rot, placed in enumerate_placements(b, pair, filter_dead=True):
+                sim = simulate_chain(placed, exclude_hidden_row_from_pop=True)
+                best = max(best, sim.score_approx)
+                nxt.append(sim.final_board)
+        frontier = nxt
+        if not frontier:
+            break
+    return best
+
+
+def test_beam_search_matches_brute_force_at_shallow_depth(
+    sample_boards: "list[Board]",
+) -> None:
+    """幅を枝刈りが起きないほど広くすれば、ビームサーチ=全探索の真値と一致するか。
+
+    深さ1 (22通り) ・深さ2 (最大484通り) は全探索が現実的なので、
+    `beam_search` (running-max方式) が真値を取りこぼさないことを確認する
+    (`beam.rs` のアルゴリズム自体の正しさの検証、simulate/enumerate の
+    単体パリティだけでは検出できないバグ — 手順復元・running-max更新の
+    ロジック誤り — を捕捉する目的)。
+    """
+    subset = sample_boards[:30]
+    pairs_1 = [(1, 2)]
+    pairs_2 = [(1, 2), (3, 4)]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        for pairs in (pairs_1, pairs_2):
+            truth = _brute_force_best_score(board, pairs)
+            result = beam_search(
+                board, pairs, beam_width=_EXHAUSTIVE_BEAM_WIDTH,
+                exclude_hidden_row_from_pop=True,
+            )
+            if result.best_score != truth:
+                mismatches.append(
+                    f"[{i}] depth={len(pairs)}: beam={result.best_score} "
+                    f"truth={truth}",
+                )
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件でビームサーチが全探索真値と不一致:\n"
+        + "\n".join(mismatches[:20])
     )

@@ -48,13 +48,17 @@ user確定指示 (2026-08-12): ぷよぷよ連鎖シミュレーション+ビー
 
 5. **パリティテスト** (`tests/test_puyo_core_parity.py`): 実盤面600件
    (`data/indicators_v2/boards_lean_phase_l_2026-08-11/` から12動画×60盤面)
-   で3テスト全通過:
+   で4テスト全通過:
    - `test_simulate_chain_parity_with_chain_bitboard`: 600/600 一致
      (chain_count/total_erased/total_ojama/score_approx/final_board全て)
    - `test_simulate_chain_parity_ghost_rule`: 600/600 一致 (幽霊連鎖ルール、
      `simulate_batch` 厳密版と比較)
    - `test_enumerate_placements_parity_with_indicators_v2`: 120盤面×3ペアで
      `_enumerate_placement_boards` と盤面集合完全一致
+   - `test_beam_search_matches_brute_force_at_shallow_depth` (追加分):
+     幅500 (枝刈りが起きない広さ) で深さ1・2を全探索と突き合わせ、
+     30盤面×2深さ=60件全一致。`beam.rs` の running-max・手順復元ロジック
+     自体 (simulate/enumerate単体では検出できない) の正しさを検証する目的。
 
 6. **ベンチ** (`scripts/_bench_puyo_core_2026-08-12.py`): 実装済み・実行済み。
    **⚠️ 計測時、WSL側で148収集ジョブが10並列走行中 (loadavg 1分=28.6、
@@ -146,8 +150,10 @@ PYTHONPATH=. ./venv/bin/python -m scripts._bench_puyo_core_2026-08-12
    お邪魔換算前の素点) を返すので、既存スクリプトの `_brute_force` 関数と
    同じ土俵で比較可能 (score_approx / OJAMA_RATE_STANDARD でお邪魔換算に
    揃える必要あり、既存スクリプトは `calculate_chain_score` の厳密値を
-   使っているため、比較時は近似 vs 厳密の差を認識すること)。まだ実際に
-   繋いで走らせてはいない。
+   使っているため、比較時は近似 vs 厳密の差を認識すること)。
+   **一部前進**: `test_beam_search_matches_brute_force_at_shallow_depth`
+   (パリティテストに追加済み) で同じ考え方の検証を先取り実施し全通過。
+   既存スクリプトへの実際の接続・大規模実行はまだ未実施。
 4. 並列化の効果を正しく測るため、スレッドプールサイズ可変対応
    (現状 `OnceLock` は初回呼び出しのスレッド数で固定、複数スレッド数を
    比較するベンチでは毎回プロセスを再起動する必要がある。今回の
