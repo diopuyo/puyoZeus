@@ -91,6 +91,7 @@ def test_all_scalar_indicators_in_range(board: Board) -> None:
         iv.column_bumpiness(board),
         iv.death_margin(board),
         iv.death_margin_neighbor(board),
+        iv.center_bulge(board),
         iv.current_max_chain(board),
         iv.immediate_fire_power(board),
         iv.chain_efficiency(board),
@@ -170,6 +171,97 @@ def test_death_margin_decreases_with_height() -> None:
     v = iv.death_margin(Board.from_list(g))
     assert v.raw == 8.0  # 12 - 4
     assert v.score < 1.0
+
+
+# ============================
+# II-4 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+# ============================
+
+
+def _set_column_height(
+    grid: list[list[int]], col: int, height: int, color: int = COLOR_RED,
+) -> None:
+    """指定列の最下段から height 段を color で積む (テスト用ヘルパ)。"""
+    for row in range(BOARD_ROWS - 1, BOARD_ROWS - 1 - height, -1):
+        grid[row][col] = color
+
+
+def test_center_bulge_empty_board_is_flat() -> None:
+    """空盤面: 中央・外周とも高さ0でフラット (score=0.5, raw=0.0)。"""
+    v = iv.center_bulge(_empty_board())
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_flat_board_is_flat() -> None:
+    """全列同高 (フラット地形) なら中央=外周で raw=0.0, score=0.5。"""
+    g = _empty_grid()
+    for col in range(BOARD_COLS):
+        _set_column_height(g, col, height=5)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_center_tower_is_above_flat() -> None:
+    """中央 (3,4列目) だけ高いタワーは raw>0, score>0.5 (中央凸=定性的に不利側)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw > 0.0
+    assert v.score > 0.5
+
+
+def test_center_bulge_outer_only_is_below_flat() -> None:
+    """外周 (1,2,5,6列目) だけ高いと raw<0, score<0.5 (中央が低い=定性的に安全側)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_OUTER_COLS:
+        _set_column_height(g, col, height=10)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw < 0.0
+    assert v.score < 0.5
+
+
+def test_center_bulge_base_rows_only_is_clipped_flat() -> None:
+    """下 BASE_ROWS(=3) 段のみに積んだ盤面はクリップで全列 h'=0 → フラット扱い。
+
+    「土台は無視する」という仕様の直接検証: 中央だけ土台3段分を積んでも
+    中央凸とは判定されないこと。
+    """
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=iv.BASE_ROWS)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_counts_ojama_as_height() -> None:
+    """おじゃまも高さに数える (Board.height_of の既存仕様を継承)。
+
+    色ぷよタワーと同じ高さのおじゃまタワーで同じ raw になることを確認する。
+    """
+    g_color = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g_color, col, height=10, color=COLOR_RED)
+    g_ojama = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g_ojama, col, height=10, color=COLOR_OJAMA)
+    v_color = iv.center_bulge(Board.from_list(g_color))
+    v_ojama = iv.center_bulge(Board.from_list(g_ojama))
+    assert v_ojama.raw == pytest.approx(v_color.raw)
+    assert v_ojama.raw > 0.0
+
+
+def test_center_bulge_score_matches_normalization_formula() -> None:
+    """score = (raw + 9) / 18 の仕様式と一致すること (定数直書き禁止の裏取り)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=12)
+    v = iv.center_bulge(Board.from_list(g))
+    expected = (v.raw + iv.CENTER_BULGE_RAW_ABS_MAX) / (2.0 * iv.CENTER_BULGE_RAW_ABS_MAX)
+    assert v.score == pytest.approx(expected)
 
 
 # ============================

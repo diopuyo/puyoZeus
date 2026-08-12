@@ -212,6 +212,9 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     "expected_fire_k2", "expected_fire_k2_raw",
     "expected_fire_k3", "expected_fire_k3_raw",
     "expected_fire_k4", "expected_fire_k4_raw",
+    # XIX 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+    # (INDICATOR_COLUMNS 末尾、新指標は常に末尾追加で順序保持)
+    "center_bulge", "center_bulge_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -396,6 +399,7 @@ def _fill_indicator_columns(
     bm = iv.column_bumpiness(board)
     dm = iv.death_margin(board)
     dn = iv.death_margin_neighbor(board)
+    cb = iv.center_bulge(board)
     cm = iv.current_max_chain(board)
     ifp = iv.immediate_fire_power(board, elapsed_sec)
     rfp = iv.reach_fire_power(board, next_pair, dnext_pair, elapsed_sec)
@@ -432,6 +436,9 @@ def _fill_indicator_columns(
         "column_bumpiness": bm.score, "column_bumpiness_raw": bm.raw,
         "death_margin": dm.score, "death_margin_raw": dm.raw,
         "death_margin_neighbor": dn.score, "death_margin_neighbor_raw": dn.raw,
+        # XIX 中央凸度 (末尾追加。dict の記述位置は CSV 列順に影響しない。
+        # 列順は INDICATOR_COLUMNS 側で末尾固定済み)
+        "center_bulge": cb.score, "center_bulge_raw": cb.raw,
         "current_max_chain": cm.score, "current_max_chain_raw": cm.raw,
         "immediate_fire_power": ifp.score, "immediate_fire_power_raw": ifp.raw,
         "reach_fire_power": rfp.value.score, "reach_fire_power_raw": rfp.value.raw,
