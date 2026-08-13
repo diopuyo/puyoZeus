@@ -394,6 +394,19 @@ class DetectorSignals:
     # 実設置イベント (落下ボーナス等) の証拠として使う。
     # backwards compat: default 0 で既存動作と完全同一。
     own_score_delta: int = 0
+    # 案4-lite 拡張 (coordinator追加指示, 2026-08-13、OJAMA_FALL誤分類根因
+    # 調査 場面2): 自 side の直近 chain hold 終了予定時刻
+    # (RecognitionPipeline._chain_until_1p/_chain_until_2p をそのまま渡す。
+    # 新規の状態追跡を増やさず既存の追跡値を再利用する)。 chain_event が
+    # 現在アクティブなら time_sec 以降の未来時刻、 終了済みなら最後に更新
+    # された時刻のまま残る (試合開始時は 0.0)。
+    # OjamaVisualDetector が `signals.time_sec - own_chain_hold_until_sec` で
+    # 「直近まで自 chain がアクティブだったか」を state 非依存に判定する
+    # (ctx.state==CHAIN の瞬間条件だけでは chain_event 検出の瞬間空白で
+    # state が既に CHAIN を離れた後の割り込みを捉えられないため)。
+    # backwards compat: default 0.0 で既存動作と完全同一
+    # (0.0 は「経過大 = 直近アクティブでない」と等価に働く)。
+    own_chain_hold_until_sec: float = 0.0
 
 
 class StateTransitionDetector(Protocol):

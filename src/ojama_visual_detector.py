@@ -82,6 +82,25 @@ OJAMA_ENTRY_CONSEC_SEC: float = OJAMA_CONSEC_THRESH / 30.0
 # 抑止する。
 OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER: int = 3
 
+# 案4-lite 拡張 (coordinator追加指示, 2026-08-13、場面2実測 52→69 の悪化対処):
+# 「ctx.state == CHAIN」の瞬間条件だけでは実際の割り込み経路を捉えられない
+# (実測: chain_to_ojama_interrupts は baseline でも常に 0 = 直接の
+# CHAIN→OJAMA_FALL 隣接フレーム遷移は存在しない)。実際は
+# 「chain_event 検出が数秒の空白を作る → state が既に CHAIN を離れた後
+# (GRAVITY_SETTLE 等の中間 state 経由) に OJAMA_FALL entry が判定される」
+# という state 非依存の経路であるため、「直近 T 秒以内に自 side の
+# chain_event がアクティブだった」を実時間で判定する方式に拡張する。
+# T は連鎖1リンクの実測 (~0.4秒) の 2〜3 倍 (= 空白がここに収まる想定)。
+OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC: float = 0.4 * 2.5
+
+# 案4-lite 拡張 (coordinator追加指示, 2026-08-13、悪化原因の切り分け対象):
+# 案2 (enable_ojama_fall_placement_override) の早期 exit 直後は ROI に
+# visual artifact が残っている可能性があり、 即座に再度 entry 判定される
+# と「exit→即re-entry」の振動を誘発しうる。 exit 直後 本秒数以内の entry は
+# CHAIN 割り込みと同じ倍率で厳格化する (enable_ojama_fall_entry_hardening
+# 配下、 案2単体 (entry_hardening OFF) には一切影響しない)。
+OJAMA_REENTRY_SUPPRESS_SEC: float = 0.4
+
 # ROI の開始行 (= HIDDEN_ROWS = 1 = 可視最上段)
 _ROI_ROW_START: int = HIDDEN_ROWS
 # ROI の終了行 (exclusive)
@@ -193,11 +212,17 @@ class OjamaVisualDetector:
             OJAMA_FALL⇔STABLE が 0.15-0.3 秒周期で振動する実害が確認された
             (docs/DEMO_REVIEW_2026-08-13.md 場面1)。default False = 既存挙動と
             完全 bit-identical。
-        enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査追補)。
-            True で OJAMA_FALL entry 判定を frame 数連続でなく実時間連続
-            (`OJAMA_ENTRY_CONSEC_SEC`) に切り替え、 さらに ctx.state==CHAIN
-            からの割り込み entry のみ持続時間を
-            `OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER` 倍に厳格化する。
+        enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査追補、
+            coordinator追加指示で拡張)。True で OJAMA_FALL entry 判定を
+            frame 数連続でなく実時間連続 (`OJAMA_ENTRY_CONSEC_SEC`) に
+            切り替え、 `_is_hardened_entry_context` が True の間
+            (a) ctx.state==CHAIN、 (b) 直近 `OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_
+            SEC` 秒以内に自 side の chain_event がアクティブだった
+            (state 非依存、 chain_event 検出の空白で state が既に CHAIN を
+            離れた後の割り込みも捉える)、 (c) 直近
+            `OJAMA_REENTRY_SUPPRESS_SEC` 秒以内に案2 (placement override) の
+            早期 exit があった (exit→即re-entry 振動対策) — のいずれかで
+            持続時間を `OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER` 倍に厳格化する。
             stride 間引き下で chain_event が瞬間的に欠落した隙に低発火閾値の
             OJAMA_FALL entry が CHAIN を奪う実害への対策 (場面2)。
             default False = 既存挙動と完全 bit-identical。
@@ -237,6 +262,29 @@ class OjamaVisualDetector:
     _entry_trigger_start_time: float = field(
         default=-1.0, init=False, repr=False,
     )
+    # 案4-lite 拡張 (coordinator追加指示, 2026-08-13): 案2 (placement
+    # override) による直近の早期 exit 時刻 (-1.0 = 未発生)。
+    # `_reset_internal_state()` では意図的にクリアしない
+    # (re-entry 抑制窓の判定に「exit してから」の経過時間が必要なため)。
+    _placement_override_exit_time: float = field(
+        default=-1.0, init=False, repr=False,
+    )
+    # 案4-lite 拡張・第2ラウンド (coordinator追加指示, 2026-08-13、実データ
+    # 直接確認で判明): ChainPhaseDetector が最優先のため、 本 detector の
+    # entry 判定は「真に CHAIN 中」はほぼ呼ばれない (chain_event がアクティブ
+    # な間 ChainPhaseDetector が毎 frame 勝つため)。 実際に呼ばれるのは
+    # CHAIN 終了直後の GRAVITY_SETTLE 中、 またはそこから即 STABLE に
+    # 抜けた直後の 1-2 frame。 ctx.state==GRAVITY_SETTLE の「瞬間」条件では
+    # GRAVITY_SETTLE→STABLE→OJAMA_FALL という第2の割り込み経路 (実測:
+    # t=198.267 gravity_settle → t=198.400 stable → t=198.500 ojama_fall、
+    # 経過 0.233秒) を捉えられない。 本 detector 自身が「直近に
+    # CHAIN/GRAVITY_SETTLE を観測した時刻」 を内部で追跡し (新規の
+    # pipeline レベル状態追跡ではなく、 本 detector 内で完結する自己観測)、
+    # state 遷移の経路によらず一貫して厳格化できるようにする。
+    # (-1.0 = 未観測)。
+    _last_chain_or_settle_observed_time: float = field(
+        default=-1.0, init=False, repr=False,
+    )
 
     def detect(
         self,
@@ -261,6 +309,11 @@ class OjamaVisualDetector:
                 # 案B と同じ理由 (2026-07-24): keep_top_ojama_count で
                 # ROI に残る実カウントを保持し、 直後の再突入振動を防ぐ。
                 self._reset_internal_state(keep_top_ojama_count=cur_count)
+                # 案4-lite 拡張 (coordinator追加指示, 2026-08-13): exit 時刻を
+                # 記録する (`_reset_internal_state()` はクリアしないフィールド)。
+                # enable_ojama_fall_entry_hardening=True 時の re-entry 抑制窓
+                # 判定に使う (entry_hardening=False なら参照されず無害)。
+                self._placement_override_exit_time = signals.time_sec
                 return BoardState.STABLE
             # 案B (2026-07-24): 全盤面 settle 判定に委譲 (default False で既存不変)。
             if self.enable_ojama_fall_board_settle:
@@ -387,6 +440,14 @@ class OjamaVisualDetector:
         self._board_stable_consec = 0
         self._prev_board_puyo_count = -1
 
+        # 案4-lite 拡張・第2ラウンド (coordinator追加指示, 2026-08-13):
+        # detect() が呼ばれた時点 (= 他の高優先度 detector が勝たなかった
+        # frame) の ctx.state を無条件で観測記録する。 早期 return 分岐の
+        # 前に置くことで、 CHAIN/GRAVITY_SETTLE 中に発火しない分岐でも
+        # 観測時刻を確実に更新する。
+        if ctx.state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            self._last_chain_or_settle_observed_time = signals.time_sec
+
         # CHAIN 中かつフラグ OFF → 発火しない
         if (
             ctx.state == BoardState.CHAIN
@@ -460,10 +521,12 @@ class OjamaVisualDetector:
 
         frame 数でなく time_sec 差分で「連続観測」を判定するため、 フレーム
         間引き (stride) 下でも実時間の意味が変わらない。 さらに
-        ctx.state == CHAIN からの割り込みは
+        `_is_hardened_entry_context` が True の間 (CHAIN 中/直近 CHAIN
+        アクティブ/直近 案2 早期 exit 直後) は
         OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER 倍の持続時間を要求し、
-        chain_event の瞬間欠落への割り込みを抑止する
-        (docs/DEMO_REVIEW_2026-08-13.md 場面2 の根因対策)。
+        chain_event 関連の瞬間的な検出空白への割り込みを抑止する
+        (docs/DEMO_REVIEW_2026-08-13.md 場面2 の根因対策、
+        coordinator追加指示 2026-08-13 で state 非依存の実時間判定に拡張)。
         """
         if is_new_trigger:
             self._entry_trigger_start_time = signals.time_sec
@@ -472,7 +535,7 @@ class OjamaVisualDetector:
             return None
 
         required_sec = OJAMA_ENTRY_CONSEC_SEC
-        if ctx.state == BoardState.CHAIN:
+        if self._is_hardened_entry_context(ctx, signals):
             required_sec *= OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
 
         elapsed = signals.time_sec - self._entry_trigger_start_time
@@ -481,6 +544,74 @@ class OjamaVisualDetector:
             return BoardState.OJAMA_FALL
 
         return None
+
+    def _is_hardened_entry_context(
+        self, ctx: StateContext, signals: DetectorSignals,
+    ) -> bool:
+        """entry 厳格化 (持続時間倍率) を適用すべき文脈か判定する.
+
+        coordinator追加指示 (2026-08-13、場面2実測 52→69 の悪化対処、実データ
+        直接確認で2ラウンドの調査を要した)。当初「ctx.state == CHAIN」の
+        瞬間条件だけでは実際の割り込み経路を捉えられないと判明した。
+        実データ (frame_records 直接確認、
+        logs/verify_ojama_fall_fix_scene2_2026-08-13_v2.json) で少なくとも
+        2 つの割り込み経路を確認した:
+          (a) CHAIN → GRAVITY_SETTLE → OJAMA_FALL → CHAIN
+              (~1.2〜1.3秒周期、連鎖1リンクの実測とほぼ一致)。
+          (b) GRAVITY_SETTLE → STABLE (一瞬) → OJAMA_FALL
+              (実測: t=198.267 gravity_settle → t=198.400 stable →
+              t=198.500 ojama_fall、経過 0.233秒。 GravitySettleDetector が
+              先に STABLE へ正常解決した直後、 まだ ROI trigger が残った
+              状態で本 detector の entry がすり抜ける)。
+        (b) は ctx.state の瞬間条件では原理的に捉えられない (STABLE は
+        「厳格化すべきでない通常 state」でもあるため)。 本 detector 自身が
+        「直近に CHAIN/GRAVITY_SETTLE を観測した時刻」 を内部で追跡する
+        ことで、 経由する中間 state の種類によらず一貫して捉える
+        (`_last_chain_or_settle_observed_time`、 detect() 呼び出し時の
+        自己観測、 新規のpipelineレベル状態追跡ではない)。 以下いずれかで
+        True (OR):
+            1. ctx.state == CHAIN (直接 CHAIN 中からの entry、安全弁として維持。
+               ただし ChainPhaseDetector が最優先のため実運用では chain_event
+               空白時の 1 frame 程度でしか成立しない)。
+            2. ctx.state == GRAVITY_SETTLE (経路(a)の直接判定)。
+            3. 直近 OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC 秒以内に本 detector が
+               CHAIN/GRAVITY_SETTLE を観測していた (経路(b)を含む、 中間
+               state 非依存の判定)。
+            4. 直近 OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC 秒以内に自 side の
+               chain_event がアクティブだった
+               (signals.own_chain_hold_until_sec との差分。 既存の追跡値
+               `_chain_until_1p`/`_chain_until_2p` を再利用する保険的な
+               二重チェック、 条件3 と独立に評価する)。
+            5. 直近 OJAMA_REENTRY_SUPPRESS_SEC 秒以内に案2 (placement
+               override) の早期 exit があった (exit→即re-entry 振動対策)。
+        """
+        if ctx.state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE):
+            return True
+        if (
+            self._last_chain_or_settle_observed_time >= 0
+            and signals.time_sec - self._last_chain_or_settle_observed_time
+            < OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC
+        ):
+            return True
+        # own_chain_hold_until_sec <= 0.0 は「まだ一度も自 chain が発生してい
+        # ない」sentinel (RecognitionPipeline.reset() の初期値と同じ規約)。
+        # これを除外しないと、 試合序盤の time_sec がまだ小さい間、 default
+        # 値 0.0 との差分が偶然小さく見えて誤って「直近アクティブ」と判定
+        # してしまう (2026-08-13 実装時にユニットテストで検出、time_sec=0
+        # 起点のテスト規約でも再現)。
+        if (
+            signals.own_chain_hold_until_sec > 0.0
+            and signals.time_sec - signals.own_chain_hold_until_sec
+            < OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC
+        ):
+            return True
+        if (
+            self._placement_override_exit_time >= 0
+            and signals.time_sec - self._placement_override_exit_time
+            < OJAMA_REENTRY_SUPPRESS_SEC
+        ):
+            return True
+        return False
 
     def _reset_internal_state(
         self, keep_top_ojama_count: int | None = None,

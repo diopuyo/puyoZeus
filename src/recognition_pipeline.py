@@ -4163,6 +4163,9 @@ class RecognitionPipeline:
             # 案B (2026-08-04): 自連鎖中は視覚グロー判定 (連鎖数テロップ写り込み
             # 誤発火対策) を抑制するため own_chain_active を渡す。
             own_chain_active=chain_ev_1p is not None,
+            # 案4-lite 拡張 (coordinator追加指示, 2026-08-13): 自 side の
+            # 直近 chain hold 終了予定時刻 (既存追跡値をそのまま渡す)。
+            own_chain_hold_until=self._chain_until_1p,
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -4177,6 +4180,7 @@ class RecognitionPipeline:
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
             opponent_chain_active=chain_ev_1p is not None,
             own_chain_active=chain_ev_2p is not None,  # 案B (2026-08-04)
+            own_chain_hold_until=self._chain_until_2p,
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -5498,6 +5502,7 @@ class RecognitionPipeline:
         chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
         opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
         own_chain_active: bool = False,  # 案B 4条件AND拡張 (2026-08-04)
+        own_chain_hold_until: float = 0.0,  # 案4-lite 拡張 (2026-08-13)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
@@ -5700,6 +5705,7 @@ class RecognitionPipeline:
             chain_max_hold_expired=chain_max_hold_expired,  # 案P3
             effect_gate_window_active=_effect_gate_window_active,
             own_score_delta=score_d_for_self,  # 案2 (2026-08-13)
+            own_chain_hold_until_sec=own_chain_hold_until,  # 案4-lite拡張 (2026-08-13)
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
