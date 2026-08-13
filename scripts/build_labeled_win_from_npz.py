@@ -87,6 +87,49 @@ COLUMNS 末尾追加ルールと同じ精神)。
     (2026-08-13 追加、未ビルド環境では自動的に既存 Python 実装へ
     フォールバックする)。`--no-native` でこの載せ替えを強制的に無効化できる
     (パリティ検証・デバッグ用)。
+--exclude-broken (既定ON): BROKEN_VIDEOS (score OCR破綻の4動画) を変換対象
+    から除外する。`--no-exclude-broken` で無効化可 (デバッグ用)。
+--with-saturation-chain (既定OFF): opt-in指標 saturation_chain (C-3) を
+    full profile に含める。既定OFF (下記コスト実測節参照)。
+
+## 2026-08-13 追加分 (docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md, user採用済み)
+- **A-1**: 旧収集 (collect_indicators_v2.py) から脱落していた11列のうち
+  reach_fire_power 系 (next_pair必須、grid-onlyレジストリと非互換のため
+  除外) を除く10列を GRID_ONLY_HEAVY_INDICATORS へ再接続 (full profile限定)。
+  5列 (immediate_fire_power/chain_efficiency/second_chain_potential/
+  ignition_point_count/multi_color_ignition) は native化済み。
+  **緊急native化**: min_puyos_to_ignite (実測2000ms/行) も native化し
+  43ms/行まで短縮 (下記)。
+- **A-2**: BROKEN_VIDEOS (c26/c30/c58/c69、score OCR破綻・won欠損100%実測
+  確認済み) を convert_dir の既定挙動として隔離する
+  (`--no-exclude-broken` で無効化可)。
+- **A-4**: 全消しボーナス予約中フラグ (all_clear_bonus_pending) は npz に
+  `all_clear_pending` 真値列 (VideoChainTracker、収集64本目以降) があれば
+  それを採用し、無ければ既存の近似ヒューリスティックにフォールバックする。
+  `all_clear_source` 列 (0=真値/1=近似) でどちらを使ったか区別できる。
+- **C-3**: 実装・テスト済みだった `saturation_chain` (飽和連鎖量、user確定
+  定義) を追加したが、**既定 full profile からは除外 (opt-in、下記参照)**。
+- **C-4**: 盤面直読みの新指標3種 (`color_diversity_evenness`/
+  `buried_hole_count` は light profile、`chain_articulation_point_count`
+  は重いため full profile 限定) を追加。
+
+## 【重要】saturation_chain の opt-in化 (2026-08-13、user方針決定)
+A-1/C-3 接続直後の素朴な実装では saturation_chain ≈12500ms/行という
+桁違いのコストが判明した (システム高負荷下・30サンプル実測)。終端測定
+ステップを native化しても改善せず (≈10173ms/行)、真因はビーム構築ステップ
+`src/indicators_v2.py::_sat_expand_step` 自体 (simulate不要のはずが
+1ステップ≈258ms、最大73ステップで最大17.8秒/行) と判明。この関数の
+native化には `native/puyo_core` 本体への新規実装が必要 (本ファイルの
+scope外)。**このため既定 full profile からは除外し `--with-saturation-
+chain` の opt-in フラグに変更した** (`OPTIONAL_HEAVY_INDICATOR_NAMES`
+直上コメント参照)。定義パラメータ (fill_ratio=0.93, beam_width=6) は
+user確定 (2026-07-22) のため不変。採否判断用の少数動画サブセット測定を
+先行させ、価値が確認されたら native ポートで本採用する方針。
+min_puyos_to_ignite (実測2000ms/行) は native化で43ms/行まで短縮できた
+ため通常の既定ON経路に残す (`GRID_ONLY_HEAVY_INDICATORS_NATIVE` 参照)。
+native化しなかった simultaneous_pop_richness (≈149ms/行) /
+chain_articulation_point_count (≈59ms/行) は許容範囲内 (native拡張に
+無い情報を要するため意図的に据え置き、モジュール内コメント参照)。
 """
 from __future__ import annotations
 
@@ -136,20 +179,86 @@ GRID_ONLY_INDICATORS: dict[str, Callable[[Board], "iv.IndicatorV2Value"]] = {
     "center_bulge_color": iv.center_bulge_color,
     "center_bulge_ojama": iv.center_bulge_ojama,
     "board_ojama_count": iv.board_ojama_count,
+    # C-4 (2026-08-13 ラウンド2提案書 user採用済み): 盤面直読みの安価な新指標。
+    # simulate 不要 (盤面走査のみ) のため light profile に収容。
+    "color_diversity_evenness": iv.color_diversity_evenness,
+    "buried_hole_count": iv.buried_hole_count,
 }
 # full: 連鎖シミュレーションを要する重い指標 (実測 1〜19ms/行)。
 # --profile full 指定時のみ計算する。
 # saturated_chain_count は a-1 決定 (2026-08-12) により削除済み
 # (current_max_chain と19万場面で完全一致、src/production_config.py の
 # ATTRIBUTION_EXCLUDED_INDICATORS にも同根拠で既に記録あり)。
+#
+# A-1 (2026-08-13 ラウンド2提案書、横展開監査 docs/CROSS_CUTTING_AUDIT_
+# 2026-08-13.md P2): 旧 collect_indicators_v2.py には配線されていたが本
+# ツールへの載せ替え時に脱落していた11列のうち、reach_fire_power 系 (3列)
+# を除く10列を再接続する (reach_fire_power は next_pair/dnext_pair 必須の
+# ため grid-only レジストリの型 `Callable[[Board], IndicatorV2Value]` と
+# 非互換 — 除外理由は production_config.KNOWN_PIPELINE_GAPS に別エージェント
+# により記録済み、本ファイルでの対応不要)。
+# C-3 (同提案書、実装・テスト済みで検証中断していた saturation_chain の
+# 正式接続) / C-4 の重い版 (chain_articulation_point_count) も同時に追加。
+#
+# **saturation_chain は opt-in 扱い (2026-08-13 コスト実測後、user方針決定)**:
+# ここには「既知の heavy 指標カタログ」として残す (DIFF分類・native parity
+# テストの対象台帳として)。実際の登録レジストリ (`_resolve_indicator_
+# registry`) では既定で除外し、`--with-saturation-chain` 明示時のみ含める
+# (下記 OPTIONAL_HEAVY_INDICATOR_NAMES 参照、理由は同定数直上コメント)。
 GRID_ONLY_HEAVY_INDICATORS: dict[str, Callable[[Board], "iv.IndicatorV2Value"]] = {
     "current_max_chain": iv.current_max_chain,
     "dig_resistance": iv.dig_resistance,
     "ukeyasusa": iv.ukeyasusa,
     "sub_chain_count": iv.sub_chain_count,
+    # --- A-1 再接続 (10列、next非依存のみ) ---
+    "immediate_fire_power": iv.immediate_fire_power,
+    "chain_efficiency": iv.chain_efficiency,
+    "min_puyos_to_ignite": iv.min_puyos_to_ignite,
+    "second_chain_potential": iv.second_chain_potential,
+    "main_linked_pair_count": iv.main_linked_pair_count,
+    "isolated_pair_count": iv.isolated_pair_count,
+    "main_linked_ratio": iv.main_linked_ratio,
+    "ignition_point_count": iv.ignition_point_count,
+    "multi_color_ignition": iv.multi_color_ignition,
+    "simultaneous_pop_richness": iv.simultaneous_pop_richness,
+    # --- C-3 (saturation_chain 正式接続、既定OFFのopt-in。下記参照) ---
+    "saturation_chain": iv.saturation_chain,
+    # --- C-4 (重い版、find_groups だけでなく追加simulateを要するため) ---
+    "chain_articulation_point_count": iv.chain_articulation_point_count,
 }
 
+# ============================
+# saturation_chain の opt-in化 (2026-08-13 コスト実測後、user方針決定)
+# ============================
+# 実測 (2026-08-13): 1行8〜18秒 (システム高負荷下、ビーム構築ステップ
+# `iv._sat_expand_step` が支配的コスト。native化した終端測定はほぼ無関係
+# だったと判明、詳細はモジュール docstring「コスト実測」節)。148本フルは
+# 非現実的なため既定 full profile から外す。採否判断用の少数動画サブセット
+# 測定を先行させ、価値が確認されたら native/puyo_core へのビーム構築ポート
+# (本ファイルの scope 外、別タスク) で本採用する方針。
+# 定義パラメータ (fill_ratio=0.93, beam_width=6) は user確定 (2026-07-22)
+# のため本対応では不変 (indicators_v2.py::saturation_chain 自体も無変更)。
+OPTIONAL_HEAVY_INDICATOR_NAMES: frozenset[str] = frozenset({"saturation_chain"})
+
 VALID_PROFILES: tuple[str, ...] = ("light", "full")
+
+# ============================
+# A-2: 壊れ動画の隔離 (2026-08-13 ラウンド2提案書 A-2)
+# ============================
+# score OCR完全破綻により won ラベル・全消し検出等が実質不能と判明した動画。
+# npz ファイル名の stem (例 "c26.npz"→"c26") と照合する (npz内部の video_id
+# 列は "video_c26" 形式のため、stem 側で比較する必要がある)。
+#
+# 実測根拠 (2026-08-13、data/indicators_v2/boards_lean_phase_l_2026-08-07/
+# 各npz、convert_dir の主経路と同じ won/score 列で確認):
+#   c26: n=8034,  won欠損率100%, score欠損率100% (既知、project_video_
+#        difficulty_3broken_2026-07-29)
+#   c30: n=9578,  won欠損率100%, score欠損率100% (新規発見、A-2)
+#   c58: n=11059, won欠損率100%, score欠損率100% (既知)
+#   c69: n=11467, won欠損率100%, score欠損率100% (既知)
+# 参考 (健全動画の score欠損率、同ディレクトリ): c1=1.5%, c10=0.4%,
+# c100=1.1%, c103=0.2% (0〜数%が通常域、100%は完全破綻)。
+BROKEN_VIDEOS: tuple[str, ...] = ("c26", "c30", "c58", "c69")
 
 # ============================
 # Rust ネイティブ拡張 (puyo_core) 載せ替え (2026-08-13 追加)
@@ -384,13 +493,291 @@ def _native_sub_chain_count(
     return iv.IndicatorV2Value(score=iv._clamp01(raw / iv.NORM_SUB_CHAIN), raw=raw)
 
 
-# full profile 重い4列の native 版レジストリ (use_native は呼び出し側が
-# functools.partial で bind する、`_resolve_indicator_registry` 参照)。
+# ============================
+# A-1 再接続分の native 版 (2026-08-13 追加)
+# ============================
+# 5列 (immediate_fire_power/chain_efficiency/second_chain_potential/
+# ignition_point_count/multi_color_ignition) は既存4列と同じ「takapt 30通り
+# 探索 or 1回 simulate」パターンのため native化する。
+# main_linked_pair_count/isolated_pair_count/main_linked_ratio は
+# find_groups のみで simulate 不要 (実測 <1ms/行) のため native化不要、
+# Python 実装のままとする (GRID_ONLY_HEAVY_INDICATORS_NATIVE に載せない =
+# 常に iv.xxx が呼ばれる、_resolve_indicator_registry のフォールバック参照)。
+# simultaneous_pop_richness は native ChainSimResult に無い情報 (ステップ内
+# erased_groups数) を要するため「無理はしない」方針により Python 実装の
+# まま (実測149ms/行、重いが致命的ではないため許容)。
+# chain_articulation_point_count も同様 (`_erase_groups` 等の内部詳細が
+# puyo_core 未露出のため native化しない、実測59ms/行で許容範囲)。
+# min_puyos_to_ignite/saturation_chain は当初「無理はしない」対象だったが、
+# 実測でそれぞれ2000ms/行・12500ms/行という桁違いのコストが判明したため
+# (他列の数十〜数百倍、148本再学習が非現実的な時間になる) 例外的に
+# native化する (下記「緊急native化」セクション参照)。
+
+
+def _native_fire_ojama_from_chain_result(result: "object") -> int:
+    """native ChainSimResult の exact_score からお邪魔換算する。
+
+    `iv._board_fire_ojama` の native 版 (elapsed_sec=0.0 固定、grid-only
+    レジストリは時間情報を持たないため既存 Python 経路の既定値と揃える)。
+    """
+    ojama = iv.score_to_ojama(
+        score=result.exact_score, prev_leftover=0, elapsed_sec=0.0,
+        rate_base=iv.OJAMA_RATE_STANDARD,
+    )
+    return int(ojama.ojama_count)
+
+
+def _native_immediate_fire_power(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 III-2 `immediate_fire_power` の native 分岐版。
+
+    `_native_takapt_best_drop` の best_result (exact_score 保持済み) を
+    再利用し `iv._board_fire_ojama` の再simulateを省く。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.immediate_fire_power(board)
+    _best_chain, best_board, best_result = _native_takapt_best_drop(board)
+    if best_board is None or best_result is None:
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    ojama = _native_fire_ojama_from_chain_result(best_result)
+    return iv.IndicatorV2Value(
+        score=iv._clamp01(float(ojama) / iv.ON_FIELD_CAP), raw=float(ojama),
+    )
+
+
+def _native_chain_efficiency(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 III-4 `chain_efficiency` の native 分岐版 (best_result 再利用)。"""
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.chain_efficiency(board)
+    _best_chain, best_board, best_result = _native_takapt_best_drop(board)
+    if best_board is None or best_result is None:
+        ojama = 0
+    else:
+        ojama = _native_fire_ojama_from_chain_result(best_result)
+    color_count = iv._count_color_puyos(board)
+    raw = 0.0 if color_count <= 0 else float(ojama) / float(color_count)
+    return iv.IndicatorV2Value(score=iv._clamp01(raw / iv.CHAIN_EFF_MAX), raw=raw)
+
+
+def _native_second_chain_potential(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 III-7 `second_chain_potential` の native 分岐版。
+
+    ChainResult.participating_cells は native ChainSimResult.total_erased
+    のエイリアス (`src/chain.py::ChainResult.participating_cells` docstring
+    「= total_erased、indicators.py 用エイリアス」参照) のためそのまま使える。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.second_chain_potential(board)
+    color_count = iv._count_color_puyos(board)
+    participating = _native_simulate_chain(
+        board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    ).total_erased
+    non_participating = max(0, color_count - participating)
+    raw = float(non_participating)
+    score = 0.0 if color_count <= 0 else float(non_participating) / float(color_count)
+    return iv.IndicatorV2Value(score=iv._clamp01(score), raw=raw)
+
+
+def _native_ignition_scan(board: Board) -> "list[tuple[int, int]]":
+    """takapt 30通り native バッチ scan で発火可能な (col, color) 一覧を返す。
+
+    `ignition_point_count`/`multi_color_ignition` 共通の探索部分
+    (`iv._takapt_full_scan` の native 版、追加 simゼロで探索を共有)。
+    呼び出し前提: `_board_is_gravity_consistent(board)` 確認済み。
+    """
+    raw = _native_chain_metrics_after_drops(
+        board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    hits: "list[tuple[int, int]]" = []
+    for (col, color), r in zip(_NATIVE_DROP_CANDIDATES_30, raw):
+        if r is None:
+            continue
+        chain_count, _exact_score = r
+        if chain_count > 0:
+            hits.append((col, color))
+    return hits
+
+
+def _native_ignition_point_count(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 XII-2 `ignition_point_count` の native 分岐版。"""
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.ignition_point_count(board)
+    hits = _native_ignition_scan(board)
+    raw = float(len(hits))
+    return iv.IndicatorV2Value(
+        score=iv._clamp01(raw / iv.NORM_IGNITION_POINT_COUNT), raw=raw,
+    )
+
+
+def _native_multi_color_ignition(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 XII-3 `multi_color_ignition` の native 分岐版 (探索を scan と共有)。"""
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.multi_color_ignition(board)
+    hits = _native_ignition_scan(board)
+    colors_hit = {color for _col, color in hits}
+    raw = float(len(colors_hit))
+    return iv.IndicatorV2Value(
+        score=iv._clamp01(raw / iv.NORM_MULTI_COLOR_IGNITION), raw=raw,
+    )
+
+
+# ============================
+# 緊急native化 (2026-08-13 コスト実測で発覚した2件): min_puyos_to_ignite /
+# saturation_chain
+# ============================
+# A-1/C-3 接続直後の実測 (30サンプル、システム高負荷下) で
+# min_puyos_to_ignite ≈2000ms/行、saturation_chain ≈12500ms/行 という
+# 桁違いのコストが判明 (他の重い列は数十ms/行、native化済み4列は数ms/行)。
+# 「無理はしない」方針の対象外とし (148本の全処理が現実的な時間で終わらず
+# A-1/C-3 の価値が実質使えなくなるため)、コストの支配項のみ native化する。
+
+
+def _native_search_min_ignite(board: Board, base_chain: int) -> int:
+    """`iv._search_min_ignite` の native 分岐版 (N=1: 30通り, N=2: 900通り)。
+
+    N=1 は `chain_metrics_after_drops` の1回のバッチ呼び出しで置換 (`iv.
+    _search_min_ignite` の30回個別simulateがコスト支配項)。N=2 は「1手目を
+    生の(連鎖未解決)盤面として保持し2手目をバッチ探索」を1手目30通り分
+    繰り返す (`iv._search_min_ignite` の900回個別simulateに対応、native
+    ラウンドトリップは最大31回に圧縮)。IGNITION_TRIAL_LIMIT>=2 前提の
+    呼び出し元 (`_native_min_puyos_to_ignite`) からのみ呼ばれる。
+    """
+    raw1 = _native_chain_metrics_after_drops(
+        board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    for r in raw1:
+        if r is not None and r[0] > base_chain:
+            return 1
+    first_drops = _native_simulate_after_drops(
+        board, _NATIVE_DROP_CANDIDATES_30,
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    for r1 in first_drops:
+        if r1 is None or r1.dropped_board.is_dead():
+            continue
+        raw2 = _native_chain_metrics_after_drops(
+            r1.dropped_board, _NATIVE_DROP_CANDIDATES_30,
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
+        for r2 in raw2:
+            if r2 is not None and r2[0] > base_chain:
+                return 2
+    return iv.IGNITION_TRIAL_LIMIT + 1
+
+
+def _native_min_puyos_to_ignite(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 III-5 `min_puyos_to_ignite` の native 分岐版 (実測2000ms/行 → 緊急native化)。
+
+    IGNITION_TRIAL_LIMIT が既存の2以外に変わった場合は非対応 (安全側で
+    Python版へフォールバック、`_native_search_min_ignite` が N=1/N=2 決め打ち
+    のため)。
+    """
+    if not (
+        use_native and _PUYO_CORE_AVAILABLE
+        and _board_is_gravity_consistent(board)
+        and iv.IGNITION_TRIAL_LIMIT == 2
+    ):
+        return iv.min_puyos_to_ignite(board)
+    base_chain = _native_simulate_chain(
+        board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    ).chain_count
+    n = _native_search_min_ignite(board, base_chain)
+    score = 1.0 - (float(n) / float(iv.IGNITION_MAX_PUYOS))
+    return iv.IndicatorV2Value(score=iv._clamp01(score), raw=float(n))
+
+
+def _native_sat_measure_terminal_chain(frontier: "list[Board]") -> "int | None":
+    """saturation_chain 終端測定の native 版 (`iv._sat_measure_terminal_chain`
+    相当、takapt 30通り native バッチ)。
+
+    終端候補 (最大 beam_width 件) 全てが gravity-consistent の場合のみ
+    最大到達連鎖数を返す。1件でも重力違反があれば None を返し、呼び出し側が
+    既存 Python 実装にフォールバックする (完全一致を保証する安全弁、
+    `_board_is_gravity_consistent` 参照)。
+    """
+    best = 0
+    for candidate in frontier:
+        if not _board_is_gravity_consistent(candidate):
+            return None
+        raw = _native_chain_metrics_after_drops(
+            candidate, _NATIVE_DROP_CANDIDATES_30,
+            exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+        )
+        for r in raw:
+            if r is not None:
+                best = max(best, r[0])
+    return best
+
+
+def _native_saturation_chain(
+    board: Board,
+    fill_ratio: float = iv.SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = iv.SATURATION_BEAM_WIDTH_DEFAULT,
+    use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 C-3 `saturation_chain` の native 分岐版 (実測12500ms/行 → 緊急native化)。
+
+    ビーム構築 (`iv._sat_expand_step`) は元々 simulate 不要で高速なため
+    無変更のまま再利用し、唯一の重い箇所 (終端 beam_width 候補×takapt30通り
+    = 最大180回のfull simulate) だけ `_native_sat_measure_terminal_chain` に
+    置き換える。この関数は `iv.saturation_chain` 本体のビーム構築ループを
+    ミラーする (private helper 群を直接呼ぶため、`iv.saturation_chain` の
+    アルゴリズムが変わった場合はここも追従が必要 — パリティテスト
+    `TestNativeHeavyIndicatorParity` がドリフトを検出する)。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.saturation_chain(board, fill_ratio, beam_width)
+    if board.is_dead():
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    target_cells = round(fill_ratio * iv.FULL_BOARD_CAP)
+    frontier: "list[Board]" = [board]
+    steps = min(
+        max(0, target_cells - board.count_puyos()), iv.SATURATION_MAX_BUILD_STEPS,
+    )
+    for _ in range(steps):
+        next_frontier = iv._sat_expand_step(frontier, beam_width)
+        if not next_frontier:
+            break
+        frontier = next_frontier
+    best_chain = _native_sat_measure_terminal_chain(frontier)
+    if best_chain is None:
+        best_chain = iv._sat_measure_terminal_chain(frontier, iv._SHARED_SIMULATOR)
+    return iv.IndicatorV2Value(
+        score=iv._clamp01(float(best_chain) / iv.NORM_SATURATED_CHAIN),
+        raw=float(best_chain),
+    )
+
+
+# full profile 重い4列 (既存) + A-1 native化5列 + 緊急native化2列
+# (min_puyos_to_ignite/saturation_chain) の native 版レジストリ (use_native
+# は呼び出し側が functools.partial で bind する、`_resolve_indicator_
+# registry` 参照)。ここに無いキー (main_linked_pair_count 等) は自動的に
+# GRID_ONLY_HEAVY_INDICATORS の Python 実装のまま扱われる。
 GRID_ONLY_HEAVY_INDICATORS_NATIVE: dict[str, Callable[..., "iv.IndicatorV2Value"]] = {
     "current_max_chain": _native_current_max_chain,
     "dig_resistance": _native_dig_resistance,
     "ukeyasusa": _native_ukeyasusa,
     "sub_chain_count": _native_sub_chain_count,
+    "immediate_fire_power": _native_immediate_fire_power,
+    "chain_efficiency": _native_chain_efficiency,
+    "second_chain_potential": _native_second_chain_potential,
+    "ignition_point_count": _native_ignition_point_count,
+    "multi_color_ignition": _native_multi_color_ignition,
+    "min_puyos_to_ignite": _native_min_puyos_to_ignite,
+    "saturation_chain": _native_saturation_chain,
 }
 
 # ============================
@@ -452,8 +839,34 @@ DIFF_KEEP_OWN_NEW_COLUMNS: tuple[str, ...] = (
 
 # (5) diff化しない例外 (own のみ残す)。b-2本文: 3個連結は差にすると終盤の
 # 不可解な逆転がさらに悪化するため対象外。
+#
+# 2026-08-13 追加分 (A-1再接続10列 + C-3 saturation_chain + C-4新指標3種):
+# b-2 の diff/own 判断は個別に実測 (grid-only系は当てやすさ改善を確認済み)
+# して初めて決めており、この新規14列は同種の実測がまだ無い。無評価のまま
+# DIFF_KEEP_OWN_HEAVY_COLUMNS 等に混ぜると「diff化がb-2実測で検証済み」と
+# 誤解される (過学習への警戒、feedback_overfitting_awareness_2026-08-04)
+# ため、安全側デフォルトとして own のみに留める (このexempt扱いは分類
+# 完全性テスト tests/test_indicator_pipeline_registry_2026-08-13.py の
+# 要求を満たすための暫定分類であり、b-2同様の実測後に再評価すること)。
 DIFF_EXEMPT_OWN_ONLY_COLUMNS: tuple[str, ...] = (
     "conn_triple_count",
+    # --- A-1 再接続10列 (2026-08-13) ---
+    "immediate_fire_power",
+    "chain_efficiency",
+    "min_puyos_to_ignite",
+    "second_chain_potential",
+    "main_linked_pair_count",
+    "isolated_pair_count",
+    "main_linked_ratio",
+    "ignition_point_count",
+    "multi_color_ignition",
+    "simultaneous_pop_richness",
+    # --- C-3 (2026-08-13) ---
+    "saturation_chain",
+    # --- C-4 新指標3種 (2026-08-13) ---
+    "color_diversity_evenness",
+    "buried_hole_count",
+    "chain_articulation_point_count",
 )
 
 # connectivity_observation() は registry の外で個別に書く固定3列
@@ -495,10 +908,18 @@ ALL_CLEAR_JUMP_LOWER_BOUND_SCORE: float = (
 ALL_CLEAR_JUMP_UPPER_BOUND_SCORE: float = ALL_CLEAR_BONUS_SCORE * 1.5  # = 3150.0
 
 # 状態機械が own 列として生成する固定列 (registry の外、CONN_ALWAYS_
-# PRESENT_COLUMNS と同じ位置付け)。
+# PRESENT_COLUMNS と同じ位置付け)。all_clear_source (2026-08-13 A-4追加):
+# all_clear_bonus_pending が真値 (VideoChainTracker.all_clear_pending、npz
+# 収集64本目以降) 由来か近似ヒューリスティック由来かを区別する列
+# (0=真値/1=近似、_apply_all_clear_truth/_compute_all_clear_bonus_pending
+# 参照)。diff/carry対象ではない (own のみ、メタ情報)。
 TEMPORAL_STATE_COLUMNS: tuple[str, ...] = (
-    "all_clear_bonus_pending",
+    "all_clear_bonus_pending", "all_clear_source",
 )
+
+# all_clear_source の値 (マジックナンバー禁止のため定数化)。
+ALL_CLEAR_SOURCE_TRUTH: float = 0.0  # VideoChainTracker 真値 (npz収集64本目以降)
+ALL_CLEAR_SOURCE_APPROX: float = 1.0  # score差分ヒューリスティック近似 (既存)
 
 # chain_mechanism が「連鎖タグ無し」を意味する値の集合 (小文字化して比較)。
 # 空文字が通常だが、npz 側の型変換で "nan"/"none" 文字列化する経路があっても
@@ -528,23 +949,37 @@ PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
 
 
 def _resolve_indicator_registry(
-    profile: str, use_native: bool = True,
+    profile: str, use_native: bool = True, with_saturation_chain: bool = False,
 ) -> dict[str, Callable[[Board], "iv.IndicatorV2Value"]]:
     """profile に応じて使う指標レジストリを確定する (light はheavy除外)。
 
-    use_native (2026-08-13 追加、既定 True): full profile の重い4列を
+    use_native (2026-08-13 追加、既定 True): full profile の重い列を
     Rust拡張 puyo_core 経由で計算する native 版レジストリ
     (GRID_ONLY_HEAVY_INDICATORS_NATIVE) に切り替える。拡張未導入環境では
     各関数が自動的に既存 Python 実装 (GRID_ONLY_HEAVY_INDICATORS 相当) へ
     フォールバックするため、通常この引数は既定値のままでよい。False を
     渡すと native 分岐を無条件で無効化する (パリティ検証・デバッグ用)。
+
+    with_saturation_chain (2026-08-13 追加、既定 False): OPTIONAL_HEAVY_
+    INDICATOR_NAMES (現状 saturation_chain のみ) を registry に含めるか。
+    実測で1行8〜18秒という桁違いのコストが判明したための opt-in化
+    (定数直上コメント参照)。既定 False = 148本フル実行の既定挙動から除外。
     """
     if profile != "full":
         return dict(GRID_ONLY_INDICATORS)
-    heavy = {
-        name: functools.partial(fn, use_native=use_native)
-        for name, fn in GRID_ONLY_HEAVY_INDICATORS_NATIVE.items()
-    }
+    # Python実装を土台にし (2026-08-13 バグ修正: 以前は
+    # GRID_ONLY_HEAVY_INDICATORS_NATIVE に無いキーが full profile から
+    # 丸ごと消える潜在バグがあった。A-1 で native 版を持たない新規重い列
+    # [min_puyos_to_ignite 等] を追加したことで顕在化する前に修正)、
+    # native 版を持つキーだけ functools.partial で上書きする。
+    heavy: dict[str, Callable[..., "iv.IndicatorV2Value"]] = dict(GRID_ONLY_HEAVY_INDICATORS)
+    if not with_saturation_chain:
+        for name in OPTIONAL_HEAVY_INDICATOR_NAMES:
+            heavy.pop(name, None)
+    for name, fn in GRID_ONLY_HEAVY_INDICATORS_NATIVE.items():
+        if name not in heavy:
+            continue  # opt-outされた列 (saturation_chain) を誤って復活させない
+        heavy[name] = functools.partial(fn, use_native=use_native)
     return {**GRID_ONLY_INDICATORS, **heavy}
 
 
@@ -584,13 +1019,20 @@ META_COLUMNS: tuple[str, ...] = (
 )
 
 
-def _final_fieldnames(profile: str) -> list[str]:
+def _final_fieldnames(
+    profile: str, with_saturation_chain: bool = False,
+) -> list[str]:
     """出力CSVの最終列順を構築する (a-1 raw削除・b-1 分解・b-2 diff/carry化を反映)。
 
     own 側の出力対象は DIFF_REPLACE_OWN_COLUMNS を除いた列のみ (diff_ に
     完全置換した列は own を書かない、CSVには乗せず内部計算だけに使う)。
+
+    with_saturation_chain (2026-08-13 追加、既定 False): opt-in 指標
+    saturation_chain を含めるか (`_resolve_indicator_registry` 参照)。
     """
-    registry = _resolve_indicator_registry(profile)
+    registry = _resolve_indicator_registry(
+        profile, with_saturation_chain=with_saturation_chain,
+    )
     own_candidates = (
         list(registry.keys()) + list(CONN_ALWAYS_PRESENT_COLUMNS)
         + list(TEMPORAL_STATE_COLUMNS)
@@ -810,7 +1252,8 @@ def _compute_all_clear_bonus_pending(
 
     scores / chain_mechanisms は rows と同じ添字で対応する前提 (convert_
     one_npz が同じループで構築するため)。状態遷移の実体は
-    _all_clear_state_for_group() 参照。
+    _all_clear_state_for_group() 参照。近似ヒューリスティック経路のため
+    all_clear_source は常に ALL_CLEAR_SOURCE_APPROX (1.0、A-4 2026-08-13)。
     """
     groups: dict[tuple, list[int]] = {}
     for i, r in enumerate(rows):
@@ -823,6 +1266,26 @@ def _compute_all_clear_bonus_pending(
         states = _all_clear_state_for_group(group_scores, group_tags)
         for pos, i in enumerate(idxs):
             rows[i]["all_clear_bonus_pending"] = states[pos]
+            rows[i]["all_clear_source"] = ALL_CLEAR_SOURCE_APPROX
+
+
+def _apply_all_clear_truth(rows: list[dict], all_clear_pending: np.ndarray) -> None:
+    """npz の all_clear_pending 真値列 (A-4, 2026-08-13) を採用する。
+
+    `src/chain_detector.py::VideoChainTracker.all_clear_pending` が実運用
+    パイプラインで厳密に追跡した値 (npz収集64本目以降のみ収録)。近似
+    ヒューリスティック (`_compute_all_clear_bonus_pending`) より精度が高い
+    ため存在すればこちらを優先し、rows と同じ添字で対応する前提で
+    all_clear_bonus_pending にそのまま書き込み、all_clear_source を
+    ALL_CLEAR_SOURCE_TRUTH (0.0) に設定する (in-place)。
+
+    Args:
+        rows: convert_one_npz が積んだ meta+indicator 行のリスト。
+        all_clear_pending: npz の "all_clear_pending" 配列 (rows と同じ添字)。
+    """
+    for i, r in enumerate(rows):
+        r["all_clear_bonus_pending"] = float(all_clear_pending[i])
+        r["all_clear_source"] = ALL_CLEAR_SOURCE_TRUTH
 
 
 def _approx_tsumo(rows_meta: list[dict]) -> None:
@@ -887,9 +1350,14 @@ def convert_one_npz(
     _approx_tsumo(rows)
     for i in range(n):
         rows[i].update(_compute_row(grids[i], registry))
-    _compute_all_clear_bonus_pending(
-        rows, [int(s) for s in scores], [str(m) for m in chain_mechanisms],
-    )
+    # A-4 (2026-08-13): npz に VideoChainTracker 真値があればそれを優先採用、
+    # 無い旧npzのみ近似ヒューリスティックにフォールバックする。
+    if "all_clear_pending" in d.files:
+        _apply_all_clear_truth(rows, d["all_clear_pending"])
+    else:
+        _compute_all_clear_bonus_pending(
+            rows, [int(s) for s in scores], [str(m) for m in chain_mechanisms],
+        )
     diff_cols = _resolve_diff_target_columns(registry)
     carry_cols = _resolve_carry_target_columns(registry)
     rows = _attach_opponent_diff_columns(rows, diff_cols, tuple(carry_cols))
@@ -897,8 +1365,29 @@ def convert_one_npz(
     return rows
 
 
+def _split_broken_videos(
+    npz_files: list[Path],
+) -> "tuple[list[Path], list[tuple[str, int]]]":
+    """npz ファイル一覧を (隔離対象を除いたリスト, 隔離した (ファイル名, 行数)) に分ける。
+
+    A-2 (2026-08-13): BROKEN_VIDEOS (score OCR破綻・won欠損100%) を stem
+    (拡張子・ディレクトリを除いたファイル名) で照合する。行数は grids 配列の
+    長さのみを読む軽量操作 (指標計算はしない、隔離対象を数えるためだけ)。
+    """
+    kept: list[Path] = []
+    excluded: list[tuple[str, int]] = []
+    for p in npz_files:
+        if p.stem in BROKEN_VIDEOS:
+            n_rows = int(np.load(str(p), allow_pickle=True)["grids"].shape[0])
+            excluded.append((p.name, n_rows))
+        else:
+            kept.append(p)
+    return kept, excluded
+
+
 def convert_dir(
     npz_dir: Path, out_csv: Path, profile: str = "light", use_native: bool = True,
+    exclude_broken: bool = True, with_saturation_chain: bool = False,
 ) -> tuple[int, float]:
     """npz_dir 内の全 npz を変換し out_csv に書き出す。
 
@@ -906,14 +1395,33 @@ def convert_dir(
         use_native: full profile の重い4列を Rust拡張 puyo_core 経由で計算
             するか (2026-08-13 追加、既定 True、後方互換の optional 引数)。
             `_resolve_indicator_registry` 参照。
+        exclude_broken: BROKEN_VIDEOS (score OCR破綻・won欠損100%、A-2
+            2026-08-13追加) を変換対象から除外するか (既定 True、後方互換の
+            optional 引数)。隔離した動画・行数は必ずログ出力する
+            (黙って落とさない、feedback_progress_report 系の恒久方針)。
+        with_saturation_chain: opt-in指標 saturation_chain を含めるか
+            (2026-08-13追加、既定 False、後方互換の optional 引数)。実測で
+            1行8〜18秒という桁違いのコストが判明したため既定OFF
+            (`OPTIONAL_HEAVY_INDICATOR_NAMES` 直上コメント参照)。
 
     Returns:
         (書き出し行数, 所要秒数)。
     """
-    registry = _resolve_indicator_registry(profile, use_native=use_native)
+    registry = _resolve_indicator_registry(
+        profile, use_native=use_native, with_saturation_chain=with_saturation_chain,
+    )
     t0 = time.time()
     all_rows: list[dict] = []
     npz_files = sorted(npz_dir.glob("*.npz"))
+    if exclude_broken:
+        npz_files, excluded = _split_broken_videos(npz_files)
+        if excluded:
+            total_excluded_rows = sum(n for _name, n in excluded)
+            detail = ", ".join(f"{name}({n}行)" for name, n in excluded)
+            print(
+                f"[exclude-broken] BROKEN_VIDEOS を隔離: {len(excluded)}本"
+                f" (計 {total_excluded_rows} 行) — {detail}",
+            )
     for i, p in enumerate(npz_files):
         rows = convert_one_npz(p, registry)
         all_rows.extend(rows)
@@ -922,7 +1430,7 @@ def convert_dir(
     if not all_rows:
         print("[WARN] 変換対象行が0件でした")
         return 0, time.time() - t0
-    fieldnames = _final_fieldnames(profile)
+    fieldnames = _final_fieldnames(profile, with_saturation_chain=with_saturation_chain)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", encoding="utf-8", newline="") as f:
         # extrasaction="ignore": diff_ に完全置換した own 列 (b-2) が行dict
@@ -950,8 +1458,30 @@ def main() -> int:
             "パリティ検証・デバッグ用)。"
         ),
     )
+    ap.add_argument(
+        "--no-exclude-broken", dest="exclude_broken", action="store_false",
+        default=True,
+        help=(
+            "BROKEN_VIDEOS (c26/c30/c58/c69、score OCR破綻・A-2 2026-08-13"
+            "追加) の隔離を無効化し全npzを変換する (デバッグ用、既定は隔離ON)。"
+        ),
+    )
+    ap.add_argument(
+        "--with-saturation-chain", dest="with_saturation_chain",
+        action="store_true", default=False,
+        help=(
+            "opt-in指標 saturation_chain (C-3, full profile限定) を含める。"
+            "既定OFF (2026-08-13実測: 1行8〜18秒と桁違いに重く148本フルは"
+            "非現実的なため。採否判断用の少数動画サブセット測定向け、"
+            "`OPTIONAL_HEAVY_INDICATOR_NAMES` 直上コメント参照)。"
+        ),
+    )
     a = ap.parse_args()
-    convert_dir(a.npz_dir, a.out, profile=a.profile, use_native=a.use_native)
+    convert_dir(
+        a.npz_dir, a.out, profile=a.profile, use_native=a.use_native,
+        exclude_broken=a.exclude_broken,
+        with_saturation_chain=a.with_saturation_chain,
+    )
     return 0
 
 

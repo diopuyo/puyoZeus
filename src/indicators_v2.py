@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import math
 import random
 import zlib
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ from src.board import (
     Board,
     VISIBLE_ROWS,
 )
-from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
+from src.chain import ChainResult, ChainSimulator, ChainStep, MIN_ERASE_COUNT
 from src.chain_bitboard import (
     batch_adjacency_tiebreak,
     batch_from_boards,
@@ -3867,6 +3868,169 @@ def ojama_damage(
     return IndicatorV2Value(score=_clamp01(_ojama_damage_from_margin(remaining)), raw=remaining)
 
 
+# ============================
+# XX 盤面直読み新指標3種 (C-4, docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md
+# user採用済み。末尾追加・既存に非依存)
+# ============================
+
+# XX-1 色多様性の均等度: 5色 (IGNITION_TRIAL_COLORS) 均等分布時の理論上限
+# エントロピー = log(5)。試合は実際には4色のみ使用 (reference_four_colors_
+# per_match_2026-07-22) だが、これは board-only 関数からは判別できないため
+# 固定5色ユニバースで正規化する (どの試合・どの時点でも一律の天井が乗るのみ
+# なので相対比較=学習でのranking自体は歪めない)。
+COLOR_DIVERSITY_EVENNESS_NORM: float = math.log(len(IGNITION_TRIAL_COLORS))  # ≈1.609
+
+# XX-2 埋没穴数: 盤面容量72 (ON_FIELD_CAP) で正規化 (board_ojama_count 等と同じ天井)。
+
+# XX-3 連鎖関節点数: 1ステップあたりの急所グループ数の経験的上限 (暫定6、
+# NORM_SIMULTANEOUS_POP と同水準。データ後決定)。
+NORM_CHAIN_ARTICULATION_POINT: float = 6.0
+
+
+def color_diversity_evenness(board: Board) -> IndicatorV2Value:
+    """XX-1 色多様性の均等度 (Shannon evenness、C-4 提案)。
+
+    盤面上の色ぷよ (IGNITION_TRIAL_COLORS の5色) の出現比率から Shannon
+    エントロピー H=-Σp_i*log(p_i) を求め、5色均等分布時の理論上限
+    log(5) で正規化する。色ぷよが0個 (未着手盤面等) は多様性ゼロとして
+    score=raw=0.0 を返す (0除算回避)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+
+    Returns:
+        IndicatorV2Value: score=正規化エントロピー(0〜1), raw=エントロピー(nats)。
+    """
+    grid = board._grid
+    counts: dict[int, int] = {c: 0 for c in IGNITION_TRIAL_COLORS}
+    total = 0
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            v = int(grid[row, col])
+            if v in counts:
+                counts[v] += 1
+                total += 1
+    if total == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    entropy = 0.0
+    for c in counts.values():
+        if c == 0:
+            continue
+        p = c / total
+        entropy -= p * math.log(p)
+    return IndicatorV2Value(
+        score=_clamp01(entropy / COLOR_DIVERSITY_EVENNESS_NORM), raw=entropy,
+    )
+
+
+def buried_hole_count(board: Board) -> IndicatorV2Value:
+    """XX-2 埋没穴数 (テトリス由来、C-4 提案)。
+
+    各列の最上段占有セル (色ぷよ/おじゃま。EMPTY/UNKNOWN は非占有、
+    `_board_is_gravity_consistent` と同じ意味論) より下に残る空きセルを
+    「埋没穴」として数える (重力で自然には埋まらない歪みの量)。
+
+    正規化: raw / ON_FIELD_CAP (盤面容量72の理論上限、実際の最大はもっと小さい)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+
+    Returns:
+        IndicatorV2Value: score=raw/72, raw=埋没穴セル数。
+    """
+    grid = board._grid
+    holes = 0
+    for col in range(BOARD_COLS):
+        top_row: int | None = None
+        for row in range(BOARD_ROWS):
+            v = int(grid[row, col])
+            if v != COLOR_EMPTY and v != COLOR_UNKNOWN:
+                top_row = row
+                break
+        if top_row is None:
+            continue
+        for row in range(top_row, BOARD_ROWS):
+            v = int(grid[row, col])
+            if v == COLOR_EMPTY or v == COLOR_UNKNOWN:
+                holes += 1
+    raw = float(holes)
+    return IndicatorV2Value(score=_clamp01(raw / ON_FIELD_CAP), raw=raw)
+
+
+def _count_critical_erase_groups(
+    steps: "list[ChainStep]", sim: ChainSimulator,
+) -> int:
+    """連鎖ステップ列のうち、消えなかったら以降の連鎖が短くなる急所グループ数。
+
+    `scripts/_tmp_g3_articulation_pilot.py` の予備計算 (2026-08-13、C-4提案)
+    を正式実装として移植。各ステップの各グループを「消えなかった」ことに
+    した反実仮想盤面 (held グループをおじゃま色に凍結し連結判定から外し、
+    他グループは通常通り消去) を作り、続きを再simulateして残り連鎖数が
+    元より短くなるかで急所か判定する。
+
+    Args:
+        steps: ChainResult.steps (chain_count>=2 の場合のみ呼び出すこと)。
+        sim: ChainSimulator インスタンス (`_erase_groups`/`apply_gravity` 使用)。
+
+    Returns:
+        int: 急所グループ数 (連鎖の生命線となるグループの総数)。
+    """
+    critical = 0
+    chain_count = len(steps)
+    for i, step in enumerate(steps):
+        groups = step.erased_groups
+        remaining_orig = chain_count - i
+        for g_idx in range(len(groups)):
+            held = groups[g_idx]
+            other_groups = [g for j, g in enumerate(groups) if j != g_idx]
+            wb = step.board_before.copy()
+            for (r, c) in held.cells:
+                wb.set(r, c, COLOR_OJAMA)
+            if other_groups:
+                sim._erase_groups(wb, other_groups)
+            sim.apply_gravity(wb)
+            alt_result = sim.simulate(wb)
+            remaining_alt = (1 + alt_result.chain_count) if other_groups else alt_result.chain_count
+            if remaining_alt < remaining_orig:
+                critical += 1
+    return critical
+
+
+def chain_articulation_point_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XX-3 連鎖関節点数 (C-4 提案、`_tmp_g3_articulation_pilot.py` の正式実装)。
+
+    best takapt発火 (`_takapt_best_drop`) で見つけた最良連鎖のステップに
+    対し `_count_critical_erase_groups` で「そこを潰されると連鎖が壊れる」
+    急所グループ数を数える。連鎖1以下 (急所の概念が無意味) または発火不能
+    なら0。重い指標 (ステップ×グループ数回の追加再simulateを要する) のため
+    full profile 限定 (native化は非対応: `_erase_groups`/ChainStep 内部が
+    Rust拡張 puyo_core に未露出のため)。
+
+    正規化: raw / NORM_CHAIN_ARTICULATION_POINT (暫定6、データ後決定)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/6, raw=急所グループ数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain < 2:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    result = sim.simulate(best_board)
+    if len(result.steps) < 2:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    critical = _count_critical_erase_groups(result.steps, sim)
+    raw = float(critical)
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_CHAIN_ARTICULATION_POINT), raw=raw,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -4025,4 +4189,11 @@ __all__ = [
     # — 末尾追加・既存に非依存。center_bulge() 本体は変更なし。
     "center_bulge_color",
     "center_bulge_ojama",
+    # XX 盤面直読み新指標3種 (C-4, 2026-08-13 ラウンド2提案書 user採用済み)
+    # — 末尾追加・既存に非依存。
+    "color_diversity_evenness",
+    "buried_hole_count",
+    "chain_articulation_point_count",
+    "COLOR_DIVERSITY_EVENNESS_NORM",
+    "NORM_CHAIN_ARTICULATION_POINT",
 ]

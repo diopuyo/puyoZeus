@@ -57,18 +57,19 @@ _META_ONLY_COLUMNS: frozenset[str] = frozenset({
 # **この集合を KNOWN_PIPELINE_GAPS に足して本テストを黙らせてはいけない**
 # (脱落の可視化そのものが本テストの目的)。A-1 が実施されたら、実際に
 # 再接続された列をこの集合から手動で削除し、コメントで反映日を明記すること。
+#
+# 【2026-08-13 A-1実装反映】immediate_fire_power/chain_efficiency/
+# min_puyos_to_ignite/second_chain_potential/main_linked_pair_count/
+# isolated_pair_count/main_linked_ratio/ignition_point_count/
+# multi_color_ignition/simultaneous_pop_richness の10列を
+# GRID_ONLY_HEAVY_INDICATORS へ再接続済み (scripts/build_labeled_win_
+# from_npz.py)。reach_fire_power はこの10列と異なり next_pair/dnext_pair
+# 必須で grid-onlyレジストリの型と非互換なため対象外のまま
+# (production_config.KNOWN_PIPELINE_GAPS に既に文書化済み、gaps側で除外
+# されるため本集合には現れない)。残る ojama_disruption は A-1 の対象外
+# (別件、未対応のまま)。
 EXPECTED_UNDOCUMENTED_GAP_COLUMNS: frozenset[str] = frozenset({
-    "immediate_fire_power",
-    "chain_efficiency",
-    "min_puyos_to_ignite",
-    "second_chain_potential",
     "ojama_disruption",
-    "main_linked_pair_count",
-    "isolated_pair_count",
-    "main_linked_ratio",
-    "ignition_point_count",
-    "multi_color_ignition",
-    "simultaneous_pop_richness",
 })
 
 
