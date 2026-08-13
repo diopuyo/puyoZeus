@@ -42,6 +42,12 @@ from sklearn.metrics import log_loss, roc_auc_score
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
+_PROJ_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJ_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJ_ROOT))
+
+from src.production_config import reorg_removed_indicator_names  # noqa: E402
+
 # =============================================================================
 # 定数
 # =============================================================================
@@ -64,8 +70,18 @@ META_COLS: frozenset[str] = frozenset([
     "won",  # 目的変数
 ])
 
-# absorption_capacity は board_puyo_total と完全重複のため除外
-REDUNDANT_COLS: frozenset[str] = frozenset(["absorption_capacity", "absorption_capacity_raw"])
+# absorption_capacity は board_puyo_total と完全重複のため除外。
+# saturated_chain_count は current_max_chain と完全一致のため a-1決定
+# (2026-08-12) で削除確定済みだが、本タプルへの反映が漏れていた
+# (build_labeled_win_from_npz.py にしか反映されていなかった、
+# docs/CROSS_CUTTING_AUDIT_2026-08-13.md P2)。2026-08-13 是正: 削除台帳
+# `src.production_config.REORG_REMOVED_INDICATORS` を単一情報源とし、
+# 台帳の *_raw 版も含めて機械的に合成する (台帳を更新するだけで自動追従する)。
+REDUNDANT_COLS: frozenset[str] = frozenset(
+    {"absorption_capacity", "absorption_capacity_raw"}
+    | reorg_removed_indicator_names()
+    | {f"{name}_raw" for name in reorg_removed_indicator_names()}
+)
 
 # 火力系指標 (注目対象)
 FIRE_INDICATORS: frozenset[str] = frozenset([

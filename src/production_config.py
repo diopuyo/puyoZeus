@@ -206,7 +206,30 @@ VISUALIZATION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "user 要望「連鎖中はずっと chain であってほしい」。"
         "連鎖中の異常な離脱 20 回 -> 0 回",
     ),
+    AdoptedFlag(
+        "--production-recognition", "2026-08-13",
+        "横展開監査 (docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1) の配線漏れ是正。"
+        "visualize_recognition.py が RECOGNITION_ADOPTED (バーストガード等6"
+        "フラグ) を明示指定しない限り一切適用しておらず、レビュー動画が本番"
+        "より劣化した認識で生成されていた (visualize_advantage_overlay.py の "
+        "eacb1f3 と同型の事故)。recognition_load_default_kwargs() 経由で "
+        "load_default() へ自動適用する。--no-production-recognition で無効化",
+    ),
+    AdoptedFlag(
+        "--production-visualization", "2026-08-13",
+        "同上の是正。上記2フラグ (chain-formula-simulate-verify/"
+        "overlay-chain-hold-until-end) 自体を CLI 既定 ON にする配線 "
+        "(resolve_production_config_overrides() 経由)。"
+        "--no-production-visualization で無効化",
+    ),
 )
+
+# measure_stable_cell_acc.py (物差し) にも同型の配線漏れがあった (P1)。
+# --no-production-recognition の明示指定で過去測定と bit-identical な旧構成
+# (各フラグ明示指定必須) を再現できる (物差しの継続性維持)。専用の
+# AdoptedFlag タプルは持たず、RECOGNITION_ADOPTED を単一情報源として
+# resolve_production_recognition_flags() (同ファイル内) が消費する
+# (recognition_load_default_kwargs() と同じ変換ロジック)。
 
 
 # ============================
@@ -302,6 +325,189 @@ INDICATOR_REORG_DECISIONS: tuple[AdoptedFlag, ...] = (
         "own+diff+比率+交互作用の4列で表現 (単純な差では向きが逆転する謎の答え)",
     ),
 )
+
+
+@dataclass(frozen=True)
+class RemovedIndicator:
+    """死亡確定・削除決定済みの指標 1 件 (REORG_REMOVED_INDICATORS 用)。"""
+
+    name: str        # 指標名 (collect_indicators_v2.INDICATOR_COLUMNS 等の表記に合わせる base 列名)
+    confirmed: str    # 死亡・削除の確定日 (YYYY-MM-DD)
+    reason: str       # 死因 (実測結果 または重複判定の根拠)
+
+
+# ============================
+# 指標大整理 — 削除台帳 (2026-08-13 新設、横展開監査 P2)
+# ============================
+# 背景: saturated_chain_count の削除決定 (a-1、INDICATOR_REORG_DECISIONS 参照、
+# 2026-08-12) が3箇所中1箇所 (build_labeled_win_from_npz.py) にしか反映されて
+# おらず、scripts/visualize_advantage_overlay.py の FEATURE_CANDIDATES /
+# scripts/model_indicator_win.py の REDUNDANT_COLS には残ったままだった
+# (「片方の経路だけ直して他方が古いまま」の型A事故、
+# docs/CROSS_CUTTING_AUDIT_2026-08-13.md P2)。加えて過去に死亡確定したのに
+# 公式の除外リストへ一度も登録されていなかった3件 (honsen_output/
+# taiou_capacity/disturbance_rejection、docs/INDICATOR_PROPOSAL_ROUND2_
+# 2026-08-13.md D節) をここで台帳化する。
+#
+# 使い方: 学習・モデル特徴量の候補リストを組み立てる箇所は
+# `reorg_removed_indicator_names()` の集合を除外候補として参照すること
+# (FEATURE_CANDIDATES / REDUNDANT_COLS がこのパターンに追従済み)。
+REORG_REMOVED_INDICATORS: tuple[RemovedIndicator, ...] = (
+    RemovedIndicator(
+        "saturated_chain_count", "2026-08-12",
+        "current_max_chain と19万場面で完全一致 (作成時のバグで同じものを"
+        "2回計算していた)。a-1決定 (INDICATOR_REORG_DECISIONS 参照、"
+        "ATTRIBUTION_EXCLUDED_INDICATORS と同根拠)",
+    ),
+    RemovedIndicator(
+        "absorption_capacity", "2026-08-12",
+        "board_puyo_total と完全重複。a-1決定 (INDICATOR_REORG_DECISIONS 参照)。"
+        "scripts/model_indicator_win.py の REDUNDANT_COLS では既に先行して"
+        "除外済みだった",
+    ),
+    RemovedIndicator(
+        "honsen_output", "2026-07-17",
+        "催促・条件1 (本線打ち合い収支)。中盤AUC 0.512 = current_max_chain の"
+        "生値0.514と同等で無寄与と確定 (memory "
+        "project_midgame_indicator_failures_2026-07-17)",
+    ),
+    RemovedIndicator(
+        "taiou_capacity", "2026-07-20",
+        "対応力 (相手催促を本線温存で上回る)。単純な受け容量 (当てやすさ0.52)"
+        "に負け、blend不採用と確定 (docs/INDICATOR_CANDIDATES_2026-07-20.md "
+        "分類4)",
+    ),
+    RemovedIndicator(
+        "disturbance_rejection", "2026-08-13",
+        "外乱除去比 (C4、returned÷incoming お邪魔)。docs/INDICATOR_CANDIDATES_"
+        "2026-07-20.md では候補提示のみ (「既存会計から実装ゼロ」) のまま構想"
+        "倒れで終わっている。同系統の潰し・相殺設計である ojama_disruption "
+        "(催促・条件2) が478行全ゼロの完全失敗 (memory "
+        "project_midgame_indicator_failures_2026-07-17) で決着済みのため、"
+        "docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md D節の判定に従い死亡"
+        "確定として登録する (独立実測が無い旨は正直に記録)",
+    ),
+)
+
+
+def reorg_removed_indicator_names() -> frozenset[str]:
+    """REORG_REMOVED_INDICATORS の指標名集合を返す (除外リスト構築用)。"""
+    return frozenset(r.name for r in REORG_REMOVED_INDICATORS)
+
+
+@dataclass(frozen=True)
+class PipelineGap:
+    """collect_indicators_v2 (旧) → build_labeled_win_from_npz (新) の意図的な
+    列欠落 1 件 (KNOWN_PIPELINE_GAPS 用)。"""
+
+    column: str       # collect_indicators_v2.INDICATOR_COLUMNS 側の base 列名 (*_raw等を除く)
+    confirmed: str     # 欠落を意図的と確認した日付 (YYYY-MM-DD)
+    reason: str        # 欠落の理由 (設計上の構造的制約 または明示的な削除決定)
+
+
+# ============================
+# npz→CSV 変換ツールのレジストリ整合 — 既知の意図的ギャップ許容リスト
+# (2026-08-13 新設、横展開監査 P1/P2 台帳監査の提案4本の1)
+# ============================
+# collect_indicators_v2.INDICATOR_COLUMNS (旧収集) と
+# build_labeled_win_from_npz._final_fieldnames("full") (新変換) の差分のうち、
+# **設計上意図的で危険でない**ものだけをここに列挙する。
+#
+# 重要: 2026-08-13 時点で判明している「意図的でない脱落11列」
+# (main_linked_pair_count 等、docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md
+# A-1、user採否待ち) はここに **含めない**。含めてしまうと A-1 の問題が
+# テストから見えなくなり「直したことにする」事故を再生産するため
+# (tests/test_indicator_pipeline_registry_2026-08-13.py が11列の存在を
+# 継続的に検出する)。
+KNOWN_PIPELINE_GAPS: tuple[PipelineGap, ...] = (
+    PipelineGap(
+        "tsumo_count_rate", "2026-08-13",
+        "累積手数カウンタ (フレーム間の state) が必要。npz は盤面グリッドの"
+        "みを保持する grid-only ツールのため構造的に計算不可 "
+        "(build_labeled_win_from_npz.py 冒頭「現状カバー範囲」参照)",
+    ),
+    PipelineGap(
+        "margin_time_rate", "2026-08-13",
+        "試合相対経過秒 (state) が必要。tsumo_count_rate と同じ構造的制約",
+    ),
+    PipelineGap(
+        "chain_duration_sec", "2026-08-13",
+        "連鎖の実時間長 (フレーム間の state) が必要。同上の構造的制約",
+    ),
+    PipelineGap(
+        "ojama_net_balance", "2026-08-13",
+        "OjamaAccountingTracker の毎フレーム BoardState 遷移が必要。npz は "
+        "STABLE 重複除去済みスナップショットのみでこの遷移列を保持しない "
+        "(build_labeled_win_from_npz.py 冒頭「現状カバー範囲」に既存記載)",
+    ),
+    PipelineGap(
+        "ojama_forecast", "2026-08-13",
+        "ojama_net_balance と同じ制約 (OjamaAccountingTracker の遷移情報が必要)",
+    ),
+    PipelineGap(
+        "reach_fire_power", "2026-08-13",
+        "next_pair/dnext_pair 依存。npz は --with-next 収集時のみ next1_a/b を"
+        "保持し、本ツールでは next 依存指標は未実装 (冒頭「現状カバー範囲」"
+        "に既存記載)",
+    ),
+    PipelineGap(
+        "near_future_fire_k1", "2026-08-13", "reach_fire_power と同じ next_pair 依存の制約",
+    ),
+    PipelineGap(
+        "near_future_fire_k2", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k3", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k5", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "fire_stability_k2", "2026-08-13", "同上 (near_future_fire_power と同じビーム machinery の副産物)",
+    ),
+    PipelineGap(
+        "fire_stability_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "fire_stability_k6", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k1", "2026-08-13", "同上 next_pair 依存 (ランダム色ツモのモンテカルロ平均)",
+    ),
+    PipelineGap(
+        "expected_fire_k2", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k3", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "saturated_chain_count", "2026-08-12",
+        "a-1決定 (INDICATOR_REORG_DECISIONS 参照)。REORG_REMOVED_INDICATORS と"
+        "同一根拠 (current_max_chain と完全一致のため削除)",
+    ),
+    PipelineGap(
+        "absorption_capacity", "2026-08-12",
+        "a-1決定。REORG_REMOVED_INDICATORS と同一根拠 (board_puyo_total と"
+        "完全重複)",
+    ),
+    PipelineGap(
+        "center_bulge", "2026-08-12",
+        "b-1決定 (INDICATOR_REORG_DECISIONS 参照)。center_bulge_color/_ojama "
+        "に分解済みのため合成列は出力しない (機能は分解後の2列として存続、"
+        "削除ではない)",
+    ),
+)
+
+
+def known_pipeline_gap_columns() -> frozenset[str]:
+    """KNOWN_PIPELINE_GAPS の列名集合を返す (整合テスト用)。"""
+    return frozenset(g.column for g in KNOWN_PIPELINE_GAPS)
 
 
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:

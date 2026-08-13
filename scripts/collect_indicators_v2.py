@@ -1,5 +1,13 @@
 """指標 v2 (第1バッチ) 算出パイプライン — 1 動画 → dataset CSV。
 
+**警告 (2026-08-13、横展開監査 docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1)**:
+本ファイルは主経路 (本番データ収集) から引退済み。本番データ収集には
+`scripts/collect_boards_lean.py` を使用すること。本ファイルは
+`RecognitionPipeline.load_default` を呼ぶ際に `src.production_config.
+RECOGNITION_ADOPTED` (バーストガード等の本番採用フラグ群) を一切配線して
+いないため、ここで生成した CSV は本番より劣化した認識で作られている。
+本ファイルは指標関数 (indicators_v2.py 等) の単体確認専用として残置する。
+
 `docs/INDICATOR_V2_MEASUREMENT_SPEC_2026-06-17.md` のパイプライン仕様に従う。
 
 処理概要:
