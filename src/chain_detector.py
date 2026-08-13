@@ -131,6 +131,16 @@ class ChainEvent:
             2026-08-02 追加、既定 None (後方互換)。既存呼び出し (mechanism 未指定)
             は None のままで挙動不変。Step2 (仮想盤面再構成) で経路別の
             信頼度を扱うために追加した optional 属性。
+        score_estimated: total_score/base_score が実測 (score OCR 差分) でなく
+            ChainSimulator によるシミュレーション推定であることを示すフラグ
+            (根治①, 2026-08-13, docs/KNOWN_WEAKNESSES.md W7)。formula/landing
+            経路の疑似 ChainEvent は本来スコアを直接観測できず、従来は 0
+            固定だった (W7 実測: 全連鎖の6.14%が該当し、先読み評価#9の
+            起動ゲートを阻害)。enable_pseudo_chain_score_fill=True で
+            calculate_chain_score(検証済みChainResult) を充填した場合に
+            True。既定 False (未充填、旧挙動 bit-identical、後方互換)。
+            推定値は認識の連結欠損 (W1) により実際より低く出る場合がある
+            点に注意 (simulate は真値を過小評価しがちという既知の弱点)。
     """
     trigger_sec: float
     end_sec: float
@@ -144,6 +154,7 @@ class ChainEvent:
     leftover_score: int
     is_all_clear: bool
     mechanism: str | None = None
+    score_estimated: bool = False
 
 
 class VideoChainTracker:

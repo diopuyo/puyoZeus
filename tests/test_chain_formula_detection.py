@@ -734,3 +734,136 @@ def test_simulate_verify_active_chain_already_set_skips_gate() -> None:
     assert pipe._active_chain_1p is dummy_ev, (
         "既存 active_chain を上書きしないこと (機能D 本来のガード維持)"
     )
+
+
+# ===========================================================================
+# 根治① (W7, 2026-08-13, docs/KNOWN_WEAKNESSES.md): 疑似 ChainEvent の
+# simulate 推定スコア充填 (enable_pseudo_chain_score_fill)
+# ===========================================================================
+
+
+def _make_pipe_with_score_fill(
+    enable_fill: bool, enable_verify: bool = True,
+) -> RecognitionPipeline:
+    """enable_pseudo_chain_score_fill を指定した最小構成 pipeline。"""
+    from src.image_reader import ImageReader
+    from src.match_state import MatchStateDetector
+    reader = MagicMock(spec=ImageReader)
+    reader._classifier = None
+    reader.read_both_boards.return_value = (None, None)
+    reader.set_pre_capture_mode = MagicMock()
+    reader.set_background_fingerprints = MagicMock()
+    match_det = MagicMock(spec=MatchStateDetector)
+    return RecognitionPipeline(
+        image_reader=reader,
+        match_state_detector=match_det,
+        enable_chain_formula_detection=True,
+        enable_chain_formula_simulate_verify=enable_verify,
+        enable_pseudo_chain_score_fill=enable_fill,
+        force_in_match=True,
+    )
+
+
+def test_pseudo_score_fill_default_is_off() -> None:
+    """enable_pseudo_chain_score_fill のデフォルト値は False (backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.__init__)
+    assert sig.parameters["enable_pseudo_chain_score_fill"].default is False
+
+    sig_load = inspect.signature(RecognitionPipeline.load_default)
+    assert sig_load.parameters["enable_pseudo_chain_score_fill"].default is False
+
+
+def test_pseudo_score_fill_flag_off_bit_identical() -> None:
+    """フラグ OFF (既定) では formula 経路の疑似イベントが total_score=0/
+    base_score=0/score_estimated=False のまま (旧挙動, bit-identical)。"""
+    pipe = _make_pipe_with_score_fill(enable_fill=False)
+    clearable_board = _make_clearable_board()
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    ev = pipe._active_chain_1p
+    assert ev is not None
+    assert (ev.total_score, ev.base_score, ev.score_estimated) == (0, 0, False)
+
+
+def test_pseudo_score_fill_flag_on_fills_verified_score() -> None:
+    """フラグ ON かつ起点盤面に実在の連鎖 (4連結1色1連鎖=40点) がある場合、
+    total_score/base_score に simulate 推定値が充填され score_estimated=True
+    になる (根治①)。"""
+    pipe = _make_pipe_with_score_fill(enable_fill=True)
+    clearable_board = _make_clearable_board()
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=clearable_board,
+    )
+    ev = pipe._active_chain_1p
+    assert ev is not None
+    assert ev.score_estimated is True
+    assert ev.total_score == 40, f"4連結1色1連鎖の期待得点=40: {ev.total_score}"
+    assert ev.base_score == 40
+
+
+def test_pseudo_score_fill_flag_on_but_verify_off_stays_zero() -> None:
+    """フラグ ON でも enable_chain_formula_simulate_verify=False (検証なし
+    固定1発火経路) では verified=None のため充填できず (0,0,False) のまま
+    (fail-safe、backwards compat の退避経路と衝突しないことの確認)。"""
+    from src.board import Board
+    pipe = _make_pipe_with_score_fill(enable_fill=True, enable_verify=False)
+    pipe._apply_chain_formula_early_fire(
+        side="1P", time_sec=1.0, prev_confirmed=Board(),  # 空盤面 (検証なしでも発火)
+    )
+    ev = pipe._active_chain_1p
+    assert ev is not None
+    assert (ev.total_score, ev.base_score, ev.score_estimated) == (0, 0, False)
+
+
+def test_fill_pseudo_chain_score_helper_none_input() -> None:
+    """_fill_pseudo_chain_score(None) は常に (0, 0, False) (フラグ ON/OFF 両方)。"""
+    pipe_on = _make_pipe_with_score_fill(enable_fill=True)
+    pipe_off = _make_pipe_with_score_fill(enable_fill=False)
+    assert pipe_on._fill_pseudo_chain_score(None) == (0, 0, False)
+    assert pipe_off._fill_pseudo_chain_score(None) == (0, 0, False)
+
+
+def test_fill_pseudo_chain_score_helper_zero_chain_count() -> None:
+    """chain_count<=0 の ChainResult は「充填する得点が無い」として (0,0,False)。"""
+    from src.board import Board
+    pipe = _make_pipe_with_score_fill(enable_fill=True)
+    empty_board = Board()
+    verified = pipe._simulate_before_board(empty_board)
+    assert verified is not None and verified.chain_count == 0
+    assert pipe._fill_pseudo_chain_score(verified) == (0, 0, False)
+
+
+def test_fill_pseudo_chain_score_helper_valid_result() -> None:
+    """chain_count>=1 の検証済み ChainResult は calculate_chain_score() の
+    total_score をそのまま (total_score, base_score, True) として返す。"""
+    from src.scoring import calculate_chain_score
+    pipe = _make_pipe_with_score_fill(enable_fill=True)
+    clearable_board = _make_clearable_board()
+    verified = pipe._simulate_before_board(clearable_board)
+    assert verified is not None and verified.chain_count >= 1
+    expected = calculate_chain_score(verified).total_score
+    assert pipe._fill_pseudo_chain_score(verified) == (expected, expected, True)
+
+
+def test_landing_path_score_fill_matches_shared_helper() -> None:
+    """landing 経路 (着地直後即時連鎖判定) は formula 経路と同じ共用ヘルパー
+    _fill_pseudo_chain_score を使うため、同一の検証済み ChainResult から
+    同じ (total_score, base_score, score_estimated) を得る。
+
+    landing 経路は _step_side 内部の巨大メソッドに埋め込まれ、フルの
+    状態遷移を駆動する end-to-end テストが無い
+    (test_immediate_landing_chain_pseudo_event_uses_calibrated_hold の
+    docstring と同じ既知の制約、将来の integration test 追加は別課題)。
+    本テストはソース側が呼ぶのと同じヘルパー・同じ盤面で結果が一致する
+    ことを保証する式レベルのロックに留まる。"""
+    pipe = _make_pipe_with_score_fill(enable_fill=True)
+    clearable_board = _make_clearable_board()
+    # landing 経路のソース (_step_side 内) と同じ呼び出し順:
+    # _simulate_before_board → _fill_pseudo_chain_score
+    verified_landing = pipe._simulate_before_board(clearable_board)
+    total_score, base_score, score_estimated = (
+        pipe._fill_pseudo_chain_score(verified_landing)
+    )
+    assert (total_score, base_score, score_estimated) == (40, 40, True)

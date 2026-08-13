@@ -435,6 +435,21 @@ class ResolvedExchangeTracker:
         if not self._active:
             # CHAIN_TOTAL_MIN_SCORE 未満 (OCR誤読ノイズ由来の疑いが濃い極小連鎖、
             # ojama_accounting.py と同じ判断基準) はトリガー対象外にする。
+            #
+            # 根治③ (W7, 2026-08-13, docs/KNOWN_WEAKNESSES.md): 当初案は
+            # 「total_score>=40 または simulate検証済み chain_count>=1」の
+            # OR ゲートへ拡張する計画だったが、根治① (score_estimated 充填、
+            # src/recognition_pipeline.py `_fill_pseudo_chain_score`) を
+            # 実装した結果、拡張は不要と判明したため見送った (簡素化)。
+            # 根拠: calculate_step_score (src/scoring.py) は消去グループ
+            # size>=4 (ぷよ消去の最小単位) でのみステップを生成し、その
+            # 最小得点は 4×10×max(1,0)=40=CHAIN_TOTAL_MIN_SCORE と厳密に
+            # 一致する。つまり chain_count>=1 の simulate 検証済み結果は
+            # 必ず total_score>=40 になり、既存ゲートを素通しで満たす
+            # (tests/test_scoring.py の不変条件テストで固定)。
+            # score_estimated=False かつ total_score=0 (根治①未実装/OFF時の
+            # 旧来ハードコード値、または simulate 失敗時の fail-safe) だけが
+            # 引き続き「スコア未計算」としてノイズゲート対象になる。
             if (ev1 is not None and ev2 is not None
                     and ev1.total_score >= CHAIN_TOTAL_MIN_SCORE
                     and ev2.total_score >= CHAIN_TOTAL_MIN_SCORE):
@@ -2331,6 +2346,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_ojama_fall_placement_override: bool | None = None,
              enable_ojama_fall_entry_hardening: bool | None = None,
              enable_ojama_fall_scoped_exit: bool | None = None,
+             enable_pseudo_chain_score_fill: bool = False,
              layout: str = "overlay",
              show_excluded_attribution: bool = False,
              render: bool = True,
@@ -2555,6 +2571,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         認識用フレームと表示用フレーム (OUT_W/OUT_H) は独立に生成するため、
         本フラグは出力動画の解像度・レイアウトに一切影響しない。
         False にすると従来 (bit-identical) の挙動に戻る (A/B比較用)。
+    enable_pseudo_chain_score_fill: RecognitionPipeline.load_default に渡す
+        W7根治①フラグ (2026-08-13、docs/KNOWN_WEAKNESSES.md)。formula/landing
+        経路の疑似 ChainEvent の total_score/base_score に simulate 推定値を
+        充填する。既定 False = 従来挙動 (backwards compat、未採用のため
+        use_production_recognition 経由でも自動 ON にはならない)。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -2654,6 +2675,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             enable_ojama_fall_entry_hardening),
         enable_ojama_fall_scoped_exit=_resolve_flag(
             "enable_ojama_fall_scoped_exit", enable_ojama_fall_scoped_exit),
+        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
+        # 未採用のため RECOGNITION_ADOPTED には含めず、直接引き渡す
+        # (既定 False、backwards compat)。
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
         # 本番採用の認識フラグ群 (2026-08-13 是正)。RECOGNITION_ADOPTED の
         # 6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
         # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
@@ -3262,6 +3287,12 @@ def main() -> None:
         default=None, dest="enable_ojama_fall_scoped_exit",
         help="OJAMA_FALL出口のおじゃま限定監視+会計連動 (Stage2根治、2026-08-13)。None=既定OFF")
     ap.add_argument(
+        "--enable-pseudo-chain-score-fill", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_pseudo_chain_score_fill",
+        help="W7根治① (2026-08-13、docs/KNOWN_WEAKNESSES.md): formula/landing "
+             "経路の疑似ChainEventにsimulate推定スコアを充填する。既定OFF"
+             " (bit-identical)。")
+    ap.add_argument(
         "--layout", choices=VALID_LAYOUTS, default="overlay", dest="layout",
         help="出力レイアウト (2026-08-10 user指示追加)。'overlay'(既定)は従来通り"
              "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
@@ -3389,6 +3420,7 @@ def main() -> None:
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
              enable_ojama_fall_entry_hardening=a.enable_ojama_fall_entry_hardening,
              enable_ojama_fall_scoped_exit=a.enable_ojama_fall_scoped_exit,
+             enable_pseudo_chain_score_fill=a.enable_pseudo_chain_score_fill,
              layout=a.layout,
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
