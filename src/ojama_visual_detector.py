@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.board import BOARD_COLS, COLOR_OJAMA, HIDDEN_ROWS, Board
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_OJAMA, HIDDEN_ROWS, Board
 from src.board_state_machine import (
     BoardState,
     DetectorSignals,
@@ -101,6 +101,23 @@ OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC: float = 0.4 * 2.5
 # 配下、 案2単体 (entry_hardening OFF) には一切影響しない)。
 OJAMA_REENTRY_SUPPRESS_SEC: float = 0.4
 
+# 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の根治、
+# docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典): 案B (全盤面 settle) は
+# 盤面全体のぷよ数 (色ぷよ込み) の静止を待つため、 自分のツモ設置で数値が
+# 変化し続け出口判定を塞ぐ (根因調査 2026-08-13 で実測: 設置ブロック16/16件、
+# 高速振動)。 根治は「おじゃまセルの個数」のみを監視対象にし、 色ぷよの
+# 増減を無視する。 定数は案B系 (Board Settle) の値を初期値として流用しつつ、
+# 今後 scoped 系固有のチューニングが他系に波及しないよう独立命名する。
+OJAMA_FALL_SCOPED_EXIT_MIN_SEC: float = OJAMA_FALL_SETTLE_MIN_SEC
+OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES: int = OJAMA_FALL_SETTLE_STABLE_FRAMES
+OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD: int = OJAMA_FALL_SETTLE_DIFF_THRESHOLD
+
+# 案1 会計連動: 未着弾予告量 (会計トラッカー由来、 getattr 安全参照) が
+# 0 以下 (= もう降ってくる予告が無い) のとき、 静止確認に必要な連続フレーム数
+# をこの倍率で短縮し、 滞在上限を短くする。 最低 1 フレームは静止確認する
+# 安全弁として `max(1, ...)` を必ず適用する。
+OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR: int = 2
+
 # ROI の開始行 (= HIDDEN_ROWS = 1 = 可視最上段)
 _ROI_ROW_START: int = HIDDEN_ROWS
 # ROI の終了行 (exclusive)
@@ -146,6 +163,30 @@ def _count_top_ojama(
 
     # CNN または HSV 一方でも検知した場合はその最大値を採用 (感度優先)
     return max(count_cnn, count_hsv)
+
+
+def _count_board_ojama(board: Board) -> int:
+    """盤面可視領域全体 (HIDDEN_ROWS〜最下段) の COLOR_OJAMA セル数を返す.
+
+    案1 (enable_ojama_fall_scoped_exit) の静止判定専用ヘルパー。
+    `_count_top_ojama` の ROI (可視最上段 2 行のみ) はおじゃまが ROI を
+    通過して下段に着地した後は捕捉できないため、 「まだ盤面のどこかで
+    おじゃまが動いているか」 を見るにはスコープを盤面全体に広げる必要が
+    ある。 色ぷよは対象外とし、 COLOR_OJAMA セルのみを数える (= 自分の
+    ツモ設置による色ぷよの増減はこの値に一切影響しない)。
+
+    Args:
+        board: 対象盤面 (通常は signals.cnn_board)。
+
+    Returns:
+        可視領域内の COLOR_OJAMA セル数 (0 以上の整数)。
+    """
+    count = 0
+    for r in range(HIDDEN_ROWS, BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            if int(board.get(r, c)) == COLOR_OJAMA:
+                count += 1
+    return count
 
 
 def _has_ojama_fall_placement_evidence(signals: DetectorSignals) -> bool:
@@ -226,6 +267,20 @@ class OjamaVisualDetector:
             stride 間引き下で chain_event が瞬間的に欠落した隙に低発火閾値の
             OJAMA_FALL entry が CHAIN を奪う実害への対策 (場面2)。
             default False = 既存挙動と完全 bit-identical。
+        enable_ojama_fall_scoped_exit: 案1 (2026-08-13、OJAMA_FALL出口の根治、
+            docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典)。True で
+            OJAMA_FALL 退出条件を「おじゃまセル限定の個数安定」
+            (`_count_board_ojama`、 色ぷよの増減は無視) に切り替える。
+            案B (`enable_ojama_fall_board_settle`) は盤面全体のぷよ数を見る
+            ため自分のツモ設置でも数値が変化し続け出口判定を塞ぐ
+            (根因調査で実測: 設置ブロック16/16件、 高速振動)。 さらに
+            `signals.own_pending_ojama_forecast` (お邪魔会計トラッカー由来、
+            getattr 安全参照) が 0 以下なら静止確認に必要な連続フレーム数を
+            `OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR` で短縮する。
+            本フラグが True の間は `enable_ojama_fall_board_settle` より
+            優先され、 案2 (`enable_ojama_fall_placement_override`) とは
+            併存可能 (案2 の即時 exit 判定が本フラグより先にチェックされる
+            ため矛盾しない)。 default False = 既存挙動と完全 bit-identical。
 
     いずれも False のままなら既存挙動に近い動作となる (= STABLE/TSUMO_FALL 時の
     新規お邪魔出現のみ OJAMA_FALL に遷移)。
@@ -246,6 +301,9 @@ class OjamaVisualDetector:
     # 案4-lite (2026-08-13、根因調査追補): entry 判定の実時間ハードニング。
     # default False = 既存挙動と完全 bit-identical。
     enable_ojama_fall_entry_hardening: bool = False
+    # 案1 (2026-08-13、OJAMA_FALL出口の根治): おじゃまセル限定の静止判定。
+    # default False = 既存挙動と完全 bit-identical。
+    enable_ojama_fall_scoped_exit: bool = False
 
     # 内部 state (dataclass field、 init=False)
     _consec_count: int = field(default=0, init=False, repr=False)
@@ -285,6 +343,13 @@ class OjamaVisualDetector:
     _last_chain_or_settle_observed_time: float = field(
         default=-1.0, init=False, repr=False,
     )
+    # 案1 (2026-08-13): おじゃまセル限定 settle 判定用の内部 state。
+    # 案B (`_settle_start_frame` 等) と独立命名し、 両フラグが同時に True の
+    # 構成 (通常は想定しないが安全側に倒す) でも状態が混線しないようにする。
+    _scoped_exit_start_frame: int = field(default=-1, init=False, repr=False)
+    _scoped_exit_start_time: float = field(default=0.0, init=False, repr=False)
+    _scoped_stable_consec: int = field(default=0, init=False, repr=False)
+    _prev_board_ojama_count: int = field(default=-1, init=False, repr=False)
 
     def detect(
         self,
@@ -315,6 +380,10 @@ class OjamaVisualDetector:
                 # 判定に使う (entry_hardening=False なら参照されず無害)。
                 self._placement_override_exit_time = signals.time_sec
                 return BoardState.STABLE
+            # 案1 (2026-08-13): おじゃまセル限定の静止判定 (根治)。
+            # 案B より優先する (根治が exit を先に決める設計、両立可能)。
+            if self.enable_ojama_fall_scoped_exit:
+                return self._detect_ojama_fall_exit_scoped(ctx, signals)
             # 案B (2026-07-24): 全盤面 settle 判定に委譲 (default False で既存不変)。
             if self.enable_ojama_fall_board_settle:
                 return self._detect_ojama_fall_exit_board_settle(ctx, signals)
@@ -414,6 +483,67 @@ class OjamaVisualDetector:
 
         return None  # 継続
 
+    def _detect_ojama_fall_exit_scoped(
+        self, ctx: StateContext, signals: DetectorSignals,
+    ) -> BoardState | None:
+        """案1: おじゃまセル限定の静止判定による OJAMA_FALL 退出判定 (根治).
+
+        `_detect_ojama_fall_exit_board_settle` (案B) は盤面全体のぷよ数
+        (色ぷよ込み) を見るため自分のツモ設置でも数値が変化し続け、 退出
+        判定が延々と塞がれる (根因調査 2026-08-13 で実測: 設置ブロック
+        16/16件)。 本メソッドは `_count_board_ojama` (おじゃまセルのみ) の
+        静止だけを見て、 色ぷよの増減を無視する。 さらに
+        `signals.own_pending_ojama_forecast` が 0 以下なら
+        `_scoped_required_stable_frames` により静止確認フレーム数を短縮する。
+        """
+        cur_ojama_count = _count_board_ojama(signals.cnn_board)
+
+        if self._scoped_exit_start_frame < 0:
+            self._scoped_exit_start_time = signals.time_sec
+            self._scoped_exit_start_frame = ctx.frame_idx
+            self._scoped_stable_consec = 0
+            self._prev_board_ojama_count = cur_ojama_count
+            return None  # 最初のフレームは必ず継続
+
+        elapsed = signals.time_sec - self._scoped_exit_start_time
+        if elapsed >= OJAMA_FALL_MAX_SEC:
+            # 安全弁: タイムアウトで強制 STABLE (案B と同じ安全弁を流用)。
+            exit_top_count = _count_top_ojama(signals.cnn_board, signals.hsv_board)
+            self._reset_internal_state(keep_top_ojama_count=exit_top_count)
+            return BoardState.STABLE
+
+        if elapsed < OJAMA_FALL_SCOPED_EXIT_MIN_SEC:
+            self._prev_board_ojama_count = cur_ojama_count
+            self._scoped_stable_consec = 0
+            return None
+
+        diff = abs(cur_ojama_count - self._prev_board_ojama_count)
+        self._prev_board_ojama_count = cur_ojama_count
+        if diff < OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD:
+            self._scoped_stable_consec += 1
+        else:
+            self._scoped_stable_consec = 0
+
+        required = self._scoped_required_stable_frames(signals)
+        if self._scoped_stable_consec >= required:
+            exit_top_count = _count_top_ojama(signals.cnn_board, signals.hsv_board)
+            self._reset_internal_state(keep_top_ojama_count=exit_top_count)
+            return BoardState.STABLE
+        return None  # 継続
+
+    def _scoped_required_stable_frames(self, signals: DetectorSignals) -> int:
+        """会計連動: 未着弾予告が尽きていれば必要静止フレーム数を短縮する.
+
+        `signals.own_pending_ojama_forecast` は getattr 安全参照 (トラッカー
+        無効構成では属性自体が既定 None のため、 従来通りの必要フレーム数を
+        返す)。 0 以下 (= もう降ってくる予告が無い) の場合のみ短縮する。
+        """
+        pending = getattr(signals, "own_pending_ojama_forecast", None)
+        base = OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES
+        if pending is not None and pending <= 0:
+            return max(1, base // OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR)
+        return base
+
     def _detect_ojama_fall_entry(
         self, ctx: StateContext, signals: DetectorSignals, cur_count: int,
     ) -> BoardState | None:
@@ -439,6 +569,12 @@ class OjamaVisualDetector:
         self._settle_start_time = 0.0
         self._board_stable_consec = 0
         self._prev_board_puyo_count = -1
+        # 案1 (2026-08-13): おじゃまセル限定 settle 判定用の内部 state も同様に
+        # 都度リセットする (案B と同じ理由、 再突入時の残骸汚染を防ぐ)。
+        self._scoped_exit_start_frame = -1
+        self._scoped_exit_start_time = 0.0
+        self._scoped_stable_consec = 0
+        self._prev_board_ojama_count = -1
 
         # 案4-lite 拡張・第2ラウンド (coordinator追加指示, 2026-08-13):
         # detect() が呼ばれた時点 (= 他の高優先度 detector が勝たなかった
@@ -639,5 +775,10 @@ class OjamaVisualDetector:
         self._settle_start_time = 0.0
         self._board_stable_consec = 0
         self._prev_board_puyo_count = -1
+        # 案1: おじゃまセル限定 settle 判定用の内部 state もリセット。
+        self._scoped_exit_start_frame = -1
+        self._scoped_exit_start_time = 0.0
+        self._scoped_stable_consec = 0
+        self._prev_board_ojama_count = -1
         # 案4-lite: 実時間ベース entry 判定の開始時刻もリセット。
         self._entry_trigger_start_time = -1.0
