@@ -261,3 +261,105 @@ def test_returns_virtual_board_pair_instance():
     opp = Board()
     result = reconstruct_virtual_board_pair(before, opp, net_ojama_after_pred=0.0)
     assert isinstance(result, VirtualBoardPair)
+
+
+# ============================
+# resolve_mutual_exchange (2026-08-13、デモレビュー #9 対処)
+# ============================
+
+
+def test_cancel_mutual_pending_own_cancel_then_surplus_crosses():
+    """自分の生成量で自分の予告を相殺→余剰が相手に交差する。"""
+    from src.exchange_virtual_board import _cancel_mutual_pending
+
+    # p1 生成10、p1への予告6 (自分の生成で自分への予告を相殺→残り0・余剰4はp2へ)。
+    # p2 生成3、p2への予告5 (自分の生成で自分への予告を相殺→残り2・余剰0)。
+    final_p1, final_p2 = _cancel_mutual_pending(
+        gen_p1_ojama=10, gen_p2_ojama=3, pending_p1=6, pending_p2=5)
+    assert final_p1 == 0       # p1の相殺残り0(own1) + p2発の余剰0(surplus2)
+    assert final_p2 == 6       # p2の相殺残り2(own2) + p1発の余剰4(surplus1)
+
+
+def test_cancel_mutual_pending_no_pending_passes_gen_through():
+    """予告が0なら、生成量がそのまま相手への着弾量になる (通常の一方向と同じ)。"""
+    from src.exchange_virtual_board import _cancel_mutual_pending
+
+    final_p1, final_p2 = _cancel_mutual_pending(
+        gen_p1_ojama=10, gen_p2_ojama=0, pending_p1=0, pending_p2=0)
+    assert final_p1 == 0
+    assert final_p2 == 10
+
+
+def test_resolve_mutual_exchange_simulates_both_sides_independently():
+    """両側とも自分の連鎖を消化した final_board が使われる。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_4connect_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=0,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.board_p1_after == ChainSimulator().simulate(before1).final_board
+    assert result.board_p2_after == before2  # 連鎖なし=消化前と同一
+
+
+def test_resolve_mutual_exchange_mutual_fire_lands_on_both():
+    """両者とも生成量>0・予告0 の場合、双方に相手発のおじゃまが着弾する。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_no_chain_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=6, gen_p2_ojama=12,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.dropped_to_p1 == 12  # p2発の12個がp1へ
+    assert result.dropped_to_p2 == 6   # p1発の6個がp2へ
+    assert result.leftover_p1 == 0
+    assert result.leftover_p2 == 0
+
+
+def test_resolve_mutual_exchange_caps_at_max_drop_per_turn():
+    """欠陥E-1と同じ1ターン上限が両者同時発火でも適用される。"""
+    from src.exchange_virtual_board import OJAMA_MAX_DROP_PER_TURN, resolve_mutual_exchange
+
+    before1 = make_no_chain_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=448,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.dropped_to_p1 == OJAMA_MAX_DROP_PER_TURN
+    assert result.leftover_p1 == 448 - OJAMA_MAX_DROP_PER_TURN
+
+
+def test_resolve_mutual_exchange_negative_gen_raises_value_error():
+    """負の生成量は silent fallback せず ValueError (fail-silent 回避)。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_no_chain_board()
+    before2 = make_no_chain_board()
+    with pytest.raises(ValueError):
+        resolve_mutual_exchange(
+            before1, before2, gen_p1_ojama=-1, gen_p2_ojama=0,
+            pending_p1=0, pending_p2=0,
+        )
+
+
+def test_resolve_mutual_exchange_dead_flags_and_determinism():
+    """窒息判定 + 同一入力の再現性 (端数列配置含む)。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    dead = make_dead_board()
+    opp = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        dead, opp, gen_p1_ojama=0, gen_p2_ojama=0, pending_p1=0, pending_p2=0)
+    assert result.p1_dead is True
+    assert result.p2_dead is False
+    r1 = resolve_mutual_exchange(
+        opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
+    r2 = resolve_mutual_exchange(
+        opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
+    assert r1.board_p1_after == r2.board_p1_after
+    assert r1.board_p2_after == r2.board_p2_after
