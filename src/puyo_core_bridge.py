@@ -22,6 +22,26 @@ import 自体は失敗しない (`try/except ImportError` で optional import)�
 - `simulate_after_drops`/`chain_metrics_after_drops`: 1個ぷよを複数パターン
   落として連鎖シミュレートするバッチAPI (takapt定石探索・潜在火力ビーム
   探索の高速化用、Python<->Rust 境界を跨ぐ変換コストを候補数で償却)。
+- `simulate_chain_with_steps`: `simulate_chain` の拡張版、ステップごとの
+  同時消し詳細 (`ChainStepDetail`) も返す。XII-5 同時消しリッチネス
+  (`src.indicators_v2.simultaneous_pop_richness`) の native 対応用
+  (2026-08-13 追加、既存 `simulate_chain` は無変更)。
+- `enumerate_and_simulate_placements`: `enumerate_placements` + 配置ごとの
+  `simulate_chain` 個別呼び出しを1回のバッチ呼び出しに統合した結果型。
+  `scripts/mc_counter_estimator.py` の `_select_best_placement`/
+  `_select_build_placement` 用 (Python<->Rust 境界の往復回数削減、
+  2026-08-13 追加、既存2関数は無変更)。
+- `max_chain_after_drops_for_boards`: 複数盤面それぞれの最大連鎖数
+  (列×色候補を試した上限) を1回のバッチ呼び出しで返す。
+  `_select_build_placement` の tie-break (候補盤面ごとの
+  `_current_max_chain_value` 個別呼び出し) を1回に統合するための API
+  (2026-08-13 追加)。
+- `potential_fire_power_raw_for_boards`: 複数盤面それぞれの
+  potential_fire_power (2手先ビーム) 生値を1回のバッチ呼び出しで返す。
+  `_select_build_placement` の tie-break で「潜在連鎖が同値タイの候補
+  全件」に個別呼び出しされていた `_potential_fire_power_value`
+  (実測: tied件数中央値10・最大22件、往復の主要コストと判明) を1回に
+  統合するための API (2026-08-13 追加)。
 """
 from __future__ import annotations
 
@@ -186,6 +206,98 @@ def _simulate_chain_fallback(
     )
 
 
+@dataclass(frozen=True)
+class ChainStepDetail:
+    """1 ステップ (1 消し) の同時消し詳細 (2026-08-13 追加)。
+
+    `src.chain.ChainStep` と同一の意味論 (`num_groups`=`len(erased_groups)`、
+    `num_colors`=`erased_groups` 内の異なり色数)。XII-5 同時消しリッチネス
+    (`src.indicators_v2.simultaneous_pop_richness`) の native 対応用。
+
+    Attributes:
+        num_groups: このステップで同時に消えたグループ数 (色をまたいで合計)。
+        num_colors: このステップで消えた色の種類数。
+        erased_count: このステップで消えた通常ぷよ数 (おじゃま除く)。
+        ojama_count: このステップで消えたおじゃま数。
+    """
+    num_groups: int
+    num_colors: int
+    erased_count: int
+    ojama_count: int
+
+
+def simulate_chain_with_steps(
+    board: Board, exclude_hidden_row_from_pop: bool = False,
+) -> "tuple[ChainSimResult, list[ChainStepDetail]]":
+    """`simulate_chain` の拡張版: 連鎖シミュレーション結果に加え、ステップごと
+    の同時消し詳細 (`ChainStepDetail`) も返す (2026-08-13 追加)。
+
+    XII-5 同時消しリッチネス (`src.indicators_v2.simultaneous_pop_richness`)
+    が必要とする「各ステップの同時消しグループ数・色数・消去個数」を、
+    連鎖シミュレーションを1回実行するだけで得るための拡張版
+    (既存 `simulate_chain`/`ChainSimResult` は無変更)。
+
+    Args:
+        board: 判定対象の盤面 (破壊しない)。
+        exclude_hidden_row_from_pop: 幽霊連鎖ルール (既定 False、
+            backwards compat。`simulate_chain` と同じ既定値方針)。
+
+    Returns:
+        `(ChainSimResult, ChainStepDetail のリスト)`。`ChainStepDetail`
+        のリストは `chain_count` と同じ長さ (ステップ順)。値は
+        `src.chain.ChainSimulator.simulate(board).steps` の
+        `erased_groups`/`erased_count`/`erased_ojama` と完全一致する
+        (`tests/test_puyo_core_parity.py` で確認)。
+    """
+    if NATIVE_AVAILABLE:
+        flat = _grid_to_flat_list(board)
+        r, steps_raw = _native.simulate_chain_with_steps_py(flat, exclude_hidden_row_from_pop)
+        result = ChainSimResult(
+            chain_count=r.chain_count,
+            total_erased=r.total_erased,
+            total_ojama=r.total_ojama,
+            score_approx=r.score_approx,
+            exact_score=r.exact_score,
+            final_board=_flat_list_to_board(r.final_grid),
+        )
+        steps = [
+            ChainStepDetail(
+                num_groups=s.num_groups, num_colors=s.num_colors,
+                erased_count=s.erased_count, ojama_count=s.ojama_count,
+            )
+            for s in steps_raw
+        ]
+        return result, steps
+    return _simulate_chain_with_steps_fallback(board, exclude_hidden_row_from_pop)
+
+
+def _simulate_chain_with_steps_fallback(
+    board: Board, exclude_hidden_row_from_pop: bool,
+) -> "tuple[ChainSimResult, list[ChainStepDetail]]":
+    """`simulate_chain_with_steps` の Python フォールバック。
+
+    `_simulate_chain_fallback` (既存) で通常の連鎖シミュレーション結果を
+    得た上で、ステップ詳細のみ `src.chain.ChainSimulator` を再実行して求める
+    (`_simulate_chain_fallback` 自体も内部で ChainSimulator を1回実行して
+    いるため2回実行になるが、フォールバック経路 [低速だが正解] 限定の
+    冗長性として許容する)。exclude_hidden_row_from_pop=True の未対応は
+    `_simulate_chain_fallback` 側の例外にそのまま委ねる (fail-silent回避)。
+    """
+    result = _simulate_chain_fallback(board, exclude_hidden_row_from_pop)
+    from src.chain import ChainSimulator as _FallbackSimulator
+    chain_result = _FallbackSimulator().simulate(board)
+    steps = [
+        ChainStepDetail(
+            num_groups=len(step.erased_groups),
+            num_colors=len({g.color for g in step.erased_groups}),
+            erased_count=step.erased_count,
+            ojama_count=step.erased_ojama,
+        )
+        for step in chain_result.steps
+    ]
+    return result, steps
+
+
 def simulate_after_drops(
     board: Board,
     drops: "list[tuple[int, int]]",
@@ -261,6 +373,113 @@ def chain_metrics_after_drops(
         None if r is None else (r.chain_result.chain_count, r.chain_result.exact_score)
         for r in results
     ]
+
+
+def max_chain_after_drops_for_boards(
+    boards: "list[Board]",
+    drops: "list[tuple[int, int]]",
+    exclude_hidden_row_from_pop: bool = False,
+) -> "list[int]":
+    """複数盤面それぞれに対し、列×色候補 (`drops`) を試して到達できる最大
+    連鎖数を返す (2026-08-13 追加)。
+
+    `scripts/mc_counter_estimator.py` の `_select_build_placement` の
+    tie-break (候補盤面ごとに `chain_metrics_after_drops` を個別呼び出しして
+    最大連鎖数を取る) を1回のバッチ呼び出しに統合するための API
+    (候補数分の Python<->Rust 往復を1回に削減)。
+
+    Args:
+        boards: 評価対象の盤面リスト (各破壊しない)。
+        drops: `[(col, color), ...]` の候補リスト (通常は列×色30通り)。
+        exclude_hidden_row_from_pop: 幽霊連鎖ルール (既定 False)。
+
+    Returns:
+        `boards` と同じ長さの最大連鎖数リスト (置ける候補が1つも無い盤面は0)。
+        値は `chain_metrics_after_drops` を盤面ごとに個別呼び出しして
+        `chain_count` の最大を取った場合と完全一致する
+        (`tests/test_puyo_core_parity.py` で確認)。
+    """
+    if NATIVE_AVAILABLE:
+        flats = [_grid_to_flat_list(b) for b in boards]
+        raw = _native.max_chain_after_drops_for_boards_py(
+            flats, drops, exclude_hidden_row_from_pop,
+        )
+        return list(raw)
+    results: "list[int]" = []
+    for board in boards:
+        metrics = chain_metrics_after_drops(board, drops, exclude_hidden_row_from_pop)
+        chain_counts = [m[0] for m in metrics if m is not None]
+        results.append(max(chain_counts) if chain_counts else 0)
+    return results
+
+
+def potential_fire_power_raw_for_boards(
+    boards: "list[Board]",
+    drops: "list[tuple[int, int]]",
+    beam_k: int,
+    exclude_hidden_row_from_pop: bool = False,
+) -> "list[int]":
+    """複数盤面それぞれについて、potential_fire_power (2手先ビーム beam_k)
+    の生値 (お邪魔換算前の最良2手先 exact_score) をまとめて返す
+    (2026-08-13 追加)。
+
+    `scripts/mc_counter_estimator.py::_select_build_placement` の tie-break
+    (潜在連鎖が同値タイの候補全件に対して1件ずつ `_potential_fire_power_value`
+    を呼ぶ、実測で tied 件数は中央値10件・最大22件) を1回のバッチ呼び出しに
+    統合するための API (候補数分の Python<->Rust 往復を1回に削減)。
+
+    アルゴリズム (`_pfp_first_pass`/`_pfp_second_pass` と同一意味論):
+        1手目: `drops` を試し、シミュレート後 chain_count 降順で上位
+            `beam_k` 件の「落下直後 (連鎖解決前)」盤面を残す。
+        2手目: 残した各盤面にさらに `drops` を試し、到達できる最大
+            `exact_score` を求める。
+
+    Args:
+        boards: 評価対象の盤面リスト (各破壊しない)。
+        drops: `[(col, color), ...]` の候補リスト (通常は列×色30通り)。
+        beam_k: 1手目で残す上位候補数。
+        exclude_hidden_row_from_pop: 幽霊連鎖ルール (既定 False)。
+
+    Returns:
+        `boards` と同じ長さの最良2手先 exact_score リスト (候補が無い盤面は0)。
+        値は `simulate_after_drops`+`chain_metrics_after_drops` で盤面ごとに
+        個別に2段探索した場合と完全一致する (`tests/test_puyo_core_parity.py`
+        で確認)。
+    """
+    if NATIVE_AVAILABLE:
+        flats = [_grid_to_flat_list(b) for b in boards]
+        raw = _native.potential_fire_power_raw_for_boards_py(
+            flats, drops, beam_k, exclude_hidden_row_from_pop,
+        )
+        return list(raw)
+    return [
+        _potential_fire_power_raw_one_fallback(b, drops, beam_k, exclude_hidden_row_from_pop)
+        for b in boards
+    ]
+
+
+def _potential_fire_power_raw_one_fallback(
+    board: Board,
+    drops: "list[tuple[int, int]]",
+    beam_k: int,
+    exclude_hidden_row_from_pop: bool,
+) -> int:
+    """`potential_fire_power_raw_for_boards` の Python フォールバック、1盤面分。"""
+    first_pass = [
+        (r.chain_result.chain_count, r.dropped_board)
+        for r in simulate_after_drops(board, drops, exclude_hidden_row_from_pop)
+        if r is not None
+    ]
+    first_pass.sort(key=lambda x: x[0], reverse=True)
+    best_score = 0
+    for _chain, board1 in first_pass[:beam_k]:
+        for m in chain_metrics_after_drops(board1, drops, exclude_hidden_row_from_pop):
+            if m is None:
+                continue
+            _chain_count, exact_score = m
+            if exact_score > best_score:
+                best_score = exact_score
+    return best_score
 
 
 def _drop_one_fallback_then_simulate(
@@ -364,6 +583,87 @@ def enumerate_placements(
             if filter_dead and placed.is_dead():
                 continue
             results.append((col, rotation, placed))
+    return results
+
+
+@dataclass(frozen=True)
+class PlacementSimResult:
+    """1配置 (設置直後盤面+連鎖シミュレーション結果) の統合結果 (2026-08-13追加)。
+
+    `enumerate_placements` + 配置ごとの `simulate_chain` 個別呼び出しを1回の
+    バッチ呼び出しに統合した結果型 (`scripts/mc_counter_estimator.py` の
+    `_select_best_placement`/`_select_build_placement` 用、Python<->Rust
+    境界の往復回数削減が目的、値は個別呼び出しした場合と完全一致)。
+
+    Attributes:
+        col: 設置列。
+        rotation: 回転種別 (0-3、`_ROTATION_*` 定数参照)。
+        placed_board: 設置直後 (連鎖解決前) の盤面。
+        is_dead: 設置直後盤面が窒息しているか。
+        chain_result: placed_board を連鎖シミュレートした結果。
+    """
+    col: int
+    rotation: int
+    placed_board: Board
+    is_dead: bool
+    chain_result: ChainSimResult
+
+
+def enumerate_and_simulate_placements(
+    board: Board,
+    pair: "tuple[int, int]",
+    filter_dead: bool = False,
+    exclude_hidden_row_from_pop: bool = False,
+) -> "list[PlacementSimResult]":
+    """22配置の列挙+各配置の連鎖シミュレーションを1回にまとめて返す (2026-08-13追加)。
+
+    `enumerate_placements` (1回) + 配置ごとの `simulate_chain` (最大22回) を
+    個別に呼び出す場合と値は完全一致するが、拡張導入時は1回の
+    Python<->Rust往復に統合される (境界コスト削減目的)。
+
+    Args:
+        board: 判定対象の盤面 (破壊しない)。
+        pair: 設置するペア (top, bot)。
+        filter_dead: True で設置直後 (連鎖解決前) が窒息する配置を除外
+            (`enumerate_placements` と同一意味論、既定 False =
+            `_select_build_placement` の「消去済み含め全候補見る」用途に合わせる)。
+        exclude_hidden_row_from_pop: 幽霊連鎖ルール (既定 False)。
+
+    Returns:
+        `PlacementSimResult` のリスト (列挙順=`enumerate_placements` と同一、
+        rotation昇順→col昇順)。
+    """
+    if NATIVE_AVAILABLE:
+        flat = _grid_to_flat_list(board)
+        raw = _native.enumerate_and_simulate_placements_py(
+            flat, pair[0], pair[1], filter_dead, exclude_hidden_row_from_pop,
+        )
+        return [
+            PlacementSimResult(
+                col=r.col,
+                rotation=r.rotation,
+                placed_board=_flat_list_to_board(r.placed_grid),
+                is_dead=r.is_dead,
+                chain_result=ChainSimResult(
+                    chain_count=r.chain_count,
+                    total_erased=r.total_erased,
+                    total_ojama=r.total_ojama,
+                    score_approx=r.score_approx,
+                    exact_score=r.exact_score,
+                    final_board=_flat_list_to_board(r.final_grid),
+                ),
+            )
+            for r in raw
+        ]
+    results: "list[PlacementSimResult]" = []
+    for col, rotation, placed in enumerate_placements(board, pair, filter_dead=filter_dead):
+        results.append(
+            PlacementSimResult(
+                col=col, rotation=rotation, placed_board=placed,
+                is_dead=placed.is_dead(),
+                chain_result=simulate_chain(placed, exclude_hidden_row_from_pop),
+            )
+        )
     return results
 
 

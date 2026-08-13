@@ -29,9 +29,13 @@ from src.puyo_core_bridge import (
     NATIVE_AVAILABLE,
     beam_search,
     chain_metrics_after_drops,
+    enumerate_and_simulate_placements,
     enumerate_placements,
+    max_chain_after_drops_for_boards,
+    potential_fire_power_raw_for_boards,
     simulate_after_drops,
     simulate_chain,
+    simulate_chain_with_steps,
 )
 
 _DATA_DIR = (
@@ -149,6 +153,62 @@ def test_exact_score_parity_with_chain_simulator(sample_boards: "list[Board]") -
     n_bad = len(mismatches)
     assert not mismatches, (
         f"{n_bad}/{n} 件で ChainSimulator の厳密得点と不一致:\n"
+        + "\n".join(mismatches[:20])
+    )
+
+
+def test_simulate_chain_with_steps_parity_with_chain_simulator(
+    sample_boards: "list[Board]",
+) -> None:
+    """`simulate_chain_with_steps` (2026-08-13追加、XII-5 同時消しリッチネス
+    native対応用) のステップごと詳細が `src.chain.ChainSimulator` と
+    完全一致するか (`simultaneous_pop_richness` が使う
+    `len(step.erased_groups)`/`erased_count`/`erased_ojama` と同一土俵)。
+    """
+    from src.chain import ChainSimulator
+
+    sim = ChainSimulator()
+    mismatches: "list[str]" = []
+    for i, board in enumerate(sample_boards):
+        native_result, native_steps = simulate_chain_with_steps(
+            board, exclude_hidden_row_from_pop=False,
+        )
+        py_result = sim.simulate(board)
+        if len(native_steps) != len(py_result.steps):
+            mismatches.append(
+                f"[{i}] ステップ数不一致: native={len(native_steps)} py={len(py_result.steps)}",
+            )
+            continue
+        if native_result.chain_count != py_result.chain_count:
+            mismatches.append(
+                f"[{i}] chain_count: native={native_result.chain_count} py={py_result.chain_count}",
+            )
+        for s_idx, (n_step, py_step) in enumerate(zip(native_steps, py_result.steps)):
+            expected_groups = len(py_step.erased_groups)
+            expected_colors = len({g.color for g in py_step.erased_groups})
+            if n_step.num_groups != expected_groups:
+                mismatches.append(
+                    f"[{i}] step{s_idx} num_groups: native={n_step.num_groups} py={expected_groups}",
+                )
+            if n_step.num_colors != expected_colors:
+                mismatches.append(
+                    f"[{i}] step{s_idx} num_colors: native={n_step.num_colors} py={expected_colors}",
+                )
+            if n_step.erased_count != py_step.erased_count:
+                mismatches.append(
+                    f"[{i}] step{s_idx} erased_count: native={n_step.erased_count} "
+                    f"py={py_step.erased_count}",
+                )
+            if n_step.ojama_count != py_step.erased_ojama:
+                mismatches.append(
+                    f"[{i}] step{s_idx} ojama_count: native={n_step.ojama_count} "
+                    f"py={py_step.erased_ojama}",
+                )
+
+    n = len(sample_boards)
+    n_bad = len(mismatches)
+    assert not mismatches, (
+        f"{n_bad}件で ChainSimulator のステップ詳細と不一致 (対象{n}件):\n"
         + "\n".join(mismatches[:20])
     )
 
@@ -303,6 +363,124 @@ def test_enumerate_placements_parity_with_indicators_v2(
 
     assert not mismatches, (
         f"{len(mismatches)} 件で設置列挙が不一致:\n" + "\n".join(mismatches[:20])
+    )
+
+
+def test_enumerate_and_simulate_placements_parity_with_individual_calls(
+    sample_boards: "list[Board]",
+) -> None:
+    """バッチ版 `enumerate_and_simulate_placements` (2026-08-13追加、
+    `scripts/mc_counter_estimator.py` の境界コスト削減用) が、
+    `enumerate_placements` + 配置ごとの `simulate_chain` 個別呼び出しと
+    完全一致するか (`v3.2 選択ロジックの境界コスト削減` の前提パリティ)。
+    """
+    pairs = ((1, 2), (3, 4), (1, 1))
+    subset = sample_boards[:120]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        for pair in pairs:
+            batch = enumerate_and_simulate_placements(board, pair, filter_dead=False)
+            individual = enumerate_placements(board, pair, filter_dead=False)
+            if len(batch) != len(individual):
+                mismatches.append(
+                    f"[{i}] pair={pair}: 件数不一致 batch={len(batch)} individual={len(individual)}",
+                )
+                continue
+            for (col, rotation, placed) in individual:
+                matches = [
+                    r for r in batch
+                    if r.col == col and r.rotation == rotation
+                ]
+                if len(matches) != 1:
+                    mismatches.append(f"[{i}] pair={pair} col={col} rot={rotation}: 対応なし")
+                    continue
+                r = matches[0]
+                if not np.array_equal(r.placed_board._grid, placed._grid):
+                    mismatches.append(f"[{i}] pair={pair} col={col} rot={rotation}: placed_board不一致")
+                if r.is_dead != placed.is_dead():
+                    mismatches.append(f"[{i}] pair={pair} col={col} rot={rotation}: is_dead不一致")
+                individual_sim = simulate_chain(placed)
+                if r.chain_result.chain_count != individual_sim.chain_count:
+                    mismatches.append(
+                        f"[{i}] pair={pair} col={col} rot={rotation}: chain_count不一致",
+                    )
+                if r.chain_result.exact_score != individual_sim.exact_score:
+                    mismatches.append(
+                        f"[{i}] pair={pair} col={col} rot={rotation}: exact_score不一致",
+                    )
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件でバッチ版が個別呼び出しと不一致:\n" + "\n".join(mismatches[:20])
+    )
+
+
+def test_max_chain_after_drops_for_boards_parity_with_individual_calls(
+    sample_boards: "list[Board]",
+) -> None:
+    """バッチ版 `max_chain_after_drops_for_boards` (2026-08-13追加、
+    `scripts/mc_counter_estimator.py::_select_build_placement` の tie-break
+    境界コスト削減用) が、盤面ごとに `chain_metrics_after_drops` を個別
+    呼び出しして最大 chain_count を取った場合と完全一致するか。
+    """
+    drops = [(col, color) for col in range(BOARD_COLS) for color in (1, 2, 3, 4, 5)]
+    subset = sample_boards[:80]
+    batch_results = max_chain_after_drops_for_boards(subset, drops)
+    mismatches: "list[str]" = []
+    for i, (board, batch_max) in enumerate(zip(subset, batch_results)):
+        metrics = chain_metrics_after_drops(board, drops)
+        chain_counts = [m[0] for m in metrics if m is not None]
+        expected = max(chain_counts) if chain_counts else 0
+        if batch_max != expected:
+            mismatches.append(f"[{i}] batch={batch_max} individual={expected}")
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件でバッチ版が個別呼び出しと不一致:\n" + "\n".join(mismatches[:20])
+    )
+
+
+def _potential_fire_power_raw_reference(
+    board: Board, drops: "list[tuple[int, int]]", beam_k: int,
+) -> int:
+    """`potential_fire_power_raw_for_boards` の正解基準となる素朴なリファレンス
+    実装 (`simulate_after_drops`+`chain_metrics_after_drops` を素直に2段
+    ネストして呼ぶだけ、`_pfp_first_pass`/`_pfp_second_pass` と同一意味論)。
+    """
+    first_pass = [
+        (r.chain_result.chain_count, r.dropped_board)
+        for r in simulate_after_drops(board, drops)
+        if r is not None
+    ]
+    first_pass.sort(key=lambda x: x[0], reverse=True)
+    best_score = 0
+    for _chain, board1 in first_pass[:beam_k]:
+        for m in chain_metrics_after_drops(board1, drops):
+            if m is None:
+                continue
+            _chain_count, exact_score = m
+            if exact_score > best_score:
+                best_score = exact_score
+    return best_score
+
+
+def test_potential_fire_power_raw_for_boards_parity_with_reference(
+    sample_boards: "list[Board]",
+) -> None:
+    """バッチ版 `potential_fire_power_raw_for_boards` (2026-08-13追加、
+    `scripts/mc_counter_estimator.py::_select_build_placement` の tie-break
+    境界コスト削減用) が、素朴な2段ネスト参照実装と完全一致するか。
+    """
+    drops = [(col, color) for col in range(BOARD_COLS) for color in (1, 2, 3, 4, 5)]
+    beam_k = 5
+    subset = sample_boards[:40]
+    batch_results = potential_fire_power_raw_for_boards(subset, drops, beam_k)
+    mismatches: "list[str]" = []
+    for i, (board, batch_val) in enumerate(zip(subset, batch_results)):
+        expected = _potential_fire_power_raw_reference(board, drops, beam_k)
+        if batch_val != expected:
+            mismatches.append(f"[{i}] batch={batch_val} reference={expected}")
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件でバッチ版が参照実装と不一致:\n" + "\n".join(mismatches[:20])
     )
 
 

@@ -4,6 +4,64 @@ user確定指示 (2026-08-12): ぷよぷよ連鎖シミュレーション+ビー
 ネイティブ拡張。目標=深さ13〜16手/幅250のビームサーチを1探索100ms以内
 (8スレッドで10〜20msが理想)。
 
+## 2026-08-13 追記: 移植1 (同時消しリッチネスnative対応) + 移植2 (反撃計算選択ロジック完全移植)
+
+**タスク#10 (user承認済み) の残り2件、コミットはしていない (working tree のまま)**。
+
+### 移植1: 同時消しリッチネスのnative対応
+- `bitboard.rs::ChainStepInfo`/`simulate_chain_with_steps` を新規追加
+  (既存 `simulate_chain`/`ChainSimResult` は無変更、`simulate_chain_core`
+  への内部リファクタで共通化)。ステップごとの同時消しグループ数・色数・
+  消去個数を返す (`src/chain.py::ChainStep.erased_groups` と同一意味論)。
+- `lib.rs::simulate_chain_with_steps_py`/`ChainStepInfoPy`、
+  `src/puyo_core_bridge.py::simulate_chain_with_steps`/`ChainStepDetail`
+  (+ Pythonフォールバック、`ChainSimulator` 使用) を追加。
+- パリティ: 実盤面600件で `ChainSimulator` とステップ単位で完全一致
+  (`tests/test_puyo_core_parity.py::
+  test_simulate_chain_with_steps_parity_with_chain_simulator`)。
+- **`src/indicators_v2.py` への配線は未実施** (task指示により編集禁止
+  ファイル、配線は後続タスク)。
+
+### 移植2: 反撃計算の選択ロジック完全移植 (RT下準備)
+`scripts/mc_counter_estimator.py` の `_select_best_placement`/
+`_select_build_placement` が持っていた境界コスト (0.24s/rollout) を3段で削減:
+1. `enumerate_and_simulate_placements` (native: `lib.rs::
+   enumerate_and_simulate_placements_py`): 22配置列挙+配置ごとの
+   `simulate_chain` (最大23回の往復) を1回に統合。
+2. `max_chain_after_drops_for_boards` (native: `lib.rs::
+   max_chain_after_drops_for_boards_py`): `_select_build_placement` の
+   tie-break (`current_max_chain` を候補盤面ごとに個別評価、最大22回) を
+   1回に統合。
+3. **実測で最大の効果**: `potential_fire_power_raw_for_boards` (native:
+   `lib.rs::potential_fire_power_raw_for_boards_py`)。診断
+   (60盤面サンプル) で tied 候補数が中央値10件・最大22件と判明し、
+   候補ごとに `_potential_fire_power_value` (最大1+beam_k=6回の往復) を
+   個別呼び出しすることがロールアウトの主要コストと確定。これを2手先
+   ビーム探索ごと1回のバッチ呼び出しに統合。
+
+**効果 (WSL側で148収集ジョブ10+並列走行中の高負荷下 [loadavg 17〜32]
+での参考値、`_bench_movement2_native_only.py` 系の一時スクリプトで計測、
+time_budget_sec=5.0・n_rollouts=20)**:
+- percentile50相当盤面 (色ぷよ23個): 266ms/rollout → 109ms/rollout (2.4x)
+- percentile80相当盤面 (色ぷよ39個): 199ms/rollout → 77ms/rollout (2.6x)
+
+上記3点のうち1.と2.単独の効果は小さかった (0.3〜0.5ms/手規模、
+`_bench_movement2_isolated.py` 系の一時スクリプトで分離計測) ため、
+「Python<->Rust境界の往復コスト」より「tied候補全件への
+potential_fire_power評価」という**アルゴリズム上の評価対象数**が実測上の
+主因だった。教訓: 往復回数を減らす前に、まず何が何回呼ばれているか
+(候補数の実測分布) を確認すべきだった (推測でなく計測、CLAUDE.md原則の再確認)。
+
+**パリティ**: 新設3APIとも `tests/test_puyo_core_parity.py` に個別呼び出し
+との完全一致テストを追加 (計11パリティテスト全通過)。加えて
+`tests/test_mc_counter_estimator.py::TestNativePythonSelectionParity`
+(新設) で通常盤面 (重力一貫) での `use_native=True/False` 完全一致を
+`_select_best_placement`/`_select_build_placement`/
+`estimate_counter_distribution` の3段で直接確認。既存33テスト (旧30+新3)
+全通過、`test_compute_exchange_delta_winprob.py`(90件)・
+`test_build_labeled_win_from_npz.py`(70件)・`test_counter_reach_*`
+系も無破壊。**`cargo test` 18件も全通過** (新設4件含む)。
+
 **14:40 PCシャットダウン前のチェックポイントコミット**。このファイルは
 再開する別セッションの自分が読む前提で書く。
 

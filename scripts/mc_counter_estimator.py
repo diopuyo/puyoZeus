@@ -95,6 +95,46 @@ test_exact_score_parity_with_chain_simulator` で実盤面600件、
 そのロールアウト呼び出し全体 (`n_rollouts` 本すべて) を `use_native=False`
 (純Python経路) で実行することで「完全一致」を保証する (native の恒久修正
 は別課題、native/puyo_core 自体は本タスクで変更しない)。
+
+## v3.2 選択ロジックの境界コスト削減 (2026-08-13 追加)
+
+v3 (`simulate_after_drops`/`chain_metrics_after_drops` 経由のバッチ化) の後も
+`_select_best_placement`/`_select_build_placement` (内部の
+`_enumerate_placements_dispatch`) は「22配置列挙 (1回) + 配置ごとの
+`simulate_chain` (最大22回)」という計最大23回の Python<->Rust 往復を毎手
+1回 (組むフェーズは毎手、発火フェーズはロールアウト末尾に1回) 行っていた
+(実測 0.24s/rollout の主要因)。`src/puyo_core_bridge.py` に
+`enumerate_and_simulate_placements` (2026-08-13 追加、`native/puyo_core/
+src/lib.rs::enumerate_and_simulate_placements_py` を1回呼ぶだけで22配置+
+シミュレーション結果一式を取得するバッチAPI) を新設し、両関数の native
+分岐をこれ1回の呼び出しに置き換えた (推定ロジック・選択則は一切変えず、
+往復回数のみ削減、値は旧実装と完全一致。速度計測は
+`scripts/_bench_mc_counter_native_2026-08-13.py` で新旧比較する)。
+
+さらに実測すると、上記だけでは効果が限定的だった (「1手分の列挙+選択」の
+往復は1回に減ったが、`_select_build_placement` の tie-break
+[潜在連鎖 `current_max_chain` 評価] が build_only 候補盤面ごとに
+`_current_max_chain_value` を個別呼び出ししており [最大22回]、これが
+実際の主要コストだった)。`native/puyo_core/src/lib.rs::
+max_chain_after_drops_for_boards_py` (複数盤面×列×色30通りを1回で評価) と
+`src/puyo_core_bridge.max_chain_after_drops_for_boards` を追加し、
+`_current_max_chain_values_batch` 経由でこの tie-break も1回のバッチ
+呼び出しに統合した (値は完全一致)。
+
+それでもなお速度改善が体感できなかったため、一時診断スクリプトで
+`_select_build_placement` の候補構成を実測したところ、**`current_max_chain`
+が同値タイになる候補数 (`tied`) が中央値10件・最大22件** と判明した
+(60盤面サンプル、`build_only` 自体も中央値19件)。`tied` 全件に対して
+`max(tied, key=_potential_fire_power_value)` を呼ぶと、候補1件あたり
+最大 `1+POTENTIAL_FIRE_POWER_BEAM_K` (=6) 回の native往復が発生するため、
+これが実測上のロールアウト主要コストだった (前段の enumerate+simulate
+統合・current_max_chain バッチ化はいずれも0.3〜0.5ms/手規模で、この
+tie-break の方が桁違いに大きかった)。`native/puyo_core/src/lib.rs::
+potential_fire_power_raw_for_boards_py` (複数盤面×2手先ビームを1回で評価)
+と `src/puyo_core_bridge.potential_fire_power_raw_for_boards` を追加し、
+`_potential_fire_power_values_batch` 経由でこの tie-break も1回のバッチ
+呼び出しに統合した (`POTENTIAL_FIRE_POWER_MAX_ADD==2` [現行値] の場合のみ、
+値は完全一致)。
 """
 from __future__ import annotations
 
@@ -121,7 +161,15 @@ from src.indicators_v2 import (
 )
 from src.puyo_core_bridge import NATIVE_AVAILABLE
 from src.puyo_core_bridge import chain_metrics_after_drops as _native_chain_metrics_after_drops
-from src.puyo_core_bridge import enumerate_placements as _native_enumerate_placements
+from src.puyo_core_bridge import (
+    enumerate_and_simulate_placements as _native_enumerate_and_simulate_placements,
+)
+from src.puyo_core_bridge import (
+    max_chain_after_drops_for_boards as _native_max_chain_after_drops_for_boards,
+)
+from src.puyo_core_bridge import (
+    potential_fire_power_raw_for_boards as _native_potential_fire_power_raw_for_boards,
+)
 from src.puyo_core_bridge import simulate_after_drops as _native_simulate_after_drops
 from src.puyo_core_bridge import simulate_chain as _native_simulate_chain
 from src.scoring import calculate_chain_score
@@ -235,11 +283,6 @@ def _board_is_gravity_consistent(board: Board) -> bool:
     return True
 
 
-def _native_chain_count(board: Board) -> int:
-    """native puyo_core で連鎖数のみ求める (exact_score不要な箇所用)。"""
-    return _native_simulate_chain(board).chain_count
-
-
 # 列×色30通り (takapt定石/潜在火力探索の1手先候補) の (col, color) 一覧。
 # `_takapt_best_drop`/`_pfp_first_pass` と同一探索順 (col昇順→色昇順)。
 _DROP_CANDIDATES_30: "tuple[tuple[int, int], ...]" = tuple(
@@ -271,6 +314,26 @@ def _current_max_chain_value(
         if chain_count > best_chain:
             best_chain = chain_count
     return best_chain
+
+
+def _current_max_chain_values_batch(
+    boards: "list[Board]", sim: ChainSimulator, use_native: bool,
+) -> "list[float]":
+    """`_current_max_chain_value` を複数候補盤面にわたって評価する
+    (`_select_build_placement` の tie-break 専用、2026-08-13 追加)。
+
+    use_native=True かつ拡張導入済みの場合、候補盤面ごとに個別呼び出しして
+    いた `_current_max_chain_value` (盤面数 = 最大22回の native 往復) を
+    `max_chain_after_drops_for_boards` (1回のバッチ呼び出しで全候補盤面×
+    列×色30通りをまとめて評価) に置き換え、往復を1回に削減する
+    (`v3.2 選択ロジックの境界コスト削減` docstring参照、値は
+    `_current_max_chain_value` を1件ずつ呼んだ場合と完全一致)。
+    """
+    if not (use_native and NATIVE_AVAILABLE):
+        return [float(_current_max_chain_value(b, sim, use_native)) for b in boards]
+    return [
+        float(v) for v in _native_max_chain_after_drops_for_boards(boards, _DROP_CANDIDATES_30)
+    ]
 
 
 def _pfp_first_pass_native(board: Board, beam_k: int) -> "list[tuple[int, Board]]":
@@ -335,6 +398,30 @@ def _potential_fire_power_value(
     return float(best_ojama)
 
 
+def _potential_fire_power_values_batch(
+    boards: "list[Board]", sim: ChainSimulator, use_native: bool,
+) -> "list[float]":
+    """`_potential_fire_power_value` を複数候補盤面にわたって評価する
+    (`_select_build_placement` の tie-break 専用、2026-08-13 追加)。
+
+    実測診断で `_select_build_placement` の tied 候補数は中央値10件・
+    最大22件と判明し (60盤面サンプル)、候補ごとに `_potential_fire_power_
+    value` (最大 1+beam_k 回の native往復) を個別呼び出しすることが
+    ロールアウトの残存コストの主因だった (`v3.2 選択ロジックの境界コスト
+    削減` docstring参照)。native経路かつ `POTENTIAL_FIRE_POWER_MAX_ADD==2`
+    (現行値) の場合のみ `potential_fire_power_raw_for_boards`
+    (1回のバッチ呼び出し) に置き換え、それ以外 (将来 MAX_ADD が変わった
+    場合・フォールバック) は既存 `_potential_fire_power_value` の個別
+    呼び出しをそのまま維持する (値は完全一致)。
+    """
+    if not (use_native and NATIVE_AVAILABLE) or POTENTIAL_FIRE_POWER_MAX_ADD != 2:
+        return [_potential_fire_power_value(b, sim, use_native) for b in boards]
+    raw = _native_potential_fire_power_raw_for_boards(
+        boards, _DROP_CANDIDATES_30, POTENTIAL_FIRE_POWER_BEAM_K,
+    )
+    return [float(_score_to_ojama_count(float(v), 0.0)) for v in raw]
+
+
 def _enumerate_placements_dispatch(
     current: Board, pair: "tuple[int, int]", sim: ChainSimulator, use_native: bool,
 ) -> "list[tuple[int, Board]]":
@@ -346,11 +433,17 @@ def _enumerate_placements_dispatch(
     の tie-break は常に「同じ chain_count 値の候補群」内での min/max であり、
     Python の安定ソートは同値キー内の相対順序を変えないため、この省略は
     選択結果に影響しない (報告書の設計判断参照、意味論保存)。
+
+    2026-08-13: native経路は `enumerate_and_simulate_placements` (1回の
+    バッチ呼び出しで22配置+連鎖シミュレーション結果一式を取得) に置き換え、
+    従来「列挙1回+配置ごとに simulate_chain 最大22回」だった Python<->Rust
+    往復を1回に削減した (`v3.2 選択ロジックの境界コスト削減` docstring参照、
+    値は完全一致)。
     """
     if not (use_native and NATIVE_AVAILABLE):
         return _enumerate_placements(current, pair, sim)
-    raw = _native_enumerate_placements(current, pair, filter_dead=False)
-    return [(_native_chain_count(placed), placed) for _col, _rotation, placed in raw]
+    results = _native_enumerate_and_simulate_placements(current, pair, filter_dead=False)
+    return [(r.chain_result.chain_count, r.placed_board) for r in results]
 
 
 def _select_best_placement(
@@ -371,23 +464,22 @@ def _select_best_placement(
 
     use_native=True (既定) かつ拡張導入済みの場合、native puyo_core の
     `exact_score` (連結ボーナス反映、`calculate_chain_score` とパリティ
-    確認済み) を使う。1配置あたりの simulate 呼び出しを1回に共有する
-    (元実装は `_enumerate_placements` 内と本関数内で同一盤面を2回
-    simulate していたが、simulate は盤面のみに依存する純粋関数のため
-    結果再利用は意味論に影響しない、速度目的の最適化)。
+    確認済み) を使う。2026-08-13: 22配置列挙+配置ごとの連鎖シミュレーション
+    (最大22回の個別 native 呼び出し) を `enumerate_and_simulate_placements`
+    (1回のバッチ呼び出し) に統合し、Python<->Rust 往復を削減した
+    (`v3.2 選択ロジックの境界コスト削減` docstring参照、選択則・値は完全一致)。
     """
     if use_native and NATIVE_AVAILABLE:
-        raw = _native_enumerate_placements(current, pair, filter_dead=False)
-        scored = [(placed, _native_simulate_chain(placed)) for _c, _r, placed in raw]
+        results = _native_enumerate_and_simulate_placements(current, pair, filter_dead=False)
         # 元の _enumerate_placements と同じ安定ソート (chain_count降順)。
-        scored.sort(key=lambda x: x[1].chain_count, reverse=True)
+        results.sort(key=lambda r: r.chain_result.chain_count, reverse=True)
         best_native: "tuple[float, Board, Board] | None" = None
-        for placed, sim_result in scored:
-            if placed.is_dead():
+        for r in results:
+            if r.is_dead:
                 continue
-            score = float(sim_result.exact_score)
+            score = float(r.chain_result.exact_score)
             if best_native is None or score > best_native[0]:
-                best_native = (score, placed, sim_result.final_board)
+                best_native = (score, r.placed_board, r.chain_result.final_board)
         return best_native
     best: "tuple[float, Board, Board] | None" = None
     for _chain_count, placed in _enumerate_placements(current, pair, sim):
@@ -428,8 +520,12 @@ def _select_build_placement(
     use_native=True (既定) かつ拡張導入済みの場合、内側の連鎖評価
     (chain_count/current_max_chain/potential_fire_power 相当) を native
     puyo_core に置換する (`_enumerate_placements_dispatch`/
-    `_current_max_chain_value`/`_potential_fire_power_value` 参照、
-    推定ロジック自体はここでは一切変えない)。
+    `_current_max_chain_values_batch`/`_potential_fire_power_value` 参照、
+    推定ロジック自体はここでは一切変えない)。2026-08-13: tie-break の
+    current_max_chain 評価は候補盤面ごとの個別呼び出し (最大22回の native
+    往復) から `_current_max_chain_values_batch` (1回のバッチ呼び出し) に
+    置き換えた (`v3.2 選択ロジックの境界コスト削減` docstring参照、値は
+    従来と完全一致)。
     """
     candidates = _enumerate_placements_dispatch(current, pair, sim, use_native)
     build_only = [(c, p) for c, p in candidates if c == 0 and not p.is_dead()]
@@ -443,14 +539,19 @@ def _select_build_placement(
         return sim.simulate(placed).final_board
     if len(build_only) == 1:
         return build_only[0][1]
-    scored = [
-        (float(_current_max_chain_value(p, sim, use_native)), p) for _c, p in build_only
-    ]
+    build_boards = [p for _c, p in build_only]
+    chain_values = _current_max_chain_values_batch(build_boards, sim, use_native)
+    scored = list(zip(chain_values, build_boards))
     best_potential = max(potential for potential, _p in scored)
     tied = [p for potential, p in scored if potential == best_potential]
     if len(tied) == 1:
         return tied[0]
-    return max(tied, key=lambda p: _potential_fire_power_value(p, sim, use_native))
+    # 2026-08-13: tied 全件への _potential_fire_power_value 個別呼び出し
+    # (実測でロールアウトの主要コスト) を1回のバッチ呼び出しに統合
+    # (`_potential_fire_power_values_batch` 参照、値は完全一致)。
+    pfp_values = _potential_fire_power_values_batch(tied, sim, use_native)
+    best_idx = max(range(len(tied)), key=lambda i: pfp_values[i])
+    return tied[best_idx]
 
 
 def _deadline_trigger_value(

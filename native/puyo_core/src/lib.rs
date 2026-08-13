@@ -22,7 +22,7 @@ use rayon::ThreadPool;
 
 use bitboard::{
     board_from_grid, board_to_grid, drop_one, enumerate_placements, is_dead as bitboard_is_dead,
-    simulate_chain, BOARD_COLS, BOARD_ROWS,
+    simulate_chain, simulate_chain_with_steps, BitBoard, BOARD_COLS, BOARD_ROWS,
 };
 
 /// rayon スレッドプールをプロセス全体で 1 個だけ再利用する
@@ -104,6 +104,64 @@ fn simulate_chain_py(
         exact_score: result.exact_score,
         final_grid: board_to_grid(&result.final_board),
     })
+}
+
+/// 1 ステップ (1 消し) の同時消し詳細 (Python から属性アクセス可能、
+/// 2026-08-13 追加)。XII-5 同時消しリッチネス
+/// (`src/indicators_v2.py::simultaneous_pop_richness`) の native 対応用。
+#[pyclass]
+#[derive(Clone)]
+pub struct ChainStepInfoPy {
+    #[pyo3(get)]
+    pub num_groups: u32,
+    #[pyo3(get)]
+    pub num_colors: u32,
+    #[pyo3(get)]
+    pub erased_count: i64,
+    #[pyo3(get)]
+    pub ojama_count: i64,
+}
+
+/// `simulate_chain_py` の拡張版: 連鎖シミュレーション結果に加え、ステップごとの
+/// 同時消し詳細も返す (`ChainStepInfoPy`、2026-08-13 追加)。既存
+/// `simulate_chain_py`/`ChainSimResultPy` は無変更 (新規関数のみの追加)。
+///
+/// Args:
+///     grid: 13x6 色コード配列を flatten した長さ78のリスト (行優先)。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール (本番既定 True)。
+///
+/// Returns:
+///     `(ChainSimResultPy, list[ChainStepInfoPy])` のタプル
+///     (steps の長さ=chain_count、ステップ順)。
+#[pyfunction]
+fn simulate_chain_with_steps_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<(ChainSimResultPy, Vec<ChainStepInfoPy>)> {
+    let arr = grid_from_pylist(grid)?;
+    let (result, steps) = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        simulate_chain_with_steps(&board, exclude_hidden_row_from_pop)
+    });
+    let result_py = ChainSimResultPy {
+        chain_count: result.chain_count,
+        total_erased: result.total_erased,
+        total_ojama: result.total_ojama,
+        score_approx: result.score_approx,
+        exact_score: result.exact_score,
+        final_grid: board_to_grid(&result.final_board),
+    };
+    let steps_py = steps
+        .into_iter()
+        .map(|s| ChainStepInfoPy {
+            num_groups: s.num_groups,
+            num_colors: s.num_colors,
+            erased_count: s.erased_count,
+            ojama_count: s.ojama_count,
+        })
+        .collect();
+    Ok((result_py, steps_py))
 }
 
 /// `simulate_after_drops_py` 専用の結果型 (Python から属性アクセス可能)。
@@ -211,6 +269,134 @@ fn chain_metrics_after_drops_py(
     Ok(results)
 }
 
+/// 複数盤面それぞれに対し、列×色30通り (`drops`) を試して到達できる最大
+/// 連鎖数を返す (2026-08-13 追加)。
+///
+/// `scripts/mc_counter_estimator.py` の `_select_build_placement` の
+/// tie-break (`_current_max_chain_value` を候補盤面ごとに個別呼び出し) を
+/// 1回のバッチ呼び出しに統合するための API (候補数 [最大22程度] 分の
+/// Python<->Rust 往復を1回に削減、`v3.2 選択ロジックの境界コスト削減`
+/// docstring参照)。`chain_metrics_after_drops_py` を `grids` の要素数だけ
+/// 個別に呼んで `chain_count` の最大を取った場合と完全一致する。
+///
+/// Args:
+///     grids: 評価対象の盤面 (各78要素 flatten) のリスト。
+///     drops: `[(col, color), ...]` の候補リスト (通常は列×色30通り)。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール。
+///
+/// Returns:
+///     `grids` と同じ長さの最大連鎖数リスト (置ける候補が1つも無い盤面は0)。
+#[pyfunction]
+fn max_chain_after_drops_for_boards_py(
+    py: Python<'_>,
+    grids: Vec<Vec<u8>>,
+    drops: Vec<(u8, u8)>,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Vec<i32>> {
+    let arrs: Vec<[u8; GRID_LEN]> = grids
+        .into_iter()
+        .map(grid_from_pylist)
+        .collect::<PyResult<Vec<_>>>()?;
+    let results = py.allow_threads(|| {
+        arrs.iter()
+            .map(|arr| {
+                let board = board_from_grid(arr);
+                drops
+                    .iter()
+                    .filter_map(|&(col, color)| drop_one(&board, col as usize, color))
+                    .map(|dropped| simulate_chain(&dropped, exclude_hidden_row_from_pop).chain_count)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .collect::<Vec<_>>()
+    });
+    Ok(results)
+}
+
+/// 複数盤面それぞれについて、potential_fire_power (既存指標III-8、2手先
+/// ビーム beam_k) の生値 (お邪魔換算前の最良2手先 exact_score) をまとめて
+/// 返す (2026-08-13 追加)。
+///
+/// `scripts/mc_counter_estimator.py::_select_build_placement` の tie-break
+/// (潜在連鎖が同値タイの候補全件に対して `_potential_fire_power_value` を
+/// 呼ぶ) が実測でロールアウトの主要コストだった (tied件数の実測分布は
+/// 中央値10件・最大22件、候補1件あたり最大 1+beam_k 回の native往復が
+/// 必要だったため)。本関数で tied 候補全件をまとめて1回の呼び出しに
+/// 統合する。
+///
+/// アルゴリズム (`_pfp_first_pass`/`_pfp_second_pass` と同一意味論、
+/// `POTENTIAL_FIRE_POWER_MAX_ADD==2` の場合のみ呼び出し側が使う想定):
+///   1手目: `drops` (列×色30通り) を試し、シミュレート後 chain_count 降順で
+///     上位 `beam_k` 件の「落下直後 (連鎖解決前)」盤面を残す
+///     (`_pfp_first_pass` の dropped_board と同じ、解決済み盤面ではない点に注意)。
+///   2手目: 残した各盤面にさらに `drops` を試し、到達できる最大
+///     `exact_score` を求める。全候補中の最大値を返す。
+///
+/// Args:
+///     grids: 評価対象の盤面 (各78要素 flatten) のリスト。
+///     drops: `[(col, color), ...]` の候補リスト (通常は列×色30通り)。
+///     beam_k: 1手目で残す上位候補数 (`POTENTIAL_FIRE_POWER_BEAM_K`)。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール。
+///
+/// Returns:
+///     `grids` と同じ長さの最良2手先 exact_score リスト (候補が無い盤面は0)。
+#[pyfunction]
+fn potential_fire_power_raw_for_boards_py(
+    py: Python<'_>,
+    grids: Vec<Vec<u8>>,
+    drops: Vec<(u8, u8)>,
+    beam_k: usize,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Vec<i64>> {
+    let arrs: Vec<[u8; GRID_LEN]> = grids
+        .into_iter()
+        .map(grid_from_pylist)
+        .collect::<PyResult<Vec<_>>>()?;
+    let results = py.allow_threads(|| {
+        arrs.iter()
+            .map(|arr| {
+                let board = board_from_grid(arr);
+                potential_fire_power_raw_one(&board, &drops, beam_k, exclude_hidden_row_from_pop)
+            })
+            .collect::<Vec<_>>()
+    });
+    Ok(results)
+}
+
+/// `potential_fire_power_raw_for_boards_py` の1盤面分の本体
+/// (可読性のため分離、50行ルール対応)。
+fn potential_fire_power_raw_one(
+    board: &BitBoard,
+    drops: &[(u8, u8)],
+    beam_k: usize,
+    exclude_hidden_row_from_pop: bool,
+) -> i64 {
+    // 1手目: 30候補をシミュレートし、chain_count降順で上位beam_k件の
+    // 「落下直後 (連鎖未解決)」盤面を残す (`_pfp_first_pass` と同一意味論)。
+    let mut first_pass: Vec<(i32, BitBoard)> = drops
+        .iter()
+        .filter_map(|&(col, color)| drop_one(board, col as usize, color))
+        .map(|dropped| {
+            let r = simulate_chain(&dropped, exclude_hidden_row_from_pop);
+            (r.chain_count, dropped)
+        })
+        .collect();
+    first_pass.sort_by(|a, b| b.0.cmp(&a.0));
+    first_pass.truncate(beam_k);
+
+    // 2手目: 残した各盤面にさらに30候補を試し、最大exact_scoreを求める。
+    first_pass
+        .iter()
+        .flat_map(|(_chain, board1)| {
+            drops.iter().filter_map(move |&(col, color)| {
+                let dropped2 = drop_one(board1, col as usize, color)?;
+                Some(simulate_chain(&dropped2, exclude_hidden_row_from_pop).exact_score)
+            })
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// 22 配置 (4回転×6列、横置きは5列) を列挙し、配置後盤面 (発火前) を返す。
 ///
 /// Args:
@@ -237,6 +423,92 @@ fn enumerate_placements_py(
             .map(|(placement, placed)| {
                 let dead = bitboard_is_dead(&placed);
                 (placement.col, placement.rotation, board_to_grid(&placed), dead)
+            })
+            .collect::<Vec<_>>()
+    });
+    Ok(results)
+}
+
+/// 1 配置 (設置直後盤面+連鎖シミュレーション結果) の統合結果
+/// (Python から属性アクセス可能、2026-08-13 追加)。
+///
+/// `scripts/mc_counter_estimator.py` の `_select_best_placement`/
+/// `_select_build_placement` 用: 従来は `enumerate_placements_py` (1回) +
+/// 配置ごとの `simulate_chain_py` (最大22回) で最大23回の Python<->Rust
+/// 往復が必要だったが、本型を返す `enumerate_and_simulate_placements_py`
+/// (1回) に統合することで往復を1回に減らす (境界コスト削減、意味論は
+/// 個別呼び出しした場合と完全一致)。
+#[pyclass]
+#[derive(Clone)]
+pub struct PlacementSimResultPy {
+    #[pyo3(get)]
+    pub col: u8,
+    #[pyo3(get)]
+    pub rotation: u8,
+    /// 設置直後 (連鎖解決前) の盤面。
+    #[pyo3(get)]
+    pub placed_grid: Vec<u8>,
+    /// 設置直後盤面が窒息しているか (`enumerate_placements_py` の `is_dead` と同一意味論)。
+    #[pyo3(get)]
+    pub is_dead: bool,
+    #[pyo3(get)]
+    pub chain_count: i32,
+    #[pyo3(get)]
+    pub total_erased: i64,
+    #[pyo3(get)]
+    pub total_ojama: i64,
+    #[pyo3(get)]
+    pub score_approx: i64,
+    #[pyo3(get)]
+    pub exact_score: i64,
+    /// 連鎖解決後の盤面。
+    #[pyo3(get)]
+    pub final_grid: Vec<u8>,
+}
+
+/// 22 配置を列挙し、各配置の連鎖シミュレーション結果まで一括して返す
+/// (`enumerate_placements_py` + 配置ごとの `simulate_chain_py` の統合版、
+/// 2026-08-13 追加。既存2関数は無変更)。
+///
+/// Args:
+///     grid: 13x6 flatten (長さ78)。
+///     top_color / bot_color: ペアの色 (1-5)。
+///     filter_dead: true で「設置直後」が窒息する配置を除外
+///         (`enumerate_placements_py` と同一意味論)。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール。
+///
+/// Returns:
+///     `PlacementSimResultPy` のリスト (列挙順=rotation昇順→col昇順、
+///     `enumerate_placements_py` と同一順序)。
+#[pyfunction]
+fn enumerate_and_simulate_placements_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    top_color: u8,
+    bot_color: u8,
+    filter_dead: bool,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Vec<PlacementSimResultPy>> {
+    let arr = grid_from_pylist(grid)?;
+    let results = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        enumerate_placements(&board, (top_color, bot_color), filter_dead)
+            .into_iter()
+            .map(|(placement, placed)| {
+                let dead = bitboard_is_dead(&placed);
+                let r = simulate_chain(&placed, exclude_hidden_row_from_pop);
+                PlacementSimResultPy {
+                    col: placement.col,
+                    rotation: placement.rotation,
+                    placed_grid: board_to_grid(&placed),
+                    is_dead: dead,
+                    chain_count: r.chain_count,
+                    total_erased: r.total_erased,
+                    total_ojama: r.total_ojama,
+                    score_approx: r.score_approx,
+                    exact_score: r.exact_score,
+                    final_grid: board_to_grid(&r.final_board),
+                }
             })
             .collect::<Vec<_>>()
     });
@@ -324,12 +596,18 @@ fn beam_search_py(
 #[pymodule]
 fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(simulate_chain_py, m)?)?;
+    m.add_function(wrap_pyfunction!(simulate_chain_with_steps_py, m)?)?;
     m.add_function(wrap_pyfunction!(simulate_after_drops_py, m)?)?;
     m.add_function(wrap_pyfunction!(chain_metrics_after_drops_py, m)?)?;
+    m.add_function(wrap_pyfunction!(max_chain_after_drops_for_boards_py, m)?)?;
+    m.add_function(wrap_pyfunction!(potential_fire_power_raw_for_boards_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_placements_py, m)?)?;
+    m.add_function(wrap_pyfunction!(enumerate_and_simulate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_py, m)?)?;
     m.add_class::<ChainSimResultPy>()?;
+    m.add_class::<ChainStepInfoPy>()?;
     m.add_class::<DropSimResultPy>()?;
+    m.add_class::<PlacementSimResultPy>()?;
     m.add_class::<BeamSearchResultPy>()?;
     Ok(())
 }

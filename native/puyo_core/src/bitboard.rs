@@ -332,15 +332,95 @@ pub struct ChainSimResult {
     pub final_board: BitBoard,
 }
 
-/// 連鎖シミュレーション (`chain_bitboard.simulate_batch_with_approx_score` の
-/// 1 盤面版とビット一致)。
+/// 1 ステップ (1 消し) の同時消し詳細情報 (2026-08-13 追加)。
+///
+/// `src/chain.py::ChainStep` と同一の意味論 (`num_groups`=
+/// `len(erased_groups)`、`num_colors`=`erased_groups` 内の異なり色数)。
+/// XII-5 同時消しリッチネス (`src/indicators_v2.py::simultaneous_pop_richness`)
+/// の native 対応用。`simulate_chain_with_steps` 経由でのみ生成され、既存
+/// `ChainSimResult`/`simulate_chain` は一切変更しない (新規追加のみ)。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ChainStepInfo {
+    /// このステップで同時に消えたグループ数 (色をまたいで合計)。
+    pub num_groups: u32,
+    /// このステップで消えた色の種類数。
+    pub num_colors: u32,
+    /// このステップで消えた通常ぷよ数 (おじゃま除く)。
+    pub erased_count: i64,
+    /// このステップで消えたおじゃま数。
+    pub ojama_count: i64,
+}
+
+/// 1 ステップ分の消去演算の中間結果 (`compute_step_pop` の戻り値、
+/// `simulate_chain_core` から抽出した可読性のためのヘルパー)。
+struct StepPopResult {
+    color_union: ColPlanes,
+    ojama_cleared: ColPlanes,
+    erased_count: i64,
+    ojama_count: i64,
+    num_colors_step: usize,
+    /// 色をまたいで平坦化した連結成分サイズ一覧 (1要素=1グループ)。
+    step_groups: Vec<u32>,
+}
+
+/// 1 ステップ分の消去マスクを色ごとに計算し、消去が起きるかどうかと
+/// 消去確定情報をまとめて返す (`simulate_chain_core` から抽出)。
+/// 消去が起きない (連鎖終了) 場合は `None`。
+fn compute_step_pop(
+    colors: &[ColPlanes; NUM_TRACKED_COLORS],
+    ojama: &ColPlanes,
+    pop_mask: u16,
+) -> Option<StepPopResult> {
+    let mut color_pop_masks: [ColPlanes; NUM_TRACKED_COLORS] = Default::default();
+    for i in 0..NUM_TRACKED_COLORS {
+        let masked = plane_mask(&colors[i], pop_mask);
+        color_pop_masks[i] = get_mask_pop(&masked);
+    }
+    let mut color_union: ColPlanes = [0; BOARD_COLS];
+    for i in 0..NUM_TRACKED_COLORS {
+        color_union = plane_or(&color_union, &color_pop_masks[i]);
+    }
+    if !plane_any_nonzero(&color_union) {
+        return None;
+    }
+
+    let ojama_cleared = plane_and(&expand(&color_union), ojama);
+    let num_colors_step = color_pop_masks
+        .iter()
+        .filter(|m| plane_any_nonzero(m))
+        .count();
+    // 厳密得点用の連結成分分解 (連結ボーナスがグループサイズ依存のため)。
+    // XII-5 同時消しリッチネス用のグループ数もこの分解結果の件数がそのまま使える
+    // (`src/chain.py::ChainStep.erased_groups` と同一粒度、追加コストなし)。
+    let step_groups: Vec<u32> = color_pop_masks.iter().flat_map(connected_component_sizes).collect();
+
+    Some(StepPopResult {
+        color_union,
+        ojama_cleared,
+        erased_count: plane_popcount(&color_union),
+        ojama_count: plane_popcount(&ojama_cleared),
+        num_colors_step,
+        step_groups,
+    })
+}
+
+/// `simulate_chain`/`simulate_chain_with_steps` の共通本体
+/// (`chain_bitboard.simulate_batch_with_approx_score` の 1 盤面版とビット一致)。
 ///
 /// Args:
 ///     board: 判定対象の盤面 (破壊しない、コピーして処理)。
 ///     exclude_hidden_row_from_pop: true で隠し段 (13段目) を消去判定から除外する
 ///         (幽霊連鎖ルール、本番既定 `GHOST_CHAIN_RULE_ENABLED=True`、
 ///         `src/production_config.py:160` 参照)。
-pub fn simulate_chain(board: &BitBoard, exclude_hidden_row_from_pop: bool) -> ChainSimResult {
+///     collect_steps: true でステップごとの `ChainStepInfo` を収集する
+///         (false の場合は空 `Vec` を返す、既存 `simulate_chain` の呼び出し元
+///         [ビームサーチ・MC反撃計算等の高頻度経路] に余計な収集コストを
+///         負わせないための分岐)。
+fn simulate_chain_core(
+    board: &BitBoard,
+    exclude_hidden_row_from_pop: bool,
+    collect_steps: bool,
+) -> (ChainSimResult, Vec<ChainStepInfo>) {
     let pop_mask: u16 = if exclude_hidden_row_from_pop {
         POP_MASK_12BIT
     } else {
@@ -354,55 +434,43 @@ pub fn simulate_chain(board: &BitBoard, exclude_hidden_row_from_pop: bool) -> Ch
     let mut total_ojama: i64 = 0;
     let mut score_approx: i64 = 0;
     let mut exact_score: i64 = 0;
+    let mut step_infos: Vec<ChainStepInfo> = Vec::new();
 
     for step in 0..MAX_CHAIN_STEPS {
-        let mut color_pop_masks: [ColPlanes; NUM_TRACKED_COLORS] = Default::default();
-        for i in 0..NUM_TRACKED_COLORS {
-            let masked = plane_mask(&colors[i], pop_mask);
-            color_pop_masks[i] = get_mask_pop(&masked);
-        }
-        let mut color_union: ColPlanes = [0; BOARD_COLS];
-        for i in 0..NUM_TRACKED_COLORS {
-            color_union = plane_or(&color_union, &color_pop_masks[i]);
-        }
-        if !plane_any_nonzero(&color_union) {
-            break;
-        }
-
-        let ojama_cleared = plane_and(&expand(&color_union), &ojama);
-        let full_pop_mask = plane_or(&color_union, &ojama_cleared);
-
-        let erased_count = plane_popcount(&color_union);
-        let ojama_count = plane_popcount(&ojama_cleared);
-        total_erased += erased_count;
-        total_ojama += ojama_count;
+        let pop = match compute_step_pop(&colors, &ojama, pop_mask) {
+            Some(p) => p,
+            None => break,
+        };
+        total_erased += pop.erased_count;
+        total_ojama += pop.ojama_count;
         chain_count += 1;
 
-        let num_colors_step = color_pop_masks
-            .iter()
-            .filter(|m| plane_any_nonzero(m))
-            .count();
         let chain_bonus_this_step = chain_power(step + 1);
-        let raw_bonus = chain_bonus_this_step + COLOR_BONUS_LUT[num_colors_step];
+        let raw_bonus = chain_bonus_this_step + COLOR_BONUS_LUT[pop.num_colors_step];
         let multiplier = raw_bonus.clamp(MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER);
-        let step_score = erased_count * BASE_SCORE_PER_PUYO * multiplier;
-        score_approx += step_score;
+        score_approx += pop.erased_count * BASE_SCORE_PER_PUYO * multiplier;
 
-        // 厳密得点: 連結ボーナスはグループサイズ依存なので、消去確定マスク
-        // (color_pop_masks[i]、m2/m3演算で既に「このステップで消える色iのセル」
-        // だけに絞られている) を連結成分分解して初めて求まる
+        // 厳密得点: 連結ボーナスはグループサイズ依存なので、消去確定マスクを
+        // 連結成分分解した `pop.step_groups` から求める
         // (`src/scoring.py::calculate_step_score` の conn 相当)。
-        let exact_conn_bonus_this_step: i64 = color_pop_masks
-            .iter()
-            .flat_map(connected_component_sizes)
-            .map(connection_bonus)
-            .sum();
-        let exact_raw_bonus =
-            chain_bonus_this_step + exact_conn_bonus_this_step + COLOR_BONUS_LUT[num_colors_step];
+        let exact_conn_bonus_this_step: i64 =
+            pop.step_groups.iter().map(|&sz| connection_bonus(sz)).sum();
+        let exact_raw_bonus = chain_bonus_this_step
+            + exact_conn_bonus_this_step
+            + COLOR_BONUS_LUT[pop.num_colors_step];
         let exact_multiplier = exact_raw_bonus.clamp(MIN_BONUS_MULTIPLIER, MAX_BONUS_MULTIPLIER);
-        let exact_step_score = erased_count * BASE_SCORE_PER_PUYO * exact_multiplier;
-        exact_score += exact_step_score;
+        exact_score += pop.erased_count * BASE_SCORE_PER_PUYO * exact_multiplier;
 
+        if collect_steps {
+            step_infos.push(ChainStepInfo {
+                num_groups: pop.step_groups.len() as u32,
+                num_colors: pop.num_colors_step as u32,
+                erased_count: pop.erased_count,
+                ojama_count: pop.ojama_count,
+            });
+        }
+
+        let full_pop_mask = plane_or(&pop.color_union, &pop.ojama_cleared);
         let keep_mask = plane_not_masked(&full_pop_mask, FULL_MASK);
         for i in 0..NUM_TRACKED_COLORS {
             colors[i] = pext_plane(&colors[i], &keep_mask);
@@ -410,14 +478,36 @@ pub fn simulate_chain(board: &BitBoard, exclude_hidden_row_from_pop: bool) -> Ch
         ojama = pext_plane(&ojama, &keep_mask);
     }
 
-    ChainSimResult {
+    let result = ChainSimResult {
         chain_count,
         total_erased,
         total_ojama,
         score_approx,
         exact_score,
         final_board: BitBoard { colors, ojama },
-    }
+    };
+    (result, step_infos)
+}
+
+/// 連鎖シミュレーション (`chain_bitboard.simulate_batch_with_approx_score` の
+/// 1 盤面版とビット一致)。既存 API・戻り値は無変更 (`simulate_chain_core` へ
+/// 委譲する内部リファクタのみ、2026-08-13)。
+pub fn simulate_chain(board: &BitBoard, exclude_hidden_row_from_pop: bool) -> ChainSimResult {
+    simulate_chain_core(board, exclude_hidden_row_from_pop, false).0
+}
+
+/// `simulate_chain` の拡張版: 連鎖シミュレーション結果に加え、ステップごとの
+/// 同時消し詳細 (`ChainStepInfo`) も返す (2026-08-13 追加、新規関数のみで
+/// 既存 `simulate_chain`/`ChainSimResult` は無変更)。
+///
+/// XII-5 同時消しリッチネス (`src/indicators_v2.py::simultaneous_pop_richness`)
+/// の native 対応用。返り値の `Vec<ChainStepInfo>` は `chain_count` と同じ
+/// 長さ (1ステップ=1要素、ステップ順)。
+pub fn simulate_chain_with_steps(
+    board: &BitBoard,
+    exclude_hidden_row_from_pop: bool,
+) -> (ChainSimResult, Vec<ChainStepInfo>) {
+    simulate_chain_core(board, exclude_hidden_row_from_pop, true)
 }
 
 // ============================
@@ -840,5 +930,93 @@ mod tests {
         for (_placement, placed) in &filtered {
             assert!(!is_dead(placed), "filter_dead=true の結果に窒息盤面が残っている");
         }
+    }
+
+    #[test]
+    fn simulate_chain_with_steps_matches_simulate_chain_totals() {
+        // simulate_chain_with_steps の ChainSimResult 部分は simulate_chain 単体
+        // 呼び出しと完全一致するはず (共通コア simulate_chain_core への
+        // リファクタが値を変えていないことの直接確認)。
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED;
+        grid[11 * BOARD_COLS + 0] = COLOR_RED;
+        grid[12 * BOARD_COLS + 1] = COLOR_RED;
+        grid[11 * BOARD_COLS + 1] = COLOR_RED;
+        grid[10 * BOARD_COLS + 1] = COLOR_BLUE;
+        grid[9 * BOARD_COLS + 1] = COLOR_BLUE;
+        grid[12 * BOARD_COLS + 2] = COLOR_BLUE;
+        grid[11 * BOARD_COLS + 2] = COLOR_BLUE;
+        let board = board_from_grid(&grid);
+        let plain = simulate_chain(&board, false);
+        let (with_steps, steps) = simulate_chain_with_steps(&board, false);
+        assert_eq!(plain.chain_count, with_steps.chain_count);
+        assert_eq!(plain.total_erased, with_steps.total_erased);
+        assert_eq!(plain.total_ojama, with_steps.total_ojama);
+        assert_eq!(plain.score_approx, with_steps.score_approx);
+        assert_eq!(plain.exact_score, with_steps.exact_score);
+        assert_eq!(steps.len(), plain.chain_count as usize, "ステップ数=連鎖数");
+    }
+
+    #[test]
+    fn simultaneous_pop_richness_counts_single_group_single_color() {
+        // 2x2 の同色4連結1個のみ消える1ステップ: グループ数1・色数1
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED;
+        grid[11 * BOARD_COLS + 0] = COLOR_RED;
+        grid[12 * BOARD_COLS + 1] = COLOR_RED;
+        grid[11 * BOARD_COLS + 1] = COLOR_RED;
+        let board = board_from_grid(&grid);
+        let (_result, steps) = simulate_chain_with_steps(&board, false);
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].num_groups, 1);
+        assert_eq!(steps[0].num_colors, 1);
+        assert_eq!(steps[0].erased_count, 4);
+        assert_eq!(steps[0].ojama_count, 0);
+    }
+
+    #[test]
+    fn simultaneous_pop_richness_counts_two_groups_two_colors_same_step() {
+        // 同じステップで赤4連結+青4連結が同時に消える (2グループ・2色)
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED;
+        grid[11 * BOARD_COLS + 0] = COLOR_RED;
+        grid[12 * BOARD_COLS + 1] = COLOR_RED;
+        grid[11 * BOARD_COLS + 1] = COLOR_RED;
+        grid[12 * BOARD_COLS + 3] = COLOR_BLUE;
+        grid[11 * BOARD_COLS + 3] = COLOR_BLUE;
+        grid[12 * BOARD_COLS + 4] = COLOR_BLUE;
+        grid[11 * BOARD_COLS + 4] = COLOR_BLUE;
+        let board = board_from_grid(&grid);
+        let (result, steps) = simulate_chain_with_steps(&board, false);
+        assert_eq!(result.chain_count, 1, "赤4連結と青4連結は同時に消えるので1連鎖");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].num_groups, 2, "赤グループ+青グループ=2グループ");
+        assert_eq!(steps[0].num_colors, 2);
+        assert_eq!(steps[0].erased_count, 8);
+    }
+
+    #[test]
+    fn simultaneous_pop_richness_multi_step_reports_per_step_details() {
+        // multi_step_chain_counts_two_steps と同一構図 (2連鎖) で、各ステップの
+        // グループ数・色数・消去数がステップごとに正しく分かれて記録されるか。
+        let mut grid = empty_grid();
+        grid[12 * BOARD_COLS + 0] = COLOR_RED; // col0 高さ0
+        grid[11 * BOARD_COLS + 0] = COLOR_RED; // col0 高さ1
+        grid[12 * BOARD_COLS + 1] = COLOR_RED; // col1 高さ0
+        grid[11 * BOARD_COLS + 1] = COLOR_RED; // col1 高さ1
+        grid[10 * BOARD_COLS + 1] = COLOR_BLUE; // col1 高さ2
+        grid[9 * BOARD_COLS + 1] = COLOR_BLUE; // col1 高さ3
+        grid[12 * BOARD_COLS + 2] = COLOR_BLUE; // col2 高さ0
+        grid[11 * BOARD_COLS + 2] = COLOR_BLUE; // col2 高さ1
+        let board = board_from_grid(&grid);
+        let (result, steps) = simulate_chain_with_steps(&board, false);
+        assert_eq!(result.chain_count, 2);
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].num_groups, 1, "1段目は赤4連結のみ");
+        assert_eq!(steps[0].num_colors, 1);
+        assert_eq!(steps[0].erased_count, 4);
+        assert_eq!(steps[1].num_groups, 1, "2段目は落下合流した青4連結のみ");
+        assert_eq!(steps[1].num_colors, 1);
+        assert_eq!(steps[1].erased_count, 4);
     }
 }
