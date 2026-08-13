@@ -61,13 +61,25 @@ COLUMNS 末尾追加ルールと同じ精神)。
   chain_trigger_sec / chain_mechanism (--enable-chain-tracker 収集時)。
 - **本ツールが計算するのは「盤面グリッドのみ」から求まる指標のみ**
   (GRID_ONLY_INDICATORS / GRID_ONLY_HEAVY_INDICATORS)。
-- **未対応 (既知のギャップ、意図的に列を出力しない)**:
-  ojama_net_balance / ojama_forecast — OjamaAccountingTracker は
-  「毎フレームの BoardState 遷移 + tsumo_settled タイミング」を要求するが
-  npz は STABLE 重複除去済みスナップショットのみで、この遷移列を保持して
-  いない。score 列から近似復元する経路は別途検討 (調査報告参照)。
-  列を出力しないことで `_resolve_features()` の列存在ガードが自動的に
-  除外する (既存の「未収集列」と同じ扱い、後方互換)。
+- **タスク#8 (2026-08-13) で解消**: ojama_net_balance / ojama_forecast は
+  npz からの事後復元を諦め、収集側 (`scripts/collect_boards_lean.py`) が
+  `OjamaAccountingTracker` を実際に駆動して真値を記録するようになった
+  (npz収集64本目以降)。本ツールはこの真値列を own-perspective のまま
+  0-1 正規化して出力する (`OJAMA_TRUTH_COLUMNS` 直上コメント参照)。
+  旧npz (真値列なし) は NaN + `ojama_source=1` で区別する。
+  **側別サンプリングバイアス (docs/CROSS_CUTTING_AUDIT_2026-08-13.md P4
+  決着)**: 各側の記録は「自分の設置直後 (=自分に有利な瞬間)」に偏るため、
+  生の own 値をそのまま side 別に使うと構造的バイアスを学習してしまう。
+  対処として `ojama_net_balance_synced` (b-2 と同じ merge_asof backward
+  パターンで相手の直近値を対応付け、`(own−opp)/2` で平均する再同期版) を
+  追加した。`net_2p=−net_1p` の厳密対称性 (会計コアは瞬時対称、P4決着済み)
+  より、この平均は理論上「共通時刻での対称バイアス除去済み推定値」になる
+  (両側の記録タイミング選好が対称という仮定の下)。**実測での注意**:
+  真値npz42本の検証では平均バイアス量が21.7%縮小 (|生|1.998→|synced|1.646)
+  する部分的な効果を確認したが、side別の符号一貫性 (2P>1P方向) は
+  85.7%→81.0%とわずかな改善に留まり、完全な除去ではない (真の実力差との
+  混同・両側の選好非対称性など残差要因は残る、過大な期待をしないこと)。
+  さらに C-2 猶予量 `ojama_margin` (吸収余力−実飛来量) も追加した。
 - next_pair 依存指標 (near_future_fire_power 等) は本ツールでは未実装
   (next1_a/b はレジストリの外で読み取り可能、拡張ポイントとしてコメントで
   明示するに留める)。
@@ -130,6 +142,21 @@ min_puyos_to_ignite (実測2000ms/行) は native化で43ms/行まで短縮で�
 native化しなかった simultaneous_pop_richness (≈149ms/行) /
 chain_articulation_point_count (≈59ms/行) は許容範囲内 (native拡張に
 無い情報を要するため意図的に据え置き、モジュール内コメント参照)。
+
+## タスク#8 (2026-08-13、docs/CROSS_CUTTING_AUDIT_2026-08-13.md P4 決着の反映)
+おじゃま収支の真値列 (ojama_net_balance/ojama_forecast、npz収集64本目以降)
+を初めてCSVに接続する。あわせて P4 で確定した「側別サンプリングバイアス」
+(自分の設置直後=自分に有利な瞬間に記録が偏る) を打ち消す再同期列
+`ojama_net_balance_synced` と、C-2 猶予量 `ojama_margin` (吸収余力−実飛来量)
+を新設する。詳細・判断根拠は `OJAMA_TRUTH_COLUMNS` 直上コメント参照。
+これら4列 (+ソース種別 `ojama_source`) は grid-only レジストリ (Board→
+IndicatorV2Value の関数) の外から来る値のため、b-2 の DIFF_* 5分類には
+**あえて含めない** (`all_clear_bonus_pending`/`all_clear_source` が
+`TEMPORAL_STATE_COLUMNS` として同5分類の対象外になっている既存の前例と
+同じ扱い — 5分類はあくまで grid-only レジストリの列を対象にした完全分割
+テスト `tests/test_indicator_pipeline_registry_2026-08-13.py::
+TestDiffClassificationCompleteness` の管轄であり、対象外にすることで
+「テストが落ちない」を設計上保証する)。
 """
 from __future__ import annotations
 
@@ -947,6 +974,199 @@ PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     "color_ojama_ratio_own", "color_diff_x_ojama_diff",
 )
 
+# ============================
+# タスク#8: おじゃま収支の真値CSV統合 (2026-08-13、docs/CROSS_CUTTING_AUDIT_
+# 2026-08-13.md P4 決着の反映)
+# ============================
+# npz 収集側 (`scripts/collect_boards_lean.py`) が64本目以降で
+# OjamaAccountingTracker を実駆動して記録した ojama_net_balance/
+# ojama_forecast (own-perspective: 1P はそのまま、2P は符号反転済み、
+# 自分有利方向が正) を初めてCSVに接続する。旧npz (真値列なし) は列自体が
+# 存在しないため NaN 全埋め + ojama_source=OJAMA_SOURCE_MISSING で区別する
+# (all_clear_bonus_pending の all_clear_source と同じ「真値/近似(欠損)の
+# 出自フラグ」パターン)。
+#
+# **P4決着 (2026-08-13、docs/CROSS_CUTTING_AUDIT_2026-08-13.md 該当節)**:
+# 会計コア自体は瞬時対称 (net_1p(t)+net_2p(t)=0、合成9万ティックで残差ゼロ
+# を確認済み・無罪) だが、各側の記録タイミングが独立 (自分の設置直後=自分の
+# pending消化直後=自分に有利な瞬間にだけ記録) なため、生の own 値を side別
+# にそのまま使うと構造的サンプリングバイアスが乗る (対称乱数合成テストで
+# 実データと同符号・同水準の残差を再現し確定)。対処は「分析時の時刻再同期」
+# であり、既存の b-2 diff列生成と全く同じ merge_asof(direction="backward")
+# パターンを再利用して求める:
+#   own(t1) は自分の直近確定値、opp_asof(t1) は同じ t1 時点での相手の
+#   「直近確定値」(相手が記録した時刻 t2<=t1 のスナップショット)。
+#   net_2p=−net_1p の厳密対称性 (真の同時刻なら own(t)=-opp(t) が常に成立)
+#   より、-opp_asof(t1) は「t1時点の own を相手側の観測から推定した値」と
+#   解釈できる。own(t1) 単独 (自分に有利な瞬間に偏る) と -opp_asof(t1)
+#   (相手に有利な瞬間に偏る、符号反転で見れば自分に不利な瞬間に偏る) を
+#   平均するとバイアスが打ち消し合う:
+#     ojama_net_balance_synced = (own(t1) − opp_asof(t1)) / 2
+#   既存 `_attach_opponent_diff_columns` が計算する diff_<col> = own−opp_asof
+#   がまさにこの分子そのものなので、再実装せず同関数をそのまま再利用し
+#   (`convert_one_npz` 内、一時列 `_OJAMA_NET_BALANCE_SYNC_RAW_COL` 経由)、
+#   得られた diff_ 値を 2 で割るだけで済ませる (パターン完全一致、実装量最小)。
+#
+# **C-2 猶予量 (ojama_margin) の設計判断**: 「自分の吸収余力 − 実飛来量」を
+# 求めるにあたり、受け側容量系の既存指標を検討した:
+#   - `death_margin`: raw が「窒息列(3列目)1本の残り段数」であり単位が
+#     「行数」。おじゃま個数 (セル数、floor(N/6)行×6列+端数の分配) と直接
+#     引き算できない (単位不一致、かつ死亡列以外の空きを無視するため過小)。
+#   - `ukeyasusa`: dig_resistance(生存確率)/absorption_capacity/death_margin
+#     を重み付け合成した0-1複合スコアであり、そもそも「引き算できる生の
+#     容量 (raw)」を持たない。
+#   - `absorption_capacity` (raw=ON_FIELD_CAP−count_puyos、単位=セル数):
+#     ojama_forecast の raw (単位=個数=セル数) と単位が完全に一致する唯一の
+#     候補。**本タスクではこれを採用する** (2026-08-13 コーダ判断)。
+#     ただし `absorption_capacity` 自体は a-1 決定 (2026-08-12) で
+#     board_puyo_total と完全重複のため本ツールの登録レジストリには無い。
+#     Board を再構築せずに済ませるため、既に計算済みの own
+#     `board_puyo_total` (score=raw/ON_FIELD_CAP の正確な線形変換、raw は
+#     常に0〜72でクランプが効かないため score から raw を完全に逆算できる)
+#     から `ON_FIELD_CAP − board_puyo_total_score*ON_FIELD_CAP` として導出
+#     する (Board再構築の重複を避ける既存の性能方針と一致、
+#     `_attach_ojama_margin_column` docstring 参照)。
+#
+# **DIFF_* 5分類への非振り分け (意図的)**: 上記4列 (+ojama_source) は
+# grid-only レジストリ (`GRID_ONLY_INDICATORS`/`GRID_ONLY_HEAVY_INDICATORS`)
+# の外から来る値であり、`DIFF_REPLACE_OWN_COLUMNS` 等5分類の対象は
+# 「Board→IndicatorV2Value のレジストリ関数が生成した own 列」に限定されて
+# いる (`tests/test_indicator_pipeline_registry_2026-08-13.py::
+# TestDiffClassificationCompleteness` の管轄範囲もそこまで)。
+# `all_clear_bonus_pending`/`all_clear_source` が `TEMPORAL_STATE_COLUMNS`
+# として同5分類の対象外になっている既存の前例と同じ扱いにする (own 列としては
+# 出力するが、5分類には登録しない)。net_balance/forecast は元々「相手との
+# 差」ではなく「相手を含めた収支そのもの」なので、これをさらに相手と diff化
+# するのは概念的に無意味という判断もある (5分類のうち EXEMPT=own onlyと
+# 実質同じ扱いになるため、無理に5分類の枠に押し込む必要が無い)。
+
+OJAMA_SOURCE_TRUTH: float = 0.0  # OjamaAccountingTracker 真値 (npz収集64本目以降)
+OJAMA_SOURCE_MISSING: float = 1.0  # 旧npz、ojama_net_balance/ojama_forecast 列が存在しない
+
+# convert_one_npz 内でのみ使う一時列名 (最終CSVには出さない、
+# `_final_fieldnames` に含めないことで DictWriter の extrasaction="ignore"
+# が自動的に除外する)。相手との再同期 (merge_asof) 計算専用の own raw 値。
+_OJAMA_NET_BALANCE_SYNC_RAW_COL: str = "_ojama_net_balance_raw_for_sync"
+
+# grid-only レジストリの外から来る「おじゃま収支の真値系」own列 (常に own
+# のみ、DIFF_* 5分類には含めない、上記コメント参照)。`_final_fieldnames` の
+# own_candidates に `TEMPORAL_STATE_COLUMNS` と同じ扱いで直接追加する。
+OJAMA_TRUTH_COLUMNS: tuple[str, ...] = (
+    "ojama_net_balance", "ojama_forecast", "ojama_source",
+    "ojama_net_balance_synced", "ojama_margin",
+)
+
+
+def _finite_or_nan_score(
+    raw: float, normalize: "Callable[[float], iv.IndicatorV2Value]",
+) -> float:
+    """raw が有限値の場合のみ既存の正規化関数に委譲しスコアを返す (NaN安全)。
+
+    `iv.ojama_forecast()` は内部で `max(0, forecast)` を使うが、Python の
+    `max(0, float("nan"))` は (比較が常に False になるため) **NaN を静かに
+    0 に変換してしまう既知の落とし穴**がある。「取得不能 (NaN)」を
+    「予告0個」と誤解させないよう、ここで先に `np.isfinite` ガードを掛けて
+    NaN を確実にそのまま伝播させる (サイレント破損防止)。
+    """
+    if not np.isfinite(raw):
+        return float("nan")
+    return normalize(raw).score
+
+
+def _ojama_truth_raw_arrays(
+    d: "np.lib.npyio.NpzFile", n: int,
+) -> "tuple[np.ndarray, np.ndarray, float]":
+    """npz からおじゃま収支の真値 raw 配列 (own-perspective) を取り出す。
+
+    両列が揃っている npz (収集64本目以降) のみ真値として採用する。片方だけ
+    存在する状態は収集側の実装上想定されないが、安全側 (見なかったことに
+    しない) で「両方揃っていなければ両方 NaN 扱い」にする。
+
+    Returns:
+        (net_balance_raw, forecast_raw, source) の3値。source は npz 全体で
+        1つの値 (OJAMA_SOURCE_TRUTH または OJAMA_SOURCE_MISSING)。行ごとの
+        取得不能 (NaN) とは別概念 (OJAMA_TRUTH_COLUMNS 直上コメント参照)。
+    """
+    has_truth = "ojama_net_balance" in d.files and "ojama_forecast" in d.files
+    if has_truth:
+        return (
+            np.asarray(d["ojama_net_balance"], dtype=np.float64),
+            np.asarray(d["ojama_forecast"], dtype=np.float64),
+            OJAMA_SOURCE_TRUTH,
+        )
+    nan_fill = np.full(n, float("nan"), dtype=np.float64)
+    return nan_fill, nan_fill.copy(), OJAMA_SOURCE_MISSING
+
+
+def _attach_ojama_truth_own_columns(
+    rows: list[dict], net_raw: np.ndarray, forecast_raw: np.ndarray, source: float,
+) -> None:
+    """おじゃま収支の真値 own 列を in-place で rows に書き込む。
+
+    ojama_net_balance/ojama_forecast は既存 IV-1/IV-2 正規化関数
+    (`iv.ojama_net_balance`/`iv.ojama_forecast`) に委譲する (薄い委譲構造の
+    原則、CLAUDE.md 0-1正規化必須ルール)。合わせて後段の計算用に own raw
+    値を一時列に保持する: 再同期 (`_attach_ojama_net_balance_synced_column`)
+    用の `_OJAMA_NET_BALANCE_SYNC_RAW_COL`、猶予量
+    (`_attach_ojama_margin_column`) 用の `_ojama_forecast_raw_for_margin`。
+    """
+    for i, r in enumerate(rows):
+        net = float(net_raw[i])
+        r["ojama_net_balance"] = _finite_or_nan_score(net, iv.ojama_net_balance)
+        r["ojama_forecast"] = _finite_or_nan_score(
+            float(forecast_raw[i]), iv.ojama_forecast,
+        )
+        r["ojama_source"] = source
+        r[_OJAMA_NET_BALANCE_SYNC_RAW_COL] = net
+        r["_ojama_forecast_raw_for_margin"] = float(forecast_raw[i])
+
+
+def _attach_ojama_net_balance_synced_column(rows: list[dict]) -> list[dict]:
+    """P4決着の再同期版収支 `ojama_net_balance_synced` を追加する。
+
+    既存の b-2 diff列生成インフラ (`_attach_opponent_diff_columns`、
+    merge_asof(direction="backward")) を一時列 `_OJAMA_NET_BALANCE_SYNC_RAW_
+    COL` にそのまま適用し、得られる `diff_<一時列名>` (= own − opp の直近
+    確定値、対称性の根拠は OJAMA_TRUTH_COLUMNS 直上コメント参照) を 2 で
+    割って `iv.ojama_net_balance` で再正規化するだけで済ませる (既存パターン
+    の再利用、新規の merge_asof 実装をしない)。
+    """
+    rows = _attach_opponent_diff_columns(rows, [_OJAMA_NET_BALANCE_SYNC_RAW_COL], ())
+    diff_key = f"diff_{_OJAMA_NET_BALANCE_SYNC_RAW_COL}"
+    for r in rows:
+        delta = r.pop(diff_key, float("nan"))
+        synced_raw = delta / 2.0 if np.isfinite(delta) else float("nan")
+        r["ojama_net_balance_synced"] = _finite_or_nan_score(
+            synced_raw, iv.ojama_net_balance,
+        )
+        r.pop(_OJAMA_NET_BALANCE_SYNC_RAW_COL, None)
+    return rows
+
+
+def _attach_ojama_margin_column(rows: list[dict]) -> None:
+    """C-2 猶予量 `ojama_margin` (吸収余力−実飛来量) を in-place で追加する。
+
+    吸収余力の raw (単位=セル数、absorption_capacity 相当) は own
+    `board_puyo_total` の score から逆算する (`ON_FIELD_CAP -
+    board_puyo_total_score*ON_FIELD_CAP`、Board再構築を避ける最適化。
+    board_puyo_total の raw は常に0〜72でクランプが効かないため score
+    からの逆算に精度損失は無い)。実飛来量の raw は own `ojama_forecast`
+    (自分に向かう予告個数、既に0以上にクリップ済み) を使う。両者とも
+    ojama_forecast と同じ OJAMA_NET_NORM_HALF/FULL (=ON_FIELD_CAP/144) の
+    正規化を再利用する (`iv.ojama_net_balance` に委譲、0=収支ゼロ相当を
+    0.5 に写す既存の慣習と揃える。死亡列限定の death_margin や複合スコアの
+    ukeyasusa を不採用にした理由は本セクション先頭コメント参照)。
+    """
+    for r in rows:
+        forecast_raw = r.pop("_ojama_forecast_raw_for_margin", float("nan"))
+        board_total_score = float(r["board_puyo_total"])
+        absorption_raw = iv.ON_FIELD_CAP - board_total_score * iv.ON_FIELD_CAP
+        if not np.isfinite(forecast_raw):
+            r["ojama_margin"] = float("nan")
+            continue
+        margin_raw = absorption_raw - max(0.0, forecast_raw)
+        r["ojama_margin"] = iv.ojama_net_balance(margin_raw).score
+
 
 def _resolve_indicator_registry(
     profile: str, use_native: bool = True, with_saturation_chain: bool = False,
@@ -1035,7 +1255,7 @@ def _final_fieldnames(
     )
     own_candidates = (
         list(registry.keys()) + list(CONN_ALWAYS_PRESENT_COLUMNS)
-        + list(TEMPORAL_STATE_COLUMNS)
+        + list(TEMPORAL_STATE_COLUMNS) + list(OJAMA_TRUTH_COLUMNS)
     )
     own_output_cols = [c for c in own_candidates if c not in DIFF_REPLACE_OWN_COLUMNS]
     diff_output_cols = [f"diff_{c}" for c in _resolve_diff_target_columns(registry)]
@@ -1358,6 +1578,12 @@ def convert_one_npz(
         _compute_all_clear_bonus_pending(
             rows, [int(s) for s in scores], [str(m) for m in chain_mechanisms],
         )
+    # タスク#8 (2026-08-13): おじゃま収支の真値統合。own列書き込み→猶予量→
+    # 再同期 (相手との merge_asof を要するため own列書き込み後に行う) の順。
+    net_raw, forecast_raw, ojama_source = _ojama_truth_raw_arrays(d, n)
+    _attach_ojama_truth_own_columns(rows, net_raw, forecast_raw, ojama_source)
+    _attach_ojama_margin_column(rows)
+    rows = _attach_ojama_net_balance_synced_column(rows)
     diff_cols = _resolve_diff_target_columns(registry)
     carry_cols = _resolve_carry_target_columns(registry)
     rows = _attach_opponent_diff_columns(rows, diff_cols, tuple(carry_cols))

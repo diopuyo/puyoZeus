@@ -434,16 +434,13 @@ KNOWN_PIPELINE_GAPS: tuple[PipelineGap, ...] = (
         "chain_duration_sec", "2026-08-13",
         "連鎖の実時間長 (フレーム間の state) が必要。同上の構造的制約",
     ),
-    PipelineGap(
-        "ojama_net_balance", "2026-08-13",
-        "OjamaAccountingTracker の毎フレーム BoardState 遷移が必要。npz は "
-        "STABLE 重複除去済みスナップショットのみでこの遷移列を保持しない "
-        "(build_labeled_win_from_npz.py 冒頭「現状カバー範囲」に既存記載)",
-    ),
-    PipelineGap(
-        "ojama_forecast", "2026-08-13",
-        "ojama_net_balance と同じ制約 (OjamaAccountingTracker の遷移情報が必要)",
-    ),
+    # ojama_net_balance/ojama_forecast はタスク#8 (2026-08-13、
+    # docs/CROSS_CUTTING_AUDIT_2026-08-13.md P4決着) で再接続済みのため本
+    # 許容リストから削除した (収集側 collect_boards_lean.py が
+    # OjamaAccountingTracker を実駆動して真値を npz に保存するようになった、
+    # build_labeled_win_from_npz.py の OJAMA_TRUTH_COLUMNS 参照。許容リストが
+    # 陳腐化したまま残すと再接続の事実がテストから見えなくなるため削除する
+    # ルール、test_known_pipeline_gaps_entries_are_actually_absent 参照)。
     PipelineGap(
         "reach_fire_power", "2026-08-13",
         "next_pair/dnext_pair 依存。npz は --with-next 収集時のみ next1_a/b を"
