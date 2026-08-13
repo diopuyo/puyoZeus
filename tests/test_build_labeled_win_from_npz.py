@@ -618,3 +618,326 @@ class TestNativeHeavyIndicatorParity:
             registry_off["current_max_chain"](board).score
             == blwn.GRID_ONLY_HEAVY_INDICATORS["current_max_chain"](board).score
         )
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "immediate_fire_power", "chain_efficiency", "second_chain_potential",
+            "ignition_point_count", "multi_color_ignition",
+        ],
+    )
+    def test_a1_native_reconnected_indicators_match_python(
+        self, native_parity_boards: "list", name: str,
+    ) -> None:
+        """A-1 (2026-08-13) で native化した5列が既存 Python 実装と完全一致すること。
+
+        乱数を含まない (drop_ojama を使わない) ため無条件で完全一致するはず。
+        """
+        mismatches = []
+        for i, board in enumerate(native_parity_boards):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS[name](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE[name](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"{name}: {len(mismatches)}/{len(native_parity_boards)} 件不一致 "
+            f"(先頭5件): {mismatches[:5]}"
+        )
+
+    # min_puyos_to_ignite / saturation_chain は Python版が実測 2000ms/行・
+    # 12500ms/行と極めて重い (緊急native化の動機そのもの) ため、1000件
+    # フルサンプルで比較すると Python側だけで数十分〜数時間かかりテスト
+    # として非現実的。少数サンプル (先頭8件) に限定して確認する。
+    _EXPENSIVE_PARITY_SAMPLE_SIZE: int = 4
+
+    def test_min_puyos_to_ignite_native_matches_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """min_puyos_to_ignite: 緊急native化 (実測2000ms/行) の完全一致確認
+        (小サンプル、乱数を含まないため無条件で完全一致するはず)。"""
+        sample = native_parity_boards[: self._EXPENSIVE_PARITY_SAMPLE_SIZE]
+        mismatches = []
+        for i, board in enumerate(sample):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["min_puyos_to_ignite"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["min_puyos_to_ignite"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"min_puyos_to_ignite: {len(mismatches)}/{len(sample)} 件不一致: {mismatches}"
+        )
+
+    def test_saturation_chain_native_matches_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """saturation_chain: 緊急native化 (実測12500ms/行) の完全一致確認
+        (小サンプル、乱数を含まないため無条件で完全一致するはず)。"""
+        sample = native_parity_boards[: self._EXPENSIVE_PARITY_SAMPLE_SIZE]
+        mismatches = []
+        for i, board in enumerate(sample):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["saturation_chain"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["saturation_chain"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"saturation_chain: {len(mismatches)}/{len(sample)} 件不一致: {mismatches}"
+        )
+
+
+# ============================
+# A-1: 脱落11列の再接続 (2026-08-13 ラウンド2提案書、next非依存の10列)
+# ============================
+
+
+def test_full_profile_includes_a1_reconnected_columns(tmp_path: Path) -> None:
+    """A-1 再接続10列が full profile のレジストリに存在すること。"""
+    registry = blwn._resolve_indicator_registry("full")
+    for name in (
+        "immediate_fire_power", "chain_efficiency", "min_puyos_to_ignite",
+        "second_chain_potential", "main_linked_pair_count", "isolated_pair_count",
+        "main_linked_ratio", "ignition_point_count", "multi_color_ignition",
+        "simultaneous_pop_richness",
+    ):
+        assert name in registry, f"{name} が full profile レジストリに無い"
+
+
+def test_light_profile_excludes_a1_reconnected_columns() -> None:
+    """A-1 再接続10列は light profile には含めない (重い連鎖シミュ系のため)。"""
+    registry = blwn._resolve_indicator_registry("light")
+    for name in ("immediate_fire_power", "min_puyos_to_ignite", "ignition_point_count"):
+        assert name not in registry
+
+
+def test_a1_reconnected_columns_produce_values_in_unit_range(tmp_path: Path) -> None:
+    """A-1 再接続10列が実際に計算され 0〜1 の score を返すこと (NaN/欠損でない)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz(npz_path, n=3)
+    registry = blwn._resolve_indicator_registry("full")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    target_cols = (
+        "immediate_fire_power", "chain_efficiency", "min_puyos_to_ignite",
+        "second_chain_potential", "main_linked_pair_count", "isolated_pair_count",
+        "main_linked_ratio", "ignition_point_count", "multi_color_ignition",
+        "simultaneous_pop_richness",
+    )
+    for row in rows:
+        for col in target_cols:
+            assert col in row, col
+            assert not np.isnan(row[col]), col
+            assert 0.0 <= row[col] <= 1.0, (col, row[col])
+
+
+def test_reach_fire_power_not_reconnected(tmp_path: Path) -> None:
+    """reach_fire_power (next_pair必須) は grid-only レジストリの型と非互換の
+    ため対象外のままであること (production_config.KNOWN_PIPELINE_GAPS に
+    別エージェントが既に文書化済み、本ツールでの対応は不要)。"""
+    registry = blwn._resolve_indicator_registry("full")
+    assert "reach_fire_power" not in registry
+
+
+# ============================
+# A-2: 壊れ動画の隔離 (2026-08-13)
+# ============================
+
+
+def test_broken_videos_constant_matches_expected_four() -> None:
+    """BROKEN_VIDEOS が仕様通りの4本 (c26/c30/c58/c69) であること。"""
+    assert blwn.BROKEN_VIDEOS == ("c26", "c30", "c58", "c69")
+
+
+def test_convert_dir_excludes_broken_videos_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture,
+) -> None:
+    """既定 (exclude_broken=True) で BROKEN_VIDEOS の npz が変換対象から
+    除外され、隔離した動画・行数がログ出力されること (黙って落とさない)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "c26.npz", n=4, video_id="video_c26")
+    _write_synthetic_npz(npz_dir / "good.npz", n=3, video_id="video_good")
+    out_csv = tmp_path / "out.csv"
+    n_rows, _elapsed = blwn.convert_dir(npz_dir, out_csv, profile="light")
+    assert n_rows == 3  # good.npz のみ (c26.npz の4行は隔離)
+    df = pd.read_csv(out_csv)
+    assert set(df["video_id"]) == {"video_good"}
+    captured = capsys.readouterr()
+    assert "exclude-broken" in captured.out
+    assert "c26.npz" in captured.out
+    assert "4" in captured.out  # 隔離した行数
+
+
+def test_convert_dir_no_exclude_broken_keeps_all(tmp_path: Path) -> None:
+    """--no-exclude-broken 相当 (exclude_broken=False) では全npzが変換されること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "c26.npz", n=4, video_id="video_c26")
+    _write_synthetic_npz(npz_dir / "good.npz", n=3, video_id="video_good")
+    out_csv = tmp_path / "out.csv"
+    n_rows, _elapsed = blwn.convert_dir(
+        npz_dir, out_csv, profile="light", exclude_broken=False,
+    )
+    assert n_rows == 7
+    df = pd.read_csv(out_csv)
+    assert set(df["video_id"]) == {"video_c26", "video_good"}
+
+
+# ============================
+# A-4: 全消しボーナスの真値差し替え (2026-08-13)
+# ============================
+
+
+def _write_npz_with_all_clear_truth(
+    path: Path, n: int, all_clear_values: list[int],
+) -> None:
+    """all_clear_pending 真値列 (VideoChainTracker由来) を持つ合成npzを書く。"""
+    grids = np.array([_make_grid(height=3) for _ in range(n)], dtype=np.int8)
+    np.savez_compressed(
+        str(path), grids=grids, video_id=np.array(["v"] * n), side=np.array(["1P"] * n),
+        t_sec=np.arange(n, dtype=np.float32), game_idx=np.zeros(n, dtype=np.int32),
+        frame_idx=np.arange(n, dtype=np.int32), won=np.array([1.0] * n, dtype=np.float32),
+        score=np.full(n, -1, dtype=np.int32),
+        all_clear_pending=np.array(all_clear_values, dtype=np.int8),
+    )
+
+
+def test_all_clear_truth_used_when_present_in_npz(tmp_path: Path) -> None:
+    """npz に all_clear_pending 真値列があればそれをそのまま採用し、
+    all_clear_source が真値 (0.0) になること (A-4)。"""
+    npz_path = tmp_path / "truth.npz"
+    _write_npz_with_all_clear_truth(npz_path, n=4, all_clear_values=[0, 1, 1, 0])
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert [r["all_clear_bonus_pending"] for r in rows_sorted] == [0.0, 1.0, 1.0, 0.0]
+    assert all(r["all_clear_source"] == blwn.ALL_CLEAR_SOURCE_TRUTH for r in rows_sorted)
+
+
+def test_all_clear_approx_fallback_sets_source_flag(tmp_path: Path) -> None:
+    """npz に all_clear_pending が無い旧npzでは近似ヒューリスティックに
+    フォールバックし、all_clear_source が近似 (1.0) になること (A-4)。"""
+    npz_path = tmp_path / "no_truth.npz"
+    _write_synthetic_npz(npz_path, n=3)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert all(r["all_clear_source"] == blwn.ALL_CLEAR_SOURCE_APPROX for r in rows)
+
+
+def test_csv_output_includes_all_clear_source_column(tmp_path: Path) -> None:
+    """convert_dir の CSV に all_clear_source 列が乗ること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=3)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    assert "all_clear_source" in df.columns
+
+
+# ============================
+# C-3: 飽和連鎖量 (saturation_chain) — opt-in化 (2026-08-13 コスト実測後、user方針決定)
+# ============================
+# 実測で1行8〜18秒という桁違いのコストが判明したため、既定 full profile
+# からは除外し `--with-saturation-chain` の明示指定時のみ含める。
+# GRID_ONLY_HEAVY_INDICATORS (カタログ) 自体には残るため、DIFF分類テスト
+# (tests/test_indicator_pipeline_registry_2026-08-13.py) やネイティブ
+# パリティテスト (上記 TestNativeHeavyIndicatorParity) には影響しない。
+
+
+def test_full_profile_excludes_saturation_chain_by_default() -> None:
+    """saturation_chain は実測コスト (1行8〜18秒) が桁違いのため、既定
+    (with_saturation_chain 未指定) の full profile レジストリには
+    含まれないこと (opt-in化、2026-08-13 user方針決定)。"""
+    registry = blwn._resolve_indicator_registry("full")
+    assert "saturation_chain" not in registry
+
+
+def test_full_profile_includes_saturation_chain_when_opted_in() -> None:
+    """--with-saturation-chain 相当 (with_saturation_chain=True) を明示した
+    場合のみ saturation_chain が full profile レジストリに含まれること。"""
+    registry = blwn._resolve_indicator_registry("full", with_saturation_chain=True)
+    assert "saturation_chain" in registry
+
+
+def test_light_profile_excludes_saturation_chain() -> None:
+    """saturation_chain は重い (ビームサーチ+takapt探索) ため light には
+    with_saturation_chain の値にかかわらず含めない (light は最初から
+    heavy 系を除外する分岐のため)。"""
+    registry = blwn._resolve_indicator_registry("light", with_saturation_chain=True)
+    assert "saturation_chain" not in registry
+
+
+def test_optional_heavy_indicator_names_matches_saturation_chain_only() -> None:
+    """OPTIONAL_HEAVY_INDICATOR_NAMES が現状 saturation_chain のみである
+    こと (想定外の列がサイレントに opt-in 対象へ紛れ込むことを防ぐ)。"""
+    assert blwn.OPTIONAL_HEAVY_INDICATOR_NAMES == frozenset({"saturation_chain"})
+
+
+def test_convert_dir_excludes_saturation_chain_column_by_default(
+    tmp_path: Path,
+) -> None:
+    """convert_dir が既定 (with_saturation_chain 未指定) では CSV に
+    saturation_chain 列を出力しないこと。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=2)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="full")
+    df = pd.read_csv(out_csv)
+    assert "saturation_chain" not in df.columns
+
+
+def test_convert_dir_includes_saturation_chain_column_when_opted_in(
+    tmp_path: Path,
+) -> None:
+    """convert_dir に with_saturation_chain=True (--with-saturation-chain
+    相当) を渡すと CSV に saturation_chain 列が出力され、値が 0〜1 に
+    収まること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=2)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="full", with_saturation_chain=True)
+    df = pd.read_csv(out_csv)
+    assert "saturation_chain" in df.columns
+    assert df["saturation_chain"].between(0.0, 1.0).all()
+
+
+# ============================
+# C-4: 盤面直読みの新指標3種 (2026-08-13)
+# ============================
+
+
+def test_light_profile_includes_c4_cheap_indicators(tmp_path: Path) -> None:
+    """color_diversity_evenness / buried_hole_count が light profile に
+    含まれ、実際の値が 0〜1 に収まること (C-4)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz(npz_path, n=3)
+    registry = blwn._resolve_indicator_registry("light")
+    assert "color_diversity_evenness" in registry
+    assert "buried_hole_count" in registry
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for row in rows:
+        assert 0.0 <= row["color_diversity_evenness"] <= 1.0
+        assert 0.0 <= row["buried_hole_count"] <= 1.0
+
+
+def test_full_profile_includes_chain_articulation_point_count(tmp_path: Path) -> None:
+    """chain_articulation_point_count (重いため full profile 限定) が
+    含まれ、実際の値が 0〜1 に収まること (C-4)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz(npz_path, n=2)
+    registry = blwn._resolve_indicator_registry("full")
+    assert "chain_articulation_point_count" in registry
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for row in rows:
+        assert 0.0 <= row["chain_articulation_point_count"] <= 1.0
+
+
+def test_light_profile_excludes_chain_articulation_point_count() -> None:
+    """chain_articulation_point_count は light profile には含めない。"""
+    registry = blwn._resolve_indicator_registry("light")
+    assert "chain_articulation_point_count" not in registry
