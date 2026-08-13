@@ -860,16 +860,22 @@ class CounterReachTracker:
     def _reach(
         self, board: Board, budget_sec: float,
         known_pairs: "tuple[tuple[int, int], ...]",
+        threshold_ojama: float = COUNTER_THRESHOLD_OJAMA,
     ) -> tuple[float, float]:
-        """(閾値以上を返せる確率, 平均打手数) を返す。"""
+        """(閾値以上を返せる確率, 平均打手数) を返す。
+
+        threshold_ojama: 到達確率を判定するお邪魔換算の閾値 (2026-08-13 追加
+            の optional 引数、既定は従来の固定値 COUNTER_THRESHOLD_OJAMA。
+            --counter-defender-only では実際の飛来量を渡す、backwards compat)。
+        """
         dist = mc_counter.estimate_counter_distribution(
             board, budget_sec,
             known_pairs=known_pairs,
-            thresholds_ojama=(COUNTER_THRESHOLD_OJAMA,),
+            thresholds_ojama=(threshold_ojama,),
             n_rollouts=COUNTER_N_ROLLOUTS,
         )
         return (
-            float(dist.prob_at_least.get(COUNTER_THRESHOLD_OJAMA, 0.0)),
+            float(dist.prob_at_least.get(threshold_ojama, 0.0)),
             float(dist.mean_hands_used),
         )
 
@@ -878,6 +884,8 @@ class CounterReachTracker:
         next1: "tuple[int, int] | None" = None,
         next2: "tuple[int, int] | None" = None,
         t_sec: float | None = None,
+        defender_side: str | None = None,
+        threshold_ojama: float | None = None,
     ) -> tuple[float, float, float]:
         """(1P視点の優位[-100,100], 1Pの応手確率, 2Pの応手確率) を返す。
 
@@ -888,7 +896,23 @@ class CounterReachTracker:
             指定した場合のみ `COUNTER_RECOMPUTE_INTERVAL_SEC` 間引きを適用する。
             ただし budget_sec が 0↔正 で遷移した直後 (打ち合い開始/終了) は
             反応遅れを避けるため間引きを無視して即計算する。
+        defender_side: "1P"/"2P" を指定すると、その side の盤面**のみ**を
+            対象に応手確率を計算する (2026-08-13 #4/#5 修正、
+            --counter-defender-only 用)。指定 side の応手確率のみが返り値の
+            該当 index に入り、もう片方は NaN になる。返り値[0] (adv) は
+            0.0 固定 (呼び出し側 generate() が ojama_damage ベースの新しい
+            統合式で計算するため、本メソッドは確率算出のみ担当する設計分離)。
+            既定 None = 従来通り両側計算 (backwards compat)。時間ベース間引き
+            (COUNTER_RECOMPUTE_INTERVAL_SEC) は defender_side 指定時は適用
+            しない (閾値/対象 side がフレームごとに変わり得るため単純化、
+            計算コストは従来の片側分のみで元々半減している)。
+        threshold_ojama: defender_side 指定時に使う到達確率の閾値 (お邪魔
+            換算、実際の飛来量)。None なら COUNTER_THRESHOLD_OJAMA へ
+            フォールバックする。
         """
+        if defender_side is not None:
+            return self._update_defender_only(b1, b2, budget_sec, next1, next2,
+                                              t_sec, defender_side, threshold_ojama)
         budget_transitioned = (
             (budget_sec <= 0.0) != (self.last_budget_sec <= 0.0)
         )
@@ -925,6 +949,254 @@ class CounterReachTracker:
         self._last_result = result
         self._last_t_sec = t_sec
         return result
+
+    def _update_defender_only(
+        self, b1: Board, b2: Board, budget_sec: float,
+        next1: "tuple[int, int] | None", next2: "tuple[int, int] | None",
+        t_sec: float | None, defender_side: str, threshold_ojama: float | None,
+    ) -> tuple[float, float, float]:
+        """`update()` の defender_side 指定時の実体 (#4/#5 修正、2026-08-13)。
+
+        受け側の盤面 1 つだけを対象に MC を1回だけ回す (従来の両側計算より
+        コストが半分で済む)。既存の `_cache` を再利用するが、キーに
+        defender_side/threshold を含めて対称経路のキャッシュと衝突しない
+        ようにする。時間ベース間引きは適用しない (docstring 参照)。
+        """
+        if budget_sec <= 0.0:
+            result = (0.0, float("nan"), float("nan"))
+            self.last_budget_sec = budget_sec
+            self._last_result = result
+            self._last_t_sec = t_sec
+            return result
+        self.last_budget_sec = budget_sec
+        board = b1 if defender_side == "1P" else b2
+        nx = next1 if defender_side == "1P" else next2
+        th = COUNTER_THRESHOLD_OJAMA if threshold_ojama is None else threshold_ojama
+        known = (nx,) if nx and nx[0] > 0 and nx[1] > 0 else ()
+        base = board.grid_bytes() if hasattr(board, "grid_bytes") else board._grid.tobytes()
+        key = base + f"|{budget_sec:.2f}|{known}|def={defender_side}|th={th:.2f}".encode()
+        if key not in self._cache:
+            if len(self._cache) > 256:
+                self._cache.clear()
+            self._cache[key] = self._reach(board, budget_sec, known, threshold_ojama=th)
+        p, h = self._cache[key]
+        self.last_hands = h
+        result = (
+            (0.0, p, float("nan")) if defender_side == "1P" else (0.0, float("nan"), p)
+        )
+        self._last_result = result
+        self._last_t_sec = t_sec
+        return result
+
+
+# ============================
+# #3/#4/#5 修正 (2026-08-13、docs/DEMO_REVIEW_2026-08-13.md)
+# ============================
+# #3  --counter-remaining-time: 打ち合い応手の時間予算の意味論修正
+#       (経過時間の控除 + 観測連鎖数を最終連鎖数と誤認しない条件付き補正)。
+# #4/#5 --counter-defender-only: 受け側限定・実飛来量ベースの応手判定。
+# 両フラグは独立 (それぞれ既定 False = 従来挙動、組み合わせ自由)。
+# 攻撃側検知 (_detect_chain_attacker) だけを共有する。
+
+# #3 で使う条件付き分布テーブルの既定パス
+# (scripts/_build_chain_length_conditional_2026-08-13.py が生成)。
+CHAIN_LENGTH_CONDITIONAL_PATH = Path("data/verify/chain_length_conditional_2026-08-13.json")
+
+
+@dataclass(frozen=True)
+class _ChainAttackObservation:
+    """攻撃側検知の下ごしらえ結果 (#3 と #4/#5 が共通で使う)。"""
+    chain_count: int                       # 観測された連鎖数 (0=攻撃なし)
+    trigger_sec: float                     # 攻撃側 ChainEvent.trigger_sec
+    attacker_side: "str | None"            # "1P"/"2P"/None (攻撃なし)
+    attacker_event: "ChainEvent | None"     # 攻撃側の生 ChainEvent
+
+
+def _detect_chain_attacker(r_p1, r_p2, t_sec: float) -> _ChainAttackObservation:
+    """両 side の chain_event から、より大きい連鎖数を出している側 (攻撃側) を
+    検知する (旧来の `_cc` 計算をそのまま関数化しただけ、挙動不変)。
+    """
+    cc = 0
+    trigger_sec = 0.0
+    attacker_side: "str | None" = None
+    attacker_event = None
+    for label, sr in (("1P", r_p1), ("2P", r_p2)):
+        ev = getattr(sr, "chain_event", None)
+        n = getattr(ev, "chain_count", None) if ev is not None else None
+        if n and int(n) > cc:
+            cc = int(n)
+            trigger_sec = float(getattr(ev, "trigger_sec", t_sec))
+            attacker_side = label
+            attacker_event = ev
+    return _ChainAttackObservation(cc, trigger_sec, attacker_side, attacker_event)
+
+
+def _load_chain_length_conditional_table(
+    path: Path = CHAIN_LENGTH_CONDITIONAL_PATH,
+) -> "dict[int, float]":
+    """#3 で使う E[最終連鎖数|観測N連鎖到達] テーブルを読み込む。
+
+    ファイル不在・壊れている場合は空dictを返す (fail-safe、レンダを止めない)。
+    呼び出し側 `_expected_final_chain_count` は空dictを「観測値=最終値と
+    みなす」保守的フォールバック (旧来の近似と同じ) として扱う。
+    """
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        table = data.get("expected_final_given_reached_n", {})
+        return {int(k): float(v) for k, v in table.items()}
+    except (json.JSONDecodeError, OSError, ValueError, AttributeError):
+        return {}
+
+
+def _expected_final_chain_count(observed_n: int, table: "dict[int, float]") -> float:
+    """観測連鎖数 N から期待最終連鎖数 E[最終|N到達] を引く (テーブル無ければ
+    保守的フォールバック=観測値そのまま、実測上限超は外挿せずクランプする)。
+    """
+    if observed_n <= 0:
+        return 0.0
+    if not table:
+        return float(observed_n)
+    if observed_n in table:
+        return table[observed_n]
+    max_key = max(table)
+    return table[max_key] if observed_n > max_key else float(observed_n)
+
+
+def _chain_remaining_time_budget_sec(
+    chain_count: int, trigger_sec: float, t_sec: float,
+    table: "dict[int, float]",
+) -> float:
+    """#3 修正: 経過時間控除 + 条件付き期待最終連鎖数で残り時間を求める (stateless)。
+
+    残り時間 = anim(E[最終|N]) − 経過時間 + 着弾ラグ (+1手、
+    reference_ojama_landing_gated_by_placement と整合させるため
+    SEC_PER_HAND を流用、新規定数を作らない)。
+    """
+    if chain_count <= 0:
+        return 0.0
+    expected_final = _expected_final_chain_count(chain_count, table)
+    total_anim = iv.estimate_chain_anim_duration_sec(expected_final)
+    elapsed = max(0.0, t_sec - trigger_sec)
+    remaining = total_anim - elapsed + iv.SEC_PER_HAND
+    return max(0.0, remaining)
+
+
+def _resolve_counter_time_budget(
+    obs: _ChainAttackObservation, t_sec: float,
+    enable_remaining_time: bool, chain_len_table: "dict[int, float]",
+) -> float:
+    """#3: 打ち合い応手の時間予算を求める (旧来経路/新経路の切替)。
+
+    enable_remaining_time=False (既定) では従来通り
+    `estimate_chain_anim_duration_sec(観測連鎖数)` そのもの (bit-identical、
+    backwards compat)。
+    """
+    if obs.chain_count <= 0:
+        return 0.0
+    if not enable_remaining_time:
+        return iv.estimate_chain_anim_duration_sec(float(obs.chain_count))
+    return _chain_remaining_time_budget_sec(
+        obs.chain_count, obs.trigger_sec, t_sec, chain_len_table)
+
+
+def _incoming_ojama_for_defender(
+    defender_side: str, obs: _ChainAttackObservation,
+    snap: OjamaAccountSnapshot, elapsed_sec: float,
+) -> float:
+    """defender_side に実際に飛んでくるおじゃま概算量を求める (1方向分)。
+
+    脅威 = 攻撃側 (defender_side の相手) の進行中連鎖の現時点得点
+    (score_to_ojama 換算、`iv._score_to_ojama_count` 再利用) + 既存の
+    予告おじゃま (pending)。固定閾値ではなく実際の飛来量そのものを使う
+    (docs/DEMO_REVIEW_2026-08-13.md #5、reference_ojama_damage_nonlinear
+    「二値でなく期待ダメージ」原則)。
+    """
+    attacker_side = "2P" if defender_side == "1P" else "1P"
+    pending = snap.pending_p1 if defender_side == "1P" else snap.pending_p2
+    chain_ojama = (
+        iv._score_to_ojama_count(float(obs.attacker_event.total_score), elapsed_sec)
+        if obs.attacker_side == attacker_side and obs.attacker_event is not None
+        else 0
+    )
+    return float(chain_ojama) + float(max(0, pending))
+
+
+def _resolve_defender_threat(
+    obs: _ChainAttackObservation, snap: OjamaAccountSnapshot, elapsed_sec: float,
+) -> "tuple[str | None, float]":
+    """#4/#5: 受け側と実際の飛来おじゃま概算量を求める (脅威が無ければ None, 0.0)。
+
+    脅威の対象は「相手の連鎖イベントが進行中」または「予告おじゃま
+    (pending) > 0」のどちらか (docs/DEMO_REVIEW_2026-08-13.md #5 item1、
+    連鎖イベントが無くても既に着弾待ちの予告だけで脅威は成立しうる)。
+    両方向 (1P向け/2P向け) を独立に確認し、両方に脅威がある稀なケースでは
+    より大きい飛来量の方を優先する (本アーキは単一 defender のみを扱う
+    設計上の制約、2026-08-13)。
+    """
+    incoming_1p = _incoming_ojama_for_defender("1P", obs, snap, elapsed_sec)
+    incoming_2p = _incoming_ojama_for_defender("2P", obs, snap, elapsed_sec)
+    candidates = [
+        (side, amount) for side, amount in (("1P", incoming_1p), ("2P", incoming_2p))
+        if amount > 0.0
+    ]
+    if not candidates:
+        return None, 0.0
+    return max(candidates, key=lambda c: c[1])
+
+
+def _counter_defender_adv(
+    defender_side: str, defender_prob: float, incoming_ojama: float,
+    b1: Board, b2: Board,
+) -> float:
+    """#4: 受け側限定の応手成分を有利不利へ変換する (2026-08-13)。
+
+    counter成分 = 攻撃側方向 × (1-受け側応手確率) × 飛来量ダメージ。
+    飛来量ダメージは `iv.ojama_damage` (reference_ojama_damage_function の
+    折れ点12/18個・受け側の残り容量 [headroom] に依存する既存の非線形関数)
+    を再利用する。 受け側が高確率で返せる (defender_prob→1) ほど 0 に
+    近づき、 極端化を抑える方向へ効く (docs/DEMO_REVIEW_2026-08-13.md #4)。
+    値域は既存 COUNTER_SCALE (旧来の対称式と同じ換算定数、新規定数無し) で
+    [-COUNTER_SCALE, +COUNTER_SCALE] に収まる。
+    """
+    if math.isnan(defender_prob):
+        return 0.0
+    defender_board = b1 if defender_side == "1P" else b2
+    damage = iv.ojama_damage(defender_board, incoming_ojama).score
+    direction = -1.0 if defender_side == "1P" else 1.0
+    return direction * damage * (1.0 - defender_prob) * COUNTER_SCALE
+
+
+def _build_counter_text_defender_only(
+    defender_side: "str | None", defender_prob: float, incoming_ojama: float,
+) -> str:
+    """#4/#5 修正版の応手情報行 (受け側のみ・脅威が無ければ空文字)。
+
+    従来の `_build_counter_text` は固定閾値を両者常時計算・表示していたが
+    (docs/DEMO_REVIEW_2026-08-13.md #5)、受け側のみ・実際の飛来量が
+    条件のときだけ表示する仕様に修正する (--counter-defender-only 有効時)。
+    """
+    if defender_side is None or math.isnan(defender_prob):
+        return ""
+    return (
+        f"{defender_side}応手 {defender_prob * 100:.0f}%"
+        f"  (飛来おじゃま概算{incoming_ojama:.0f}個)"
+    )
+
+
+def _resolve_counter_text(
+    enable_defender_only: bool, defender_side: "str | None",
+    counter_p1: float, counter_p2: float, incoming_ojama: float,
+) -> str:
+    """panel レイアウトの応手情報行テキストを、フラグに応じて選ぶ。"""
+    if not enable_defender_only:
+        return _build_counter_text(counter_p1, counter_p2)
+    defender_prob = (
+        counter_p1 if defender_side == "1P"
+        else counter_p2 if defender_side == "2P" else float("nan")
+    )
+    return _build_counter_text_defender_only(defender_side, defender_prob, incoming_ojama)
 
 
 class CapabilityPressureTracker:
@@ -1574,6 +1846,36 @@ def _graph_geometry(
     return gx0, gx1, gy0, gy1, y0 + 6
 
 
+def _graph_relative_time(t_sec: float, start_sec: float, game_start_sec: float) -> float:
+    """#8 修正: 下部グラフの横軸に使う「現在の試合開始からの相対時間」。
+
+    game_start_sec は境界検知のたびに `(t_sec - start_sec)` の値へ更新される
+    (`_reset_graph_origin` 参照)。境界が一度も起きない動画では
+    game_start_sec=0.0 のままなので、戻り値は従来の `t_sec - start_sec` と
+    完全に一致する (backwards compat)。
+    """
+    return (t_sec - start_sec) - game_start_sec
+
+
+def _reset_graph_origin(
+    t_sec: float, start_sec: float, n_frames: int, fps: float,
+) -> "tuple[float, float]":
+    """#8 修正: 試合境界検知時にグラフの原点とスケールを巻き直す。
+
+    docs/DEMO_REVIEW_2026-08-13.md #8: history.clear() だけでは history に
+    積む座標が動画全体の絶対時間のままだったため、境界後の曲線が絶対位置
+    (=途中) から始まって見えるバグだった。原点を現在時刻に更新し、スケール
+    (グラフ横軸の総尺) も「この時点からの残り動画尺」に巻き直す (試合ごとに
+    巻き直してよい、簡明な実装を優先)。
+
+    Returns:
+        (新しい game_start_sec, 新しい graph_total)。
+    """
+    game_start_sec = t_sec - start_sec
+    graph_total = max(1.0, (n_frames / fps) - t_sec)
+    return game_start_sec, graph_total
+
+
 def _draw_graph(
     d: "ImageDraw.ImageDraw", history: list[tuple[float, float]],
     t_rel: float, total: float,
@@ -1870,6 +2172,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_capability_pressure: bool = False,
              disable_pressure: bool = False,
              enable_counter_reach: bool = COUNTER_REACH_ENABLED_BY_DEFAULT,
+             enable_counter_remaining_time: bool = False,
+             enable_counter_defender_only: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              layout: str = "overlay",
@@ -1968,6 +2272,31 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         無効化する (2026-08-09 user伝授)。スコアはおじゃまを送る手段であり、
         送った時点で意味を失う (送ったぶんは予告おじゃま/盤面おじゃまとして
         既に観測できるため二重計上になる)。既定 False = 従来挙動維持。
+    enable_counter_remaining_time: True で打ち合い応手の時間予算の意味論を
+        修正する (2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #3)。従来
+        (既定 False) は「観測済み連鎖数 × 0.4秒」を毎回の総時間予算として
+        丸ごと渡していた (経過時間を控除せず・観測連鎖数を最終連鎖数と
+        誤認する二重のズレ)。True にすると (1) 攻撃側 ChainEvent.trigger_sec
+        からの経過時間を時計で控除し、 (2) 「N連鎖まで観測された連鎖の
+        最終連鎖数」の条件付き期待値テーブル (CHAIN_LENGTH_CONDITIONAL_PATH、
+        scripts/_build_chain_length_conditional_2026-08-13.py が148動画の
+        実測 chain_trigger_sec イベントから生成、無ければ観測値そのまま=
+        旧来近似へ自動フォールバック) を使う。既定 False = 従来挙動と
+        完全に同一 (backwards compat)。
+    enable_counter_defender_only: True で打ち合い応手確率を受け側限定・
+        実飛来量ベースに切り替える (2026-08-13、docs/DEMO_REVIEW_
+        2026-08-13.md #4/#5)。従来 (既定 False) は (a) 固定閾値
+        COUNTER_THRESHOLD_OJAMA を両者に常時計算・表示し (b) 攻撃が無い
+        側にも表示していた。True にすると、攻撃 (相手の連鎖イベントまたは
+        予告おじゃま) が飛んでいる側のみを対象に、閾値を実際の飛来量
+        (進行中連鎖の現時点得点→おじゃま換算 + 既存予告分) から動的に
+        算出する。有利不利への統合も
+        「攻撃側方向 × (1-受け側応手確率) × 飛来量ダメージ
+        (iv.ojama_damage、受け側の残り容量に依存する非線形関数)」に
+        変わり、受け側が高確率で返せる場合に極端化を抑える方向へ効く。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+        enable_counter_reach=False の場合はどちらのフラグも無効
+        (打ち合い応手成分自体が計算されない)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -2135,6 +2464,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     # 「使われる時だけ意味を持つ」設計)。
     counter_p1: float = float("nan")
     counter_p2: float = float("nan")
+    # #4/#5 修正 (--counter-defender-only) 用。脅威が無い間は None/0.0 のまま
+    # (パネル表示行を出さない・統合式へも寄与させない、既定挙動)。
+    defender_side: str | None = None
+    incoming_ojama: float = 0.0
+    # #3 修正 (--counter-remaining-time) 用の条件付き分布テーブル (E[最終|N到達])。
+    # フラグ OFF 時は読み込まない (I/O 無駄を避ける、無効時は完全に旧経路)。
+    _chain_len_table = (
+        _load_chain_length_conditional_table() if enable_counter_remaining_time else {}
+    )
     ptracker = PressureTracker()
     fctracker = RealtimeForecastTracker()
     svtracker = ScoreLeadTracker()
@@ -2150,8 +2488,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
-    history: list[tuple[float, float]] = []  # (ゲーム開始からの秒, 有利不利) 累積
-    total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺
+    history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
+    total_dur = max(1.0, (n / fps) - start_sec)  # グラフ横軸の総尺 (1試合目/境界無し用)
+    # (#8 修正、2026-08-13) 下部グラフの横軸原点。試合境界を検知するたびに
+    # 「(t - start_sec) - game_start_sec」が0から再スタートするよう更新する
+    # (history.clear() だけでは history に積む座標が動画全体の絶対時間の
+    # ままだったため、境界後の曲線が絶対位置=途中から始まって見えるバグ
+    # だった。docs/DEMO_REVIEW_2026-08-13.md #8)。
+    game_start_sec = 0.0
+    # グラフ横軸のスケール。試合ごとに巻き直す (簡明な実装を優先、境界検知の
+    # たびに「その時点からの残り動画尺」で再計算する。1試合目/境界が一度も
+    # 起きない動画では total_dur のまま=従来と完全に同一の挙動)。
+    graph_total = total_dur
     step = max(1, int(round(sample_interval * fps)))
     written = 0
     # タイムラインdump (2026-08-11 追加)。dump_timeline_path が None の間引き
@@ -2197,7 +2545,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv_ema, p1_last, drivers = 0.0, 0.5, []
             ukey1 = ukey2 = sat1 = sat2 = 0.0
             counter_p1 = counter_p2 = float("nan")
+            defender_side, incoming_ojama = None, 0.0
             history.clear()
+            # (#8 修正) グラフ横軸をこの試合の開始 (=現在の t - start_sec) を
+            # 原点にリセットし、スケールも「この時点からの残り動画尺」に
+            # 巻き直す (試合ごとに巻き直してよい、簡明な実装を優先)。
+            game_start_sec, graph_total = _reset_graph_origin(t, start_sec, n, fps)
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
              efire_tracker) = _fresh_trackers(
                 model, attribution_exclude=attribution_exclude)
@@ -2282,24 +2635,41 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # 相手が返せない攻撃を持っている側を有利にする。
             # 着弾までの時間予算を、 **そのときの連鎖数から** 出す。
             # 固定値ではなく局面依存 (2026-08-09 user指摘)。
-            # estimate_chain_anim_duration_sec は 23 動画 418 イベントの実測
-            # ベース (0.4 秒/連鎖)。
-            _cc = 0
-            for _sr in (r.p1, r.p2):
-                _ev = getattr(_sr, "chain_event", None)
-                _n = getattr(_ev, "chain_count", None) if _ev is not None else None
-                if _n:
-                    _cc = max(_cc, int(_n))
-            _budget = iv.estimate_chain_anim_duration_sec(float(_cc)) if _cc else 0.0
-            counter_adv, counter_p1, counter_p2 = (
-                counter_tracker.update(
+            # (2026-08-13 #3/#4/#5 修正、docs/DEMO_REVIEW_2026-08-13.md 参照)
+            # 時間予算の算出 (#3) と 受け側限定・実飛来量ベース (#4/#5) は
+            # それぞれ独立フラグで、下ごしらえ (_detect_chain_attacker) だけ共有する。
+            attack_obs = _detect_chain_attacker(r.p1, r.p2, t)
+            _budget = _resolve_counter_time_budget(
+                attack_obs, t, enable_counter_remaining_time, _chain_len_table)
+            if not enable_counter_reach:
+                counter_adv, counter_p1, counter_p2 = 0.0, float("nan"), float("nan")
+                defender_side, incoming_ojama = None, 0.0
+            elif enable_counter_defender_only:
+                defender_side, incoming_ojama = _resolve_defender_threat(
+                    attack_obs, snap, tracker._elapsed(t))
+                _, counter_p1, counter_p2 = counter_tracker.update(
+                    b1, b2, _budget,
+                    next1=getattr(r.p1, "next_pair", None),
+                    next2=getattr(r.p2, "next_pair", None),
+                    t_sec=t, defender_side=defender_side,
+                    threshold_ojama=incoming_ojama if defender_side else None,
+                )
+                defender_prob = (
+                    counter_p1 if defender_side == "1P"
+                    else counter_p2 if defender_side == "2P" else float("nan")
+                )
+                counter_adv = (
+                    _counter_defender_adv(defender_side, defender_prob, incoming_ojama, b1, b2)
+                    if defender_side is not None else 0.0
+                )
+            else:
+                defender_side, incoming_ojama = None, 0.0
+                counter_adv, counter_p1, counter_p2 = counter_tracker.update(
                     b1, b2, _budget,
                     next1=getattr(r.p1, "next_pair", None),
                     next2=getattr(r.p2, "next_pair", None),
                     t_sec=t,  # 時間ベース間引き (2026-08-12、CounterReachTracker.update 参照)
-                ) if enable_counter_reach
-                else (0.0, float("nan"), float("nan"))
-            )
+                )
             adv = (W_PRESSURE * pres + W_FORECAST * fc
                    + W_MODEL * model_adv + W_THREAT * threat
                    + W_COUNTER * counter_adv) + sl_bias
@@ -2343,9 +2713,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_early_fire_reaction and efire_tracker.bias != 0.0:
             disp_adv = max(-100.0, min(100.0, adv_ema + efire_tracker.bias))
             disp_p1 = adv_to_winprob(disp_adv)
+        # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
+        # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
+        # (t - start_sec) と一致するため必ず 0 から始まる。境界が一度も
+        # 起きない動画では game_start_sec=0.0 のままなので従来 (t - start_sec)
+        # と完全に同一 (backwards compat)。
+        t_rel = _graph_relative_time(t, start_sec, game_start_sec)
         if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
             # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦を維持
-            history.append((t - start_sec, disp_adv))
+            history.append((t_rel, disp_adv))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         if not render:
@@ -2391,13 +2767,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if layout == "panel":
             frame_out = _draw_panel_layout(
                 display_frame, disp_adv, disp_p1, drivers, waiting,
-                history, t - start_sec, total_dur,
+                history, t_rel, graph_total,
                 state1=r.p1.state.name, state2=r.p2.state.name,
-                counter_text=_build_counter_text(counter_p1, counter_p2),
+                counter_text=_resolve_counter_text(
+                    enable_counter_defender_only, defender_side,
+                    counter_p1, counter_p2, incoming_ojama),
                 elapsed_sec=t - start_sec)
         else:
             frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
-                                      history, t - start_sec, total_dur,
+                                      history, t_rel, graph_total,
                                       ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2)
         writer.write(frame_out)
         written += 1
@@ -2536,6 +2914,21 @@ def main() -> None:
              "ため通常は不要。",
     )
     ap.add_argument(
+        "--counter-remaining-time", action="store_true", default=False,
+        dest="enable_counter_remaining_time",
+        help="打ち合い応手の時間予算の意味論を修正する (2026-08-13、"
+             "docs/DEMO_REVIEW_2026-08-13.md #3)。経過時間の控除 + 観測連鎖数"
+             "を最終連鎖数と誤認しない条件付き補正 (E[最終|N到達]) に切り替える。"
+             "既定 OFF = 従来挙動 (観測連鎖数×0.4秒をそのまま予算にする)。",
+    )
+    ap.add_argument(
+        "--counter-defender-only", action="store_true", default=False,
+        dest="enable_counter_defender_only",
+        help="打ち合い応手確率を受け側限定・実飛来量ベースに切り替える "
+             "(2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #4/#5)。既定 OFF = "
+             "従来挙動 (固定閾値12個を両側常時計算)。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -2653,6 +3046,8 @@ def main() -> None:
              enable_capability_pressure=a.enable_capability_pressure,
              disable_pressure=a.disable_pressure,
              enable_counter_reach=a.enable_counter_reach,
+             enable_counter_remaining_time=a.enable_counter_remaining_time,
+             enable_counter_defender_only=a.enable_counter_defender_only,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              layout=a.layout,
