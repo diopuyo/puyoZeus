@@ -10,8 +10,10 @@
 #
 # 区間 (score OCR 粗スキャン scripts/_scan_score_series_video74_2026-08-13.py で特定):
 #   1試合目の実開始 t≈237.4s (0-0 stable) → 少し前の t=230 から開始。
-#   3試合目の終了 t≈405.7s (score表示が None に落ちる=結果画面遷移) → +5秒強で t=411 まで。
+#   3試合目の終了 t≈405.7s (score表示が None に落ちる=結果画面遷移) → +約1.3秒で t=407 まで。
 #   (試合境界: t=284/340/406 で 0-0 リセット確認済み、464/450/490/528/614 も後続に検出)
+#   検収指摘⑨ (2026-08-14): 旧 --end-sec 411 は4試合目の頭2.5秒が混入していた
+#   (3試合目終了 t≈405.7 に対し余裕が過大)。407 に短縮して排除。
 cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 export PYTHONPATH=.
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
@@ -26,7 +28,7 @@ CMD="nice -n 19 ./venv/bin/python -u -m scripts.visualize_advantage_overlay \
   --stable-majority-window \
   --enable-ojama-fall-placement-override --enable-ojama-fall-entry-hardening \
   --enable-ojama-fall-scoped-exit --resolved-exchange-eval --enable-pseudo-chain-score-fill \
-  --start-sec 230 --end-sec 411 \
+  --start-sec 230 --end-sec 407 \
   --out $OUTDIR/demo2_video74_3match.mp4"
 echo "[cmd] $CMD"
 eval "$CMD"

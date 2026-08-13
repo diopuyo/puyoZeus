@@ -638,3 +638,64 @@ def test_resolved_no_redecide_when_settled_score_not_exceeding(monkeypatch) -> N
     snap_settled = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=100)
     tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), snap_settled, 0.0)
     assert len(calls) == 1  # 予測(5000) > 確定値(100) のため再決着しない
+
+
+# ============================
+# ホールド解放条件 (検収指摘⑤、2026-08-14)
+# ============================
+# 両者発火でホールド中、片方が先に連鎖を終えた (chain_event が None化) 瞬間に
+# 判定が動く事象の回帰テスト。tracker.update 自体は「両側 chain_event が
+# None」まで正しく hold を維持する (AND ゲート) ことを固定し、実際の漏洩点
+# だった呼出側の settled 上書きヘルパー (resolved_hold_freezes_settled) も
+# 併せて検証する。
+
+
+def test_resolved_holds_when_only_one_side_ends_first(monkeypatch) -> None:
+    """両者発火でホールド後、片方の chain_event だけ None になっても
+    ホールドは維持される (deactivate しない) — 検収指摘⑤の核心。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    # 1P (ev1) の連鎖だけ先に終わり chain_event が None 化、2P (ev2) は継続中。
+    active, just_deactivated = tracker.update(
+        _make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert active is True  # 部分解放しない
+    assert just_deactivated is False
+    assert tracker.hold_adv == held  # 保持値も不変
+
+
+def test_resolved_deactivates_only_when_both_sides_end(monkeypatch) -> None:
+    """両側とも chain_event が None に戻ったときだけ deactivate する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    # 1P だけ終了 → まだ保持。
+    active, _ = tracker.update(
+        _make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert active is True
+    # 続いて 2P も終了 → ここで初めて解放。
+    active, just_deactivated = tracker.update(
+        _make_signal(None, 500), _make_signal(None, 300), _make_snapshot(), 0.0)
+    assert active is False
+    assert just_deactivated is True
+
+
+def test_resolved_hold_freezes_settled_only_while_active() -> None:
+    """呼出側 (main ループ) の settled 上書きヘルパー: hold 中のみ True を
+    返し、settled 判定 (per_side_settled の片側OR) を素通りさせない
+    (検収指摘⑤の実漏洩点)。フラグ無効時/非hold中は常に False = 従来挙動。"""
+    from scripts.visualize_advantage_overlay import resolved_hold_freezes_settled
+
+    assert resolved_hold_freezes_settled(True, True) is True
+    assert resolved_hold_freezes_settled(True, False) is False
+    assert resolved_hold_freezes_settled(False, True) is False
+    assert resolved_hold_freezes_settled(False, False) is False

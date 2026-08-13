@@ -466,6 +466,28 @@ class ResolvedExchangeTracker:
         return True, False
 
 
+def resolved_hold_freezes_settled(
+    enable_resolved_exchange_eval: bool, resolved_active: bool,
+) -> bool:
+    """決着ホールド中は per_side_settled の片側 STABLE 判定を素通りさせない
+    (検収指摘⑤、2026-08-14)。
+
+    `ResolvedExchangeTracker.update` 自体は「両側 chain_event が None」まで
+    正しく hold を維持する (`ev1 is None and ev2 is None` の AND ゲート)。
+    だが呼出側 (main ループ) の `enable_per_side_settled` は片側だけ STABLE
+    になった瞬間に settled=True へ OR で倒す仕様のため、片方の連鎖が先に
+    終わった瞬間 (chain_event が None化 = 状態が STABLE に戻る瞬間) に
+    settled 再計算が起動し、「片方は最新盤面・もう片方は連鎖前の凍結盤面」
+    という不整合ペアで内部 EMA (adv_ema/p1_last) が汚染される。 hold 解除
+    直後にその汚染が漏れて表示値が跳ぶ (「部分解放」に見える実体)。
+    True を返したら呼出側は settled を強制的に False に上書きする
+    (= hold 中は内部状態も含め完全凍結、両側 chain_event が None に戻り
+    tracker が deactivate するまで settled 再計算そのものを止める)。
+    `enable_resolved_exchange_eval` 無効時は常に False (従来挙動と完全一致)。
+    """
+    return enable_resolved_exchange_eval and resolved_active
+
+
 # (改修1) スコアリセット検知: 新ゲーム開始/全消し等でスコアが「前フレームから
 #   大幅減少」または「両者ほぼ0」に戻ったら試合境界とみなし、凍結盤面(b1/b2)や
 #   各種持続トラッカーを全て初期化する。空盤面(スコア0)なのに前試合の非空盤面
@@ -2868,6 +2890,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 r.p1.state == BoardState.STABLE
                 and r.p2.state == BoardState.STABLE
             )
+        # (検収指摘⑤ 2026-08-14) 決着ホールド中は settled 再計算そのものを
+        # 止める (resolved_hold_freezes_settled docstring 参照)。フラグ無効時
+        # /非hold中は常に False = 従来判定を素通り (backwards compat)。
+        if resolved_hold_freezes_settled(enable_resolved_exchange_eval, resolved_active):
+            settled = False
         # #9 決着先読みの保持値を adv_ema/p1_last へ引き継ぐ際 (deactivate 直後)、
         # 同一フレームで settled 再計算が走っていればそちらを優先する
         # (真の観測後盤面 > 決着先読みの1回評価、フラグ無効時は常に False)。
