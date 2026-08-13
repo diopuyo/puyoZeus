@@ -139,9 +139,24 @@ user確定 (2026-07-22) のため不変。採否判断用の少数動画サブ�
 先行させ、価値が確認されたら native ポートで本採用する方針。
 min_puyos_to_ignite (実測2000ms/行) は native化で43ms/行まで短縮できた
 ため通常の既定ON経路に残す (`GRID_ONLY_HEAVY_INDICATORS_NATIVE` 参照)。
-native化しなかった simultaneous_pop_richness (≈149ms/行) /
-chain_articulation_point_count (≈59ms/行) は許容範囲内 (native拡張に
-無い情報を要するため意図的に据え置き、モジュール内コメント参照)。
+native化しなかった chain_articulation_point_count (≈59ms/行) は許容範囲内
+(native拡張に無い情報を要するため意図的に据え置き、モジュール内コメント参照)。
+**simultaneous_pop_richness (≈149ms/行) は同日中に native化した** (タスク#10
+「移植1」で puyo_core へ `simulate_chain_with_steps` [ステップごとの同時消し
+グループ数/色数/消去個数を露出する新API] が追加されたため。
+`_native_simultaneous_pop_richness` 参照、実測コストは下記追記節)。
+
+## simultaneous_pop_richness native対応の実測 (2026-08-13 追記、タスク#10仕上げ)
+実測 (300盤面サンプル、loadavg 15〜18の中負荷下): **12.97ms/行 → 0.81ms/行
+(16.0倍)**。この列だけで full profile (grid-only heavy指標合計、150盤面
+サンプル) の行あたりコストの **61.8%** を占めていたと確認 (native化前
+20.43ms/行 → native化後7.80ms/行、2.6倍)。148動画換算 (実測109本の平均
+7,141行/本から概算、総行数≈1,057,000行): grid-only heavy指標の計算だけで
+**約6.0時間 → 約2.3時間** (savings≈3.7時間)。この数字は指標計算部分のみ
+(npz読み込み・diff計算・CSV書き出し等のI/Oは含まない) であり、実際の
+フルCSV生成時間はこれより大きい。完全一致は
+`tests/test_build_labeled_win_from_npz.py::TestNativeHeavyIndicatorParity::
+test_simultaneous_pop_richness_native_matches_python` (60盤面) で確認済み。
 
 ## タスク#8 (2026-08-13、docs/CROSS_CUTTING_AUDIT_2026-08-13.md P4 決着の反映)
 おじゃま収支の真値列 (ojama_net_balance/ojama_forecast、npz収集64本目以降)
@@ -201,6 +216,7 @@ from src.puyo_core_bridge import (  # noqa: E402
     chain_metrics_after_drops as _native_chain_metrics_after_drops,
     simulate_after_drops as _native_simulate_after_drops,
     simulate_chain as _native_simulate_chain,
+    simulate_chain_with_steps as _native_simulate_chain_with_steps,
 )
 from src.scoring import ALL_CLEAR_BONUS  # noqa: E402
 
@@ -547,6 +563,44 @@ def _native_sub_chain_count(
     return iv.IndicatorV2Value(score=iv._clamp01(raw / iv.NORM_SUB_CHAIN), raw=raw)
 
 
+def _native_simultaneous_pop_richness(
+    board: Board, use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 XII-5 `simultaneous_pop_richness` の native 分岐版
+    (2026-08-13、タスク#10「移植1」で puyo_core に追加された
+    `simulate_chain_with_steps` [ステップごとの同時消しグループ数/色数/
+    消去個数を露出する新API] を使って初めて native化可能になった。
+    それまでは「native ChainSimResult にステップ内 erased_groups数の情報が
+    無い」ため意図的に Python 実装のまま据え置いていた [直下「A-1再接続分」
+    コメント参照、経緯を記録として残す]。
+
+    `iv.simultaneous_pop_richness` と同一の探索 (takapt定石30通り→
+    最良候補を simulate→ステップごとの同時消しグループ数の平均) だが、
+    最良候補の再simulateを `simulate_chain_with_steps` (ステップ情報付き)
+    1回で済ませる (`_native_takapt_best_drop` の `best_result` は
+    ステップ情報を持たない `ChainSimResult` のため、そのままでは
+    `erased_groups` 相当の値を取り出せない — これが native化できなかった
+    理由そのものであり、`simulate_chain_with_steps` の追加で解消した)。
+
+    use_native=False または拡張未導入時は既存 `iv.simultaneous_pop_richness`
+    にそのまま委譲する (完全一致、indicators_v2.py 自体は無変更)。
+    """
+    if not (use_native and _PUYO_CORE_AVAILABLE and _board_is_gravity_consistent(board)):
+        return iv.simultaneous_pop_richness(board)
+    best_chain, best_board, _best_result = _native_takapt_best_drop(board)
+    if best_board is None or best_chain == 0:
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    _result, steps = _native_simulate_chain_with_steps(
+        best_board, exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    if not steps:
+        return iv.IndicatorV2Value(score=0.0, raw=0.0)
+    avg_groups = sum(s.num_groups for s in steps) / len(steps)
+    return iv.IndicatorV2Value(
+        score=iv._clamp01(avg_groups / iv.NORM_SIMULTANEOUS_POP), raw=avg_groups,
+    )
+
+
 # ============================
 # A-1 再接続分の native 版 (2026-08-13 追加)
 # ============================
@@ -557,11 +611,15 @@ def _native_sub_chain_count(
 # find_groups のみで simulate 不要 (実測 <1ms/行) のため native化不要、
 # Python 実装のままとする (GRID_ONLY_HEAVY_INDICATORS_NATIVE に載せない =
 # 常に iv.xxx が呼ばれる、_resolve_indicator_registry のフォールバック参照)。
-# simultaneous_pop_richness は native ChainSimResult に無い情報 (ステップ内
-# erased_groups数) を要するため「無理はしない」方針により Python 実装の
-# まま (実測149ms/行、重いが致命的ではないため許容)。
-# chain_articulation_point_count も同様 (`_erase_groups` 等の内部詳細が
-# puyo_core 未露出のため native化しない、実測59ms/行で許容範囲)。
+# simultaneous_pop_richness は2026-08-13当初「native ChainSimResult に無い
+# 情報 (ステップ内erased_groups数) を要する」として Python 実装のまま
+# 据え置いていたが、同日中にタスク#10「移植1」で puyo_core へ
+# `simulate_chain_with_steps` が追加されたため `_native_simultaneous_pop_
+# richness` で native化済み (上記関数、GRID_ONLY_HEAVY_INDICATORS_NATIVE
+# 登録済み)。
+# chain_articulation_point_count は同種の制約が未解消のため Python 実装の
+# まま (`_erase_groups` 等の内部詳細が puyo_core 未露出、実測59ms/行で
+# 許容範囲)。
 # min_puyos_to_ignite/saturation_chain は当初「無理はしない」対象だったが、
 # 実測でそれぞれ2000ms/行・12500ms/行という桁違いのコストが判明したため
 # (他列の数十〜数百倍、148本再学習が非現実的な時間になる) 例外的に
@@ -858,6 +916,10 @@ GRID_ONLY_HEAVY_INDICATORS_NATIVE: dict[str, Callable[..., "iv.IndicatorV2Value"
     "min_puyos_to_ignite": _native_min_puyos_to_ignite,
     "saturation_chain": _native_saturation_chain,
     "saturation_chain_upper": _native_saturation_chain_upper,
+    # タスク#10「移植1」(2026-08-13、puyo_core に simulate_chain_with_steps
+    # 追加) で native化可能になった (上記 _native_simultaneous_pop_richness
+    # 直上コメント参照)。
+    "simultaneous_pop_richness": _native_simultaneous_pop_richness,
 }
 
 # ============================

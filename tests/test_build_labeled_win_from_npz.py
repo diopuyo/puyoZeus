@@ -688,6 +688,44 @@ class TestNativeHeavyIndicatorParity:
             f"saturation_chain: {len(mismatches)}/{len(sample)} 件不一致: {mismatches}"
         )
 
+    # simultaneous_pop_richness の Python版は実測≈149ms/行 (min_puyos_to_
+    # ignite/saturation_chain ほど極端ではないが軽くない) のため、1000件
+    # フルサンプルではなく中サンプルで比較する (タスク#10仕上げ、2026-08-13)。
+    _SIMULTANEOUS_POP_PARITY_SAMPLE_SIZE: int = 60
+
+    def test_simultaneous_pop_richness_native_matches_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """simultaneous_pop_richness: タスク#10「移植1」
+        (`native/puyo_core::simulate_chain_with_steps`) で native化した
+        native分岐が既存 Python 実装と完全一致すること (乱数を含まないため
+        無条件で完全一致するはず)。"""
+        sample = native_parity_boards[: self._SIMULTANEOUS_POP_PARITY_SAMPLE_SIZE]
+        mismatches = []
+        for i, board in enumerate(sample):
+            py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["simultaneous_pop_richness"](board)
+            native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["simultaneous_pop_richness"](
+                board, use_native=True,
+            )
+            if py_val.score != native_val.score or py_val.raw != native_val.raw:
+                mismatches.append((i, py_val, native_val))
+        assert not mismatches, (
+            f"simultaneous_pop_richness: {len(mismatches)}/{len(sample)} 件不一致 "
+            f"(先頭5件): {mismatches[:5]}"
+        )
+
+    def test_simultaneous_pop_richness_use_native_false_delegates_to_python(
+        self, native_parity_boards: "list",
+    ) -> None:
+        """use_native=False で native 分岐が完全無効化されること。"""
+        board = native_parity_boards[0]
+        py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["simultaneous_pop_richness"](board)
+        native_off = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["simultaneous_pop_richness"](
+            board, use_native=False,
+        )
+        assert py_val.score == native_off.score
+        assert py_val.raw == native_off.raw
+
 
 # ============================
 # A-1: 脱落11列の再接続 (2026-08-13 ラウンド2提案書、next非依存の10列)
