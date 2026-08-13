@@ -2191,6 +2191,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_counter_defender_only: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
+             enable_ojama_fall_placement_override: bool | None = None,
+             enable_ojama_fall_entry_hardening: bool | None = None,
+             enable_ojama_fall_scoped_exit: bool | None = None,
              layout: str = "overlay",
              show_excluded_attribution: bool = False,
              render: bool = True,
@@ -2482,6 +2485,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard),
         stable_majority_window=_resolve_flag(
             "stable_majority_window", stable_majority_window),
+        # OJAMA_FALL誤分類の修正フラグ3種 (2026-08-13 デモレビュー対応、既定OFF)
+        enable_ojama_fall_placement_override=_resolve_flag(
+            "enable_ojama_fall_placement_override",
+            enable_ojama_fall_placement_override),
+        enable_ojama_fall_entry_hardening=_resolve_flag(
+            "enable_ojama_fall_entry_hardening",
+            enable_ojama_fall_entry_hardening),
+        enable_ojama_fall_scoped_exit=_resolve_flag(
+            "enable_ojama_fall_scoped_exit", enable_ojama_fall_scoped_exit),
         # 本番採用の認識フラグ群 (2026-08-13 是正)。RECOGNITION_ADOPTED の
         # 6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
         # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
@@ -3036,6 +3048,18 @@ def main() -> None:
              "デフォルト None = load_default 本体の既定値 (False) に従う。A/B比較用。",
     )
     ap.add_argument(
+        "--enable-ojama-fall-placement-override", action=argparse.BooleanOptionalAction,
+        default=None, dest="enable_ojama_fall_placement_override",
+        help="OJAMA_FALL中の実設置検知で即exit (案2、2026-08-13)。None=既定OFF")
+    ap.add_argument(
+        "--enable-ojama-fall-entry-hardening", action=argparse.BooleanOptionalAction,
+        default=None, dest="enable_ojama_fall_entry_hardening",
+        help="OJAMA_FALL入口の実時間化+連鎖直後の割込抑制 (案4-lite、2026-08-13)。None=既定OFF")
+    ap.add_argument(
+        "--enable-ojama-fall-scoped-exit", action=argparse.BooleanOptionalAction,
+        default=None, dest="enable_ojama_fall_scoped_exit",
+        help="OJAMA_FALL出口のおじゃま限定監視+会計連動 (Stage2根治、2026-08-13)。None=既定OFF")
+    ap.add_argument(
         "--layout", choices=VALID_LAYOUTS, default="overlay", dest="layout",
         help="出力レイアウト (2026-08-10 user指示追加)。'overlay'(既定)は従来通り"
              "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
@@ -3159,6 +3183,9 @@ def main() -> None:
              enable_counter_defender_only=a.enable_counter_defender_only,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
+             enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
+             enable_ojama_fall_entry_hardening=a.enable_ojama_fall_entry_hardening,
+             enable_ojama_fall_scoped_exit=a.enable_ojama_fall_scoped_exit,
              layout=a.layout,
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
