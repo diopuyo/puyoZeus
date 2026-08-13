@@ -1371,6 +1371,23 @@ class RecognitionPipeline:
         # default False = 従来の厳密連続一致を完全維持・bit-identical
         # (backwards compat、148動画収集走行中のため既定OFF必須)。
         stable_majority_window: bool = False,
+        # 案2 (enable_ojama_fall_placement_override, 2026-08-13、OJAMA_FALL
+        # 誤分類根因調査): OJAMA_FALL 滞在中の実設置検知による早期 exit。
+        # 詳細は src/ojama_visual_detector.py の OjamaVisualDetector docstring
+        # 参照。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_placement_override: bool = False,
+        # 案4-lite (enable_ojama_fall_entry_hardening, 2026-08-13、根因調査
+        # 追補): OJAMA_FALL entry 判定を実時間ベースに切替 + CHAIN 割り込み
+        # の厳格化。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_entry_hardening: bool = False,
+        # 案3 (enable_chain_gate_raw_fallback, 2026-08-13、OJAMA_FALL誤分類
+        # 根因調査、優先度最下位): 4連結ゲートの cnn_board フォールバック
+        # (CHAIN 継続中のみ)。詳細は src/state_detectors.py の
+        # ChainPhaseDetector docstring 参照。default False = 従来挙動完全
+        # 維持・bit-identical (backwards compat)。
+        enable_chain_gate_raw_fallback: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1859,6 +1876,19 @@ class RecognitionPipeline:
         # 格納が必要 (BoardStateMachine へそのまま伝播するため)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         self._enable_stable_majority_window: bool = bool(stable_majority_window)
+        # 案2/案4-lite/案3 (2026-08-13、OJAMA_FALL誤分類根因調査):
+        # _build_state_machine 呼び出し前に格納が必要 (detector へそのまま
+        # 伝播するため)。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        self._enable_ojama_fall_placement_override: bool = bool(
+            enable_ojama_fall_placement_override
+        )
+        self._enable_ojama_fall_entry_hardening: bool = bool(
+            enable_ojama_fall_entry_hardening
+        )
+        self._enable_chain_gate_raw_fallback: bool = bool(
+            enable_chain_gate_raw_fallback
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -1995,6 +2025,13 @@ class RecognitionPipeline:
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
             stable_majority_window=self._enable_stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                self._enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=(
+                self._enable_ojama_fall_entry_hardening
+            ),
+            enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2033,6 +2070,13 @@ class RecognitionPipeline:
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
             stable_majority_window=self._enable_stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                self._enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=(
+                self._enable_ojama_fall_entry_hardening
+            ),
+            enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2395,6 +2439,14 @@ class RecognitionPipeline:
         # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         stable_majority_window: bool = False,
+        # 案2/案4-lite (2026-08-13、OJAMA_FALL誤分類根因調査): OjamaVisualDetector
+        # へそのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_ojama_fall_placement_override: bool = False,
+        enable_ojama_fall_entry_hardening: bool = False,
+        # 案3 (2026-08-13、優先度最下位): ChainPhaseDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_chain_gate_raw_fallback: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2426,6 +2478,7 @@ class RecognitionPipeline:
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
         )
         detectors: list = [
             chain_det,
@@ -2439,6 +2492,12 @@ class RecognitionPipeline:
                 enable_ojama_fall_board_settle=enable_ojama_fall_board_settle,
                 enable_ojama_entry_gravity_settle_guard=(
                     enable_ojama_entry_gravity_settle_guard
+                ),
+                enable_ojama_fall_placement_override=(
+                    enable_ojama_fall_placement_override
+                ),
+                enable_ojama_fall_entry_hardening=(
+                    enable_ojama_fall_entry_hardening
                 ),
             )
             detectors.append(ovd)
@@ -2752,6 +2811,12 @@ class RecognitionPipeline:
         # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
         # (backwards compat、148動画収集走行中のため既定OFF必須)。
         stable_majority_window: bool = False,
+        # 案2/案4-lite/案3 (2026-08-13、OJAMA_FALL誤分類根因調査): __init__ へ
+        # そのまま伝播する。 default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_ojama_fall_placement_override: bool = False,
+        enable_ojama_fall_entry_hardening: bool = False,
+        enable_chain_gate_raw_fallback: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2967,6 +3032,11 @@ class RecognitionPipeline:
             enable_burst_close_extension=enable_burst_close_extension,
             burst_chain_gap_max_sec=burst_chain_gap_max_sec,
             stable_majority_window=stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
+            enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
         )
 
     # ------------------------------------------------------------------
@@ -5629,6 +5699,7 @@ class RecognitionPipeline:
             ojama_top_positive=_ojama_top_positive,
             chain_max_hold_expired=chain_max_hold_expired,  # 案P3
             effect_gate_window_active=_effect_gate_window_active,
+            own_score_delta=score_d_for_self,  # 案2 (2026-08-13)
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、

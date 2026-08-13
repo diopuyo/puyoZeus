@@ -11,6 +11,7 @@ from src.board_state_machine import (
     DetectorSignals,
     StateContext,
 )
+from src.chain import ChainSimulator
 from src.state_detectors import (
     ChainPhaseDetector,
     EffectPhaseDetector,
@@ -546,3 +547,83 @@ def test_bugfix_c_disabled_reproduces_stale_timeout_bug() -> None:
     # 旧開始時刻 (0.0) から MAX_SEC 超過分の時間が経過 → 誤って即 STABLE 化
     # (連鎖途中の中途半端な盤面が確定してしまう旧挙動、バグC 本体)
     assert result == BoardState.STABLE
+
+
+# ============================
+# 案3 (enable_chain_gate_raw_fallback, 2026-08-13、OJAMA_FALL誤分類根因調査、
+# 優先度最下位): 4連結ゲートの cnn_board フォールバック
+# ============================
+
+
+def _erasable_board() -> Board:
+    """4 連結 (消去可能) な盤面 (最下段 col 0-3 に赤)。"""
+    return _board_with_puyos([(12, c, COLOR_RED) for c in range(4)])
+
+
+def _non_erasable_board() -> Board:
+    """4 連結が無い盤面 (赤 3 個のみ、消去不可)。"""
+    return _board_with_puyos([(12, c, COLOR_RED) for c in range(3)])
+
+
+def test_chain_gate_rejects_when_confirmed_lacks_erasable_default_off() -> None:
+    """回帰: confirmed_board に 4連結が無ければ既定 (フラグ OFF) は chain_event
+    を拒否する (cycle 49 従来挙動、cnn_board に 4連結があっても見ない)。
+    """
+    det = ChainPhaseDetector(chain_sim=ChainSimulator())
+    ctx = StateContext(state=BoardState.STABLE, confirmed_board=_non_erasable_board())
+    ev = _StubChainEvent(trigger_sec=0.0, end_sec=1.0)
+    sig = _signal(0.0, _erasable_board(), chain_event=ev)
+    assert det.detect(ctx, sig) is None, (
+        "既定 (enable_chain_gate_raw_fallback=False) では cnn_board を見ず拒否するはず"
+    )
+
+
+def test_chain_gate_raw_fallback_passes_during_chain_continuation() -> None:
+    """案3: enable_chain_gate_raw_fallback=True かつ ctx.state==CHAIN (継続中)
+    なら、 confirmed_board に 4連結が無くても cnn_board (常時最新) に 4連結が
+    あれば chain_event を通す。
+    """
+    det = ChainPhaseDetector(
+        chain_sim=ChainSimulator(), enable_chain_gate_raw_fallback=True,
+    )
+    ctx = StateContext(state=BoardState.CHAIN, confirmed_board=_non_erasable_board())
+    ev = _StubChainEvent(trigger_sec=0.0, end_sec=1.0)
+    sig = _signal(0.0, _erasable_board(), chain_event=ev)
+    assert det.detect(ctx, sig) == BoardState.CHAIN, (
+        "CHAIN 継続中は cnn_board フォールバックで chain_event を通すはず"
+    )
+
+
+def test_chain_gate_raw_fallback_not_applied_on_initial_entry() -> None:
+    """案3: enable_chain_gate_raw_fallback=True でも ctx.state!=CHAIN
+    (初回 CHAIN 突入判定) には適用しない。
+
+    4連結ゲートの主目的である「chain_hold 残響の誤 CHAIN 突入拒否」
+    (実測 t188-193) を壊さないための必須条件。
+    """
+    det = ChainPhaseDetector(
+        chain_sim=ChainSimulator(), enable_chain_gate_raw_fallback=True,
+    )
+    ctx = StateContext(state=BoardState.STABLE, confirmed_board=_non_erasable_board())
+    ev = _StubChainEvent(trigger_sec=0.0, end_sec=1.0)
+    sig = _signal(0.0, _erasable_board(), chain_event=ev)
+    assert det.detect(ctx, sig) is None, (
+        "初回 CHAIN 突入判定 (ctx.state != CHAIN) にはフォールバックを適用しない"
+        "はず (chain_hold 残響の誤突入拒否ケースを壊さないため)"
+    )
+
+
+def test_chain_gate_raw_fallback_still_rejects_when_cnn_board_also_lacks_erasable() -> None:
+    """案3: フォールバック ON でも cnn_board にも 4連結が無ければ拒否を維持する
+    (= t188-193 の「confirmed にも cnn にも 4連結が無く正しく拒否している
+    ケース」を壊さないことの確認)。
+    """
+    det = ChainPhaseDetector(
+        chain_sim=ChainSimulator(), enable_chain_gate_raw_fallback=True,
+    )
+    ctx = StateContext(state=BoardState.CHAIN, confirmed_board=_non_erasable_board())
+    ev = _StubChainEvent(trigger_sec=0.0, end_sec=1.0)
+    sig = _signal(0.0, _non_erasable_board(), chain_event=ev)
+    assert det.detect(ctx, sig) is None, (
+        "cnn_board にも 4連結が無ければフォールバック ON でも拒否を維持するはず"
+    )

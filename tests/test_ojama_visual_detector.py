@@ -21,6 +21,8 @@ from src.board_state_machine import (
 )
 from src.ojama_visual_detector import (
     OJAMA_CONSEC_THRESH,
+    OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER,
+    OJAMA_ENTRY_CONSEC_SEC,
     OJAMA_FALL_MAX_SEC,
     OJAMA_FALL_SETTLE_DIFF_THRESHOLD,
     OJAMA_FALL_SETTLE_MIN_FRAMES,
@@ -28,6 +30,7 @@ from src.ojama_visual_detector import (
     OJAMA_SETTLE_CONSEC,
     OjamaVisualDetector,
     _count_top_ojama,
+    _has_ojama_fall_placement_evidence,
 )
 from src.state_detectors import ChainPhaseDetector, TsumoPhaseDetector
 
@@ -788,4 +791,304 @@ def test_bugfix_b_gravity_settle_guard_disabled_reproduces_bug() -> None:
     assert BoardState.OJAMA_FALL in results, (
         "フラグ OFF (既定) では GRAVITY_SETTLE 中でも旧挙動通り OJAMA_FALL へ"
         " 発火するはず (backwards compat 回帰防止)"
+    )
+
+
+def test_str_detector_signals_own_score_delta_default_zero() -> None:
+    """ST-R: DetectorSignals.own_score_delta のデフォルトは 0。"""
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+    )
+    assert sig.own_score_delta == 0, "デフォルト 0 で既存ビルドが壊れない"
+
+
+# ============================
+# 案2 (enable_ojama_fall_placement_override, 2026-08-13、OJAMA_FALL誤分類
+# 根因調査): OJAMA_FALL 中の実設置検知による早期 exit
+# ============================
+
+
+def test_placement_evidence_true_on_slide_motion() -> None:
+    """_has_ojama_fall_placement_evidence: slide_motion=True で証拠ありと判定する。"""
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+        slide_motion=True, own_score_delta=0,
+    )
+    assert _has_ojama_fall_placement_evidence(sig) is True
+
+
+def test_placement_evidence_true_on_own_score_delta() -> None:
+    """_has_ojama_fall_placement_evidence: own_score_delta>0 (落下ボーナス等)
+    で証拠ありと判定する。
+    """
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+        slide_motion=False, own_score_delta=8,
+    )
+    assert _has_ojama_fall_placement_evidence(sig) is True
+
+
+def test_placement_evidence_false_without_signals() -> None:
+    """_has_ojama_fall_placement_evidence: 両方 False/0 なら証拠なしと判定する。"""
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+        slide_motion=False, own_score_delta=0,
+    )
+    assert _has_ojama_fall_placement_evidence(sig) is False
+
+
+def test_placement_override_exits_immediately_on_slide_motion() -> None:
+    """enable_ojama_fall_placement_override=True: OJAMA_FALL 中に
+    slide_motion=True を検知したら settle 判定を待たず即 STABLE 復帰する。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+    )
+    # frame 0: OJAMA_FALL 突入 (settle start 記録のみ、必ず None)
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(20), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    # frame 1: slide_motion=True (= 実設置の証拠) → settle 未達でも即 STABLE
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(22),
+        is_match_active=True, slide_motion=True,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result == BoardState.STABLE, (
+        "実設置の証拠 (slide_motion) があれば settle 未達でも即 STABLE 復帰するはず"
+    )
+
+
+def test_placement_override_exits_immediately_on_own_score_delta() -> None:
+    """enable_ojama_fall_placement_override=True: own_score_delta>0 (落下
+    ボーナス等) でも settle 判定を待たず即 STABLE 復帰する
+    (docs/DEMO_REVIEW_2026-08-13.md 場面1: score 213→221 の +8=落下ボーナスと
+    同じパターン)。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+    )
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(20), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(22),
+        is_match_active=True, own_score_delta=8,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result == BoardState.STABLE
+
+
+def test_placement_override_default_off_bit_identical() -> None:
+    """回帰: enable_ojama_fall_placement_override=False (既定) では
+    slide_motion/own_score_delta があっても settle 判定 (盤面全体安定) を
+    待つ従来挙動を維持する (bit-identical)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)  # override 既定 False
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(20), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(22),
+        is_match_active=True, slide_motion=True, own_score_delta=8,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result is None, (
+        "フラグ OFF では実設置証拠があっても settle 判定を無視しない (従来通り継続)"
+    )
+
+
+def test_placement_override_scene1_extension_reproduction_and_fix() -> None:
+    """場面1 再現+修正確認 (docs/DEMO_REVIEW_2026-08-13.md):
+    全盤面ぷよ数の静止を待つ既存出口判定 (`_detect_ojama_fall_exit_board_settle`)
+    は、 自分のツモ設置が連続すると (= board 全体の count が毎フレーム変化し
+    続けると) `_board_stable_consec` が一度も閾値へ到達できず OJAMA_FALL に
+    張り付き続ける (出口判定のスコープ過大、実測: 0.15-0.3 秒周期の振動・
+    最悪 OJAMA_FALL_MAX_SEC までの延長)。 override ON なら、 その途中で
+    own_score_delta (落下ボーナス) が観測された瞬間に settle 未達でも即座に
+    STABLE へ抜ける。
+    """
+    counts = [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]  # 毎フレーム変化し続ける
+
+    # --- override OFF: 全フレーム通しても settle が一度も成立せず OJAMA_FALL のまま ---
+    det_off = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+    results_off = []
+    for i, n in enumerate(counts):
+        ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=i)
+        sig = DetectorSignals(
+            time_sec=float(i) / 30.0, cnn_board=_board_with_n_puyos(n),
+            is_match_active=True, own_score_delta=8 if i > 0 else 0,
+        )
+        results_off.append(det_off.detect(ctx, sig))
+    assert all(r is None for r in results_off), (
+        "毎フレーム board count が変化し続けると settle が成立せず"
+        " OJAMA_FALL に張り付き続ける (延長バグの再現)"
+    )
+
+    # --- override ON: 最初に own_score_delta>0 が来たフレームで即座に STABLE ---
+    det_on = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+    )
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(counts[0]),
+        is_match_active=True, own_score_delta=0,
+    )
+    assert det_on.detect(ctx0, sig0) is None  # 1 frame目は証拠なし、継続
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(counts[1]),
+        is_match_active=True, own_score_delta=8,
+    )
+    result1 = det_on.detect(ctx1, sig1)
+    assert result1 == BoardState.STABLE, (
+        "override ON なら実設置証拠が来た時点で settle 未達でも即 STABLE 復帰し、"
+        " 延長 (最悪 OJAMA_FALL_MAX_SEC まで張り付く) を回避できる"
+    )
+
+
+# ============================
+# 案4-lite (enable_ojama_fall_entry_hardening, 2026-08-13 根因調査追補):
+# OJAMA_FALL entry の実時間ハードニング
+# ============================
+
+
+def test_entry_hardening_time_based_fires_after_required_sec() -> None:
+    """実時間ベース entry: OJAMA_ENTRY_CONSEC_SEC 秒経過で OJAMA_FALL 発火する
+    (frame 数でなく time_sec 差分で判定、通常 state (STABLE) からの entry)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None  # trigger 開始のみ
+
+    # required_sec 未満: まだ発火しない
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC * 0.5, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) is None
+
+    # required_sec 以上経過: 発火する
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig2 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx2, sig2) == BoardState.OJAMA_FALL
+
+
+def test_entry_hardening_stride_invariant() -> None:
+    """実時間ベース entry は frame 間隔 (stride) に依存せず同じ実時間で発火する
+    (stride=2 相当、 中間フレームを間引いても time_sec 差分だけで判定される)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # stride=2 相当: 中間フレームを飛ばし、 一気に閾値超過の時刻を渡す
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.OJAMA_FALL, (
+        "間引き幅に関係なく実時間が経過すれば発火するはず"
+    )
+
+
+def test_entry_hardening_chain_interrupt_blocked_at_normal_duration() -> None:
+    """CHAIN 割り込み厳格化: ctx.state==CHAIN からの entry は通常の
+    OJAMA_ENTRY_CONSEC_SEC 経過だけでは発火しない (倍率が掛かるため)。
+
+    docs/DEMO_REVIEW_2026-08-13.md 場面2 の再現 (stride 下で chain_event が
+    瞬間欠落した隙に OJAMA_FALL が CHAIN を奪う経路への対策)。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_visual_chain_exit=True,
+        enable_ojama_fall_entry_hardening=True,
+    )
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.CHAIN, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # 通常閾値 (OJAMA_ENTRY_CONSEC_SEC) は超えたが、 CHAIN 倍率には未達
+    ctx1 = StateContext(state=BoardState.CHAIN, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    result = det.detect(ctx1, sig1)
+    assert result is None, (
+        "CHAIN 中は通常閾値だけでは発火せず、 割り込みを抑止するはず"
+        f" (要求倍率={OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER})"
+    )
+
+
+def test_entry_hardening_chain_interrupt_fires_after_multiplier_duration() -> None:
+    """CHAIN 割り込み厳格化: 倍率分の実時間が経過すれば CHAIN からでも発火する
+    (= 本物の長時間 CHAIN 中お邪魔降下は見逃さない、 安全弁が残ることの確認)。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_visual_chain_exit=True,
+        enable_ojama_fall_entry_hardening=True,
+    )
+    ojama_board = _board_with_ojama_top(2)
+    required = OJAMA_ENTRY_CONSEC_SEC * OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+
+    ctx0 = StateContext(state=BoardState.CHAIN, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.CHAIN, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=required + 0.001, cnn_board=ojama_board, is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.OJAMA_FALL
+
+
+def test_entry_hardening_default_off_bit_identical() -> None:
+    """回帰: enable_ojama_fall_entry_hardening=False (既定) では従来通り
+    frame 数連続 (OJAMA_CONSEC_THRESH) で判定する (bit-identical)。
+    """
+    det = OjamaVisualDetector()  # 既定 False
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # 実時間はごく僅かしか経過していないが frame 数 (2連続) は満たす
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 3000.0, cnn_board=ojama_board, is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.OJAMA_FALL, (
+        "既定 (frame 数ベース) では極短時間でも 2 フレーム連続で発火するはず"
+        " (実時間ハードニングが介入しないことの確認)"
     )

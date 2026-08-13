@@ -62,6 +62,26 @@ OJAMA_FALL_SETTLE_STABLE_FRAMES: int = GRAVITY_SETTLE_MIN_FRAMES
 OJAMA_FALL_SETTLE_DIFF_THRESHOLD: int = GRAVITY_SETTLE_PUYO_DIFF_THRESHOLD
 OJAMA_FALL_MAX_SEC: float = GRAVITY_SETTLE_MAX_SEC
 
+# 案4-lite (enable_ojama_fall_entry_hardening, 2026-08-13 根因調査追補):
+# OJAMA_CONSEC_THRESH (=2 frame 連続) の実時間版。 テストコード
+# (tests/test_ojama_visual_detector.py の `_make_signals`) 及び
+# --normalize-fps-30 収集経路は time_sec = frame_idx/30 (30fps 前提) で
+# 一貫しているため、 GRAVITY_SETTLE_PHYSICS_CLEAR_MIN_SEC (/60 換算、
+# 60fps 前提) とは分母を変える。 診断 (--stride 2) で実測した通り、
+# frame 数ベースの「2 フレーム連続」は間引き幅 (stride) に応じて実時間の
+# 意味が伸縮する (docs/DEMO_REVIEW_2026-08-13.md 場面2)。 実時間基準に
+# 切り替えることでこの非対称を解消する。
+OJAMA_ENTRY_CONSEC_SEC: float = OJAMA_CONSEC_THRESH / 30.0
+
+# 案4-lite: ctx.state == CHAIN からの OJAMA_FALL entry (= CHAIN 割り込み) に
+# 要求する持続時間の倍率。 ChainPhaseDetector が chain_event の瞬間欠落
+# (stride 間引き下で発生しやすい) 時に ojama_top_positive 保留で None を
+# 返すと、 本 detector が同一 frame 内で ctx.state==CHAIN のまま entry 判定に
+# 呼ばれ、 通常閾値のまま CHAIN を横取りしてしまう (場面2 の実測根因)。
+# CHAIN からの割り込みのみ必要時間を延長し、 瞬間的な検出空白への割り込みを
+# 抑止する。
+OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER: int = 3
+
 # ROI の開始行 (= HIDDEN_ROWS = 1 = 可視最上段)
 _ROI_ROW_START: int = HIDDEN_ROWS
 # ROI の終了行 (exclusive)
@@ -109,6 +129,35 @@ def _count_top_ojama(
     return max(count_cnn, count_hsv)
 
 
+def _has_ojama_fall_placement_evidence(signals: DetectorSignals) -> bool:
+    """案2: OJAMA_FALL 滞在中の実設置証拠を判定する (stateless ヘルパー).
+
+    実測パターン (docs/DEMO_REVIEW_2026-08-13.md 場面1): 全盤面ぷよ数の
+    静止判定 (`_detect_ojama_fall_exit_board_settle`) は「盤面全体」を
+    見るため自分のツモ設置でもぷよ数が変化し続け、 OJAMA_FALL⇔STABLE が
+    0.15-0.3 秒周期で振動する (出口判定のスコープ過大)。 以下いずれかを
+    検知したら実設置が起きたとみなし、 出口判定を待たず即座に STABLE へ
+    復帰する。
+
+    - signals.slide_motion: NEXT ROI のスライド検知
+      (= 次ツモへ繰り上がった = 設置完了の物理的証拠、 TsumoPhaseDetector の
+      R-7 と同じ signal を流用)。
+    - signals.own_score_delta > 0: 自 side の score 増分 (= 落下ボーナス等)。
+      おじゃま受け側は連鎖しないため自 score は通常動かない。 増分があれば
+      設置イベントの証拠 (reference_ojama_landing_gated_by_placement:
+      おじゃまは受け側ツモ着地時に降る、 の裏付けとも整合する)。
+
+    Args:
+        signals: 現 frame の DetectorSignals。
+
+    Returns:
+        実設置の証拠が確認できたか。
+    """
+    if signals.slide_motion:
+        return True
+    return signals.own_score_delta > 0
+
+
 # ============================
 # OjamaVisualDetector
 # ============================
@@ -135,6 +184,23 @@ class OjamaVisualDetector:
             化するバグ (バグC、 src/state_detectors.py 側の
             enable_gravity_settle_reset_on_exit と対) を誘発する。
             default False = 既存挙動と完全 bit-identical。
+        enable_ojama_fall_placement_override: 案2 (2026-08-13、OJAMA_FALL
+            誤分類根因調査)。True で OJAMA_FALL 滞在中に実設置の証拠
+            (NEXT スライド or 自 side score の落下ボーナス増分) を検知したら、
+            settle 判定を待たず即座に STABLE へ復帰する。全盤面ぷよ数の
+            静止を待つ既存の退出判定 (`_detect_ojama_fall_exit_board_settle`)
+            は自分のツモ設置でも盤面全体のぷよ数が変化し続けるため
+            OJAMA_FALL⇔STABLE が 0.15-0.3 秒周期で振動する実害が確認された
+            (docs/DEMO_REVIEW_2026-08-13.md 場面1)。default False = 既存挙動と
+            完全 bit-identical。
+        enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査追補)。
+            True で OJAMA_FALL entry 判定を frame 数連続でなく実時間連続
+            (`OJAMA_ENTRY_CONSEC_SEC`) に切り替え、 さらに ctx.state==CHAIN
+            からの割り込み entry のみ持続時間を
+            `OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER` 倍に厳格化する。
+            stride 間引き下で chain_event が瞬間的に欠落した隙に低発火閾値の
+            OJAMA_FALL entry が CHAIN を奪う実害への対策 (場面2)。
+            default False = 既存挙動と完全 bit-identical。
 
     いずれも False のままなら既存挙動に近い動作となる (= STABLE/TSUMO_FALL 時の
     新規お邪魔出現のみ OJAMA_FALL に遷移)。
@@ -149,6 +215,12 @@ class OjamaVisualDetector:
     # 修正B (2026-08-08、バグB): GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を
     # 禁止するガード。default False = 既存挙動と完全 bit-identical。
     enable_ojama_entry_gravity_settle_guard: bool = False
+    # 案2 (2026-08-13、OJAMA_FALL誤分類根因調査): 実設置検知による早期 exit。
+    # default False = 既存挙動と完全 bit-identical。
+    enable_ojama_fall_placement_override: bool = False
+    # 案4-lite (2026-08-13、根因調査追補): entry 判定の実時間ハードニング。
+    # default False = 既存挙動と完全 bit-identical。
+    enable_ojama_fall_entry_hardening: bool = False
 
     # 内部 state (dataclass field、 init=False)
     _consec_count: int = field(default=0, init=False, repr=False)
@@ -161,6 +233,10 @@ class OjamaVisualDetector:
     _settle_start_time: float = field(default=0.0, init=False, repr=False)
     _board_stable_consec: int = field(default=0, init=False, repr=False)
     _prev_board_puyo_count: int = field(default=-1, init=False, repr=False)
+    # 案4-lite: 実時間ベース entry 判定用の開始時刻 (-1.0 = 未開始)。
+    _entry_trigger_start_time: float = field(
+        default=-1.0, init=False, repr=False,
+    )
 
     def detect(
         self,
@@ -176,12 +252,22 @@ class OjamaVisualDetector:
         )
 
         if ctx.state == BoardState.OJAMA_FALL:
+            # 案2 (2026-08-13): 実設置の証拠が確認できたら settle 判定を
+            # 待たず即 STABLE 復帰する。
+            if (
+                self.enable_ojama_fall_placement_override
+                and _has_ojama_fall_placement_evidence(signals)
+            ):
+                # 案B と同じ理由 (2026-07-24): keep_top_ojama_count で
+                # ROI に残る実カウントを保持し、 直後の再突入振動を防ぐ。
+                self._reset_internal_state(keep_top_ojama_count=cur_count)
+                return BoardState.STABLE
             # 案B (2026-07-24): 全盤面 settle 判定に委譲 (default False で既存不変)。
             if self.enable_ojama_fall_board_settle:
                 return self._detect_ojama_fall_exit_board_settle(ctx, signals)
             return self._detect_ojama_fall_exit(cur_count)
 
-        return self._detect_ojama_fall_entry(ctx, cur_count)
+        return self._detect_ojama_fall_entry(ctx, signals, cur_count)
 
     def _detect_ojama_fall_exit(
         self, cur_count: int,
@@ -276,7 +362,7 @@ class OjamaVisualDetector:
         return None  # 継続
 
     def _detect_ojama_fall_entry(
-        self, ctx: StateContext, cur_count: int,
+        self, ctx: StateContext, signals: DetectorSignals, cur_count: int,
     ) -> BoardState | None:
         """OJAMA_FALL 発火判定 (STABLE/TSUMO_FALL/CHAIN → OJAMA_FALL).
 
@@ -286,8 +372,9 @@ class OjamaVisualDetector:
           - 「開始トリガー」: cur_count > 0 かつ (prev_count == 0 or cur_count > prev_count)
             = お邪魔が新規出現または増加したフレームでカウント開始。
           - 「継続」: 開始後 cur_count > 0 の間はカウントを継続する。
-          - OJAMA_CONSEC_THRESH フレーム到達で OJAMA_FALL 発火。
-          この設計により「出現 → 安定」の 2 フレームで確実に検知できる。
+          - enable_ojama_fall_entry_hardening=False (既定) は
+            OJAMA_CONSEC_THRESH フレーム到達で発火 (frame 数連続、従来挙動)。
+            True なら実時間連続判定に切り替える (`_detect_entry_time_based`)。
 
         防御コード (案B, 2026-07-24): CHAIN 等に途中横取りされて OJAMA_FALL から
         state が抜けると、 このメソッドが (exit メソッドではなく) 毎 frame
@@ -331,11 +418,24 @@ class OjamaVisualDetector:
         if cur_count == 0:
             # お邪魔なし: カウントリセット
             self._consec_count = 0
+            self._entry_trigger_start_time = -1.0
             return None
 
         # 開始トリガー: 前フレームが 0 またはお邪魔が増加した時にカウントを (再) 開始
         is_new_trigger = prev_count == 0 or cur_count > prev_count
 
+        if self.enable_ojama_fall_entry_hardening:
+            return self._detect_entry_time_based(ctx, signals, is_new_trigger)
+        return self._detect_entry_frame_based(ctx, is_new_trigger)
+
+    def _detect_entry_frame_based(
+        self, ctx: StateContext, is_new_trigger: bool,
+    ) -> BoardState | None:
+        """従来 (frame 数連続) の OJAMA_FALL entry 判定.
+
+        enable_ojama_fall_entry_hardening=False (既定) で使われる、
+        従来ロジックと bit-identical な経路。
+        """
         if self._consec_count == 0 and not is_new_trigger:
             # まだ開始トリガーが来ていない: カウントしない
             return None
@@ -348,6 +448,36 @@ class OjamaVisualDetector:
 
         if self._consec_count >= OJAMA_CONSEC_THRESH:
             self._consec_count = 0
+            return BoardState.OJAMA_FALL
+
+        return None
+
+    def _detect_entry_time_based(
+        self, ctx: StateContext, signals: DetectorSignals,
+        is_new_trigger: bool,
+    ) -> BoardState | None:
+        """案4-lite: 実時間ベースの OJAMA_FALL entry 判定.
+
+        frame 数でなく time_sec 差分で「連続観測」を判定するため、 フレーム
+        間引き (stride) 下でも実時間の意味が変わらない。 さらに
+        ctx.state == CHAIN からの割り込みは
+        OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER 倍の持続時間を要求し、
+        chain_event の瞬間欠落への割り込みを抑止する
+        (docs/DEMO_REVIEW_2026-08-13.md 場面2 の根因対策)。
+        """
+        if is_new_trigger:
+            self._entry_trigger_start_time = signals.time_sec
+        if self._entry_trigger_start_time < 0:
+            # 開始トリガーが一度も来ていない: カウントしない
+            return None
+
+        required_sec = OJAMA_ENTRY_CONSEC_SEC
+        if ctx.state == BoardState.CHAIN:
+            required_sec *= OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+
+        elapsed = signals.time_sec - self._entry_trigger_start_time
+        if elapsed >= required_sec:
+            self._entry_trigger_start_time = -1.0
             return BoardState.OJAMA_FALL
 
         return None
@@ -378,3 +508,5 @@ class OjamaVisualDetector:
         self._settle_start_time = 0.0
         self._board_stable_consec = 0
         self._prev_board_puyo_count = -1
+        # 案4-lite: 実時間ベース entry 判定の開始時刻もリセット。
+        self._entry_trigger_start_time = -1.0

@@ -386,6 +386,14 @@ class DetectorSignals:
     # None = 未取得 (この場合は従来の固定レートへフォールバックし、
     # 推測で減衰させない)。 backwards compat: default None で既存動作と同一。
     elapsed_since_first_move_sec: float | None = None
+    # 案2 (enable_ojama_fall_placement_override, 2026-08-13、OJAMA_FALL
+    # 誤分類根因調査): 自 side (score_delta フィールドは相手側のため区別する)
+    # の今フレーム score 増分 (常に 0 以上、RecognitionPipeline._step_side の
+    # score_d_for_self をそのまま渡す)。 OJAMA_FALL 滞在中に自 score が動く
+    # ことは通常無い (おじゃま受け側は連鎖しないため) ため、 増分があれば
+    # 実設置イベント (落下ボーナス等) の証拠として使う。
+    # backwards compat: default 0 で既存動作と完全同一。
+    own_score_delta: int = 0
 
 
 class StateTransitionDetector(Protocol):
