@@ -44,14 +44,25 @@
 - **実測**: 2026-08-13決着。分析時再同期で部分対処 (-21.7%)
 - **根治**: 側非依存の密な会計記録列 (次回収集/Phase Jから設計採用、決定済み)
 
-### W7: 疑似ChainEventのスコア0固定 (2026-08-13夜 発見・根治着手)
+### W7: 疑似ChainEventのスコア0固定 (2026-08-13夜 発見、同日中に①③実装完了)
 - **実測**: 連鎖検知3経路のうち formula/landing の2経路が、simulate済み結果を持ちながら
   total_score=0 をハードコード。全連鎖の6.14%が該当、43.8%が4秒以上未確定、
   36.6%は永久未確定。CHAIN保持定数の過小 (0.3秒/連鎖 vs 実測0.5秒+) が再発火ループを併発
 - **実害**: 先読み評価 (#9) の起動ゲートが両者発火場面で開かない / 「score=0の
   cc=8」を幻連鎖と誤認する回帰テストまで書かれた (score未計算と連鎖不在の混同)
-- **根治 (即実施)**: ①formula/landing の発火時に calculate_chain_score(検証済み結果) を充填
-  ③先読み評価のトリガーをsimulate検証済みchain_count併用に
+- **根治① 実装済 (既定OFF、`enable_pseudo_chain_score_fill`)**: formula/landing の
+  発火時に `RecognitionPipeline._fill_pseudo_chain_score()` で
+  calculate_chain_score(検証済み結果) を充填し `ChainEvent.score_estimated` で
+  明示。src/recognition_pipeline.py, src/chain_detector.py。実データ再検証
+  (logs/_diag_chain_score_zero_2026-08-13_trace2_fillON.log) で該当窓の
+  score=0 永続 (cc=8 が4.2秒間 score=0) が解消し即時 score=30300 表示を確認
+- **根治③ 判断: ゲート拡張は不要と結論し見送り (簡素化)**: 当初案「total_score>=40
+  または simulate検証済みchain_count>=1」のOR拡張は、①実装後に不要と判明。
+  根拠: 消去ステップは4連結以上でのみ生成され最小得点=4×10×1=40=
+  CHAIN_TOTAL_MIN_SCORE と厳密一致するため、score_estimated=True の結果は
+  必ず既存ゲートを素通しで満たす (tests/test_scoring.py の不変条件テストで固定)。
+  ResolvedExchangeTracker のコードは無変更、誤った回帰テスト
+  (test_resolved_inactive_when_score_below_noise_gate) のみ意図を訂正
 - **チケット (バックテスト必須)**: ②CHAIN保持定数の実測ベース再較正 (cycle71系への回帰リスク)
   ④「連鎖中の差分は10の倍数」制約によるクロスチェック層 (W2の制約を再利用)
 

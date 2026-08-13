@@ -1138,6 +1138,18 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False を渡せば従来挙動 (常に None) に完全に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # 根治① (W7, 2026-08-13, docs/KNOWN_WEAKNESSES.md): 疑似 ChainEvent
+        # (機能D 掛け算式 formula 経路 / 着地直後即時判定 landing 経路) の
+        # total_score/base_score を、既に持っている simulate 検証済み
+        # ChainResult から calculate_chain_score() で充填する。追加の
+        # simulate は landing 経路のみ (formula 経路は既存検証結果を再利用、
+        # 二重 simulate ゼロ)。充填成功時は ChainEvent.score_estimated=True。
+        # 実測 (score OCR 差分) による後続イベントでの上書きは既存の
+        # active_chain 更新経路がそのまま担う (本フラグは疑似イベント生成
+        # 直後の初期値のみを変える)。
+        # default False = 従来挙動完全維持 (total_score=0 固定、bit-identical、
+        # backwards compat)。
+        enable_pseudo_chain_score_fill: bool = False,
         # #45 おじゃま merge 統合修正 案(a) (2026-07-24): 重力フィルタ支持緩和。
         # 案B (enable_ojama_fall_board_settle) 適用後、 _merge_diff_only 内の
         # `_apply_gravity_filter` が F ガード (empty_to_color_guard) 起因で
@@ -2214,6 +2226,10 @@ class RecognitionPipeline:
         self._enable_chain_formula_simulate_verify: bool = bool(
             enable_chain_formula_simulate_verify
         )
+        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
+        self._enable_pseudo_chain_score_fill: bool = bool(
+            enable_pseudo_chain_score_fill
+        )
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -2701,6 +2717,9 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False で従来挙動 (常に None) に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
+        # default False = 従来挙動完全維持 (bit-identical, backwards compat)。
+        enable_pseudo_chain_score_fill: bool = False,
         # A0 (2026-07-24): CHAIN 保持時間モデルの較正値注入用。
         # 従来 __init__ には chain_hold_per_step_sec が存在したが load_default
         # には露出していなかった (評価スクリプト経由で注入不可という抜け漏れ)。
@@ -3041,6 +3060,7 @@ class RecognitionPipeline:
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+            enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
             chain_hold_base_sec=chain_hold_base_sec,
             chain_hold_per_step_sec=chain_hold_per_step_sec,
             chain_max_hold_sec=chain_max_hold_sec,
@@ -5051,6 +5071,46 @@ class RecognitionPipeline:
         except Exception:
             return None
 
+    def _fill_pseudo_chain_score(
+        self, verified: "ChainResult | None",
+    ) -> "tuple[int, int, bool]":
+        """疑似 ChainEvent の推定スコアを計算する (根治①, W7, 2026-08-13)。
+
+        formula/landing 経路の疑似 ChainEvent は score OCR で直接観測できず
+        従来 total_score=0 固定だった (docs/KNOWN_WEAKNESSES.md W7: 全連鎖の
+        6.14%が該当、先読み評価#9のゲートを阻害)。既に検証済みの
+        ChainResult (before_board を simulate した結果) があれば
+        calculate_chain_score() を適用し、その値を「シミュレーション推定」
+        として充填する。実測 (score OCR 差分) の後続イベントによる上書きは
+        既存の active_chain 更新経路がそのまま担うため本メソッドは関与しない。
+
+        推定値は認識の連結欠損 (W1) により実際より低く出る場合がある
+        (simulate は真値を過小評価しがちという既知の弱点)。
+
+        Args:
+            verified: before_board を simulate した ChainResult。None なら
+                未検証 (=フォールバック無効時、または疑似発火自体が抑制済み)。
+
+        Returns:
+            (total_score, base_score, score_estimated)。フラグ OFF、
+            verified が None、または verified.chain_count<=0 (連鎖不在=
+            充填する得点が無い) の場合は (0, 0, False) を返す
+            (bit-identical, backwards compat, fail-safe)。
+        """
+        if not self._enable_pseudo_chain_score_fill:
+            return 0, 0, False
+        if verified is None or verified.chain_count <= 0:
+            return 0, 0, False
+        from src.scoring import calculate_chain_score
+        try:
+            result = calculate_chain_score(verified)
+        except Exception:
+            return 0, 0, False
+        # 持ち越し (全消しボーナス) は疑似イベント生成時点では未知のため、
+        # base_score (素点) と total_score は同値として扱う (backwards
+        # compat: 既存の 0,0 固定と同じ「持ち越し未考慮」の意味論を維持)。
+        return result.total_score, result.total_score, True
+
     def _resolve_formula_chain_count(
         self, before_board: "Board",
     ) -> "tuple[int | None, ChainResult | None]":
@@ -5113,7 +5173,13 @@ class RecognitionPipeline:
         chain_count, verified = self._resolve_formula_chain_count(before)
         if chain_count is None:
             return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
-        # 疑似 ChainEvent を生成 (score は不明なため 0)
+        # 根治① (W7, 2026-08-13): 既に持っている検証済み ChainResult (verified)
+        # から calculate_chain_score() で推定スコアを充填する (追加 simulate
+        # ゼロ)。フラグ OFF または verified が None (検証 OFF 時の固定1発火)
+        # の場合は従来通り (0, 0, False) (bit-identical, backwards compat)。
+        total_score, base_score, score_estimated = (
+            self._fill_pseudo_chain_score(verified)
+        )
         pseudo = ChainEvent(
             trigger_sec=time_sec,
             end_sec=(
@@ -5122,11 +5188,12 @@ class RecognitionPipeline:
             ),
             before_board=before,
             chain_count=chain_count,
-            total_erased=0, total_score=0, base_score=0,
+            total_erased=0, total_score=total_score, base_score=base_score,
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
             mechanism=CHAIN_MECHANISM_FORMULA,
+            score_estimated=score_estimated,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec
@@ -6114,6 +6181,19 @@ class RecognitionPipeline:
                         ctx.confirmed_board = prev_confirmed.copy() \
                             if prev_confirmed is not None else final_board
                 if chain_count >= 1:
+                    # 根治① (W7, 2026-08-13): formula 経路と異なり landing
+                    # 経路は検証済み ChainResult を持たないため、追加で
+                    # inferred_landing を simulate する (既存
+                    # _simulate_before_board パターン、フラグ OFF 時は
+                    # 呼ばない)。simulate 失敗時は従来の (0, 0, False) の
+                    # まま (fail-safe)。
+                    verified_landing = (
+                        self._simulate_before_board(inferred_landing)
+                        if self._enable_pseudo_chain_score_fill else None
+                    )
+                    total_score, base_score, score_estimated = (
+                        self._fill_pseudo_chain_score(verified_landing)
+                    )
                     # A0 (2026-07-24) バグ修正: 従来ここだけハードコード 0.3 で
                     # self._chain_hold_per_step_sec (config 可能な設定値) を
                     # 無視していた。既定値 0.3 なら数値上は不変だが、較正値を
@@ -6129,11 +6209,13 @@ class RecognitionPipeline:
                         ),
                         before_board=inferred_landing,
                         chain_count=chain_count,
-                        total_erased=0, total_score=0, base_score=0,
+                        total_erased=0, total_score=total_score,
+                        base_score=base_score,
                         all_clear_bonus_applied=0,
                         ojama_sent=0, leftover_score=0,
                         is_all_clear=False,
                         mechanism=CHAIN_MECHANISM_LANDING,
+                        score_estimated=score_estimated,
                     )
                     chain_until = (
                         time_sec

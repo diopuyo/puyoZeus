@@ -120,6 +120,32 @@ def test_simple_1chain_4connect_single_color() -> None:
     assert scored.steps[0].bonus_multiplier == 1
 
 
+def test_minimum_chain_score_meets_chain_total_min_score_gate() -> None:
+    """W7 根治③ (2026-08-13, docs/KNOWN_WEAKNESSES.md) の判断根拠となる
+    不変条件: 実在する連鎖 (chain_count>=1) の最小得点は、消去グループの
+    最小サイズ (4連結) × 最小倍率 (max(1,0)=1) で決まり、必ず
+    CHAIN_TOTAL_MIN_SCORE (ojama_accounting.py の連鎖ノイズゲート閾値) 以上
+    になる。この不変性により
+    「score_estimated=True (根治①で simulate 検証済み充填) なら常に既存の
+    total_score>=CHAIN_TOTAL_MIN_SCORE ゲートを素通しで満たす」ため、
+    ResolvedExchangeTracker のゲート拡張 (根治③の当初案) は不要と判断し
+    見送った (scripts/visualize_advantage_overlay.py の ResolvedExchangeTracker
+    参照)。本テストが破れたら根治③の簡素化前提が崩れ、ゲート拡張の
+    再実装が必要になる。"""
+    from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+
+    grid = _empty_grid()
+    grid[9][0] = COLOR_RED
+    grid[10][0] = COLOR_RED
+    grid[11][0] = COLOR_RED
+    grid[12][0] = COLOR_RED
+    board = Board.from_list(grid)
+    result = ChainSimulator().simulate(board)
+    assert result.chain_count >= 1
+    scored = calculate_chain_score(result)
+    assert scored.total_score == CHAIN_TOTAL_MIN_SCORE == 40
+
+
 def test_2chain_same_color_only() -> None:
     """
     2連鎖シンプルケース。同色のみで 4+4 連結。

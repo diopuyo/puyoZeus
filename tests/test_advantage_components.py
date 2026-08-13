@@ -18,6 +18,7 @@ import pytest
 from src.board import Board  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.indicators_v2 import IndicatorV2Value  # noqa: E402
+from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE  # noqa: E402
 from src.probability_calibration import (  # noqa: E402
     PhaseCalibrationParams, PlattCalibrationParams,
 )
@@ -306,14 +307,19 @@ def test_resolve_display_platt_selects_correct_phase_by_progress() -> None:
 
 def _make_chain_event(
     trigger_sec: float, before_board: Board | None = None, total_score: int = 0,
+    score_estimated: bool = False,
 ) -> ChainEvent:
-    """テスト用の最小 ChainEvent を組み立てる (before_board/total_score 以外は不使用値でよい)。"""
+    """テスト用の最小 ChainEvent を組み立てる (before_board/total_score 以外は不使用値でよい)。
+
+    score_estimated: 根治① (W7, 2026-08-13) の充填フラグ。既定 False
+    (backwards compat、既存呼び出しは挙動不変)。
+    """
     return ChainEvent(
         trigger_sec=trigger_sec, end_sec=trigger_sec + 1.0,
         before_board=before_board if before_board is not None else Board(),
         chain_count=1, total_erased=0, total_score=total_score, base_score=0,
         all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
-        is_all_clear=False,
+        is_all_clear=False, score_estimated=score_estimated,
     )
 
 
@@ -487,19 +493,50 @@ def test_resolved_inactive_when_only_one_side_fires() -> None:
     assert just_deactivated is False
 
 
-def test_resolved_inactive_when_score_below_noise_gate(monkeypatch) -> None:
-    """CHAIN_TOTAL_MIN_SCORE 未満の幻連鎖 (実動画で実測した cc=8 score=0 系の
-    ノイズ) はトリガーしない — 実測に基づく回帰テスト。"""
+def test_resolved_inactive_when_score_unfilled(monkeypatch) -> None:
+    """total_score=0 かつ score_estimated=False (根治①未実装/OFF時、または
+    simulate 失敗時の fail-safe 値) は「スコア未計算」としてトリガー対象外
+    にする — 実動画で実測した cc=8 score=0 系のノイズへの回帰テスト。
+
+    【訂正 2026-08-13 W7根治③】旧テスト名/docstring は「score=0 の
+    ChainEvent = 幻連鎖 (連鎖不在)」と記していたが誤り。実際には
+    chain_count=8 (simulate 検証済み、連鎖は実在) でも total_score が
+    ハードコード0だった (docs/KNOWN_WEAKNESSES.md W7: 「score未計算」と
+    「連鎖不在」の混同)。本テストの意図は「連鎖の実在性」ではなく
+    「スコアが計算できていない (score_estimated=False かつ 0)」ことのみを
+    ノイズ扱いする、という後者の意味論に正しく寄せた。"""
     import scripts.visualize_advantage_overlay as vao
     stub, calls = _stub_score_advantage_factory()
     monkeypatch.setattr(vao, "_score_advantage", stub)
     tracker = vao.ResolvedExchangeTracker(model=object())
     ev1 = _make_chain_event(trigger_sec=1.0, total_score=0)
     ev2 = _make_chain_event(trigger_sec=1.0, total_score=0)
+    assert ev1.score_estimated is False and ev2.score_estimated is False
     active, _ = tracker.update(
         _make_signal(ev1, 0), _make_signal(ev2, 0), _make_snapshot(), 0.0)
     assert active is False
     assert calls == []  # _score_advantage は一度も呼ばれない
+
+
+def test_resolved_activates_on_minimum_estimated_score(monkeypatch) -> None:
+    """根治① (W7, 2026-08-13) が充填する最小の推定スコア (=CHAIN_TOTAL_MIN_SCORE,
+    4連結1色1連鎖の最小得点 4×10×1=40) は、既存ゲートを変更しなくても
+    素通しで起動する — 根治③のゲート拡張が不要と判断した根拠の直接確認
+    (tests/test_scoring.py の不変条件テストと対で W7 根治③の判断を裏付ける)。
+    """
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE, score_estimated=True)
+    ev2 = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE, score_estimated=True)
+    active, _ = tracker.update(
+        _make_signal(ev1, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(ev2, CHAIN_TOTAL_MIN_SCORE), _make_snapshot(), 0.0)
+    assert active is True
+    assert len(calls) == 1
 
 
 def test_resolved_activates_on_mutual_fire_above_gate(monkeypatch) -> None:
