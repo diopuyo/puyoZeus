@@ -49,6 +49,9 @@ from src.production_config import (  # noqa: E402
     ATTRIBUTION_EXCLUDED_INDICATORS,
     COUNTER_REACH_ENABLED_BY_DEFAULT,
     OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
+    OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT,
+    OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
+    recognition_load_default_kwargs,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
@@ -2181,6 +2184,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              render: bool = True,
              dump_timeline_path: Path | None = None,
              normalize_fps_30: bool = OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
+             use_production_recognition: bool = (
+                 OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT),
+             resize_1080p: bool = OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -2353,6 +2359,27 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         (OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT、
         src.production_config が単一情報源)。False にすると従来の全フレーム
         処理を完全再現する (A/B比較・基準データ収集で全フレームが必須な場合用)。
+    use_production_recognition: True (既定) で本番採用の認識フラグ群
+        (src.production_config.RECOGNITION_ADOPTED: effect-gate/burst-guard-v2/
+        transition-merge-guard/burst-gate-open-threshold 0.954/
+        hidden-row-burst-guard/match-transition-debounce) を
+        recognition_load_default_kwargs() 経由で load_default() へ自動適用する
+        (2026-08-13 是正、根因調査の副次発見)。従来はこれらを一切転送しておらず、
+        デモ/レビュー動画が本番より劣化した認識で生成されていた
+        (2026-08-08 の --early-fire-reaction 付け忘れ事故と同型)。False にすると
+        従来通り load_default の関数既定値 (全て無効) で動く (A/B比較用、
+        backwards compat)。個別に上書きした引数 (enable_landing_observed_color
+        等) との衝突は無い (RECOGNITION_ADOPTED の6キーはそれらと重複しない)。
+    resize_1080p: True (既定) で認識入力を 1920x1080 に正規化してから
+        RecognitionPipeline.update() に渡す (collect_boards_lean.py:1050 と
+        同一の正規化。2026-08-13 是正、根因調査の副次発見)。従来は表示キャンバス
+        用サイズ OUT_W/OUT_H(1280x720) へ直接縮小したフレームをそのまま認識にも
+        渡しており、BoardRegion の絶対px座標較正 (1920x1080前提) と不整合だった
+        (CLAUDE.md「他解像度は1920x1080にリサイズしてから認識する」原則違反。
+        720p 入力 + burst-guard 有効でクラッシュすることを診断で実証済み)。
+        認識用フレームと表示用フレーム (OUT_W/OUT_H) は独立に生成するため、
+        本フラグは出力動画の解像度・レイアウトに一切影響しない。
+        False にすると従来 (bit-identical) の挙動に戻る (A/B比較用)。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -2442,7 +2469,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_puyo_to_empty_hsv_guard=_resolve_flag(
             "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard),
         stable_majority_window=_resolve_flag(
-            "stable_majority_window", stable_majority_window))
+            "stable_majority_window", stable_majority_window),
+        # 本番採用の認識フラグ群 (2026-08-13 是正)。RECOGNITION_ADOPTED の
+        # 6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
+        # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
+        **(recognition_load_default_kwargs() if use_production_recognition else {}))
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
@@ -2524,11 +2555,32 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 経路は不変。render=False では描画自体を行わないため無駄なコピーを
         # 避ける、2026-08-11 追加)。
         raw_native = frame.copy() if (show_recognition and render) else None
+        # --- 認識入力の 1080p 正規化 (2026-08-13 是正) ---
+        # RecognitionPipeline.update() は BoardRegion の絶対px座標較正
+        # (DEFAULT_P1_REGION 等、1920x1080 前提) を使うため、collect_boards_lean.py
+        # (TARGET_W/TARGET_H=1920,1080) と同じ正規化をここでも行う必要がある。
+        # 従来は下記の表示キャンバス用リサイズ (OUT_W/OUT_H=1280x720) の結果を
+        # そのまま認識にも渡しており座標系が不整合だった。認識用フレーム
+        # (recog_frame) と表示用フレーム (frame) は元の native frame から
+        # 独立に生成する (表示解像度は resize_1080p の有無に関わらず不変)。
+        if resize_1080p:
+            recog_frame = (
+                frame if frame.shape[:2] == (NATIVE_H, NATIVE_W)
+                else cv2.resize(frame, (NATIVE_W, NATIVE_H),
+                                interpolation=cv2.INTER_AREA)
+            )
+        else:
+            # 逃げ道 (--no-resize-1080p): 従来と bit-identical
+            # (表示用縮小フレームをそのまま認識に渡す、A/B比較用)。
+            recog_frame = (
+                frame if frame.shape[:2] == (OUT_H, OUT_W)
+                else cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
+            )
         if frame.shape[:2] != (OUT_H, OUT_W):
             frame = cv2.resize(frame, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
         t = fi / fps
         # お邪魔会計は密な駆動が必須のため pipe.update / _drive_ojama は毎フレーム。
-        r = pipe.update(fi, t, frame)
+        r = pipe.update(fi, t, recog_frame)
         # (改修1) 試合境界(score大幅減少/両者0付近)を検知したら凍結盤面・持続
         # トラッカー・表示状態を全て初期化する(前試合の「幻の差」持ち越し防止)。
         if _detect_score_reset(r.p1.score, r.p2.score, prev_score1, prev_score2):
@@ -3022,11 +3074,56 @@ def main() -> None:
             "基準データ収集等、既定 ON では困る用途で使う。"
         ),
     )
+    # 本番採用の認識フラグ群の自動適用 (2026-08-13 是正、対称化パターンは
+    # --normalize-fps-30 と同一)。
+    ap.add_argument(
+        "--production-recognition", action="store_true",
+        dest="production_recognition",
+        help=(
+            "本番採用の認識フラグ群 (src.production_config.RECOGNITION_ADOPTED: "
+            "effect-gate/burst-guard-v2/transition-merge-guard/"
+            "burst-gate-open-threshold 0.954/hidden-row-burst-guard/"
+            "match-transition-debounce) を load_default() へ自動適用する "
+            "(2026-08-13 追加)。既定 True 化により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-production-recognition を使う。"
+        ),
+    )
+    ap.add_argument(
+        "--no-production-recognition", action="store_true",
+        dest="no_production_recognition",
+        help=(
+            "本番採用の認識フラグ群の自動適用を明示的に無効化する "
+            "(2026-08-13 追加、既定 True 化に伴う逃げ道)。--production-recognition "
+            "と同時指定した場合は本フラグ (無効化) が優先される。過去の劣化"
+            "構成の再現・A/B比較用。"
+        ),
+    )
+    ap.add_argument(
+        "--resize-1080p", action="store_true", dest="resize_1080p",
+        help=(
+            "認識入力を1920x1080へ正規化してから RecognitionPipeline.update() に"
+            "渡す (collect_boards_lean.py:1050 と同一の正規化、2026-08-13 追加)。"
+            "既定 True 化により本フラグは実質 no-op (明示しなくても既定で有効)。"
+            "後方互換のため残置。無効化するには --no-resize-1080p を使う。"
+        ),
+    )
+    ap.add_argument(
+        "--no-resize-1080p", action="store_true", dest="no_resize_1080p",
+        help=(
+            "1080p正規化を明示的に無効化し、表示キャンバス用サイズ "
+            "(1280x720) へ直接縮小したフレームをそのまま認識に渡す従来挙動を"
+            "再現する (2026-08-13 追加、既定 True 化に伴う逃げ道。過去の劣化"
+            "構成の再現・A/B比較用)。"
+        ),
+    )
     a = ap.parse_args()
     # 既定値解決 (collect_boards_lean.py と同じ方式): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず既定 True
     # (generate() 関数側の既定と一致させる)。
     normalize_fps_30 = not a.no_normalize_fps_30
+    use_production_recognition = not a.no_production_recognition
+    resize_1080p = not a.no_resize_1080p
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
              exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
@@ -3054,7 +3151,9 @@ def main() -> None:
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
              dump_timeline_path=a.dump_timeline_path,
-             normalize_fps_30=normalize_fps_30)
+             normalize_fps_30=normalize_fps_30,
+             use_production_recognition=use_production_recognition,
+             resize_1080p=resize_1080p)
 
 
 if __name__ == "__main__":

@@ -146,6 +146,29 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT=True で CLI 既定値も"
         "同時に ON 化し、収集側と同じ意味論に揃える",
     ),
+    AdoptedFlag(
+        "--production-recognition", "2026-08-13",
+        "本番採用の認識フラグ群 (RECOGNITION_ADOPTED: effect-gate/"
+        "burst-guard-v2/transition-merge-guard/burst-gate-open-threshold "
+        "0.954/hidden-row-burst-guard/match-transition-debounce) を "
+        "load_default() へ自動適用する (recognition_load_default_kwargs() 経由)。"
+        "根因調査 (2026-08-13) の副次発見: 従来 overlay はこれらを一切転送して"
+        "おらず、デモ/レビュー動画が本番より劣化した認識で生成されていた "
+        "(2026-08-08の--early-fire-reaction付け忘れ事故と同型)。"
+        "OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT=True で CLI 既定値も"
+        "同時に ON 化する",
+    ),
+    AdoptedFlag(
+        "--resize-1080p", "2026-08-13",
+        "認識入力を1920x1080へ正規化してから RecognitionPipeline.update() に"
+        "渡す (collect_boards_lean.py:1050 と同一の正規化)。根因調査 "
+        "(2026-08-13) の副次発見: 従来 overlay は表示キャンバス用サイズ "
+        "OUT_W/OUT_H(1280x720) へ直接縮小したフレームをそのまま認識にも渡して"
+        "おり、BoardRegion の絶対px座標較正 (1920x1080前提) と不整合だった "
+        "(CLAUDE.md「他解像度は1920x1080にリサイズしてから認識する」原則違反)。"
+        "OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT=True で CLI 既定値も同時に "
+        "ON 化する (認識用と表示用のフレームは独立に生成、表示解像度は不変)",
+    ),
 )
 
 # --counter-reach の CLI 既定値。visualize_advantage_overlay.py の argparse
@@ -158,6 +181,17 @@ COUNTER_REACH_ENABLED_BY_DEFAULT: bool = True
 # ADVANTAGE_ADOPTED エントリ参照)。COUNTER_REACH_ENABLED_BY_DEFAULT と同じ
 # パターンで単一情報源化する。
 OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT: bool = True
+
+# --production-recognition の CLI 既定値/generate() 既定値 (2026-08-13 追加、
+# 上記2定数と同じパターン)。True で RECOGNITION_ADOPTED (本番採用の認識
+# フラグ群) を recognition_load_default_kwargs() 経由で自動適用する。
+OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT: bool = True
+
+# --resize-1080p の CLI 既定値/generate() 既定値 (2026-08-13 追加)。True で
+# 認識入力を 1920x1080 へ正規化してから RecognitionPipeline.update() に渡す
+# (collect_boards_lean.py と同一正規化、CLAUDE.md「他解像度は1920x1080に
+# リサイズしてから認識する」原則)。
+OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT: bool = True
 
 # ============================
 # 表示 (visualize_recognition の overlay 系)
@@ -278,6 +312,29 @@ def _join(flags: tuple[AdoptedFlag, ...]) -> str:
 def recognition_flags() -> str:
     """認識の本番構成フラグを返す (収集・表示の両方が受け付けるもの)。"""
     return _join(RECOGNITION_ADOPTED)
+
+
+def recognition_load_default_kwargs() -> dict[str, "float | bool"]:
+    """RECOGNITION_ADOPTED を RecognitionPipeline.load_default() 用 kwargs に変換する。
+
+    2026-08-13 是正 (根因調査の副次発見): scripts/visualize_advantage_overlay.py が
+    RECOGNITION_ADOPTED (本番採用の認識フラグ群) を load_default() へ一切
+    転送しておらず、デモ/レビュー動画が本番より劣化した認識 (バーストガード等が
+    無効) で生成されていた (2026-08-08 の --early-fire-reaction 付け忘れ事故と
+    同型)。collect_boards_lean.py の argparse dest 名 (enable_effect_gate 等、
+    同ファイル 769-1009 行) は RecognitionPipeline.load_default() のキーワード
+    引数名と完全に一致しているため、 "--xxx-yyy" 形式のフラグ名を dest 名
+    "xxx_yyy" へ機械的に変換するだけで両者と同じ呼出し経路になる (RECOGNITION_
+    ADOPTED に新しいフラグを追記するだけで overlay 側も自動追従し、個別配線の
+    抜け漏れを構造的に根絶する)。値付きフラグ ("--burst-gate-open-threshold
+    0.954" 等) は float にパースし、値無しフラグ (store_true 系) は True にする。
+    """
+    kwargs: dict[str, "float | bool"] = {}
+    for f in RECOGNITION_ADOPTED:
+        parts = f.flag.split()
+        name = parts[0].lstrip("-").replace("-", "_")
+        kwargs[name] = True if len(parts) == 1 else float(parts[1])
+    return kwargs
 
 
 def collect_flags() -> str:
