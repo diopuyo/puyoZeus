@@ -782,6 +782,9 @@ def collect_lean(
     enable_phantom_board_guard: bool = False,
     enable_margin_time_rate: bool = False,
     enable_stable_majority_window: bool = False,
+    enable_ojama_fall_placement_override: bool = False,
+    enable_ojama_fall_entry_hardening: bool = False,
+    enable_chain_gate_raw_fallback: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -921,6 +924,25 @@ def collect_lean(
             max=226.9 で完全に重なる)、盤面の物理的整合
             (src/board_quality.py) で弾く。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_fall_placement_override: 案2 (2026-08-13、OJAMA_FALL
+            誤分類根因調査)。True で OJAMA_FALL 滞在中に実設置の証拠
+            (NEXT スライド or 自 side score の落下ボーナス増分) を検知したら
+            settle 判定を待たず即座に STABLE へ復帰する。全盤面ぷよ数の静止を
+            待つ既存出口判定は自分のツモ設置でも延長される (振動実害あり、
+            docs/DEMO_REVIEW_2026-08-13.md 場面1)。既定 False = 従来挙動完全
+            維持 (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査
+            追補)。True で OJAMA_FALL entry 判定を frame 数連続でなく実時間
+            連続に切り替え、 CHAIN 状態からの割り込み entry のみ持続時間を
+            厳格化する。stride 間引き下で chain_event が瞬間欠落した隙に
+            OJAMA_FALL が CHAIN を奪う実害への対策 (場面2)。既定 False =
+            従来挙動完全維持 (backwards compat、user デモレビュー承認前の
+            savepoint 実装)。
+        enable_chain_gate_raw_fallback: 案3 (2026-08-13、優先度最下位)。True で
+            4連結ゲートが confirmed_board 上で erasable なしと判定した場合でも、
+            cnn_board (常時最新) に erasable があれば chain_event を通す
+            (CHAIN 継続中のみ)。既定 False = 従来挙動完全維持 (backwards
+            compat)。
 
     Returns:
         蓄積した snapshot 数。
@@ -991,6 +1013,9 @@ def collect_lean(
         enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
         enable_margin_time_rate=enable_margin_time_rate,
         stable_majority_window=enable_stable_majority_window,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
+        enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1423,6 +1448,38 @@ def main() -> int:
             "既定は無効 (後方互換、148動画収集走行中のため既定OFF必須)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-fall-placement-override", action="store_true",
+        dest="enable_ojama_fall_placement_override",
+        help=(
+            "案2 (2026-08-13、OJAMA_FALL誤分類根因調査) を有効化する。"
+            "OJAMA_FALL 滞在中に実設置の証拠 (NEXTスライド or 自sideスコアの"
+            "落下ボーナス増分) を検知したら settle 判定を待たず即座に STABLE "
+            "へ復帰する (自分のツモ設置による出口判定延長・振動の対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-fall-entry-hardening", action="store_true",
+        dest="enable_ojama_fall_entry_hardening",
+        help=(
+            "案4-lite (2026-08-13、根因調査追補) を有効化する。OJAMA_FALL "
+            "entry 判定を frame 数連続でなく実時間連続に切り替え、CHAIN 状態"
+            "からの割り込み entry のみ持続時間を厳格化する (stride 間引き下で"
+            "chain_event が瞬間欠落した隙に OJAMA_FALL が CHAIN を奪う対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-gate-raw-fallback", action="store_true",
+        dest="enable_chain_gate_raw_fallback",
+        help=(
+            "案3 (2026-08-13、優先度最下位) を有効化する。4連結ゲートが "
+            "confirmed_board 上で erasable なしと判定した場合でも、cnn_board "
+            "(常時最新) に erasable があれば chain_event を通す (CHAIN 継続中"
+            "のみ)。既定は無効 (後方互換)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -1455,6 +1512,11 @@ def main() -> int:
         enable_phantom_board_guard=args.enable_phantom_board_guard,
         enable_margin_time_rate=args.enable_margin_time_rate,
         enable_stable_majority_window=args.enable_stable_majority_window,
+        enable_ojama_fall_placement_override=(
+            args.enable_ojama_fall_placement_override
+        ),
+        enable_ojama_fall_entry_hardening=args.enable_ojama_fall_entry_hardening,
+        enable_chain_gate_raw_fallback=args.enable_chain_gate_raw_fallback,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
