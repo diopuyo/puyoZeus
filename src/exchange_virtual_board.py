@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 from src.board import Board
 from src.chain import ChainResult, ChainSimulator
+from src.ojama_accounting import cancel_own_pending_then_send_surplus
 from src.production_config import GHOST_CHAIN_RULE_ENABLED
 from src.scoring import OJAMA_MAX_DROP_PER_TURN
 
@@ -190,4 +191,131 @@ def reconstruct_virtual_board_pair(
         attacker_dead=attacker_after.is_dead(),
         opponent_dead=opponent_after.is_dead(),
         chain_result=chain_result,
+    )
+
+
+# ============================
+# 両者同時発火の決着計算 (2026-08-13、デモレビュー #9 対処)
+# ============================
+#
+# `reconstruct_virtual_board_pair` は「攻撃側1名 + 予測正味おじゃま」の
+# 1方向モデル用 (スタッキングモデルの予測値を受け取る設計)。デモレビュー #9
+# (両者発火後の勝率乱高下) は「両側が同時に連鎖を撃っている」実況面での
+# 決着計算が必要で、双方の `ChainEvent.before_board` が既知 (=予測不要、
+# 双方とも実際に確定した起点盤面から直接 simulate できる) という点が
+# 上記関数の前提と異なるため、専用関数を追加する。ただし内部で使う部品
+# (ChainSimulator.simulate/drop_ojama、_deterministic_ojama_seed、
+# OJAMA_MAX_DROP_PER_TURN 上限) は本モジュール既存資産をそのまま再利用する
+# (再実装しない)。
+
+
+@dataclass(frozen=True)
+class MutualExchangeResult:
+    """両者同時発火の決着計算結果 (#9 対処)。
+
+    Attributes:
+        board_p1_after: 1P の連鎖消化 + 着弾後仮想盤面。
+        board_p2_after: 2P の連鎖消化 + 着弾後仮想盤面。
+        dropped_to_p1: 1P へ実際に配置したおじゃま数 (1ターン上限適用後)。
+        dropped_to_p2: 2P へ実際に配置したおじゃま数。
+        leftover_p1: 1P へまだ配置していない残り (次ターン繰越=forecast相当)。
+        leftover_p2: 2P へまだ配置していない残り。
+        p1_dead: board_p1_after が窒息判定なら True。
+        p2_dead: board_p2_after が窒息判定なら True。
+        chain_result_p1: 1P simulate の生結果 (chain_count 等の下流利用のため保持)。
+        chain_result_p2: 2P simulate の生結果。
+    """
+    board_p1_after: Board
+    board_p2_after: Board
+    dropped_to_p1: int
+    dropped_to_p2: int
+    leftover_p1: int
+    leftover_p2: int
+    p1_dead: bool
+    p2_dead: bool
+    chain_result_p1: ChainResult
+    chain_result_p2: ChainResult
+
+
+def _cancel_mutual_pending(
+    gen_p1_ojama: int, gen_p2_ojama: int, pending_p1: int, pending_p2: int,
+) -> tuple[int, int]:
+    """両者同時発火の相殺会計 (純関数、stateless)。
+
+    実ゲーム仕様 (reference_ojama_landing_pattern) の相殺規則「自分の生成量で
+    まず自分への予告を相殺し、余剰を相手へ送る」を、双方が同時に発火した
+    場合に拡張する。同時発火のため、一方の余剰が他方の予告をさらに
+    相殺する交差処理は行わない (両者とも「発火した瞬間」に手持ちの生成量
+    だけを使い切る単純化。1フレーム内の同時発生を扱うための近似であり、
+    厳密な時系列上の連鎖的相殺までは再現しない)。
+    既存 `cancel_own_pending_then_send_surplus` (ojama_accounting.py) を
+    other_pending=0 固定で2回呼び、各々の surplus を手動で交換して
+    合算する (再実装しない)。
+
+    Returns:
+        (最終的に p1 へ向かう予告個数, 最終的に p2 へ向かう予告個数)。
+    """
+    own1, surplus1 = cancel_own_pending_then_send_surplus(gen_p1_ojama, pending_p1, 0)
+    own2, surplus2 = cancel_own_pending_then_send_surplus(gen_p2_ojama, pending_p2, 0)
+    return own1 + surplus2, own2 + surplus1
+
+
+def resolve_mutual_exchange(
+    before_p1: Board, before_p2: Board,
+    gen_p1_ojama: int, gen_p2_ojama: int,
+    pending_p1: int, pending_p2: int,
+    simulator: "ChainSimulator | None" = None,
+) -> MutualExchangeResult:
+    """両者同時発火 (#9 デモレビュー対処) の決着を1回で計算する。
+
+    双方の発火直前盤面 (`ChainEvent.before_board`) から連鎖を完走
+    シミュレーションし (幽霊連鎖ルールは `GHOST_CHAIN_RULE_ENABLED` に従う、
+    本番採用フラグと同じ経路)、得点→おじゃま換算済みの生成量
+    (`gen_p1_ojama`/`gen_p2_ojama`、換算は呼び出し側が `score_to_ojama` で
+    行う設計 — `reconstruct_virtual_board_pair` と同じ役割分担) を相殺し、
+    1ターン上限 (`OJAMA_MAX_DROP_PER_TURN`) まで着弾させた仮想盤面ペアを
+    返す。
+
+    Args:
+        before_p1: 1P の発火直前盤面。
+        before_p2: 2P の発火直前盤面。
+        gen_p1_ojama: 1P の連鎖が生成したおじゃま数 (お邪魔換算済み、0以上)。
+        gen_p2_ojama: 2P の連鎖が生成したおじゃま数。
+        pending_p1: 交換前に既に確定している 1P への予告おじゃま数。
+        pending_p2: 交換前に既に確定している 2P への予告おじゃま数。
+        simulator: 再利用する ChainSimulator (省略時は関数内で新規生成)。
+
+    Returns:
+        MutualExchangeResult。
+
+    Raises:
+        ValueError: gen_p1_ojama/gen_p2_ojama が負の場合。
+    """
+    if gen_p1_ojama < 0 or gen_p2_ojama < 0:
+        raise ValueError("gen_p1_ojama/gen_p2_ojama は0以上である必要があります")
+    sim = simulator if simulator is not None else ChainSimulator(
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    chain_result_p1 = sim.simulate(before_p1)
+    chain_result_p2 = sim.simulate(before_p2)
+    board_p1 = chain_result_p1.final_board.copy()
+    board_p2 = chain_result_p2.final_board.copy()
+    total_p1, total_p2 = _cancel_mutual_pending(
+        int(gen_p1_ojama), int(gen_p2_ojama), int(pending_p1), int(pending_p2))
+    drop_p1 = min(total_p1, OJAMA_MAX_DROP_PER_TURN)
+    drop_p2 = min(total_p2, OJAMA_MAX_DROP_PER_TURN)
+    if drop_p1 > 0:
+        seed = _deterministic_ojama_seed(
+            board_p1, board_p2, drop_p1, _OJAMA_SEED_SALT_TO_OPPONENT)
+        board_p1 = sim.drop_ojama(board_p1, drop_p1, seed=seed)
+    if drop_p2 > 0:
+        seed = _deterministic_ojama_seed(
+            board_p2, board_p1, drop_p2, _OJAMA_SEED_SALT_TO_ATTACKER)
+        board_p2 = sim.drop_ojama(board_p2, drop_p2, seed=seed)
+    return MutualExchangeResult(
+        board_p1_after=board_p1, board_p2_after=board_p2,
+        dropped_to_p1=drop_p1, dropped_to_p2=drop_p2,
+        leftover_p1=total_p1 - drop_p1, leftover_p2=total_p2 - drop_p2,
+        p1_dead=board_p1.is_dead(), p2_dead=board_p2.is_dead(),
+        chain_result_p1=chain_result_p1, chain_result_p2=chain_result_p2,
     )

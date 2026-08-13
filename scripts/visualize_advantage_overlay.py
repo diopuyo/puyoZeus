@@ -21,7 +21,7 @@ import json
 import math
 import sys
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dataclass_replace
 from pathlib import Path
 
 import cv2
@@ -35,8 +35,10 @@ import src.indicators_v2 as iv  # noqa: E402
 from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
+from src.exchange_virtual_board import resolve_mutual_exchange  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
+    CHAIN_TOTAL_MIN_SCORE,  # #9 決着先読みの発火ノイズガードに流用 (ResolvedExchangeTracker)
     OjamaAccountingTracker, OjamaAccountSnapshot,
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
 )
@@ -313,6 +315,140 @@ class EarlyFireTracker:
     def on_settled(self) -> None:
         """settled(確定)再計算が入ったら速報バイアスをクリアする(二重計上防止)。"""
         self.bias = 0.0
+
+
+# ============================
+# #9 両者同時発火の決着先読み (2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #9)
+# ============================
+# --resolved-exchange-eval で有効化 (既定 OFF)。両側の chain_event が同時に
+# アクティブになった瞬間、双方の発火直前盤面 (ChainEvent.before_board) から
+# 連鎖を完走シミュレーションし決着後の仮想盤面を1回だけ評価する。連鎖終了
+# (両側の chain_event が両方 None に戻る) まで結果を保持し、その間は再評価
+# しない (「確定済みの未来を逐次再評価しない」という #9 の原理そのもの)。
+# 片側のみの発火はトリガー対象外 (EarlyFireTracker の領分のまま)。
+
+
+class ResolvedExchangeTracker:
+    """両者同時発火の決着を先読みし、連鎖終了まで固定表示する (#9 対処)。
+
+    決着計算は `resolve_mutual_exchange` (連鎖完走シミュレーション+相殺+着弾、
+    src.exchange_virtual_board の既存資産、Step2 `reconstruct_virtual_board_pair`
+    の姉妹関数) → `_score_advantage` (既存学習モデル) の2段のみ (pressure/
+    threat/counter 等の他ライブ成分は含めない、決着先読みの対象はあくまで
+    「モデルが見た仮想盤面ペアの勝率」)。simulate の連結欠損由来の過小評価
+    (既知事故: 真値8連鎖→simulate1連鎖、project_chain_count_both_untrustworthy)
+    への対策として、保持中に **確定済み** 連鎖合計得点
+    (`OjamaAccountSnapshot.chain_total_score_p1/p2`、`chain_end_triggered_p1/p2`
+    が立った瞬間のみ真、K_SETTLE_FRAMES 連続不変を確認済みの値) が予測総得点を
+    超えたら、それを下限として即時再決着する。生 score OCR (掛け算式アニメ中は
+    上昇し続ける途中値) を直接比較すると、上昇アニメの毎フレームで
+    「観測>予測」が成立してしまい絶えず再決着し続ける (=乱高下の再現、
+    実測で確認済み) ため、既存の settle 確定済み値のみを見る。
+    """
+
+    def __init__(
+        self, model,
+        attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
+    ) -> None:
+        self._model = model
+        self._attribution_exclude = attribution_exclude
+        self._active = False
+        self._ev1: "ChainEvent | None" = None
+        self._ev2: "ChainEvent | None" = None
+        self._pred_score1 = 0.0
+        self._pred_score2 = 0.0
+        # 各 side につき再決着は1回まで (下記 _maybe_redecide 参照)。
+        self._redecided1 = False
+        self._redecided2 = False
+        self.hold_adv = 0.0    # 保持中の決着後有利不利 (1P視点)
+        self.hold_p1 = 0.5     # 保持中の決着後1P勝率
+        self.hold_drivers: list[tuple[str, float]] = []
+
+    def _resolve(
+        self, snap: OjamaAccountSnapshot, elapsed_sec: float,
+        score1: float, score2: float,
+    ) -> None:
+        """resolve_mutual_exchange → _score_advantage の2段で決着値を計算・保持する。"""
+        gen1 = iv._score_to_ojama_count(score1, elapsed_sec)
+        gen2 = iv._score_to_ojama_count(score2, elapsed_sec)
+        result = resolve_mutual_exchange(
+            self._ev1.before_board, self._ev2.before_board, gen1, gen2,
+            snap.pending_p1, snap.pending_p2,
+        )
+        # 決着後盤面には着弾分 (leftover 未満) が既に反映済みのため、snap の
+        # forecast/net_balance だけを決着後の残り (leftover) に差し替える
+        # (他のフィールドは会計連続性のため元 snap のまま流用、dataclasses.replace)。
+        resolved_snap = dataclass_replace(
+            snap,
+            net_balance_capped=result.leftover_p2 - result.leftover_p1,
+            forecast_p1=result.leftover_p1, forecast_p2=result.leftover_p2,
+        )
+        adv, p1, drivers = _score_advantage(
+            self._model, result.board_p1_after, result.board_p2_after,
+            resolved_snap, attribution_exclude=self._attribution_exclude,
+        )
+        self.hold_adv, self.hold_p1, self.hold_drivers = adv, p1, drivers
+        self._pred_score1, self._pred_score2 = score1, score2
+
+    def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
+        """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
+
+        `chain_end_triggered_p1/p2` は OjamaAccountingTracker が
+        K_SETTLE_FRAMES 連続でscore不変を確認した瞬間だけ True になる
+        edge-trigger (1連鎖=1回) — 掛け算式アニメ中の生 score OCR を毎フレーム
+        比較すると常に「観測>予測(未完のため)」が成立し続けて再決着が
+        乱発するため、確定済み値のみを見る (クラス docstring 参照)。
+        各 side、保持セッション中に1回まで (`_redecided1/2`)。2回目以降の
+        settle は別の (後続の) 連鎖である可能性が高く、その場合は元の
+        before_board を使い回した再決着はむしろ不整合を生むため見送る
+        (簡明優先、hold の解除は両側 chain_event が None に戻るのを待つ)。
+        """
+        obs1 = (
+            float(snap.chain_total_score_p1)
+            if snap.chain_end_triggered_p1 and not self._redecided1 else None
+        )
+        obs2 = (
+            float(snap.chain_total_score_p2)
+            if snap.chain_end_triggered_p2 and not self._redecided2 else None
+        )
+        self._redecided1 = self._redecided1 or obs1 is not None
+        self._redecided2 = self._redecided2 or obs2 is not None
+        exceeded = (
+            (obs1 is not None and obs1 > self._pred_score1)
+            or (obs2 is not None and obs2 > self._pred_score2)
+        )
+        if not exceeded:
+            return
+        self._resolve(
+            snap, elapsed_sec,
+            max(self._pred_score1, obs1 or 0.0), max(self._pred_score2, obs2 or 0.0),
+        )
+
+    def update(
+        self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
+    ) -> "tuple[bool, bool]":
+        """毎フレーム呼ぶ。(is_active, just_deactivated) を返す
+
+        (決着値そのものは hold_adv/hold_p1/hold_drivers 属性を直接参照する)。
+        """
+        ev1, ev2 = r_p1.chain_event, r_p2.chain_event
+        if not self._active:
+            # CHAIN_TOTAL_MIN_SCORE 未満 (OCR誤読ノイズ由来の疑いが濃い極小連鎖、
+            # ojama_accounting.py と同じ判断基準) はトリガー対象外にする。
+            if (ev1 is not None and ev2 is not None
+                    and ev1.total_score >= CHAIN_TOTAL_MIN_SCORE
+                    and ev2.total_score >= CHAIN_TOTAL_MIN_SCORE):
+                self._ev1, self._ev2 = ev1, ev2
+                self._redecided1 = self._redecided2 = False
+                self._resolve(
+                    snap, elapsed_sec, float(ev1.total_score), float(ev2.total_score))
+                self._active = True
+            return self._active, False
+        self._maybe_redecide(snap, elapsed_sec)
+        if ev1 is None and ev2 is None:
+            self._active = False
+            return False, True
+        return True, False
 
 
 # (改修1) スコアリセット検知: 新ゲーム開始/全消し等でスコアが「前フレームから
@@ -2189,6 +2325,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_counter_reach: bool = COUNTER_REACH_ENABLED_BY_DEFAULT,
              enable_counter_remaining_time: bool = False,
              enable_counter_defender_only: bool = False,
+             enable_resolved_exchange_eval: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -2198,6 +2335,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              show_excluded_attribution: bool = False,
              render: bool = True,
              dump_timeline_path: Path | None = None,
+             debug_history_out: list[tuple[float, float]] | None = None,
              normalize_fps_30: bool = OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
              use_production_recognition: bool = (
                  OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT),
@@ -2318,6 +2456,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         既定 False = 従来挙動と完全に同一 (backwards compat)。
         enable_counter_reach=False の場合はどちらのフラグも無効
         (打ち合い応手成分自体が計算されない)。
+    enable_resolved_exchange_eval: True で ResolvedExchangeTracker (両者同時
+        発火の決着先読み) を有効化する (2026-08-13、docs/DEMO_REVIEW_
+        2026-08-13.md #9)。従来 (既定 False) は連鎖アニメ中の観測到着ごとに
+        settled ゲート越しに逐次再評価するため、両者が撃ち合った未来は
+        物理的に確定しているにもかかわらず勝率が乱高下する。True にすると、
+        両側の chain_event が同時にアクティブになった瞬間に一度だけ
+        `resolve_mutual_exchange` (連鎖完走シミュレーション+相殺+着弾、
+        src.exchange_virtual_board) → `_score_advantage` の2段で決着後勝率を
+        計算し、両側の chain_event が両方 None に戻る (=両者の連鎖アニメ終了)
+        まで表示を固定する (adv_ema/p1_last の EMA 内部状態には混ぜず直接
+        ホールド、無効時は完全に従来経路とビット一致)。片側のみの発火は
+        トリガー対象外 (--early-fire-reaction の領分のまま、両フラグは独立)。
+        simulate の連結欠損由来の過小評価 (既知事故: 真値8連鎖→simulate1連鎖)
+        対策として、保持中に観測 score が予測総得点を超えたら下限として
+        即時再決着する。既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -2359,6 +2512,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         同スクリプトのモジュール docstring 参照) が不要になる。
         既定 None = dump しない (backwards compat、既存呼出元は挙動不変)。
         `render=False` と併用すると計算のみを最速で回せる。
+    debug_history_out: 指定すると、実際に画面へ表示する値 disp_adv (t_sec, disp_adv)
+        を history と同じ間引き (sample_interval) で毎回追記する (2026-08-13
+        #9 検証用デバッグフック、CLI 未配線)。settled 更新時のみ記録する
+        dump_timeline_path と異なり、非settled中の保持値も含めた「実際の表示値」
+        の全サンプルが得られる (#9 の乱高下削減効果を分散で数値検証するための
+        側路であり、本番挙動には一切影響しない)。既定 None = 何もしない
+        (backwards compat、既存呼出元は挙動不変)。
     normalize_fps_30: True (既定、2026-08-12 追加) で 60fps 等の動画を
         stride 相当 (実効30fps) に間引く
         (src.fps_normalize.resolve_normalize_fps_30_stride)。
@@ -2541,6 +2701,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     attribution_exclude = () if show_excluded_attribution else ATTRIBUTION_EXCLUDED_INDICATORS
     hcache = HeavyAdvCache(model, attribution_exclude=attribution_exclude)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
+    # #9 両者同時発火の決着先読み (2026-08-13)。enable_resolved_exchange_eval=False
+    # 時も生成のみ (コスト僅少、update() 呼び出し自体は毎フレーム行うが chain_event
+    # が両方非None になるまで内部で何もしない)。
+    resolved_tracker = ResolvedExchangeTracker(model, attribution_exclude=attribution_exclude)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -2632,6 +2796,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 model, attribution_exclude=attribution_exclude)
             cap_ptracker = CapabilityPressureTracker()
             counter_tracker = CounterReachTracker()
+            resolved_tracker = ResolvedExchangeTracker(
+                model, attribution_exclude=attribution_exclude)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -2646,6 +2812,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_early_fire_reaction:
             efire_tracker.update(r.p1.chain_event, r.p2.chain_event, b2, b1,
                                  tracker._elapsed(t))
+        # (#9 決着先読み) settled ゲートの外側 (= 非STABLE中も毎フレーム) で
+        # 呼ぶことが要 (chain_event の両側同時アクティブ検知は STABLE ゲート内
+        # では起きない、EarlyFireTracker と同じ理由)。
+        resolved_active, resolved_just_deactivated = False, False
+        if enable_resolved_exchange_eval:
+            resolved_active, resolved_just_deactivated = resolved_tracker.update(
+                r.p1, r.p2, snap, tracker._elapsed(t))
         # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
@@ -2670,7 +2843,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 r.p1.state == BoardState.STABLE
                 and r.p2.state == BoardState.STABLE
             )
+        # #9 決着先読みの保持値を adv_ema/p1_last へ引き継ぐ際 (deactivate 直後)、
+        # 同一フレームで settled 再計算が走っていればそちらを優先する
+        # (真の観測後盤面 > 決着先読みの1回評価、フラグ無効時は常に False)。
+        settled_ran_this_frame = False
         if b1 is not None and b2 is not None and settled:
+            settled_ran_this_frame = True
             # 重い盤面由来(モデルadv/threat/ukeyasusa/飽和連鎖)はキャッシュ間引き、安価な圧力/リードは毎フレーム
             model_adv, threat, drivers, ukey1, ukey2, sat1, sat2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
@@ -2789,6 +2967,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_early_fire_reaction and efire_tracker.bias != 0.0:
             disp_adv = max(-100.0, min(100.0, adv_ema + efire_tracker.bias))
             disp_p1 = adv_to_winprob(disp_adv)
+        # (#9 決着先読み) 保持中は EMA/早期発火バイアスを完全に上書きする
+        # (「確定済みの未来を逐次再評価しない」= disp を決着値に固定表示、
+        # docs/DEMO_REVIEW_2026-08-13.md #9)。hold 解除直後は、同フレームで
+        # 真の settled 再計算が走っていなければ adv_ema/p1_last を決着値で
+        # 継続させ、次回 settled 更新からのジャンプを最小化する
+        # (実装は簡明優先、既定 False 時は本ブロック自体を評価しない)。
+        if enable_resolved_exchange_eval:
+            if resolved_active:
+                disp_adv, disp_p1 = resolved_tracker.hold_adv, resolved_tracker.hold_p1
+                drivers = resolved_tracker.hold_drivers
+            elif resolved_just_deactivated and not settled_ran_this_frame:
+                adv_ema, p1_last = resolved_tracker.hold_adv, resolved_tracker.hold_p1
+                disp_adv, disp_p1 = adv_ema, p1_last
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
         # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
         # (t - start_sec) と一致するため必ず 0 から始まる。境界が一度も
@@ -2798,6 +2989,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
             # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦を維持
             history.append((t_rel, disp_adv))
+            if debug_history_out is not None:
+                debug_history_out.append((t, disp_adv))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         if not render:
@@ -3005,6 +3198,15 @@ def main() -> None:
              "従来挙動 (固定閾値12個を両側常時計算)。",
     )
     ap.add_argument(
+        "--resolved-exchange-eval", action="store_true", default=False,
+        dest="enable_resolved_exchange_eval",
+        help="両者同時発火の決着を先読みし連鎖終了まで固定表示する "
+             "(2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #9)。両側の "
+             "chain_event が同時にアクティブになった瞬間に一度だけ連鎖を"
+             "完走シミュレーションし決着後勝率で固定する。既定 OFF = 従来挙動 "
+             "(観測到着ごとの逐次再評価、連鎖中の乱高下あり)。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -3181,6 +3383,7 @@ def main() -> None:
              enable_counter_reach=a.enable_counter_reach,
              enable_counter_remaining_time=a.enable_counter_remaining_time,
              enable_counter_defender_only=a.enable_counter_defender_only,
+             enable_resolved_exchange_eval=a.enable_resolved_exchange_eval,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,

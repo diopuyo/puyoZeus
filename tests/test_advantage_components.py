@@ -304,12 +304,14 @@ def test_resolve_display_platt_selects_correct_phase_by_progress() -> None:
 # EarlyFireTracker (2026-07-29 userレビュー指摘1/2対処)
 # ============================
 
-def _make_chain_event(trigger_sec: float, before_board: Board | None = None) -> ChainEvent:
-    """テスト用の最小 ChainEvent を組み立てる (before_board 以外は不使用値でよい)。"""
+def _make_chain_event(
+    trigger_sec: float, before_board: Board | None = None, total_score: int = 0,
+) -> ChainEvent:
+    """テスト用の最小 ChainEvent を組み立てる (before_board/total_score 以外は不使用値でよい)。"""
     return ChainEvent(
         trigger_sec=trigger_sec, end_sec=trigger_sec + 1.0,
         before_board=before_board if before_board is not None else Board(),
-        chain_count=1, total_erased=0, total_score=0, base_score=0,
+        chain_count=1, total_erased=0, total_score=total_score, base_score=0,
         all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0,
         is_all_clear=False,
     )
@@ -415,3 +417,187 @@ def test_early_fire_none_board_is_safe() -> None:
     ev1 = _make_chain_event(trigger_sec=1.0)
     v = ft.update(ev1, None, None, None, 0.0)
     assert v == 0.0
+
+
+# ============================
+# ResolvedExchangeTracker (2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #9)
+# ============================
+# 実動画 (review_demo_2026-08-12.mp4 source t=192-200s、両者発火シーン) で
+# 診断したところ、既知バグクラス (OJAMA_FALL/CHAIN 高速振動系) の実害として
+# 「chain_count=8 だが total_score=0」の幻連鎖が数秒間 trigger_sec を変えながら
+# 再検知され続ける事象を実測した (本フラグの追加が原因ではなく既存の認識層の
+# 挙動)。以下は実測で動機づけられた2つの防御 (ノイズ下限ゲート/再決着1回上限)
+# を、実認識に依存せず決定論的に検証する。
+
+
+def _make_snapshot(
+    pending_p1: int = 0, pending_p2: int = 0,
+    chain_end_triggered_p1: bool = False, chain_end_triggered_p2: bool = False,
+    chain_total_score_p1: int = 0, chain_total_score_p2: int = 0,
+) -> "OjamaAccountSnapshot":
+    """テスト用の最小 OjamaAccountSnapshot を組み立てる (残りは無害な既定値)。"""
+    from src.ojama_accounting import OjamaAccountSnapshot
+
+    return OjamaAccountSnapshot(
+        t_sec=0.0, pending_p1=pending_p1, pending_p2=pending_p2,
+        total_generated_by_p1=0, total_generated_by_p2=0,
+        total_offset_by_p1=0, total_offset_by_p2=0,
+        total_dropped_to_p1=0, total_dropped_to_p2=0,
+        net_ojama_balance=pending_p2 - pending_p1,
+        overflow_risk_p1=False, overflow_risk_p2=False, confidence=1.0,
+        leftover_p1=0, leftover_p2=0,
+        all_clear_pending_p1=False, all_clear_pending_p2=False,
+        chain_end_triggered_p1=chain_end_triggered_p1,
+        chain_end_triggered_p2=chain_end_triggered_p2,
+        chain_total_score_p1=chain_total_score_p1,
+        chain_total_score_p2=chain_total_score_p2,
+    )
+
+
+def _make_signal(chain_event: "ChainEvent | None", score: int | None) -> types.SimpleNamespace:
+    """テスト用の最小 Signals もどき (ResolvedExchangeTracker が読む2属性のみ)。"""
+    return types.SimpleNamespace(chain_event=chain_event, score=score)
+
+
+def _stub_score_advantage_factory():
+    """呼び出し回数を数えつつ決定論的な (adv, p1, drivers) を返すスタブを作る。
+
+    呼び出し順に adv=10,20,30... と単調変化させ、「何回 _score_advantage が
+    実行されたか」をテスト側で直接検証できるようにする (再決着の1回上限等)。
+    """
+    calls: list[int] = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()) -> tuple:
+        calls.append(1)
+        n = len(calls)
+        return float(n * 10), 0.5 + n * 0.05, []
+
+    return _stub, calls
+
+
+def test_resolved_inactive_when_only_one_side_fires() -> None:
+    """片側のみの発火はトリガー対象外 (early-fire-reaction の領分のまま)。"""
+    from scripts.visualize_advantage_overlay import ResolvedExchangeTracker
+
+    tracker = ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0)
+    active, just_deactivated = tracker.update(
+        _make_signal(ev1, 100), _make_signal(None, 0), _make_snapshot(), 0.0)
+    assert active is False
+    assert just_deactivated is False
+
+
+def test_resolved_inactive_when_score_below_noise_gate(monkeypatch) -> None:
+    """CHAIN_TOTAL_MIN_SCORE 未満の幻連鎖 (実動画で実測した cc=8 score=0 系の
+    ノイズ) はトリガーしない — 実測に基づく回帰テスト。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=0)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=0)
+    active, _ = tracker.update(
+        _make_signal(ev1, 0), _make_signal(ev2, 0), _make_snapshot(), 0.0)
+    assert active is False
+    assert calls == []  # _score_advantage は一度も呼ばれない
+
+
+def test_resolved_activates_on_mutual_fire_above_gate(monkeypatch) -> None:
+    """両側とも CHAIN_TOTAL_MIN_SCORE 以上で同時発火 → 即座に決着計算する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    active, just_deactivated = tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert active is True
+    assert just_deactivated is False
+    assert len(calls) == 1
+    assert tracker.hold_adv == 10.0  # スタブの1回目の戻り値
+
+
+def test_resolved_holds_without_recompute_while_same_events_active(monkeypatch) -> None:
+    """同一 ChainEvent が継続する間は毎フレーム呼ばれても再計算しない (ホールド)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    snap = _make_snapshot()
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), snap, 0.0)
+    held = tracker.hold_adv
+    for _ in range(10):
+        active, _ = tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), snap, 0.0)
+        assert active is True
+        assert tracker.hold_adv == held  # 保持中は不変
+    assert len(calls) == 1  # 決着計算は1回のみ
+
+
+def test_resolved_deactivates_and_retains_hold_value_when_both_clear(monkeypatch) -> None:
+    """両側の chain_event が両方 None に戻ったら deactivate し、最後の決着値を保持する
+    (呼出側が adv_ema へ引き継ぐための値)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    active, just_deactivated = tracker.update(
+        _make_signal(None, 500), _make_signal(None, 300), _make_snapshot(), 0.0)
+    assert active is False
+    assert just_deactivated is True
+    assert tracker.hold_adv == held  # 値そのものは維持 (引き継ぎ用)
+
+
+def test_resolved_redecide_when_settled_score_exceeds_prediction(monkeypatch) -> None:
+    """simulate 過小評価対策: 確定済み連鎖合計得点が予測を超えたら再決着する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    # 1P の連鎖が settle し、真の得点(2500)が予測(100)を大幅に超過していたと判明。
+    snap_settled = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=2500)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap_settled, 0.0)
+    assert len(calls) == 2  # 下限として即時再決着
+
+
+def test_resolved_redecide_at_most_once_per_side(monkeypatch) -> None:
+    """実動画で実測した「同一保持中に同側の settle が繰り返し立つ」異常系でも
+    再決着は1回までに抑える (実測に基づく回帰テスト、本文コメント参照)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    snap_a = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=2500)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap_a, 0.0)
+    assert len(calls) == 2
+    # 同側の settle が再度 (異常に) 立っても3回目は起きない。
+    snap_b = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=9999)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap_b, 0.0)
+    assert len(calls) == 2
+
+
+def test_resolved_no_redecide_when_settled_score_not_exceeding(monkeypatch) -> None:
+    """確定済み得点が予測以下なら再決着しない (下限方式なので上回った時だけ動く)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=5000)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    snap_settled = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=100)
+    tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), snap_settled, 0.0)
+    assert len(calls) == 1  # 予測(5000) > 確定値(100) のため再決着しない
