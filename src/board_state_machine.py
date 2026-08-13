@@ -407,6 +407,15 @@ class DetectorSignals:
     # backwards compat: default 0.0 で既存動作と完全同一
     # (0.0 は「経過大 = 直近アクティブでない」と等価に働く)。
     own_chain_hold_until_sec: float = 0.0
+    # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の根治):
+    # 自 side の未着弾おじゃま予告量 (お邪魔会計トラッカー由来)。
+    # RecognitionPipeline が会計トラッカーを有効化している構成でのみ算出して
+    # 渡す (`_all_clear_pending` と同じ「外部で計算し signals に注入する」
+    # パターン、 detector 側は getattr で安全参照する)。
+    # None = 未計測/トラッカー無効構成を意味し、 OjamaVisualDetector は
+    # 滞在短縮ロジックを一切適用しない (= 従来相当のフレーム数で判定)。
+    # backwards compat: default None で既存動作と完全同一。
+    own_pending_ojama_forecast: int | None = None
 
 
 class StateTransitionDetector(Protocol):

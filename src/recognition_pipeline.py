@@ -237,7 +237,12 @@ CHAIN_EXIT_NEXT_WARMUP_SEC: float = 0.5
 # score が大幅減少 / 両者ほぼ0) でのみ検知できるため、その専用しきい値を
 # ここで定義する (enable_match_start_full_clear=True 時のみ使用)。
 # SCORE_RESET_THRESHOLD (=500) は ojama_accounting.py の既存定数を流用し重複させない。
-from src.ojama_accounting import SCORE_RESET_THRESHOLD  # noqa: E402
+# OjamaAccountingTracker: 案1 会計連動 (enable_ojama_fall_scoped_exit_accounting,
+# 2026-08-13) で OJAMA_FALL 出口の滞在短縮判定に未着弾予告量を渡すために使う。
+from src.ojama_accounting import (  # noqa: E402
+    SCORE_RESET_THRESHOLD,
+    OjamaAccountingTracker,
+)
 # 両者スコアがこれ以下なら「0付近」とみなす (OCR ノイズ許容)。
 # scripts/visualize_advantage_overlay.py の SCORE_NEAR_ZERO_THRESHOLD と同値。
 MATCH_START_SCORE_NEAR_ZERO_THRESHOLD: int = 20
@@ -1388,6 +1393,18 @@ class RecognitionPipeline:
         # ChainPhaseDetector docstring 参照。default False = 従来挙動完全
         # 維持・bit-identical (backwards compat)。
         enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の
+        # 根治): OjamaVisualDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        enable_ojama_fall_scoped_exit: bool = False,
+        # 案1 会計連動 (2026-08-13): True で OjamaAccountingTracker を内部に
+        # 保持し、 未着弾おじゃま予告量を signals.own_pending_ojama_forecast
+        # 経由で OjamaVisualDetector に渡す。 enable_ojama_fall_scoped_exit と
+        # 独立フラグにすることで、 会計連動なしでも scoped_exit 単体を
+        # 検証できるようにする。default False = 従来挙動完全維持
+        # (トラッカー不在時は signal が None のまま = 短縮ロジック不発動)。
+        enable_ojama_fall_scoped_exit_accounting: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1889,6 +1906,25 @@ class RecognitionPipeline:
         self._enable_chain_gate_raw_fallback: bool = bool(
             enable_chain_gate_raw_fallback
         )
+        # 案1 (2026-08-13、OJAMA_FALL出口の根治): _build_state_machine
+        # 呼び出し前に格納が必要 (detector へそのまま伝播するため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_ojama_fall_scoped_exit: bool = bool(
+            enable_ojama_fall_scoped_exit
+        )
+        # 案1 会計連動: フラグ ON のときのみ OjamaAccountingTracker を保持する。
+        # 両 side (1P/2P) の相殺を単一 Tracker が内部で扱う設計
+        # (OjamaAccountingTracker.on_state_transition("p1"/"p2", ...)) のため
+        # インスタンスは 1 つで足りる。 OFF (既定) では None のまま
+        # (= getattr 安全参照側で従来挙動にフォールバックする)。
+        self._enable_ojama_fall_scoped_exit_accounting: bool = bool(
+            enable_ojama_fall_scoped_exit_accounting
+        )
+        self._ojama_fall_accounting_tracker: "OjamaAccountingTracker | None" = (
+            OjamaAccountingTracker()
+            if self._enable_ojama_fall_scoped_exit_accounting
+            else None
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -2032,6 +2068,7 @@ class RecognitionPipeline:
                 self._enable_ojama_fall_entry_hardening
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2077,6 +2114,7 @@ class RecognitionPipeline:
                 self._enable_ojama_fall_entry_hardening
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2447,6 +2485,11 @@ class RecognitionPipeline:
         # 案3 (2026-08-13、優先度最下位): ChainPhaseDetector へそのまま伝播する。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の
+        # 根治): OjamaVisualDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # 148動画収集走行中のため既定OFF必須)。
+        enable_ojama_fall_scoped_exit: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2499,6 +2542,7 @@ class RecognitionPipeline:
                 enable_ojama_fall_entry_hardening=(
                     enable_ojama_fall_entry_hardening
                 ),
+                enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
             )
             detectors.append(ovd)
         detectors.append(
@@ -2817,6 +2861,10 @@ class RecognitionPipeline:
         enable_ojama_fall_placement_override: bool = False,
         enable_ojama_fall_entry_hardening: bool = False,
         enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (2026-08-13、OJAMA_FALL出口の根治): __init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_fall_scoped_exit: bool = False,
+        enable_ojama_fall_scoped_exit_accounting: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3037,6 +3085,10 @@ class RecognitionPipeline:
             ),
             enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
             enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
+            enable_ojama_fall_scoped_exit_accounting=(
+                enable_ojama_fall_scoped_exit_accounting
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -3159,6 +3211,10 @@ class RecognitionPipeline:
         # (前試合の全消し状態が次試合に持ち越されるのを防ぐ)。
         self._all_clear_pending_1p = False
         self._all_clear_pending_2p = False
+        # 案1 会計連動 (2026-08-13): 試合切替時に帳簿もクリアする
+        # (前試合の未着弾予告量が次試合に持ち越されるのを防ぐ)。
+        if self._ojama_fall_accounting_tracker is not None:
+            self._ojama_fall_accounting_tracker.reset()
         # バーストガード再設計 Stage1 (2026-08-05): Schmitt trigger 状態も
         # 試合切替時にクリアする (前試合の burst 状態が次試合に残留し
         # project_match_boundary_residue_leak_2026-07-25 と同種の罠になるのを防ぐ)。
@@ -4247,6 +4303,19 @@ class RecognitionPipeline:
             self._all_clear_pending_2p, p2.confirmed_board, cur_score_2p,
             chain_fired=chain_ev_2p is not None,
         )
+
+        # 案1 会計連動 (2026-08-13、OJAMA_FALL出口の根治): OjamaAccountingTracker
+        # に今フレームの state 遷移を通知する。 _all_clear_pending と同じ
+        # 「_step_side 後に更新し、 次フレームの signals 構築で読む」二段構え
+        # (今フレームの signals は _step_side 呼び出し時点で既に構築済のため
+        # 因果関係は崩れない)。 トラッカー無効構成 (既定) では None のため no-op。
+        if self._ojama_fall_accounting_tracker is not None:
+            self._ojama_fall_accounting_tracker.on_state_transition(
+                "p1", _pre_state_1p, p1.state, cur_score_1p, time_sec,
+            )
+            self._ojama_fall_accounting_tracker.on_state_transition(
+                "p2", _pre_state_2p, p2.state, cur_score_2p, time_sec,
+            )
 
         # Phase I.c: OnlineHsvCalibrator update (動画別 HSV 自動学習)
         # 1P/2P STABLE 中の信頼サンプルを蓄積、ready 後に ColorClassifier ranges
@@ -5688,6 +5757,16 @@ class RecognitionPipeline:
         _elapsed_since_first_move = (
             None if _first_move is None else max(0.0, time_sec - _first_move)
         )
+        # 案1 会計連動 (2026-08-13): 会計トラッカーが有効な構成でのみ
+        # 未着弾おじゃま予告量を算出する (getattr 安全参照、トラッカー無効
+        # 構成では None のまま = OjamaVisualDetector 側は従来相当の判定)。
+        _own_pending_ojama_forecast: int | None = None
+        _acct_tracker = getattr(self, "_ojama_fall_accounting_tracker", None)
+        if _acct_tracker is not None:
+            _acct_snap = _acct_tracker.get_snapshot(time_sec)
+            _own_pending_ojama_forecast = (
+                _acct_snap.pending_p1 if side == "1P" else _acct_snap.pending_p2
+            )
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -5706,6 +5785,7 @@ class RecognitionPipeline:
             effect_gate_window_active=_effect_gate_window_active,
             own_score_delta=score_d_for_self,  # 案2 (2026-08-13)
             own_chain_hold_until_sec=own_chain_hold_until,  # 案4-lite拡張 (2026-08-13)
+            own_pending_ojama_forecast=_own_pending_ojama_forecast,  # 案1会計連動
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、

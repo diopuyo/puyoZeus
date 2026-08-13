@@ -1,9 +1,10 @@
-"""OJAMA_FALL誤分類 修正 (案2+案4-lite+案3) の実データ効果測定 (2026-08-13).
+"""OJAMA_FALL誤分類 修正 (案2+案4-lite+案3+案1) の実データ効果測定 (2026-08-13).
 
 src/_diag_ojama_fall_misclass_2026-08-13.py (根因調査本体) は書き換えず、
 「full_prod」設定に新フラグ (enable_ojama_fall_placement_override /
 enable_ojama_fall_entry_hardening / enable_chain_gate_raw_fallback) を
-ON にした「full_prod_fix」設定を追加して同一フレームに並走させる。
+ON にした「full_prod_fix」設定、 さらに案1 (enable_ojama_fall_scoped_exit、
+出口の根治) を追加した「full_prod_fix_scoped」設定を並走させる。
 
 対象:
   - 場面1 (source t=188-190、stride=1): OJAMA_FALL⇔STABLE 振動の解消確認。
@@ -39,7 +40,9 @@ from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
 DEFAULT_FPS: float = 30.0
 SIDES = ("1P", "2P")
-CONFIGS = ("full_prod", "full_prod_fix")
+# 案1 (2026-08-13、OJAMA_FALL出口の根治): full_prod_fix_scoped を追加し
+# 3 設定並走にする (full_prod_fix はそのまま維持、 既存比較を壊さない)。
+CONFIGS = ("full_prod", "full_prod_fix", "full_prod_fix_scoped")
 
 PROD_TARGET_W: int = 1920
 PROD_TARGET_H: int = 1080
@@ -60,6 +63,11 @@ def _build_pipeline(config: str) -> RecognitionPipeline:
     full_prod: collect_boards_lean.py 相当の本番構成 (_diag_ojama_fall_
         misclass_2026-08-13.py の full_prod と同一)。
     full_prod_fix: 上記 + 案2/案4-lite/案3 の新フラグ全て ON。
+    full_prod_fix_scoped: 上記 (full_prod_fix) + 案1
+        (enable_ojama_fall_scoped_exit、 出口の根治) を追加 ON。
+        会計連動 (enable_ojama_fall_scoped_exit_accounting) は本比較の対象外
+        (別途 A/B が必要なため既定 OFF のまま、 未着弾量ゼロ短縮ロジックの
+        効果は別測定に回す)。
     """
     base_kwargs: dict[str, Any] = dict(
         stable_frame_count=3,
@@ -83,6 +91,14 @@ def _build_pipeline(config: str) -> RecognitionPipeline:
             enable_ojama_fall_placement_override=True,
             enable_ojama_fall_entry_hardening=True,
             enable_chain_gate_raw_fallback=True,
+        )
+    if config == "full_prod_fix_scoped":
+        return RecognitionPipeline.load_default(
+            **base_kwargs,
+            enable_ojama_fall_placement_override=True,
+            enable_ojama_fall_entry_hardening=True,
+            enable_chain_gate_raw_fallback=True,
+            enable_ojama_fall_scoped_exit=True,
         )
     raise ValueError(f"unknown config: {config}")
 

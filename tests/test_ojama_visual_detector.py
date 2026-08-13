@@ -25,12 +25,17 @@ from src.ojama_visual_detector import (
     OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC,
     OJAMA_ENTRY_CONSEC_SEC,
     OJAMA_FALL_MAX_SEC,
+    OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD,
+    OJAMA_FALL_SCOPED_EXIT_MIN_SEC,
+    OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR,
+    OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES,
     OJAMA_FALL_SETTLE_DIFF_THRESHOLD,
     OJAMA_FALL_SETTLE_MIN_FRAMES,
     OJAMA_FALL_SETTLE_STABLE_FRAMES,
     OJAMA_REENTRY_SUPPRESS_SEC,
     OJAMA_SETTLE_CONSEC,
     OjamaVisualDetector,
+    _count_board_ojama,
     _count_top_ojama,
     _has_ojama_fall_placement_evidence,
 )
@@ -1389,6 +1394,290 @@ def test_placement_override_alone_reentry_not_suppressed_when_hardening_off() ->
     sig3 = DetectorSignals(time_sec=0.077, cnn_board=board3, is_match_active=True)
     assert det.detect(ctx3, sig3) == BoardState.OJAMA_FALL, (
         "entry_hardening=False なら抑制されず、従来通り2フレーム連続で発火"
+    )
+
+
+def test_str_detector_signals_own_pending_ojama_forecast_default_none() -> None:
+    """ST-R: DetectorSignals.own_pending_ojama_forecast のデフォルトは None
+    (トラッカー無効構成 = 既存ビルドが壊れない)。
+    """
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+    )
+    assert sig.own_pending_ojama_forecast is None, (
+        "デフォルト None で既存ビルドが壊れない"
+    )
+
+
+# ============================
+# 案1 (2026-08-13、OJAMA_FALL出口の根治): おじゃまセル限定 settle 判定
+# (enable_ojama_fall_scoped_exit)
+# ============================
+
+
+def _board_with_ojama_and_color(ojama_n: int, color_n: int = 0) -> Board:
+    """可視領域に COLOR_OJAMA を ojama_n 個 (下段から) + COLOR_RED を
+    color_n 個 (上段から、 ojama と重ならないセルのみ) 配置した盤面。
+
+    案1 scoped exit のテスト用: 色ぷよ (COLOR_RED) の増減がおじゃま個数の
+    カウントに一切影響しないことを確認するため、 双方を独立に数えられる
+    ように上下から敷き詰める。
+    """
+    from src.board import BOARD_COLS as _COLS, BOARD_ROWS as _ROWS
+
+    b = Board()
+    filled = 0
+    for r in range(_ROWS - 1, HIDDEN_ROWS - 1, -1):
+        for c in range(_COLS):
+            if filled >= ojama_n:
+                break
+            b.set(r, c, COLOR_OJAMA)
+            filled += 1
+        if filled >= ojama_n:
+            break
+    placed = 0
+    for r in range(HIDDEN_ROWS, _ROWS):
+        for c in range(_COLS):
+            if placed >= color_n:
+                break
+            if int(b.get(r, c)) != COLOR_EMPTY:
+                continue
+            b.set(r, c, COLOR_RED)
+            placed += 1
+        if placed >= color_n:
+            break
+    return b
+
+
+def test_count_board_ojama_ignores_hidden_row() -> None:
+    """`_count_board_ojama` は隠し段 (row=0) を対象外とする (可視領域のみ)。"""
+    b = Board()
+    b.set(0, 0, COLOR_OJAMA)  # 隠し段 (対象外)
+    b.set(HIDDEN_ROWS, 0, COLOR_OJAMA)  # 可視最上段 (対象)
+    assert _count_board_ojama(b) == 1
+
+
+def test_count_board_ojama_counts_below_roi() -> None:
+    """`_count_board_ojama` は ROI (可視最上段2行) を超えた下段のおじゃまも
+    数える (`_count_top_ojama` との違い)。
+    """
+    b = Board()
+    b.set(HIDDEN_ROWS + 5, 0, COLOR_OJAMA)  # ROI 外・可視領域内
+    assert _count_top_ojama(b) == 0
+    assert _count_board_ojama(b) == 1
+
+
+def test_count_board_ojama_ignores_color_puyo() -> None:
+    """`_count_board_ojama` は色ぷよ (COLOR_RED 等) を数えない。"""
+    board = _board_with_ojama_and_color(ojama_n=5, color_n=10)
+    assert _count_board_ojama(board) == 5
+
+
+def _drive_scoped_exit(
+    det: OjamaVisualDetector,
+    ojama_counts: list[int],
+    *,
+    color_counts: "list[int] | None" = None,
+    fps: float = 30.0,
+    start_frame: int = 0,
+    own_pending_ojama_forecast: "int | None" = None,
+) -> list[BoardState | None]:
+    """ojama_counts (各フレームの可視領域おじゃま数) を順に detect() へ渡す
+    (案1 scoped exit テスト用)。 color_counts を渡すと同じ長さで各フレームの
+    色ぷよ数を独立に変化させられる (色ぷよの増減が判定に影響しないことの
+    検証に使う)。 ctx.state は常に OJAMA_FALL (退出判定のみをテストする)。
+    """
+    results: list[BoardState | None] = []
+    for i, n in enumerate(ojama_counts):
+        frame_idx = start_frame + i
+        color_n = 0 if color_counts is None else color_counts[i]
+        ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=frame_idx)
+        sig = DetectorSignals(
+            time_sec=float(frame_idx) / fps,
+            cnn_board=_board_with_ojama_and_color(n, color_n),
+            is_match_active=True,
+            own_pending_ojama_forecast=own_pending_ojama_forecast,
+        )
+        results.append(det.detect(ctx, sig))
+    return results
+
+
+def test_scoped_exit_ignores_own_placement_color_churn() -> None:
+    """根治確認 (中核): おじゃま数が一定でも自分のツモ設置で色ぷよ数が
+    フレーム毎に変わり続ける実測パターン (設置ブロック16/16件) で、
+    scoped exit (案1) は退出判定を塞がれない。
+
+    色ぷよ数は毎フレーム DIFF_THRESHOLD ちょうど分だけ増加させる
+    (= 案B の全盤面判定なら `diff < THRESHOLD` を満たさず永久に settle
+    しないシナリオ)。 おじゃま数は固定のため scoped exit は正常に
+    STABLE 復帰する。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    n_frames = 20
+    ojama_counts = [10] * n_frames
+    color_counts = [
+        i * OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD for i in range(n_frames)
+    ]
+    results = _drive_scoped_exit(det, ojama_counts, color_counts=color_counts)
+    assert any(r == BoardState.STABLE for r in results), (
+        "色ぷよ設置が続いても scoped exit はおじゃま数の安定だけで退出するはず"
+    )
+
+
+def test_scoped_exit_blocked_while_ojama_still_falling() -> None:
+    """おじゃま数自体がまだ変動中 (落下中) の間は退出しない。"""
+    det = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    ojama_counts = [10, 20, 30, 40, 50, 60, 70]  # 単調増加 = 落下継続中
+    results = _drive_scoped_exit(det, ojama_counts)
+    assert all(r is None for r in results), (
+        "おじゃま数が変動中は STABLE 復帰しないはず"
+    )
+
+
+def test_scoped_exit_timeout_forces_stable() -> None:
+    """安全弁: OJAMA_FALL_MAX_SEC 秒超過で安定未達でも強制 STABLE 復帰する。"""
+    det = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_ojama_and_color(10), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_FALL_MAX_SEC + 0.1,
+        cnn_board=_board_with_ojama_and_color(50),  # 不安定
+        is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.STABLE
+
+
+def test_scoped_exit_pending_zero_shortens_required_stable_frames() -> None:
+    """会計連動: own_pending_ojama_forecast<=0 なら必要静止フレーム数が
+    `OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR` で短縮され、 pending が
+    残っている (または未接続 None の) 場合より早く STABLE 復帰する。
+    """
+    n_frames = OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES + 4
+    ojama_counts = [10] * n_frames
+
+    det_pending = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    results_pending = _drive_scoped_exit(
+        det_pending, ojama_counts, own_pending_ojama_forecast=3,
+    )
+    first_stable_pending = results_pending.index(BoardState.STABLE)
+
+    det_zero = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    results_zero = _drive_scoped_exit(
+        det_zero, ojama_counts, own_pending_ojama_forecast=0,
+    )
+    first_stable_zero = results_zero.index(BoardState.STABLE)
+
+    assert first_stable_zero < first_stable_pending, (
+        "未着弾予告が尽きていれば (pending<=0) より早く STABLE 復帰するはず"
+    )
+    expected_required = max(
+        1,
+        OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES
+        // OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR,
+    )
+    assert expected_required < OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES, (
+        "テスト前提: 短縮後の必要フレーム数は短縮前より小さいはず"
+    )
+
+
+def test_scoped_exit_pending_none_behaves_like_untracked_default() -> None:
+    """会計トラッカー未接続 (own_pending_ojama_forecast=None) では従来通り
+    `OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES` フル分の静止を要求する
+    (= pending>0 の場合と同じ結果になる、 短縮ロジックが誤発動しない)。
+    """
+    n_frames = OJAMA_FALL_SCOPED_EXIT_STABLE_FRAMES + 4
+    ojama_counts = [10] * n_frames
+
+    det_none = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    results_none = _drive_scoped_exit(
+        det_none, ojama_counts, own_pending_ojama_forecast=None,
+    )
+    det_pending = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+    results_pending = _drive_scoped_exit(
+        det_pending, ojama_counts, own_pending_ojama_forecast=5,
+    )
+    assert (
+        results_none.index(BoardState.STABLE)
+        == results_pending.index(BoardState.STABLE)
+    ), "None (未接続) は pending>0 と同じ必要フレーム数になるはず"
+
+
+def test_scoped_exit_default_off_bit_identical_to_board_settle() -> None:
+    """回帰: enable_ojama_fall_scoped_exit=False (既定) では
+    enable_ojama_fall_board_settle 側の従来ロジックのみが使われ、
+    own_pending_ojama_forecast があっても一切参照しない (bit-identical)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_board_settle=True)  # scoped 既定 False
+    counts = [20, 30, 40, 44] + [45] * 8
+    results = _drive_board_settle(det, counts)
+    # own_pending_ojama_forecast を渡しても結果が変わらないことを追加確認する。
+    det2 = OjamaVisualDetector(enable_ojama_fall_board_settle=True)
+    results2: list[BoardState | None] = []
+    for i, n in enumerate(counts):
+        ctx = StateContext(state=BoardState.OJAMA_FALL, frame_idx=i)
+        sig = DetectorSignals(
+            time_sec=float(i) / 30.0, cnn_board=_board_with_n_puyos(n),
+            is_match_active=True, own_pending_ojama_forecast=0,
+        )
+        results2.append(det2.detect(ctx, sig))
+    assert results == results2, (
+        "scoped_exit=False では own_pending_ojama_forecast を無視するはず"
+    )
+
+
+def test_scoped_exit_takes_priority_over_board_settle_when_both_enabled() -> None:
+    """両フラグ ON (通常は想定しないが安全側の確認): 案1 (scoped exit) が
+    案B (board_settle) より優先され、 色ぷよ churn で塞がれない。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_scoped_exit=True,
+    )
+    n_frames = 20
+    ojama_counts = [10] * n_frames
+    color_counts = [
+        i * OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD for i in range(n_frames)
+    ]
+    results = _drive_scoped_exit(det, ojama_counts, color_counts=color_counts)
+    assert any(r == BoardState.STABLE for r in results), (
+        "両フラグ ON でも scoped exit が優先され、 色ぷよ churn で塞がれないはず"
+    )
+
+
+def test_scoped_exit_intercept_resets_no_stale_contamination() -> None:
+    """案B の (c) テストと同型: OJAMA_FALL から他 state に途中横取りされた
+    後の再突入で scoped 系の内部 state が汚染されないことを確認する。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_scoped_exit=True)
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_ojama_and_color(10), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+    assert det._scoped_exit_start_frame == 0  # noqa: SLF001
+
+    ctx_other = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig_other = DetectorSignals(
+        time_sec=100.0, cnn_board=_empty_board(), is_match_active=True,
+    )
+    assert det.detect(ctx_other, sig_other) is None
+    assert det._scoped_exit_start_frame == -1  # noqa: SLF001
+
+    ctx2 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=2)
+    sig2 = DetectorSignals(
+        time_sec=100.05, cnn_board=_board_with_ojama_and_color(10),
+        is_match_active=True,
+    )
+    result = det.detect(ctx2, sig2)
+    assert result is None, (
+        "再突入直後は新規 start として記録され、 stale time でタイムアウトしてはいけない"
     )
 
 
