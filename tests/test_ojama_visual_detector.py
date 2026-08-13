@@ -22,11 +22,13 @@ from src.board_state_machine import (
 from src.ojama_visual_detector import (
     OJAMA_CONSEC_THRESH,
     OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER,
+    OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC,
     OJAMA_ENTRY_CONSEC_SEC,
     OJAMA_FALL_MAX_SEC,
     OJAMA_FALL_SETTLE_DIFF_THRESHOLD,
     OJAMA_FALL_SETTLE_MIN_FRAMES,
     OJAMA_FALL_SETTLE_STABLE_FRAMES,
+    OJAMA_REENTRY_SUPPRESS_SEC,
     OJAMA_SETTLE_CONSEC,
     OjamaVisualDetector,
     _count_top_ojama,
@@ -1092,3 +1094,307 @@ def test_entry_hardening_default_off_bit_identical() -> None:
         "既定 (frame 数ベース) では極短時間でも 2 フレーム連続で発火するはず"
         " (実時間ハードニングが介入しないことの確認)"
     )
+
+
+# ============================
+# 案4-lite 拡張 (coordinator追加指示, 2026-08-13、場面2実測 52→69 の悪化対処):
+# CHAIN 割り込み厳格化を state 非依存 (直近 own chain アクティブ) に拡張 +
+# 案2 exit 直後の re-entry 抑制
+# ============================
+
+
+def test_hardening_gravity_settle_state_is_hardened_context() -> None:
+    """coordinator追加指示 (第2ラウンド、実データ直接確認で判明):
+    実測 (logs/verify_ojama_fall_fix_scene2_2026-08-13_v2.json の
+    frame_records) で CHAIN→GRAVITY_SETTLE→OJAMA_FALL→CHAIN という
+    周期的割り込み (~1.2〜1.3秒、連鎖1リンクの実測とほぼ一致) が
+    ctx.state==GRAVITY_SETTLE から直接発生することを確認した。
+    「ctx.state==CHAIN」の瞬間条件だけでは GravitySettleDetector が
+    最低優先度で登録されているため CHAIN 終了直後の GRAVITY_SETTLE 中に
+    素通りされる。 ctx.state==GRAVITY_SETTLE も CHAIN と同じ倍率で
+    厳格化する。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # 通常閾値は超えたが CHAIN 倍率には未達 → まだ発火しない
+    ctx1 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) is None, (
+        "ctx.state==GRAVITY_SETTLE も CHAIN と同じ倍率で厳格化されるはず"
+        " (実測された CHAIN→GRAVITY_SETTLE→OJAMA_FALL→CHAIN の直接経路)"
+    )
+
+    # CHAIN 倍率分の実時間が経過すれば発火する (安全弁は残る)。
+    ctx2 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=2)
+    required = OJAMA_ENTRY_CONSEC_SEC * OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+    sig2 = DetectorSignals(
+        time_sec=required + 0.001, cnn_board=ojama_board, is_match_active=True,
+    )
+    assert det.detect(ctx2, sig2) == BoardState.OJAMA_FALL
+
+
+def test_hardening_recent_gravity_settle_observation_covers_stable_transition() -> None:
+    """coordinator追加指示 (第2ラウンド、実データ直接確認で判明):
+    GRAVITY_SETTLE → STABLE (一瞬) → OJAMA_FALL という経路 (実測:
+    t=198.267 gravity_settle → t=198.400 stable → t=198.500 ojama_fall、
+    経過 0.233秒) は ctx.state の瞬間条件 (CHAIN/GRAVITY_SETTLE) では
+    原理的に捉えられない (発火時点では既に STABLE のため)。 本 detector
+    自身が「直近に CHAIN/GRAVITY_SETTLE を観測した時刻」 を内部で追跡し、
+    STABLE に遷移した直後の entry も同じ倍率で厳格化することを確認する。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    # GRAVITY_SETTLE を観測 (ROI 陰性のまま、 観測時刻のみ内部に記録される)。
+    ctx0 = StateContext(state=BoardState.GRAVITY_SETTLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=_empty_board(), is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # STABLE に遷移した直後 (ctx.state はもう GRAVITY_SETTLE でない) に
+    # ROI お邪魔が出現 → 通常閾値だけでは発火しないはず (直近観測で厳格化)。
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(time_sec=0.05, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx1, sig1) is None  # trigger 開始のみ
+
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig2 = DetectorSignals(
+        time_sec=0.05 + OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx2, sig2) is None, (
+        "GRAVITY_SETTLE 観測直後の STABLE では通常閾値だけで発火してはいけない"
+        " (ctx.state の瞬間条件では捉えられない経路への対策)"
+    )
+
+    # CHAIN 倍率分の実時間が経過すれば発火する (安全弁は残る)。
+    ctx3 = StateContext(state=BoardState.STABLE, frame_idx=3)
+    required = OJAMA_ENTRY_CONSEC_SEC * OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+    sig3 = DetectorSignals(
+        time_sec=0.05 + required + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx3, sig3) == BoardState.OJAMA_FALL
+
+
+def test_hardening_recent_chain_activity_extends_beyond_chain_state() -> None:
+    """coordinator追加指示: ctx.state==CHAIN でなくても、 直近
+    own_chain_hold_until_sec が近ければ (= 直近まで自 chain がアクティブ
+    だった) entry を CHAIN 割り込みと同じ倍率で厳格化する。
+
+    「ctx.state == CHAIN」の瞬間条件だけでは、 chain_event 検出の空白で
+    state が既に CHAIN を離れた後 (GRAVITY_SETTLE 等の中間 state 経由) に
+    entry 判定される実際の割り込み経路を素通りしてしまう
+    (場面2 実測: chain_to_ojama_interrupts が baseline でも常に 0 =
+    隣接フレームの直接 CHAIN→OJAMA_FALL 遷移は存在しない、が根拠)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    # 直近 (0.1秒前) まで own chain が hold されていた想定 (ctx.state は STABLE)。
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=100.0, cnn_board=ojama_board, is_match_active=True,
+        own_chain_hold_until_sec=99.9,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    # 通常閾値は超えたが CHAIN 倍率には未達 → まだ発火しない
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=100.0 + OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True, own_chain_hold_until_sec=99.9,
+    )
+    assert det.detect(ctx1, sig1) is None, (
+        "ctx.state != CHAIN でも直近 own chain アクティブなら厳格化されるはず"
+    )
+
+    # CHAIN 倍率分の実時間が経過すれば発火する (安全弁は残る)。
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    required = OJAMA_ENTRY_CONSEC_SEC * OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+    sig2 = DetectorSignals(
+        time_sec=100.0 + required + 0.001, cnn_board=ojama_board,
+        is_match_active=True, own_chain_hold_until_sec=99.9,
+    )
+    assert det.detect(ctx2, sig2) == BoardState.OJAMA_FALL
+
+
+def test_hardening_chain_activity_outside_window_not_hardened() -> None:
+    """回帰: own_chain_hold_until_sec が OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC
+    より昔なら (= 直近アクティブでない) 厳格化しない (通常閾値のみ)。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    old_chain_until = 100.0 - OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC - 1.0
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=100.0, cnn_board=ojama_board, is_match_active=True,
+        own_chain_hold_until_sec=old_chain_until,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=100.0 + OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True, own_chain_hold_until_sec=old_chain_until,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.OJAMA_FALL, (
+        "直近アクティブでない own chain 履歴は厳格化の対象外のはず"
+    )
+
+
+def test_hardening_default_own_chain_hold_until_sentinel_not_treated_as_recent() -> None:
+    """回帰: own_chain_hold_until_sec の既定値 0.0 (= 「まだ chain 未発生」
+    sentinel、RecognitionPipeline.reset() と同じ規約) は、 time_sec が
+    小さい序盤フレームでも「直近アクティブ」と誤判定しない。
+    """
+    det = OjamaVisualDetector(enable_ojama_fall_entry_hardening=True)
+    ojama_board = _board_with_ojama_top(2)
+
+    ctx0 = StateContext(state=BoardState.STABLE, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=ojama_board, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.STABLE, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=ojama_board,
+        is_match_active=True,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.OJAMA_FALL, (
+        "own_chain_hold_until_sec 既定値 (0.0) は「直近アクティブ」と誤判定"
+        "してはいけない"
+    )
+
+
+def test_hardening_reentry_after_placement_override_exit_requires_extra_duration() -> None:
+    """coordinator追加指示: 案2 (placement override) の早期 exit 直後は
+    OJAMA_REENTRY_SUPPRESS_SEC 秒以内の再 entry を CHAIN 割り込みと同じ倍率で
+    厳格化する (exit→即re-entry 振動対策)。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+        enable_ojama_fall_entry_hardening=True,
+    )
+    board2 = _board_with_ojama_top(2)
+    board3 = _board_with_ojama_top(3)
+
+    # OJAMA_FALL 突入 (settle start 記録)。
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    # own_score_delta>0 (実設置証拠) で即 STABLE 復帰 (案2)。
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=0.033, cnn_board=board2, is_match_active=True, own_score_delta=8,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.STABLE
+
+    # exit 直後、 ROI お邪魔が増加 (新規トリガー) → 通常閾値だけでは発火しない。
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig2 = DetectorSignals(time_sec=0.043, cnn_board=board3, is_match_active=True)
+    assert det.detect(ctx2, sig2) is None
+
+    ctx3 = StateContext(state=BoardState.STABLE, frame_idx=3)
+    sig3 = DetectorSignals(
+        time_sec=0.043 + OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=board3,
+        is_match_active=True,
+    )
+    assert det.detect(ctx3, sig3) is None, (
+        "exit 直後の re-entry は CHAIN 割り込みと同じ倍率で厳格化されるはず"
+    )
+
+    # 倍率分の実時間が経過すれば発火する (完全ブロックではない)。
+    ctx4 = StateContext(state=BoardState.STABLE, frame_idx=4)
+    required = OJAMA_ENTRY_CONSEC_SEC * OJAMA_ENTRY_CHAIN_INTERRUPT_MULTIPLIER
+    sig4 = DetectorSignals(
+        time_sec=0.043 + required + 0.001, cnn_board=board3, is_match_active=True,
+    )
+    assert det.detect(ctx4, sig4) == BoardState.OJAMA_FALL
+
+
+def test_hardening_reentry_suppression_expires_after_window() -> None:
+    """回帰: OJAMA_REENTRY_SUPPRESS_SEC を過ぎれば通常閾値に戻る。"""
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+        enable_ojama_fall_entry_hardening=True,
+    )
+    board2 = _board_with_ojama_top(2)
+    board3 = _board_with_ojama_top(3)
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=0.01, cnn_board=board2, is_match_active=True, own_score_delta=8,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.STABLE
+
+    # OJAMA_REENTRY_SUPPRESS_SEC 経過後に新規トリガー → 通常閾値のみで発火。
+    trigger_t = 0.01 + OJAMA_REENTRY_SUPPRESS_SEC + 0.01
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig2 = DetectorSignals(time_sec=trigger_t, cnn_board=board3, is_match_active=True)
+    assert det.detect(ctx2, sig2) is None
+
+    ctx3 = StateContext(state=BoardState.STABLE, frame_idx=3)
+    sig3 = DetectorSignals(
+        time_sec=trigger_t + OJAMA_ENTRY_CONSEC_SEC + 0.001, cnn_board=board3,
+        is_match_active=True,
+    )
+    assert det.detect(ctx3, sig3) == BoardState.OJAMA_FALL, (
+        "抑制窓を過ぎれば通常閾値のみで発火するはず"
+    )
+
+
+def test_placement_override_alone_reentry_not_suppressed_when_hardening_off() -> None:
+    """回帰: enable_ojama_fall_entry_hardening=False (既定) では、 案2の
+    exit 直後でも re-entry 抑制は働かず、 従来の frame 数連続判定のみで
+    発火する (backwards compat: 案2単体導入時の挙動を変えない)。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+    )
+    board2 = _board_with_ojama_top(2)
+    board3 = _board_with_ojama_top(3)
+
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=0.033, cnn_board=board2, is_match_active=True, own_score_delta=8,
+    )
+    assert det.detect(ctx1, sig1) == BoardState.STABLE
+
+    # 直後 2 フレーム連続で ROI 増加 → 従来通り即発火 (抑制なし)。
+    ctx2 = StateContext(state=BoardState.STABLE, frame_idx=2)
+    sig2 = DetectorSignals(time_sec=0.043, cnn_board=board3, is_match_active=True)
+    assert det.detect(ctx2, sig2) is None  # 1 フレーム目
+
+    ctx3 = StateContext(state=BoardState.STABLE, frame_idx=3)
+    sig3 = DetectorSignals(time_sec=0.077, cnn_board=board3, is_match_active=True)
+    assert det.detect(ctx3, sig3) == BoardState.OJAMA_FALL, (
+        "entry_hardening=False なら抑制されず、従来通り2フレーム連続で発火"
+    )
+
+
+def test_str_detector_signals_own_chain_hold_until_sec_default_zero() -> None:
+    """ST-R: DetectorSignals.own_chain_hold_until_sec のデフォルトは 0.0。"""
+    sig = DetectorSignals(
+        time_sec=0.0, cnn_board=_empty_board(), is_match_active=True,
+    )
+    assert sig.own_chain_hold_until_sec == 0.0, "デフォルト 0.0 で既存ビルドが壊れない"
