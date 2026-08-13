@@ -941,3 +941,201 @@ def test_light_profile_excludes_chain_articulation_point_count() -> None:
     """chain_articulation_point_count は light profile には含めない。"""
     registry = blwn._resolve_indicator_registry("light")
     assert "chain_articulation_point_count" not in registry
+
+
+# ============================
+# タスク#8: おじゃま収支のCSV統合 (2026-08-13、docs/CROSS_CUTTING_AUDIT_
+# 2026-08-13.md P4 決着の反映)
+# ============================
+
+
+def _write_npz_with_ojama_truth(
+    path: Path,
+    sides: list[str],
+    t_secs: list[float],
+    net_balance: list[float],
+    forecast: list[float],
+    heights: list[int] | None = None,
+    game_idx: list[int] | None = None,
+) -> None:
+    """ojama_net_balance/ojama_forecast 真値列付きの合成npzを書く。
+
+    all_clear系テストの `_write_npz_with_scores` と同じ流儀 (盤面高さ以外を
+    厳密に制御する専用ヘルパー)。heights 未指定時は全行 height=3 の同一盤面
+    (猶予量計算をしないテスト向け)。
+    """
+    n = len(sides)
+    if heights is None:
+        heights = [3] * n
+    grids = np.array([_make_grid(height=h) for h in heights], dtype=np.int8)
+    if game_idx is None:
+        game_idx = [0] * n
+    np.savez_compressed(
+        str(path), grids=grids, video_id=np.array(["v"] * n), side=np.array(sides),
+        t_sec=np.array(t_secs, dtype=np.float32), game_idx=np.array(game_idx, dtype=np.int32),
+        frame_idx=np.arange(n, dtype=np.int32), won=np.array([1.0] * n, dtype=np.float32),
+        score=np.full(n, -1, dtype=np.int32),
+        ojama_net_balance=np.array(net_balance, dtype=np.float32),
+        ojama_forecast=np.array(forecast, dtype=np.float32),
+    )
+
+
+def test_ojama_truth_columns_present_and_normalized(tmp_path: Path) -> None:
+    """npz に真値列があれば own-perspective の値を 0-1 正規化して出力すること。"""
+    npz_path = tmp_path / "truth.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "1P"], t_secs=[0.0, 1.0],
+        net_balance=[0.0, 36.0], forecast=[0.0, 10.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert rows_sorted[0]["ojama_net_balance"] == pytest.approx(0.5)
+    assert rows_sorted[1]["ojama_net_balance"] == pytest.approx(0.75)
+    assert rows_sorted[0]["ojama_forecast"] == pytest.approx(0.0)
+    assert rows_sorted[1]["ojama_forecast"] == pytest.approx(10.0 / 72.0)
+    assert all(r["ojama_source"] == blwn.OJAMA_SOURCE_TRUTH for r in rows_sorted)
+
+
+def test_ojama_truth_columns_nan_and_missing_source_for_old_npz(tmp_path: Path) -> None:
+    """真値列の無い旧npzでは NaN + ojama_source=MISSING になること。"""
+    npz_path = tmp_path / "no_truth.npz"
+    _write_synthetic_npz(npz_path, n=3)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert np.isnan(r["ojama_net_balance"])
+        assert np.isnan(r["ojama_forecast"])
+        assert np.isnan(r["ojama_net_balance_synced"])
+        assert r["ojama_source"] == blwn.OJAMA_SOURCE_MISSING
+
+
+def test_ojama_net_balance_synced_matches_own_minus_opp_over_two(tmp_path: Path) -> None:
+    """synced = (own - 相手の直近確定値) / 2 と厳密一致すること (b-2 と同じ
+    merge_asof backward パターンの再利用、OJAMA_TRUTH_COLUMNS 直上コメント
+    「P4決着」節参照)。
+
+    先頭行 (1P@t=0.0) は相手側の直近確定値が無いため NaN になる
+    (`test_diff_is_nan_when_opponent_has_no_prior_snapshot` と同じ仕様)。
+    """
+    npz_path = tmp_path / "sync.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P", "1P", "2P"], t_secs=[0.0, 0.5, 1.0, 1.5],
+        net_balance=[10.0, -8.0, 6.0, -4.0], forecast=[0.0, 0.0, 0.0, 0.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert np.isnan(rows_sorted[0]["ojama_net_balance_synced"])  # 1P@0.0: 相手未確定
+    expected_raw = [(-8.0 - 10.0) / 2.0, (6.0 - (-8.0)) / 2.0, (-4.0 - 6.0) / 2.0]
+    for row, exp in zip(rows_sorted[1:], expected_raw):
+        expected_score = blwn.iv.ojama_net_balance(exp).score
+        assert row["ojama_net_balance_synced"] == pytest.approx(expected_score)
+
+
+def test_ojama_margin_boundary_zero_when_capacity_equals_forecast(tmp_path: Path) -> None:
+    """猶予量: 満杯盤面 (吸収余力=0) + 飛来量0 のとき境界値0.5になること
+    (収支ゼロ相当、`iv.ojama_net_balance` の慣習と揃える)。"""
+    npz_path = tmp_path / "margin_zero.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P"], t_secs=[0.0], net_balance=[0.0], forecast=[0.0],
+        heights=[12],  # 満杯盤面 (absorption raw = ON_FIELD_CAP - 72 = 0)
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert rows[0]["ojama_margin"] == pytest.approx(0.5)
+
+
+def test_ojama_margin_boundary_one_when_empty_board_no_incoming(tmp_path: Path) -> None:
+    """猶予量: 空盤面 (吸収余力=満タン72) + 飛来量0 で上限1.0になること。"""
+    npz_path = tmp_path / "margin_full.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P"], t_secs=[0.0], net_balance=[0.0], forecast=[0.0],
+        heights=[0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert rows[0]["ojama_margin"] == pytest.approx(1.0)
+
+
+def test_ojama_margin_clamped_to_zero_when_forecast_far_exceeds_capacity(
+    tmp_path: Path,
+) -> None:
+    """猶予量: 満杯盤面+容量を大幅超過する飛来量で下限0.0にクランプされること。"""
+    npz_path = tmp_path / "margin_overflow.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P"], t_secs=[0.0], net_balance=[0.0], forecast=[200.0],
+        heights=[12],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert rows[0]["ojama_margin"] == pytest.approx(0.0)
+
+
+def test_ojama_margin_matches_absorption_capacity_formula(tmp_path: Path) -> None:
+    """ojama_margin の raw が (ON_FIELD_CAP-count_puyos)-forecast_raw の
+    正規化と一致すること (board_puyo_total score からの逆算が正しいことの
+    直接検証、境界値以外の一般ケース)。"""
+    npz_path = tmp_path / "margin_formula.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P"], t_secs=[0.0], net_balance=[0.0], forecast=[15.0],
+        heights=[5],  # 6列 x 5段 = 30個
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    absorption_raw = blwn.iv.ON_FIELD_CAP - 30.0
+    expected_score = blwn.iv.ojama_net_balance(absorption_raw - 15.0).score
+    assert rows[0]["ojama_margin"] == pytest.approx(expected_score)
+
+
+def test_ojama_margin_nan_when_forecast_unavailable(tmp_path: Path) -> None:
+    """forecast が取得不能 (旧npz) なら ojama_margin も NaN になること。"""
+    npz_path = tmp_path / "margin_nan.npz"
+    _write_synthetic_npz(npz_path, n=2)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert np.isnan(r["ojama_margin"])
+
+
+def test_csv_output_includes_ojama_truth_columns(tmp_path: Path) -> None:
+    """convert_dir の CSV に真値系5列が乗ること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in blwn.OJAMA_TRUTH_COLUMNS:
+        assert col in df.columns
+
+
+def test_ojama_truth_columns_have_no_diff_or_carry_variants(tmp_path: Path) -> None:
+    """おじゃま収支の真値系は grid-only レジストリ外のため diff_/opp_ が
+    生成されないこと (b-2 DIFF_* 5分類には意図的に含めない設計、
+    OJAMA_TRUTH_COLUMNS 直上コメント参照)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in (
+        "ojama_net_balance", "ojama_forecast", "ojama_net_balance_synced", "ojama_margin",
+    ):
+        assert f"diff_{col}" not in df.columns
+        assert f"opp_{col}" not in df.columns
+
+
+def test_no_temp_ojama_columns_leak_into_rows(tmp_path: Path) -> None:
+    """内部一時列 (アンダースコア始まりの raw 保持用列) が最終行dictに
+    残らないこと (CSVには元々乗らないが、行dict自体の掃除も確認する)。"""
+    npz_path = tmp_path / "truth.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P"], t_secs=[0.0, 0.5],
+        net_balance=[5.0, -5.0], forecast=[1.0, 2.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert not any(k.startswith("_ojama") for k in r), r.keys()
