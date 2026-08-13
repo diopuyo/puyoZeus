@@ -32,6 +32,9 @@ from src.board import (  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.ojama_accounting import OjamaAccountingTracker, OjamaAccountSnapshot  # noqa: E402
 from src.probabilistic_board import ProbabilisticBoard  # noqa: E402
+from src.production_config import (  # noqa: E402
+    recognition_load_default_kwargs,
+)
 from src.scoring import ojama_count_to_icons  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 
@@ -1179,6 +1182,67 @@ def _build_detailed_log_entry(
     }
 
 
+# ============================
+# 本番構成の自動適用 (2026-08-13 是正)
+# ============================
+# 横展開監査 (docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1) で発覚した配線漏れ:
+# 本ファイルは RECOGNITION_ADOPTED (バーストガード等6フラグ) と
+# VISUALIZATION_ADOPTED (連鎖数実測化/連鎖表示ホールド) の CLI 既定値が
+# すべて False のままで、明示的にフラグを渡さない限りレビュー動画が本番より
+# 劣化した認識・表示で生成されていた (overlay 側の eacb1f3 と同型の事故)。
+# 本関数で production_config を単一情報源として自動適用する。
+
+
+def resolve_production_config_overrides(
+    args: object,
+    use_production_recognition: bool,
+    use_production_visualization: bool,
+) -> dict[str, object]:
+    """本番採用フラグを CLI args の実効値へ解決する (2026-08-13 追加)。
+
+    RECOGNITION_ADOPTED (6キー) は use_production_recognition が True (既定、
+    --no-production-recognition で無効化) のとき recognition_load_default_kwargs()
+    を自動適用する。CLI で明示 ON にされていればそれを優先する (OR 合成、
+    store_true 系のため明示 OFF は元々存在しない)。
+    VISUALIZATION_ADOPTED (2キー) は use_production_visualization が True
+    (既定、--no-production-visualization で無効化) のとき自動適用する。
+    こちらは明示 ON/OFF どちらも尊重する (tri-state: None/未指定=production gate に従う)。
+
+    Returns:
+        {属性名: 値} の dict。呼び出し側が setattr(args, name, value) で
+        args に反映することを想定 (main() の単一呼び出し箇所)。
+    """
+    production_recognition = (
+        recognition_load_default_kwargs() if use_production_recognition else {}
+    )
+    overrides: dict[str, object] = {}
+    for name in (
+        "enable_effect_gate", "enable_burst_guard_v2",
+        "enable_transition_merge_guard", "enable_hidden_row_burst_guard",
+        "enable_match_transition_debounce",
+    ):
+        overrides[name] = bool(getattr(args, name, False)) or bool(
+            production_recognition.get(name, False)
+        )
+    _threshold = getattr(args, "burst_gate_open_threshold", None)
+    overrides["burst_gate_open_threshold"] = (
+        _threshold if _threshold is not None
+        else production_recognition.get("burst_gate_open_threshold")
+    )
+    # VISUALIZATION_ADOPTED: 明示指定 (None でない) を最優先、未指定は production gate に従う
+    _verify = getattr(args, "enable_chain_formula_simulate_verify", None)
+    overrides["enable_chain_formula_simulate_verify"] = (
+        _verify if _verify is not None else use_production_visualization
+    )
+    if getattr(args, "no_overlay_chain_hold_until_end", False):
+        overrides["overlay_chain_hold_until_end"] = False
+    elif getattr(args, "overlay_chain_hold_until_end", False):
+        overrides["overlay_chain_hold_until_end"] = True
+    else:
+        overrides["overlay_chain_hold_until_end"] = use_production_visualization
+    return overrides
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--video", type=Path, required=True)
@@ -1484,15 +1548,18 @@ def main() -> int:
     parser.add_argument(
         "--chain-formula-simulate-verify",
         action=argparse.BooleanOptionalAction,
-        default=False,
+        default=None,
         dest="enable_chain_formula_simulate_verify",
         help="修正D (2026-07-24): 機能D 疑似発火の起点盤面を ChainSimulator で "
-             "事前検証する。 真因診断で機能D 早期発火 77件中35件=45.5%が "
+             "事前検証する。 真因診断で機能D 早期発火 77件中35件=45.5%%が "
              "連鎖ゼロの起点盤面からの疑似発火 (偽イベント) と確定した対策。 "
              "True で連鎖ゼロの起点盤面での疑似発火を抑制し、 連鎖ありは "
              "固定 chain_count=1 でなく実測値で発火する。 "
-             "ライブラリ default=False (無効、 bit-identical)。 "
-             "--chain-formula-simulate-verify で有効化。",
+             "2026-08-13 是正: 既定 None = --production-visualization (既定 ON) が "
+             "src.production_config.VISUALIZATION_ADOPTED の採用値 (True) を自動適用する "
+             "(--no-production-visualization で無効化可能)。 "
+             "--chain-formula-simulate-verify / --no-chain-formula-simulate-verify で"
+             "明示指定した場合はそちらを常に優先する。",
     )
     parser.add_argument(
         "--hsv-deferred-consensus",
@@ -1501,7 +1568,7 @@ def main() -> int:
         dest="enable_hsv_deferred_consensus",
         help="案 Y-4: HSV-first commit + deferred consensus を制御する。 "
              "True にすると infer_placement が HSV 拮抗と判定した着地 2 候補を保留し、 "
-             "後続フレームの CNN==HSV consensus 投票で確定させる (corruption 65% 起源対策)。 "
+             "後続フレームの CNN==HSV consensus 投票で確定させる (corruption 65%% 起源対策)。 "
              "ライブラリ default=False (無効)。 --hsv-deferred-consensus で有効化。",
     )
     # 不具合B 対処: 予告おじゃま発光ガード (2026-06-04)
@@ -1736,7 +1803,18 @@ def main() -> int:
         help=(
             "連鎖中は状態ラベルを chain のまま維持する。GRAVITY_SETTLE を chain "
             "として表示し、物理推論の連鎖終了時刻 (ChainEvent.end_sec) までは "
-            "途中の誤遷移でも chain を保つ。既定 False = 従来通り実 state 表示。"
+            "途中の誤遷移でも chain を保つ。"
+            "2026-08-13 是正: 明示指定なしなら --production-visualization (既定 ON) が "
+            "src.production_config.VISUALIZATION_ADOPTED の採用値 (True) を自動適用する。"
+        ),
+    )
+    parser.add_argument(
+        "--no-overlay-chain-hold-until-end", action="store_true", default=False,
+        dest="no_overlay_chain_hold_until_end",
+        help=(
+            "連鎖表示ホールドを明示的に無効化する (2026-08-13 追加、"
+            "--production-visualization 既定 ON 化に伴う逃げ道)。"
+            "--overlay-chain-hold-until-end と同時指定した場合は本フラグ (無効化) が優先される。"
         ),
     )
     parser.add_argument(
@@ -1792,7 +1870,65 @@ def main() -> int:
             "既定は無効 (後方互換)。"
         ),
     )
+    # 本番構成の自動適用 (2026-08-13 是正、横展開監査 P1)。overlay の
+    # eacb1f3 と同一パターン: 既定 ON、--no-xxx で無効化して旧構成を再現する。
+    parser.add_argument(
+        "--production-recognition", action="store_true",
+        dest="production_recognition",
+        help=(
+            "本番採用の認識フラグ群 (src.production_config.RECOGNITION_ADOPTED: "
+            "effect-gate/burst-guard-v2/transition-merge-guard/"
+            "burst-gate-open-threshold 0.954/hidden-row-burst-guard/"
+            "match-transition-debounce) を自動適用する。既定 True 化により"
+            "本フラグは実質 no-op (明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-production-recognition を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-production-recognition", action="store_true", default=False,
+        dest="no_production_recognition",
+        help=(
+            "本番採用の認識フラグ群の自動適用を明示的に無効化する "
+            "(2026-08-13 追加、既定 True 化に伴う逃げ道)。過去の測定・レビュー動画との "
+            "比較互換 (bit-identical 再現) 用。"
+        ),
+    )
+    parser.add_argument(
+        "--production-visualization", action="store_true",
+        dest="production_visualization",
+        help=(
+            "本番採用の表示フラグ群 (src.production_config.VISUALIZATION_ADOPTED: "
+            "chain-formula-simulate-verify/overlay-chain-hold-until-end) を"
+            "自動適用する。既定 True 化により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-production-visualization を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-production-visualization", action="store_true", default=False,
+        dest="no_production_visualization",
+        help=(
+            "本番採用の表示フラグ群の自動適用を明示的に無効化する "
+            "(2026-08-13 追加、既定 True 化に伴う逃げ道)。個別フラグの明示指定は"
+            "本設定の有無に関わらず常に優先される。"
+        ),
+    )
     args = parser.parse_args()
+    # 本番構成の自動適用 (2026-08-13 是正): production_config を単一情報源として
+    # RECOGNITION_ADOPTED / VISUALIZATION_ADOPTED を args へ反映する。
+    # 以降のロジック (load_default 呼び出し・連鎖表示ホールド判定) は
+    # args の当該属性を参照するだけで自動的に本番構成に追従する。
+    use_production_recognition = not args.no_production_recognition
+    use_production_visualization = not args.no_production_visualization
+    for _name, _value in resolve_production_config_overrides(
+        args, use_production_recognition, use_production_visualization,
+    ).items():
+        setattr(args, _name, _value)
+    print(
+        f"[viz] production_recognition={'ON' if use_production_recognition else 'OFF'} "
+        f"production_visualization={'ON' if use_production_visualization else 'OFF'} "
+        "(2026-08-13 是正、src.production_config が単一情報源)"
+    )
     # --overlay-show-states の検証・解決 (BoardState への変換、不正値は起動時エラー)
     overlay_show_states: frozenset[BoardState] | None = None
     if args.overlay_show_states is not None:

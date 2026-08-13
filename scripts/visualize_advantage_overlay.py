@@ -52,6 +52,7 @@ from src.production_config import (  # noqa: E402
     OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT,
     OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
     recognition_load_default_kwargs,
+    reorg_removed_indicator_names,
 )
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
@@ -396,10 +397,21 @@ EXPECTED_FIRE_COLS: tuple[str, ...] = tuple(
 # 列が無い間は _resolve_features() の列存在ガードで自動的に除外され、
 # 収集後に自動有効化される (saturated_chain_count 等と同じ方式)。
 CENTER_BULGE_COL: str = "center_bulge"
-FEATURE_CANDIDATES: tuple[str, ...] = FEATURES + (
-    "saturated_chain_count", "ukeyasusa", "sub_chain_count",
-) + NEAR_FUTURE_FIRE_COLS + FIRE_STABILITY_COLS + EXPECTED_FIRE_COLS + (
-    CENTER_BULGE_COL,
+# saturated_chain_count は a-1決定 (2026-08-12、src.production_config.
+# INDICATOR_REORG_DECISIONS 参照) で削除確定済みだが、本タプルへの反映が
+# 漏れていた (build_labeled_win_from_npz.py にしか反映されていなかった、
+# docs/CROSS_CUTTING_AUDIT_2026-08-13.md P2)。2026-08-13 是正: 削除台帳
+# `src.production_config.REORG_REMOVED_INDICATORS` を単一情報源とし、末尾の
+# フィルタで機械的に除外する (台帳を更新するだけで本タプルも自動追従する)。
+FEATURE_CANDIDATES: tuple[str, ...] = tuple(
+    c for c in (
+        FEATURES + (
+            "saturated_chain_count", "ukeyasusa", "sub_chain_count",
+        ) + NEAR_FUTURE_FIRE_COLS + FIRE_STABILITY_COLS + EXPECTED_FIRE_COLS + (
+            CENTER_BULGE_COL,
+        )
+    )
+    if c not in reorg_removed_indicator_names()
 )
 # 主要ドライバ表示用の日本語ラベル
 JP_LABEL: dict[str, str] = {
