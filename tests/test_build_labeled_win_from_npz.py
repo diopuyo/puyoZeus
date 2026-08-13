@@ -907,6 +907,146 @@ def test_convert_dir_includes_saturation_chain_column_when_opted_in(
 
 
 # ============================
+# saturation_chain_upper: 上部限定軽量版 (2026-08-13 user簡略化決定)
+# ============================
+# saturation_chain (opt-in) とは異なり、閾値未満は count_puyos() 1回だけの
+# 軽量ゲート判定 (NaN即返し) のため opt-in化は不要 = full profile の既定に
+# 含める (OPTIONAL_HEAVY_INDICATOR_NAMES には追加していない、
+# `test_optional_heavy_indicator_names_matches_saturation_chain_only` が
+# 引き続き saturation_chain のみであることを保証する)。
+
+
+def test_full_profile_includes_saturation_chain_upper_by_default() -> None:
+    """saturation_chain_upper はフラグ無しで full profile の既定に含まれる
+    こと (saturation_chain の opt-in化とは異なる設計、モジュール docstring
+    「saturation_chain_upper」節参照)。"""
+    registry = blwn._resolve_indicator_registry("full")
+    assert "saturation_chain_upper" in registry
+
+
+def test_light_profile_excludes_saturation_chain_upper() -> None:
+    """saturation_chain_upper は重い (ビームサーチ+takapt探索) ため light
+    には含めない (heavy 系除外の既存分岐に従う)。"""
+    registry = blwn._resolve_indicator_registry("light")
+    assert "saturation_chain_upper" not in registry
+
+
+def _write_mixed_fill_npz(path: Path) -> None:
+    """充填率が閾値未満/以上の盤面を1本ずつ含む合成 npz を書き出す。
+
+    height=3 (fill=18/78≈0.23、閾値未満) と height=12 (fill=72/78≈0.923、
+    閾値以上) を1P/2Pに割り当てる (`_write_synthetic_npz` と同じ won 整合
+    パターン、`_make_grid` を再利用)。
+    """
+    grids = np.array([_make_grid(height=3), _make_grid(height=12)], dtype=np.int8)
+    video_id_arr = np.array(["video_test"] * 2)
+    side = np.array(["1P", "2P"])
+    t_sec = np.array([0.0, 0.5], dtype=np.float32)
+    game_idx = np.zeros(2, dtype=np.int32)
+    frame_idx = np.arange(2, dtype=np.int32)
+    won = np.array([1.0, 0.0], dtype=np.float32)
+    score = np.full(2, -1, dtype=np.int32)
+    np.savez_compressed(
+        str(path), grids=grids, video_id=video_id_arr, side=side, t_sec=t_sec,
+        game_idx=game_idx, frame_idx=frame_idx, won=won, score=score,
+    )
+
+
+def test_convert_dir_includes_saturation_chain_upper_column_by_default(
+    tmp_path: Path,
+) -> None:
+    """convert_dir が既定 (フラグ無し) で saturation_chain_upper 列を出力し、
+    閾値未満は NaN・閾値以上は 0〜1 の有限値になること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_mixed_fill_npz(npz_dir / "a.npz")
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="full")
+    df = pd.read_csv(out_csv)
+    assert "saturation_chain_upper" in df.columns
+    # board_puyo_total (own, DIFF_KEEP_OWN_PAIR_COLUMNS のため置換されず残る)
+    # で低充填/高充填の行を判別する。
+    low_fill_row = df[df["board_puyo_total"] < 0.5]
+    high_fill_row = df[df["board_puyo_total"] >= 0.5]
+    assert len(low_fill_row) == 1 and len(high_fill_row) == 1
+    assert low_fill_row["saturation_chain_upper"].isna().all()
+    assert high_fill_row["saturation_chain_upper"].between(0.0, 1.0).all()
+
+
+_SAT_UPPER_PARITY_TARGET_BOARDS: int = 40
+
+
+def _load_saturation_chain_upper_parity_boards() -> "list":
+    """充填率 >= SATURATION_UPPER_MIN_FILL の実盤面のみを収集する専用サンプラー。
+
+    `native_parity_boards` (ランダム抽出) だと対象 (実測 0.68% 出現率、
+    `src/indicators_v2.py::SATURATION_UPPER_MIN_FILL` 直上コメント参照) が
+    ほぼ集まらないため、閾値を満たす盤面だけを走査して集める専用実装。
+    """
+    npz_files = sorted(_NATIVE_PARITY_DATA_DIR.glob("*.npz"))
+    if not npz_files:
+        pytest.skip(f"評価データが見つからない: {_NATIVE_PARITY_DATA_DIR}")
+    boards: "list" = []
+    for p in npz_files:
+        data = np.load(str(p), allow_pickle=True)
+        grids = data["grids"]
+        for i in range(grids.shape[0]):
+            grid = grids[i].astype(np.uint8)
+            if np.any(grid == _COLOR_UNKNOWN):
+                continue
+            board = Board()
+            board._grid = grid
+            if board.count_puyos() / blwn.iv.FULL_BOARD_CAP >= blwn.iv.SATURATION_UPPER_MIN_FILL:
+                boards.append(board)
+        if len(boards) >= _SAT_UPPER_PARITY_TARGET_BOARDS:
+            break
+    return boards
+
+
+@pytest.fixture(scope="module")
+def saturation_chain_upper_parity_boards() -> "list":
+    boards = _load_saturation_chain_upper_parity_boards()
+    if len(boards) < 5:
+        pytest.skip(f"閾値以上の実盤面サンプルが不足 ({len(boards)}件)")
+    return boards
+
+
+@pytestmark_native_parity
+def test_saturation_chain_upper_native_matches_python(
+    saturation_chain_upper_parity_boards: "list",
+) -> None:
+    """saturation_chain_upper の native 分岐 (終端測定のみ native化) が
+    既存 Python 実装と完全一致すること (閾値以上の実盤面のみ)。"""
+    mismatches = []
+    for i, board in enumerate(saturation_chain_upper_parity_boards):
+        py_val = blwn.GRID_ONLY_HEAVY_INDICATORS["saturation_chain_upper"](board)
+        native_val = blwn.GRID_ONLY_HEAVY_INDICATORS_NATIVE["saturation_chain_upper"](
+            board, use_native=True,
+        )
+        if py_val.score != native_val.score or py_val.raw != native_val.raw:
+            mismatches.append((i, py_val, native_val))
+    assert not mismatches, (
+        f"saturation_chain_upper: {len(mismatches)}/"
+        f"{len(saturation_chain_upper_parity_boards)} 件不一致: {mismatches}"
+    )
+
+
+def test_saturation_chain_upper_below_threshold_skips_native_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """閾値未満は native 呼び出し自体を行わずに NaN を返すこと (無駄な
+    Rust ラウンドトリップ回避の確認、`_native_saturation_chain` を呼んだら
+    失敗させて検知する)。"""
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("閾値未満で _native_saturation_chain が呼ばれた")
+
+    monkeypatch.setattr(blwn, "_native_saturation_chain", _fail)
+    board = Board()  # 空盤面 (fill=0 < 閾値)
+    v = blwn._native_saturation_chain_upper(board)
+    assert v.score != v.score  # NaN
+
+
+# ============================
 # C-4: 盤面直読みの新指標3種 (2026-08-13)
 # ============================
 

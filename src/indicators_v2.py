@@ -2283,6 +2283,97 @@ def saturation_chain(
     )
 
 
+# ============================
+# XII-1c' 忠実な飽和連鎖量 上部限定軽量版 (saturation_chain_upper)
+# ============================
+# user簡略化決定 (2026-08-13): 「おじゃまぷよの数がイコール飽和現象に
+# 繋がる」ため、疎らな盤面の飽和はシミュレーション不要 (既存
+# board_ojama_count が現象の代理指標になる)。saturation_chain の全域探索
+# (空盤面から最大73手積む、実測12500ms/行) を「盤面が既に高く積まれている
+# 局面」限定に絞り、対象外は NaN (0 ではない、「未計測」と「飽和ゼロ」を
+# 区別する) にすることでビームの負荷を減らす。
+#
+# 【SATURATION_UPPER_MIN_FILL の導出根拠 (2026-08-13、コスト実測→予算→
+# バッファのチェーンから導出。シーン逆算ではなく実測コストからの逆算)】
+#
+# 1. ビーム構築1ステップ (`_sat_expand_step` 1回) の native化を試みたが
+#    **bit-identical要件を満たせず断念した** (重要な負の実験結果):
+#    native `chain_metrics_after_drops` で「発火する配置」を
+#    `chain_count>0` 判定に置き換えると、既存 `_sat_group_size_after_drop`
+#    (新規セル自身の連結成分サイズのみを見る、盤面全体の既存グループは見ない)
+#    と食い違うケースが実データで発生する。実測 (data/indicators_v2/
+#    boards_lean_phase_l_2026-08-11、fill 0.60-0.90 の 424 件サンプル):
+#    「盤面自体が置く前から4連結以上を含む」(chain_count>0 の状態) が
+#    fill>=0.70 のサブセットで 2/14 件 (約14%) 見つかった。npz の
+#    grids は STABLE snapshot が前提だが、ojama落下等の中間状態や希少な
+#    認識誤りにより、この不変条件 (盤面は常に非発火) が実データでは
+#    厳密には保証されない。既存 `saturation_chain`/`_sat_expand_step` は
+#    この前提のズレを認識していない (=変更しない、既存動作を保存する
+#    という本タスクの制約と、native化のパリティ要件が衝突するため
+#    native化を断念した)。**ビーム構築ステップは既存 Python 実装を無変更で
+#    再利用し、終端測定 (takapt 30通り) のみ既存 `saturation_chain` と同じ
+#    native分岐で高速化する** (詳細: scripts/build_labeled_win_from_npz.py
+#    `_native_saturation_chain_upper` 参照)。
+# 2-4. 上記の制約下でビーム構築ステップの実測コストのみで予算を組む:
+#    軽負荷単発実行で 1 ステップ ≈3-5ms、過去実測 (2026-08-13、
+#    システム高負荷下30サンプル、build_labeled_win_from_npz.py モジュール
+#    docstring「saturation_chain の opt-in化」節) で ≈258ms/ステップ。
+#    本プロジェクトは複数エージェント並行実行が前提 (CLAUDE.md 自律運転
+#    方針) のため保守的に高負荷値 258ms を採用する。
+#    148本フル生成に許容する追加時間予算を 1.5 時間 (user提示「1〜2時間」
+#    の中間、保守的側に選択) とし、実データ (63動画 453,146行、148本換算
+#    ≈1,064,533行) の充填率分布から「予算内に収まる最も緩い閾値」
+#    X_raw≈0.885 (この時点で追加時間 ≈1.14時間、対象行あたり平均残り
+#    ステップ数 avg_steps≈1.63) を実測した。安全係数 0.7 を平均残り
+#    ステップ数に適用すると N_operational=floor(1.63*0.7)=1 となり、
+#    fill = 0.93 − 1/78 ≈ 0.917 が導出される。この近傍は fill が
+#    0.02 変わるだけで avg_steps が 1.1〜2.2 と大きく振れる離散的な領域
+#    (残りセル数が一桁の整数のため) であり、0.917 という値自体に強い
+#    精度は無い。丸めた 0.90 を採用する (実測見込み: 対象行出現率
+#    0.671%・148本換算 7,139 行・追加時間 ≈0.57時間 [予算 1.5時間の
+#    約38%、十分なバッファを残す])。将来ビーム構築ステップ自体が
+#    native化されればこの閾値は自然に下げられる (低くなるほど対象が
+#    増える設計、上記の native化断念が唯一のブロッカー)。
+SATURATION_UPPER_MIN_FILL: float = 0.90
+
+
+def saturation_chain_upper(
+    board: Board,
+    fill_ratio: float = SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = SATURATION_BEAM_WIDTH_DEFAULT,
+    min_fill: float = SATURATION_UPPER_MIN_FILL,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1c' saturation_chain の上部限定軽量版 (user簡略化決定 2026-08-13)。
+
+    現在の充填率 (count_puyos()/FULL_BOARD_CAP) が min_fill 未満の場合は
+    score=raw=NaN を返す (0 ではない: 「未計測」と「飽和ゼロ」を区別し、
+    学習側が両者を混同しないようにする)。min_fill 以上の場合は既存
+    `saturation_chain` を無変更のままそのまま呼ぶ (アルゴリズム・
+    パラメータ完全同一、この関数が追加するのは「計測するか否か」の
+    門番のみ)。閾値の導出根拠は `SATURATION_UPPER_MIN_FILL` 直上コメント
+    参照。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        fill_ratio: 目標充填率 (`saturation_chain` にそのまま渡す)。
+        beam_width: ビーム幅 (`saturation_chain` にそのまま渡す)。
+        min_fill: 計測を実行する最低充填率 (既定 SATURATION_UPPER_MIN_FILL)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: 閾値未満は score=raw=NaN。閾値以上は
+            `saturation_chain(board, fill_ratio, beam_width, simulator)`
+            と完全同一の値。
+    """
+    current_fill = board.count_puyos() / FULL_BOARD_CAP
+    if current_fill < min_fill:
+        return IndicatorV2Value(score=float("nan"), raw=float("nan"))
+    return saturation_chain(
+        board, fill_ratio=fill_ratio, beam_width=beam_width, simulator=simulator,
+    )
+
+
 def ignition_point_count(
     board: Board, simulator: ChainSimulator | None = None,
 ) -> IndicatorV2Value:
@@ -4125,6 +4216,10 @@ __all__ = [
     "SATURATION_FILL_RATIO_DEFAULT",
     "SATURATION_BEAM_WIDTH_DEFAULT",
     "SATURATION_MAX_BUILD_STEPS",
+    # XII-1c' 忠実な飽和連鎖量 上部限定軽量版 (saturation_chain_upper)
+    # — user簡略化決定 (2026-08-13、末尾追加・既存に非依存)。
+    "saturation_chain_upper",
+    "SATURATION_UPPER_MIN_FILL",
     # XIII 催促保持 (saisoku_hold) — 検証中の新規指標 (末尾追加、既存に非依存)
     "saisoku_hold",
     "SAISOKU_CONSUME_RATIO",

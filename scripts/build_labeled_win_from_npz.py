@@ -157,6 +157,26 @@ IndicatorV2Value の関数) の外から来る値のため、b-2 の DIFF_* 5分
 テスト `tests/test_indicator_pipeline_registry_2026-08-13.py::
 TestDiffClassificationCompleteness` の管轄であり、対象外にすることで
 「テストが落ちない」を設計上保証する)。
+
+## saturation_chain_upper (2026-08-13、user簡略化決定)
+`saturation_chain` (C-3) はコスト実測 (1行8〜18秒) が桁違いのため opt-in化
+されたが、その後 user が「上部限定軽量版」への簡略化を決定した:
+「疎らな盤面の飽和はおじゃまぷよ数 (既存 `board_ojama_count`) が現象を
+代理するため計測不要、盤面が既に高く積まれている局面 (充填率
+`iv.SATURATION_UPPER_MIN_FILL`=0.90 以上) だけ既存の積み上げ探索を実行する」
+という設計 (`iv.saturation_chain_upper` 参照)。閾値未満は NaN (0 ではない、
+「未計測」と区別) を返すだけの軽量判定のため **saturation_chain のような
+opt-in化は不要 = full profile の既定に含める** (`OPTIONAL_HEAVY_
+INDICATOR_NAMES` に追加していない)。閾値の導出根拠 (コスト実測→予算→
+バッファのチェーン)、および「ビーム構築ステップ自体の native化は実データで
+bit-identical要件を満たせず断念した」という負の実験結果は
+`src/indicators_v2.py::SATURATION_UPPER_MIN_FILL` 直上コメントに集約する
+(このファイル側では終端測定のみの native化 `_native_saturation_chain_upper`
+のみ実装、`_native_saturation_chain` と同型)。
+実測コスト見込み (63動画実データ→148動画換算、対象=fill>=0.90の行):
+出現率0.671%・行数≈7,139行・追加時間≈0.57時間 (保守的な258ms/ステップ
+[過去実測・システム高負荷下]前提、軽負荷実測では3-5ms/ステップで
+さらに短い)。
 """
 from __future__ import annotations
 
@@ -252,6 +272,13 @@ GRID_ONLY_HEAVY_INDICATORS: dict[str, Callable[[Board], "iv.IndicatorV2Value"]] 
     "saturation_chain": iv.saturation_chain,
     # --- C-4 (重い版、find_groups だけでなく追加simulateを要するため) ---
     "chain_articulation_point_count": iv.chain_articulation_point_count,
+    # --- 上部限定軽量版 (saturation_chain_upper, 2026-08-13 user簡略化決定) ---
+    # 疎らな盤面 (fill<SATURATION_UPPER_MIN_FILL) は NaN を返すだけの軽量
+    # ゲート判定のみ (count_puyos() 1回) のため、saturation_chain のような
+    # opt-in化は不要 = full profile の既定に含める (OPTIONAL_HEAVY_
+    # INDICATOR_NAMES に加えない)。閾値・native化の可否はコスト実測込みで
+    # `iv.SATURATION_UPPER_MIN_FILL` 直上コメント参照。
+    "saturation_chain_upper": iv.saturation_chain_upper,
 }
 
 # ============================
@@ -788,10 +815,35 @@ def _native_saturation_chain(
     )
 
 
+def _native_saturation_chain_upper(
+    board: Board,
+    fill_ratio: float = iv.SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = iv.SATURATION_BEAM_WIDTH_DEFAULT,
+    min_fill: float = iv.SATURATION_UPPER_MIN_FILL,
+    use_native: bool = True,
+) -> "iv.IndicatorV2Value":
+    """既存 `iv.saturation_chain_upper` の native 分岐版 (2026-08-13、
+    user簡略化決定タスク)。
+
+    **ビーム構築ステップ自体の native化は断念済み** (`iv.
+    SATURATION_UPPER_MIN_FILL` 直上コメント参照: 実データで native
+    `chain_count` フィルタが既存 `_sat_group_size_after_drop` と食い違う
+    ケースを実測、bit-identical要件を優先)。よって本関数がやっているのは
+    `_native_saturation_chain` と全く同じ「終端測定のみ native化」であり、
+    唯一の追加ロジックは閾値ゲート (min_fill 未満は native呼び出し自体を
+    スキップして NaN を返す、無駄な native ラウンドトリップを避ける)。
+    """
+    current_fill = board.count_puyos() / iv.FULL_BOARD_CAP
+    if current_fill < min_fill:
+        return iv.IndicatorV2Value(score=float("nan"), raw=float("nan"))
+    return _native_saturation_chain(board, fill_ratio, beam_width, use_native)
+
+
 # full profile 重い4列 (既存) + A-1 native化5列 + 緊急native化2列
-# (min_puyos_to_ignite/saturation_chain) の native 版レジストリ (use_native
-# は呼び出し側が functools.partial で bind する、`_resolve_indicator_
-# registry` 参照)。ここに無いキー (main_linked_pair_count 等) は自動的に
+# (min_puyos_to_ignite/saturation_chain) + saturation_chain_upper (2026-08-13
+# user簡略化決定) の native 版レジストリ (use_native は呼び出し側が
+# functools.partial で bind する、`_resolve_indicator_registry` 参照)。
+# ここに無いキー (main_linked_pair_count 等) は自動的に
 # GRID_ONLY_HEAVY_INDICATORS の Python 実装のまま扱われる。
 GRID_ONLY_HEAVY_INDICATORS_NATIVE: dict[str, Callable[..., "iv.IndicatorV2Value"]] = {
     "current_max_chain": _native_current_max_chain,
@@ -805,6 +857,7 @@ GRID_ONLY_HEAVY_INDICATORS_NATIVE: dict[str, Callable[..., "iv.IndicatorV2Value"
     "multi_color_ignition": _native_multi_color_ignition,
     "min_puyos_to_ignite": _native_min_puyos_to_ignite,
     "saturation_chain": _native_saturation_chain,
+    "saturation_chain_upper": _native_saturation_chain_upper,
 }
 
 # ============================
@@ -894,6 +947,8 @@ DIFF_EXEMPT_OWN_ONLY_COLUMNS: tuple[str, ...] = (
     "color_diversity_evenness",
     "buried_hole_count",
     "chain_articulation_point_count",
+    # --- 上部限定軽量版 (2026-08-13 user簡略化決定、未評価のため own のみ) ---
+    "saturation_chain_upper",
 )
 
 # connectivity_observation() は registry の外で個別に書く固定3列

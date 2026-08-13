@@ -1607,6 +1607,110 @@ def test_full_board_cap_is_78() -> None:
 
 
 # ============================
+# XII-1c' saturation_chain_upper (上部限定軽量版、2026-08-13 user簡略化決定)
+# ============================
+
+
+def _checkerboard_high_fill_board(free_cols: "tuple[int, ...]" = ()) -> Board:
+    """充填率 SATURATION_UPPER_MIN_FILL 以上の非発火 (4連結なし) 盤面を作る。
+
+    赤/青の市松模様で可視12段 (row1〜row12、隠し段row0除く) を埋める
+    (縦横とも隣接同色が無いため4連結しない配置、充填率72/78≈0.923)。
+    free_cols で指定した列は最下段 1 マスだけ空ける (最大1列まで、2列以上
+    空けると充填率が0.90を下回るため呼出側で使用範囲に注意)。
+    """
+    g = _empty_grid()
+    colors = [COLOR_RED, COLOR_BLUE]
+    for row in range(1, BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            if col in free_cols and row == BOARD_ROWS - 1:
+                continue
+            g[row][col] = colors[(row + col) % 2]
+    return Board.from_list(g)
+
+
+def test_saturation_chain_upper_below_threshold_returns_nan() -> None:
+    """充填率が SATURATION_UPPER_MIN_FILL 未満なら score/raw ともに NaN。
+
+    0 ではない (「未計測」と「飽和ゼロ」を区別する、モジュール docstring
+    「SATURATION_UPPER_MIN_FILL の導出根拠」節参照)。
+    """
+    board = _empty_board()
+    v = iv.saturation_chain_upper(board)
+    assert v.score != v.score  # NaN の自己不等式 (import math を避ける簡易判定)
+    assert v.raw != v.raw
+
+
+def test_saturation_chain_upper_four_chain_board_below_threshold_returns_nan() -> None:
+    """4連結発火盤面 (充填率は低い) も同様に閾値未満で NaN。"""
+    board = _four_chain_board()
+    assert board.count_puyos() / iv.FULL_BOARD_CAP < iv.SATURATION_UPPER_MIN_FILL
+    v = iv.saturation_chain_upper(board)
+    assert v.score != v.score
+    assert v.raw != v.raw
+
+
+def test_saturation_chain_upper_at_threshold_matches_saturation_chain() -> None:
+    """充填率が閾値以上なら既存 saturation_chain と完全一致する値を返す。
+
+    ビーム構築・終端測定のアルゴリズムは無変更のまま呼ぶだけ (delegation)
+    のため、bit-identical (score/raw とも == で一致) を確認する。
+    """
+    board = _checkerboard_high_fill_board()
+    assert board.count_puyos() / iv.FULL_BOARD_CAP >= iv.SATURATION_UPPER_MIN_FILL
+    upper = iv.saturation_chain_upper(board)
+    full = iv.saturation_chain(board)
+    assert upper.score == full.score
+    assert upper.raw == full.raw
+
+
+def test_saturation_chain_upper_min_fill_override_allows_low_fill_board() -> None:
+    """min_fill を明示的に下げれば、既定では NaN になる低充填盤面も計測する。"""
+    board = _four_chain_board()
+    v = iv.saturation_chain_upper(board, min_fill=0.0)
+    full = iv.saturation_chain(board)
+    assert v.score == full.score
+    assert v.raw == full.raw
+
+
+def test_saturation_chain_upper_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊、閾値以上のケース)。"""
+    board = _checkerboard_high_fill_board()
+    before = board.copy()
+    iv.saturation_chain_upper(board)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_saturation_chain_upper_score_in_range_above_threshold() -> None:
+    """閾値以上の盤面では score が 0〜1 に収まる (NaN にならない)。
+
+    free_cols は最大1列まで (2列以上空けると充填率70/78≈0.897<0.90 に
+    落ちて NaN になってしまうため、`_checkerboard_high_fill_board` の
+    充填率制約に従う)。
+    """
+    for free_cols in ((), (0,)):
+        board = _checkerboard_high_fill_board(free_cols)
+        assert board.count_puyos() / iv.FULL_BOARD_CAP >= iv.SATURATION_UPPER_MIN_FILL
+        v = iv.saturation_chain_upper(board)
+        assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_upper_exported_in_all() -> None:
+    """saturation_chain_upper が __all__ に含まれること (既存 saturation_chain
+    は末尾追加規約により無変更のまま残る)。"""
+    assert "saturation_chain_upper" in iv.__all__
+    assert "SATURATION_UPPER_MIN_FILL" in iv.__all__
+    assert "saturation_chain" in iv.__all__  # 既存指標は互換維持で残存
+
+
+def test_saturation_chain_upper_min_fill_constant_in_unit_range() -> None:
+    """SATURATION_UPPER_MIN_FILL は充填率 (0〜1) として妥当な範囲。"""
+    assert 0.0 < iv.SATURATION_UPPER_MIN_FILL < iv.SATURATION_FILL_RATIO_DEFAULT
+
+
+# ============================
 # XIII 催促保持 (saisoku_hold)
 # ============================
 #
