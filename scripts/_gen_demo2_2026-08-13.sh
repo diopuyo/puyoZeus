@@ -25,7 +25,7 @@ CMD="nice -n 19 ./venv/bin/python -u -m scripts.visualize_advantage_overlay \
   --counter-remaining-time --counter-defender-only \
   --stable-majority-window \
   --enable-ojama-fall-placement-override --enable-ojama-fall-entry-hardening \
-  --enable-ojama-fall-scoped-exit --resolved-exchange-eval \
+  --enable-ojama-fall-scoped-exit --resolved-exchange-eval --enable-pseudo-chain-score-fill \
   --start-sec 230 --end-sec 411 \
   --out $OUTDIR/demo2_video74_3match.mp4"
 echo "[cmd] $CMD"
