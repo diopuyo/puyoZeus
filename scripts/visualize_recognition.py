@@ -1220,6 +1220,9 @@ def resolve_production_config_overrides(
         "enable_effect_gate", "enable_burst_guard_v2",
         "enable_transition_merge_guard", "enable_hidden_row_burst_guard",
         "enable_match_transition_debounce",
+        # 2026-08-15 追加 (RECOGNITION_ADOPTED 採用に伴う横展開是正、
+        # test_common_flag_also_exists_in_visualizer 回帰テスト対応)。
+        "enable_ojama_fall_placement_override",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1700,6 +1703,20 @@ def main() -> int:
             "防ぐ。既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-fall-placement-override", action="store_true", default=False,
+        dest="enable_ojama_fall_placement_override",
+        help=(
+            "案2修正版 (2026-08-13導入/2026-08-15 evidence判定修正、"
+            "src.production_config.RECOGNITION_ADOPTED 採用 2026-08-15) を"
+            "有効化する。OJAMA_FALL 滞在中に実設置の確定証拠 (NEXT スライド、"
+            "または自chain roll-up除外済みの自side score増分) を検知したら "
+            "settle 判定を待たず即座に STABLE へ復帰する。全盤面ぷよ数の静止を"
+            "待つ既存出口判定は自分のツモ設置でも延長され OJAMA_FALL<->STABLE "
+            "0.15-0.3秒周期振動を起こす実害があった (docs/DEMO_REVIEW_2026-08-13.md "
+            "場面1)。既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
     # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
     # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
@@ -2074,6 +2091,10 @@ def main() -> int:
         burst_gate_open_threshold=args.burst_gate_open_threshold,
         enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
         enable_match_transition_debounce=args.enable_match_transition_debounce,
+        # RECOGNITION_ADOPTED 採用 (2026-08-15): --enable-ojama-fall-placement-override
+        enable_ojama_fall_placement_override=(
+            args.enable_ojama_fall_placement_override
+        ),
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定
