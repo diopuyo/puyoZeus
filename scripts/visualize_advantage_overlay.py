@@ -23,6 +23,7 @@ import sys
 import zlib
 from dataclasses import dataclass, replace as dataclass_replace
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -63,6 +64,17 @@ from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E4
 import scripts.mc_counter_estimator as mc_counter  # noqa: E402
 from scripts.model_indicator_win import (  # noqa: E402
     GBC_PARAMS, load_labeled_csv, pair_sides_for_win, build_features,
+)
+# 評価済みモデル成果物 (2026-08-14 coordinator指示) の47列スキーマは
+# build_labeled_win_from_npz.py の b-2 分類定数が単一情報源。ここで列名の
+# 分類表を再定義せず import して再利用する (重複定義によるドリフト防止、
+# CLAUDE.md「マジックナンバー禁止・単一情報源」原則)。
+from scripts.build_labeled_win_from_npz import (  # noqa: E402
+    COLOR_OJAMA_RATIO_EPS,
+    DIFF_KEEP_OWN_HEAVY_COLUMNS,
+    DIFF_KEEP_OWN_NEW_COLUMNS,
+    DIFF_KEEP_OWN_PAIR_COLUMNS,
+    DIFF_REPLACE_OWN_COLUMNS,
 )
 
 OUT_W, OUT_H = 1280, 720
@@ -774,6 +786,29 @@ JP_LABEL: dict[str, str] = {
     "fire_stability_k6": "火力安定K6",
     "expected_fire_k1": "期待火力K1", "expected_fire_k2": "期待火力K2",
     "center_bulge": "中央凸度",
+    # --- 評価済みモデル成果物 (47列、2026-08-14) 用の追加ラベル ---
+    "center_bulge_color": "中央凸度(色)", "center_bulge_ojama": "中央凸度(おじゃま)",
+    "color_diversity_evenness": "色多様性均等度", "buried_hole_count": "埋没穴数",
+    "immediate_fire_power": "即時火力", "chain_efficiency": "連鎖効率",
+    "min_puyos_to_ignite": "発火最小ぷよ数", "second_chain_potential": "副砲潜在力",
+    "main_linked_pair_count": "本線連結対数", "isolated_pair_count": "孤立対数",
+    "main_linked_ratio": "本線連結比率", "ignition_point_count": "発火点数",
+    "multi_color_ignition": "多色発火性", "simultaneous_pop_richness": "同時消し豊富度",
+    "saturation_chain_upper": "飽和連鎖(上限探索)",
+    "chain_articulation_point_count": "連鎖関節点数",
+    "conn_max_group_size": "最大連結サイズ",
+    "all_clear_bonus_pending": "全消しボーナス予約中",
+    "opp_all_clear_bonus_pending": "相手全消しボーナス予約中",
+    "ojama_net_balance_synced": "おじゃま収支(再同期)", "ojama_margin": "おじゃま猶予量",
+    "color_ojama_ratio_own": "色ぷよ比率", "color_diff_x_ojama_diff": "色ぷよ差×おじゃま差",
+    "diff_max_column_height": "最大列高差", "diff_column_bumpiness": "凹凸差",
+    "diff_death_margin": "窒息余裕差", "diff_death_margin_neighbor": "窒息余裕差(隣接)",
+    "diff_conn_pair_count": "連結対数差", "diff_conn_max_group_size": "最大連結サイズ差",
+    "diff_board_color_puyo_total": "色ぷよ総数差", "diff_board_puyo_total": "盤面ぷよ総数差",
+    "diff_board_ojama_count": "盤面お邪魔数差", "diff_center_bulge_color": "中央凸度差(色)",
+    "diff_center_bulge_ojama": "中央凸度差(おじゃま)", "diff_current_max_chain": "現在最大連鎖差",
+    "diff_dig_resistance": "掘り耐性差", "diff_ukeyasusa": "受けやすさ差",
+    "diff_sub_chain_count": "副砲連鎖数差",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
@@ -913,6 +948,160 @@ def _resolve_features(df: pd.DataFrame) -> list[str]:
 TRAIN_CSV_PATH: str = (
     "data/verify/labeled_win_full148_2026-08-14/labeled_win_full148.csv"
 )
+# [2026-08-14 追記] 上記コメントで報告した「AUC 0.657/47列との乖離」は
+# 下記 MODEL_ARTIFACT_PATH 経由の直読みで解消済み (coordinator指示)。
+# TRAIN_CSV_PATH は artifact 不在時のフォールバック学習でのみ使われる
+# (_acquire_model 参照)。
+
+# ============================
+# 評価済みモデル成果物の直読み (2026-08-14 coordinator指示)
+# ============================
+# 「評価したモデル (AUC 0.657/終盤0.839, scripts/_retrain148_2026-08-14.py)
+# = デモが使うモデル」を構造的に一致させる。従来の起動時学習 (_train_model,
+# 1P/2P差分9列・109秒) は評価と別パイプラインだったため、評価済み成果物
+# (全144動画・47列・row単位=side単独で勝率を出す方式) を直接ロードする。
+# 特徴量列リストは成果物と同じディレクトリの feature_cols_full.json
+# (_retrain148_2026-08-14.py が既に保存済み、47列) を単一情報源として使う。
+MODEL_ARTIFACT_DIR: Path = Path("data/verify/retrain148_2026-08-14")
+MODEL_ARTIFACT_PATH: Path = MODEL_ARTIFACT_DIR / "model_full148_full_features.joblib"
+MODEL_ARTIFACT_FEATURE_COLS_PATH: Path = MODEL_ARTIFACT_DIR / "feature_cols_full.json"
+
+# 評価成果物モデルが使う grid-only 指標 (Board -> IndicatorV2Value)。
+# scripts/build_labeled_win_from_npz.py の GRID_ONLY_INDICATORS +
+# GRID_ONLY_HEAVY_INDICATORS と同一の関数集合 (薄い委譲構造を踏襲、
+# indicators_v2.py への委譲のみで新規ロジックを持たない)。native分岐は
+# 使わず常に既存Python実装を直接呼ぶ (ライブ推論では正確性を優先、
+# native/Python parityは別テストで担保済みのためこの選択で値は変わらない)。
+FULL_MODEL_GRID_REGISTRY: dict[str, Callable[[Board], "iv.IndicatorV2Value"]] = {
+    "board_color_puyo_total": iv.board_color_puyo_total,
+    "board_puyo_total": iv.board_puyo_total,
+    "max_column_height": iv.max_column_height,
+    "column_bumpiness": iv.column_bumpiness,
+    "death_margin": iv.death_margin,
+    "death_margin_neighbor": iv.death_margin_neighbor,
+    "center_bulge_color": iv.center_bulge_color,
+    "center_bulge_ojama": iv.center_bulge_ojama,
+    "board_ojama_count": iv.board_ojama_count,
+    "color_diversity_evenness": iv.color_diversity_evenness,
+    "buried_hole_count": iv.buried_hole_count,
+    "current_max_chain": iv.current_max_chain,
+    "dig_resistance": iv.dig_resistance,
+    "ukeyasusa": iv.ukeyasusa,
+    "sub_chain_count": iv.sub_chain_count,
+    "immediate_fire_power": iv.immediate_fire_power,
+    "chain_efficiency": iv.chain_efficiency,
+    "min_puyos_to_ignite": iv.min_puyos_to_ignite,
+    "second_chain_potential": iv.second_chain_potential,
+    "main_linked_pair_count": iv.main_linked_pair_count,
+    "isolated_pair_count": iv.isolated_pair_count,
+    "main_linked_ratio": iv.main_linked_ratio,
+    "ignition_point_count": iv.ignition_point_count,
+    "multi_color_ignition": iv.multi_color_ignition,
+    "simultaneous_pop_richness": iv.simultaneous_pop_richness,
+    "saturation_chain_upper": iv.saturation_chain_upper,
+    "chain_articulation_point_count": iv.chain_articulation_point_count,
+}
+
+
+def _side_feats_full_base(board: Board) -> dict[str, float]:
+    """評価成果物モデル用の grid-only 指標 (27種+conn3種=30列) を1回で計算する。"""
+    row = {name: fn(board).score for name, fn in FULL_MODEL_GRID_REGISTRY.items()}
+    total_conn, _ = iv.connectivity_observation(board)
+    row["conn_pair_count"] = float(total_conn.pair_count)
+    row["conn_triple_count"] = float(total_conn.triple_count)
+    row["conn_max_group_size"] = float(total_conn.max_group_size)
+    return row
+
+
+def _side_feats_full(
+    self_base: dict[str, float], opp_base: dict[str, float],
+    net: int, forecast: int,
+) -> dict[str, float]:
+    """1 side ぶんの47列特徴量を組み立てる (評価成果物モデルと同一スキーマ)。
+
+    diff_*/own+diff の分類は build_labeled_win_from_npz.py の
+    DIFF_REPLACE_OWN_COLUMNS 等 (import 済み、単一情報源) と完全一致させる。
+    ojama_net_balance_synced/all_clear_bonus_pending 系は permutation
+    importance 実測 (rank30以降、importance<=0.0002、
+    data/verify/retrain148_2026-08-14/permutation_importance_full.csv) で
+    予測寄与がほぼ0と確認済みのため、ライブでは簡略値で代替する
+    (詳細下記コメント。将来 VideoChainTracker.all_clear_pending 配線で
+    厳密化する余地は残すが、重要度が低く今回は見送り)。
+    """
+    feat = dict(self_base)
+    diff_targets = (
+        DIFF_REPLACE_OWN_COLUMNS + DIFF_KEEP_OWN_PAIR_COLUMNS
+        + DIFF_KEEP_OWN_NEW_COLUMNS + DIFF_KEEP_OWN_HEAVY_COLUMNS
+    )
+    for c in diff_targets:
+        feat[f"diff_{c}"] = self_base[c] - opp_base[c]
+    for c in DIFF_REPLACE_OWN_COLUMNS:
+        feat.pop(c, None)  # own→diff完全置換 (b-2決定、own列はCSVに乗せない)
+    feat["ojama_net_balance"] = iv.ojama_net_balance(net).score
+    feat["ojama_forecast"] = iv.ojama_forecast(forecast).score
+    # 簡略化 (rank31, importance=0.0001): オフライン版は両側の直近確定値を
+    # merge_asofして平均する再同期版だが、ライブでは常に同一フレームの両盤面
+    # が既に同期済みのため ojama_net_balance と同値で代替する。
+    feat["ojama_net_balance_synced"] = feat["ojama_net_balance"]
+    absorption_raw = iv.ON_FIELD_CAP - self_base["board_puyo_total"] * iv.ON_FIELD_CAP
+    margin_raw = absorption_raw - max(0.0, float(forecast))
+    feat["ojama_margin"] = iv.ojama_net_balance(margin_raw).score
+    # 簡略化 (rank30/40、importance<=0.0001): 全消しボーナス予約中フラグは
+    # 常に0固定 (VideoChainTracker.all_clear_pending 配線は将来課題、
+    # 重要度が低く現時点では見送り)。
+    feat["all_clear_bonus_pending"] = 0.0
+    feat["opp_all_clear_bonus_pending"] = 0.0
+    color, ojama = feat["board_color_puyo_total"], feat["board_ojama_count"]
+    feat["color_ojama_ratio_own"] = color / (color + ojama + COLOR_OJAMA_RATIO_EPS)
+    feat["color_diff_x_ojama_diff"] = (
+        feat["diff_board_color_puyo_total"] * feat["diff_board_ojama_count"]
+    )
+    return feat
+
+
+def _load_artifact_model():
+    """評価済みモデル成果物 (MODEL_ARTIFACT_PATH) をロードする (2026-08-14
+    coordinator指示)。
+
+    成果物または隣接列リストが無い/壊れている場合は None を返す
+    (fail-safe、呼出元 `_acquire_model` が従来の起動時学習へフォールバックする)。
+    ロードしたモデルには `_puyo_feature_mode="full_row"` を付与し、
+    `_score_advantage` がこの属性を見て行単位 (side単独) 推論に分岐する
+    (`_score_advantage_full_row` 参照、既存の diff ベース経路は無変更)。
+    """
+    if not MODEL_ARTIFACT_PATH.exists() or not MODEL_ARTIFACT_FEATURE_COLS_PATH.exists():
+        return None
+    try:
+        import joblib
+        model = joblib.load(MODEL_ARTIFACT_PATH)
+        cols = json.loads(MODEL_ARTIFACT_FEATURE_COLS_PATH.read_text(encoding="utf-8"))
+    except (ImportError, OSError, ValueError) as e:
+        print(f"[model] 成果物ロード失敗 ({e!r})。CSV起動時学習にフォールバックします。")
+        return None
+    model._puyo_feature_mode = "full_row"
+    model._puyo_full_cols = [str(c) for c in cols]
+    print(f"[model] 評価済み成果物をロード: {MODEL_ARTIFACT_PATH} (列数={len(cols)})")
+    return model
+
+
+def _acquire_model(exclude_video: str | None = None):
+    """モデルを確保する: 評価済み成果物を優先ロードし、無ければ従来の起動時
+    学習 (`_train_model`) にフォールバックする (2026-08-14 coordinator指示)。
+
+    exclude_video (動画リーク防止用) 指定時は成果物 (全144動画で学習済み・
+    除外不可) を使わず、必ず CSV起動時学習にフォールバックする
+    (黙って全動画学習済みモデルを返すサイレント不整合を防ぐ、fail-silent警戒)。
+    """
+    if exclude_video is not None:
+        print(f"[model] exclude_video={exclude_video!r} 指定のため成果物"
+              f" (全144動画で学習済み・除外不可) を使わず CSV起動時学習にフォールバックします。")
+        return _train_model(exclude_video)
+    model = _load_artifact_model()
+    if model is not None:
+        return model
+    print(f"[model] 成果物未検出 ({MODEL_ARTIFACT_PATH})。CSV起動時学習にフォールバックします。")
+    return _train_model(exclude_video)
+
 
 # ============================
 # 交互作用特徴: 色ぷよ差 × おじゃまフラット度 (2026-08-09 user伝授)
@@ -1744,6 +1933,47 @@ def _fill_expected_fire_candidate(
         f2[name] = ef2.values[k].score
 
 
+def _driver_value(name: str, f1: dict[str, float], f2: dict[str, float]) -> float:
+    """主因表示用の1P視点の値を返す (2026-08-14 追加、_score_advantage_full_row用)。
+
+    `diff_` プレフィックス付き列名は既にそれ自体が「自−相手」の相対量
+    (build_labeled_win_from_npz.py の b-2 diff化)なので f1 の値をそのまま
+    使う (f1-f2 すると二重差分になってしまうため区別が必要)。それ以外の
+    own列は従来通り f1-f2 の差分を使う。
+    """
+    if name.startswith("diff_"):
+        return f1.get(name, 0.0)
+    return f1.get(name, 0.0) - f2.get(name, 0.0)
+
+
+def _score_advantage_full_row(
+    model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
+    attribution_exclude: tuple[str, ...],
+) -> tuple[float, float, list[tuple[str, float]]]:
+    """評価済み成果物モデル (47列、side単独row単位) 用の推論経路 (2026-08-14)。
+
+    1P/2P それぞれ独立に「このsideが勝つ確率」を予測する (学習時の `won`
+    ラベルが side単独行に対する二値ラベルのため、対の差分は取らない)。
+    2予測は反対称保証が無いため、project既定の「有利不利は反対称関数」
+    原則 (_train_model のミラー標本と同じ思想) に従い対称化して統合する。
+    """
+    cols = model._puyo_full_cols
+    base1, base2 = _side_feats_full_base(b1), _side_feats_full_base(b2)
+    f1 = _side_feats_full(base1, base2, snap.net_balance_capped, snap.forecast_p1)
+    f2 = _side_feats_full(base2, base1, -snap.net_balance_capped, snap.forecast_p2)
+    x1 = np.array([[np.nan_to_num(f1.get(c, 0.0)) for c in cols]], dtype=float)
+    x2 = np.array([[np.nan_to_num(f2.get(c, 0.0)) for c in cols]], dtype=float)
+    p_1p_wins = float(model.predict_proba(x1)[0, 1])
+    p_2p_wins = float(model.predict_proba(x2)[0, 1])
+    p1 = 0.5 * (p_1p_wins + (1.0 - p_2p_wins))
+    adv = (p1 - 0.5) * 200.0
+    all_candidates = sorted(
+        ((c, _driver_value(c, f1, f2)) for c in JP_LABEL if c in f1),
+        key=lambda kv: -abs(kv[1]))
+    drivers = [kv for kv in all_candidates if kv[0] not in attribution_exclude][:3]
+    return adv, p1, drivers
+
+
 def _score_advantage(
     model, b1: Board, b2: Board, snap: OjamaAccountSnapshot,
     feature_cols: tuple[str, ...] | list[str] | None = None,
@@ -1762,7 +1992,14 @@ def _score_advantage(
     adv/p1 を計算し終えた後の「表示候補の絞り込み」としてのみ使う。
     デバッグ目的で除外前の全候補を見たい場合は空 tuple `()` を渡す
     (--show-excluded-attribution 経由、scripts.visualize_advantage_overlay.main 参照)。
+
+    model._puyo_feature_mode == "full_row" (評価済み成果物モデル、
+    2026-08-14 coordinator指示) の場合は `_score_advantage_full_row` に
+    完全委譲する (以下の従来 diff ベース経路は無変更、feature_cols 引数も
+    full_row 分岐では無視される)。
     """
+    if getattr(model, "_puyo_feature_mode", None) == "full_row":
+        return _score_advantage_full_row(model, b1, b2, snap, attribution_exclude)
     cols = list(feature_cols) if feature_cols is not None else list(
         getattr(model, "_puyo_feature_cols", FEATURES))
     f1 = _side_feats(b1, snap.net_balance_capped, snap.forecast_p1)
@@ -2821,7 +3058,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         phase_platt_params = load_phase_platt_calibration(
             PHASE_CALIBRATION_PATH, required=True,
         )
-    model = _train_model(exclude_video)
+    model = _acquire_model(exclude_video)
     _draw_recog_cells = _draw_recog_state = None
     _vr_rois: tuple[int, int, int, int] | None = None
     _vr_roi_size: tuple[int, int] | None = None
