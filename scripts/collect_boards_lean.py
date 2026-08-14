@@ -785,6 +785,8 @@ def collect_lean(
     enable_ojama_fall_placement_override: bool = False,
     enable_ojama_fall_entry_hardening: bool = False,
     enable_chain_gate_raw_fallback: bool = False,
+    enable_ojama_fall_scoped_exit: bool = False,
+    precise_seek: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -943,6 +945,30 @@ def collect_lean(
             cnn_board (常時最新) に erasable があれば chain_event を通す
             (CHAIN 継続中のみ)。既定 False = 従来挙動完全維持 (backwards
             compat)。
+        enable_ojama_fall_scoped_exit: 案1 (2026-08-13、OJAMA_FALL出口の根治、
+            docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典、
+            RecognitionPipeline.load_default の同名引数へそのまま伝播する)。
+            True で OJAMA_FALL 退出条件を「おじゃまセル限定の個数安定」に
+            切り替える (色ぷよの増減は無視)。案B (enable_ojama_fall_board_settle)
+            は盤面全体のぷよ数を見るため自分のツモ設置でも数値が変化し続け
+            出口判定を塞ぐ (根因調査で実測: 設置ブロック16/16件、高速振動)。
+            既定 False = 従来挙動完全維持 (backwards compat、user デモ
+            レビュー承認前の savepoint 実装)。
+        precise_seek: フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で
+            発見した測定器事故の修正)。True で --start-sec 指定時の
+            `cap.set(CAP_PROP_POS_FRAMES, ...)` 呼び出しを廃し、代わりに
+            frame 0 から `cap.read()` を start_frame 回だけ呼んで捨てる
+            (デコードのみ、pipeline.update は呼ばない)。cv2/ffmpeg の
+            CAP_PROP_POS_FRAMES シークはコンテナの GOP 構造に依存し、
+            同一動画でも再エンコード世代が違うと着地フレームが数十〜数百
+            フレームずれることがある (2026-08-14 実測: YouTube再DL動画で
+            人手ラベルの絶対フレーム番号との突合が惨敗 (52-61%まで崩壊)、
+            動画を再DLしていない c13 のみ従来通り97%超の整合を維持)。
+            本フラグは該当動画の再取得なしに再現できる根治であり、
+            --start-sec 0 (=本番 Phase L regen の通常運用) では
+            start_frame=0 のため cap.set 自体が元々呼ばれず無関係
+            (production 経路は無傷)。既定 False = 従来挙動完全維持
+            (backwards compat、処理コスト増のため既定では有効化しない)。
 
     Returns:
         蓄積した snapshot 数。
@@ -956,7 +982,14 @@ def collect_lean(
 
     start_frame = int(start_sec * fps) if start_sec > 0.0 else 0
     if start_frame > 0:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
+        if precise_seek:
+            # GOP精度に依存しない厳密シーク: 先頭から読み捨てる (2026-08-14)。
+            for _ in range(start_frame):
+                ok_skip, _ = cap.read()
+                if not ok_skip:
+                    break
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
 
     if max_sec > 0:
         end_frame = min(total_frames, start_frame + int(max_sec * fps))
@@ -1016,6 +1049,7 @@ def collect_lean(
         enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
         enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
         enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
+        enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1480,6 +1514,30 @@ def main() -> int:
             "のみ)。既定は無効 (後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-fall-scoped-exit", action="store_true",
+        dest="enable_ojama_fall_scoped_exit",
+        help=(
+            "案1 (2026-08-13、OJAMA_FALL出口の根治、"
+            "docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典) を有効化する。"
+            "OJAMA_FALL 退出条件を「おじゃまセル限定の個数安定」に切り替える "
+            "(色ぷよの増減は無視、案Bの自分のツモ設置による振動の対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--precise-seek", action="store_true",
+        dest="precise_seek",
+        help=(
+            "フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した"
+            "測定器事故の修正) を有効化する。--start-sec 指定時の"
+            "cap.set(CAP_PROP_POS_FRAMES) を廃し、frame 0 から読み捨てる"
+            "方式に切り替える (cv2/ffmpeg の GOP依存シーク誤差を根治、"
+            "再エンコード世代が異なる動画で人手ラベルの絶対フレーム番号との"
+            "突合が大きくずれる問題への対策)。--start-sec 0 (通常の Phase L "
+            "regen 運用) では無関係。既定は無効 (後方互換、処理コスト増)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -1517,6 +1575,8 @@ def main() -> int:
         ),
         enable_ojama_fall_entry_hardening=args.enable_ojama_fall_entry_hardening,
         enable_chain_gate_raw_fallback=args.enable_chain_gate_raw_fallback,
+        enable_ojama_fall_scoped_exit=args.enable_ojama_fall_scoped_exit,
+        precise_seek=args.precise_seek,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
