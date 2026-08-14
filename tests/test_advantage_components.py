@@ -1257,6 +1257,304 @@ def test_resolve_counter_text_for_display_ignores_hold_when_defender_only_disabl
 
 
 # ============================
+# 指摘13: 片側のみ連鎖中のライブ受け側再評価
+# (docs/DEMO_REVIEW_2026-08-13.md #13、2026-08-15)
+# ============================
+# 「84%で固定でなく、2Pのみ連鎖中なら受け側の状況は0.5秒ごとに変わるので
+# 動くのが普通では」への対処。攻撃側の帰結 (飛来量・仮想盤面 board_pX_after)
+# は凍結維持しつつ、受け側の現在盤面 (呼出側 generate() の sticky b1/b2) +
+# 残り時間予算の逓減でモデル評価/決定度増幅を再計算する。新フラグ
+# enable_live_defender_reeval (既定OFF)。
+
+
+def _stub_exchange_result_distinct_boards(
+    dropped_to_p1: int = 0, dropped_to_p2: int = 0,
+) -> types.SimpleNamespace:
+    """board_p1_after/board_p2_after/pre_landing の4枚全てに識別可能な別々の
+    Board を持つ stub (どの盤面が実際に使われたかを `is` で厳密確認できる)。"""
+    return types.SimpleNamespace(
+        board_p1_after=_board_with_ojama(11), board_p2_after=_board_with_ojama(12),
+        board_p1_pre_landing=_board_with_ojama(13), board_p2_pre_landing=_board_with_ojama(14),
+        dropped_to_p1=dropped_to_p1, dropped_to_p2=dropped_to_p2,
+        leftover_p1=0, leftover_p2=0,
+        p1_dead=False, p2_dead=False,
+        chain_result_p1=types.SimpleNamespace(chain_count=1),
+        chain_result_p2=types.SimpleNamespace(chain_count=1),
+    )
+
+
+def test_live_defender_reeval_default_off_is_bit_identical(monkeypatch) -> None:
+    """既定 False では b1/b2 を渡しても片側終了フェーズは完全凍結のまま
+    (backwards compat、既存 test_resolved_holds_when_only_one_side_ends_first
+    と同じ前提を b1/b2 明示指定で再確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())  # enable_live_defender_reeval省略=False
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    assert len(calls) == 1
+    live_board = _board_with_ojama(5)
+    active, _ = tracker.update(
+        _make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+        b1=live_board, b2=live_board)
+    assert active is True
+    assert tracker.hold_adv == held  # 生盤面を渡しても凍結が優先される
+    assert len(calls) == 1  # _score_advantage は再度呼ばれない
+
+
+def test_live_defender_reeval_skipped_when_both_sides_still_chaining(monkeypatch) -> None:
+    """両者ともまだ連鎖中 (ev1/ev2 とも None でない) 間はライブ再評価をせず
+    完全凍結を維持する (指摘13の設計: ケース1「両者連鎖中」とケース2
+    「片側のみ連鎖中」の区別が正しく効いていることの確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    live_board = _board_with_ojama(1)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board, b2=live_board)
+    assert len(calls) == 1  # 両側継続中はライブ再評価が起動しない
+
+
+def test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_board(
+    monkeypatch,
+) -> None:
+    """片側のみ連鎖中 (1P終了=受け側、2P継続=攻撃側) の間、モデル評価に渡る
+    盤面は 1P=呼出側から渡されたライブ盤面・2P=凍結仮想盤面 (board_p2_after)
+    になる (攻撃側の生盤面は連鎖アニメ中で信用できないため使わない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    captured_boards: list[tuple] = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        captured_boards.append((b1, b2))
+        return 0.0, 0.5, []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(captured_boards) == 1  # 初回決着計算
+
+    live_board = _board_with_ojama(9)
+    # 1P (受け側=dropped_to_p1=30) の chain_event だけ None化、2P (攻撃側) は継続中。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board, b2=None)
+
+    assert len(captured_boards) == 2  # ライブ再評価でもう1回呼ばれる
+    b1_used, b2_used = captured_boards[1]
+    assert b1_used is live_board  # 受け側 (1P) はライブ盤面
+    assert b2_used is result_stub.board_p2_after  # 攻撃側 (2P) は凍結仮想盤面のまま
+    assert b2_used is not result_stub.board_p2_pre_landing
+
+
+def test_live_defender_reeval_noop_when_defender_board_not_yet_observed(monkeypatch) -> None:
+    """受け側の STABLE 盤面をまだ一度も観測していない (b1/b2 が None) 間は
+    再評価せず直前の保持値を維持する (安全側、段差回避)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    active, _ = tracker.update(
+        _make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0, t_sec=1.0)
+    assert active is True
+    assert tracker.hold_adv == held
+    assert len(calls) == 1  # ライブ再評価は呼ばれない (盤面欠損でno-op)
+
+
+def test_live_defender_reeval_noop_when_no_threat(monkeypatch) -> None:
+    """相殺で飛来量が無い局面ではライブ再評価対象の受け側が無く no-op
+    (指摘10の noop テストと同じ前提を指摘13ライブ経路でも確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange",
+                        lambda *a, **k: _stub_mutual_exchange_result())
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    live_board = _board_with_ojama(1)
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board)
+    assert tracker.hold_adv == held
+    assert len(calls) == 1
+
+
+def test_live_defender_reeval_respects_recompute_interval_throttle(monkeypatch) -> None:
+    """再評価は COUNTER_RECOMPUTE_INTERVAL_SEC (0.5秒) 未満の連続呼び出しでは
+    間引かれ、0.5秒以上経過すると再計算される (既存の応手判定周期と同一)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    calls: list[int] = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        calls.append(1)
+        return float(len(calls)), 0.5, []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+
+    live_board = _board_with_ojama(1)
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board)
+    assert len(calls) == 2  # 決着直後は間引きなしで即評価 (段差回避)
+
+    # 0.5秒未満の再呼び出しは間引かれる (再計算されない)。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.2,
+                   t_sec=1.2, b1=live_board)
+    assert len(calls) == 2
+
+    # 0.5秒以上経過した呼び出しでは再計算される。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.6,
+                   t_sec=1.6, b1=live_board)
+    assert len(calls) == 3
+
+
+def test_live_defender_reeval_budget_decreases_with_elapsed_time_and_updates_display(
+    monkeypatch,
+) -> None:
+    """決定度増幅も併用時、時間予算は `_chain_remaining_time_budget_sec` に
+    現在の t_sec を都度渡すことで経過時間ぶん自然に減り (残り時間の逓減)、
+    ホールド表示専用フィールド (hold_defender_prob 等) も追従する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    captured_budgets: list[float] = []
+
+    def fake_counter_update(self, b1, b2, budget, **kw):
+        captured_budgets.append(budget)
+        return (0.0, 0.4, float("nan"))
+
+    monkeypatch.setattr(vao.CounterReachTracker, "update", fake_counter_update)
+    monkeypatch.setattr(vao, "_counter_defender_adv", lambda *a, **k: -2.0)
+
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_decisive_amplify=True, enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=100.0, total_score=500)
+    # 攻撃側 (2P、defender=1P なので attacker_event=ev2) は6連鎖・t=100.0発火。
+    ev2 = ChainEvent(
+        trigger_sec=100.0, end_sec=101.0, before_board=Board(),
+        chain_count=6, total_erased=0, total_score=300, base_score=0,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0, is_all_clear=False,
+    )
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(),
+                   0.0, t_sec=100.0)
+    assert len(captured_budgets) == 1  # 初回決着計算内の増幅
+
+    live_board = _board_with_ojama(1)
+    # 1P(受け側)が先に終了、2Pの連鎖アニメはまだ続いている。発火から1.5秒経過。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(),
+                   1.0, t_sec=101.5, b1=live_board)
+    assert len(captured_budgets) == 2
+
+    expected = vao._chain_remaining_time_budget_sec(6, 100.0, 101.5, {})
+    assert captured_budgets[1] == pytest.approx(expected)
+    assert captured_budgets[1] < captured_budgets[0]  # 経過時間ぶん残り予算が減っている
+    assert tracker.hold_defender_prob == pytest.approx(0.4)  # 表示フィールドも追従
+    assert tracker.hold_defender_side == "1P"
+
+
+def test_live_defender_snap_forecast_uses_full_incoming_for_defender_side() -> None:
+    """[指摘13 forecast整合修正、2026-08-15] 受け側の盤面をライブ(着弾前)に
+    差し替える際、forecast は dropped_to_pX を含む全量 (self._incoming_total_pX)
+    に差し替わる。着弾前盤面には dropped 分がまだ一切反映されていないため、
+    forecast が leftover のみだと dropped 分が盤面にも forecast にも
+    現れず脅威を静かに過小評価してしまう回帰の直接テスト。"""
+    import scripts.visualize_advantage_overlay as vao
+    from src.ojama_accounting import OjamaAccountSnapshot
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 42.0  # dropped_to_p1(30) + leftover_p1(12) 相当
+    tracker._incoming_total_p2 = 5.0
+    tracker._resolved_snap = OjamaAccountSnapshot(
+        t_sec=0.0, pending_p1=0, pending_p2=0,
+        total_generated_by_p1=0, total_generated_by_p2=0,
+        total_offset_by_p1=0, total_offset_by_p2=0,
+        total_dropped_to_p1=0, total_dropped_to_p2=0,
+        net_ojama_balance=0,
+        overflow_risk_p1=False, overflow_risk_p2=False, confidence=1.0,
+        leftover_p1=0, leftover_p2=0,
+        all_clear_pending_p1=False, all_clear_pending_p2=False,
+        chain_end_triggered_p1=False, chain_end_triggered_p2=False,
+        chain_total_score_p1=0, chain_total_score_p2=0,
+        net_balance_capped=5.0 - 12.0, forecast_p1=12.0, forecast_p2=5.0,
+    )
+
+    snap_1p_defender = tracker._live_defender_snap("1P")
+    assert snap_1p_defender.forecast_p1 == pytest.approx(42.0)  # 全量に差し替わる
+    assert snap_1p_defender.forecast_p2 == pytest.approx(5.0)  # 攻撃側は元の leftover のまま
+    assert snap_1p_defender.net_balance_capped == pytest.approx(5.0 - 42.0)
+
+    snap_2p_defender = tracker._live_defender_snap("2P")
+    assert snap_2p_defender.forecast_p1 == pytest.approx(12.0)  # 攻撃側(1P)は元のまま
+    assert snap_2p_defender.forecast_p2 == pytest.approx(5.0)  # defender=2Pだが元leftover(5)=incoming(5)で偶然一致
+    assert snap_2p_defender.net_balance_capped == pytest.approx(5.0 - 12.0)
+
+
+def test_live_defender_reeval_passes_full_incoming_forecast_to_score_advantage(
+    monkeypatch,
+) -> None:
+    """`_reevaluate_live_defender` が `_score_advantage` へ渡す snap は
+    `_live_defender_snap` 差し替え後の値であることを配線レベルで確認する
+    (self._resolved_snap をそのまま渡す旧実装への回帰を防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    # dropped_to_p1=30, leftover_p1=10 -> incoming_total_p1=40 (leftoverのみの10とは異なる値)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    result_stub.leftover_p1 = 10
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    captured_snaps: list = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        captured_snaps.append(snap)
+        return 0.0, 0.5, []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(captured_snaps) == 1
+    assert captured_snaps[0].forecast_p1 == pytest.approx(10.0)  # 初回決着 = leftoverのまま
+
+    live_board = _board_with_ojama(9)
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board, b2=None)
+
+    assert len(captured_snaps) == 2
+    # ライブ再評価では forecast_p1 が dropped_to_p1(30)+leftover_p1(10)=40 に差し替わる
+    # (self._resolved_snap.forecast_p1 = leftover のみの 10 ではないことを確認)。
+    assert captured_snaps[1].forecast_p1 == pytest.approx(40.0)
+    assert captured_snaps[1].forecast_p1 != pytest.approx(10.0)
+
+
+# ============================
 # 評価済みモデル成果物の直読み (2026-08-14 coordinator指示)
 # ============================
 # 「評価したモデル (AUC 0.657/終盤0.839) = デモが使うモデル」を構造的に
