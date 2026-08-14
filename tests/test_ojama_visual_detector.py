@@ -25,6 +25,7 @@ from src.ojama_visual_detector import (
     OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC,
     OJAMA_ENTRY_CONSEC_SEC,
     OJAMA_FALL_MAX_SEC,
+    OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC,
     OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD,
     OJAMA_FALL_SCOPED_EXIT_MIN_SEC,
     OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR,
@@ -38,6 +39,7 @@ from src.ojama_visual_detector import (
     _count_board_ojama,
     _count_top_ojama,
     _has_ojama_fall_placement_evidence,
+    _is_own_chain_recently_active_for_score_exclusion,
 )
 from src.state_detectors import ChainPhaseDetector, TsumoPhaseDetector
 
@@ -871,11 +873,13 @@ def test_placement_override_exits_immediately_on_slide_motion() -> None:
     )
 
 
-def test_placement_override_exits_immediately_on_own_score_delta() -> None:
-    """enable_ojama_fall_placement_override=True: own_score_delta>0 (落下
-    ボーナス等) でも settle 判定を待たず即 STABLE 復帰する
-    (docs/DEMO_REVIEW_2026-08-13.md 場面1: score 213→221 の +8=落下ボーナスと
-    同じパターン)。
+def test_placement_override_single_frame_score_delta_still_exits_immediately_when_not_chain_active() -> None:
+    """own_score_delta>0 の単一フレームは、 自 chain が直近アクティブでない
+
+    限り従来通り即座に STABLE 復帰する (2026-08-15 修正で「常に不採用」には
+    していない — 実時間ヒステリシス案は 55盤面物差しで有意に悪化すると実測
+    したため不採用に確定した、 `_confirm_placement_evidence` の docstring
+    参照)。 本テストは単一フレーム即決の維持を保証する回帰テスト。
     """
     det = OjamaVisualDetector(
         enable_ojama_fall_board_settle=True,
@@ -894,6 +898,80 @@ def test_placement_override_exits_immediately_on_own_score_delta() -> None:
     )
     result = det.detect(ctx1, sig1)
     assert result == BoardState.STABLE
+
+
+def test_placement_override_score_delta_excluded_during_own_chain_recent_active() -> None:
+    """own_chain_hold_until_sec が直近アクティブなら own_score_delta>0 の
+
+    単一フレームでも評価対象から除外される (自 chain roll-up の score 上昇を
+    実設置と誤認しない、 案2修正の根治対象 (b))。
+    """
+    det = OjamaVisualDetector(
+        enable_ojama_fall_board_settle=True,
+        enable_ojama_fall_placement_override=True,
+    )
+    ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
+    sig0 = DetectorSignals(
+        time_sec=0.0, cnn_board=_board_with_n_puyos(20), is_match_active=True,
+    )
+    assert det.detect(ctx0, sig0) is None
+
+    ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
+    sig1 = DetectorSignals(
+        time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(20),
+        is_match_active=True, own_score_delta=320,
+        own_chain_hold_until_sec=1.0 / 30.0 + 0.5,  # 自 chain 継続中
+    )
+    assert det.detect(ctx1, sig1) is None, (
+        "自 chain roll-up 中の own_score_delta は単一フレームでも"
+        " 実設置と確定してはいけない (roll-up誤検知対策)"
+    )
+
+    # 除外が解除されれば (自 chain がもう直近アクティブでなくなれば)
+    # 同じ own_score_delta>0 でも通常通り採用される (安全弁の確認)。
+    ctx2 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=2)
+    sig2 = DetectorSignals(
+        time_sec=100.0, cnn_board=_board_with_n_puyos(20),
+        is_match_active=True, own_score_delta=8, own_chain_hold_until_sec=1.0,
+    )
+    assert det.detect(ctx2, sig2) == BoardState.STABLE
+
+
+def test_is_own_chain_recently_active_for_score_exclusion_true_when_recent() -> None:
+    """`_is_own_chain_recently_active_for_score_exclusion`: own_chain_hold_
+
+    until_sec が `OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC` 秒以内なら
+    True。
+    """
+    sig = DetectorSignals(
+        time_sec=10.0, cnn_board=_empty_board(), is_match_active=True,
+        own_chain_hold_until_sec=(
+            10.0 - OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC + 0.01
+        ),
+    )
+    assert _is_own_chain_recently_active_for_score_exclusion(sig) is True
+
+
+def test_is_own_chain_recently_active_for_score_exclusion_false_when_old() -> None:
+    """回帰: 直近アクティブでない (窓より昔) なら False。"""
+    sig = DetectorSignals(
+        time_sec=10.0, cnn_board=_empty_board(), is_match_active=True,
+        own_chain_hold_until_sec=(
+            10.0 - OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC - 0.01
+        ),
+    )
+    assert _is_own_chain_recently_active_for_score_exclusion(sig) is False
+
+
+def test_is_own_chain_recently_active_for_score_exclusion_sentinel_zero_false() -> None:
+    """回帰: own_chain_hold_until_sec 既定値 0.0 (chain 未発生 sentinel) は
+
+    time_sec が小さい序盤フレームでも「直近アクティブ」と誤判定しない。
+    """
+    sig = DetectorSignals(
+        time_sec=0.01, cnn_board=_empty_board(), is_match_active=True,
+    )
+    assert _is_own_chain_recently_active_for_score_exclusion(sig) is False
 
 
 def test_placement_override_default_off_bit_identical() -> None:
@@ -927,8 +1005,13 @@ def test_placement_override_scene1_extension_reproduction_and_fix() -> None:
     続けると) `_board_stable_consec` が一度も閾値へ到達できず OJAMA_FALL に
     張り付き続ける (出口判定のスコープ過大、実測: 0.15-0.3 秒周期の振動・
     最悪 OJAMA_FALL_MAX_SEC までの延長)。 override ON なら、 その途中で
-    own_score_delta (落下ボーナス) が観測された瞬間に settle 未達でも即座に
-    STABLE へ抜ける。
+    slide_motion (= 次ツモへのスライド、 実設置の物理的証拠) が観測された
+    瞬間に settle 未達でも即座に STABLE へ抜ける。
+    (2026-08-15 修正: own_score_delta は単一フレームでは確定しなくなった
+    ため、 本テストは「即座に確定する」経路として slide_motion を使う。
+    own_score_delta のヒステリシス自体は
+    test_placement_override_exits_after_score_delta_hysteresis_confirmed
+    で別途検証する。)
     """
     counts = [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]  # 毎フレーム変化し続ける
 
@@ -947,7 +1030,7 @@ def test_placement_override_scene1_extension_reproduction_and_fix() -> None:
         " OJAMA_FALL に張り付き続ける (延長バグの再現)"
     )
 
-    # --- override ON: 最初に own_score_delta>0 が来たフレームで即座に STABLE ---
+    # --- override ON: slide_motion が来たフレームで即座に STABLE ---
     det_on = OjamaVisualDetector(
         enable_ojama_fall_board_settle=True,
         enable_ojama_fall_placement_override=True,
@@ -955,19 +1038,20 @@ def test_placement_override_scene1_extension_reproduction_and_fix() -> None:
     ctx0 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=0)
     sig0 = DetectorSignals(
         time_sec=0.0, cnn_board=_board_with_n_puyos(counts[0]),
-        is_match_active=True, own_score_delta=0,
+        is_match_active=True,
     )
     assert det_on.detect(ctx0, sig0) is None  # 1 frame目は証拠なし、継続
 
     ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
     sig1 = DetectorSignals(
         time_sec=1.0 / 30.0, cnn_board=_board_with_n_puyos(counts[1]),
-        is_match_active=True, own_score_delta=8,
+        is_match_active=True, slide_motion=True,
     )
     result1 = det_on.detect(ctx1, sig1)
     assert result1 == BoardState.STABLE, (
-        "override ON なら実設置証拠が来た時点で settle 未達でも即 STABLE 復帰し、"
-        " 延長 (最悪 OJAMA_FALL_MAX_SEC まで張り付く) を回避できる"
+        "override ON なら実設置証拠 (slide_motion) が来た時点で settle 未達でも"
+        " 即 STABLE 復帰し、 延長 (最悪 OJAMA_FALL_MAX_SEC まで張り付く) を"
+        " 回避できる"
     )
 
 
@@ -1297,10 +1381,13 @@ def test_hardening_reentry_after_placement_override_exit_requires_extra_duration
     sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
     assert det.detect(ctx0, sig0) is None
 
-    # own_score_delta>0 (実設置証拠) で即 STABLE 復帰 (案2)。
+    # slide_motion=True (実設置証拠、 ヒステリシス対象外で即採用) で
+    # 即 STABLE 復帰 (案2)。 own_score_delta は 2026-08-15 修正でヒステリシス
+    # 対象になったため、 本テストの主眼 (re-entry hardening) には無関係な
+    # タイミング変化を持ち込まないよう slide_motion 経路を使う。
     ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
     sig1 = DetectorSignals(
-        time_sec=0.033, cnn_board=board2, is_match_active=True, own_score_delta=8,
+        time_sec=0.033, cnn_board=board2, is_match_active=True, slide_motion=True,
     )
     assert det.detect(ctx1, sig1) == BoardState.STABLE
 
@@ -1341,9 +1428,12 @@ def test_hardening_reentry_suppression_expires_after_window() -> None:
     sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
     assert det.detect(ctx0, sig0) is None
 
+    # slide_motion 経路 (ヒステリシス対象外) を使う (own_score_delta は
+    # 2026-08-15 修正でヒステリシス対象になったため、 本テストの主眼
+    # (抑制窓の失効) に無関係なタイミング変化を持ち込まないため)。
     ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
     sig1 = DetectorSignals(
-        time_sec=0.01, cnn_board=board2, is_match_active=True, own_score_delta=8,
+        time_sec=0.01, cnn_board=board2, is_match_active=True, slide_motion=True,
     )
     assert det.detect(ctx1, sig1) == BoardState.STABLE
 
@@ -1379,9 +1469,13 @@ def test_placement_override_alone_reentry_not_suppressed_when_hardening_off() ->
     sig0 = DetectorSignals(time_sec=0.0, cnn_board=board2, is_match_active=True)
     assert det.detect(ctx0, sig0) is None
 
+    # slide_motion 経路 (ヒステリシス対象外) を使う (own_score_delta は
+    # 2026-08-15 修正でヒステリシス対象になったため、 本テストの主眼
+    # (entry_hardening=False 時の re-entry 非抑制) に無関係なタイミング
+    # 変化を持ち込まないため)。
     ctx1 = StateContext(state=BoardState.OJAMA_FALL, frame_idx=1)
     sig1 = DetectorSignals(
-        time_sec=0.033, cnn_board=board2, is_match_active=True, own_score_delta=8,
+        time_sec=0.033, cnn_board=board2, is_match_active=True, slide_motion=True,
     )
     assert det.detect(ctx1, sig1) == BoardState.STABLE
 
