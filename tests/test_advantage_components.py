@@ -15,7 +15,10 @@ import types
 import numpy as np
 import pytest
 
-from src.board import Board  # noqa: E402
+from src.board import (  # noqa: E402
+    BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, Board,
+)
+from src.board_state_machine import BoardState  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.indicators_v2 import IndicatorV2Value  # noqa: E402
 from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE  # noqa: E402
@@ -699,3 +702,203 @@ def test_resolved_hold_freezes_settled_only_while_active() -> None:
     assert resolved_hold_freezes_settled(True, False) is False
     assert resolved_hold_freezes_settled(False, True) is False
     assert resolved_hold_freezes_settled(False, False) is False
+
+
+# ============================
+# 指摘11: 着弾完了までのホールド延長 (docs/DEMO_REVIEW_2026-08-13.md #11)
+# ============================
+
+
+def _board_with_ojama(n: int) -> Board:
+    """可視領域 (隠し段除く) の下段から順に n 個のお邪魔を敷いた Board を返す
+    (テスト専用。iv.board_ojama_count は隠し段を数えないため、n をそのまま
+    raw 値として使えるよう下段=BOARD_ROWS-1 から積む=窒息列を巻き込まない)。"""
+    from src.board import HIDDEN_ROWS
+
+    grid = [[COLOR_EMPTY] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    placed = 0
+    for row in range(BOARD_ROWS - 1, HIDDEN_ROWS - 1, -1):
+        for col in range(BOARD_COLS):
+            if placed >= n:
+                break
+            grid[row][col] = COLOR_OJAMA
+            placed += 1
+        if placed >= n:
+            break
+    return Board.from_list(grid)
+
+
+def _make_signal_full(
+    chain_event: "ChainEvent | None", score: "int | None",
+    state: BoardState = BoardState.STABLE,
+    confirmed_board: "Board | None" = None,
+) -> types.SimpleNamespace:
+    """`_make_signal` に state/confirmed_board を足した完全版 (着弾完了判定②用)。"""
+    return types.SimpleNamespace(
+        chain_event=chain_event, score=score, state=state,
+        confirmed_board=confirmed_board if confirmed_board is not None else Board(),
+    )
+
+
+def test_landing_complete_true_immediately_when_pending_already_drained() -> None:
+    """既存動作の保存: pending が既に両者0なら board 状態を一切見ずに True
+    (r_p1/r_p2 に state/confirmed_board が無くても安全 = 短絡評価の確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 10.0
+    tracker._incoming_total_p2 = 0.0
+    tracker._target_ojama_p1 = 10.0
+    assert tracker._landing_complete(object(), object(), _make_snapshot()) is True
+
+
+def test_landing_complete_false_while_board_not_yet_stable() -> None:
+    """pending がまだ残っており、受け側盤面も STABLE でない間は未完了。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 10.0
+    tracker._incoming_total_p2 = 0.0
+    tracker._target_ojama_p1 = 10.0
+    r1 = _make_signal_full(None, 0, state=BoardState.OJAMA_FALL)
+    r2 = _make_signal_full(None, 0, state=BoardState.STABLE)
+    snap = _make_snapshot(pending_p1=5, pending_p2=0)
+    assert tracker._landing_complete(r1, r2, snap) is False
+
+
+def test_landing_complete_true_when_board_reaches_predicted_target() -> None:
+    """②: pending は未だ0でなくても、受け側 STABLE 盤面のおじゃま数が
+    予測着弾量に達していれば True (会計 pending の遅れに対する保険経路)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 10.0
+    tracker._incoming_total_p2 = 0.0
+    tracker._target_ojama_p1 = 10.0
+    r1 = _make_signal_full(None, 0, state=BoardState.STABLE, confirmed_board=_board_with_ojama(10))
+    r2 = _make_signal_full(None, 0, state=BoardState.STABLE)
+    snap = _make_snapshot(pending_p1=5, pending_p2=0)  # 会計はまだ残っている想定
+    assert tracker._landing_complete(r1, r2, snap) is True
+
+
+def test_resolved_hold_extends_until_pending_drains(monkeypatch) -> None:
+    """指摘11本体: 両側 chain_event が None化しても pending>0 の間は保持を
+    延長し、pending が0になって初めて解放する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    # 両側の連鎖アニメが終了。しかしまだ着弾中 (pending>0) → 延長。
+    r1 = _make_signal_full(None, 0, state=BoardState.OJAMA_FALL)
+    r2 = _make_signal_full(None, 0, state=BoardState.OJAMA_FALL)
+    active, just_deactivated = tracker.update(r1, r2, _make_snapshot(pending_p1=8), 1.0)
+    assert active is True
+    assert just_deactivated is False
+    assert tracker.hold_adv == held  # 保持値も不変
+    # 着弾完了 (pending が0に到達) → ここで初めて解放。
+    active, just_deactivated = tracker.update(
+        _make_signal(None, 0), _make_signal(None, 0), _make_snapshot(), 2.0)
+    assert active is False
+    assert just_deactivated is True
+
+
+def test_resolved_hold_safety_valve_forces_release(monkeypatch) -> None:
+    """安全弁: 着弾完了シグナルが成立しないまま物理最大時間を超えたら強制解放する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    r1 = _make_signal_full(None, 0, state=BoardState.OJAMA_FALL)
+    r2 = _make_signal_full(None, 0, state=BoardState.OJAMA_FALL)
+    stuck_snap = _make_snapshot(pending_p1=999, pending_p2=999)  # 着弾が永遠に完了しない想定
+    active, just_deactivated = tracker.update(r1, r2, stuck_snap, elapsed_sec=1.0)
+    assert active is True and just_deactivated is False
+    just_before = 1.0 + vao.RESOLVED_HOLD_LANDING_MAX_WAIT_SEC - 0.01
+    active, just_deactivated = tracker.update(r1, r2, stuck_snap, elapsed_sec=just_before)
+    assert active is True and just_deactivated is False  # まだ安全弁未満
+    just_after = 1.0 + vao.RESOLVED_HOLD_LANDING_MAX_WAIT_SEC + 0.01
+    active, just_deactivated = tracker.update(r1, r2, stuck_snap, elapsed_sec=just_after)
+    assert active is False and just_deactivated is True  # 安全弁で強制解放
+
+
+def test_resolved_hold_bit_identical_when_pending_already_zero(monkeypatch) -> None:
+    """回帰確認: pending が最初から0 (既存テスト群の前提) なら従来通り
+    chain_event が両方 None になった瞬間に即解放する (延長ロジック追加前と
+    ビット一致、既存テスト test_resolved_deactivates_only_when_both_sides_end
+    と同じ前提の明示版)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    active, just_deactivated = tracker.update(
+        _make_signal(None, 500), _make_signal(None, 300), _make_snapshot(), 1.0)
+    assert active is False
+    assert just_deactivated is True
+
+
+# ============================
+# 指摘10: 決定度の増幅 (docs/DEMO_REVIEW_2026-08-13.md #10)
+# ============================
+
+
+def test_decisive_amplify_default_off_is_bit_identical(monkeypatch) -> None:
+    """enable_decisive_amplify 既定 False では #9 単独の決着値と完全同一
+    (backwards compat、新規サブフラグ未指定の既存呼出元は無変化)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())  # enable_decisive_amplify省略=False
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert tracker.hold_adv == 10.0  # スタブの1回目の戻り値そのまま (増幅なし)
+    assert tracker.hold_p1 == pytest.approx(0.55)
+
+
+def test_decisive_amplify_adds_to_decisive_side_when_enabled(monkeypatch) -> None:
+    """指摘10: enable_decisive_amplify=True で受け側応手不能度ぶんが決着値に
+    加算される (CounterReachTracker/_counter_defender_adv 自体は既存実装を
+    そのまま呼ぶだけなので、統合の配線だけを固定値で検証する)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(
+        vao.CounterReachTracker, "update",
+        lambda self, b1, b2, budget, **kw: (0.0, 0.1, float("nan")),
+    )
+    monkeypatch.setattr(vao, "_counter_defender_adv", lambda *a, **k: -8.0)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert tracker.hold_adv == pytest.approx(10.0 - 8.0)
+    assert tracker.hold_p1 == pytest.approx(vao.adv_to_winprob(2.0))
+
+
+def test_decisive_amplify_noop_when_no_incoming(monkeypatch) -> None:
+    """飛来量が無い (両者ともゼロ) 局面では増幅対象の受け側が無く無効果。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: types.SimpleNamespace(
+        board_p1_after=Board(), board_p2_after=Board(),
+        dropped_to_p1=0, dropped_to_p2=0, leftover_p1=0, leftover_p2=0,
+        p1_dead=False, p2_dead=False,
+        chain_result_p1=types.SimpleNamespace(chain_count=1),
+        chain_result_p2=types.SimpleNamespace(chain_count=1),
+    ))
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert tracker.hold_adv == 10.0  # 増幅対象なし = スタブの戻り値そのまま
