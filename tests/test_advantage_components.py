@@ -5,6 +5,7 @@ PressureTracker(着弾ダメージの持続記憶)と ScoreLeadTracker(得点リ
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -902,6 +903,265 @@ def test_decisive_amplify_noop_when_no_incoming(monkeypatch) -> None:
     ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert tracker.hold_adv == 10.0  # 増幅対象なし = スタブの戻り値そのまま
+
+
+# ============================
+# 指摘12: 増幅の時間予算統一 + 専用強度 + ホールド中表示
+# (docs/DEMO_REVIEW_2026-08-13.md #12、2026-08-14)
+# ============================
+# 実測 (logs/diag_issue12_breakdown_2026-08-14_v5.log): _amplify_decisive が
+# 旧式 iv.estimate_chain_anim_duration_sec(観測連鎖数=2連鎖×0.4秒=2.4秒) を
+# 直呼びしていたため、実演出8.1秒に対し残り時間を過小評価 → 応手0%と誤断 →
+# 決定度増幅(旧COUNTER_SCALE全量)が発動し 84%→97% に飽和していた。
+
+
+def _stub_mutual_exchange_result(
+    dropped_to_p1: int = 0, dropped_to_p2: int = 0,
+    leftover_p1: int = 0, leftover_p2: int = 0,
+) -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        board_p1_after=Board(), board_p2_after=Board(),
+        dropped_to_p1=dropped_to_p1, dropped_to_p2=dropped_to_p2,
+        leftover_p1=leftover_p1, leftover_p2=leftover_p2,
+        p1_dead=False, p2_dead=False,
+        chain_result_p1=types.SimpleNamespace(chain_count=1),
+        chain_result_p2=types.SimpleNamespace(chain_count=1),
+    )
+
+
+def test_amplify_decisive_source_never_calls_legacy_time_budget_directly() -> None:
+    """静的回帰テスト (修正1の再発防止): _amplify_decisive の実装ソースに
+    旧式 `iv.estimate_chain_anim_duration_sec` の直呼びが無く、#3で実装済みの
+    `_chain_remaining_time_budget_sec` 経由のみで時間予算を求めていることを
+    ソース検査で固定する (「時間予算はこの関数以外で計算しない」の徹底)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    method = vao.ResolvedExchangeTracker._amplify_decisive
+    src = inspect.getsource(method)
+    code_only = src.replace(method.__doc__ or "", "")  # docstring内の言及を除外しコード本体のみ検査
+    assert "estimate_chain_anim_duration_sec" not in code_only
+    assert "_chain_remaining_time_budget_sec" in code_only
+
+
+def test_amplify_decisive_budget_matches_unified_function_and_differs_from_legacy(
+    monkeypatch,
+) -> None:
+    """修正1本体: _amplify_decisive が CounterReachTracker.update に渡す budget は
+    `_chain_remaining_time_budget_sec` の出力と一致し、旧式 (観測連鎖数×0.4秒、
+    経過時間控除なし) とは異なる値になる (実測との整合、指摘12直撃の再発防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(
+        vao, "resolve_mutual_exchange",
+        lambda *a, **k: _stub_mutual_exchange_result(dropped_to_p1=30),
+    )
+    captured: dict = {}
+
+    def fake_counter_update(self, b1, b2, budget, **kw):
+        captured["budget"] = budget
+        return (0.0, 0.3, float("nan"))
+
+    monkeypatch.setattr(vao.CounterReachTracker, "update", fake_counter_update)
+    monkeypatch.setattr(vao, "_counter_defender_adv", lambda *a, **k: -3.0)
+
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    # 攻撃側 (2P、defender=1P なので attacker_event=ev2) は6連鎖・t=100.0発火。
+    ev1 = _make_chain_event(trigger_sec=100.0, total_score=500)
+    ev2 = ChainEvent(
+        trigger_sec=100.0, end_sec=101.0, before_board=Board(),
+        chain_count=6, total_erased=0, total_score=300, base_score=0,
+        all_clear_bonus_applied=0, ojama_sent=0, leftover_score=0, is_all_clear=False,
+    )
+    # elapsed_sec(試合内経過)は0.0のままにし、raw t_sec=101.0 (発火から1秒後)
+    # を新規引数で渡す (2026-08-14 修正1、update() 側スレッド配線の確認)。
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(),
+                   0.0, t_sec=101.0)
+
+    expected = vao._chain_remaining_time_budget_sec(6, 100.0, 101.0, {})
+    legacy = vao.iv.estimate_chain_anim_duration_sec(6.0)
+    assert captured["budget"] == pytest.approx(expected)
+    assert captured["budget"] != pytest.approx(legacy)  # 旧式とビット一致しない
+
+
+def test_resolved_update_t_sec_defaults_to_elapsed_sec_when_omitted() -> None:
+    """update() に t_sec を渡さない既存呼出し (4引数のまま) は内部 _t_sec が
+    elapsed_sec にフォールバックする (backwards compat、既存テスト群は
+    enable_decisive_amplify=False のため実害なし)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker.update(_make_signal(None, 0), _make_signal(None, 0), _make_snapshot(), 3.5)
+    assert tracker._t_sec == pytest.approx(3.5)
+
+
+def test_resolved_amplify_scale_derived_from_existing_constants() -> None:
+    """修正2: RESOLVED_AMPLIFY_SCALE は既存定数 (COUNTER_SCALE, W_COUNTER) の
+    積のみで定義され、シーンからの逆算で決めていない
+    (feedback_overfitting_awareness_2026-08-04 準拠、新規マジックナンバー無し)。
+    ライブ per-frame 経路で counter_adv が W_COUNTER 倍されてから合成される
+    のと同じ実効上限に揃えることで、決着増幅の二重計上 (指摘12の根因) を防ぐ。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    assert vao.RESOLVED_AMPLIFY_SCALE == pytest.approx(vao.COUNTER_SCALE * vao.W_COUNTER)
+    assert vao.RESOLVED_AMPLIFY_SCALE < vao.COUNTER_SCALE  # 全量加算だった旧バグは再発しない
+
+
+def test_counter_defender_adv_default_scale_is_bit_identical_to_live_path() -> None:
+    """scale 省略時はライブ per-frame 用 COUNTER_SCALE と完全に一致する
+    (backwards compat、既存呼出元 = ライブ経路は挙動不変)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    b = Board()
+    omitted = vao._counter_defender_adv("2P", 0.3, 20.0, b, b)
+    explicit = vao._counter_defender_adv("2P", 0.3, 20.0, b, b, scale=vao.COUNTER_SCALE)
+    assert omitted == explicit
+
+
+def test_counter_defender_adv_resolved_scale_shrinks_magnitude_proportionally() -> None:
+    """修正2: RESOLVED_AMPLIFY_SCALE を渡すと、振幅が COUNTER_SCALE 比で縮む
+    (二重計上防止の実効値を直接確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    b = Board()
+    full = vao._counter_defender_adv("2P", 0.0, 20.0, b, b, scale=vao.COUNTER_SCALE)
+    resolved = vao._counter_defender_adv("2P", 0.0, 20.0, b, b, scale=vao.RESOLVED_AMPLIFY_SCALE)
+    assert resolved == pytest.approx(full * (vao.RESOLVED_AMPLIFY_SCALE / vao.COUNTER_SCALE))
+
+
+def test_amplify_decisive_populates_hold_display_fields(monkeypatch) -> None:
+    """修正3: 決着計算時に受け側の side/飛来量/応手確率をホールド表示専用
+    フィールドへ公開する (ResolvedExchangeTracker.hold_defender_side 等)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(
+        vao, "resolve_mutual_exchange",
+        lambda *a, **k: _stub_mutual_exchange_result(dropped_to_p1=30),
+    )
+    monkeypatch.setattr(
+        vao.CounterReachTracker, "update",
+        lambda self, b1, b2, budget, **kw: (0.0, 0.15, float("nan")),
+    )
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    assert tracker.hold_defender_side == "1P"  # dropped_to_p1=30 のみ = 1Pが受け側
+    assert tracker.hold_incoming_ojama == pytest.approx(30.0)
+    assert tracker.hold_defender_prob == pytest.approx(0.15)
+
+
+def test_amplify_decisive_resets_hold_display_fields_when_no_incoming(monkeypatch) -> None:
+    """飛来量が無い局面では表示フィールドも None/nan にリセットされる
+    (前回保持の受け側情報を持ち越さない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(
+        vao, "resolve_mutual_exchange", lambda *a, **k: _stub_mutual_exchange_result())
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    assert tracker.hold_defender_side is None
+    assert tracker.hold_incoming_ojama == 0.0
+    assert math.isnan(tracker.hold_defender_prob)
+
+
+def test_resolved_hold_display_fields_stay_default_when_amplify_disabled(monkeypatch) -> None:
+    """enable_decisive_amplify=False (既定) では _amplify_decisive 自体が
+    呼ばれないため、表示フィールドは __init__ の既定値のまま
+    (#9 単独構成に追加コストも追加副作用も無いことの確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())  # enable_decisive_amplify省略=False
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    assert tracker.hold_defender_side is None
+    assert math.isnan(tracker.hold_defender_prob)
+
+
+def test_amplify_decisive_hold_display_fields_do_not_affect_judgment(monkeypatch) -> None:
+    """修正3の要件: ホールド表示専用フィールドの公開は判定値
+    (hold_adv/hold_p1) に一切影響しない (表示と判定の分離を固定)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(
+        vao, "resolve_mutual_exchange",
+        lambda *a, **k: _stub_mutual_exchange_result(dropped_to_p1=30),
+    )
+    monkeypatch.setattr(
+        vao.CounterReachTracker, "update",
+        lambda self, b1, b2, budget, **kw: (0.0, 0.15, float("nan")),
+    )
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    hold_adv_before, hold_p1_before = tracker.hold_adv, tracker.hold_p1
+
+    # 表示フィールドを読むだけの操作 (パネル描画相当) を挟んでも判定値は不変。
+    _ = (tracker.hold_defender_side, tracker.hold_incoming_ojama, tracker.hold_defender_prob)
+    assert tracker.hold_adv == hold_adv_before
+    assert tracker.hold_p1 == hold_p1_before
+
+
+def test_resolve_counter_text_for_display_uses_hold_values_while_active() -> None:
+    """修正3: ホールド中 (resolved_hold_active=True) かつ defender-only モードは
+    ライブ per-frame の古い値 (指摘12 副次バグ) ではなく、決着計算の内部値
+    (hold_defender_side/hold_incoming_ojama/hold_defender_prob) を描画する。"""
+    from scripts.visualize_advantage_overlay import _resolve_counter_text_for_display
+
+    text = _resolve_counter_text_for_display(
+        True, True,
+        "2P", 0.42, 55.0,  # hold_* (決着計算の内部値、これが使われるべき)
+        "1P", 0.99, float("nan"), 3.0,  # ライブ per-frame の古い値 (無視される)
+    )
+    assert "2P応手 42%" in text
+    assert "55" in text
+    assert "1P" not in text  # ライブ側の古い受け側 (1P) が漏れていない
+
+
+def test_resolve_counter_text_for_display_falls_back_when_not_holding() -> None:
+    """ホールド非アクティブ時は従来通りライブ per-frame の値を使う
+    (_resolve_counter_text とビット一致、backwards compat)。"""
+    from scripts.visualize_advantage_overlay import (
+        _resolve_counter_text, _resolve_counter_text_for_display,
+    )
+
+    live = _resolve_counter_text(True, "1P", 0.6, float("nan"), 12.0)
+    via_helper = _resolve_counter_text_for_display(
+        True, False, "2P", 0.42, 55.0, "1P", 0.6, float("nan"), 12.0)
+    assert via_helper == live
+
+
+def test_resolve_counter_text_for_display_ignores_hold_when_defender_only_disabled() -> None:
+    """enable_defender_only=False の場合は resolved_hold_active に関わらず
+    従来の両側常時表示のまま (backwards compat、hold中でも例外扱いしない)。"""
+    from scripts.visualize_advantage_overlay import (
+        _resolve_counter_text, _resolve_counter_text_for_display,
+    )
+
+    live = _resolve_counter_text(False, "1P", 0.6, 0.4, 12.0)
+    via_helper = _resolve_counter_text_for_display(
+        False, True, "2P", 0.42, 55.0, "1P", 0.6, 0.4, 12.0)
+    assert via_helper == live
 
 
 # ============================

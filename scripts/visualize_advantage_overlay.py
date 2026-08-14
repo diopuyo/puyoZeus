@@ -386,9 +386,19 @@ class ResolvedExchangeTracker:
     の board_p1_after/board_p2_after) で受け側限定の応手確率を計算し
     (既存 `CounterReachTracker` の受け側限定経路を再利用)、既存
     `_counter_defender_adv` (物理由来の非線形ダメージ関数 `iv.ojama_damage`
-    + 応手確率 + 既存定数 COUNTER_SCALE のみ、新規マジックナンバー無し) と
-    同一の式で決着値へ加算する。既定 False = 従来 (#9 のみ) の決着値と
-    完全に同一 (backwards compat)。
+    + 応手確率 + 専用定数 `RESOLVED_AMPLIFY_SCALE`) と同一の式で決着値へ
+    加算する。既定 False = 従来 (#9 のみ) の決着値と完全に同一
+    (backwards compat)。
+
+    [指摘12対処、2026-08-14] `_amplify_decisive` が使う時間予算は
+    `_chain_remaining_time_budget_sec` (#3 の経過時間控除 + E[最終|N観測]
+    条件付き期待) に一本化した。以前は `iv.estimate_chain_anim_duration_sec`
+    (観測連鎖数×0.4秒、経過時間控除なし) を直呼びしており、連鎖の後半ほど
+    残り時間を過小評価 → 応手0%と誤断 → 決定度増幅が全量発動、という
+    二重の誤りが重なっていた (実演出8.1秒 vs 旧式算出2.4秒、指摘12の実測)。
+    増幅強度も専用定数 `RESOLVED_AMPLIFY_SCALE` (= `COUNTER_SCALE * W_COUNTER`)
+    に分離し、ライブ per-frame 経路が重み付け後に持つ実効上限と揃えることで
+    モデル評価との二重計上を避ける (同定数のコメント参照)。
     """
 
     def __init__(
@@ -424,6 +434,24 @@ class ResolvedExchangeTracker:
         # をこのクラス専用にもう1個持つ。ライブ per-frame 用インスタンスとは
         # 独立、決着計算は頻度が低い=1保持につき高々数回のためキャッシュ共有は不要)。
         self._counter_tracker = CounterReachTracker()
+        # [指摘12 修正1, 2026-08-14] #3 で実装済みの経過時間控除+条件付き
+        # 期待最終連鎖数テーブル (_chain_remaining_time_budget_sec が読む)。
+        # enable_decisive_amplify=False の間は使われないため I/O を避ける
+        # (既存の `_chain_len_table` ロード方針と同じ、generate() 内コメント参照)。
+        self._chain_len_table: "dict[int, float]" = (
+            _load_chain_length_conditional_table() if enable_decisive_amplify else {}
+        )
+        # [指摘12 修正1] `update()` 呼び出し時点の動画内絶対時刻 (raw t、
+        # `ChainEvent.trigger_sec` と同じ時間軸)。試合開始からの経過秒
+        # `elapsed_sec` とは意味論が異なる (定数オフセット分ずれる) ため
+        # 別属性で保持する (_amplify_decisive の時間予算計算専用)。
+        self._t_sec: float = 0.0
+        # [指摘12 修正3, 2026-08-14] ホールド中のパネル表示用 (受け側限定
+        # 応手情報)。判定値 (hold_adv/hold_p1) には一切混ぜず、表示専用の
+        # サイドチャネルとして公開する (呼出側 generate() が参照)。
+        self.hold_defender_side: "str | None" = None
+        self.hold_incoming_ojama: float = 0.0
+        self.hold_defender_prob: float = float("nan")
 
     def _resolve(
         self, snap: OjamaAccountSnapshot, elapsed_sec: float,
@@ -493,27 +521,44 @@ class ResolvedExchangeTracker:
 
         着弾後仮想盤面 (board_p1_after/board_p2_after) で受け側限定の応手確率を
         既存 CounterReachTracker (受け側限定経路) から求め、既存
-        `_counter_defender_adv` (COUNTER_SCALE + iv.ojama_damage、新規定数
-        無し) と同一式で adv に加算する。応手不能 (確率低) かつ飛来量大なら
-        決定的側へ増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+        `_counter_defender_adv` (`RESOLVED_AMPLIFY_SCALE` + iv.ojama_damage) と
+        同一式で adv に加算する。応手不能 (確率低) かつ飛来量大なら決定的側へ
+        増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+
+        [指摘12 修正1、2026-08-14] 時間予算は #3 で実装済みの
+        `_chain_remaining_time_budget_sec` (経過時間控除 +
+        E[最終連鎖数|観測N到達] の条件付き期待) **のみ**で計算する
+        (旧式 `iv.estimate_chain_anim_duration_sec(観測連鎖数)` の直呼びは
+        禁止 — `test_amplify_decisive_source_never_calls_legacy_time_budget_directly`
+        で静的に検査する)。旧式は経過時間を控除しないため、連鎖の後半ほど
+        残り時間を過小評価し「応手不能」と誤断する系統バイアスがあった
+        (指摘12: 実演出8.1秒に対し旧式2.4秒と算出、応手0%→過剰増幅の直接原因)。
         """
         defender_side, incoming = self._decisive_defender(result)
+        self.hold_defender_side, self.hold_incoming_ojama = defender_side, incoming
         if defender_side is None:
+            self.hold_defender_prob = float("nan")
             return adv, adv_to_winprob(adv)
         # 回復時間 = 相手 (攻撃側) の隙時間。実観測 ChainEvent.chain_count
         # (simulate 由来の chain_count は既知の過小評価事故があるため使わない、
-        # project_chain_count_both_untrustworthy) から既存の連鎖アニメ時間
-        # 推定を再利用する (#3 の従来経路 _resolve_counter_time_budget と同じ式)。
+        # project_chain_count_both_untrustworthy) を起点に、#3 修正と同じ
+        # 「時間予算の計算箇所」1関数 (_chain_remaining_time_budget_sec) だけを
+        # 経由する (他の場所で時間予算を計算しない、根本修正)。
         attacker_event = self._ev2 if defender_side == "1P" else self._ev1
-        budget = iv.estimate_chain_anim_duration_sec(float(attacker_event.chain_count))
+        budget = _chain_remaining_time_budget_sec(
+            attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
+            self._chain_len_table,
+        )
         _, cp1, cp2 = self._counter_tracker.update(
             result.board_p1_after, result.board_p2_after, budget,
             defender_side=defender_side, threshold_ojama=incoming,
         )
         defender_prob = cp1 if defender_side == "1P" else cp2
+        self.hold_defender_prob = defender_prob
         amp = _counter_defender_adv(
             defender_side, defender_prob, incoming,
             result.board_p1_after, result.board_p2_after,
+            scale=RESOLVED_AMPLIFY_SCALE,
         )
         adv = max(-100.0, min(100.0, adv + amp))
         return adv, adv_to_winprob(adv)
@@ -603,11 +648,21 @@ class ResolvedExchangeTracker:
 
     def update(
         self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
+        t_sec: "float | None" = None,
     ) -> "tuple[bool, bool]":
         """毎フレーム呼ぶ。(is_active, just_deactivated) を返す
 
         (決着値そのものは hold_adv/hold_p1/hold_drivers 属性を直接参照する)。
+
+        t_sec: 呼出側の動画内絶対時刻 (raw、`ChainEvent.trigger_sec` と同じ
+            時間軸、2026-08-14 指摘12 修正1 で追加の optional 引数)。
+            `_amplify_decisive` の時間予算計算 (経過時間控除) 専用で、
+            省略時 (None、backwards compat) は `elapsed_sec` にフォール
+            バックする — 呼び出し元が新規引数を渡さない既存テスト等は
+            従来と同じ挙動 (enable_decisive_amplify=False では未使用のため
+            実害なし)。
         """
+        self._t_sec = elapsed_sec if t_sec is None else t_sec
         ev1, ev2 = r_p1.chain_event, r_p2.chain_event
         if not self._active:
             # CHAIN_TOTAL_MIN_SCORE 未満 (OCR誤読ノイズ由来の疑いが濃い極小連鎖、
@@ -1401,6 +1456,21 @@ COUNTER_SCALE: float = 40.0
 # ロールアウト本数 (既定 200 は重いので表示用に減らす)。
 COUNTER_N_ROLLOUTS: int = 60
 
+# [指摘12 修正2, 2026-08-14] 決着ホールドの決定度増幅 (ResolvedExchangeTracker.
+# _amplify_decisive) 専用の強度定数。
+# 従来は本増幅がライブ per-frame 用 COUNTER_SCALE (=40.0) をそのまま**全量**
+# adv に加算していたが、ライブ per-frame の同種成分 (打ち合い応手 counter_adv)
+# は 4成分ブレンド式 `adv = W_PRESSURE*pres + W_FORECAST*fc + W_MODEL*model_adv
+# + W_THREAT*threat + W_COUNTER*counter_adv` で W_COUNTER(=0.20) 倍に抑えて
+# から合成される — つまりライブ経路での実効上限は COUNTER_SCALE*W_COUNTER=8.0。
+# 決着増幅だけがこの重み付けを経ずに COUNTER_SCALE を素通しで加算していたため、
+# モデルの評価 (既に着弾後仮想盤面のおじゃま量/連結崩壊等を織り込み済み) の上に
+# 同じ機構を実効5倍で二重計上していたのが 指摘12 (84%→97%飽和) の増幅側の
+# 根因。既存定数 (COUNTER_SCALE, W_COUNTER) の積のみで構成し、シーンからの
+# 逆算では決めない (feedback_overfitting_awareness_2026-08-04 準拠、
+# 新規マジックナンバー無し)。
+RESOLVED_AMPLIFY_SCALE: float = COUNTER_SCALE * W_COUNTER
+
 # 再計算の時間間引き間隔 [秒] (2026-08-12 追加)。
 # `_reach` は1回0.35〜数秒かかる MC 計算で、打ち合い場面では毎フレーム
 # (相手盤面が変わる度) キャッシュキーが変わり毎秒複数回走っていた
@@ -1719,7 +1789,7 @@ def _resolve_defender_threat(
 
 def _counter_defender_adv(
     defender_side: str, defender_prob: float, incoming_ojama: float,
-    b1: Board, b2: Board,
+    b1: Board, b2: Board, scale: float = COUNTER_SCALE,
 ) -> float:
     """#4: 受け側限定の応手成分を有利不利へ変換する (2026-08-13)。
 
@@ -1728,15 +1798,20 @@ def _counter_defender_adv(
     折れ点12/18個・受け側の残り容量 [headroom] に依存する既存の非線形関数)
     を再利用する。 受け側が高確率で返せる (defender_prob→1) ほど 0 に
     近づき、 極端化を抑える方向へ効く (docs/DEMO_REVIEW_2026-08-13.md #4)。
-    値域は既存 COUNTER_SCALE (旧来の対称式と同じ換算定数、新規定数無し) で
-    [-COUNTER_SCALE, +COUNTER_SCALE] に収まる。
+    値域は [-scale, +scale] に収まる。
+
+    scale: 呼び出し元ごとに強度を切り替える optional 引数 (2026-08-14
+        指摘12 修正2 で追加、backwards compat)。既定はライブ per-frame 用
+        `COUNTER_SCALE` (従来と bit-identical)。決着ホールドの決定度増幅
+        (`ResolvedExchangeTracker._amplify_decisive`) は専用の
+        `RESOLVED_AMPLIFY_SCALE` を渡す (二重計上防止、同定数のコメント参照)。
     """
     if math.isnan(defender_prob):
         return 0.0
     defender_board = b1 if defender_side == "1P" else b2
     damage = iv.ojama_damage(defender_board, incoming_ojama).score
     direction = -1.0 if defender_side == "1P" else 1.0
-    return direction * damage * (1.0 - defender_prob) * COUNTER_SCALE
+    return direction * damage * (1.0 - defender_prob) * scale
 
 
 def _build_counter_text_defender_only(
@@ -1768,6 +1843,36 @@ def _resolve_counter_text(
         else counter_p2 if defender_side == "2P" else float("nan")
     )
     return _build_counter_text_defender_only(defender_side, defender_prob, incoming_ojama)
+
+
+def _resolve_counter_text_for_display(
+    enable_defender_only: bool, resolved_hold_active: bool,
+    hold_defender_side: "str | None", hold_defender_prob: float,
+    hold_incoming_ojama: float,
+    defender_side: "str | None", counter_p1: float, counter_p2: float,
+    incoming_ojama: float,
+) -> str:
+    """[指摘12 修正3、2026-08-14] パネルの応手%行を、決着ホールド中かどうかで
+    出所を切り替える。
+
+    ホールド中 (`resolved_hold_active=True`) は毎フレームの settled 再計算
+    そのものが凍結される (`resolved_hold_freezes_settled`) ため、ライブ
+    per-frame の `defender_side`/`counter_p1`/`counter_p2`/`incoming_ojama`
+    はホールド開始前の**古い値のまま**になる (指摘12 副次バグ: 表示が古い
+    値に張り付き、受け側の向きも実際の決着と食い違う)。ホールド中は代わりに
+    `ResolvedExchangeTracker` が決着計算 (`_amplify_decisive`) の内部で求めた
+    受け側 side・飛来量・応手確率 (`hold_defender_side`/`hold_incoming_ojama`/
+    `hold_defender_prob`) を表示専用に使う。これは表示のみの分岐であり
+    `hold_adv`/`hold_p1` (判定値) には一切触れない
+    (test_resolved_hold_display_does_not_affect_judgment で確認)。
+    `enable_defender_only=False` の場合は従来通り両側常時表示に戻す
+    (backwards compat)。
+    """
+    if resolved_hold_active and enable_defender_only:
+        return _build_counter_text_defender_only(
+            hold_defender_side, hold_defender_prob, hold_incoming_ojama)
+    return _resolve_counter_text(
+        enable_defender_only, defender_side, counter_p1, counter_p2, incoming_ojama)
 
 
 class CapabilityPressureTracker:
@@ -2947,9 +3052,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     enable_resolved_decisive_amplify: True で決着値に「受け側の応手不能度」を
         統合する (2026-08-14 指摘10対処)。着弾後仮想盤面で受け側限定の応手
         確率を既存 CounterReachTracker (受け側限定経路) から求め、既存
-        `_counter_defender_adv` (COUNTER_SCALE + iv.ojama_damage、新規定数
-        無し) と同一式で決着値に加算する。応手不能 (確率低) かつ飛来量大な
-        ほど決定的側へ増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+        `_counter_defender_adv` (専用定数 RESOLVED_AMPLIFY_SCALE +
+        iv.ojama_damage) と同一式で決着値に加算する。応手不能 (確率低) かつ
+        飛来量大なほど決定的側へ増幅し、受け側が高確率で返せる場合はほぼ
+        無効果のまま。時間予算は #3 と同じ `_chain_remaining_time_budget_sec`
+        に一本化済み (指摘12対処、2026-08-14、旧式の直呼びは静的テストで
+        禁止)。ホールド中のパネル応手%表示も本メソッドの内部値
+        (`hold_defender_side`/`hold_incoming_ojama`/`hold_defender_prob`) を
+        使うよう切り替わる (指摘12 副次バグ対処、判定値には影響しない)。
         `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
         フラグ)。既定 False = 従来 (#9 のみ) の決着値と完全に同一
         (backwards compat)。
@@ -3312,7 +3422,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         resolved_active, resolved_just_deactivated = False, False
         if enable_resolved_exchange_eval:
             resolved_active, resolved_just_deactivated = resolved_tracker.update(
-                r.p1, r.p2, snap, tracker._elapsed(t))
+                r.p1, r.p2, snap, tracker._elapsed(t), t_sec=t)
         # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
@@ -3537,9 +3647,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 display_frame, disp_adv, disp_p1, drivers, waiting,
                 history, t_rel, graph_total,
                 state1=r.p1.state.name, state2=r.p2.state.name,
-                counter_text=_resolve_counter_text(
-                    enable_counter_defender_only, defender_side,
-                    counter_p1, counter_p2, incoming_ojama),
+                counter_text=_resolve_counter_text_for_display(
+                    enable_counter_defender_only,
+                    enable_resolved_exchange_eval and resolved_active,
+                    resolved_tracker.hold_defender_side,
+                    resolved_tracker.hold_defender_prob,
+                    resolved_tracker.hold_incoming_ojama,
+                    defender_side, counter_p1, counter_p2, incoming_ojama),
                 elapsed_sec=t - start_sec)
         else:
             frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
