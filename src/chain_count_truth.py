@@ -55,8 +55,11 @@ from src.chain_count_ocr import (
     ChainCountOcr,
     ChainCountWindowResult,
     Side,
+    _approx_min_chain_score,
+    _log_distance_from_ideal,
     _select_chain_count_by_score,
 )
+from src.scoring import is_pure_chain_score_delta, score_consistency_ratio
 
 if TYPE_CHECKING:
     import cv2
@@ -66,6 +69,15 @@ if TYPE_CHECKING:
 FULL_CHAIN_COUNT_CANDIDATES: frozenset[int] = frozenset(
     range(CHAIN_COUNT_MIN, CHAIN_COUNT_MAX + 1)
 )
+
+# 高信頼帯 (タスク#7 追加、2026-08-14) の許容比率。既存の整合性チェック
+# ([0.5, 2.0]、simulate() の桁違い誤りを検出する粗い網) より大幅に狭い
+# [0.9, 1.1] を採用し、「連鎖数の真値そのもの」を主張できる水準まで絞る。
+# この帯を満たす候補は、下限近似 (各ステップ4個消し・単色・連結なし) との
+# 差が10%以内という強い制約になる (docs/KNOWN_WEAKNESSES.md W3 対処、
+# タスク#7)。
+HIGH_CONFIDENCE_SCORE_RATIO_MIN: float = 0.9
+HIGH_CONFIDENCE_SCORE_RATIO_MAX: float = 1.1
 
 
 @dataclass(frozen=True)
@@ -168,9 +180,89 @@ def read_chain_count_truth(
     return resolve_chain_count_truth(telop_window, delta_score)
 
 
+# ============================
+# 得点逆算 高信頼帯 (タスク#7 追加、2026-08-14)
+# ============================
+#
+# 背景: テロップテンプレの複数動画採取が完了するまでの間、得点逆算単独でも
+# 「かなり自信を持って正しいと言える」帯を切り出せれば、C-1b の条件付き
+# テーブル (data/verify/chain_length_conditional_2026-08-13.json) の信頼版
+# 構築を先に進められる。以下の2条件を両方満たす場合のみ「高信頼」とする:
+#   (1) delta_score が「純粋な連鎖得点」の構造的性質 (10の倍数) を満たす
+#       (`is_pure_chain_score_delta`)。落下ボーナス混入イベントは事前に
+#       層別で除外する (docs/KNOWN_WEAKNESSES.md W2 の制約を再利用)。
+#   (2) 最有力候補の score_consistency_ratio が [0.9, 1.1] という狭い帯に
+#       入る (既存の整合性チェック [0.5, 2.0] より大幅に厳格)。
+# いずれかを満たさない場合は fail-safe で chain_count=None を返す
+# (数値だけで採否を決めない、測定器事故6件の教訓)。
+
+
+@dataclass(frozen=True)
+class HighConfidenceScoreResult:
+    """`select_chain_count_high_confidence_band` の結果。
+
+    Attributes:
+        chain_count: 高信頼帯を満たした連鎖数。満たさない場合は None。
+        ratio: 採用候補 (満たさない場合は最有力候補) の score_consistency_ratio。
+            候補が1つも無い場合のみ None。
+        is_pure_chain_score: delta_score が10の倍数だったか
+            (False なら以降の判定は行わず reason="contaminated" で終わる)。
+        reason: 判定理由。
+            "high_confidence"  = 両条件を満たし採用
+            "ratio_out_of_band" = 純粋だが比率が [0.9, 1.1] の外
+            "contaminated"      = delta_score が10の倍数でない (混入疑い)
+            "no_candidates"     = candidates が空 (呼び出し側の誤り)
+    """
+
+    chain_count: int | None
+    ratio: float | None
+    is_pure_chain_score: bool
+    reason: str
+
+
+def select_chain_count_high_confidence_band(
+    delta_score: int,
+    candidates: frozenset[int] = FULL_CHAIN_COUNT_CANDIDATES,
+    ratio_min: float = HIGH_CONFIDENCE_SCORE_RATIO_MIN,
+    ratio_max: float = HIGH_CONFIDENCE_SCORE_RATIO_MAX,
+) -> HighConfidenceScoreResult:
+    """得点逆算のみ (テロップ非依存) で、狭い高信頼帯を満たす連鎖数を選ぶ。
+
+    テロップテンプレが未整備の動画でも使える独立系統として設計する
+    (`resolve_chain_count_truth` の系統②と同じ下限近似ロジックを再利用する
+    が、許容比率をタスク#7 指定の [0.9, 1.1] に絞り、かつ delta_score の
+    「10の倍数」制約による事前フィルタを追加する点が異なる)。
+
+    Args:
+        delta_score: 連鎖イベントの実測得点差分。
+        candidates: 候補とする連鎖数の集合 (既定は全域)。
+        ratio_min, ratio_max: 高信頼帯の許容比率 (既定 [0.9, 1.1])。
+
+    Returns:
+        HighConfidenceScoreResult (stateless、入力のみに依存する純粋関数)。
+    """
+    if not is_pure_chain_score_delta(delta_score):
+        return HighConfidenceScoreResult(None, None, False, "contaminated")
+    valid = {n for n in candidates if CHAIN_COUNT_MIN <= n <= CHAIN_COUNT_MAX}
+    if not valid:
+        return HighConfidenceScoreResult(None, None, True, "no_candidates")
+    scored = [
+        (n, score_consistency_ratio(_approx_min_chain_score(n), delta_score))
+        for n in sorted(valid)
+    ]
+    best_n, best_ratio = min(scored, key=lambda item: _log_distance_from_ideal(item[1]))
+    if not (ratio_min <= best_ratio <= ratio_max):
+        return HighConfidenceScoreResult(None, best_ratio, True, "ratio_out_of_band")
+    return HighConfidenceScoreResult(best_n, best_ratio, True, "high_confidence")
+
+
 __all__ = [
     "FULL_CHAIN_COUNT_CANDIDATES",
+    "HIGH_CONFIDENCE_SCORE_RATIO_MAX",
+    "HIGH_CONFIDENCE_SCORE_RATIO_MIN",
     "ChainCountTruthResult",
+    "HighConfidenceScoreResult",
     "resolve_chain_count_truth",
     "read_chain_count_truth",
+    "select_chain_count_high_confidence_band",
 ]
