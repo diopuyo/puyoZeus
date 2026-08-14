@@ -902,3 +902,136 @@ def test_decisive_amplify_noop_when_no_incoming(monkeypatch) -> None:
     ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert tracker.hold_adv == 10.0  # 増幅対象なし = スタブの戻り値そのまま
+
+
+# ============================
+# 評価済みモデル成果物の直読み (2026-08-14 coordinator指示)
+# ============================
+# 「評価したモデル (AUC 0.657/終盤0.839) = デモが使うモデル」を構造的に
+# 一致させるための _acquire_model/_load_artifact_model/_score_advantage_full_row
+# の配線テスト (実joblib/実CSV学習は重いためモック中心、成果物ロード成功系は
+# 実ファイルが存在する前提のsmokeテストのみ実行)。
+
+
+def test_load_artifact_model_returns_none_when_files_missing(monkeypatch, tmp_path) -> None:
+    """成果物 (joblib) が存在しない環境では None を返す (fail-safe)。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao, "MODEL_ARTIFACT_PATH", tmp_path / "no_such_model.joblib")
+    monkeypatch.setattr(
+        vao, "MODEL_ARTIFACT_FEATURE_COLS_PATH", tmp_path / "no_such_cols.json")
+    assert vao._load_artifact_model() is None
+
+
+def test_load_artifact_model_returns_none_when_cols_missing(monkeypatch, tmp_path) -> None:
+    """joblib はあるが隣接列リストJSONが無い場合も None (片方欠損もfail-safe)。"""
+    import scripts.visualize_advantage_overlay as vao
+    model_path = tmp_path / "model.joblib"
+    model_path.write_bytes(b"dummy")  # 内容は読まれない (列リスト欠損で先にNone)
+    monkeypatch.setattr(vao, "MODEL_ARTIFACT_PATH", model_path)
+    monkeypatch.setattr(
+        vao, "MODEL_ARTIFACT_FEATURE_COLS_PATH", tmp_path / "no_such_cols.json")
+    assert vao._load_artifact_model() is None
+
+
+def test_acquire_model_falls_back_to_train_model_when_artifact_missing(
+    monkeypatch, tmp_path,
+) -> None:
+    """成果物が無い環境では従来の _train_model にフォールバックする (fail-safe)。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao, "MODEL_ARTIFACT_PATH", tmp_path / "no_such_model.joblib")
+    monkeypatch.setattr(
+        vao, "MODEL_ARTIFACT_FEATURE_COLS_PATH", tmp_path / "no_such_cols.json")
+    sentinel = object()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        vao, "_train_model", lambda exclude_video=None: (calls.append(exclude_video), sentinel)[1])
+    result = vao._acquire_model(None)
+    assert result is sentinel
+    assert calls == [None]
+
+
+def test_acquire_model_skips_artifact_when_exclude_video_given(monkeypatch) -> None:
+    """exclude_video 指定時は成果物 (全144動画で学習済み・除外不可) を使わず、
+    必ず _train_model にフォールバックする (リーク防止、fail-silent警戒)。"""
+    import scripts.visualize_advantage_overlay as vao
+    load_calls: list[int] = []
+    monkeypatch.setattr(
+        vao, "_load_artifact_model", lambda: (load_calls.append(1), object())[1])
+    sentinel = object()
+    train_calls: list[object] = []
+    monkeypatch.setattr(
+        vao, "_train_model",
+        lambda exclude_video=None: (train_calls.append(exclude_video), sentinel)[1])
+    result = vao._acquire_model("video_29")
+    assert result is sentinel
+    assert train_calls == ["video_29"]
+    assert load_calls == []  # 成果物ロード自体を試みない
+
+
+def test_score_advantage_dispatches_to_full_row_when_artifact_mode(monkeypatch) -> None:
+    """model._puyo_feature_mode == 'full_row' なら _score_advantage_full_row に
+    完全委譲する (従来 diff ベース経路とは別関数、混在しない)。"""
+    import scripts.visualize_advantage_overlay as vao
+    calls: list[tuple] = []
+
+    def _stub_full_row(model, b1, b2, snap, attribution_exclude):
+        calls.append((model, b1, b2, snap, attribution_exclude))
+        return 42.0, 0.71, [("dummy", 1.0)]
+
+    monkeypatch.setattr(vao, "_score_advantage_full_row", _stub_full_row)
+    model = types.SimpleNamespace(_puyo_feature_mode="full_row")
+    b1, b2 = Board(), Board()
+    snap = _make_snapshot()
+    adv, p1, drivers = vao._score_advantage(model, b1, b2, snap)
+    assert (adv, p1, drivers) == (42.0, 0.71, [("dummy", 1.0)])
+    assert len(calls) == 1
+
+
+def test_score_advantage_full_row_symmetric_on_identical_boards() -> None:
+    """評価済み成果物モデルの実smoke: 完全に対称な局面 (同一盤面・pending無し)
+    では adv=0/p1=0.5 に近い値を返す (対称化式 0.5*(p_1p+(1-p_2p)) の健全性)。
+
+    成果物 (data/verify/retrain148_2026-08-14) が無い環境ではスキップする。
+    """
+    import scripts.visualize_advantage_overlay as vao
+    if not vao.MODEL_ARTIFACT_PATH.exists() or not vao.MODEL_ARTIFACT_FEATURE_COLS_PATH.exists():
+        pytest.skip("評価済みモデル成果物が未配置の環境のためスキップ")
+    model = vao._load_artifact_model()
+    assert model is not None
+    assert model._puyo_feature_mode == "full_row"
+    snap = _make_snapshot()
+    adv, p1, drivers = vao._score_advantage(model, Board(), Board(), snap)
+    assert adv == pytest.approx(0.0, abs=1e-9)  # 同一盤面同一入力 → 完全対称
+    assert p1 == pytest.approx(0.5, abs=1e-9)
+    assert isinstance(drivers, list)
+
+
+def test_side_feats_full_matches_direct_indicator_calls() -> None:
+    """_side_feats_full_base が FULL_MODEL_GRID_REGISTRY の各関数を board に
+    直接適用した値と完全一致することを確認する (委譲のみで新規ロジックが
+    無いことの回帰テスト)。"""
+    import scripts.visualize_advantage_overlay as vao
+    board = _board_with_ojama(5)
+    base = vao._side_feats_full_base(board)
+    for name, fn in vao.FULL_MODEL_GRID_REGISTRY.items():
+        assert base[name] == pytest.approx(fn(board).score, nan_ok=True)
+    total_conn, _ = vao.iv.connectivity_observation(board)
+    assert base["conn_pair_count"] == float(total_conn.pair_count)
+    assert base["conn_triple_count"] == float(total_conn.triple_count)
+    assert base["conn_max_group_size"] == float(total_conn.max_group_size)
+
+
+def test_side_feats_full_diff_targets_own_removed() -> None:
+    """own→diff完全置換対象 (DIFF_REPLACE_OWN_COLUMNS) は最終featにown列が
+    残らず、diff_ 列だけが入ることを確認する (b-2決定の再現)。"""
+    import scripts.visualize_advantage_overlay as vao
+    base_self = vao._side_feats_full_base(_board_with_ojama(3))
+    base_opp = vao._side_feats_full_base(_board_with_ojama(1))
+    feat = vao._side_feats_full(base_self, base_opp, net=0, forecast=0)
+    for c in vao.DIFF_REPLACE_OWN_COLUMNS:
+        assert c not in feat
+        assert f"diff_{c}" in feat
+        assert feat[f"diff_{c}"] == pytest.approx(base_self[c] - base_opp[c])
+    for c in vao.DIFF_KEEP_OWN_PAIR_COLUMNS + vao.DIFF_KEEP_OWN_HEAVY_COLUMNS:
+        assert c in feat  # own側は残る (own+diff両方)
+        assert f"diff_{c}" in feat
