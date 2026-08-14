@@ -1709,16 +1709,26 @@ def _chain_remaining_time_budget_sec(
     chain_count: int, trigger_sec: float, t_sec: float,
     table: "dict[int, float]",
 ) -> float:
-    """#3 修正: 経過時間控除 + 条件付き期待最終連鎖数で残り時間を求める (stateless)。
+    """#3 修正 + #12 フォローアップ較正 (2026-08-14): 経過時間控除 + 条件付き
+    期待最終連鎖数で残り時間を求める (stateless)。
 
     残り時間 = anim(E[最終|N]) − 経過時間 + 着弾ラグ (+1手、
     reference_ojama_landing_gated_by_placement と整合させるため
     SEC_PER_HAND を流用、新規定数を作らない)。
+
+    anim() は calibration="empirical_table_2026_08_14" (連鎖数別演出時間の
+    実測中央値テーブル、docs/DEMO_REVIEW_2026-08-13.md #12 案B) を使う。
+    従来の calibration="legacy" (0.4秒/連鎖) は大連鎖ほど実演出を大幅に
+    過小評価していた (6連鎖: 実測中央値9.5秒 vs 旧2.4秒)。この関数は
+    enable_counter_remaining_time (既定False) 配下でのみ呼ばれる opt-in
+    経路のため、legacy 経路 (_resolve_counter_time_budget の
+    enable_remaining_time=False 分岐) には一切影響しない。
     """
     if chain_count <= 0:
         return 0.0
     expected_final = _expected_final_chain_count(chain_count, table)
-    total_anim = iv.estimate_chain_anim_duration_sec(expected_final)
+    total_anim = iv.estimate_chain_anim_duration_sec(
+        expected_final, calibration="empirical_table_2026_08_14")
     elapsed = max(0.0, t_sec - trigger_sec)
     remaining = total_anim - elapsed + iv.SEC_PER_HAND
     return max(0.0, remaining)
