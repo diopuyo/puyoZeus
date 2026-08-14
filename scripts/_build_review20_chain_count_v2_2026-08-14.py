@@ -33,7 +33,7 @@ import cv2
 import numpy as np
 
 from src.chain_count_ocr import ChainCountOcr, DEFAULT_CHAIN_TEMPLATE_DIR
-from src.chain_count_truth import resolve_chain_count_truth
+from src.chain_count_truth import compute_telop_search_window, resolve_chain_count_truth
 from src.scoring import is_pure_chain_score_delta
 
 _spec = importlib.util.spec_from_file_location(
@@ -60,14 +60,16 @@ CANDIDATE_VIDEOS = ["c13", "c11", "c17", "c20", "c12", "c16"]
 MIN_N_FOR_REVIEW = 2
 MAX_N_FOR_REVIEW = 9
 
-# フレーム切り出しウィンドウ (発火前盤面行 t_sec を起点)。
-WINDOW_BEFORE_PAD_SEC = 0.2
-WINDOW_AFTER_PAD_SEC = 1.0
-# 前面実行の時間予算 (foreground、CLAUDE.md 指示) に収めるため、window の
-# 最大幅と sampling 間隔を実行コスト優先で調整する (既定 0.05秒より粗いが、
-# ポップアップ表示継続 0.6〜0.7秒に対し 0.15秒でも 4サンプル/ステップ確保できる)。
-MAX_WINDOW_SPAN_SEC = 4.5
-REVIEW_SAMPLE_INTERVAL_SEC = 0.15
+# 探索窓は `compute_telop_search_window` (src/chain_count_truth.py) に一元化。
+# 【2026-08-14 続行タスクで撤回】旧実装はここで独自に
+# WINDOW_BEFORE_PAD_SEC/WINDOW_AFTER_PAD_SEC/MAX_WINDOW_SPAN_SEC=4.5秒 という
+# 実測に基づかないキャップを持っていたが、実データ (video_c13 game_idx=12)
+# でこのキャップが本物のポップアップ区間を切り落としていたことが判明した
+# (docs/KNOWN_WEAKNESSES.md W3、src.chain_count_truth モジュール docstring
+# 「テロップ探索窓の設計」参照)。sampling 間隔も生産既定 (0.05秒) に戻す
+# (フェード/縮小アニメーションでスコアが鋭く変化するため粗い間隔は
+# ピークを逃す実測あり)。
+REVIEW_SAMPLE_INTERVAL_SEC = 0.05
 
 
 def _events_with_before_t(npz_path: Path) -> list[dict]:
@@ -207,8 +209,7 @@ def main() -> None:
         if not video_path.is_file():
             print(f"[review20] SKIP {ev['video_id']}: 動画不在")
             continue
-        t_end = ev["t_sec"] + WINDOW_AFTER_PAD_SEC
-        t_start = max(ev["before_t_sec"] - WINDOW_BEFORE_PAD_SEC, t_end - MAX_WINDOW_SPAN_SEC)
+        t_start, t_end = compute_telop_search_window(ev["before_t_sec"], ev["t_sec"])
 
         # 系統① (テロップ単独、連続列方式) を読む。delta_score は渡さない
         # (`resolve_chain_count_truth` 内で系統②を独立に計算するため、ここで
@@ -229,15 +230,27 @@ def main() -> None:
         n_resolved_baseline += int(truth_baseline.chain_count is not None)
         n_resolved_extended += int(truth_extended.chain_count is not None)
 
+        # レビュー用の実画面フレームは「拡張構成で最も確信度が高かった瞬間」を
+        # 優先して切り出す (テロップが見えている可能性が高い瞬間、user目視用)。
+        # 見つからない場合は発火タグ行時刻 (ev["t_sec"]) にフォールバックする。
+        best_frame_t = ev["t_sec"]
+        best_conf = -1.0
+        for i, s in enumerate(win_extended.samples):
+            if s.chain_count is not None and s.confidence > best_conf:
+                best_conf = s.confidence
+                best_frame_t = t_start + i * REVIEW_SAMPLE_INTERVAL_SEC
+
         frame_name = f"event_{idx:02d}_{ev['video_id']}_{ev['side']}_g{ev['game_idx']}.png"
-        _save_review_frame(video_path, ev["side"], ev["t_sec"], OUT_DIR / frame_name)
+        _save_review_frame(video_path, ev["side"], best_frame_t, OUT_DIR / frame_name)
 
         review_rows.append({
             "idx": idx,
             "video_id": ev["video_id"],
             "side": ev["side"],
             "game_idx": ev["game_idx"],
-            "t_sec": round(ev["t_sec"], 2),
+            "trigger_sec": round(ev["t_sec"], 2),
+            "search_window": [round(t_start, 2), round(t_end, 2)],
+            "frame_captured_at_sec": round(best_frame_t, 2),
             "delta_score": ev["delta_score"],
             "expected_n_from_score_band": ev["expected_n"],
             "score_ratio": ev["score_ratio"],

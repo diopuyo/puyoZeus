@@ -147,6 +147,70 @@ def resolve_chain_count_truth(
     )
 
 
+# ============================
+# テロップ探索窓の設計 (続行タスク 2026-08-14、W3「窓ズレ」対処)
+# ============================
+#
+# 背景: `resolve_chain_count_truth`/`read_chain_count_truth` に渡す
+# [t_start, t_end] windowをどう決めるかは呼び出し側の責務だったが、npz から
+# 実イベントを再構成する既存スクリプト (`_build_review20_chain_count_v2_
+# 2026-08-14.py`) が独自に組んだ window は実測で 20/20 件とも解決failed
+# だった。実画面フレーム調査 (video_c13 game_idx=12 実測) で、真因は
+# 「chain_trigger_sec (発火タグ行) 自体は連鎖終了+沈静化debounce後の値
+# (mechanism='baseline'、実測全体の95%を占める) であり、"発火前盤面行
+# (before_t_sec)〜trigger_sec" の区間には本物のテロップが確実に収まって
+# いた」にもかかわらず、呼び出し側が実測に基づかない `MAX_WINDOW_SPAN_SEC`
+# で区間を恣意的に切り詰めていたことと判明した (該当ケースで [860.1, 866.6]
+# の6.5秒区間のうち [860.1, 863.1) を切り落とし、そこにあった「1れんさ!」
+# の本物のポップアップ (t≈861.05-861.4、confidence 0.66-0.84) を丸ごと
+# 見逃していた)。
+#
+# 実測 (2026-08-14、得点逆算高信頼帯で expected_n が既知の実イベント12件、
+# `scripts/_measure_telop_window_offsets_2026-08-14.py`、5件で確信検出):
+#   - offset_settle_sec (trigger_sec - 最終ステップポップアップ実ピーク時刻)
+#     は 0.17〜9.63秒 (中央値2.02秒)。**全件で trigger_sec 以前** に収まって
+#     いた (= before_t_sec〜trigger_sec の区間内)。
+#   - before_t_sec から最初の「1れんさ!」ポップアップまでの遅延は
+#     0.5〜0.8秒 (中央値0.55秒、n=3)。
+# → before_t_sec〜trigger_sec の自然な区間そのものが実測上十分な
+#   カバレッジを持つため、追加の大きな片側マージンは不要。必要なのは
+#   小さな検出debounceの安全バッファのみ。
+#
+# 【既知の未検証ギャップ】mechanism='formula'/'landing' (合計0.75%、
+# 本実測で確信サンプル0件) は理論上 trigger_sec が連鎖**開始**直後の値に
+# なるはずで、その場合は逆に窓の**終端側**を延ばす必要があるかもしれない
+# (before_t_sec〜trigger_sec だけでは連鎖の後半+沈静化を含まない懸念)。
+# データ不足のため mechanism 別分岐は実装せず、正直に未検証と明記する。
+TELOP_SEARCH_PRE_BUFFER_SEC: float = 0.3
+TELOP_SEARCH_POST_BUFFER_SEC: float = 0.5
+
+
+def compute_telop_search_window(
+    before_t_sec: float, trigger_sec: float,
+) -> tuple[float, float]:
+    """発火前盤面行時刻と発火タグ行時刻から、テロップ探索窓 [t_start, t_end] を返す。
+
+    実測 (本モジュール docstring 「テロップ探索窓の設計」参照) に基づき、
+    `before_t_sec〜trigger_sec` の自然な区間に小さな安全バッファのみを
+    加える (シーンから逆算した恣意的なキャップは加えない、
+    feedback_overfitting_awareness_2026-08-04 準拠)。
+
+    Args:
+        before_t_sec: 発火前 STABLE 盤面行の t_sec
+            (npz再構成の場合は `_find_before_board_index` が返す行の t_sec)。
+        trigger_sec: `ChainEvent.trigger_sec` (npz の chain_trigger_sec 列)。
+
+    Returns:
+        (t_start, t_end)。trigger_sec < before_t_sec の異常な入力でも
+        t_end < t_start にはならないよう下限を保証する (stateless、純粋関数)。
+    """
+    t_start = before_t_sec - TELOP_SEARCH_PRE_BUFFER_SEC
+    t_end = trigger_sec + TELOP_SEARCH_POST_BUFFER_SEC
+    if t_end < t_start:
+        t_end = t_start
+    return t_start, t_end
+
+
 def read_chain_count_truth(
     ocr: ChainCountOcr,
     cap: "cv2.VideoCapture",
@@ -260,8 +324,11 @@ __all__ = [
     "FULL_CHAIN_COUNT_CANDIDATES",
     "HIGH_CONFIDENCE_SCORE_RATIO_MAX",
     "HIGH_CONFIDENCE_SCORE_RATIO_MIN",
+    "TELOP_SEARCH_POST_BUFFER_SEC",
+    "TELOP_SEARCH_PRE_BUFFER_SEC",
     "ChainCountTruthResult",
     "HighConfidenceScoreResult",
+    "compute_telop_search_window",
     "resolve_chain_count_truth",
     "read_chain_count_truth",
     "select_chain_count_high_confidence_band",

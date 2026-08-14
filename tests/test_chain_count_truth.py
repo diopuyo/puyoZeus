@@ -25,8 +25,11 @@ from src.chain_count_truth import (
     FULL_CHAIN_COUNT_CANDIDATES,
     HIGH_CONFIDENCE_SCORE_RATIO_MAX,
     HIGH_CONFIDENCE_SCORE_RATIO_MIN,
+    TELOP_SEARCH_POST_BUFFER_SEC,
+    TELOP_SEARCH_PRE_BUFFER_SEC,
     ChainCountTruthResult,
     HighConfidenceScoreResult,
+    compute_telop_search_window,
     read_chain_count_truth,
     resolve_chain_count_truth,
     select_chain_count_high_confidence_band,
@@ -292,6 +295,46 @@ def test_high_confidence_band_zero_or_negative_delta_is_contaminated() -> None:
     result = select_chain_count_high_confidence_band(0)
     assert result.chain_count is None
     assert result.reason == "contaminated"
+
+
+# =============================================================================
+# compute_telop_search_window (続行タスク 2026-08-14、W3「窓ズレ」対処)
+# =============================================================================
+
+
+def test_compute_telop_search_window_real_c13_g12_case() -> None:
+    """video_c13 game_idx=12 実測 (before_t=860.1, trigger=866.6) で、実測の
+    本物のポップアップ位置 (t≈861.05〜863.9) を窓が確実に含むこと。
+
+    旧実装は MAX_WINDOW_SPAN_SEC=4.5秒 の恣意的キャップで [860.1, 863.1) を
+    切り落とし、本物の「1れんさ!」ポップアップ (t≈861.05-861.4) を
+    丸ごと見逃していた (実測で確認済み、本モジュール docstring 参照)。
+    """
+    t_start, t_end = compute_telop_search_window(before_t_sec=860.1, trigger_sec=866.6)
+    assert t_start <= 861.05  # 実測の最初のポップアップ開始時刻を含む
+    assert t_end >= 863.9  # 実測の最終ステップポップアップ時刻を含む
+    assert t_end >= 866.6  # trigger_sec 自体も窓に含む
+
+
+def test_compute_telop_search_window_applies_small_buffers() -> None:
+    t_start, t_end = compute_telop_search_window(before_t_sec=100.0, trigger_sec=110.0)
+    assert t_start == pytest.approx(100.0 - TELOP_SEARCH_PRE_BUFFER_SEC)
+    assert t_end == pytest.approx(110.0 + TELOP_SEARCH_POST_BUFFER_SEC)
+
+
+def test_compute_telop_search_window_no_artificial_span_cap() -> None:
+    """区間が長い (実測最大 9.63秒 の offset_settle 相当) でも切り詰めないこと。
+
+    旧実装のバグ (実測に基づかない MAX_WINDOW_SPAN_SEC) の再発防止テスト。
+    """
+    t_start, t_end = compute_telop_search_window(before_t_sec=0.0, trigger_sec=20.0)
+    assert t_end - t_start >= 20.0
+
+
+def test_compute_telop_search_window_guards_against_inverted_input() -> None:
+    """trigger_sec < before_t_sec という異常入力でも t_end < t_start にならない。"""
+    t_start, t_end = compute_telop_search_window(before_t_sec=50.0, trigger_sec=10.0)
+    assert t_end >= t_start
 
 
 def test_read_chain_count_truth_no_popup_returns_unknown() -> None:
