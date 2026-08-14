@@ -48,6 +48,9 @@ NPZ_DIRS: dict[str, Path] = {
     "c12": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_c12_2026-08-15",
     "c13": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_c13_2026-08-15",
     "c23": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_c23_2026-08-15",
+    # c1' (2026-08-15修正版): _confirm_placement_evidence のヒステリシス+
+    # chain除外修正を適用した placement_override 単体の再収集。
+    "c1p": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_c1p_fix_2026-08-15",
 }
 
 
@@ -159,6 +162,17 @@ def compare_all(tags: tuple[str, ...] = BASELINE_TAGS) -> None:
     (SCORING_DIR / "stratified_accuracy.csv").write_text("\n".join(strat_lines) + "\n", encoding="utf-8")
 
     print("\n=== (3) 誤り分類表 (aのinit_grid基準、各構成で解消/新規悪化したか) ===")
+    # 案3修正 (2026-08-15、過少報告是正): 従来は tags 全構成の N-way
+    # intersection (`common_sheets`) を分母にしていたため、 tags に含めた
+    # *無関係な他構成* (例: c12/c) の収集欠落シートまで巻き込んで、 評価対象の
+    # 構成 (例: c1) 自身は突合できているシートの regression まで丸ごと
+    # 欠落扱いになっていた (実測: c1 単体の新規劣化 46 セルが 20 セルに
+    # 過少報告される事故、 data/verify/yardstick_v2_2026-08-14/
+    # scoring_ablation/_diag_c1_new_regressions_2026-08-15.json で確定)。
+    # 各構成 t の集計は「a と t のペアワイズ共通シート」のみを分母にし、
+    # 他の tags の欠落から独立させる。 n_cells_gt / wrong_in_a は a 自身の
+    # 全シート (a が miss していない限り) を基準に確定する (どの t を比較
+    # 対象に含めても a 側の基準列がブレないようにするため)。
     class_cols: list[str] = (
         [f"wrong_in_{t}" for t in tags]
         + [f"fixed_by_{t}" for t in tags if t != "a"]
@@ -167,35 +181,49 @@ def compare_all(tags: tuple[str, ...] = BASELINE_TAGS) -> None:
     class_lines = ["category,n_cells_gt," + ",".join(class_cols)]
     by_cat: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     by_sheet = {tag: {r["sheet_id"]: r for r in scores[tag]} for tag in tags}
-    common_sheets = set.intersection(*(set(by_sheet[t]) for t in tags))
-    n_mismatch_sheets = len(set(by_sheet["a"])) - len(common_sheets)
-    if n_mismatch_sheets:
-        print(f"  [警告] 構成間で突合できたシート数が一致しない (共通{len(common_sheets)}件、"
-              f"欠落{n_mismatch_sheets}件) — 再収集の欠落を確認すること")
-    for sid in common_sheets:
-        cells_by_tag = {t: {(c["r"], c["c"]): c for c in by_sheet[t][sid].get("cells", [])} for t in tags}
-        a_cells = cells_by_tag["a"]
-        for key, ac in a_cells.items():
-            if any(key not in cells_by_tag[t] for t in tags):
-                continue
-            cat = ac["a_error_category"]
+    a_by_sheet = by_sheet["a"]
+
+    # (3a) a 基準の n_cells_gt / wrong_in_a を a 自身の全シートで確定する。
+    for a_row in a_by_sheet.values():
+        for c in a_row.get("cells", []):
+            cat = c["a_error_category"]
             by_cat[cat]["n_cells_gt"] += 1
-            wrong = {t: (not cells_by_tag[t][key]["is_correct"]) for t in tags}
-            for t in tags:
-                by_cat[cat][f"wrong_in_{t}"] += int(wrong[t])
-            for t in tags:
-                if t == "a":
+            by_cat[cat]["wrong_in_a"] += int(not c["is_correct"])
+
+    # (3b) t != "a" の wrong_in_t / fixed_by_t / new_regression_in_t は
+    # 「a と t のペアワイズ共通シート」のみで確定する (他 tags の欠落と無関係)。
+    for t in tags:
+        if t == "a":
+            continue
+        pair_common = set(a_by_sheet) & set(by_sheet[t])
+        n_pair_mismatch = len(set(a_by_sheet)) - len(pair_common)
+        if n_pair_mismatch:
+            print(f"  [警告] a/{t} 間で突合できたシート数が一致しない "
+                  f"(共通{len(pair_common)}件、欠落{n_pair_mismatch}件) — "
+                  f"{t} の再収集の欠落を確認すること")
+        for sid in pair_common:
+            a_cells = {(c["r"], c["c"]): c for c in a_by_sheet[sid].get("cells", [])}
+            t_cells = {(c["r"], c["c"]): c for c in by_sheet[t][sid].get("cells", [])}
+            for key, ac in a_cells.items():
+                tc = t_cells.get(key)
+                if tc is None:
                     continue
-                by_cat[cat][f"fixed_by_{t}"] += int(wrong["a"] and not wrong[t])
-                by_cat[cat][f"new_regression_in_{t}"] += int((not wrong["a"]) and wrong[t])
+                cat = ac["a_error_category"]
+                wrong_a = not ac["is_correct"]
+                wrong_t = not tc["is_correct"]
+                by_cat[cat][f"wrong_in_{t}"] += int(wrong_t)
+                by_cat[cat][f"fixed_by_{t}"] += int(wrong_a and not wrong_t)
+                by_cat[cat][f"new_regression_in_{t}"] += int(
+                    (not wrong_a) and wrong_t
+                )
     for cat in sorted(by_cat, key=lambda k: -by_cat[k]["n_cells_gt"]):
         v = by_cat[cat]
         class_lines.append(
             f"{cat},{v['n_cells_gt']}," + ",".join(str(v.get(col, 0)) for col in class_cols)
         )
-        wrong_str = " ".join(f"{t}={v[f'wrong_in_{t}']}" for t in tags)
-        fix_str = " ".join(f"{t}={v[f'fixed_by_{t}']}" for t in tags if t != "a")
-        reg_str = " ".join(f"{t}={v[f'new_regression_in_{t}']}" for t in tags if t != "a")
+        wrong_str = " ".join(f"{t}={v.get(f'wrong_in_{t}', 0)}" for t in tags)
+        fix_str = " ".join(f"{t}={v.get(f'fixed_by_{t}', 0)}" for t in tags if t != "a")
+        reg_str = " ".join(f"{t}={v.get(f'new_regression_in_{t}', 0)}" for t in tags if t != "a")
         print(f"  [{cat}] gt={v['n_cells_gt']} wrong: {wrong_str} | fixed: {fix_str} | new_regression: {reg_str}")
     (SCORING_DIR / "error_classification.csv").write_text("\n".join(class_lines) + "\n", encoding="utf-8")
     print("\n[done] 全出力: " + str(SCORING_DIR))

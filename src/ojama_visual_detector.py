@@ -118,6 +118,27 @@ OJAMA_FALL_SCOPED_EXIT_DIFF_THRESHOLD: int = OJAMA_FALL_SETTLE_DIFF_THRESHOLD
 # 安全弁として `max(1, ...)` を必ず適用する。
 OJAMA_FALL_SCOPED_EXIT_NO_PENDING_DIVISOR: int = 2
 
+# 案2修正 (2026-08-15、実害46セル根治、data/verify/yardstick_v2_2026-08-14/
+# scoring_ablation/_diag_c1_new_regressions_2026-08-15.json 診断+実データ
+# 直接確認で確定): own_score_delta>0 の単一フレーム即決 evidence 判定が、
+# (a) score OCR の孤立 1 フレームぶれ (実測: c17/c96/c13/c23/c10 の5シート
+# 全てで own_score_delta=1 のような小さい孤立増分が繰り返し観測され、
+# 直前直後の own_chain_hold_until_sec は time_sec から数秒以上前=自chain無関係
+# だった)、 (b) 自 side の小連鎖・全消しボーナスの roll-up アニメ中の score
+# 上昇 (実測: own_score_delta=320/2100、 own_chain_hold_until_sec が
+# time_sec 近傍=自chain継続中) の両方を「実設置」と誤認していた。
+#
+# 修正は (b) の chain-active 除外のみを適用する ((a) 用の実時間ヒステリシス
+# 案は 55盤面物差しで実測した上で不採用に確定、 理由は下記
+# `_confirm_placement_evidence` の docstring 参照)。
+
+# 案2修正 (b) 用: 「直近何秒以内に自 chain がアクティブだったか」の判定窓。
+# OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC (連鎖1リンク実測 ~0.4秒の2〜3倍) と
+# 同じ物理的根拠を再利用する (独立命名)。
+OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC: float = (
+    OJAMA_ENTRY_CHAIN_RECENT_ACTIVE_SEC
+)
+
 # ROI の開始行 (= HIDDEN_ROWS = 1 = 可視最上段)
 _ROI_ROW_START: int = HIDDEN_ROWS
 # ROI の終了行 (exclusive)
@@ -190,14 +211,20 @@ def _count_board_ojama(board: Board) -> int:
 
 
 def _has_ojama_fall_placement_evidence(signals: DetectorSignals) -> bool:
-    """案2: OJAMA_FALL 滞在中の実設置証拠を判定する (stateless ヘルパー).
+    """案2: OJAMA_FALL 滞在中の「生」実設置証拠を判定する (stateless ヘルパー).
+
+    ⚠️ この関数の True は「即座に STABLE へ復帰してよい」ことを意味しない
+    (2026-08-15 修正)。 own_score_delta 経路は自 chain roll-up を拾って
+    しまうため、 実際の確定判定には `OjamaVisualDetector.
+    _confirm_placement_evidence` (chain-active 除外つき) を使う。 本関数は
+    「今フレーム単体で見た生の signal 有無」のみを返す stateless ヘルパー
+    として、 従来の呼び出し互換 (直接呼ぶテスト等) のために残す。
 
     実測パターン (docs/DEMO_REVIEW_2026-08-13.md 場面1): 全盤面ぷよ数の
     静止判定 (`_detect_ojama_fall_exit_board_settle`) は「盤面全体」を
     見るため自分のツモ設置でもぷよ数が変化し続け、 OJAMA_FALL⇔STABLE が
     0.15-0.3 秒周期で振動する (出口判定のスコープ過大)。 以下いずれかを
-    検知したら実設置が起きたとみなし、 出口判定を待たず即座に STABLE へ
-    復帰する。
+    検知したら実設置の可能性ありとみなす (確定は呼び出し側の責務)。
 
     - signals.slide_motion: NEXT ROI のスライド検知
       (= 次ツモへ繰り上がった = 設置完了の物理的証拠、 TsumoPhaseDetector の
@@ -205,17 +232,51 @@ def _has_ojama_fall_placement_evidence(signals: DetectorSignals) -> bool:
     - signals.own_score_delta > 0: 自 side の score 増分 (= 落下ボーナス等)。
       おじゃま受け側は連鎖しないため自 score は通常動かない。 増分があれば
       設置イベントの証拠 (reference_ojama_landing_gated_by_placement:
-      おじゃまは受け側ツモ着地時に降る、 の裏付けとも整合する)。
+      おじゃまは受け側ツモ着地時に降る、 の裏付けとも整合する) …という
+      2026-08-13 導入時の前提だったが、 診断で「小連鎖・全消しの roll-up」
+      と「単発 OCR ぶれ」の両方を誤検知することが確定した (定数コメント参照)。
 
     Args:
         signals: 現 frame の DetectorSignals。
 
     Returns:
-        実設置の証拠が確認できたか。
+        生の実設置 signal (slide_motion or own_score_delta>0) が今フレーム
+        観測できたか。
     """
     if signals.slide_motion:
         return True
     return signals.own_score_delta > 0
+
+
+def _is_own_chain_recently_active_for_score_exclusion(
+    signals: DetectorSignals,
+) -> bool:
+    """案2修正: 「直近まで自 side の chain がアクティブだったか」を判定する.
+
+    own_score_delta による実設置誤検知のうち、 自 chain の roll-up アニメ
+    (score が連鎖アニメの間フレームごとに増え続ける) が原因のケースを除外
+    するための判定。 `_is_hardened_entry_context` (entry hardening 機能側)
+    の条件4と同じ計算式だが、 本関数は「案2修正 (score_delta 除外)」専用の
+    独立実装として切り離す (今後の調整が entry hardening 側に波及しない
+    ようにするため、 既存コードベースの独立命名規約と同じ方針)。
+
+    signals.own_chain_hold_until_sec <= 0.0 は「まだ一度も自 chain が発生
+    していない」sentinel (RecognitionPipeline.reset() の初期値と同じ規約)
+    のため除外条件から外す (序盤の time_sec が小さい間の誤判定防止、
+    `_is_hardened_entry_context` と同じ既知の落とし穴)。
+
+    Args:
+        signals: 現 frame の DetectorSignals。
+
+    Returns:
+        直近 `OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC` 秒以内に自 chain
+        がアクティブだったか。
+    """
+    return (
+        signals.own_chain_hold_until_sec > 0.0
+        and signals.time_sec - signals.own_chain_hold_until_sec
+        < OJAMA_FALL_PLACEMENT_SCORE_CHAIN_EXCLUDE_SEC
+    )
 
 
 # ============================
@@ -245,14 +306,33 @@ class OjamaVisualDetector:
             enable_gravity_settle_reset_on_exit と対) を誘発する。
             default False = 既存挙動と完全 bit-identical。
         enable_ojama_fall_placement_override: 案2 (2026-08-13、OJAMA_FALL
-            誤分類根因調査)。True で OJAMA_FALL 滞在中に実設置の証拠
-            (NEXT スライド or 自 side score の落下ボーナス増分) を検知したら、
-            settle 判定を待たず即座に STABLE へ復帰する。全盤面ぷよ数の
-            静止を待つ既存の退出判定 (`_detect_ojama_fall_exit_board_settle`)
-            は自分のツモ設置でも盤面全体のぷよ数が変化し続けるため
-            OJAMA_FALL⇔STABLE が 0.15-0.3 秒周期で振動する実害が確認された
-            (docs/DEMO_REVIEW_2026-08-13.md 場面1)。default False = 既存挙動と
-            完全 bit-identical。
+            誤分類根因調査、2026-08-15 evidence 一発判定欠陥修正)。True で
+            OJAMA_FALL 滞在中に実設置の証拠 (NEXT スライド、 または自 side
+            score の非連鎖増分) を検知したら、 settle 判定を待たず即座に
+            STABLE へ復帰する。全盤面ぷよ数の静止を待つ既存の退出判定
+            (`_detect_ojama_fall_exit_board_settle`) は自分のツモ設置でも
+            盤面全体のぷよ数が変化し続けるため OJAMA_FALL⇔STABLE が
+            0.15-0.3 秒周期で振動する実害が確認された
+            (docs/DEMO_REVIEW_2026-08-13.md 場面1)。
+            2026-08-15 追加修正 (data/verify/yardstick_v2_2026-08-14/
+            scoring_ablation/_diag_c1_new_regressions_2026-08-15.json 診断):
+            導入時の own_score_delta>0 単一フレーム即決は (a) score OCR の
+            孤立ぶれ、 (b) 自 chain roll-up アニメ中の score 上昇、 の両方を
+            実設置と誤認し実害46セルを持ち込んでいた。 `_confirm_placement_
+            evidence` で直近自 chain アクティブなら own_score_delta を評価
+            対象から除外するよう変更した ((b) の根治)。 (a) 用の実時間
+            ヒステリシス (2フレーム連続要求) も試作したが、 55盤面物差しの
+            再実測で **有意に悪化** (新規劣化 46→57セル、 全体一致率
+            95.18%→93.95%) したため不採用に確定した — 真因は
+            `collect_boards_lean._should_emit` が STABLE 復帰時のみ snapshot
+            を記録する仕様で、 ヒステリシスが早期 exit の頻度を落とすと
+            OJAMA_FALL 中の snapshot 空白期間が伸び、 物差し query フレームが
+            古い (もっと前の) snapshot に nearest match してしまう二次被害が
+            (a) 自体を残す一次効果を上回った。 chain除外のみ (ヒステリシス
+            無し) では 46→25セル (46%減) かつ全体一致率 95.18%→95.63%
+            (改善) を実測、 この構成を最終採用する。
+            default False = 既存挙動と完全 bit-identical
+            (フラグ OFF 時は `_confirm_placement_evidence` 自体が呼ばれない)。
         enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査追補、
             coordinator追加指示で拡張)。True で OJAMA_FALL entry 判定を
             frame 数連続でなく実時間連続 (`OJAMA_ENTRY_CONSEC_SEC`) に
@@ -365,11 +445,12 @@ class OjamaVisualDetector:
         )
 
         if ctx.state == BoardState.OJAMA_FALL:
-            # 案2 (2026-08-13): 実設置の証拠が確認できたら settle 判定を
-            # 待たず即 STABLE 復帰する。
+            # 案2 (2026-08-13、2026-08-15 chain除外修正): 実設置の証拠が
+            # 確定できたら settle 判定を待たず即 STABLE 復帰する。
+            # (`_confirm_placement_evidence` が roll-up 誤検知を除外する)
             if (
                 self.enable_ojama_fall_placement_override
-                and _has_ojama_fall_placement_evidence(signals)
+                and self._confirm_placement_evidence(signals)
             ):
                 # 案B と同じ理由 (2026-07-24): keep_top_ojama_count で
                 # ROI に残る実カウントを保持し、 直後の再突入振動を防ぐ。
@@ -390,6 +471,42 @@ class OjamaVisualDetector:
             return self._detect_ojama_fall_exit(cur_count)
 
         return self._detect_ojama_fall_entry(ctx, signals, cur_count)
+
+    def _confirm_placement_evidence(self, signals: DetectorSignals) -> bool:
+        """案2修正 (2026-08-15): 実設置証拠を「確定」判定する.
+
+        `_has_ojama_fall_placement_evidence` の生判定をそのまま採用すると
+        46セルの新規劣化を持ち込む (診断確定、 モジュール定数コメント参照)。
+        経路ごとに以下の扱いに分ける:
+
+        - slide_motion: 従来通り即採用 (診断で単一フレーム誤爆の対象になって
+          いない)。
+        - own_score_delta: 直近自 chain アクティブなら除外する (roll-up
+          誤検知対策)、 それ以外は従来通り単一フレームで即採用する。
+
+        ⚠️ 実時間ヒステリシス (own_score_delta が N秒間途切れず観測される
+        ことを要求する案) も試作したが、 55盤面物差しで **有意に悪化**
+        すると実測で確定し不採用にした (46→57セル・全体一致率 95.18%→
+        93.95%)。 真因: `collect_boards_lean._should_emit` は STABLE 復帰
+        時のみ snapshot を記録する仕様のため、 ヒステリシスが早期 exit の
+        頻度を落とすと OJAMA_FALL 中の snapshot 空白期間が伸びる。 物差し
+        query フレームがその空白の中に落ちると、 nearest match が
+        「OJAMA_FALL に入る前の古い snapshot」まで遡ってしまい、 単発ノイズ
+        1件を防ぐ一次効果より snapshot 空白の二次被害が大きい
+        (chain除外のみなら 46→25セル・全体一致率 95.18%→95.63% と改善する
+        ため、 hysteresis 抜きのこの実装を最終採用する)。
+
+        Args:
+            signals: 現 frame の DetectorSignals。
+
+        Returns:
+            実設置と確定できたか (True なら即 STABLE 復帰してよい)。
+        """
+        if signals.slide_motion:
+            return True
+        if signals.own_score_delta <= 0:
+            return False
+        return not _is_own_chain_recently_active_for_score_exclusion(signals)
 
     def _detect_ojama_fall_exit(
         self, cur_count: int,
