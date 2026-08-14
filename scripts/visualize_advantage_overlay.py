@@ -3521,12 +3521,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     _production_recognition_kwargs = (
         recognition_load_default_kwargs() if use_production_recognition else {}
     )
-    _effective_ojama_fall_placement_override = (
-        bool(enable_ojama_fall_placement_override)
-        if enable_ojama_fall_placement_override is not None
-        else bool(_production_recognition_kwargs.get(
-            "enable_ojama_fall_placement_override", False))
-    )
+    # tri-state 解決 (2026-08-15): 明示指定 (not None) は常にそれを使う。未指定
+    # (None) かつ production_recognition が OFF のときはキー自体を渡さない
+    # (test_no_production_recognition_skips_adopted_kwargs が要求する「RECOGNITION_
+    # ADOPTED のキーは一切渡らない」不変条件を、標準7キー目のこのフラグにも
+    # 適用するため)。未指定かつ ON のときのみ採用値 True を明示供給する。
+    _ojama_override_kwargs: dict[str, bool] = {}
+    if enable_ojama_fall_placement_override is not None:
+        _ojama_override_kwargs["enable_ojama_fall_placement_override"] = bool(
+            enable_ojama_fall_placement_override)
+    elif use_production_recognition:
+        _ojama_override_kwargs["enable_ojama_fall_placement_override"] = bool(
+            _production_recognition_kwargs.get(
+                "enable_ojama_fall_placement_override", False))
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -3551,11 +3558,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             "stable_majority_window", stable_majority_window),
         # OJAMA_FALL誤分類の修正フラグ3種 (2026-08-13 デモレビュー対応)。
         # placement_override のみ 2026-08-15 に RECOGNITION_ADOPTED 採用済のため
-        # 上で計算済みの _effective_ojama_fall_placement_override を使う
-        # (明示指定なしの間は production_recognition の採用値 True に従う)。
-        # entry_hardening/scoped_exit の2つは未採用のため従来通り _resolve_flag
-        # (ライブラリ既定 False に解決) のまま。
-        enable_ojama_fall_placement_override=_effective_ojama_fall_placement_override,
+        # 上で計算済みの _ojama_override_kwargs (tri-state, キー自体を条件付きで
+        # 渡す) を末尾の ** 展開で合流させる。entry_hardening/scoped_exit の2つは
+        # 未採用のため従来通り _resolve_flag (ライブラリ既定 False に解決) のまま。
         enable_ojama_fall_entry_hardening=_resolve_flag(
             "enable_ojama_fall_entry_hardening",
             enable_ojama_fall_entry_hardening),
@@ -3569,9 +3574,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 残り6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
         # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
         # enable_ojama_fall_placement_override (7キー目、2026-08-15採用) だけは
-        # 上で個別マージ済みのため ** 展開からは除外する (二重供給防止)。
+        # 上の tri-state 解決 (_ojama_override_kwargs) 経由でマージするため
+        # 生の recognition_load_default_kwargs() からは除外する (二重供給防止)。
         **{k: v for k, v in _production_recognition_kwargs.items()
-           if k != "enable_ojama_fall_placement_override"})
+           if k != "enable_ojama_fall_placement_override"},
+        **_ojama_override_kwargs)
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
