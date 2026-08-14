@@ -363,3 +363,92 @@ def test_resolve_mutual_exchange_dead_flags_and_determinism():
         opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
     assert r1.board_p1_after == r2.board_p1_after
     assert r1.board_p2_after == r2.board_p2_after
+
+
+# ============================
+# board_p1_pre_landing / board_p2_pre_landing (2026-08-14 指摘12 意味論バグ対処)
+# ============================
+# 応手可否判定は「相殺後の余剰おじゃまがまだ配置されていない盤面」で行うべき
+# (おじゃまは連鎖完了後・受け側ツモ設置時まで降らない、
+# memory reference_ojama_landing_gated_by_placement)。これを検証する。
+
+
+def test_pre_landing_excludes_incoming_ojama_no_own_chain():
+    """自分は連鎖なし・相手から着弾のみのケース: pre_landing は着弾前
+    (=消化前 before_board と同一)、after は着弾後 (おじゃまが増えている)。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_no_chain_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=12,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.dropped_to_p1 == 12
+    assert result.board_p1_pre_landing == before1  # 着弾前=連鎖前と同一(連鎖なしのため)
+    assert result.board_p1_pre_landing != result.board_p1_after  # 着弾後は変化している
+    assert result.board_p1_after.count_puyos() - result.board_p1_pre_landing.count_puyos() == 12
+
+
+def test_pre_landing_equals_own_chain_result_when_chain_and_incoming_both_occur():
+    """自分は連鎖あり・相手からも着弾があるケース: pre_landing は「自分の連鎖は
+    消化済みだが着弾前」= ChainSimulator の final_board そのもの (着弾で
+    上書きされる前)、after だけがさらに着弾分を含む。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_4connect_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=12,
+        pending_p1=0, pending_p2=0,
+    )
+    own_chain_final = ChainSimulator().simulate(before1).final_board
+    assert result.board_p1_pre_landing == own_chain_final
+    assert result.board_p1_pre_landing != result.board_p1_after
+    assert result.dropped_to_p1 == 12
+
+
+def test_pre_landing_unaffected_by_leftover_capped_beyond_max_drop():
+    """1ターン上限 (欠陥E-1) を超える着弾でも、pre_landing は上限適用前の
+    着弾ゼロ状態のまま (leftover の有無に関わらず pre_landing の意味論は
+    「まだ何も配置していない」で固定)。"""
+    from src.exchange_virtual_board import OJAMA_MAX_DROP_PER_TURN, resolve_mutual_exchange
+
+    before1 = make_no_chain_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=448,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.board_p1_pre_landing == before1
+    assert result.dropped_to_p1 == OJAMA_MAX_DROP_PER_TURN
+    assert result.leftover_p1 == 448 - OJAMA_MAX_DROP_PER_TURN
+
+
+def test_pre_landing_no_incoming_equals_after_board():
+    """着弾が0個の side は pre_landing と after が完全に同一 (差分が無い
+    ケースでの回帰確認、後方互換の基準線)。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    before1 = make_4connect_board()
+    before2 = make_no_chain_board()
+    result = resolve_mutual_exchange(
+        before1, before2, gen_p1_ojama=0, gen_p2_ojama=0,
+        pending_p1=0, pending_p2=0,
+    )
+    assert result.dropped_to_p1 == 0
+    assert result.board_p1_pre_landing == result.board_p1_after
+
+
+def test_pre_landing_deterministic_across_repeated_calls():
+    """同一入力は pre_landing も再現性がある (乱数着弾より前の値なので当然
+    決定論だが、明示的に固定する)。"""
+    from src.exchange_virtual_board import resolve_mutual_exchange
+
+    opp = make_no_chain_board()
+    r1 = resolve_mutual_exchange(
+        opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
+    r2 = resolve_mutual_exchange(
+        opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
+    assert r1.board_p1_pre_landing == r2.board_p1_pre_landing
+    assert r1.board_p2_pre_landing == r2.board_p2_pre_landing

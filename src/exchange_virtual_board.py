@@ -216,6 +216,17 @@ class MutualExchangeResult:
     Attributes:
         board_p1_after: 1P の連鎖消化 + 着弾後仮想盤面。
         board_p2_after: 2P の連鎖消化 + 着弾後仮想盤面。
+        board_p1_pre_landing: 1P の連鎖消化後・**着弾前**仮想盤面 (2026-08-14
+            指摘12 意味論バグ対処で追加)。自分の連鎖は消化済みだが、相殺後の
+            余剰おじゃま (dropped_to_p1) はまだ配置していない状態。
+            「おじゃまは連鎖完了後・受け側ツモ設置時まで降らない」
+            (memory reference_ojama_landing_gated_by_placement) というルール
+            上、応手可否 (相手の連鎖演出中に撃ち返せるか) の判定はこの
+            **降られる前**の盤面で行うのが正しい意味論。board_p1_after
+            (=既に降り切った盤面) から判定すると、実際にはまだ空中の
+            おじゃまが盤面を埋めているため応手確率が不当に過小評価される
+            (指摘12実測: 136個飛来で応手0%、時間予算は十分あったのに)。
+        board_p2_pre_landing: 2P の連鎖消化後・着弾前仮想盤面。
         dropped_to_p1: 1P へ実際に配置したおじゃま数 (1ターン上限適用後)。
         dropped_to_p2: 2P へ実際に配置したおじゃま数。
         leftover_p1: 1P へまだ配置していない残り (次ターン繰越=forecast相当)。
@@ -227,6 +238,8 @@ class MutualExchangeResult:
     """
     board_p1_after: Board
     board_p2_after: Board
+    board_p1_pre_landing: Board
+    board_p2_pre_landing: Board
     dropped_to_p1: int
     dropped_to_p2: int
     leftover_p1: int
@@ -300,6 +313,14 @@ def resolve_mutual_exchange(
     chain_result_p2 = sim.simulate(before_p2)
     board_p1 = chain_result_p1.final_board.copy()
     board_p2 = chain_result_p2.final_board.copy()
+    # 着弾前スナップショット (2026-08-14 指摘12 意味論バグ対処): 自分の連鎖は
+    # 消化済みだが、相殺後の余剰おじゃまはまだ配置していない状態を保持する。
+    # 応手可否判定用 (MutualExchangeResult.board_p1_pre_landing/
+    # board_p2_pre_landing のdocstring参照)。この後の drop_ojama では
+    # board_p1/board_p2 という同名の変数を再代入するだけで、ここで取った
+    # copy() には影響しない。
+    board_p1_pre_landing = board_p1.copy()
+    board_p2_pre_landing = board_p2.copy()
     total_p1, total_p2 = _cancel_mutual_pending(
         int(gen_p1_ojama), int(gen_p2_ojama), int(pending_p1), int(pending_p2))
     drop_p1 = min(total_p1, OJAMA_MAX_DROP_PER_TURN)
@@ -314,6 +335,8 @@ def resolve_mutual_exchange(
         board_p2 = sim.drop_ojama(board_p2, drop_p2, seed=seed)
     return MutualExchangeResult(
         board_p1_after=board_p1, board_p2_after=board_p2,
+        board_p1_pre_landing=board_p1_pre_landing,
+        board_p2_pre_landing=board_p2_pre_landing,
         dropped_to_p1=drop_p1, dropped_to_p2=drop_p2,
         leftover_p1=total_p1 - drop_p1, leftover_p2=total_p2 - drop_p2,
         p1_dead=board_p1.is_dead(), p2_dead=board_p2.is_dead(),
