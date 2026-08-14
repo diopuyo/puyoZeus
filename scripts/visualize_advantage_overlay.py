@@ -40,7 +40,9 @@ from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     CHAIN_TOTAL_MIN_SCORE,  # #9 決着先読みの発火ノイズガードに流用 (ResolvedExchangeTracker)
     OjamaAccountingTracker, OjamaAccountSnapshot,
+    PENDING_ABS_CAP,  # ホールド延長の安全弁 (RESOLVED_HOLD_LANDING_MAX_WAIT_SEC) 算出用
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
+    THEORY_DROP_PER_TURN,  # 同上 (1ターンの最大落下量)
 )
 from src.probability_calibration import (  # noqa: E402
     PhaseCalibrationParams, PlattCalibrationParams, apply_platt_calibration,
@@ -326,6 +328,23 @@ class EarlyFireTracker:
 # (両側の chain_event が両方 None に戻る) まで結果を保持し、その間は再評価
 # しない (「確定済みの未来を逐次再評価しない」という #9 の原理そのもの)。
 # 片側のみの発火はトリガー対象外 (EarlyFireTracker の領分のまま)。
+#
+# [指摘11対処、2026-08-14] 「両側 chain_event が両方 None に戻る」だけでは
+# 連鎖アニメ終了の瞬間でしかなく、相殺後おじゃまの**着弾**はまだ完了して
+# いない (docs/DEMO_REVIEW_2026-08-13.md #11: 1Pは2連鎖で対応するも5段くらい
+# 降る状況で1P有利表示になっていた事象の根因)。ホールドは「着弾完了」まで
+# 延長する (ResolvedExchangeTracker._landing_complete 参照)。
+
+# 安全弁 (指摘11): 着弾完了シグナルが何らかの理由で成立しないまま無限に
+# ホールドし続けないよう、延長フェーズに上限時間を設ける。シーンからの
+# 逆算ではなく物理量のみから導く (feedback_overfitting_awareness_2026-08-04
+# 準拠): 予告おじゃまの絶対上限 PENDING_ABS_CAP (=216個、on-field 3面分、
+# src.ojama_accounting) を 1ターンの最大落下量 THEORY_DROP_PER_TURN
+# (=30個/ターン) で捌き切るのに要するターン数の天井 × 1手あたりの実測秒数
+# (iv.SEC_PER_HAND=0.733秒、labeled_win.csv 実測中央値)。
+RESOLVED_HOLD_LANDING_MAX_WAIT_SEC: float = (
+    math.ceil(PENDING_ABS_CAP / THEORY_DROP_PER_TURN) * iv.SEC_PER_HAND
+)
 
 
 class ResolvedExchangeTracker:
@@ -344,14 +363,30 @@ class ResolvedExchangeTracker:
     上昇し続ける途中値) を直接比較すると、上昇アニメの毎フレームで
     「観測>予測」が成立してしまい絶えず再決着し続ける (=乱高下の再現、
     実測で確認済み) ため、既存の settle 確定済み値のみを見る。
+
+    [指摘11対処、2026-08-14] 両側の chain_event が両方 None に戻っても
+    即座に解放せず、相殺後おじゃまの着弾完了 (`_landing_complete`) まで
+    保持を延長する。安全弁として `RESOLVED_HOLD_LANDING_MAX_WAIT_SEC` を
+    超えたら強制解放する。
+
+    [指摘10対処、2026-08-14] `enable_decisive_amplify=True` の場合、決着値に
+    「受け側の応手不能度」を統合する。着弾後仮想盤面 (`resolve_mutual_exchange`
+    の board_p1_after/board_p2_after) で受け側限定の応手確率を計算し
+    (既存 `CounterReachTracker` の受け側限定経路を再利用)、既存
+    `_counter_defender_adv` (物理由来の非線形ダメージ関数 `iv.ojama_damage`
+    + 応手確率 + 既存定数 COUNTER_SCALE のみ、新規マジックナンバー無し) と
+    同一の式で決着値へ加算する。既定 False = 従来 (#9 のみ) の決着値と
+    完全に同一 (backwards compat)。
     """
 
     def __init__(
         self, model,
         attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
+        enable_decisive_amplify: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
+        self._enable_decisive_amplify = enable_decisive_amplify
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -363,6 +398,20 @@ class ResolvedExchangeTracker:
         self.hold_adv = 0.0    # 保持中の決着後有利不利 (1P視点)
         self.hold_p1 = 0.5     # 保持中の決着後1P勝率
         self.hold_drivers: list[tuple[str, float]] = []
+        # [指摘11] 着弾完了待ちの延長フェーズ管理用 (両側 chain_event が
+        # None化した後、着弾完了までの間だけ True)。
+        self._awaiting_landing: bool = False
+        self._landing_wait_started_sec: "float | None" = None
+        # [指摘11] 決着計算時点で予測した各 side の最終お邪魔到達量 (着弾
+        # 完了判定①用)。incoming が 0 なら「元々受け側でない」= 常に達成扱い。
+        self._target_ojama_p1: float = 0.0
+        self._target_ojama_p2: float = 0.0
+        self._incoming_total_p1: float = 0.0
+        self._incoming_total_p2: float = 0.0
+        # [指摘10] 応手不能度の増幅で使う受け側限定 MC (既存 CounterReachTracker
+        # をこのクラス専用にもう1個持つ。ライブ per-frame 用インスタンスとは
+        # 独立、決着計算は頻度が低い=1保持につき高々数回のためキャッシュ共有は不要)。
+        self._counter_tracker = CounterReachTracker()
 
     def _resolve(
         self, snap: OjamaAccountSnapshot, elapsed_sec: float,
@@ -375,6 +424,7 @@ class ResolvedExchangeTracker:
             self._ev1.before_board, self._ev2.before_board, gen1, gen2,
             snap.pending_p1, snap.pending_p2,
         )
+        self._update_landing_targets(result)
         # 決着後盤面には着弾分 (leftover 未満) が既に反映済みのため、snap の
         # forecast/net_balance だけを決着後の残り (leftover) に差し替える
         # (他のフィールドは会計連続性のため元 snap のまま流用、dataclasses.replace)。
@@ -387,8 +437,74 @@ class ResolvedExchangeTracker:
             self._model, result.board_p1_after, result.board_p2_after,
             resolved_snap, attribution_exclude=self._attribution_exclude,
         )
+        if self._enable_decisive_amplify:
+            adv, p1 = self._amplify_decisive(adv, result)
         self.hold_adv, self.hold_p1, self.hold_drivers = adv, p1, drivers
         self._pred_score1, self._pred_score2 = score1, score2
+
+    def _update_landing_targets(self, result: "MutualExchangeResult") -> None:
+        """決着計算が予測した各 side の最終お邪魔到達量 (着弾完了判定①用) を保持する。
+
+        [指摘11] 目標 = 発火直前の盤面おじゃま数 + 今回の交換で確定した
+        飛来量総量 (即時落下分 dropped + 次ターン繰越 leftover)。
+        """
+        base1 = float(iv.board_ojama_count(self._ev1.before_board).raw)
+        base2 = float(iv.board_ojama_count(self._ev2.before_board).raw)
+        self._incoming_total_p1 = float(result.dropped_to_p1 + result.leftover_p1)
+        self._incoming_total_p2 = float(result.dropped_to_p2 + result.leftover_p2)
+        self._target_ojama_p1 = base1 + self._incoming_total_p1
+        self._target_ojama_p2 = base2 + self._incoming_total_p2
+
+    def _decisive_defender(
+        self, result: "MutualExchangeResult",
+    ) -> "tuple[str | None, float]":
+        """今回の交換で最終的に飛来量が大きい側 (受け側) を返す (指摘10)。
+
+        `_resolve_defender_threat` と同じ「脅威が無ければ None / 両方向とも
+        あれば大きい方を優先」という判断パターンを、決着計算の生データ
+        (result) 向けに踏襲する (入力が異なるため別関数、ロジックは対応)。
+        """
+        candidates = [
+            (side, amount) for side, amount in (
+                ("1P", float(result.dropped_to_p1 + result.leftover_p1)),
+                ("2P", float(result.dropped_to_p2 + result.leftover_p2)),
+            ) if amount > 0.0
+        ]
+        if not candidates:
+            return None, 0.0
+        return max(candidates, key=lambda c: c[1])
+
+    def _amplify_decisive(
+        self, adv: float, result: "MutualExchangeResult",
+    ) -> "tuple[float, float]":
+        """[指摘10] 受け側の応手不能度を決着値に統合する (既定 enable 時のみ呼ばれる)。
+
+        着弾後仮想盤面 (board_p1_after/board_p2_after) で受け側限定の応手確率を
+        既存 CounterReachTracker (受け側限定経路) から求め、既存
+        `_counter_defender_adv` (COUNTER_SCALE + iv.ojama_damage、新規定数
+        無し) と同一式で adv に加算する。応手不能 (確率低) かつ飛来量大なら
+        決定的側へ増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+        """
+        defender_side, incoming = self._decisive_defender(result)
+        if defender_side is None:
+            return adv, adv_to_winprob(adv)
+        # 回復時間 = 相手 (攻撃側) の隙時間。実観測 ChainEvent.chain_count
+        # (simulate 由来の chain_count は既知の過小評価事故があるため使わない、
+        # project_chain_count_both_untrustworthy) から既存の連鎖アニメ時間
+        # 推定を再利用する (#3 の従来経路 _resolve_counter_time_budget と同じ式)。
+        attacker_event = self._ev2 if defender_side == "1P" else self._ev1
+        budget = iv.estimate_chain_anim_duration_sec(float(attacker_event.chain_count))
+        _, cp1, cp2 = self._counter_tracker.update(
+            result.board_p1_after, result.board_p2_after, budget,
+            defender_side=defender_side, threshold_ojama=incoming,
+        )
+        defender_prob = cp1 if defender_side == "1P" else cp2
+        amp = _counter_defender_adv(
+            defender_side, defender_prob, incoming,
+            result.board_p1_after, result.board_p2_after,
+        )
+        adv = max(-100.0, min(100.0, adv + amp))
+        return adv, adv_to_winprob(adv)
 
     def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
         """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
@@ -424,6 +540,55 @@ class ResolvedExchangeTracker:
             max(self._pred_score1, obs1 or 0.0), max(self._pred_score2, obs2 or 0.0),
         )
 
+    def _landing_complete(self, r_p1, r_p2, snap: OjamaAccountSnapshot) -> bool:
+        """[指摘11] 着弾完了を検知する (どちらかの成立で True)。
+
+        ① 会計の未着弾量が0になった: 既存 `OjamaAccountSnapshot.pending_p1/p2`
+           (=forecast_incoming、tsumo 着地の度に drain される実測値) が両者
+           とも0以下。最も単純で堅牢な既存シグナル、通常はこちらが先に成立する。
+        ② 受け側盤面のおじゃま数が決着計算の予測着弾量に達した: `_resolve`
+           時点で保持した `_target_ojama_p{1,2}` に、実際の確定盤面
+           (STABLE時のみ信用、CLAUDE.md「STABLE確定盤面のみで評価」原則) の
+           `iv.board_ojama_count` が到達したか。①より判定が遅れがちだが
+           (confirmed_board は非STABLE中フリーズ)、①が何らかの理由で
+           成立しない場合の保険として OR で残す。incoming が0の side は
+           「元々受け側でない」ため常に達成扱い。
+        """
+        if snap.pending_p1 <= 0 and snap.pending_p2 <= 0:
+            return True
+        ok1 = self._incoming_total_p1 <= 0.0
+        ok2 = self._incoming_total_p2 <= 0.0
+        if not ok1 and r_p1.state == BoardState.STABLE and r_p1.confirmed_board is not None:
+            ok1 = iv.board_ojama_count(r_p1.confirmed_board).raw >= self._target_ojama_p1
+        if not ok2 and r_p2.state == BoardState.STABLE and r_p2.confirmed_board is not None:
+            ok2 = iv.board_ojama_count(r_p2.confirmed_board).raw >= self._target_ojama_p2
+        return ok1 and ok2
+
+    def _release(self) -> "tuple[bool, bool]":
+        """ホールドを解除する共通処理 (指摘11、着弾完了/安全弁のどちらでも同じ)。"""
+        self._active = False
+        self._awaiting_landing = False
+        self._landing_wait_started_sec = None
+        return False, True
+
+    def _await_landing(
+        self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
+    ) -> "tuple[bool, bool]":
+        """[指摘11] 両側 chain_event が None化した後の着弾完了待ちフェーズ。
+
+        着弾完了なら解放、未完了でも安全弁 (`RESOLVED_HOLD_LANDING_MAX_WAIT_SEC`)
+        を超えたら強制解放する (無限ホールド防止)。
+        """
+        if not self._awaiting_landing:
+            self._awaiting_landing = True
+            self._landing_wait_started_sec = elapsed_sec
+        if self._landing_complete(r_p1, r_p2, snap):
+            return self._release()
+        waited = elapsed_sec - self._landing_wait_started_sec
+        if waited >= RESOLVED_HOLD_LANDING_MAX_WAIT_SEC:
+            return self._release()
+        return True, False
+
     def update(
         self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
     ) -> "tuple[bool, bool]":
@@ -455,14 +620,20 @@ class ResolvedExchangeTracker:
                     and ev2.total_score >= CHAIN_TOTAL_MIN_SCORE):
                 self._ev1, self._ev2 = ev1, ev2
                 self._redecided1 = self._redecided2 = False
+                self._awaiting_landing = False
+                self._landing_wait_started_sec = None
                 self._resolve(
                     snap, elapsed_sec, float(ev1.total_score), float(ev2.total_score))
                 self._active = True
             return self._active, False
         self._maybe_redecide(snap, elapsed_sec)
         if ev1 is None and ev2 is None:
-            self._active = False
-            return False, True
+            # [指摘11] 連鎖アニメは終わったが、相殺後おじゃまの着弾完了までは
+            # ホールドを延長する (「着弾前の空白」で通常評価に戻さない)。
+            return self._await_landing(r_p1, r_p2, snap, elapsed_sec)
+        # 連鎖アニメがまだ続いている (片側だけ終わった場合も含む、検収指摘⑤)。
+        self._awaiting_landing = False
+        self._landing_wait_started_sec = None
         return True, False
 
 
@@ -713,11 +884,34 @@ def _resolve_features(df: pd.DataFrame) -> list[str]:
 #   - 動画数  10 -> 66
 #   - 列      88 -> 96 (上位互換。 現行の全列を含む)
 # ペア数は 6,049 -> 73,416。
-# 2026-08-12 暫定切替: npz→CSV変換ツール (選択肢C) の初回産出物 (63本 light、
-# center_bulge入り) に向ける。148本フル版が出来たら差し替える。旧66本CSVは下記。
-#   旧: data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv
+# 2026-08-14 正式切替: 148本フル・2026-08-14学習し直し結果 (AUC 0.657
+# /終盤0.839、scripts/_retrain148_2026-08-14.py) を受けて、暫定 light63
+# (2026-08-12、63本のみ・仮特徴量セット) から正式昇格させる。
+#   旧 (暫定light63): data/verify/npz_light_smoke_2026-08-12/labeled_win_light63.csv
+#   旧旧 (66本): data/verify/win_eval_combined66_2026-07-29/labeled_win_combined66.csv
+#
+# [重要・既知の列名不一致に関する注記 (2026-08-14 コーダ実装時検証)]
+# _retrain148_2026-08-14.py が報告した AUC 0.657 は「CSVの47列(非meta数値列)を
+# そのまま行単位特徴量として使う」独自パイプラインの数値であり、本モジュールの
+# _train_model()/_resolve_features() (FEATURE_CANDIDATES の裸の列名一致 →
+# pair_sides_for_win → build_features で 1P-2P 差分を作る方式) とは別物。
+# npz→CSV変換ツールは b-2 決定 (2026-08-12 実測) により
+# max_column_height/column_bumpiness/death_margin/death_margin_neighbor/
+# conn_pair_count/conn_max_group_size を「own列」ではなく「diff_own列」の
+# 形でのみ出力するため (scripts/build_labeled_win_from_npz.py の
+# DIFF_REPLACE_OWN_COLUMNS 参照)、本モジュールの列存在ガードはこれらの
+# base 列名を見つけられず学習から除外する (center_bulge も
+# center_bulge_color/_ojama に分解済みで同様に見つからない)。
+# 実際に _resolve_features() で解決される列は 9 個 (旧 light63 の 9 個とは
+# 中身が入れ替わり: 新規に current_max_chain/ojama_net_balance/
+# ojama_forecast/dig_resistance/ukeyasusa/sub_chain_count を獲得する一方、
+# max_column_height/column_bumpiness/death_margin/death_margin_neighbor/
+# conn_pair_count/center_bulge を失う)。「47列を自動で拾う」という期待は
+# 現状のこのパイプラインでは成立しないため、diff_ プレフィックス列の
+# 取り込みは別途フォローアップとして検討する (このコメントと合わせて
+# _train_model() 内のスキップログで実際の解決列を都度確認できる)。
 TRAIN_CSV_PATH: str = (
-    "data/verify/npz_light_smoke_2026-08-12/labeled_win_light63.csv"
+    "data/verify/labeled_win_full148_2026-08-14/labeled_win_full148.csv"
 )
 
 # ============================
@@ -2363,6 +2557,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_counter_remaining_time: bool = False,
              enable_counter_defender_only: bool = False,
              enable_resolved_exchange_eval: bool = False,
+             enable_resolved_decisive_amplify: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -2502,13 +2697,25 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         両側の chain_event が同時にアクティブになった瞬間に一度だけ
         `resolve_mutual_exchange` (連鎖完走シミュレーション+相殺+着弾、
         src.exchange_virtual_board) → `_score_advantage` の2段で決着後勝率を
-        計算し、両側の chain_event が両方 None に戻る (=両者の連鎖アニメ終了)
-        まで表示を固定する (adv_ema/p1_last の EMA 内部状態には混ぜず直接
-        ホールド、無効時は完全に従来経路とビット一致)。片側のみの発火は
+        計算し、両側の chain_event が両方 None に戻った (=両者の連鎖アニメ
+        終了) 後もさらに相殺後おじゃまの**着弾完了**まで表示を固定する
+        (2026-08-14 指摘11対処、ResolvedExchangeTracker._landing_complete
+        参照。着弾完了は判定不能でも安全弁 RESOLVED_HOLD_LANDING_MAX_WAIT_SEC
+        で必ず解放する)。表示は adv_ema/p1_last の EMA 内部状態には混ぜず
+        直接ホールド (無効時は完全に従来経路とビット一致)。片側のみの発火は
         トリガー対象外 (--early-fire-reaction の領分のまま、両フラグは独立)。
         simulate の連結欠損由来の過小評価 (既知事故: 真値8連鎖→simulate1連鎖)
         対策として、保持中に観測 score が予測総得点を超えたら下限として
         即時再決着する。既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_resolved_decisive_amplify: True で決着値に「受け側の応手不能度」を
+        統合する (2026-08-14 指摘10対処)。着弾後仮想盤面で受け側限定の応手
+        確率を既存 CounterReachTracker (受け側限定経路) から求め、既存
+        `_counter_defender_adv` (COUNTER_SCALE + iv.ojama_damage、新規定数
+        無し) と同一式で決着値に加算する。応手不能 (確率低) かつ飛来量大な
+        ほど決定的側へ増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+        `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
+        フラグ)。既定 False = 従来 (#9 のみ) の決着値と完全に同一
+        (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -2751,7 +2958,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     # #9 両者同時発火の決着先読み (2026-08-13)。enable_resolved_exchange_eval=False
     # 時も生成のみ (コスト僅少、update() 呼び出し自体は毎フレーム行うが chain_event
     # が両方非None になるまで内部で何もしない)。
-    resolved_tracker = ResolvedExchangeTracker(model, attribution_exclude=attribution_exclude)
+    resolved_tracker = ResolvedExchangeTracker(
+        model, attribution_exclude=attribution_exclude,
+        enable_decisive_amplify=enable_resolved_decisive_amplify)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -2844,7 +3053,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             cap_ptracker = CapabilityPressureTracker()
             counter_tracker = CounterReachTracker()
             resolved_tracker = ResolvedExchangeTracker(
-                model, attribution_exclude=attribution_exclude)
+                model, attribution_exclude=attribution_exclude,
+                enable_decisive_amplify=enable_resolved_decisive_amplify)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -3255,8 +3465,17 @@ def main() -> None:
         help="両者同時発火の決着を先読みし連鎖終了まで固定表示する "
              "(2026-08-13、docs/DEMO_REVIEW_2026-08-13.md #9)。両側の "
              "chain_event が同時にアクティブになった瞬間に一度だけ連鎖を"
-             "完走シミュレーションし決着後勝率で固定する。既定 OFF = 従来挙動 "
+             "完走シミュレーションし決着後勝率で固定する。着弾完了 (2026-08-14 "
+             "指摘11対処) まで保持を延長する。既定 OFF = 従来挙動 "
              "(観測到着ごとの逐次再評価、連鎖中の乱高下あり)。",
+    )
+    ap.add_argument(
+        "--resolved-decisive-amplify", action="store_true", default=False,
+        dest="enable_resolved_decisive_amplify",
+        help="--resolved-exchange-eval の決着値に受け側の応手不能度を統合する "
+             "(2026-08-14、docs/DEMO_REVIEW_2026-08-13.md #10)。応手不能かつ "
+             "飛来量大なら決定的側へ増幅する。--resolved-exchange-eval 無効時 "
+             "は無視される。既定 OFF = #9 のみの決着値と完全に同一。",
     )
     ap.add_argument(
         "--no-pressure", action="store_true", default=False,
@@ -3442,6 +3661,7 @@ def main() -> None:
              enable_counter_remaining_time=a.enable_counter_remaining_time,
              enable_counter_defender_only=a.enable_counter_defender_only,
              enable_resolved_exchange_eval=a.enable_resolved_exchange_eval,
+             enable_resolved_decisive_amplify=a.enable_resolved_decisive_amplify,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
