@@ -412,16 +412,44 @@ class ResolvedExchangeTracker:
     (`_counter_defender_adv` の `iv.ojama_damage`) は「返せなかった場合に
     何が起きるか」を測るものなので、こちらは着弾後盤面のままが正しい
     (両者を混同しないこと、下記実装参照)。
+
+    [指摘13対処、2026-08-15] 従来は「片側だけ連鎖アニメが終わった」瞬間も
+    「両側とも連鎖継続中」と同じ完全凍結ブランチに合流していた (両側
+    chain_event が両方 None になるまで hold_* を一切動かさない)。これは
+    「決着済みの攻撃側の帰結」と「生きている受け側の応手力」を区別せず
+    両方凍結する設計不備だった (user指摘: 受け側は連鎖中も置き続けており、
+    実際に応手力は変化する)。`enable_live_defender_reeval=True` の場合、
+    片側のみ連鎖中 (攻撃側継続・受け側は自由行動) の間、
+    `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定周期と同一) ごとに
+    以下を再評価する (`_reevaluate_live_defender` 参照):
+      - 凍結維持: 攻撃側の連鎖帰結 (`_decisive_defender` が返す飛来量
+        incoming、攻撃側の仮想盤面 `board_pX_after`) — 攻撃側の生盤面は
+        アニメ中で信用できない (physics_only 原則) ため使わない。
+      - 生値で再評価: 受け側の**現在の**盤面 (呼出側 generate() が保持する
+        sticky な `b1`/`b2`、片側STABLE時のみ更新される) + 残り時間予算
+        (`_chain_remaining_time_budget_sec` に現在の `t_sec` を都度渡すだけで
+        経過時間控除が自然に効く)。
+    増幅 (`enable_decisive_amplify=True` の場合のみ) とモデル評価
+    (`_score_advantage`) の両方をこの更新済み値で再計算し hold_adv/hold_p1に
+    反映するため、表示が「攻撃側の帰結起点→受け側の組みに応じて漸移→
+    撃ち返しで通常経路に反転」という連続的な挙動になる。
+    `enable_live_defender_reeval=False` (既定) では本節は一切実行されず、
+    従来 (両側 chain_event が両方 None になるまで完全凍結) と bit-identical
+    (backwards compat)。
     """
 
     def __init__(
         self, model,
         attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
         enable_decisive_amplify: bool = False,
+        enable_live_defender_reeval: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
         self._enable_decisive_amplify = enable_decisive_amplify
+        # [指摘13、2026-08-15] 片側のみ連鎖中の間の受け側ライブ再評価 (既定OFF、
+        # クラス docstring 指摘13節参照)。
+        self._enable_live_defender_reeval = enable_live_defender_reeval
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -465,6 +493,18 @@ class ResolvedExchangeTracker:
         self.hold_defender_side: "str | None" = None
         self.hold_incoming_ojama: float = 0.0
         self.hold_defender_prob: float = float("nan")
+        # [指摘13、2026-08-15] 直近の _resolve() が保持した決着結果 (凍結成分)。
+        # 片側のみ連鎖中のライブ再評価 (`_reevaluate_live_defender`) が
+        # 攻撃側の帰結 (board_pX_after/pre_landing、飛来量) を読み直すために
+        # 保持する (_resolve() 内のローカル変数だった result/resolved_snap を
+        # インスタンス属性へ格上げ、他の既存フィールドには影響しない)。
+        self._result: "MutualExchangeResult | None" = None
+        self._resolved_snap: "OjamaAccountSnapshot | None" = None
+        # [指摘13] ライブ再評価の間引き用の直近実行時刻 (raw t_sec、
+        # COUNTER_RECOMPUTE_INTERVAL_SEC と同じ 0.5秒周期)。_resolve() の
+        # たびに None へ戻し、新しい決着セッション開始直後は間引きせず
+        # 即座に1回評価させる (段差回避)。
+        self._last_live_reeval_t: "float | None" = None
 
     def _resolve(
         self, snap: OjamaAccountSnapshot, elapsed_sec: float,
@@ -486,6 +526,9 @@ class ResolvedExchangeTracker:
             net_balance_capped=result.leftover_p2 - result.leftover_p1,
             forecast_p1=result.leftover_p1, forecast_p2=result.leftover_p2,
         )
+        # [指摘13] 片側のみ連鎖中のライブ再評価が読む凍結成分を保持する。
+        self._result, self._resolved_snap = result, resolved_snap
+        self._last_live_reeval_t = None
         adv, p1, drivers = _score_advantage(
             self._model, result.board_p1_after, result.board_p2_after,
             resolved_snap, attribution_exclude=self._attribution_exclude,
@@ -590,6 +633,115 @@ class ResolvedExchangeTracker:
         adv = max(-100.0, min(100.0, adv + amp))
         return adv, adv_to_winprob(adv)
 
+    def _live_defender_snap(self, defender_side: str) -> OjamaAccountSnapshot:
+        """[指摘13、2026-08-15] 受け側の盤面をライブ(着弾前)に差し替える際、
+        forecast/net_balance も同じ「着弾前」意味論に合わせて差し替えた
+        snapshot を返す (`_reevaluate_live_defender` docstring 参照)。
+
+        受け側の forecast だけ全量 (`dropped_to_pX + leftover_pX` =
+        `self._incoming_total_pX`) に差し替える。攻撃側は盤面
+        (`board_pX_after`) を変えていないため forecast は元の leftover の
+        まま (二重計上しない)。net_balance_capped も同じ差し替え後の値の
+        差分に揃える (`_side_feats` の net/forecast 引数と整合)。
+        """
+        if defender_side == "1P":
+            forecast_p1, forecast_p2 = (
+                self._incoming_total_p1, self._resolved_snap.forecast_p2)
+        else:
+            forecast_p1, forecast_p2 = (
+                self._resolved_snap.forecast_p1, self._incoming_total_p2)
+        return dataclass_replace(
+            self._resolved_snap,
+            forecast_p1=forecast_p1, forecast_p2=forecast_p2,
+            net_balance_capped=forecast_p2 - forecast_p1,
+        )
+
+    def _reevaluate_live_defender(
+        self, b1: "Board | None", b2: "Board | None",
+    ) -> None:
+        """[指摘13、2026-08-15] 片側のみ連鎖中の間、受け側の現在盤面+残り
+        時間逓減で hold_adv/hold_p1/hold_drivers を再評価する。
+
+        `update()` 側で `enable_live_defender_reeval=True` かつ「ちょうど
+        片側の chain_event が None (=攻撃側継続・受け側自由行動)」の場合のみ
+        呼ばれる。`COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定
+        周期と同一) 未満の連続呼び出しは即 return しキャッシュ値を保持する
+        (無効化中の判定は行わない=呼出元のフラグゲートが単一情報源)。
+
+        b1/b2: 呼出側 generate() が保持する「受け側の現在の STABLE 確定盤面」
+        (sticky、片側STABLE時のみ更新・非STABLE中は前回値を保持)。凍結対象の
+        攻撃側盤面は `self._result.board_pX_after`/`board_pX_pre_landing`
+        (直近 `_resolve()` が保持した仮想盤面) をそのまま使い続ける — 攻撃側
+        の生盤面は連鎖アニメ中で信用できない (physics_only 原則)。
+
+        [着弾前盤面と forecast の整合、2026-08-15] `self._resolved_snap.
+        forecast_pX` (=`result.leftover_pX`) は「`board_pX_after` (既に
+        `dropped_to_pX` 分の着弾が反映済みの盤面) の上に、まだ配置していない
+        残りだけ」を表す前提の値。受け側の盤面だけをライブ (=着弾前、
+        `dropped_to_pX` 分も含めて何も降っていない) に差し替えると、
+        `dropped_to_pX` 分が盤面にも forecast にも現れず、脅威を静かに
+        過小評価してしまう (実測: この抜け漏れにより指摘12窓で84%→74%程度の
+        想定を超えて1P有利側へ過剰に振れる事象を診断で確認)。
+        `_live_defender_snap` で受け側の forecast だけ全量 (`dropped_to_pX`
+        + `leftover_pX` = `self._incoming_total_pX`) に差し替えて整合させる
+        (攻撃側は盤面を変えていないため forecast は元の leftover のまま)。
+        """
+        if (
+            self._last_live_reeval_t is not None
+            and (self._t_sec - self._last_live_reeval_t) < COUNTER_RECOMPUTE_INTERVAL_SEC
+        ):
+            return
+        if self._result is None or self._resolved_snap is None:
+            return  # _resolve 未実行 (理論上到達しない、安全側 no-op)
+        defender_side, incoming = self._decisive_defender(self._result)
+        if defender_side is None:
+            return  # 脅威なし(相殺で完全相殺等)は再評価対象なし、既存値を保持
+        attacker_event = self._ev2 if defender_side == "1P" else self._ev1
+        if attacker_event is None:
+            return  # 攻撃側イベント不明(理論上到達しない防御的ガード)
+        live_defender_board = b1 if defender_side == "1P" else b2
+        if live_defender_board is None:
+            return  # 受け側の STABLE 盤面をまだ一度も観測していない(安全側、段差回避)
+        board_p1 = (
+            live_defender_board if defender_side == "1P" else self._result.board_p1_after)
+        board_p2 = (
+            live_defender_board if defender_side == "2P" else self._result.board_p2_after)
+        live_snap = self._live_defender_snap(defender_side)
+        adv, p1, drivers = _score_advantage(
+            self._model, board_p1, board_p2, live_snap,
+            attribution_exclude=self._attribution_exclude,
+        )
+        if self._enable_decisive_amplify:
+            budget = _chain_remaining_time_budget_sec(
+                attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
+                self._chain_len_table,
+            )
+            # 応手確率MCの受け側盤面は生値 (=着弾前と同じ意味論、まだ何も
+            # 降っていない)。非受け側は _update_defender_only 内で未使用のため
+            # 元の pre_landing を渡す (既存 _amplify_decisive と同じ組み方)。
+            counter_b1 = (
+                live_defender_board if defender_side == "1P"
+                else self._result.board_p1_pre_landing)
+            counter_b2 = (
+                live_defender_board if defender_side == "2P"
+                else self._result.board_p2_pre_landing)
+            _, cp1, cp2 = self._counter_tracker.update(
+                counter_b1, counter_b2, budget,
+                defender_side=defender_side, threshold_ojama=incoming, t_sec=self._t_sec,
+            )
+            defender_prob = cp1 if defender_side == "1P" else cp2
+            self.hold_defender_side, self.hold_incoming_ojama, self.hold_defender_prob = (
+                defender_side, incoming, defender_prob)
+            amp = _counter_defender_adv(
+                defender_side, defender_prob, incoming,
+                self._result.board_p1_after, self._result.board_p2_after,
+                scale=RESOLVED_AMPLIFY_SCALE,
+            )
+            adv = max(-100.0, min(100.0, adv + amp))
+            p1 = adv_to_winprob(adv)
+        self.hold_adv, self.hold_p1, self.hold_drivers = adv, p1, drivers
+        self._last_live_reeval_t = self._t_sec
+
     def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
         """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
 
@@ -676,6 +828,7 @@ class ResolvedExchangeTracker:
     def update(
         self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
         t_sec: "float | None" = None,
+        b1: "Board | None" = None, b2: "Board | None" = None,
     ) -> "tuple[bool, bool]":
         """毎フレーム呼ぶ。(is_active, just_deactivated) を返す
 
@@ -688,6 +841,12 @@ class ResolvedExchangeTracker:
             バックする — 呼び出し元が新規引数を渡さない既存テスト等は
             従来と同じ挙動 (enable_decisive_amplify=False では未使用のため
             実害なし)。
+        b1/b2: [指摘13、2026-08-15 追加の optional 引数] 呼出側 generate() が
+            保持する「受け側の現在の STABLE 確定盤面」(sticky、片側STABLE時
+            のみ更新・非STABLE中は前回値を保持)。`enable_live_defender_reeval
+            =True` かつ片側のみ連鎖中の間だけ `_reevaluate_live_defender` が
+            参照する。省略時 (None、backwards compat) はライブ再評価自体が
+            盤面欠損として no-op になる (既存呼出元は無変化)。
         """
         self._t_sec = elapsed_sec if t_sec is None else t_sec
         ev1, ev2 = r_p1.chain_event, r_p2.chain_event
@@ -728,6 +887,12 @@ class ResolvedExchangeTracker:
         # 連鎖アニメがまだ続いている (片側だけ終わった場合も含む、検収指摘⑤)。
         self._awaiting_landing = False
         self._landing_wait_started_sec = None
+        if self._enable_live_defender_reeval and (ev1 is None) != (ev2 is None):
+            # [指摘13] ちょうど片側だけ chain_event が None (=攻撃側継続・
+            # 受け側自由行動)。従来はここも完全凍結ブランチに合流していたが、
+            # 受け側成分だけ生値で再評価する (無効時は本行に到達しても何もしない
+            # フラグゲートを通らないため、既定挙動は完全に不変)。
+            self._reevaluate_live_defender(b1, b2)
         return True, False
 
 
@@ -2937,6 +3102,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_counter_defender_only: bool = False,
              enable_resolved_exchange_eval: bool = False,
              enable_resolved_decisive_amplify: bool = False,
+             enable_resolved_live_defender: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -3100,6 +3266,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
         フラグ)。既定 False = 従来 (#9 のみ) の決着値と完全に同一
         (backwards compat)。
+    enable_resolved_live_defender: True で「片側のみ連鎖中 (攻撃側継続・
+        受け側自由行動)」の間、決着値を `COUNTER_RECOMPUTE_INTERVAL_SEC`
+        (0.5秒) ごとにライブ再評価する (2026-08-15 指摘13対処、
+        docs/DEMO_REVIEW_2026-08-13.md #13)。従来は両側 chain_event が両方
+        None に戻るまで hold_adv を完全凍結していたが、受け側は連鎖中も
+        置き続けており応手力は実際に変化する (user指摘)。凍結を維持する
+        成分 (攻撃側の連鎖帰結=飛来量・攻撃側の仮想盤面 board_pX_after) と
+        生値で動かす成分 (受け側の現在 STABLE 確定盤面・残り時間予算の逓減)
+        を分離し、モデル評価と決定度増幅 (enable_resolved_decisive_amplify
+        有効時) の両方をこの更新済み値で再計算する
+        (`ResolvedExchangeTracker._reevaluate_live_defender` 参照)。表示が
+        「攻撃側の帰結起点→受け側の組みに応じて漸移→撃ち返しで反転」という
+        連続的な挙動になる。`enable_resolved_exchange_eval=False` の場合は
+        無視される (#9 サブフラグ)。既定 False = 従来 (両側終了まで完全凍結)
+        と完全に同一 (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -3344,7 +3525,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     # が両方非None になるまで内部で何もしない)。
     resolved_tracker = ResolvedExchangeTracker(
         model, attribution_exclude=attribution_exclude,
-        enable_decisive_amplify=enable_resolved_decisive_amplify)
+        enable_decisive_amplify=enable_resolved_decisive_amplify,
+        enable_live_defender_reeval=enable_resolved_live_defender)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -3438,7 +3620,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             counter_tracker = CounterReachTracker()
             resolved_tracker = ResolvedExchangeTracker(
                 model, attribution_exclude=attribution_exclude,
-                enable_decisive_amplify=enable_resolved_decisive_amplify)
+                enable_decisive_amplify=enable_resolved_decisive_amplify,
+                enable_live_defender_reeval=enable_resolved_live_defender)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -3458,8 +3641,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # では起きない、EarlyFireTracker と同じ理由)。
         resolved_active, resolved_just_deactivated = False, False
         if enable_resolved_exchange_eval:
+            # b1/b2 (受け側の現在 STABLE 確定盤面、直上で更新済み) を渡す
+            # (指摘13、enable_resolved_live_defender=False では tracker 内部で
+            # 未使用のため無害)。
             resolved_active, resolved_just_deactivated = resolved_tracker.update(
-                r.p1, r.p2, snap, tracker._elapsed(t), t_sec=t)
+                r.p1, r.p2, snap, tracker._elapsed(t), t_sec=t, b1=b1, b2=b2)
         # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
@@ -3866,6 +4052,16 @@ def main() -> None:
              "は無視される。既定 OFF = #9 のみの決着値と完全に同一。",
     )
     ap.add_argument(
+        "--resolved-live-defender", action=argparse.BooleanOptionalAction, default=False,
+        dest="enable_resolved_live_defender",
+        help="片側のみ連鎖中 (攻撃側継続・受け側自由行動) の間、決着値を0.5秒ごと"
+             "ライブ再評価する (2026-08-15、docs/DEMO_REVIEW_2026-08-13.md #13)。"
+             "攻撃側の帰結 (飛来量・仮想盤面) は凍結維持したまま、受け側の現在盤面"
+             "+残り時間逓減でモデル評価/決定度増幅を再計算する。"
+             "--resolved-exchange-eval 無効時は無視される。既定 OFF = 従来"
+             " (両側終了まで完全凍結) と完全に同一。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -4050,6 +4246,7 @@ def main() -> None:
              enable_counter_defender_only=a.enable_counter_defender_only,
              enable_resolved_exchange_eval=a.enable_resolved_exchange_eval,
              enable_resolved_decisive_amplify=a.enable_resolved_decisive_amplify,
+             enable_resolved_live_defender=a.enable_resolved_live_defender,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
