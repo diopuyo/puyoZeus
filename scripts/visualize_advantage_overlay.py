@@ -382,8 +382,7 @@ class ResolvedExchangeTracker:
     超えたら強制解放する。
 
     [指摘10対処、2026-08-14] `enable_decisive_amplify=True` の場合、決着値に
-    「受け側の応手不能度」を統合する。着弾後仮想盤面 (`resolve_mutual_exchange`
-    の board_p1_after/board_p2_after) で受け側限定の応手確率を計算し
+    「受け側の応手不能度」を統合する。受け側限定の応手確率を計算し
     (既存 `CounterReachTracker` の受け側限定経路を再利用)、既存
     `_counter_defender_adv` (物理由来の非線形ダメージ関数 `iv.ojama_damage`
     + 応手確率 + 専用定数 `RESOLVED_AMPLIFY_SCALE`) と同一の式で決着値へ
@@ -399,6 +398,20 @@ class ResolvedExchangeTracker:
     増幅強度も専用定数 `RESOLVED_AMPLIFY_SCALE` (= `COUNTER_SCALE * W_COUNTER`)
     に分離し、ライブ per-frame 経路が重み付け後に持つ実効上限と揃えることで
     モデル評価との二重計上を避ける (同定数のコメント参照)。
+
+    [指摘12 修正4、2026-08-14 意味論バグ対処] 応手確率 (`CounterReachTracker`
+    への入力盤面) は `resolve_mutual_exchange` の `board_p1_pre_landing`/
+    `board_p2_pre_landing` (自分の連鎖は消化済みだが、相殺後の余剰おじゃまは
+    まだ配置していない盤面) を使う。時間予算修正 (修正1) 後もなお時間予算13秒
+    (mean_hands≈13、手数は十分) にもかかわらず応手0%になる事象が残っていた
+    根因がこれで、`board_p1_after`/`board_p2_after` (=着弾**後**、余剰おじゃま
+    が既に降り切った盤面) を渡していたため、実際にはまだ空中のおじゃまが
+    盤面を埋めた状態から MC を回していた (「おじゃまは連鎖完了後・受け側
+    ツモ設置時まで降らない」ルールとの意味論不一致、memory
+    reference_ojama_landing_gated_by_placement)。ダメージ計算
+    (`_counter_defender_adv` の `iv.ojama_damage`) は「返せなかった場合に
+    何が起きるか」を測るものなので、こちらは着弾後盤面のままが正しい
+    (両者を混同しないこと、下記実装参照)。
     """
 
     def __init__(
@@ -519,11 +532,11 @@ class ResolvedExchangeTracker:
     ) -> "tuple[float, float]":
         """[指摘10] 受け側の応手不能度を決着値に統合する (既定 enable 時のみ呼ばれる)。
 
-        着弾後仮想盤面 (board_p1_after/board_p2_after) で受け側限定の応手確率を
-        既存 CounterReachTracker (受け側限定経路) から求め、既存
-        `_counter_defender_adv` (`RESOLVED_AMPLIFY_SCALE` + iv.ojama_damage) と
-        同一式で adv に加算する。応手不能 (確率低) かつ飛来量大なら決定的側へ
-        増幅し、受け側が高確率で返せる場合はほぼ無効果のまま。
+        受け側限定の応手確率を既存 CounterReachTracker (受け側限定経路) から
+        求め、既存 `_counter_defender_adv` (`RESOLVED_AMPLIFY_SCALE` +
+        iv.ojama_damage) と同一式で adv に加算する。応手不能 (確率低) かつ
+        飛来量大なら決定的側へ増幅し、受け側が高確率で返せる場合はほぼ
+        無効果のまま。
 
         [指摘12 修正1、2026-08-14] 時間予算は #3 で実装済みの
         `_chain_remaining_time_budget_sec` (経過時間控除 +
@@ -533,6 +546,17 @@ class ResolvedExchangeTracker:
         で静的に検査する)。旧式は経過時間を控除しないため、連鎖の後半ほど
         残り時間を過小評価し「応手不能」と誤断する系統バイアスがあった
         (指摘12: 実演出8.1秒に対し旧式2.4秒と算出、応手0%→過剰増幅の直接原因)。
+
+        [指摘12 修正4、2026-08-14 意味論バグ対処] 応手確率の MC 入力盤面は
+        `board_p1_pre_landing`/`board_p2_pre_landing` (着弾**前**、自分の
+        連鎖は消化済みだが余剰おじゃまはまだ配置していない盤面) を使う。
+        修正1 (時間予算) 後も応手0%が残っていた根因がこれで、着弾**後**
+        盤面 (`board_p1_after`/`board_p2_after`、既に降り切っている) から
+        MC を回すと、まだ空中のはずのおじゃまが盤面を埋めた状態で判定して
+        しまい不当に過小評価される。一方 `_counter_defender_adv` の
+        ダメージ計算 (iv.ojama_damage) は「返せなかった場合に何が起きるか」
+        を測るものなので着弾後盤面のままが正しい (下記で使い分ける、
+        混同しないこと)。
         """
         defender_side, incoming = self._decisive_defender(result)
         self.hold_defender_side, self.hold_incoming_ojama = defender_side, incoming
@@ -549,8 +573,11 @@ class ResolvedExchangeTracker:
             attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
             self._chain_len_table,
         )
+        # 応手確率の判定は着弾前盤面 (修正4)。ダメージ計算 (下の
+        # _counter_defender_adv) は着弾後盤面のまま — 意味論が異なるため
+        # 混同しない。
         _, cp1, cp2 = self._counter_tracker.update(
-            result.board_p1_after, result.board_p2_after, budget,
+            result.board_p1_pre_landing, result.board_p2_pre_landing, budget,
             defender_side=defender_side, threshold_ojama=incoming,
         )
         defender_prob = cp1 if defender_side == "1P" else cp2

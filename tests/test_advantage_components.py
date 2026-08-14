@@ -893,6 +893,7 @@ def test_decisive_amplify_noop_when_no_incoming(monkeypatch) -> None:
     monkeypatch.setattr(vao, "_score_advantage", stub)
     monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: types.SimpleNamespace(
         board_p1_after=Board(), board_p2_after=Board(),
+        board_p1_pre_landing=Board(), board_p2_pre_landing=Board(),
         dropped_to_p1=0, dropped_to_p2=0, leftover_p1=0, leftover_p2=0,
         p1_dead=False, p2_dead=False,
         chain_result_p1=types.SimpleNamespace(chain_count=1),
@@ -903,6 +904,96 @@ def test_decisive_amplify_noop_when_no_incoming(monkeypatch) -> None:
     ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert tracker.hold_adv == 10.0  # 増幅対象なし = スタブの戻り値そのまま
+
+
+# ============================
+# 指摘12 修正4: 応手確率MCへの入力は着弾前盤面 (意味論バグ対処、2026-08-14)
+# ============================
+# 指摘12対処 (修正1: 時間予算統一) の後もなお応手0%が残っていた根因。
+# _amplify_decisive が CounterReachTracker.update に着弾**後**仮想盤面
+# (board_p1_after/board_p2_after、余剰おじゃまが既に降り切っている) を渡して
+# いたため、実際にはまだ空中のはずのおじゃまが盤面を埋めた状態で応手可否を
+# 判定してしまっていた。着弾**前**盤面 (board_p1_pre_landing/
+# board_p2_pre_landing) を渡すよう修正する。
+
+
+def test_amplify_decisive_passes_pre_landing_board_to_counter_mc(monkeypatch) -> None:
+    """CounterReachTracker.update に渡る盤面は着弾前 (pre_landing) であり、
+    着弾後 (after、既に降り切って埋まった盤面) ではないことを直接検証する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+
+    after_board = _board_with_ojama(30)     # 着弾後=既に埋まっている想定
+    pre_landing_board = _board_with_ojama(0)  # 着弾前=まだ空いている想定
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: types.SimpleNamespace(
+        board_p1_after=after_board, board_p2_after=Board(),
+        board_p1_pre_landing=pre_landing_board, board_p2_pre_landing=Board(),
+        dropped_to_p1=30, dropped_to_p2=0, leftover_p1=0, leftover_p2=0,
+        p1_dead=False, p2_dead=False,
+        chain_result_p1=types.SimpleNamespace(chain_count=1),
+        chain_result_p2=types.SimpleNamespace(chain_count=1),
+    ))
+    captured: dict = {}
+
+    def fake_counter_update(self, b1, b2, budget, **kw):
+        captured["b1"] = b1
+        captured["b2"] = b2
+        return (0.0, 0.5, float("nan"))
+
+    monkeypatch.setattr(vao.CounterReachTracker, "update", fake_counter_update)
+    monkeypatch.setattr(vao, "_counter_defender_adv", lambda *a, **k: 0.0)
+
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    assert captured["b1"] is pre_landing_board  # 着弾前を渡している (着弾後ではない)
+    assert captured["b1"] is not after_board
+
+
+def test_amplify_decisive_damage_calc_still_uses_after_board(monkeypatch) -> None:
+    """ダメージ計算 (_counter_defender_adv) は着弾後盤面のまま (混同していない
+    ことの確認、応手確率MCとは意味論が異なる)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda *a, **k: {})
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+
+    after_board = _board_with_ojama(30)
+    pre_landing_board = _board_with_ojama(0)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: types.SimpleNamespace(
+        board_p1_after=after_board, board_p2_after=Board(),
+        board_p1_pre_landing=pre_landing_board, board_p2_pre_landing=Board(),
+        dropped_to_p1=30, dropped_to_p2=0, leftover_p1=0, leftover_p2=0,
+        p1_dead=False, p2_dead=False,
+        chain_result_p1=types.SimpleNamespace(chain_count=1),
+        chain_result_p2=types.SimpleNamespace(chain_count=1),
+    ))
+    monkeypatch.setattr(
+        vao.CounterReachTracker, "update",
+        lambda self, b1, b2, budget, **kw: (0.0, 0.5, float("nan")),
+    )
+    captured: dict = {}
+
+    def fake_counter_defender_adv(defender_side, defender_prob, incoming, b1, b2, **kw):
+        captured["b1"] = b1
+        captured["b2"] = b2
+        return 0.0
+
+    monkeypatch.setattr(vao, "_counter_defender_adv", fake_counter_defender_adv)
+
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_decisive_amplify=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    assert captured["b1"] is after_board  # ダメージ計算は着弾後のまま (修正対象外)
+    assert captured["b1"] is not pre_landing_board
 
 
 # ============================
@@ -921,6 +1012,7 @@ def _stub_mutual_exchange_result(
 ) -> types.SimpleNamespace:
     return types.SimpleNamespace(
         board_p1_after=Board(), board_p2_after=Board(),
+        board_p1_pre_landing=Board(), board_p2_pre_landing=Board(),
         dropped_to_p1=dropped_to_p1, dropped_to_p2=dropped_to_p2,
         leftover_p1=leftover_p1, leftover_p2=leftover_p2,
         p1_dead=False, p2_dead=False,
