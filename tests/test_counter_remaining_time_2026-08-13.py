@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.visualize_advantage_overlay import (
     CHAIN_LENGTH_CONDITIONAL_PATH,
     _ChainAttackObservation,
@@ -56,15 +58,22 @@ def test_expected_final_zero_or_negative_returns_zero() -> None:
 
 
 def test_remaining_time_subtracts_elapsed_and_adds_landing_lag() -> None:
-    """残り時間 = anim(E[最終|N]) − 経過 + 着弾ラグ (SEC_PER_HAND)。"""
+    """残り時間 = anim(E[最終|N]) − 経過 + 着弾ラグ (SEC_PER_HAND)。
+
+    anim() は2026-08-14較正 (calibration="empirical_table_2026_08_14"、
+    docs/DEMO_REVIEW_2026-08-13.md #12 案B) を使う (_chain_remaining_time_
+    budget_sec 内部の固定配線、legacy 0.4秒/連鎖ではない)。"""
     table = {2: 5.0}  # N=2到達なら最終5連鎖と期待
     trigger_sec = 10.0
     t_sec = 11.0  # 発火から1秒経過
     budget = _chain_remaining_time_budget_sec(2, trigger_sec, t_sec, table)
-    expected_anim = estimate_chain_anim_duration_sec(5.0)  # 0.4*5=2.0
+    expected_anim = estimate_chain_anim_duration_sec(
+        5.0, calibration="empirical_table_2026_08_14")
     expected = expected_anim - 1.0 + SEC_PER_HAND
     assert budget == expected
     assert expected > 0.0
+    # 旧式 (0.4秒/連鎖) とは値が異なることも明示 (退行防止)。
+    assert budget != pytest.approx(estimate_chain_anim_duration_sec(5.0) - 1.0 + SEC_PER_HAND)
 
 
 def test_remaining_time_never_negative() -> None:

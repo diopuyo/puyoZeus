@@ -1364,6 +1364,84 @@ CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11: float = 0.17
 CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11: int = 15
 
 
+# ============================
+# 較正 Phase 2 (2026-08-14、連鎖数別演出時間の実測テーブル較正)
+# ============================
+#
+# 背景: docs/DEMO_REVIEW_2026-08-13.md #12 の残課題「応手確率が依然0%
+# (予算4.06秒 vs 実演出8.1秒) = user目視『対応可能』と矛盾」。v2026_08_11
+# の固定バイアス較正 (0.4秒×N + 0.17秒) は連鎖数依存の傾きを変えない前提
+# だったが、実測 (data/verify/chain_anim_duration_2026-08-14/
+# table_by_chain_count.csv、旧23動画+新10動画Phase L、ピクセルdiffベース
+# 盤面settle実測) では大連鎖ほど傾きが 0.4秒/連鎖を大きく超える
+# (6連鎖=中央値9.50秒、8連鎖=中央値11.97秒。旧定数ならそれぞれ2.4秒/
+# 3.2秒で3〜4倍過小)。本較正は連鎖数別の実測中央値テーブルを直接使う
+# (診断報告 案B、docs/DEMO_REVIEW_2026-08-13.md #12 のフォローアップ)。
+#
+# テーブルは N=1..12 (実測サンプル数 n=11〜105件、十分な母数) のみ保持
+# する。N=13以上 (n=6/3/3件と極小、単独の中央値は信頼できない) は生の
+# 中央値を採用せず、線形フィット a + b*N (a=3.3, b=0.89、診断報告 案B
+# 指定値) で外挿する。整数点間 (呼び出し元 _expected_final_chain_count
+# が非整数の期待値を返す場合) は線形補間する。
+#
+# 呼び出しは明示的opt-in (calibration="empirical_table_2026_08_14") のみ。
+# calibration 省略時 (="legacy") には一切関与せず、既存呼び出し
+# (母数多数) は bit-identical (backwards compat、CLAUDE.md 準拠)。
+CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14: "dict[int, float]" = {
+    1: 2.633339436848985,
+    2: 3.8666788736979356,
+    3: 5.324864691490291,
+    4: 6.6666605631510265,
+    5: 8.099788809652864,
+    6: 9.499958349006874,
+    7: 10.72486165364586,
+    8: 11.966739908854265,
+    9: 13.54989029947933,
+    10: 11.458198025916658,
+    11: 13.891654459635419,
+    12: 14.083327229817712,
+}
+
+# N=13以上の外挿式パラメータ (data/verify/chain_anim_duration_2026-08-14/
+# README.txt 記載の実測に対する線形フィット、診断報告 案B 指定値)。
+CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14: float = 3.3
+CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14: float = 0.89
+CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14: int = 13
+
+
+def _estimate_chain_anim_duration_empirical_table_2026_08_14(n: float) -> float:
+    """calibration="empirical_table_2026_08_14" の内部実装 (n>0 前提)。
+
+    N=1..12 はテーブルの整数点間を線形補間 (0<N<1 は原点0.0を仮のアンカー
+    として補間する)。N>=13 は外挿式に切り替える。テーブル最終点(N=12)と
+    外挿式(N=13)の連続性は保証しない (実測とフィットの切れ目のため、
+    生じるギャップは小さい: N=12→13で約+0.8秒)。
+
+    Args:
+        n: 連鎖数 (float可、0より大きい前提。呼び出し元
+            estimate_chain_anim_duration_sec が n<=0 を0.0にガード済み)。
+
+    Returns:
+        推定所要秒数 (float, >= 0)。
+    """
+    table = CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14
+    min_extrapolate = float(CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14)
+    if n >= min_extrapolate:
+        return (
+            CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14
+            + CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14 * n
+        )
+    max_table_n = max(table)
+    lo = min(int(n), max_table_n)
+    if lo >= max_table_n:
+        return table[max_table_n]
+    hi = lo + 1
+    frac = n - lo
+    y_lo = table[lo] if lo >= 1 else 0.0
+    y_hi = table[hi]
+    return y_lo + (y_hi - y_lo) * frac
+
+
 def estimate_chain_anim_duration_sec(
     chain_count: float,
     calibration: str = "legacy",
@@ -1380,7 +1458,11 @@ def estimate_chain_anim_duration_sec(
             "v2026_08_11" (chain_end_sec_gap 全域再測定ベースの固定バイアス
             較正、CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11 のコメント参照。
             chain_count は CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11
-            でクランプする)。既存呼び出し (省略時) は影響を受けない。
+            でクランプする) または "empirical_table_2026_08_14"
+            (連鎖数別演出時間の実測中央値テーブル較正、
+            CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14 のコメント
+            ブロック参照。N=13以上は線形フィットで外挿しクランプしない)。
+            既存呼び出し (省略時) は影響を受けない。
 
     Returns:
         推定所要秒数 (float, >= 0)。
@@ -1399,6 +1481,10 @@ def estimate_chain_anim_duration_sec(
             CHAIN_ANIM_PER_STEP_SEC * n_clamped
             + CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11
         )
+    if calibration == "empirical_table_2026_08_14":
+        if n <= 0.0:
+            return 0.0
+        return _estimate_chain_anim_duration_empirical_table_2026_08_14(n)
     raise ValueError(f"未知の calibration 指定: {calibration!r}")
 
 
@@ -4171,6 +4257,11 @@ __all__ = [
     # VII-4b 較正 Phase 1 (2026-08-11、chain_end_sec_gap 全域再測定)
     "CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11",
     "CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11",
+    # VII-4c 較正 Phase 2 (2026-08-14、連鎖数別演出時間の実測テーブル較正)
+    "CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
