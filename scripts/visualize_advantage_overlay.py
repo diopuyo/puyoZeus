@@ -36,7 +36,10 @@ import src.indicators_v2 as iv  # noqa: E402
 from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
-from src.exchange_virtual_board import resolve_mutual_exchange  # noqa: E402
+from src.exchange_virtual_board import (  # noqa: E402
+    land_pending_ojama_onto_board,
+    resolve_mutual_exchange,
+)
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     CHAIN_TOTAL_MIN_SCORE,  # #9 決着先読みの発火ノイズガードに流用 (ResolvedExchangeTracker)
@@ -436,6 +439,29 @@ class ResolvedExchangeTracker:
     `enable_live_defender_reeval=False` (既定) では本節は一切実行されず、
     従来 (両側 chain_event が両方 None になるまで完全凍結) と bit-identical
     (backwards compat)。
+
+    [指摘13 方向反転修正、2026-08-15、docs/KNOWN_WEAKNESSES.md W12]
+    上記の forecast 全量差し替え (`_live_defender_snap`) だけでは直らない
+    方向反転が残っていた (診断: logs/_diag_issue13_direction_flip_2026-08-15.log)。
+    根因は学習モデルが forecast 特徴をほぼ無視すること (W12実測:
+    着弾前局面の実勝率48.4%=ノーペナルティ学習、重要度26位/47列)。
+    受け側の生盤面 (未着弾=クリーン) をそのままモデルへ渡す限り forecast を
+    どれだけ差し替えても「降るまでは無傷」判定は解消しない。
+    対処 (意味論の統一): モデルへ渡す前に、未着弾分を物理的に着弾させた
+    仮想盤面を再構成する (`land_pending_ojama_onto_board`、
+    `resolve_mutual_exchange` と同じ着弾原理 + `OJAMA_MAX_DROP_PER_TURN`
+    上限を再利用、新規の着弾実装は書かない)。着弾させる量は「凍結時の
+    incoming 固定」ではなく `_live_remaining_incoming` が現在の会計
+    スナップショット (`snap.pending_pX`、実際に降り進んでいれば減る) から
+    都度求める (二重計上防止)。会計が0を示すのに凍結時飛来予測が正の場合
+    (baseline reset 等で会計がこの交換を追跡できていない場合) は、盤面上の
+    増加分を凍結時飛来量から控除するフォールバックへ切り替える。
+    forecast (`_live_defender_snap`) は「このフレームで着弾しきれず残った
+    分」(`leftover_now`、`OJAMA_MAX_DROP_PER_TURN` 超過分) だけに揃え、
+    凍結経路 `_resolve()` (forecast=leftover) と意味論を一致させる。
+    応手確率MC (`CounterReachTracker`) は引き続き着弾**前**の生盤面を使う
+    (指摘12 修正4 と同じ「降られる前に撃てるか」の意味論、モデル評価用の
+    着弾後仮想盤面とは別物であり混同しないこと、下記実装のコメント参照)。
     """
 
     def __init__(
@@ -633,31 +659,66 @@ class ResolvedExchangeTracker:
         adv = max(-100.0, min(100.0, adv + amp))
         return adv, adv_to_winprob(adv)
 
-    def _live_defender_snap(self, defender_side: str) -> OjamaAccountSnapshot:
-        """[指摘13、2026-08-15] 受け側の盤面をライブ(着弾前)に差し替える際、
-        forecast/net_balance も同じ「着弾前」意味論に合わせて差し替えた
+    def _live_defender_snap(
+        self, defender_side: str, leftover_now: float,
+    ) -> OjamaAccountSnapshot:
+        """[指摘13、2026-08-15 方向反転修正で意味論変更] 受け側の forecast を
+        「このフレームで物理着弾させた後に残った未着弾分」に差し替えた
         snapshot を返す (`_reevaluate_live_defender` docstring 参照)。
 
-        受け側の forecast だけ全量 (`dropped_to_pX + leftover_pX` =
-        `self._incoming_total_pX`) に差し替える。攻撃側は盤面
+        受け側の盤面はこのフレームで `leftover_now` を除く分を
+        `land_pending_ojama_onto_board` により物理的に着弾済みにしたため、
+        forecast も凍結経路 `_resolve()` と同じ意味論 (= 着弾済み分は盤面が
+        語る、forecast は残りだけ) に揃える。旧実装 (全量 `_incoming_total_pX`
+        を forecast に積む方式) は forecast 特徴がモデルにほぼ無視される
+        (W12) ため方向反転を解消できず撤回した。攻撃側は盤面
         (`board_pX_after`) を変えていないため forecast は元の leftover の
         まま (二重計上しない)。net_balance_capped も同じ差し替え後の値の
         差分に揃える (`_side_feats` の net/forecast 引数と整合)。
         """
         if defender_side == "1P":
-            forecast_p1, forecast_p2 = (
-                self._incoming_total_p1, self._resolved_snap.forecast_p2)
+            forecast_p1, forecast_p2 = leftover_now, self._resolved_snap.forecast_p2
         else:
-            forecast_p1, forecast_p2 = (
-                self._resolved_snap.forecast_p1, self._incoming_total_p2)
+            forecast_p1, forecast_p2 = self._resolved_snap.forecast_p1, leftover_now
         return dataclass_replace(
             self._resolved_snap,
             forecast_p1=forecast_p1, forecast_p2=forecast_p2,
             net_balance_capped=forecast_p2 - forecast_p1,
         )
 
+    def _live_remaining_incoming(
+        self, defender_side: str, live_defender_board: Board,
+        snap: "OjamaAccountSnapshot | None",
+    ) -> float:
+        """[指摘13 方向反転修正、2026-08-15] 受け側の「まだ着弾していない」量を、
+        現在の会計優先・盤面差分フォールバックで求める。
+
+        優先: `snap.pending_pX` (実際の tsumo 着地の度に drain される会計値、
+        現在までに本当に降った分は自然に減っている=二重計上しない)。
+        フォールバック: 会計側が0を示しているのに凍結時点の飛来予測
+        (`self._incoming_total_pX`) が正の場合 (baseline reset (score大幅
+        減少検知) 等で会計がこの交換を追跡できていない場合)、凍結時点の
+        飛来量から盤面上で既に増えた分を控除した残りを使う
+        (`self._target_ojama_pX` = 凍結時盤面 + 飛来総量、なので
+        `target - 現在盤面値` = 未着弾の残り)。
+        """
+        incoming_total = (
+            self._incoming_total_p1 if defender_side == "1P" else self._incoming_total_p2)
+        if incoming_total <= 0.0:
+            return 0.0
+        if snap is not None:
+            acct_pending = float(
+                snap.pending_p1 if defender_side == "1P" else snap.pending_p2)
+            if acct_pending > 0.0:
+                return min(acct_pending, incoming_total)
+        target = (
+            self._target_ojama_p1 if defender_side == "1P" else self._target_ojama_p2)
+        current = float(iv.board_ojama_count(live_defender_board).raw)
+        return max(0.0, target - current)
+
     def _reevaluate_live_defender(
         self, b1: "Board | None", b2: "Board | None",
+        snap: "OjamaAccountSnapshot | None" = None,
     ) -> None:
         """[指摘13、2026-08-15] 片側のみ連鎖中の間、受け側の現在盤面+残り
         時間逓減で hold_adv/hold_p1/hold_drivers を再評価する。
@@ -673,18 +734,20 @@ class ResolvedExchangeTracker:
         攻撃側盤面は `self._result.board_pX_after`/`board_pX_pre_landing`
         (直近 `_resolve()` が保持した仮想盤面) をそのまま使い続ける — 攻撃側
         の生盤面は連鎖アニメ中で信用できない (physics_only 原則)。
+        snap: [方向反転修正、2026-08-15 追加の optional 引数] 呼出側 `update()`
+            が保持する現在の `OjamaAccountSnapshot` (`_live_remaining_incoming`
+            参照)。省略時 (None、backwards compat) は会計フォールバック側の
+            盤面差分のみで残量を求める。
 
-        [着弾前盤面と forecast の整合、2026-08-15] `self._resolved_snap.
-        forecast_pX` (=`result.leftover_pX`) は「`board_pX_after` (既に
-        `dropped_to_pX` 分の着弾が反映済みの盤面) の上に、まだ配置していない
-        残りだけ」を表す前提の値。受け側の盤面だけをライブ (=着弾前、
-        `dropped_to_pX` 分も含めて何も降っていない) に差し替えると、
-        `dropped_to_pX` 分が盤面にも forecast にも現れず、脅威を静かに
-        過小評価してしまう (実測: この抜け漏れにより指摘12窓で84%→74%程度の
-        想定を超えて1P有利側へ過剰に振れる事象を診断で確認)。
-        `_live_defender_snap` で受け側の forecast だけ全量 (`dropped_to_pX`
-        + `leftover_pX` = `self._incoming_total_pX`) に差し替えて整合させる
-        (攻撃側は盤面を変えていないため forecast は元の leftover のまま)。
+        [方向反転修正、2026-08-15、docs/KNOWN_WEAKNESSES.md W12]
+        受け側の生盤面 (未着弾=クリーン) を直接モデルへ渡す限り、forecast を
+        どれだけ差し替えても方向反転は解消しない (モデルは forecast 特徴を
+        ほぼ無視する)。モデル評価に使う盤面は `land_pending_ojama_onto_board`
+        で未着弾分 (`_live_remaining_incoming` が求める、`OJAMA_MAX_DROP_
+        PER_TURN` 上限まで) を物理的に着弾させた仮想盤面に差し替える。
+        forecast (`_live_defender_snap`) はこのフレームで着弾しきれず残った
+        `leftover_now` のみに揃え、凍結経路 `_resolve()` (forecast=leftover)
+        と意味論を一致させる (二重計上しない)。
         """
         if (
             self._last_live_reeval_t is not None
@@ -702,11 +765,17 @@ class ResolvedExchangeTracker:
         live_defender_board = b1 if defender_side == "1P" else b2
         if live_defender_board is None:
             return  # 受け側の STABLE 盤面をまだ一度も観測していない(安全側、段差回避)
+        attacker_board_frozen = (
+            self._result.board_p2_after if defender_side == "1P"
+            else self._result.board_p1_after)
+        remaining = self._live_remaining_incoming(defender_side, live_defender_board, snap)
+        landed_defender_board, _dropped_now, leftover_now = land_pending_ojama_onto_board(
+            live_defender_board, attacker_board_frozen, remaining)
         board_p1 = (
-            live_defender_board if defender_side == "1P" else self._result.board_p1_after)
+            landed_defender_board if defender_side == "1P" else self._result.board_p1_after)
         board_p2 = (
-            live_defender_board if defender_side == "2P" else self._result.board_p2_after)
-        live_snap = self._live_defender_snap(defender_side)
+            landed_defender_board if defender_side == "2P" else self._result.board_p2_after)
+        live_snap = self._live_defender_snap(defender_side, leftover_now)
         adv, p1, drivers = _score_advantage(
             self._model, board_p1, board_p2, live_snap,
             attribution_exclude=self._attribution_exclude,
@@ -716,9 +785,11 @@ class ResolvedExchangeTracker:
                 attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
                 self._chain_len_table,
             )
-            # 応手確率MCの受け側盤面は生値 (=着弾前と同じ意味論、まだ何も
-            # 降っていない)。非受け側は _update_defender_only 内で未使用のため
-            # 元の pre_landing を渡す (既存 _amplify_decisive と同じ組み方)。
+            # 応手確率MC (CounterReachTracker) は着弾**前**の生盤面を使う
+            # (指摘12 修正4 と同じ「降られる前に撃てるか」の意味論)。上の
+            # board_p1/board_p2 (モデル評価用、着弾後仮想盤面) とは別物
+            # — 混同しないこと。非受け側は未使用のため元の pre_landing を
+            # 渡す (既存 _amplify_decisive と同じ組み方)。
             counter_b1 = (
                 live_defender_board if defender_side == "1P"
                 else self._result.board_p1_pre_landing)
@@ -847,6 +918,9 @@ class ResolvedExchangeTracker:
             =True` かつ片側のみ連鎖中の間だけ `_reevaluate_live_defender` が
             参照する。省略時 (None、backwards compat) はライブ再評価自体が
             盤面欠損として no-op になる (既存呼出元は無変化)。
+        snap: 既存の必須引数 (`_maybe_redecide` 用) を `_reevaluate_live_
+            defender` にもそのまま渡す (2026-08-15 方向反転修正)。受け側の
+            未着弾量を現在の会計から求める (`_live_remaining_incoming`)。
         """
         self._t_sec = elapsed_sec if t_sec is None else t_sec
         ev1, ev2 = r_p1.chain_event, r_p2.chain_event
@@ -892,7 +966,7 @@ class ResolvedExchangeTracker:
             # 受け側自由行動)。従来はここも完全凍結ブランチに合流していたが、
             # 受け側成分だけ生値で再評価する (無効時は本行に到達しても何もしない
             # フラグゲートを通らないため、既定挙動は完全に不変)。
-            self._reevaluate_live_defender(b1, b2)
+            self._reevaluate_live_defender(b1, b2, snap)
         return True, False
 
 
@@ -3438,6 +3512,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 従来挙動と完全一致)。
         writer = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"),
                                  effective_fps, canvas_size)
+    # RECOGNITION_ADOPTED 採用 (2026-08-15): enable_ojama_fall_placement_override が
+    # 標準採用7キーの1つに移った。本ファイルは元々この1キーだけ独立CLI引数
+    # (--enable-ojama-fall-placement-override, 2026-08-13導入, BooleanOptionalAction)
+    # として明示 kwargs 供給しており、下記 ** 展開 (recognition_load_default_kwargs())
+    # にもそのまま同名キーが含まれるようになるため、二重供給 (TypeError, 直下コメント
+    # 「重複時は TypeError で早期に気付ける設計」参照) を避けて事前にマージする。
+    _production_recognition_kwargs = (
+        recognition_load_default_kwargs() if use_production_recognition else {}
+    )
+    _effective_ojama_fall_placement_override = (
+        bool(enable_ojama_fall_placement_override)
+        if enable_ojama_fall_placement_override is not None
+        else bool(_production_recognition_kwargs.get(
+            "enable_ojama_fall_placement_override", False))
+    )
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -3460,10 +3549,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             "enable_puyo_to_empty_hsv_guard", enable_puyo_to_empty_hsv_guard),
         stable_majority_window=_resolve_flag(
             "stable_majority_window", stable_majority_window),
-        # OJAMA_FALL誤分類の修正フラグ3種 (2026-08-13 デモレビュー対応、既定OFF)
-        enable_ojama_fall_placement_override=_resolve_flag(
-            "enable_ojama_fall_placement_override",
-            enable_ojama_fall_placement_override),
+        # OJAMA_FALL誤分類の修正フラグ3種 (2026-08-13 デモレビュー対応)。
+        # placement_override のみ 2026-08-15 に RECOGNITION_ADOPTED 採用済のため
+        # 上で計算済みの _effective_ojama_fall_placement_override を使う
+        # (明示指定なしの間は production_recognition の採用値 True に従う)。
+        # entry_hardening/scoped_exit の2つは未採用のため従来通り _resolve_flag
+        # (ライブラリ既定 False に解決) のまま。
+        enable_ojama_fall_placement_override=_effective_ojama_fall_placement_override,
         enable_ojama_fall_entry_hardening=_resolve_flag(
             "enable_ojama_fall_entry_hardening",
             enable_ojama_fall_entry_hardening),
@@ -3474,9 +3566,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # (既定 False、backwards compat)。
         enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
         # 本番採用の認識フラグ群 (2026-08-13 是正)。RECOGNITION_ADOPTED の
-        # 6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
+        # 残り6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
         # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
-        **(recognition_load_default_kwargs() if use_production_recognition else {}))
+        # enable_ojama_fall_placement_override (7キー目、2026-08-15採用) だけは
+        # 上で個別マージ済みのため ** 展開からは除外する (二重供給防止)。
+        **{k: v for k, v in _production_recognition_kwargs.items()
+           if k != "enable_ojama_fall_placement_override"})
     import re
     m = re.search(r"(v\d+|video_\d+)", video.name)
     if m and hasattr(pipe, "set_video_id"):
