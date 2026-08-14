@@ -36,6 +36,7 @@ user レビュー (タスク#7 item 3 のレビューシートと合わせて実
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,19 +51,33 @@ from src.chain_count_ocr import (
     _crop_search_roi,
     _to_gray,
 )
+from src.chain_count_truth import compute_telop_search_window
+
+_spec = importlib.util.spec_from_file_location(
+    "_review20_for_capture",
+    Path(__file__).resolve().parent / "_build_review20_chain_count_v2_2026-08-14.py",
+)
+assert _spec is not None and _spec.loader is not None
+_review20_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_review20_mod)
 
 DEFAULT_OUT_DIR = Path("data/verify/chain_count_v2_2026-08-14/candidate_templates")
 # WSL 上の ~/frames/ (16動画・削除禁止資産、CLAUDE.md/MEMORY.md 記載) を既定にする。
 # 本スクリプトは WSL 上の venv から実行する前提 (CLAUDE.md プロセス管理ルール)。
 DEFAULT_VIDEO_DIR = Path.home() / "frames"
 
-# 採取窓 (タグ行 t_sec を基準にした前後秒数)。タグ行は「非空セル数が
-# ERASURE_MIN_DROP 以上減少した」行であり、連鎖アニメの中盤〜終盤に相当する
-# ことが多い実測分布 (_build_chain_length_conditional_2026-08-13.py の
-# docstring 参照) のため、前方に余裕を持たせる。
-CAPTURE_WINDOW_BEFORE_SEC: float = 3.0
-CAPTURE_WINDOW_AFTER_SEC: float = 1.0
-CAPTURE_SAMPLE_INTERVAL_SEC: float = 0.1
+# 採取窓は `compute_telop_search_window` (src/chain_count_truth.py) に一元化。
+# 【2026-08-14 続行タスクで撤回】旧実装は CAPTURE_WINDOW_BEFORE_SEC=3.0 /
+# _AFTER_SEC=1.0 という t_center (発火タグ行時刻) 基準の固定窓を使っていたが、
+# 実測で「発火前盤面行 (before_t_sec) 〜発火タグ行 (trigger_sec)」の自然な
+# 区間そのものを使う方が正確・網羅的と判明したため、この区間 (+小さな
+# 安全バッファ) に統一する。
+CAPTURE_SAMPLE_INTERVAL_SEC: float = 0.05
+# 採取候補として保存する最低スコア (閾値未満は junk crop の可能性が高く
+# 保存しても user レビューの手間を増やすだけなので除外する)。
+CAPTURE_MIN_SAVE_SCORE: float = 0.55
+# 採取対象イベント数の上限 (review20 と同じ選定ロジックを再利用)。
+CAPTURE_MAX_TARGETS: int = 20
 
 
 @dataclass(frozen=True)
@@ -71,7 +86,8 @@ class CaptureTarget:
     video_id: str
     side: Side
     game_idx: int
-    t_center_sec: float
+    before_t_sec: float
+    trigger_sec: float
     expected_n: int
 
 
@@ -112,8 +128,7 @@ def capture_one(
     best_t: float | None = None
     best_roi: np.ndarray | None = None
 
-    t = target.t_center_sec - CAPTURE_WINDOW_BEFORE_SEC
-    t_end = target.t_center_sec + CAPTURE_WINDOW_AFTER_SEC
+    t, t_end = compute_telop_search_window(target.before_t_sec, target.trigger_sec)
     while t <= t_end:
         cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t) * 1000.0)
         ok, frame = cap.read()
@@ -133,7 +148,7 @@ def capture_one(
     cap.release()
 
     saved_path: str | None = None
-    if best_loc is not None and best_roi is not None:
+    if best_loc is not None and best_roi is not None and best_score >= CAPTURE_MIN_SAVE_SCORE:
         x, y = best_loc
         h, w = tpl_gray.shape[:2]
         crop = best_roi[y:y + h, x:x + w]
@@ -147,17 +162,22 @@ def capture_one(
     return CaptureResult(target, max(0.0, best_score), best_t, saved_path)
 
 
-# 初回ブートストラップ候補 (userタスク指定16動画のうち、得点逆算高信頼帯で
-# expected_n が判明したイベントから手動選定。1動画1イベントに限らず複数
-# クラスをカバーするよう選んだ、2026-08-14 実測)。
-DEFAULT_TARGETS: tuple[CaptureTarget, ...] = (
-    CaptureTarget("c13", "1P", 12, 866.60, 3),
-    CaptureTarget("c17", "1P", 13, 942.97, 6),
-    CaptureTarget("c20", "2P", 5, 484.53, 7),
-    CaptureTarget("c11", "2P", 8, 614.07, 6),
-    CaptureTarget("c13", "2P", 20, 1376.50, 3),
-    CaptureTarget("c17", "1P", 18, 1169.67, 4),
-)
+def _build_targets_from_review20_events() -> tuple[CaptureTarget, ...]:
+    """review20 と同じ選定ロジック (得点逆算高信頼帯) からイベントを取得する。
+
+    2026-08-14 続行タスクでの窓修正 (`compute_telop_search_window`) を経て、
+    手動選定した6件の固定リスト (旧実装) から動的選定に切り替える
+    (成功窓で候補を広く取り直すため)。
+    """
+    events = _review20_mod._select_review_events()[:CAPTURE_MAX_TARGETS]
+    return tuple(
+        CaptureTarget(
+            video_id=ev["video_id"], side=ev["side"], game_idx=ev["game_idx"],
+            before_t_sec=ev["before_t_sec"], trigger_sec=ev["t_sec"],
+            expected_n=ev["expected_n"],
+        )
+        for ev in events
+    )
 
 
 def main() -> None:
@@ -167,8 +187,11 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     args = ap.parse_args()
 
+    targets = _build_targets_from_review20_events()
+    print(f"[capture] 採取対象イベント数={len(targets)}")
+
     results: list[dict] = []
-    for target in DEFAULT_TARGETS:
+    for target in targets:
         video_path = args.video_dir / f"video_{target.video_id}.mp4"
         if not video_path.is_file():
             print(f"[capture] SKIP {target.video_id}: 動画ファイル不在 ({video_path})")
