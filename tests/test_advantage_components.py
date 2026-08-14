@@ -1327,9 +1327,13 @@ def test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_boar
     monkeypatch,
 ) -> None:
     """片側のみ連鎖中 (1P終了=受け側、2P継続=攻撃側) の間、モデル評価に渡る
-    盤面は 1P=呼出側から渡されたライブ盤面・2P=凍結仮想盤面 (board_p2_after)
-    になる (攻撃側の生盤面は連鎖アニメ中で信用できないため使わない)。"""
+    盤面は 1P=受け側の未着弾分を物理着弾させた仮想盤面 (方向反転修正、
+    2026-08-15、W12対処)・2P=凍結仮想盤面 (board_p2_after) になる
+    (攻撃側の生盤面は連鎖アニメ中で信用できないため使わない)。生盤面を
+    そのまま渡すと「降るまでは無傷」誤判定になる (指摘13方向反転の根因)
+    ため、`land_pending_ojama_onto_board` で別オブジェクトへ差し替わる。"""
     import scripts.visualize_advantage_overlay as vao
+    from src.indicators_v2 import board_ojama_count
 
     result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
     monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
@@ -1348,12 +1352,16 @@ def test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_boar
 
     live_board = _board_with_ojama(9)
     # 1P (受け側=dropped_to_p1=30) の chain_event だけ None化、2P (攻撃側) は継続中。
+    # 会計 snap は既定 (pending=0) のため板差分フォールバックが効く:
+    # incoming_total_p1=30 (dropped30+leftover0)、base(ev1.before_board)=0、
+    # target=30。current(live_board)=9 → remaining=21 (<OJAMA_MAX_DROP_PER_TURN)。
     tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
                    t_sec=1.0, b1=live_board, b2=None)
 
     assert len(captured_boards) == 2  # ライブ再評価でもう1回呼ばれる
     b1_used, b2_used = captured_boards[1]
-    assert b1_used is live_board  # 受け側 (1P) はライブ盤面
+    assert b1_used is not live_board  # 生盤面のままではない(物理着弾済み仮想盤面)
+    assert board_ojama_count(b1_used).raw == pytest.approx(30.0)  # 9(既着弾)+21(今回着弾)=30
     assert b2_used is result_stub.board_p2_after  # 攻撃側 (2P) は凍結仮想盤面のまま
     assert b2_used is not result_stub.board_p2_pre_landing
 
@@ -1480,12 +1488,13 @@ def test_live_defender_reeval_budget_decreases_with_elapsed_time_and_updates_dis
     assert tracker.hold_defender_side == "1P"
 
 
-def test_live_defender_snap_forecast_uses_full_incoming_for_defender_side() -> None:
-    """[指摘13 forecast整合修正、2026-08-15] 受け側の盤面をライブ(着弾前)に
-    差し替える際、forecast は dropped_to_pX を含む全量 (self._incoming_total_pX)
-    に差し替わる。着弾前盤面には dropped 分がまだ一切反映されていないため、
-    forecast が leftover のみだと dropped 分が盤面にも forecast にも
-    現れず脅威を静かに過小評価してしまう回帰の直接テスト。"""
+def test_live_defender_snap_forecast_uses_leftover_after_live_landing() -> None:
+    """[方向反転修正、2026-08-15] 受け側の forecast は「このフレームで物理
+    着弾させた後に残った未着弾分」(leftover_now、呼出側が
+    `land_pending_ojama_onto_board` から得る) に差し替わる。旧実装 (全量
+    self._incoming_total_pX を forecast に積む方式) はモデルが forecast を
+    ほぼ無視する (W12) ため方向反転を解消できず撤回した。凍結経路
+    `_resolve()` と同じ「forecast=leftover」意味論に揃う。"""
     import scripts.visualize_advantage_overlay as vao
     from src.ojama_accounting import OjamaAccountSnapshot
 
@@ -1506,23 +1515,27 @@ def test_live_defender_snap_forecast_uses_full_incoming_for_defender_side() -> N
         net_balance_capped=5.0 - 12.0, forecast_p1=12.0, forecast_p2=5.0,
     )
 
-    snap_1p_defender = tracker._live_defender_snap("1P")
-    assert snap_1p_defender.forecast_p1 == pytest.approx(42.0)  # 全量に差し替わる
+    # 例: 今回のライブ再評価で12個中12個すべて着弾済み(leftover_now=0)とする。
+    snap_1p_defender = tracker._live_defender_snap("1P", leftover_now=0.0)
+    assert snap_1p_defender.forecast_p1 == pytest.approx(0.0)  # 着弾済み=盤面が語る、forecastは0
     assert snap_1p_defender.forecast_p2 == pytest.approx(5.0)  # 攻撃側は元の leftover のまま
-    assert snap_1p_defender.net_balance_capped == pytest.approx(5.0 - 42.0)
+    assert snap_1p_defender.net_balance_capped == pytest.approx(5.0 - 0.0)
 
-    snap_2p_defender = tracker._live_defender_snap("2P")
+    # OJAMA_MAX_DROP_PER_TURN 超過等で一部が着弾しきれず残った場合 (leftover_now=8)。
+    snap_2p_defender = tracker._live_defender_snap("2P", leftover_now=8.0)
     assert snap_2p_defender.forecast_p1 == pytest.approx(12.0)  # 攻撃側(1P)は元のまま
-    assert snap_2p_defender.forecast_p2 == pytest.approx(5.0)  # defender=2Pだが元leftover(5)=incoming(5)で偶然一致
-    assert snap_2p_defender.net_balance_capped == pytest.approx(5.0 - 12.0)
+    assert snap_2p_defender.forecast_p2 == pytest.approx(8.0)  # defender側だけ残量に差し替わる
+    assert snap_2p_defender.net_balance_capped == pytest.approx(8.0 - 12.0)
 
 
-def test_live_defender_reeval_passes_full_incoming_forecast_to_score_advantage(
+def test_live_defender_reeval_passes_landed_leftover_forecast_to_score_advantage(
     monkeypatch,
 ) -> None:
     """`_reevaluate_live_defender` が `_score_advantage` へ渡す snap は
     `_live_defender_snap` 差し替え後の値であることを配線レベルで確認する
-    (self._resolved_snap をそのまま渡す旧実装への回帰を防止)。"""
+    (self._resolved_snap をそのまま渡す旧実装への回帰を防止)。方向反転修正
+    (2026-08-15) 後は forecast が「物理着弾させた残り (leftover_now)」に
+    揃う (盤面側で着弾済み分を表現するため forecast は全量ではない)。"""
     import scripts.visualize_advantage_overlay as vao
 
     # dropped_to_p1=30, leftover_p1=10 -> incoming_total_p1=40 (leftoverのみの10とは異なる値)
@@ -1544,14 +1557,134 @@ def test_live_defender_reeval_passes_full_incoming_forecast_to_score_advantage(
     assert captured_snaps[0].forecast_p1 == pytest.approx(10.0)  # 初回決着 = leftoverのまま
 
     live_board = _board_with_ojama(9)
+    # incoming_total_p1 = dropped(30)+leftover(10) = 40。base(ev1.before_board)=0、
+    # target=40。current(live_board)=9 → remaining=31 (OJAMA_MAX_DROP_PER_TURN=30で
+    # キャップされ dropped_now=30、leftover_now=1)。
     tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
                    t_sec=1.0, b1=live_board, b2=None)
 
     assert len(captured_snaps) == 2
-    # ライブ再評価では forecast_p1 が dropped_to_p1(30)+leftover_p1(10)=40 に差し替わる
-    # (self._resolved_snap.forecast_p1 = leftover のみの 10 ではないことを確認)。
-    assert captured_snaps[1].forecast_p1 == pytest.approx(40.0)
+    # 旧実装 (forecast=incoming全量40) への回帰でないこと、かつ初回決着の
+    # leftover(10)のままでもないこと (=盤面着弾+forecast残りの二重計上防止)。
+    assert captured_snaps[1].forecast_p1 == pytest.approx(1.0)
+    assert captured_snaps[1].forecast_p1 != pytest.approx(40.0)
     assert captured_snaps[1].forecast_p1 != pytest.approx(10.0)
+
+
+# ============================
+# _live_remaining_incoming: 会計優先・盤面差分フォールバック
+# (方向反転修正、2026-08-15、docs/KNOWN_WEAKNESSES.md W12)
+# ============================
+
+
+def test_live_remaining_incoming_prefers_accounting_snapshot_when_available() -> None:
+    """会計スナップショット (`snap.pending_pX`) が正の値を持つ間は、実際に
+    tsumo 設置で降り進んだ分が自然に反映された値をそのまま使う (盤面差分
+    フォールバックより優先、二重計上防止の一次ソース)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 40.0
+    tracker._target_ojama_p1 = 40.0  # base(0)+incoming_total(40)
+    snap = _make_snapshot(pending_p1=15, pending_p2=0)  # 40個中25個は既に降り進んだ想定
+    live_board = _board_with_ojama(0)  # 盤面はまだ空(会計が正なら盤面は見ない)
+
+    remaining = tracker._live_remaining_incoming("1P", live_board, snap)
+    assert remaining == pytest.approx(15.0)  # 会計値をそのまま採用
+
+
+def test_live_remaining_incoming_caps_accounting_value_at_frozen_incoming_total() -> None:
+    """会計値が凍結時の飛来予測を上回っても、凍結時飛来総量を超えない
+    (今回の交換由来分だけを対象にする、無関係な後続予告の混入防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 40.0
+    tracker._target_ojama_p1 = 40.0
+    snap = _make_snapshot(pending_p1=999, pending_p2=0)
+    live_board = _board_with_ojama(0)
+
+    remaining = tracker._live_remaining_incoming("1P", live_board, snap)
+    assert remaining == pytest.approx(40.0)  # incoming_total 上限でクリップ
+
+
+def test_live_remaining_incoming_falls_back_to_board_delta_when_accounting_zeroed() -> None:
+    """会計が0を示す (baseline reset 等でこの交換を追跡できていない) のに
+    凍結時飛来予測が正の場合、盤面上で既に増えた分を凍結時飛来量から
+    控除した残りへフォールバックする (二重計上防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 40.0
+    tracker._target_ojama_p1 = 40.0  # base(0)+incoming_total(40)
+    snap = _make_snapshot(pending_p1=0, pending_p2=0)  # 会計リセット済み(取れない)
+    live_board = _board_with_ojama(9)  # 盤面には既に9個降り進んでいる
+
+    remaining = tracker._live_remaining_incoming("1P", live_board, snap)
+    assert remaining == pytest.approx(31.0)  # 40 - 9
+
+
+def test_live_remaining_incoming_none_snapshot_uses_board_delta_fallback() -> None:
+    """snap=None (省略、backwards compat) でも盤面差分フォールバックで安全に
+    動作する (会計未配線の呼出元でも no-op にならない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p1 = 40.0
+    tracker._target_ojama_p1 = 40.0
+    live_board = _board_with_ojama(9)
+
+    remaining = tracker._live_remaining_incoming("1P", live_board, None)
+    assert remaining == pytest.approx(31.0)
+
+
+def test_live_remaining_incoming_zero_when_defender_side_has_no_incoming() -> None:
+    """今回の交換で受け側でない側 (incoming_total<=0) は常に0
+    (会計・盤面のノイズに関わらず脅威を作り出さない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._incoming_total_p2 = 0.0
+    tracker._target_ojama_p2 = 0.0
+    snap = _make_snapshot(pending_p1=0, pending_p2=999)  # 別枠の予告(無関係)混入を模擬
+    live_board = _board_with_ojama(9)
+
+    remaining = tracker._live_remaining_incoming("2P", live_board, snap)
+    assert remaining == pytest.approx(0.0)
+
+
+def test_reevaluate_live_defender_landed_board_plus_leftover_equals_target_no_double_count(
+    monkeypatch,
+) -> None:
+    """[二重計上防止の直接テスト] 物理着弾後の盤面おじゃま数 + forecast
+    (leftover_now) の和が、凍結時に見積もった着弾目標総量
+    (`_target_ojama_p1` = base + incoming_total) とちょうど一致すること
+    (盤面が語る分と forecast が語る分が重複も欠落もしていない不変条件)。"""
+    import scripts.visualize_advantage_overlay as vao
+    from src.indicators_v2 import board_ojama_count
+
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    result_stub.leftover_p1 = 10  # incoming_total_p1 = 40
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    captured: list = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        captured.append((b1, snap))
+        return 0.0, 0.5, []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    live_board = _board_with_ojama(9)
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board, b2=None)
+
+    assert len(captured) == 2
+    b1_used, snap_used = captured[1]
+    assert board_ojama_count(b1_used).raw + snap_used.forecast_p1 == pytest.approx(
+        tracker._target_ojama_p1)
 
 
 # ============================

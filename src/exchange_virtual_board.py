@@ -342,3 +342,61 @@ def resolve_mutual_exchange(
         p1_dead=board_p1.is_dead(), p2_dead=board_p2.is_dead(),
         chain_result_p1=chain_result_p1, chain_result_p2=chain_result_p2,
     )
+
+
+# ============================
+# 未着弾おじゃまの単体着弾 (2026-08-15、指摘13「方向反転」修正)
+# ============================
+#
+# W12 (docs/KNOWN_WEAKNESSES.md): 学習モデルは forecast (予告おじゃま) を
+# ほぼ無視する (重要度26位/47列、ON_FIELD_CAP=72で飽和)。受け側の
+# 「未着弾=クリーンな生盤面」をそのままモデルへ渡すと「降るまでは無傷」と
+# 誤認識され、有利不利判定の方向そのものが反転する (指摘13実測: 1P 87%)。
+# 対処は「未着弾分を物理的に着弾させた仮想盤面をモデルに見せる」ことで
+# forecast 特徴に頼らず盤面そのものから脅威を伝える。着弾原理
+# (ChainSimulator.drop_ojama + _deterministic_ojama_seed) と1ターン上限
+# (OJAMA_MAX_DROP_PER_TURN) は本モジュール既存資産をそのまま再利用し、
+# 新しい着弾ロジックは書かない (resolve_mutual_exchange と同じ部品)。
+
+# 単体着弾専用のシード salt (前2つと衝突しないための固定値、マジック
+# ナンバー回避の定数定義)。
+_OJAMA_SEED_SALT_LIVE_DEFENDER: int = 0xD44
+
+
+def land_pending_ojama_onto_board(
+    board: Board, opponent_board: Board, pending_count: float,
+    simulator: "ChainSimulator | None" = None,
+) -> "tuple[Board, int, int]":
+    """未着弾おじゃまを1ターン上限まで物理的に着弾させた仮想盤面を返す。
+
+    `resolve_mutual_exchange` の着弾ステップ (drop_ojama + 決定論的シード +
+    `OJAMA_MAX_DROP_PER_TURN` 上限) を単体盤面向けに切り出したもの。
+    呼び出し側 (`ResolvedExchangeTracker._reevaluate_live_defender`) が
+    「受け側の生盤面 (未着弾) をそのままモデルへ渡すと無傷に見える」
+    問題 (指摘13) を、既存の着弾原理だけで解消するために使う。
+
+    Args:
+        board: 着弾前の受け側盤面 (生値、STABLE確定盤面)。
+        opponent_board: シード導出用の相手側盤面 (盤面の組合せで決定論的に
+            変える、`_deterministic_ojama_seed` と同じ規約)。
+        pending_count: まだ着弾していない予告おじゃま数 (0以上、呼び出し
+            側の会計値をそのまま渡してよい、非整数は四捨五入する)。
+        simulator: 再利用する `ChainSimulator` (省略時は新規生成)。
+
+    Returns:
+        (着弾後仮想盤面, 実際に着弾させた数, 着弾しきれず残った数)。
+        2つ目・3つ目の和は `round(pending_count)` と一致する
+        (`OJAMA_MAX_DROP_PER_TURN` 超過分は3つ目=leftover に回る、
+        `MutualExchangeResult.leftover_pX` と同じ意味論)。
+    """
+    total = max(0, int(round(pending_count)))
+    dropped = min(total, OJAMA_MAX_DROP_PER_TURN)
+    if dropped <= 0:
+        return board, 0, total
+    sim = simulator if simulator is not None else ChainSimulator(
+        exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED,
+    )
+    seed = _deterministic_ojama_seed(
+        board, opponent_board, dropped, _OJAMA_SEED_SALT_LIVE_DEFENDER)
+    landed_board = sim.drop_ojama(board, dropped, seed=seed)
+    return landed_board, dropped, total - dropped

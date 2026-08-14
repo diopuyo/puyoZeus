@@ -452,3 +452,110 @@ def test_pre_landing_deterministic_across_repeated_calls():
         opp, opp, gen_p1_ojama=6, gen_p2_ojama=9, pending_p1=0, pending_p2=0)
     assert r1.board_p1_pre_landing == r2.board_p1_pre_landing
     assert r1.board_p2_pre_landing == r2.board_p2_pre_landing
+
+
+# ============================
+# land_pending_ojama_onto_board (2026-08-15、指摘13「方向反転」修正)
+# ============================
+# W12 (docs/KNOWN_WEAKNESSES.md): 学習モデルは forecast (予告おじゃま) を
+# ほぼ無視するため、受け側の未着弾おじゃまを物理的に着弾させた仮想盤面を
+# モデルへ渡す必要がある。resolve_mutual_exchange と同じ着弾原理
+# (drop_ojama + 決定論的シード + OJAMA_MAX_DROP_PER_TURN 上限) の単体版。
+
+
+def test_land_pending_ojama_zero_pending_returns_same_board_unchanged():
+    """未着弾量0なら盤面はそのまま (同一オブジェクト、着弾なし)。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = make_no_chain_board()
+    opp = Board()
+    landed, dropped, leftover = land_pending_ojama_onto_board(board, opp, 0.0)
+    assert landed is board
+    assert dropped == 0
+    assert leftover == 0
+
+
+def test_land_pending_ojama_below_cap_lands_all_and_no_leftover():
+    """1ターン上限 (OJAMA_MAX_DROP_PER_TURN) 以下ならその個数を全量着弾させ、
+    leftover は0になる。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = Board()  # 空盤面、十分な空きあり
+    opp = Board()
+    landed, dropped, leftover = land_pending_ojama_onto_board(board, opp, 20.0)
+    assert dropped == 20
+    assert leftover == 0
+    placed = sum(1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+                 if landed.get(r, c) == COLOR_OJAMA)
+    assert placed == 20
+
+
+def test_land_pending_ojama_over_cap_clips_at_max_drop_per_turn():
+    """OJAMA_MAX_DROP_PER_TURN を超える量は上限までしか着弾させず、超過分は
+    leftover として返す (resolve_mutual_exchange と同じ1ターン上限規約)。"""
+    from src.exchange_virtual_board import (
+        OJAMA_MAX_DROP_PER_TURN,
+        land_pending_ojama_onto_board,
+    )
+
+    board = Board()
+    opp = Board()
+    landed, dropped, leftover = land_pending_ojama_onto_board(board, opp, 45.0)
+    assert dropped == OJAMA_MAX_DROP_PER_TURN
+    assert leftover == 45 - OJAMA_MAX_DROP_PER_TURN
+    placed = sum(1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+                 if landed.get(r, c) == COLOR_OJAMA)
+    assert placed == OJAMA_MAX_DROP_PER_TURN
+
+
+def test_land_pending_ojama_does_not_mutate_input_board():
+    """入力盤面 (board) 自体は変更されない (drop_ojama が内部で copy() する
+    既存契約をそのまま継承していることの確認)。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = Board()
+    opp = Board()
+    before_count = sum(1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+                        if board.get(r, c) == COLOR_OJAMA)
+    land_pending_ojama_onto_board(board, opp, 20.0)
+    after_count = sum(1 for r in range(BOARD_ROWS) for c in range(BOARD_COLS)
+                       if board.get(r, c) == COLOR_OJAMA)
+    assert before_count == after_count == 0
+
+
+def test_land_pending_ojama_deterministic_across_repeated_calls():
+    """同一入力 (盤面2枚+個数) には常に同一結果を返す (再現性、既存
+    _deterministic_ojama_seed の思想を踏襲)。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = Board()
+    opp = make_no_chain_board()
+    r1, _, _ = land_pending_ojama_onto_board(board, opp, 17.0)
+    r2, _, _ = land_pending_ojama_onto_board(board, opp, 17.0)
+    assert r1 == r2
+
+
+def test_land_pending_ojama_negative_count_rounds_to_zero():
+    """呼び出し側が誤って負値を渡しても0扱い (fail-safe、drop_ojama の
+    ValueError を呼び出し側まで伝播させない)。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = make_no_chain_board()
+    opp = Board()
+    landed, dropped, leftover = land_pending_ojama_onto_board(board, opp, -5.0)
+    assert landed is board
+    assert dropped == 0
+    assert leftover == 0
+
+
+def test_land_pending_ojama_custom_simulator_reused():
+    """呼び出し側が渡した ChainSimulator インスタンスでも同じ結果になる。"""
+    from src.exchange_virtual_board import land_pending_ojama_onto_board
+
+    board = Board()
+    opp = Board()
+    shared_sim = ChainSimulator()
+    landed, dropped, leftover = land_pending_ojama_onto_board(
+        board, opp, 10.0, simulator=shared_sim)
+    assert dropped == 10
+    assert leftover == 0
