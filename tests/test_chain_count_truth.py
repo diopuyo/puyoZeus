@@ -23,9 +23,13 @@ from src.chain_count_ocr import (
 )
 from src.chain_count_truth import (
     FULL_CHAIN_COUNT_CANDIDATES,
+    HIGH_CONFIDENCE_SCORE_RATIO_MAX,
+    HIGH_CONFIDENCE_SCORE_RATIO_MIN,
     ChainCountTruthResult,
+    HighConfidenceScoreResult,
     read_chain_count_truth,
     resolve_chain_count_truth,
+    select_chain_count_high_confidence_band,
 )
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
 
@@ -206,6 +210,88 @@ def test_read_chain_count_truth_end_to_end_agrees_with_real_templates() -> None:
     assert result.telop_chain_count == 5
     assert result.chain_count == 5
     assert result.reason == "agree"
+
+
+# =============================================================================
+# select_chain_count_high_confidence_band (タスク#7 追加、2026-08-14)
+# =============================================================================
+
+
+def test_high_confidence_band_constants() -> None:
+    assert HIGH_CONFIDENCE_SCORE_RATIO_MIN == pytest.approx(0.9)
+    assert HIGH_CONFIDENCE_SCORE_RATIO_MAX == pytest.approx(1.1)
+
+
+def test_high_confidence_band_accepts_exact_ratio_match() -> None:
+    """下限近似にぴったり一致する delta_score (比率1.0) は高信頼で採用される。"""
+    delta = _approx_min_chain_score(9)  # =27880 (video_c54 2P game_idx=9 相当)
+    result = select_chain_count_high_confidence_band(delta)
+    assert isinstance(result, HighConfidenceScoreResult)
+    assert result.chain_count == 9
+    assert result.is_pure_chain_score is True
+    assert result.reason == "high_confidence"
+    assert result.ratio == pytest.approx(1.0)
+
+
+def test_high_confidence_band_rejects_non_multiple_of_10() -> None:
+    """10の倍数でない delta_score は落下ボーナス混入疑いとして即座に拒否。"""
+    delta = _approx_min_chain_score(9) + 1  # 27881、非10倍数
+    result = select_chain_count_high_confidence_band(delta)
+    assert result.chain_count is None
+    assert result.ratio is None
+    assert result.is_pure_chain_score is False
+    assert result.reason == "contaminated"
+
+
+def test_high_confidence_band_accepts_real_video_c54_event_via_all_clear_hypothesis() -> None:
+    """video_c54 2P game_idx=9 実測 delta_score=30920 (真の連鎖数9) は高信頼で採用される。
+
+    素朴な比率 (30920/27880≈1.109) だけを見ると帯の外に見えるが、
+    `score_consistency_ratio` は全消し繰越仮説 (+ALL_CLEAR_BONUS=2100) も
+    候補にし対数距離が近い方を採用するため、実際の比率は
+    30920/(27880+2100)≈1.031 となり高信頼帯に入る。この実データ整合性は
+    `score_consistency_ratio` 側の既存仕様 (allow_all_clear_carryover=True)
+    をそのまま利用しているだけであり、本関数側で特別扱いはしていない。
+    """
+    delta = 30920
+    result = select_chain_count_high_confidence_band(delta)
+    assert result.chain_count == 9
+    assert result.is_pure_chain_score is True
+    assert result.reason == "high_confidence"
+    assert result.ratio == pytest.approx(30920 / (27880 + 2100), rel=1e-6)
+    assert HIGH_CONFIDENCE_SCORE_RATIO_MIN <= result.ratio <= HIGH_CONFIDENCE_SCORE_RATIO_MAX
+
+
+def test_high_confidence_band_rejects_ratio_outside_tight_band() -> None:
+    """10の倍数だが最有力候補の比率が [0.9, 1.1] の外になる合成例。
+
+    5連鎖下限近似 (4840) のちょうど2倍 (9680) は、既存の緩い整合性チェック
+    ([0.5, 2.0]) は満たすが、本関数のタイトな高信頼帯では不採用になることを
+    確認する (テロップ非依存の独立系統として厳格さを優先する設計)。
+    """
+    delta = 9680
+    result = select_chain_count_high_confidence_band(delta)
+    assert result.chain_count is None
+    assert result.is_pure_chain_score is True
+    assert result.reason == "ratio_out_of_band"
+    assert result.ratio is not None
+    assert not (HIGH_CONFIDENCE_SCORE_RATIO_MIN <= result.ratio <= HIGH_CONFIDENCE_SCORE_RATIO_MAX)
+
+
+def test_high_confidence_band_no_candidates() -> None:
+    """candidates が空集合の場合は no_candidates (呼び出し側の誤り検知用)。"""
+    result = select_chain_count_high_confidence_band(40, candidates=frozenset())
+    assert result.chain_count is None
+    assert result.ratio is None
+    assert result.is_pure_chain_score is True
+    assert result.reason == "no_candidates"
+
+
+def test_high_confidence_band_zero_or_negative_delta_is_contaminated() -> None:
+    """delta_score<=0 は連鎖が起きていない (純粋性チェックで False → contaminated)。"""
+    result = select_chain_count_high_confidence_band(0)
+    assert result.chain_count is None
+    assert result.reason == "contaminated"
 
 
 def test_read_chain_count_truth_no_popup_returns_unknown() -> None:
