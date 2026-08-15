@@ -1688,6 +1688,191 @@ def test_reevaluate_live_defender_landed_board_plus_leftover_equals_target_no_do
 
 
 # ============================
+# 指摘14 案1: enable_live_defender_strict (既定OFF)
+# ============================
+# 背景 (docs/DEMO_REVIEW_2026-08-13.md #14): 従来の XOR 条件
+# ((ev1 is None) != (ev2 is None)) だけでは defender_side (_decisive_defender
+# が返す、決着計算時点の飛来量が多い側) 自身の chain_event が実際に None で
+# あるかを検証しない。両者が本当に同時に本線を撃ち合い攻撃側のアニメだけ
+# 先に終わったケースでも同じ XOR が成立し、defender_side が実はまだ連鎖
+# 継続中 (自由な受け側ではない) にもかかわらず着地前の綺麗な盤面で
+# 再評価してしまう (実測: 589個飛来の2Pに誤って生存率18.9%を5.2秒表示)。
+
+
+def test_live_defender_strict_default_off_still_misfires_on_still_chaining_defender(
+    monkeypatch,
+) -> None:
+    """strict省略時 (False、backwards compat) は、defender_side (2P) 自身の
+    chain_event がまだ非None (=2P自身も本線を撃ち合い継続中) でも、従来の
+    XOR 条件だけで再評価が起動してしまう (指摘14の誤爆が既定 OFF 時は
+    温存されていることの確認、退行検出用)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p2=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    live_board = _board_with_ojama(1)
+    # 1P (攻撃側) の ev だけ None化。2P (defender=_decisive_defender の判定、
+    # dropped_to_p2=30) 自身はまだ連鎖継続中 (ev2 は非None)。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=None, b2=live_board)
+    assert len(calls) == 2  # strict省略=False なので誤爆再評価が起きる (旧経路と同一)
+
+
+def test_live_defender_strict_skips_reeval_when_defender_still_chaining(monkeypatch) -> None:
+    """[指摘14 案1本体] strict=True では、defender_side (2P) 自身の
+    chain_event がまだ非None の間は再評価をスキップし直前の保持値を維持する
+    (実測 589個飛来ケースの再現、誤爆修正の直接確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p2=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    held = tracker.hold_adv
+    live_board = _board_with_ojama(1)
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=None, b2=live_board)
+    assert len(calls) == 1  # strict=True で誤爆を回避、再評価されない
+    assert tracker.hold_adv == held  # 保持値も直前のまま (退行なし)
+
+
+def test_live_defender_strict_still_reevaluates_when_defender_truly_free(monkeypatch) -> None:
+    """[指摘14 案1の副作用チェック] defender_side (1P) 自身の chain_event が
+    実際に None (=本当に自由行動中) の正当なケースは、strict=True でも従来
+    通り再評価される (指摘13が意図した挙動を壊さないことの確認、既存の
+    test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_board
+    と同じ盤面組み合わせを strict=True で再確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    live_board = _board_with_ojama(9)
+    # 1P (defender、dropped_to_p1=30) 自身の ev が None (=本当に自由行動中)、
+    # 2P (攻撃側) は継続中。
+    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+                   t_sec=1.0, b1=live_board, b2=None)
+    assert len(calls) == 2  # 正当なケースは strict でも再評価される
+
+
+def test_live_defender_strict_flag_default_is_false() -> None:
+    """コンストラクタ既定値の後方互換確認 (省略時 False)。"""
+    import scripts.visualize_advantage_overlay as vao
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    assert tracker._enable_live_defender_strict is False
+
+
+# ============================
+# 指摘14 案2: enable_resolved_kill_override (既定OFF)
+# ============================
+# 背景: kill_override はライブ per-frame 経路にのみ配線されており、決着
+# ホールド中 (hold_adv/hold_p1 がそのまま disp_adv/disp_p1 に代入される経路)
+# には未配線だった。pending/room 比が致死水準 (実測 589/50≈11.8 ≫
+# KILL_RATIO_FULL=1.5) でも安全弁が発火しない事故の直接対処。
+
+
+def test_hold_after_kill_override_noop_when_not_lethal() -> None:
+    """飛来量が小さい (KILL_MIN_PENDING 未満) 間は hold_adv/hold_p1 を変えない
+    (kill_override 本体の既存ノーオップ条件をそのまま踏襲、新規判定を足さない)。"""
+    import scripts.visualize_advantage_overlay as vao
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker.hold_adv, tracker.hold_p1 = 20.0, 0.6
+    tracker._incoming_total_p1, tracker._incoming_total_p2 = 10.0, 0.0
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(0)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    assert adv == pytest.approx(20.0)
+    assert p1 == pytest.approx(0.6)
+
+
+def test_hold_after_kill_override_overrides_lethal_hold_toward_survivor(monkeypatch) -> None:
+    """[指摘14 案2本体] pending/room 比が致死水準 (実測ケースを模した
+    589 pending / room≈50) では hold_adv/hold_p1 が生存側 (1P) へ完全に
+    上書きされる (kill_override(g=1) と同値になることを直接確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    # 誤爆時に表示されていた値を模す (2P の実際の生存率18.9%相当、1P視点+62)。
+    tracker.hold_adv, tracker.hold_p1 = 62.2, 0.811
+    tracker._incoming_total_p1, tracker._incoming_total_p2 = 0.0, 589.0
+    b1 = _board_with_ojama(0)
+    b2 = _board_with_ojama(22)  # room2 = 72-22 = 50 (実測に近似)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    expected_adv = vao.kill_override(
+        tracker.hold_adv, tracker._incoming_total_p1, tracker._incoming_total_p2,
+        vao.board_room(b1), vao.board_room(b2))
+    assert adv == pytest.approx(expected_adv)
+    assert adv == pytest.approx(100.0)  # 致死度差が KILL_RATIO_FULL 以上 → 完全上書き
+    assert p1 == pytest.approx(vao.adv_to_winprob(100.0))
+
+
+def test_hold_after_kill_override_reuses_existing_room_and_pending_no_new_heuristic() -> None:
+    """室/pending 比の材料は既存の観測量のみ再利用する (新しいヒューリスティクス
+    を増やさない): pending=self._incoming_total_p1/p2 (指摘11の着弾完了判定と
+    同一値)、room=モジュール既存の board_room(b1)/board_room(b2)。"""
+    import scripts.visualize_advantage_overlay as vao
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker.hold_adv, tracker.hold_p1 = 0.0, 0.5
+    tracker._incoming_total_p1, tracker._incoming_total_p2 = 50.0, 60.0
+    b1, b2 = _board_with_ojama(3), _board_with_ojama(7)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    expected = vao.kill_override(
+        0.0, 50.0, 60.0, vao.board_room(b1), vao.board_room(b2))
+    assert adv == pytest.approx(expected)
+    if adv == 0.0:
+        assert p1 == pytest.approx(0.5)
+    else:
+        assert p1 == pytest.approx(vao.adv_to_winprob(adv))
+
+
+def test_generate_source_gates_hold_kill_override_calls_by_flag() -> None:
+    """静的回帰テスト: generate() ソース中の hold_after_kill_override 呼び出し
+    2箇所 (resolved_active時/just_deactivated時) が両方とも
+    `enable_resolved_kill_override` の if ブロック配下にあることを固定する
+    (既定 OFF 時に絶対に呼ばれないことの構造的保証)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.generate)
+    code_only = src.replace(vao.generate.__doc__ or "", "")  # docstring内の言及を除外
+    call_pattern = "resolved_tracker.hold_after_kill_override("
+    assert code_only.count(call_pattern) == 2
+    # 各出現の直前行が enable_resolved_kill_override の if であることを確認。
+    lines = code_only.splitlines()
+    hit_lines = [i for i, line in enumerate(lines) if call_pattern in line]
+    assert len(hit_lines) == 2
+    for idx in hit_lines:
+        preceding = "\n".join(lines[max(0, idx - 2):idx])
+        assert "if enable_resolved_kill_override:" in preceding
+
+
+def test_generate_signature_new_flags_default_false() -> None:
+    """generate() の新規フラグ2つは既定 False (backwards compat、既存呼出元
+    はキーワード省略可)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    sig = inspect.signature(vao.generate)
+    assert sig.parameters["enable_resolved_live_defender_strict"].default is False
+    assert sig.parameters["enable_resolved_kill_override"].default is False
+
+
+# ============================
 # 評価済みモデル成果物の直読み (2026-08-14 coordinator指示)
 # ============================
 # 「評価したモデル (AUC 0.657/終盤0.839) = デモが使うモデル」を構造的に
