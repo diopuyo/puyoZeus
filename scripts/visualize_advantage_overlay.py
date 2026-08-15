@@ -361,6 +361,21 @@ RESOLVED_HOLD_LANDING_MAX_WAIT_SEC: float = (
     math.ceil(PENDING_ABS_CAP / THEORY_DROP_PER_TURN) * iv.SEC_PER_HAND
 )
 
+# [指摘14 案1、2026-08-15] `enable_live_defender_strict=True` 時に
+# 「defender_side が今まさに自分の連鎖を処理中」とみなす状態機械 state の集合
+# (ResolvedExchangeTracker docstring 指摘14節参照)。BoardState.CHAIN =
+# 「連鎖中(消去+重力)」そのもの、BoardState.GRAVITY_SETTLE = その直後の
+# 重力settle/着地完了までの継続window (board_state_machine.py の docstring
+# 通り「CHAIN 終了後から board が物理的に静止するまでの window」)。
+# 実測 (計装ログ logs/_diag_issue14_reeval_calls_2026-08-15.log) で、
+# 誤爆は旧連鎖の chain_event hold が切れてから新連鎖の trigger が検出
+# されるまでの GRAVITY_SETTLE 区間で発生することを確認済み。
+# BoardState.TSUMO_FALL/OJAMA_FALL は意図的に含めない (指摘13が意図した
+# 「受け側は連鎖中も置き続ける」正当な自由行動を塞がないため)。
+_LIVE_DEFENDER_BUSY_STATES: frozenset["BoardState"] = frozenset({
+    BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
+})
+
 
 class ResolvedExchangeTracker:
     """両者同時発火の決着を先読みし、連鎖終了まで固定表示する (#9 対処)。
@@ -465,20 +480,43 @@ class ResolvedExchangeTracker:
 
     [指摘14 案1、2026-08-15、既定OFF、docs/DEMO_REVIEW_2026-08-13.md #14]
     `enable_live_defender_strict=True` の場合、`_reevaluate_live_defender` の
-    起動条件を厳格化する。従来 (既定) は「ちょうど片側の chain_event が
-    None」という XOR 条件のみで defender_side (`_decisive_defender` が返す、
-    決着計算時点の飛来量が多い側) を「自由な受け側」とみなし生盤面で
-    再評価していたが、これは defender_side 自身の chain_event が実際に
-    None であることを検証していなかった。両者が本当に同時に本線を撃ち合い
-    片方 (攻撃側) のアニメだけ先に終わった場合も同じ XOR が成立してしまい、
-    まだ連鎖継続中の defender_side (受け側のはずが実際は連鎖中) の着地前
-    盤面 (おじゃま僅少) をモデルへ渡し致死量を見落とす (実測: 589個飛来の
-    2P に誤って hold_p1=81.1% (=2P生存18.9%) を5.2秒表示、正しくは
-    96.1%)。strict=True では defender_side 自身の ev (ev1/ev2 いずれか) が
-    None であることを追加条件とし、成立しなければ再評価をスキップして
-    直前の保持値を維持する (安全側、新しい推測ロジックは増やさず既存の
-    ev1/ev2 観測をそのまま使う)。既定 False = 従来挙動と完全に同一
-    (backwards compat)。
+    起動条件を厳格化する。
+
+    【誤爆の実機構(計装で確定、推測でなく実測)】
+    実動画 (review_demo_2026-08-12.mp4、絶対t=195.3秒) で
+    `scripts/_diag_issue14_reeval_calls_2026-08-15.py` により
+    `_reevaluate_live_defender` の全呼び出しを計装したところ、致死退行を
+    引き起こした初回呼び出しは ev1_cc=9(1P、継続中)/ev2 が None
+    (defender=2P) という XOR 条件下で発生していたが、そのフレームの
+    defender(2P)自身の **状態機械 state は `BoardState.GRAVITY_SETTLE`**
+    (直前の小連鎖の消去は終わったが重力 settle 中でまだ物理的に静止して
+    いない) であり、次の瞬間には2Pがさらに7連鎖という**本物の別の連鎖**を
+    新規発火させていた。つまり ev(ChainEvent)は「trigger 検知フレームで
+    1度だけ発行され chain_hold_base_sec+chain_hold_per_step_sec×chain_count
+    秒だけ保持後 None に戻る」パルス方式 (src/chain_detector.py
+    VideoChainTracker._try_emit_event 参照) のため、**旧連鎖の hold が
+    切れてから新連鎖の trigger が検出されるまでの短い settle 区間で
+    ev が None になる瞬間が生じる**。この区間は defender が真に「自由」
+    なのではなく、直前の消去の重力settleの真っ最中 (=すぐ次の本物の連鎖に
+    突入する寸前) であり、chain_event の有無だけでは判定できない
+    (旧・案1初版はここで defender_ev is not None だけを見ており、この
+    settle gap では ev が None のため誤って「自由」と判定し続けてしまい
+    A/B実測でも strict が baseline と1桁も違わない=無効化していた)。
+
+    【対処】状態機械の `state` (`r_p1.state`/`r_p2.state`、既存の
+    BoardStateMachine 出力、新しい推測ロジックではない) を使う。
+    defender_side 自身の state が `_LIVE_DEFENDER_BUSY_STATES`
+    (= {BoardState.CHAIN, BoardState.GRAVITY_SETTLE}) に含まれる間は
+    「現在まさに連鎖(消去+重力)を処理中」と判定し再評価をスキップして
+    直前の保持値を維持する。`BoardState.CHAIN` は毎フレーム直接観測される
+    (chain_event のようなパルス+hold-window方式ではない) ため、旧連鎖の
+    hold 切れ〜新連鎖 trigger 検知までの gap でも「defender は今まさに
+    連鎖中」を取りこぼさない。`BoardState.TSUMO_FALL`(ツモ設置)・
+    `BoardState.OJAMA_FALL`(おじゃま着弾) は意図的に busy 扱いしない
+    (defender が普通にツモを置いている/着弾中は指摘13が意図した
+    「受け側は連鎖中も置き続けており応手力が変化する」正当な自由行動
+    そのものであり、ここを塞ぐと指摘13の効果自体が失われる)。
+    既定 False = 従来挙動と完全に同一 (backwards compat)。
     """
 
     def __init__(
@@ -741,7 +779,7 @@ class ResolvedExchangeTracker:
     def _reevaluate_live_defender(
         self, b1: "Board | None", b2: "Board | None",
         snap: "OjamaAccountSnapshot | None" = None,
-        ev1: "ChainEvent | None" = None, ev2: "ChainEvent | None" = None,
+        state1: "BoardState | None" = None, state2: "BoardState | None" = None,
     ) -> None:
         """[指摘13、2026-08-15] 片側のみ連鎖中の間、受け側の現在盤面+残り
         時間逓減で hold_adv/hold_p1/hold_drivers を再評価する。
@@ -761,11 +799,14 @@ class ResolvedExchangeTracker:
             が保持する現在の `OjamaAccountSnapshot` (`_live_remaining_incoming`
             参照)。省略時 (None、backwards compat) は会計フォールバック側の
             盤面差分のみで残量を求める。
-        ev1/ev2: [指摘14 案1、2026-08-15 追加の optional 引数] 呼出側 `update()`
-            が同フレームで観測した生の chain_event。`enable_live_defender_strict
-            =True` の場合のみ、defender_side 自身の ev が実際に None であるかの
-            検証に使う (クラス docstring 指摘14節参照)。strict=False (既定) では
-            未使用 (省略しても backwards compat)。
+        state1/state2: [指摘14 案1、2026-08-15 追加の optional 引数、案1初版の
+            ev1/ev2 から差し替え] 呼出側 `update()` が同フレームで観測した
+            `r_p1.state`/`r_p2.state` (状態機械 BoardState)。
+            `enable_live_defender_strict=True` の場合のみ、defender_side 自身の
+            state が `_LIVE_DEFENDER_BUSY_STATES` (今まさに連鎖処理中) に
+            含まれるかの検証に使う (クラス docstring 指摘14節、chain_event
+            ではなく state を使う理由の実測根拠を参照)。strict=False (既定)
+            では未使用 (省略しても backwards compat)。
 
         [方向反転修正、2026-08-15、docs/KNOWN_WEAKNESSES.md W12]
         受け側の生盤面 (未着弾=クリーン) を直接モデルへ渡す限り、forecast を
@@ -788,14 +829,19 @@ class ResolvedExchangeTracker:
         if defender_side is None:
             return  # 脅威なし(相殺で完全相殺等)は再評価対象なし、既存値を保持
         if self._enable_live_defender_strict:
-            # [指摘14 案1] defender_side 自身の ev が None (=本当に連鎖アニメが
-            # 終わり自由行動中) であることを追加確認する。XOR 条件だけでは
-            # defender_side の判定が「攻撃側の ev が None」なケース (= 本当は
-            # まだ両者とも撃ち合い中で defender_side 側が連鎖継続中) と区別
-            # できない (クラス docstring 指摘14節参照)。不一致なら再評価せず
-            # 直前の保持値を維持する (安全側、新規推測ロジックは追加しない)。
-            defender_ev = ev1 if defender_side == "1P" else ev2
-            if defender_ev is not None:
+            # [指摘14 案1、状態機械 state 版] defender_side 自身が今まさに
+            # 自分の連鎖 (消去+重力) を処理中でないことを状態機械 state で
+            # 確認する。chain_event の有無 (旧版) は「trigger 検知フレームで
+            # 1度だけ発行され一定時間 hold 後 None に戻る」パルス方式のため、
+            # 旧連鎖の hold 切れ〜新連鎖 trigger 検知までの settle gap で
+            # 「defender 自身の ev が None」になる瞬間が生じ、そこを「自由」と
+            # 誤判定していた (実測: logs/_diag_issue14_reeval_calls_2026-08-15.log、
+            # クラス docstring 指摘14節参照)。state は毎フレーム直接観測される
+            # ため gap が生じない。不一致 (busy) なら再評価せず直前の保持値を
+            # 維持する (安全側、新規推測ロジックは追加せず既存の state 観測を
+            # そのまま使う)。
+            defender_state = state1 if defender_side == "1P" else state2
+            if defender_state in _LIVE_DEFENDER_BUSY_STATES:
                 return
         attacker_event = self._ev2 if defender_side == "1P" else self._ev1
         if attacker_event is None:
@@ -1041,7 +1087,11 @@ class ResolvedExchangeTracker:
             # 受け側自由行動)。従来はここも完全凍結ブランチに合流していたが、
             # 受け側成分だけ生値で再評価する (無効時は本行に到達しても何もしない
             # フラグゲートを通らないため、既定挙動は完全に不変)。
-            self._reevaluate_live_defender(b1, b2, snap, ev1=ev1, ev2=ev2)
+            # getattr フォールバック (state 属性を持たない軽量テスト
+            # ダブルとの後方互換用。本番の Signals は必ず state を持つ)。
+            self._reevaluate_live_defender(
+                b1, b2, snap,
+                state1=getattr(r_p1, "state", None), state2=getattr(r_p2, "state", None))
         return True, False
 
 
@@ -3439,13 +3489,20 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         「受け側が自由行動中」と誤分類し、実際にはまだ連鎖継続中の受け側の
         着地前盤面 (おじゃま僅少) をモデルへ渡して致死量を見落とす
         (実測: 589個飛来を受ける2Pに誤って生存率18.9%を5.2秒表示、正しくは
-        3.9%)。True にすると defender_side 自身の chain_event が実際に None
-        であることを追加確認し、不一致なら再評価をスキップして直前の保持値
-        を維持する (`ResolvedExchangeTracker._reevaluate_live_defender` 参照)。
+        3.9%)。計装 (`scripts/_diag_issue14_reeval_calls_2026-08-15.py`) で
+        誤爆の実機構を確認したところ、chain_event の有無 (案1初版) では
+        「旧連鎖の hold が切れてから新連鎖の trigger が検出されるまでの
+        settle gap」を取りこぼすと判明した (この gap では defender 自身は
+        `BoardState.GRAVITY_SETTLE` = 今まさに重力settle中だが ev は既に
+        None)。True にすると defender_side 自身の**状態機械 state**
+        (`r_p1.state`/`r_p2.state`) が `_LIVE_DEFENDER_BUSY_STATES`
+        (= {CHAIN, GRAVITY_SETTLE}) に含まれるかを追加確認し、含まれれば
+        (=今まさに自分の連鎖処理中) 再評価をスキップして直前の保持値を
+        維持する (`ResolvedExchangeTracker._reevaluate_live_defender` 参照)。
+        `TSUMO_FALL`/`OJAMA_FALL` は busy 扱いしない (指摘13が意図した
+        「受け側は連鎖中も置き続ける」正当な自由行動を塞がないため)。
         `enable_resolved_live_defender=False` の場合は無視される (孫フラグ)。
-        既定 False = 従来挙動と完全に同一 (backwards compat)。副作用として、
-        指摘13が意図した正当な「片側だけ本当に終わったケース」の再評価頻度も
-        下がりうる (回帰窓での確認要)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_resolved_kill_override: True で決着ホールド値 (hold_adv/hold_p1)
         にも致死上書き (`kill_override`) を適用する (2026-08-15 指摘14 案2、
         docs/DEMO_REVIEW_2026-08-13.md #14)。従来 (既定 False) は
@@ -4282,9 +4339,11 @@ def main() -> None:
              "条件だけでは「両者が本当に同時に本線を撃ち合い攻撃側のアニメ"
              "だけ先に終わった」ケースを誤って受け側再評価対象にしてしまう "
              "(実測: 589個飛来を受ける側の生存率を18.9%%と誤表示、正しくは"
-             "3.9%%)。defender_side 自身の chain_event が実際に None である"
-             "ことを追加確認する。--resolved-live-defender 無効時は無視。"
-             "既定 OFF = 従来挙動と完全に同一。",
+             "3.9%%)。defender_side 自身の状態機械 state が CHAIN/"
+             "GRAVITY_SETTLE (今まさに自分の連鎖処理中) であることを追加"
+             "確認する (chain_event 有無では settle gap を取りこぼすと計装で"
+             "確認済み、docstring 参照)。--resolved-live-defender 無効時は"
+             "無視。既定 OFF = 従来挙動と完全に同一。",
     )
     ap.add_argument(
         "--resolved-kill-override", action=argparse.BooleanOptionalAction,
