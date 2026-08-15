@@ -1690,22 +1690,37 @@ def test_reevaluate_live_defender_landed_board_plus_leftover_equals_target_no_do
 # ============================
 # 指摘14 案1: enable_live_defender_strict (既定OFF)
 # ============================
-# 背景 (docs/DEMO_REVIEW_2026-08-13.md #14): 従来の XOR 条件
-# ((ev1 is None) != (ev2 is None)) だけでは defender_side (_decisive_defender
-# が返す、決着計算時点の飛来量が多い側) 自身の chain_event が実際に None で
-# あるかを検証しない。両者が本当に同時に本線を撃ち合い攻撃側のアニメだけ
-# 先に終わったケースでも同じ XOR が成立し、defender_side が実はまだ連鎖
-# 継続中 (自由な受け側ではない) にもかかわらず着地前の綺麗な盤面で
-# 再評価してしまう (実測: 589個飛来の2Pに誤って生存率18.9%を5.2秒表示)。
+# 【重要】案1は実装→A/B実測→coordinator指摘 (「ev1/ev2 ベースの向きが逆」)
+# →実機構の計装確認→やり直し、という経緯を辿った (2026-08-15)。
+# 計装 (scripts/_diag_issue14_reeval_calls_2026-08-15.py、対象=
+# review_demo_2026-08-12.mp4 絶対t=195.3秒) で誤爆の初回発生フレームを
+# 直接確認したところ:
+#   ev1_cc=9(1P、継続中) / ev2=None(defender=2P) → 旧XOR条件は成立
+#   だが **defender(2P)自身の状態機械 state は BoardState.GRAVITY_SETTLE**
+#   (直前の小連鎖の消去は終わったが重力settle中でまだ静止していない) で
+#   あり、次のフレームで2Pは別の本物の7連鎖を新規発火させていた。
+# 根因: ChainEvent は「trigger 検知フレームで1度だけ発行され
+# chain_hold_base_sec+chain_hold_per_step_sec×chain_count 秒だけ保持後
+# None に戻る」パルス方式 (src/chain_detector.py VideoChainTracker) のため、
+# 旧連鎖の hold が切れてから新連鎖の trigger が検出されるまでの settle gap
+# で ev が None になる瞬間が生じる。この gap は defender が真に「自由」
+# なのではなく重力settleの真っ最中であり、chain_event の有無だけでは
+# 判定できない (案1初版はここを見誤り、A/B実測で baseline と1桁も
+# 変わらず=無効化していた)。
+# 対処: 状態機械の state (毎フレーム直接観測、chain_event のようなパルス
+# +hold-window方式ではない) を使う。defender_side 自身の state が
+# `_LIVE_DEFENDER_BUSY_STATES` (= {CHAIN, GRAVITY_SETTLE}) に含まれる間は
+# 再評価をスキップする。TSUMO_FALL/OJAMA_FALL は busy 扱いしない
+# (指摘13が意図した「受け側は連鎖中も置き続ける」正当な自由行動を
+# 塞がないため)。
 
 
-def test_live_defender_strict_default_off_still_misfires_on_still_chaining_defender(
-    monkeypatch,
-) -> None:
-    """strict省略時 (False、backwards compat) は、defender_side (2P) 自身の
-    chain_event がまだ非None (=2P自身も本線を撃ち合い継続中) でも、従来の
-    XOR 条件だけで再評価が起動してしまう (指摘14の誤爆が既定 OFF 時は
-    温存されていることの確認、退行検出用)。"""
+def test_live_defender_strict_default_off_still_misfires_on_settle_gap(monkeypatch) -> None:
+    """strict省略時 (False、backwards compat) は、defender_side (2P) 自身が
+    実際には GRAVITY_SETTLE 中 (=直前の連鎖の重力settleの真っ最中、実測
+    595.3秒地点の settle gap を再現) でも、従来の XOR 条件だけで再評価が
+    起動してしまう (指摘14の誤爆が既定 OFF 時は温存されていることの確認、
+    退行検出用)。"""
     import scripts.visualize_advantage_overlay as vao
     stub, calls = _stub_score_advantage_factory()
     monkeypatch.setattr(vao, "_score_advantage", stub)
@@ -1717,17 +1732,21 @@ def test_live_defender_strict_default_off_still_misfires_on_still_chaining_defen
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert len(calls) == 1
     live_board = _board_with_ojama(1)
-    # 1P (攻撃側) の ev だけ None化。2P (defender=_decisive_defender の判定、
-    # dropped_to_p2=30) 自身はまだ連鎖継続中 (ev2 は非None)。
-    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
-                   t_sec=1.0, b1=None, b2=live_board)
+    # 1P (攻撃側) は継続中。2P (defender=_decisive_defender の判定、
+    # dropped_to_p2=30) は ev2 が settle gap で None だが実際は
+    # GRAVITY_SETTLE 中 (実測パターンの再現)。
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(None, 300, state=BoardState.GRAVITY_SETTLE),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=None, b2=live_board)
     assert len(calls) == 2  # strict省略=False なので誤爆再評価が起きる (旧経路と同一)
 
 
-def test_live_defender_strict_skips_reeval_when_defender_still_chaining(monkeypatch) -> None:
-    """[指摘14 案1本体] strict=True では、defender_side (2P) 自身の
-    chain_event がまだ非None の間は再評価をスキップし直前の保持値を維持する
-    (実測 589個飛来ケースの再現、誤爆修正の直接確認)。"""
+def test_live_defender_strict_skips_reeval_during_settle_gap(monkeypatch) -> None:
+    """[指摘14 案1本体、実機構の直接再現] strict=True では、defender_side
+    (2P) 自身が GRAVITY_SETTLE 中 (実測 t=195.3秒の settle gap と同一パターン、
+    ev2 は None だが state2 は busy) の間は再評価をスキップし直前の保持値を
+    維持する (誤爆修正の直接確認)。"""
     import scripts.visualize_advantage_overlay as vao
     stub, calls = _stub_score_advantage_factory()
     monkeypatch.setattr(vao, "_score_advantage", stub)
@@ -1741,16 +1760,44 @@ def test_live_defender_strict_skips_reeval_when_defender_still_chaining(monkeypa
     assert len(calls) == 1
     held = tracker.hold_adv
     live_board = _board_with_ojama(1)
-    tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
-                   t_sec=1.0, b1=None, b2=live_board)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(None, 300, state=BoardState.GRAVITY_SETTLE),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=None, b2=live_board)
     assert len(calls) == 1  # strict=True で誤爆を回避、再評価されない
     assert tracker.hold_adv == held  # 保持値も直前のまま (退行なし)
 
 
-def test_live_defender_strict_still_reevaluates_when_defender_truly_free(monkeypatch) -> None:
-    """[指摘14 案1の副作用チェック] defender_side (1P) 自身の chain_event が
-    実際に None (=本当に自由行動中) の正当なケースは、strict=True でも従来
-    通り再評価される (指摘13が意図した挙動を壊さないことの確認、既存の
+def test_live_defender_strict_skips_when_defender_state_is_chain(monkeypatch) -> None:
+    """defender_side 自身の state が CHAIN (ev がまだ発行されていない/検知
+    ラグ中でも、盤面上は直接 CHAIN と分かる) でも同様にスキップする
+    (busy 判定は CHAIN と GRAVITY_SETTLE の両方が対象)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p2=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    held = tracker.hold_adv
+    live_board = _board_with_ojama(1)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(None, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=None, b2=live_board)
+    assert len(calls) == 1
+    assert tracker.hold_adv == held
+
+
+def test_live_defender_strict_still_reevaluates_when_defender_state_stable(
+    monkeypatch,
+) -> None:
+    """[指摘14 案1の副作用チェック] defender_side (1P) 自身の state が
+    STABLE (=本当に自由行動中) の正当なケースは、strict=True でも従来通り
+    再評価される (指摘13が意図した挙動を壊さないことの確認、既存の
     test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_board
     と同じ盤面組み合わせを strict=True で再確認)。"""
     import scripts.visualize_advantage_overlay as vao
@@ -1765,11 +1812,65 @@ def test_live_defender_strict_still_reevaluates_when_defender_truly_free(monkeyp
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert len(calls) == 1
     live_board = _board_with_ojama(9)
-    # 1P (defender、dropped_to_p1=30) 自身の ev が None (=本当に自由行動中)、
-    # 2P (攻撃側) は継続中。
+    # 1P (defender、dropped_to_p1=30) 自身の state が STABLE (=本当に自由
+    # 行動中)、2P (攻撃側) は継続中。
+    tracker.update(
+        _make_signal_full(None, 500, state=BoardState.STABLE),
+        _make_signal_full(ev2, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=live_board, b2=None)
+    assert len(calls) == 2  # 正当なケースは strict でも再評価される
+
+
+def test_live_defender_strict_still_reevaluates_when_defender_state_tsumo_fall(
+    monkeypatch,
+) -> None:
+    """defender_side が TSUMO_FALL (ツモ設置中、指摘13が意図した「受け側は
+    連鎖中も置き続ける」正当な自由行動そのもの) の間は busy 扱いにせず
+    strict=True でも再評価される (TSUMO_FALL/OJAMA_FALL を busy 集合に
+    含めない設計判断の直接確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    live_board = _board_with_ojama(9)
+    tracker.update(
+        _make_signal_full(None, 500, state=BoardState.TSUMO_FALL),
+        _make_signal_full(ev2, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=live_board, b2=None)
+    assert len(calls) == 2  # TSUMO_FALL は busy 扱いしないため再評価される
+
+
+def test_live_defender_strict_backward_compat_when_signal_lacks_state_attribute(
+    monkeypatch,
+) -> None:
+    """[後方互換] `.state` 属性を持たない軽量な信号オブジェクト (既存テスト群が
+    使う `_make_signal`) を渡しても、`update()` 側の `getattr(..., None)`
+    フォールバックにより例外を出さず「busy でない」扱いになる (defender_state
+    が None のため `_LIVE_DEFENDER_BUSY_STATES` に含まれない=素通り)。既存の
+    `_make_signal` ベースのテスト群 (strict=False) を壊さないための保証。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    live_board = _board_with_ojama(9)
+    # _make_signal (state属性なし) をそのまま使う。例外を出さず再評価される。
     tracker.update(_make_signal(None, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
                    t_sec=1.0, b1=live_board, b2=None)
-    assert len(calls) == 2  # 正当なケースは strict でも再評価される
+    assert len(calls) == 2
 
 
 def test_live_defender_strict_flag_default_is_false() -> None:
