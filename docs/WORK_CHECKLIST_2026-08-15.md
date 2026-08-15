@@ -28,8 +28,8 @@
 - [x] 案2 `--resolved-kill-override` 実装 (8f8a577)
 - [x] A/B実測 (指摘14窓=退行消滅96.1%維持 / 指摘13窓=正当ケース温存)
 - [x] フルpytest 4,971 passed / 0 failed
-- [ ] **production_config.py へ採用登録** (採用日+根拠+A/B数値を必須記録)
-- [ ] 全域バックテスト (過学習防止、feedback_overfitting_awareness)
+- [x] **production_config.py へ採用登録** (2026-08-15、テスト75件パス)
+- [ ] 全域バックテスト (過学習防止、feedback_overfitting_awareness) ← デモ生成と並行
 
 ### B. れんさ数の表示追加 (user要望 2026-08-15)
 user曰く「得点より連鎖数の方が重要指標」。認識性能検証としても使いたい。
