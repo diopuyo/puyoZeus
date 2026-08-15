@@ -1317,3 +1317,290 @@ def test_no_temp_ojama_columns_leak_into_rows(tmp_path: Path) -> None:
     rows = blwn.convert_one_npz(npz_path, registry)
     for r in rows:
         assert not any(k.startswith("_ojama") for k in r), r.keys()
+
+
+# ============================
+# W12 (2026-08-16、根治P4第一歩): 0-1正規化前の生値2列
+# (ojama_net_balance_uncapped/ojama_forecast_uncapped)
+# ============================
+
+
+def test_ojama_uncapped_columns_preserve_value_beyond_saturation(
+    tmp_path: Path,
+) -> None:
+    """予告個数が ON_FIELD_CAP(=72) を超えても uncapped 列は真の生値を
+    保持し、正規化列 (ojama_forecast) のように 1.0 に飽和しないこと。"""
+    npz_path = tmp_path / "beyond_cap.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "1P"], t_secs=[0.0, 1.0],
+        net_balance=[0.0, 0.0], forecast=[72.0, 216.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    # 正規化列は両方とも上限飽和で同じ値 (1.0) になる。
+    assert rows_sorted[0]["ojama_forecast"] == pytest.approx(1.0)
+    assert rows_sorted[1]["ojama_forecast"] == pytest.approx(1.0)
+    # uncapped 列は飽和せず72と216を区別できる。
+    assert rows_sorted[0]["ojama_forecast_uncapped"] == pytest.approx(72.0)
+    assert rows_sorted[1]["ojama_forecast_uncapped"] == pytest.approx(216.0)
+
+
+def test_ojama_net_balance_uncapped_matches_raw_own_value(tmp_path: Path) -> None:
+    """ojama_net_balance_uncapped は own視点の生の収支値そのものと一致
+    すること (正規化されない)。"""
+    npz_path = tmp_path / "net_uncapped.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P"], t_secs=[0.0, 0.5],
+        net_balance=[36.0, -80.0], forecast=[0.0, 0.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert rows_sorted[0]["ojama_net_balance_uncapped"] == pytest.approx(36.0)
+    assert rows_sorted[1]["ojama_net_balance_uncapped"] == pytest.approx(-80.0)
+
+
+def test_ojama_uncapped_columns_nan_for_old_npz_without_truth(
+    tmp_path: Path,
+) -> None:
+    """真値列の無い旧npzでは uncapped 列も NaN になること (0埋めしない、
+    欠損の明示)。"""
+    npz_path = tmp_path / "no_truth_uncapped.npz"
+    _write_synthetic_npz(npz_path, n=3)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert np.isnan(r["ojama_net_balance_uncapped"])
+        assert np.isnan(r["ojama_forecast_uncapped"])
+
+
+def test_csv_output_includes_ojama_uncapped_columns(tmp_path: Path) -> None:
+    """convert_dir の CSV に uncapped 2列が乗ること (OJAMA_TRUTH_COLUMNS
+    末尾追加分)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    assert "ojama_net_balance_uncapped" in df.columns
+    assert "ojama_forecast_uncapped" in df.columns
+
+
+def test_ojama_uncapped_columns_have_no_diff_or_carry_variants(
+    tmp_path: Path,
+) -> None:
+    """uncapped 2列も他の真値系と同じく diff_/opp_ が生成されないこと
+    (own-perspectiveの収支そのものであり相手との差を取る意味が無いため、
+    b-2 DIFF_* 5分類の対象外)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in ("ojama_net_balance_uncapped", "ojama_forecast_uncapped"):
+        assert f"diff_{col}" not in df.columns
+        assert f"opp_{col}" not in df.columns
+
+
+def test_ojama_uncapped_columns_do_not_end_with_raw_suffix() -> None:
+    """a-1 決定記録の「*_raw 列は全面禁止」ガード
+    (test_convert_one_npz_never_emits_raw_columns/test_csv_output_has_no_
+    raw_columns) と名前が衝突しないこと (OJAMA_TRUTH_COLUMNS 直上コメント
+    「列名について (`_raw` を避けた理由)」節の意図を固定する回帰テスト)。"""
+    for col in ("ojama_net_balance_uncapped", "ojama_forecast_uncapped"):
+        assert col in blwn.OJAMA_TRUTH_COLUMNS
+        assert not col.endswith("_raw")
+
+
+def test_existing_ojama_truth_columns_unaffected_by_uncapped_addition(
+    tmp_path: Path,
+) -> None:
+    """uncapped 2列の追加が既存の ojama_net_balance/ojama_forecast/
+    ojama_source/ojama_net_balance_synced/ojama_margin の値を変えないこと
+    (既存列は1つも壊さない、というタスク要件の直接検証)。"""
+    npz_path = tmp_path / "unaffected.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P"], t_secs=[0.0, 0.5],
+        net_balance=[10.0, -8.0], forecast=[5.0, 3.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert rows_sorted[0]["ojama_net_balance"] == pytest.approx(
+        blwn.iv.ojama_net_balance(10.0).score,
+    )
+    assert rows_sorted[0]["ojama_forecast"] == pytest.approx(
+        blwn.iv.ojama_forecast(5.0).score,
+    )
+    assert rows_sorted[0]["ojama_source"] == blwn.OJAMA_SOURCE_TRUTH
+
+
+# ============================
+# W12 (2026-08-16、アーキ設計確定分): ojama_forecast_log /
+# ojama_forecast_progress_interaction / color_forecast_ratio_own
+# ============================
+
+
+def test_ojama_forecast_log_desaturates_beyond_on_field_cap(tmp_path: Path) -> None:
+    """正規化列 ojama_forecast が72個で1.0に飽和する局面でも、
+    ojama_forecast_log は72個(0.797付近)と216個(1.0)を区別できること。"""
+    npz_path = tmp_path / "log_desat.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "1P"], t_secs=[0.0, 1.0],
+        net_balance=[0.0, 0.0], forecast=[72.0, 216.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert rows_sorted[0]["ojama_forecast"] == pytest.approx(1.0)
+    assert rows_sorted[1]["ojama_forecast"] == pytest.approx(1.0)
+    import math
+    expected_72 = math.log1p(72.0) / math.log1p(blwn.PENDING_ABS_CAP)
+    assert rows_sorted[0]["ojama_forecast_log"] == pytest.approx(expected_72)
+    assert rows_sorted[1]["ojama_forecast_log"] == pytest.approx(1.0)
+    assert rows_sorted[0]["ojama_forecast_log"] < rows_sorted[1]["ojama_forecast_log"]
+
+
+def test_ojama_forecast_log_nan_for_old_npz_without_truth(tmp_path: Path) -> None:
+    """真値列の無い旧npzでは ojama_forecast_log も NaN になること。"""
+    npz_path = tmp_path / "log_nan.npz"
+    _write_synthetic_npz(npz_path, n=2)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert np.isnan(r["ojama_forecast_log"])
+        assert np.isnan(r["ojama_forecast_progress_interaction"])
+
+
+def test_ojama_forecast_progress_interaction_matches_algebraic_formula(
+    tmp_path: Path,
+) -> None:
+    """ojama_forecast_progress_interaction = ojama_forecast_log ×
+    match_progress (match_progress は own board_puyo_total score と
+    diff_board_puyo_total から (own+opp_asof)/2 として厳密に再現できること、
+    b-2 の merge_asof backward パターンと同じ対応付け)。"""
+    npz_path = tmp_path / "interaction.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P", "1P", "2P"], t_secs=[0.0, 0.5, 1.0, 1.5],
+        net_balance=[0.0, 0.0, 0.0, 0.0], forecast=[100.0, 100.0, 100.0, 100.0],
+        heights=[2, 10, 4, 8],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    import math
+    forecast_log = math.log1p(100.0) / math.log1p(blwn.PENDING_ABS_CAP)
+    # 先頭行 (1P@0.0) は相手の直近確定値が無いため NaN
+    # (test_ojama_net_balance_synced_matches_own_minus_opp_over_two と同じ仕様)。
+    assert np.isnan(rows_sorted[0]["ojama_forecast_progress_interaction"])
+    expected_progress = [
+        (10 * 6 / 72.0 + 2 * 6 / 72.0) / 2.0,   # 2P@0.5: own=10段, opp_asof=1P 2段
+        (4 * 6 / 72.0 + 10 * 6 / 72.0) / 2.0,   # 1P@1.0: own=4段, opp_asof=2P 10段
+        (8 * 6 / 72.0 + 4 * 6 / 72.0) / 2.0,    # 2P@1.5: own=8段, opp_asof=1P 4段
+    ]
+    for row, expected in zip(rows_sorted[1:], expected_progress):
+        assert row["ojama_forecast_log"] == pytest.approx(forecast_log)
+        assert row["ojama_forecast_progress_interaction"] == pytest.approx(
+            forecast_log * expected,
+        )
+
+
+def test_color_forecast_ratio_own_matches_formula(tmp_path: Path) -> None:
+    """color_forecast_ratio_own = color_raw/(color_raw+forecast_raw+EPS) と
+    厳密一致すること (合成盤面は全て色ぷよのためcolor_raw=height*6)。"""
+    npz_path = tmp_path / "color_ratio.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P"], t_secs=[0.0], net_balance=[0.0], forecast=[15.0],
+        heights=[5],  # 6列x5段=30個、全て色ぷよ
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    color_raw = 30.0
+    expected = color_raw / (color_raw + 15.0 + blwn.COLOR_OJAMA_RATIO_EPS)
+    assert rows[0]["color_forecast_ratio_own"] == pytest.approx(expected)
+
+
+def test_color_forecast_ratio_own_nan_for_old_npz_without_truth(
+    tmp_path: Path,
+) -> None:
+    """真値列の無い旧npzでは color_forecast_ratio_own も NaN になること
+    (forecast_raw が取得不能なため)。"""
+    npz_path = tmp_path / "color_ratio_nan.npz"
+    _write_synthetic_npz(npz_path, n=2)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert np.isnan(r["color_forecast_ratio_own"])
+
+
+def test_csv_output_includes_w12_architect_columns(tmp_path: Path) -> None:
+    """convert_dir の CSV に W12 アーキ確定3列が乗ること。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in (
+        "ojama_forecast_log", "ojama_forecast_progress_interaction",
+        "color_forecast_ratio_own",
+    ):
+        assert col in df.columns
+
+
+def test_w12_architect_columns_have_no_diff_or_carry_variants(
+    tmp_path: Path,
+) -> None:
+    """W12アーキ確定3列も diff_/opp_ が生成されないこと (own-perspective の
+    絶対量/比率であり相手との差を取る意味が無いため、5分類・対称化の
+    一括変換の対象外)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in (
+        "ojama_forecast_log", "ojama_forecast_progress_interaction",
+        "color_forecast_ratio_own",
+    ):
+        assert f"diff_{col}" not in df.columns
+        assert f"opp_{col}" not in df.columns
+
+
+def test_w12_architect_columns_reuse_existing_constants_not_new_ones() -> None:
+    """PENDING_ABS_CAP は src.ojama_accounting からimportした既存216を
+    使い、独自の新定数を作っていないこと (アーキ指示の直接検証)。"""
+    from src.ojama_accounting import PENDING_ABS_CAP as _canonical_cap
+
+    assert blwn.PENDING_ABS_CAP is _canonical_cap
+    assert blwn.PENDING_ABS_CAP == 216
+
+
+def test_existing_columns_unaffected_by_w12_architect_columns_addition(
+    tmp_path: Path,
+) -> None:
+    """W12アーキ確定3列の追加が既存の ojama_net_balance/ojama_forecast/
+    color_ojama_ratio_own 等の値を変えないこと (既存列は1つも壊さない)。"""
+    npz_path = tmp_path / "unaffected2.npz"
+    _write_npz_with_ojama_truth(
+        npz_path, sides=["1P", "2P"], t_secs=[0.0, 0.5],
+        net_balance=[10.0, -8.0], forecast=[5.0, 3.0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    rows_sorted = sorted(rows, key=lambda r: r["t_sec"])
+    assert rows_sorted[0]["ojama_net_balance"] == pytest.approx(
+        blwn.iv.ojama_net_balance(10.0).score,
+    )
+    assert rows_sorted[0]["ojama_forecast"] == pytest.approx(
+        blwn.iv.ojama_forecast(5.0).score,
+    )
+    color = float(rows_sorted[0]["board_color_puyo_total"])
+    ojama = float(rows_sorted[0]["board_ojama_count"])
+    assert rows_sorted[0]["color_ojama_ratio_own"] == pytest.approx(
+        color / (color + ojama + blwn.COLOR_OJAMA_RATIO_EPS),
+    )
