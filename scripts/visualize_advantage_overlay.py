@@ -462,6 +462,23 @@ class ResolvedExchangeTracker:
     応手確率MC (`CounterReachTracker`) は引き続き着弾**前**の生盤面を使う
     (指摘12 修正4 と同じ「降られる前に撃てるか」の意味論、モデル評価用の
     着弾後仮想盤面とは別物であり混同しないこと、下記実装のコメント参照)。
+
+    [指摘14 案1、2026-08-15、既定OFF、docs/DEMO_REVIEW_2026-08-13.md #14]
+    `enable_live_defender_strict=True` の場合、`_reevaluate_live_defender` の
+    起動条件を厳格化する。従来 (既定) は「ちょうど片側の chain_event が
+    None」という XOR 条件のみで defender_side (`_decisive_defender` が返す、
+    決着計算時点の飛来量が多い側) を「自由な受け側」とみなし生盤面で
+    再評価していたが、これは defender_side 自身の chain_event が実際に
+    None であることを検証していなかった。両者が本当に同時に本線を撃ち合い
+    片方 (攻撃側) のアニメだけ先に終わった場合も同じ XOR が成立してしまい、
+    まだ連鎖継続中の defender_side (受け側のはずが実際は連鎖中) の着地前
+    盤面 (おじゃま僅少) をモデルへ渡し致死量を見落とす (実測: 589個飛来の
+    2P に誤って hold_p1=81.1% (=2P生存18.9%) を5.2秒表示、正しくは
+    96.1%)。strict=True では defender_side 自身の ev (ev1/ev2 いずれか) が
+    None であることを追加条件とし、成立しなければ再評価をスキップして
+    直前の保持値を維持する (安全側、新しい推測ロジックは増やさず既存の
+    ev1/ev2 観測をそのまま使う)。既定 False = 従来挙動と完全に同一
+    (backwards compat)。
     """
 
     def __init__(
@@ -469,6 +486,7 @@ class ResolvedExchangeTracker:
         attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
         enable_decisive_amplify: bool = False,
         enable_live_defender_reeval: bool = False,
+        enable_live_defender_strict: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
@@ -476,6 +494,10 @@ class ResolvedExchangeTracker:
         # [指摘13、2026-08-15] 片側のみ連鎖中の間の受け側ライブ再評価 (既定OFF、
         # クラス docstring 指摘13節参照)。
         self._enable_live_defender_reeval = enable_live_defender_reeval
+        # [指摘14 案1、2026-08-15] 上記ライブ再評価の起動条件厳格化 (既定OFF、
+        # クラス docstring 指摘14節参照)。enable_live_defender_reeval=False の
+        # 間は本フラグの値に関わらず _reevaluate_live_defender 自体が呼ばれない。
+        self._enable_live_defender_strict = enable_live_defender_strict
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -719,6 +741,7 @@ class ResolvedExchangeTracker:
     def _reevaluate_live_defender(
         self, b1: "Board | None", b2: "Board | None",
         snap: "OjamaAccountSnapshot | None" = None,
+        ev1: "ChainEvent | None" = None, ev2: "ChainEvent | None" = None,
     ) -> None:
         """[指摘13、2026-08-15] 片側のみ連鎖中の間、受け側の現在盤面+残り
         時間逓減で hold_adv/hold_p1/hold_drivers を再評価する。
@@ -738,6 +761,11 @@ class ResolvedExchangeTracker:
             が保持する現在の `OjamaAccountSnapshot` (`_live_remaining_incoming`
             参照)。省略時 (None、backwards compat) は会計フォールバック側の
             盤面差分のみで残量を求める。
+        ev1/ev2: [指摘14 案1、2026-08-15 追加の optional 引数] 呼出側 `update()`
+            が同フレームで観測した生の chain_event。`enable_live_defender_strict
+            =True` の場合のみ、defender_side 自身の ev が実際に None であるかの
+            検証に使う (クラス docstring 指摘14節参照)。strict=False (既定) では
+            未使用 (省略しても backwards compat)。
 
         [方向反転修正、2026-08-15、docs/KNOWN_WEAKNESSES.md W12]
         受け側の生盤面 (未着弾=クリーン) を直接モデルへ渡す限り、forecast を
@@ -759,6 +787,16 @@ class ResolvedExchangeTracker:
         defender_side, incoming = self._decisive_defender(self._result)
         if defender_side is None:
             return  # 脅威なし(相殺で完全相殺等)は再評価対象なし、既存値を保持
+        if self._enable_live_defender_strict:
+            # [指摘14 案1] defender_side 自身の ev が None (=本当に連鎖アニメが
+            # 終わり自由行動中) であることを追加確認する。XOR 条件だけでは
+            # defender_side の判定が「攻撃側の ev が None」なケース (= 本当は
+            # まだ両者とも撃ち合い中で defender_side 側が連鎖継続中) と区別
+            # できない (クラス docstring 指摘14節参照)。不一致なら再評価せず
+            # 直前の保持値を維持する (安全側、新規推測ロジックは追加しない)。
+            defender_ev = ev1 if defender_side == "1P" else ev2
+            if defender_ev is not None:
+                return
         attacker_event = self._ev2 if defender_side == "1P" else self._ev1
         if attacker_event is None:
             return  # 攻撃側イベント不明(理論上到達しない防御的ガード)
@@ -812,6 +850,43 @@ class ResolvedExchangeTracker:
             p1 = adv_to_winprob(adv)
         self.hold_adv, self.hold_p1, self.hold_drivers = adv, p1, drivers
         self._last_live_reeval_t = self._t_sec
+
+    def hold_after_kill_override(
+        self, b1: "Board | None", b2: "Board | None",
+    ) -> "tuple[float, float]":
+        """[指摘14 案2、2026-08-15、既定では呼ばれない] 決着ホールド値
+        (hold_adv/hold_p1) に致死上書き (`kill_override`) を適用した値を返す。
+
+        従来 `kill_override` はライブ per-frame 経路 (通常の4成分ブレンド)
+        にのみ配線されており、決着ホールド中 (`ResolvedExchangeTracker` が
+        disp_adv/disp_p1 を丸ごと上書きする経路) には未配線だった。その結果
+        pending/room 比が致死水準でも決着ホールド中は安全弁が発火しない
+        (実測: 589/50≈11.8 ≫ KILL_RATIO_FULL=1.5 でも無発火)。呼出側
+        `generate()` の `--resolved-kill-override` (既定OFF) 有効時のみ、
+        表示直前にこのメソッドを呼んで hold_adv/hold_p1 を上書きする。
+
+        room/pending 比の材料は新規に増やさず既存の観測量のみ再利用する:
+        pending = `self._incoming_total_p1/p2` (直近 `_resolve()` が
+        `_update_landing_targets` で確定した決着済み飛来量総量。指摘11の
+        着弾完了判定 `_landing_complete` と同一値、二重定義しない)。
+        room = `board_room(b1)/board_room(b2)` (呼出側が保持する現在の
+        sticky 確定盤面、モジュール既存の `board_room` をそのまま使う)。
+
+        二重計上防止 (amplify との優先順位): ライブ経路 (3861-3870行付近) と
+        同じく `kill_override` を「最終段」として適用する。`kill_override` は
+        致死度差が `KILL_RATIO_FULL` 以上で g=1 (完全上書き) となり adv を
+        target(±100) へ完全に置換するため、g=1 の場面では amplify 由来の
+        寄与 (既に adv に混ざっている) は自動的に上書きされ二重計上しない。
+        g<1 (部分ブレンド) の場面では amplify 込みの adv を (1-g) 分だけ残す
+        設計を意図的に踏襲する (ライブ経路と同一の優先順位、既存の
+        `kill_override` の意味論を変えない)。
+        """
+        room1, room2 = board_room(b1), board_room(b2)
+        adv = kill_override(
+            self.hold_adv, self._incoming_total_p1, self._incoming_total_p2, room1, room2)
+        if adv == self.hold_adv:
+            return self.hold_adv, self.hold_p1
+        return adv, adv_to_winprob(adv)
 
     def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
         """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
@@ -966,7 +1041,7 @@ class ResolvedExchangeTracker:
             # 受け側自由行動)。従来はここも完全凍結ブランチに合流していたが、
             # 受け側成分だけ生値で再評価する (無効時は本行に到達しても何もしない
             # フラグゲートを通らないため、既定挙動は完全に不変)。
-            self._reevaluate_live_defender(b1, b2, snap)
+            self._reevaluate_live_defender(b1, b2, snap, ev1=ev1, ev2=ev2)
         return True, False
 
 
@@ -3177,6 +3252,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_resolved_exchange_eval: bool = False,
              enable_resolved_decisive_amplify: bool = False,
              enable_resolved_live_defender: bool = False,
+             enable_resolved_live_defender_strict: bool = False,
+             enable_resolved_kill_override: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -3355,6 +3432,31 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         連続的な挙動になる。`enable_resolved_exchange_eval=False` の場合は
         無視される (#9 サブフラグ)。既定 False = 従来 (両側終了まで完全凍結)
         と完全に同一 (backwards compat)。
+    enable_resolved_live_defender_strict: True で `enable_resolved_live_defender`
+        の起動条件を厳格化する (2026-08-15 指摘14 案1、docs/DEMO_REVIEW_
+        2026-08-13.md #14)。従来 (既定 False) の XOR 条件だけでは「両者が
+        本当に同時に本線を撃ち合い攻撃側のアニメだけ先に終わった」ケースを
+        「受け側が自由行動中」と誤分類し、実際にはまだ連鎖継続中の受け側の
+        着地前盤面 (おじゃま僅少) をモデルへ渡して致死量を見落とす
+        (実測: 589個飛来を受ける2Pに誤って生存率18.9%を5.2秒表示、正しくは
+        3.9%)。True にすると defender_side 自身の chain_event が実際に None
+        であることを追加確認し、不一致なら再評価をスキップして直前の保持値
+        を維持する (`ResolvedExchangeTracker._reevaluate_live_defender` 参照)。
+        `enable_resolved_live_defender=False` の場合は無視される (孫フラグ)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。副作用として、
+        指摘13が意図した正当な「片側だけ本当に終わったケース」の再評価頻度も
+        下がりうる (回帰窓での確認要)。
+    enable_resolved_kill_override: True で決着ホールド値 (hold_adv/hold_p1)
+        にも致死上書き (`kill_override`) を適用する (2026-08-15 指摘14 案2、
+        docs/DEMO_REVIEW_2026-08-13.md #14)。従来 (既定 False) は
+        `kill_override` がライブ per-frame 経路にのみ配線されており、決着
+        ホールド中は pending/room 比が致死水準でも安全弁が発火しなかった
+        (実測: 589/50≈11.8 ≫ KILL_RATIO_FULL=1.5 でも無発火)。True にすると
+        `ResolvedExchangeTracker.hold_after_kill_override` を表示直前に通す
+        (既存の `kill_override` 関数・既存の `_incoming_total_p1/p2`・
+        `board_room` をそのまま再利用、新規の観測量は増やさない)。
+        `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
+        フラグ)。既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -3628,7 +3730,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     resolved_tracker = ResolvedExchangeTracker(
         model, attribution_exclude=attribution_exclude,
         enable_decisive_amplify=enable_resolved_decisive_amplify,
-        enable_live_defender_reeval=enable_resolved_live_defender)
+        enable_live_defender_reeval=enable_resolved_live_defender,
+        enable_live_defender_strict=enable_resolved_live_defender_strict)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -3723,7 +3826,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             resolved_tracker = ResolvedExchangeTracker(
                 model, attribution_exclude=attribution_exclude,
                 enable_decisive_amplify=enable_resolved_decisive_amplify,
-                enable_live_defender_reeval=enable_resolved_live_defender)
+                enable_live_defender_reeval=enable_resolved_live_defender,
+                enable_live_defender_strict=enable_resolved_live_defender_strict)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -3911,8 +4015,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             if resolved_active:
                 disp_adv, disp_p1 = resolved_tracker.hold_adv, resolved_tracker.hold_p1
                 drivers = resolved_tracker.hold_drivers
+                # [指摘14 案2、2026-08-15] 決着ホールド値にも致死上書きを通す
+                # (既定 OFF、ResolvedExchangeTracker.hold_after_kill_override
+                # docstring 参照)。
+                if enable_resolved_kill_override:
+                    disp_adv, disp_p1 = resolved_tracker.hold_after_kill_override(b1, b2)
             elif resolved_just_deactivated and not settled_ran_this_frame:
                 adv_ema, p1_last = resolved_tracker.hold_adv, resolved_tracker.hold_p1
+                if enable_resolved_kill_override:
+                    adv_ema, p1_last = resolved_tracker.hold_after_kill_override(b1, b2)
                 disp_adv, disp_p1 = adv_ema, p1_last
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
         # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
@@ -4164,6 +4275,29 @@ def main() -> None:
              " (両側終了まで完全凍結) と完全に同一。",
     )
     ap.add_argument(
+        "--resolved-live-defender-strict", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_live_defender_strict",
+        help="--resolved-live-defender の起動条件を厳格化する (2026-08-15 "
+             "指摘14 案1、docs/DEMO_REVIEW_2026-08-13.md #14)。従来の XOR "
+             "条件だけでは「両者が本当に同時に本線を撃ち合い攻撃側のアニメ"
+             "だけ先に終わった」ケースを誤って受け側再評価対象にしてしまう "
+             "(実測: 589個飛来を受ける側の生存率を18.9%%と誤表示、正しくは"
+             "3.9%%)。defender_side 自身の chain_event が実際に None である"
+             "ことを追加確認する。--resolved-live-defender 無効時は無視。"
+             "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
+        "--resolved-kill-override", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_kill_override",
+        help="決着ホールド値 (hold_adv/hold_p1) にも致死上書き (kill_override) "
+             "を適用する (2026-08-15 指摘14 案2、docs/DEMO_REVIEW_2026-08-13.md "
+             "#14)。従来 kill_override はライブ per-frame 経路にのみ配線され、"
+             "決着ホールド中は pending/room 比が致死水準でも安全弁が発火"
+             "しなかった (実測: 589/50≈11.8 ≫ KILL_RATIO_FULL=1.5 でも無発火)。"
+             "--resolved-exchange-eval 無効時は無視される。既定 OFF = 従来"
+             "挙動と完全に同一。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -4349,6 +4483,8 @@ def main() -> None:
              enable_resolved_exchange_eval=a.enable_resolved_exchange_eval,
              enable_resolved_decisive_amplify=a.enable_resolved_decisive_amplify,
              enable_resolved_live_defender=a.enable_resolved_live_defender,
+             enable_resolved_live_defender_strict=a.enable_resolved_live_defender_strict,
+             enable_resolved_kill_override=a.enable_resolved_kill_override,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
