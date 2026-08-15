@@ -653,6 +653,7 @@ class ResolvedExchangeTracker:
         enable_decisive_amplify: bool = False,
         enable_live_defender_reeval: bool = False,
         enable_live_defender_strict: bool = False,
+        enable_kill_override_counter_aware: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
@@ -664,6 +665,17 @@ class ResolvedExchangeTracker:
         # クラス docstring 指摘14節参照)。enable_live_defender_reeval=False の
         # 間は本フラグの値に関わらず _reevaluate_live_defender 自体が呼ばれない。
         self._enable_live_defender_strict = enable_live_defender_strict
+        # [指摘19、2026-08-15] hold_after_kill_override の致死断定を受け側の
+        # 応手確率で減衰する (既定OFF、hold_after_kill_override docstring
+        # 参照)。enable_resolved_kill_override=False の間は本フラグの値に
+        # 関わらず hold_after_kill_override 自体が呼ばれない (孫フラグ)。
+        self._enable_kill_override_counter_aware = enable_kill_override_counter_aware
+        # [指摘19] _dampen_kill_override_by_counter_prob の MC 間引き用キャッシュ
+        # (COUNTER_RECOMPUTE_INTERVAL_SEC 周期、_reevaluate_live_defender の
+        # _last_live_reeval_t と同じ設計パターン)。
+        self._last_kill_dampen_t: "float | None" = None
+        self._last_kill_dampen_side: "str | None" = None
+        self._last_kill_dampen_prob: float = float("nan")
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -1063,13 +1075,118 @@ class ResolvedExchangeTracker:
         g<1 (部分ブレンド) の場面では amplify 込みの adv を (1-g) 分だけ残す
         設計を意図的に踏襲する (ライブ経路と同一の優先順位、既存の
         `kill_override` の意味論を変えない)。
+
+        [指摘19対処、2026-08-15、既定OFF、docs/DEMO_REVIEW_2026-08-13.md #19]
+        `enable_kill_override_counter_aware=True` の場合、致死断定を
+        「受け側が実際に応手可能か」で減衰する。
+
+        【根因、実測で確定 (logs/_diag_issue19_2026-08-15.log)】
+        上記 kill_override は pending/room 比のみで致死を断定し、受け側が
+        応手できるかを一切見ていない。ドメインルール「おじゃまは連鎖完了+
+        受け側のツモ着地時に降る」(memory
+        reference_ojama_landing_gated_by_placement) により受け側には撃ち
+        返す時間があるにもかかわらず、比だけを見て致死断定すると
+        (実動画 t=201.4-203.4) 受け側が STABLE で応手可能な局面まで
+        1P 0.7% と誤断定していた (直後に実際に撃ち返し score 42065 vs
+        19729 で勝利)。
+
+        【対処、新規の推測ロジックは追加しない】応手確率は
+        `_reevaluate_live_defender`/`_amplify_decisive` が同一フレームで
+        既に計算済みの `self.hold_defender_prob`/`self.hold_defender_side`
+        (既存 `CounterReachTracker` の受け側限定経路、defender_side=
+        飛来を受ける側・threshold_ojama=実飛来量で算出済み) をそのまま
+        再利用する (`_dampen_kill_override_by_counter_prob` 参照)。閾値は
+        新設せず、応手確率をそのまま連続的な減衰係数として使う (シーン
+        逆算禁止、既存の確率値を直接使うため導出不要)。
         """
         room1, room2 = board_room(b1), board_room(b2)
         adv = kill_override(
             self.hold_adv, self._incoming_total_p1, self._incoming_total_p2, room1, room2)
         if adv == self.hold_adv:
             return self.hold_adv, self.hold_p1
+        if self._enable_kill_override_counter_aware:
+            adv = self._dampen_kill_override_by_counter_prob(adv, b1, b2)
+            if adv == self.hold_adv:
+                return self.hold_adv, self.hold_p1
         return adv, adv_to_winprob(adv)
+
+    def _dampen_kill_override_by_counter_prob(
+        self, adv: float, b1: "Board | None", b2: "Board | None",
+    ) -> float:
+        """[指摘19、2026-08-15、既定OFF] 致死断定を受け側の応手確率で減衰する。
+
+        victim_side (kill_override が致死断定した側) は adv の移動方向で
+        判定する: kill_override の target は必ず ±100 で、hold_adv から
+        target 方向へ線形ブレンドされるため、呼出元で adv != hold_adv
+        (=上書き発生) を確認済みの前提下では adv < hold_adv なら 1P が
+        victim (target=-100)、adv > hold_adv なら 2P が victim
+        (target=+100) と一意に決まる (kill_override 内部の閾値定数を
+        再実装しない)。
+
+        [実測で判明、logs/_diag_issue19_dampen_trace_2026-08-15.log]
+        `hold_defender_prob` (`_amplify_decisive` が決着直後の1回だけ計算) を
+        そのまま使うと、受け側がその後に実際に積み上げた盤面 (実測: room1が
+        37→68まで伸びる=1Pが盤面を切り崩し中) を一切反映できず凍結値の
+        まま致死断定を維持し続ける (実測: 応手確率0.0167のまま2秒以上
+        固定、致死断定=撃ち返し直前の実際の盤面を見ていない)。よって
+        新しい推測ロジックを作らず、既存の `CounterReachTracker`
+        (`self._counter_tracker`、`_amplify_decisive`/
+        `_reevaluate_live_defender` と同一インスタンス) と既存の時間予算
+        関数 `_chain_remaining_time_budget_sec` (#3/#12 修正と同一) を、
+        呼出元 `hold_after_kill_override` が毎フレーム受け取る **現在の**
+        sticky 確定盤面 (b1/b2) に対して都度呼び直す。攻撃側の連鎖情報
+        (`self._ev1`/`self._ev2`、`_amplify_decisive` と同じ frozen 参照) が
+        無い場合や受け側盤面が未確定の場合は判定不能として従来
+        (kill_override そのまま) を返す (fail-silent を避け警戒を緩めない)。
+
+        MC 自体は `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定
+        周期と同一、`_reevaluate_live_defender` と同じ間引きパターン) で
+        間引く (`hold_after_kill_override` は毎フレーム呼ばれるため、
+        間引かないと同一盤面に対しMCロールアウトを毎フレーム再実行して
+        しまい実測で著しく遅い、diag実行時に計装で確認済み)。
+
+        応手確率をそのまま連続減衰係数として使う (新しい確率閾値は増やさ
+        ない): prob=1.0 (確実に応手可能) で効果ゼロ (hold_adv のまま)、
+        prob=0.0 (応手不能確定) で従来の完全上書きのまま。中間値は線形
+        補間。
+        """
+        victim_side = "1P" if adv < self.hold_adv else "2P"
+        incoming = (
+            self._incoming_total_p1 if victim_side == "1P" else self._incoming_total_p2)
+        attacker_event = self._ev2 if victim_side == "1P" else self._ev1
+        victim_board = b1 if victim_side == "1P" else b2
+        if incoming <= 0.0 or attacker_event is None or victim_board is None:
+            return adv  # 判定不能 (理論上到達しない防御的ガード含む)、従来通り
+        prob = self._kill_dampen_counter_prob(b1, b2, victim_side, incoming, attacker_event)
+        if math.isnan(prob):
+            return adv
+        prob = max(0.0, min(1.0, prob))
+        return self.hold_adv + (adv - self.hold_adv) * (1.0 - prob)
+
+    def _kill_dampen_counter_prob(
+        self, b1: "Board | None", b2: "Board | None", victim_side: str,
+        incoming: float, attacker_event: "ChainEvent",
+    ) -> float:
+        """`_dampen_kill_override_by_counter_prob` の MC 呼び出し部分
+        (間引き付き)。victim_side/threshold が前回計算時から変わっていれば
+        間引きを無視して即再計算する (段差回避、`_reevaluate_live_defender`
+        の間引き設計と同じ考え方)。"""
+        stale = (
+            self._last_kill_dampen_t is None
+            or self._last_kill_dampen_side != victim_side
+            or (self._t_sec - self._last_kill_dampen_t) >= COUNTER_RECOMPUTE_INTERVAL_SEC
+        )
+        if not stale:
+            return self._last_kill_dampen_prob
+        budget = _chain_remaining_time_budget_sec(
+            attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
+            self._chain_len_table)
+        _, cp1, cp2 = self._counter_tracker.update(
+            b1, b2, budget, defender_side=victim_side, threshold_ojama=incoming)
+        self._last_kill_dampen_prob = cp1 if victim_side == "1P" else cp2
+        self._last_kill_dampen_side = victim_side
+        self._last_kill_dampen_t = self._t_sec
+        return self._last_kill_dampen_prob
 
     def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
         """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
@@ -3466,6 +3583,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_resolved_live_defender: bool = False,
              enable_resolved_live_defender_strict: bool = False,
              enable_resolved_kill_override: bool = False,
+             enable_resolved_kill_override_counter_aware: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -3677,6 +3795,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         `board_room` をそのまま再利用、新規の観測量は増やさない)。
         `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
         フラグ)。既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_resolved_kill_override_counter_aware: True で
+        `enable_resolved_kill_override` の致死断定を「受け側が実際に応手
+        可能か」で減衰する (2026-08-15 指摘19、docs/DEMO_REVIEW_2026-08-13.md
+        #19、`ResolvedExchangeTracker.hold_after_kill_override` docstring
+        参照)。従来 (既定 False) は pending/room 比のみで致死断定するため、
+        受け側が STABLE で応手可能な局面でも致死断定する誤りがあった
+        (実測 t=201.4-203.4: 1P 0.7% と誤表示、直後に撃ち返し score 42065
+        vs 19729 で勝利)。応手確率は新規に推測ロジックを作らず、既存の
+        `CounterReachTracker` 経由で同一フレームに算出済みの
+        `hold_defender_prob`/`hold_defender_side` を再利用する。
+        `enable_resolved_kill_override=False` の場合は無視される (孫フラグ)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -3967,7 +4097,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         model, attribution_exclude=attribution_exclude,
         enable_decisive_amplify=enable_resolved_decisive_amplify,
         enable_live_defender_reeval=enable_resolved_live_defender,
-        enable_live_defender_strict=enable_resolved_live_defender_strict)
+        enable_live_defender_strict=enable_resolved_live_defender_strict,
+        enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -4063,7 +4194,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 model, attribution_exclude=attribution_exclude,
                 enable_decisive_amplify=enable_resolved_decisive_amplify,
                 enable_live_defender_reeval=enable_resolved_live_defender,
-                enable_live_defender_strict=enable_resolved_live_defender_strict)
+                enable_live_defender_strict=enable_resolved_live_defender_strict,
+                enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware)
             # 試合境界で前試合の保持中パルス(推定連鎖数/実測得点差)を持ち越さない
             # (2026-08-15、前試合最後の連鎖表示が次試合冒頭に残る誤表示を防止)。
             chain_display_tracker = ChainCountDisplayTracker()
@@ -4555,6 +4687,18 @@ def main() -> None:
              "挙動と完全に同一。",
     )
     ap.add_argument(
+        "--resolved-kill-override-counter-aware", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_kill_override_counter_aware",
+        help="--resolved-kill-override の致死断定を受け側の応手確率で減衰する "
+             "(2026-08-15 指摘19、docs/DEMO_REVIEW_2026-08-13.md #19)。従来は"
+             "pending/room 比のみで致死断定するため、受け側がSTABLEで応手"
+             "可能な局面でも致死断定していた (実測 t=201.4-203.4: 1P 0.7%"
+             "と誤表示、直後に撃ち返し勝利)。既存の CounterReachTracker が"
+             "同一フレームで算出済みの hold_defender_prob/hold_defender_side"
+             "を再利用し新規の推測ロジックは追加しない。--resolved-kill-"
+             "override 無効時は無視される。既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -4750,6 +4894,8 @@ def main() -> None:
              enable_resolved_live_defender=a.enable_resolved_live_defender,
              enable_resolved_live_defender_strict=a.enable_resolved_live_defender_strict,
              enable_resolved_kill_override=a.enable_resolved_kill_override,
+             enable_resolved_kill_override_counter_aware=(
+                 a.enable_resolved_kill_override_counter_aware),
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,

@@ -1971,6 +1971,237 @@ def test_generate_signature_new_flags_default_false() -> None:
     sig = inspect.signature(vao.generate)
     assert sig.parameters["enable_resolved_live_defender_strict"].default is False
     assert sig.parameters["enable_resolved_kill_override"].default is False
+    assert sig.parameters["enable_resolved_kill_override_counter_aware"].default is False
+
+
+# ============================
+# 指摘19: enable_kill_override_counter_aware (既定OFF)
+# ============================
+# 背景 (実測、logs/_diag_issue19_2026-08-15.log): kill_override は pending/room
+# 比のみで致死を断定し、受け側が実際に応手可能かを一切見ていない。ドメイン
+# ルール「おじゃまは連鎖完了+受け側のツモ着地時に降る」により受け側には撃ち
+# 返す時間があるため、受け側がSTABLEで応手可能な局面 (t=201.4-203.4、実際に
+# 撃ち返し score 42065 vs 19729 で勝利) まで 1P 0.7% と致死断定していた。
+#
+# [設計変更の実測根拠、logs/_diag_issue19_dampen_trace_2026-08-15.log]
+# 当初案は `_amplify_decisive` が決着直後の1回だけ計算する
+# `hold_defender_prob` をそのまま読む方式だったが、実測で「受け側が盤面を
+# 積み上げても (room1が37→68まで伸びる=1Pが盤面を切り崩し中) 応手確率が
+# 0.0167のまま2秒以上固定される」ことが判明し退行を解消できなかった。
+# そのため `_dampen_kill_override_by_counter_prob` は `hold_defender_prob` を
+# 使わず、既存の `CounterReachTracker` (`self._counter_tracker`) と既存の
+# 時間予算関数 `_chain_remaining_time_budget_sec` を **現在の** sticky 盤面
+# (b1/b2、呼出元 hold_after_kill_override が毎フレーム受け取る) に対して
+# 都度呼び直す設計にした。
+
+
+class _FakeCounterTrackerForKillOverride:
+    """テスト専用スタブ (実際のMCロールアウトを避け固定確率を返す)。
+
+    `CounterReachTracker.update(b1, b2, budget_sec, defender_side=,
+    threshold_ojama=)` と同じ呼び出し規約 (defender_side指定時の返り値
+    tuple 意味論) を再現する。呼び出し引数を calls に記録し、
+    「既存のMC機構をそのまま呼んでいる (新しい推測ロジックを増やしていない)」
+    ことをテストから直接確認できるようにする。"""
+
+    def __init__(self, prob_1p: float = float("nan"), prob_2p: float = float("nan")) -> None:
+        self.prob_1p = prob_1p
+        self.prob_2p = prob_2p
+        self.calls: list[tuple] = []
+
+    def update(self, b1, b2, budget_sec, defender_side=None, threshold_ojama=None, **_kw):
+        self.calls.append((budget_sec, defender_side, threshold_ojama))
+        p = self.prob_1p if defender_side == "1P" else self.prob_2p
+        return (
+            (0.0, p, float("nan")) if defender_side == "1P" else (0.0, float("nan"), p))
+
+
+def _tracker_with_lethal_setup(model=None) -> "vao.ResolvedExchangeTracker":
+    """589 pending / room≈50 (実測ケース、完全上書き g=1) を模したトラッカーを返す。
+
+    victim_side は "2P" (589 pending を受ける側) になる。攻撃側イベント
+    (self._ev1、victim=2P の場合の attacker_event 参照先) を既存の
+    `_make_chain_event` ヘルパーで最小構成しておく (fail-back テストで
+    None のままにしたい場合は呼出元で上書きすること)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=model or object())
+    tracker.hold_adv, tracker.hold_p1 = 62.2, 0.811
+    tracker._incoming_total_p1, tracker._incoming_total_p2 = 0.0, 589.0
+    tracker._ev1 = _make_chain_event(trigger_sec=100.0, total_score=200)
+    tracker._t_sec = 100.5  # trigger直後 = 予算はほぼ満額
+    return tracker
+
+
+def test_kill_override_counter_aware_off_is_bit_identical_to_baseline() -> None:
+    """[既定OFF] enable_kill_override_counter_aware=False の間は
+    (新設計の) 応手確率フレッシュ計算に一切到達せず、従来 (#14案2) と
+    bit-identical な結果を返す (backwards compat)。フェイクトラッカーが
+    prob=1.0 (応手確実=完全抑制) を返す設定でも無視されることを直接示す
+    (万一フラグゲートが壊れて誤って呼ばれた場合の検出力を持たせる)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = _tracker_with_lethal_setup()
+    tracker._counter_tracker = _FakeCounterTrackerForKillOverride(prob_2p=1.0)
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    expected_adv = vao.kill_override(
+        tracker.hold_adv, tracker._incoming_total_p1, tracker._incoming_total_p2,
+        vao.board_room(b1), vao.board_room(b2))
+    assert adv == pytest.approx(expected_adv)
+    assert adv == pytest.approx(100.0)  # 従来通り完全上書き(フラグ未参照の証拠)
+    assert p1 == pytest.approx(vao.adv_to_winprob(100.0))
+    assert tracker._counter_tracker.calls == []  # フェイクトラッカーが一度も呼ばれない
+
+
+def test_kill_override_counter_aware_suppresses_when_defender_can_counter() -> None:
+    """[本体] 受け側 (victim_side="2P") が応手確実 (prob=1.0) なら致死断定を
+    完全に取り消し hold_adv/hold_p1 のまま返す (指摘19が解消したい退行の
+    直接対処)。応手確率は既存 CounterReachTracker 互換の呼び出し規約
+    (defender_side/threshold_ojama) 経由でのみ得ることを確認する。"""
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    fake = _FakeCounterTrackerForKillOverride(prob_2p=1.0)
+    tracker._counter_tracker = fake
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    assert adv == pytest.approx(tracker.hold_adv)
+    assert p1 == pytest.approx(tracker.hold_p1)
+    assert len(fake.calls) == 1
+    budget_sec, defender_side, threshold_ojama = fake.calls[0]
+    assert defender_side == "2P"
+    assert threshold_ojama == pytest.approx(589.0)  # self._incoming_total_p2 をそのまま再利用
+    assert budget_sec > 0.0
+
+
+def test_kill_override_counter_aware_throttles_mc_within_recompute_interval() -> None:
+    """MC 呼び出しは `COUNTER_RECOMPUTE_INTERVAL_SEC` 未満の連続呼び出しでは
+    間引かれる (実測: 間引き無しでは同一盤面へ毎フレームMCロールアウトを
+    再実行し著しく遅い、logs/_diag_issue19_counter_aware_2026-08-15.log の
+    生成が停止する程の速度劣化を招くことを診断で確認済み)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    fake = _FakeCounterTrackerForKillOverride(prob_2p=0.5)
+    tracker._counter_tracker = fake
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    tracker.hold_after_kill_override(b1, b2)
+    assert len(fake.calls) == 1
+    tracker._t_sec += vao.COUNTER_RECOMPUTE_INTERVAL_SEC * 0.5  # 間隔未満
+    tracker.hold_after_kill_override(b1, b2)
+    assert len(fake.calls) == 1  # 再計算されない (キャッシュされた確率を再利用)
+    tracker._t_sec += vao.COUNTER_RECOMPUTE_INTERVAL_SEC  # 間隔以上経過
+    tracker.hold_after_kill_override(b1, b2)
+    assert len(fake.calls) == 2  # 間隔経過後は再計算される
+
+
+def test_kill_override_counter_aware_still_fires_when_defender_cannot_counter() -> None:
+    """受け側が応手不能確定 (prob=0.0) なら従来通り完全発火する
+    (counter_aware=True でも安全弁の効き目を弱めない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    tracker._counter_tracker = _FakeCounterTrackerForKillOverride(prob_2p=0.0)
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    expected_adv = vao.kill_override(
+        tracker.hold_adv, tracker._incoming_total_p1, tracker._incoming_total_p2,
+        vao.board_room(b1), vao.board_room(b2))
+    assert adv == pytest.approx(expected_adv)
+    assert adv == pytest.approx(100.0)
+
+
+def test_kill_override_counter_aware_partial_prob_dampens_linearly() -> None:
+    """中間の応手確率 (0.4) は線形補間で減衰する (新しい閾値を増やさない
+    ことの直接確認: hold_adv + (override_adv - hold_adv) * (1 - prob))。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    tracker._counter_tracker = _FakeCounterTrackerForKillOverride(prob_2p=0.4)
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    adv, _ = tracker.hold_after_kill_override(b1, b2)
+    override_adv = vao.kill_override(
+        tracker.hold_adv, tracker._incoming_total_p1, tracker._incoming_total_p2,
+        vao.board_room(b1), vao.board_room(b2))
+    expected = tracker.hold_adv + (override_adv - tracker.hold_adv) * (1.0 - 0.4)
+    assert adv == pytest.approx(expected)
+
+
+def test_kill_override_counter_aware_falls_back_when_attacker_event_missing() -> None:
+    """攻撃側イベント参照 (victim_side="2P" なら self._ev1) が未設定 (None、
+    __init__ 直後の既定値) の場合は判定不能として従来通り発火する
+    (fail-silentを避け警戒を緩めない、理論上到達しないはずの防御的ガード)。"""
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    tracker._ev1 = None  # 攻撃側イベント不明を明示的に再現
+    fake = _FakeCounterTrackerForKillOverride(prob_2p=1.0)  # 呼ばれれば抑制されてしまう値
+    tracker._counter_tracker = fake
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(22)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    assert adv == pytest.approx(100.0)
+    assert fake.calls == []  # 判定不能時はMCを呼ばずに安全側へ倒れる
+
+
+def test_kill_override_counter_aware_falls_back_when_victim_board_is_none() -> None:
+    """victim_side ("2P") の現在盤面が None (STABLE を一度も観測していない)
+    場合も判定不能として従来通り発火する。"""
+    tracker = _tracker_with_lethal_setup()
+    tracker._enable_kill_override_counter_aware = True
+    fake = _FakeCounterTrackerForKillOverride(prob_2p=1.0)
+    tracker._counter_tracker = fake
+    b1, b2 = _board_with_ojama(0), None  # victim=2P の盤面が未確定
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    assert adv == pytest.approx(100.0)
+    assert fake.calls == []
+
+
+def test_kill_override_counter_aware_noop_when_not_lethal() -> None:
+    """致死断定自体が発火しない (KILL_MIN_PENDING未満) 場合は counter_aware
+    ロジックにすら到達しない (既存の早期return分岐をそのまま通る、MCも
+    一切呼ばれない)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    tracker._enable_kill_override_counter_aware = True
+    tracker.hold_adv, tracker.hold_p1 = 20.0, 0.6
+    tracker._incoming_total_p1, tracker._incoming_total_p2 = 10.0, 0.0
+    fake = _FakeCounterTrackerForKillOverride(prob_1p=0.0)  # 応手不能でも非致死なら不変
+    tracker._counter_tracker = fake
+    b1, b2 = _board_with_ojama(0), _board_with_ojama(0)
+    adv, p1 = tracker.hold_after_kill_override(b1, b2)
+    assert adv == pytest.approx(20.0)
+    assert p1 == pytest.approx(0.6)
+    assert fake.calls == []
+
+
+def test_resolved_exchange_tracker_constructor_new_flag_default_false() -> None:
+    """ResolvedExchangeTracker.__init__ の新規フラグは既定 False
+    (backwards compat、既存呼出元はキーワード省略可)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    sig = inspect.signature(vao.ResolvedExchangeTracker.__init__)
+    assert sig.parameters["enable_kill_override_counter_aware"].default is False
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    assert tracker._enable_kill_override_counter_aware is False
+
+
+def test_generate_source_wires_kill_override_counter_aware_to_both_constructions() -> None:
+    """静的回帰テスト: generate() ソース中の ResolvedExchangeTracker 構築
+    (通常時/試合境界リセット時の2箇所) が両方とも
+    enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware
+    を渡していることを固定する (新フラグの配線漏れ防止)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.generate)
+    code_only = src.replace(vao.generate.__doc__ or "", "")
+    pattern = (
+        "enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware")
+    assert code_only.count(pattern) == 2
 
 
 # ============================
