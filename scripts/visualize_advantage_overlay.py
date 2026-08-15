@@ -645,6 +645,80 @@ class ResolvedExchangeTracker:
     「受け側は連鎖中も置き続けており応手力が変化する」正当な自由行動
     そのものであり、ここを塞ぐと指摘13の効果自体が失われる)。
     既定 False = 従来挙動と完全に同一 (backwards compat)。
+
+    [指摘19 根治、2026-08-16、coordinator決定(b)、docs/DEMO_REVIEW_2026-08-13.md #19]
+    `enable_kill_override_counter_aware` (状態ゲート方式) は致死上書き
+    (`kill_override`) という**安全弁1個だけ**を止める対症療法であり、その
+    手前の `hold_adv` 自体の計算 (`_resolve`→`resolve_mutual_exchange` が
+    使う gen1/gen2 = 各 side が生成したお邪魔換算値) が非対称に壊れている
+    という根本原因は残っていた。
+
+    【実機構(計装で確定、logs/_diag_issue19_root_cause_trace_2026-08-16.log)】
+    `_maybe_redecide` は `OjamaAccountSnapshot.chain_end_triggered_pX` が
+    True の**最初の1フレーム**だけ `chain_total_score_pX` を読み、以後は
+    `_redecidedX` で永久に latch して無視する(docstring 指摘11節参照、
+    「2回目以降のsettleは別の連鎖の可能性が高い」という設計判断)。しかし
+    `OjamaAccountingTracker` の実装 (src/ojama_accounting.py
+    `_finalize_chain_end`) では、`chain_end_triggered_pX` は settle 開始
+    (TSUMO_FALL/OJAMA_FALL 遷移) の瞬間に True になり、**同一の連鎖が
+    coalesce window 内で複数回に分けて finalize されるたびに
+    `chain_total_score_pX` を段階的に上書きしながら True であり続ける**
+    (実測: t=5.23で総額0(未確定)→t=5.87で1260→t=8.43で4020、この間ずっと
+    `chain_end_triggered_p1=True` 継続)。「1回きり」latch は運悪く**未確定
+    (0や小さい途中値) の瞬間に固定してしまい、その後実際に育っていく
+    真の確定値を二度と拾わない**。これが victim 側の gen が過小評価される
+    直接原因。attacker 側は既に完全終了している (settle が1回で完結する)
+    ため latch の悪影響を受けず「即時確定値」のまま正しく動く
+    (`_maybe_redecide` は両 side 対称のコードだが、片方だけ症状が出るのは
+    settle 過程の非対称さ=「相手は終わっている・自分は今まさに終わりつつ
+    ある」という指摘19 前提そのものに起因する)。
+
+    【対処】`enable_resolved_victim_gen_live=True` の場合、`_redecide_obs`
+    (下記) で「1回きり」制限を「`chain_end_triggered_pX` が True の間は
+    `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定周期と同一) ごと
+    に再チェックし、より大きい確定値が出るたびに追従する」へ緩和する。
+    `_maybe_redecide` の `max(pred, obs)` 合成は変更しない (単調増加のみ
+    許容、後退しない)。victim/attacker を明示的に区別する新しい判定は
+    追加しない (どちらの side も同じコードを通るが、既に決着済みの
+    attacker 側は `chain_total_score_pX` がそれ以上変化しないため
+    実質ノーオペ=「攻撃側は従来通り即時確定値のまま」が自然に成り立つ)。
+    既定 False = 従来 (`_redecided1/2` による1回きり latch) と完全に同一
+    (backwards compat)。
+
+    【実測による正直な報告、2026-08-16、コーダ検証】本フラグは `_maybe_
+    redecide` の latch バグそのものは実在し (logs/_diag_issue19_root_cause_
+    trace_2026-08-16.log で 0→1260→4020 の段階確定と latch を実証、
+    ユニットテストでも再現・修正を確認済み)、この latch バグ単体としては
+    正しい修正である。**しかし指摘19 の実受入窓 (review_demo_2026-08-12.mp4
+    絶対t=201.2-203.4) の再現には効果が無かった** (logs/_diag_issue19_
+    victim_gen_live_ab_2026-08-16.log: フラグ ON でも 0.7% のまま変化なし)。
+    詳細計装 (logs/_diag_issue19_pinpoint_mechanism_2026-08-16.log) で判明した
+    実際の機構: この窓では `_resolve()` が t_abs=201.23 に**既に正しい**
+    hold_adv=5.24 (56%相当) を1回の呼び出しで算出済み (gen1/gen2 とも
+    ev.total_score の simulate 値をそのまま使った初回決着で、latch バグに
+    ぶつかる前に正解に到達している)。ところが `hold_after_kill_override` が
+    `_incoming_total_p1=262` という**この hold_adv 自体が既に織り込み済みの
+    値**に対して独自の pending/room 比ヒューリスティックで即座に致死断定し、
+    victim(1P) 自身の state が `_LIVE_DEFENDER_BUSY_STATES` (自分の反撃連鎖が
+    アニメ中= CHAIN) である間 `enable_kill_override_counter_aware` の
+    busy ゲートが「busy=安全弁を弱めない」と判断し続けるため、1P 自身の
+    連鎖アニメが終わり state が STABLE に戻る t_abs=203.43 まで 2.2秒間
+    -100.00 (0.7%) に固定され続ける。つまり 指摘19 の真因は「victim の
+    gen が過小評価される」ことではなく、「**resolve_mutual_exchange が
+    既に正しく解決した結果を kill_override の独立ヒューリスティックが
+    busy 状態ゲート越しに上書きし続ける**」ことだった (根治対象を誤認、
+    本フラグは撤回はしないが 指摘19 の解決フラグとしては不採用)。
+
+    さらに 指摘13 の既存合格窓 (t=234.87-245.5) で非退行確認したところ、
+    本フラグ ON 時に t=236.23-243.30 の区間で BASE (2-6%) から FIX
+    (最大26.4%) へ一時的に乖離することを検出した (最終収束値 56.3% は
+    3構成とも一致、既定 OFF では当然 bit-identical)。ON にした場合の
+    他シーンへの波及は未レビューのため、実運用フラグとしての採用は
+    現時点で推奨しない (「_redecided1/2 latch バグの根治」としては
+    有効、別課題として扱う)。指摘19 自体の次の一手は
+    `hold_after_kill_override` 側 (kill_override 発火条件そのものの
+    見直し、または「同一 _resolve セッション内で既に確定済みの hold_adv
+    は kill_override の busy ゲートより優先する」設計) が本命候補。
     """
 
     def __init__(
@@ -654,6 +728,7 @@ class ResolvedExchangeTracker:
         enable_live_defender_reeval: bool = False,
         enable_live_defender_strict: bool = False,
         enable_kill_override_counter_aware: bool = False,
+        enable_resolved_victim_gen_live: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
@@ -671,14 +746,25 @@ class ResolvedExchangeTracker:
         # enable_resolved_kill_override=False の間は本フラグの値に関わらず
         # hold_after_kill_override 自体が呼ばれない (孫フラグ)。
         self._enable_kill_override_counter_aware = enable_kill_override_counter_aware
+        # [指摘19 根治、2026-08-16] 保持セッション中「1回きり」の再決着 latch
+        # を、chain_end_triggered_pX が True の間 0.5秒ごとに追従する方式へ
+        # 緩和する (既定OFF、クラス docstring 指摘19根治節参照)。
+        self._enable_resolved_victim_gen_live = enable_resolved_victim_gen_live
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
         self._pred_score1 = 0.0
         self._pred_score2 = 0.0
         # 各 side につき再決着は1回まで (下記 _maybe_redecide 参照)。
+        # enable_resolved_victim_gen_live=True の場合のみ _redecide_obs が
+        # この latch を「0.5秒ごとの追従」へ読み替える。
         self._redecided1 = False
         self._redecided2 = False
+        # [指摘19 根治] 上記の 0.5秒間引き用の直近再決着時刻 (raw elapsed_sec、
+        # COUNTER_RECOMPUTE_INTERVAL_SEC と同じ周期)。新しい保持セッション
+        # 開始時 (update() の trigger ブロック) に None へ戻す。
+        self._victim_live_last_t1: "float | None" = None
+        self._victim_live_last_t2: "float | None" = None
         self.hold_adv = 0.0    # 保持中の決着後有利不利 (1P視点)
         self.hold_p1 = 0.5     # 保持中の決着後1P勝率
         self.hold_drivers: list[tuple[str, float]] = []
@@ -1113,6 +1199,41 @@ class ResolvedExchangeTracker:
                 return self.hold_adv, self.hold_p1  # 受け側は自由行動中=致死断定しない
         return adv, adv_to_winprob(adv)
 
+    def _redecide_obs(
+        self, triggered: bool, total_score: int, side_is_1p: bool, elapsed_sec: float,
+    ) -> "float | None":
+        """1 side 分の再決着観測値を返す (`_maybe_redecide` 補助、指摘19根治)。
+
+        既定 (enable_resolved_victim_gen_live=False): 従来通り保持セッション
+        中 1回きり (`_redecided1/2` latch、bit-identical)。
+
+        True の場合: `chain_end_triggered_pX` が True の間 (=同一連鎖の
+        settle が継続中。ojama_accounting.py `_finalize_chain_end` は
+        coalesce window 内で `chain_total_score_pX` を複数回に分けて段階的に
+        確定する、クラス docstring 指摘19根治節の実測ログ参照)、
+        `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒) ごとに再チェックし追従する
+        (`_maybe_redecide` 側の `max(pred, obs)` が単調増加を保証)。
+        """
+        redecided = self._redecided1 if side_is_1p else self._redecided2
+        if not triggered:
+            return None
+        if not self._enable_resolved_victim_gen_live:
+            obs = None if redecided else float(total_score)
+        else:
+            last_t = self._victim_live_last_t1 if side_is_1p else self._victim_live_last_t2
+            due = last_t is None or (elapsed_sec - last_t) >= COUNTER_RECOMPUTE_INTERVAL_SEC
+            obs = float(total_score) if (not redecided or due) else None
+            if obs is not None:
+                if side_is_1p:
+                    self._victim_live_last_t1 = elapsed_sec
+                else:
+                    self._victim_live_last_t2 = elapsed_sec
+        if side_is_1p:
+            self._redecided1 = redecided or triggered
+        else:
+            self._redecided2 = redecided or triggered
+        return obs
+
     def _maybe_redecide(self, snap: OjamaAccountSnapshot, elapsed_sec: float) -> None:
         """確定済み連鎖合計得点が予測総得点を超えたら下限として即時再決着する。
 
@@ -1125,17 +1246,16 @@ class ResolvedExchangeTracker:
         settle は別の (後続の) 連鎖である可能性が高く、その場合は元の
         before_board を使い回した再決着はむしろ不整合を生むため見送る
         (簡明優先、hold の解除は両側 chain_event が None に戻るのを待つ)。
+
+        [指摘19 根治、2026-08-16] `enable_resolved_victim_gen_live=True` の
+        場合、上記「1回きり」は `_redecide_obs` により「chain_end_triggered_pX
+        が True の間 0.5秒ごとに追従」へ緩和される (クラス docstring 参照)。
+        既定 False では本メソッドの挙動は従来と完全に同一 (bit-identical)。
         """
-        obs1 = (
-            float(snap.chain_total_score_p1)
-            if snap.chain_end_triggered_p1 and not self._redecided1 else None
-        )
-        obs2 = (
-            float(snap.chain_total_score_p2)
-            if snap.chain_end_triggered_p2 and not self._redecided2 else None
-        )
-        self._redecided1 = self._redecided1 or obs1 is not None
-        self._redecided2 = self._redecided2 or obs2 is not None
+        obs1 = self._redecide_obs(
+            snap.chain_end_triggered_p1, snap.chain_total_score_p1, True, elapsed_sec)
+        obs2 = self._redecide_obs(
+            snap.chain_end_triggered_p2, snap.chain_total_score_p2, False, elapsed_sec)
         exceeded = (
             (obs1 is not None and obs1 > self._pred_score1)
             or (obs2 is not None and obs2 > self._pred_score2)
@@ -1247,6 +1367,10 @@ class ResolvedExchangeTracker:
                     and ev2.total_score >= CHAIN_TOTAL_MIN_SCORE):
                 self._ev1, self._ev2 = ev1, ev2
                 self._redecided1 = self._redecided2 = False
+                # [指摘19 根治] 新しい保持セッション開始、0.5秒間引きタイマも
+                # リセットする (enable_resolved_victim_gen_live=False では
+                # 未使用のため実害なし)。
+                self._victim_live_last_t1 = self._victim_live_last_t2 = None
                 self._awaiting_landing = False
                 self._landing_wait_started_sec = None
                 self._resolve(
@@ -3509,6 +3633,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_resolved_live_defender_strict: bool = False,
              enable_resolved_kill_override: bool = False,
              enable_resolved_kill_override_counter_aware: bool = False,
+             enable_resolved_victim_gen_live: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -3732,6 +3857,21 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         `hold_defender_prob`/`hold_defender_side` を再利用する。
         `enable_resolved_kill_override=False` の場合は無視される (孫フラグ)。
         既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_resolved_victim_gen_live: True で `_maybe_redecide` の「保持
+        セッション中1回きり」再決着 latch を、`chain_end_triggered_pX` が
+        True の間 `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒) ごとに追従する
+        方式へ緩和する (2026-08-16 指摘19 根治、coordinator決定(b)、
+        docs/DEMO_REVIEW_2026-08-13.md #19、`ResolvedExchangeTracker` docstring
+        指摘19根治節参照)。従来 (既定 False) は「1回きり」latch が settle
+        開始直後の未確定 (しばしば0の) `chain_total_score_pX` で永久に
+        固定してしまい、その後段階的に育っていく真の確定値 (実測:
+        0→1260→4020 と複数回に分けて確定) を二度と拾わなかった。これが
+        自分の連鎖を処理中の側 (victim) の生成お邪魔量が過小評価される
+        直接原因 (`--resolved-kill-override-counter-aware` は対症療法として
+        致死上書きだけを止めていたが、その手前の hold_adv 自体は非対称の
+        まま残っていた)。`--resolved-exchange-eval` 無効時は無視される
+        (#9 サブフラグ)。既定 False = 従来挙動と完全に同一 (backwards
+        compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -4023,7 +4163,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_decisive_amplify=enable_resolved_decisive_amplify,
         enable_live_defender_reeval=enable_resolved_live_defender,
         enable_live_defender_strict=enable_resolved_live_defender_strict,
-        enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware)
+        enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
+        enable_resolved_victim_gen_live=enable_resolved_victim_gen_live)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -4120,7 +4261,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 enable_decisive_amplify=enable_resolved_decisive_amplify,
                 enable_live_defender_reeval=enable_resolved_live_defender,
                 enable_live_defender_strict=enable_resolved_live_defender_strict,
-                enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware)
+                enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
+                enable_resolved_victim_gen_live=enable_resolved_victim_gen_live)
             # 試合境界で前試合の保持中パルス(推定連鎖数/実測得点差)を持ち越さない
             # (2026-08-15、前試合最後の連鎖表示が次試合冒頭に残る誤表示を防止)。
             chain_display_tracker = ChainCountDisplayTracker()
@@ -4626,6 +4768,19 @@ def main() -> None:
              "override 無効時は無視される。既定 OFF = 従来挙動と完全に同一。",
     )
     ap.add_argument(
+        "--resolved-victim-gen-live", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_victim_gen_live",
+        help="決着の再決着 (_maybe_redecide) を「保持セッション中1回きり」"
+             "から「chain_end_triggered_pX が True の間0.5秒ごとに追従」"
+             "へ緩和する (2026-08-16 指摘19 根治、docs/DEMO_REVIEW_2026-08-13"
+             ".md #19)。従来の1回きり latch は settle 開始直後の未確定"
+             "(しばしば0の) chain_total_score_pX で永久に固定してしまい、"
+             "段階的に育つ真の確定値 (実測: 0→1260→4020) を拾わなかった。"
+             "自分の連鎖を処理中の側の生成お邪魔量が過小評価される直接原因"
+             "だった。--resolved-exchange-eval 無効時は無視される。"
+             "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
         "--no-pressure", action="store_true", default=False,
         dest="disable_pressure",
         help="圧力成分を完全に外す (2026-08-09)。圧力は攻撃の履歴だが、その効果は"
@@ -4823,6 +4978,7 @@ def main() -> None:
              enable_resolved_kill_override=a.enable_resolved_kill_override,
              enable_resolved_kill_override_counter_aware=(
                  a.enable_resolved_kill_override_counter_aware),
+             enable_resolved_victim_gen_live=a.enable_resolved_victim_gen_live,
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
