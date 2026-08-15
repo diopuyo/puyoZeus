@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import src.indicators_v2 as iv  # noqa: E402
 from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.chain_count_truth import select_chain_count_high_confidence_band  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.exchange_virtual_board import (  # noqa: E402
     land_pending_ojama_onto_board,
@@ -332,6 +333,133 @@ class EarlyFireTracker:
     def on_settled(self) -> None:
         """settled(確定)再計算が入ったら速報バイアスをクリアする(二重計上防止)。"""
         self.bias = 0.0
+
+
+# ============================
+# れんさ数表示 (--show-chain-count、2026-08-15 user要望、既定 OFF)
+# ============================
+# user要望: 「得点よりれんさ数の方が重要指標。実際の連鎖数と評価がどう動いたか、
+# どちらの盤面での連鎖か明確に。認識性能検証としても使えるように」。
+#
+# 設計方針 (推定/実測の両論併記、単一の断定値を出さない):
+#   - 推定連鎖数 = `ChainEvent.chain_count`。ただしこれは常に simulate 由来
+#     (chain_detector.py `_try_emit_event` の `sim.chain_count`) であり、
+#     真値8連鎖→1と過小評価する壊滅例が実測済み
+#     (project_chain_count_both_untrustworthy_2026-07-30)。「推定」と明示する。
+#   - 実測得点差 = `OjamaAccountSnapshot.chain_total_score_p1/p2`
+#     (`chain_end_triggered_p1/p2` が立った瞬間のみ真)。これは score OCR の
+#     連鎖前後差分そのもの (src/ojama_accounting.py `_finalize_chain_end`:
+#     `chain_total = score_after - score_start`) であり、`ChainEvent.total_score`
+#     (これも simulate 由来、chain_detector.py:282,285) とは別物・こちらが
+#     真の観測値。
+#   - 得点逆算連鎖数 = 実測得点差を `select_chain_count_high_confidence_band`
+#     (src/chain_count_truth.py) に通した高信頼帯判定 (カバレッジ19.1%、
+#     判定不能なら None=「-」表示。単独では真値扱いしない)。
+#   - 推定 (simulate) と逆算 (得点) が食い違ったら、それ自体が
+#     「認識性能検証」の価値そのもの (どちらか、あるいは両方が誤っている
+#     証拠) → 表示側で目立たせる (色を変える)。
+CHAIN_DISPLAY_HOLD_SEC: float = 4.0  # 連鎖情報のパルス表示を保持する秒数
+# (根拠: EARLY_FIRE_DECAY の半減期11.5秒より短いが、"数字を読んで比較する"
+# UI 用途には十分な長さを固定値として確保する。連鎖アニメ自体は最長でも
+# 十数秒に収まる実測 (project_chain_count_both_untrustworthy) との比較で
+# 極端に短くも長くもない値)。
+
+
+@dataclass(frozen=True)
+class ChainCountDisplayInfo:
+    """`ChainCountDisplayTracker.snapshot` が返す片側 (1P/2P) 分の表示情報。
+
+    いずれのフィールドも None なら「該当データなし・保持期限切れ」を意味し、
+    呼び出し側は "-" 等のプレースホルダで描画する。
+    """
+
+    estimated_chain_count: int | None      # 推定連鎖数 (simulate 由来)
+    actual_score: int | None               # 実測得点差 (score OCR 由来)
+    derived_chain_count: int | None        # 得点逆算連鎖数 (高信頼帯、不明なら None)
+
+
+class ChainCountDisplayTracker:
+    """認識性能検証用の「推定連鎖数 vs 実測得点差」を側ごとに保持する (表示専用)。
+
+    stateless な `select_chain_count_high_confidence_band` を毎フレーム
+    再利用するだけで、本クラス自体は「パルスで一瞬しか立たない値を
+    一定時間読める形で保持する」という外部 wrapper の責務のみを持つ
+    (CLAUDE.md 「観測指標は stateless 実装、state-holding は外部 wrapper」)。
+    adv/winprob の計算には一切関与しない (表示専用、コアロジックへの
+    副作用ゼロ)。
+    """
+
+    def __init__(self) -> None:
+        self._est_p1: int | None = None
+        self._est_p1_until: float = -1.0
+        self._est_p2: int | None = None
+        self._est_p2_until: float = -1.0
+        self._score_p1: int | None = None
+        self._derived_p1: int | None = None
+        self._score_p1_until: float = -1.0
+        self._score_p2: int | None = None
+        self._derived_p2: int | None = None
+        self._score_p2_until: float = -1.0
+
+    def update(
+        self, ev1: "ChainEvent | None", ev2: "ChainEvent | None",
+        snap: OjamaAccountSnapshot, t_sec: float,
+    ) -> None:
+        """毎フレーム呼ぶ (render 有無・settled 有無に関わらず、パルス取りこぼし防止)。"""
+        if ev1 is not None:
+            self._est_p1 = ev1.chain_count
+            self._est_p1_until = t_sec + CHAIN_DISPLAY_HOLD_SEC
+        if ev2 is not None:
+            self._est_p2 = ev2.chain_count
+            self._est_p2_until = t_sec + CHAIN_DISPLAY_HOLD_SEC
+        if snap.chain_end_triggered_p1:
+            self._score_p1 = snap.chain_total_score_p1
+            self._derived_p1 = select_chain_count_high_confidence_band(
+                snap.chain_total_score_p1).chain_count
+            self._score_p1_until = t_sec + CHAIN_DISPLAY_HOLD_SEC
+        if snap.chain_end_triggered_p2:
+            self._score_p2 = snap.chain_total_score_p2
+            self._derived_p2 = select_chain_count_high_confidence_band(
+                snap.chain_total_score_p2).chain_count
+            self._score_p2_until = t_sec + CHAIN_DISPLAY_HOLD_SEC
+
+    def snapshot(self, side: str, t_sec: float) -> "ChainCountDisplayInfo | None":
+        """side ("1P"/"2P") の現在の表示情報を返す。両方とも保持期限切れなら None。"""
+        if side == "1P":
+            est = self._est_p1 if t_sec <= self._est_p1_until else None
+            score = self._score_p1 if t_sec <= self._score_p1_until else None
+            derived = self._derived_p1 if t_sec <= self._score_p1_until else None
+        else:
+            est = self._est_p2 if t_sec <= self._est_p2_until else None
+            score = self._score_p2 if t_sec <= self._score_p2_until else None
+            derived = self._derived_p2 if t_sec <= self._score_p2_until else None
+        if est is None and score is None:
+            return None
+        return ChainCountDisplayInfo(est, score, derived)
+
+
+def _build_chain_display_text(
+    side_label: str, info: "ChainCountDisplayInfo | None",
+) -> tuple[str, bool]:
+    """1行分の表示文字列と「推定≠逆算」食い違いフラグを組み立てる (純粋関数)。
+
+    info が None (連鎖無し・保持期限切れ) の場合は空文字を返し、呼び出し側
+    (`_draw_panel_info`) の optional-if-truthy パターン (`counter_text` と
+    同様) で行自体を描かない。
+    """
+    if info is None:
+        return "", False
+    est_s = f"{info.estimated_chain_count}連鎖" if info.estimated_chain_count is not None else "-"
+    score_s = f"{info.actual_score:+d}点" if info.actual_score is not None else "-"
+    derived_s = f"{info.derived_chain_count}連鎖" if info.derived_chain_count is not None else "-"
+    mismatch = (
+        info.estimated_chain_count is not None
+        and info.derived_chain_count is not None
+        and info.estimated_chain_count != info.derived_chain_count
+    )
+    tag = " [推定≠逆算]" if mismatch else ""
+    text = f"{side_label} 推定{est_s} / 実測{score_s} (逆算{derived_s}){tag}"
+    return text, mismatch
 
 
 # ============================
@@ -692,11 +820,20 @@ class ResolvedExchangeTracker:
         if defender_side is None:
             self.hold_defender_prob = float("nan")
             return adv, adv_to_winprob(adv)
-        # 回復時間 = 相手 (攻撃側) の隙時間。実観測 ChainEvent.chain_count
-        # (simulate 由来の chain_count は既知の過小評価事故があるため使わない、
-        # project_chain_count_both_untrustworthy) を起点に、#3 修正と同じ
-        # 「時間予算の計算箇所」1関数 (_chain_remaining_time_budget_sec) だけを
-        # 経由する (他の場所で時間予算を計算しない、根本修正)。
+        # 回復時間 = 相手 (攻撃側) の隙時間。
+        # [2026-08-15 コメント是正] 以前の記述は「実観測 ChainEvent.chain_count
+        # (simulate由来のchain_countは使わない)」としていたが誤り。
+        # ChainEvent.chain_count 自体が常に simulate 由来 (chain_detector.py
+        # `_try_emit_event` の `sim.chain_count`、chain_detector.py:280,300) で
+        # あり、「simulate由来でない実観測 chain_count」は存在しない
+        # (project_chain_count_both_untrustworthy の過小評価事故はこの値
+        # そのものが対象)。ここで attacker_event.chain_count を使うのは値を
+        # 信頼しているからではなく、`_expected_final_chain_count` が
+        # 「観測 N 到達」を入力に E[最終連鎖数|N到達] を引く条件付き期待値
+        # テーブル (#3 修正) の**入力**として扱うことで simulate 過小評価を
+        # 補正する設計だからである。#3 修正と同じ「時間予算の計算箇所」
+        # 1関数 (_chain_remaining_time_budget_sec) だけを経由する
+        # (他の場所で時間予算を計算しない、根本修正)。
         attacker_event = self._ev2 if defender_side == "1P" else self._ev1
         budget = _chain_remaining_time_budget_sec(
             attacker_event.chain_count, attacker_event.trigger_sec, self._t_sec,
@@ -1312,6 +1449,14 @@ PANEL_INFO_DRIVER_LINE_H = 26   # 主因1件あたりの行送り
 PANEL_INFO_STATE1_Y = 420       # 1P状態行
 PANEL_INFO_STATE2_Y = 450       # 2P状態行
 PANEL_INFO_COUNTER_Y = 490      # 応手情報行 (counter-reach有効時のみ)
+# れんさ数表示 (--show-chain-count、2026-08-15 追加、既定 OFF)。
+# 応手情報行 (PANEL_INFO_COUNTER_Y) の下、経過時刻行 (下端 h-50) より十分上。
+PANEL_INFO_CHAIN_Y1 = PANEL_INFO_COUNTER_Y + 30   # 1P れんさ表示行
+PANEL_INFO_CHAIN_Y2 = PANEL_INFO_CHAIN_Y1 + PANEL_INFO_DRIVER_LINE_H  # 2P れんさ表示行
+# 推定連鎖数(simulate)と得点逆算連鎖数が食い違う場合に強調する警告色 (橙)。
+# 認識性能検証の主目的 (食い違いを目立たせる) のため、通常の 1P/2P 色より
+# 明らかに異なる色調にする。
+PANEL_CHAIN_MISMATCH_COLOR = (255, 140, 0)
 PANEL_INFO_ELAPSED_BOTTOM_MARGIN = 50  # 経過時刻行 (情報パネル下端からの距離)
 
 
@@ -3165,12 +3310,17 @@ def _draw_panel_info(
     d: "ImageDraw.ImageDraw", box: tuple[int, int, int, int],
     adv: float, p1: float, waiting: bool, drivers: list[tuple[str, float]],
     state1: str, state2: str, counter_text: str, elapsed_sec: float,
+    chain_text_p1: str = "", chain_text_p2: str = "",
+    chain_mismatch_p1: bool = False, chain_mismatch_p2: bool = False,
 ) -> None:
     """右側縦長情報パネル (バー/勝率/主因/状態/経過時刻) を描画する。
 
     box: (x0, y0, w, h) の矩形 (panel_layout_regions()["info"])。
     バー描画は既存 _draw_bar を座標だけ差し替えて再利用する
     (「読みやすさ優先」のため overlay 版よりバー太め・勝率フォント大きめ)。
+    chain_text_p1/p2: --show-chain-count (既定 OFF) 用のれんさ表示行。
+        既定 "" = 従来通り行自体を描かない (counter_text と同じ
+        optional-if-truthy パターン、backwards compat)。
     """
     x0, y0, w, h = box
     d.rectangle([x0, y0, x0 + w, y0 + h], fill=(18, 18, 24))
@@ -3197,6 +3347,14 @@ def _draw_panel_info(
     if counter_text:
         d.text((x0 + pad, y0 + PANEL_INFO_COUNTER_Y), counter_text,
                font=_font(18), fill=(220, 220, 150))
+    if chain_text_p1:
+        color = PANEL_CHAIN_MISMATCH_COLOR if chain_mismatch_p1 else (150, 200, 255)
+        d.text((x0 + pad, y0 + PANEL_INFO_CHAIN_Y1), chain_text_p1,
+               font=_font(16), fill=color)
+    if chain_text_p2:
+        color = PANEL_CHAIN_MISMATCH_COLOR if chain_mismatch_p2 else (255, 180, 180)
+        d.text((x0 + pad, y0 + PANEL_INFO_CHAIN_Y2), chain_text_p2,
+               font=_font(16), fill=color)
     d.text((x0 + pad, y0 + h - PANEL_INFO_ELAPSED_BOTTOM_MARGIN),
            f"経過 {elapsed_sec:.0f} 秒", font=_font(20), fill=(200, 200, 200))
 
@@ -3206,6 +3364,8 @@ def _draw_panel_layout(
     drivers: list[tuple[str, float]], waiting: bool,
     history: list[tuple[float, float]], t_rel: float, total: float,
     state1: str, state2: str, counter_text: str, elapsed_sec: float,
+    chain_text_p1: str = "", chain_text_p2: str = "",
+    chain_mismatch_p1: bool = False, chain_mismatch_p2: bool = False,
 ) -> np.ndarray:
     """パネルレイアウト (左上映像+左下グラフ+右情報パネル+下端字幕帯、1920x1080)
     で1フレーム描画する。
@@ -3228,7 +3388,9 @@ def _draw_panel_layout(
     if history:
         _draw_graph(d, history, t_rel, total, render_area=regions["graph"])
     _draw_panel_info(d, regions["info"], adv, p1, waiting, drivers,
-                     state1, state2, counter_text, elapsed_sec)
+                     state1, state2, counter_text, elapsed_sec,
+                     chain_text_p1=chain_text_p1, chain_text_p2=chain_text_p2,
+                     chain_mismatch_p1=chain_mismatch_p1, chain_mismatch_p2=chain_mismatch_p2)
     return cv2.cvtColor(np.array(canvas), cv2.COLOR_RGB2BGR)
 
 
@@ -3319,6 +3481,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              use_production_recognition: bool = (
                  OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT),
              resize_1080p: bool = OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
+             show_chain_count: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -3603,6 +3766,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         経路の疑似 ChainEvent の total_score/base_score に simulate 推定値を
         充填する。既定 False = 従来挙動 (backwards compat、未採用のため
         use_production_recognition 経由でも自動 ON にはならない)。
+    show_chain_count: True で --layout panel の情報パネルに「推定連鎖数
+        (ChainEvent.chain_count、simulate 由来) / 実測得点差
+        (OjamaAccountSnapshot.chain_total_score_pX、score OCR 由来) / 得点逆算
+        連鎖数 (select_chain_count_high_confidence_band、判定不能なら"-")」を
+        1P/2P それぞれ並べて表示する (2026-08-15 user要望「れんさ数の方が
+        重要指標・認識性能検証としても使える形に」)。単一の断定値でなく
+        3値併記なのは、simulate 推定と得点逆算の食い違い自体が認識性能
+        検証の価値だから (一致していれば連鎖数は信頼できる、食い違えば
+        どちらか/両方が誤っている証拠。食い違い時は情報パネル側でオレンジ
+        色に切り替えて強調する)。既定 False = 行を一切描かない
+        (bit-identical、backwards compat)。layout="overlay" には未配線
+        (_draw_overlay は変更していないため無関係)。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -3781,6 +3956,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     attribution_exclude = () if show_excluded_attribution else ATTRIBUTION_EXCLUDED_INDICATORS
     hcache = HeavyAdvCache(model, attribution_exclude=attribution_exclude)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
+    # れんさ数表示 (--show-chain-count、2026-08-15)。show_chain_count=False 時も
+    # 生成・update() 自体は行うが (コスト僅少)、_draw_panel_layout へ渡す文字列を
+    # 組み立てないため描画には一切現れない (bit-identical、後方互換)。
+    chain_display_tracker = ChainCountDisplayTracker()
     # #9 両者同時発火の決着先読み (2026-08-13)。enable_resolved_exchange_eval=False
     # 時も生成のみ (コスト僅少、update() 呼び出し自体は毎フレーム行うが chain_event
     # が両方非None になるまで内部で何もしない)。
@@ -3885,6 +4064,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 enable_decisive_amplify=enable_resolved_decisive_amplify,
                 enable_live_defender_reeval=enable_resolved_live_defender,
                 enable_live_defender_strict=enable_resolved_live_defender_strict)
+            # 試合境界で前試合の保持中パルス(推定連鎖数/実測得点差)を持ち越さない
+            # (2026-08-15、前試合最後の連鎖表示が次試合冒頭に残る誤表示を防止)。
+            chain_display_tracker = ChainCountDisplayTracker()
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
@@ -3893,6 +4075,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
+        # れんさ数表示 (--show-chain-count) 用の保持更新。adv/history/その他の
+        # コアロジックには一切影響しない (表示専用トラッカー、毎フレーム更新
+        # してもコスト僅少なため show_chain_count フラグでのゲートは不要)。
+        chain_display_tracker.update(r.p1.chain_event, r.p2.chain_event, snap, t)
         # (早期発火) chain_event 検知フレームで即座に速報バイアスを更新する。
         # settled ゲートの外側 (= 非STABLE中も毎フレーム) で呼ぶことが本修正の要
         # (2026-07-29 userレビュー指摘1/2対処、詳細は EarlyFireTracker docstring)。
@@ -4136,6 +4322,16 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             display_frame = cv2.resize(
                 raw_native, (OUT_W, OUT_H), interpolation=cv2.INTER_AREA)
         if layout == "panel":
+            # れんさ数表示 (--show-chain-count、既定 OFF)。OFF 時は空文字/False
+            # のままとなり _draw_panel_info の optional-if-truthy 分岐で行自体が
+            # 描かれない (=既存出力と bit-identical、後方互換)。
+            chain_text_p1, chain_mismatch_p1 = "", False
+            chain_text_p2, chain_mismatch_p2 = "", False
+            if show_chain_count:
+                chain_text_p1, chain_mismatch_p1 = _build_chain_display_text(
+                    "1P", chain_display_tracker.snapshot("1P", t))
+                chain_text_p2, chain_mismatch_p2 = _build_chain_display_text(
+                    "2P", chain_display_tracker.snapshot("2P", t))
             frame_out = _draw_panel_layout(
                 display_frame, disp_adv, disp_p1, drivers, waiting,
                 history, t_rel, graph_total,
@@ -4147,7 +4343,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     resolved_tracker.hold_defender_prob,
                     resolved_tracker.hold_incoming_ojama,
                     defender_side, counter_p1, counter_p2, incoming_ojama),
-                elapsed_sec=t - start_sec)
+                elapsed_sec=t - start_sec,
+                chain_text_p1=chain_text_p1, chain_text_p2=chain_text_p2,
+                chain_mismatch_p1=chain_mismatch_p1, chain_mismatch_p2=chain_mismatch_p2)
         else:
             frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
                                       history, t_rel, graph_total,
@@ -4424,6 +4622,14 @@ def main() -> None:
              "グラフ・右に縦長情報パネルを配置する新レイアウト (1920x1080)。",
     )
     ap.add_argument(
+        "--show-chain-count", action="store_true", default=False,
+        dest="show_chain_count",
+        help="--layout panel の情報パネルに推定連鎖数(simulate)/実測得点差"
+             "(score OCR)/得点逆算連鎖数を1P/2Pそれぞれ表示する "
+             "(2026-08-15 user要望、認識性能検証用)。既定OFF=行を描かない"
+             " (bit-identical)。3値が食い違う場合はオレンジで強調表示する。",
+    )
+    ap.add_argument(
         "--show-excluded-attribution", action="store_true", default=False,
         dest="show_excluded_attribution",
         help="デバッグ専用。「主因」欄から通常除外している指標 "
@@ -4556,7 +4762,8 @@ def main() -> None:
              dump_timeline_path=a.dump_timeline_path,
              normalize_fps_30=normalize_fps_30,
              use_production_recognition=use_production_recognition,
-             resize_1080p=resize_1080p)
+             resize_1080p=resize_1080p,
+             show_chain_count=a.show_chain_count)
 
 
 if __name__ == "__main__":
