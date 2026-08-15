@@ -200,6 +200,45 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT=True で CLI 既定値も同時に "
         "ON 化する (認識用と表示用のフレームは独立に生成、表示解像度は不変)",
     ),
+    AdoptedFlag(
+        "--resolved-live-defender-strict", "2026-08-15",
+        "指摘14 案1 (user承認2026-08-15、コミット53129bb)。決着ホールド中の "
+        "受け側再評価 (_reevaluate_live_defender、指摘13で導入) の起動条件を "
+        "状態機械ベースに厳格化する。従来は「ちょうど片側の chain_event が "
+        "None」という XOR のみで受け側を「自由」と判定していたが、ChainEvent は "
+        "trigger 検知時に1度発行され hold 秒後に None へ戻るパルス方式のため、"
+        "「旧連鎖の hold 切れ〜新連鎖の trigger 検知」の settle gap にいる側も "
+        "ev=None になり誤って自由扱いされていた。実測 (t=195.30): "
+        "ev1_cc=9 (1P継続中) / ev2=None かつ state2=GRAVITY_SETTLE の 2P を "
+        "自由な受け側と誤分類し、着弾前の綺麗な盤面をモデルへ渡して "
+        "hold_p1 96.1%→81.1% へ退行 (真の飛来おじゃま589個=回避不能死なのに "
+        "2P 18.9% を5.2秒表示)。修正 = defender 側の状態が "
+        "_LIVE_DEFENDER_BUSY_STATES {CHAIN, GRAVITY_SETTLE} なら再評価を "
+        "スキップし直前値を維持する。TSUMO_FALL/OJAMA_FALL は指摘13が意図した "
+        "正当な自由行動を塞がないため意図的に非busy。A/B実測 "
+        "(logs/_diag_issue14_flags_ab_v2_2026-08-15.log): 指摘14窓 "
+        "(194.53-201秒) は退行が完全消滅し 96.1% を窓全体で維持。指摘13 正当窓 "
+        "(234.87-245.5秒) は t=236.27 以降 baseline と完全一致・0.5秒ごとに "
+        "連続変化 (凍結の再発なし)、冒頭0.9秒のみ 2P 77%→84.3% に変化 "
+        "(defender が実際に busy だった瞬間を正しくスキップした結果。この値は "
+        "指摘12で決着した84.3%と一致)",
+    ),
+    AdoptedFlag(
+        "--resolved-kill-override", "2026-08-15",
+        "指摘14 案2 (user承認2026-08-15、コミット8f8a577)。既存の致死上書き "
+        "安全弁 kill_override を決着ホールド表示値にも配線する。従来は "
+        "ライブ per-frame 経路にのみ配線されており、決着ホールド中は "
+        "disp_adv/disp_p1 を丸ごと上書きする経路が通常経路を迂回するため "
+        "pending/room 比が致死水準でも安全弁が絶対に発火しなかった "
+        "(実測 589/50≈11.8 ≫ KILL_RATIO_FULL=1.5 で無発火)。材料は新規に "
+        "増やさず既存の観測量のみ再利用 (pending=_incoming_total_p1/p2 = "
+        "指摘11の着弾完了判定と同一値、room=board_room(b1)/board_room(b2))。"
+        "二重計上防止はライブ経路と同じく kill_override を最終段として適用 "
+        "(g=1 の完全上書き時は amplify 由来の寄与も自動的に上書きされる)。"
+        "A/B実測 (logs/_diag_issue14_flags_ab_2026-08-15.log): 指摘14窓の "
+        "全時刻で adv=+100/p1=99.3% (2P 19%→0.7%)。案1が誤爆機構そのものを "
+        "断つのに対し、本フラグは致死場面の最終防波堤として併用する",
+    ),
 )
 
 # --counter-reach の CLI 既定値。visualize_advantage_overlay.py の argparse
