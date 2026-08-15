@@ -1,6 +1,27 @@
 """指摘14修正2フラグ (--resolved-live-defender-strict / --resolved-kill-override)
 の全域バックテスト (2026-08-15、coordinator依頼)。
 
+## v2 改定 (2026-08-15、同日中の是正・2点のみ)
+初回実行 (data/verify/backtest_issue14_2026-08-15/) に2つの問題が判明した
+ための再実行。**旧結果は上書きしない** (OUT_ROOT/LOG_ROOT を v2 パスへ変更)。
+
+1. **フラグ構成が出荷構成と不一致**: `common_overlay_kwargs()` が
+   `stable_majority_window` / `enable_ojama_fall_entry_hardening` /
+   `enable_ojama_fall_scoped_exit` を True にしていたが、この3つは
+   2026-08-15 に不採用確定 (効果ゼロ/悪化主犯/寄与ゼロ)。
+   `scripts/_gen_demo_final4_2026-08-15.sh` (出荷直前構成) と完全一致させる
+   よう削除した。
+2. **凍結検出器 (`_frozen_runs`) が試合外画面を凍結として誤計上** (弱点台帳
+   W14)。`RecognitionPipeline.update` を read-only ラッパーで計装し、
+   disp_adv と同一フレーム粒度で state1/state2 (BoardState.name) と
+   score1/score2 を記録。凍結区間の判定に「試合外
+   (state1==MENU or state2==MENU or 両者スコアが SCORE_NEAR_ZERO_THRESHOLD
+   以下)」フィルタを追加し、該当区間は「凍結」統計から除外する。
+   さらに user 指定の判定基準 (★最重要) に基づき、試合中の凍結区間を
+   A (全時間帯 両者連鎖中=正当) / B (途中から片側が設置開始したのに
+   固定=不備候補) / C (その他) へ分類する。
+
+
 ## 目的
 1場面 (絶対194.53-201秒、review_demo_2026-08-12.mp4) では退行消滅を確認済み
 (scripts/_diag_issue14_flags_ab_v2_2026-08-15.py 等)。本スクリプトは
@@ -82,8 +103,10 @@ if str(_ROOT) not in sys.path:
 # ============================
 
 VIDEO_DIR: Path = Path.home() / "frames"
-OUT_ROOT: Path = _ROOT / "data" / "verify" / "backtest_issue14_2026-08-15"
-LOG_ROOT: Path = _ROOT / "logs" / "backtest_issue14_2026-08-15"
+# v2 (2026-08-15): 旧結果 (data/verify/backtest_issue14_2026-08-15/) を
+# 上書きしないよう別ディレクトリに出力する。
+OUT_ROOT: Path = _ROOT / "data" / "verify" / "backtest_issue14_v2_2026-08-15"
+LOG_ROOT: Path = _ROOT / "logs" / "backtest_issue14_v2_2026-08-15"
 PYTHON_BIN: Path = _ROOT / "venv" / "bin" / "python"
 
 # 手元実物動画 (WSL ~/frames/ 実物)。指摘14の調整に使った
@@ -116,8 +139,8 @@ CHUNK_SEC: float = 30.0
 # 「測れていないこと」として報告に明記する)。
 N_CHUNKS_PER_VIDEO: int = 2
 CHUNK_OFFSET_FRACTIONS: tuple[float, ...] = (0.35, 0.75)
-# 同時実行プロセス数 (16コア中、他ジョブ (フルpytest等) との共存を考慮し10)
-MAX_PARALLEL_WORKERS: int = 10
+# 同時実行プロセス数 (v2: coordinator指示により最大8に変更)
+MAX_PARALLEL_WORKERS: int = 8
 
 CONFIG_OFF: str = "off"  # 指摘14 2フラグとも False (採用前)
 CONFIG_ON: str = "on"    # 指摘14 2フラグとも True (2026-08-15 採用構成)
@@ -133,14 +156,40 @@ T_MATCH_DECIMALS: int = 3
 # フレーム抽出時、動画の fps が読めない場合のフォールバック値
 DEFAULT_FPS_FALLBACK: float = 30.0
 
+# ============================
+# v2 是正 (問題2): 試合外フィルタ + A/B/C 分類用定数
+# ============================
+
+# BoardState.name (src/board_state_machine.py) のうち「連鎖中」とみなす値。
+# ★user判定基準: この2値のまま両者とも動かないなら凍結は正当。
+CHAIN_LIKE_STATE_NAMES: frozenset[str] = frozenset({"CHAIN", "GRAVITY_SETTLE"})
+# 「設置活動中/確定済」とみなす値。連鎖後にこれへ遷移したのに disp_adv が
+# 固定されたままなら不備の候補 (B)。
+PLACE_LIKE_STATE_NAMES: frozenset[str] = frozenset({"STABLE", "TSUMO_FALL"})
+# 試合外 (タイトル/リザルト/リトライ) を表す BoardState.name。
+MENU_STATE_NAME: str = "MENU"
+# score が OCR 失敗 (None) だった場合の npz 保存用センチネル値
+# (実スコアは非負のため -1 は衝突しない)。
+SCORE_NONE_SENTINEL: int = -1
+# 凍結区間分類: A=正当(両者連鎖中) / B=不備候補(片側設置開始なのに固定) /
+# C=その他 (盤面が実際に不変等)。
+RUN_CLASS_LEGIT: str = "A"
+RUN_CLASS_SUSPECT: str = "B"
+RUN_CLASS_OTHER: str = "C"
+
 
 def common_overlay_kwargs() -> dict[str, object]:
     """OFF/ON 双方に共通の土台 kwargs を返す。
 
-    scripts/_gen_demo_final3_2026-08-15.sh (2026-08-15 時点で実際に使われて
-    いる最良構成) と同一のフラグ集合。production_config.advantage_overlay_
-    flags() は resolved-exchange-eval 系がまだ未登録のため使わない
-    (docstring「土台」節参照)。
+    scripts/_gen_demo_final4_2026-08-15.sh (2026-08-15 出荷直前構成、
+    指摘14修正2フラグを除く全フラグ) と完全一致させる。
+    [v2是正] stable_majority_window / enable_ojama_fall_entry_hardening /
+    enable_ojama_fall_scoped_exit の3つは 2026-08-15 に不採用確定
+    (効果ゼロ/悪化主犯/寄与ゼロ、final4 スクリプトのコメント参照) のため
+    削除した (旧v1では誤って True のまま計測していた)。
+    enable_ojama_fall_placement_override は採用済みのため維持。
+    production_config.advantage_overlay_flags() は resolved-exchange-eval
+    系がまだ未登録のため使わない (docstring「土台」節参照)。
     """
     return dict(
         sample_interval=0.0,
@@ -151,10 +200,7 @@ def common_overlay_kwargs() -> dict[str, object]:
         disable_pressure=True,
         enable_counter_remaining_time=True,
         enable_counter_defender_only=True,
-        stable_majority_window=True,
         enable_ojama_fall_placement_override=True,
-        enable_ojama_fall_entry_hardening=True,
-        enable_ojama_fall_scoped_exit=True,
         enable_resolved_exchange_eval=True,
         enable_resolved_decisive_amplify=True,
         enable_resolved_live_defender=True,
@@ -307,6 +353,7 @@ def _run_worker(
     プロセス内のみに閉じる、1ジョブ限りで終了するため後始末は不要)。
     """
     import scripts.visualize_advantage_overlay as ov
+    from src.recognition_pipeline import RecognitionPipeline
 
     hold_trace: list[tuple[float, bool]] = []
     original_update = ov.ResolvedExchangeTracker.update
@@ -323,7 +370,26 @@ def _run_worker(
         hold_trace.append((float(t_sec) if t_sec is not None else float("nan"), bool(active)))
         return active, just_deactivated
 
+    # v2 追加 (問題2): RecognitionPipeline.update を read-only ラッパーへ
+    # 差し替え、disp_adv と同一フレーム粒度 (generate() 内 t = fi/fps を
+    # そのまま pipe.update に渡している、line "r = pipe.update(fi, t,
+    # recog_frame)") で state1/state2/score1/score2 を記録する。
+    # production コード自体は無変更 (このプロセス内限定の属性差し替え、
+    # ResolvedExchangeTracker.update の差し替えと同じ方式)。
+    state_trace: list[tuple[float, str, str, int, int]] = []
+    original_pipe_update = RecognitionPipeline.update
+
+    def _traced_pipe_update(self, frame_idx, time_sec, frame):  # noqa: ANN001
+        result = original_pipe_update(self, frame_idx, time_sec, frame)
+        s1 = getattr(result.p1.state, "name", "")
+        s2 = getattr(result.p2.state, "name", "")
+        sc1 = result.p1.score if result.p1.score is not None else SCORE_NONE_SENTINEL
+        sc2 = result.p2.score if result.p2.score is not None else SCORE_NONE_SENTINEL
+        state_trace.append((float(time_sec), s1, s2, int(sc1), int(sc2)))
+        return result
+
     ov.ResolvedExchangeTracker.update = _traced_update
+    RecognitionPipeline.update = _traced_pipe_update
     history: list[tuple[float, float]] = []
     try:
         kwargs = dict(common_overlay_kwargs())
@@ -336,17 +402,26 @@ def _run_worker(
         )
     finally:
         ov.ResolvedExchangeTracker.update = original_update
+        RecognitionPipeline.update = original_pipe_update
 
     out_npz.parent.mkdir(parents=True, exist_ok=True)
     t_adv = np.array([t for t, _ in history], dtype=np.float64)
     adv = np.array([a for _, a in history], dtype=np.float32)
     t_hold = np.array([t for t, _ in hold_trace], dtype=np.float64)
     active = np.array([a for _, a in hold_trace], dtype=np.bool_)
+    t_state = np.array([t for t, _, _, _, _ in state_trace], dtype=np.float64)
+    state1 = np.array([s1 for _, s1, _, _, _ in state_trace], dtype="U20")
+    state2 = np.array([s2 for _, _, s2, _, _ in state_trace], dtype="U20")
+    score1 = np.array([sc1 for _, _, _, sc1, _ in state_trace], dtype=np.int64)
+    score2 = np.array([sc2 for _, _, _, _, sc2 in state_trace], dtype=np.int64)
     np.savez_compressed(
         out_npz, t_adv=t_adv, adv=adv, t_hold=t_hold, active=active,
+        t_state=t_state, state1=state1, state2=state2,
+        score1=score1, score2=score2,
         start_sec=np.float64(start_sec), chunk_sec=np.float64(chunk_sec),
     )
-    print(f"[worker] adv={len(history)} hold={len(hold_trace)} -> {out_npz}")
+    print(f"[worker] adv={len(history)} hold={len(hold_trace)} "
+          f"state={len(state_trace)} -> {out_npz}")
 
 
 # ============================
@@ -370,18 +445,125 @@ def _hold_events(t_hold: np.ndarray, active: np.ndarray) -> list[tuple[float, fl
     return events
 
 
-def _frozen_runs(t_adv: np.ndarray, adv: np.ndarray) -> list[float]:
-    """disp_adv が連続して不変だった区間の継続秒リストを返す。"""
+def _frozen_run_windows(
+    t_adv: np.ndarray, adv: np.ndarray,
+) -> list[tuple[float, float, float]]:
+    """disp_adv が連続して不変だった区間の (開始t, 終了t, 継続秒) 一覧を返す。
+
+    v2: 単なる継続秒だけでなく開始/終了時刻も返す (問題2是正、試合外フィルタ
+    /A-B-C分類のために区間内の state トレースへ後で突合わせる必要があるため)。
+
+    [v2実行中に発覚した測定器バグの是正・第3の修正] disp_adv が毎フレーム
+    変化し続ける (=凍結が一切無い) 区間では、隣接2点が「異なる」ことをもって
+    「1点だけの縮退run (継続秒=0)」が全フレームぶん記録されてしまい、
+    (a) 凍結件数が実態の数十〜数百倍に水増しされる (b) A/B/C分類が単一
+    フレームの状態タプルに対して評価され、たまたま隣接側が CHAIN で自側が
+    STABLE/TSUMO_FALL のような何気ない瞬間を大量に「B(不備候補)」誤判定する
+    という二重の実害を引き起こした (実測: video_c10 1本だけで270件超のB誤検出
+    → フレーム抽出が暴走、ディスク圧迫の危険まで確認)。継続秒=0 は定義上
+    「1フレームも重複していない」= そもそも凍結ではないため、ここで除外する
+    (この不具合は v1 の生凍結分布集計にも内在していたため、v2 で合わせて
+    是正する)。
+    """
     if len(t_adv) < 2:
         return []
-    runs: list[float] = []
+    windows: list[tuple[float, float, float]] = []
     run_start = t_adv[0]
     for i in range(1, len(adv)):
         if adv[i] != adv[i - 1]:
-            runs.append(float(t_adv[i - 1] - run_start))
+            windows.append((float(run_start), float(t_adv[i - 1]), float(t_adv[i - 1] - run_start)))
             run_start = t_adv[i]
-    runs.append(float(t_adv[-1] - run_start))
-    return runs
+    windows.append((float(run_start), float(t_adv[-1]), float(t_adv[-1] - run_start)))
+    # 継続秒=0 (縮退run、1フレームも重複していない) を除外する。
+    return [w for w in windows if w[2] > 0.0]
+
+
+def _frozen_runs(t_adv: np.ndarray, adv: np.ndarray) -> list[float]:
+    """disp_adv が連続して不変だった区間の継続秒リストを返す (旧仕様、生値)。
+
+    v2 でも「是正前の生の凍結分布」を報告する (前回結果との差分を示すため)
+    目的で残す。試合外フィルタは適用しない。
+    """
+    return [dur for _, _, dur in _frozen_run_windows(t_adv, adv)]
+
+
+def _state_lookup(state_data: dict) -> dict[float, tuple[str, str, int, int]]:
+    """npz の t_state/state1/state2/score1/score2 から t(丸め)→状態タプルの辞書を作る。
+
+    generate() 内で t = fi/fps を pipe.update()/history 双方に同一の float
+    として渡しているため (同一プロセス内の同一変数)、丸め誤差はほぼ無いが
+    OFF/ON マージと同じ T_MATCH_DECIMALS 丸めを踏襲し安全側に倒す。
+    """
+    t_state = state_data["t_state"]
+    s1 = state_data["state1"]
+    s2 = state_data["state2"]
+    sc1 = state_data["score1"]
+    sc2 = state_data["score2"]
+    return {
+        round(float(t), T_MATCH_DECIMALS): (str(s1[i]), str(s2[i]), int(sc1[i]), int(sc2[i]))
+        for i, t in enumerate(t_state)
+    }
+
+
+def _score_looks_waiting(score: int) -> bool:
+    """スコアが OCR失敗(SCORE_NONE_SENTINEL)、または0付近(待機画面)かを返す。"""
+    from scripts.visualize_advantage_overlay import SCORE_NEAR_ZERO_THRESHOLD
+    return score == SCORE_NONE_SENTINEL or score <= SCORE_NEAR_ZERO_THRESHOLD
+
+
+def _states_in_window(
+    lookup: dict[float, tuple[str, str, int, int]], start_t: float, end_t: float,
+) -> list[tuple[str, str, int, int]]:
+    """凍結区間 [start_t, end_t] (両端含む) 内の state トレース点を時刻昇順で返す。"""
+    lo = round(start_t, T_MATCH_DECIMALS)
+    hi = round(end_t, T_MATCH_DECIMALS)
+    return [v for t, v in sorted(lookup.items()) if lo <= t <= hi]
+
+
+def _is_out_of_match_window(states: list[tuple[str, str, int, int]]) -> bool:
+    """区間内に試合外 (MENU) または両者スコア待機状態のフレームが1つでもあれば True。
+
+    v2是正 (問題2、弱点台帳W14): 「3.63秒 ちょうど50.0%固定」等の凍結誤計上
+    (実体はラウンド間待機/ばたんきゅー演出) をここで除外する。
+    state が全く取れない (states空、= state トレースと disp_adv のt突合わせに
+    失敗) 場合は判定不能として False (=試合中として扱う、安全側フォールバック
+    だが件数を "unmatched" として別途カウントし正直に開示する)。
+    """
+    for s1, s2, sc1, sc2 in states:
+        if s1 == MENU_STATE_NAME or s2 == MENU_STATE_NAME:
+            return True
+        if _score_looks_waiting(sc1) and _score_looks_waiting(sc2):
+            return True
+    return False
+
+
+def _classify_run(states: list[tuple[str, str, int, int]]) -> str:
+    """★user判定基準に基づき凍結区間を A(正当)/B(不備候補)/C(その他) に分類する。
+
+    A: 全時間帯で両者とも連鎖中 (CHAIN_LIKE_STATE_NAMES) のまま。
+    B: 区間内のどこかで連鎖中(いずれかの側)から設置活動中/確定済
+       (PLACE_LIKE_STATE_NAMES) へ遷移した形跡があるのに disp_adv は不変
+       (= 置くたびに微妙に変動するはず、というuser基準への違反候補)。
+    C: そのいずれでもない (連鎖自体が一度も観測されない=盤面が実際に不変等)。
+    """
+    has_chain_like = any(
+        s1 in CHAIN_LIKE_STATE_NAMES or s2 in CHAIN_LIKE_STATE_NAMES for s1, s2, _, _ in states
+    )
+    if not has_chain_like:
+        return RUN_CLASS_OTHER
+    all_chain_like = all(
+        s1 in CHAIN_LIKE_STATE_NAMES and s2 in CHAIN_LIKE_STATE_NAMES for s1, s2, _, _ in states
+    )
+    if all_chain_like:
+        return RUN_CLASS_LEGIT
+    # 連鎖中フレームが少なくとも1つあり、かつ全時間帯連鎖中ではない
+    # (= どこかで片側が PLACE_LIKE へ遷移している) → 不備候補。
+    has_place_like = any(
+        s1 in PLACE_LIKE_STATE_NAMES or s2 in PLACE_LIKE_STATE_NAMES for s1, s2, _, _ in states
+    )
+    if has_place_like:
+        return RUN_CLASS_SUSPECT
+    return RUN_CLASS_OTHER
 
 
 def _percentile(values: list[float], q: float) -> float:
@@ -456,8 +638,64 @@ def extract_top_frames(top_diffs: list[tuple[float, str, float, float, float]]) 
     return extracted
 
 
+# B(不備候補) 実画面フレーム抽出の上限件数 (指示上「数件なら」保存する想定の
+# 安全弁。件数がこれを超える場合はディスク圧迫防止のため上位のみ抽出し、
+# 打ち切ったことを summary に明記する)。
+MAX_B_EVENT_FRAMES: int = 20
+# B(不備候補) 全件リストの markdown 表示上限 (JSON には常に全件を残す)。
+B_EVENT_MD_TABLE_CAP: int = 300
+
+
+def extract_b_event_frames(b_events: list[dict]) -> list[dict]:
+    """B分類 (不備候補) の凍結区間から、開始時刻の実画面フレームを保存する。
+
+    件数が少数 (指示上「数件なら」) を想定した単純実装。MAX_B_EVENT_FRAMES
+    件を上限に保存する (feedback_review_actual_screen_frames、抽象プロット
+    でなく実画面で判断。無制限だとディスク圧迫の危険があるため安全弁を設ける)。
+    継続時間が長い順に優先する (=より深刻な不備候補を優先的に証拠化)。
+    """
+    if not b_events:
+        return []
+    b_events = sorted(b_events, key=lambda e: -e["duration"])[:MAX_B_EVENT_FRAMES]
+    frames_dir = OUT_ROOT / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    extracted: list[dict] = []
+    seen_video: dict[str, "cv2.VideoCapture"] = {}
+    for ev in b_events:
+        video_path = _video_path_for(ev["name"])
+        if video_path is None:
+            continue
+        key = str(video_path)
+        if key not in seen_video:
+            seen_video[key] = cv2.VideoCapture(key)
+        cap = seen_video[key]
+        fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS_FALLBACK
+        t = ev["start_t"]
+        frame_idx = int(round(t * fps))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            print(f"[B-frame-extract skip] 読めない: {ev['name']} t={t:.2f}")
+            continue
+        out_path = frames_dir / (
+            f"Bevent_{ev['config']}_{ev['name']}_t{t:.2f}_dur{ev['duration']:.2f}.png")
+        cv2.imwrite(str(out_path), frame)
+        row = dict(ev)
+        row["path"] = str(out_path)
+        extracted.append(row)
+        print(f"[B-frame-extract] {out_path}")
+    for cap in seen_video.values():
+        cap.release()
+    return extracted
+
+
 def run_aggregate() -> None:
-    """収集済み npz を集計し summary.md/json + 上位乖離フレームを書き出す。"""
+    """収集済み npz を集計し summary.md/json + 上位乖離/B事象フレームを書き出す。
+
+    v2是正 (問題2): 凍結区間を試合外フィルタ (MENU state / 待機スコア) で
+    除外し、試合中の凍結区間のみを A(正当)/B(不備候補)/C(その他) に分類する
+    (★user判定基準)。旧v1相当の「生の凍結分布」も差分報告用に残す。
+    """
     from scripts.visualize_advantage_overlay import adv_to_winprob
 
     npz_root = OUT_ROOT / "npz"
@@ -474,7 +712,22 @@ def run_aggregate() -> None:
     changed_frames = 0
     total_matched_frames = 0
     extreme_frac = {CONFIG_OFF: [], CONFIG_ON: []}
-    frozen_runs_all = {CONFIG_OFF: [], CONFIG_ON: []}
+    # 生の凍結分布 (試合外フィルタ適用前、旧v1相当。差分報告用に残す)。
+    frozen_runs_raw = {CONFIG_OFF: [], CONFIG_ON: []}
+    # 試合外フィルタ適用後 (v2是正済み) の凍結分布。
+    frozen_runs_inmatch = {CONFIG_OFF: [], CONFIG_ON: []}
+    n_runs_excluded_out_of_match = {CONFIG_OFF: 0, CONFIG_ON: 0}
+    # state トレースが空/突合わせ失敗で判定不能だった件数 (正直な開示用)。
+    n_runs_unmatched_state = {CONFIG_OFF: 0, CONFIG_ON: 0}
+    run_class_counts = {
+        CONFIG_OFF: {RUN_CLASS_LEGIT: 0, RUN_CLASS_SUSPECT: 0, RUN_CLASS_OTHER: 0},
+        CONFIG_ON: {RUN_CLASS_LEGIT: 0, RUN_CLASS_SUSPECT: 0, RUN_CLASS_OTHER: 0},
+    }
+    run_class_duration = {
+        CONFIG_OFF: {RUN_CLASS_LEGIT: 0.0, RUN_CLASS_SUSPECT: 0.0, RUN_CLASS_OTHER: 0.0},
+        CONFIG_ON: {RUN_CLASS_LEGIT: 0.0, RUN_CLASS_SUSPECT: 0.0, RUN_CLASS_OTHER: 0.0},
+    }
+    b_events: dict[str, list[dict]] = {CONFIG_OFF: [], CONFIG_ON: []}
     hold_events_all = {CONFIG_OFF: [], CONFIG_ON: []}
     top_diffs: list[tuple[float, str, float, float, float]] = []  # (|diff|, name, t, off_adv, on_adv)
     per_pair_rows: list[dict] = []
@@ -505,8 +758,42 @@ def run_aggregate() -> None:
         if len(p1_on):
             extreme_frac[CONFIG_ON].append(
                 float(np.mean((p1_on > EXTREME_P1_HIGH) | (p1_on < EXTREME_P1_LOW))))
-        frozen_runs_all[CONFIG_OFF].extend(_frozen_runs(t_off, adv_off))
-        frozen_runs_all[CONFIG_ON].extend(_frozen_runs(t_on, adv_on))
+
+        # --- 凍結区間: 生分布 + 試合外フィルタ + A/B/C分類 (v2是正) ---
+        for tag, t_arr, adv_arr, d in (
+            (CONFIG_OFF, t_off, adv_off, off_d), (CONFIG_ON, t_on, adv_on, on_d),
+        ):
+            windows = _frozen_run_windows(t_arr, adv_arr)
+            frozen_runs_raw[tag].extend(dur for _, _, dur in windows)
+            has_state = "t_state" in d.files and len(d["t_state"]) > 0
+            lookup = _state_lookup(d) if has_state else {}
+            for start_t, end_t, dur in windows:
+                if not has_state:
+                    n_runs_unmatched_state[tag] += 1
+                    # 判定不能=フィルタ無しでフォールバック計上 (安全側、開示のみ)。
+                    frozen_runs_inmatch[tag].append(dur)
+                    continue
+                states = _states_in_window(lookup, start_t, end_t)
+                if not states:
+                    n_runs_unmatched_state[tag] += 1
+                    frozen_runs_inmatch[tag].append(dur)
+                    continue
+                if _is_out_of_match_window(states):
+                    n_runs_excluded_out_of_match[tag] += 1
+                    continue
+                frozen_runs_inmatch[tag].append(dur)
+                cls = _classify_run(states)
+                run_class_counts[tag][cls] += 1
+                run_class_duration[tag][cls] += dur
+                if cls == RUN_CLASS_SUSPECT:
+                    idx = int(np.argmin(np.abs(t_arr - start_t)))
+                    frozen_val = float(adv_arr[idx])
+                    b_events[tag].append(dict(
+                        name=name, config=tag, start_t=start_t, end_t=end_t,
+                        duration=dur, frozen_adv=frozen_val,
+                        frozen_p1=float(adv_to_winprob(frozen_val)),
+                    ))
+
         hold_events_all[CONFIG_OFF].extend(_hold_events(off_d["t_hold"], off_d["active"]))
         hold_events_all[CONFIG_ON].extend(_hold_events(on_d["t_hold"], on_d["active"]))
         per_pair_rows.append(dict(
@@ -516,6 +803,9 @@ def run_aggregate() -> None:
         ))
 
     top_diffs.sort(key=lambda r: -r[0])
+    for tag in (CONFIG_OFF, CONFIG_ON):
+        b_events[tag].sort(key=lambda e: (e["name"], e["start_t"]))
+
     summary = dict(
         n_pairs=len(pairs),
         total_matched_frames=total_matched_frames,
@@ -526,12 +816,31 @@ def run_aggregate() -> None:
         diff_max=(max(all_diffs) if all_diffs else 0.0),
         extreme_p1_fraction_off=float(np.mean(extreme_frac[CONFIG_OFF])) if extreme_frac[CONFIG_OFF] else 0.0,
         extreme_p1_fraction_on=float(np.mean(extreme_frac[CONFIG_ON])) if extreme_frac[CONFIG_ON] else 0.0,
-        frozen_run_median_off=_percentile(frozen_runs_all[CONFIG_OFF], 50),
-        frozen_run_p95_off=_percentile(frozen_runs_all[CONFIG_OFF], 95),
-        frozen_run_max_off=(max(frozen_runs_all[CONFIG_OFF]) if frozen_runs_all[CONFIG_OFF] else 0.0),
-        frozen_run_median_on=_percentile(frozen_runs_all[CONFIG_ON], 50),
-        frozen_run_p95_on=_percentile(frozen_runs_all[CONFIG_ON], 95),
-        frozen_run_max_on=(max(frozen_runs_all[CONFIG_ON]) if frozen_runs_all[CONFIG_ON] else 0.0),
+        # 生 (試合外フィルタ適用前、旧v1相当)
+        frozen_run_median_off_raw=_percentile(frozen_runs_raw[CONFIG_OFF], 50),
+        frozen_run_p95_off_raw=_percentile(frozen_runs_raw[CONFIG_OFF], 95),
+        frozen_run_max_off_raw=(max(frozen_runs_raw[CONFIG_OFF]) if frozen_runs_raw[CONFIG_OFF] else 0.0),
+        frozen_run_median_on_raw=_percentile(frozen_runs_raw[CONFIG_ON], 50),
+        frozen_run_p95_on_raw=_percentile(frozen_runs_raw[CONFIG_ON], 95),
+        frozen_run_max_on_raw=(max(frozen_runs_raw[CONFIG_ON]) if frozen_runs_raw[CONFIG_ON] else 0.0),
+        n_runs_raw_off=len(frozen_runs_raw[CONFIG_OFF]),
+        n_runs_raw_on=len(frozen_runs_raw[CONFIG_ON]),
+        # 試合外フィルタ適用後 (v2是正済み、本命の数字)
+        frozen_run_median_off=_percentile(frozen_runs_inmatch[CONFIG_OFF], 50),
+        frozen_run_p95_off=_percentile(frozen_runs_inmatch[CONFIG_OFF], 95),
+        frozen_run_max_off=(max(frozen_runs_inmatch[CONFIG_OFF]) if frozen_runs_inmatch[CONFIG_OFF] else 0.0),
+        frozen_run_median_on=_percentile(frozen_runs_inmatch[CONFIG_ON], 50),
+        frozen_run_p95_on=_percentile(frozen_runs_inmatch[CONFIG_ON], 95),
+        frozen_run_max_on=(max(frozen_runs_inmatch[CONFIG_ON]) if frozen_runs_inmatch[CONFIG_ON] else 0.0),
+        n_runs_excluded_out_of_match_off=n_runs_excluded_out_of_match[CONFIG_OFF],
+        n_runs_excluded_out_of_match_on=n_runs_excluded_out_of_match[CONFIG_ON],
+        n_runs_unmatched_state_off=n_runs_unmatched_state[CONFIG_OFF],
+        n_runs_unmatched_state_on=n_runs_unmatched_state[CONFIG_ON],
+        # A/B/C 分類 (試合中の凍結区間のみ、★user判定基準)
+        run_class_counts_off=run_class_counts[CONFIG_OFF],
+        run_class_counts_on=run_class_counts[CONFIG_ON],
+        run_class_duration_off=run_class_duration[CONFIG_OFF],
+        run_class_duration_on=run_class_duration[CONFIG_ON],
         n_hold_events_off=len(hold_events_all[CONFIG_OFF]),
         n_hold_events_on=len(hold_events_all[CONFIG_ON]),
         hold_duration_median_off=_percentile([d for _, d in hold_events_all[CONFIG_OFF]], 50),
@@ -542,7 +851,11 @@ def run_aggregate() -> None:
 
     OUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-    lines = ["# 指摘14 2フラグ 全域バックテスト集計 (2026-08-15)", ""]
+    lines = ["# 指摘14 2フラグ 全域バックテスト集計 v2 (2026-08-15是正)", ""]
+    lines.append(
+        "v1 (data/verify/backtest_issue14_2026-08-15/) からの是正2点: "
+        "(1) 出荷構成一致 (不採用3フラグ削除) (2) 凍結検出器の試合外フィルタ+A/B/C分類")
+    lines.append("")
     lines.append(f"- 動画/地点ペア数: {summary['n_pairs']}")
     lines.append(f"- マッチしたフレーム総数: {summary['total_matched_frames']}")
     lines.append(
@@ -554,12 +867,73 @@ def run_aggregate() -> None:
     lines.append(
         f"- 極端値(p1>95% or <5%)時間割合: OFF={summary['extreme_p1_fraction_off']*100:.2f}% "
         f"-> ON={summary['extreme_p1_fraction_on']*100:.2f}%")
+    lines.append("")
+    lines.append("## 凍結継続時間 (問題1: 出荷構成是正 / 問題2: 試合外フィルタ)")
     lines.append(
-        f"- 凍結継続時間 中央値/p95/最大 [秒]: OFF="
+        f"- [是正前=生・v1相当] 件数/中央値/p95/最大 [秒]: "
+        f"OFF={summary['n_runs_raw_off']}件 "
+        f"{summary['frozen_run_median_off_raw']:.3f}/{summary['frozen_run_p95_off_raw']:.3f}/"
+        f"{summary['frozen_run_max_off_raw']:.3f} -> "
+        f"ON={summary['n_runs_raw_on']}件 "
+        f"{summary['frozen_run_median_on_raw']:.3f}/{summary['frozen_run_p95_on_raw']:.3f}/"
+        f"{summary['frozen_run_max_on_raw']:.3f}")
+    lines.append(
+        f"- 試合外として除外した区間数: OFF={summary['n_runs_excluded_out_of_match_off']}件 "
+        f"-> ON={summary['n_runs_excluded_out_of_match_on']}件 "
+        f"(判定不能でフォールバック計上: OFF={summary['n_runs_unmatched_state_off']}件 "
+        f"ON={summary['n_runs_unmatched_state_on']}件)")
+    lines.append(
+        f"- [是正後=試合中のみ] 件数/中央値/p95/最大 [秒]: "
+        f"OFF={len(frozen_runs_inmatch[CONFIG_OFF])}件 "
         f"{summary['frozen_run_median_off']:.3f}/{summary['frozen_run_p95_off']:.3f}/"
-        f"{summary['frozen_run_max_off']:.3f} -> ON="
+        f"{summary['frozen_run_max_off']:.3f} -> "
+        f"ON={len(frozen_runs_inmatch[CONFIG_ON])}件 "
         f"{summary['frozen_run_median_on']:.3f}/{summary['frozen_run_p95_on']:.3f}/"
         f"{summary['frozen_run_max_on']:.3f}")
+    lines.append("")
+    lines.append("## ★最重要: 凍結区間の A(正当)/B(不備候補)/C(その他) 分類 (試合中のみ)")
+    for tag, label in ((CONFIG_OFF, "OFF"), (CONFIG_ON, "ON")):
+        c = run_class_counts[tag]
+        du = run_class_duration[tag]
+        lines.append(
+            f"- {label}: A(両者連鎖中)={c[RUN_CLASS_LEGIT]}件/{du[RUN_CLASS_LEGIT]:.1f}秒 "
+            f"B(不備候補)={c[RUN_CLASS_SUSPECT]}件/{du[RUN_CLASS_SUSPECT]:.1f}秒 "
+            f"C(その他)={c[RUN_CLASS_OTHER]}件/{du[RUN_CLASS_OTHER]:.1f}秒")
+    lines.append("")
+    lines.append("### B(不備候補) 全件 (ON構成、出荷構成での実挙動)")
+    lines.append(f"合計 {len(b_events[CONFIG_ON])} 件。")
+    if b_events[CONFIG_ON]:
+        _on_sorted = sorted(b_events[CONFIG_ON], key=lambda e: -e["duration"])
+        lines.append("| video_chunk | 開始t[s] | 終了t[s] | 継続[s] | 固定値(adv) | 固定値(p1%) |")
+        lines.append("|---|---|---|---|---|---|")
+        for ev in _on_sorted[:B_EVENT_MD_TABLE_CAP]:
+            lines.append(
+                f"| {ev['name']} | {ev['start_t']:.2f} | {ev['end_t']:.2f} | "
+                f"{ev['duration']:.2f} | {ev['frozen_adv']:+.1f} | {ev['frozen_p1']*100:.1f}% |")
+        if len(_on_sorted) > B_EVENT_MD_TABLE_CAP:
+            lines.append(
+                f"(継続時間降順、上位{B_EVENT_MD_TABLE_CAP}件のみ表示。"
+                f"全{len(_on_sorted)}件は summary.json 参照)")
+    else:
+        lines.append("無し (ON構成の試合中凍結区間に B 分類は0件)。")
+    lines.append("")
+    lines.append("### 参考: OFF構成側の B(不備候補)")
+    lines.append(f"合計 {len(b_events[CONFIG_OFF])} 件。")
+    if b_events[CONFIG_OFF]:
+        _off_sorted = sorted(b_events[CONFIG_OFF], key=lambda e: -e["duration"])
+        lines.append("| video_chunk | 開始t[s] | 終了t[s] | 継続[s] | 固定値(adv) | 固定値(p1%) |")
+        lines.append("|---|---|---|---|---|---|")
+        for ev in _off_sorted[:B_EVENT_MD_TABLE_CAP]:
+            lines.append(
+                f"| {ev['name']} | {ev['start_t']:.2f} | {ev['end_t']:.2f} | "
+                f"{ev['duration']:.2f} | {ev['frozen_adv']:+.1f} | {ev['frozen_p1']*100:.1f}% |")
+        if len(_off_sorted) > B_EVENT_MD_TABLE_CAP:
+            lines.append(
+                f"(継続時間降順、上位{B_EVENT_MD_TABLE_CAP}件のみ表示。"
+                f"全{len(_off_sorted)}件は summary.json 参照)")
+    else:
+        lines.append("無し (OFF構成の試合中凍結区間に B 分類は0件)。")
+    lines.append("")
     lines.append(
         f"- 決着ホールド発生回数: OFF={summary['n_hold_events_off']} -> ON={summary['n_hold_events_on']}")
     lines.append(
@@ -581,16 +955,32 @@ def run_aggregate() -> None:
             f"- {row['name']} t={row['t']:.2f}s diff={row['diff']:.1f} "
             f"(OFF={row['off_adv']:+.1f}/ON={row['on_adv']:+.1f}): {row['path']}")
 
+    b_extracted = extract_b_event_frames(b_events[CONFIG_ON])
+    lines.append("")
+    lines.append(f"## B(不備候補) 実画面フレーム抽出 ({len(b_extracted)}件、ON構成)")
+    if len(b_events[CONFIG_ON]) > len(b_extracted):
+        lines.append(
+            f"(全{len(b_events[CONFIG_ON])}件中、継続時間が長い順に上位"
+            f"{MAX_B_EVENT_FRAMES}件のみ抽出。全件一覧は上表参照)")
+    for row in b_extracted:
+        lines.append(
+            f"- {row['name']} t={row['start_t']:.2f}s dur={row['duration']:.2f}s "
+            f"固定値={row['frozen_p1']*100:.1f}%: {row['path']}")
+
     (OUT_ROOT / "summary.md").write_text("\n".join(lines), encoding="utf-8")
     with (OUT_ROOT / "summary.json").open("w", encoding="utf-8") as f:
         json.dump(dict(summary=summary, per_pair=per_pair_rows,
                        top_diffs=[dict(abs_diff=d, name=n, t=t, off_adv=o, on_adv=k)
                                   for d, n, t, o, k in top_diffs[:30]],
-                       extracted_frames=extracted),
+                       extracted_frames=extracted,
+                       b_events_on=b_events[CONFIG_ON], b_events_off=b_events[CONFIG_OFF],
+                       b_extracted_frames=b_extracted),
                   f, ensure_ascii=False, indent=2)
     print(f"[aggregate] summary -> {OUT_ROOT / 'summary.md'}")
     print(f"[aggregate] top diffs -> {len(top_diffs)} 件中上位15件を記録、"
           f"実画面フレーム{len(extracted)}件抽出")
+    print(f"[aggregate] B(不備候補): ON={len(b_events[CONFIG_ON])}件 OFF={len(b_events[CONFIG_OFF])}件、"
+          f"実画面フレーム{len(b_extracted)}件抽出")
 
 
 def main() -> int:
