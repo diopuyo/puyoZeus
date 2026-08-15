@@ -2159,6 +2159,169 @@ def test_generate_source_passes_state_to_hold_kill_override_calls() -> None:
 
 
 # ============================
+# 指摘19 根治: enable_resolved_victim_gen_live (既定OFF、2026-08-16)
+# ============================
+# 背景 (実測、logs/_diag_issue19_root_cause_trace_2026-08-16.log): 従来の
+# `_maybe_redecide` は `chain_end_triggered_pX` が True の**最初の1フレーム**
+# だけ `chain_total_score_pX` を latch (`_redecided1/2`) し、以後は無視する。
+# しかし OjamaAccountingTracker (src/ojama_accounting.py) の実装では
+# `chain_end_triggered_pX` は settle 開始の瞬間に True になり、同一の連鎖が
+# coalesce window 内で複数回に分けて finalize されるたびに
+# `chain_total_score_pX` を段階的に上書きしながら True であり続ける
+# (実測: 0→1260→4020 と3段階で確定)。「1回きり」latch は運悪く未確定
+# (0や小さい途中値) の瞬間に固定してしまい、真の確定値を二度と拾わなかった。
+# 本節は `enable_resolved_victim_gen_live=True` でこの latch を
+# 「chain_end_triggered_pX が True の間 COUNTER_RECOMPUTE_INTERVAL_SEC ごとに
+# 追従する」方式へ緩和したことの回帰テスト。
+
+
+def test_resolved_exchange_tracker_victim_gen_live_default_false() -> None:
+    """ResolvedExchangeTracker.__init__ の新規フラグは既定 False
+    (backwards compat、既存呼出元はキーワード省略可)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    sig = inspect.signature(vao.ResolvedExchangeTracker.__init__)
+    assert sig.parameters["enable_resolved_victim_gen_live"].default is False
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    assert tracker._enable_resolved_victim_gen_live is False
+
+
+def test_generate_signature_victim_gen_live_default_false() -> None:
+    """generate() の新規フラグも既定 False。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    sig = inspect.signature(vao.generate)
+    assert sig.parameters["enable_resolved_victim_gen_live"].default is False
+
+
+def test_victim_gen_live_off_is_bit_identical_to_at_most_once(monkeypatch) -> None:
+    """[既定OFF・指摘19根治バグの直接再現] `enable_resolved_victim_gen_live
+    =False` の間は、同一 chain_end_triggered_p1 継続中の最初の観測 (実測
+    パターン通り未確定=0) で `_redecided1` が永久に latch されるため、
+    以後 total が真に育っても (1260→4020) 二度と拾わない (=victim の gen が
+    過小評価されたまま固定される、指摘19 の根本原因そのもの)。
+    `test_resolved_redecide_at_most_once_per_side` と同じ「1回きり」結論の
+    直接確認 (bit-identical)。ON 版 (`test_victim_gen_live_on_follows_
+    growing_confirmed_total`) が同じ入力列で追従することとの対比。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())  # 既定 False
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    for step_sec, total in ((0.6, 0), (1.2, 1260), (1.8, 4020)):
+        snap = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=total)
+        tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap, step_sec)
+    assert len(calls) == 1  # 最初の (未確定=0の) 観測で latch、真の4020も永久に無視
+    assert tracker._pred_score1 == pytest.approx(100.0)  # 過小評価のまま固定
+
+
+def test_victim_gen_live_on_follows_growing_confirmed_total(monkeypatch) -> None:
+    """[本体] True の場合、同一 chain_end_triggered_p1 継続中に
+    chain_total_score_p1 が段階的に育つたび (0.5秒以上間隔をあけて) 追従し、
+    予測を都度更新する (実測パターン 0→1260→4020 の再現)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_resolved_victim_gen_live=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    # t=0.6: 最初の settle 観測 (総額まだ0、latchせず「未確定」として素通り)。
+    snap0 = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=0)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap0, 0.6)
+    assert len(calls) == 1  # 0は100を超えないため再決着なし
+    # t=1.2 (前回確定観測から0.6秒後): 1260に成長、100を超えるため再決着。
+    snap1 = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=1260)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap1, 1.2)
+    assert len(calls) == 2
+    assert tracker._pred_score1 == pytest.approx(1260.0)
+    # t=1.8 (前回確定から0.6秒後): 4020にさらに成長、追従する。
+    snap2 = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=4020)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap2, 1.8)
+    assert len(calls) == 3
+    assert tracker._pred_score1 == pytest.approx(4020.0)
+
+
+def test_victim_gen_live_throttles_within_half_second(monkeypatch) -> None:
+    """0.5秒 (COUNTER_RECOMPUTE_INTERVAL_SEC) 未満の連続呼び出しは、
+    総額が育っていても追従をスキップする (間引き、`_reevaluate_live_defender`
+    と同じ周期を再利用)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_resolved_victim_gen_live=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    snap1 = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=1260)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap1, 0.3)
+    assert len(calls) == 2  # 最初の確定観測は latch 済みでなくても即座に通る
+    # 0.5秒未満 (0.3→0.6=0.3秒後) の再成長はスキップされる。
+    snap2 = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=4020)
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap2, 0.6)
+    assert len(calls) == 2  # 間引きにより追従しない
+    assert tracker._pred_score1 == pytest.approx(1260.0)
+    # 0.5秒以上経過 (0.3→0.9=0.6秒後) すれば追従する。
+    tracker.update(_make_signal(ev1, 100), _make_signal(ev2, 300), snap2, 0.9)
+    assert len(calls) == 3
+    assert tracker._pred_score1 == pytest.approx(4020.0)
+
+
+def test_victim_gen_live_attacker_side_unaffected_when_already_settled(monkeypatch) -> None:
+    """攻撃側 (chain_total_score_pX が最初から確定値で以後変化しない) は、
+    フラグ ON でも追加の再決着を起こさない (「攻撃側は従来通り即時確定値の
+    まま」がクラス docstring の主張通りノーオペで成り立つことの確認)。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_resolved_victim_gen_live=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=5000)  # 攻撃側、既に大きい
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+    # 攻撃側 (1P) は settle 完了済み総額が最初の予測と同じ (追加成長なし)。
+    for step_sec in (0.6, 1.2, 1.8):
+        snap = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=5000)
+        tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), snap, step_sec)
+    assert len(calls) == 1  # 5000は5000を超えないため再決着は一度も起きない
+
+
+def test_generate_source_wires_victim_gen_live_to_both_constructions() -> None:
+    """静的回帰テスト: generate() ソース中の ResolvedExchangeTracker 構築
+    (通常時/試合境界リセット時の2箇所) が両方とも
+    enable_resolved_victim_gen_live=enable_resolved_victim_gen_live
+    を渡していることを固定する (新フラグの配線漏れ防止)。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.generate)
+    code_only = src.replace(vao.generate.__doc__ or "", "")
+    pattern = "enable_resolved_victim_gen_live=enable_resolved_victim_gen_live"
+    assert code_only.count(pattern) == 2
+
+
+def test_main_source_wires_victim_gen_live_cli_flag() -> None:
+    """静的回帰テスト: main() ソースが --resolved-victim-gen-live の argparse
+    定義と generate() 呼び出しへの受け渡しの両方を含むことを固定する。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.main)
+    assert '"--resolved-victim-gen-live"' in src
+    assert "dest=\"enable_resolved_victim_gen_live\"" in src
+    assert "enable_resolved_victim_gen_live=a.enable_resolved_victim_gen_live" in src
+
+
+# ============================
 # 評価済みモデル成果物の直読み (2026-08-14 coordinator指示)
 # ============================
 # 「評価したモデル (AUC 0.657/終盤0.839) = デモが使うモデル」を構造的に
