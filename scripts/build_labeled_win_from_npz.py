@@ -173,6 +173,83 @@ IndicatorV2Value の関数) の外から来る値のため、b-2 の DIFF_* 5分
 TestDiffClassificationCompleteness` の管轄であり、対象外にすることで
 「テストが落ちない」を設計上保証する)。
 
+## W12 (2026-08-16、根治P4第一歩) 生値2列の追加
+`ojama_forecast` は `iv.ON_FIELD_CAP`(=72) で 0-1 正規化するため、予告個数が
+72個を超えると全て同じ値(1.0)に飽和する。実測 (docs/KNOWN_WEAKNESSES.md
+W12、2026-08-16 再測定・81動画582,493行) では予告0個=48.6%、72-143個=
+44.3%、144-215個=43.4%、216個以上=26.2% (着弾前) と、72個を超えても量が
+増えるほど実勝率が悪化し続けるが、現行の正規化ではこれらが全て score=1.0
+で区別不能になっている。**旧数値「着弾前48.4%/着弾後18.3%」は再現不能と
+判明し使用禁止**(同ファイル W12 冒頭の訂正注記)、上記が有効な再測定値。
+この飽和が学習側の見落としの一因と考えられる。生値自体は
+`convert_one_npz` 内で既に一時列 (`_ojama_forecast_raw_for_margin`/
+`_OJAMA_NET_BALANCE_SYNC_RAW_COL`) として保持・計算に使われた後 pop
+されるだけで、npz 側には元々ロスなく存在している(「データが無い」のでは
+なく「配線されていない」だけ)。そこで診断・将来の特徴量設計検討用に、
+0-1 正規化前の生の個数をそのまま **別列** `ojama_forecast_uncapped`/
+`ojama_net_balance_uncapped` として追加する (`_attach_ojama_truth_own_
+columns` 内で一時列と同時に書き込む、pop 対象にはしない)。
+
+**列名について (`_raw` を避けた理由)**: 素直には `*_raw` と呼びたいところ
+だが、a-1 決定記録 (docs/INDICATOR_REORG_PROPOSAL_2026-08-12.md 「a-1.
+中身が完全に同じ重複」) で「加工前/加工後の2本立て8組 (*_raw 列、= 既存の
+正規化列と完全重複・情報量ゼロ)」を削除・CSV非出力にすることが確定し、
+回帰防止テスト `tests/test_build_labeled_win_from_npz.py::
+test_convert_one_npz_never_emits_raw_columns` /
+`test_csv_output_has_no_raw_columns` が **任意の `*_raw` 列を全面禁止**
+するガードとして存在する。本タスクの2列は「正規化列とは違う情報を持つ
+(72個超えの領域は正規化列からは復元不可能)」ため a-1 の「完全重複」には
+該当しないが、テストは名前ベースの一律禁止のため `_raw` 接尾辞を使うと
+無関係な既存の禁止事項に抵触して見える (かつ意味的にも a-1 の「完全重複
+raw」と混同されうる)。よって意味が近い別名 `_uncapped` (0-1正規化の上限
+飽和が掛かっていない、の意) を採用し、a-1 のテスト・決定記録は無改修で
+維持する。
+
+- **0-1正規化の対象外**: CLAUDE.md 「指標は0-1正規化必須」は学習に直接
+  投入する指標列の規約であり、この2列は「診断・設計検討用の生の材料」
+  という別カテゴリのため対象外とする (学習に入れる最終的な形=対数圧縮や
+  上限拡張等は P3 で設計する、ここでは正しく取り出せることのみを保証)。
+- **欠損の明示**: 真値の無い旧npzでは他の真値系列と全く同じ経路 (`_ojama_
+  truth_raw_arrays` の nan_fill) から来るため、自動的に NaN になる (0埋めで
+  誤魔化さない)。
+- **対称化パイプライン非該当**: 本ツールに列を一括反転する処理は存在せず
+  (b-2 の DIFF_* 5分類も個別列の明示リスト方式)、視覚オーバーレイ側の
+  mirror/symmetrize (`scripts/visualize_advantage_overlay.py`) とは完全に
+  別パイプラインのため、この2列がそちらの影響を受けることもない。
+  この2列は own-perspective の絶対量 (個数、side非依存) であり、
+  OJAMA_TRUTH_COLUMNS の他4列と同じく diff化・carry化もしない (概念的に
+  「相手を含めた収支そのもの」であり相手との差を取る意味が無い点は上記と
+  同じ)。
+
+## W12 (2026-08-16、アーキ設計確定分) 追加3列
+上記の uncapped 生値2列に続けて、実際に飽和の影響を緩和する3列を追加する
+(実装は `_attach_ojama_forecast_log_columns`、詳細な数式・根拠は関数
+docstring 参照):
+
+| 列名 | 定義式 | 正規化 |
+|---|---|---|
+| `ojama_forecast_log` | `log1p(forecast_uncapped) / log1p(PENDING_ABS_CAP)` | 式自体が0-1有界 |
+| `ojama_forecast_progress_interaction` | `ojama_forecast_log × match_progress` | 0-1×0-1で自動有界 |
+| `color_forecast_ratio_own` | `color_raw / (color_raw + forecast_raw + COLOR_OJAMA_RATIO_EPS)` | 比率で自動0-1 |
+
+`PENDING_ABS_CAP` (=216=ON_FIELD_CAP*3) は `src/ojama_accounting.py` の
+`OjamaAccountingTracker` が forecast_incoming に実際に掛けている物理上限
+そのもの (新規定数を作らず import して使う)。`COLOR_OJAMA_RATIO_EPS` も
+既存の `color_ojama_ratio_own` と同じ定数を再利用する。match_progress は
+中間値でありCSV列としては出力しない (新規の merge_asof を増やさず既存
+`diff_board_puyo_total` から代数的に逆算するため、`_attach_opponent_diff_
+columns` の後に呼ぶ必要がある、詳細は関数docstring)。3列とも own専用の
+絶対量/比率 (side非依存) であり、`ojama_forecast_log`/`ojama_forecast_
+progress_interaction` は `OJAMA_TRUTH_COLUMNS`、`color_forecast_ratio_own`
+は `PAIR_INTERACTION_COLUMNS` (既存 `color_ojama_ratio_own` と対になる
+色ぷよ×予告おじゃま版のため) にそれぞれ末尾追加し、b-2 の DIFF_* 5分類・
+視覚オーバーレイ側の mirror/symmetrize いずれの一括変換も通さない。
+
+採用しなかった設計 (アーキ確定): 容量との交互作用は非単調 (空き36-53が
+54-71より高い逆転) で交絡濃厚のため保留 (既存 `ojama_margin` で代替)、
+猶予時間はn不足で保留 (63本の再収集後に再検討)。位相は列を分けず
+`ojama_forecast_progress_interaction` の乗算1列に圧縮する (列数節約)。
+
 ## saturation_chain_upper (2026-08-13、user簡略化決定)
 `saturation_chain` (C-3) はコスト実測 (1行8〜18秒) が桁違いのため opt-in化
 されたが、その後 user が「上部限定軽量版」への簡略化を決定した:
@@ -198,6 +275,7 @@ from __future__ import annotations
 import argparse
 import csv
 import functools
+import math
 import sys
 import time
 from pathlib import Path
@@ -210,6 +288,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import BOARD_COLS, COLOR_EMPTY, COLOR_UNKNOWN, Board  # noqa: E402
 import src.indicators_v2 as iv  # noqa: E402
+from src.ojama_accounting import PENDING_ABS_CAP  # noqa: E402
 from src.production_config import GHOST_CHAIN_RULE_ENABLED  # noqa: E402
 from src.puyo_core_bridge import NATIVE_AVAILABLE as _PUYO_CORE_AVAILABLE  # noqa: E402
 from src.puyo_core_bridge import (  # noqa: E402
@@ -1089,6 +1168,12 @@ CARRY_OPPONENT_COLUMNS: tuple[str, ...] = (
 COLOR_OJAMA_RATIO_EPS: float = 1e-6
 PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     "color_ojama_ratio_own", "color_diff_x_ojama_diff",
+    # --- W12根治 (2026-08-16、アーキ設計確定分) ---
+    # color_ojama_ratio_own と対になる「色ぷよ×予告おじゃま」版。既存の
+    # COLOR_OJAMA_RATIO_EPS をそのまま再利用する (新規epsilon定数を作らない、
+    # アーキ指示)。own専用の比率で side非依存の絶対量、diff化・対称化の
+    # 一括変換は通さない (このタプル自体が既に own-only レーン)。
+    "color_forecast_ratio_own",
 )
 
 # ============================
@@ -1156,6 +1241,13 @@ PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
 # 差」ではなく「相手を含めた収支そのもの」なので、これをさらに相手と diff化
 # するのは概念的に無意味という判断もある (5分類のうち EXEMPT=own onlyと
 # 実質同じ扱いになるため、無理に5分類の枠に押し込む必要が無い)。
+# W12 (2026-08-16) 追加の `ojama_net_balance_uncapped`/`ojama_forecast_
+# uncapped`/`ojama_forecast_log`/`ojama_forecast_progress_interaction`
+# (OJAMA_TRUTH_COLUMNS 合計8列+ojama_source) も同じ理由 (grid-only
+# レジストリ外・own-perspectiveの収支そのもの) で全く同じ扱いにする
+# (diff化・carry化しない own only)。同日追加の `color_forecast_ratio_own`
+# は PAIR_INTERACTION_COLUMNS 側 (既存 color_ojama_ratio_own と対、直上
+# コメント参照) だが理由は同一。
 
 OJAMA_SOURCE_TRUTH: float = 0.0  # OjamaAccountingTracker 真値 (npz収集64本目以降)
 OJAMA_SOURCE_MISSING: float = 1.0  # 旧npz、ojama_net_balance/ojama_forecast 列が存在しない
@@ -1171,6 +1263,26 @@ _OJAMA_NET_BALANCE_SYNC_RAW_COL: str = "_ojama_net_balance_raw_for_sync"
 OJAMA_TRUTH_COLUMNS: tuple[str, ...] = (
     "ojama_net_balance", "ojama_forecast", "ojama_source",
     "ojama_net_balance_synced", "ojama_margin",
+    # --- W12 (2026-08-16) 追加: 0-1正規化前の生の個数 (末尾追加、既存順序
+    # 保持。EXTRA_INDICATOR_NAMES 末尾追加ルールと同じ精神)。診断・将来の
+    # 特徴量設計検討用の材料であり、CLAUDE.md「指標は0-1正規化必須」の
+    # 対象外 (モジュール docstring「W12 (2026-08-16) 生値2列の追加」節参照)。
+    # `*_raw` でなく `*_uncapped` にした理由も同節参照 (a-1「完全重複raw列
+    # 全面禁止」テストとの名前衝突回避)。
+    "ojama_net_balance_uncapped", "ojama_forecast_uncapped",
+    # --- W12根治 (2026-08-16、アーキ設計確定分。実装は _attach_ojama_
+    # forecast_log_columns) ---
+    # ojama_forecast_log: log1p(forecast_uncapped)/log1p(PENDING_ABS_CAP)。
+    #   飽和(72個超で全て1.0)を対数圧縮で緩和する別表現 (0-1有界は式自体で
+    #   保証、PENDING_ABS_CAP=216はOjamaAccountingTrackerの物理上限そのもの
+    #   でありsrc.ojama_accountingからimportする、新規定数を作らない)。
+    # ojama_forecast_progress_interaction: 上記 × match_progress (両者の
+    #   board_puyo_total平均、既存 diff_board_puyo_total から逆算し新規の
+    #   merge_asof計算を増やさない)。位相 (序盤/中盤/終盤) ごとに同じ予告量
+    #   でも意味が違う (P1実測: 216+予告の実勝率が序盤52.4%/中盤42.1%/
+    #   終盤11.3%) ことを1列に圧縮して表現する (位相を列で分けない、
+    #   アーキ指示=列数節約)。
+    "ojama_forecast_log", "ojama_forecast_progress_interaction",
 )
 
 
@@ -1226,16 +1338,24 @@ def _attach_ojama_truth_own_columns(
     値を一時列に保持する: 再同期 (`_attach_ojama_net_balance_synced_column`)
     用の `_OJAMA_NET_BALANCE_SYNC_RAW_COL`、猶予量
     (`_attach_ojama_margin_column`) 用の `_ojama_forecast_raw_for_margin`。
+
+    W12 (2026-08-16) 追加: 同じ raw 値を pop されない最終CSV列
+    `ojama_net_balance_uncapped`/`ojama_forecast_uncapped` にも書き込む
+    (0-1正規化前の生の個数、`_raw` でなく `_uncapped` にした理由はモジュール
+    docstring「W12 生値2列の追加」節参照)。真値の無い旧npzでは net_raw/
+    forecast_raw が既に NaN fill 済みのため、この2列も自動的に NaN になる
+    (0埋めしない)。
     """
     for i, r in enumerate(rows):
         net = float(net_raw[i])
+        forecast = float(forecast_raw[i])
         r["ojama_net_balance"] = _finite_or_nan_score(net, iv.ojama_net_balance)
-        r["ojama_forecast"] = _finite_or_nan_score(
-            float(forecast_raw[i]), iv.ojama_forecast,
-        )
+        r["ojama_forecast"] = _finite_or_nan_score(forecast, iv.ojama_forecast)
         r["ojama_source"] = source
         r[_OJAMA_NET_BALANCE_SYNC_RAW_COL] = net
-        r["_ojama_forecast_raw_for_margin"] = float(forecast_raw[i])
+        r["_ojama_forecast_raw_for_margin"] = forecast
+        r["ojama_net_balance_uncapped"] = net
+        r["ojama_forecast_uncapped"] = forecast
 
 
 def _attach_ojama_net_balance_synced_column(rows: list[dict]) -> list[dict]:
@@ -1283,6 +1403,87 @@ def _attach_ojama_margin_column(rows: list[dict]) -> None:
             continue
         margin_raw = absorption_raw - max(0.0, forecast_raw)
         r["ojama_margin"] = iv.ojama_net_balance(margin_raw).score
+
+
+def _attach_ojama_forecast_log_columns(rows: list[dict]) -> None:
+    """W12根治 (2026-08-16、アーキ設計確定分) の3列を in-place で追加する。
+
+    docs/KNOWN_WEAKNESSES.md W12「学習モデルが未着弾おじゃま予告をほぼ
+    無視する」の原因の一つである `ojama_forecast` の /72 飽和 (72個超は
+    全て同じ値) を緩和する目的で、既に確保済みの `ojama_forecast_uncapped`
+    (生の予告個数、pop されない列) を材料に以下3列を追加する。
+
+    - `ojama_forecast_log`: log1p(forecast_uncapped)/log1p(PENDING_ABS_CAP)。
+      式自体が [0,1] に有界 (PENDING_ABS_CAP が理論上の最大値のため)。
+      浮動小数の丸め対策として `iv._clamp01` を通す (他の指標関数と同じ
+      慣習、build_labeled_win_from_npz.py 内で既に多用されている private
+      ヘルパーの共有利用)。`PENDING_ABS_CAP` (=ON_FIELD_CAP*3=216) は
+      `src/ojama_accounting.py` の `OjamaAccountingTracker` が
+      forecast_incoming に実際に掛けている物理上限そのもの。新規定数を
+      作らずそのまま import して使う (アーキ設計指示)。
+    - `ojama_forecast_progress_interaction`: 上記 × match_progress。
+      match_progress (両者の board_puyo_total スコア平均、0-1、
+      `scripts/visualize_advantage_overlay.py::_match_progress_from_totals`
+      と同じ定義) は新規の merge_asof を増やさず、既に計算済みの
+      `diff_board_puyo_total` (= own − opp_asof、b-2で計算済み) から
+      代数的に逆算する: opp_asof = own − diff ⇒ (own+opp_asof)/2 =
+      own − diff/2。**本関数は `_attach_opponent_diff_columns` の後に
+      呼ぶこと** (diff_board_puyo_total が存在している前提、呼出順は
+      `convert_one_npz` 参照)。同じ予告量でも位相 (序盤/中盤/終盤) で
+      意味が違う (P1実測: 予告216+の実勝率が序盤52.4%/中盤42.1%/終盤
+      11.3%) ことを列を増やさず1列の積で表現する (アーキ指示: 位相は
+      列を分けず乗算1列に圧縮、列数節約)。match_progress 自体は中間値
+      であり単独の CSV 列としては出力しない。
+    - `color_forecast_ratio_own`: color_raw/(color_raw+forecast_raw+EPS)。
+      既存 `color_ojama_ratio_own` (色ぷよ×盤面おじゃま) と対になる、
+      色ぷよ×予告おじゃま版。EPS は既存 `COLOR_OJAMA_RATIO_EPS` をそのまま
+      再利用する (新規epsilon定数を作らない、アーキ指示)。
+
+    3列とも own-perspective の絶対量/比率 (side非依存) であり、
+    `OJAMA_TRUTH_COLUMNS`/`PAIR_INTERACTION_COLUMNS` と同じ「grid-only
+    レジストリ外・own only」レーンに乗せる (b-2 の DIFF_* 5分類・対称化の
+    一括変換は通さない。side依存量を誤って一括変換に流すと壊れた過去事故
+    への対策、feedback_symmetry_flip_column_types_2026-08-10 2026-08-10
+    user恒久指示)。真値の無い旧npz、相手の直近確定値が未確定な先頭行
+    (`diff_board_puyo_total` がNaN) では NaN になる (0埋めしない、既存の
+    欠損明示パターンと同じ)。
+
+    採用しなかった設計 (アーキ確定): 容量との交互作用は非単調 (空き
+    36-53が54-71より高い逆転) で交絡濃厚のため保留 (既存 `ojama_margin`
+    で代替)、猶予時間はn不足で保留 (63本の再収集後に再検討)。
+    """
+    log_denom = math.log1p(PENDING_ABS_CAP)
+    for r in rows:
+        forecast_raw = float(r.get("ojama_forecast_uncapped", float("nan")))
+        color_score = float(r.get("board_color_puyo_total", float("nan")))
+        color_raw = color_score * iv.ON_FIELD_CAP
+
+        if np.isfinite(forecast_raw):
+            forecast_log = iv._clamp01(
+                math.log1p(max(0.0, forecast_raw)) / log_denom,
+            )
+        else:
+            forecast_log = float("nan")
+        r["ojama_forecast_log"] = forecast_log
+
+        own_total_score = float(r.get("board_puyo_total", float("nan")))
+        diff_total = float(r.get("diff_board_puyo_total", float("nan")))
+        if (
+            np.isfinite(forecast_log)
+            and np.isfinite(own_total_score)
+            and np.isfinite(diff_total)
+        ):
+            match_progress = iv._clamp01(own_total_score - diff_total / 2.0)
+            r["ojama_forecast_progress_interaction"] = forecast_log * match_progress
+        else:
+            r["ojama_forecast_progress_interaction"] = float("nan")
+
+        if np.isfinite(color_raw) and np.isfinite(forecast_raw):
+            r["color_forecast_ratio_own"] = color_raw / (
+                color_raw + max(0.0, forecast_raw) + COLOR_OJAMA_RATIO_EPS
+            )
+        else:
+            r["color_forecast_ratio_own"] = float("nan")
 
 
 def _resolve_indicator_registry(
@@ -1704,6 +1905,9 @@ def convert_one_npz(
     diff_cols = _resolve_diff_target_columns(registry)
     carry_cols = _resolve_carry_target_columns(registry)
     rows = _attach_opponent_diff_columns(rows, diff_cols, tuple(carry_cols))
+    # W12根治 (2026-08-16): diff_board_puyo_total (直上で計算済み) を要する
+    # ため必ず _attach_opponent_diff_columns の後に呼ぶ (関数docstring参照)。
+    _attach_ojama_forecast_log_columns(rows)
     rows = _add_pair_interaction_columns(rows)
     return rows
 
