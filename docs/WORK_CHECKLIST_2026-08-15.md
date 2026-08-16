@@ -158,3 +158,30 @@ user曰く「得点より連鎖数の方が重要指標」。認識性能検証�
 | 弱点台帳 (W1〜W13) | `docs/KNOWN_WEAKNESSES.md` |
 | 採用フラグの単一情報源 | `src/production_config.py` |
 | このチェックリスト | `docs/WORK_CHECKLIST_2026-08-15.md` |
+
+## ★user決定 (2026-08-16): 指標の整理も今回同時に行う
+「完全に消すのもあり、消さなくても判定に使わないようにすれば良い」(user)。
+→ **方針: 「収集は続けるが判定に使わない」除外リスト方式を基本** (データは残るので後戻り可・
+既存 `LEARNED_WEIGHTS_*` と収集パイプラインを壊さない)。
+
+### 死に指標の実測 (148本モデルの permutation importance)
+- **貢献ゼロまたは負 (5列)**: `dig_resistance`(0.0) / `saturation_chain_upper`(-4.3e-7) /
+  `main_linked_ratio`(-1.5e-6) / `multi_color_ignition`(-2.2e-6) / `isolated_pair_count`(-1.1e-4)
+- **ほぼ死 (10列)**: ojama_margin / simultaneous_pop_richness / immediate_fire_power /
+  conn_triple_count / main_linked_pair_count / diff_conn_pair_count / min_puyos_to_ignite /
+  opp_all_clear_bonus_pending / buried_hole_count / ignition_point_count
+- 上位: diff_board_ojama_count(0.0314) / diff_current_max_chain(0.0250) /
+  diff_max_column_height(0.0151) / **color_ojama_ratio_own(0.0071、user伝授の軸)** / ukeyasusa(0.0058)
+- **下位5列の合計は上位1列の0.4%未満**
+
+### アブレーション実験 (85本・同一分割、走行中)
+| 構成 | 内容 |
+|---|---|
+| A | 旧47列 (ベースライン) |
+| B | A + W12新5列 |
+| C | B から貢献ゼロ/負の5列を除外 |
+| D | C からさらに「ほぼ死」10列も除外 (計15列削減) |
+
+**判定基準**: AUC (全体・**位相別必須**) が落ちなければ削除可。
+注意: `saturation_chain_upper` は過去に無相関と判定して撤退済みなのに列だけ残っていたもの。
+`ojama_margin` はW12の容量交互作用の代替として残した列なので個別判断。
