@@ -130,6 +130,7 @@ game_idx を振る。動画末尾で最終 score が大きい side を勝者と�
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -144,6 +145,7 @@ from src.board import Board  # noqa: E402
 from src.board_quality import is_phantom_board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
+from src.match_winner import MatchWinnerDetector  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
     OjamaAccountSnapshot,
@@ -166,6 +168,14 @@ SCORE_RESET_THRESHOLD: int = 500
 # 1P/2P が同じ境界を検知したときに 2 回進めないための窓。
 # 実際の 1 試合は最短 14 秒 (勝利数パネル実測) なので誤抑制しない。
 GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
+
+# 試合境界マルチシグナル (W20/W21根治、2026-08-17) の許容窓 [秒]。
+# score-reset 検知時刻が、視覚信号 (is_match_active False→True) による直近の
+# 境界進行時刻からこの秒数以内なら「視覚信号で確認済み」とみなし異常マーク
+# しない。score OCR は STABLE snapshot 取得時にしか読まないため数フレーム分の
+# ずれが生じ得る (--sample-interval 使用時は特に)。GAME_BOUNDARY_DEBOUNCE_SEC
+# (5秒) より短く、通常の OCR 検知ラグ (概ね 1 秒未満) より十分大きい値。
+BOUNDARY_MULTISIGNAL_TOLERANCE_SEC: float = 3.0
 
 # サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
 MIN_SAMPLE_INTERVAL_FRAMES: int = 1
@@ -233,6 +243,12 @@ ALL_CLEAR_PENDING_UNKNOWN: int = -1
 OJAMA_NET_BALANCE_UNKNOWN: float = float("nan")
 OJAMA_FORECAST_UNKNOWN: float = float("nan")
 
+# match_end_locked (勝敗演出ロックダウン区間フラグ、2026-08-17 追加、
+# W20/W21根治) が未取得の場合の埋め値。値は 0 (非ロック中) / 1 (ロック中) の
+# 二値のため -1 は安全な sentinel (PipelineResult.match_end_locked 未対応の
+# 古い pipeline フェイク等では常にこの値になる)。
+MATCH_END_LOCKED_UNKNOWN: int = -1
+
 
 # ============================
 # 蓄積バッファ
@@ -294,6 +310,15 @@ class _LeanNpzAccumulator:
     # (後方互換: 挙動不変)。
     ojama_net_balances: list[float] = field(default_factory=list)
     ojama_forecasts: list[float] = field(default_factory=list)
+    # 勝敗演出ロックダウン区間フラグ (0/1、2026-08-17 追加、W20/W21根治)。
+    # RecognitionPipeline.PipelineResult.match_end_locked (MatchEndDetector の
+    # やった/ばたんきゅー ロックダウン判定) をそのまま記録する。後段 (連鎖
+    # イベント抽出・学習データ生成) がこの区間由来の snapshot を除外できる
+    # ようにするためのマーカー列 (実際の除外適用は各消費側の個別対応が必要、
+    # 本列はマーキングのみ)。None は MATCH_END_LOCKED_UNKNOWN (-1) として
+    # 保存する。既存呼び出し (match_end_locked 省略) では常に -1 のまま保存
+    # される (後方互換: 挙動不変)。
+    match_end_lockeds: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -312,6 +337,7 @@ class _LeanNpzAccumulator:
         all_clear_pending: int | None = None,
         ojama_net_balance: float | None = None,
         ojama_forecast: float | None = None,
+        match_end_locked: bool | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -351,6 +377,11 @@ class _LeanNpzAccumulator:
                 個数 (own-perspective、自分に向かう予告個数)。None は
                 OJAMA_FORECAST_UNKNOWN (NaN) で保存する (後方互換、
                 2026-08-12 追加)。
+            match_end_locked: この snapshot 時点の PipelineResult.
+                match_end_locked (勝敗演出ロックダウン区間フラグ) の値。
+                0/1/bool/None を受け付ける。None は MATCH_END_LOCKED_UNKNOWN
+                (-1) で保存する (後方互換: 省略時は既存呼び出しと同じ挙動、
+                2026-08-17 追加、W20/W21根治)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -387,10 +418,15 @@ class _LeanNpzAccumulator:
             float(ojama_forecast) if ojama_forecast is not None
             else OJAMA_FORECAST_UNKNOWN
         )
+        self.match_end_lockeds.append(
+            int(match_end_locked) if match_end_locked is not None
+            else MATCH_END_LOCKED_UNKNOWN
+        )
 
     def assign_won_labels(
         self,
         game_final_scores: dict[int, dict[str, int | None]],
+        panel_winners: dict[int, str | None] | None = None,
     ) -> None:
         """各 game_idx の最終 score から 1P 視点 won を付与する。
 
@@ -399,6 +435,14 @@ class _LeanNpzAccumulator:
 
         Args:
             game_final_scores: {game_idx: {"1P": score_int|None, "2P": score_int|None}}
+            panel_winners: {game_idx: "1P"|"2P"|None} パネル数字差分による
+                クロスチェック勝者 (MatchWinnerDetector、W20/W21根治、
+                2026-08-17)。None (既定) は従来通り score 系統
+                (+窒息フォールバック) のみで判定する (後方互換、
+                bit-identical)。指定時は score 系統との 2 系統一致を要求し、
+                不一致または片方でも None なら判定不能 (unknown、won は
+                NaN のまま) とする (単一系統を無条件の正解にしない設計、
+                fail-silent 警戒)。
         """
         winner_by_game: dict[int, str | None] = {}
         for gidx, scores in game_final_scores.items():
@@ -406,10 +450,20 @@ class _LeanNpzAccumulator:
             s2 = scores.get("2P")
             if s1 is not None and s2 is not None and s1 != s2:
                 # スコアで判定できる場合: 高得点側が勝者
-                winner_by_game[gidx] = "1P" if s1 > s2 else "2P"
+                score_winner = "1P" if s1 > s2 else "2P"
             else:
                 # スコア同点・欠損時: 窒息フォールバック
-                winner_by_game[gidx] = _winner_by_survival(self, gidx)
+                score_winner = _winner_by_survival(self, gidx)
+            if panel_winners is None:
+                winner_by_game[gidx] = score_winner
+            else:
+                panel_winner = panel_winners.get(gidx)
+                # 2 系統一致要求: 両者が一致したときのみ採用、それ以外は unknown
+                winner_by_game[gidx] = (
+                    score_winner
+                    if (score_winner is not None and score_winner == panel_winner)
+                    else None
+                )
 
         for i in range(len(self.wons)):
             gidx = self.game_idxs[i]
@@ -450,6 +504,11 @@ class _LeanNpzAccumulator:
         既存呼び出しでは全て NaN (OJAMA_NET_BALANCE_UNKNOWN /
         OJAMA_FORECAST_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
         挙動には影響しない新規キー)。
+
+        match_end_locked (int8、2026-08-17 追加、W20/W21根治) も同様に常に
+        追加保存する (既存キーは不変、後方互換)。match_end_locked 未指定の
+        既存呼び出しでは全て MATCH_END_LOCKED_UNKNOWN (-1) になる (後方互換、
+        既存 npz 読み出し側の挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         save_kwargs: dict[str, np.ndarray] = dict(
@@ -471,6 +530,7 @@ class _LeanNpzAccumulator:
             all_clear_pending=np.array(self.all_clear_pendings, dtype=np.int8),
             ojama_net_balance=np.array(self.ojama_net_balances, dtype=np.float32),
             ojama_forecast=np.array(self.ojama_forecasts, dtype=np.float32),
+            match_end_locked=np.array(self.match_end_lockeds, dtype=np.int8),
         )
         if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
             save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
@@ -564,10 +624,38 @@ class _SharedGameCounter:
     片側の検知失敗に耐える。両者が同じ境界を検知したときに 2 回進まないよう
     直前の進行から GAME_BOUNDARY_DEBOUNCE_SEC 以内は進めない
     (実際の 1 試合は最短 14 秒なので誤抑制しない)。
+
+    試合境界マルチシグナル拡張 (W20/W21根治、2026-08-17):
+    multisignal_mode=True のとき、RecognitionPipeline.is_match_active
+    (score_zero + match_end_locked + ヒステリシスの統合判定、本番稼働中) の
+    False→True 立ち上がりを境界進行の**主信号**にする
+    (observe_visual_signal、collect_lean のメインループから 1 フレームに
+    1 回だけ呼ぶ想定)。旧来の score-reset 単独判定は削除せず、視覚信号が
+    近接時刻で確認できない場合の**フォールバック + 異常マーク**に降格する
+    (_update_game_boundary 側で判定、anomalies に記録)。
+    multisignal_mode=False (既定) では観測メソッドは no-op であり、
+    advance_if_new 経由の従来挙動 (score-reset 単独) と bit-identical。
     """
     game_idx: int = 0
     # 最後に境界を進めた時刻 [秒]。None = まだ一度も進めていない。
     last_advance_sec: float | None = None
+    # 試合境界マルチシグナル (2026-08-17) の有効フラグ。既定 False = 従来の
+    # score-reset 単独判定 (後方互換、bit-identical)。
+    multisignal_mode: bool = False
+    # 直近フレームで観測した is_match_active (立ち上がり検知用)。
+    # None = まだ一度も observe_visual_signal を呼んでいない。
+    _prev_is_active: bool | None = field(default=None, repr=False)
+    # 視覚信号 (is_match_active 立ち上がり) で最後に境界を進めた時刻 [秒]。
+    # score-reset イベントがこの時刻の近傍かどうかで異常マーク要否を判定する。
+    last_visual_advance_sec: float | None = None
+    # advance_if_new が実際に境界を進めた全ての時刻 [秒] (2026-08-17 追加)。
+    # MatchWinnerDetector クロスチェック用の match_starts 近似値として使う
+    # (詳細は _detect_panel_winners_crosscheck)。
+    advance_times: list[float] = field(default_factory=list)
+    # score-reset がフォールバックとして境界を進めた際の異常イベント記録
+    # (人手レビュー用、W20/W21根治)。視覚信号が近傍で確認できなかった
+    # score-reset のみを記録する (視覚信号で確認済みの通常ケースは記録しない)。
+    anomalies: list[dict] = field(default_factory=list)
 
     def advance_if_new(self, t_sec: float) -> bool:
         """境界を進める (デバウンス内なら進めない)。進めたら True。"""
@@ -578,7 +666,36 @@ class _SharedGameCounter:
             return False
         self.game_idx += 1
         self.last_advance_sec = t_sec
+        self.advance_times.append(t_sec)
         return True
+
+    def observe_visual_signal(self, is_active: bool, t_sec: float) -> None:
+        """フレーム毎の is_match_active を観測し、False→True 立ち上がりで
+        境界を進める (multisignal_mode=True 限定、2026-08-17 追加)。
+
+        collect_lean のメインループから 1P/2P 処理の**外側**で 1 フレームに
+        つき 1 回だけ呼ぶこと (is_match_active はフレーム全体の判定であり
+        side 別ではないため、_process_side_lean 側の 2 回呼び出しに混ぜない)。
+
+        Args:
+            is_active: このフレームの PipelineResult.is_match_active。
+            t_sec: 現在時刻 [秒]。
+        """
+        if self.multisignal_mode and self._prev_is_active is False and is_active:
+            if self.advance_if_new(t_sec):
+                self.last_visual_advance_sec = t_sec
+        self._prev_is_active = is_active
+
+    def record_score_reset_anomaly(
+        self, t_sec: float, side_label: str, score_delta: int, game_idx: int,
+    ) -> None:
+        """視覚信号で確認できなかった score-reset イベントを記録する。"""
+        self.anomalies.append({
+            "t_sec": round(t_sec, 3),
+            "side": side_label,
+            "score_delta": int(score_delta),
+            "game_idx_before_advance": int(game_idx),
+        })
 
 
 def _update_game_boundary(
@@ -586,6 +703,7 @@ def _update_game_boundary(
     score: int | None,
     shared: "_SharedGameCounter | None" = None,
     t_sec: float = 0.0,
+    side_label: str | None = None,
 ) -> None:
     """score リセット検知で game_idx を進める。旧ゲームの最終 score は
     リセット直前の prev_score (高値) を記録する。
@@ -598,11 +716,22 @@ def _update_game_boundary(
     どちらかが境界を検知すれば両 side が同じ game_idx に揃う。
     shared=None のときは従来の side 独立カウンタ (後方互換)。
 
+    試合境界マルチシグナル (W20/W21根治、2026-08-17): shared.multisignal_mode
+    =True のとき、score-reset は境界を**直接**進めない。視覚信号
+    (is_match_active 立ち上がり) が BOUNDARY_MULTISIGNAL_TOLERANCE_SEC 以内に
+    確認できていればそれで既に境界は進んでいるため何もしない。確認できて
+    いなければ「視覚信号が境界と言っていないのに score だけ急変した」異常
+    イベントとして shared.anomalies に記録した上でフォールバックとして境界を
+    進める (根治後もデータの取りこぼしを起こさないための安全弁)。
+    multisignal_mode=False では従来通り score-reset が直接 shared を進める
+    (後方互換、bit-identical)。
+
     Args:
         state: 対象 side の状態。
         score: 今フレームの score OCR 値 (None は無視)。
         shared: 共有カウンタ。None なら side 独立 (旧挙動)。
         t_sec: 現在時刻 [秒]。shared のデバウンス判定に使う。
+        side_label: "1P"/"2P" (異常イベント記録用、省略可)。
     """
     if score is None:
         return
@@ -615,10 +744,23 @@ def _update_game_boundary(
         state.final_scores[state.game_idx] = state.prev_score
         if shared is None:
             state.game_idx += 1
+        elif shared.multisignal_mode:
+            near_visual = (
+                shared.last_visual_advance_sec is not None
+                and abs(t_sec - shared.last_visual_advance_sec)
+                    <= BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+            )
+            if not near_visual:
+                advanced = shared.advance_if_new(t_sec)
+                if advanced:
+                    shared.record_score_reset_anomaly(
+                        t_sec, side_label or "?",
+                        state.prev_score - score, state.game_idx,
+                    )
         else:
             shared.advance_if_new(t_sec)
     if shared is not None:
-        # 共有カウンタに追従 (相手側が検知した境界にも乗る)
+        # 共有カウンタに追従 (相手側・視覚信号が検知した境界にも乗る)
         state.game_idx = shared.game_idx
     # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
     state.final_scores[state.game_idx] = score
@@ -787,6 +929,28 @@ def collect_lean(
     enable_chain_gate_raw_fallback: bool = False,
     enable_ojama_fall_scoped_exit: bool = False,
     precise_seek: bool = False,
+    # W13根治 案1 (2026-08-16): highlight override 配線。RecognitionPipeline
+    # 本体へそのまま forward する。既定 False = 従来挙動完全維持 (backwards
+    # compat、物差しv2 A/B測定用に末尾追加)。
+    enable_highlight_override: bool = False,
+    # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来挙動
+    # 完全維持 (backwards compat、案1 との A/B/併用測定用)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。True で
+    # is_match_active (score_zero + match_end_locked + ヒステリシスの統合
+    # 判定、本番稼働中) の False→True 立ち上がりを game_idx 進行の主信号に
+    # する。score-reset 単独判定はフォールバック + 異常マーク (人手レビュー
+    # 用) に降格する (_SharedGameCounter.observe_visual_signal /
+    # _update_game_boundary 参照)。既定 False = 従来の score-reset 単独判定
+    # (後方互換、bit-identical)。
+    enable_boundary_multisignal: bool = False,
+    # W20/W21根治 (2026-08-17): 勝者判定に MatchWinnerDetector (パネル数字
+    # 差分) を接続し、score 系統の勝者判定と 2 系統一致を要求する
+    # (不一致/片方欠損は unknown、単一系統を無条件の正解にしない)。
+    # 既定 False = 従来の score 系統単独判定 (後方互換、bit-identical)。
+    # 動画を再オープンしてシークする追加コストが掛かるため既定無効。
+    enable_winner_panel_crosscheck: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -969,6 +1133,25 @@ def collect_lean(
             start_frame=0 のため cap.set 自体が元々呼ばれず無関係
             (production 経路は無傷)。既定 False = 従来挙動完全維持
             (backwards compat、処理コスト増のため既定では有効化しない)。
+        enable_boundary_multisignal: 試合境界マルチシグナル (W20/W21根治、
+            2026-08-17)。True で RecognitionPipeline.is_match_active
+            (score_zero + match_end_locked + ヒステリシスの統合判定、本番
+            稼働中) の False→True 立ち上がりを game_idx 進行の主信号にする。
+            score-reset 単独判定は削除せず、視覚信号が
+            BOUNDARY_MULTISIGNAL_TOLERANCE_SEC 以内に確認できない場合の
+            フォールバック + 異常マーク (out_npz と同じディレクトリに
+            `<out_npz_stem>_boundary_anomalies.json` を書き出す) に降格する。
+            既定 False = 従来の score-reset 単独判定 (後方互換、
+            bit-identical)。
+        enable_winner_panel_crosscheck: 勝者判定に MatchWinnerDetector
+            (パネル数字差分) を接続する (W20/W21根治、2026-08-17)。True で
+            score 系統の勝者判定との 2 系統一致を要求し、不一致/片方欠損は
+            unknown (won は NaN のまま) とする (単一系統を無条件の正解に
+            しない、fail-silent 警戒)。動画を再オープンしてシークするため
+            追加コストが掛かる。クロスチェック自体が失敗 (動画オープン
+            不能等) した場合は標準エラー出力に警告した上で score 系統単独
+            判定にフォールバックする (全 unknown 化はしない)。既定 False =
+            従来の score 系統単独判定 (後方互換、bit-identical)。
 
     Returns:
         蓄積した snapshot 数。
@@ -1050,6 +1233,8 @@ def collect_lean(
         enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
         enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
         enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
+        enable_highlight_override=enable_highlight_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1061,7 +1246,11 @@ def collect_lean(
     state_p2 = _SideState()
     # ゲーム境界は両者共通の 1 つの事象なので共有カウンタで管理する
     # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
-    shared_game = _SharedGameCounter()
+    # multisignal_mode は enable_boundary_multisignal 引数をそのまま伝える
+    # (既定 False = 従来の score-reset 単独判定、W20/W21根治 2026-08-17)。
+    shared_game = _SharedGameCounter(multisignal_mode=enable_boundary_multisignal)
+    # クロスチェック用に処理した最終フレーム時刻を追跡 (2026-08-17 追加)。
+    last_t_sec = start_sec
 
     # おじゃま会計 (2026-08-12 追加): 動画処理開始時に一度だけ生成・リセット
     # する。試合 (game_idx) が進むたびに reset() してはならない
@@ -1085,6 +1274,22 @@ def collect_lean(
         fi = start_frame + local_i
         t_sec = fi / fps
         result = pipeline.update(fi, t_sec, frame)
+        last_t_sec = t_sec
+
+        # 試合境界マルチシグナル (W20/W21根治、2026-08-17): フレーム全体の
+        # is_match_active 立ち上がりを 1 フレームにつき 1 回だけ観測する
+        # (1P/2P 別の _process_side_lean 呼び出しには混ぜない)。
+        # multisignal_mode=False (既定) では no-op (bit-identical)。
+        # getattr フォールバック True: is_match_active 未対応の古い pipeline
+        # フェイク (テスト用) でも例外にならないための安全策
+        # (multisignal_mode=False の間は観測結果自体に副作用がないため無害)。
+        shared_game.observe_visual_signal(
+            getattr(result, "is_match_active", True), t_sec,
+        )
+        # 勝敗演出ロックダウン区間フラグ (2026-08-17 追加、W20/W21根治)。
+        # is_match_active 同様、未対応の古い pipeline フェイクでは None のまま
+        # (後方互換: _process_side_lean 側で MATCH_END_LOCKED_UNKNOWN に埋める)。
+        match_end_locked_flag = getattr(result, "match_end_locked", None)
 
         # 試合開始からの確定ツモ設置数 (2026-08-12 追加、着地イベント代理指標用)。
         # pipeline が tsumo_count 未対応 (フェイク等) の場合は None のまま
@@ -1133,6 +1338,7 @@ def collect_lean(
             all_clear_pending=all_clear_pending_1p,
             ojama_net_balance=ojama_net_1p,
             ojama_forecast=ojama_forecast_1p,
+            match_end_locked=match_end_locked_flag,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -1144,14 +1350,89 @@ def collect_lean(
             all_clear_pending=all_clear_pending_2p,
             ojama_net_balance=ojama_net_2p,
             ojama_forecast=ojama_forecast_2p,
+            match_end_locked=match_end_locked_flag,
         )
     cap.release()
 
     # 勝敗ラベルを付与して保存
     combined_final = _merge_final_scores(state_p1, state_p2)
-    acc.assign_won_labels(combined_final)
+    # 勝者クロスチェック (W20/W21根治、2026-08-17): enable_winner_panel_
+    # crosscheck=False (既定) では panel_winners=None のまま渡され、
+    # assign_won_labels は従来通り score 系統単独で判定する (bit-identical)。
+    panel_winners: dict[int, str | None] | None = None
+    if enable_winner_panel_crosscheck:
+        panel_winners = _detect_panel_winners_crosscheck(
+            video_path, start_sec, shared_game.advance_times, last_t_sec,
+        )
+    acc.assign_won_labels(combined_final, panel_winners=panel_winners)
     acc.save(out_npz)
+
+    # 試合境界異常イベントの永続化 (W20/W21根治、2026-08-17)。
+    # multisignal_mode=False または異常なしなら書き出さない (従来挙動維持)。
+    if shared_game.anomalies:
+        anomaly_path = out_npz.with_name(
+            out_npz.stem + "_boundary_anomalies.json",
+        )
+        anomaly_path.write_text(
+            json.dumps(shared_game.anomalies, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"[lean] boundary anomalies: {len(shared_game.anomalies)} events "
+            f"-> {anomaly_path}",
+        )
+
     return len(acc.grids)
+
+
+def _detect_panel_winners_crosscheck(
+    video_path: Path,
+    start_sec: float,
+    advance_times: list[float],
+    last_observable_sec: float,
+) -> dict[int, str | None] | None:
+    """パネル数字差分によるクロスチェック勝者判定 (W20/W21根治、2026-08-17)。
+
+    敗者特定の 2 系統一致要求 (score 系統 + パネル系統) のうち、パネル系統側
+    を計算する。動画オープン不能・検出処理中の例外等、クロスチェック自体が
+    実行不能な場合は None を返し、呼び出し側は score-only の従来挙動に
+    フォールバックする (fail-silent 警戒: 失敗を隠して全 unknown にはしない)。
+
+    Args:
+        video_path: 入力動画パス (メインループの cap とは独立に開き直す。
+            MatchWinnerDetector はランダムアクセスシークを多用するため
+            専用の VideoCapture インスタンスを使う)。
+        start_sec: 処理開始オフセット秒 (= 試合 0 の開始とみなす近似値)。
+        advance_times: _SharedGameCounter.advance_times (境界を進めた時刻の
+            列。試合 1 以降の開始近似値。score-reset 検知は着地後数フレーム
+            遅れるため厳密な「レディーゴー」時刻ではないが、
+            offset_before=1.0 の余裕を持たせた数値パネル比較には十分)。
+        last_observable_sec: 最終処理フレームの時刻 (最終試合判定の探索起点)。
+
+    Returns:
+        {game_idx: "1P"|"2P"|None}。全体失敗時は None。
+    """
+    match_starts = [start_sec, *advance_times]
+    try:
+        detector = MatchWinnerDetector.load_default()
+        cap2 = cv2.VideoCapture(str(video_path))
+        if not cap2.isOpened():
+            cap2.release()
+            raise RuntimeError(f"failed to reopen video: {video_path}")
+        try:
+            results = detector.detect_all_winners(
+                cap2, match_starts, last_observable_sec=last_observable_sec,
+            )
+        finally:
+            cap2.release()
+    except Exception as exc:  # noqa: BLE001 - fail-silent 回避のため意図的に捕捉
+        print(
+            f"[lean] WARNING: winner panel crosscheck failed ({exc}); "
+            f"falling back to score-only winner labeling for this video",
+            file=sys.stderr,
+        )
+        return None
+    return {i: r.winner for i, r in enumerate(results)}
 
 
 def _process_side_lean(
@@ -1173,6 +1454,7 @@ def _process_side_lean(
     all_clear_pending: int | None = None,
     ojama_net_balance: float | None = None,
     ojama_forecast: float | None = None,
+    match_end_locked: bool | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -1208,8 +1490,15 @@ def _process_side_lean(
             2026-08-12 追加)。
         exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
             満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
+        match_end_locked: この snapshot 時点の PipelineResult.
+            match_end_locked (勝敗演出ロックダウン区間フラグ)。None は
+            acc.append 側で MATCH_END_LOCKED_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-17 追加、
+            W20/W21根治)。
     """
-    _update_game_boundary(state, score, shared=shared_game, t_sec=t_sec)
+    _update_game_boundary(
+        state, score, shared=shared_game, t_sec=t_sec, side_label=side_label,
+    )
     if board is None or not _should_emit(
         state, board, bstate, exclude_phantom=exclude_phantom,
     ):
@@ -1223,6 +1512,7 @@ def _process_side_lean(
         chain_trigger_sec=trigger_sec, mechanism=mechanism,
         tsumo_count=tsumo_count, all_clear_pending=all_clear_pending,
         ojama_net_balance=ojama_net_balance, ojama_forecast=ojama_forecast,
+        match_end_locked=match_end_locked,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
@@ -1538,6 +1828,50 @@ def main() -> int:
             "regen 運用) では無関係。既定は無効 (後方互換、処理コスト増)。"
         ),
     )
+    parser.add_argument(
+        "--enable-highlight-override", action="store_true",
+        dest="enable_highlight_override",
+        help=(
+            "W13根治 案1 (2026-08-16)。ImageReader.use_highlight_override を"
+            "有効化する (白ハイライト blob 検出で patch-NCC tier1 EMPTY判定を"
+            "却下、docs/KNOWN_WEAKNESSES.md W13)。既定は無効 (後方互換、"
+            "物差しv2 A/B測定用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-patch-fp-hsv-guard", action="store_true",
+        dest="enable_patch_fp_hsv_guard",
+        help=(
+            "W13根治 案2 (2026-08-17)。ImageReader.enable_patch_fp_hsv_guard を"
+            "有効化する (tier1 patch-NCC 経路に cycle17-19 の HSV AND ガードを"
+            "移植、docs/KNOWN_WEAKNESSES.md W13)。既定は無効 (後方互換、"
+            "物差しv2 A/B/併用測定用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-boundary-multisignal", action="store_true",
+        dest="enable_boundary_multisignal",
+        help=(
+            "W20/W21根治 (2026-08-17)。試合境界マルチシグナル。"
+            "RecognitionPipeline.is_match_active (score_zero + "
+            "match_end_locked + ヒステリシスの統合判定、本番稼働中) の"
+            "False→True 立ち上がりを game_idx 進行の主信号にする。"
+            "score-reset 単独判定はフォールバック + 異常マーク "
+            "(<out_npz>_boundary_anomalies.json に記録) に降格する。"
+            "既定は無効 (後方互換、docs/KNOWN_WEAKNESSES.md W20/W21)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-winner-panel-crosscheck", action="store_true",
+        dest="enable_winner_panel_crosscheck",
+        help=(
+            "W20/W21根治 (2026-08-17)。MatchWinnerDetector (パネル数字差分) "
+            "による勝者クロスチェックを有効化する。score 系統の勝者判定との"
+            "2系統一致を要求し、不一致/片方欠損は unknown とする。"
+            "動画を再オープンしてシークするため追加コスト大。"
+            "既定は無効 (後方互換、docs/KNOWN_WEAKNESSES.md W20/W21)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -1577,6 +1911,10 @@ def main() -> int:
         enable_chain_gate_raw_fallback=args.enable_chain_gate_raw_fallback,
         enable_ojama_fall_scoped_exit=args.enable_ojama_fall_scoped_exit,
         precise_seek=args.precise_seek,
+        enable_highlight_override=args.enable_highlight_override,
+        enable_patch_fp_hsv_guard=args.enable_patch_fp_hsv_guard,
+        enable_boundary_multisignal=args.enable_boundary_multisignal,
+        enable_winner_panel_crosscheck=args.enable_winner_panel_crosscheck,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
