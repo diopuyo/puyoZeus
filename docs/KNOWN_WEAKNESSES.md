@@ -241,6 +241,29 @@
   2. tier1 `is_empty_by_patch_fp` にHSV色域ANDガード追加 (cycle19の発想を新経路へ移植、工数中、影響範囲広)
   3. `BG_FP_FORCE_MAX_PUYO` 緩和条件の根治 (直近着地履歴のあるセルを採取対象から除外等、工数大)
   - 並行検討: 列単位の物理整合性チェック新設 (user指摘「物理推論で検出できるはず」への直接回答)
+- **【2026-08-16 案1実装・効果測定完了、既定OFF】** `enable_highlight_override` フラグを
+  `RecognitionPipeline.load_default()` → `_build_hybrid_reader()` / HSV-onlyフォールバック分岐の
+  両方の `ImageReader` 構築経路に配線 (`src/recognition_pipeline.py`)。既定 `False` = 従来挙動と
+  bit-identical (静的テスト3件で固定、`tests/test_recognition_pipeline.py`)。
+  同一場面 (review_demo_2026-08-12.mp4、t=250〜300秒、本番採用構成
+  `recognition_load_default_kwargs()` ベース) でOFF/ON比較実測
+  (`scripts/_diag_w13_fix_verify_2026-08-16.py`、`data/verify/diag_w13_fix_2026-08-16/`):
+  - **1P列0: 完全解消**。OFF は row9/row10 が15〜18秒連続EMPTY (t=277.6〜295.4)、ON はこの区間の
+    ギャップが**全行で0件**に消滅
+  - **2P列2: 未解決バグ→安定解決**。OFF は着地 (t≈279〜281、実画面で紫/緑/青/緑スタックを目視確認)
+    後もセルがEMPTYのまま測定窓終端 (t=292) まで**自己回復せず永続破綻** (旧「自然回復あり」の
+    前提が本セルでは成立しない実例)。ON は着地直後 (row10: t=279.2、row9: t=280.9) に正しい色へ
+    安定遷移し、以後 t=292 まで揺らぎ無く継続
+  - **波及効果 (想定外の副次発見)**: 1P列1〜4 も同一機構でrescueされている (各列8.7〜9.3秒規模、
+    実画面 `t282.00_1p_board.png` で該当セルに実ぷよ存在を目視確認)。原報告の「列0のみ」は
+    最も長時間破綻した代表例に過ぎず、実際は**同一bg_fp汚染が1P盤面の広範囲に及んでいた**
+  - **副作用チェック**: 全盤面 (6列×12行×2側) でOFF=EMPTY→ON=非EMPTYの反転は4992サンプル・
+    114セルに及ぶが、内訳上位20件は全て上記の列0/列1-4/列2 (2P) の同一bg_fp汚染機構と一致
+    (`false_positive_breakdown`)。1P列0/2P列2の最上段行 (row0-2、恒常的に空) では反転0件。
+    **ただし試合遷移から離れた「クリーンな」時間帯での網羅的な誤反転チェックは未実施**
+    (この依頼のスコープ外、物差し全体再測定でuserが最終判定)
+  - テスト: 新規3件 (`test_highlight_override_default_false_on_load_default` 等) + 既存
+    `python -m pytest tests/ -q` で **5030 passed, 13 skipped, 1 deselected, 0 failed**
 
 ### W14: 凍結検出器が試合外画面 (MENU) を凍結として誤計上 (2026-08-15、測定器事故8件目)
 - **実測**: 全域バックテスト (`scripts/_backtest_issue14_flags_2026-08-15.py` の `_frozen_runs`) が
@@ -308,3 +331,27 @@
 - **根治**: 真の `tsumo_count` をCSVに配線する
 - **関連の未解明**: 序盤AUCが全構成で 0.50 (チャンスレート)。指標不足なのか
   **位相定義のズレ**なのか切り分け未実施
+
+### W19: 部分的な救済が「浮きぷよクリア」で列全体の消失に増幅される / 修正が別の修正の発火条件を消す (2026-08-17)
+W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した結果、**2つの機構**が確定した。
+
+- **増幅装置 (両ケース共通)**: `clear_floating_above_gap` (`src/board_rules.py:91-148`, min_gap=2) は
+  列を下から走査し**最初の空白ギャップより上を全部EMPTY化**する。一方ハイライト救済
+  (`src/background_fingerprint.py:710`) は **セル単位** で、同色・隣接でも白blobの写り方は
+  フレームごとにばらつく (実測: c109 row6/row10 は `white_ratio=0.0` で救済されず、
+  row7/8/11 は 0.09〜0.14 で救済)。**1セルだけ救済に失敗すると穴になり、救済に成功したセルも道連れで列ごと消える**
+- **【新規】修正同士の副作用連鎖 (c109)**: OFF では自己修復 `_apply_baseline_broken_counter`
+  (`src/recognition_pipeline.py:5575-5620`) が発火して汚染bg_fpを破棄し正しく認識していた。
+  ON では **highlight_override が他セルを救済して puyo 数の差を埋めてしまい、
+  自己修復の発火条件 (|diff|<=8) に入らず一度も発火しなかった** → 汚染bg_fpが生き残り列全体wipe。
+  **修正Aが修正Bの「症状」を隠し、Bの自己修復が働かなくなる**という型。記録なし=新規
+- **タイミングずれ (c11)**: フラグが他セルの分類を変え、STABLE確定のタイミングが数フレームずれた結果、
+  「たまたまギャップが写っていた瞬間」で確定し、以後1.7秒以上その誤盤面に再収束し続けた。
+  厳密な因果連鎖は**未確定**
+- **既知の光沢誤読 (`project_specular_highlight_empty_misread`) とは別機構**
+  (あちらは classify() の彩度中央値低下、こちらは tier1/bg_fp汚染 + 物理浮遊クリアの増幅)
+- **再現の罠**: stride=1 (密サンプリング) では再現せず、**stride=2 (本番と同一) で初めて再現**した
+  ([[project_frame_sampling_corrupts_boards_2026-07-30]] と同型の教訓)
+- **修正候補**: ①`clear_floating_above_gap` に「部分救済で開いた穴は対象外」ガード (根治寄り・大工数)
+  ②救済判定を単一フレームでなく**直近NフレームのウィンドウOR**にする (フリッカ耐性、工数中、過剰救済リスク)
+  ③自己修復の発火条件を override 非依存の指標に変える (c109型のみ狙い撃ち、工数中)
