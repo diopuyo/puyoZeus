@@ -389,3 +389,13 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
 - **根治**: **試合境界マルチシグナル** (レディーゴー=正確な開始時刻 / ばたんきゅー=終了+敗者の即時特定、
   user伝授 2026-08-13、[[reference_match_boundary_multisignal_2026-08-13]])。
   **これ1つで W20 の勝敗演出除外と W21 の境界ズレの両方が解決する**
+- **実装状況 (2026-08-17、配線完了・実動画A/B測定は未実施)**: `scripts/collect_boards_lean.py`
+  に `--enable-boundary-multisignal` (RecognitionPipeline.is_match_active の
+  False→True 立ち上がりを game_idx 進行の主信号にし、score-reset はフォールバック
+  + 異常マーク `<out_npz>_boundary_anomalies.json` に降格) と
+  `--enable-winner-panel-crosscheck` (MatchWinnerDetector によるパネル数字差分と
+  score 系統の 2 系統一致要求、不一致/片方欠損は unknown) を追加。
+  `match_end_locked` フラグも npz に新規列として常時記録 (後段の連鎖イベント抽出側
+  での除外適用はまだ未着手、マーキングのみ)。両フラグとも既定 OFF (bit-identical、
+  pytest 140/140 + 全体回帰緑)。**次段: 実動画 (c109 等) での A/B 実測**
+  (混入解消の確認・異常イベント検出件数・パネルクロスチェック一致率) が必要。

@@ -444,6 +444,13 @@ class PipelineResult:
     is_match_active: bool
     p1: SideResult
     p2: SideResult
+    # W20/W21根治 (2026-08-17、試合境界マルチシグナル配線): 勝敗演出
+    # (やった/ばたんきゅー) ロックダウン区間中かどうか (MatchEndDetector 判定
+    # そのもの。is_match_active=False の一因でもあるが、区間の由来を明示
+    # 公開することで後段 (連鎖イベント抽出・学習データ生成) がこの区間由来の
+    # 幻盤面を個別に除外できるようにする、docs/KNOWN_WEAKNESSES.md W20)。
+    # backwards compat のため default False (既存呼び出しは無指定で従来通り)。
+    match_end_locked: bool = False
 
 
 # ============================
@@ -2334,6 +2341,8 @@ class RecognitionPipeline:
         use_puyo_gate: bool = False,
         patch_ncc_threshold: float | None = None,
         ui_mask_cells: frozenset[tuple[int, int]] | None = None,
+        enable_highlight_override: bool = False,
+        enable_patch_fp_hsv_guard: bool = False,
     ) -> ImageReader:
         """HybridClassifier (HSV + CNN) で ImageReader を組み立てる.
 
@@ -2406,6 +2415,8 @@ class RecognitionPipeline:
             use_match_state=False,
             use_telop_mask=True,
             patch_ncc_threshold=patch_ncc_threshold,
+            use_highlight_override=enable_highlight_override,
+            enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
         )
 
     @staticmethod
@@ -2884,6 +2895,23 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_ojama_fall_scoped_exit: bool = False,
         enable_ojama_fall_scoped_exit_accounting: bool = False,
+        # W13根治 案1 (2026-08-16): 試合開始直後の bg_fp 強制採取窓
+        # (BG_FP_FORCE_WINDOW_SEC) で既設置ぷよが背景指紋に焼き込まれ、
+        # 以降そのセルが patch-NCC tier1 (is_empty_by_patch_fp) で無条件
+        # EMPTY 化される事故 (docs/KNOWN_WEAKNESSES.md W13) への対処。
+        # 実装済みだが配線漏れだった ImageReader.use_highlight_override を
+        # ImageReader 構築経路に接続する (白ハイライト blob 検出でtier1
+        # EMPTY 判定を却下し classify に回す)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # 副作用リスク: 稀に真の空セルが「ぷよあり」に倒れる方向
+        # (白ハイライト状の背景模様がある場合)。
+        enable_highlight_override: bool = False,
+        # W13根治 案2 (2026-08-17): tier1 patch-NCC 経路への HSV AND ガード移植
+        # (cycle17-19 が旧 is_empty_by_fp 経路に持っていた「距離<閾値 AND HSV
+        # 単独でも puyo 色でない」を patch-NCC 経路にも適用する)。__init__ へ
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、案1 との A/B/併用測定用)。
+        enable_patch_fp_hsv_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2921,12 +2949,16 @@ class RecognitionPipeline:
                 use_puyo_gate=use_puyo_gate,
                 patch_ncc_threshold=patch_ncc_threshold,
                 ui_mask_cells=ui_mask_cells,
+                enable_highlight_override=enable_highlight_override,
+                enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
             )
         else:
             reader = ImageReader(
                 use_match_state=False,
                 classifier=ColorClassifier(vote_mode=vote_mode),
                 patch_ncc_threshold=patch_ncc_threshold,
+                use_highlight_override=enable_highlight_override,
+                enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
             )
         match_detector = MatchStateDetector.load_default()
         score: ScoreOcr | None = None
@@ -4431,6 +4463,7 @@ class RecognitionPipeline:
             time_sec=time_sec,
             is_match_active=is_active,
             p1=p1, p2=p2,
+            match_end_locked=match_end_locked,
         )
 
         # Phase I: 擬似ラベル抽出 hook (error は silent skip)

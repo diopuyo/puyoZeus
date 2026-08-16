@@ -1468,7 +1468,8 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     enable_margin_time_rate / enable_stable_majority_window /
     enable_ojama_fall_placement_override / enable_ojama_fall_entry_hardening /
     enable_chain_gate_raw_fallback / enable_ojama_fall_scoped_exit /
-    precise_seek が末尾に順次 optional 追加され、既存引数の並び・デフォルト値
+    precise_seek / enable_highlight_override / enable_patch_fp_hsv_guard
+    が末尾に順次 optional 追加され、既存引数の並び・デフォルト値
     が一切変わっていないこと (backwards compat)。
     """
     import inspect
@@ -1487,77 +1488,93 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # 2026-07-30 既定 True 化 (user承認済み、A/B実測で60fps stride-2が優位)
     assert sig.parameters["normalize_fps_30"].default is True
     # エフェクト時間ゲート (2026-08-03、A/B 計測用): 末尾に追加、既定 OFF。
-    assert params[-21] == "enable_effect_gate"
+    assert params[-25] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-20] == "effect_gate_persist_sec"
+    assert params[-24] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-19] == "enable_effect_visual_gate"
+    assert params[-23] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-18] == "enable_burst_guard_v2"
+    assert params[-22] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-17] == "enable_transition_merge_guard"
+    assert params[-21] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-16] == "burst_gate_open_threshold"
+    assert params[-20] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-15] == "enable_hidden_row_burst_guard"
+    assert params[-19] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-14] == "enable_burst_close_extension"
+    assert params[-18] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-13] == "burst_chain_gap_max_sec"
+    assert params[-17] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-12] == "enable_online_hsv_refresh"
+    assert params[-16] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-11] == "enable_match_transition_debounce"
+    assert params[-15] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
     # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
     # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
-    assert params[-10] == "enable_ojama_entry_gravity_settle_guard"
+    assert params[-14] == "enable_ojama_entry_gravity_settle_guard"
     assert (
         sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
     )
-    assert params[-9] == "enable_gravity_settle_reset_on_exit"
+    assert params[-13] == "enable_gravity_settle_reset_on_exit"
     assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
     # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
-    assert params[-8] == "enable_phantom_board_guard"
+    assert params[-12] == "enable_phantom_board_guard"
     assert sig.parameters["enable_phantom_board_guard"].default is False
     # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
-    assert params[-7] == "enable_margin_time_rate"
+    assert params[-11] == "enable_margin_time_rate"
     assert sig.parameters["enable_margin_time_rate"].default is False
     # 盤面確定窓 3中2多数決 (2026-08-13 user承認): さらに末尾に追加、既定 OFF。
-    assert params[-6] == "enable_stable_majority_window"
+    assert params[-10] == "enable_stable_majority_window"
     assert sig.parameters["enable_stable_majority_window"].default is False
     # OJAMA_FALL誤分類根因調査 案2/案4-lite/案3 (2026-08-13):
     # さらに末尾に追加、既定 OFF (全 OFF で bit-identical)。
-    assert params[-5] == "enable_ojama_fall_placement_override"
+    assert params[-9] == "enable_ojama_fall_placement_override"
     assert (
         sig.parameters["enable_ojama_fall_placement_override"].default is False
     )
-    assert params[-4] == "enable_ojama_fall_entry_hardening"
+    assert params[-8] == "enable_ojama_fall_entry_hardening"
     assert sig.parameters["enable_ojama_fall_entry_hardening"].default is False
-    assert params[-3] == "enable_chain_gate_raw_fallback"
+    assert params[-7] == "enable_chain_gate_raw_fallback"
     assert sig.parameters["enable_chain_gate_raw_fallback"].default is False
     # OJAMA_FALL出口の根治 案1 (2026-08-13、フル物差し回帰タスク#5向け新設):
     # さらに末尾に追加、既定 OFF (bit-identical)。collect_boards_lean.py には
     # 元々 RecognitionPipeline 側の実装のみ存在し CLI 未配線だったギャップの
     # 是正 (config (c) = OJAMA_FALL系3種の物差し比較に必要)。
-    assert params[-2] == "enable_ojama_fall_scoped_exit"
+    assert params[-6] == "enable_ojama_fall_scoped_exit"
     assert sig.parameters["enable_ojama_fall_scoped_exit"].default is False
     # フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した測定器
     # 事故の修正): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-1] == "precise_seek"
+    assert params[-5] == "precise_seek"
     assert sig.parameters["precise_seek"].default is False
+    # W13根治 案1 (2026-08-16): highlight override 配線。さらに末尾に追加、
+    # 既定 OFF (bit-identical、物差しv2 A/B測定用)。
+    assert params[-4] == "enable_highlight_override"
+    assert sig.parameters["enable_highlight_override"].default is False
+    # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
+    # さらに末尾に追加、既定 OFF (bit-identical、案1 との A/B/併用測定用)。
+    assert params[-3] == "enable_patch_fp_hsv_guard"
+    assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
+    # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。さらに末尾に
+    # 追加、既定 OFF (bit-identical)。
+    assert params[-2] == "enable_boundary_multisignal"
+    assert sig.parameters["enable_boundary_multisignal"].default is False
+    # W20/W21根治 (2026-08-17): 勝者パネルクロスチェック配線。さらに末尾に
+    # 追加、既定 OFF (bit-identical)。
+    assert params[-1] == "enable_winner_panel_crosscheck"
+    assert sig.parameters["enable_winner_panel_crosscheck"].default is False
     assert sig.parameters["enable_burst_guard_v2"].default is False
 
 
@@ -1628,6 +1645,38 @@ def test_main_cli_enable_hidden_row_burst_guard_flag_sets_true() -> None:
     """--enable-hidden-row-burst-guard 指定時は True が渡ること。"""
     captured = _run_fake_main_lean(["--enable-hidden-row-burst-guard"])
     assert captured["enable_hidden_row_burst_guard"] is True
+
+
+def test_main_cli_enable_highlight_override_default_false() -> None:
+    """CLI で --enable-highlight-override 未指定なら False が渡ること。
+
+    W13根治 案1 (2026-08-16、物差しv2 A/B測定用): backwards compat、
+    既定 False で従来挙動と bit-identical。
+    """
+    captured = _run_fake_main_lean([])
+    assert captured["enable_highlight_override"] is False
+
+
+def test_main_cli_enable_highlight_override_flag_sets_true() -> None:
+    """--enable-highlight-override 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-highlight-override"])
+    assert captured["enable_highlight_override"] is True
+
+
+def test_main_cli_enable_patch_fp_hsv_guard_default_false() -> None:
+    """CLI で --enable-patch-fp-hsv-guard 未指定なら False が渡ること。
+
+    W13根治 案2 (2026-08-17、物差しv2 A/B/併用測定用): backwards compat、
+    既定 False で従来挙動と bit-identical。
+    """
+    captured = _run_fake_main_lean([])
+    assert captured["enable_patch_fp_hsv_guard"] is False
+
+
+def test_main_cli_enable_patch_fp_hsv_guard_flag_sets_true() -> None:
+    """--enable-patch-fp-hsv-guard 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-patch-fp-hsv-guard"])
+    assert captured["enable_patch_fp_hsv_guard"] is True
 
 
 def test_main_cli_enable_burst_close_extension_default_false() -> None:
@@ -2059,3 +2108,363 @@ class TestSharedGameCounter:
         mod._update_game_boundary(s1, 5000)
         mod._update_game_boundary(s1, 0)
         assert s1.game_idx == 1
+
+
+# ============================
+# 試合境界マルチシグナル (W20/W21根治、2026-08-17 追加)
+# ============================
+
+class TestBoundaryMultisignal:
+    """_SharedGameCounter.observe_visual_signal / multisignal_mode の検証。
+
+    設計: is_match_active (視覚+score_zero+match_end_locked の統合判定) の
+    False→True 立ち上がりを境界進行の主信号にし、score-reset は
+    フォールバック + 異常マークに降格する (docs/KNOWN_WEAKNESSES.md W20/W21)。
+    """
+
+    def test_multisignal_mode_false_is_noop_bit_identical(self) -> None:
+        """multisignal_mode=False (既定) では observe_visual_signal は
+        game_idx に一切影響しない (旧 score-reset 単独動作と bit-identical)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter()
+        assert shared.multisignal_mode is False
+        shared.observe_visual_signal(False, t_sec=1.0)
+        shared.observe_visual_signal(True, t_sec=2.0)  # False→True だが無視
+        assert shared.game_idx == 0
+        assert shared.last_visual_advance_sec is None
+
+    def test_visual_rising_edge_advances_boundary(self) -> None:
+        """multisignal_mode=True で False→True 立ち上がりが境界を進める。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        shared.observe_visual_signal(False, t_sec=1.0)
+        shared.observe_visual_signal(True, t_sec=2.0)  # 立ち上がり → 境界
+        assert shared.game_idx == 1
+        assert shared.last_visual_advance_sec == 2.0
+
+    def test_visual_signal_continuous_true_does_not_readvance(self) -> None:
+        """True が継続する間は再度進まない (立ち上がりのみ検知)。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        shared.observe_visual_signal(False, t_sec=1.0)
+        shared.observe_visual_signal(True, t_sec=2.0)
+        shared.observe_visual_signal(True, t_sec=3.0)
+        shared.observe_visual_signal(True, t_sec=4.0)
+        assert shared.game_idx == 1
+
+    def test_score_reset_near_visual_advance_no_anomaly(self) -> None:
+        """score-reset が視覚信号確認済み時刻の近傍なら異常マークしない。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        shared.observe_visual_signal(False, t_sec=59.0)
+        shared.observe_visual_signal(True, t_sec=60.0)  # 視覚信号で境界1
+        assert shared.game_idx == 1
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=10.0)
+        # score-reset 検知が視覚信号 (60.0) の許容窓 (3秒) 以内
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=61.0, side_label="1P",
+        )
+        assert shared.game_idx == 1, "視覚信号確認済みで二重に進んでいる"
+        assert shared.anomalies == []
+
+    def test_score_reset_without_visual_signal_records_anomaly_and_advances(
+        self,
+    ) -> None:
+        """score-reset が視覚信号なしで発生 → フォールバックで進みつつ
+        異常マークが残る (人手レビュー対象、W21実例 c109 相当のケース)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=10.0)
+        # 視覚信号は一度も立ち上がっていない状態で score だけ急落
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=60.0, side_label="1P",
+        )
+        assert shared.game_idx == 1, "フォールバックで進んでいない"
+        assert len(shared.anomalies) == 1
+        anomaly = shared.anomalies[0]
+        assert anomaly["side"] == "1P"
+        assert anomaly["score_delta"] == 9000
+        assert anomaly["t_sec"] == 60.0
+
+    def test_score_reset_far_from_visual_advance_records_anomaly(self) -> None:
+        """視覚信号はあったが score-reset 時刻から許容窓より遠い → 異常マーク。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        shared.observe_visual_signal(False, t_sec=9.0)
+        shared.observe_visual_signal(True, t_sec=10.0)  # 視覚信号で境界1 (別ゲーム)
+        assert shared.game_idx == 1
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=20.0)
+        # 許容窓 3秒より遠い (視覚信号 last_advance=10.0 との差 40 秒)
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=50.0, side_label="1P",
+        )
+        assert shared.game_idx == 2, "遠い score-reset がフォールバックで進んでいない"
+        assert len(shared.anomalies) == 1
+
+
+# ============================
+# 勝敗演出ロックダウン区間マーク (W20/W21根治、2026-08-17 追加)
+# ============================
+
+class TestMatchEndLockedColumn:
+    """_LeanNpzAccumulator の match_end_locked 列の記録・保存を検証する。"""
+
+    def test_append_default_omitted_uses_unknown_sentinel(
+        self, tmp_path: Path,
+    ) -> None:
+        """match_end_locked 省略時は MATCH_END_LOCKED_UNKNOWN (-1、後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 10)
+        assert acc.match_end_lockeds == [mod.MATCH_END_LOCKED_UNKNOWN]
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert data["match_end_locked"][0] == mod.MATCH_END_LOCKED_UNKNOWN
+
+    def test_append_explicit_values_roundtrip(self, tmp_path: Path) -> None:
+        """match_end_locked=True/False が npz に 1/0 でそのまま保存される。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(
+            board._grid, "v1", "1P", 1.0, 0, 10, match_end_locked=True,
+        )
+        acc.append(
+            board._grid, "v1", "1P", 2.0, 0, 11, match_end_locked=False,
+        )
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert list(data["match_end_locked"]) == [1, 0]
+
+
+# ============================
+# 勝者パネルクロスチェック (W20/W21根治、2026-08-17 追加)
+# ============================
+
+class TestAssignWonLabelsPanelCrosscheck:
+    """assign_won_labels の panel_winners 引数 (2 系統一致要求) を検証する。"""
+
+    def test_panel_winners_none_keeps_legacy_score_only_behaviour(self) -> None:
+        """panel_winners=None (既定) は従来通り score 系統単独判定 (bit-identical)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 1)
+        acc.append(board._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels({0: {"1P": 5000, "2P": 3000}})
+        assert acc.wons == [1.0, 0.0]
+
+    def test_panel_agrees_with_score_keeps_winner(self) -> None:
+        """score 系統とパネル系統が一致 → その勝者を採用する。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 1)
+        acc.append(board._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels(
+            {0: {"1P": 5000, "2P": 3000}}, panel_winners={0: "1P"},
+        )
+        assert acc.wons == [1.0, 0.0]
+
+    def test_panel_disagrees_with_score_marks_unknown(self) -> None:
+        """score 系統とパネル系統が不一致 → unknown (won は NaN のまま)。
+
+        単一系統を無条件の正解にしない設計 (fail-silent 警戒)。
+        """
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 1)
+        acc.append(board._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels(
+            {0: {"1P": 5000, "2P": 3000}}, panel_winners={0: "2P"},
+        )
+        assert all(math.isnan(w) for w in acc.wons)
+
+    def test_panel_missing_marks_unknown_even_if_score_has_winner(self) -> None:
+        """パネル系統が判定不能 (None) → score だけでは確定させない。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 1)
+        acc.append(board._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels(
+            {0: {"1P": 5000, "2P": 3000}}, panel_winners={0: None},
+        )
+        assert all(math.isnan(w) for w in acc.wons)
+
+
+# ============================
+# collect_lean() フル配線の結合テスト (W20/W21根治、2026-08-17 追加)
+# ============================
+
+class _FakeLeanPipelineVisualBoundary(_FakeLeanPipeline):
+    """is_match_active の False→True 立ち上がりのみで境界が進むことを
+    collect_lean() 経由のフル配線で検証するための最小フェイク。
+
+    score は常に一定値 (100、リセットなし) にして score-reset 経路を
+    完全に無効化し、視覚信号のみが game_idx を進めることを切り分ける。
+    frame_idx 0-1: is_match_active=True、盤面 A (COLOR_RED)。
+    frame_idx 2: is_match_active=False (試合外、盤面は COLOR_BLUE に変化)。
+    frame_idx 3-4: is_match_active=True (立ち上がり→境界)、盤面は
+        COLOR_GREEN (frame2 の COLOR_BLUE と区別し dedup で握り潰されない
+        ようにする)。
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._is_active_by_frame = {0: True, 1: True, 2: False, 3: True, 4: True}
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        if fi < 2:
+            color = COLOR_RED
+        elif fi == 2:
+            color = COLOR_BLUE
+        else:
+            color = COLOR_GREEN
+        board = _make_board(color)
+        side = SimpleNamespace(
+            state=BoardState.STABLE, score=100, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(
+            p1=side, p2=side,
+            is_match_active=self._is_active_by_frame.get(fi, True),
+            match_end_locked=False,
+        )
+
+
+def test_collect_lean_boundary_multisignal_off_ignores_visual_transition(
+    tmp_path: Path,
+) -> None:
+    """enable_boundary_multisignal=False (既定) では is_match_active の
+    立ち上がりを無視し、score が変わらない限り game_idx は 0 のまま
+    (旧挙動 bit-identical)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(5, fps=30.0)
+    fake_pipeline = _FakeLeanPipelineVisualBoundary()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+        )
+    with np.load(out_npz) as data:
+        assert set(data["game_idx"].tolist()) == {0}
+        # match_end_locked は fake が False を返すため 0 (未知 -1 ではない)
+        assert set(data["match_end_locked"].tolist()) == {0}
+    assert not (tmp_path / "out_boundary_anomalies.json").exists()
+
+
+def test_collect_lean_boundary_multisignal_on_advances_game_idx(
+    tmp_path: Path,
+) -> None:
+    """enable_boundary_multisignal=True で is_match_active 立ち上がりのみが
+    game_idx を進める (score は一定値でリセットなし)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(5, fps=30.0)
+    fake_pipeline = _FakeLeanPipelineVisualBoundary()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+            enable_boundary_multisignal=True,
+        )
+    with np.load(out_npz) as data:
+        game_idxs = data["game_idx"]
+        t_secs = data["t_sec"]
+        # frame0/1 (t=0, 1/30) は境界前 (game 0)
+        pre = game_idxs[t_secs < 2 / 30]
+        assert set(pre.tolist()) == {0}
+        # frame3/4 (立ち上がり後) は境界後 (game 1)
+        post = game_idxs[t_secs >= 3 / 30]
+        assert set(post.tolist()) == {1}
+    # score は一度もリセットしていないため異常イベントは発生しない
+    assert not (tmp_path / "out_boundary_anomalies.json").exists()
+
+
+class _FakeWinnerDetectorResult:
+    """MatchWinnerDetector.detect_all_winners の戻り値要素の最小フェイク。"""
+
+    def __init__(self, winner: str | None) -> None:
+        self.winner = winner
+
+
+class _FakeWinnerDetector:
+    """MatchWinnerDetector の最小フェイク (cap を無視し固定結果を返す)。"""
+
+    def __init__(self, winners: list[str | None]) -> None:
+        self._winners = winners
+
+    def detect_all_winners(
+        self, cap: object, match_starts: list[float],
+        last_observable_sec: float, offset_before: float = 1.0,
+    ) -> list[_FakeWinnerDetectorResult]:
+        return [_FakeWinnerDetectorResult(w) for w in self._winners]
+
+
+def test_collect_lean_winner_panel_crosscheck_agrees_keeps_winner(
+    tmp_path: Path,
+) -> None:
+    """パネル系統が score 系統と一致 → 従来通りの勝者ラベルを維持する。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+    fake_pipeline = _FakeLeanPipeline()  # 単一ゲーム、score=None (勝者None)
+
+    class _FakeDetectorClass:
+        @classmethod
+        def load_default(cls) -> _FakeWinnerDetector:
+            return _FakeWinnerDetector([None])  # score も None のため won は
+            # 判定不能のままだが、配線経路 (panel_winners 生成→
+            # assign_won_labels 呼び出し) が例外なく通ることを確認する。
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        mp.setattr(mod, "MatchWinnerDetector", _FakeDetectorClass)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+            enable_winner_panel_crosscheck=True,
+        )
+    assert n == 0  # _FakeLeanPipeline は MENU 状態のため snapshot は 0 件
+
+
+def test_collect_lean_winner_panel_crosscheck_failure_falls_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture,
+) -> None:
+    """クロスチェック自体が失敗しても collect_lean は例外を投げず、
+    score 系統単独判定にフォールバックする (fail-silent 警戒)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+    fake_pipeline = _FakeLeanPipeline()
+
+    class _FailingDetectorClass:
+        @classmethod
+        def load_default(cls) -> "_FailingDetectorClass":
+            raise RuntimeError("boom (テスト用の意図的な失敗)")
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        mp.setattr(mod, "MatchWinnerDetector", _FailingDetectorClass)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(  # 例外を投げずに完走すること自体が検証対象
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+            enable_winner_panel_crosscheck=True,
+        )
+    assert n == 0
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.err
