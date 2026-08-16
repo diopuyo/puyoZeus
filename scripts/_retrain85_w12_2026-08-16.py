@@ -1,4 +1,4 @@
-"""W12根治 P5先行検証: 真値85本のみで旧列 vs 新5列 (W12) の効果を比較する。
+"""W12根治 P5先行検証: 真値85本のみで旧列 vs 新5列 (W12) + 指標整理アブレーション。
 
 `scripts/_retrain148_2026-08-14.py` の構造を流用しつつ、以下を85本サブセット
 向けに変更する:
@@ -11,6 +11,25 @@
 - W12の核心 (予告216個以上での予測勝率の実勝率への近づき) を、
   `scripts/_diag_w12_quantify_2026-08-16.py` と同じ bucket 定義
   (`FORECAST_BUCKETS`) ・同じ位相定義 (progress三分位) で直接検証する。
+
+## 指標整理アブレーション (2026-08-16 追加依頼、user決定「収集は続けるが判定に
+使わない (除外リスト方式)」)
+148本モデルの permutation importance (`data/verify/retrain148_2026-08-14/
+permutation_importance_full.csv`) で下位が死んでいた列を、同じ85本・同じ分割
+で段階的に除外し AUC (全体+位相別) が落ちないか実測する:
+
+| 構成 | 内容 |
+|---|---|
+| A | 旧47列 (ベースライン) |
+| B | 旧47列 + W12新5列 |
+| C | B から DEAD_ZERO_OR_NEG_5 (貢献ゼロ/負の5列) を除外 |
+| D | C から NEARLY_DEAD_10 (ほぼ死の10列) もさらに除外 (計15列削減) |
+| E | B から `ojama_margin` だけを単独で除外 (W12容量交互作用の代替列のため
+    C/Dとは独立に個別判定できるよう分離、user指示「余力があれば」) |
+
+「消さずに判定に使わないようにする」= 除外リスト方式のため、収集パイプライン
+(`build_labeled_win_from_npz.py` 側の列生成) 自体はどの列も一切削除しない
+(このスクリプトは学習時の特徴量選択のみを扱う)。
 
 入力CSVは `scripts/_p5_convert85_2026-08-16.py` が生成する
 `data/verify/labeled_win_w12_85_2026-08-16/labeled_win_w12_85.csv`
@@ -82,6 +101,28 @@ W12_NEW_COLS: tuple[str, ...] = (
     "ojama_net_balance_uncapped", "ojama_forecast_uncapped",
     "ojama_forecast_log", "ojama_forecast_progress_interaction",
     "color_forecast_ratio_own",
+)
+
+# ============================
+# 指標整理アブレーション (2026-08-16 追加依頼)
+# ============================
+# 148本モデル (`retrain148_2026-08-14/permutation_importance_full.csv`) で
+# 貢献ゼロまたは負だった5列 (削除の有力候補)。saturation_chain_upper は
+# 「飽和天井は空き空間量と同じで無相関」撤退済みなのに列だけ残っている
+# もの (project_saturation_ceiling_untrustworthy_2026-07-22)。
+DEAD_ZERO_OR_NEG_5: tuple[str, ...] = (
+    "dig_resistance", "saturation_chain_upper", "main_linked_ratio",
+    "multi_color_ignition", "isolated_pair_count",
+)
+
+# 同モデルで「ほぼ死」だった10列。ojama_margin は W12 の容量交互作用の代替
+# として残す判断をした列のため、C/D をひとまとめに除外するだけでなく E で
+# 単独除外も測る (削除するとW12対応と矛盾しうるため個別判断が必要)。
+NEARLY_DEAD_10: tuple[str, ...] = (
+    "ojama_margin", "simultaneous_pop_richness", "immediate_fire_power",
+    "conn_triple_count", "main_linked_pair_count", "diff_conn_pair_count",
+    "min_puyos_to_ignite", "opp_all_clear_bonus_pending",
+    "buried_hole_count", "ignition_point_count",
 )
 
 # `_diag_w12_quantify_2026-08-16.py` と同一のbucket定義 (直接比較のため)。
@@ -250,13 +291,33 @@ def forecast_bin_report(df: pd.DataFrame, oof_baseline, oof_new, progress: np.nd
     return combined
 
 
+def run_config(label, cols, df, y, groups, progress, n_folds):
+    """1構成分 (特徴量リスト固定) の OOF学習・評価・位相別評価をまとめて行う。"""
+    print(f"\n=== 構成 {label}: {len(cols)}列 ===")
+    X = df[cols].fillna(0.0).values.astype(np.float32)
+    oof = run_oof(X, y, groups, n_folds)
+    res = eval_oof(y, oof, label)
+    pv = per_video_auc(y, oof, groups)
+    res["video_median_auc"] = float(pv["auc"].median())
+    res["n_features"] = len(cols)
+    print(f"  --- 位相別 ({label}) ---")
+    res["phase"] = phase_auc_report(y, oof, progress, groups)
+    return res, oof
+
+
 def main():
-    parser = argparse.ArgumentParser(description="85本 (真値限定) 旧列 vs W12新5列 比較")
+    parser = argparse.ArgumentParser(
+        description="85本 (真値限定) 旧列 vs W12新5列 + 指標整理アブレーション A/B/C/D/E",
+    )
     parser.add_argument("--csv", default=DEFAULT_CSV)
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--n-folds", type=int, default=N_FOLDS)
     parser.add_argument("--perm-repeats", type=int, default=PERM_N_REPEATS)
     parser.add_argument("--skip-perm", action="store_true")
+    parser.add_argument(
+        "--skip-e", action="store_true",
+        help="構成E (ojama_margin単独除外) をスキップする (時間節約用)",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -264,7 +325,7 @@ def main():
     t_start = time.time()
 
     print("=" * 80)
-    print("  W12 P5先行検証: 真値85本 旧列 vs 新5列比較")
+    print("  W12 P5先行検証 + 指標整理アブレーション (A/B/C/D/E)")
     print("=" * 80)
 
     print("\n=== 1. データ読み込み ===")
@@ -273,49 +334,66 @@ def main():
     if missing_new:
         print(f"  [FATAL] W12新列が見つからない: {missing_new}")
         return 1
+    missing_dead = [c for c in DEAD_ZERO_OR_NEG_5 + NEARLY_DEAD_10 if c not in df.columns]
+    if missing_dead:
+        print(f"  [FATAL] アブレーション対象列が見つからない: {missing_dead}")
+        return 1
 
     print("\n=== 2. 試合内相対進行率 ===")
     progress = compute_match_progress(df)
     y = df["won"].values.astype(int)
     groups = df["video_id"].values
 
-    baseline_cols = resolve_feature_cols(df, exclude_extra=frozenset(W12_NEW_COLS))
-    new_cols = resolve_feature_cols(df)  # W12新5列を含む全数値列
-    print(f"  旧列 (baseline): {len(baseline_cols)}列")
-    print(f"  新列 (baseline+W12新5列): {len(new_cols)}列")
+    cols_a = resolve_feature_cols(df, exclude_extra=frozenset(W12_NEW_COLS))
+    cols_b = resolve_feature_cols(df)  # W12新5列を含む全数値列 (旧47列+新5列)
+    cols_c = [c for c in cols_b if c not in DEAD_ZERO_OR_NEG_5]
+    cols_d = [c for c in cols_c if c not in NEARLY_DEAD_10]
+    cols_e = [c for c in cols_b if c != "ojama_margin"]
+
+    configs = [
+        ("A_旧47列", cols_a),
+        ("B_旧47列+W12新5列", cols_b),
+        ("C_Bから貢献ゼロ負5列除外", cols_c),
+        ("D_Cからほぼ死10列も除外", cols_d),
+    ]
+    if not args.skip_e:
+        configs.append(("E_Bからojama_margin単独除外", cols_e))
+
     summary = {
         "n_rows": len(df), "n_videos": int(df["video_id"].nunique()),
-        "n_features_baseline": len(baseline_cols), "n_features_new": len(new_cols),
+        "n_features": {label: len(cols) for label, cols in configs},
     }
 
-    print("\n=== 3. 旧列モデル (baseline) ===")
-    X_base = df[baseline_cols].fillna(0.0).values.astype(np.float32)
-    oof_base = run_oof(X_base, y, groups, args.n_folds)
-    res_base = eval_oof(y, oof_base, "85本_旧列")
-    pv_base = per_video_auc(y, oof_base, groups)
-    res_base["video_median_auc"] = float(pv_base["auc"].median())
-    print("  --- 位相別 (旧列) ---")
-    res_base["phase"] = phase_auc_report(y, oof_base, progress, groups)
-    summary["baseline"] = res_base
+    results = {}
+    oofs = {}
+    for label, cols in configs:
+        res, oof = run_config(label, cols, df, y, groups, progress, args.n_folds)
+        results[label] = res
+        oofs[label] = oof
+    summary["configs"] = results
 
-    print("\n=== 4. 新列モデル (旧列+W12新5列) ===")
-    X_new = df[new_cols].fillna(0.0).values.astype(np.float32)
-    oof_new = run_oof(X_new, y, groups, args.n_folds)
-    res_new = eval_oof(y, oof_new, "85本_旧列+W12新5列")
-    pv_new = per_video_auc(y, oof_new, groups)
-    res_new["video_median_auc"] = float(pv_new["auc"].median())
-    print("  --- 位相別 (新列) ---")
-    res_new["phase"] = phase_auc_report(y, oof_new, progress, groups)
-    summary["new"] = res_new
+    delta_auc_w12 = results["B_旧47列+W12新5列"]["auc"] - results["A_旧47列"]["auc"]
+    print(f"\n  W12新5列の純増分 dAUC (B-A, プール) = {delta_auc_w12:+.4f}")
+    summary["delta_auc_w12_b_minus_a"] = delta_auc_w12
 
-    delta_auc = res_new["auc"] - res_base["auc"]
-    print(f"\n  W12新5列の純増分 dAUC (プール) = {delta_auc:+.4f}")
-    summary["delta_auc_w12"] = delta_auc
+    delta_auc_c = results["C_Bから貢献ゼロ負5列除外"]["auc"] - results["B_旧47列+W12新5列"]["auc"]
+    print(f"  貢献ゼロ/負5列削除の影響 dAUC (C-B) = {delta_auc_c:+.4f}")
+    summary["delta_auc_c_minus_b"] = delta_auc_c
+
+    delta_auc_d = results["D_Cからほぼ死10列も除外"]["auc"] - results["C_Bから貢献ゼロ負5列除外"]["auc"]
+    print(f"  ほぼ死10列追加削除の影響 dAUC (D-C) = {delta_auc_d:+.4f}")
+    summary["delta_auc_d_minus_c"] = delta_auc_d
+
+    if "E_Bからojama_margin単独除外" in results:
+        delta_auc_e = results["E_Bからojama_margin単独除外"]["auc"] - results["B_旧47列+W12新5列"]["auc"]
+        print(f"  ojama_margin単独除外の影響 dAUC (E-B) = {delta_auc_e:+.4f}")
+        summary["delta_auc_e_minus_b"] = delta_auc_e
 
     if not args.skip_perm:
-        print("\n=== 5. permutation importance (新列モデル) ===")
+        print("\n=== permutation importance (構成B: 新列モデル) ===")
         perm_df = compute_perm_importance(
-            X_new, y, groups, new_cols, args.n_folds, args.perm_repeats,
+            df[cols_b].fillna(0.0).values.astype(np.float32),
+            y, groups, cols_b, args.n_folds, args.perm_repeats,
         )
         perm_df.to_csv(out_dir / "permutation_importance_new.csv", index=False)
         print("\n  上位15列:")
@@ -329,10 +407,10 @@ def main():
         summary["w12_col_ranks"] = w12_rank.set_index("feature")["rank"].to_dict()
         summary["w12_col_importance"] = w12_rank.set_index("feature")["importance_mean"].to_dict()
     else:
-        print("\n=== 5. permutation importance: --skip-perm によりスキップ ===")
+        print("\n=== permutation importance: --skip-perm によりスキップ ===")
 
-    print("\n=== 6. W12核心検証: 予告bucket別 実勝率 vs 旧/新モデル予測 ===")
-    fb_report = forecast_bin_report(df, oof_base, oof_new, progress)
+    print("\n=== W12核心検証: 予告bucket別 実勝率 vs 構成A/B モデル予測 ===")
+    fb_report = forecast_bin_report(df, oofs["A_旧47列"], oofs["B_旧47列+W12新5列"], progress)
     fb_report.to_csv(out_dir / "forecast_bin_report.csv", index=False)
     print(fb_report.to_string(index=False))
 
