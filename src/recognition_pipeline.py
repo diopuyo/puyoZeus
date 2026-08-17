@@ -1553,11 +1553,15 @@ class RecognitionPipeline:
         # (b-2) 次試合開始までのラッチ (2026-08-18、
         # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
         # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
-        # 試合開始 (raw_active 持続) が確認されるまで試合外とみなすラッチ。
-        # 結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
-        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性 (試合外画面
-        # の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC でラッチが
-        # 無限残留しないようにする。
+        # 試合開始 (MatchStateDetector の生判定持続) が確認されるまで試合外
+        # とみなすラッチ。結果パネル・対戦カード紹介・次ラウンド待機を一括
+        # カバーし、MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性
+        # (試合外画面の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC で
+        # ラッチが無限残留しないようにする。
+        # 実測起因の設計修正 (2026-08-18): collect_boards_lean.py は
+        # force_in_match=True をハードコードしているため、force_in_match の
+        # OR で常に True になる raw_active はここでは使わず、
+        # match_res.state (=MatchStateDetector の生判定) を使う。
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_post_match_lockdown_latch: bool = False,
@@ -3673,23 +3677,29 @@ class RecognitionPipeline:
         # (b-2) 次試合開始までのラッチ (2026-08-18、
         # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
         # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
-        # 試合開始 (raw_active 持続) が確認されるまで試合外とみなす。
+        # 試合開始 (visual_in_match 持続) が確認されるまで試合外とみなす。
         # 結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
         # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性を防ぐ。
-        # ラッチOFF判定に使う raw_active は、この時点ではまだ hard_match_off
-        # ブロックによる強制 False 化 (下記) を受けていない「素の」
-        # MatchStateDetector 判定値。
+        # ラッチOFF判定には raw_active でなく match_res.state (=
+        # MatchStateDetector の生判定) を使う。実写検証 (2026-08-18、
+        # data/verify/boundary_impl_verify_2026-08-18/) で判明: 本番の収集
+        # 経路 (collect_boards_lean.py) は force_in_match=True をハードコード
+        # しており、raw_active は force_in_match の OR で常に True になる
+        # (= 「次試合開始」の意味を持たない)。match_res.state はこの OR の
+        # 影響を受けない「素の」画面認識結果のため、force_in_match の値に
+        # 関わらずラッチが機能する。
         # 既定 False (enable_post_match_lockdown_latch) では以下の状態更新を
         # 一切行わず self._post_match_lockdown_active は常に False のまま
         # (= bit-identical)。
         if self._enable_post_match_lockdown_latch:
+            visual_in_match = match_res.state == MatchState.IN_MATCH
             if match_end_locked and not self._post_match_lockdown_prev_end_locked:
                 self._post_match_lockdown_active = True
                 self._post_match_lockdown_started_time = time_sec
                 self._post_match_lockdown_raw_active_since = -1.0
             self._post_match_lockdown_prev_end_locked = match_end_locked
             if self._post_match_lockdown_active:
-                if raw_active:
+                if visual_in_match:
                     if self._post_match_lockdown_raw_active_since < 0.0:
                         self._post_match_lockdown_raw_active_since = time_sec
                     elif (
