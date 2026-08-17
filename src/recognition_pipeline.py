@@ -819,6 +819,27 @@ class RecognitionPipeline:
     # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
     CHAIN_BAN_SEC_AFTER_MATCH_START: float = CHAIN_BAN_FRAMES_AFTER_MATCH_START / 60
 
+    # (b-1) match_end持続時間ゲート (2026-08-18、Step 0診断B対処、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+    # 実測 (data/verify/diag_match_end_miss_2026-08-17/, video_c21 f57548) で
+    # 本物の「ばたんきゅー/やった!」結果パネルは match_end_locked が 3.15 秒
+    # 連続 True になる一方、連鎖中の瞬間誤爆は単発 (1 frame 前後) で終わる。
+    # その中間に余裕を持たせた値として 1.0 秒を採用 (根拠: 誤爆側の上限が
+    # 数フレーム、本物側の下限が3秒超という実測分布から、両側から十分な
+    # マージンを確保できる値)。他の長連鎖フィニッシュ実例による追加校正は
+    # 今後の課題 (design doc §3(b-1) 校正材料参照)。
+    MATCH_END_PERSIST_OVERRIDE_SEC: float = 1.0
+
+    # (b-2) 次試合開始までのラッチの安全弁 (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+    # ばたんきゅー/やった!検出から次の本物の試合開始 (raw_active 持続) までを
+    # ラッチで覆うが、検出漏れ等で無限にラッチが残留するリスクに対する上限。
+    # 対戦カード紹介・次ラウンド待機画面の実測時間に基づく値 (実測: c21 の
+    # ばたんきゅーパネル〜次試合の raw_active 持続確認まで実測十数秒、
+    # 詳細は data/verify/boundary_impl_verify_2026-08-18/post_match_lockdown_
+    # duration.json 参照)。安全のため実測値に対し十分なマージンを取る。
+    POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
+
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
     # SCORE_MOVE_WINDOW_FRAMES 内に SCORE_MOVE_MIN_DELTA 以上動いていれば
     # hard_match_off (= MatchEnd lockdown 等) を打ち消して試合中継続.
@@ -1520,6 +1541,26 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
+        # (b-1) match_end持続時間ゲート (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)、Step0診断B
+        # 対処): match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上
+        # 連続 True の場合のみ、chain_in_progress による hard_match_off 抑制を
+        # 上書きし、正規の試合終了検出を通す (連鎖アニメ中に表示され始める
+        # 本物のパネルを取り零さないようにする)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_match_end_persist_override: bool = False,
+        # (b-2) 次試合開始までのラッチ (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+        # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
+        # 試合開始 (raw_active 持続) が確認されるまで試合外とみなすラッチ。
+        # 結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
+        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性 (試合外画面
+        # の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC でラッチが
+        # 無限残留しないようにする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_post_match_lockdown_latch: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2060,6 +2101,26 @@ class RecognitionPipeline:
         )
         self._ojama_override_exit_until_1p: float = 0.0
         self._ojama_override_exit_until_2p: float = 0.0
+        # (b-1) match_end持続時間ゲート (2026-08-18)。 default False = bit-identical。
+        self._enable_match_end_persist_override: bool = bool(
+            enable_match_end_persist_override
+        )
+        # match_end_locked が連続 True になり始めた time_sec。
+        # -1.0 = 現在 False (連続区間の外)。
+        self._match_end_locked_since: float = -1.0
+        # (b-2) 次試合開始までのラッチ (2026-08-18)。 default False = bit-identical。
+        self._enable_post_match_lockdown_latch: bool = bool(
+            enable_post_match_lockdown_latch
+        )
+        self._post_match_lockdown_active: bool = False
+        # ラッチON判定用: 前フレームの match_end_locked (edge検出専用、
+        # 大ROI間引きキャッシュ用の self._last_match_end_locked とは別物)。
+        self._post_match_lockdown_prev_end_locked: bool = False
+        # ラッチがONになった time_sec (安全弁の基準点)。-1.0 = 非活性。
+        self._post_match_lockdown_started_time: float = -1.0
+        # raw_active が連続 True になり始めた time_sec (ラッチOFF判定用)。
+        # -1.0 = 現在 False (連続区間の外、またはラッチ非活性)。
+        self._post_match_lockdown_raw_active_since: float = -1.0
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -3081,6 +3142,12 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
+        # (b-1)/(b-2) 境界マルチシグナル統合設計 (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3): __init__ へ
+        # そのまま forward する。両方 default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_match_end_persist_override: bool = False,
+        enable_post_match_lockdown_latch: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3318,6 +3385,8 @@ class RecognitionPipeline:
                 enable_next_history_starvation_fix
             ),
             enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         )
 
     # ------------------------------------------------------------------
@@ -3413,6 +3482,13 @@ class RecognitionPipeline:
         # 長時間劣化修正 A' (2026-08-06): デバウンスのpending状態も試合切替時に
         # クリアする (前試合のpending観測が次試合に残留するのを防ぐ)。
         self._match_active_debounce_state = MatchActiveDebounceState()
+        # (b-1)/(b-2) 境界マルチシグナル (2026-08-18): 前試合の持続タイマー/
+        # ラッチ状態が次試合に残留するのを防ぐ。
+        self._match_end_locked_since = -1.0
+        self._post_match_lockdown_active = False
+        self._post_match_lockdown_prev_end_locked = False
+        self._post_match_lockdown_started_time = -1.0
+        self._post_match_lockdown_raw_active_since = -1.0
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -3594,6 +3670,49 @@ class RecognitionPipeline:
                     pass
             else:
                 match_end_locked = self._last_match_end_locked
+        # (b-2) 次試合開始までのラッチ (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+        # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
+        # 試合開始 (raw_active 持続) が確認されるまで試合外とみなす。
+        # 結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
+        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性を防ぐ。
+        # ラッチOFF判定に使う raw_active は、この時点ではまだ hard_match_off
+        # ブロックによる強制 False 化 (下記) を受けていない「素の」
+        # MatchStateDetector 判定値。
+        # 既定 False (enable_post_match_lockdown_latch) では以下の状態更新を
+        # 一切行わず self._post_match_lockdown_active は常に False のまま
+        # (= bit-identical)。
+        if self._enable_post_match_lockdown_latch:
+            if match_end_locked and not self._post_match_lockdown_prev_end_locked:
+                self._post_match_lockdown_active = True
+                self._post_match_lockdown_started_time = time_sec
+                self._post_match_lockdown_raw_active_since = -1.0
+            self._post_match_lockdown_prev_end_locked = match_end_locked
+            if self._post_match_lockdown_active:
+                if raw_active:
+                    if self._post_match_lockdown_raw_active_since < 0.0:
+                        self._post_match_lockdown_raw_active_since = time_sec
+                    elif (
+                        time_sec - self._post_match_lockdown_raw_active_since
+                        >= self.CHAIN_BAN_SEC_AFTER_MATCH_START
+                    ):
+                        # 既存の「試合開始直後の整定時間」定数を再利用
+                        # (collect_boards_lean.py の
+                        # BOUNDARY_VISUAL_RISE_PERSIST_SEC と同一根拠、
+                        # 新規マジックナンバーを増やさない)。
+                        self._post_match_lockdown_active = False
+                else:
+                    self._post_match_lockdown_raw_active_since = -1.0
+                # 安全弁: 誤爆等でラッチが無限残留しないよう上限で強制解除。
+                if (
+                    self._post_match_lockdown_active
+                    and self._post_match_lockdown_started_time >= 0.0
+                    and (
+                        time_sec - self._post_match_lockdown_started_time
+                        >= self.POST_MATCH_LOCKDOWN_MAX_SEC
+                    )
+                ):
+                    self._post_match_lockdown_active = False
         # cycle 71f (提案 A): score 動き情報を追跡 (= 試合 2 開始直後の演出で
         # MatchStateDetector / MatchEndDetector が「試合外」 と判定しても、
         # score が継続的に動いていれば「試合中」 と判定する確実な信号).
@@ -3628,7 +3747,11 @@ class RecognitionPipeline:
         # 強い「試合外」シグナル (hysteresis を上書き)
         # 2026-05-10 FIX-C: score=0 でも cnn_board に puyo があれば試合中継続
         # (試合開始直後の最初の数手が menu 誤判定される問題を回避)。
-        hard_match_off = score_zero_both or match_end_locked
+        # (b-2) self._post_match_lockdown_active は既定 False (bit-identical)。
+        hard_match_off = (
+            score_zero_both or match_end_locked
+            or self._post_match_lockdown_active
+        )
         if hard_match_off:
             # match_end は確定信号、 score_zero は puyo 確認で否定
             puyo_observed = False
@@ -3649,7 +3772,10 @@ class RecognitionPipeline:
                     score_zero_both = False  # 既に puyo 観測 = 試合中
                 if p2_b is not None and p2_b.count_puyos() >= 2:
                     score_zero_both = False
-                hard_match_off = score_zero_both or match_end_locked
+                hard_match_off = (
+                    score_zero_both or match_end_locked
+                    or self._post_match_lockdown_active
+                )
             if hard_match_off:
                 raw_active = False
         # Telop visible 状態を保存 (EffectPhaseDetector で利用)
@@ -3725,13 +3851,39 @@ class RecognitionPipeline:
                 BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
             )
         )
+        # (b-1) match_end持続時間ゲート (2026-08-18、Step 0診断B対処、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+        # 実測 (data/verify/diag_match_end_miss_2026-08-17/) で、本物の
+        # ばたんきゅー/やった!パネルは match_end_locked が3秒超連続 True に
+        # なる一方、連鎖中の瞬間誤爆は単発で終わる。持続時間で弁別し、
+        # MATCH_END_PERSIST_OVERRIDE_SEC 秒以上連続した場合のみ上記
+        # chain_in_progress による抑制を上書きする (= 正規の試合終了検出が
+        # 勝者の連鎖アニメ中に打ち消されないようにする)。
+        # 既定 False (enable_match_end_persist_override) では
+        # match_end_persisted は常に False (= 従来ロジックと bit-identical)。
+        if match_end_locked:
+            if self._match_end_locked_since < 0.0:
+                self._match_end_locked_since = time_sec
+        else:
+            self._match_end_locked_since = -1.0
+        match_end_persisted = (
+            self._enable_match_end_persist_override
+            and match_end_locked
+            and self._match_end_locked_since >= 0.0
+            and (
+                time_sec - self._match_end_locked_since
+                >= self.MATCH_END_PERSIST_OVERRIDE_SEC
+            )
+        )
+        chain_in_progress_suppresses = chain_in_progress and not match_end_persisted
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
         # cycle 71f (提案 A): score が直近 window 内で SCORE_MOVE_MIN_DELTA 以上
         # 動いていれば、 hard_match_off を打ち消して試合中継続を保証する.
         # 「演出/READY/GO! で MatchEnd が誤発火するが score は動いている」
         # シナリオ (= v50 51-63s) を解消.
         effective_hard_off = (
-            hard_match_off and not score_actively_moving and not chain_in_progress
+            hard_match_off and not score_actively_moving
+            and not chain_in_progress_suppresses
         )
         is_active = (
             (raw_active or recent_active or sm_active or score_actively_moving)

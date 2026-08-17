@@ -3216,6 +3216,285 @@ def test_legitimate_match_end_detected_after_chain_state_exits() -> None:
 
 
 # ============================
+# (b-1) match_end持続時間ゲート (2026-08-18、
+# docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1))
+# ============================
+
+
+def test_match_end_persist_override_default_off_bit_identical() -> None:
+    """既定 False では従来ロジックと bit-identical (瞬間誤爆は抑制継続)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=False,
+    )
+    t = 5.0
+    for i in range(120):
+        # state machine が自律的に CHAIN から遷移してしまうため、毎フレーム
+        # 強制する (chain_in_progress 判定は update() 冒頭で読まれるため、
+        # _step_side による事後遷移とは競合しない)。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(i, t, _dummy_frame())
+        t += 0.05
+    assert res.is_match_active is True, (
+        "既定 False では 6 秒連続 match_end_locked でも CHAIN 中は"
+        "従来通り抑制され続けるべき (bit-identical)"
+    )
+
+
+def test_match_end_persist_override_suppresses_instant_false_positive() -> None:
+    """flag ON でも瞬間誤爆 (persist 時間未満) は従来通り抑制される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    # 1 フレームだけの瞬間誤爆 (MATCH_END_PERSIST_OVERRIDE_SEC=1.0秒未満)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "persist 時間未満の match_end_locked は瞬間誤爆として"
+        "抑制され続けるべき (flag ON でも)"
+    )
+
+
+def test_match_end_persist_override_detects_after_persist_duration() -> None:
+    """flag ON かつ match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上
+    連続すれば、CHAIN 中でも正規の試合終了検出が反映される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    t = 5.0
+    frame_idx = 0
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.is_match_active is True, "立ち上がり直後はまだ抑制されるべき"
+    # MATCH_END_PERSIST_OVERRIDE_SEC (=1.0秒) を超えるまで進める。
+    while t - 5.0 < RecognitionPipeline.MATCH_END_PERSIST_OVERRIDE_SEC + 0.2:
+        frame_idx += 1
+        t += 0.1
+        # state machine が自律的に CHAIN から遷移してしまうため毎フレーム強制。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.is_match_active is False, (
+        "match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上連続すれば、"
+        "CHAIN 中の抑制を上書きして正規の試合終了検出が反映されるべき"
+    )
+
+
+def test_match_end_persist_override_resets_when_locked_flickers() -> None:
+    """match_end_locked が一度 False に戻ると持続タイマーがリセットされる。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+
+    class _FlickerMatchEndDetector:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def update(self, frame: np.ndarray, time_sec: float) -> bool:
+            self.calls += 1
+            # 3 回に 1 回だけ False に落ちる (真の持続にはならない)。
+            return self.calls % 3 != 0
+
+        def is_locked(self, time_sec: float) -> bool:
+            return False
+
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_FlickerMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    t = 5.0
+    res = None
+    for i in range(60):
+        # state machine が自律的に CHAIN から遷移してしまうため毎フレーム強制。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(i, t, _dummy_frame())
+        t += 0.1
+    assert res is not None
+    assert res.is_match_active is True, (
+        "match_end_locked が持続せずフリッカーする場合は、持続タイマーが"
+        "都度リセットされるため誤って正規検出扱いされてはいけない"
+    )
+
+
+# ============================
+# (b-2) 次試合開始までのラッチ (2026-08-18、
+# docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2))
+# ============================
+
+
+def test_post_match_lockdown_latch_default_off_bit_identical() -> None:
+    """既定 False では従来ロジックと bit-identical。
+
+    match_end_locked が 5 秒ロックダウン後に False へ戻り、raw_active も
+    False (待機画面) のままだと、既定 False では is_match_active が
+    (score_zero 等の他条件次第だが) match_end_locked=False の時点で
+    通常判定に戻る (= ラッチ機構が一切効かない)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=False,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "既定 False では self._post_match_lockdown_active は常に False の"
+        "まま更新されるべき (bit-identical)"
+    )
+
+
+def test_post_match_lockdown_latch_activates_and_forces_inactive() -> None:
+    """flag ON: match_end_locked の立ち上がりでラッチが ON になり、
+    match_end_locked が False に戻った後 (5秒ロックダウン切れ相当) も
+    raw_active が False (対戦カード紹介等の待機画面) の間は
+    is_match_active=False が維持される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+
+    class _OneShotMatchEndDetector:
+        """1 回目の update() のみ True (ロックダウン切れ後の再現)。"""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def update(self, frame: np.ndarray, time_sec: float) -> bool:
+            self.calls += 1
+            return self.calls == 1
+
+        def is_locked(self, time_sec: float) -> bool:
+            return False
+
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_OneShotMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is False
+    assert pipe._post_match_lockdown_active is True, (
+        "match_end_locked の立ち上がりでラッチが ON になるべき"
+    )
+    # match_end_locked は 2 フレーム目以降 False に戻るが、raw_active
+    # (MatchStateDetector) は依然 False (待機画面) のため is_active=False
+    # が継続すべき。
+    res2 = pipe.update(1, 6.0, _dummy_frame())
+    assert res2.is_match_active is False, (
+        "ラッチが ON の間は match_end_locked が False に戻っても"
+        "試合外判定を維持するべき"
+    )
+    assert pipe._post_match_lockdown_active is True
+
+
+def test_post_match_lockdown_latch_releases_after_raw_active_persists() -> None:
+    """flag ON: ラッチON後、raw_active (次試合開始) が
+    CHAIN_BAN_SEC_AFTER_MATCH_START 秒以上連続すればラッチが解除される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+
+    # match_end_detector を切り離せないため、match_end_locked は True の
+    # ままだが、raw_active の持続を検証する目的でここでは match_end
+    # を意図的に None 化して match_end_locked=False の状態にする。
+    pipe._match_end_detector = None
+    # 次試合開始 (raw_active=True) を CHAIN_BAN_SEC_AFTER_MATCH_START 秒超
+    # 連続させる。
+    detector._in_match = True
+    t = 6.0
+    frame_idx = 1
+    persist_sec = RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+    while t - 6.0 < persist_sec + 0.2:
+        frame_idx += 1
+        t += 0.05
+        res = pipe.update(frame_idx, t, _dummy_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "raw_active が持続すればラッチは解除されるべき"
+    )
+    assert res.is_match_active is True
+
+
+def test_post_match_lockdown_latch_safety_valve_releases_after_max_sec() -> None:
+    """flag ON: raw_active が一度も持続しなくても、
+    POST_MATCH_LOCKDOWN_MAX_SEC 秒経過すれば安全弁でラッチが強制解除される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+    # raw_active は False のまま (次試合が一度も始まらない異常系)。
+    t = 5.0 + RecognitionPipeline.POST_MATCH_LOCKDOWN_MAX_SEC + 1.0
+    res = pipe.update(1, t, _dummy_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "安全弁 POST_MATCH_LOCKDOWN_MAX_SEC 秒経過でラッチは強制解除される"
+        "べき (raw_active が一度も持続しなくても無限残留しない)"
+    )
+
+
+# ============================
 # 反復4 (2026-07-23): confirmed_board=None 理由分類 診断計装テスト
 # ============================
 
