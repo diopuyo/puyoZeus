@@ -846,6 +846,18 @@ class RecognitionPipeline:
     #   3rd (現行): score_zero_both 持続 + 盤面ROI分散ガード。対戦カード
     #        紹介の装飾スコアカウントアップ演出が「00000000」を最大2.68秒
     #        持続して経由することが判明したため、盤面ROI追加確認で防御。
+    # 既知の残課題 (2026-08-18 実写検証、③試合外5件で0/5遮断、
+    # data/verify/boundary_impl_verify_2026-08-18/scorezero_latch_verify.csv):
+    # 3rd 版は対戦カード紹介の装飾スコア誤爆 (本コメント上部の課題) を修正
+    # 済みだが、is_match_active は各ラベル済アンカーの **0.27〜0.3秒前**
+    # (c18/c20 で確認、c21 は b-1 自体の1.0秒grace内で別経路) に True へ
+    # 復帰してしまい、5件とも遮断できていない。match_end_locked/
+    # score_zero_both/latch のいずれも False の状態で復帰しているため、
+    # score_actively_moving または sm_active (state machine が MENU 強制
+    # 解除後に対戦カード紹介の非ゲームプレイ画面を再度 CNN 誤読して
+    # STABLE/TSUMO_FALL 等に遷移する経路) の再点火が濃厚な原因候補だが
+    # 未特定。本タスク (解除信号置換) の対象範囲外の別問題であり、
+    # 148再収集投入前に追加調査が必要 (user/アーキ判断待ち)。
     POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
