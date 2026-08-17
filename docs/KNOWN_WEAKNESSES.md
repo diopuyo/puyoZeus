@@ -437,6 +437,59 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
   既定 `enable_boundary_multisignal=False` は無関係のため bit-identical 維持
   (pytest 5066 件全緑、`tests/test_collect_boards_lean.py` に競合ケース回帰テスト追加)。
 
+### W23: `_validate_next_history` の ever_seen 飢餓状態が正しい観測を誤って上書きする — W10訂正のさらなる訂正 (2026-08-17、測定器事故9件目)
+- **前提の誤り**: 「持続誤認26件」のうち系統1 (25/26件、c23/c10 実例) は当初
+  cycle 71n の STABLE 長期不一致 override 誤発火が根因と診断されていた (本タスク着手時の
+  前提)。その根治として `enable_override_color_guard` (override 発火セルを着地色 watch
+  リストに合流登録し CNN==HSV 一致で即時再訂正) を実装・単体テスト12件で健全性を確認した
+  上で、実データ (c23/c10 の実映像、`scripts/_diag_override_guard_realcheck_2026-08-17.py`
+  で直接計装) に適用したところ、**統一測定 構成E で該当セルの持続時間が 1 ミリ秒も変化
+  しなかった** (c23: 0.468秒→0.468秒、c10: 3.233秒→3.333秒(実質誤差内))。数値だけで
+  「効かなかった」と流さず実際に計装した結果、**前提診断そのものが誤りだった**と判明
+- **実際の機構**: `RecognitionPipeline._step_side` 内、STABLE 中は毎フレーム
+  `ctx.confirmed_board` から `published_confirmed` を作り (`recognition_pipeline.py:7085`)、
+  `_validate_next_history` (`recognition_pipeline.py:7094`, 実装本体 `:7325`) を通してから
+  `SideResult.confirmed_board` として外部出力する (`:7135`/`:7203`)。この関数は
+  「NEXT履歴 (`next_queue`) + 試合を通じて観測済みの色集合 (`ever_seen`)」に無い色を
+  HSV距離最寄りの既知色で強制置換する (cycle 8 Innovation D)。**試合開始直後、
+  `ever_seen` がまだ 4 色全部を観測していない間** (実測: c23 で `ever_seen={1,3}`
+  のみ・c10 で `ever_seen={1,2,5}` のみ、本来 4 色そろうはずが 3 色しか無い)、
+  正しく観測されている色 (CNN・内部 `ctx.confirmed_board` とも正解と一致) が
+  「未知色」と誤判定され、既知色の中で HSV 距離最寄りの**別の色**に強制変換される
+- **直接反証** (計装ログ実測、c23 t=1405.05 frame=84219):
+  `ctx.confirmed_board` は cnn_raw=5(紫)・history全件5 のまま**一度も汚染されていない**。
+  cycle 71n の override は不発 (history が終始正解のみなので発火条件を満たさない)。
+  それにもかかわらず外部出力 `SideResult.confirmed_board` は `_validate_next_history` が
+  同フレームで 5→1 に書き換えるため誤り値が現れる。**着地色ガード系 (W10/本タスクの両方)
+  は `ctx.confirmed_board` を対象にしており、この事故には構造的に無力**
+  (対象セルそのものに触れる前提が誤り)
+- **収集チャンク境界との一致**: 実測2件とも、誤りの発生フレームが収集チャンクの
+  **開始フレームからわずか5〜48フレーム (0.1〜0.8秒) 以内**だった
+  (c23 chunk1 start=frame84223相当・c10 chunk1 start=frame80244)。物差しv2の
+  収集方式 (30秒チャンクを動画内複数地点へ再シークし都度パイプラインを MENU から
+  再起動) が `ever_seen` を必然的に空にリセットするため、**通し視聴する本番運用より
+  この弱点が収集方式そのもので誇張されている可能性が高い** (真の試合開始直後を除けば
+  本来 `ever_seen` は試合中盤以降ずっと4色そろっているはず)。ただし試合の**真の開始
+  直後数秒**は本番でも同じ弱点に晒される可能性があるため看過はできない
+- **今回実装した2フラグの評価** (フラグ自体は健全、対象がズレていただけ):
+  - `enable_ojama_column_stack_fix` (系統2、c109): 実データで効果確認 **済**
+    (後述、color_to_ojama カテゴリ 1/1 セル解消)。こちらは診断通りの機構で正しく機能。
+  - `enable_override_color_guard` (系統1): 単体テスト12件で cycle71n override の
+    誤発火→即時再訂正という設計通りの動作は確認済みだが、**実データでは cycle71n
+    override 自体が発火していなかったため効果ゼロ**。フラグ自体は無害
+    (既定OFF・bit-identical・cycle71n が真に誤発火するケースへの安全網としては有効)
+    だが、本件26件の系統1を根治するものではない
+- **根治の方向 (次アクション、未実装・user判断待ち)**: `_validate_next_history` の
+  ever_seen 判定を「試合開始直後は無条件で信頼しない」方向に緩和する (例:
+  観測済み色が3色以下の間は HSV距離代替を無効化し CNN 観測をそのまま通す等)。
+  ただし本関数は元々「浮きぷよ除去」も兼務しており (`recognition_pipeline.py:7335`)、
+  分離してから再設計すること (1関数50行超のため分割案も要検討)
+- **教訓**: 「盤面レベルの diff パターンが既知機構の挙動と一致する」ことは
+  「その機構が原因である」ことの証明にならない。実装前に対象コードパスを直接
+  計装確認すべきだった (今回は実装後の実データ検証で発覚、対応順序として結果的には
+  安全側 — 数値だけで採否判断していれば「効果なし」の一言で見過ごされ、真因が
+  永久に未発見のままだった)
+
 ### W10【訂正+根因確定 2026-08-17】「単発フレームの色分類の系統誤り」は誤りだった
 - **計装で反証**: 誤り18セル全てで、HSV (H中央値137-139=紫域ど真ん中) も CNN (p_purple=1.00) も
   **正しく「紫」と分類できる**。単発フレームの分類は一切誤っていない → **CNN再学習は不要**
@@ -494,3 +547,38 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
   `python -m pytest tests/ -q`: **5092 passed, 13 skipped, 1 deselected, 0 failed**
   (新規13件込み、既存回帰なし)。user承認待ちのsavepoint実装、`production_config.py`
   への採用登録は未実施。
+
+- **【2026-08-17 段階3: 持続誤認26件の是正着手、系統2は成功・系統1は前提診断が誤りと判明】**
+  持続誤認26件 (系統1=cycle71n override 誤発火25件、系統2=おじゃま列内二重着地衝突1件、
+  との前提診断) の是正に着手。
+  **系統2 (`enable_ojama_column_stack_fix`)**: `_filter_transition_new_cnn_for_burst_guard`
+  (既存関数、無改修) を OJAMA_FALL からの遷移merge時に `effect_gate_window_active` の
+  窓に関係なく常時適用するよう `board_state_machine.py` の merge 条件を拡張
+  (`_apply_ojama_stack_fix` 変数、既存 `enable_transition_merge_guard` とは独立フラグ)。
+  単体テスト4件 (フラグ格納・c109実測再現・窓非活性下動作・OFF時bit-identical) 追加、
+  **統一測定 構成E で実データ改善を確認** (`color_to_ojama` カテゴリ 1件→0件、
+  c109 r4c4 の赤保持を実測)。
+  **系統1 (`enable_override_color_guard`)**: `enable_landing_color_guard` と同じ
+  watch リスト機構に override 発火セルを合流登録する形で実装、単体テスト12件
+  (登録・OFF時無登録・CNN==HSV一致による1フレーム自己訂正等) 全て健全に通過。
+  しかし実データ (c23/c10 実映像を直接計装、`scripts/_diag_override_guard_realcheck_
+  2026-08-17.py`) では **対象セルの持続時間が全く変化しなかった** (c23: 0.468秒→
+  0.468秒、c10: 3.233秒→3.333秒)。原因を計装追跡した結果、**前提診断 (cycle71n
+  override が根因) 自体が誤りだったと判明** (真因は W23 参照: `_validate_next_history`
+  の ever_seen 飢餓状態が `ctx.confirmed_board` とは独立に `published_confirmed` を
+  汚染する別機構。`ctx.confirmed_board` 自体は計装で健全なまま=cycle71n は不発と実証)。
+  **数値だけで採否を決めず実データ計装まで行ったことで誤診断を検出**
+  (fail-silent警戒の実践、feedback_viz_eval_required / 測定器事故の教訓通り)。
+  **統一測定 構成E 最終結果** (55盤面物差しv2、構成D比較):
+  stage2 (同一フレーム限定, n=23/55) 行0除acc: D 98.7886%→E 98.8492%
+  (+0.06pt, 1631/1651→1632/1651)。全体 (n=51/55) 行0除acc: D 96.8818%→E 96.9092%
+  (+0.03pt)。持続誤認 (>=5フレーム相当) 件数: D 105件→E 104件 (-1件、W23根治までは
+  これ以上の改善なし)。誤り分類表: `color_to_ojama` 1→0 (系統2根治)、`W10_red_purple`
+  10→10 (不変、真因がW23のため対象外)。
+  **1次目標の再判定**: 難所セット99%以上 = **未達** (98.85% stage2 / 96.91% 全体)、
+  5フレーム連続誤認0件 = **未達** (104件残存)。系統2は完全根治、系統1はW23の根治
+  (`_validate_next_history` のever_seen緩和、次アクション参照) が本命の残作業。
+  **既定OFF時のbit-identical**: 両フラグとも `python -m pytest tests/ -q` で既存回帰
+  なしを確認 (フラグ未指定時は登録・merge条件拡張とも完全にスキップされる分岐)。
+  両フラグとも user承認待ちのsavepoint実装、`production_config.py` への採用登録は未実施
+  (系統2は効果実証済みのため採用候補、系統1はW23根治後に再評価)。

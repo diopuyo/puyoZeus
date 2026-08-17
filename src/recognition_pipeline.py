@@ -979,6 +979,20 @@ class RecognitionPipeline:
         # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat、
         # user 承認前の savepoint 実装)。
         enable_landing_color_guard: bool = False,
+        # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照): cycle 71n の STABLE 長期不一致
+        # override (下記 6826 行付近) が誤発火した場合、書き込まれたセルを
+        # 上記 enable_landing_color_guard と同じ監視リスト
+        # (self._landing_color_watch_1p/2p) に登録し、CNN==HSV 一致による
+        # 即時再訂正の対象にする。override 発火時 history をクリアするため
+        # (h_list.clear())、誤発火後は次に 75% 多数決が積み直されるまで
+        # 数秒間放置される問題への対処 (実測 c23: 10 セル 0.47 秒、
+        # c10: 15 セル 6.0 秒)。enable_landing_observed_color=False や
+        # enable_landing_color_guard=False の場合でも独立して動作する
+        # (監視リストの登録元が異なるだけで再チェック機構は共通)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards
+        # compat、user承認前の savepoint 実装)。
+        enable_override_color_guard: bool = False,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
         # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
@@ -1442,6 +1456,13 @@ class RecognitionPipeline:
         # 参照。default False = 従来挙動完全維持・bit-identical
         # (backwards compat、user承認前の savepoint 実装)。
         enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照): BoardStateMachine (1P/2P 両方)
+        # にそのまま伝播する。詳細は src/board_state_machine.py の
+        # `_TRANSITION_MERGE_GUARD_SCOPE` docstring 参照。
+        # default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_column_stack_fix: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1966,6 +1987,10 @@ class RecognitionPipeline:
         self._enable_floating_gap_restore: bool = bool(
             enable_floating_gap_restore
         )
+        # 持続誤認26件系統2 (2026-08-17)。 default False = bit-identical。
+        self._enable_ojama_column_stack_fix: bool = bool(
+            enable_ojama_column_stack_fix
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -2111,6 +2136,7 @@ class RecognitionPipeline:
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
             enable_floating_gap_restore=self._enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2158,6 +2184,7 @@ class RecognitionPipeline:
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
             enable_floating_gap_restore=self._enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2280,8 +2307,14 @@ class RecognitionPipeline:
         # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_color_guard: bool = bool(enable_landing_color_guard)
+        # 持続誤認26件系統1 (2026-08-17): cycle 71n override 発火セルの
+        # 継続監視ガード。default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_override_color_guard: bool = bool(
+            enable_override_color_guard
+        )
         # 監視中の着地セル: side ごとに [(cell, deadline_time_sec), ...]。
         # LANDING_VOTE_SEC 秒経過 or CNN==HSV 一致で解決したセルから除去される。
+        # enable_landing_color_guard / enable_override_color_guard 共用。
         self._landing_color_watch_1p: list[tuple[tuple[int, int], float]] = []
         self._landing_color_watch_2p: list[tuple[tuple[int, int], float]] = []
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
@@ -2551,6 +2584,10 @@ class RecognitionPipeline:
         # R2 浮きぷよ是正機構 (2026-08-17): BoardStateMachine にそのまま伝播。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17):
+        # BoardStateMachine にそのまま伝播。default False = 従来挙動完全
+        # 維持・bit-identical (backwards compat)。
+        enable_ojama_column_stack_fix: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2649,6 +2686,7 @@ class RecognitionPipeline:
             enable_transition_merge_guard=enable_transition_merge_guard,
             stable_majority_window=stable_majority_window,
             enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2954,6 +2992,11 @@ class RecognitionPipeline:
         # __init__ へそのまま伝播する。default False = 従来挙動完全維持・
         # bit-identical (backwards compat、user承認前の savepoint 実装)。
         enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
+        # __init__ へそのまま伝播する。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_override_color_guard: bool = False,
+        enable_ojama_column_stack_fix: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3185,6 +3228,8 @@ class RecognitionPipeline:
                 enable_ojama_fall_scoped_exit_accounting
             ),
             enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_override_color_guard=enable_override_color_guard,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         )
 
     # ------------------------------------------------------------------
@@ -6750,8 +6795,12 @@ class RecognitionPipeline:
         # した時点で即座に上書きする (physics_only 原則: NON-STABLE では不実行)。
         # enable_landing_color_guard=False (既定) では watch リストが常に空の
         # ため本ブロックは実質何もせず bit-identical。
+        # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17): cycle 71n
+        # override 発火セルもこの同じ watch リストに登録され、同じ再チェックを
+        # 受ける (下記登録ブロック参照)。両フラグとも False なら watch リストは
+        # 常に空のままなので bit-identical。
         if (
-            self._enable_landing_color_guard
+            (self._enable_landing_color_guard or self._enable_override_color_guard)
             and ctx.state == BoardState.STABLE
             and ctx.confirmed_board is not None
             and frame_bgr is not None
@@ -6836,6 +6885,10 @@ class RecognitionPipeline:
             )
             from collections import Counter as _CounterClass
             override_fired = False
+            # 持続誤認26件系統1 (2026-08-17): override が書き込んだセルを
+            # 記録し、 enable_override_color_guard=True なら watch リストへ
+            # 登録して CNN==HSV 一致による即時再訂正の対象にする。
+            _override_written_cells: list[tuple[int, int]] = []
             for r in range(BOARD_ROWS):
                 for c in range(BOARD_COLS):
                     cnn_v = int(cnn_board.get(r, c))
@@ -6874,11 +6927,29 @@ class RecognitionPipeline:
                             ctx.confirmed_board.set(r, c, most_common)
                             h_list.clear()
                             override_fired = True
+                            _override_written_cells.append((r, c))
             # cycle 71v: override が走った frame は gravity filter で
             # 浮きぷよ残留を最終 sweep. v51/v70 の背景誤認対策。
             if override_fired:
                 from src.board_state_machine import _apply_gravity_filter
                 _apply_gravity_filter(ctx.confirmed_board)
+            # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17):
+            # override 発火セルを既存の着地色 watch リストに合流登録する。
+            # フラグ OFF (既定) では _override_written_cells が使われず
+            # bit-identical。
+            if self._enable_override_color_guard and _override_written_cells:
+                _override_deadline = time_sec + self.LANDING_VOTE_SEC
+                _override_entries = [
+                    (cell, _override_deadline) for cell in _override_written_cells
+                ]
+                if side == "1P":
+                    self._landing_color_watch_1p = (
+                        self._landing_color_watch_1p + _override_entries
+                    )
+                else:
+                    self._landing_color_watch_2p = (
+                        self._landing_color_watch_2p + _override_entries
+                    )
         else:
             # STABLE 以外 → 履歴クリア (= state 切替で reset)
             if side == "1P":

@@ -1051,6 +1051,135 @@ def test_floating_gap_restore_scoped_out_during_chain_transition() -> None:
     assert sm.context.confirmed_board.get(11, 0) == 0
 
 
+# ============================
+# 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17)
+# docs/KNOWN_WEAKNESSES.md W10、c109 実測: OJAMA_FALL 一斉着地バッチで
+# 同一列に既存の色ぷよがあるのに CNN がおじゃま誤読し上書きする物理違反。
+# ============================
+
+
+def test_board_state_machine_stores_ojama_column_stack_fix_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること。"""
+    sm_on = BoardStateMachine(enable_ojama_column_stack_fix=True)
+    assert sm_on._enable_ojama_column_stack_fix is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_ojama_column_stack_fix is False
+
+
+def test_ojama_column_stack_fix_e2e_prevents_existing_puyo_overwrite() -> None:
+    """持続誤認26件系統2 (c109 実測再現): OJAMA_FALL → STABLE 遷移で、
+    一斉おじゃま着地バッチが同一列内で二重書き込みし、既存の色ぷよ (赤) を
+    おじゃま(9) に上書きする物理違反を防ぐ。
+    flag OFF (default) では従来通り既存ぷよが上書きされる (c109 と同型の回帰確認)。
+    flag ON では base が EMPTY でない diff (= 既存ぷよ→おじゃま) を却下し、
+    正当な着地 (base=EMPTY→おじゃま) のみ許可する。"""
+    baseline = Board()
+    baseline.set(2, 4, COLOR_RED)
+    baseline.set(3, 4, COLOR_RED)
+    baseline.set(4, 4, COLOR_RED)  # 既存スタック (c109 実測の col4 row2-4 相当)
+    # row0/row1 (col4) は空のまま (= おじゃまの正当な着地先)
+    for _r in range(5, BOARD_ROWS):
+        baseline.set(_r, 4, COLOR_RED)  # 床までの物理的支持 (浮きぷよ扱い防止)
+
+    cnn_collision = baseline.copy()
+    cnn_collision.set(1, 4, COLOR_OJAMA)  # 正当な着地 (空 → おじゃま)
+    cnn_collision.set(4, 4, COLOR_OJAMA)  # 衝突: 既存赤が誤っておじゃまに化ける (c109型)
+
+    def _run(*, enable_ojama_column_stack_fix: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = baseline.copy()
+        # OJAMA_FALL 滞在中 (煙/バーストが持続) は毎フレーム cnn_collision を
+        # 観測させる (= F ガードの多数決履歴にも正当な着地 (row1) を反映させる)。
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, cnn_collision))
+        sm.update(6, _signal(0.30, cnn_collision))
+        return sm
+
+    sm_off = _run(enable_ojama_column_stack_fix=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(1, 4) == COLOR_OJAMA  # 正当着地
+    assert sm_off.context.confirmed_board.get(4, 4) == COLOR_OJAMA  # バグ: 既存赤が上書きされる
+    assert sm_off.context.confirmed_board.get(2, 4) == COLOR_RED  # 中間は無事
+
+    sm_on = _run(enable_ojama_column_stack_fix=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(1, 4) == COLOR_OJAMA  # 正当着地は維持
+    assert sm_on.context.confirmed_board.get(4, 4) == COLOR_RED  # 修正: 既存赤が保持される
+    assert sm_on.context.confirmed_board.get(2, 4) == COLOR_RED
+    assert sm_on.context.confirmed_board.get(3, 4) == COLOR_RED
+
+
+def test_ojama_column_stack_fix_applies_regardless_of_effect_gate_window() -> None:
+    """c109 実測: 衝突フレームは effect_gate_window_active の窓終了後だった
+    (`enable_transition_merge_guard` の既存条件では捕捉できない)。
+    `enable_ojama_column_stack_fix` は OJAMA_FALL からの遷移である限り、
+    effect_gate_window_active に関係なく物理フィルタを適用する。"""
+    baseline = Board()
+    baseline.set(4, 4, COLOR_RED)
+    for _r in range(5, BOARD_ROWS):
+        baseline.set(_r, 4, COLOR_RED)  # 床までの物理的支持 (浮きぷよ扱い防止)
+    cnn_collision = baseline.copy()
+    cnn_collision.set(4, 4, COLOR_OJAMA)
+
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=6),
+        ],
+        enable_ojama_column_stack_fix=True,
+        # enable_transition_merge_guard は既定 False のまま (= 未併用でも効く)
+    )
+    sm.update(0, _signal(0.0, _empty_board()))
+    sm.context.confirmed_board = baseline.copy()
+    for i in range(1, 6):
+        sm.update(i, _signal(0.05 * i, baseline))
+    # effect_gate_window_active は _signal() のデフォルト (False) のまま
+    sm.update(6, _signal(0.30, cnn_collision))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(4, 4) == COLOR_RED  # 窓非活性でも保護される
+
+
+def test_ojama_column_stack_fix_off_bit_identical_default() -> None:
+    """回帰防止: enable_ojama_column_stack_fix 省略時と False 明示時が
+    bit-identical であること (default False)。"""
+    baseline = Board()
+    baseline.set(4, 4, COLOR_RED)
+    cnn_collision = baseline.copy()
+    cnn_collision.set(4, 4, COLOR_OJAMA)
+
+    def _run(**kwargs: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            **kwargs,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = baseline.copy()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, baseline))
+        sm.update(6, _signal(0.30, cnn_collision))
+        return sm
+
+    sm_omitted = _run()
+    sm_explicit_false = _run(enable_ojama_column_stack_fix=False)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert (
+                sm_omitted.context.confirmed_board.get(r, c)
+                == sm_explicit_false.context.confirmed_board.get(r, c)
+            )
+
+
 def test_non_stable_history_accumulates_in_chain_state() -> None:
     """F: CHAIN state 中、 cnn_board 履歴が context に蓄積される."""
     sm = BoardStateMachine(
