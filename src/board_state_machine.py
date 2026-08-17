@@ -635,6 +635,7 @@ def _merge_diff_only(
     initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     hsv_board: Board | None = None,
     enable_puyo_to_empty_hsv_guard: bool = False,
+    history_board: Board | None = None,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -681,6 +682,11 @@ def _merge_diff_only(
             gravity filter で上のぷよまで連鎖消去される列デッドロック
             (c34 1P col=1, frame 14332 実測) を根で止める。
             default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        history_board: R2 浮きぷよ是正機構 (2026-08-17)。 `_apply_gravity_filter`
+            にそのまま渡す (直前 STABLE 盤面を想定)。呼び出し側が
+            from_state スコープ判定 (色→空 が物理的に説明可能な遷移か) を
+            済ませた上で渡す前提。 default None = 従来挙動完全維持
+            (backwards compat)。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -738,7 +744,9 @@ def _merge_diff_only(
     support_board = (
         empty_to_color_guard if enable_gravity_filter_support else None
     )
-    _apply_gravity_filter(merged, support_board=support_board)
+    _apply_gravity_filter(
+        merged, support_board=support_board, history_board=history_board,
+    )
     return merged
 
 
@@ -797,6 +805,7 @@ def _filter_transition_new_cnn_for_burst_guard(
 
 def _apply_gravity_filter(
     board: Board, *, support_board: Board | None = None,
+    history_board: Board | None = None,
 ) -> None:
     """浮きぷよ ban (Phase C-6 の A): 空 cell の上に puyo がある場合、
     その上の puyo を空に戻す。連鎖中の重力再配置中に CNN が誤検出した
@@ -818,6 +827,16 @@ def _apply_gravity_filter(
             F ガード (empty_to_color_guard) 起因で EMPTY のまま残った cell が
             積もり中のおじゃまを浮きぷよ誤消去するのを防ぐ目的で渡す想定。
             default None = 従来挙動完全維持 (backwards compat)。
+        history_board: R2 浮きぷよ是正機構 (2026-08-17)。 None でない場合、
+            gap 判定される EMPTY cell について history_board の同 cell が
+            非空色ならその色で復元し gap 扱いにしない (= 「上の puyo が
+            浮いている」でなく「下が誤 EMPTY」という解釈を優先する)。
+            復元できなければ (history_board が None、または同 cell が
+            EMPTY/UNKNOWN) 従来通り gap 扱い (= 上の puyo を消す) に
+            フォールバックする。呼び出し側 (BoardStateMachine) が直前
+            STABLE 盤面を保持・供給する外部 wrapper であり、本関数自身は
+            history を保持しない (stateless)。
+            default None = 従来挙動完全維持・bit-identical (backwards compat)。
     """
     from src.board import COLOR_EMPTY, COLOR_UNKNOWN
 
@@ -832,9 +851,16 @@ def _apply_gravity_filter(
                     sup_v = support_board.get(r, c)
                     if sup_v != COLOR_EMPTY and sup_v != COLOR_UNKNOWN:
                         continue
+                # R2: history_board が同 cell に非空色の記録を持つなら
+                # 「誤 EMPTY 疑い」として復元する (= 消す方向でなく疑う方向)。
+                if history_board is not None:
+                    hist_v = history_board.get(r, c)
+                    if hist_v != COLOR_EMPTY and hist_v != COLOR_UNKNOWN:
+                        board.set(r, c, hist_v)
+                        continue  # 復元成功、 gap 扱いにしない
                 gap_found = True
             elif gap_found:
-                # 空 cell の上に puyo → 浮き → 空に戻す
+                # 空 cell の上に puyo → 浮き → 空に戻す (復元不能時のフォールバック)
                 board.set(r, c, COLOR_EMPTY)
 
 
@@ -929,6 +955,15 @@ class BoardStateMachine:
         stable_majority_window: bool = False,
         stable_majority_window_frames: int = STABLE_MAJORITY_WINDOW_FRAMES,
         stable_majority_min_votes: int = STABLE_MAJORITY_MIN_VOTES,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # True にすると、 TSUMO_FALL/OJAMA_FALL → STABLE 遷移の
+        # `_merge_diff_only` で「下が空・上に puyo」の物理矛盾を検出した際、
+        # 上の puyo を消すのでなく直前 confirmed_board (= 直近 STABLE 盤面)
+        # の同 cell から色ぷよ復元を試みる (`_apply_gravity_filter` 参照)。
+        # CHAIN/GRAVITY_SETTLE 遷移では色→空 が物理的に正当な消去でありうる
+        # ため対象外 (`_TRANSITION_MERGE_GUARD_SCOPE` と同じスコープを再利用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_floating_gap_restore: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -960,6 +995,8 @@ class BoardStateMachine:
         # (backwards compat)。
         self._enable_gravity_filter_support = bool(enable_gravity_filter_support)
         self._merge_use_majority_value = bool(merge_use_majority_value)
+        # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
+        self._enable_floating_gap_restore = bool(enable_floating_gap_restore)
         # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
         # True で _apply_stable_recovery_gate の安全弁C浮き判定/最終重力
         # フィルタに stable_recovery_counters 由来の support を渡す。
@@ -1235,6 +1272,17 @@ class BoardStateMachine:
                 new_cnn_for_merge = _filter_transition_new_cnn_for_burst_guard(
                     self._ctx.confirmed_board, signals.cnn_board, self._ctx.state,
                 )
+            # R2 浮きぷよ是正機構 (2026-08-17): 色→空 が物理的に正当化できない
+            # from_state (TSUMO_FALL/OJAMA_FALL、`_TRANSITION_MERGE_GUARD_SCOPE`
+            # と同じスコープ) のときのみ history_board (= 遷移前 confirmed_board)
+            # を渡す。CHAIN/EFFECT/GRAVITY_SETTLE 等では色ぷよの消滅が正当な
+            # 物理事象でありうるため None のまま (= 復元を試みない)。
+            _floating_restore_history: "Board | None" = None
+            if (
+                self._enable_floating_gap_restore
+                and self._ctx.state in _TRANSITION_MERGE_GUARD_SCOPE
+            ):
+                _floating_restore_history = self._ctx.confirmed_board
             self._ctx.confirmed_board = _merge_diff_only(
                 self._ctx.confirmed_board, new_cnn_for_merge,
                 empty_to_color_guard=empty_guard,
@@ -1246,6 +1294,7 @@ class BoardStateMachine:
                 enable_puyo_to_empty_hsv_guard=(
                     self._enable_puyo_to_empty_hsv_guard
                 ),
+                history_board=_floating_restore_history,
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()

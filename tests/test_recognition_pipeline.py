@@ -1723,6 +1723,162 @@ def test_enable_landing_observed_color_default_false_no_regression():
 
 
 # ---------------------------------------------------------------------------
+# W10根治 (2026-08-17): enable_landing_color_guard フラグテスト
+# docs/KNOWN_WEAKNESSES.md W10 — 着地セル色の継続監視ガード。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_landing_color_guard(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_landing_color_guard フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_landing_color_guard=enable_flag,
+    )
+
+
+def test_enable_landing_color_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_landing_color_guard が False。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    assert not pipe._enable_landing_color_guard, (
+        "default OFF: _enable_landing_color_guard は False であるべき"
+    )
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_enable_landing_color_guard_flag_on():
+    """フラグ ON → _enable_landing_color_guard が True。"""
+    pipe = _make_pipe_landing_color_guard(True)
+    assert pipe._enable_landing_color_guard, (
+        "ON時: _enable_landing_color_guard は True であるべき"
+    )
+
+
+def test_enable_landing_color_guard_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def test_enable_landing_color_guard_off_never_populates_watch_list():
+    """フラグ OFF ではフル pipeline を回しても watch リストは常に空のまま
+    (= bit-identical: 監視自体が一切走らない)。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(10):
+        pipe.update(i, i * 0.033, frame)
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_landing_color_guard_continuous_overwrite_when_cnn_hsv_agree():
+    """W10根治の中核: watch リストに登録済セルは、CNN==HSV が一致した
+    フレームで即座に confirmed_board が上書きされる (= 1回限りでなく継続)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    class _HsvAgreesPurple:
+        """HSV-only 分類器スタブ: 常に紫を返す。"""
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_PURPLE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvAgreesPurple()
+
+    # cnn_board (= 当該フレームの CNN 観測): (11,2) は紫 (真の色)
+    cnn_purple = Board()
+    cnn_purple.set(11, 2, COLOR_PURPLE)
+    reader = _StubImageReader(cnn_purple, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    # confirmed_board (= 誤って確定済の色): (11,2) は赤 (NEXT誤読等による誤色)
+    wrong_confirmed = Board()
+    wrong_confirmed.set(11, 2, COLOR_RED)
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = wrong_confirmed.copy()
+
+    # 監視リストに (11,2) を登録 (期限は十分先)
+    pipe._landing_color_watch_1p = [((11, 2), 999.0)]
+
+    result = pipe.update(0, 0.5, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(11, 2)) == COLOR_PURPLE, (
+        "CNN==HSV が一致した紫へ即座に上書きされるべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "解決済セルは監視リストから除去されるべき"
+    )
+
+
+def test_landing_color_guard_no_overwrite_when_cnn_hsv_disagree():
+    """CNN != HSV の場合は上書きせず、watch リストにも残り続ける
+    (保守的、誤補正しない)。"""
+    from src.board import COLOR_BLUE, COLOR_RED, COLOR_YELLOW
+
+    class _HsvReturnsBlue:
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_BLUE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvReturnsBlue()
+
+    cnn_yellow = Board()
+    cnn_yellow.set(11, 2, COLOR_YELLOW)  # CNN=黄, HSV=青 → 不一致
+    reader = _StubImageReader(cnn_yellow, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    wrong_confirmed = Board()
+    wrong_confirmed.set(11, 2, COLOR_RED)
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = wrong_confirmed.copy()
+    pipe._landing_color_watch_1p = [((11, 2), 999.0)]
+
+    result = pipe.update(0, 0.5, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(11, 2)) == COLOR_RED, (
+        "CNN != HSV では上書きしない (保守的)"
+    )
+    assert pipe._landing_color_watch_1p == [((11, 2), 999.0)], (
+        "不一致の間は監視リストを維持し続けるべき"
+    )
+
+
+def test_landing_color_guard_expires_after_deadline():
+    """監視期限 (deadline) を過ぎたセルは監視リストから除去される
+    (= 無期限凍結を防ぐ安全弁)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = Board()
+    # 期限切れ (time_sec=0.5 の呼び出しに対し deadline=0.1 は既に過去)
+    pipe._landing_color_watch_1p = [((11, 2), 0.1)]
+
+    pipe.update(0, 0.5, _dummy_frame())
+
+    assert pipe._landing_color_watch_1p == [], (
+        "期限切れセルは自動的に監視終了するべき"
+    )
+
+
+# ---------------------------------------------------------------------------
 # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
 # _flag_landing_distrust_cells 単体テスト
 # ---------------------------------------------------------------------------
@@ -3606,6 +3762,158 @@ def test_ojama_dropout_fix_flags_explicit_false_restores_legacy() -> None:
         )
         assert opd is not None
         assert opd.defer_ojama_fall_exit_to_visual is False
+
+
+# ============================
+# W13根治 案1: use_highlight_override 配線 (2026-08-16)
+# ============================
+
+
+def test_highlight_override_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_highlight_override"].default is False
+
+
+def test_load_default_wires_highlight_override_to_reader_hybrid_path() -> None:
+    """CNN モデル存在時 (_build_hybrid_reader 経路) で
+    enable_highlight_override が ImageReader まで配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._reader._use_highlight_override is False  # noqa: SLF001
+    assert pipe_on._reader._use_highlight_override is True  # noqa: SLF001
+
+
+def test_load_default_wires_highlight_override_to_reader_hsv_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CNN モデル不在 (HSV-only fallback、else 分岐) 経路でも配線されることを
+    確認する (2箇所ある ImageReader 構築の両方をカバー、配線漏れ再発防止)。"""
+    from pathlib import Path
+    monkeypatch.setattr(
+        RecognitionPipeline, "DEFAULT_CNN_MODEL_PATH",
+        Path("__no_such_model_2026-08-16__.pt"),
+    )
+    try:
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=True,
+        )
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=False,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_on._reader._use_highlight_override is True  # noqa: SLF001
+    assert pipe_off._reader._use_highlight_override is False  # noqa: SLF001
+
+
+# ============================
+# W13根治 案2: enable_patch_fp_hsv_guard 配線 (2026-08-17)
+# ============================
+
+
+def test_patch_fp_hsv_guard_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
+
+
+def test_load_default_wires_patch_fp_hsv_guard_to_reader_hybrid_path() -> None:
+    """CNN モデル存在時 (_build_hybrid_reader 経路) で
+    enable_patch_fp_hsv_guard が ImageReader まで配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._reader._enable_patch_fp_hsv_guard is False  # noqa: SLF001
+    assert pipe_on._reader._enable_patch_fp_hsv_guard is True  # noqa: SLF001
+
+
+def test_load_default_wires_patch_fp_hsv_guard_to_reader_hsv_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CNN モデル不在 (HSV-only fallback、else 分岐) 経路でも配線されることを
+    確認する (2箇所ある ImageReader 構築の両方をカバー、配線漏れ再発防止)。"""
+    from pathlib import Path
+    monkeypatch.setattr(
+        RecognitionPipeline, "DEFAULT_CNN_MODEL_PATH",
+        Path("__no_such_model_2026-08-17__.pt"),
+    )
+    try:
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=True,
+        )
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=False,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_on._reader._enable_patch_fp_hsv_guard is True  # noqa: SLF001
+    assert pipe_off._reader._enable_patch_fp_hsv_guard is False  # noqa: SLF001
+
+
+# ============================
+# R2: 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17)
+# ============================
+
+
+def test_floating_gap_restore_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_floating_gap_restore"].default is False
+
+
+def test_load_default_wires_floating_gap_restore_to_state_machines() -> None:
+    """enable_floating_gap_restore が BoardStateMachine (1P/2P 両方) まで
+    配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_floating_gap_restore=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_floating_gap_restore=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._sm_1p._enable_floating_gap_restore is False  # noqa: SLF001
+    assert pipe_on._sm_1p._enable_floating_gap_restore is True  # noqa: SLF001
+    assert pipe_off._sm_2p._enable_floating_gap_restore is False  # noqa: SLF001
+    assert pipe_on._sm_2p._enable_floating_gap_restore is True  # noqa: SLF001
 
 
 # ============================

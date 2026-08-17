@@ -522,6 +522,110 @@ class TestHighlightOverride:
         assert reader._use_highlight_override is False
 
 
+class _FakeHsvOnlyClassifier:
+    """W13案2テスト用: 単独 HSV 判定結果を固定で返すスタブ classifier。"""
+
+    def __init__(self, color: int) -> None:
+        self._color = color
+
+    def classify(self, bgr_patch: np.ndarray) -> int:
+        return self._color
+
+
+class TestPatchFpHsvGuard:
+    """W13根治 案2 (2026-08-17): enable_patch_fp_hsv_guard テスト。
+
+    cycle17-19 (docs/CYCLE_FINDINGS.md) の AND ガードを tier1 patch-NCC 経路
+    (`_is_empty_tier1`) に移植したもの。既定 False = 従来挙動 bit-identical。
+    """
+
+    def test_default_false(self) -> None:
+        reader = ImageReader()
+        assert reader._enable_patch_fp_hsv_guard is False
+
+    def test_explicit_true(self) -> None:
+        reader = ImageReader(enable_patch_fp_hsv_guard=True)
+        assert reader._enable_patch_fp_hsv_guard is True
+
+    @staticmethod
+    def _make_textured_patch() -> np.ndarray:
+        """NCC が退化 (std=0) しない、緩やかな勾配を持つ 8x8 HSV パッチ。"""
+        patch = np.zeros((8, 8, 3), dtype=np.float32)
+        for y in range(8):
+            for x in range(8):
+                patch[y, x] = (60.0 + x, 180.0 + y, 200.0)
+        return patch
+
+    def test_guard_off_keeps_legacy_empty_on_puyo_texture_match(self) -> None:
+        """既定 OFF: bg と現フレームのテクスチャが一致 (NCC>=閾値) すれば、
+        HSV 単独分類器が puyo 色を返しても従来通り無条件 EMPTY (bit-identical)。
+        """
+        from src.background_fingerprint import CellFingerprint, CellPatchFingerprint
+        texture = self._make_textured_patch()
+        # W13 実機構の再現: bg_fp が puyo 自体のテクスチャを焼き込んだ想定
+        # (bg == 現フレーム、NCC=1.0 で実質一致)。
+        bg_cell = CellPatchFingerprint(patch_hsv=texture.copy())
+        raw_bgr = np.zeros((8, 8, 3), dtype=np.uint8)
+        raw_bgr[:, :, 1] = 200  # 緑寄りの生パッチ (HSV 単独判定用)
+        reader = ImageReader(
+            classifier=_FakeHsvOnlyClassifier(COLOR_GREEN),
+            enable_patch_fp_hsv_guard=False,
+        )
+        result = reader._is_empty_tier1(
+            bg_cell, texture.copy(), CellFingerprint(60, 180, 200),
+            0, 0, raw_bgr_patch=raw_bgr,
+        )
+        assert result is True
+
+    def test_guard_on_rejects_empty_when_hsv_alone_detects_color(self) -> None:
+        """案2 ON: 同条件でも HSV 単独分類が puyo 色を返せば EMPTY 判定を却下する。"""
+        from src.background_fingerprint import CellFingerprint, CellPatchFingerprint
+        texture = self._make_textured_patch()
+        bg_cell = CellPatchFingerprint(patch_hsv=texture.copy())
+        raw_bgr = np.zeros((8, 8, 3), dtype=np.uint8)
+        raw_bgr[:, :, 1] = 200
+        reader = ImageReader(
+            classifier=_FakeHsvOnlyClassifier(COLOR_GREEN),
+            enable_patch_fp_hsv_guard=True,
+        )
+        result = reader._is_empty_tier1(
+            bg_cell, texture.copy(), CellFingerprint(60, 180, 200),
+            0, 0, raw_bgr_patch=raw_bgr,
+        )
+        assert result is False
+
+    def test_guard_on_still_empty_when_hsv_alone_says_empty(self) -> None:
+        """案2 ON でも HSV 単独分類が EMPTY/UNKNOWN なら従来通り EMPTY のまま。"""
+        from src.background_fingerprint import CellFingerprint, CellPatchFingerprint
+        texture = self._make_textured_patch()
+        bg_cell = CellPatchFingerprint(patch_hsv=texture.copy())
+        raw_bgr = np.zeros((8, 8, 3), dtype=np.uint8)
+        reader = ImageReader(
+            classifier=_FakeHsvOnlyClassifier(COLOR_EMPTY),
+            enable_patch_fp_hsv_guard=True,
+        )
+        result = reader._is_empty_tier1(
+            bg_cell, texture.copy(), CellFingerprint(60, 180, 200),
+            0, 0, raw_bgr_patch=raw_bgr,
+        )
+        assert result is True
+
+    def test_guard_on_no_raw_patch_falls_back_to_legacy(self) -> None:
+        """raw_bgr_patch=None (呼び出し側未対応) ならガードをスキップし従来通り。"""
+        from src.background_fingerprint import CellFingerprint, CellPatchFingerprint
+        texture = self._make_textured_patch()
+        bg_cell = CellPatchFingerprint(patch_hsv=texture.copy())
+        reader = ImageReader(
+            classifier=_FakeHsvOnlyClassifier(COLOR_GREEN),
+            enable_patch_fp_hsv_guard=True,
+        )
+        result = reader._is_empty_tier1(
+            bg_cell, texture.copy(), CellFingerprint(60, 180, 200),
+            0, 0,
+        )
+        assert result is True
+
+
 class TestStaticMaskAndGuard:
     """T4 StaticBoardMask AND ガード: ImageReader.set_static_mask テスト。"""
 

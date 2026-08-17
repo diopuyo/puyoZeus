@@ -936,6 +936,65 @@ def correct_landing_cells_by_observed_color(
     return result
 
 
+def apply_persistent_landing_color_guard(
+    confirmed: Board,
+    watch_cells: list[tuple[int, int]],
+    cnn_board: Board,
+    hsv_classifier: "object",
+    frame_bgr: np.ndarray,
+    region: "object",
+) -> tuple[Board, list[tuple[int, int]]]:
+    """W10 根治: 着地セル色を複数フレームにわたり継続監視して補正する.
+
+    根因 (docs/KNOWN_WEAKNESSES.md W10): 設置推論 (infer_placement) は
+    NEXT ツモ読取の色で着地セルを確定するため、 NEXT 読取が誤ると
+    実測と異なる色が確定盤面に書き込まれる。
+    `correct_landing_cells_by_observed_color` は着地直後 1 回限りしか
+    働かないため、 誤色が数秒間残ることがある (実測 c11 で 1.7 秒)。
+
+    本関数はその 1 回限りの制約を取り払い、 呼出側が保持する監視対象
+    セルリスト (着地から一定時間内) に対して毎フレーム CNN==HSV 一致
+    チェックを再実行する。 一致が得られた cell のみ即座に上書きし、
+    それ以外は confirmed の値をそのまま保持する (保守的、既存関数と同じ制約)。
+
+    stateless 実装 (CLAUDE.md 原則): 監視対象・期限の管理は呼出側
+    (RecognitionPipeline._landing_color_watch_1p/2p) が行い、
+    本関数自体は state を持たない。
+
+    Args:
+        confirmed: 現在の確定盤面 (上書き対象)。 STABLE 確定盤面のみを渡すこと
+            (physics_only 原則、呼出側でゲート)。
+        watch_cells: 監視中の着地セル座標のリスト。
+        cnn_board: 当該フレームの CNN+HSV 融合観測盤面。
+        hsv_classifier: HSV-only 分類器 (ColorClassifier)。
+        frame_bgr: 当該フレームの BGR 画像。
+        region: BoardRegion (cell_sample_rect を持つ)。
+
+    Returns:
+        (上書き後の確定盤面, 一致が得られ監視を終了してよいセルのリスト)。
+        後者が空なら呼出側は watch_cells をそのまま維持してよい。
+    """
+    result = confirmed.copy()
+    resolved: list[tuple[int, int]] = []
+    if hsv_classifier is None or not hasattr(hsv_classifier, "classify"):
+        return result, resolved
+    for (r, c) in watch_cells:
+        cnn_color = int(cnn_board.get(r, c))
+        if cnn_color not in _VALID_PUYO_COLORS:
+            continue
+        patch = _extract_cell_patch_from_frame(frame_bgr, region, r, c)
+        if patch is None or patch.size == 0:
+            continue
+        try:
+            hsv_color = int(hsv_classifier.classify(patch))
+        except Exception:
+            continue
+        if hsv_color in _VALID_PUYO_COLORS and cnn_color == hsv_color:
+            result.set(r, c, hsv_color)
+            resolved.append((r, c))
+    return result, resolved
+
+
 __all__ = [
     "LandingPattern",
     "enumerate_landing_patterns",
@@ -944,6 +1003,7 @@ __all__ = [
     "infer_placement",
     "resolve_after_placement",
     "correct_landing_cells_by_observed_color",
+    "apply_persistent_landing_color_guard",
     # fix/v70-zeropatch-redyellow (2026-06-01): HSV 分類 fallback 定数
     "HSV_CLASSIFY_REJECT_RATIO",
     "HSV_CLASSIFY_MAX_DISTANCE",

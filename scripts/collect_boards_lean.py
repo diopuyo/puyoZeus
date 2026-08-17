@@ -1040,6 +1040,10 @@ def collect_lean(
     # 既定 False = 従来の score 系統単独判定 (後方互換、bit-identical)。
     # 動画を再オープンしてシークする追加コストが掛かるため既定無効。
     enable_winner_panel_crosscheck: bool = False,
+    # R2 浮きぷよ是正機構 (2026-08-17): RecognitionPipeline 本体へそのまま
+    # forward する。既定 False = 従来挙動完全維持 (backwards compat、
+    # hsv-guard 併用/単独 A/B 測定用、末尾追加)。
+    enable_floating_gap_restore: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1324,6 +1328,7 @@ def collect_lean(
         enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
         enable_highlight_override=enable_highlight_override,
         enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1944,6 +1949,17 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-floating-gap-restore", action="store_true",
+        dest="enable_floating_gap_restore",
+        help=(
+            "R2 浮きぷよ是正機構 (2026-08-17)。TSUMO_FALL/OJAMA_FALL→STABLE "
+            "遷移で「下が空・上に puyo」の物理矛盾を検出したら、上を消すの"
+            "でなく遷移前 confirmed_board から色を復元する (docs/"
+            "KNOWN_WEAKNESSES.md W13 の第二防衛線)。既定は無効 (後方互換、"
+            "hsv-guard 併用/単独 A/B 測定用)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-boundary-multisignal", action="store_true",
         dest="enable_boundary_multisignal",
         help=(
@@ -2008,6 +2024,7 @@ def main() -> int:
         precise_seek=args.precise_seek,
         enable_highlight_override=args.enable_highlight_override,
         enable_patch_fp_hsv_guard=args.enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=args.enable_floating_gap_restore,
         enable_boundary_multisignal=args.enable_boundary_multisignal,
         enable_winner_panel_crosscheck=args.enable_winner_panel_crosscheck,
     )
