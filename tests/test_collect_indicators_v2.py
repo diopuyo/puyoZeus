@@ -100,10 +100,16 @@ _XVI_COLUMNS: tuple[str, ...] = (
     "expected_fire_k4", "expected_fire_k4_raw",
 )
 
+# CSV 末尾に追加された XIX (中央凸度 center_bulge) の列名
+# (2026-08-12 壁打ちuser仕様、順序保持で確認)。
+_XIX_COLUMNS: tuple[str, ...] = (
+    "center_bulge", "center_bulge_raw",
+)
+
 # 新指標追加のたびに末尾へ連結していく既存ブロック群 (退行検知の土台。
 # 新ブロック追加時はこのタプルに1行足すだけで済むようにする)。
 _TAIL_BLOCKS: "tuple[tuple[str, ...], ...]" = (
-    _XII_COLUMNS, _XIV_COLUMNS, _XV_COLUMNS, _XVI_COLUMNS,
+    _XII_COLUMNS, _XIV_COLUMNS, _XV_COLUMNS, _XVI_COLUMNS, _XIX_COLUMNS,
 )
 
 
@@ -127,13 +133,17 @@ def test_tail_blocks_are_contiguous_at_end_of_indicator_columns() -> None:
     assert tail_block == expected_tail
 
 
-def test_xvi_columns_are_tail_of_indicator_columns() -> None:
-    """XVI (平均ツモ期待火力) 2 指標が INDICATOR_COLUMNS の末尾4列であること。
+def test_xix_columns_are_tail_of_indicator_columns() -> None:
+    """XIX (中央凸度 center_bulge) 1 指標が INDICATOR_COLUMNS の末尾2列であること。
 
-    2026-07-22 本番統合、新指標は常に末尾追加 (CLAUDE.md 規約)。
+    2026-08-12 壁打ちuser仕様で本番統合、新指標は常に末尾追加 (CLAUDE.md 規約)。
+    旧 test_xvi_columns_are_tail_of_indicator_columns は XIX 追加により
+    「XVI が末尾」が成立しなくなったため本テストに置き換える (正当な末尾追加の
+    結果であり退行ではない、test_tail_blocks_are_contiguous_at_end_of_indicator_columns
+    と同じ考え方)。
     """
-    tail = collect_mod.INDICATOR_COLUMNS[-len(_XVI_COLUMNS):]
-    assert tail == _XVI_COLUMNS
+    tail = collect_mod.INDICATOR_COLUMNS[-len(_XIX_COLUMNS):]
+    assert tail == _XIX_COLUMNS
 
 
 def test_xvi_columns_present_in_all_columns() -> None:
@@ -975,4 +985,32 @@ def test_xii_columns_are_tail_of_indicator_columns() -> None:
     assert cols[start:start + len(_XII_COLUMNS)] == _XII_COLUMNS, (
         "XII 5 指標の相対順序が崩れている (順序保持ルール違反)"
     )
+
+
+# ============================
+# XIX 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+# ============================
+
+
+def test_xix_columns_present_in_all_columns() -> None:
+    """XIX (center_bulge) 1 指標 (score/raw 計 2 列) が ALL_COLUMNS に含まれること。"""
+    for col in _XIX_COLUMNS:
+        assert col in collect_mod.ALL_COLUMNS, f"{col} が ALL_COLUMNS に無い"
+
+
+@pytest.mark.parametrize("board", [_empty_board(), _chain_ready_board()])
+def test_fill_indicator_columns_center_bulge_score_in_range(board: Board) -> None:
+    """center_bulge の score が 0-1 範囲・NaN なしで埋まること。"""
+    row = _call_fill(board)
+    val = row["center_bulge"]
+    assert isinstance(val, float)
+    assert 0.0 <= val <= 1.0, f"center_bulge={val} が 0-1 範囲外"
+    assert val == val, "center_bulge が NaN"
+
+
+def test_fill_indicator_columns_center_bulge_empty_board_is_flat() -> None:
+    """空盤面は中央・外周とも高さ0でフラット (score=0.5, raw=0.0)。"""
+    row = _call_fill(_empty_board())
+    assert row["center_bulge_raw"] == pytest.approx(0.0)
+    assert row["center_bulge"] == pytest.approx(0.5)
 

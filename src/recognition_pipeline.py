@@ -81,6 +81,26 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
+# W25根治 おじゃま落下窓 総合ガード warmup (enable_ojama_cnn_override_warmup、
+# docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/):
+# おじゃま落下時の白雲パーティクル (HSV S≈14-20/V≈250) が下段セル群を
+# 0.85〜1.0秒覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する
+# (c13 実測 t=289.98-290.87 / 292.10〜 の2波、対象9セル)。
+# 案4 (2026-08-17): cycle 71n override の STABLE_CNN_HISTORY_FRAMES
+# (=18≈0.6s) 窓を雲の持続が上回るため、雲を正しい観測と誤認して確定セルを
+# 上書きしてしまう問題に対し、OJAMA_FALL entry〜exit の間この秒数だけ
+# cycle 71n override の発火を抑制する。
+# 第2弾 (2026-08-17、w25_guard_gap.md): 案4単独では実害9セルが0/9解消だった
+# ため根因を再調査し、雲による CNN⇔inferred 持続不一致が DriftDetector
+# needs_resync を誘発→sm.reset()で confirmed_board が丸ごと None化→直後の
+# 遷移で既存ガード (enable_ojama_column_stack_fix) が「baseline is None
+# (初回確定)」分岐で無効化される、という第2の実害経路を確定。同じ warmup
+# タイマーで needs_resync による sm.reset() も抑制範囲に追加した
+# (history 蓄積自体は継続、機能C の CHAIN_EXIT_WARMUP_SEC と同型の
+# 時間ベース warmup)。実測 0.85-1.0s に安全マージンを加えた値
+# (フレーム基準禁止、W4 教訓により SEC 基準必須)。
+OJAMA_OVERRIDE_EXIT_WARMUP_SEC: float = 1.3
+
 # 機能D: 連鎖開始 掛け算式 検知 (enable_chain_formula_detection 用)。
 # score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ ink_ratio が
 # CHAIN_FORMULA_INK_RATIO_MIN より高い場合に連鎖開始とみなす。
@@ -237,7 +257,12 @@ CHAIN_EXIT_NEXT_WARMUP_SEC: float = 0.5
 # score が大幅減少 / 両者ほぼ0) でのみ検知できるため、その専用しきい値を
 # ここで定義する (enable_match_start_full_clear=True 時のみ使用)。
 # SCORE_RESET_THRESHOLD (=500) は ojama_accounting.py の既存定数を流用し重複させない。
-from src.ojama_accounting import SCORE_RESET_THRESHOLD  # noqa: E402
+# OjamaAccountingTracker: 案1 会計連動 (enable_ojama_fall_scoped_exit_accounting,
+# 2026-08-13) で OJAMA_FALL 出口の滞在短縮判定に未着弾予告量を渡すために使う。
+from src.ojama_accounting import (  # noqa: E402
+    SCORE_RESET_THRESHOLD,
+    OjamaAccountingTracker,
+)
 # 両者スコアがこれ以下なら「0付近」とみなす (OCR ノイズ許容)。
 # scripts/visualize_advantage_overlay.py の SCORE_NEAR_ZERO_THRESHOLD と同値。
 MATCH_START_SCORE_NEAR_ZERO_THRESHOLD: int = 20
@@ -317,6 +342,7 @@ from src.next_slide_detector import (
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
     correct_landing_cells_by_observed_color,
+    apply_persistent_landing_color_guard,
     DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
@@ -439,6 +465,13 @@ class PipelineResult:
     is_match_active: bool
     p1: SideResult
     p2: SideResult
+    # W20/W21根治 (2026-08-17、試合境界マルチシグナル配線): 勝敗演出
+    # (やった/ばたんきゅー) ロックダウン区間中かどうか (MatchEndDetector 判定
+    # そのもの。is_match_active=False の一因でもあるが、区間の由来を明示
+    # 公開することで後段 (連鎖イベント抽出・学習データ生成) がこの区間由来の
+    # 幻盤面を個別に除外できるようにする、docs/KNOWN_WEAKNESSES.md W20)。
+    # backwards compat のため default False (既存呼び出しは無指定で従来通り)。
+    match_end_locked: bool = False
 
 
 # ============================
@@ -786,6 +819,47 @@ class RecognitionPipeline:
     # フレーム定数→時間定数化 Stage1 (2026-07-25): 実ロジックは秒定数を正とする。
     CHAIN_BAN_SEC_AFTER_MATCH_START: float = CHAIN_BAN_FRAMES_AFTER_MATCH_START / 60
 
+    # (b-1) match_end持続時間ゲート (2026-08-18、Step 0診断B対処、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+    # 実測 (data/verify/diag_match_end_miss_2026-08-17/, video_c21 f57548) で
+    # 本物の「ばたんきゅー/やった!」結果パネルは match_end_locked が 3.15 秒
+    # 連続 True になる一方、連鎖中の瞬間誤爆は単発 (1 frame 前後) で終わる。
+    # その中間に余裕を持たせた値として 1.0 秒を採用 (根拠: 誤爆側の上限が
+    # 数フレーム、本物側の下限が3秒超という実測分布から、両側から十分な
+    # マージンを確保できる値)。他の長連鎖フィニッシュ実例による追加校正は
+    # 今後の課題 (design doc §3(b-1) 校正材料参照)。
+    MATCH_END_PERSIST_OVERRIDE_SEC: float = 1.0
+
+    # (b-2) 次試合開始までのラッチの安全弁 (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+    # ばたんきゅー/やった!検出から次の本物の試合開始 (score_zero_both 持続 +
+    # 盤面ROI実ゲームプレイ確認、_board_shows_real_gameplay 参照) までを
+    # ラッチで覆うが、検出漏れ等で無限にラッチが残留するリスクに対する上限。
+    # **未実測の暫定値** (45秒、対戦カード紹介+次ラウンド待機の常識的な上限
+    # からの見積もりに過ぎない、バックストップ位置づけであり主判定にしない
+    # 前提、2026-08-18 アーキ確定)。
+    # 解除信号の変遷の経緯 (2026-08-18 実写検証、
+    # data/verify/boundary_impl_verify_2026-08-18/):
+    #   1st: raw_active → force_in_match=True 環境で常に True になり無意味。
+    #   2nd: match_res.state==IN_MATCH → パネル表示中も IN_MATCH 判定され
+    #        続け、0.5秒でほぼ即解除。
+    #   3rd (現行): score_zero_both 持続 + 盤面ROI分散ガード。対戦カード
+    #        紹介の装飾スコアカウントアップ演出が「00000000」を最大2.68秒
+    #        持続して経由することが判明したため、盤面ROI追加確認で防御。
+    # 既知の残課題 (2026-08-18 実写検証、③試合外5件で0/5遮断、
+    # data/verify/boundary_impl_verify_2026-08-18/scorezero_latch_verify.csv):
+    # 3rd 版は対戦カード紹介の装飾スコア誤爆 (本コメント上部の課題) を修正
+    # 済みだが、is_match_active は各ラベル済アンカーの **0.27〜0.3秒前**
+    # (c18/c20 で確認、c21 は b-1 自体の1.0秒grace内で別経路) に True へ
+    # 復帰してしまい、5件とも遮断できていない。match_end_locked/
+    # score_zero_both/latch のいずれも False の状態で復帰しているため、
+    # score_actively_moving または sm_active (state machine が MENU 強制
+    # 解除後に対戦カード紹介の非ゲームプレイ画面を再度 CNN 誤読して
+    # STABLE/TSUMO_FALL 等に遷移する経路) の再点火が濃厚な原因候補だが
+    # 未特定。本タスク (解除信号置換) の対象範囲外の別問題であり、
+    # 148再収集投入前に追加調査が必要 (user/アーキ判断待ち)。
+    POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
+
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
     # SCORE_MOVE_WINDOW_FRAMES 内に SCORE_MOVE_MIN_DELTA 以上動いていれば
     # hard_match_off (= MatchEnd lockdown 等) を打ち消して試合中継続.
@@ -886,6 +960,13 @@ class RecognitionPipeline:
     # 誤って自己修復 reset が発火するのを防ぐ目的)。
     BASELINE_BROKEN_STABLE_GRACE_SEC: float = 3.0
 
+    # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
+    # の「NEXT履歴+ever_seen に無い色は強制置換」が成立するための必要条件。
+    # 試合は4色構成 (reference_four_colors_per_match_2026-07-22) のため、
+    # ever_seen∪next_queue の puyo 色数がこの値未満の間は和集合が不完全
+    # (= 4色ルールで5色目を弾く根拠が成立しない「飢餓状態」) とみなす。
+    NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION: int = 4
+
     def __init__(
         self,
         image_reader: ImageReader,
@@ -955,6 +1036,31 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_landing_observed_color: bool = True,
+        # W10根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md): 着地セル色の継続監視ガード。
+        # correct_landing_cells_by_observed_color (上記 enable_landing_observed_color)
+        # は着地直後 1 回限りしか働かないため、NEXT 読取誤り等で infer_placement が
+        # 誤色を書き込むと、その誤色が数秒間 (実測 c11 で1.7秒) 残ることがある。
+        # True にすると着地セルを LANDING_VOTE_SEC 秒間 (既存の着地投票と同じ窓を
+        # 流用、新規定数は増やさない) 継続監視し、CNN==HSV が一致した時点で即座に
+        # confirmed_board を上書きする。STABLE 確定盤面のみに適用 (physics_only 原則)。
+        # enable_landing_observed_color=False の場合は無効 (base 機構への追加拡張のため)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user 承認前の savepoint 実装)。
+        enable_landing_color_guard: bool = False,
+        # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照): cycle 71n の STABLE 長期不一致
+        # override (下記 6826 行付近) が誤発火した場合、書き込まれたセルを
+        # 上記 enable_landing_color_guard と同じ監視リスト
+        # (self._landing_color_watch_1p/2p) に登録し、CNN==HSV 一致による
+        # 即時再訂正の対象にする。override 発火時 history をクリアするため
+        # (h_list.clear())、誤発火後は次に 75% 多数決が積み直されるまで
+        # 数秒間放置される問題への対処 (実測 c23: 10 セル 0.47 秒、
+        # c10: 15 セル 6.0 秒)。enable_landing_observed_color=False や
+        # enable_landing_color_guard=False の場合でも独立して動作する
+        # (監視リストの登録元が異なるだけで再チェック機構は共通)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards
+        # compat、user承認前の savepoint 実装)。
+        enable_override_color_guard: bool = False,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
         # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
@@ -1133,6 +1239,18 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False を渡せば従来挙動 (常に None) に完全に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # 根治① (W7, 2026-08-13, docs/KNOWN_WEAKNESSES.md): 疑似 ChainEvent
+        # (機能D 掛け算式 formula 経路 / 着地直後即時判定 landing 経路) の
+        # total_score/base_score を、既に持っている simulate 検証済み
+        # ChainResult から calculate_chain_score() で充填する。追加の
+        # simulate は landing 経路のみ (formula 経路は既存検証結果を再利用、
+        # 二重 simulate ゼロ)。充填成功時は ChainEvent.score_estimated=True。
+        # 実測 (score OCR 差分) による後続イベントでの上書きは既存の
+        # active_chain 更新経路がそのまま担う (本フラグは疑似イベント生成
+        # 直後の初期値のみを変える)。
+        # default False = 従来挙動完全維持 (total_score=0 固定、bit-identical、
+        # backwards compat)。
+        enable_pseudo_chain_score_fill: bool = False,
         # #45 おじゃま merge 統合修正 案(a) (2026-07-24): 重力フィルタ支持緩和。
         # 案B (enable_ojama_fall_board_settle) 適用後、 _merge_diff_only 内の
         # `_apply_gravity_filter` が F ガード (empty_to_color_guard) 起因で
@@ -1364,6 +1482,158 @@ class RecognitionPipeline:
         # (elapsed<=0.0 を満たすのは elapsed が負になる異常系のみなので実質
         # 無効化、close後クールダウン0.9秒はこの値と無関係のため無改修で残る)。
         burst_chain_gap_max_sec: "float | None" = None,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用): BoardStateMachine (1P/2P 両方) に
+        # そのまま伝播する。詳細は src/board_state_machine.py の
+        # STABLE_MAJORITY_WINDOW_FRAMES 定数コメント参照。
+        # default False = 従来の厳密連続一致を完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
+        # 案2 (enable_ojama_fall_placement_override, 2026-08-13、OJAMA_FALL
+        # 誤分類根因調査): OJAMA_FALL 滞在中の実設置検知による早期 exit。
+        # 詳細は src/ojama_visual_detector.py の OjamaVisualDetector docstring
+        # 参照。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_placement_override: bool = False,
+        # 案4-lite (enable_ojama_fall_entry_hardening, 2026-08-13、根因調査
+        # 追補): OJAMA_FALL entry 判定を実時間ベースに切替 + CHAIN 割り込み
+        # の厳格化。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_entry_hardening: bool = False,
+        # 案3 (enable_chain_gate_raw_fallback, 2026-08-13、OJAMA_FALL誤分類
+        # 根因調査、優先度最下位): 4連結ゲートの cnn_board フォールバック
+        # (CHAIN 継続中のみ)。詳細は src/state_detectors.py の
+        # ChainPhaseDetector docstring 参照。default False = 従来挙動完全
+        # 維持・bit-identical (backwards compat)。
+        enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の
+        # 根治): OjamaVisualDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        enable_ojama_fall_scoped_exit: bool = False,
+        # 案1 会計連動 (2026-08-13): True で OjamaAccountingTracker を内部に
+        # 保持し、 未着弾おじゃま予告量を signals.own_pending_ojama_forecast
+        # 経由で OjamaVisualDetector に渡す。 enable_ojama_fall_scoped_exit と
+        # 独立フラグにすることで、 会計連動なしでも scoped_exit 単体を
+        # 検証できるようにする。default False = 従来挙動完全維持
+        # (トラッカー不在時は signal が None のまま = 短縮ロジック不発動)。
+        enable_ojama_fall_scoped_exit_accounting: bool = False,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # BoardStateMachine (1P/2P 両方) にそのまま伝播する。詳細は
+        # src/board_state_machine.py の `_apply_gravity_filter` docstring
+        # 参照。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照): BoardStateMachine (1P/2P 両方)
+        # にそのまま伝播する。詳細は src/board_state_machine.py の
+        # `_TRANSITION_MERGE_GUARD_SCOPE` docstring 参照。
+        # default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_column_stack_fix: bool = False,
+        # W23根治 (enable_next_history_starvation_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W23 参照): `_validate_next_history` の
+        # 「NEXT履歴+ever_seen に無い色を強制置換」ステップは、試合開始直後
+        # ever_seen が NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION (4色) 未満しか
+        # 観測していない「飢餓状態」では和集合が不完全なため、正しい観測色を
+        # 誤って別の既知色へ強制変換する事故が実測された (c23/c10、
+        # ctx.confirmed_board は健全だが published_confirmed のみ汚染)。
+        # True にすると飢餓中はこのステップをスキップし観測値をそのまま通す
+        # (浮きぷよ除去は従来通り継続実施)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_next_history_starvation_fix: bool = False,
+        # W25根治 おじゃま落下窓の総合ガード (enable_ojama_cnn_override_warmup、
+        # docs/KNOWN_WEAKNESSES.md W25): おじゃま落下時の白雲パーティクル誤認
+        # 対策。OJAMA_FALL の entry/dwell/exit の間 (= おじゃま落下窓、
+        # OJAMA_OVERRIDE_EXIT_WARMUP_SEC 秒の warmup タイマーで管理)、以下2箇所
+        # を抑制する:
+        #   (案4, 2026-08-17): cycle 71n の STABLE 長期不一致 override の発火。
+        #   (第2弾, 2026-08-17、data/verify/diag_c13c22_recheck_2026-08-17/
+        #    w25_guard_gap.md): DriftDetector needs_resync による sm.reset()。
+        #    雲混入で CNN⇔inferred が持続不一致になり resync が誘発される→
+        #    confirmed_board が丸ごと None化→直後の遷移で
+        #    enable_ojama_column_stack_fix ガードが「baseline is None
+        #    (初回確定)」分岐に落ちて無効化される、という実害経路への対処。
+        # 機能C enable_chain_exit_warmup と同型の時間ベース warmup。
+        # 設置反映経路 _update_landing_votes、_merge_diff_only 自体、
+        # _filter_transition_new_cnn_for_burst_guard 自体には一切触れない。
+        # 第3弾 (2026-08-18) 追記: 案4+第2弾でも対象9セルは 0/9 のまま解消せず
+        # (w25_guard_gap.md 第2弾検証節)、cycle71n・drift-resync のいずれとも
+        # 独立な「設計C 事後復旧ゲート (色→色訂正、
+        # enable_recovery_counter_carryover 併用時に OJAMA_FALL 振動をまたいで
+        # 不一致カウンタが持ち越される)」という第3の経路が実測で確定した。
+        # 「ガード2つ超で根治自動昇格」(feedback_kill_known_weaknesses) に基づき
+        # 個別ガードの追加はここで打ち止めとし、根治は
+        # enable_ojama_write_accounting_guard (CNN観測入力段での一元フィルタ)
+        # に委ねる。本フラグは以後「会計整合フィルタが利用できない/効かない
+        # 場面のフェイルセーフ」として併用する位置づけに再定義する
+        # (廃止しない、ロジックは無改修)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_ojama_cnn_override_warmup: bool = False,
+        # W25根治 第3弾・最終 (enable_ojama_write_accounting_guard、2026-08-18、
+        # docs/KNOWN_WEAKNESSES.md W25、
+        # data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md):
+        # CNN観測入力段 (cnn_board が state machine に入る直前) で会計整合
+        # フィルタを一元適用する。 セル単位の直近安定色メモリ
+        # (state machine reset の影響を受けない外部 wrapper 保持、
+        # stateless判定+外部wrapper保持の規約に準拠) を用いて、
+        # 「非空色セルへの 9 書込み」を常に直近安定色へ差し替える
+        # (src/ojama_write_accounting.py の純関数、詳細はそちら参照)。
+        # 空セルへの 9 書込み (正規のおじゃま着弾経路) は対象外・無条件通過。
+        # 実測に基づく設計修正 (2026-08-18): 当初は OjamaAccountingTracker
+        # 由来の pending おじゃま予告量 (floor(予告/6)) をクレジットとして
+        # 判定に使い credit>0 なら素通しする設計だったが、 c13 実測で
+        # score OCR 異常由来の巨大クレジット (floor(216/6)=36) がこの
+        # 素通しを悪用し対象セルを解消できないことが判明。 ぷよぷよの
+        # ルール上おじゃまは空セルにのみ着弾するため credit は判定に使わない
+        # よう修正した (トラッカー自体は pending 取得可否のフォールバック
+        # 判定に引き続き使う、詳細は _apply_ojama_write_accounting_filter)。
+        # cycle71n / drift-resync / 事後復旧ゲートは一切無改修 (入力段で
+        # 誤り自体を消すため、下流の全機構が最初から正しい観測を見る)。
+        # True 時は内部で OjamaAccountingTracker を自動生成する
+        # (enable_ojama_fall_scoped_exit_accounting 未指定でも動作する)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装、production_config 未登録)。
+        enable_ojama_write_accounting_guard: bool = False,
+        # (b-1) match_end持続時間ゲート (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)、Step0診断B
+        # 対処): match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上
+        # 連続 True の場合のみ、chain_in_progress による hard_match_off 抑制を
+        # 上書きし、正規の試合終了検出を通す (連鎖アニメ中に表示され始める
+        # 本物のパネルを取り零さないようにする)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_match_end_persist_override: bool = False,
+        # (b-2) 次試合開始までのラッチ (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)、
+        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換):
+        # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
+        # 試合開始 (score_zero_both 持続 + 盤面ROI実ゲームプレイ確認、
+        # _board_shows_real_gameplay 参照) が確認されるまで試合外とみなす
+        # ラッチ。結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
+        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性 (試合外
+        # 画面の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC でラッチが
+        # 無限残留しないようにする (詳細は同定数のコメント参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_post_match_lockdown_latch: bool = False,
+        # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+        # アーキ承認済み診断 data/verify/boundary_impl_verify_2026-08-18/
+        # reignition_diag.md より): score_actively_moving (cycle 71f) が
+        # 対戦カード紹介の装飾スコアカウントアップ演出を実スコアリングと
+        # 誤認し、match_end_locked/self._post_match_lockdown_active による
+        # hard_match_off を単独で打ち消す再点火バグへの対処。
+        # match_end_locked/latch が活性な間だけ、既存の
+        # _board_shows_real_gameplay ((b-2)で構築済み、盤面ROI画素分散、
+        # puyo_observedガード同系) で score_actively_moving の信頼性を
+        # 裏取りする。cycle 71f 本来の救済シナリオ (match_end_locked/latch
+        # 非活性時、v50 51-63s) は無条件で信用し続けるため変更しない。
+        # (b-1)/(b-2) とは独立に A/B できるよう別フラグにする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_result_screen_hardening: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1848,6 +2118,116 @@ class RecognitionPipeline:
                 UserWarning,
                 stacklevel=2,
             )
+        # 盤面確定窓 3中2多数決 (2026-08-13): _build_state_machine 呼び出し前に
+        # 格納が必要 (BoardStateMachine へそのまま伝播するため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_stable_majority_window: bool = bool(stable_majority_window)
+        # 案2/案4-lite/案3 (2026-08-13、OJAMA_FALL誤分類根因調査):
+        # _build_state_machine 呼び出し前に格納が必要 (detector へそのまま
+        # 伝播するため)。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        self._enable_ojama_fall_placement_override: bool = bool(
+            enable_ojama_fall_placement_override
+        )
+        self._enable_ojama_fall_entry_hardening: bool = bool(
+            enable_ojama_fall_entry_hardening
+        )
+        self._enable_chain_gate_raw_fallback: bool = bool(
+            enable_chain_gate_raw_fallback
+        )
+        # 案1 (2026-08-13、OJAMA_FALL出口の根治): _build_state_machine
+        # 呼び出し前に格納が必要 (detector へそのまま伝播するため)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        self._enable_ojama_fall_scoped_exit: bool = bool(
+            enable_ojama_fall_scoped_exit
+        )
+        # 案1 会計連動: フラグ ON のときのみ OjamaAccountingTracker を保持する。
+        # 両 side (1P/2P) の相殺を単一 Tracker が内部で扱う設計
+        # (OjamaAccountingTracker.on_state_transition("p1"/"p2", ...)) のため
+        # インスタンスは 1 つで足りる。 OFF (既定) では None のまま
+        # (= getattr 安全参照側で従来挙動にフォールバックする)。
+        self._enable_ojama_fall_scoped_exit_accounting: bool = bool(
+            enable_ojama_fall_scoped_exit_accounting
+        )
+        # W25根治 第3弾 (2026-08-18): enable_ojama_write_accounting_guard も
+        # トラッカー生成条件に加える (会計整合フィルタが pending 予告量を必要
+        # とするため、enable_ojama_fall_scoped_exit_accounting 未指定でも
+        # 自動生成する)。既存フラグの挙動 (OR の左辺) は変えない。
+        self._enable_ojama_write_accounting_guard: bool = bool(
+            enable_ojama_write_accounting_guard
+        )
+        self._ojama_fall_accounting_tracker: "OjamaAccountingTracker | None" = (
+            OjamaAccountingTracker()
+            if (
+                self._enable_ojama_fall_scoped_exit_accounting
+                or self._enable_ojama_write_accounting_guard
+            )
+            else None
+        )
+        # W25根治 第3弾: セル単位の直近安定色メモリ (1P/2P 別)。
+        # state machine reset (sm.reset()) の影響を受けない外部 wrapper 保持
+        # (stateless判定+外部wrapper保持の規約)。STABLE 確定毎に更新し、
+        # OJAMA_FALL 振動・drift-resync で ctx.confirmed_board が消えても
+        # 直近の「信頼できる色」を保持し続ける。フラグ OFF でも保持コスト自体は
+        # 軽微だが、参照は enable_ojama_write_accounting_guard=True のみ
+        # (未参照時は空 dict のまま、bit-identical に影響しない)。
+        self._stable_color_memory_1p: dict[tuple[int, int], int] = {}
+        self._stable_color_memory_2p: dict[tuple[int, int], int] = {}
+        # W25固着対策 (2026-08-18、data/verify/diag_w25_regression2_2026-08-18/):
+        # セル単位の「生CNN観測が連続して9を示している間の開始time_sec」
+        # (1P/2P 別)。 会計整合フィルタが直近安定色メモリを永久に信用し続け、
+        # 正規のおじゃま着弾/着地推論の自己修復すら拒否してしまう固着事故
+        # (c10/c109) への対処。 OJAMA_REJECT_TIMEOUT_SEC 秒連続で生観測が9を
+        # 示したらタイムアウト受理する (詳細は
+        # _apply_ojama_write_accounting_filter / src/ojama_write_accounting.py
+        # 参照)。 フリッカ許容なし (1frameでも9以外を観測したら即クリア、
+        # `_update_ojama_raw9_streak` 参照)。
+        self._ojama_raw9_streak_start_1p: dict[tuple[int, int], float] = {}
+        self._ojama_raw9_streak_start_2p: dict[tuple[int, int], float] = {}
+        # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
+        self._enable_floating_gap_restore: bool = bool(
+            enable_floating_gap_restore
+        )
+        # 持続誤認26件系統2 (2026-08-17)。 default False = bit-identical。
+        self._enable_ojama_column_stack_fix: bool = bool(
+            enable_ojama_column_stack_fix
+        )
+        # W23根治 (2026-08-17)。 default False = bit-identical。
+        self._enable_next_history_starvation_fix: bool = bool(
+            enable_next_history_starvation_fix
+        )
+        # W25根治 案4 (2026-08-17)。 default False = bit-identical。
+        # float: OJAMA_FALL→STABLE 遷移 time_sec。抑制中は
+        # time_sec < _ojama_override_exit_until_* 。
+        self._enable_ojama_cnn_override_warmup: bool = bool(
+            enable_ojama_cnn_override_warmup
+        )
+        self._ojama_override_exit_until_1p: float = 0.0
+        self._ojama_override_exit_until_2p: float = 0.0
+        # (b-1) match_end持続時間ゲート (2026-08-18)。 default False = bit-identical。
+        self._enable_match_end_persist_override: bool = bool(
+            enable_match_end_persist_override
+        )
+        # match_end_locked が連続 True になり始めた time_sec。
+        # -1.0 = 現在 False (連続区間の外)。
+        self._match_end_locked_since: float = -1.0
+        # (b-2) 次試合開始までのラッチ (2026-08-18)。 default False = bit-identical。
+        self._enable_post_match_lockdown_latch: bool = bool(
+            enable_post_match_lockdown_latch
+        )
+        self._post_match_lockdown_active: bool = False
+        # ラッチON判定用: 前フレームの match_end_locked (edge検出専用、
+        # 大ROI間引きキャッシュ用の self._last_match_end_locked とは別物)。
+        self._post_match_lockdown_prev_end_locked: bool = False
+        # ラッチがONになった time_sec (安全弁の基準点)。-1.0 = 非活性。
+        self._post_match_lockdown_started_time: float = -1.0
+        # raw_active が連続 True になり始めた time_sec (ラッチOFF判定用)。
+        # -1.0 = 現在 False (連続区間の外、またはラッチ非活性)。
+        self._post_match_lockdown_raw_active_since: float = -1.0
+        # 境界実装の仕上げ (2026-08-18)。 default False = bit-identical。
+        self._enable_result_screen_hardening: bool = bool(
+            enable_result_screen_hardening
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -1944,6 +2324,10 @@ class RecognitionPipeline:
         self._drift_resync_start_guard_suppressed_2p: int = 0
         self._drift_resync_hsv_gate_suppressed_1p: int = 0
         self._drift_resync_hsv_gate_suppressed_2p: int = 0
+        # W25根治 第2弾 (2026-08-17): おじゃま落下窓 warmup 中の needs_resync
+        # 抑制回数 (1P/2P 別)。既存2ガードと同様の効果測定用カウンタ。
+        self._drift_resync_ojama_warmup_suppressed_1p: int = 0
+        self._drift_resync_ojama_warmup_suppressed_2p: int = 0
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -1983,6 +2367,17 @@ class RecognitionPipeline:
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
+            stable_majority_window=self._enable_stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                self._enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=(
+                self._enable_ojama_fall_entry_hardening
+            ),
+            enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
+            enable_floating_gap_restore=self._enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2020,6 +2415,17 @@ class RecognitionPipeline:
             effect_gate_persist_sec=self._effect_gate_persist_sec,
             effect_gate_hard_freeze=self._enable_burst_guard_v2,
             enable_transition_merge_guard=self._enable_transition_merge_guard,
+            stable_majority_window=self._enable_stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                self._enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=(
+                self._enable_ojama_fall_entry_hardening
+            ),
+            enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
+            enable_floating_gap_restore=self._enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2119,6 +2525,10 @@ class RecognitionPipeline:
         self._enable_chain_formula_simulate_verify: bool = bool(
             enable_chain_formula_simulate_verify
         )
+        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
+        self._enable_pseudo_chain_score_fill: bool = bool(
+            enable_pseudo_chain_score_fill
+        )
         # 着地色修正 案1 (2026-06-01): TSUMO_FALL→STABLE 着地時の falling_pair を
         # prev_next_queue[-2] から _landing_pending (消費ツモ色) に切り替える。
         # True で修正ロジック有効。False (default) = 従来挙動完全維持 (backwards compat)。
@@ -2135,6 +2545,19 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_color_guard: bool = bool(enable_landing_color_guard)
+        # 持続誤認26件系統1 (2026-08-17): cycle 71n override 発火セルの
+        # 継続監視ガード。default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_override_color_guard: bool = bool(
+            enable_override_color_guard
+        )
+        # 監視中の着地セル: side ごとに [(cell, deadline_time_sec), ...]。
+        # LANDING_VOTE_SEC 秒経過 or CNN==HSV 一致で解決したセルから除去される。
+        # enable_landing_color_guard / enable_override_color_guard 共用。
+        self._landing_color_watch_1p: list[tuple[tuple[int, int], float]] = []
+        self._landing_color_watch_2p: list[tuple[tuple[int, int], float]] = []
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True で着地セルの CNN 観測色/baseline 不一致フラグを計算し、
         # P7 (着地投票) に伝播する。default False = 従来挙動完全維持
@@ -2223,6 +2646,8 @@ class RecognitionPipeline:
         use_puyo_gate: bool = False,
         patch_ncc_threshold: float | None = None,
         ui_mask_cells: frozenset[tuple[int, int]] | None = None,
+        enable_highlight_override: bool = False,
+        enable_patch_fp_hsv_guard: bool = False,
     ) -> ImageReader:
         """HybridClassifier (HSV + CNN) で ImageReader を組み立てる.
 
@@ -2295,6 +2720,8 @@ class RecognitionPipeline:
             use_match_state=False,
             use_telop_mask=True,
             patch_ncc_threshold=patch_ncc_threshold,
+            use_highlight_override=enable_highlight_override,
+            enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
         )
 
     @staticmethod
@@ -2379,6 +2806,29 @@ class RecognitionPipeline:
         # バーストガード Stage1.5 (2026-08-05 アーキ追補, A/B 計測用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_transition_merge_guard: bool = False,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        stable_majority_window: bool = False,
+        # 案2/案4-lite (2026-08-13、OJAMA_FALL誤分類根因調査): OjamaVisualDetector
+        # へそのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_ojama_fall_placement_override: bool = False,
+        enable_ojama_fall_entry_hardening: bool = False,
+        # 案3 (2026-08-13、優先度最下位): ChainPhaseDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の
+        # 根治): OjamaVisualDetector へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # 148動画収集走行中のため既定OFF必須)。
+        enable_ojama_fall_scoped_exit: bool = False,
+        # R2 浮きぷよ是正機構 (2026-08-17): BoardStateMachine にそのまま伝播。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17):
+        # BoardStateMachine にそのまま伝播。default False = 従来挙動完全
+        # 維持・bit-identical (backwards compat)。
+        enable_ojama_column_stack_fix: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2410,6 +2860,7 @@ class RecognitionPipeline:
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
+            enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
         )
         detectors: list = [
             chain_det,
@@ -2424,6 +2875,13 @@ class RecognitionPipeline:
                 enable_ojama_entry_gravity_settle_guard=(
                     enable_ojama_entry_gravity_settle_guard
                 ),
+                enable_ojama_fall_placement_override=(
+                    enable_ojama_fall_placement_override
+                ),
+                enable_ojama_fall_entry_hardening=(
+                    enable_ojama_fall_entry_hardening
+                ),
+                enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
             )
             detectors.append(ovd)
         detectors.append(
@@ -2467,6 +2925,9 @@ class RecognitionPipeline:
             effect_gate_persist_sec=effect_gate_persist_sec,
             effect_gate_hard_freeze=effect_gate_hard_freeze,
             enable_transition_merge_guard=enable_transition_merge_guard,
+            stable_majority_window=stable_majority_window,
+            enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2509,6 +2970,9 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_landing_observed_color: bool = True,
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_color_guard: bool = False,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_placement_color_cnn_check: bool = False,
@@ -2581,6 +3045,9 @@ class RecognitionPipeline:
         # user viz 承認前の savepoint 実装のため default True だが、
         # False で従来挙動 (常に None) に戻せる (backwards compat)。
         enable_chain_estimate_stale_hold: bool = True,
+        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
+        # default False = 従来挙動完全維持 (bit-identical, backwards compat)。
+        enable_pseudo_chain_score_fill: bool = False,
         # A0 (2026-07-24): CHAIN 保持時間モデルの較正値注入用。
         # 従来 __init__ には chain_hold_per_step_sec が存在したが load_default
         # には露出していなかった (評価スクリプト経由で注入不可という抜け漏れ)。
@@ -2730,6 +3197,74 @@ class RecognitionPipeline:
         # 既定 ON (速度 +23.5〜26.8%)。従来経路に戻すには False を渡す。
         enable_score_ocr_matmul: bool = True,
         ui_mask_cells: "frozenset[tuple[int, int]] | None" = UI_MASK_TARGET_CELLS,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用)。BoardStateMachine (1P/2P 両方) に
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
+        # 案2/案4-lite/案3 (2026-08-13、OJAMA_FALL誤分類根因調査): __init__ へ
+        # そのまま伝播する。 default False = 従来挙動完全維持・bit-identical
+        # (backwards compat)。
+        enable_ojama_fall_placement_override: bool = False,
+        enable_ojama_fall_entry_hardening: bool = False,
+        enable_chain_gate_raw_fallback: bool = False,
+        # 案1 (2026-08-13、OJAMA_FALL出口の根治): __init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_ojama_fall_scoped_exit: bool = False,
+        enable_ojama_fall_scoped_exit_accounting: bool = False,
+        # W13根治 案1 (2026-08-16): 試合開始直後の bg_fp 強制採取窓
+        # (BG_FP_FORCE_WINDOW_SEC) で既設置ぷよが背景指紋に焼き込まれ、
+        # 以降そのセルが patch-NCC tier1 (is_empty_by_patch_fp) で無条件
+        # EMPTY 化される事故 (docs/KNOWN_WEAKNESSES.md W13) への対処。
+        # 実装済みだが配線漏れだった ImageReader.use_highlight_override を
+        # ImageReader 構築経路に接続する (白ハイライト blob 検出でtier1
+        # EMPTY 判定を却下し classify に回す)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        # 副作用リスク: 稀に真の空セルが「ぷよあり」に倒れる方向
+        # (白ハイライト状の背景模様がある場合)。
+        enable_highlight_override: bool = False,
+        # W13根治 案2 (2026-08-17): tier1 patch-NCC 経路への HSV AND ガード移植
+        # (cycle17-19 が旧 is_empty_by_fp 経路に持っていた「距離<閾値 AND HSV
+        # 単独でも puyo 色でない」を patch-NCC 経路にも適用する)。__init__ へ
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、案1 との A/B/併用測定用)。
+        enable_patch_fp_hsv_guard: bool = False,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # __init__ へそのまま伝播する。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
+        # __init__ へそのまま伝播する。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_override_color_guard: bool = False,
+        enable_ojama_column_stack_fix: bool = False,
+        # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): __init__ へ
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_next_history_starvation_fix: bool = False,
+        # W25根治 おじゃま落下窓の総合ガード (2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/
+        # w25_guard_gap.md): cycle 71n override 抑制 + DriftDetector
+        # needs_resync 抑制の2箇所に効く。__init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_ojama_cnn_override_warmup: bool = False,
+        # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25、
+        # data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md):
+        # CNN観測入力段の会計整合フィルタ。__init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_ojama_write_accounting_guard: bool = False,
+        # (b-1)/(b-2) 境界マルチシグナル統合設計 (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3): __init__ へ
+        # そのまま forward する。両方 default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_match_end_persist_override: bool = False,
+        enable_post_match_lockdown_latch: bool = False,
+        # 境界実装の仕上げ (2026-08-18): __init__ へそのまま forward する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_result_screen_hardening: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -2767,12 +3302,16 @@ class RecognitionPipeline:
                 use_puyo_gate=use_puyo_gate,
                 patch_ncc_threshold=patch_ncc_threshold,
                 ui_mask_cells=ui_mask_cells,
+                enable_highlight_override=enable_highlight_override,
+                enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
             )
         else:
             reader = ImageReader(
                 use_match_state=False,
                 classifier=ColorClassifier(vote_mode=vote_mode),
                 patch_ncc_threshold=patch_ncc_threshold,
+                use_highlight_override=enable_highlight_override,
+                enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
             )
         match_detector = MatchStateDetector.load_default()
         score: ScoreOcr | None = None
@@ -2877,6 +3416,7 @@ class RecognitionPipeline:
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_landing_color_guard=enable_landing_color_guard,
             enable_placement_color_cnn_check=enable_placement_color_cnn_check,
             enable_placement_cnn_veto=enable_placement_cnn_veto,
             placement_cnn_veto_mode=placement_cnn_veto_mode,
@@ -2906,6 +3446,7 @@ class RecognitionPipeline:
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
+            enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
             chain_hold_base_sec=chain_hold_base_sec,
             chain_hold_per_step_sec=chain_hold_per_step_sec,
             chain_max_hold_sec=chain_max_hold_sec,
@@ -2944,6 +3485,27 @@ class RecognitionPipeline:
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_burst_close_extension=enable_burst_close_extension,
             burst_chain_gap_max_sec=burst_chain_gap_max_sec,
+            stable_majority_window=stable_majority_window,
+            enable_ojama_fall_placement_override=(
+                enable_ojama_fall_placement_override
+            ),
+            enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
+            enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
+            enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
+            enable_ojama_fall_scoped_exit_accounting=(
+                enable_ojama_fall_scoped_exit_accounting
+            ),
+            enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_override_color_guard=enable_override_color_guard,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+            enable_next_history_starvation_fix=(
+                enable_next_history_starvation_fix
+            ),
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
         )
 
     # ------------------------------------------------------------------
@@ -2974,6 +3536,29 @@ class RecognitionPipeline:
             return True
         interval = max(1, self._large_roi_throttle_frames)
         return (frame_idx % interval) == 0
+
+    def _board_shows_real_gameplay(self, frame: np.ndarray) -> bool:
+        """(b-2) ラッチ解除の追加安全弁 (2026-08-18、実写検証で追加)。
+
+        score_zero_both 持続だけでは対戦カード紹介の装飾スコアカウント
+        アップ演出 (一時的に「00000000」を経由する) を弾けないことが
+        実測で判明した (data/verify/boundary_impl_verify_2026-08-18/)。
+        盤面 ROI (P1/P2 両方) の画素分散が実ゲームプレイの閾値を超えて
+        いるかを追加確認する (puyo_observedガード同系、既存の
+        score_zero_both 内 puyo_observed 判定と同じ「盤面の実態で信号を
+        裏取りする」設計思想)。両 side が閾値を超えた場合のみ True
+        (fail-safe: 判定不能/装飾画面ならラッチ継続=試合外扱いを維持)。
+        """
+        try:
+            from src.board_motion import board_roi_gray, is_real_gameplay_board
+            gray_1p = board_roi_gray(frame, "1P")
+            gray_2p = board_roi_gray(frame, "2P")
+            return (
+                is_real_gameplay_board(gray_1p)
+                and is_real_gameplay_board(gray_2p)
+            )
+        except Exception:
+            return False
 
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
@@ -3039,6 +3624,13 @@ class RecognitionPipeline:
         # 長時間劣化修正 A' (2026-08-06): デバウンスのpending状態も試合切替時に
         # クリアする (前試合のpending観測が次試合に残留するのを防ぐ)。
         self._match_active_debounce_state = MatchActiveDebounceState()
+        # (b-1)/(b-2) 境界マルチシグナル (2026-08-18): 前試合の持続タイマー/
+        # ラッチ状態が次試合に残留するのを防ぐ。
+        self._match_end_locked_since = -1.0
+        self._post_match_lockdown_active = False
+        self._post_match_lockdown_prev_end_locked = False
+        self._post_match_lockdown_started_time = -1.0
+        self._post_match_lockdown_raw_active_since = -1.0
         self._bg_fp_captured = False
         # ImageReader の bg_fp も解除 + I1 対応 A: pre_capture_mode も reset
         if hasattr(self._reader, "set_background_fingerprints"):
@@ -3066,6 +3658,10 @@ class RecognitionPipeline:
         # (前試合の全消し状態が次試合に持ち越されるのを防ぐ)。
         self._all_clear_pending_1p = False
         self._all_clear_pending_2p = False
+        # 案1 会計連動 (2026-08-13): 試合切替時に帳簿もクリアする
+        # (前試合の未着弾予告量が次試合に持ち越されるのを防ぐ)。
+        if self._ojama_fall_accounting_tracker is not None:
+            self._ojama_fall_accounting_tracker.reset()
         # バーストガード再設計 Stage1 (2026-08-05): Schmitt trigger 状態も
         # 試合切替時にクリアする (前試合の burst 状態が次試合に残留し
         # project_match_boundary_residue_leak_2026-07-25 と同種の罠になるのを防ぐ)。
@@ -3094,6 +3690,16 @@ class RecognitionPipeline:
         # cycle 71n (案 θ): STABLE CNN 履歴もリセット.
         self._stable_cnn_history_1p.clear()
         self._stable_cnn_history_2p.clear()
+        # W25根治 第3弾: 直近安定色メモリは試合境界 (pipeline reset()) では
+        # クリアする (新試合に前試合の色情報を持ち込まない)。
+        # sm.reset() (drift-resync 由来の state machine 単体リセット) では
+        # クリアしない (= 本メモリの設計目的そのもの、こちらは意図的に対象外)。
+        self._stable_color_memory_1p.clear()
+        self._stable_color_memory_2p.clear()
+        # W25固着対策: 連続9観測ストリークも試合境界でクリアする
+        # (新試合に前試合のストリーク開始時刻を持ち込まない)。
+        self._ojama_raw9_streak_start_1p.clear()
+        self._ojama_raw9_streak_start_2p.clear()
         # NEXT slide detector + prev_frame もリセット
         if self._slide_detector_1p is not None:
             self._slide_detector_1p.reset()
@@ -3132,6 +3738,9 @@ class RecognitionPipeline:
         # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
         self._chain_exit_until_1p = 0.0
         self._chain_exit_until_2p = 0.0
+        # W25根治 案4: OJAMA_FALL→STABLE warmup 抑制終了時刻リセット
+        self._ojama_override_exit_until_1p = 0.0
+        self._ojama_override_exit_until_2p = 0.0
         # 案 Y-4 deferred landing state リセット
         self._deferred_landing_1p = None
         self._deferred_landing_2p = None
@@ -3213,6 +3822,68 @@ class RecognitionPipeline:
                     pass
             else:
                 match_end_locked = self._last_match_end_locked
+        # (b-2) 次試合開始までのラッチ (2026-08-18、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)、
+        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換):
+        # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
+        # 試合開始 (score_zero_both 持続 + 盤面ROI実ゲームプレイ確認) が
+        # 確認されるまで試合外とみなす。結果パネル・対戦カード紹介・次
+        # ラウンド待機を一括カバーし、MatchEndDetector 自身の 5 秒ロック
+        # ダウン切れ後の再活性を防ぐ。
+        # 解除信号の変遷 (2026-08-18):
+        #   1st: raw_active → force_in_match=True 環境で常に True になり
+        #        無意味と判明 (実写検証、c21)。
+        #   2nd: match_res.state==IN_MATCH → パネル表示中も IN_MATCH と
+        #        判定され続け、0.5秒でほぼ即解除されてしまうと判明。
+        #   3rd (現行): score_zero_both (ScoreZeroDetector の
+        #        「00000000」テンプレNCC、ZERO_NCC_THRESHOLD=0.85) の
+        #        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒 (=
+        #        CHAIN_BAN_SEC_AFTER_MATCH_START、既存定数を再利用) 持続。
+        #        対戦カード紹介のダミースコアは通常 score_zero_both=False
+        #        側に落ちるはずだが、実測 (2026-08-18、c18/c20、
+        #        data/verify/boundary_impl_verify_2026-08-18/
+        #        score_zero_ncc_cardintro_scan.csv) で「装飾スコア
+        #        カウントアップ演出」が離陸前に一時的に「00000000」を
+        #        経由し、0.5秒を超えて持続する区間 (最大2.68秒) が確認され
+        #        た (保留条件チェックで発見、跨ぎ件数241/2702行)。そのため
+        #        追加安全弁 _board_shows_real_gameplay (盤面ROIの画素分散、
+        #        puyo_observedガード同系) を AND 条件で要求する: 装飾画面は
+        #        単色に近いイラスト背景で低分散 (実測最大std 21.48)、実
+        #        ゲームプレイは色ぷよ/グリッド線で高分散 (実測最小std
+        #        47.33) と分離できる (src.board_motion 参照)。
+        # 既定 False (enable_post_match_lockdown_latch) では以下の状態更新を
+        # 一切行わず self._post_match_lockdown_active は常に False のまま
+        # (= bit-identical)。
+        if self._enable_post_match_lockdown_latch:
+            if match_end_locked and not self._post_match_lockdown_prev_end_locked:
+                self._post_match_lockdown_active = True
+                self._post_match_lockdown_started_time = time_sec
+                self._post_match_lockdown_raw_active_since = -1.0
+            self._post_match_lockdown_prev_end_locked = match_end_locked
+            if self._post_match_lockdown_active:
+                if score_zero_both:
+                    if self._post_match_lockdown_raw_active_since < 0.0:
+                        self._post_match_lockdown_raw_active_since = time_sec
+                    persisted = (
+                        time_sec - self._post_match_lockdown_raw_active_since
+                        >= self.CHAIN_BAN_SEC_AFTER_MATCH_START
+                    )
+                    # persisted 成立後も毎フレーム再チェックする (盤面ROI
+                    # 確認が同一フレームで揃わなくても取り零さないため)。
+                    if persisted and self._board_shows_real_gameplay(frame):
+                        self._post_match_lockdown_active = False
+                else:
+                    self._post_match_lockdown_raw_active_since = -1.0
+                # 安全弁: 誤爆等でラッチが無限残留しないよう上限で強制解除。
+                if (
+                    self._post_match_lockdown_active
+                    and self._post_match_lockdown_started_time >= 0.0
+                    and (
+                        time_sec - self._post_match_lockdown_started_time
+                        >= self.POST_MATCH_LOCKDOWN_MAX_SEC
+                    )
+                ):
+                    self._post_match_lockdown_active = False
         # cycle 71f (提案 A): score 動き情報を追跡 (= 試合 2 開始直後の演出で
         # MatchStateDetector / MatchEndDetector が「試合外」 と判定しても、
         # score が継続的に動いていれば「試合中」 と判定する確実な信号).
@@ -3247,7 +3918,11 @@ class RecognitionPipeline:
         # 強い「試合外」シグナル (hysteresis を上書き)
         # 2026-05-10 FIX-C: score=0 でも cnn_board に puyo があれば試合中継続
         # (試合開始直後の最初の数手が menu 誤判定される問題を回避)。
-        hard_match_off = score_zero_both or match_end_locked
+        # (b-2) self._post_match_lockdown_active は既定 False (bit-identical)。
+        hard_match_off = (
+            score_zero_both or match_end_locked
+            or self._post_match_lockdown_active
+        )
         if hard_match_off:
             # match_end は確定信号、 score_zero は puyo 確認で否定
             puyo_observed = False
@@ -3268,7 +3943,10 @@ class RecognitionPipeline:
                     score_zero_both = False  # 既に puyo 観測 = 試合中
                 if p2_b is not None and p2_b.count_puyos() >= 2:
                     score_zero_both = False
-                hard_match_off = score_zero_both or match_end_locked
+                hard_match_off = (
+                    score_zero_both or match_end_locked
+                    or self._post_match_lockdown_active
+                )
             if hard_match_off:
                 raw_active = False
         # Telop visible 状態を保存 (EffectPhaseDetector で利用)
@@ -3344,13 +4022,61 @@ class RecognitionPipeline:
                 BoardState.CHAIN, BoardState.GRAVITY_SETTLE,
             )
         )
+        # (b-1) match_end持続時間ゲート (2026-08-18、Step 0診断B対処、
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+        # 実測 (data/verify/diag_match_end_miss_2026-08-17/) で、本物の
+        # ばたんきゅー/やった!パネルは match_end_locked が3秒超連続 True に
+        # なる一方、連鎖中の瞬間誤爆は単発で終わる。持続時間で弁別し、
+        # MATCH_END_PERSIST_OVERRIDE_SEC 秒以上連続した場合のみ上記
+        # chain_in_progress による抑制を上書きする (= 正規の試合終了検出が
+        # 勝者の連鎖アニメ中に打ち消されないようにする)。
+        # 既定 False (enable_match_end_persist_override) では
+        # match_end_persisted は常に False (= 従来ロジックと bit-identical)。
+        if match_end_locked:
+            if self._match_end_locked_since < 0.0:
+                self._match_end_locked_since = time_sec
+        else:
+            self._match_end_locked_since = -1.0
+        match_end_persisted = (
+            self._enable_match_end_persist_override
+            and match_end_locked
+            and self._match_end_locked_since >= 0.0
+            and (
+                time_sec - self._match_end_locked_since
+                >= self.MATCH_END_PERSIST_OVERRIDE_SEC
+            )
+        )
+        chain_in_progress_suppresses = chain_in_progress and not match_end_persisted
+        # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+        # 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md
+        # で確定): score_actively_moving (cycle 71f) は対戦カード紹介の
+        # 装飾スコアカウントアップ演出 (「00000000」→「0000012」等) を実
+        # スコアリングと誤認し、match_end_locked/self._post_match_lockdown_
+        # active による hard_match_off を単独で打ち消してしまう (実測:
+        # is_match_active がアンカー0.27〜0.3秒前に再点火、盤面ROIは
+        # board_shows_real_gameplay=False のまま = 装飾画面と矛盾)。
+        # match_end_locked/latch が活性な間だけ、盤面ROI画素分散
+        # (_board_shows_real_gameplay、puyo_observedガード同系) で
+        # score_actively_moving の信頼性を裏取りする。cycle 71f 本来の
+        # 救済シナリオ (match_end_locked/latch 非活性時、v50 51-63s) は
+        # 無条件で信用し続けるため変更しない。
+        # 既定 False では score_actively_moving_trusted は常に
+        # score_actively_moving と同値 (= bit-identical)。
+        if self._enable_result_screen_hardening:
+            score_actively_moving_trusted = score_actively_moving and (
+                not (match_end_locked or self._post_match_lockdown_active)
+                or self._board_shows_real_gameplay(frame)
+            )
+        else:
+            score_actively_moving_trusted = score_actively_moving
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
         # cycle 71f (提案 A): score が直近 window 内で SCORE_MOVE_MIN_DELTA 以上
         # 動いていれば、 hard_match_off を打ち消して試合中継続を保証する.
         # 「演出/READY/GO! で MatchEnd が誤発火するが score は動いている」
         # シナリオ (= v50 51-63s) を解消.
         effective_hard_off = (
-            hard_match_off and not score_actively_moving and not chain_in_progress
+            hard_match_off and not score_actively_moving_trusted
+            and not chain_in_progress_suppresses
         )
         is_active = (
             (raw_active or recent_active or sm_active or score_actively_moving)
@@ -4070,6 +4796,9 @@ class RecognitionPipeline:
             # 案B (2026-08-04): 自連鎖中は視覚グロー判定 (連鎖数テロップ写り込み
             # 誤発火対策) を抑制するため own_chain_active を渡す。
             own_chain_active=chain_ev_1p is not None,
+            # 案4-lite 拡張 (coordinator追加指示, 2026-08-13): 自 side の
+            # 直近 chain hold 終了予定時刻 (既存追跡値をそのまま渡す)。
+            own_chain_hold_until=self._chain_until_1p,
         )
         p2 = self._step_side(
             "2P", frame_idx, time_sec, is_active, cnn_2p,
@@ -4084,6 +4813,7 @@ class RecognitionPipeline:
             chain_max_hold_expired=self._chain_max_hold_expired_2p,  # 案P3
             opponent_chain_active=chain_ev_1p is not None,
             own_chain_active=chain_ev_2p is not None,  # 案B (2026-08-04)
+            own_chain_hold_until=self._chain_until_2p,
         )
         # tier1 warmup guard: _step_side 後にカウンタを更新。
         # _pre_state_* = _step_side 呼び出し前 (= 前フレームの state)。
@@ -4150,6 +4880,19 @@ class RecognitionPipeline:
             self._all_clear_pending_2p, p2.confirmed_board, cur_score_2p,
             chain_fired=chain_ev_2p is not None,
         )
+
+        # 案1 会計連動 (2026-08-13、OJAMA_FALL出口の根治): OjamaAccountingTracker
+        # に今フレームの state 遷移を通知する。 _all_clear_pending と同じ
+        # 「_step_side 後に更新し、 次フレームの signals 構築で読む」二段構え
+        # (今フレームの signals は _step_side 呼び出し時点で既に構築済のため
+        # 因果関係は崩れない)。 トラッカー無効構成 (既定) では None のため no-op。
+        if self._ojama_fall_accounting_tracker is not None:
+            self._ojama_fall_accounting_tracker.on_state_transition(
+                "p1", _pre_state_1p, p1.state, cur_score_1p, time_sec,
+            )
+            self._ojama_fall_accounting_tracker.on_state_transition(
+                "p2", _pre_state_2p, p2.state, cur_score_2p, time_sec,
+            )
 
         # Phase I.c: OnlineHsvCalibrator update (動画別 HSV 自動学習)
         # 1P/2P STABLE 中の信頼サンプルを蓄積、ready 後に ColorClassifier ranges
@@ -4245,6 +4988,7 @@ class RecognitionPipeline:
             time_sec=time_sec,
             is_match_active=is_active,
             p1=p1, p2=p2,
+            match_end_locked=match_end_locked,
         )
 
         # Phase I: 擬似ラベル抽出 hook (error は silent skip)
@@ -4885,6 +5629,46 @@ class RecognitionPipeline:
         except Exception:
             return None
 
+    def _fill_pseudo_chain_score(
+        self, verified: "ChainResult | None",
+    ) -> "tuple[int, int, bool]":
+        """疑似 ChainEvent の推定スコアを計算する (根治①, W7, 2026-08-13)。
+
+        formula/landing 経路の疑似 ChainEvent は score OCR で直接観測できず
+        従来 total_score=0 固定だった (docs/KNOWN_WEAKNESSES.md W7: 全連鎖の
+        6.14%が該当、先読み評価#9のゲートを阻害)。既に検証済みの
+        ChainResult (before_board を simulate した結果) があれば
+        calculate_chain_score() を適用し、その値を「シミュレーション推定」
+        として充填する。実測 (score OCR 差分) の後続イベントによる上書きは
+        既存の active_chain 更新経路がそのまま担うため本メソッドは関与しない。
+
+        推定値は認識の連結欠損 (W1) により実際より低く出る場合がある
+        (simulate は真値を過小評価しがちという既知の弱点)。
+
+        Args:
+            verified: before_board を simulate した ChainResult。None なら
+                未検証 (=フォールバック無効時、または疑似発火自体が抑制済み)。
+
+        Returns:
+            (total_score, base_score, score_estimated)。フラグ OFF、
+            verified が None、または verified.chain_count<=0 (連鎖不在=
+            充填する得点が無い) の場合は (0, 0, False) を返す
+            (bit-identical, backwards compat, fail-safe)。
+        """
+        if not self._enable_pseudo_chain_score_fill:
+            return 0, 0, False
+        if verified is None or verified.chain_count <= 0:
+            return 0, 0, False
+        from src.scoring import calculate_chain_score
+        try:
+            result = calculate_chain_score(verified)
+        except Exception:
+            return 0, 0, False
+        # 持ち越し (全消しボーナス) は疑似イベント生成時点では未知のため、
+        # base_score (素点) と total_score は同値として扱う (backwards
+        # compat: 既存の 0,0 固定と同じ「持ち越し未考慮」の意味論を維持)。
+        return result.total_score, result.total_score, True
+
     def _resolve_formula_chain_count(
         self, before_board: "Board",
     ) -> "tuple[int | None, ChainResult | None]":
@@ -4947,7 +5731,13 @@ class RecognitionPipeline:
         chain_count, verified = self._resolve_formula_chain_count(before)
         if chain_count is None:
             return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
-        # 疑似 ChainEvent を生成 (score は不明なため 0)
+        # 根治① (W7, 2026-08-13): 既に持っている検証済み ChainResult (verified)
+        # から calculate_chain_score() で推定スコアを充填する (追加 simulate
+        # ゼロ)。フラグ OFF または verified が None (検証 OFF 時の固定1発火)
+        # の場合は従来通り (0, 0, False) (bit-identical, backwards compat)。
+        total_score, base_score, score_estimated = (
+            self._fill_pseudo_chain_score(verified)
+        )
         pseudo = ChainEvent(
             trigger_sec=time_sec,
             end_sec=(
@@ -4956,11 +5746,12 @@ class RecognitionPipeline:
             ),
             before_board=before,
             chain_count=chain_count,
-            total_erased=0, total_score=0, base_score=0,
+            total_erased=0, total_score=total_score, base_score=base_score,
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
             mechanism=CHAIN_MECHANISM_FORMULA,
+            score_estimated=score_estimated,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec
@@ -5383,6 +6174,128 @@ class RecognitionPipeline:
         if hasattr(self._reader, "set_pre_capture_mode"):
             self._reader.set_pre_capture_mode(True)
 
+    def _get_own_pending_ojama_forecast(
+        self, side: str, time_sec: float,
+    ) -> int | None:
+        """会計トラッカーからの自 side 未着弾おじゃま予告量を返す。
+
+        案1会計連動 (2026-08-13) で導入した既存ロジックをそのまま抽出
+        (_step_side 内の重複呼出しを避けるため、W25根治第3弾で関数化)。
+        トラッカー無効構成 (enable_ojama_fall_scoped_exit_accounting も
+        enable_ojama_write_accounting_guard も False) では None を返す
+        (= getattr 安全参照側で従来挙動にフォールバックする)。
+        """
+        tracker = getattr(self, "_ojama_fall_accounting_tracker", None)
+        if tracker is None:
+            return None
+        snap = tracker.get_snapshot(time_sec)
+        return snap.pending_p1 if side == "1P" else snap.pending_p2
+
+    def _update_ojama_raw9_streak(
+        self, side: str, cnn_board: Board, time_sec: float,
+    ) -> "dict[tuple[int, int], float]":
+        """W25固着対策 (2026-08-18): セル単位「生CNN観測が連続して9を示し
+        ている持続時間」を更新し、今フレームの duration 辞書を返す。
+
+        フリッカ許容なし: 1 frame でも生CNN観測が9以外を示したら、その
+        セルのストリーク開始時刻を即座に破棄する (許容を入れると雲の
+        断続累積が `OJAMA_REJECT_TIMEOUT_SEC` に届くリスクがあり、棄却側
+        の論拠 [雲は0.85〜1.0秒で晴れる] が崩れるため、アーキ指定で禁止)。
+
+        外部 wrapper 状態 (`_ojama_raw9_streak_start_1p/2p`) は
+        stateless判定+外部wrapper保持の規約に従い本 pipeline が保持する
+        (src/ojama_write_accounting.py の純関数側は一切 state を持たない)。
+
+        Args:
+            side: "1P" or "2P"。
+            cnn_board: 今フレームの生 CNN 観測盤面 (会計整合フィルタ適用前)。
+            time_sec: 今フレームの time_sec。
+
+        Returns:
+            (row, col) -> 連続9観測の持続時間 (秒)。9 以外のセルは
+            辞書に含めない (呼び出し側は `.get(key, 0.0)` で 0.0 扱い)。
+        """
+        streak_start = (
+            self._ojama_raw9_streak_start_1p if side == "1P"
+            else self._ojama_raw9_streak_start_2p
+        )
+        duration_by_cell: dict[tuple[int, int], float] = {}
+        for r in range(HIDDEN_ROWS, BOARD_ROWS):
+            for c in range(BOARD_COLS):
+                key = (r, c)
+                if int(cnn_board.get(r, c)) == COLOR_OJAMA:
+                    if key not in streak_start:
+                        streak_start[key] = time_sec
+                    duration_by_cell[key] = time_sec - streak_start[key]
+                else:
+                    # フリッカ許容なし: 9 以外を観測した瞬間に即クリア。
+                    streak_start.pop(key, None)
+        return duration_by_cell
+
+    def _apply_ojama_write_accounting_filter(
+        self, side: str, cnn_board: Board, own_pending_ojama_forecast: int | None,
+        time_sec: float,
+    ) -> Board:
+        """W25根治 第3弾: CNN観測入力段の会計整合フィルタ (呼出し側)。
+
+        enable_ojama_write_accounting_guard=True の場合のみ呼ばれる。
+        pending 予告量が取得できない (トラッカー無効、通常は起こらないが
+        防御的に None も許容) 場合は cnn_board をそのまま返す
+        (= 会計を信用しないフォールバック、既存 enable_ojama_cnn_
+        override_warmup のみに委ねる)。
+
+        実測に基づく設計修正 (2026-08-18、
+        data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md
+        第3弾検証節、src/ojama_write_accounting.py モジュール docstring
+        「実測に基づく設計修正」参照): 当初は credit>0 で非空色セルへの
+        9書込みも素通しする設計だったが、c13 実測でこの素通し分岐が
+        原因で対象9セルが解消0/9のままだったことが判明した (score OCR
+        異常由来で pending 予告量が PENDING_ABS_CAP=216 に達し、
+        floor(216/6)=36 という不合理なクレジットが生成されていた)。
+        ぷよぷよのルール上おじゃまは空セルにのみ着弾するため、
+        credit の大小に関わらず非空色セルへの9書込みを許容する理由は無い
+        (reference_ojama_landing_pattern)。 実験的に credit ベースの素通しを
+        無効化したところ対象9セルが9/9解消したため、
+        `ojama_write_accounting.filter_ojama_write_by_accounting` 側で
+        判定ロジックから credit を除外した (関数シグネチャは互換維持)。
+        本関数では pending 予告量の「取得可否」のみを見て、値の大小には
+        依存しない (PENDING_ABS_CAP 到達等の値のブレは判定に影響しない)。
+
+        固着対策 (2026-08-18、data/verify/diag_w25_regression2_2026-08-18/、
+        src/ojama_write_accounting.py モジュール docstring「固着対策」節
+        参照): 28チャンクA/Bで新規悪化2件 (c10/c109) が永久固着と判明した
+        ため、セル単位の連続9観測持続時間 (`_update_ojama_raw9_streak`) を
+        毎フレーム更新し、`OJAMA_REJECT_TIMEOUT_SEC` 秒に達したら直近安定
+        色メモリの陳腐化を疑い9を受理するタイムアウト機構を追加した。
+        本メソッドは own_pending_ojama_forecast が None (会計フォール
+        バック) の場合は早期 return するが、ストリーク自体は
+        `_update_ojama_raw9_streak` 側で常時更新する (会計が一時的に
+        利用不能でもストリークの連続性を保つため)。
+
+        Args:
+            side: "1P" or "2P"。
+            cnn_board: フィルタ対象の CNN 観測盤面。
+            own_pending_ojama_forecast: `_get_own_pending_ojama_forecast` の
+                戻り値をそのまま渡す (二重計算を避けるため呼出し元で1回だけ
+                算出済みの値)。
+            time_sec: 今フレームの time_sec (ストリーク更新に使う)。
+
+        Returns:
+            フィルタ適用後の Board (対象外なら cnn_board そのもの)。
+        """
+        duration_by_cell = self._update_ojama_raw9_streak(side, cnn_board, time_sec)
+        if own_pending_ojama_forecast is None:
+            return cnn_board
+        from src.ojama_write_accounting import apply_ojama_write_accounting_filter
+        credit = max(0, own_pending_ojama_forecast) // 6
+        memory = (
+            self._stable_color_memory_1p if side == "1P"
+            else self._stable_color_memory_2p
+        )
+        return apply_ojama_write_accounting_filter(
+            cnn_board, memory, credit, duration_by_cell,
+        )
+
     def _step_side(
         self,
         side: str,
@@ -5405,8 +6318,24 @@ class RecognitionPipeline:
         chain_max_hold_expired: bool = False,  # 案P3: MAX_HOLD 超過フラグ
         opponent_chain_active: bool = False,  # エフェクト時間ゲート (2026-08-03)
         own_chain_active: bool = False,  # 案B 4条件AND拡張 (2026-08-04)
+        own_chain_hold_until: float = 0.0,  # 案4-lite 拡張 (2026-08-13)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
+        # W25根治 第3弾・最終 (2026-08-18): CNN観測入力段の会計整合フィルタ
+        # (一元プリプロセッサ)。cnn_board が本関数のあらゆる下流処理
+        # (placement_validated / ojama_top_positive / signals.cnn_board /
+        # cycle71n history / transition-merge / 事後復旧ゲート、いずれも
+        # 無改修) に渡る前に、ここで一度だけ書き換える。会計トラッカーの
+        # pending 予告量は本関数内で1回だけ算出し (_get_own_pending_
+        # ojama_forecast)、後段の signals 構築でも同じ値を再利用する
+        # (二重計算を避ける)。
+        _own_pending_ojama_forecast = self._get_own_pending_ojama_forecast(
+            side, time_sec,
+        )
+        if self._enable_ojama_write_accounting_guard:
+            cnn_board = self._apply_ojama_write_accounting_filter(
+                side, cnn_board, _own_pending_ojama_forecast, time_sec,
+            )
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
         # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
         _landing_diag: dict | None = None
@@ -5590,6 +6519,9 @@ class RecognitionPipeline:
         _elapsed_since_first_move = (
             None if _first_move is None else max(0.0, time_sec - _first_move)
         )
+        # 案1 会計連動 (2026-08-13): 未着弾おじゃま予告量は本関数先頭で
+        # 既に算出済み (_own_pending_ojama_forecast、W25根治第3弾で
+        # 関数冒頭に集約・二重計算を廃止)。ここではそのまま再利用する。
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -5606,6 +6538,9 @@ class RecognitionPipeline:
             ojama_top_positive=_ojama_top_positive,
             chain_max_hold_expired=chain_max_hold_expired,  # 案P3
             effect_gate_window_active=_effect_gate_window_active,
+            own_score_delta=score_d_for_self,  # 案2 (2026-08-13)
+            own_chain_hold_until_sec=own_chain_hold_until,  # 案4-lite拡張 (2026-08-13)
+            own_pending_ojama_forecast=_own_pending_ojama_forecast,  # 案1会計連動
         )
         # 着地推論用: sm.update 前のスナップショット
         # TSUMO_FALL 中は confirmed_board が更新されないため、
@@ -5618,6 +6553,23 @@ class RecognitionPipeline:
         prev_next_queue = list(sm.context.next_queue)
 
         ctx: StateContext = sm.update(frame_idx, signals)
+
+        # W25根治 第3弾: 直近安定色メモリの更新。STABLE 確定毎に (state
+        # machine reset の影響を受けない) 外部 wrapper へスナップショットする。
+        # 会計整合フィルタが機能していれば ctx.confirmed_board はこの時点で
+        # 既に「入力段で訂正済みの正しい観測」を反映しているはずなので、
+        # ここでの更新は自己整合的 (次フレームの filter が正しい
+        # prev_stable_color を参照できる)。
+        if self._enable_ojama_write_accounting_guard and (
+            ctx.state == BoardState.STABLE and ctx.confirmed_board is not None
+        ):
+            memory = (
+                self._stable_color_memory_1p if side == "1P"
+                else self._stable_color_memory_2p
+            )
+            for r in range(BOARD_ROWS):
+                for c in range(BOARD_COLS):
+                    memory[(r, c)] = int(ctx.confirmed_board.get(r, c))
 
         # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では chain_event
         # 引数が既に None 化されているため、退避しておいた ChainEvent を
@@ -5829,6 +6781,32 @@ class RecognitionPipeline:
                         frame_bgr,
                         region_for_side,
                     )
+                    # W10根治 (2026-08-17): 上記の 1 回限り補正では拾いきれない
+                    # ケース (この frame の CNN==HSV が偶然一致しない等) に備え、
+                    # 着地 2 cell を LANDING_VOTE_SEC 秒間の継続監視対象に登録する。
+                    # enable_landing_color_guard=False (既定) では登録自体を行わず
+                    # bit-identical を維持する。
+                    if self._enable_landing_color_guard:
+                        _guard_landing_cells: list[tuple[int, int]] = [
+                            (r, c)
+                            for r in range(BOARD_ROWS)
+                            for c in range(BOARD_COLS)
+                            if (
+                                int(prev_confirmed.get(r, c))
+                                in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                and int(inferred_landing.get(r, c)) not in (
+                                    COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
+                                )
+                            )
+                        ]
+                        _guard_deadline = time_sec + self.LANDING_VOTE_SEC
+                        _guard_entries = [
+                            (cell, _guard_deadline) for cell in _guard_landing_cells
+                        ]
+                        if side == "1P":
+                            self._landing_color_watch_1p = _guard_entries
+                        else:
+                            self._landing_color_watch_2p = _guard_entries
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
                 # next_pair (= 今消費された NEXT) が明示されていれば整合性チェック。
                 # alert のみ (= 棄却はしない。 現時点は fail-silent 検知用)。
@@ -5934,6 +6912,19 @@ class RecognitionPipeline:
                         ctx.confirmed_board = prev_confirmed.copy() \
                             if prev_confirmed is not None else final_board
                 if chain_count >= 1:
+                    # 根治① (W7, 2026-08-13): formula 経路と異なり landing
+                    # 経路は検証済み ChainResult を持たないため、追加で
+                    # inferred_landing を simulate する (既存
+                    # _simulate_before_board パターン、フラグ OFF 時は
+                    # 呼ばない)。simulate 失敗時は従来の (0, 0, False) の
+                    # まま (fail-safe)。
+                    verified_landing = (
+                        self._simulate_before_board(inferred_landing)
+                        if self._enable_pseudo_chain_score_fill else None
+                    )
+                    total_score, base_score, score_estimated = (
+                        self._fill_pseudo_chain_score(verified_landing)
+                    )
                     # A0 (2026-07-24) バグ修正: 従来ここだけハードコード 0.3 で
                     # self._chain_hold_per_step_sec (config 可能な設定値) を
                     # 無視していた。既定値 0.3 なら数値上は不変だが、較正値を
@@ -5949,11 +6940,13 @@ class RecognitionPipeline:
                         ),
                         before_board=inferred_landing,
                         chain_count=chain_count,
-                        total_erased=0, total_score=0, base_score=0,
+                        total_erased=0, total_score=total_score,
+                        base_score=base_score,
                         all_clear_bonus_applied=0,
                         ojama_sent=0, leftover_score=0,
                         is_all_clear=False,
                         mechanism=CHAIN_MECHANISM_LANDING,
+                        score_estimated=score_estimated,
                     )
                     chain_until = (
                         time_sec
@@ -6200,6 +7193,43 @@ class RecognitionPipeline:
             else:
                 self._chain_exit_until_2p = warmup_until
 
+        # W25根治 案4+第2弾 (2026-08-17): おじゃま落下窓の総合ガード warmup。
+        # おじゃま落下時の白雲パーティクル (HSV S≈14-20/V≈250) が下段セル群を
+        # 覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する
+        # (docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/
+        # で機構を実測確認済)。 当初は cycle 71n override 発火抑制のみだったが、
+        # 第2弾の根因調査 (data/verify/diag_c13c22_recheck_2026-08-17/
+        # w25_guard_gap.md) で「雲によるCNN⇔inferred持続不一致が
+        # DriftDetector 再同期 (sm.reset) を誘発 → confirmed_board が丸ごと
+        # None化 → 既存の enable_ojama_column_stack_fix ガードが
+        # 『baseline is None (初回確定)』分岐で無効化される」という第2の
+        # 実害経路が確定したため、本 warmup の抑制範囲を drift 再同期
+        # (_check_baseline_broken_reset とは別の needs_resync 経路) にも
+        # 拡張する (6960行目付近の抑制条件を参照)。
+        # トリガはOJAMA_FALL ENTRY (dwell中の毎frame延長を含む) と
+        # OJAMA_FALL→STABLE EXIT の両方: entry 側が無いと「雲混入直後・
+        # まだ1度もexitしていない」最初の drift-resync 発火 (実測: c13
+        # t=289.733 が該当) を防げない。
+        # enable_ojama_cnn_override_warmup=True の場合のみ有効。
+        # 作用点は cycle 71n override + drift 再同期抑制の2箇所のみ
+        # (設置反映経路 _update_landing_votes / LANDING_VOTE_SEC、
+        # _merge_diff_only 自体、_filter_transition_new_cnn_for_burst_guard
+        # 自体には一切触れない)。
+        if self._enable_ojama_cnn_override_warmup and (
+            ctx.state == BoardState.OJAMA_FALL
+            or (
+                prev_state == BoardState.OJAMA_FALL
+                and ctx.state == BoardState.STABLE
+            )
+        ):
+            ojama_override_warmup_until = (
+                time_sec + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+            )
+            if side == "1P":
+                self._ojama_override_exit_until_1p = ojama_override_warmup_until
+            else:
+                self._ojama_override_exit_until_2p = ojama_override_warmup_until
+
         # cycle 29 (2026-05-18): NEXT 移動検知ベースで grace + landing_vote 起動。
         # 既存の TSUMO_FALL → STABLE 経路は placement_inferrer で confirmed を
         # 物理推論済 (= ctx.confirmed_board 更新済)。 NEXT 検知 frame で
@@ -6288,6 +7318,26 @@ class RecognitionPipeline:
                         self._drift_resync_hsv_gate_suppressed_1p += 1
                     else:
                         self._drift_resync_hsv_gate_suppressed_2p += 1
+            # W25根治 第2弾 (2026-08-17、data/verify/diag_c13c22_recheck_2026-08-17/
+            # w25_guard_gap.md): おじゃま落下窓の白雲パーティクルが CNN⇔inferred
+            # の持続不一致を作り、この needs_resync を誘発 → sm.reset() で
+            # confirmed_board が丸ごと None化 → 直後の OJAMA_FALL→STABLE 遷移で
+            # enable_ojama_column_stack_fix ガードが「baseline is None (初回確定)」
+            # 分岐に落ちて無効化される、という第2の実害経路が実測で確定した。
+            # おじゃま落下 warmup 窓 (_ojama_override_exit_until_*、cycle 71n
+            # override 抑制と共用) 中は本 reset も抑制する。他2ガードと独立に
+            # 単独評価 (OR 条件、既存ガードと排他ではない)。
+            if self._enable_ojama_cnn_override_warmup:
+                _ojama_warmup_until = (
+                    self._ojama_override_exit_until_1p if side == "1P"
+                    else self._ojama_override_exit_until_2p
+                )
+                if time_sec < _ojama_warmup_until:
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_ojama_warmup_suppressed_1p += 1
+                    else:
+                        self._drift_resync_ojama_warmup_suppressed_2p += 1
             if not _drift_resync_suppress:
                 sm.reset(keep_match_state=True)
                 drift.reset()
@@ -6376,6 +7426,63 @@ class RecognitionPipeline:
             else:
                 self._landing_grace_2p = None
 
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # docs/KNOWN_WEAKNESSES.md W10 — infer_placement が NEXT 読取誤りで
+        # 誤色を確定すると、 着地直後 1 回限りの補正 (enable_landing_observed_color)
+        # では取りこぼし、 誤色が数秒間残ることがある (実測 c11 で 1.7 秒)。
+        # 着地時に登録された監視対象セル (self._landing_color_watch_1p/2p) を
+        # STABLE 確定盤面に対してのみ毎フレーム再チェックし、 CNN==HSV が一致
+        # した時点で即座に上書きする (physics_only 原則: NON-STABLE では不実行)。
+        # enable_landing_color_guard=False (既定) では watch リストが常に空の
+        # ため本ブロックは実質何もせず bit-identical。
+        # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17): cycle 71n
+        # override 発火セルもこの同じ watch リストに登録され、同じ再チェックを
+        # 受ける (下記登録ブロック参照)。両フラグとも False なら watch リストは
+        # 常に空のままなので bit-identical。
+        if (
+            (self._enable_landing_color_guard or self._enable_override_color_guard)
+            and ctx.state == BoardState.STABLE
+            and ctx.confirmed_board is not None
+            and frame_bgr is not None
+        ):
+            _watch = (
+                self._landing_color_watch_1p if side == "1P"
+                else self._landing_color_watch_2p
+            )
+            if _watch:
+                # 期限切れセルは監視終了 (無期限凍結を防ぐ)。
+                _active_watch = [
+                    (cell, deadline) for (cell, deadline) in _watch
+                    if deadline > time_sec
+                ]
+                if _active_watch:
+                    _guard_region = (
+                        DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+                    )
+                    _guard_classifier = getattr(self._reader, "_classifier", None)
+                    _guard_hsv_clf = getattr(
+                        _guard_classifier, "_hsv", _guard_classifier,
+                    )
+                    ctx.confirmed_board, _resolved_cells = (
+                        apply_persistent_landing_color_guard(
+                            ctx.confirmed_board,
+                            [cell for (cell, _d) in _active_watch],
+                            cnn_board,
+                            _guard_hsv_clf,
+                            frame_bgr,
+                            _guard_region,
+                        )
+                    )
+                    ctx.pending_board = ctx.confirmed_board.copy()
+                    _active_watch = [
+                        (cell, deadline) for (cell, deadline) in _active_watch
+                        if cell not in _resolved_cells
+                    ]
+                if side == "1P":
+                    self._landing_color_watch_1p = _active_watch
+                else:
+                    self._landing_color_watch_2p = _active_watch
+
         # cycle 71h: 着地後 vote refinement.
         # TSUMO_FALL→STABLE 着地時に登録された pending エントリの cnn 観測色を蓄積、
         # LANDING_VOTE_FRAMES 経過時に最頻値で confirmed_board の cell 色を更新.
@@ -6392,6 +7499,19 @@ class RecognitionPipeline:
             self._enable_chain_exit_warmup
             and ctx.state == BoardState.STABLE
             and time_sec < _chain_exit_until
+        )
+
+        # W25根治 案4: OJAMA_FALL→STABLE warmup 中は cycle 71n override の
+        # 発火のみを抑制する (history 蓄積は継続、_update_landing_votes には
+        # 適用しない — 作用点を cycle 71n override に限定するのが設計要件)。
+        _ojama_override_exit_until = (
+            self._ojama_override_exit_until_1p if side == "1P"
+            else self._ojama_override_exit_until_2p
+        )
+        in_ojama_override_warmup = (
+            self._enable_ojama_cnn_override_warmup
+            and ctx.state == BoardState.STABLE
+            and time_sec < _ojama_override_exit_until
         )
 
         # cycle 26 (A1): grace 中は updated 反映を skip (蓄積は継続)。
@@ -6418,6 +7538,10 @@ class RecognitionPipeline:
             )
             from collections import Counter as _CounterClass
             override_fired = False
+            # 持続誤認26件系統1 (2026-08-17): override が書き込んだセルを
+            # 記録し、 enable_override_color_guard=True なら watch リストへ
+            # 登録して CNN==HSV 一致による即時再訂正の対象にする。
+            _override_written_cells: list[tuple[int, int]] = []
             for r in range(BOARD_ROWS):
                 for c in range(BOARD_COLS):
                     cnn_v = int(cnn_board.get(r, c))
@@ -6451,16 +7575,36 @@ class RecognitionPipeline:
                             # cycle 26 (A1): grace 中は override skip
                             # (history append は続行、grace 終了後に発火)
                             # 機能C: chain exit warmup 中も override skip
-                            if in_grace or in_chain_exit_warmup:
+                            # W25根治 案4: ojama override warmup 中も skip
+                            # (白雲パーティクル誤観測の history 汚染を反映しない)
+                            if in_grace or in_chain_exit_warmup or in_ojama_override_warmup:
                                 continue
                             ctx.confirmed_board.set(r, c, most_common)
                             h_list.clear()
                             override_fired = True
+                            _override_written_cells.append((r, c))
             # cycle 71v: override が走った frame は gravity filter で
             # 浮きぷよ残留を最終 sweep. v51/v70 の背景誤認対策。
             if override_fired:
                 from src.board_state_machine import _apply_gravity_filter
                 _apply_gravity_filter(ctx.confirmed_board)
+            # 持続誤認26件系統1 (enable_override_color_guard, 2026-08-17):
+            # override 発火セルを既存の着地色 watch リストに合流登録する。
+            # フラグ OFF (既定) では _override_written_cells が使われず
+            # bit-identical。
+            if self._enable_override_color_guard and _override_written_cells:
+                _override_deadline = time_sec + self.LANDING_VOTE_SEC
+                _override_entries = [
+                    (cell, _override_deadline) for cell in _override_written_cells
+                ]
+                if side == "1P":
+                    self._landing_color_watch_1p = (
+                        self._landing_color_watch_1p + _override_entries
+                    )
+                else:
+                    self._landing_color_watch_2p = (
+                        self._landing_color_watch_2p + _override_entries
+                    )
         else:
             # STABLE 以外 → 履歴クリア (= state 切替で reset)
             if side == "1P":
@@ -6607,6 +7751,10 @@ class RecognitionPipeline:
                 ever_seen=ever_seen,
                 frame_bgr=frame_bgr,
                 region=region_for_validate,
+                enable_starvation_fix=self._enable_next_history_starvation_fix,
+                min_colors_for_validation=(
+                    self.NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION
+                ),
             )
         # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」遷移を記録。
         # prev_stable と current confirmed_board を比較する。
@@ -6838,6 +7986,8 @@ class RecognitionPipeline:
         ever_seen: set[int] | None = None,
         frame_bgr: "np.ndarray | None" = None,
         region: "object | None" = None,
+        enable_starvation_fix: bool = False,
+        min_colors_for_validation: int = 4,
     ) -> Board:
         """ネクスト履歴 整合性 + 浮きぷよ除去 (2026-05-10 FIX-B 拡張).
 
@@ -6849,6 +7999,14 @@ class RecognitionPipeline:
         cycle 71v-B (2026-05-15): ever_seen 集合で NEXT cap スクロールアウト対策.
         cycle 8 (2026-05-15, Innovation D): UNKNOWN→HSV 距離最小 seen 色 replace.
             frame_bgr + region 渡しなら HSV ベース、 無ければ UNKNOWN フォールバック.
+        W23根治 (2026-08-17, enable_starvation_fix): 試合開始直後 ever_seen が
+            min_colors_for_validation 色未満しか観測していない「飢餓状態」では、
+            和集合 (seen) が不完全で「履歴外色→強制置換」の前提 (4色ルールで
+            5色目を弾く) が成立しない。正しい観測色を誤って別の既知色へ
+            強制変換する事故 (docs/KNOWN_WEAKNESSES.md W23) を防ぐため、
+            enable_starvation_fix=True かつ飢餓中はステップ1を丸ごとスキップし
+            観測値をそのまま通す (ステップ2の浮きぷよ除去は継続実施)。
+            enable_starvation_fix=False (既定) では従来挙動と完全に bit-identical。
         """
         from src.board_state_machine import _apply_gravity_filter
         if not next_queue:
@@ -6862,8 +8020,16 @@ class RecognitionPipeline:
         if ever_seen is not None:
             seen.update(ever_seen)
         out = board.copy()
-        # 1. ネクスト履歴外色を 処理 (= 6 色全色出尽くし時はスキップ)
-        if len(seen) < 9:
+        seen_puyo_color_count = len({
+            col for col in seen
+            if col not in (COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN)
+        })
+        is_starving = (
+            enable_starvation_fix
+            and seen_puyo_color_count < min_colors_for_validation
+        )
+        # 1. ネクスト履歴外色を 処理 (= 6 色全色出尽くし時はスキップ、飢餓中もスキップ)
+        if len(seen) < 9 and not is_starving:
             # ever_seen から puyo 色 (= EMPTY/OJAMA/UNKNOWN 除く) を抽出
             seen_puyo_colors = {
                 col for col in seen

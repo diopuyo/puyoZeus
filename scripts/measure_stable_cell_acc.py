@@ -51,6 +51,7 @@ from src.board import (
     COLOR_YELLOW,
 )
 from src.board_state_machine import BoardState
+from src.production_config import recognition_load_default_kwargs
 from src.recognition_evaluator import compute_avg_puyo_count
 from src.recognition_pipeline import RecognitionPipeline
 # ============================
@@ -355,6 +356,71 @@ def _resolve_flag(value: Optional[bool], flag_name: str) -> bool:
     return bool(sig.parameters[flag_name].default)
 
 
+def resolve_production_recognition_flags(
+    args: object, use_production_recognition: bool,
+) -> dict:
+    """全域無悪化ゲート6フラグ (RECOGNITION_ADOPTED) の実効値を解決する。
+
+    2026-08-13 是正 (横展開監査 docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1):
+    本スクリプト (物差し) は従来これら6フラグを --enable-effect-gate 等の
+    明示指定が無い限り全て無効のまま測定していた (「本番より劣化した認識で
+    精度を測っていた」事故、visualize_recognition.py と同型)。
+
+    use_production_recognition=True (既定、--no-production-recognition で
+    無効化) のとき src.production_config.recognition_load_default_kwargs() の
+    採用値を自動適用する。CLI で明示 ON にされていればそれを優先する
+    (OR 合成、store_true 系のため明示 OFF は元々存在しない)。
+
+    **物差しの継続性**: --no-production-recognition を明示指定すると、6フラグは
+    各 CLI 引数を明示指定しない限り全て無効 (旧 default) のまま動く。
+    過去の測定 JSON との bit-identical 比較にはこちらを使うこと。
+
+    Args:
+        args: argparse.Namespace (または同等の属性を持つ任意オブジェクト、
+            テスト容易化のため型を限定しない)。
+        use_production_recognition: production_config の自動適用可否。
+
+    Returns:
+        {"enable_effect_gate": bool, ..., "burst_gate_open_threshold": float|None}
+        の13キー dict (2026-08-15: enable_ojama_fall_placement_override 追加、
+        2026-08-17: enable_patch_fp_hsv_guard 追加、2026-08-17: 5フラグ一括
+        (floating_gap_restore/landing_color_guard/override_color_guard/
+        ojama_column_stack_fix/next_history_starvation_fix) 追加、
+        user承認・構成F)。
+        呼び出し側は main() の該当ローカル変数へ代入する。
+    """
+    production = (
+        recognition_load_default_kwargs() if use_production_recognition else {}
+    )
+    resolved: dict = {}
+    for name in (
+        "enable_effect_gate", "enable_burst_guard_v2",
+        "enable_transition_merge_guard", "enable_hidden_row_burst_guard",
+        "enable_match_transition_debounce",
+        # 2026-08-15 追加 (RECOGNITION_ADOPTED 採用に伴う横展開是正)。
+        "enable_ojama_fall_placement_override",
+        # 2026-08-17 追加 (RECOGNITION_ADOPTED 採用 --enable-patch-fp-hsv-guard
+        # の配線漏れ是正、W13根治案2)。
+        "enable_patch_fp_hsv_guard",
+        # 2026-08-17 追加 (RECOGNITION_ADOPTED 採用、5フラグ一括・user承認・
+        # 構成F)。
+        "enable_floating_gap_restore",
+        "enable_landing_color_guard",
+        "enable_override_color_guard",
+        "enable_ojama_column_stack_fix",
+        "enable_next_history_starvation_fix",
+    ):
+        resolved[name] = bool(getattr(args, name, False)) or bool(
+            production.get(name, False)
+        )
+    threshold = getattr(args, "burst_gate_open_threshold", None)
+    resolved["burst_gate_open_threshold"] = (
+        threshold if threshold is not None
+        else production.get("burst_gate_open_threshold")
+    )
+    return resolved
+
+
 def _make_pipeline_cnn(
     video_id: str,
     enable_constraint_fill: bool = True,
@@ -421,6 +487,19 @@ def _make_pipeline_cnn(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15): OJAMA_FALL 実設置 override 修正版。
+    # scripts/collect_boards_lean.py / visualize_recognition.py と同一パターン。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17): W13根治案2 tier1 patch-NCC HSV
+    # AND ガード。末尾追加 (同上の理由)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F)。
+    # 末尾追加 (同上の理由)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -527,6 +606,13 @@ def _make_pipeline_cnn(
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -804,6 +890,17 @@ def _process_video(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15、末尾追加)。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、末尾追加)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F、
+    # 末尾追加)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -893,6 +990,13 @@ def _process_video(
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -982,6 +1086,20 @@ def _process_video_worker(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15): 末尾追加 (同上の理由、
+    # executor.submit の位置引数タプルにも同じ末尾位置で追加)。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17): 末尾追加 (同上の理由、
+    # executor.submit の位置引数タプルにも同じ末尾位置で追加)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F):
+    # 末尾追加 (同上の理由、executor.submit の位置引数タプルにも同じ末尾
+    # 位置で追加)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1046,6 +1164,13 @@ def _process_video_worker(
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2645,6 +2770,94 @@ def _parse_args() -> argparse.Namespace:
             "既定は無効 (後方互換)。"
         ),
     )
+    p.add_argument(
+        "--enable-ojama-fall-placement-override", action="store_true", default=False,
+        dest="enable_ojama_fall_placement_override",
+        help=(
+            "案2修正版 (2026-08-13導入/2026-08-15 evidence判定修正、"
+            "RECOGNITION_ADOPTED 採用 2026-08-15) を有効化する。OJAMA_FALL "
+            "滞在中に実設置の確定証拠を検知したら settle 判定を待たず即座に "
+            "STABLE へ復帰する。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-patch-fp-hsv-guard", action="store_true", default=False,
+        dest="enable_patch_fp_hsv_guard",
+        help=(
+            "W13 根治 案2 (2026-08-17、RECOGNITION_ADOPTED 採用 2026-08-17) を"
+            "有効化する。tier1 patch-NCC の EMPTY 判定に HSV 色域 AND ガードを"
+            "追加し、試合開始直後の背景指紋強制採取が既設置ぷよを『背景』として"
+            "焼き込み以降そのセルが無条件 EMPTY 化される事故 "
+            "(docs/KNOWN_WEAKNESSES.md W13) を防ぐ。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-floating-gap-restore", action="store_true", default=False,
+        dest="enable_floating_gap_restore",
+        help=(
+            "R2浮きぷよ是正 (RECOGNITION_ADOPTED 採用 2026-08-17、user承認・"
+            "5フラグ一括構成F) を有効化する。TSUMO_FALL/OJAMA_FALL→STABLE "
+            "遷移で「下が空・上に puyo」の物理矛盾を検出したら、遷移前 "
+            "confirmed_board から色を復元する。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-landing-color-guard", action="store_true", default=False,
+        dest="enable_landing_color_guard",
+        help=(
+            "W10観測補正継続ガード (RECOGNITION_ADOPTED 採用 2026-08-17、"
+            "user承認・5フラグ一括構成F) を有効化する。着地セル色の継続監視"
+            "ガード。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-override-color-guard", action="store_true", default=False,
+        dest="enable_override_color_guard",
+        help=(
+            "cycle71n長期投票overrideの安全網 (RECOGNITION_ADOPTED 採用 "
+            "2026-08-17、user承認・5フラグ一括構成F) を有効化する。既定は"
+            "無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-column-stack-fix", action="store_true", default=False,
+        dest="enable_ojama_column_stack_fix",
+        help=(
+            "持続誤認26件系統2根治 (RECOGNITION_ADOPTED 採用 2026-08-17、"
+            "user承認・5フラグ一括構成F) を有効化する。おじゃま配分の同一列"
+            "二重書き込み衝突を根治する。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-next-history-starvation-fix", action="store_true", default=False,
+        dest="enable_next_history_starvation_fix",
+        help=(
+            "W23根治 (RECOGNITION_ADOPTED 採用 2026-08-17、user承認・5フラグ"
+            "一括構成F) を有効化する。_validate_next_history の ever_seen "
+            "飢餓状態対策。既定は無効 (後方互換)。"
+        ),
+    )
+    # 本番構成の自動適用 (2026-08-13 是正、横展開監査 P1)。
+    # scripts/visualize_recognition.py / visualize_advantage_overlay.py と同一パターン。
+    p.add_argument(
+        "--production-recognition", action="store_true",
+        dest="production_recognition",
+        help=(
+            "上記バーストガード系6フラグ (src.production_config.RECOGNITION_"
+            "ADOPTED) を自動適用する。既定 True 化により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-production-recognition を使う。"
+        ),
+    )
+    p.add_argument(
+        "--no-production-recognition", action="store_true", default=False,
+        dest="no_production_recognition",
+        help=(
+            "本番採用の認識フラグ群の自動適用を明示的に無効化し、過去の測定と "
+            "bit-identical な旧構成 (各フラグを明示指定しない限り全て無効) を "
+            "再現する (2026-08-13 追加、物差しの継続性用)。"
+        ),
+    )
     return p.parse_args()
 
 
@@ -2722,6 +2935,17 @@ def _collect_results(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15、末尾追加)。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、末尾追加)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F、
+    # 末尾追加)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -2815,6 +3039,13 @@ def _collect_results(
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_online_hsv_refresh=enable_online_hsv_refresh,
             enable_match_transition_debounce=enable_match_transition_debounce,
+            enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+            enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+            enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_landing_color_guard=enable_landing_color_guard,
+            enable_override_color_guard=enable_override_color_guard,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+            enable_next_history_starvation_fix=enable_next_history_starvation_fix,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -2861,6 +3092,13 @@ def _collect_results(
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
 
 
@@ -2922,6 +3160,17 @@ def _collect_serial(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15、末尾追加)。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、末尾追加)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F、
+    # 末尾追加)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -2977,6 +3226,13 @@ def _collect_serial(
             enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
             enable_online_hsv_refresh=enable_online_hsv_refresh,
             enable_match_transition_debounce=enable_match_transition_debounce,
+            enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+            enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+            enable_floating_gap_restore=enable_floating_gap_restore,
+            enable_landing_color_guard=enable_landing_color_guard,
+            enable_override_color_guard=enable_override_color_guard,
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+            enable_next_history_starvation_fix=enable_next_history_starvation_fix,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3049,6 +3305,22 @@ def _collect_parallel(
     enable_hidden_row_burst_guard: bool = False,
     enable_online_hsv_refresh: bool = False,
     enable_match_transition_debounce: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-15): 末尾追加 (同上の理由、下の
+    # executor.submit 位置引数タプルにも同じ末尾位置で追加すること)。
+    enable_ojama_fall_placement_override: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17): 末尾追加 (同上の理由、下の
+    # executor.submit 位置引数タプルにも同じ末尾位置で追加すること。
+    # _process_video_worker の末尾引数順と完全一致させること)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F):
+    # 末尾追加 (同上の理由、下の executor.submit 位置引数タプルにも同じ末尾
+    # 位置で追加すること。_process_video_worker の末尾引数順と完全一致
+    # させること)。
+    enable_floating_gap_restore: bool = False,
+    enable_landing_color_guard: bool = False,
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    enable_next_history_starvation_fix: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3118,6 +3390,20 @@ def _collect_parallel(
                 enable_hidden_row_burst_guard,
                 enable_online_hsv_refresh,
                 enable_match_transition_debounce,
+                # RECOGNITION_ADOPTED 採用 (2026-08-15): _process_video_worker
+                # の末尾引数と完全一致させること (順序ズレ厳禁)。
+                enable_ojama_fall_placement_override,
+                # RECOGNITION_ADOPTED 採用 (2026-08-17): _process_video_worker
+                # の末尾引数と完全一致させること (順序ズレ厳禁)。
+                enable_patch_fp_hsv_guard,
+                # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・
+                # 構成F): _process_video_worker の末尾引数と完全一致させる
+                # こと (順序ズレ厳禁)。
+                enable_floating_gap_restore,
+                enable_landing_color_guard,
+                enable_override_color_guard,
+                enable_ojama_column_stack_fix,
+                enable_next_history_starvation_fix,
             )
             futures[fut] = vid
 
@@ -3354,23 +3640,39 @@ def main() -> int:
     # デフォルト True = 従来挙動完全一致 (backwards compat)。
     force_in_match: bool = bool(getattr(args, "force_in_match", True))
     # 全域無悪化ゲート (2026-08-06): バーストガード系フラグ 6 個。
-    # 既定は全 OFF = 従来挙動完全一致 (backwards compat)。
-    enable_effect_gate: bool = bool(getattr(args, "enable_effect_gate", False))
-    enable_burst_guard_v2: bool = bool(getattr(args, "enable_burst_guard_v2", False))
-    enable_transition_merge_guard: bool = bool(
-        getattr(args, "enable_transition_merge_guard", False)
+    # 2026-08-13 是正 (横展開監査 P1): production_recognition (既定 True) で
+    # src.production_config.RECOGNITION_ADOPTED の採用値を自動適用する。
+    # --no-production-recognition で無効化すると従来通り「各フラグを明示指定
+    # しない限り全て無効」の旧挙動に完全に戻る (物差しの継続性、過去測定との
+    # bit-identical 比較用)。
+    use_production_recognition: bool = not bool(
+        getattr(args, "no_production_recognition", False)
     )
-    burst_gate_open_threshold: Optional[float] = getattr(
-        args, "burst_gate_open_threshold", None
-    )
-    enable_hidden_row_burst_guard: bool = bool(
-        getattr(args, "enable_hidden_row_burst_guard", False)
-    )
+    _prf = resolve_production_recognition_flags(args, use_production_recognition)
+    enable_effect_gate: bool = _prf["enable_effect_gate"]
+    enable_burst_guard_v2: bool = _prf["enable_burst_guard_v2"]
+    enable_transition_merge_guard: bool = _prf["enable_transition_merge_guard"]
+    burst_gate_open_threshold: Optional[float] = _prf["burst_gate_open_threshold"]
+    enable_hidden_row_burst_guard: bool = _prf["enable_hidden_row_burst_guard"]
     enable_online_hsv_refresh: bool = bool(
         getattr(args, "enable_online_hsv_refresh", False)
     )
-    enable_match_transition_debounce: bool = bool(
-        getattr(args, "enable_match_transition_debounce", False)
+    enable_match_transition_debounce: bool = _prf["enable_match_transition_debounce"]
+    enable_ojama_fall_placement_override: bool = _prf["enable_ojama_fall_placement_override"]
+    enable_patch_fp_hsv_guard: bool = _prf["enable_patch_fp_hsv_guard"]
+    # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F)。
+    enable_floating_gap_restore: bool = _prf["enable_floating_gap_restore"]
+    enable_landing_color_guard: bool = _prf["enable_landing_color_guard"]
+    enable_override_color_guard: bool = _prf["enable_override_color_guard"]
+    enable_ojama_column_stack_fix: bool = _prf["enable_ojama_column_stack_fix"]
+    enable_next_history_starvation_fix: bool = (
+        _prf["enable_next_history_starvation_fix"]
+    )
+    print(
+        f"[measure] production_recognition="
+        f"{'ON' if use_production_recognition else 'OFF'} "
+        "(2026-08-13 是正、src.production_config が単一情報源。"
+        "--no-production-recognition で旧構成を再現可能)"
     )
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
@@ -3485,6 +3787,13 @@ def main() -> int:
         enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
         enable_online_hsv_refresh=enable_online_hsv_refresh,
         enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -3579,6 +3888,10 @@ def main() -> int:
             "enable_initial_confirm_vote": _resolve_flag(
                 enable_initial_confirm_vote, "enable_initial_confirm_vote"
             ),
+            # production_recognition の on/off を記録 (2026-08-13 追加、後日比較用)。
+            # True (既定) = RECOGNITION_ADOPTED 自動適用構成、
+            # False (--no-production-recognition) = 過去測定と bit-identical な旧構成。
+            "use_production_recognition": use_production_recognition,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

@@ -1,0 +1,7382 @@
+[
+  {
+    "sheet_id": "000_c109_1P_f652064",
+    "anchor_status": "ok",
+    "video_filename": "video_c109.mp4",
+    "frame_idx": 652064,
+    "t_sec_at_collection": 10867.733,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/000_c109_1P_f652064_frame.png",
+    "reference_frame_sha256": "b3dca44caf79e808e6003111171a81161ed025ffb86856a922861cfed8f547f5",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/000_c109_1P_f652064_roi.png",
+    "board_roi_sha256": "7f7dde8a600b7f465a33addaeb97b1ef10c69894c6e9080c761c82f6ee919677",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        9,
+        0
+      ],
+      [
+        9,
+        9,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        5,
+        1,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        9,
+        9,
+        9
+      ],
+      [
+        1,
+        5,
+        0,
+        5,
+        5,
+        2
+      ],
+      [
+        3,
+        5,
+        0,
+        1,
+        5,
+        1
+      ],
+      [
+        3,
+        1,
+        5,
+        3,
+        1,
+        1
+      ],
+      [
+        3,
+        1,
+        3,
+        1,
+        3,
+        3
+      ],
+      [
+        5,
+        5,
+        5,
+        3,
+        5,
+        3
+      ],
+      [
+        3,
+        1,
+        2,
+        5,
+        3,
+        5
+      ],
+      [
+        3,
+        3,
+        1,
+        2,
+        2,
+        5
+      ],
+      [
+        1,
+        1,
+        2,
+        3,
+        3,
+        3
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.8056,
+    "has_ojama": true,
+    "video_id": "c109",
+    "side": "1P",
+    "t_sec": 10867.733
+  },
+  {
+    "sheet_id": "001_c109_2P_f66674",
+    "anchor_status": "ok",
+    "video_filename": "video_c109.mp4",
+    "frame_idx": 66674,
+    "t_sec_at_collection": 1111.233,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/001_c109_2P_f66674_frame.png",
+    "reference_frame_sha256": "a1c3e5ace273aed2a513da08d4611acfc84696de479bdea807dffe519fec2438",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/001_c109_2P_f66674_roi.png",
+    "board_roi_sha256": "707cfbd49b8b5cfafdaed340d5ca6400d74a4b94dcaf729d15ba70fd79e62ddb",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        1,
+        3,
+        0,
+        0,
+        3,
+        3
+      ],
+      [
+        5,
+        1,
+        1,
+        1,
+        1,
+        5
+      ],
+      [
+        5,
+        3,
+        1,
+        3,
+        9,
+        4
+      ],
+      [
+        5,
+        3,
+        3,
+        9,
+        5,
+        4
+      ],
+      [
+        1,
+        1,
+        4,
+        4,
+        5,
+        3
+      ],
+      [
+        1,
+        5,
+        5,
+        1,
+        4,
+        3
+      ],
+      [
+        4,
+        4,
+        4,
+        1,
+        5,
+        5
+      ],
+      [
+        1,
+        1,
+        1,
+        3,
+        1,
+        5
+      ],
+      [
+        4,
+        3,
+        5,
+        3,
+        1,
+        1
+      ],
+      [
+        4,
+        4,
+        3,
+        5,
+        4,
+        5
+      ],
+      [
+        3,
+        3,
+        5,
+        5,
+        3,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.9306,
+    "has_ojama": true,
+    "video_id": "c109",
+    "side": "2P",
+    "t_sec": 1111.233
+  },
+  {
+    "sheet_id": "002_c11_2P_f54124",
+    "anchor_status": "ok",
+    "video_filename": "video_c11.mp4",
+    "frame_idx": 54124,
+    "t_sec_at_collection": 902.067,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/002_c11_2P_f54124_frame.png",
+    "reference_frame_sha256": "ef3755a4d72fb0547b9e0d4e306224568afc1b70cda05e89e6bc8551b115bae5",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/002_c11_2P_f54124_roi.png",
+    "board_roi_sha256": "3cf09e898532b0ae317b074dadeaeecfaf1e5fe0825021c0daf7520e777794a8",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        4,
+        1,
+        4,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        4,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        3,
+        4,
+        1,
+        1,
+        0
+      ],
+      [
+        4,
+        1,
+        3,
+        4,
+        1,
+        0
+      ],
+      [
+        4,
+        4,
+        3,
+        4,
+        1,
+        3
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        9
+      ],
+      [
+        3,
+        4,
+        4,
+        1,
+        1,
+        1
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.5139,
+    "has_ojama": true,
+    "video_id": "c11",
+    "side": "2P",
+    "t_sec": 902.067
+  },
+  {
+    "sheet_id": "003_c17_2P_f17284",
+    "anchor_status": "ok",
+    "video_filename": "video_c17.mp4",
+    "frame_idx": 17284,
+    "t_sec_at_collection": 288.067,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/003_c17_2P_f17284_frame.png",
+    "reference_frame_sha256": "c3d01bbc3e0eb65309d85e4c908227f31d01a39c004c67dbe69f731d4846a9d1",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/003_c17_2P_f17284_roi.png",
+    "board_roi_sha256": "1721cb1e48de4df0ac9fd9c0f01c3afc6fcff2a4d4cf853c0a671547c5439500",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        4
+      ],
+      [
+        0,
+        9,
+        9,
+        1,
+        4,
+        4
+      ],
+      [
+        0,
+        4,
+        3,
+        4,
+        5,
+        3
+      ],
+      [
+        1,
+        3,
+        1,
+        1,
+        4,
+        4
+      ],
+      [
+        1,
+        4,
+        1,
+        4,
+        5,
+        3
+      ],
+      [
+        1,
+        5,
+        4,
+        4,
+        5,
+        9
+      ],
+      [
+        5,
+        1,
+        1,
+        1,
+        9,
+        9
+      ],
+      [
+        4,
+        3,
+        9,
+        5,
+        9,
+        9
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        1,
+        3
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        3,
+        3
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.9167,
+    "has_ojama": true,
+    "video_id": "c17",
+    "side": "2P",
+    "t_sec": 288.067
+  },
+  {
+    "sheet_id": "004_c21_1P_f144486",
+    "anchor_status": "ok",
+    "video_filename": "video_c21.mp4",
+    "frame_idx": 144486,
+    "t_sec_at_collection": 2408.1,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/004_c21_1P_f144486_frame.png",
+    "reference_frame_sha256": "3382cb0b9203a501269cd88d70d7f4dc0c77126815fc23a57d22e2b143ab776d",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/004_c21_1P_f144486_roi.png",
+    "board_roi_sha256": "222892074a6791a4beeb8e54ee2f3e2608d8f9497e23aab36ae9686a75de949e",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        9,
+        0,
+        1,
+        3,
+        9,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        4,
+        3,
+        1
+      ],
+      [
+        2,
+        9,
+        1,
+        3,
+        3,
+        1
+      ],
+      [
+        2,
+        1,
+        4,
+        4,
+        2,
+        3
+      ],
+      [
+        4,
+        2,
+        1,
+        4,
+        3,
+        3
+      ],
+      [
+        2,
+        2,
+        1,
+        3,
+        2,
+        2
+      ],
+      [
+        4,
+        1,
+        2,
+        3,
+        4,
+        4
+      ],
+      [
+        4,
+        4,
+        1,
+        2,
+        2,
+        2
+      ],
+      [
+        1,
+        1,
+        3,
+        4,
+        4,
+        4
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.7083,
+    "has_ojama": true,
+    "video_id": "c21",
+    "side": "1P",
+    "t_sec": 2408.1
+  },
+  {
+    "sheet_id": "005_c10_2P_f15517",
+    "anchor_status": "ok",
+    "video_filename": "video_c10.mp4",
+    "frame_idx": 15517,
+    "t_sec_at_collection": 258.617,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/005_c10_2P_f15517_frame.png",
+    "reference_frame_sha256": "00e17004842bbadea1680e4fa3226856741d1f41b06a3fb3e909fc80569eefdb",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/005_c10_2P_f15517_roi.png",
+    "board_roi_sha256": "3a5cf85d74aac79630737e725287ded16edd4af34c3289b082db85ee773929a6",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        4,
+        9,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        4,
+        4,
+        0,
+        3,
+        0
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.2917,
+    "has_ojama": true,
+    "video_id": "c10",
+    "side": "2P",
+    "t_sec": 258.617
+  },
+  {
+    "sheet_id": "006_c17_2P_f17006",
+    "anchor_status": "ok",
+    "video_filename": "video_c17.mp4",
+    "frame_idx": 17006,
+    "t_sec_at_collection": 283.433,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/006_c17_2P_f17006_frame.png",
+    "reference_frame_sha256": "a7390601466f23dd645163a898f8aa84511f209db75890e4e7bc1ad381fb09db",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/006_c17_2P_f17006_roi.png",
+    "board_roi_sha256": "9181961a6e1ba1066764d0995498905a65b720647e7c1be75a2b84a074ed3005",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        9,
+        9
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        1,
+        3
+      ],
+      [
+        9,
+        0,
+        9,
+        9,
+        3,
+        3
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.125,
+    "has_ojama": true,
+    "video_id": "c17",
+    "side": "2P",
+    "t_sec": 283.433
+  },
+  {
+    "sheet_id": "007_c23_2P_f84251",
+    "anchor_status": "ok",
+    "video_filename": "video_c23.mp4",
+    "frame_idx": 84251,
+    "t_sec_at_collection": 1405.588,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/007_c23_2P_f84251_frame.png",
+    "reference_frame_sha256": "5bf0d500191d498c55033c21cf29082d1204ee639ad9eb3e80dbce35f6558502",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/007_c23_2P_f84251_roi.png",
+    "board_roi_sha256": "91b222f291530b981651f2a1ad2d2742d64be0660b5bbeab24143a09a908e968",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        3,
+        3,
+        4,
+        4,
+        1,
+        3
+      ],
+      [
+        3,
+        3,
+        4,
+        9,
+        9,
+        1
+      ],
+      [
+        1,
+        1,
+        1,
+        4,
+        4,
+        1
+      ],
+      [
+        1,
+        4,
+        9,
+        4,
+        1,
+        3
+      ],
+      [
+        9,
+        9,
+        9,
+        1,
+        1,
+        1
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.4722,
+    "has_ojama": true,
+    "video_id": "c23",
+    "side": "2P",
+    "t_sec": 1405.588
+  },
+  {
+    "sheet_id": "008_c18_2P_f49624",
+    "anchor_status": "ok",
+    "video_filename": "video_c18.mp4",
+    "frame_idx": 49624,
+    "t_sec_at_collection": 1654.133,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/008_c18_2P_f49624_frame.png",
+    "reference_frame_sha256": "d8ca72fee776c5e67edde51347f846ede98dc109c69dfe8c876a653cd8c56a05",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/008_c18_2P_f49624_roi.png",
+    "board_roi_sha256": "63646871adc9eaf216f43453d4a71c0a2b40778a87cd6450468e2416ab50a165",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        2,
+        9,
+        3,
+        3,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        4,
+        1,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        3,
+        1,
+        0,
+        0
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.2778,
+    "has_ojama": true,
+    "video_id": "c18",
+    "side": "2P",
+    "t_sec": 1654.133
+  },
+  {
+    "sheet_id": "009_c10_2P_f80448",
+    "anchor_status": "ok",
+    "video_filename": "video_c10.mp4",
+    "frame_idx": 80448,
+    "t_sec_at_collection": 1340.8,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/009_c10_2P_f80448_frame.png",
+    "reference_frame_sha256": "9bc3b985685af746a12604371f4dc02e0d4143292562441f6c78ccb0453fd5b0",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/009_c10_2P_f80448_roi.png",
+    "board_roi_sha256": "ff662eb775b1133e3f64344740775e425416fc7a74150453955b34b40682c16d",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        9,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        5,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        5,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        4,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        1,
+        0,
+        5,
+        1
+      ],
+      [
+        0,
+        5,
+        5,
+        0,
+        4,
+        1
+      ],
+      [
+        0,
+        1,
+        5,
+        0,
+        5,
+        5
+      ],
+      [
+        0,
+        4,
+        1,
+        5,
+        5,
+        5
+      ],
+      [
+        1,
+        1,
+        5,
+        5,
+        5,
+        1
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.4444,
+    "has_ojama": true,
+    "video_id": "c10",
+    "side": "2P",
+    "t_sec": 1340.8
+  },
+  {
+    "sheet_id": "010_c96_2P_f951622",
+    "anchor_status": "ok",
+    "video_filename": "_hold_video_c96.mp4",
+    "frame_idx": 951622,
+    "t_sec_at_collection": 15860.367,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/010_c96_2P_f951622_frame.png",
+    "reference_frame_sha256": "427ebe6958b899dc723954b988f22a4536640a4c914fff007f5f3ceaa71e77dd",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/010_c96_2P_f951622_roi.png",
+    "board_roi_sha256": "af5327d2917d151a87e56b4ad4cfc1b3004cb8f296cb2498f0984d9a99ddf990",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        9,
+        3
+      ],
+      [
+        2,
+        2,
+        2,
+        2,
+        2,
+        3
+      ],
+      [
+        5,
+        3,
+        5,
+        2,
+        1,
+        2
+      ],
+      [
+        5,
+        5,
+        3,
+        5,
+        5,
+        2
+      ],
+      [
+        3,
+        3,
+        5,
+        1,
+        5,
+        1
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.4028,
+    "has_ojama": true,
+    "video_id": "c96",
+    "side": "2P",
+    "t_sec": 15860.367
+  },
+  {
+    "sheet_id": "011_c11_2P_f54022",
+    "anchor_status": "ok",
+    "video_filename": "video_c11.mp4",
+    "frame_idx": 54022,
+    "t_sec_at_collection": 900.367,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/011_c11_2P_f54022_frame.png",
+    "reference_frame_sha256": "d5ea6e67f477c4ae3b3ceda15a3a10a0ef55fb8df4b3445aec3f21c77740ca62",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/011_c11_2P_f54022_roi.png",
+    "board_roi_sha256": "672a4938a682cdebe33c7d8eff9a2b3dc06919800e55ef2bf38850a20553e071",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        4,
+        1,
+        1,
+        0
+      ],
+      [
+        4,
+        1,
+        3,
+        4,
+        1,
+        0
+      ],
+      [
+        4,
+        4,
+        3,
+        4,
+        1,
+        3
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        1,
+        9
+      ],
+      [
+        3,
+        4,
+        4,
+        1,
+        1,
+        1
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.4444,
+    "has_ojama": true,
+    "video_id": "c11",
+    "side": "2P",
+    "t_sec": 900.367
+  },
+  {
+    "sheet_id": "012_c17_1P_f16884",
+    "anchor_status": "ok",
+    "video_filename": "video_c17.mp4",
+    "frame_idx": 16884,
+    "t_sec_at_collection": 281.4,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/012_c17_1P_f16884_frame.png",
+    "reference_frame_sha256": "5593488f8a884f9f22d571da9a8a7bc297d152472fc8b5514ca7567e78c6b7d5",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/012_c17_1P_f16884_roi.png",
+    "board_roi_sha256": "c887993d4cf63d8a43543a81777b64c99cbdd7576efa651928f116d5f8930024",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        10
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        4,
+        1,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        3,
+        4,
+        3,
+        5,
+        1
+      ],
+      [
+        0,
+        3,
+        1,
+        1,
+        1,
+        3
+      ],
+      [
+        1,
+        5,
+        1,
+        3,
+        5,
+        9
+      ],
+      [
+        1,
+        4,
+        4,
+        9,
+        9,
+        9
+      ],
+      [
+        4,
+        5,
+        4,
+        1,
+        9,
+        9
+      ],
+      [
+        9,
+        1,
+        1,
+        9,
+        9,
+        9
+      ],
+      [
+        3,
+        1,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        5,
+        5,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        3,
+        5,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        1,
+        1,
+        9,
+        9,
+        9,
+        9
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.8611,
+    "has_ojama": true,
+    "video_id": "c17",
+    "side": "1P",
+    "t_sec": 281.4
+  },
+  {
+    "sheet_id": "013_c13_2P_f17458",
+    "anchor_status": "ok",
+    "video_filename": "video_c13.mp4",
+    "frame_idx": 17458,
+    "t_sec_at_collection": 290.967,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/013_c13_2P_f17458_frame.png",
+    "reference_frame_sha256": "bcc5ad13e0d7610c4ea003c0ca54a3b62f70c72fc70fed0c167a8bd3471c0866",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/013_c13_2P_f17458_roi.png",
+    "board_roi_sha256": "50c35f1d375059d5ea9fafb3799431f4a1637c72ba35cac13d304a075ad80053",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        9,
+        0,
+        9,
+        9,
+        4
+      ],
+      [
+        0,
+        9,
+        9,
+        9,
+        9,
+        4
+      ],
+      [
+        0,
+        9,
+        9,
+        2,
+        4,
+        3
+      ],
+      [
+        0,
+        9,
+        9,
+        3,
+        2,
+        4
+      ],
+      [
+        0,
+        4,
+        9,
+        3,
+        2,
+        5
+      ],
+      [
+        9,
+        4,
+        9,
+        4,
+        3,
+        9
+      ],
+      [
+        9,
+        2,
+        5,
+        4,
+        3,
+        2
+      ],
+      [
+        9,
+        4,
+        3,
+        2,
+        9,
+        9
+      ],
+      [
+        9,
+        9,
+        3,
+        9,
+        9,
+        9
+      ],
+      [
+        9,
+        9,
+        5,
+        2,
+        9,
+        9
+      ],
+      [
+        3,
+        3,
+        5,
+        9,
+        9,
+        9
+      ],
+      [
+        5,
+        5,
+        2,
+        4,
+        4,
+        9
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.9167,
+    "has_ojama": true,
+    "video_id": "c13",
+    "side": "2P",
+    "t_sec": 290.967
+  },
+  {
+    "sheet_id": "014_c11_1P_f54758",
+    "anchor_status": "ok",
+    "video_filename": "video_c11.mp4",
+    "frame_idx": 54758,
+    "t_sec_at_collection": 912.633,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/014_c11_1P_f54758_frame.png",
+    "reference_frame_sha256": "7bbeb6df7f0589b9e410aa7a390aeb01ac2798f2c0e1fe7bf549cc8ff91a22a4",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/014_c11_1P_f54758_roi.png",
+    "board_roi_sha256": "cd760f3c8b99b688d832bb85f65297ee75cf2f6f26f0c7182426b9829f3b1270",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        9,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        9,
+        5,
+        0,
+        0,
+        5,
+        3
+      ],
+      [
+        9,
+        5,
+        0,
+        5,
+        1,
+        5
+      ],
+      [
+        3,
+        4,
+        0,
+        4,
+        1,
+        5
+      ],
+      [
+        3,
+        3,
+        1,
+        4,
+        5,
+        4
+      ],
+      [
+        3,
+        4,
+        4,
+        3,
+        4,
+        4
+      ],
+      [
+        1,
+        1,
+        4,
+        1,
+        5,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5417,
+    "has_ojama": true,
+    "video_id": "c11",
+    "side": "1P",
+    "t_sec": 912.633
+  },
+  {
+    "sheet_id": "015_c20_2P_f85184",
+    "anchor_status": "ok",
+    "video_filename": "video_c20.mp4",
+    "frame_idx": 85184,
+    "t_sec_at_collection": 1419.733,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/015_c20_2P_f85184_frame.png",
+    "reference_frame_sha256": "bc7cd2f7a27319daf6a780dc7ad3db98c67e7e14e4d1a466e4d49f6e1f680e3c",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/015_c20_2P_f85184_roi.png",
+    "board_roi_sha256": "9c892e5ed40b066faf3f12fa372dc45d4bf15c71cfa648d7aae64aeccd958a1c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        9,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        9,
+        2,
+        9
+      ],
+      [
+        0,
+        0,
+        9,
+        1,
+        3,
+        9
+      ],
+      [
+        0,
+        0,
+        5,
+        2,
+        3,
+        5
+      ],
+      [
+        1,
+        3,
+        5,
+        5,
+        2,
+        1
+      ],
+      [
+        9,
+        9,
+        2,
+        2,
+        5,
+        3
+      ],
+      [
+        9,
+        9,
+        1,
+        1,
+        1,
+        3
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.4167,
+    "has_ojama": true,
+    "video_id": "c20",
+    "side": "2P",
+    "t_sec": 1419.733
+  },
+  {
+    "sheet_id": "016_c22_2P_f107306",
+    "anchor_status": "ok",
+    "video_filename": "video_c22.mp4",
+    "frame_idx": 107306,
+    "t_sec_at_collection": 1788.433,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/016_c22_2P_f107306_frame.png",
+    "reference_frame_sha256": "5a5ee631bc017e5e02413cda034635273fbc68e78a125957b9541d4a21d2ad06",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/016_c22_2P_f107306_roi.png",
+    "board_roi_sha256": "43d0cc87d16e5151f8b8a1734d340187b7d5b9e09caced0f00a6c00a797f1793",
+    "init_grid": [
+      [
+        10,
+        3,
+        0,
+        0,
+        10,
+        10
+      ],
+      [
+        5,
+        5,
+        0,
+        0,
+        5,
+        5
+      ],
+      [
+        2,
+        3,
+        0,
+        0,
+        2,
+        2
+      ],
+      [
+        3,
+        3,
+        0,
+        5,
+        2,
+        3
+      ],
+      [
+        5,
+        2,
+        0,
+        5,
+        5,
+        3
+      ],
+      [
+        5,
+        1,
+        1,
+        1,
+        3,
+        9
+      ],
+      [
+        9,
+        2,
+        2,
+        5,
+        2,
+        2
+      ],
+      [
+        5,
+        2,
+        5,
+        5,
+        2,
+        5
+      ],
+      [
+        3,
+        3,
+        1,
+        2,
+        3,
+        5
+      ],
+      [
+        5,
+        5,
+        5,
+        3,
+        5,
+        3
+      ],
+      [
+        3,
+        1,
+        2,
+        3,
+        1,
+        1
+      ],
+      [
+        3,
+        3,
+        1,
+        2,
+        2,
+        2
+      ],
+      [
+        1,
+        1,
+        2,
+        1,
+        1,
+        5
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.9167,
+    "has_ojama": true,
+    "video_id": "c22",
+    "side": "2P",
+    "t_sec": 1788.433
+  },
+  {
+    "sheet_id": "017_c18_2P_f49555",
+    "anchor_status": "ok",
+    "video_filename": "video_c18.mp4",
+    "frame_idx": 49555,
+    "t_sec_at_collection": 1651.833,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/017_c18_2P_f49555_frame.png",
+    "reference_frame_sha256": "80e2445e5ad54a22933e42809cf13a809ec8426976bce14f1cf2d92bb3eb9b95",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/017_c18_2P_f49555_roi.png",
+    "board_roi_sha256": "8896fa264b0ad658ad4c8be95e76c7e22bfa7a484d394375cdbe83c14cd7850e",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        9,
+        3,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        4,
+        1,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        3,
+        1,
+        0,
+        0
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.1944,
+    "has_ojama": true,
+    "video_id": "c18",
+    "side": "2P",
+    "t_sec": 1651.833
+  },
+  {
+    "sheet_id": "018_c96_2P_f96137",
+    "anchor_status": "ok",
+    "video_filename": "_hold_video_c96.mp4",
+    "frame_idx": 96137,
+    "t_sec_at_collection": 1602.283,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/018_c96_2P_f96137_frame.png",
+    "reference_frame_sha256": "55b1c6c4985c2b621d02dfaeb2abb2e84dc250fdb575861d27080ebf2424bb5c",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/018_c96_2P_f96137_roi.png",
+    "board_roi_sha256": "fbe21744792176806dd57904bcf33d7a3c7d6b5cb7db3d1c263e9b25c947478a",
+    "init_grid": [
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        4,
+        9,
+        9,
+        0
+      ],
+      [
+        4,
+        9,
+        2,
+        4,
+        9,
+        2
+      ],
+      [
+        4,
+        9,
+        2,
+        2,
+        9,
+        2
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        9,
+        2
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        2,
+        9,
+        2,
+        2,
+        2,
+        2
+      ],
+      [
+        9,
+        1,
+        4,
+        3,
+        2,
+        4
+      ],
+      [
+        9,
+        1,
+        2,
+        3,
+        2,
+        3
+      ],
+      [
+        3,
+        3,
+        2,
+        2,
+        2,
+        3
+      ],
+      [
+        9,
+        9,
+        3,
+        3,
+        3,
+        3
+      ],
+      [
+        2,
+        1,
+        4,
+        3,
+        3,
+        3
+      ],
+      [
+        9,
+        3,
+        3,
+        3,
+        3,
+        3
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.9861,
+    "has_ojama": true,
+    "video_id": "c96",
+    "side": "2P",
+    "t_sec": 1602.283
+  },
+  {
+    "sheet_id": "019_c23_1P_f150153",
+    "anchor_status": "ok",
+    "video_filename": "video_c23.mp4",
+    "frame_idx": 150153,
+    "t_sec_at_collection": 2505.053,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/019_c23_1P_f150153_frame.png",
+    "reference_frame_sha256": "9f827a0351045319a3489c722f2b54eb35150140f0cb5eda661170743346d09c",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/019_c23_1P_f150153_roi.png",
+    "board_roi_sha256": "670df107f06e5216e911a8e963ccf14f6ff1f6c0d5551c8223abcc668b4205c2",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        9,
+        0,
+        9,
+        0,
+        0
+      ],
+      [
+        5,
+        2,
+        9,
+        5,
+        0,
+        0
+      ],
+      [
+        3,
+        2,
+        3,
+        3,
+        3,
+        0
+      ],
+      [
+        3,
+        3,
+        3,
+        9,
+        2,
+        0
+      ],
+      [
+        2,
+        2,
+        5,
+        9,
+        9,
+        0
+      ],
+      [
+        3,
+        2,
+        3,
+        5,
+        9,
+        0
+      ],
+      [
+        3,
+        3,
+        2,
+        2,
+        5,
+        9
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.5,
+    "has_ojama": true,
+    "video_id": "c23",
+    "side": "1P",
+    "t_sec": 2505.053
+  },
+  {
+    "sheet_id": "020_c17_2P_f17602",
+    "anchor_status": "ok",
+    "video_filename": "video_c17.mp4",
+    "frame_idx": 17602,
+    "t_sec_at_collection": 293.367,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/020_c17_2P_f17602_frame.png",
+    "reference_frame_sha256": "fea1c2ec0d204db6e34ff39a30a3f5c7fd0cbe43ebd13b3833b9900e3d8bf485",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/020_c17_2P_f17602_roi.png",
+    "board_roi_sha256": "e219273024318cfa9284d49c459f6a05757b8ffaa3ad3574201220ca22c0ead4",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        9
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        9
+      ],
+      [
+        0,
+        0,
+        9,
+        5,
+        9,
+        9
+      ],
+      [
+        0,
+        0,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        0,
+        0,
+        9,
+        9,
+        9,
+        9
+      ],
+      [
+        0,
+        0,
+        9,
+        9,
+        1,
+        3
+      ],
+      [
+        9,
+        0,
+        9,
+        9,
+        3,
+        3
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.3889,
+    "has_ojama": true,
+    "video_id": "c17",
+    "side": "2P",
+    "t_sec": 293.367
+  },
+  {
+    "sheet_id": "021_c11_1P_f96560",
+    "anchor_status": "ok",
+    "video_filename": "video_c11.mp4",
+    "frame_idx": 96560,
+    "t_sec_at_collection": 1609.333,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/021_c11_1P_f96560_frame.png",
+    "reference_frame_sha256": "7d05a734fa91c8289241b2742ee9a8b8a720cb1baab8285a08f8799efc93f1e3",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/021_c11_1P_f96560_roi.png",
+    "board_roi_sha256": "19fe1a8fd030a1df58b743ca456e9d6282f134f66a17524098d920aec717c7fc",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        9,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        0,
+        0,
+        0,
+        0
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.1389,
+    "has_ojama": true,
+    "video_id": "c11",
+    "side": "1P",
+    "t_sec": 1609.333
+  },
+  {
+    "sheet_id": "022_c17_1P_f17412",
+    "anchor_status": "ok",
+    "video_filename": "video_c17.mp4",
+    "frame_idx": 17412,
+    "t_sec_at_collection": 290.2,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/022_c17_1P_f17412_frame.png",
+    "reference_frame_sha256": "b2ad06fb52c465c93939a565f65edd1181fc65675037430122e51b4defd0a9a1",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/022_c17_1P_f17412_roi.png",
+    "board_roi_sha256": "b9d9e6dff7fd103ee64c70ece959be8510859836e3970cd92f7ce185a89647e1",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        2,
+        9
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        2,
+        9
+      ],
+      [
+        4,
+        0,
+        0,
+        3,
+        9,
+        9
+      ],
+      [
+        4,
+        0,
+        0,
+        3,
+        9,
+        9
+      ],
+      [
+        1,
+        0,
+        0,
+        9,
+        9,
+        9
+      ],
+      [
+        1,
+        0,
+        3,
+        9,
+        9,
+        9
+      ],
+      [
+        4,
+        4,
+        4,
+        9,
+        9,
+        9
+      ],
+      [
+        1,
+        1,
+        9,
+        9,
+        9,
+        9
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.5139,
+    "has_ojama": true,
+    "video_id": "c17",
+    "side": "1P",
+    "t_sec": 290.2
+  },
+  {
+    "sheet_id": "023_c20_2P_f15723",
+    "anchor_status": "ok",
+    "video_filename": "video_c20.mp4",
+    "frame_idx": 15723,
+    "t_sec_at_collection": 262.05,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/023_c20_2P_f15723_frame.png",
+    "reference_frame_sha256": "5243cbd91eabdf4d2ea9c4c1229283c2aaa83609b9f2b3e5b1d11fd82753dc32",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/023_c20_2P_f15723_roi.png",
+    "board_roi_sha256": "55c958d9587e1384ed1a681fe2f83effa16aa8e3eb823844d00a5787ff951d14",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        9,
+        9,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        9,
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        0,
+        4,
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        5,
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        9,
+        9,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        9,
+        4,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        9,
+        2,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        3,
+        2,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        4,
+        4,
+        0,
+        0
+      ],
+      [
+        9,
+        9,
+        4,
+        9,
+        0,
+        0
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5972,
+    "has_ojama": true,
+    "video_id": "c20",
+    "side": "2P",
+    "t_sec": 262.05
+  },
+  {
+    "sheet_id": "024_c21_1P_f14321",
+    "anchor_status": "ok",
+    "video_filename": "video_c21.mp4",
+    "frame_idx": 14321,
+    "t_sec_at_collection": 238.683,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/024_c21_1P_f14321_frame.png",
+    "reference_frame_sha256": "4149bf1968e7328fceee0347df58ff2e7aeb3bae784df46ca3275772d32e71f7",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/024_c21_1P_f14321_roi.png",
+    "board_roi_sha256": "32395369a10166f5ffb3c5f2893917b0308b622f640a051464b45997c545e59c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        9,
+        9,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        5,
+        5,
+        2
+      ],
+      [
+        0,
+        9,
+        0,
+        9,
+        9,
+        9
+      ],
+      [
+        0,
+        1,
+        0,
+        9,
+        9,
+        9
+      ],
+      [
+        0,
+        5,
+        3,
+        9,
+        9,
+        9
+      ],
+      [
+        9,
+        5,
+        5,
+        9,
+        9,
+        9
+      ],
+      [
+        2,
+        2,
+        2,
+        9,
+        9,
+        9
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.4444,
+    "has_ojama": true,
+    "video_id": "c21",
+    "side": "1P",
+    "t_sec": 238.683
+  },
+  {
+    "sheet_id": "025_c23_1P_f84451",
+    "anchor_status": "ok",
+    "video_filename": "video_c23.mp4",
+    "frame_idx": 84451,
+    "t_sec_at_collection": 1408.924,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/025_c23_1P_f84451_frame.png",
+    "reference_frame_sha256": "cdc245836b8387bf1be3e428e09472f389c98b32bff32636b0ea3aec0b2098c3",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/025_c23_1P_f84451_roi.png",
+    "board_roi_sha256": "78ffecfe771a0ec2285c5057e94752d71b420c4cb6e4eeaf13524378a65cef7b",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        9,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        5,
+        0,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        5,
+        5,
+        0,
+        0
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.2361,
+    "has_ojama": true,
+    "video_id": "c23",
+    "side": "1P",
+    "t_sec": 1408.924
+  },
+  {
+    "sheet_id": "026_c13_2P_f17462",
+    "anchor_status": "ok",
+    "video_filename": "video_c13.mp4",
+    "frame_idx": 17462,
+    "t_sec_at_collection": 291.033,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/026_c13_2P_f17462_frame.png",
+    "reference_frame_sha256": "44558ac6a7372f6f3b7216504053a58c4ee49b4888f736ffd23c3be2b33b5765",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/026_c13_2P_f17462_roi.png",
+    "board_roi_sha256": "84708e41a0e5bc9ca35959625cc7dd200a1c2beacd1ebe1ef703b49362750348",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        9,
+        0,
+        9,
+        9,
+        4
+      ],
+      [
+        0,
+        9,
+        9,
+        9,
+        9,
+        4
+      ],
+      [
+        0,
+        9,
+        9,
+        2,
+        4,
+        3
+      ],
+      [
+        0,
+        9,
+        9,
+        3,
+        2,
+        4
+      ],
+      [
+        0,
+        4,
+        9,
+        3,
+        2,
+        5
+      ],
+      [
+        9,
+        4,
+        9,
+        4,
+        3,
+        4
+      ],
+      [
+        9,
+        2,
+        5,
+        4,
+        3,
+        2
+      ],
+      [
+        9,
+        4,
+        3,
+        2,
+        4,
+        2
+      ],
+      [
+        9,
+        4,
+        3,
+        9,
+        4,
+        4
+      ],
+      [
+        9,
+        3,
+        5,
+        2,
+        2,
+        5
+      ],
+      [
+        3,
+        3,
+        5,
+        2,
+        4,
+        5
+      ],
+      [
+        5,
+        5,
+        2,
+        4,
+        4,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.9167,
+    "has_ojama": true,
+    "video_id": "c13",
+    "side": "2P",
+    "t_sec": 291.033
+  },
+  {
+    "sheet_id": "027_c109_2P_f66630",
+    "anchor_status": "ok",
+    "video_filename": "video_c109.mp4",
+    "frame_idx": 66630,
+    "t_sec_at_collection": 1110.5,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/027_c109_2P_f66630_frame.png",
+    "reference_frame_sha256": "567689f2ffc5e810c07908791bea14898f7b0f9a15e95e66c549e23546119e2c",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/027_c109_2P_f66630_roi.png",
+    "board_roi_sha256": "6c4668e3d8d20563c8540ccfa38998231a7d5fd7a76cf48c05e88e1ed1bd59fb",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        1,
+        3,
+        0,
+        0,
+        3,
+        3
+      ],
+      [
+        5,
+        1,
+        1,
+        0,
+        1,
+        5
+      ],
+      [
+        5,
+        3,
+        1,
+        0,
+        9,
+        4
+      ],
+      [
+        5,
+        3,
+        3,
+        9,
+        5,
+        4
+      ],
+      [
+        1,
+        1,
+        4,
+        4,
+        5,
+        3
+      ],
+      [
+        1,
+        5,
+        5,
+        1,
+        4,
+        3
+      ],
+      [
+        4,
+        4,
+        4,
+        1,
+        5,
+        5
+      ],
+      [
+        1,
+        1,
+        1,
+        3,
+        1,
+        5
+      ],
+      [
+        4,
+        3,
+        5,
+        3,
+        1,
+        1
+      ],
+      [
+        4,
+        4,
+        3,
+        5,
+        4,
+        5
+      ],
+      [
+        3,
+        3,
+        5,
+        5,
+        3,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.9028,
+    "has_ojama": true,
+    "video_id": "c109",
+    "side": "2P",
+    "t_sec": 1110.5
+  },
+  {
+    "sheet_id": "028_c16_2P_f42831",
+    "anchor_status": "ok",
+    "video_filename": "video_c16.mp4",
+    "frame_idx": 42831,
+    "t_sec_at_collection": 1427.7,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/028_c16_2P_f42831_frame.png",
+    "reference_frame_sha256": "9399fbaf606358c0cdcd87cf3b51d621054089b968a033294d1147aefbd028c9",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/028_c16_2P_f42831_roi.png",
+    "board_roi_sha256": "73eeb25bf163861a6806cf3b4bb3eb00f7c68743185a9af6c722620ca751c082",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        9
+      ],
+      [
+        9,
+        9,
+        0,
+        0,
+        5,
+        5
+      ],
+      [
+        2,
+        4,
+        0,
+        0,
+        3,
+        2
+      ],
+      [
+        3,
+        3,
+        0,
+        0,
+        4,
+        4
+      ],
+      [
+        2,
+        3,
+        0,
+        0,
+        4,
+        5
+      ],
+      [
+        5,
+        5,
+        5,
+        0,
+        5,
+        5
+      ],
+      [
+        3,
+        2,
+        4,
+        5,
+        4,
+        2
+      ],
+      [
+        3,
+        3,
+        2,
+        4,
+        4,
+        2
+      ],
+      [
+        2,
+        2,
+        4,
+        5,
+        5,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5556,
+    "has_ojama": true,
+    "video_id": "c16",
+    "side": "2P",
+    "t_sec": 1427.7
+  },
+  {
+    "sheet_id": "029_c109_2P_f652546",
+    "anchor_status": "ok",
+    "video_filename": "video_c109.mp4",
+    "frame_idx": 652546,
+    "t_sec_at_collection": 10875.767,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/029_c109_2P_f652546_frame.png",
+    "reference_frame_sha256": "dbafa6dfb02d6161d0ab10c681ae2c31785fe387bd9c48d756e8acd5f743ae0f",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/029_c109_2P_f652546_roi.png",
+    "board_roi_sha256": "34b4b065b17a290080a1001f1e9f5f075a53f6ff30d55b9e48bcc22422c9182a",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        9,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        9,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        0,
+        5,
+        1,
+        0,
+        0
+      ],
+      [
+        3,
+        5,
+        1,
+        2,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        2,
+        3,
+        3,
+        1
+      ],
+      [
+        3,
+        3,
+        2,
+        2,
+        3,
+        1
+      ],
+      [
+        3,
+        1,
+        1,
+        5,
+        5,
+        1
+      ],
+      [
+        2,
+        2,
+        2,
+        5,
+        1,
+        5
+      ],
+      [
+        3,
+        1,
+        3,
+        1,
+        5,
+        5
+      ],
+      [
+        3,
+        3,
+        1,
+        3,
+        3,
+        3
+      ],
+      [
+        1,
+        1,
+        3,
+        5,
+        5,
+        1
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.7361,
+    "has_ojama": true,
+    "video_id": "c109",
+    "side": "2P",
+    "t_sec": 10875.767
+  },
+  {
+    "sheet_id": "030_c18_1P_f88091",
+    "anchor_status": "ok",
+    "video_filename": "video_c18.mp4",
+    "frame_idx": 88091,
+    "t_sec_at_collection": 2936.367,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/030_c18_1P_f88091_frame.png",
+    "reference_frame_sha256": "92e0f8fd0b51fd30d6a524b2e517e646649dc27303cd8a84a1857defab266b87",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/030_c18_1P_f88091_roi.png",
+    "board_roi_sha256": "342c1bf859c2f2d571f1d6b7e4674b76978b75610b904273c1d1e0427596480c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        1,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        3,
+        1,
+        4,
+        4,
+        0,
+        0
+      ],
+      [
+        3,
+        5,
+        1,
+        1,
+        4,
+        0
+      ],
+      [
+        5,
+        5,
+        1,
+        5,
+        5,
+        1
+      ],
+      [
+        3,
+        3,
+        3,
+        5,
+        1,
+        1
+      ],
+      [
+        4,
+        4,
+        4,
+        3,
+        5,
+        5
+      ],
+      [
+        3,
+        3,
+        3,
+        1,
+        4,
+        5
+      ],
+      [
+        4,
+        5,
+        1,
+        5,
+        4,
+        3
+      ],
+      [
+        4,
+        4,
+        5,
+        1,
+        1,
+        4
+      ],
+      [
+        5,
+        5,
+        1,
+        3,
+        3,
+        4
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.7778,
+    "has_ojama": false,
+    "video_id": "c18",
+    "side": "1P",
+    "t_sec": 2936.367
+  },
+  {
+    "sheet_id": "031_c10_1P_f143100",
+    "anchor_status": "ok",
+    "video_filename": "video_c10.mp4",
+    "frame_idx": 143100,
+    "t_sec_at_collection": 2385.0,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/031_c10_1P_f143100_frame.png",
+    "reference_frame_sha256": "ecce9f293c0833733f7fafbda92ebd11a2acf5f4a5ddbcd0d60896e3bcae98c8",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/031_c10_1P_f143100_roi.png",
+    "board_roi_sha256": "5294cfac965a8e8fb6e00451c1e9dd9a8c95f56618db0333cc4508bb00cd2786",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        5,
+        5
+      ],
+      [
+        3,
+        0,
+        0,
+        0,
+        4,
+        5
+      ],
+      [
+        3,
+        3,
+        0,
+        0,
+        2,
+        3
+      ],
+      [
+        2,
+        2,
+        4,
+        5,
+        5,
+        5
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.25,
+    "has_ojama": false,
+    "video_id": "c10",
+    "side": "1P",
+    "t_sec": 2385.0
+  },
+  {
+    "sheet_id": "032_c20_1P_f149004",
+    "anchor_status": "ok",
+    "video_filename": "video_c20.mp4",
+    "frame_idx": 149004,
+    "t_sec_at_collection": 2483.4,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/032_c20_1P_f149004_frame.png",
+    "reference_frame_sha256": "b8f76c8a36afd5912ad2244a02adac24501b3e203174198308b110c1bac56de5",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/032_c20_1P_f149004_roi.png",
+    "board_roi_sha256": "de0de30b64cc518e5587924abd9ae49fdeb29502533a9a2fefb34afa7003520f",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        5,
+        2,
+        3,
+        5,
+        5,
+        3
+      ],
+      [
+        5,
+        5,
+        2,
+        3,
+        3,
+        5
+      ],
+      [
+        2,
+        2,
+        3,
+        1,
+        1,
+        1
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.3194,
+    "has_ojama": false,
+    "video_id": "c20",
+    "side": "1P",
+    "t_sec": 2483.4
+  },
+  {
+    "sheet_id": "033_c13_2P_f91334",
+    "anchor_status": "ok",
+    "video_filename": "video_c13.mp4",
+    "frame_idx": 91334,
+    "t_sec_at_collection": 1522.233,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/033_c13_2P_f91334_frame.png",
+    "reference_frame_sha256": "f71e791ca9deb2da4f0d7944d1fd05ae66127f8eb76c9c38ea052c27092d6f55",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/033_c13_2P_f91334_roi.png",
+    "board_roi_sha256": "5cb014aa16580fa4a56f233290d928fcfa0fc60d663f6494c91c4cfa9dfdd1d7",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        2,
+        0,
+        2
+      ],
+      [
+        0,
+        1,
+        0,
+        4,
+        4,
+        2
+      ],
+      [
+        3,
+        1,
+        0,
+        2,
+        2,
+        1
+      ],
+      [
+        4,
+        4,
+        0,
+        2,
+        1,
+        1
+      ],
+      [
+        3,
+        3,
+        0,
+        1,
+        3,
+        3
+      ],
+      [
+        2,
+        1,
+        0,
+        2,
+        2,
+        3
+      ],
+      [
+        2,
+        2,
+        0,
+        4,
+        4,
+        4
+      ],
+      [
+        1,
+        1,
+        0,
+        3,
+        2,
+        2
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5417,
+    "has_ojama": false,
+    "video_id": "c13",
+    "side": "2P",
+    "t_sec": 1522.233
+  },
+  {
+    "sheet_id": "034_c11_1P_f10330",
+    "anchor_status": "ok",
+    "video_filename": "video_c11.mp4",
+    "frame_idx": 10330,
+    "t_sec_at_collection": 172.167,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/034_c11_1P_f10330_frame.png",
+    "reference_frame_sha256": "c865af51808fb0f2f1531342f52e24f7adeae9738221d1db07421b80a57ace2e",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/034_c11_1P_f10330_roi.png",
+    "board_roi_sha256": "7546b1e5335d0f75348211e69cc76a3516bbbf60aa6edf8abb4629166d631c6c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        2,
+        1,
+        2,
+        0,
+        2,
+        2
+      ],
+      [
+        1,
+        4,
+        1,
+        0,
+        5,
+        1
+      ],
+      [
+        1,
+        5,
+        4,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        2,
+        5,
+        2,
+        4,
+        5
+      ],
+      [
+        5,
+        2,
+        2,
+        4,
+        4,
+        5
+      ],
+      [
+        5,
+        4,
+        4,
+        2,
+        2,
+        5
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.5278,
+    "has_ojama": false,
+    "video_id": "c11",
+    "side": "1P",
+    "t_sec": 172.167
+  },
+  {
+    "sheet_id": "035_c10_1P_f80816",
+    "anchor_status": "ok",
+    "video_filename": "video_c10.mp4",
+    "frame_idx": 80816,
+    "t_sec_at_collection": 1346.933,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/035_c10_1P_f80816_frame.png",
+    "reference_frame_sha256": "74c15321f79eb588d44697ca695b223623cd42cb977f591ffd90b75176080dda",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/035_c10_1P_f80816_roi.png",
+    "board_roi_sha256": "59cf525dc442ba00bf398bd053d9a7c9c83557703aeb03a772b22ed901a75b4c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        5,
+        4,
+        0
+      ],
+      [
+        4,
+        4,
+        0,
+        5,
+        4,
+        1
+      ],
+      [
+        5,
+        5,
+        0,
+        4,
+        5,
+        2
+      ],
+      [
+        4,
+        5,
+        0,
+        4,
+        4,
+        2
+      ],
+      [
+        4,
+        4,
+        0,
+        2,
+        2,
+        5
+      ],
+      [
+        5,
+        5,
+        5,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        1,
+        2,
+        5,
+        5,
+        1
+      ],
+      [
+        4,
+        4,
+        1,
+        2,
+        2,
+        2
+      ],
+      [
+        1,
+        1,
+        2,
+        5,
+        5,
+        1
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.6528,
+    "has_ojama": false,
+    "video_id": "c10",
+    "side": "1P",
+    "t_sec": 1346.933
+  },
+  {
+    "sheet_id": "036_c10_1P_f80484",
+    "anchor_status": "ok",
+    "video_filename": "video_c10.mp4",
+    "frame_idx": 80484,
+    "t_sec_at_collection": 1341.4,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/036_c10_1P_f80484_frame.png",
+    "reference_frame_sha256": "9c05ff70e02b5df34ea87b1922e120eaa349afbc7d7c9f19c4b728b449276acd",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/036_c10_1P_f80484_roi.png",
+    "board_roi_sha256": "cfd8da1647fbcdaf13282746bcd65a6a49f1deab9cb6cf9c29c28ab42edf6ddb",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        0,
+        5,
+        4,
+        0
+      ],
+      [
+        4,
+        5,
+        0,
+        5,
+        4,
+        0
+      ],
+      [
+        5,
+        5,
+        0,
+        4,
+        5,
+        2
+      ],
+      [
+        4,
+        4,
+        1,
+        4,
+        4,
+        2
+      ],
+      [
+        4,
+        1,
+        1,
+        2,
+        2,
+        5
+      ],
+      [
+        5,
+        5,
+        5,
+        2,
+        1,
+        1
+      ],
+      [
+        4,
+        1,
+        2,
+        5,
+        5,
+        1
+      ],
+      [
+        4,
+        4,
+        1,
+        2,
+        2,
+        2
+      ],
+      [
+        1,
+        1,
+        2,
+        5,
+        5,
+        1
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.6806,
+    "has_ojama": false,
+    "video_id": "c10",
+    "side": "1P",
+    "t_sec": 1341.4
+  },
+  {
+    "sheet_id": "037_c20_1P_f149198",
+    "anchor_status": "ok",
+    "video_filename": "video_c20.mp4",
+    "frame_idx": 149198,
+    "t_sec_at_collection": 2486.633,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/037_c20_1P_f149198_frame.png",
+    "reference_frame_sha256": "dc1a45fa3334240323da569ccdd010a6535d2572ee2ba5a4505b767858d79f37",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/037_c20_1P_f149198_roi.png",
+    "board_roi_sha256": "ee192ff7b8512f64deec23bf46d217f9536af4195a9075244d780246f7be7e06",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        5,
+        2,
+        1
+      ],
+      [
+        5,
+        3,
+        0,
+        1,
+        3,
+        1
+      ],
+      [
+        3,
+        3,
+        0,
+        1,
+        1,
+        3
+      ],
+      [
+        5,
+        2,
+        3,
+        5,
+        5,
+        3
+      ],
+      [
+        5,
+        5,
+        2,
+        3,
+        3,
+        5
+      ],
+      [
+        2,
+        2,
+        3,
+        1,
+        1,
+        1
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.4306,
+    "has_ojama": false,
+    "video_id": "c20",
+    "side": "1P",
+    "t_sec": 2486.633
+  },
+  {
+    "sheet_id": "038_c109_1P_f651406",
+    "anchor_status": "ok",
+    "video_filename": "video_c109.mp4",
+    "frame_idx": 651406,
+    "t_sec_at_collection": 10856.767,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/038_c109_1P_f651406_frame.png",
+    "reference_frame_sha256": "23aa97ccc16eba7a6fc1143f261a6dff7f15c05e41853fe309e77a5d4fe951c0",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/038_c109_1P_f651406_roi.png",
+    "board_roi_sha256": "162e348d6ed9cf1620d41ac31b6f67633f70bd526f7fb6d7ec3c770978834511",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        1,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        1,
+        3,
+        1,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        5,
+        3,
+        0,
+        0
+      ],
+      [
+        3,
+        1,
+        2,
+        5,
+        3,
+        5
+      ],
+      [
+        3,
+        3,
+        1,
+        2,
+        2,
+        5
+      ],
+      [
+        1,
+        1,
+        2,
+        3,
+        3,
+        3
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.5139,
+    "has_ojama": false,
+    "video_id": "c109",
+    "side": "1P",
+    "t_sec": 10856.767
+  },
+  {
+    "sheet_id": "039_c18_1P_f87635",
+    "anchor_status": "ok",
+    "video_filename": "video_c18.mp4",
+    "frame_idx": 87635,
+    "t_sec_at_collection": 2921.167,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/039_c18_1P_f87635_frame.png",
+    "reference_frame_sha256": "07162d3672683957516c3820f3c91754c54ab2efe8fcefdc464021b37c5de286",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/039_c18_1P_f87635_roi.png",
+    "board_roi_sha256": "c5702dc5537f03fbde39b50fd527d12a0750796c0d88af07682af2204759abe1",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        3,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        5,
+        1,
+        5,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        5,
+        1,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        1,
+        3,
+        3,
+        0
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.25,
+    "has_ojama": false,
+    "video_id": "c18",
+    "side": "1P",
+    "t_sec": 2921.167
+  },
+  {
+    "sheet_id": "040_c12_1P_f140476",
+    "anchor_status": "ok",
+    "video_filename": "video_c12.mp4",
+    "frame_idx": 140476,
+    "t_sec_at_collection": 2341.267,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/040_c12_1P_f140476_frame.png",
+    "reference_frame_sha256": "48f2f51764658d349a5154562c056d65cc7d0b80022036b34160a248ebce6612",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/040_c12_1P_f140476_roi.png",
+    "board_roi_sha256": "44603ee2ea8567b15439184c2f58b647024c917658728e3432b3cf31a5daed8d",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        2
+      ],
+      [
+        3,
+        0,
+        0,
+        0,
+        3,
+        4
+      ],
+      [
+        3,
+        0,
+        3,
+        5,
+        5,
+        4
+      ],
+      [
+        5,
+        0,
+        2,
+        3,
+        3,
+        2
+      ],
+      [
+        5,
+        2,
+        5,
+        3,
+        5,
+        2
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.3333,
+    "has_ojama": false,
+    "video_id": "c12",
+    "side": "1P",
+    "t_sec": 2341.267
+  },
+  {
+    "sheet_id": "041_c16_1P_f75392",
+    "anchor_status": "ok",
+    "video_filename": "video_c16.mp4",
+    "frame_idx": 75392,
+    "t_sec_at_collection": 2513.067,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/041_c16_1P_f75392_frame.png",
+    "reference_frame_sha256": "29c36ee5d7870a3451511c0af296e0b433da6050d8fe90cba25060f2caa3e506",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/041_c16_1P_f75392_roi.png",
+    "board_roi_sha256": "9b3e031a92db1cffd2b0394c700a23bfbdee67eca5e5bd602962aed60f4ee0d8",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        3,
+        1,
+        3,
+        5
+      ],
+      [
+        5,
+        3,
+        1,
+        3,
+        5,
+        5
+      ],
+      [
+        3,
+        3,
+        4,
+        4,
+        3,
+        3
+      ],
+      [
+        4,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      [
+        4,
+        4,
+        1,
+        5,
+        4,
+        4
+      ],
+      [
+        1,
+        1,
+        5,
+        5,
+        3,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5278,
+    "has_ojama": false,
+    "video_id": "c16",
+    "side": "1P",
+    "t_sec": 2513.067
+  },
+  {
+    "sheet_id": "042_c22_1P_f20273",
+    "anchor_status": "ok",
+    "video_filename": "video_c22.mp4",
+    "frame_idx": 20273,
+    "t_sec_at_collection": 337.883,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/042_c22_1P_f20273_frame.png",
+    "reference_frame_sha256": "086666cbb17a4b65b22fa83462c6a163a39656e52eb582c4407765bf146ac64e",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/042_c22_1P_f20273_roi.png",
+    "board_roi_sha256": "ff937968a13feaf92b34e5c1ca82307e514c506d653e371d56892372d526fdae",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        3,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        4,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        3,
+        3,
+        1
+      ],
+      [
+        1,
+        0,
+        2,
+        3,
+        2,
+        3
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.2083,
+    "has_ojama": false,
+    "video_id": "c22",
+    "side": "1P",
+    "t_sec": 337.883
+  },
+  {
+    "sheet_id": "043_c22_1P_f108676",
+    "anchor_status": "ok",
+    "video_filename": "video_c22.mp4",
+    "frame_idx": 108676,
+    "t_sec_at_collection": 1811.267,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/043_c22_1P_f108676_frame.png",
+    "reference_frame_sha256": "71460754b5185449922d910abc0c263d373e5282f38ff1b1d3479c536cb5d25a",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/043_c22_1P_f108676_roi.png",
+    "board_roi_sha256": "8679edae241c0d3944bb5784cad8a7c5e2a9ede941c85d0b20f825678c32e58d",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        2,
+        4,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        2,
+        0,
+        0,
+        0
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.1111,
+    "has_ojama": false,
+    "video_id": "c22",
+    "side": "1P",
+    "t_sec": 1811.267
+  },
+  {
+    "sheet_id": "044_c20_2P_f16655",
+    "anchor_status": "ok",
+    "video_filename": "video_c20.mp4",
+    "frame_idx": 16655,
+    "t_sec_at_collection": 277.583,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/044_c20_2P_f16655_frame.png",
+    "reference_frame_sha256": "f87162572b5ae9faa38611e60981e7618331a8dcbdbe72720c5b3e6d00fc0149",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/044_c20_2P_f16655_roi.png",
+    "board_roi_sha256": "e3cf1571621010dc384b9622e4837c319d9137145fc92b534ac25b0c6065f7b7",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        2
+      ],
+      [
+        5,
+        0,
+        1,
+        3,
+        3,
+        1
+      ],
+      [
+        1,
+        1,
+        3,
+        2,
+        2,
+        1
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.1944,
+    "has_ojama": false,
+    "video_id": "c20",
+    "side": "2P",
+    "t_sec": 277.583
+  },
+  {
+    "sheet_id": "045_c13_1P_f160154",
+    "anchor_status": "ok",
+    "video_filename": "video_c13.mp4",
+    "frame_idx": 160154,
+    "t_sec_at_collection": 2669.233,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/045_c13_1P_f160154_frame.png",
+    "reference_frame_sha256": "ca3a882149439fcd10da198f8ce36b77c60f7c8a2c84e294acc4ab7e8d2ea1df",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/045_c13_1P_f160154_roi.png",
+    "board_roi_sha256": "da50ba0c1cb505b8f8e093f79d125efd8bbdf49a2265250cc53721d6fac13dde",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        3,
+        0,
+        0,
+        2,
+        3
+      ],
+      [
+        3,
+        4,
+        0,
+        0,
+        2,
+        3
+      ],
+      [
+        4,
+        4,
+        0,
+        0,
+        4,
+        4
+      ],
+      [
+        3,
+        3,
+        0,
+        2,
+        2,
+        4
+      ],
+      [
+        4,
+        2,
+        2,
+        4,
+        4,
+        2
+      ],
+      [
+        4,
+        4,
+        2,
+        3,
+        3,
+        2
+      ],
+      [
+        2,
+        2,
+        2,
+        2,
+        2,
+        3
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.5139,
+    "has_ojama": false,
+    "video_id": "c13",
+    "side": "1P",
+    "t_sec": 2669.233
+  },
+  {
+    "sheet_id": "046_c14_1P_f102130",
+    "anchor_status": "ok",
+    "video_filename": "video_c14.mp4",
+    "frame_idx": 102130,
+    "t_sec_at_collection": 1702.167,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/046_c14_1P_f102130_frame.png",
+    "reference_frame_sha256": "f19fb06bec0025efd18fb625eddfcc2a375bfe50e5b2eba83948a850efcdad54",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/046_c14_1P_f102130_roi.png",
+    "board_roi_sha256": "eaff0616f625841cce25a05bb52c506c5c041f598acda6866307206ceed58fc9",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        4
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        3,
+        1,
+        5,
+        5
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.1528,
+    "has_ojama": false,
+    "video_id": "c14",
+    "side": "1P",
+    "t_sec": 1702.167
+  },
+  {
+    "sheet_id": "047_c12_1P_f142116",
+    "anchor_status": "ok",
+    "video_filename": "video_c12.mp4",
+    "frame_idx": 142116,
+    "t_sec_at_collection": 2368.6,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/047_c12_1P_f142116_frame.png",
+    "reference_frame_sha256": "87c8cd792a469310352d9141f8de4d13d7f54662d7264cb7f2e84d7742988d5d",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/047_c12_1P_f142116_roi.png",
+    "board_roi_sha256": "068c15c271d19bc83cb4ec400e8a99639a948bae3657a7847c1a4f595278c513",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        5,
+        5,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        5,
+        4,
+        3,
+        0
+      ],
+      [
+        0,
+        3,
+        2,
+        4,
+        5,
+        0
+      ],
+      [
+        0,
+        3,
+        2,
+        5,
+        5,
+        0
+      ],
+      [
+        3,
+        2,
+        4,
+        4,
+        3,
+        0
+      ],
+      [
+        5,
+        2,
+        4,
+        3,
+        3,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.3611,
+    "has_ojama": false,
+    "video_id": "c12",
+    "side": "1P",
+    "t_sec": 2368.6
+  },
+  {
+    "sheet_id": "048_c22_1P_f107588",
+    "anchor_status": "ok",
+    "video_filename": "video_c22.mp4",
+    "frame_idx": 107588,
+    "t_sec_at_collection": 1793.133,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/048_c22_1P_f107588_frame.png",
+    "reference_frame_sha256": "345d50e25232f3b4dd333ceac182818c45d541cdf8be613d5531cba8fde5c78a",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/048_c22_1P_f107588_roi.png",
+    "board_roi_sha256": "5cd6cfd19ff5cf82dcbf5922e8ce45fa34687dfd7a7f52009765622fbfc4082e",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        5,
+        0,
+        2
+      ],
+      [
+        0,
+        0,
+        0,
+        5,
+        5,
+        2
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.0972,
+    "has_ojama": false,
+    "video_id": "c22",
+    "side": "1P",
+    "t_sec": 1793.133
+  },
+  {
+    "sheet_id": "049_c22_1P_f109020",
+    "anchor_status": "ok",
+    "video_filename": "video_c22.mp4",
+    "frame_idx": 109020,
+    "t_sec_at_collection": 1817.0,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/049_c22_1P_f109020_frame.png",
+    "reference_frame_sha256": "0797100f99e788914440477f0c8cb9643c2339f4569d9b711f8de8d4a8a2398f",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/049_c22_1P_f109020_roi.png",
+    "board_roi_sha256": "61359909e3b2c8f94684693618adc9d9026a494b8026119fb302e47f1a9fd002",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        4,
+        2,
+        0,
+        1,
+        0
+      ],
+      [
+        2,
+        2,
+        4,
+        0,
+        3,
+        2
+      ],
+      [
+        4,
+        4,
+        5,
+        5,
+        1,
+        1
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.3056,
+    "has_ojama": false,
+    "video_id": "c22",
+    "side": "1P",
+    "t_sec": 1817.0
+  },
+  {
+    "sheet_id": "050_c12_1P_f141620",
+    "anchor_status": "ok",
+    "video_filename": "video_c12.mp4",
+    "frame_idx": 141620,
+    "t_sec_at_collection": 2360.333,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/050_c12_1P_f141620_frame.png",
+    "reference_frame_sha256": "75f8a94957139b9e548b1775faa441627a06b4aeedbedadfc45ec3b94870e7c4",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/050_c12_1P_f141620_roi.png",
+    "board_roi_sha256": "dee5bc2076694d093e810a112177faeac55903c85cb5df92db28016157e06a63",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        3,
+        5
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.0972,
+    "has_ojama": false,
+    "video_id": "c12",
+    "side": "1P",
+    "t_sec": 2360.333
+  },
+  {
+    "sheet_id": "051_c21_1P_f81796",
+    "anchor_status": "ok",
+    "video_filename": "video_c21.mp4",
+    "frame_idx": 81796,
+    "t_sec_at_collection": 1363.267,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/051_c21_1P_f81796_frame.png",
+    "reference_frame_sha256": "23852c97c34fe6eadb90198c989d751c2ef1d0c1439e9c98f6105f67ea2e9edc",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/051_c21_1P_f81796_roi.png",
+    "board_roi_sha256": "511e5aec7dcab7187fc8b9e308eb7b2153973a4f93a9b92fa046f8fe3f022894",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        2,
+        0,
+        0,
+        2,
+        0
+      ],
+      [
+        4,
+        5,
+        1,
+        2,
+        2,
+        0
+      ],
+      [
+        4,
+        4,
+        5,
+        1,
+        1,
+        1
+      ],
+      [
+        5,
+        5,
+        2,
+        4,
+        4,
+        4
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.2778,
+    "has_ojama": false,
+    "video_id": "c21",
+    "side": "1P",
+    "t_sec": 1363.267
+  },
+  {
+    "sheet_id": "052_c16_2P_f75606",
+    "anchor_status": "ok",
+    "video_filename": "video_c16.mp4",
+    "frame_idx": 75606,
+    "t_sec_at_collection": 2520.2,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/052_c16_2P_f75606_frame.png",
+    "reference_frame_sha256": "a6ced28c65e4e6fcb1af325fd9a6bc415a01c017cc6f8ebf14e921e1a2fe8de9",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/052_c16_2P_f75606_roi.png",
+    "board_roi_sha256": "1d72ef52a27bd998978f89e682bfc8a3b4cac0a48aa2978a635dca1f9723d562",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        1,
+        5
+      ],
+      [
+        0,
+        0,
+        0,
+        4,
+        1,
+        5
+      ],
+      [
+        0,
+        1,
+        0,
+        3,
+        3,
+        5
+      ],
+      [
+        0,
+        1,
+        0,
+        3,
+        4,
+        4
+      ],
+      [
+        3,
+        3,
+        4,
+        4,
+        3,
+        4
+      ],
+      [
+        5,
+        1,
+        4,
+        3,
+        4,
+        3
+      ],
+      [
+        5,
+        5,
+        1,
+        4,
+        4,
+        3
+      ],
+      [
+        1,
+        1,
+        4,
+        5,
+        5,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.5417,
+    "has_ojama": false,
+    "video_id": "c16",
+    "side": "2P",
+    "t_sec": 2520.2
+  },
+  {
+    "sheet_id": "053_c12_2P_f141444",
+    "anchor_status": "ok",
+    "video_filename": "video_c12.mp4",
+    "frame_idx": 141444,
+    "t_sec_at_collection": 2357.4,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/053_c12_2P_f141444_frame.png",
+    "reference_frame_sha256": "5a155208a4bc2d8c1db4c92f4a7f9401a5e719675c1401bd0726326e1af7b9f7",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/053_c12_2P_f141444_roi.png",
+    "board_roi_sha256": "b45394baf03fc045df2452468a2d44e3da31e4d93dee782fc919fe5e382c14e9",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        4,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        4,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        3,
+        4,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        5,
+        4,
+        3,
+        5
+      ],
+      [
+        3,
+        2,
+        2,
+        2,
+        5,
+        5
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.4306,
+    "has_ojama": false,
+    "video_id": "c12",
+    "side": "2P",
+    "t_sec": 2357.4
+  },
+  {
+    "sheet_id": "054_c18_1P_f87569",
+    "anchor_status": "ok",
+    "video_filename": "video_c18.mp4",
+    "frame_idx": 87569,
+    "t_sec_at_collection": 2918.967,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/054_c18_1P_f87569_frame.png",
+    "reference_frame_sha256": "5b10dc5fd728806885fa8bb040c02c61e0926a08676a22c2231bc51473222574",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/054_c18_1P_f87569_roi.png",
+    "board_roi_sha256": "2fedcad26bd0ef306dfe19b67f79aeee75266325c573463915d112218d4541b7",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        1,
+        3,
+        3,
+        0
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.1667,
+    "has_ojama": false,
+    "video_id": "c18",
+    "side": "1P",
+    "t_sec": 2918.967
+  },
+  {
+    "sheet_id": "055_c12_2P_f80090",
+    "anchor_status": "ok",
+    "video_filename": "video_c12.mp4",
+    "frame_idx": 80090,
+    "t_sec_at_collection": 1334.833,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/055_c12_2P_f80090_frame.png",
+    "reference_frame_sha256": "2b2919c88b8eb11f3c39fd1e6182b2bcc1da2a47558bc8ac188b0a6b33f0d8b8",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/055_c12_2P_f80090_roi.png",
+    "board_roi_sha256": "824c4fec87be8cb03e8b36dd1d0b52296f108bd2f7267d98fdcd1fdc66cc8a96",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        5,
+        1,
+        5,
+        0,
+        0
+      ],
+      [
+        3,
+        2,
+        2,
+        5,
+        0,
+        0
+      ],
+      [
+        3,
+        5,
+        4,
+        4,
+        0,
+        0
+      ],
+      [
+        5,
+        2,
+        2,
+        4,
+        3,
+        0
+      ],
+      [
+        5,
+        3,
+        2,
+        3,
+        2,
+        4
+      ],
+      [
+        5,
+        3,
+        3,
+        2,
+        4,
+        4
+      ],
+      [
+        2,
+        2,
+        2,
+        4,
+        2,
+        3
+      ],
+      [
+        4,
+        5,
+        4,
+        2,
+        3,
+        3
+      ],
+      [
+        4,
+        4,
+        5,
+        4,
+        4,
+        4
+      ],
+      [
+        5,
+        5,
+        4,
+        3,
+        3,
+        2
+      ]
+    ],
+    "phase": "終盤",
+    "fill_ratio": 0.75,
+    "has_ojama": false,
+    "video_id": "c12",
+    "side": "2P",
+    "t_sec": 1334.833
+  },
+  {
+    "sheet_id": "056_c23_1P_f151259",
+    "anchor_status": "ok",
+    "video_filename": "video_c23.mp4",
+    "frame_idx": 151259,
+    "t_sec_at_collection": 2523.504,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/056_c23_1P_f151259_frame.png",
+    "reference_frame_sha256": "2f1e51c066dd18a3821c436be02e1ba91d599353d2d8d17a2e27c8105dc6ee7e",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/056_c23_1P_f151259_roi.png",
+    "board_roi_sha256": "7dac59f55e2ee104fb0ef918b4043541de5a92b4a156c8d2ce26d21f977a8812",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      [
+        1,
+        3,
+        0,
+        0,
+        0,
+        2
+      ],
+      [
+        1,
+        1,
+        3,
+        2,
+        2,
+        1
+      ],
+      [
+        3,
+        3,
+        5,
+        5,
+        5,
+        1
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.2222,
+    "has_ojama": false,
+    "video_id": "c23",
+    "side": "1P",
+    "t_sec": 2523.504
+  },
+  {
+    "sheet_id": "057_c21_1P_f81890",
+    "anchor_status": "ok",
+    "video_filename": "video_c21.mp4",
+    "frame_idx": 81890,
+    "t_sec_at_collection": 1364.833,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/057_c21_1P_f81890_frame.png",
+    "reference_frame_sha256": "957473a90edc02a68bc8459ead55a240d6ff17bcc231a6cfd75cd03359d50072",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/057_c21_1P_f81890_roi.png",
+    "board_roi_sha256": "dab36fa7424d2a13ae7788142fb6b96387279ee00e33c12e5c69d9efb98b598c",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        5,
+        5
+      ],
+      [
+        1,
+        2,
+        0,
+        0,
+        2,
+        4
+      ],
+      [
+        4,
+        5,
+        1,
+        2,
+        2,
+        4
+      ],
+      [
+        4,
+        4,
+        5,
+        1,
+        1,
+        1
+      ],
+      [
+        5,
+        5,
+        2,
+        4,
+        4,
+        4
+      ]
+    ],
+    "phase": "中盤",
+    "fill_ratio": 0.3333,
+    "has_ojama": false,
+    "video_id": "c21",
+    "side": "1P",
+    "t_sec": 1364.833
+  },
+  {
+    "sheet_id": "058_c21_2P_f143682",
+    "anchor_status": "ok",
+    "video_filename": "video_c21.mp4",
+    "frame_idx": 143682,
+    "t_sec_at_collection": 2394.7,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/058_c21_2P_f143682_frame.png",
+    "reference_frame_sha256": "d382b03765095c6d9d3e8888ab480cf611a4f985521dad8ec65051cf35c02ae2",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/058_c21_2P_f143682_roi.png",
+    "board_roi_sha256": "156b67a775eddc4f5f6e4663142438ef2ba248f309a2aadc8e1e1926f8835295",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        1,
+        4,
+        3,
+        0,
+        0
+      ],
+      [
+        4,
+        4,
+        3,
+        2,
+        2,
+        2
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.2778,
+    "has_ojama": false,
+    "video_id": "c21",
+    "side": "2P",
+    "t_sec": 2394.7
+  },
+  {
+    "sheet_id": "059_c16_2P_f42339",
+    "anchor_status": "ok",
+    "video_filename": "video_c16.mp4",
+    "frame_idx": 42339,
+    "t_sec_at_collection": 1411.3,
+    "reference_frame_png": "data/verify/yardstick_v2_2026-08-14/anchors/059_c16_2P_f42339_frame.png",
+    "reference_frame_sha256": "245a8261172b8b40520ec051d94eb6ade4c78eca5f3c4e9a16149e541588b392",
+    "board_roi_png": "data/verify/yardstick_v2_2026-08-14/anchors/059_c16_2P_f42339_roi.png",
+    "board_roi_sha256": "9d599db1c67c258dd9a3a51b565c9cc5cc63867e760096c80740c50e49fed272",
+    "init_grid": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        0,
+        5,
+        0,
+        2,
+        5
+      ],
+      [
+        3,
+        0,
+        4,
+        5,
+        4,
+        2
+      ],
+      [
+        3,
+        0,
+        2,
+        4,
+        4,
+        2
+      ],
+      [
+        2,
+        2,
+        4,
+        5,
+        5,
+        5
+      ]
+    ],
+    "phase": "序盤",
+    "fill_ratio": 0.3056,
+    "has_ojama": false,
+    "video_id": "c16",
+    "side": "2P",
+    "t_sec": 1411.3
+  }
+]

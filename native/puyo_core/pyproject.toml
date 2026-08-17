@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "puyo_core"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "ぷよぷよ連鎖シミュレーション+ビームサーチ Rust ネイティブ拡張 (PyO3)"
+
+[tool.maturin]
+module-name = "puyo_core"
+manifest-path = "Cargo.toml"

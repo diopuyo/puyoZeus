@@ -28,12 +28,15 @@ from src.scoring import (
     OJAMA_RATE_STANDARD,
     SCORE_CONSISTENCY_RATIO_MAX,
     SCORE_CONSISTENCY_RATIO_MIN,
+    CHAIN_SCORE_MULTIPLE_OF,
+    NON_CHAIN_SCORE_DELTA_MAX_APPROX,
     calculate_chain_score,
     calculate_step_score,
     chain_power,
     color_bonus,
     compute_effective_rate,
     connection_bonus,
+    is_pure_chain_score_delta,
     is_score_consistent,
     score_consistency_ratio,
     score_to_ojama,
@@ -118,6 +121,32 @@ def test_simple_1chain_4connect_single_color() -> None:
     assert scored.total_score == 40
     assert scored.steps[0].erased_count == 4
     assert scored.steps[0].bonus_multiplier == 1
+
+
+def test_minimum_chain_score_meets_chain_total_min_score_gate() -> None:
+    """W7 根治③ (2026-08-13, docs/KNOWN_WEAKNESSES.md) の判断根拠となる
+    不変条件: 実在する連鎖 (chain_count>=1) の最小得点は、消去グループの
+    最小サイズ (4連結) × 最小倍率 (max(1,0)=1) で決まり、必ず
+    CHAIN_TOTAL_MIN_SCORE (ojama_accounting.py の連鎖ノイズゲート閾値) 以上
+    になる。この不変性により
+    「score_estimated=True (根治①で simulate 検証済み充填) なら常に既存の
+    total_score>=CHAIN_TOTAL_MIN_SCORE ゲートを素通しで満たす」ため、
+    ResolvedExchangeTracker のゲート拡張 (根治③の当初案) は不要と判断し
+    見送った (scripts/visualize_advantage_overlay.py の ResolvedExchangeTracker
+    参照)。本テストが破れたら根治③の簡素化前提が崩れ、ゲート拡張の
+    再実装が必要になる。"""
+    from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+
+    grid = _empty_grid()
+    grid[9][0] = COLOR_RED
+    grid[10][0] = COLOR_RED
+    grid[11][0] = COLOR_RED
+    grid[12][0] = COLOR_RED
+    board = Board.from_list(grid)
+    result = ChainSimulator().simulate(board)
+    assert result.chain_count >= 1
+    scored = calculate_chain_score(result)
+    assert scored.total_score == CHAIN_TOTAL_MIN_SCORE == 40
 
 
 def test_2chain_same_color_only() -> None:
@@ -419,3 +448,43 @@ def test_score_consistency_default_thresholds_are_module_constants() -> None:
     """既定の許容比率が SCORE_CONSISTENCY_RATIO_MIN/MAX と一致すること。"""
     assert SCORE_CONSISTENCY_RATIO_MIN == pytest.approx(0.5)
     assert SCORE_CONSISTENCY_RATIO_MAX == pytest.approx(2.0)
+
+
+# =============================================================================
+# is_pure_chain_score_delta (タスク#7 追加、2026-08-14)
+# =============================================================================
+
+
+def test_is_pure_chain_score_delta_multiple_of_10_is_pure() -> None:
+    """10の倍数は純粋な連鎖得点として整合 (混入なし)。"""
+    assert is_pure_chain_score_delta(7600)
+    assert is_pure_chain_score_delta(40)
+    assert is_pure_chain_score_delta(30920)
+
+
+def test_is_pure_chain_score_delta_rejects_non_multiple() -> None:
+    """10の倍数でない差分は落下ボーナス等の混入疑いとして拒否すること。"""
+    assert not is_pure_chain_score_delta(7598)  # c54 既知疑義値
+    assert not is_pure_chain_score_delta(41)
+    assert not is_pure_chain_score_delta(1)
+
+
+def test_is_pure_chain_score_delta_rejects_zero_and_negative() -> None:
+    """delta_score<=0 (連鎖が起きていない/得点減少) は整合とみなさない。"""
+    assert not is_pure_chain_score_delta(0)
+    assert not is_pure_chain_score_delta(-10)
+
+
+def test_is_pure_chain_score_delta_custom_multiple() -> None:
+    """multiple_of を明示指定すると既定の10ではなくその値で判定すること。"""
+    assert is_pure_chain_score_delta(120, multiple_of=20)
+    assert not is_pure_chain_score_delta(130, multiple_of=20)
+
+
+def test_chain_score_multiple_of_constant_is_10() -> None:
+    assert CHAIN_SCORE_MULTIPLE_OF == 10
+
+
+def test_non_chain_score_delta_max_approx_constant() -> None:
+    """W2 記載のおおよその上限値 (~250) がそのまま定数化されていること。"""
+    assert NON_CHAIN_SCORE_DELTA_MAX_APPROX == 250

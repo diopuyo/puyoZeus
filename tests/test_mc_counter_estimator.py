@@ -12,6 +12,7 @@ scripts/_bench_mc_counter_v2_2026-08-04.py の実測ベンチで別途確認す�
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 import src.indicators_v2 as iv
@@ -20,14 +21,17 @@ from scripts.mc_counter_estimator import (
     MC_COUNTER_MAX_HANDS_HARD_CAP,
     PLACEMENT_SPEED_BY_ROW_SEC,
     PLACEMENT_SPEED_FALLBACK_SEC,
+    _board_is_gravity_consistent,
     _clamp_row_index,
     _deadline_trigger_value,
     _mc_counter_seed,
     _placement_row_index,
+    _select_best_placement,
     _select_build_placement,
     estimate_counter_distribution,
 )
 from src.chain import ChainSimulator
+from src.puyo_core_bridge import NATIVE_AVAILABLE
 
 
 def _seed_board_ready_to_fire() -> Board:
@@ -80,6 +84,111 @@ class TestPlacementSpeedTable:
         before = Board()._grid.copy()
         after = before.copy()  # 新規セル無し (満杯で置けなかった防御的ケース)
         assert _placement_row_index(before, after) == 12
+
+
+def _seed_gravity_violation_board() -> Board:
+    """列0に浮きぷよ (row10=赤の下、row11=空、row12=赤という重力違反) を
+    仕込んだ人工盤面 (native 安全弁テスト専用)。
+
+    認識由来の浮きぷよ欠陥
+    (`project_gravity_violation_regen_lead_2026-07-30`、実測0.28%)を模した
+    もの。列2-3には通常材料 (青2連結) も積んでおき、ロールアウトが実際に
+    手を打てる (組む/発火フェーズが両方動く) 構図にする。
+    """
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    g[10][0] = COLOR_RED  # 浮きぷよ (下に row11 の空きを挟む)
+    g[12][0] = COLOR_RED
+    g[12][2] = COLOR_BLUE
+    g[12][3] = COLOR_BLUE
+    g[11][2] = COLOR_BLUE
+    return Board.from_list(g)
+
+
+class TestGravityViolationSafetyValve:
+    """重力違反盤面 (認識由来の浮きぷよ) に対する native 安全弁のテスト
+    (モジュール docstring「v3.1 重力違反盤面の安全弁」参照)。
+    """
+
+    def test_detects_floating_puyo_column(self) -> None:
+        board = _seed_gravity_violation_board()
+        assert not _board_is_gravity_consistent(board)
+
+    def test_normal_board_is_gravity_consistent(self) -> None:
+        board = _seed_board_ready_to_fire()
+        assert _board_is_gravity_consistent(board)
+
+    def test_empty_board_is_gravity_consistent(self) -> None:
+        assert _board_is_gravity_consistent(Board())
+
+    def test_native_default_matches_python_on_violation(self) -> None:
+        """重力違反盤面では use_native=True (既定) でも安全弁が働き、
+        呼び出し全体が純Python経路に固定される。use_native=False (明示的
+        純Python) と完全一致することで、native/Python混在による不整合が
+        起きないことを確認する (「完全一致」要件)。
+        """
+        board = _seed_gravity_violation_board()
+        native_default = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=3,
+        )
+        python_explicit = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=3, use_native=False,
+        )
+        assert native_default.mean == pytest.approx(python_explicit.mean)
+        assert native_default.p25 == pytest.approx(python_explicit.p25)
+        assert native_default.p75 == pytest.approx(python_explicit.p75)
+        assert native_default.mean_hands_used == pytest.approx(
+            python_explicit.mean_hands_used,
+        )
+
+
+@pytest.mark.skipif(
+    not NATIVE_AVAILABLE, reason="puyo_core ネイティブ拡張が未ビルド (maturin develop 要)",
+)
+class TestNativePythonSelectionParity:
+    """v3.2 (2026-08-13、選択ロジックの境界コスト削減) の回帰確認。
+
+    重力違反盤面限定の安全弁テスト (`TestGravityViolationSafetyValve`) とは
+    別に、通常 (重力一貫) 盤面で `use_native=True` (境界コスト削減後の
+    native経路) が `use_native=False` (純Python経路) と完全一致することを
+    直接確認する (`_select_best_placement`/`_select_build_placement` の
+    リファクタ自体の正しさの検証、往復回数を減らしても選択結果が変わらない
+    ことの保証)。
+    """
+
+    def test_select_best_placement_native_matches_python(self) -> None:
+        board = _seed_board_ready_to_fire()
+        sim = ChainSimulator()
+        native = _select_best_placement(board, (COLOR_RED, COLOR_BLUE), sim, use_native=True)
+        python = _select_best_placement(board, (COLOR_RED, COLOR_BLUE), sim, use_native=False)
+        assert native is not None
+        assert python is not None
+        assert native[0] == pytest.approx(python[0])
+        assert np.array_equal(native[1]._grid, python[1]._grid)
+        assert np.array_equal(native[2]._grid, python[2]._grid)
+
+    def test_select_build_placement_native_matches_python(self) -> None:
+        board = _seed_board_ready_to_fire()
+        sim = ChainSimulator()
+        native = _select_build_placement(board, (COLOR_RED, COLOR_RED), sim, use_native=True)
+        python = _select_build_placement(board, (COLOR_RED, COLOR_RED), sim, use_native=False)
+        assert native is not None
+        assert python is not None
+        assert np.array_equal(native._grid, python._grid)
+
+    def test_estimate_counter_distribution_native_matches_python_on_normal_board(self) -> None:
+        board = _seed_board_ready_to_fire()
+        native = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=5,
+            known_pairs=((COLOR_RED, COLOR_BLUE),),
+        )
+        python = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=5,
+            known_pairs=((COLOR_RED, COLOR_BLUE),), use_native=False,
+        )
+        assert native.mean == pytest.approx(python.mean)
+        assert native.p25 == pytest.approx(python.p25)
+        assert native.p75 == pytest.approx(python.p75)
+        assert native.mean_hands_used == pytest.approx(python.mean_hands_used)
 
 
 class TestSeedDeterminism:

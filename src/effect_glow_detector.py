@@ -37,6 +37,39 @@ BRIGHT_V_THRESHOLD: int = 230
 # 窓内 (行帯) の bright_ratio 最大値がこれを超えたらエフェクトグローありと判定する。
 EFFECT_BRIGHT_RATIO_MAX_THRESHOLD: float = 0.97
 
+# 本モジュールが前提とするフルフレーム解像度 (H, W)。BoardRegion の絶対px座標
+# 較正 (DEFAULT_P1_REGION/P2_REGION) は 1920x1080 前提で定義されている
+# (CLAUDE.md「他解像度は1920x1080にリサイズしてから認識する」原則)。
+_EXPECTED_FRAME_SHAPE: tuple[int, int] = (1080, 1920)
+
+
+def _assert_1080p_frame(frame_bgr: np.ndarray) -> None:
+    """frame_bgr が 1920x1080 前提を満たすことを検証し、破っていれば即エラー化する。
+
+    2026-08-13 是正 (横展開監査 P3): 本モジュールはこれまで「1920x1080前提」を
+    docstring のみで説明しており、実体としての自衛 (assert) が無かった。
+    scripts/visualize_advantage_overlay.py が表示用 720p フレームをそのまま
+    認識 (本モジュール含む) に渡していた 2026-08-13 の座標不整合事故と同型の
+    リスクが、本モジュール単体にも構造的に残っていたため、新しい呼び出し
+    経路が誤った解像度のフレームを渡した場合に即座に検知できるようにする
+    (契約破りを黙って通さない)。呼び出し元の正しい対処は「1920x1080へ
+    リサイズしてから渡す」こと (collect_boards_lean.py と同じ正規化)。
+
+    Args:
+        frame_bgr: 呼び出し元が渡したフルフレーム (BGR)。
+
+    Raises:
+        ValueError: frame_bgr.shape[:2] が (1080, 1920) と一致しない場合。
+    """
+    actual = frame_bgr.shape[:2]
+    if actual != _EXPECTED_FRAME_SHAPE:
+        raise ValueError(
+            f"effect_glow_detector は 1920x1080 (H,W)={_EXPECTED_FRAME_SHAPE} "
+            f"前提だが実際の frame shape={actual} が渡された。呼び出し元で "
+            "1920x1080 へリサイズしてから渡すこと "
+            "(CLAUDE.md「他解像度は1920x1080にリサイズしてから認識する」原則)。"
+        )
+
 
 def compute_cell_bright_ratio(patch_bgr: np.ndarray) -> float:
     """1セル切り出し画像 (BGR) の高輝度画素比率を計算する (stateless純関数)。
@@ -71,7 +104,12 @@ def compute_effect_glow_score(
 
     Returns:
         窓内の全セル (rows × BOARD_COLS) の bright_ratio 最大値 (0.0〜1.0)。
+
+    Raises:
+        ValueError: frame_bgr が 1920x1080 でない場合 (2026-08-13 追加、
+            契約破りの即時エラー化。`_assert_1080p_frame` 参照)。
     """
+    _assert_1080p_frame(frame_bgr)
     max_ratio = 0.0
     for row in rows:
         for col in range(BOARD_COLS):

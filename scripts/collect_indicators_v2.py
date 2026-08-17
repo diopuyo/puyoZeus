@@ -1,5 +1,13 @@
 """指標 v2 (第1バッチ) 算出パイプライン — 1 動画 → dataset CSV。
 
+**警告 (2026-08-13、横展開監査 docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1)**:
+本ファイルは主経路 (本番データ収集) から引退済み。本番データ収集には
+`scripts/collect_boards_lean.py` を使用すること。本ファイルは
+`RecognitionPipeline.load_default` を呼ぶ際に `src.production_config.
+RECOGNITION_ADOPTED` (バーストガード等の本番採用フラグ群) を一切配線して
+いないため、ここで生成した CSV は本番より劣化した認識で作られている。
+本ファイルは指標関数 (indicators_v2.py 等) の単体確認専用として残置する。
+
 `docs/INDICATOR_V2_MEASUREMENT_SPEC_2026-06-17.md` のパイプライン仕様に従う。
 
 処理概要:
@@ -212,6 +220,9 @@ INDICATOR_COLUMNS: tuple[str, ...] = (
     "expected_fire_k2", "expected_fire_k2_raw",
     "expected_fire_k3", "expected_fire_k3_raw",
     "expected_fire_k4", "expected_fire_k4_raw",
+    # XIX 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+    # (INDICATOR_COLUMNS 末尾、新指標は常に末尾追加で順序保持)
+    "center_bulge", "center_bulge_raw",
 )
 ALL_COLUMNS: tuple[str, ...] = META_COLUMNS + INDICATOR_COLUMNS
 
@@ -396,6 +407,7 @@ def _fill_indicator_columns(
     bm = iv.column_bumpiness(board)
     dm = iv.death_margin(board)
     dn = iv.death_margin_neighbor(board)
+    cb = iv.center_bulge(board)
     cm = iv.current_max_chain(board)
     ifp = iv.immediate_fire_power(board, elapsed_sec)
     rfp = iv.reach_fire_power(board, next_pair, dnext_pair, elapsed_sec)
@@ -432,6 +444,9 @@ def _fill_indicator_columns(
         "column_bumpiness": bm.score, "column_bumpiness_raw": bm.raw,
         "death_margin": dm.score, "death_margin_raw": dm.raw,
         "death_margin_neighbor": dn.score, "death_margin_neighbor_raw": dn.raw,
+        # XIX 中央凸度 (末尾追加。dict の記述位置は CSV 列順に影響しない。
+        # 列順は INDICATOR_COLUMNS 側で末尾固定済み)
+        "center_bulge": cb.score, "center_bulge_raw": cb.raw,
         "current_max_chain": cm.score, "current_max_chain_raw": cm.raw,
         "immediate_fire_power": ifp.score, "immediate_fire_power_raw": ifp.raw,
         "reach_fire_power": rfp.value.score, "reach_fire_power_raw": rfp.value.raw,

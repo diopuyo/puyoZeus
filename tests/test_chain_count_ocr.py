@@ -129,6 +129,104 @@ def test_chain_count_ocr_load_default_present_digits() -> None:
 
 
 # =============================================================================
+# マルチテンプレート (タスク#7、2026-08-14、W3対処: 単一動画採取の脆弱性)
+# =============================================================================
+
+
+def _make_synthetic_glyph(height: int = 60, width: int = 40, salt: int = 0) -> np.ndarray:
+    """NCC マッチングに十分な分散を持つ合成グリフパターンを作る (実テンプレ非依存)。
+
+    実テンプレファイルへの依存を避け、決定論的・自己完結なテストにするため
+    正弦波パターンで合成する。salt を変えると別物とみなせる程度に無相関な
+    パターンになる (実測: 60台のスコアには乗らない)。
+    """
+    yy, xx = np.mgrid[0:height, 0:width]
+    pattern = (np.sin((xx + salt) * 0.7) + np.cos((yy + salt) * 0.5)) * 60 + 128
+    img = np.clip(pattern, 0, 255).astype(np.uint8)
+    return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+
+def test_multi_template_extra_template_recovers_missed_match() -> None:
+    """primary テンプレが不一致でも extra_templates の一致で検出できること (主目的)。"""
+    good = _make_synthetic_glyph(salt=1)
+    mismatched_primary = _make_synthetic_glyph(salt=99)
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, good, "1P", 40, 220)
+
+    # 比較: primary 単体では検出できないこと (= recover の意味があることの担保)
+    ocr_primary_only = ChainCountOcr(templates={3: mismatched_primary}, min_confidence=0.9)
+    assert ocr_primary_only.read_side(frame, "1P").chain_count is None
+
+    ocr = ChainCountOcr(
+        templates={3: mismatched_primary},
+        extra_templates={3: [good]},
+        min_confidence=0.9,
+    )
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 3
+    assert res.confidence >= 0.9
+
+
+def test_multi_template_single_primary_only_unchanged_behavior() -> None:
+    """extra_templates を渡さない場合は旧来 (単一テンプレ) と bit-identical。"""
+    good = _make_synthetic_glyph(salt=5)
+    ocr = ChainCountOcr(templates={4: good}, min_confidence=0.5)
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, good, "1P", 50, 260)
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 4
+    assert res.confidence == pytest.approx(1.0, abs=1e-3)
+
+
+def test_multi_template_extra_template_does_not_degrade_existing_match() -> None:
+    """既に一致している primary に無関係な extra を追加しても結果は変わらない。"""
+    good = _make_synthetic_glyph(salt=7)
+    bad_extra = _make_synthetic_glyph(salt=123)
+    ocr = ChainCountOcr(
+        templates={2: good}, extra_templates={2: [bad_extra]}, min_confidence=0.9,
+    )
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, good, "1P", 40, 220)
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 2
+    assert res.confidence == pytest.approx(1.0, abs=1e-3)
+
+
+def test_load_template_sources_from_dir_picks_up_extra_src_files(tmp_path: Path) -> None:
+    """digit_{N}.png (primary) と digit_{N}_src*.png (追加ソース) の両方を読み込む。"""
+    good = _make_synthetic_glyph(salt=1)
+    alt = _make_synthetic_glyph(salt=2)
+    cv2.imwrite(str(tmp_path / "digit_6.png"), good)
+    cv2.imwrite(str(tmp_path / "digit_6_src_c11.png"), alt)
+    primary, extra = ChainCountOcr._load_template_sources_from_dir(tmp_path)
+    assert 6 in primary
+    assert 6 in extra
+    assert len(extra[6]) == 1
+
+
+def test_load_template_sources_from_dir_empty_extra_when_no_src_files(tmp_path: Path) -> None:
+    """追加ソースが無ければ extra は空辞書 (旧来ディレクトリ構成との互換)。"""
+    good = _make_synthetic_glyph(salt=1)
+    cv2.imwrite(str(tmp_path / "digit_7.png"), good)
+    primary, extra = ChainCountOcr._load_template_sources_from_dir(tmp_path)
+    assert 7 in primary
+    assert extra == {}
+
+
+def test_load_default_end_to_end_with_extra_src_uses_multi_template(tmp_path: Path) -> None:
+    """load_default() が追加ソースを自動で取り込み、検出の復旧に使えること。"""
+    good = _make_synthetic_glyph(salt=3)
+    mismatched_primary = _make_synthetic_glyph(salt=88)
+    cv2.imwrite(str(tmp_path / "digit_8.png"), mismatched_primary)
+    cv2.imwrite(str(tmp_path / "digit_8_src_extra.png"), good)
+    ocr = ChainCountOcr.load_default(template_dir=tmp_path, min_confidence=0.9)
+    frame = _make_blank_frame()
+    frame = _paint_digit_into_board(frame, good, "1P", 40, 220)
+    res = ocr.read_side(frame, "1P")
+    assert res.chain_count == 8
+
+
+# =============================================================================
 # 位置可変性: ROI 内の異なる座標でも読み取れることを確認 (本モジュールの要点)
 # =============================================================================
 

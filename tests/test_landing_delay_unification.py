@@ -14,7 +14,11 @@ import pytest
 
 from src.indicators_v2 import (
     CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11,
+    CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14,
+    CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14,
+    CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14,
     CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11,
+    CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14,
     CHAIN_ANIM_PER_STEP_SEC,
     SEC_PER_HAND,
     estimate_chain_anim_duration_sec,
@@ -110,6 +114,95 @@ def test_estimate_chain_anim_duration_sec_unknown_calibration_raises() -> None:
     """未知の calibration 指定は ValueError で明示的に失敗する。"""
     with pytest.raises(ValueError):
         estimate_chain_anim_duration_sec(1, calibration="not_a_real_calibration")
+
+
+# ============================
+# 較正 Phase 2 (2026-08-14、連鎖数別演出時間の実測テーブル較正) 回帰テスト
+# ============================
+# calibration="empirical_table_2026_08_14" は
+# data/verify/chain_anim_duration_2026-08-14/table_by_chain_count.csv
+# (旧23動画+新10動画Phase L実測) の中央値テーブルを使う。
+# docs/DEMO_REVIEW_2026-08-13.md #12 案B のフォローアップ。
+
+@pytest.mark.parametrize("chain_count", [0, 1, 4, 6, 8, 13, 20])
+def test_estimate_chain_anim_duration_sec_default_still_legacy_after_new_calibration_added(
+    chain_count: int,
+) -> None:
+    """新 calibration 追加後も calibration 省略時は従来 (="legacy") と
+    bit-identical (backwards compat、既存呼び出し多数への影響ゼロ)。"""
+    assert (
+        estimate_chain_anim_duration_sec(chain_count)
+        == estimate_chain_anim_duration_sec(chain_count, calibration="legacy")
+        == CHAIN_ANIM_PER_STEP_SEC * max(0, chain_count)
+    )
+
+
+@pytest.mark.parametrize("chain_count,expected_sec", [
+    (1, CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[1]),
+    (6, CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[6]),
+    (8, CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[8]),
+    (12, CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[12]),
+])
+def test_estimate_chain_anim_duration_sec_empirical_table_exact_integer_points(
+    chain_count: int, expected_sec: float,
+) -> None:
+    """テーブルの整数点 (N=1..12) はテーブル値そのものと厳密一致する。"""
+    assert (
+        estimate_chain_anim_duration_sec(chain_count, calibration="empirical_table_2026_08_14")
+        == pytest.approx(expected_sec)
+    )
+
+
+def test_estimate_chain_anim_duration_sec_empirical_table_interpolates_between_integers() -> None:
+    """整数間 (N=1.5) はテーブルの隣接2点を線形補間した値になる。"""
+    lo = CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[1]
+    hi = CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[2]
+    expected = lo + (hi - lo) * 0.5
+    assert (
+        estimate_chain_anim_duration_sec(1.5, calibration="empirical_table_2026_08_14")
+        == pytest.approx(expected)
+    )
+
+
+def test_estimate_chain_anim_duration_sec_empirical_table_below_one_interpolates_from_zero() -> None:
+    """0<N<1 は原点0.0とテーブル[1]の間を線形補間する (N=0付近で連続)。"""
+    hi = CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14[1]
+    expected = hi * 0.5
+    assert (
+        estimate_chain_anim_duration_sec(0.5, calibration="empirical_table_2026_08_14")
+        == pytest.approx(expected)
+    )
+
+
+def test_estimate_chain_anim_duration_sec_empirical_table_extrapolation_formula() -> None:
+    """N=13以上 (実測サンプル極小域) は線形フィット a+b*N と厳密一致する
+    (診断報告 案B 指定値 a=3.3, b=0.89、クランプせず外挿し続ける)。"""
+    for n in (13, 14, 15, 20, 30):
+        expected = (
+            CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14
+            + CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14 * n
+        )
+        assert (
+            estimate_chain_anim_duration_sec(n, calibration="empirical_table_2026_08_14")
+            == pytest.approx(expected)
+        )
+    assert CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14 == 13
+
+
+def test_estimate_chain_anim_duration_sec_empirical_table_zero_or_negative() -> None:
+    """連鎖数が0以下ならテーブルを見ずに0.0を返す (legacy/v2026_08_11と同じ規約)。"""
+    assert estimate_chain_anim_duration_sec(0, calibration="empirical_table_2026_08_14") == 0.0
+    assert estimate_chain_anim_duration_sec(-3, calibration="empirical_table_2026_08_14") == 0.0
+
+
+def test_estimate_chain_anim_duration_sec_empirical_table_exceeds_legacy_for_large_chains() -> None:
+    """大連鎖 (6/8連鎖) では実測テーブルが legacy (0.4秒/連鎖) を大幅に上回る
+    (docs/DEMO_REVIEW_2026-08-13.md #12 の残課題「実演出8.1秒 vs 予算4.06秒」
+    の直接的な根治確認)。"""
+    for n in (6, 8):
+        legacy = estimate_chain_anim_duration_sec(n)
+        empirical = estimate_chain_anim_duration_sec(n, calibration="empirical_table_2026_08_14")
+        assert empirical > legacy * 2.0
 
 
 # ============================

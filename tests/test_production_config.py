@@ -20,6 +20,8 @@ import pytest
 from src.production_config import (
     ADVANTAGE_ADOPTED,
     COLLECT_ONLY_ADOPTED,
+    COUNTER_REACH_ENABLED_BY_DEFAULT,
+    INDICATOR_REORG_DECISIONS,
     RECOGNITION_ADOPTED,
     VISUALIZATION_ADOPTED,
     advantage_overlay_flags,
@@ -134,3 +136,62 @@ class TestGeneratorsUseProductionFlags:
             + list(ADVANTAGE_ADOPTED) + list(VISUALIZATION_ADOPTED)
         ):
             assert _flag_name(f.flag) in text
+
+
+class TestCounterReachAdoption:
+    """0-4 (指標大整理提案書): 反撃計算の正式登録・既定ON化の回帰テスト。
+
+    過去に「採用」とコードコメントのみ先行し、本ファイル未登録・CLI既定値も
+    OFF のままという食い違いがあった (2026-08-12 発覚)。この不整合の再発を
+    機械的に防ぐ。
+    """
+
+    def test_counter_reach_registered_in_advantage_adopted(self) -> None:
+        """--counter-reach が ADVANTAGE_ADOPTED に登録されていること。"""
+        flags = [_flag_name(f.flag) for f in ADVANTAGE_ADOPTED]
+        assert "--counter-reach" in flags
+
+    def test_counter_reach_enabled_by_default_flag_is_true(self) -> None:
+        """単一情報源の真偽値が True (ON) であること。"""
+        assert COUNTER_REACH_ENABLED_BY_DEFAULT is True
+
+    def test_visualize_advantage_overlay_generate_default_matches(self) -> None:
+        """generate() の enable_counter_reach 既定値が production_config と
+        一致すること (関数既定値と CLI 既定値の食い違い再発防止)。"""
+        import inspect
+
+        import scripts.visualize_advantage_overlay as vao
+
+        sig = inspect.signature(vao.generate)
+        default = sig.parameters["enable_counter_reach"].default
+        assert default == COUNTER_REACH_ENABLED_BY_DEFAULT
+
+    def test_cli_default_sourced_from_production_config(self) -> None:
+        """--counter-reach の CLI 既定値が production_config 定数の直接参照
+        になっていること (直書き default=False の再発防止、正規表現で
+        --counter-reach 引数定義ブロック内の default= を確認する)。"""
+        text = _script_text("scripts/visualize_advantage_overlay.py")
+        m = re.search(
+            r'"--counter-reach",\s*action="store_true",\s*'
+            r"default=(\w+)", text,
+        )
+        assert m is not None, "--counter-reach の定義が見つからない"
+        assert m.group(1) == "COUNTER_REACH_ENABLED_BY_DEFAULT"
+
+
+class TestIndicatorReorgDecisions:
+    """指標大整理 (2026-08-12 決定記録) の記録が production_config に残って
+    いることの回帰テスト。"""
+
+    def test_has_date_and_reason(self) -> None:
+        """各決定記録に採用日と根拠が記録されていること。"""
+        for f in INDICATOR_REORG_DECISIONS:
+            assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", f.adopted), f.flag
+            assert len(f.reason) >= 10, f"{f.flag} の根拠が薄い"
+
+    def test_describe_includes_reorg_section(self) -> None:
+        """describe() に指標大整理セクションが出ること。"""
+        text = describe()
+        assert "指標大整理" in text
+        for f in INDICATOR_REORG_DECISIONS:
+            assert f.flag in text
