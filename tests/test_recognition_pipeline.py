@@ -4782,3 +4782,201 @@ def test_next_history_starvation_fix_end_to_end_preserves_correct_color():
         "そのまま届くべき (W23根治)"
     )
 
+
+# ---------------------------------------------------------------------------
+# W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25):
+# enable_ojama_cnn_override_warmup フラグテスト。おじゃま落下時の白雲
+# パーティクル誤認による cycle 71n override の誤発火対策。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_ojama_override_warmup(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_ojama_cnn_override_warmup フラグ付きの pipeline を構築する。
+
+    enable_ojama_fall_board_settle=False を明示して OJAMA_FALL 退出判定を
+    単純な「ROI お邪魔数 0 で即 STABLE」経路 (`_detect_ojama_fall_exit`) に
+    固定する (実プロダクション既定 True の全盤面 settle 判定は、
+    プロダクション環境の複雑な signals 依存があり単体テストで駆動する
+    には不向きなため、_make_pipe_with_chain_exit_warmup が
+    enable_gravity_settle_state=False を明示するのと同じ理由で除外する)。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_fall_board_settle=False,
+        enable_ojama_cnn_override_warmup=enable_flag,
+    )
+
+
+def test_enable_ojama_cnn_override_warmup_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_cnn_override_warmup が False。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    assert not pipe._enable_ojama_cnn_override_warmup, (
+        "default OFF: _enable_ojama_cnn_override_warmup は False であるべき"
+    )
+
+
+def test_enable_ojama_cnn_override_warmup_flag_on():
+    """フラグ ON → _enable_ojama_cnn_override_warmup が True。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    assert pipe._enable_ojama_cnn_override_warmup, (
+        "ON時: _enable_ojama_cnn_override_warmup は True であるべき"
+    )
+
+
+def test_ojama_override_warmup_initial_until_zero():
+    """初期状態では _ojama_override_exit_until_* は 0.0。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    assert pipe._ojama_override_exit_until_1p == 0.0
+    assert pipe._ojama_override_exit_until_2p == 0.0
+
+
+def test_ojama_override_warmup_reset_clears_until():
+    """reset() 後は _ojama_override_exit_until_* が 0.0 に戻る。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    pipe._ojama_override_exit_until_1p = 99.0
+    pipe._ojama_override_exit_until_2p = 99.0
+    pipe.reset()
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "reset 後は 1P warmup until が 0 になるべき"
+    )
+    assert pipe._ojama_override_exit_until_2p == 0.0, (
+        "reset 後は 2P warmup until が 0 になるべき"
+    )
+
+
+def test_ojama_override_warmup_off_no_regression():
+    """フラグ OFF (default): update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+def test_ojama_override_warmup_constant_exists():
+    """OJAMA_OVERRIDE_EXIT_WARMUP_SEC 定数が正の float で存在する。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    assert isinstance(OJAMA_OVERRIDE_EXIT_WARMUP_SEC, float)
+    assert OJAMA_OVERRIDE_EXIT_WARMUP_SEC > 0.0
+
+
+def test_ojama_override_warmup_triggers_on_ojama_fall_to_stable_transition():
+    """OJAMA_FALL→STABLE 遷移 (score_delta 無しで自然に1frameで遷移、
+    OjamaPhaseDetector の既存挙動) で _ojama_override_exit_until_1p が
+    time_sec + OJAMA_OVERRIDE_EXIT_WARMUP_SEC にセットされる。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+
+    pipe = _make_pipe_ojama_override_warmup(True)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.STABLE, (
+        "score_delta 無しで OJAMA_FALL は自然に STABLE へ復帰するはず "
+        "(OjamaPhaseDetector 既存挙動)"
+    )
+    assert pipe._ojama_override_exit_until_1p == pytest.approx(
+        10.0 + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    )
+    # 2P 側は無関係のため 0.0 のまま
+    assert pipe._ojama_override_exit_until_2p == 0.0
+
+
+def test_ojama_override_warmup_off_does_not_set_until():
+    """フラグ OFF: OJAMA_FALL→STABLE 遷移が起きても
+    _ojama_override_exit_until_1p は更新されない (bit-identical)。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.STABLE
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "フラグ OFF では warmup until が一切更新されないべき (bit-identical)"
+    )
+
+
+def test_ojama_override_warmup_suppresses_cycle71n_override_during_window():
+    """W25 中核再現: OJAMA_FALL→STABLE warmup 中は cycle 71n の長期不一致
+    override が誤発火しない (白雲パーティクル起因の誤 CNN 観測を反映しない)。
+    """
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_ojama_override_warmup(True, reader=reader)
+
+    # frame 0: OJAMA_FALL → STABLE 遷移 (盤面不一致のないクリーンな遷移) で
+    # warmup を起動する。
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+    pipe.update(0, 10.0, _dummy_frame())
+    warmup_until = pipe._ojama_override_exit_until_1p
+    assert warmup_until > 10.0
+
+    # frame 1: 続けて STABLE 中 (prev_state==STABLE、warmup は継続中)。
+    # CNN が誤って赤 (雲パーティクル起因の誤観測を模擬) を観測、confirmed は
+    # 正解の紫。history を override 閾値-1個まで充填 (既存
+    # _fire_cycle71n_override と同一パターン)。
+    confirmed = Board()
+    confirmed.set(12, 1, COLOR_PURPLE)
+    pipe._sm_1p.context.confirmed_board = confirmed.copy()
+    pipe._sm_1p.context.pending_board = confirmed.copy()
+    pipe._stable_cnn_history_1p[(12, 1)] = (
+        [COLOR_RED] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader._p1 = cnn_wrong  # type: ignore[attr-defined]
+
+    result = pipe.update(1, warmup_until - 0.01, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "warmup 中は cycle 71n override が誤色書込みを抑制するべき"
+    )
+
+
+def test_ojama_override_warmup_allows_override_after_window_expires():
+    """warmup 終了後は cycle 71n override が通常通り発火する
+    (雲が晴れた後の正当な override は妨げない、既存挙動を保持)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_ojama_override_warmup(True, reader=reader)
+
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+    pipe.update(0, 10.0, _dummy_frame())
+    warmup_until = pipe._ojama_override_exit_until_1p
+
+    confirmed = Board()
+    confirmed.set(12, 1, COLOR_PURPLE)
+    pipe._sm_1p.context.confirmed_board = confirmed.copy()
+    pipe._sm_1p.context.pending_board = confirmed.copy()
+    pipe._stable_cnn_history_1p[(12, 1)] = (
+        [COLOR_RED] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader._p1 = cnn_wrong  # type: ignore[attr-defined]
+
+    result = pipe.update(1, warmup_until + 0.01, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "warmup 終了後は通常の cycle 71n override が発火するべき"
+    )
+

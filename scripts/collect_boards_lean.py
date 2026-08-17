@@ -1058,6 +1058,10 @@ def collect_lean(
     # 本体へそのまま forward する。既定 False = 従来挙動完全維持
     # (backwards compat、統一測定 構成F 用に末尾追加)。
     enable_next_history_starvation_fix: bool = False,
+    # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): RecognitionPipeline
+    # 本体へそのまま forward する。既定 False = 従来挙動完全維持
+    # (backwards compat、統一測定 構成F+本フラグ の A/B 用に末尾追加)。
+    enable_ojama_cnn_override_warmup: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1347,6 +1351,7 @@ def collect_lean(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -2042,6 +2047,17 @@ def main() -> int:
             "bit-identical、統一測定 構成F 用)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-cnn-override-warmup", action="store_true",
+        dest="enable_ojama_cnn_override_warmup",
+        help=(
+            "W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25)。"
+            "おじゃま落下時の白雲パーティクル誤認対策。OJAMA_FALL→STABLE "
+            "遷移直後 OJAMA_OVERRIDE_EXIT_WARMUP_SEC(1.3s) 秒間、cycle 71n "
+            "の STABLE 長期不一致 override の発火のみを抑制する。既定は"
+            "無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2092,6 +2108,7 @@ def main() -> int:
         enable_next_history_starvation_fix=(
             args.enable_next_history_starvation_fix
         ),
+        enable_ojama_cnn_override_warmup=args.enable_ojama_cnn_override_warmup,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
