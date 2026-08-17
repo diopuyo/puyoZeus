@@ -54,6 +54,7 @@ NPZ_DIRS: dict[str, Path] = {
     "b": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_r2_2026-08-17",
     "c": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_w10guard_2026-08-17",
     "d": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_r2w10_2026-08-17",
+    "e": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_e_2026-08-17",
 }
 
 
@@ -173,11 +174,11 @@ def analyze_tag(tag: str) -> dict[str, Any]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tag", choices=["a", "b", "c", "d"])
+    ap.add_argument("--tag", choices=["a", "b", "c", "d", "e"])
     ap.add_argument("--all", action="store_true")
     args = ap.parse_args()
 
-    tags = ["a", "b", "c", "d"] if args.all else ([args.tag] if args.tag else [])
+    tags = ["a", "b", "c", "d", "e"] if args.all else ([args.tag] if args.tag else [])
     if not tags:
         ap.print_help()
         return

@@ -1879,6 +1879,173 @@ def test_landing_color_guard_expires_after_deadline():
 
 
 # ---------------------------------------------------------------------------
+# 持続誤認26件系統1 (2026-08-17): enable_override_color_guard フラグテスト
+# docs/KNOWN_WEAKNESSES.md W10 — cycle 71n の STABLE 長期不一致 override が
+# 誤発火した際、書き込まれたセルを watch リストに合流登録して即時再訂正する。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_override_color_guard(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_override_color_guard フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_override_color_guard=enable_flag,
+    )
+
+
+def test_enable_override_color_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_override_color_guard が False。"""
+    pipe = _make_pipe_override_color_guard(False)
+    assert not pipe._enable_override_color_guard, (
+        "default OFF: _enable_override_color_guard は False であるべき"
+    )
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_enable_override_color_guard_flag_on():
+    """フラグ ON → _enable_override_color_guard が True。"""
+    pipe = _make_pipe_override_color_guard(True)
+    assert pipe._enable_override_color_guard, (
+        "ON時: _enable_override_color_guard は True であるべき"
+    )
+
+
+def test_enable_override_color_guard_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_override_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def _fire_cycle71n_override(
+    pipe: RecognitionPipeline,
+    *,
+    cell: tuple[int, int],
+    correct_color: int,
+    wrong_color: int,
+    frame_bgr: "np.ndarray",
+    time_sec: float = 10.0,
+) -> "PipelineResult":
+    """cycle 71n の長期不一致 override を 1 回の update() で発火させる
+    テスト用ヘルパー。history を「あと 1 フレームで閾値到達」まで事前充填し、
+    このフレームの CNN 観測 (wrong_color) を追加して override を発火させる。
+    """
+    from src.board import Board as _Board
+
+    r, c = cell
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    confirmed = _Board()
+    confirmed.set(r, c, correct_color)
+    ctx.confirmed_board = confirmed.copy()
+    ctx.pending_board = confirmed.copy()
+    # STABLE_CNN_HISTORY_FRAMES - 1 個の wrong_color を事前充填
+    # (このフレームで 1 個追加され閾値到達、ratio=1.0 >= 0.75 で override 発火)。
+    pipe._stable_cnn_history_1p[(r, c)] = (
+        [wrong_color] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    return pipe.update(0, time_sec, frame_bgr)
+
+
+def test_override_color_guard_registers_watch_entry_when_override_fires():
+    """フラグ ON: cycle 71n override 発火セルが watch リストに登録され、
+    期限は LANDING_VOTE_SEC 秒後 (新規定数を増やさず既存定数を流用)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_override_color_guard(True, reader=reader)
+
+    result = _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "override は従来通り発火し、誤色が書き込まれるべき"
+    )
+    assert len(pipe._landing_color_watch_1p) == 1
+    (watched_cell, deadline) = pipe._landing_color_watch_1p[0]
+    assert watched_cell == (12, 1)
+    assert deadline == pytest.approx(10.0 + pipe.LANDING_VOTE_SEC)
+
+
+def test_override_color_guard_off_does_not_register_watch_entry():
+    """フラグ OFF: override は従来通り発火するが watch リストへの登録は
+    発生しない (= 既存 cycle 71n 挙動そのまま、bit-identical)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_override_color_guard(False, reader=reader)
+
+    result = _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "override 自体はフラグ OFF でも従来通り発火するべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "フラグ OFF では watch リストへの登録は一切起きないべき (bit-identical)"
+    )
+
+
+def test_override_color_guard_self_corrects_within_one_frame_when_cnn_hsv_agree():
+    """持続誤認26件系統1 の中核再現テスト: override 誤発火の直後、
+    次フレームで CNN==HSV が正解に一致すれば LANDING_VOTE_SEC (0.4秒) を
+    待たず 1 フレームで自己訂正される (c23/c10 実例の 0.47〜6.0 秒放置を
+    大幅短縮できることの証明)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    class _HsvAgreesPurple:
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_PURPLE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvAgreesPurple()
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+    pipe = _make_pipe_override_color_guard(True, reader=reader)
+
+    # frame 0: override 誤発火 (バースト末尾、まだ CNN=赤のまま)
+    _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+    assert int(pipe._sm_1p.context.confirmed_board.get(12, 1)) == COLOR_RED
+    assert len(pipe._landing_color_watch_1p) == 1
+
+    # frame 1: バースト終了、CNN が正解 (紫) に復帰。 HSV も紫で一致。
+    reader._p1 = Board()
+    reader._p1.set(12, 1, COLOR_PURPLE)
+    result = pipe.update(1, 10.0 + 1 / 60, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "CNN==HSV が正解に一致した次フレームで即座に自己訂正されるべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "解決済セルは監視リストから除去されるべき"
+    )
+
+
+# ---------------------------------------------------------------------------
 # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
 # _flag_landing_distrust_cells 単体テスト
 # ---------------------------------------------------------------------------

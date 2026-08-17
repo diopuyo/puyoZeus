@@ -964,6 +964,21 @@ class BoardStateMachine:
         # ため対象外 (`_TRANSITION_MERGE_GUARD_SCOPE` と同じスコープを再利用)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照、c109 実測): OJAMA_FALL → STABLE
+        # 遷移 merge で、既存の色ぷよ (1-5) が同フレームの CNN 誤読で
+        # おじゃま(9) に上書きされる物理違反 (= 同一列内の二重着地衝突、
+        # 煙/バーストの半透明重畳で既存puyoがおじゃま色に誤分類される事故)
+        # を防ぐ。True の場合、`_filter_transition_new_cnn_for_burst_guard`
+        # (既存関数、無改修で再利用) を OJAMA_FALL からの遷移merge時に
+        # signals.effect_gate_window_active に関係なく必ず適用し、
+        # 「base が EMPTY でない cell が おじゃま(9) に化ける」diff を
+        # 却下する (base=EMPTY→9 の正当な着地のみ許可)。
+        # `enable_transition_merge_guard` (Stage1.5) と独立フラグ
+        # (effect_gate_window_active 依存を外した狭いスコープの方が
+        # 効果を確認しやすいため)。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_column_stack_fix: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -997,6 +1012,10 @@ class BoardStateMachine:
         self._merge_use_majority_value = bool(merge_use_majority_value)
         # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
         self._enable_floating_gap_restore = bool(enable_floating_gap_restore)
+        # 持続誤認26件系統2 (2026-08-17)。 default False = bit-identical。
+        self._enable_ojama_column_stack_fix = bool(
+            enable_ojama_column_stack_fix
+        )
         # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
         # True で _apply_stable_recovery_gate の安全弁C浮き判定/最終重力
         # フィルタに stable_recovery_counters 由来の support を渡す。
@@ -1265,9 +1284,19 @@ class BoardStateMachine:
             # `_merge_diff_only` 自体・既存引数 (signals.cnn_board) は不変、
             # ローカル変数 new_cnn_for_merge を新たに merge の入力に使うのみ。
             new_cnn_for_merge = signals.cnn_board
+            # 持続誤認26件系統2 (2026-08-17): OJAMA_FALL からの遷移では
+            # effect_gate_window_active の狭い窓に関係なく物理フィルタを
+            # 常時適用する (c109 実測=衝突フレームは窓終了後だった)。
+            _apply_ojama_stack_fix = (
+                self._enable_ojama_column_stack_fix
+                and self._ctx.state == BoardState.OJAMA_FALL
+            )
             if (
-                self._enable_transition_merge_guard
-                and signals.effect_gate_window_active
+                (
+                    self._enable_transition_merge_guard
+                    and signals.effect_gate_window_active
+                )
+                or _apply_ojama_stack_fix
             ):
                 new_cnn_for_merge = _filter_transition_new_cnn_for_burst_guard(
                     self._ctx.confirmed_board, signals.cnn_board, self._ctx.state,

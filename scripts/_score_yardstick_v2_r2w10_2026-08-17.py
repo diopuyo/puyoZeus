@@ -37,12 +37,13 @@ _sc = importlib.import_module("scripts._score_yardstick_v2_2026-08-14")
 YARDSTICK_DIR = _ROOT / "data" / "verify" / "yardstick_v2_2026-08-14"
 SCORING_DIR = YARDSTICK_DIR / "scoring_ablation"
 
-TAGS: tuple[str, ...] = ("a", "b", "c", "d")
+TAGS: tuple[str, ...] = ("a", "b", "c", "d", "e")
 TAG_LABEL: dict[str, str] = {
     "a": "A: 採用済みベース (w13p2相当)",
     "b": "B: A + R2 (floating_gap_restore)",
     "c": "C: A + W10ガード (landing_color_guard)",
     "d": "D: A + R2 + W10ガード (併用)",
+    "e": "E: D + 持続誤認26件修正2点 (override_color_guard + ojama_column_stack_fix)",
 }
 
 # 構成Aのnpz実体は再収集不要 (score_w13p2.json 収集時の yardstick_v2_boards_w13p2_
@@ -52,6 +53,7 @@ NPZ_DIRS: dict[str, Path] = {
     "b": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_r2_2026-08-17",
     "c": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_w10guard_2026-08-17",
     "d": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_r2w10_2026-08-17",
+    "e": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_e_2026-08-17",
 }
 
 
@@ -221,7 +223,7 @@ def compare_all() -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--score", choices=["a", "b", "c", "d"])
+    ap.add_argument("--score", choices=["a", "b", "c", "d", "e"])
     ap.add_argument("--compare", action="store_true")
     args = ap.parse_args()
 
