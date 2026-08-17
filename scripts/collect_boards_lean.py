@@ -1064,6 +1064,11 @@ def collect_lean(
     # 2箇所に効く。既定 False = 従来挙動完全維持 (backwards compat、
     # 統一測定 構成F+本フラグ の A/B 用に末尾追加)。
     enable_ojama_cnn_override_warmup: bool = False,
+    # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25):
+    # CNN観測入力段の会計整合フィルタ。RecognitionPipeline 本体へそのまま
+    # forward する。既定 False = 従来挙動完全維持 (backwards compat、
+    # 統一測定 構成F+第3弾フラグ の A/B 用に末尾追加)。
+    enable_ojama_write_accounting_guard: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1354,6 +1359,7 @@ def collect_lean(
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
         enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -2063,6 +2069,18 @@ def main() -> int:
             "既定は無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-write-accounting-guard", action="store_true",
+        dest="enable_ojama_write_accounting_guard",
+        help=(
+            "W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25)。"
+            "CNN観測入力段の会計整合フィルタを一元適用する。非空色セルへの"
+            "9書込みかつ pending おじゃま予告クレジット不足の場合のみ直近"
+            "安定色へ差し替える (空セルへの9書込み=正規着弾経路は対象外)。"
+            "cycle71n / drift-resync / 事後復旧ゲートは無改修。既定は無効 "
+            "(後方互換、bit-identical、構成F+第3弾フラグ の A/B 用)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2114,6 +2132,9 @@ def main() -> int:
             args.enable_next_history_starvation_fix
         ),
         enable_ojama_cnn_override_warmup=args.enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=(
+            args.enable_ojama_write_accounting_guard
+        ),
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
