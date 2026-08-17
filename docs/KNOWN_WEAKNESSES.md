@@ -709,12 +709,22 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
 - **事前情報が使える**: おじゃま落下イベントは会計 (score OCR差分+予告) から予測可能だが、
   パイプラインは既により正確なアンカー (OJAMA_FALL state遷移) を持つため新規予測器は不要 (アーキ判断)
 - **修正方向 (アーキ決定 2026-08-17、案4)**: cycle71n override専用の OJAMA_FALL→STABLE warmup を新設
-  (`_enable_chain_exit_warmup` と同型idiom、SEC基準≈1.3s、cycle71nのskip条件に追加のみ。
-  設置反映経路には触れず8フレーム基準を壊さない)。真因は「雲とおじゃまがHSVで区別できないこと」
-  ではなく「既知の時間窓で待てばいいのに cycle71n だけが待つ仕組み (warmup) を持っていない」配線ギャップ。
+  (`_enable_chain_exit_warmup` と同型idiom、SEC基準≈1.3s、cycle71nのskip条件に追加のみ)。
   雲ピクセル検出 (案1) はeffect gate v1と同型の脆さ、多数決の全セル常時適用 (案2) はスコープ過大で却下。
   **昇格条件を明記**: 同種のcycle71n盲点への「待て」ガードが今後2件目になったら、cycle71nの
   信頼度モデル再設計 (既知イベント除外の一般化) へ根治昇格 (feedback_kill_known_weaknesses 準拠)
+- **【実測 2026-08-17】案4は実装完了したが効果ゼロ (`--enable-ojama-cnn-override-warmup`、
+  コミット2fc990d、既定OFF)**: 対象9セル解消0/9・物差しv2でON/OFF bit-identical。
+  warmup自体は正しく発火していた (対象窓の91.8%で有効) が、**書き込み犯はcycle71nではなかった**。
+- **根因の再特定 (per-frameトレース)**: 真の書き込み経路は `board_state_machine.py` の
+  `_apply_transition` 内 `_merge_diff_only` (NON-STABLE→STABLE遷移時のCNN観測マージ)。
+  雲の持続~1-2秒の間に **OJAMA_FALL↔STABLE が1frame単位で何十回も振動** (対象窓271フレーム中
+  114回=42%がOJAMA_FALL) し、**再突入→再退出のたびに遷移マージが誤り値を焼き直す**。
+  cycle71nの18frame窓は判定に至る前に毎回リセットされ、どのwarmupも作用点が違うため無効。
+  つまりW25の本丸は「雲の誤分類」×「OJAMA_FALL振動中の遷移マージ書き込み」の複合。
+  次の設計判断 (アーキ再諮問): (a) 遷移マージ側への warmup 拡張 (作用点拡大、要承認) /
+  (b) OJAMA_FALL振動そのものの抑制 (状態機械のdwell/ヒステリシス) /
+  (c) 会計事前情報による選別 (着弾予定列・個数の色→9のみ許可) / (d) 視覚的unmix
 
 ### 認識1次目標の最終判定 (2026-08-17、セッション終了時点)
 - **①難所セット セル99%以上: 達成** — 同一フレーム基準 98.61% (フェーズ開始時) → **99.43%**
