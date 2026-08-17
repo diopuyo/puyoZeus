@@ -5173,3 +5173,350 @@ def test_ojama_override_warmup_resync_suppression_independent_of_other_guards():
         "他ガード (hsv_gate) は OFF かつ無関係なので増えないべき"
     )
 
+
+# ---------------------------------------------------------------------------
+# W25根治 第3弾・最終 (2026-08-18): CNN観測入力段の会計整合フィルタ。
+# docs/KNOWN_WEAKNESSES.md W25、
+# data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md 参照。
+# ---------------------------------------------------------------------------
+
+
+class _FakeOjamaSnapshot:
+    """OjamaAccountingTracker.get_snapshot() 互換スタブ (duck-typed)。"""
+
+    def __init__(self, pending_p1: int, pending_p2: int) -> None:
+        self.pending_p1 = pending_p1
+        self.pending_p2 = pending_p2
+
+
+class _FakeOjamaAccountingTracker:
+    """OjamaAccountingTracker 互換スタブ: 固定 pending 値を返す。"""
+
+    def __init__(self, pending_p1: int = 0, pending_p2: int = 0) -> None:
+        self._pending_p1 = pending_p1
+        self._pending_p2 = pending_p2
+
+    def get_snapshot(self, t_sec: float) -> _FakeOjamaSnapshot:  # noqa: ANN001
+        return _FakeOjamaSnapshot(self._pending_p1, self._pending_p2)
+
+    def on_state_transition(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def reset(self) -> None:
+        pass
+
+
+def _make_pipe_write_accounting_guard(
+    enable_flag: bool, reader: object | None = None,
+    pending_p1: int = 0, pending_p2: int = 0,
+) -> RecognitionPipeline:
+    """enable_ojama_write_accounting_guard フラグ付きの pipeline を構築する。
+
+    トラッカーは自動生成される (enable_ojama_fall_scoped_exit_accounting を
+    別途指定する必要はない、第3弾の会計配線要件)。テストで pending 値を
+    固定するため、_FakeOjamaAccountingTracker に差し替える。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=enable_flag,
+    )
+    pipe._ojama_fall_accounting_tracker = _FakeOjamaAccountingTracker(
+        pending_p1, pending_p2,
+    )
+    return pipe
+
+
+def test_enable_ojama_write_accounting_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_write_accounting_guard が False。"""
+    pipe = _make_pipe_write_accounting_guard(False)
+    assert not pipe._enable_ojama_write_accounting_guard
+
+
+def test_enable_ojama_write_accounting_guard_flag_on():
+    """フラグ ON → _enable_ojama_write_accounting_guard が True。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._enable_ojama_write_accounting_guard
+
+
+def test_ojama_write_accounting_guard_auto_creates_tracker_without_other_flag():
+    """会計配線要件: enable_ojama_fall_scoped_exit_accounting を指定せずとも
+    enable_ojama_write_accounting_guard=True だけでトラッカーが自動生成される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_write_accounting_guard=True,
+    )
+    assert pipe._ojama_fall_accounting_tracker is not None
+
+
+def test_ojama_write_accounting_guard_off_tracker_stays_none_by_default():
+    """両会計フラグ OFF (既定) ではトラッカーは None のまま
+    (bit-identical、既存 enable_ojama_fall_scoped_exit_accounting 単体の
+    挙動を変えない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+    )
+    assert pipe._ojama_fall_accounting_tracker is None
+
+
+def test_stable_color_memory_init_empty():
+    """直近安定色メモリは construction 直後は空辞書。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._stable_color_memory_1p == {}
+    assert pipe._stable_color_memory_2p == {}
+
+
+def test_stable_color_memory_cleared_on_pipeline_reset():
+    """pipeline reset() (試合境界) で直近安定色メモリがクリアされる。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+    pipe._stable_color_memory_2p[(3, 2)] = COLOR_GREEN
+    pipe.reset()
+    assert pipe._stable_color_memory_1p == {}
+    assert pipe._stable_color_memory_2p == {}
+
+
+def test_stable_color_memory_not_populated_when_flag_off():
+    """フラグ OFF: STABLE 確定があってもメモリは更新されない
+    (bit-identical、不要な計算コストも発生しない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(board.copy(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert pipe._stable_color_memory_1p == {}
+
+
+def test_stable_color_memory_populated_when_flag_on():
+    """フラグ ON: STABLE 確定で直近安定色メモリが confirmed_board の値で
+    更新される。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(board.copy(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert pipe._stable_color_memory_1p.get((9, 1)) == COLOR_RED
+
+
+def test_ojama_write_accounting_guard_rejects_spurious_ojama_end_to_end():
+    """核心 end-to-end: 直近安定色が赤のセルに雲混入で9が観測されても、
+    pending クレジット0 (会計上おじゃまが来ていない) なら confirmed/cnn_board
+    共に赤のまま保たれる (フィルタが入力段で訂正するため、cycle71n や
+    transition-merge に9が渡らない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)  # COLOR_OJAMA=9、雲混入による誤観測を模擬
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "入力段フィルタで cnn_board 自体が訂正されているべき"
+    )
+    assert int(result.p1.confirmed_board.get(9, 1)) == COLOR_RED, (
+        "confirmed_board も赤のまま維持されるべき (9書込みが下流に一切渡らない)"
+    )
+
+
+def test_ojama_write_accounting_guard_allows_genuine_landing_end_to_end():
+    """設計要件(c) end-to-end: 空セルへの正規のおじゃま着弾は pending
+    クレジット0でも常に反映される (フィルタ対象外、退行なし)。"""
+    empty_board = Board()
+    cnn_landing = Board()
+    cnn_landing.set(3, 2, 9)  # 空セルへの新規おじゃま着弾を模擬
+    reader = _StubImageReader(cnn_landing, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = empty_board.copy()
+    pipe._sm_1p.context.pending_board = empty_board.copy()
+    # memory に (3,2) の登録がない (= 未観測、EMPTY 扱い) 状態で着弾させる。
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(3, 2)) == 9, (
+        "空セルへの正規着弾はフィルタ対象外、素通しされるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_rejects_even_when_credit_positive():
+    """実測に基づく設計修正 (2026-08-18、c13実測): 当初は会計上 pending が
+    十分 (credit>0) なら colored→9 を素通しする設計だったが、score OCR
+    異常由来の巨大クレジットが実害の温床であることが c13 実測で確定した。
+    ぷよぷよのルール上おじゃまは空セルにのみ着弾するため、credit の大小に
+    関わらず colored→9 は常に棄却する。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=6)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "pending クレジットの大小に関わらず colored→9 は棄却されるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_falls_back_when_tracker_unavailable():
+    """会計崩壊フォールバック (W2破綻動画相当): トラッカーが利用不能
+    (None) な場合、フィルタは適用されず cnn_board がそのまま通る
+    (既存 enable_ojama_cnn_override_warmup のみに委ねるフェイルセーフ)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+    pipe._ojama_fall_accounting_tracker = None  # 会計利用不能を模擬
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == 9, (
+        "会計が利用不能ならフィルタは無効化され、cnn_board はそのまま通るべき"
+    )
+
+
+def test_ojama_write_accounting_guard_rejects_even_at_sanity_cap_forecast():
+    """c13実測の直接再現: pending 予告量が OjamaAccountingTracker 自身の
+    絶対サニティ上限 (PENDING_ABS_CAP=216、score OCR 異常由来) に達していた
+    実際のケースでも、credit を判定に使わない現行実装なら正しく棄却される
+    (この実測が現行実装への設計修正の直接の動機になった、回帰テスト)。"""
+    from src.ojama_accounting import PENDING_ABS_CAP
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(
+        True, reader=reader, pending_p1=PENDING_ABS_CAP,
+    )
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "PENDING_ABS_CAP 到達 (floor(216/6)=36 相当) でも colored→9 は"
+        "棄却されるべき (c13 実測の直接再現)"
+    )
+
+
+def test_ojama_write_accounting_guard_applies_regardless_of_forecast_magnitude():
+    """pending 予告量の大小に関わらず (取得できていれば) 一貫して
+    colored→9 を棄却する (credit を判定から除外した現行実装の確認)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=5)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(9, 1)) == COLOR_RED
+
+
+def test_ojama_write_accounting_guard_w2_broken_video_simulation_no_crash():
+    """検証観点(e): W2破綻動画 (score OCR 常時失敗) 相当のシミュレーション。
+    c26/c58/c69 実ファイルが手元に無いため (project_video_difficulty_
+    3broken_2026-07-29 参照)、score=None を毎フレーム返す ScoreTracker
+    スタブで代替する。実 (非スタブ) OjamaAccountingTracker を使い、
+    (1) 例外なく複数フレーム処理できる、(2) 空セルへの正規おじゃま着弾は
+    会計破綻時でも反映される (design要件(c)は会計状態に依存しない)、
+    ことを確認する。"""
+    empty_board = Board()
+    cnn_landing = Board()
+    cnn_landing.set(3, 2, 9)  # 空セルへの新規おじゃま着弾を模擬
+    reader = _StubImageReader(cnn_landing, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=True,
+    )
+    # score OCR 常時失敗 (W2破綻動画相当) を模擬。
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([None, None, None, None])
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = empty_board.copy()
+    pipe._sm_1p.context.pending_board = empty_board.copy()
+
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, _dummy_frame())
+        assert result is not None, "score OCR 破綻でも例外なく動作するべき"
+
+    assert int(result.p1.cnn_board.get(3, 2)) == 9, (
+        "会計破綻時でも空セルへの正規おじゃま着弾は反映されるべき (設計要件c)"
+    )
+
+
+def test_ojama_write_accounting_guard_off_no_regression():
+    """フラグ OFF (default): update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_write_accounting_guard(False)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+def test_ojama_write_accounting_guard_default_false_on_init_and_load_default():
+    """__init__ / load_default 両方で既定 False。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters["enable_ojama_write_accounting_guard"].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
+

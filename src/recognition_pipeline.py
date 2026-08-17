@@ -1517,9 +1517,45 @@ class RecognitionPipeline:
         # 機能C enable_chain_exit_warmup と同型の時間ベース warmup。
         # 設置反映経路 _update_landing_votes、_merge_diff_only 自体、
         # _filter_transition_new_cnn_for_burst_guard 自体には一切触れない。
+        # 第3弾 (2026-08-18) 追記: 案4+第2弾でも対象9セルは 0/9 のまま解消せず
+        # (w25_guard_gap.md 第2弾検証節)、cycle71n・drift-resync のいずれとも
+        # 独立な「設計C 事後復旧ゲート (色→色訂正、
+        # enable_recovery_counter_carryover 併用時に OJAMA_FALL 振動をまたいで
+        # 不一致カウンタが持ち越される)」という第3の経路が実測で確定した。
+        # 「ガード2つ超で根治自動昇格」(feedback_kill_known_weaknesses) に基づき
+        # 個別ガードの追加はここで打ち止めとし、根治は
+        # enable_ojama_write_accounting_guard (CNN観測入力段での一元フィルタ)
+        # に委ねる。本フラグは以後「会計整合フィルタが利用できない/効かない
+        # 場面のフェイルセーフ」として併用する位置づけに再定義する
+        # (廃止しない、ロジックは無改修)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
+        # W25根治 第3弾・最終 (enable_ojama_write_accounting_guard、2026-08-18、
+        # docs/KNOWN_WEAKNESSES.md W25、
+        # data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md):
+        # CNN観測入力段 (cnn_board が state machine に入る直前) で会計整合
+        # フィルタを一元適用する。 セル単位の直近安定色メモリ
+        # (state machine reset の影響を受けない外部 wrapper 保持、
+        # stateless判定+外部wrapper保持の規約に準拠) を用いて、
+        # 「非空色セルへの 9 書込み」を常に直近安定色へ差し替える
+        # (src/ojama_write_accounting.py の純関数、詳細はそちら参照)。
+        # 空セルへの 9 書込み (正規のおじゃま着弾経路) は対象外・無条件通過。
+        # 実測に基づく設計修正 (2026-08-18): 当初は OjamaAccountingTracker
+        # 由来の pending おじゃま予告量 (floor(予告/6)) をクレジットとして
+        # 判定に使い credit>0 なら素通しする設計だったが、 c13 実測で
+        # score OCR 異常由来の巨大クレジット (floor(216/6)=36) がこの
+        # 素通しを悪用し対象セルを解消できないことが判明。 ぷよぷよの
+        # ルール上おじゃまは空セルにのみ着弾するため credit は判定に使わない
+        # よう修正した (トラッカー自体は pending 取得可否のフォールバック
+        # 判定に引き続き使う、詳細は _apply_ojama_write_accounting_filter)。
+        # cycle71n / drift-resync / 事後復旧ゲートは一切無改修 (入力段で
+        # 誤り自体を消すため、下流の全機構が最初から正しい観測を見る)。
+        # True 時は内部で OjamaAccountingTracker を自動生成する
+        # (enable_ojama_fall_scoped_exit_accounting 未指定でも動作する)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装、production_config 未登録)。
+        enable_ojama_write_accounting_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2035,11 +2071,30 @@ class RecognitionPipeline:
         self._enable_ojama_fall_scoped_exit_accounting: bool = bool(
             enable_ojama_fall_scoped_exit_accounting
         )
+        # W25根治 第3弾 (2026-08-18): enable_ojama_write_accounting_guard も
+        # トラッカー生成条件に加える (会計整合フィルタが pending 予告量を必要
+        # とするため、enable_ojama_fall_scoped_exit_accounting 未指定でも
+        # 自動生成する)。既存フラグの挙動 (OR の左辺) は変えない。
+        self._enable_ojama_write_accounting_guard: bool = bool(
+            enable_ojama_write_accounting_guard
+        )
         self._ojama_fall_accounting_tracker: "OjamaAccountingTracker | None" = (
             OjamaAccountingTracker()
-            if self._enable_ojama_fall_scoped_exit_accounting
+            if (
+                self._enable_ojama_fall_scoped_exit_accounting
+                or self._enable_ojama_write_accounting_guard
+            )
             else None
         )
+        # W25根治 第3弾: セル単位の直近安定色メモリ (1P/2P 別)。
+        # state machine reset (sm.reset()) の影響を受けない外部 wrapper 保持
+        # (stateless判定+外部wrapper保持の規約)。STABLE 確定毎に更新し、
+        # OJAMA_FALL 振動・drift-resync で ctx.confirmed_board が消えても
+        # 直近の「信頼できる色」を保持し続ける。フラグ OFF でも保持コスト自体は
+        # 軽微だが、参照は enable_ojama_write_accounting_guard=True のみ
+        # (未参照時は空 dict のまま、bit-identical に影響しない)。
+        self._stable_color_memory_1p: dict[tuple[int, int], int] = {}
+        self._stable_color_memory_2p: dict[tuple[int, int], int] = {}
         # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
         self._enable_floating_gap_restore: bool = bool(
             enable_floating_gap_restore
@@ -3081,6 +3136,12 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
+        # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25、
+        # data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md):
+        # CNN観測入力段の会計整合フィルタ。__init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_ojama_write_accounting_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3318,6 +3379,7 @@ class RecognitionPipeline:
                 enable_next_history_starvation_fix
             ),
             enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
         )
 
     # ------------------------------------------------------------------
@@ -3472,6 +3534,12 @@ class RecognitionPipeline:
         # cycle 71n (案 θ): STABLE CNN 履歴もリセット.
         self._stable_cnn_history_1p.clear()
         self._stable_cnn_history_2p.clear()
+        # W25根治 第3弾: 直近安定色メモリは試合境界 (pipeline reset()) では
+        # クリアする (新試合に前試合の色情報を持ち込まない)。
+        # sm.reset() (drift-resync 由来の state machine 単体リセット) では
+        # クリアしない (= 本メモリの設計目的そのもの、こちらは意図的に対象外)。
+        self._stable_color_memory_1p.clear()
+        self._stable_color_memory_2p.clear()
         # NEXT slide detector + prev_frame もリセット
         if self._slide_detector_1p is not None:
             self._slide_detector_1p.reset()
@@ -5829,6 +5897,71 @@ class RecognitionPipeline:
         if hasattr(self._reader, "set_pre_capture_mode"):
             self._reader.set_pre_capture_mode(True)
 
+    def _get_own_pending_ojama_forecast(
+        self, side: str, time_sec: float,
+    ) -> int | None:
+        """会計トラッカーからの自 side 未着弾おじゃま予告量を返す。
+
+        案1会計連動 (2026-08-13) で導入した既存ロジックをそのまま抽出
+        (_step_side 内の重複呼出しを避けるため、W25根治第3弾で関数化)。
+        トラッカー無効構成 (enable_ojama_fall_scoped_exit_accounting も
+        enable_ojama_write_accounting_guard も False) では None を返す
+        (= getattr 安全参照側で従来挙動にフォールバックする)。
+        """
+        tracker = getattr(self, "_ojama_fall_accounting_tracker", None)
+        if tracker is None:
+            return None
+        snap = tracker.get_snapshot(time_sec)
+        return snap.pending_p1 if side == "1P" else snap.pending_p2
+
+    def _apply_ojama_write_accounting_filter(
+        self, side: str, cnn_board: Board, own_pending_ojama_forecast: int | None,
+    ) -> Board:
+        """W25根治 第3弾: CNN観測入力段の会計整合フィルタ (呼出し側)。
+
+        enable_ojama_write_accounting_guard=True の場合のみ呼ばれる。
+        pending 予告量が取得できない (トラッカー無効、通常は起こらないが
+        防御的に None も許容) 場合は cnn_board をそのまま返す
+        (= 会計を信用しないフォールバック、既存 enable_ojama_cnn_
+        override_warmup のみに委ねる)。
+
+        実測に基づく設計修正 (2026-08-18、
+        data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md
+        第3弾検証節、src/ojama_write_accounting.py モジュール docstring
+        「実測に基づく設計修正」参照): 当初は credit>0 で非空色セルへの
+        9書込みも素通しする設計だったが、c13 実測でこの素通し分岐が
+        原因で対象9セルが解消0/9のままだったことが判明した (score OCR
+        異常由来で pending 予告量が PENDING_ABS_CAP=216 に達し、
+        floor(216/6)=36 という不合理なクレジットが生成されていた)。
+        ぷよぷよのルール上おじゃまは空セルにのみ着弾するため、
+        credit の大小に関わらず非空色セルへの9書込みを許容する理由は無い
+        (reference_ojama_landing_pattern)。 実験的に credit ベースの素通しを
+        無効化したところ対象9セルが9/9解消したため、
+        `ojama_write_accounting.filter_ojama_write_by_accounting` 側で
+        判定ロジックから credit を除外した (関数シグネチャは互換維持)。
+        本関数では pending 予告量の「取得可否」のみを見て、値の大小には
+        依存しない (PENDING_ABS_CAP 到達等の値のブレは判定に影響しない)。
+
+        Args:
+            side: "1P" or "2P"。
+            cnn_board: フィルタ対象の CNN 観測盤面。
+            own_pending_ojama_forecast: `_get_own_pending_ojama_forecast` の
+                戻り値をそのまま渡す (二重計算を避けるため呼出し元で1回だけ
+                算出済みの値)。
+
+        Returns:
+            フィルタ適用後の Board (対象外なら cnn_board そのもの)。
+        """
+        if own_pending_ojama_forecast is None:
+            return cnn_board
+        from src.ojama_write_accounting import apply_ojama_write_accounting_filter
+        credit = max(0, own_pending_ojama_forecast) // 6
+        memory = (
+            self._stable_color_memory_1p if side == "1P"
+            else self._stable_color_memory_2p
+        )
+        return apply_ojama_write_accounting_filter(cnn_board, memory, credit)
+
     def _step_side(
         self,
         side: str,
@@ -5854,6 +5987,21 @@ class RecognitionPipeline:
         own_chain_hold_until: float = 0.0,  # 案4-lite 拡張 (2026-08-13)
     ) -> SideResult:
         """1 side 分の pipeline 処理."""
+        # W25根治 第3弾・最終 (2026-08-18): CNN観測入力段の会計整合フィルタ
+        # (一元プリプロセッサ)。cnn_board が本関数のあらゆる下流処理
+        # (placement_validated / ojama_top_positive / signals.cnn_board /
+        # cycle71n history / transition-merge / 事後復旧ゲート、いずれも
+        # 無改修) に渡る前に、ここで一度だけ書き換える。会計トラッカーの
+        # pending 予告量は本関数内で1回だけ算出し (_get_own_pending_
+        # ojama_forecast)、後段の signals 構築でも同じ値を再利用する
+        # (二重計算を避ける)。
+        _own_pending_ojama_forecast = self._get_own_pending_ojama_forecast(
+            side, time_sec,
+        )
+        if self._enable_ojama_write_accounting_guard:
+            cnn_board = self._apply_ojama_write_accounting_filter(
+                side, cnn_board, _own_pending_ojama_forecast,
+            )
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
         # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
         _landing_diag: dict | None = None
@@ -6037,16 +6185,9 @@ class RecognitionPipeline:
         _elapsed_since_first_move = (
             None if _first_move is None else max(0.0, time_sec - _first_move)
         )
-        # 案1 会計連動 (2026-08-13): 会計トラッカーが有効な構成でのみ
-        # 未着弾おじゃま予告量を算出する (getattr 安全参照、トラッカー無効
-        # 構成では None のまま = OjamaVisualDetector 側は従来相当の判定)。
-        _own_pending_ojama_forecast: int | None = None
-        _acct_tracker = getattr(self, "_ojama_fall_accounting_tracker", None)
-        if _acct_tracker is not None:
-            _acct_snap = _acct_tracker.get_snapshot(time_sec)
-            _own_pending_ojama_forecast = (
-                _acct_snap.pending_p1 if side == "1P" else _acct_snap.pending_p2
-            )
+        # 案1 会計連動 (2026-08-13): 未着弾おじゃま予告量は本関数先頭で
+        # 既に算出済み (_own_pending_ojama_forecast、W25根治第3弾で
+        # 関数冒頭に集約・二重計算を廃止)。ここではそのまま再利用する。
         signals = DetectorSignals(
             time_sec=time_sec,
             cnn_board=cnn_board,
@@ -6078,6 +6219,23 @@ class RecognitionPipeline:
         prev_next_queue = list(sm.context.next_queue)
 
         ctx: StateContext = sm.update(frame_idx, signals)
+
+        # W25根治 第3弾: 直近安定色メモリの更新。STABLE 確定毎に (state
+        # machine reset の影響を受けない) 外部 wrapper へスナップショットする。
+        # 会計整合フィルタが機能していれば ctx.confirmed_board はこの時点で
+        # 既に「入力段で訂正済みの正しい観測」を反映しているはずなので、
+        # ここでの更新は自己整合的 (次フレームの filter が正しい
+        # prev_stable_color を参照できる)。
+        if self._enable_ojama_write_accounting_guard and (
+            ctx.state == BoardState.STABLE and ctx.confirmed_board is not None
+        ):
+            memory = (
+                self._stable_color_memory_1p if side == "1P"
+                else self._stable_color_memory_2p
+            )
+            for r in range(BOARD_ROWS):
+                for c in range(BOARD_COLS):
+                    memory[(r, c)] = int(ctx.confirmed_board.get(r, c))
 
         # 根治 (2026-07-23): GRAVITY_SETTLE 経由の STABLE 復帰では chain_event
         # 引数が既に None 化されているため、退避しておいた ChainEvent を
