@@ -51,6 +51,37 @@ COLLECT_ONLY_ADOPTED: tuple[AdoptedFlag, ...] = (
         "--enable-chain-tracker", "2026-07-30",
         "機能D単独では CHAIN 検知が実運用 0 件で、連鎖中の盤面凍結が働かない",
     ),
+    AdoptedFlag(
+        "--enable-stable-persistence-gate", "2026-08-18",
+        "(d) STABLE確定の持続確認 (収集限定、RecognitionPipeline には足さない意図的"
+        "非対称配線、docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5)。"
+        "`_should_emit` 直前で直近 STABLE_PERSISTENCE_WINDOW_SEC=0.25 秒の盤面ROI"
+        "生ピクセルdiffが全て閾値未満のときだけ確定を許可し、連鎖アニメ中・送付"
+        "フラッシュ重畳による静止誤認を除外する。閾値 STABLE_PERSISTENCE_DIFF_"
+        "THRESHOLD=1.0 は実測分離ギャップから決定 (汚染側029最小値1.07、綺麗な"
+        "21枚側の最大値0.858、0.858<1.0<1.07に収まるラウンド値、src/board_motion.py "
+        "コメント参照)。シーン逆算でなく物理量の分離ギャップから固定 (過学習禁止"
+        "規約準拠)。③試合外は静止画面のため本機構では検出不能 (差分ゼロ、"
+        "(b) 系列が担当)",
+    ),
+    AdoptedFlag(
+        "--enable-boundary-multisignal", "2026-08-18",
+        "game_idx境界マルチシグナル検知 (`_SharedGameCounter`/`_reconcile_"
+        "boundary_anomalies`、W20/W21根治)。W22救済込みで c109/c13/c96 実測 "
+        "7/8=87.5% (docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §0)。"
+        "**注記**: 今回 (2026-08-18) の採用登録タイミングでの追加A/Bは未実施。"
+        "根拠は上記W22時代の実測のみであり、148再収集時に併走測定を推奨"
+        "(docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §2「(a)既存境界マル"
+        "チシグナルの本採用判断」は正式なA/B測定を前提としていたが、user承認"
+        "『全群採用』により本実測をもって先行登録する)",
+    ),
+    AdoptedFlag(
+        "--enable-winner-panel-crosscheck", "2026-08-18",
+        "WIN★パネル数値差分による勝者判定クロスチェック (`src/win_panel.py`+"
+        "`src/match_winner.py`、オフライン専用)。boundary-multisignal と同じ"
+        "W22時代の実測 (7/8=87.5%) が根拠であり、**今回の追加A/Bは未実施**"
+        "(同上の注記が適用される)",
+    ),
 )
 
 # ============================
@@ -200,6 +231,81 @@ RECOGNITION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "最終構成Fで持続誤認70・stage2セル正解率99.43%・W10_red_purple誤読"
         "10→0完全解消・盤面完全一致33→35/51を実測。フルpytest 5,113 passed / "
         "0 failed、既定OFF時は bit-identical (静的テストで担保)",
+    ),
+    AdoptedFlag(
+        "--enable-ojama-cnn-override-warmup", "2026-08-18",
+        "W25第1〜2弾 (user承認2026-08-18、docs/KNOWN_WEAKNESSES.md W25節)。"
+        "当初はcycle71n override専用のOJAMA_FALL→STABLE warmupとして実装したが"
+        "効果ゼロと実測 (対象9セル解消0/9、コミット2fc990d)。真因再追跡でdrift"
+        "再同期の暴発 (雲によるCNN 4↔9往復→DriftDetector needs_resync発火→"
+        "confirmed_board全None化→バイパス) と判明し、本フラグをOJAMA_FALL entry"
+        "起動+drift-resync抑制サイトに転用 (コミット8fe0759)。**実測**: 28チャンク"
+        "でresync発火14→7、resetの発生3→0を直接実証、物差しv2はbit-identical"
+        "(無害)。ただし9セル自体は本フラグだけでは未解消 (第3の独立経路が別途"
+        "存在、enable-ojama-write-accounting-guardが根治)。**役割再定義**: "
+        "根治実装後は会計整合フィルタのフェイルセーフ (W2破綻動画等の会計崩壊時"
+        "の保険) として位置づけ直した (アーキ決定、docs/KNOWN_WEAKNESSES.md "
+        "W25節 750-756行)",
+    ),
+    AdoptedFlag(
+        "--enable-ojama-write-accounting-guard", "2026-08-18",
+        "W25第3弾 (根治) + 固着対策 (user承認2026-08-18、docs/KNOWN_WEAKNESSES.md "
+        "W25節)。CNN観測→状態機械入力直前の一元会計整合フィルタ: 非空色→9への"
+        "直接遷移を、その列に会計上の未着弾クレジットが無い限り無条件拒否する"
+        "(物理制約「おじゃまは空セルにのみ着弾」)。**実測 (コミット4290fc5)**: "
+        "対象9セル9/9解消。stage1 (共通突合) 97.98%→**98.41% (+0.44pt)**、"
+        "**stage2 (同一フレーム限定) 99.46%→99.27% (-0.18pt、n=23小標本)**は"
+        "悪化方向だが正直に記載する。反映遅延の新規退行なし。新規悪化2件"
+        "(c10_2P/c109_2P) は精査の結果W1型永久固着 (消去+着弾を両方見逃すと"
+        "古い色に固着) の現実化と確定し、持続観測タイムアウト解除 "
+        "`OJAMA_REJECT_TIMEOUT_SEC=1.5` を追加実装 (コミット9565e9b) して固着"
+        "2件を解消 (+0.07〜0.27秒で自己修正、上限1.5秒の1/5以下)、雲9セル"
+        "9/9は維持。**新規許容の明文化 (アーキ承認)**: おじゃま反映が最大1.5秒"
+        "遅れうる。8フレーム基準 (feedback_placement_reflection_8frames) は"
+        "ツモ設置対象の受け入れ基準であり、おじゃま着弾には元々適用対象外"
+        "(棄却側論拠=雲は0.85〜1.0秒で晴れる実測 / 受理側論拠=陳腐化した"
+        "持続観測メモリは新しい実観測に屈服すべきという構造的原則)。副産物: "
+        "OjamaAccountingTracker の PENDING_ABS_CAP=216到達バグ (score OCR異常"
+        "由来) を独立の既存問題として発見、要対処リスト入り。フルpytest "
+        "5,255 passed / 0 failed、既定OFF時 bit-identical",
+    ),
+    AdoptedFlag(
+        "--enable-match-end-persist-override", "2026-08-18",
+        "境界RT系 (b-1)。user承認2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_"
+        "2026-08-17.md §3(b-1)。`match_end_locked` が MATCH_END_PERSIST_"
+        "OVERRIDE_SEC以上連続Trueなら、chain_in_progress による抑制を上書きして "
+        "effective_hard_off を有効化する持続タイマー。Step0診断"
+        "(data/verify/diag_match_end_miss_2026-08-17/) で判明した真因「本物の"
+        "決着パネルは勝者の連鎖アニメ中に表示され始め3秒超持続するが、既存の"
+        "chain_in_progress ガード (2026-07-23導入) が瞬間誤爆対策のまま2.55秒間"
+        "誤って打ち消していた」に対処する。持続時間で瞬間誤爆 (単発) と本物の"
+        "決着 (3秒超) を弁別。030実写検証 (c21) 済み、既存回帰テスト "
+        "(test_gravity_settle_in_progress_suppresses_match_end_locked_false_"
+        "positive) は維持したまま新規検証を追加",
+    ),
+    AdoptedFlag(
+        "--enable-post-match-lockdown-latch", "2026-08-18",
+        "境界RT系 (b-2)。user承認2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_"
+        "2026-08-17.md §3(b-2)。ばたんきゅー/やった!検出をトリガーに「次の"
+        "本物の試合開始が確認されるまで試合外とみなす」ラッチ。結果パネル・"
+        "対戦カード紹介・次ラウンド待機画面を一括カバーし、ロックダウン5秒切れ"
+        "後の再活性化 (対戦カード紹介中に is_match_active へ復帰する新規盲点、"
+        "030_c21_2P_f57548実写確認) を防ぐ。`hard_match_off = score_zero_both "
+        "or match_end_locked or self._post_match_lockdown_active` へ合流、"
+        "score_actively_moving/chain_in_progress の保護は無変更。RT本体実装可"
+        "(「盤面が無いと確定している区間の延長」のため指摘13リスクなし)。"
+        "実測: data/verify/boundary_impl_verify_2026-08-18/final_verify_"
+        "summary.json で rt_blocked_count=4/rt_total=5 (試合外RT遮断4/5)",
+    ),
+    AdoptedFlag(
+        "--enable-result-screen-hardening", "2026-08-18",
+        "境界RT系 (③)。user承認2026-08-18。score_actively_moving の装飾演出"
+        "(ラウンド告知・対戦カード紹介等の非試合画面でスコア風の数字表示が動いて"
+        "見える) への誤認を裏取りする列フィルタ強化。実測: data/verify/"
+        "boundary_impl_verify_2026-08-18/final_verify_summary.json で "
+        "column_filter_excluded_count=5/column_filter_total=5 (試合外の"
+        "誤混入5/5を列フィルタで除外)。b-1/b-2 と同一の検証セット "
+        "(c18/c20/c21 実写5アンカー) で確認済み",
     ),
 )
 
@@ -485,6 +591,32 @@ INDICATOR_REORG_DECISIONS: tuple[AdoptedFlag, ...] = (
 )
 
 
+# ============================
+# 学習データビルダー — 標準採用オプション (2026-08-18 新設)
+# ============================
+# scripts/build_labeled_win_from_npz.py が受け付ける CLI フラグのうち、
+# 「学習データビルド時に常に付けるべき標準構成」として確定したものをここに
+# 記録する (INDICATOR_REORG_DECISIONS と同様、決定記録のみ・単一情報源)。
+LEARNING_DATA_BUILD_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        "--exclude-match-end-locked", "2026-08-18",
+        "境界実装の仕上げ (user承認2026-08-18)。npz の match_end_locked==1 "
+        "または post_match_lockdown_active==1 のフレームを学習データ csv から"
+        "除外する (scripts/build_labeled_win_from_npz.py)。決着後の結果パネル・"
+        "対戦カード紹介・次ラウンド待機画面が試合中と誤って学習データに混入する"
+        "のを防ぐ (W20「勝敗演出の幻盤面」族の学習データ側対策)。実測: "
+        "data/verify/boundary_impl_verify_2026-08-18/final_verify_summary.json "
+        "で column_filter_excluded_count=5/column_filter_total=5 (試合外混入"
+        "5/5を除外)。両列が存在しない旧npz (収集時に本フラグ非対応だったもの) "
+        "では no-op (後方互換、tests/test_build_labeled_win_from_npz.py "
+        "test_convert_one_npz_exclude_match_end_locked_noop_when_columns_"
+        "absent で確認済み)。既定 False のため、次回の学習データビルド実行時に"
+        "明示指定が必要 (本エントリはその明示指定を「標準オプション」として"
+        "記録するもの)",
+    ),
+)
+
+
 @dataclass(frozen=True)
 class RemovedIndicator:
     """死亡確定・削除決定済みの指標 1 件 (REORG_REMOVED_INDICATORS 用)。"""
@@ -723,6 +855,7 @@ def describe() -> str:
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
         ("指標大整理", INDICATOR_REORG_DECISIONS),
+        ("学習データビルダー", LEARNING_DATA_BUILD_ADOPTED),
     ):
         lines.append(f"[{title}]")
         for f in flags:
