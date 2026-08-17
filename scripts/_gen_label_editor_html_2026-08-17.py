@@ -133,6 +133,7 @@ kbd { background:#333; border-radius:3px; padding:1px 5px; font-size:11px; }
     <div class="controls">
       <button class="primary" id="okBtn">誤りなし=OK → 次へ</button>
       <button class="warn" id="fixBtn">修正を確定 → 次へ</button>
+      <button id="skipBtn" style="background:#5c3a6e">判定不能=skip → 次へ</button>
       <button id="resetBtn">この盤面をリセット</button>
       <button id="prevBtn">← 前へ</button>
       <button id="nextBtn">次へ →</button>
@@ -143,7 +144,11 @@ kbd { background:#333; border-radius:3px; padding:1px 5px; font-size:11px; }
       キー: <kbd>0</kbd>空 <kbd>1</kbd>赤 <kbd>2</kbd>青 <kbd>3</kbd>緑 <kbd>4</kbd>黄
       <kbd>5</kbd>紫 <kbd>9</kbd>おじゃま / <kbd>Enter</kbd>=OKで次へ /
       <kbd>←</kbd><kbd>→</kbd>=移動。<br>
-      <b>判断根拠は必ず左の実画面</b> (右のグリッドは認識の下書き)。進捗は自動保存されます。
+      <b>判断根拠は必ず左の実画面</b> (右のグリッドは認識の下書き)。進捗は自動保存されます。<br>
+      <b>連鎖中の盤面のルール</b>: バースト光で消えかけのぷよ=まだその色として存在する扱い /
+      落下中で未着地のぷよ=通過中・着地予定セルとも空(0) /
+      エフェクトで色が確信できない盤面=無理にラベルせず<b>「判定不能=skip」</b>
+      (skipは測定から除外され、「連鎖中をSTABLEと誤認した疑い」として別途調べます)。
     </div>
     <textarea id="exportArea" readonly></textarea>
   </div>
@@ -175,7 +180,8 @@ function render(){
   const rec = DATA[cur];
   document.getElementById("sheetImg").src = "sheets/" + rec.sheet;
   const st = statusOf(cur);
-  const stTxt = st === "ok" ? "確認済み(OK)" : st === "fix" ? "確認済み(修正あり)" : "未確認";
+  const stTxt = st === "ok" ? "確認済み(OK)" : st === "fix" ? "確認済み(修正あり)"
+              : st === "skip" ? "確認済み(判定不能)" : "未確認";
   document.getElementById("sheetInfo").innerHTML =
     "<b>" + (cur+1) + "/" + DATA.length + "</b> " + rec.sheet +
     " | " + rec.video + " " + rec.side + " (" + rec.tertile + ") | 状態: <b>" + stTxt + "</b>";
@@ -219,7 +225,7 @@ function render(){
   const jump = document.getElementById("jump");
   jump.innerHTML = DATA.map((d, i) => {
     const s = statusOf(i);
-    const mark = s === "ok" ? "✓ " : s === "fix" ? "✎ " : "・ ";
+    const mark = s === "ok" ? "✓ " : s === "fix" ? "✎ " : s === "skip" ? "− " : "・ ";
     return "<option value='" + i + "'" + (i === cur ? " selected" : "") + ">" +
            mark + d.sheet + "</option>";
   }).join("");
@@ -249,9 +255,11 @@ function confirmSheet(kind){
     alert("修正セルがありません。誤りが無ければ「誤りなし=OK」を使ってください。");
     return;
   }
+  if (kind === "skip" && Object.keys(cells).length > 0 &&
+      !confirm("修正セルがありますが、skip (判定不能・修正は破棄) にしますか?")) return;
   state[DATA[cur].sheet] = state[DATA[cur].sheet] || {};
   state[DATA[cur].sheet].status = kind;
-  state[DATA[cur].sheet].cells = cells;
+  state[DATA[cur].sheet].cells = (kind === "skip") ? {} : cells;
   save();
   if (cur < DATA.length - 1) cur++;
   render();
@@ -259,6 +267,7 @@ function confirmSheet(kind){
 
 document.getElementById("okBtn").onclick = () => confirmSheet("ok");
 document.getElementById("fixBtn").onclick = () => confirmSheet("fix");
+document.getElementById("skipBtn").onclick = () => confirmSheet("skip");
 document.getElementById("resetBtn").onclick = () => {
   if (state[DATA[cur].sheet]) { delete state[DATA[cur].sheet]; save(); render(); }
 };
@@ -273,7 +282,8 @@ document.getElementById("exportBtn").onclick = () => {
   DATA.forEach((d, i) => {
     const s = statusOf(i);
     const w = wrongStr(i);
-    out += d.sheet + "\\t" + (s === "ok" ? "ok" : (w || "(未確認)")) + "\\n";
+    out += d.sheet + "\\t" +
+      (s === "ok" ? "ok" : s === "skip" ? "skip" : (w || "(未確認)")) + "\\n";
   });
   const area = document.getElementById("exportArea");
   area.style.display = "block"; area.value = out;
