@@ -832,20 +832,20 @@ class RecognitionPipeline:
 
     # (b-2) 次試合開始までのラッチの安全弁 (2026-08-18、
     # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
-    # ばたんきゅー/やった!検出から次の本物の試合開始 (MatchStateDetector の
-    # 生判定持続) までをラッチで覆うが、検出漏れ等で無限にラッチが残留する
-    # リスクに対する上限。**未実測の暫定値** (45秒、対戦カード紹介+次ラウンド
-    # 待機の常識的な上限からの見積もりに過ぎない)。
-    # 既知の限界 (2026-08-18 実写検証、data/verify/boundary_impl_verify_
-    # 2026-08-18/b2_lockdown_timeline.json、video_c21): ラッチの OFF 判定
-    # (match_res.state==IN_MATCH が CHAIN_BAN_SEC_AFTER_MATCH_START=0.5秒
-    # 持続) が、ばたんきゅーパネル出現からわずか 0.5 秒後に成立してしまい、
-    # 本来カバーしたい対戦カード紹介画面に到達する前にラッチが解除される
-    # (MatchStateDetector 自身がパネル表示中も IN_MATCH と判定し続けるため)。
-    # このため本安全弁の値は現時点では実測的な意味を持たない (次試合開始
-    # までの実測ではなく、OFF判定自体が機能していない状態での上限)。
-    # 148再収集投入前に (a) OFF判定の信号を見直すか (b) 十分な追加実測で
-    # この限界の実害を定量化することが必要 (user/アーキ判断待ち)。
+    # ばたんきゅー/やった!検出から次の本物の試合開始 (score_zero_both 持続 +
+    # 盤面ROI実ゲームプレイ確認、_board_shows_real_gameplay 参照) までを
+    # ラッチで覆うが、検出漏れ等で無限にラッチが残留するリスクに対する上限。
+    # **未実測の暫定値** (45秒、対戦カード紹介+次ラウンド待機の常識的な上限
+    # からの見積もりに過ぎない、バックストップ位置づけであり主判定にしない
+    # 前提、2026-08-18 アーキ確定)。
+    # 解除信号の変遷の経緯 (2026-08-18 実写検証、
+    # data/verify/boundary_impl_verify_2026-08-18/):
+    #   1st: raw_active → force_in_match=True 環境で常に True になり無意味。
+    #   2nd: match_res.state==IN_MATCH → パネル表示中も IN_MATCH 判定され
+    #        続け、0.5秒でほぼ即解除。
+    #   3rd (現行): score_zero_both 持続 + 盤面ROI分散ガード。対戦カード
+    #        紹介の装飾スコアカウントアップ演出が「00000000」を最大2.68秒
+    #        持続して経由することが判明したため、盤面ROI追加確認で防御。
     POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
@@ -1559,17 +1559,15 @@ class RecognitionPipeline:
         # user承認前の savepoint 実装)。
         enable_match_end_persist_override: bool = False,
         # (b-2) 次試合開始までのラッチ (2026-08-18、
-        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)、
+        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換):
         # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
-        # 試合開始 (MatchStateDetector の生判定持続) が確認されるまで試合外
-        # とみなすラッチ。結果パネル・対戦カード紹介・次ラウンド待機を一括
-        # カバーし、MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性
-        # (試合外画面の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC で
-        # ラッチが無限残留しないようにする。
-        # 実測起因の設計修正 (2026-08-18): collect_boards_lean.py は
-        # force_in_match=True をハードコードしているため、force_in_match の
-        # OR で常に True になる raw_active はここでは使わず、
-        # match_res.state (=MatchStateDetector の生判定) を使う。
+        # 試合開始 (score_zero_both 持続 + 盤面ROI実ゲームプレイ確認、
+        # _board_shows_real_gameplay 参照) が確認されるまで試合外とみなす
+        # ラッチ。結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
+        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性 (試合外
+        # 画面の混入) を防ぐ。安全弁 POST_MATCH_LOCKDOWN_MAX_SEC でラッチが
+        # 無限残留しないようにする (詳細は同定数のコメント参照)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_post_match_lockdown_latch: bool = False,
@@ -3430,6 +3428,29 @@ class RecognitionPipeline:
         interval = max(1, self._large_roi_throttle_frames)
         return (frame_idx % interval) == 0
 
+    def _board_shows_real_gameplay(self, frame: np.ndarray) -> bool:
+        """(b-2) ラッチ解除の追加安全弁 (2026-08-18、実写検証で追加)。
+
+        score_zero_both 持続だけでは対戦カード紹介の装飾スコアカウント
+        アップ演出 (一時的に「00000000」を経由する) を弾けないことが
+        実測で判明した (data/verify/boundary_impl_verify_2026-08-18/)。
+        盤面 ROI (P1/P2 両方) の画素分散が実ゲームプレイの閾値を超えて
+        いるかを追加確認する (puyo_observedガード同系、既存の
+        score_zero_both 内 puyo_observed 判定と同じ「盤面の実態で信号を
+        裏取りする」設計思想)。両 side が閾値を超えた場合のみ True
+        (fail-safe: 判定不能/装飾画面ならラッチ継続=試合外扱いを維持)。
+        """
+        try:
+            from src.board_motion import board_roi_gray, is_real_gameplay_board
+            gray_1p = board_roi_gray(frame, "1P")
+            gray_2p = board_roi_gray(frame, "2P")
+            return (
+                is_real_gameplay_board(gray_1p)
+                and is_real_gameplay_board(gray_2p)
+            )
+        except Exception:
+            return False
+
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
 
@@ -3683,41 +3704,54 @@ class RecognitionPipeline:
             else:
                 match_end_locked = self._last_match_end_locked
         # (b-2) 次試合開始までのラッチ (2026-08-18、
-        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+        # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)、
+        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換):
         # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
-        # 試合開始 (visual_in_match 持続) が確認されるまで試合外とみなす。
-        # 結果パネル・対戦カード紹介・次ラウンド待機を一括カバーし、
-        # MatchEndDetector 自身の 5 秒ロックダウン切れ後の再活性を防ぐ。
-        # ラッチOFF判定には raw_active でなく match_res.state (=
-        # MatchStateDetector の生判定) を使う。実写検証 (2026-08-18、
-        # data/verify/boundary_impl_verify_2026-08-18/) で判明: 本番の収集
-        # 経路 (collect_boards_lean.py) は force_in_match=True をハードコード
-        # しており、raw_active は force_in_match の OR で常に True になる
-        # (= 「次試合開始」の意味を持たない)。match_res.state はこの OR の
-        # 影響を受けない「素の」画面認識結果のため、force_in_match の値に
-        # 関わらずラッチが機能する。
+        # 試合開始 (score_zero_both 持続 + 盤面ROI実ゲームプレイ確認) が
+        # 確認されるまで試合外とみなす。結果パネル・対戦カード紹介・次
+        # ラウンド待機を一括カバーし、MatchEndDetector 自身の 5 秒ロック
+        # ダウン切れ後の再活性を防ぐ。
+        # 解除信号の変遷 (2026-08-18):
+        #   1st: raw_active → force_in_match=True 環境で常に True になり
+        #        無意味と判明 (実写検証、c21)。
+        #   2nd: match_res.state==IN_MATCH → パネル表示中も IN_MATCH と
+        #        判定され続け、0.5秒でほぼ即解除されてしまうと判明。
+        #   3rd (現行): score_zero_both (ScoreZeroDetector の
+        #        「00000000」テンプレNCC、ZERO_NCC_THRESHOLD=0.85) の
+        #        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒 (=
+        #        CHAIN_BAN_SEC_AFTER_MATCH_START、既存定数を再利用) 持続。
+        #        対戦カード紹介のダミースコアは通常 score_zero_both=False
+        #        側に落ちるはずだが、実測 (2026-08-18、c18/c20、
+        #        data/verify/boundary_impl_verify_2026-08-18/
+        #        score_zero_ncc_cardintro_scan.csv) で「装飾スコア
+        #        カウントアップ演出」が離陸前に一時的に「00000000」を
+        #        経由し、0.5秒を超えて持続する区間 (最大2.68秒) が確認され
+        #        た (保留条件チェックで発見、跨ぎ件数241/2702行)。そのため
+        #        追加安全弁 _board_shows_real_gameplay (盤面ROIの画素分散、
+        #        puyo_observedガード同系) を AND 条件で要求する: 装飾画面は
+        #        単色に近いイラスト背景で低分散 (実測最大std 21.48)、実
+        #        ゲームプレイは色ぷよ/グリッド線で高分散 (実測最小std
+        #        47.33) と分離できる (src.board_motion 参照)。
         # 既定 False (enable_post_match_lockdown_latch) では以下の状態更新を
         # 一切行わず self._post_match_lockdown_active は常に False のまま
         # (= bit-identical)。
         if self._enable_post_match_lockdown_latch:
-            visual_in_match = match_res.state == MatchState.IN_MATCH
             if match_end_locked and not self._post_match_lockdown_prev_end_locked:
                 self._post_match_lockdown_active = True
                 self._post_match_lockdown_started_time = time_sec
                 self._post_match_lockdown_raw_active_since = -1.0
             self._post_match_lockdown_prev_end_locked = match_end_locked
             if self._post_match_lockdown_active:
-                if visual_in_match:
+                if score_zero_both:
                     if self._post_match_lockdown_raw_active_since < 0.0:
                         self._post_match_lockdown_raw_active_since = time_sec
-                    elif (
+                    persisted = (
                         time_sec - self._post_match_lockdown_raw_active_since
                         >= self.CHAIN_BAN_SEC_AFTER_MATCH_START
-                    ):
-                        # 既存の「試合開始直後の整定時間」定数を再利用
-                        # (collect_boards_lean.py の
-                        # BOUNDARY_VISUAL_RISE_PERSIST_SEC と同一根拠、
-                        # 新規マジックナンバーを増やさない)。
+                    )
+                    # persisted 成立後も毎フレーム再チェックする (盤面ROI
+                    # 確認が同一フレームで揃わなくても取り零さないため)。
+                    if persisted and self._board_shows_real_gameplay(frame):
                         self._post_match_lockdown_active = False
                 else:
                     self._post_match_lockdown_raw_active_since = -1.0

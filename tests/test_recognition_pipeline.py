@@ -3428,9 +3428,31 @@ def test_post_match_lockdown_latch_activates_and_forces_inactive() -> None:
     assert pipe._post_match_lockdown_active is True
 
 
-def test_post_match_lockdown_latch_releases_after_raw_active_persists() -> None:
-    """flag ON: ラッチON後、raw_active (次試合開始) が
-    CHAIN_BAN_SEC_AFTER_MATCH_START 秒以上連続すればラッチが解除される。
+def _high_variance_frame() -> np.ndarray:
+    """盤面 ROI (P1/P2) が高分散になる合成フレーム (実ゲームプレイ相当)。
+
+    src.board_motion.REAL_GAMEPLAY_BOARD_STD_THRESHOLD (=35.0) を確実に
+    超えるよう、ランダムノイズで埋める (実測: 実ゲームプレイの std 最小値
+    47.33、乱数ノイズの std は理論上 ~73.9 で安定して超える)。
+    """
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    rng = np.random.default_rng(0)
+    for region in (DEFAULT_P1_REGION, DEFAULT_P2_REGION):
+        frame[
+            region.y: region.y + region.height,
+            region.x: region.x + region.width,
+        ] = rng.integers(
+            0, 256, size=(region.height, region.width, 3), dtype=np.uint8,
+        )
+    return frame
+
+
+def test_post_match_lockdown_latch_releases_after_score_zero_persists_with_real_gameplay() -> None:
+    """flag ON: ラッチON後、score_zero_both が
+    CHAIN_BAN_SEC_AFTER_MATCH_START 秒以上連続 **かつ** 盤面ROIが実ゲーム
+    プレイらしい (追加安全弁) 場合にラッチが解除される (2026-08-18
+    アーキ確定: 解除信号を raw_active→match_res.state→score_zero_both
+    persistence + 盤面ROI分散ガードへ置換)。
     """
     reader = _StubImageReader(_empty_board(), _empty_board())
     detector = _StubMatchDetector(in_match=False)
@@ -3441,30 +3463,85 @@ def test_post_match_lockdown_latch_releases_after_raw_active_persists() -> None:
         chain_tracker_1p=None,
         chain_tracker_2p=None,
         match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
         enable_large_roi_throttle=False,
         enable_post_match_lockdown_latch=True,
     )
     res = pipe.update(0, 5.0, _dummy_frame())
     assert pipe._post_match_lockdown_active is True
 
-    # match_end_detector を切り離せないため、match_end_locked は True の
-    # ままだが、raw_active の持続を検証する目的でここでは match_end
-    # を意図的に None 化して match_end_locked=False の状態にする。
+    # match_end_detector を切り離し match_end_locked=False にする
+    # (score_zero_both 持続の検証に無関係な信号を消す)。
     pipe._match_end_detector = None
-    # 次試合開始 (raw_active=True) を CHAIN_BAN_SEC_AFTER_MATCH_START 秒超
-    # 連続させる。
-    detector._in_match = True
+    # score_zero_both を True に切り替え、CHAIN_BAN_SEC_AFTER_MATCH_START
+    # 秒超連続させる。盤面は高分散フレーム (実ゲームプレイ確認用)。
+    pipe._score_zero_detector._both_zero = True  # type: ignore[attr-defined]
     t = 6.0
     frame_idx = 1
     persist_sec = RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
     while t - 6.0 < persist_sec + 0.2:
         frame_idx += 1
         t += 0.05
-        res = pipe.update(frame_idx, t, _dummy_frame())
+        res = pipe.update(frame_idx, t, _high_variance_frame())
     assert pipe._post_match_lockdown_active is False, (
-        "raw_active が持続すればラッチは解除されるべき"
+        "score_zero_both 持続 + 盤面ROI実ゲームプレイ確認でラッチは"
+        "解除されるべき"
     )
+    # ラッチ自体は解除されたが、この時点ではまだ score_zero_both=True の
+    # ため既存の hard_match_off (score_zero 系) が別途 is_active=False を
+    # 維持している (このスタブでは confirmed_board が空のため
+    # puyo_observed 救済が働かない、実運用では実ぷよが CNN 側にも反映され
+    # 両方同時に解消される想定)。score_zero_both の解消と MatchStateDetector
+    # の実試合再開確認 (raw_active) が揃った後のフレームで is_active が
+    # 正しく True に戻ることを確認する。
+    pipe._score_zero_detector._both_zero = False  # type: ignore[attr-defined]
+    detector._in_match = True
+    res = pipe.update(frame_idx + 1, t + 0.05, _high_variance_frame())
     assert res.is_match_active is True
+
+
+def test_post_match_lockdown_latch_stays_active_when_zero_score_lacks_real_gameplay() -> None:
+    """flag ON: score_zero_both が持続しても、盤面ROIが実ゲームプレイらしく
+    ない (装飾画面の疑い) 間はラッチが解除され続けない。
+
+    2026-08-18 実写検証 (c18/c20) で判明した回帰シナリオ: 対戦カード紹介の
+    装飾スコアカウントアップ演出が「00000000」を最大2.68秒持続して経由する
+    ため、score_zero_both 持続だけでは誤って早期解除されてしまう。追加
+    安全弁 _board_shows_real_gameplay (盤面ROI画素分散) がこれを防ぐ。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+
+    pipe._match_end_detector = None
+    pipe._score_zero_detector._both_zero = True  # type: ignore[attr-defined]
+    t = 6.0
+    frame_idx = 1
+    # 装飾スコアカウントアップ演出を模擬した実測上限 (2.68秒) を大きく超えて
+    # 持続させても、盤面ROIが低分散 (_dummy_frame の全 0 埋め) のままなら
+    # 解除されないことを確認する。
+    persist_sec = RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+    while t - 6.0 < persist_sec + 3.0:
+        frame_idx += 1
+        t += 0.05
+        res = pipe.update(frame_idx, t, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間は score_zero_both 持続だけで"
+        "ラッチが解除されてはいけない (対戦カード紹介の装飾スコア誤爆対策)"
+    )
+    assert res.is_match_active is False
 
 
 def test_post_match_lockdown_latch_safety_valve_releases_after_max_sec() -> None:
@@ -3492,6 +3569,38 @@ def test_post_match_lockdown_latch_safety_valve_releases_after_max_sec() -> None
         "安全弁 POST_MATCH_LOCKDOWN_MAX_SEC 秒経過でラッチは強制解除される"
         "べき (raw_active が一度も持続しなくても無限残留しない)"
     )
+
+
+def test_board_shows_real_gameplay_true_for_high_variance_frame() -> None:
+    """_board_shows_real_gameplay: 高分散フレーム (実ゲームプレイ相当) は
+    True。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._board_shows_real_gameplay(_high_variance_frame()) is True
+
+
+def test_board_shows_real_gameplay_false_for_flat_frame() -> None:
+    """_board_shows_real_gameplay: 全 0 埋め (装飾画面相当の低分散) は
+    False。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._board_shows_real_gameplay(_dummy_frame()) is False
+
+
+def test_board_shows_real_gameplay_requires_both_sides() -> None:
+    """_board_shows_real_gameplay: 片側のみ高分散では False (両側 AND、
+    fail-safe: 判定不能ならラッチ継続側に倒す)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    rng = np.random.default_rng(1)
+    frame[
+        DEFAULT_P1_REGION.y: DEFAULT_P1_REGION.y + DEFAULT_P1_REGION.height,
+        DEFAULT_P1_REGION.x: DEFAULT_P1_REGION.x + DEFAULT_P1_REGION.width,
+    ] = rng.integers(
+        0, 256,
+        size=(DEFAULT_P1_REGION.height, DEFAULT_P1_REGION.width, 3),
+        dtype=np.uint8,
+    )
+    # 2P 側は全 0 のまま (低分散)。
+    assert pipe._board_shows_real_gameplay(frame) is False
 
 
 # ============================

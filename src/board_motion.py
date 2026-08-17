@@ -1,15 +1,22 @@
-"""STABLE 確定盤面の生ピクセル持続確認 (収集限定、2026-08-18 新設)。
+"""盤面 ROI の生ピクセル計測群 (stateless 純関数)。
 
-docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5 (d) の実装。
-`scripts/_diag_general_chain_contamination_2026-08-17.py:160-176` の
-`_board_roi_gray`/`_column_diffs` を stateless 純関数として昇格したもの。
+2 つの用途で使われる:
+1. (d) STABLE 確定盤面の持続確認 (収集限定、2026-08-18 新設、
+   docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5)。
+   `scripts/_diag_general_chain_contamination_2026-08-17.py:160-176` の
+   `_board_roi_gray`/`_column_diffs` を stateless 純関数として昇格したもの。
+   対象カテゴリ: ①連鎖アニメ中の STABLE 誤確定 ②送付フラッシュ重畳。
+   ③試合外 (静止画面) は生ピクセル差分が元々ゼロのため本機構では検出できない
+   (design doc §5、(b) の守備範囲であり (d) の代替にはならない)。
+2. (b-2) 次試合開始までのラッチの追加安全弁 (2026-08-18、実写検証で追加、
+   RecognitionPipeline._board_shows_real_gameplay から呼ばれる)。
+   score_zero_both 持続だけでは対戦カード紹介の装飾スコアカウントアップ
+   演出 (「00000000」を一時的に経由する) を弾けないため、盤面 ROI の
+   画素分散 (実ぷよ盤面は多色で高分散、装飾イラストは低分散) を追加で見る。
 
-対象カテゴリ: ①連鎖アニメ中の STABLE 誤確定 ②送付フラッシュ重畳。
-③試合外 (静止画面) は生ピクセル差分が元々ゼロのため本機構では検出できない
-(design doc §5、(b) の守備範囲であり (d) の代替にはならない)。
-
-state を一切持たない (直近 diff の履歴保持は呼び出し側 = collect_boards_lean.py
-の責務、CLAUDE.md 「観測指標は stateless 実装を原則」に従う)。
+state を一切持たない (履歴保持が必要な呼び出し側 = collect_boards_lean.py /
+RecognitionPipeline の責務、CLAUDE.md 「観測指標は stateless 実装を原則」に
+従う)。
 """
 from __future__ import annotations
 
@@ -111,3 +118,32 @@ def is_raw_pixel_stable(
     if not recent_diffs:
         return True
     return all(d < diff_threshold for d in recent_diffs)
+
+
+# (b-2) ラッチ解除の追加安全弁 (2026-08-18 実測校正、
+# data/verify/boundary_impl_verify_2026-08-18/): 対戦カード紹介の装飾
+# スコアカウントアップ演出中、盤面 ROI (P1/P2 とも) は単色に近い暗い
+# イラスト背景のため画素値の分散が低い。実測 (c18 t≈1888.6-1891.7、
+# c20 t≈827.5-831.0、各 side): 装飾画面中の std 最大値 21.48。
+# 一方、実ゲームプレイ中 (同2動画の別時点、色ぷよ/おじゃま/グリッド線を
+# 含む盤面) の std 最小値 47.33。21.48 < 35.0 < 47.33 の分離ギャップに
+# 収まるラウンド値を採用 (2動画×両側の実測分布から、個別ケースへの逆算
+# ではない)。
+REAL_GAMEPLAY_BOARD_STD_THRESHOLD: float = 35.0
+
+
+def board_roi_std(gray: np.ndarray) -> float:
+    """盤面 ROI grayscale の画素値標準偏差。
+
+    実ぷよ盤面 (色ぷよ/おじゃま/背景グリッド) は高分散、装飾イラスト画面
+    (対戦カード紹介等の単色に近い背景) は低分散になる傾向を利用する。
+    """
+    return float(gray.std())
+
+
+def is_real_gameplay_board(
+    gray: np.ndarray,
+    threshold: float = REAL_GAMEPLAY_BOARD_STD_THRESHOLD,
+) -> bool:
+    """盤面 ROI が実ゲームプレイらしい (装飾画面でない) かを判定する。"""
+    return board_roi_std(gray) >= threshold

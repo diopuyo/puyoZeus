@@ -5,12 +5,15 @@ import numpy as np
 import pytest
 
 from src.board_motion import (
+    REAL_GAMEPLAY_BOARD_STD_THRESHOLD,
     STABLE_PERSISTENCE_DIFF_THRESHOLD,
     STABLE_PERSISTENCE_WINDOW_SEC,
     board_roi_gray,
+    board_roi_std,
     column_diffs,
     frame_diff_mean,
     is_raw_pixel_stable,
+    is_real_gameplay_board,
 )
 from src.image_reader import DEFAULT_P1_REGION, DEFAULT_P2_REGION
 
@@ -147,3 +150,45 @@ def test_is_raw_pixel_stable_custom_threshold() -> None:
 def test_constants_are_positive() -> None:
     assert STABLE_PERSISTENCE_DIFF_THRESHOLD > 0.0
     assert STABLE_PERSISTENCE_WINDOW_SEC > 0.0
+    assert REAL_GAMEPLAY_BOARD_STD_THRESHOLD > 0.0
+
+
+# ============================
+# board_roi_std / is_real_gameplay_board ((b-2) 追加安全弁、2026-08-18)
+# ============================
+
+
+def test_board_roi_std_zero_for_flat_image() -> None:
+    gray = np.full((80, 120), 100, dtype=np.uint8)
+    assert board_roi_std(gray) == 0.0
+
+
+def test_board_roi_std_matches_numpy_std() -> None:
+    rng = np.random.default_rng(3)
+    gray = rng.integers(0, 256, size=(80, 120), dtype=np.uint8)
+    assert board_roi_std(gray) == pytest.approx(float(gray.std()))
+
+
+def test_is_real_gameplay_board_flat_decorative_screen_evidence() -> None:
+    """実測 (data/verify/boundary_impl_verify_2026-08-18/): 対戦カード紹介の
+    装飾画面 std 最大値 21.48 は実ゲームプレイと判定されないこと。"""
+    gray = np.full((80, 120), 30, dtype=np.uint8)
+    # std=0 の完全単色 (装飾画面の実測値 21.48 よりさらに低分散側)。
+    assert is_real_gameplay_board(gray) is False
+
+
+def test_is_real_gameplay_board_high_variance_evidence() -> None:
+    """実測 (同上): 実ゲームプレイの std 最小値 47.33 は実ゲームプレイと
+    判定されること。"""
+    rng = np.random.default_rng(5)
+    gray = rng.normal(loc=100, scale=50.0, size=(80, 120)).clip(0, 255).astype(np.uint8)
+    assert board_roi_std(gray) >= 47.33 * 0.8  # 生成ノイズの実現値ばらつき許容
+    assert is_real_gameplay_board(gray) is True
+
+
+def test_is_real_gameplay_board_custom_threshold() -> None:
+    gray = np.full((10, 10), 100, dtype=np.uint8)
+    gray[0, 0] = 200  # 微小な分散を与える
+    std_val = board_roi_std(gray)
+    assert is_real_gameplay_board(gray, threshold=std_val + 1.0) is False
+    assert is_real_gameplay_board(gray, threshold=max(std_val - 1.0, 0.0)) is True
