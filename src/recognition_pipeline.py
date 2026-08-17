@@ -81,6 +81,19 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
+# W25根治 (enable_ojama_cnn_override_warmup, 2026-08-17、
+# docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/):
+# おじゃま落下時の白雲パーティクル (HSV S≈14-20/V≈250) が下段セル群を
+# 0.85〜1.0秒覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する。
+# cycle 71n override の STABLE_CNN_HISTORY_FRAMES(=18≈0.6s) 窓を雲の持続が
+# 上回るため、雲を正しい観測と誤認して確定セルを上書きしてしまう
+# (c13 実測 t=289.98-290.87 / 292.10〜 の2波、対象9セル)。
+# OJAMA_FALL→STABLE 遷移直後この秒数だけ cycle 71n override の発火のみを
+# 抑制する (history 蓄積自体は継続、機能C の CHAIN_EXIT_WARMUP_SEC と同型の
+# 時間ベース warmup)。実測 0.85-1.0s に安全マージンを加えた値
+# (フレーム基準禁止、W4 教訓により SEC 基準必須)。
+OJAMA_OVERRIDE_EXIT_WARMUP_SEC: float = 1.3
+
 # 機能D: 連鎖開始 掛け算式 検知 (enable_chain_formula_detection 用)。
 # score ROI の OCR が None (掛け算式表示で NCC conf 低下) かつ ink_ratio が
 # CHAIN_FORMULA_INK_RATIO_MIN より高い場合に連鎖開始とみなす。
@@ -1482,6 +1495,15 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_next_history_starvation_fix: bool = False,
+        # W25根治 案4 (enable_ojama_cnn_override_warmup, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W25): おじゃま落下時の白雲パーティクル誤認
+        # 対策。OJAMA_FALL→STABLE 遷移直後 OJAMA_OVERRIDE_EXIT_WARMUP_SEC 秒間、
+        # cycle 71n の STABLE 長期不一致 override の発火のみを抑制する
+        # (機能C enable_chain_exit_warmup と同型、作用点は cycle 71n に限定し
+        # 設置反映経路 _update_landing_votes には触れない)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_ojama_cnn_override_warmup: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2014,6 +2036,14 @@ class RecognitionPipeline:
         self._enable_next_history_starvation_fix: bool = bool(
             enable_next_history_starvation_fix
         )
+        # W25根治 案4 (2026-08-17)。 default False = bit-identical。
+        # float: OJAMA_FALL→STABLE 遷移 time_sec。抑制中は
+        # time_sec < _ojama_override_exit_until_* 。
+        self._enable_ojama_cnn_override_warmup: bool = bool(
+            enable_ojama_cnn_override_warmup
+        )
+        self._ojama_override_exit_until_1p: float = 0.0
+        self._ojama_override_exit_until_2p: float = 0.0
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -3024,6 +3054,10 @@ class RecognitionPipeline:
         # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
         # (backwards compat、user承認前の savepoint 実装)。
         enable_next_history_starvation_fix: bool = False,
+        # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): __init__ へ
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_cnn_override_warmup: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3260,6 +3294,7 @@ class RecognitionPipeline:
             enable_next_history_starvation_fix=(
                 enable_next_history_starvation_fix
             ),
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
         )
 
     # ------------------------------------------------------------------
@@ -3452,6 +3487,9 @@ class RecognitionPipeline:
         # 機能C: CHAIN→STABLE warmup 凍結終了時刻リセット
         self._chain_exit_until_1p = 0.0
         self._chain_exit_until_2p = 0.0
+        # W25根治 案4: OJAMA_FALL→STABLE warmup 抑制終了時刻リセット
+        self._ojama_override_exit_until_1p = 0.0
+        self._ojama_override_exit_until_2p = 0.0
         # 案 Y-4 deferred landing state リセット
         self._deferred_landing_1p = None
         self._deferred_landing_2p = None
@@ -6640,6 +6678,28 @@ class RecognitionPipeline:
             else:
                 self._chain_exit_until_2p = warmup_until
 
+        # W25根治 案4 (2026-08-17): OJAMA_FALL → STABLE 遷移直後の
+        # cycle 71n override 発火抑制 warmup。おじゃま落下時の白雲パーティクル
+        # (HSV S≈14-20/V≈250) が下段セル群を覆い、CNN/HSV 双方が誤って
+        # おじゃま(9)と一致観測することで cycle 71n の長期不一致 override が
+        # 誤発火する (docs/KNOWN_WEAKNESSES.md W25、
+        # data/verify/diag_c13c22_recheck_2026-08-17/ で OJAMA_FALL 経由を
+        # 実測確認済)。 enable_ojama_cnn_override_warmup=True の場合のみ有効。
+        # 作用点は cycle 71n override のみ (設置反映経路
+        # _update_landing_votes / LANDING_VOTE_SEC には触れない)。
+        if (
+            self._enable_ojama_cnn_override_warmup
+            and prev_state == BoardState.OJAMA_FALL
+            and ctx.state == BoardState.STABLE
+        ):
+            ojama_override_warmup_until = (
+                time_sec + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+            )
+            if side == "1P":
+                self._ojama_override_exit_until_1p = ojama_override_warmup_until
+            else:
+                self._ojama_override_exit_until_2p = ojama_override_warmup_until
+
         # cycle 29 (2026-05-18): NEXT 移動検知ベースで grace + landing_vote 起動。
         # 既存の TSUMO_FALL → STABLE 経路は placement_inferrer で confirmed を
         # 物理推論済 (= ctx.confirmed_board 更新済)。 NEXT 検知 frame で
@@ -6891,6 +6951,19 @@ class RecognitionPipeline:
             and time_sec < _chain_exit_until
         )
 
+        # W25根治 案4: OJAMA_FALL→STABLE warmup 中は cycle 71n override の
+        # 発火のみを抑制する (history 蓄積は継続、_update_landing_votes には
+        # 適用しない — 作用点を cycle 71n override に限定するのが設計要件)。
+        _ojama_override_exit_until = (
+            self._ojama_override_exit_until_1p if side == "1P"
+            else self._ojama_override_exit_until_2p
+        )
+        in_ojama_override_warmup = (
+            self._enable_ojama_cnn_override_warmup
+            and ctx.state == BoardState.STABLE
+            and time_sec < _ojama_override_exit_until
+        )
+
         # cycle 26 (A1): grace 中は updated 反映を skip (蓄積は継続)。
         # grace 終了後の vote 完了で正しく反映される。
         # 機能C: chain exit warmup 中も skip (残光色混入防止)。
@@ -6952,7 +7025,9 @@ class RecognitionPipeline:
                             # cycle 26 (A1): grace 中は override skip
                             # (history append は続行、grace 終了後に発火)
                             # 機能C: chain exit warmup 中も override skip
-                            if in_grace or in_chain_exit_warmup:
+                            # W25根治 案4: ojama override warmup 中も skip
+                            # (白雲パーティクル誤観測の history 汚染を反映しない)
+                            if in_grace or in_chain_exit_warmup or in_ojama_override_warmup:
                                 continue
                             ctx.confirmed_board.set(r, c, most_common)
                             h_list.clear()
