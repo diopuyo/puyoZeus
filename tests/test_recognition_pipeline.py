@@ -6003,6 +6003,152 @@ def test_ojama_write_accounting_guard_off_no_regression():
         assert result is not None
 
 
+# ---------------------------------------------------------------------------
+# W25固着対策 (2026-08-18): 連続9観測タイムアウトによる棄却解除。
+# data/verify/diag_w25_regression2_2026-08-18/ (c10/c109 永久固着の実測)
+# 参照。
+# ---------------------------------------------------------------------------
+
+
+def test_ojama_raw9_streak_init_empty():
+    """連続9観測ストリーク辞書は construction 直後は空。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._ojama_raw9_streak_start_1p == {}
+    assert pipe._ojama_raw9_streak_start_2p == {}
+
+
+def test_ojama_raw9_streak_cleared_on_pipeline_reset():
+    """pipeline reset() (試合境界) でストリーク辞書がクリアされる。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    pipe._ojama_raw9_streak_start_1p[(9, 1)] = 10.0
+    pipe._ojama_raw9_streak_start_2p[(3, 2)] = 5.0
+    pipe.reset()
+    assert pipe._ojama_raw9_streak_start_1p == {}
+    assert pipe._ojama_raw9_streak_start_2p == {}
+
+
+def test_update_ojama_raw9_streak_starts_and_computes_duration():
+    """_update_ojama_raw9_streak: 初回9観測でストリーク開始、以降は経過秒を
+    返す (SEC基準)。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    cnn = Board()
+    cnn.set(9, 1, 9)
+
+    d1 = pipe._update_ojama_raw9_streak("1P", cnn, 10.0)
+    assert d1[(9, 1)] == 0.0
+    assert pipe._ojama_raw9_streak_start_1p[(9, 1)] == 10.0
+
+    d2 = pipe._update_ojama_raw9_streak("1P", cnn, 11.5)
+    assert d2[(9, 1)] == pytest.approx(1.5)
+    assert pipe._ojama_raw9_streak_start_1p[(9, 1)] == 10.0, (
+        "ストリーク開始時刻は9観測が続く間は更新されないべき"
+    )
+
+
+def test_update_ojama_raw9_streak_clears_immediately_on_non_ojama_observation():
+    """フリッカ許容なし: 1frameでも9以外を観測したら即座にストリークを
+    破棄する (アーキ指定、許容フレームなし)。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    cnn9 = Board()
+    cnn9.set(9, 1, 9)
+    pipe._update_ojama_raw9_streak("1P", cnn9, 10.0)
+    assert (9, 1) in pipe._ojama_raw9_streak_start_1p
+
+    cnn_clear = Board()  # (9,1) は 9 以外 (COLOR_EMPTY)
+    pipe._update_ojama_raw9_streak("1P", cnn_clear, 10.017)
+
+    assert (9, 1) not in pipe._ojama_raw9_streak_start_1p, (
+        "9以外を観測した瞬間にストリークが破棄されるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_off_streak_never_updated():
+    """フラグ OFF (default): ストリーク辞書は一切更新されない
+    (bit-identical、_update_ojama_raw9_streak 自体が呼ばれない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    for i in range(4):
+        pipe.update(i, float(i) * 0.5, _dummy_frame())
+
+    assert pipe._ojama_raw9_streak_start_1p == {}
+
+
+def test_ojama_write_accounting_guard_timeout_accepts_stale_memory_after_duration():
+    """固着対策 核心 (c10/c109 永久固着の再現・解消確認): 直近安定色メモリが
+    陳腐化 (stale) している場合でも、生CNN観測が連続
+    OJAMA_REJECT_TIMEOUT_SEC 秒9を示したら棄却を解除し9を受理する。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    # frame 0 (t=0.0): ストリーク開始、タイムアウト未到達 → 棄却 (従来通り)。
+    result0 = pipe.update(0, 0.0, _dummy_frame())
+    assert int(result0.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+    # frame 1 (t=OJAMA_REJECT_TIMEOUT_SEC): タイムアウト到達 → 受理。
+    result1 = pipe.update(1, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())
+    assert int(result1.p1.cnn_board.get(9, 1)) == 9, (
+        "タイムアウト到達で陳腐化メモリの棄却を解除し9を受理するべき"
+    )
+
+
+def test_ojama_write_accounting_guard_flicker_resets_timeout_progress():
+    """フリッカ許容なし (アーキ指定): 1frameでも9以外を観測すると
+    ストリークが即リセットされ、タイムアウトへの進行が失われる。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    cnn9 = Board()
+    cnn9.set(9, 1, 9)
+    cnn_red = Board()
+    cnn_red.set(9, 1, COLOR_RED)
+
+    reader._p1 = cnn9  # type: ignore[attr-defined]
+    pipe.update(0, 0.0, _dummy_frame())  # ストリーク開始 t=0.0
+    reader._p1 = cnn_red  # type: ignore[attr-defined]
+    pipe.update(1, 1.0, _dummy_frame())  # フリッカ (9以外を観測) → リセット
+    reader._p1 = cnn9  # type: ignore[attr-defined]
+    result = pipe.update(2, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())  # t=1.5
+
+    # フリッカ後の再開 (次に9を観測したt=1.5) からのdurationは0.0 (<1.5) の
+    # ため棄却される (フリッカ前の t=0.0 からの継続とはみなされない)。
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "フリッカでストリークがリセットされ、タイムアウトに届いていないため"
+        "棄却されるべき"
+    )
+    assert pipe._ojama_raw9_streak_start_1p.get((9, 1)) == pytest.approx(
+        OJAMA_REJECT_TIMEOUT_SEC,
+    ), (
+        "ストリーク開始時刻はフリッカ後に9を再度観測したframeの time_sec に"
+        "更新されているべき (フリッカ前の開始時刻は引き継がれない)"
+    )
+
+
 def test_ojama_write_accounting_guard_default_false_on_init_and_load_default():
     """__init__ / load_default 両方で既定 False。"""
     import inspect
