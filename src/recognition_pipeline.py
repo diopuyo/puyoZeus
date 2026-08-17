@@ -832,12 +832,20 @@ class RecognitionPipeline:
 
     # (b-2) 次試合開始までのラッチの安全弁 (2026-08-18、
     # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
-    # ばたんきゅー/やった!検出から次の本物の試合開始 (raw_active 持続) までを
-    # ラッチで覆うが、検出漏れ等で無限にラッチが残留するリスクに対する上限。
-    # 対戦カード紹介・次ラウンド待機画面の実測時間に基づく値 (実測: c21 の
-    # ばたんきゅーパネル〜次試合の raw_active 持続確認まで実測十数秒、
-    # 詳細は data/verify/boundary_impl_verify_2026-08-18/post_match_lockdown_
-    # duration.json 参照)。安全のため実測値に対し十分なマージンを取る。
+    # ばたんきゅー/やった!検出から次の本物の試合開始 (MatchStateDetector の
+    # 生判定持続) までをラッチで覆うが、検出漏れ等で無限にラッチが残留する
+    # リスクに対する上限。**未実測の暫定値** (45秒、対戦カード紹介+次ラウンド
+    # 待機の常識的な上限からの見積もりに過ぎない)。
+    # 既知の限界 (2026-08-18 実写検証、data/verify/boundary_impl_verify_
+    # 2026-08-18/b2_lockdown_timeline.json、video_c21): ラッチの OFF 判定
+    # (match_res.state==IN_MATCH が CHAIN_BAN_SEC_AFTER_MATCH_START=0.5秒
+    # 持続) が、ばたんきゅーパネル出現からわずか 0.5 秒後に成立してしまい、
+    # 本来カバーしたい対戦カード紹介画面に到達する前にラッチが解除される
+    # (MatchStateDetector 自身がパネル表示中も IN_MATCH と判定し続けるため)。
+    # このため本安全弁の値は現時点では実測的な意味を持たない (次試合開始
+    # までの実測ではなく、OFF判定自体が機能していない状態での上限)。
+    # 148再収集投入前に (a) OFF判定の信号を見直すか (b) 十分な追加実測で
+    # この限界の実害を定量化することが必要 (user/アーキ判断待ち)。
     POST_MATCH_LOCKDOWN_MAX_SEC: float = 45.0
 
     # cycle 71f (提案 A): score 動きで in_match 強制復帰判定の window と閾値.
