@@ -449,3 +449,48 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
 - **頻度**: 55盤面中2イベント (3.6%)、継続0.1〜1.7秒で自己修復
 - **修正方向**: ①観測補正の常時ガード化 (着地後も CNN==HSV 一致で即上書き、工数中)
   ②NEXT読取の赤/紫誤読の検証が先 (真の起点の疑い。NextDetector「100%」記録は v89 48/48 のみ)
+
+- **【2026-08-17 段階1: NEXT読取検証、結論=不確定 (W8既知リスクで直撃)】**
+  該当2イベント (c11 t=898.467、c23 t=1405.12) の直前 NEXT 窓を実フレームで検証するため
+  c11/c23 を再DL (`AccHEU_5024`/`I8kNracPWCA`、W17対策のNode v24.19.0+ffmpeg同梱バイナリで成功) し、
+  本番と同一構成 (`models/cnn_global_best.pt`、centroid無し) の `NextDetector` で
+  着地前後 ±4〜7秒を 0.2秒刻みで走査 (`scripts/_diag_w10_next_verify_2026-08-17.py`、
+  `data/verify/diag_w10_next_2026-08-17/`)。**結果は不確定**: NEXT 表示の切替周期
+  (約2.2〜2.8秒間隔) が記録済みの着地秒 (898.467 / 1405.12) ときれいに整合せず、
+  再DL動画の内容が元動画とズレている **W8 (再DL内容drift) の再現**とみられる
+  (再DL動画は削除済み元動画とフレーム単位で対応する保証が無いという既知リスクが
+  ここでも直撃、今回は c11/c23 のアンカー用参照フレームが無いため検知もできなかった)。
+  **副次的な確認事項**: 両動画とも同じ試合内の近傍タイムスタンプで紫(5)が NEXT/DNEXT に
+  複数回出現しており (c11: next=(5,2)が2.4秒・dnext列にも5が繰返し / c23: next=(1,5)・
+  dnext=(5,1)等)、**NextDetector が紫を構造的に読めないわけではない**ことは確認できた
+  (「稀に特定フレームで誤読する」という当初仮説と矛盾しない、ただし対象フレームそのものの
+  直接確認はできていない)。再DLしたclipは検証後に削除済み (ストレージ規約遵守)。
+  **結論**: 段階1は「NEXT読取が真の起点」との確証も反証も得られず。この不確定性そのものが
+  「W10訂正版」に記載の根因 (infer_placementがNEXT色で確定盤面を書く構造そのもの) を
+  疑う理由にはならない (構造上の因果関係はコード読解で既に確定済み、`recognition_pipeline.py`
+  の `falling_pair` 決定ロジックがNEXT queue由来であることはソースレベルで自明)。
+- **【2026-08-17 段階2: 観測補正の常時ガード化、実装済・既定OFF】**
+  `enable_landing_color_guard` フラグ新設 (`src/recognition_pipeline.py`、既定 `False`)。
+  着地時 (`enable_landing_observed_color` 経路) に着地2セルを `LANDING_VOTE_SEC`
+  (既存の着地投票と同じ0.4秒、**新規定数は増やさず既存定数を流用**) 間の監視リストに登録し
+  (`self._landing_color_watch_1p/2p`)、STABLE確定盤面の**毎フレーム** CNN==HSV 一致を
+  再チェックする新関数 `apply_persistent_landing_color_guard`
+  (`src/placement_inferrer.py`、stateless実装・監視状態は呼出側 wrapper が保持) で
+  一致した時点で即座に上書きする。STABLE以外では不実行 (physics_only原則)。
+  **実測 (単体テスト、`tests/test_placement_inferrer.py::TestApplyPersistentLandingColorGuard`
+  6件・`tests/test_recognition_pipeline.py` 7件、計13件新規)**: CNN==HSV一致セルの即時上書き・
+  不一致セルの監視継続・複数セルの部分解決・期限切れセルの自動除去・
+  hsv_classifier取得失敗時のfail-safeを個別に確認。フル pipeline 経由の統合テスト
+  (`test_landing_color_guard_continuous_overwrite_when_cnn_hsv_agree`) で、
+  強制的に「誤色(赤)で確定済+CNN/HSVは紫で一致」という状況を作り、1フレームの
+  `update()` 呼び出しで confirmed_board が紫へ即座に上書きされ監視リストから
+  除去されることを確認 (= c11実例の1.7秒待ちを模擬的に0フレームへ短縮できる経路の存在を実証)。
+  **c11/c23実例そのものでの再現検証は未実施** (段階1で実フレームのdriftにより
+  対象フレームを特定できなかったため、統合テストはスタブ入力で代替)。
+  **既定OFF時のbit-identical**: `enable_landing_color_guard=False` では監視リストへの
+  登録自体が発生せず (`_guard_landing_cells`計算ブロックがフラグ内に完全に閉じている)、
+  毎フレームの再チェックブロックも `_watch` が常に空リストのため実質no-op
+  (`test_enable_landing_color_guard_off_never_populates_watch_list` で確認)。
+  `python -m pytest tests/ -q`: **5092 passed, 13 skipped, 1 deselected, 0 failed**
+  (新規13件込み、既存回帰なし)。user承認待ちのsavepoint実装、`production_config.py`
+  への採用登録は未実施。
