@@ -22,6 +22,7 @@ from src.production_config import (
     COLLECT_ONLY_ADOPTED,
     COUNTER_REACH_ENABLED_BY_DEFAULT,
     INDICATOR_REORG_DECISIONS,
+    LEARNING_DATA_BUILD_ADOPTED,
     RECOGNITION_ADOPTED,
     VISUALIZATION_ADOPTED,
     advantage_overlay_flags,
@@ -195,3 +196,29 @@ class TestIndicatorReorgDecisions:
         assert "指標大整理" in text
         for f in INDICATOR_REORG_DECISIONS:
             assert f.flag in text
+
+
+class TestLearningDataBuildAdopted:
+    """学習データビルダーの標準採用オプション (2026-08-18 新設) の回帰テスト。"""
+
+    def test_has_date_and_reason(self) -> None:
+        """各エントリに採用日と根拠が記録されていること。"""
+        assert len(LEARNING_DATA_BUILD_ADOPTED) >= 1
+        for f in LEARNING_DATA_BUILD_ADOPTED:
+            assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", f.adopted), f.flag
+            assert len(f.reason) >= 10, f"{f.flag} の根拠が薄い"
+
+    def test_describe_includes_learning_data_build_section(self) -> None:
+        """describe() に学習データビルダーセクションが出ること。"""
+        text = describe()
+        assert "学習データビルダー" in text
+        for f in LEARNING_DATA_BUILD_ADOPTED:
+            assert f.flag in text
+
+    @pytest.mark.parametrize(
+        "flag", [f.flag for f in LEARNING_DATA_BUILD_ADOPTED])
+    def test_flag_exists_in_build_labeled_win_from_npz(self, flag: str) -> None:
+        """採用済みフラグが実際に build_labeled_win_from_npz.py に存在すること。"""
+        text = _script_text("scripts/build_labeled_win_from_npz.py")
+        assert text, "scripts/build_labeled_win_from_npz.py が見つからない"
+        assert _flag_name(flag) in text, f"{flag} がスクリプトに存在しない"

@@ -397,4 +397,49 @@ RT配信の勝者即時確定にも必須で、Phase J で実装予定だった�
 1. 走行中の修正 (W10常時ガード) を完了 → **統一測定** (セル正解率+盤面完全一致率、修正前後の対比)
 2. 統一測定の**誤りセルを全数タクソノミ分類** (どの類型が何セル残っているか) → 潰す優先順位を決める
 3. 類型ごとに 根治 → 物差し回帰 → 採用、を反復 (フラグ式・全域バックテスト・単一情報源の規約は維持)
+
+---
+
+# 認識強化8フラグの本番採用登録 完了 (2026-08-18)
+
+## user承認「全群採用」を受けて `src/production_config.py` へ登録完了
+- **W25系 (RECOGNITION_ADOPTED)**: `--enable-ojama-cnn-override-warmup`
+  (W25第1〜2弾、drift-resync抑制へ役割転用、resync発火14→7・reset 3→0実証) /
+  `--enable-ojama-write-accounting-guard` (W25第3弾・根治、対象9セル9/9解消、
+  stage1 97.98→98.41%・stage2 99.46→99.27%[n=23小標本]、おじゃま反映最大1.5秒
+  遅延の新規許容を明文化、固着対策 `OJAMA_REJECT_TIMEOUT_SEC=1.5` 込み)
+- **境界RT系 (RECOGNITION_ADOPTED)**: `--enable-match-end-persist-override` (b-1) /
+  `--enable-post-match-lockdown-latch` (b-2、試合外RT遮断4/5実測) /
+  `--enable-result-screen-hardening` (③、列フィルタ除外5/5実測)
+- **収集系 (COLLECT_ONLY_ADOPTED)**: `--enable-stable-persistence-gate` (d、
+  閾値0.858<1.0<1.07の実測分離ギャップから決定) / `--enable-boundary-multisignal`
+  (game_idx境界マルチシグナル、W22時代の実測7/8=87.5%が根拠、**今回の追加A/Bは
+  未実施**と明記) / `--enable-winner-panel-crosscheck` (同上の注記)
+- **学習データビルダー (新設 LEARNING_DATA_BUILD_ADOPTED)**:
+  `--exclude-match-end-locked` を標準オプションとして記録 (列フィルタ除外5/5実証)
+
+## 配線確認・是正 (前回2895fe1と同型の漏れを事前検出・修正)
+- `scripts/visualize_recognition.py`: argparse 5個 + `resolve_production_config_
+  overrides()` タプル5キー + `load_default()` 呼出し5キーの3箇所を追加是正
+- `scripts/measure_stable_cell_acc.py`: `resolve_production_recognition_flags()`
+  タプル5キー + 関数シグネチャ/forwarding call 全経路 (`_process_video`/
+  `_process_video_worker`/`_collect_serial`/`_collect_parallel`/`_collect_results`/
+  `main()`、executor.submit の位置引数タプル含む) に5キーを追加是正。作業中に
+  発生した二重 keyword 引数の SyntaxError (`_collect_results`/`_collect_serial`
+  内の2箇所) をその場で検出・修正済み
+- `scripts/visualize_advantage_overlay.py` / `scripts/collect_boards_lean.py`:
+  既存の汎用 `**` 展開・argparse 配線により **追加修正なしで正しく伝播**を確認
+  (collect_boards_lean.py は W25/境界RT系5フラグ+収集限定3フラグとも実装時点で
+  完全配線済みだった)
+
+## テスト
+- `tests/test_production_config.py` に `TestLearningDataBuildAdopted` を新設
+  (採用日+根拠の記録確認、`--exclude-match-end-locked` の実在確認)
+- 既存の汎用回帰テスト (`test_visualize_recognition_production_config_2026-08-13.py`
+  / `test_measure_stable_cell_acc_production_recognition_2026-08-13.py` /
+  `test_advantage_overlay_production_recognition_2026-08-13.py` /
+  `test_production_config.py`) が RECOGNITION_ADOPTED 18キー全てを自動検証する
+  設計のため、配線漏れは全て機械的に検出済み
+- フルpytest (`OMP_NUM_THREADS=1 -n 8`) 実行、既定OFF時は各フラグとも
+  bit-identical (静的テストで担保)
 4. 難所セットが头打ちになったら一般分布でも測る (難所セットへの過適合を防ぐ)
