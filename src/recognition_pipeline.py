@@ -2173,6 +2173,17 @@ class RecognitionPipeline:
         # (未参照時は空 dict のまま、bit-identical に影響しない)。
         self._stable_color_memory_1p: dict[tuple[int, int], int] = {}
         self._stable_color_memory_2p: dict[tuple[int, int], int] = {}
+        # W25固着対策 (2026-08-18、data/verify/diag_w25_regression2_2026-08-18/):
+        # セル単位の「生CNN観測が連続して9を示している間の開始time_sec」
+        # (1P/2P 別)。 会計整合フィルタが直近安定色メモリを永久に信用し続け、
+        # 正規のおじゃま着弾/着地推論の自己修復すら拒否してしまう固着事故
+        # (c10/c109) への対処。 OJAMA_REJECT_TIMEOUT_SEC 秒連続で生観測が9を
+        # 示したらタイムアウト受理する (詳細は
+        # _apply_ojama_write_accounting_filter / src/ojama_write_accounting.py
+        # 参照)。 フリッカ許容なし (1frameでも9以外を観測したら即クリア、
+        # `_update_ojama_raw9_streak` 参照)。
+        self._ojama_raw9_streak_start_1p: dict[tuple[int, int], float] = {}
+        self._ojama_raw9_streak_start_2p: dict[tuple[int, int], float] = {}
         # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
         self._enable_floating_gap_restore: bool = bool(
             enable_floating_gap_restore
@@ -3685,6 +3696,10 @@ class RecognitionPipeline:
         # クリアしない (= 本メモリの設計目的そのもの、こちらは意図的に対象外)。
         self._stable_color_memory_1p.clear()
         self._stable_color_memory_2p.clear()
+        # W25固着対策: 連続9観測ストリークも試合境界でクリアする
+        # (新試合に前試合のストリーク開始時刻を持ち込まない)。
+        self._ojama_raw9_streak_start_1p.clear()
+        self._ojama_raw9_streak_start_2p.clear()
         # NEXT slide detector + prev_frame もリセット
         if self._slide_detector_1p is not None:
             self._slide_detector_1p.reset()
@@ -6176,8 +6191,50 @@ class RecognitionPipeline:
         snap = tracker.get_snapshot(time_sec)
         return snap.pending_p1 if side == "1P" else snap.pending_p2
 
+    def _update_ojama_raw9_streak(
+        self, side: str, cnn_board: Board, time_sec: float,
+    ) -> "dict[tuple[int, int], float]":
+        """W25固着対策 (2026-08-18): セル単位「生CNN観測が連続して9を示し
+        ている持続時間」を更新し、今フレームの duration 辞書を返す。
+
+        フリッカ許容なし: 1 frame でも生CNN観測が9以外を示したら、その
+        セルのストリーク開始時刻を即座に破棄する (許容を入れると雲の
+        断続累積が `OJAMA_REJECT_TIMEOUT_SEC` に届くリスクがあり、棄却側
+        の論拠 [雲は0.85〜1.0秒で晴れる] が崩れるため、アーキ指定で禁止)。
+
+        外部 wrapper 状態 (`_ojama_raw9_streak_start_1p/2p`) は
+        stateless判定+外部wrapper保持の規約に従い本 pipeline が保持する
+        (src/ojama_write_accounting.py の純関数側は一切 state を持たない)。
+
+        Args:
+            side: "1P" or "2P"。
+            cnn_board: 今フレームの生 CNN 観測盤面 (会計整合フィルタ適用前)。
+            time_sec: 今フレームの time_sec。
+
+        Returns:
+            (row, col) -> 連続9観測の持続時間 (秒)。9 以外のセルは
+            辞書に含めない (呼び出し側は `.get(key, 0.0)` で 0.0 扱い)。
+        """
+        streak_start = (
+            self._ojama_raw9_streak_start_1p if side == "1P"
+            else self._ojama_raw9_streak_start_2p
+        )
+        duration_by_cell: dict[tuple[int, int], float] = {}
+        for r in range(HIDDEN_ROWS, BOARD_ROWS):
+            for c in range(BOARD_COLS):
+                key = (r, c)
+                if int(cnn_board.get(r, c)) == COLOR_OJAMA:
+                    if key not in streak_start:
+                        streak_start[key] = time_sec
+                    duration_by_cell[key] = time_sec - streak_start[key]
+                else:
+                    # フリッカ許容なし: 9 以外を観測した瞬間に即クリア。
+                    streak_start.pop(key, None)
+        return duration_by_cell
+
     def _apply_ojama_write_accounting_filter(
         self, side: str, cnn_board: Board, own_pending_ojama_forecast: int | None,
+        time_sec: float,
     ) -> Board:
         """W25根治 第3弾: CNN観測入力段の会計整合フィルタ (呼出し側)。
 
@@ -6204,16 +6261,29 @@ class RecognitionPipeline:
         本関数では pending 予告量の「取得可否」のみを見て、値の大小には
         依存しない (PENDING_ABS_CAP 到達等の値のブレは判定に影響しない)。
 
+        固着対策 (2026-08-18、data/verify/diag_w25_regression2_2026-08-18/、
+        src/ojama_write_accounting.py モジュール docstring「固着対策」節
+        参照): 28チャンクA/Bで新規悪化2件 (c10/c109) が永久固着と判明した
+        ため、セル単位の連続9観測持続時間 (`_update_ojama_raw9_streak`) を
+        毎フレーム更新し、`OJAMA_REJECT_TIMEOUT_SEC` 秒に達したら直近安定
+        色メモリの陳腐化を疑い9を受理するタイムアウト機構を追加した。
+        本メソッドは own_pending_ojama_forecast が None (会計フォール
+        バック) の場合は早期 return するが、ストリーク自体は
+        `_update_ojama_raw9_streak` 側で常時更新する (会計が一時的に
+        利用不能でもストリークの連続性を保つため)。
+
         Args:
             side: "1P" or "2P"。
             cnn_board: フィルタ対象の CNN 観測盤面。
             own_pending_ojama_forecast: `_get_own_pending_ojama_forecast` の
                 戻り値をそのまま渡す (二重計算を避けるため呼出し元で1回だけ
                 算出済みの値)。
+            time_sec: 今フレームの time_sec (ストリーク更新に使う)。
 
         Returns:
             フィルタ適用後の Board (対象外なら cnn_board そのもの)。
         """
+        duration_by_cell = self._update_ojama_raw9_streak(side, cnn_board, time_sec)
         if own_pending_ojama_forecast is None:
             return cnn_board
         from src.ojama_write_accounting import apply_ojama_write_accounting_filter
@@ -6222,7 +6292,9 @@ class RecognitionPipeline:
             self._stable_color_memory_1p if side == "1P"
             else self._stable_color_memory_2p
         )
-        return apply_ojama_write_accounting_filter(cnn_board, memory, credit)
+        return apply_ojama_write_accounting_filter(
+            cnn_board, memory, credit, duration_by_cell,
+        )
 
     def _step_side(
         self,
@@ -6262,7 +6334,7 @@ class RecognitionPipeline:
         )
         if self._enable_ojama_write_accounting_guard:
             cnn_board = self._apply_ojama_write_accounting_filter(
-                side, cnn_board, _own_pending_ojama_forecast,
+                side, cnn_board, _own_pending_ojama_forecast, time_sec,
             )
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
         # TSUMO_FALL→STABLE 遷移時のみ上書きされる。

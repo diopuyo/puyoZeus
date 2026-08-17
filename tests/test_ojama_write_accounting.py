@@ -24,6 +24,7 @@ from src.board import (
     Board,
 )
 from src.ojama_write_accounting import (
+    OJAMA_REJECT_TIMEOUT_SEC,
     apply_ojama_write_accounting_filter,
     filter_ojama_write_by_accounting,
 )
@@ -191,3 +192,128 @@ def test_apply_filter_full_board_no_spurious_changes_when_no_ojama_present():
     for r in range(HIDDEN_ROWS, BOARD_ROWS):
         for c in range(BOARD_COLS):
             assert int(out.get(r, c)) == int(cnn.get(r, c))
+
+
+# ---------------------------------------------------------------------------
+# W25固着対策 (2026-08-18): 連続9観測タイムアウトによる棄却解除。
+# data/verify/diag_w25_regression2_2026-08-18/ 参照 (c10/c109 永久固着の
+# 直接対策)。
+# ---------------------------------------------------------------------------
+
+
+def test_filter_rejects_when_duration_below_timeout():
+    """タイムアウト未到達 (duration < OJAMA_REJECT_TIMEOUT_SEC) では従来通り
+    棄却する (固着対策導入前と bit-identical、回帰確認)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        consecutive_raw9_duration_sec=OJAMA_REJECT_TIMEOUT_SEC - 0.01,
+    )
+    assert out == COLOR_RED
+
+
+def test_filter_accepts_when_duration_reaches_timeout():
+    """核心: duration が OJAMA_REJECT_TIMEOUT_SEC に達したら
+    直近安定色メモリの陳腐化を疑い9を受理する (永久固着防止)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        consecutive_raw9_duration_sec=OJAMA_REJECT_TIMEOUT_SEC,
+    )
+    assert out == COLOR_OJAMA
+
+
+def test_filter_accepts_when_duration_exceeds_timeout():
+    """duration がタイムアウトを大幅に超えても受理し続ける (タイムアウト後
+    に再度棄却へ戻ることはない)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        consecutive_raw9_duration_sec=OJAMA_REJECT_TIMEOUT_SEC + 10.0,
+    )
+    assert out == COLOR_OJAMA
+
+
+def test_filter_duration_default_zero_is_backward_compatible():
+    """consecutive_raw9_duration_sec を渡さない既存呼出しは既定 0.0 となり、
+    タイムアウト機能が無効 (= 従来の棄却挙動と bit-identical)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+    )
+    assert out == COLOR_RED
+
+
+def test_filter_duration_does_not_affect_empty_cell_passthrough():
+    """空セル起点は duration の大小に関わらず (そもそも判定に入る前に)
+    常に素通しする (設計要件(c)はタイムアウト機構追加後も不変)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_EMPTY, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        consecutive_raw9_duration_sec=0.0,
+    )
+    assert out == COLOR_OJAMA
+
+
+def test_apply_filter_with_duration_dict_below_timeout_rejects():
+    """盤面全体適用: duration 辞書がタイムアウト未到達なら棄却される。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_OJAMA)
+    memory = {(9, 1): COLOR_RED}
+    duration_by_cell = {(9, 1): OJAMA_REJECT_TIMEOUT_SEC - 0.5}
+
+    out = apply_ojama_write_accounting_filter(
+        cnn, memory, column_pending_ojama_credit=0,
+        consecutive_raw9_duration_by_cell=duration_by_cell,
+    )
+
+    assert int(out.get(9, 1)) == COLOR_RED
+
+
+def test_apply_filter_with_duration_dict_at_timeout_accepts():
+    """盤面全体適用: duration 辞書がタイムアウトに達したセルのみ受理し、
+    他のセルは無関係 (対象セル以外は無変化)。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_OJAMA)  # タイムアウト到達 → 受理
+    cnn.set(10, 2, COLOR_OJAMA)  # タイムアウト未到達 → 棄却
+    memory = {(9, 1): COLOR_RED, (10, 2): COLOR_GREEN}
+    duration_by_cell = {
+        (9, 1): OJAMA_REJECT_TIMEOUT_SEC,
+        (10, 2): 0.1,
+    }
+
+    out = apply_ojama_write_accounting_filter(
+        cnn, memory, column_pending_ojama_credit=0,
+        consecutive_raw9_duration_by_cell=duration_by_cell,
+    )
+
+    assert int(out.get(9, 1)) == COLOR_OJAMA, "タイムアウト到達セルは受理されるべき"
+    assert int(out.get(10, 2)) == COLOR_GREEN, "タイムアウト未到達セルは棄却されたままのはず"
+
+
+def test_apply_filter_duration_dict_none_is_backward_compatible():
+    """consecutive_raw9_duration_by_cell を渡さない既存呼出し (None) は
+    全セル duration=0.0 扱いとなり、タイムアウト機能が無効
+    (= 従来の棄却挙動と bit-identical)。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_OJAMA)
+    memory = {(9, 1): COLOR_RED}
+
+    out = apply_ojama_write_accounting_filter(cnn, memory, column_pending_ojama_credit=0)
+
+    assert int(out.get(9, 1)) == COLOR_RED
+
+
+def test_apply_filter_duration_dict_missing_cell_defaults_to_zero():
+    """duration_by_cell に登録が無いセルは 0.0 扱い (= タイムアウト未到達、
+    棄却ロジックのみ適用)。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_OJAMA)
+    memory = {(9, 1): COLOR_RED}
+
+    out = apply_ojama_write_accounting_filter(
+        cnn, memory, column_pending_ojama_credit=0,
+        consecutive_raw9_duration_by_cell={},  # (9,1) 未登録
+    )
+
+    assert int(out.get(9, 1)) == COLOR_RED

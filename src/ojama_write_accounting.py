@@ -56,16 +56,86 @@ c13 実機検証 (`scripts/_verify_w25_3rd_fix_2026-08-17.py`) で、対象9セ�
 後方互換) が、「非空色セルへの9書込み」の判定には使わず常時棄却する
 よう修正する。空セルへの9書込み (正規の着弾経路) は本修正の対象外で
 従来どおり無条件で通過する (design要件(c)は不変)。
+
+## 固着対策 (2026-08-18、data/verify/diag_w25_regression2_2026-08-18/)
+
+「非空色セル→9 を常時棄却」への修正 (上記) は c13 の実害を解消したが、
+28チャンクA/B で新規悪化2件 (**永久固着**) が判明した:
+
+  - c10 (r8,1)(r10,2): 着地推論の一過性誤り (フィルタ無しなら 0.8秒で
+    自己修復) を、本フィルタが「正しい9観測」まで毎フレーム棄却して
+    自己修復機構の入力そのものを汚染し、永久固着させていた。
+  - c109 (r3,2): 紫ぷよが CHAIN 中に消去され (凍結中は「空」が STABLE
+    確定されないため直近安定色メモリは紫のまま) → 直後に正規のおじゃま
+    着弾が発生 → メモリが紫のままの棄却ロジックが正規着弾を永久に拒否。
+
+いずれも「直近安定色メモリが陳腐化 (stale) しているのに、生の CNN 観測が
+9 を一貫して示し続けている」という共通構造。**陳腐化したメモリはいつか
+実観測に屈服すべき** という別の (棄却側とは独立した) 正当化に基づき、
+セル単位の「生CNN観測が連続して9を示している持続時間」
+(`OJAMA_REJECT_TIMEOUT_SEC` 秒、SEC基準・呼び出し側で外部wrapperとして
+保持) がタイムアウトに達したら棄却を解除し9を受理する。
+
+### 論拠の分離 (重要、2つの正当化は独立)
+
+- **棄却側の論拠**: 白雲パーティクルの持続時間は実測 0.85〜1.0秒
+  (n=2波、data/verify/diag_c13c22_recheck_2026-08-17/) であり、雲由来の
+  誤観測が連続 `OJAMA_REJECT_TIMEOUT_SEC` (=1.5秒、実測上限の1.5倍
+  マージン) に届くことは無い。
+- **受理側の論拠**: 上記の雲の実測とは無関係に、「陳腐化したメモリは
+  いつか実観測に屈服すべき」という構造的な永久固着防止原則。 これは
+  雲の持続時間の長さとは論理的に独立しており、雲がどれだけ短くても
+  長くても、メモリが誤って stale なままなら実観測が最終的に勝つべき、
+  という別の要請。
+
+この2つを同じ定数 `OJAMA_REJECT_TIMEOUT_SEC` で表現しているのは偶然の
+一致ではなく、「雲の実測上限に安全マージンを載せた値」を「stale メモリの
+最大許容陳腐化期間」としても採用する、という設計判断であることに注意
+(単一の値が2つの異なる論拠を同時に満たすように選定されている)。
+
+### フリッカ許容なし (重要)
+
+ストリーム判定は 1 フレームでも生CNN観測が9以外を示したら即座にリセット
+する (許容フレームを設けない)。 許容を入れると「雲が断続的に (フリッカ
+しながら) 累積 `OJAMA_REJECT_TIMEOUT_SEC` 秒分観測される」というシナリオ
+が発生した場合、棄却側の論拠 (雲は連続 0.85〜1.0秒で晴れる) が崩れて
+しまう。 呼び出し側 (`RecognitionPipeline._update_ojama_raw9_streak`) が
+この厳格なリセット規則を実装する。
+
+### 新規許容の明文化 (暗黙ガード禁止、user恒久指示対応)
+
+本タイムアウトの導入により、「正規のおじゃま着弾の反映が最大
+`OJAMA_REJECT_TIMEOUT_SEC` (=1.5) 秒遅れる」ケースが新たに生じ得る
+(直近安定色メモリが誤って stale な色を保持していた場合、実際の着弾から
+最大1.5秒間は棄却され続け、タイムアウト到達で初めて反映される)。
+既存の「設置→盤面反映は8フレーム以内」(feedback_placement_reflection_
+8frames) はツモ設置 (TSUMO_FALL) の反映遅延基準であり、本モジュールが
+扱うおじゃま着弾の反映経路には元々適用されない (対象が異なる)。
+既存の着弾遅延基準 (reference_ojama_landing_gated_by_placement 等) も
+サブ秒精度を要求しない構造 (連鎖アニメ時間・ターン単位の粒度) のため、
+本タイムアウトによる新規許容は既存基準と抵触しない。
 """
 from __future__ import annotations
 
 from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, HIDDEN_ROWS, Board
+
+# W25固着対策 (2026-08-18): 直近安定色メモリが陳腐化 (stale) している場合の
+# 永久固着防止タイムアウト。 生CNN観測が連続してこの秒数だけ9を示したら、
+# 直近安定色メモリを信用せず9を受理する (SEC基準、フレーム基準禁止・W4教訓)。
+# 根拠は2つの独立した正当化から成る (詳細はモジュール docstring
+# 「固着対策」節参照、棄却側と受理側で論拠が異なることに注意):
+#   - 棄却側: 白雲パーティクル持続時間実測 0.85〜1.0秒 (n=2波) の
+#     1.5倍相当の安全マージン → 雲由来の誤観測はこの秒数に届かない。
+#   - 受理側: 陳腐化したメモリはいつか実観測に屈服すべき、という構造的な
+#     永久固着防止原則 (雲の実測とは無関係な別の要請)。
+OJAMA_REJECT_TIMEOUT_SEC: float = 1.5
 
 
 def filter_ojama_write_by_accounting(
     prev_stable_color: int,
     new_cnn_value: int,
     column_pending_ojama_credit: int,
+    consecutive_raw9_duration_sec: float = 0.0,
 ) -> int:
     """1 セル分の会計整合フィルタ (純関数、stateless)。
 
@@ -78,6 +148,14 @@ def filter_ojama_write_by_accounting(
     空セルへの 9 書込み (= 正規のおじゃま着弾経路) はフィルタ対象外で
     無条件に素通しする。
 
+    固着対策 (2026-08-18、モジュール docstring「固着対策」節参照):
+    `consecutive_raw9_duration_sec` (呼び出し側が算出する、生CNN観測が
+    連続してこの秒数だけ9を示している持続時間) が `OJAMA_REJECT_TIMEOUT_
+    SEC` 以上ならタイムアウト受理し、`prev_stable_color` に関わらず
+    `new_cnn_value` (=9) をそのまま返す。 直近安定色メモリが陳腐化
+    (stale) している場合の永久固着を防ぐ (棄却側の論拠とは独立、詳細は
+    モジュール docstring 参照)。
+
     Args:
         prev_stable_color: このセルの直近安定色 (state machine reset の
             影響を受けない外部メモリから取得、未観測セルは COLOR_EMPTY 扱い)。
@@ -86,20 +164,27 @@ def filter_ojama_write_by_accounting(
             着弾クレジット (floor(予告個数/6) の6列均等下限保証分のみ、
             呼び出し側で算出済みの値をそのまま渡す)。現在の判定ロジックでは
             未使用 (シグネチャ後方互換・将来拡張用に保持)。
+        consecutive_raw9_duration_sec: 生CNN観測が連続して9を示している
+            持続時間 (秒、呼び出し側が算出。フリッカ [1frameでも9以外を
+            観測] があれば即0にリセットされた値を渡すこと)。既定 0.0
+            (backwards compat、渡さなければタイムアウト機能は無効)。
 
     Returns:
         フィルタ後の値 (書換えが起きなければ `new_cnn_value` そのもの)。
     """
     del column_pending_ojama_credit  # 実測に基づき判定には使わない (docstring参照)
-    if prev_stable_color != COLOR_EMPTY and new_cnn_value == COLOR_OJAMA:
-        return prev_stable_color
-    return new_cnn_value
+    if prev_stable_color == COLOR_EMPTY or new_cnn_value != COLOR_OJAMA:
+        return new_cnn_value
+    if consecutive_raw9_duration_sec >= OJAMA_REJECT_TIMEOUT_SEC:
+        return new_cnn_value  # 固着対策: タイムアウト到達→実観測を受理
+    return prev_stable_color
 
 
 def apply_ojama_write_accounting_filter(
     cnn_board: Board,
     stable_color_memory: "dict[tuple[int, int], int]",
     column_pending_ojama_credit: int,
+    consecutive_raw9_duration_by_cell: "dict[tuple[int, int], float] | None" = None,
 ) -> Board:
     """盤面全体に会計整合フィルタを適用する (純関数、stateless)。
 
@@ -114,17 +199,24 @@ def apply_ojama_write_accounting_filter(
             COLOR_EMPTY として扱う (= フィルタ対象外、まだ安定観測が無い
             セルへの書込みは無条件で通す)。
         column_pending_ojama_credit: 全列共通の pending クレジット。
+        consecutive_raw9_duration_by_cell: (row, col) -> 生CNN観測が連続
+            して9を示している持続時間 (秒)。未登録セルは 0.0 扱い
+            (= タイムアウト未到達、従来の棄却ロジックのみ適用)。
+            既定 None (backwards compat、渡さなければタイムアウト機能は
+            全セルで無効)。
 
     Returns:
         フィルタ適用後の新規 Board (`cnn_board` 自体は変更しない)。
     """
+    consecutive_raw9_duration_by_cell = consecutive_raw9_duration_by_cell or {}
     filtered = cnn_board.copy()
     for r in range(HIDDEN_ROWS, BOARD_ROWS):
         for c in range(BOARD_COLS):
             prev = stable_color_memory.get((r, c), COLOR_EMPTY)
             cur = int(cnn_board.get(r, c))
+            duration = consecutive_raw9_duration_by_cell.get((r, c), 0.0)
             out = filter_ojama_write_by_accounting(
-                prev, cur, column_pending_ojama_credit,
+                prev, cur, column_pending_ojama_credit, duration,
             )
             if out != cur:
                 filtered.set(r, c, out)
