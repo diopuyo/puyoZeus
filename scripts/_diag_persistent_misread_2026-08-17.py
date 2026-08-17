@@ -55,6 +55,7 @@ NPZ_DIRS: dict[str, Path] = {
     "c": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_w10guard_2026-08-17",
     "d": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_r2w10_2026-08-17",
     "e": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_e_2026-08-17",
+    "f": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_f_2026-08-17",
 }
 
 

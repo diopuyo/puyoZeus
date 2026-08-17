@@ -899,6 +899,13 @@ class RecognitionPipeline:
     # 誤って自己修復 reset が発火するのを防ぐ目的)。
     BASELINE_BROKEN_STABLE_GRACE_SEC: float = 3.0
 
+    # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
+    # の「NEXT履歴+ever_seen に無い色は強制置換」が成立するための必要条件。
+    # 試合は4色構成 (reference_four_colors_per_match_2026-07-22) のため、
+    # ever_seen∪next_queue の puyo 色数がこの値未満の間は和集合が不完全
+    # (= 4色ルールで5色目を弾く根拠が成立しない「飢餓状態」) とみなす。
+    NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION: int = 4
+
     def __init__(
         self,
         image_reader: ImageReader,
@@ -1463,6 +1470,18 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical
         # (backwards compat、user承認前の savepoint 実装)。
         enable_ojama_column_stack_fix: bool = False,
+        # W23根治 (enable_next_history_starvation_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W23 参照): `_validate_next_history` の
+        # 「NEXT履歴+ever_seen に無い色を強制置換」ステップは、試合開始直後
+        # ever_seen が NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION (4色) 未満しか
+        # 観測していない「飢餓状態」では和集合が不完全なため、正しい観測色を
+        # 誤って別の既知色へ強制変換する事故が実測された (c23/c10、
+        # ctx.confirmed_board は健全だが published_confirmed のみ汚染)。
+        # True にすると飢餓中はこのステップをスキップし観測値をそのまま通す
+        # (浮きぷよ除去は従来通り継続実施)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_next_history_starvation_fix: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1990,6 +2009,10 @@ class RecognitionPipeline:
         # 持続誤認26件系統2 (2026-08-17)。 default False = bit-identical。
         self._enable_ojama_column_stack_fix: bool = bool(
             enable_ojama_column_stack_fix
+        )
+        # W23根治 (2026-08-17)。 default False = bit-identical。
+        self._enable_next_history_starvation_fix: bool = bool(
+            enable_next_history_starvation_fix
         )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
@@ -2997,6 +3020,10 @@ class RecognitionPipeline:
         # bit-identical (backwards compat、user承認前の savepoint 実装)。
         enable_override_color_guard: bool = False,
         enable_ojama_column_stack_fix: bool = False,
+        # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): __init__ へ
+        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_next_history_starvation_fix: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3230,6 +3257,9 @@ class RecognitionPipeline:
             enable_floating_gap_restore=enable_floating_gap_restore,
             enable_override_color_guard=enable_override_color_guard,
             enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+            enable_next_history_starvation_fix=(
+                enable_next_history_starvation_fix
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -7096,6 +7126,10 @@ class RecognitionPipeline:
                 ever_seen=ever_seen,
                 frame_bgr=frame_bgr,
                 region=region_for_validate,
+                enable_starvation_fix=self._enable_next_history_starvation_fix,
+                min_colors_for_validation=(
+                    self.NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION
+                ),
             )
         # T4 PuyoErasureMonitor: STABLE 中「色→EMPTY」遷移を記録。
         # prev_stable と current confirmed_board を比較する。
@@ -7327,6 +7361,8 @@ class RecognitionPipeline:
         ever_seen: set[int] | None = None,
         frame_bgr: "np.ndarray | None" = None,
         region: "object | None" = None,
+        enable_starvation_fix: bool = False,
+        min_colors_for_validation: int = 4,
     ) -> Board:
         """ネクスト履歴 整合性 + 浮きぷよ除去 (2026-05-10 FIX-B 拡張).
 
@@ -7338,6 +7374,14 @@ class RecognitionPipeline:
         cycle 71v-B (2026-05-15): ever_seen 集合で NEXT cap スクロールアウト対策.
         cycle 8 (2026-05-15, Innovation D): UNKNOWN→HSV 距離最小 seen 色 replace.
             frame_bgr + region 渡しなら HSV ベース、 無ければ UNKNOWN フォールバック.
+        W23根治 (2026-08-17, enable_starvation_fix): 試合開始直後 ever_seen が
+            min_colors_for_validation 色未満しか観測していない「飢餓状態」では、
+            和集合 (seen) が不完全で「履歴外色→強制置換」の前提 (4色ルールで
+            5色目を弾く) が成立しない。正しい観測色を誤って別の既知色へ
+            強制変換する事故 (docs/KNOWN_WEAKNESSES.md W23) を防ぐため、
+            enable_starvation_fix=True かつ飢餓中はステップ1を丸ごとスキップし
+            観測値をそのまま通す (ステップ2の浮きぷよ除去は継続実施)。
+            enable_starvation_fix=False (既定) では従来挙動と完全に bit-identical。
         """
         from src.board_state_machine import _apply_gravity_filter
         if not next_queue:
@@ -7351,8 +7395,16 @@ class RecognitionPipeline:
         if ever_seen is not None:
             seen.update(ever_seen)
         out = board.copy()
-        # 1. ネクスト履歴外色を 処理 (= 6 色全色出尽くし時はスキップ)
-        if len(seen) < 9:
+        seen_puyo_color_count = len({
+            col for col in seen
+            if col not in (COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN)
+        })
+        is_starving = (
+            enable_starvation_fix
+            and seen_puyo_color_count < min_colors_for_validation
+        )
+        # 1. ネクスト履歴外色を 処理 (= 6 色全色出尽くし時はスキップ、飢餓中もスキップ)
+        if len(seen) < 9 and not is_starving:
             # ever_seen から puyo 色 (= EMPTY/OJAMA/UNKNOWN 除く) を抽出
             seen_puyo_colors = {
                 col for col in seen

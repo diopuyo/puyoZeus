@@ -4577,3 +4577,208 @@ def test_score_reset_strict_ignores_single_frame_both_side_glitch() -> None:
         "満たないため発火してはならない"
     )
 
+
+# ---------------------------------------------------------------------------
+# W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23):
+# enable_next_history_starvation_fix フラグテスト
+# _validate_next_history は「NEXT履歴+ever_seen に無い色を強制置換」するが、
+# 試合開始直後 ever_seen が4色 (NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION) 未満
+# しか観測していない「飢餓状態」では和集合が不完全なため、正しく観測された
+# 色を誤って別の既知色へ強制変換してしまう (c23/c10 実測)。
+# ---------------------------------------------------------------------------
+
+
+def test_validate_next_history_default_off_replaces_unseen_color_bit_identical():
+    """既定 (enable_starvation_fix=False): 従来通り、履歴外色は HSV 距離
+    最寄りの既知色へ強制置換される (bit-identical 確認)。"""
+    from src.board import COLOR_PURPLE
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)  # next_queue/ever_seen に無い色
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+    )
+
+    replaced = int(out.get(12, 1))
+    assert replaced != COLOR_PURPLE, (
+        "既定挙動: 履歴外色 (紫) は強制置換されるべき (置換されないのは回帰)"
+    )
+    assert replaced in (COLOR_RED, COLOR_BLUE), (
+        "置換先は next_queue に現れた既知色 (赤/青) のいずれかであるべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_preserves_observed_color_when_below_threshold():
+    """enable_starvation_fix=True: ever_seen∪next_queue の puyo 色数が
+    NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION (既定4) 未満の飢餓状態では、
+    正しく観測された色 (紫) を強制置換せずそのまま通す (W23根治の中核)。"""
+    from src.board import COLOR_PURPLE
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # 2色のみ = 飢餓状態
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) == COLOR_PURPLE, (
+        "飢餓状態 (観測済み2色<4) では正しい観測色 (紫) を保持するべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_resumes_validation_once_4_colors_seen():
+    """enable_starvation_fix=True でも、ever_seen∪next_queue が4色そろえば
+    検証を再開し、履歴外色は従来通り強制置換される (飢餓状態を脱したら
+    元の4色ルールが機能することの確認)。"""
+    from src.board import COLOR_PURPLE, COLOR_YELLOW
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)  # next_queue の4色に含まれない
+    next_queue = [
+        (COLOR_RED, COLOR_BLUE), (COLOR_GREEN, COLOR_YELLOW),
+    ]  # 4色そろっている
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) != COLOR_PURPLE, (
+        "4色そろい飢餓状態を脱していれば、履歴外色は従来通り置換されるべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_counts_ever_seen_union_with_next_queue():
+    """飢餓判定は next_queue 単独でなく ever_seen との和集合で行う: NEXT cap
+    スクロールアウトで next_queue が2色しか見えなくても、ever_seen に
+    既に4色蓄積済みなら飢餓状態でないとみなし検証を継続する。"""
+    from src.board import COLOR_PURPLE, COLOR_YELLOW
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # next_queue 自体は2色のみ
+    ever_seen = {COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW}  # 蓄積済み4色
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=ever_seen,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) != COLOR_PURPLE, (
+        "ever_seen が4色そろっていれば next_queue が2色のみでも飢餓状態と"
+        "みなしてはならない"
+    )
+
+
+def test_validate_next_history_starvation_fix_still_applies_gravity_filter():
+    """飢餓状態でステップ1 (履歴外色置換) をスキップしても、ステップ2
+    (浮きぷよ除去、物理推論) は従来通り継続実施されるべき。"""
+    board = Board()
+    # col=0: row=5 に puyo、 row=6 は空 → 浮きぷよ (下に隙間)
+    board.set(5, 0, COLOR_RED)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # 2色のみ = 飢餓状態
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(5, 0)) == COLOR_EMPTY, (
+        "飢餓状態中でも浮きぷよ除去 (物理推論) は継続実施されるべき"
+    )
+
+
+def _make_pipe_starvation_fix(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_next_history_starvation_fix フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_next_history_starvation_fix=enable_flag,
+    )
+
+
+def test_enable_next_history_starvation_fix_flag_off_default():
+    """フラグ OFF (default) → _enable_next_history_starvation_fix が False。"""
+    pipe = _make_pipe_starvation_fix(False)
+    assert not pipe._enable_next_history_starvation_fix, (
+        "default OFF: _enable_next_history_starvation_fix は False であるべき"
+    )
+
+
+def test_enable_next_history_starvation_fix_flag_on():
+    """フラグ ON → _enable_next_history_starvation_fix が True。"""
+    pipe = _make_pipe_starvation_fix(True)
+    assert pipe._enable_next_history_starvation_fix, (
+        "ON時: _enable_next_history_starvation_fix は True であるべき"
+    )
+
+
+def test_enable_next_history_starvation_fix_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_starvation_fix(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def test_next_history_starvation_fix_end_to_end_preserves_correct_color():
+    """W23実例の再現: STABLE中、next_queue (=ever_seen) が2色しか観測して
+    いない飢餓状態で、正しく観測された第3の色 (紫) が published_confirmed
+    (SideResult.confirmed_board) に汚染されず届くことを確認する
+    (フラグ OFF では汚染される・ON では汚染されない、の対比)。"""
+    from src.board import COLOR_PURPLE
+
+    def _build(enable_flag: bool) -> "PipelineResult":  # noqa: F821
+        board = Board()
+        board.set(12, 1, COLOR_PURPLE)
+        reader = _StubImageReader(board.copy(), _empty_board())
+        pipe = _make_pipe_starvation_fix(enable_flag, reader=reader)
+        ctx = pipe._sm_1p.context
+        ctx.state = BoardState.STABLE
+        ctx.confirmed_board = board.copy()
+        ctx.pending_board = board.copy()
+        # 飢餓状態を作る: next_queue は赤/青の2色のみ (ever_seen もこれで埋まる)
+        ctx.next_queue = [(COLOR_RED, COLOR_BLUE)] * 3
+        return pipe.update(0, 10.0, _dummy_frame())
+
+    result_off = _build(False)
+    assert int(result_off.p1.confirmed_board.get(12, 1)) != COLOR_PURPLE, (
+        "フラグ OFF (既定): 飢餓状態では従来通り正しい観測色が汚染されるはず "
+        "(W23実測の再現、既存挙動が変わっていないことの確認)"
+    )
+
+    result_on = _build(True)
+    assert int(result_on.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "フラグ ON: 飢餓状態でも正しい観測色 (紫) が published_confirmed に "
+        "そのまま届くべき (W23根治)"
+    )
+

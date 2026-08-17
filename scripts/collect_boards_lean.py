@@ -1054,6 +1054,10 @@ def collect_lean(
     # 完全維持 (backwards compat、統一測定 構成E 用に末尾追加)。
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
+    # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): RecognitionPipeline
+    # 本体へそのまま forward する。既定 False = 従来挙動完全維持
+    # (backwards compat、統一測定 構成F 用に末尾追加)。
+    enable_next_history_starvation_fix: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1342,6 +1346,7 @@ def collect_lean(
         enable_landing_color_guard=enable_landing_color_guard,
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -2026,6 +2031,17 @@ def main() -> int:
             "既定は無効 (後方互換、bit-identical、統一測定 構成E 用)。"
         ),
     )
+    parser.add_argument(
+        "--enable-next-history-starvation-fix", action="store_true",
+        dest="enable_next_history_starvation_fix",
+        help=(
+            "W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23)。"
+            "_validate_next_history の「NEXT履歴+ever_seen に無い色を強制"
+            "置換」を、試合開始直後 ever_seen が4色未満の飢餓状態の間は"
+            "スキップし観測値をそのまま通す。既定は無効 (後方互換、"
+            "bit-identical、統一測定 構成F 用)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2073,6 +2089,9 @@ def main() -> int:
         enable_landing_color_guard=args.enable_landing_color_guard,
         enable_override_color_guard=args.enable_override_color_guard,
         enable_ojama_column_stack_fix=args.enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=(
+            args.enable_next_history_starvation_fix
+        ),
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
