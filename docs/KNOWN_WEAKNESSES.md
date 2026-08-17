@@ -776,7 +776,11 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
   pytest 5,255パス**。留意点: exact-match物差しは「永久固着」と「数フレーム遅延」を区別できない
   (測定粒度の限界、frame_idx直接検査で解消を実証)。おじゃま反映が最大1.5秒遅れる可能性は
   新規許容として明文化 (8フレーム基準はツモ設置対象で適用外)。
-  事後復旧ゲートへの生CNN配線はバックログ。**残: production_config採用登録 (userゲート)**
+  事後復旧ゲートへの生CNN配線はバックログ。
+  **【production_config採用登録 完了 2026-08-18】** user承認「全群採用」を受け、
+  `--enable-ojama-cnn-override-warmup` / `--enable-ojama-write-accounting-guard` を
+  `src/production_config.py` の `RECOGNITION_ADOPTED` へ登録済み
+  (docs/WORK_CHECKLIST_2026-08-15.md 末尾「認識強化8フラグの本番採用登録 完了」参照)。
 
 ### 認識1次目標の最終判定 (2026-08-17、セッション終了時点)
 - **①難所セット セル99%以上: 達成** — 同一フレーム基準 98.61% (フェーズ開始時) → **99.43%**
