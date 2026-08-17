@@ -3604,6 +3604,109 @@ def test_board_shows_real_gameplay_requires_both_sides() -> None:
 
 
 # ============================
+# 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+# 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md で
+# 確定した再点火バグの修正)
+# ============================
+
+
+def test_result_screen_hardening_default_off_bit_identical() -> None:
+    """既定 False では score_actively_moving が装飾演出でも従来通り
+    effective_hard_off を打ち消す (再点火バグ再現、bit-identical)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=False,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    # 低分散フレーム (対戦カード紹介の装飾画面相当)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "既定 False では score_actively_moving が match_end_locked を"
+        "打ち消してしまうべき (再点火バグ、bit-identical)"
+    )
+
+
+def test_result_screen_hardening_blocks_reignition_from_decorative_screen() -> None:
+    """flag ON: match_end_locked 活性下で盤面ROIが実ゲームプレイらしく
+    ない (装飾画面) 間は、score_actively_moving=True だけでは
+    effective_hard_off を打ち消せない (再点火バグの修正本体)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is False, (
+        "flag ON では盤面ROIが装飾画面のままの間、score_actively_moving だけ"
+        "で再点火してはいけない"
+    )
+
+
+def test_result_screen_hardening_preserves_cycle71f_rescue_when_match_end_inactive() -> None:
+    """match_end_locked/latch が非活性なら score_actively_moving は無条件で
+    信用される (cycle 71f 本来の救済シナリオ、v50 51-63s を壊さない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    # match_end_detector=None なので match_end_locked/latch は常に False。
+    # 盤面ROIも低分散のまま (救済には盤面ROIを問わないことの確認)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "match_end_locked/latch が非活性なら score_actively_moving 単独の"
+        "救済 (cycle 71f) は無条件で維持されるべき"
+    )
+
+
+def test_result_screen_hardening_allows_reignition_with_real_gameplay() -> None:
+    """flag ON でも、盤面ROIが実ゲームプレイらしければ score_actively_moving
+    は信用され、match_end_locked 活性下でも is_active=True に復帰できる。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    res = pipe.update(0, 5.0, _high_variance_frame())
+    assert res.is_match_active is True, (
+        "盤面ROIが実ゲームプレイらしい (高分散) なら、match_end_locked 活性"
+        "下でも score_actively_moving による復帰を認めるべき"
+    )
+
+
+# ============================
 # 反復4 (2026-07-23): confirmed_board=None 理由分類 診断計装テスト
 # ============================
 

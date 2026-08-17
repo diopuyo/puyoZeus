@@ -1583,6 +1583,21 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_post_match_lockdown_latch: bool = False,
+        # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+        # アーキ承認済み診断 data/verify/boundary_impl_verify_2026-08-18/
+        # reignition_diag.md より): score_actively_moving (cycle 71f) が
+        # 対戦カード紹介の装飾スコアカウントアップ演出を実スコアリングと
+        # 誤認し、match_end_locked/self._post_match_lockdown_active による
+        # hard_match_off を単独で打ち消す再点火バグへの対処。
+        # match_end_locked/latch が活性な間だけ、既存の
+        # _board_shows_real_gameplay ((b-2)で構築済み、盤面ROI画素分散、
+        # puyo_observedガード同系) で score_actively_moving の信頼性を
+        # 裏取りする。cycle 71f 本来の救済シナリオ (match_end_locked/latch
+        # 非活性時、v50 51-63s) は無条件で信用し続けるため変更しない。
+        # (b-1)/(b-2) とは独立に A/B できるよう別フラグにする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_result_screen_hardening: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2143,6 +2158,10 @@ class RecognitionPipeline:
         # raw_active が連続 True になり始めた time_sec (ラッチOFF判定用)。
         # -1.0 = 現在 False (連続区間の外、またはラッチ非活性)。
         self._post_match_lockdown_raw_active_since: float = -1.0
+        # 境界実装の仕上げ (2026-08-18)。 default False = bit-identical。
+        self._enable_result_screen_hardening: bool = bool(
+            enable_result_screen_hardening
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -3170,6 +3189,10 @@ class RecognitionPipeline:
         # bit-identical (backwards compat、user承認前の savepoint 実装)。
         enable_match_end_persist_override: bool = False,
         enable_post_match_lockdown_latch: bool = False,
+        # 境界実装の仕上げ (2026-08-18): __init__ へそのまま forward する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
+        enable_result_screen_hardening: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3409,6 +3432,7 @@ class RecognitionPipeline:
             enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
             enable_match_end_persist_override=enable_match_end_persist_override,
             enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
         )
 
     # ------------------------------------------------------------------
@@ -3940,13 +3964,35 @@ class RecognitionPipeline:
             )
         )
         chain_in_progress_suppresses = chain_in_progress and not match_end_persisted
+        # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+        # 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md
+        # で確定): score_actively_moving (cycle 71f) は対戦カード紹介の
+        # 装飾スコアカウントアップ演出 (「00000000」→「0000012」等) を実
+        # スコアリングと誤認し、match_end_locked/self._post_match_lockdown_
+        # active による hard_match_off を単独で打ち消してしまう (実測:
+        # is_match_active がアンカー0.27〜0.3秒前に再点火、盤面ROIは
+        # board_shows_real_gameplay=False のまま = 装飾画面と矛盾)。
+        # match_end_locked/latch が活性な間だけ、盤面ROI画素分散
+        # (_board_shows_real_gameplay、puyo_observedガード同系) で
+        # score_actively_moving の信頼性を裏取りする。cycle 71f 本来の
+        # 救済シナリオ (match_end_locked/latch 非活性時、v50 51-63s) は
+        # 無条件で信用し続けるため変更しない。
+        # 既定 False では score_actively_moving_trusted は常に
+        # score_actively_moving と同値 (= bit-identical)。
+        if self._enable_result_screen_hardening:
+            score_actively_moving_trusted = score_actively_moving and (
+                not (match_end_locked or self._post_match_lockdown_active)
+                or self._board_shows_real_gameplay(frame)
+            )
+        else:
+            score_actively_moving_trusted = score_actively_moving
         # hard_match_off は hysteresis (recent/sm) を上書きする確定シグナル.
         # cycle 71f (提案 A): score が直近 window 内で SCORE_MOVE_MIN_DELTA 以上
         # 動いていれば、 hard_match_off を打ち消して試合中継続を保証する.
         # 「演出/READY/GO! で MatchEnd が誤発火するが score は動いている」
         # シナリオ (= v50 51-63s) を解消.
         effective_hard_off = (
-            hard_match_off and not score_actively_moving
+            hard_match_off and not score_actively_moving_trusted
             and not chain_in_progress_suppresses
         )
         is_active = (
