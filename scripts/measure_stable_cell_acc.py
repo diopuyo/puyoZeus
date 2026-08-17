@@ -382,11 +382,14 @@ def resolve_production_recognition_flags(
 
     Returns:
         {"enable_effect_gate": bool, ..., "burst_gate_open_threshold": float|None}
-        の13キー dict (2026-08-15: enable_ojama_fall_placement_override 追加、
+        の18キー dict (2026-08-15: enable_ojama_fall_placement_override 追加、
         2026-08-17: enable_patch_fp_hsv_guard 追加、2026-08-17: 5フラグ一括
         (floating_gap_restore/landing_color_guard/override_color_guard/
         ojama_column_stack_fix/next_history_starvation_fix) 追加、
-        user承認・構成F)。
+        user承認・構成F。2026-08-18: 5フラグ (ojama_cnn_override_warmup/
+        ojama_write_accounting_guard/match_end_persist_override/
+        post_match_lockdown_latch/result_screen_hardening) 追加、
+        user承認・全群採用)。
         呼び出し側は main() の該当ローカル変数へ代入する。
     """
     production = (
@@ -409,6 +412,15 @@ def resolve_production_recognition_flags(
         "enable_override_color_guard",
         "enable_ojama_column_stack_fix",
         "enable_next_history_starvation_fix",
+        # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+        # W25系 (ojama-cnn-override-warmup/ojama-write-accounting-guard) +
+        # 境界RT系 (match-end-persist-override/post-match-lockdown-latch/
+        # result-screen-hardening)。
+        "enable_ojama_cnn_override_warmup",
+        "enable_ojama_write_accounting_guard",
+        "enable_match_end_persist_override",
+        "enable_post_match_lockdown_latch",
+        "enable_result_screen_hardening",
     ):
         resolved[name] = bool(getattr(args, name, False)) or bool(
             production.get(name, False)
@@ -500,6 +512,12 @@ def _make_pipeline_cnn(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -613,6 +631,11 @@ def _make_pipeline_cnn(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -901,6 +924,12 @@ def _process_video(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -997,6 +1026,11 @@ def _process_video(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -1100,6 +1134,12 @@ def _process_video_worker(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1171,6 +1211,11 @@ def _process_video_worker(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2837,6 +2882,51 @@ def _parse_args() -> argparse.Namespace:
             "飢餓状態対策。既定は無効 (後方互換)。"
         ),
     )
+    p.add_argument(
+        "--enable-ojama-cnn-override-warmup", action="store_true", default=False,
+        dest="enable_ojama_cnn_override_warmup",
+        help=(
+            "W25第1〜2弾 (RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。drift再同期の暴発抑制に転用済み。既定は無効"
+            "(後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-write-accounting-guard", action="store_true", default=False,
+        dest="enable_ojama_write_accounting_guard",
+        help=(
+            "W25第3弾・根治 (RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。CNN観測→状態機械入力直前の一元会計整合フィルタ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-match-end-persist-override", action="store_true", default=False,
+        dest="enable_match_end_persist_override",
+        help=(
+            "境界RT系 (b-1、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。match_end_locked の持続時間ゲート。既定は無効"
+            "(後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-post-match-lockdown-latch", action="store_true", default=False,
+        dest="enable_post_match_lockdown_latch",
+        help=(
+            "境界RT系 (b-2、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。次の本物の試合開始まで試合外とみなすラッチ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-result-screen-hardening", action="store_true", default=False,
+        dest="enable_result_screen_hardening",
+        help=(
+            "境界RT系 (③、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。score_actively_moving の装飾演出誤認への裏取り。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
     # 本番構成の自動適用 (2026-08-13 是正、横展開監査 P1)。
     # scripts/visualize_recognition.py / visualize_advantage_overlay.py と同一パターン。
     p.add_argument(
@@ -2946,6 +3036,12 @@ def _collect_results(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -3046,6 +3142,11 @@ def _collect_results(
             enable_override_color_guard=enable_override_color_guard,
             enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
             enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -3099,6 +3200,11 @@ def _collect_results(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
 
 
@@ -3171,6 +3277,12 @@ def _collect_serial(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -3233,6 +3345,11 @@ def _collect_serial(
             enable_override_color_guard=enable_override_color_guard,
             enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
             enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3321,6 +3438,12 @@ def _collect_parallel(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3404,6 +3527,14 @@ def _collect_parallel(
                 enable_override_color_guard,
                 enable_ojama_column_stack_fix,
                 enable_next_history_starvation_fix,
+                # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用):
+                # _process_video_worker の末尾引数と完全一致させること
+                # (順序ズレ厳禁)。
+                enable_ojama_cnn_override_warmup,
+                enable_ojama_write_accounting_guard,
+                enable_match_end_persist_override,
+                enable_post_match_lockdown_latch,
+                enable_result_screen_hardening,
             )
             futures[fut] = vid
 
@@ -3668,6 +3799,16 @@ def main() -> int:
     enable_next_history_starvation_fix: bool = (
         _prf["enable_next_history_starvation_fix"]
     )
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = _prf["enable_ojama_cnn_override_warmup"]
+    enable_ojama_write_accounting_guard: bool = (
+        _prf["enable_ojama_write_accounting_guard"]
+    )
+    enable_match_end_persist_override: bool = (
+        _prf["enable_match_end_persist_override"]
+    )
+    enable_post_match_lockdown_latch: bool = _prf["enable_post_match_lockdown_latch"]
+    enable_result_screen_hardening: bool = _prf["enable_result_screen_hardening"]
     print(
         f"[measure] production_recognition="
         f"{'ON' if use_production_recognition else 'OFF'} "
@@ -3794,6 +3935,11 @@ def main() -> int:
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
