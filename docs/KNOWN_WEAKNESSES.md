@@ -425,3 +425,14 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
   2.5秒に12回明滅
 - **修正方向**: ①visual側に専用のデバウンス状態を持たせ取り合いを解消 (工数小) ②score-reset検知後に
   許容秒だけ判定を遅延し未来のvisual riseも許容 (工数中) ③暗転・明滅の持続時間フィルタ (工数小〜中)
+- **対処済 (2026-08-17)**: ①(`last_visual_rise_sec`/`visual_rise_times` を advance_if_new の成否と
+  無関係に無条件記録) + ③(`BOUNDARY_VISUAL_RISE_PERSIST_SEC`=0.5秒の持続確認、
+  `RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START` を流用) を実装。ただし①+③単独では
+  score-reset が時系列で先着するオンライン判定は原理的に救えない (視覚確定がまだ未来のため) と判明し、
+  動画処理完了後に `visual_rise_times` 全履歴と再突合する `_reconcile_boundary_anomalies` を追加
+  (②の狙いを事後パスとして実現、game_idx/npz 出力の割り当てタイミングには無関係、anomalies メタデータ
+  のみ補正)。実測: c109 3境界 3/3・c96 3窓 3/3・c13 2窓 1/2 が事後救済で解消 (計7/8=87.5%)。
+  c13 の残り1件 (t≈1422.2、`data/frames/video_c13.mp4`) は前後40秒の窓内で is_match_active が一度も
+  0.5秒持続確認に至らず、真の異常か検出器側の別要因かは未特定 (フォローアップ課題)。
+  既定 `enable_boundary_multisignal=False` は無関係のため bit-identical 維持
+  (pytest 5066 件全緑、`tests/test_collect_boards_lean.py` に競合ケース回帰テスト追加)。

@@ -2135,13 +2135,44 @@ class TestBoundaryMultisignal:
         assert shared.last_visual_advance_sec is None
 
     def test_visual_rising_edge_advances_boundary(self) -> None:
-        """multisignal_mode=True で False→True 立ち上がりが境界を進める。"""
+        """multisignal_mode=True で False→True 立ち上がりが、
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒持続確認後に境界を進める
+        (W22根治、2026-08-17: ノイズ除去のため即時確定ではなくなった)。
+        確定時刻は持続確認完了時刻ではなく立ち上がり本来の時刻 (2.0) を使う。
+        """
         mod = _import_lean()
         shared = mod._SharedGameCounter(multisignal_mode=True)
         shared.observe_visual_signal(False, t_sec=1.0)
-        shared.observe_visual_signal(True, t_sec=2.0)  # 立ち上がり → 境界
+        shared.observe_visual_signal(True, t_sec=2.0)  # 立ち上がり候補
+        assert shared.game_idx == 0, "持続確認が完了するまでは進まない"
+        shared.observe_visual_signal(
+            True, t_sec=2.0 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )  # 持続確認完了 → 境界確定
         assert shared.game_idx == 1
         assert shared.last_visual_advance_sec == 2.0
+        assert shared.last_visual_rise_sec == 2.0
+
+    def test_visual_rise_flicker_below_persist_is_rejected_as_noise(self) -> None:
+        """持続時間が BOUNDARY_VISUAL_RISE_PERSIST_SEC 未満で False に戻る
+        瞬き (フェード暗転・ロゴ明滅相当) は境界を進めない (W22根治)。
+        瞬きの直後に来る本物の立ち上がりは、瞬きに引きずられず独立に
+        持続確認されることも併せて確認する。
+        """
+        mod = _import_lean()
+        persist = mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        shared.observe_visual_signal(False, t_sec=1.0)
+        shared.observe_visual_signal(True, t_sec=2.0)  # 瞬き立ち上がり (候補1)
+        flicker_end_sec = 2.0 + persist * 0.1  # 持続確認完了前に消える
+        shared.observe_visual_signal(False, t_sec=flicker_end_sec)  # ノイズ破棄
+        assert shared.game_idx == 0, "ノイズ候補で進んでしまっている"
+        real_rise_sec = flicker_end_sec  # 直後に本物の立ち上がり (候補2)
+        shared.observe_visual_signal(True, t_sec=real_rise_sec)
+        shared.observe_visual_signal(
+            True, t_sec=real_rise_sec + persist,
+        )  # 持続確認完了
+        assert shared.game_idx == 1
+        assert shared.last_visual_rise_sec == real_rise_sec
 
     def test_visual_signal_continuous_true_does_not_readvance(self) -> None:
         """True が継続する間は再度進まない (立ち上がりのみ検知)。"""
@@ -2159,7 +2190,10 @@ class TestBoundaryMultisignal:
         shared = mod._SharedGameCounter(multisignal_mode=True)
         s1 = mod._SideState()
         shared.observe_visual_signal(False, t_sec=59.0)
-        shared.observe_visual_signal(True, t_sec=60.0)  # 視覚信号で境界1
+        shared.observe_visual_signal(True, t_sec=60.0)  # 視覚信号で境界1 候補
+        shared.observe_visual_signal(
+            True, t_sec=60.0 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )  # 持続確認完了
         assert shared.game_idx == 1
         mod._update_game_boundary(s1, 9000, shared=shared, t_sec=10.0)
         # score-reset 検知が視覚信号 (60.0) の許容窓 (3秒) 以内
@@ -2196,15 +2230,96 @@ class TestBoundaryMultisignal:
         shared = mod._SharedGameCounter(multisignal_mode=True)
         s1 = mod._SideState()
         shared.observe_visual_signal(False, t_sec=9.0)
-        shared.observe_visual_signal(True, t_sec=10.0)  # 視覚信号で境界1 (別ゲーム)
+        shared.observe_visual_signal(True, t_sec=10.0)  # 視覚信号で境界1候補 (別ゲーム)
+        shared.observe_visual_signal(
+            True, t_sec=10.0 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )  # 持続確認完了
         assert shared.game_idx == 1
         mod._update_game_boundary(s1, 9000, shared=shared, t_sec=20.0)
-        # 許容窓 3秒より遠い (視覚信号 last_advance=10.0 との差 40 秒)
+        # 許容窓 3秒より遠い (視覚信号 last_visual_rise_sec=10.0 との差 40 秒)
         mod._update_game_boundary(
             s1, 0, shared=shared, t_sec=50.0, side_label="1P",
         )
         assert shared.game_idx == 2, "遠い score-reset がフォールバックで進んでいない"
         assert len(shared.anomalies) == 1
+
+    def test_score_reset_precedes_visual_rise_race_online_flags_anomaly(
+        self,
+    ) -> None:
+        """W22実例の競合ケース: score-reset が視覚信号の立ち上がりより
+        時系列で先に処理される (実測 c109 の常態パターン)。
+
+        単一フレーム順パスでは score-reset の時点で視覚信号はまだ確定
+        していないため、オンライン判定は異常マークする (救済は動画処理
+        完了後の _reconcile_boundary_anomalies が担う、別テストで検証)。
+        """
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=9.97)
+        # score-reset がまず先着 (t=10.0)。視覚信号はまだ立ち上がっていない。
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=10.0, side_label="1P",
+        )
+        assert shared.game_idx == 1, "フォールバックで進んでいない"
+        assert len(shared.anomalies) == 1, "score 先着はオンラインでは異常マークされる"
+        # 視覚信号は score-reset の 0.03〜3秒後に遅れて到着し、
+        # 持続確認を経て確定する (実測範囲を模す)。
+        shared.observe_visual_signal(False, t_sec=10.02)
+        shared.observe_visual_signal(True, t_sec=10.1)  # 立ち上がり候補
+        shared.observe_visual_signal(
+            True, t_sec=10.1 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )  # 持続確認完了 (advance_if_new はデバウンス内で失敗するが
+        # last_visual_rise_sec は無条件で記録される、W22根治の核心)
+        assert shared.game_idx == 1, "advance が二重に進んではいけない"
+        assert shared.last_visual_rise_sec == 10.1
+        assert shared.visual_rise_times == [10.1]
+        # ここまではまだ異常マークが残っている (事後救済前)
+        assert len(shared.anomalies) == 1
+
+    def test_reconcile_boundary_anomalies_removes_race_false_positive(
+        self,
+    ) -> None:
+        """_reconcile_boundary_anomalies が動画処理完了後に visual_rise_times
+        と再突合し、score 先着による偽陽性の異常マークを取り除く
+        (W22根治の本丸)。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=9.97)
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=10.0, side_label="1P",
+        )
+        assert len(shared.anomalies) == 1
+        shared.observe_visual_signal(False, t_sec=10.02)
+        shared.observe_visual_signal(True, t_sec=10.1)
+        shared.observe_visual_signal(
+            True, t_sec=10.1 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )
+        mod._reconcile_boundary_anomalies(shared)
+        assert shared.anomalies == [], (
+            "視覚信号が許容窓内に確認できたので事後救済で消えるはず"
+        )
+
+    def test_reconcile_boundary_anomalies_keeps_true_positive(self) -> None:
+        """視覚信号が許容窓の外にしか無い真の異常は事後突合でも残る
+        (救済ロジックが何でも消してしまわないことの回帰防止)。"""
+        mod = _import_lean()
+        shared = mod._SharedGameCounter(multisignal_mode=True)
+        s1 = mod._SideState()
+        mod._update_game_boundary(s1, 9000, shared=shared, t_sec=9.97)
+        mod._update_game_boundary(
+            s1, 0, shared=shared, t_sec=10.0, side_label="1P",
+        )
+        assert len(shared.anomalies) == 1
+        # 視覚信号は遠い時刻 (許容窓 3秒 を大きく超える 100 秒後) にのみ存在
+        shared.observe_visual_signal(False, t_sec=109.9)
+        shared.observe_visual_signal(True, t_sec=110.0)
+        shared.observe_visual_signal(
+            True, t_sec=110.0 + mod.BOUNDARY_VISUAL_RISE_PERSIST_SEC,
+        )
+        mod._reconcile_boundary_anomalies(shared)
+        assert len(shared.anomalies) == 1, "遠い視覚信号で誤って救済してしまっている"
 
 
 # ============================
@@ -2314,14 +2429,18 @@ class _FakeLeanPipelineVisualBoundary(_FakeLeanPipeline):
     完全に無効化し、視覚信号のみが game_idx を進めることを切り分ける。
     frame_idx 0-1: is_match_active=True、盤面 A (COLOR_RED)。
     frame_idx 2: is_match_active=False (試合外、盤面は COLOR_BLUE に変化)。
-    frame_idx 3-4: is_match_active=True (立ち上がり→境界)、盤面は
-        COLOR_GREEN (frame2 の COLOR_BLUE と区別し dedup で握り潰されない
-        ようにする)。
+    frame_idx 3-17: is_match_active=True (立ち上がり、持続確認待ち区間
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC=0.5秒未満、W22根治 2026-08-17)、
+        盤面は COLOR_GREEN。
+    frame_idx 18-: 持続確認 (0.5秒経過、18/30fps=0.6秒) 済み後、盤面は
+        COLOR_YELLOW (GREEN と区別し dedup で握り潰されないようにする。
+        実運用でも新ゲームの盤面は持続確認窓の間に変化し続けるのが通常
+        のため、この区別は実挙動を模する)。
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._is_active_by_frame = {0: True, 1: True, 2: False, 3: True, 4: True}
+        self._is_active_by_frame = {0: True, 1: True, 2: False}
 
     def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
         self.update_calls.append(fi)
@@ -2329,8 +2448,10 @@ class _FakeLeanPipelineVisualBoundary(_FakeLeanPipeline):
             color = COLOR_RED
         elif fi == 2:
             color = COLOR_BLUE
-        else:
+        elif fi < 18:
             color = COLOR_GREEN
+        else:
+            color = COLOR_YELLOW
         board = _make_board(color)
         side = SimpleNamespace(
             state=BoardState.STABLE, score=100, confirmed_board=board,
@@ -2350,7 +2471,7 @@ def test_collect_lean_boundary_multisignal_off_ignores_visual_transition(
     立ち上がりを無視し、score が変わらない限り game_idx は 0 のまま
     (旧挙動 bit-identical)。"""
     mod = _import_lean()
-    fake_cap = _FakeCaptureLean(5, fps=30.0)
+    fake_cap = _FakeCaptureLean(21, fps=30.0)
     fake_pipeline = _FakeLeanPipelineVisualBoundary()
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
@@ -2369,10 +2490,11 @@ def test_collect_lean_boundary_multisignal_off_ignores_visual_transition(
 def test_collect_lean_boundary_multisignal_on_advances_game_idx(
     tmp_path: Path,
 ) -> None:
-    """enable_boundary_multisignal=True で is_match_active 立ち上がりのみが
-    game_idx を進める (score は一定値でリセットなし)。"""
+    """enable_boundary_multisignal=True で is_match_active 立ち上がりが
+    持続確認 (0.5秒、W22根治) を経て game_idx を進める (score は一定値で
+    リセットなし)。"""
     mod = _import_lean()
-    fake_cap = _FakeCaptureLean(5, fps=30.0)
+    fake_cap = _FakeCaptureLean(21, fps=30.0)
     fake_pipeline = _FakeLeanPipelineVisualBoundary()
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
@@ -2385,11 +2507,11 @@ def test_collect_lean_boundary_multisignal_on_advances_game_idx(
     with np.load(out_npz) as data:
         game_idxs = data["game_idx"]
         t_secs = data["t_sec"]
-        # frame0/1 (t=0, 1/30) は境界前 (game 0)
-        pre = game_idxs[t_secs < 2 / 30]
+        # frame3 (立ち上がり、t=3/30) は持続確認完了前なのでまだ game 0
+        # (frame18、t=18/30=0.6秒 で 0.5秒持続確認が完了して game 1 になる)
+        pre = game_idxs[t_secs < 18 / 30]
         assert set(pre.tolist()) == {0}
-        # frame3/4 (立ち上がり後) は境界後 (game 1)
-        post = game_idxs[t_secs >= 3 / 30]
+        post = game_idxs[t_secs >= 18 / 30]
         assert set(post.tolist()) == {1}
     # score は一度もリセットしていないため異常イベントは発生しない
     assert not (tmp_path / "out_boundary_anomalies.json").exists()

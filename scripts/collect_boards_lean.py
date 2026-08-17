@@ -177,6 +177,17 @@ GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
 # (5秒) より短く、通常の OCR 検知ラグ (概ね 1 秒未満) より十分大きい値。
 BOUNDARY_MULTISIGNAL_TOLERANCE_SEC: float = 3.0
 
+# 視覚信号 (is_match_active) 立ち上がりのノイズ持続時間フィルタ (W22根治、
+# 2026-08-17)。実測ノイズ: フェード暗転中の 0.07 秒瞬き、ロゴのワイプ
+# アニメによる 2.5 秒に 12 回の明滅 (周期約 0.2 秒)。これらより十分長く
+# 持続して初めて「本物の立ち上がり」と確定する。値はシーンからの逆算
+# ではなく、既存の物理根拠付き定数 (試合開始直後は認識/state machine が
+# 安定するまでの実測整定時間) を流用する
+# (RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START、30 frame/60fps)。
+BOUNDARY_VISUAL_RISE_PERSIST_SEC: float = (
+    RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+)
+
 # サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
 MIN_SAMPLE_INTERVAL_FRAMES: int = 1
 
@@ -646,8 +657,26 @@ class _SharedGameCounter:
     # None = まだ一度も observe_visual_signal を呼んでいない。
     _prev_is_active: bool | None = field(default=None, repr=False)
     # 視覚信号 (is_match_active 立ち上がり) で最後に境界を進めた時刻 [秒]。
-    # score-reset イベントがこの時刻の近傍かどうかで異常マーク要否を判定する。
+    # advance_if_new が実際に成功した場合のみ記録される (「境界を進めた」
+    # という別の意味の記録として維持、W20/W21根治時点の意味論を保持)。
     last_visual_advance_sec: float | None = None
+    # 視覚信号の立ち上がり候補時刻 (持続確認待ち)。BOUNDARY_VISUAL_RISE_
+    # PERSIST_SEC 秒持続すれば確定、途中で is_active=False に戻れば
+    # ノイズとして破棄する (W22根治、2026-08-17 追加)。
+    _pending_visual_rise_sec: float | None = field(default=None, repr=False)
+    # 視覚信号が確定的に立ち上がった時刻 [秒] (W22根治、2026-08-17 追加)。
+    # advance_if_new の成否と**無関係に無条件で**記録する。
+    # 「早い者勝ち」で score-reset が先にデバウンスを消費し advance_if_new
+    # が失敗しても、視覚信号自体がいつ本当に立ち上がったかを常に保持できる
+    # ようにするための専用フィールド (last_visual_advance_sec とは別物)。
+    last_visual_rise_sec: float | None = None
+    # 確定した視覚信号立ち上がり時刻を全て集めたもの (W22根治、2026-08-17
+    # 追加)。フレーム順の単一パスでは「score-reset の時点ではまだ見ぬ
+    # 未来の視覚確定」をその場で知り得ないため、_update_game_boundary の
+    # オンライン判定は厳しめ (score-reset が先着すると異常マークされる)
+    # のまま残し、動画処理完了後に _reconcile_boundary_anomalies で本リスト
+    # と時系列前後どちらの方向にも突合して偽陽性の異常マークを取り除く。
+    visual_rise_times: list[float] = field(default_factory=list)
     # advance_if_new が実際に境界を進めた全ての時刻 [秒] (2026-08-17 追加)。
     # MatchWinnerDetector クロスチェック用の match_starts 近似値として使う
     # (詳細は _detect_panel_winners_crosscheck)。
@@ -655,6 +684,7 @@ class _SharedGameCounter:
     # score-reset がフォールバックとして境界を進めた際の異常イベント記録
     # (人手レビュー用、W20/W21根治)。視覚信号が近傍で確認できなかった
     # score-reset のみを記録する (視覚信号で確認済みの通常ケースは記録しない)。
+    # _reconcile_boundary_anomalies による事後フィルタ前の生記録。
     anomalies: list[dict] = field(default_factory=list)
 
     def advance_if_new(self, t_sec: float) -> bool:
@@ -677,13 +707,36 @@ class _SharedGameCounter:
         つき 1 回だけ呼ぶこと (is_match_active はフレーム全体の判定であり
         side 別ではないため、_process_side_lean 側の 2 回呼び出しに混ぜない)。
 
+        W22根治 (2026-08-17): 立ち上がり候補は即座に確定させず、
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒持続して初めて確定する
+        (フェード暗転の瞬き・ロゴワイプの明滅による偽の立ち上がりを除外)。
+        確定時刻は `last_visual_rise_sec` に advance_if_new の成否と無関係に
+        無条件で記録する (「早い者勝ち」競合で advance が失敗しても記録が
+        永久に欠落しないようにするため)。
+
         Args:
             is_active: このフレームの PipelineResult.is_match_active。
             t_sec: 現在時刻 [秒]。
         """
-        if self.multisignal_mode and self._prev_is_active is False and is_active:
-            if self.advance_if_new(t_sec):
-                self.last_visual_advance_sec = t_sec
+        if not self.multisignal_mode:
+            self._prev_is_active = is_active
+            return
+        if self._prev_is_active is False and is_active:
+            self._pending_visual_rise_sec = t_sec
+        if self._pending_visual_rise_sec is not None:
+            if not is_active:
+                # 持続せずに消えた = ノイズ (フェード瞬き/ロゴ明滅等)、破棄
+                self._pending_visual_rise_sec = None
+            elif (
+                t_sec - self._pending_visual_rise_sec
+                >= BOUNDARY_VISUAL_RISE_PERSIST_SEC
+            ):
+                confirmed_sec = self._pending_visual_rise_sec
+                self._pending_visual_rise_sec = None
+                self.last_visual_rise_sec = confirmed_sec
+                self.visual_rise_times.append(confirmed_sec)
+                if self.advance_if_new(confirmed_sec):
+                    self.last_visual_advance_sec = confirmed_sec
         self._prev_is_active = is_active
 
     def record_score_reset_anomaly(
@@ -745,9 +798,16 @@ def _update_game_boundary(
         if shared is None:
             state.game_idx += 1
         elif shared.multisignal_mode:
+            # last_visual_rise_sec (W22根治): advance_if_new の成否と無関係
+            # に記録される専用フィールドと突合する。ここはオンライン
+            # (フレーム順の単一パス) の判定であり、score-reset が視覚信号
+            # より時系列で先着するケースでは依然 False になり得る
+            # (視覚確定は未来の話でまだ観測していないため)。その場合の
+            # 事後救済は動画処理完了後の _reconcile_boundary_anomalies が
+            # 担う。
             near_visual = (
-                shared.last_visual_advance_sec is not None
-                and abs(t_sec - shared.last_visual_advance_sec)
+                shared.last_visual_rise_sec is not None
+                and abs(t_sec - shared.last_visual_rise_sec)
                     <= BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
             )
             if not near_visual:
@@ -765,6 +825,35 @@ def _update_game_boundary(
     # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
     state.final_scores[state.game_idx] = score
     state.prev_score = score
+
+
+def _reconcile_boundary_anomalies(shared: "_SharedGameCounter") -> None:
+    """動画処理完了後に shared.anomalies を視覚信号の全記録と再突合する
+    (W22根治、2026-08-17 追加)。
+
+    _update_game_boundary のオンライン判定 (フレーム順の単一パス) は
+    「score-reset の時点ではまだ見ぬ未来の視覚確定」を知り得ないため、
+    実測 (c109) の通り score-reset が視覚信号より常に先着するケースでは
+    近傍判定が False になり異常マークされてしまう。動画全体を処理し終えた
+    時点では `visual_rise_times` に全ての確定立ち上がり時刻が揃っている
+    ため、ここで改めて時系列の前後どちらの方向にも近傍照合し、実際には
+    視覚信号で裏付けられていた異常マークを取り除く。
+
+    game_idx / npz 出力の割り当てタイミングには一切影響しない
+    (anomalies はレビュー用メタデータのみ)。
+    """
+    if not shared.anomalies or not shared.visual_rise_times:
+        return
+    kept: list[dict] = []
+    for anomaly in shared.anomalies:
+        t = anomaly["t_sec"]
+        confirmed_by_visual = any(
+            abs(t - rise) <= BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+            for rise in shared.visual_rise_times
+        )
+        if not confirmed_by_visual:
+            kept.append(anomaly)
+    shared.anomalies[:] = kept
 
 
 def _should_emit(
@@ -1353,6 +1442,12 @@ def collect_lean(
             match_end_locked=match_end_locked_flag,
         )
     cap.release()
+
+    # 事後再突合 (W22根治、2026-08-17): score-reset が視覚信号より先着した
+    # ために偽陽性で記録された異常マークを、動画全体を処理し終えた時点の
+    # 視覚信号全履歴と再照合して取り除く。multisignal_mode=False では
+    # anomalies/visual_rise_times が常に空のため no-op (bit-identical)。
+    _reconcile_boundary_anomalies(shared_game)
 
     # 勝敗ラベルを付与して保存
     combined_final = _merge_final_scores(state_p1, state_p2)
