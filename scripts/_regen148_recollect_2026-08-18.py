@@ -35,6 +35,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -107,6 +108,9 @@ def _print_config_smoke_check() -> None:
     print("[smoke] NEW_NPZ_DIR  =", orch.NEW_NPZ_DIR)
     print("[smoke] LOG_DIR      =", orch.LOG_DIR)
     print("[smoke] download_video overridden =", orch.download_video is _download_video_node24)
+    print("[smoke] MAX_COLLECT_PARALLEL =", orch.MAX_COLLECT_PARALLEL)
+    print("[smoke] TOTAL_HOLD_SLOTS     =", orch.TOTAL_HOLD_SLOTS)
+    print("[smoke] semaphore capacity   =", orch._HOLD_SEMAPHORE._value)
 
 
 if __name__ == "__main__":
@@ -116,6 +120,18 @@ if __name__ == "__main__":
     orch.NEW_NPZ_DIR = PROJECT_ROOT / "data" / "indicators_v2" / "boards_lean_phase_l_2026-08-18"
     orch.LOG_DIR = PROJECT_ROOT / "logs" / "regen_2026-08-18_per_video"
     orch.download_video = _download_video_node24
+
+    # 収集並列を 10 -> 14 に引き上げ (2026-08-18)。
+    # 根拠: (1) memory `project_collect_indicators_v2_perf_2026-07-20` の
+    # 「cv2.setNumThreads(1) × 14並列が最適」という同一マシン・同種CPU処理での実測、
+    # (2) 本ジョブを10並列で走らせた際の実測が 収集5本時点で load 5.04 / 16コア・
+    # メモリ 3.4GB / 20GB と大幅に余裕があったこと。
+    # 148本 × 約3時間 ÷ 並列数 で見積もると 10並列=約44時間、14並列=約32時間。
+    # `_HOLD_SEMAPHORE` はモジュール読込時に旧 TOTAL_HOLD_SLOTS で確定済みのため、
+    # 差し替えないと同時保持が 12 本のままとなり並列引き上げが効かない。
+    orch.MAX_COLLECT_PARALLEL = 14
+    orch.TOTAL_HOLD_SLOTS = orch.MAX_COLLECT_PARALLEL + orch.DOWNLOAD_QUEUE_SIZE
+    orch._HOLD_SEMAPHORE = threading.Semaphore(orch.TOTAL_HOLD_SLOTS)
 
     if "--smoke-check" in sys.argv:
         _print_config_smoke_check()
