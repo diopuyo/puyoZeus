@@ -1044,6 +1044,11 @@ def collect_lean(
     # forward する。既定 False = 従来挙動完全維持 (backwards compat、
     # hsv-guard 併用/単独 A/B 測定用、末尾追加)。
     enable_floating_gap_restore: bool = False,
+    # W10根治 (2026-08-17): 着地セル色の継続監視ガード。RecognitionPipeline
+    # 本体には既に実装済み (load_default kwarg) だが collect_boards_lean.py
+    # 側の CLI 配線が漏れていたため追加 (認識強化統一測定タスクで発見)。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_landing_color_guard: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1329,6 +1334,7 @@ def collect_lean(
         enable_highlight_override=enable_highlight_override,
         enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
         enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1960,6 +1966,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-landing-color-guard", action="store_true",
+        dest="enable_landing_color_guard",
+        help=(
+            "W10根治 (2026-08-17)。RecognitionPipeline.load_default の "
+            "enable_landing_color_guard を有効化する (着地セル色の継続監視"
+            "ガード)。CLI 配線漏れの是正 (認識強化統一測定タスクで発見)。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-boundary-multisignal", action="store_true",
         dest="enable_boundary_multisignal",
         help=(
@@ -2027,6 +2043,7 @@ def main() -> int:
         enable_floating_gap_restore=args.enable_floating_gap_restore,
         enable_boundary_multisignal=args.enable_boundary_multisignal,
         enable_winner_panel_crosscheck=args.enable_winner_panel_crosscheck,
+        enable_landing_color_guard=args.enable_landing_color_guard,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
