@@ -824,6 +824,135 @@ def test_convert_dir_no_exclude_broken_keeps_all(tmp_path: Path) -> None:
 
 
 # ============================
+# 境界実装の仕上げ (--exclude-match-end-locked、2026-08-18 追加)
+# ============================
+
+
+def _write_synthetic_npz_with_match_end_locked(
+    path: Path,
+    match_end_locked: "list[int]",
+    post_match_lockdown_active: "list[int] | None" = None,
+    video_id: str = "video_test",
+) -> None:
+    """match_end_locked/post_match_lockdown_active 列付きの合成npzを書く。
+
+    n は match_end_locked の長さに揃える (1P/2P 交互、won 整合済み)。
+    post_match_lockdown_active 省略時は列自体を書かない (旧npz相当)。
+    """
+    n = len(match_end_locked)
+    grids = np.array([_make_grid(height=3 + i) for i in range(n)], dtype=np.int8)
+    video_id_arr = np.array([video_id] * n)
+    side = np.array(["1P" if i % 2 == 0 else "2P" for i in range(n)])
+    t_sec = np.array([float(i) * 0.5 for i in range(n)], dtype=np.float32)
+    game_idx = np.zeros(n, dtype=np.int32)
+    frame_idx = np.arange(n, dtype=np.int32)
+    won = np.array([1.0 if i % 2 == 0 else 0.0 for i in range(n)], dtype=np.float32)
+    score = np.full(n, -1, dtype=np.int32)
+    kwargs = dict(
+        grids=grids, video_id=video_id_arr, side=side, t_sec=t_sec,
+        game_idx=game_idx, frame_idx=frame_idx, won=won, score=score,
+        match_end_locked=np.array(match_end_locked, dtype=np.int8),
+    )
+    if post_match_lockdown_active is not None:
+        kwargs["post_match_lockdown_active"] = np.array(
+            post_match_lockdown_active, dtype=np.int8,
+        )
+    np.savez_compressed(str(path), **kwargs)
+
+
+def test_convert_one_npz_exclude_match_end_locked_removes_flagged_rows(
+    tmp_path: Path,
+) -> None:
+    """exclude_match_end_locked=True で match_end_locked==1 の行が除外される。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz_with_match_end_locked(
+        npz_path, match_end_locked=[0, 1, 0, 1],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(
+        npz_path, registry, exclude_match_end_locked=True,
+    )
+    assert len(rows) == 2  # index 1,3 (match_end_locked==1) が除外される
+
+
+def test_convert_one_npz_exclude_match_end_locked_removes_post_lockdown_rows(
+    tmp_path: Path,
+) -> None:
+    """post_match_lockdown_active==1 の行も同様に除外される。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz_with_match_end_locked(
+        npz_path, match_end_locked=[0, 0, 0, 0],
+        post_match_lockdown_active=[0, 1, 1, 0],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(
+        npz_path, registry, exclude_match_end_locked=True,
+    )
+    assert len(rows) == 2  # index 1,2 が除外される
+
+
+def test_convert_one_npz_exclude_match_end_locked_default_off_keeps_all(
+    tmp_path: Path,
+) -> None:
+    """既定 False (省略時) では従来通り全行が残る (後方互換)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz_with_match_end_locked(
+        npz_path, match_end_locked=[0, 1, 0, 1],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert len(rows) == 4
+
+
+def test_convert_one_npz_exclude_match_end_locked_ignores_unknown_sentinel(
+    tmp_path: Path,
+) -> None:
+    """UNKNOWN sentinel (-1) は除外しない (fail-safe: わかっている行だけ除外)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz_with_match_end_locked(
+        npz_path, match_end_locked=[-1, -1, -1, -1],
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(
+        npz_path, registry, exclude_match_end_locked=True,
+    )
+    assert len(rows) == 4
+
+
+def test_convert_one_npz_exclude_match_end_locked_noop_when_columns_absent(
+    tmp_path: Path,
+) -> None:
+    """両列が存在しない旧npzでは exclude_match_end_locked=True でも
+    何も除外しない (後方互換)。"""
+    npz_path = tmp_path / "synthetic.npz"
+    _write_synthetic_npz(npz_path, n=4)
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(
+        npz_path, registry, exclude_match_end_locked=True,
+    )
+    assert len(rows) == 4
+
+
+def test_convert_dir_exclude_match_end_locked_logs_and_excludes(
+    tmp_path: Path, capsys: pytest.CaptureFixture,
+) -> None:
+    """convert_dir 経由でも除外+ログ出力されること (黙って落とさない)。"""
+    npz_dir = tmp_path / "npz"
+    npz_dir.mkdir()
+    _write_synthetic_npz_with_match_end_locked(
+        npz_dir / "v1.npz", match_end_locked=[0, 1, 0, 1], video_id="video_v1",
+    )
+    out_csv = tmp_path / "out.csv"
+    n_rows, _elapsed = blwn.convert_dir(
+        npz_dir, out_csv, profile="light", exclude_match_end_locked=True,
+    )
+    assert n_rows == 2
+    captured = capsys.readouterr()
+    assert "exclude-match-end-locked" in captured.out
+    assert "2行除外" in captured.out
+
+
+# ============================
 # A-4: 全消しボーナスの真値差し替え (2026-08-13)
 # ============================
 
