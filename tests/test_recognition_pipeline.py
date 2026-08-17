@@ -4980,3 +4980,196 @@ def test_ojama_override_warmup_allows_override_after_window_expires():
         "warmup 終了後は通常の cycle 71n override が発火するべき"
     )
 
+
+# ---------------------------------------------------------------------------
+# W25根治 第2弾 (2026-08-17): おじゃま落下窓の総合ガード拡張。
+# data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md で確定した
+# 根因 (雲混入→CNN⇔inferred不一致→DriftDetector needs_resync→
+# sm.reset()でconfirmed_boardがNone化→既存の enable_ojama_column_stack_fix
+# ガードが「baseline is None (初回確定)」分岐で無効化される) への対処。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_ojama_override_warmup_boardsettle_default(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_ojama_fall_board_settle をライブラリ既定 (True) のまま使う
+    variant。 OJAMA_FALL dwell (settle判定の1frame目は必ず継続する既存挙動)
+    を利用した entry/dwell-trigger テスト専用
+    (他の W25 テストは enable_ojama_fall_board_settle=False で単純な即時
+    exit経路を使うため、dwell を作れない)。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_cnn_override_warmup=enable_flag,
+    )
+
+
+def test_ojama_override_warmup_triggers_on_ojama_fall_entry_dwell():
+    """OJAMA_FALL 継続中 (exit未達、settle判定の最初のフレームは既存挙動で
+    必ず継続) でも entry/dwell 時点で warmup がセットされる。
+    第2弾拡張の理由: 実測 (c13, t=289.733) で「雲混入直後、まだ1度も
+    OJAMA_FALL→STABLE 遷移(=旧トリガ)を経ていない」時点で最初の
+    drift-resync が発火していたため、entry/dwell 起動が無いと防げない。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+
+    pipe = _make_pipe_ojama_override_warmup_boardsettle_default(True)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.OJAMA_FALL, (
+        "settle判定の最初のフレームは必ず継続するはず "
+        "(OjamaVisualDetector 既存挙動、_settle_start_frame<0 分岐)"
+    )
+    assert pipe._ojama_override_exit_until_1p == pytest.approx(
+        10.0 + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    ), "OJAMA_FALL dwell 時点でも warmup が起動するべき (第2弾拡張)"
+
+
+def test_ojama_override_warmup_entry_dwell_off_does_not_set_until():
+    """フラグ OFF: OJAMA_FALL dwell 中でも warmup until は更新されない
+    (bit-identical)。"""
+    pipe = _make_pipe_ojama_override_warmup_boardsettle_default(False)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.OJAMA_FALL
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "フラグ OFF では dwell 中も warmup until が一切更新されないべき"
+    )
+
+
+def test_drift_resync_ojama_warmup_suppressed_counters_init_zero():
+    """新規カウンタは construction 直後は全て 0 (既存2ガードのカウンタと同型)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+    assert pipe._drift_resync_ojama_warmup_suppressed_2p == 0
+
+
+def test_ojama_override_warmup_suppresses_drift_resync_within_window():
+    """第2弾中核: おじゃま落下 warmup 窓中は、DriftDetector
+    needs_resync=True でも sm.reset() が抑制される
+    (根因: baseline=None 化で enable_ojama_column_stack_fix ガードが
+    無効化される問題への対処)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # warmup を手動で有効化 (OJAMA_FALL 経由の起動自体は別テストで確認済み、
+    # 本テストは抑制ロジック単体を検証する)。
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())  # 10.0 < 100.0 → window 内
+
+    assert sm_calls["n"] == 0, "warmup 窓中は resync が抑制されるべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p >= 1
+    assert pipe._drift_1p.reset_calls == 0
+
+
+def test_ojama_override_warmup_does_not_suppress_resync_outside_window():
+    """warmup 窓外 (time_sec >= until) では従来通り resync が発火する
+    (雲と無関係な正当な drift-resync を妨げない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe._ojama_override_exit_until_1p = 5.0  # 既に warmup 終了 (過去)
+    pipe.update(0, 10.0, _dummy_frame())  # 10.0 >= 5.0 → window 外
+
+    assert sm_calls["n"] >= 1, "warmup 窓外では resync が抑制されないべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+
+
+def test_ojama_override_warmup_off_does_not_suppress_resync():
+    """フラグ OFF (既定): resync 抑制ロジック自体が発火しない
+    (bit-identical、既存 drift-resync 挙動を一切変えない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=False,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # 手動で until をセットしてもフラグ OFF なら無視されるべき。
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert sm_calls["n"] >= 1, "フラグ OFF なら従来通り resync が発火するべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+
+
+def test_ojama_override_warmup_resync_suppression_independent_of_other_guards():
+    """新ガードは既存2ガードと独立 (OR 条件): 他ガードが抑制しない状況でも
+    本ガード単体で抑制でき、抑制時に他ガードのカウンタは増えない。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert sm_calls["n"] == 0
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p >= 1
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0, (
+        "他ガード (match_start_guard) は OFF かつ無関係なので増えないべき"
+    )
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0, (
+        "他ガード (hsv_gate) は OFF かつ無関係なので増えないべき"
+    )
+
