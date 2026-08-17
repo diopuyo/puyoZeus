@@ -145,6 +145,62 @@ RECOGNITION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "**148動画での広域バックテストは別途必須**。全体テスト 5,043 passed / 0 failed、"
         "既定OFF時は bit-identical を静的テストで担保",
     ),
+    AdoptedFlag(
+        "--enable-floating-gap-restore", "2026-08-17",
+        "R2浮きぷよ是正 (user承認2026-08-17、5フラグ一括採用・構成F)。TSUMO_FALL/"
+        "OJAMA_FALL→STABLE 遷移で「下が空・上に puyo」の物理矛盾を検出したら、"
+        "上を消すのでなく遷移前 confirmed_board から色を復元する "
+        "(docs/KNOWN_WEAKNESSES.md R2)。**単独では持続誤認±0** (構成A→B: 106→106) "
+        "だが物理矛盾是正の保険としてF構成 (5フラグ一括) に同梱採用。"
+        "根拠データ: data/verify/diag_r2_floating_gap_restore_2026-08-17/。"
+        "測定は必ずF構成 (5フラグ揃い) で行っており本フラグ単体の効果を測った"
+        "数値ではない",
+    ),
+    AdoptedFlag(
+        "--enable-landing-color-guard", "2026-08-17",
+        "W10観測補正継続ガード (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "着地セル色の継続監視ガードで、着地直後の一時的な色観測ブレを"
+        "追跡し続けて誤確定を防ぐ。構成B→C (+本フラグ) で持続誤認106→105"
+        "(-1)。根拠: docs/KNOWN_WEAKNESSES.md W10節、コミット85e39b3で観測補正"
+        "継続ガードの実測を記録、d1c60f9でCLI配線漏れ (collect_boards_lean.py) "
+        "を是正済み。測定はF構成 (5フラグ揃い) での積み上げ値",
+    ),
+    AdoptedFlag(
+        "--enable-override-color-guard", "2026-08-17",
+        "cycle71n長期投票overrideの安全網 (user承認2026-08-17、5フラグ一括採用・"
+        "構成F)。真因は W23 (_validate_next_history のever_seen飢餓状態) と"
+        "判明したため、本フラグ自体の位置づけは根治でなく安全網 "
+        "(persistent_misread_e.json 系統1ガード)。コミットa43d3fbで実装。"
+        "測定はF構成 (5フラグ揃い) での積み上げ値であり、単独の増減は"
+        "分離測定していない",
+    ),
+    AdoptedFlag(
+        "--enable-ojama-column-stack-fix", "2026-08-17",
+        "持続誤認26件の系統2根治 (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "おじゃま配分ロジックが同一列に対して二重に書き込み衝突する不具合を"
+        "根治する (c109 実例で確認)。構成D→E (+本フラグ+override-color-guard) "
+        "で持続誤認105→104 (-1)。コミットa43d3fbで実装。"
+        "測定はF構成 (5フラグ揃い) での積み上げ値",
+    ),
+    AdoptedFlag(
+        "--enable-next-history-starvation-fix", "2026-08-17",
+        "W23根治 (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "_validate_next_history の ever_seen 飢餓状態 (NEXT履歴が長期間"
+        "更新されず検証ロジックが機能不全になる不具合) を根治する。"
+        "構成E→F (+本フラグ) で **stage2 同一フレーム限定セル正解率 "
+        "98.80%→99.43%、持続誤認104→70 (-34)**。W23直接検証25件は100%解消"
+        "(persistent_misread_e.json 記載の25件が全て解消を個別確認)。"
+        "新規出現3件は別機構の露出であり本フラグの副作用ではない "
+        "(docs/KNOWN_WEAKNESSES.md 615-648行に詳細記録)。コミット19dc93aで実装。"
+        "【5フラグ一括の位置づけ】本エントリを含む上記4フラグ (floating-gap-"
+        "restore/landing-color-guard/override-color-guard/ojama-column-stack-fix) "
+        "とセットで構成F として測定・採用 (2026-08-17統一測定、data/verify/"
+        "recognition_unified_2026-08-17/persistent_misread_{a..f}.json)。"
+        "構成A (現本番、持続誤認106) を基準に B→C→D→E→F の順で積み上げ、"
+        "最終構成Fで持続誤認70・stage2セル正解率99.43%・W10_red_purple誤読"
+        "10→0完全解消・盤面完全一致33→35/51を実測。フルpytest 5,113 passed / "
+        "0 failed、既定OFF時は bit-identical (静的テストで担保)",
+    ),
 )
 
 # ============================

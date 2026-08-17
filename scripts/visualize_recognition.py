@@ -1226,8 +1226,14 @@ def resolve_production_config_overrides(
         # 2026-08-17 追加 (RECOGNITION_ADOPTED 採用 --enable-patch-fp-hsv-guard
         # の配線漏れ是正、W13根治案2)。
         "enable_patch_fp_hsv_guard",
-        # R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用)。
+        # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F)。
+        # R2浮きぷよ是正 + W10観測補正継続ガード + cycle71n override安全網 +
+        # おじゃま列内衝突根治 + W23 (ever_seen飢餓) 根治。
         "enable_floating_gap_restore",
+        "enable_landing_color_guard",
+        "enable_override_color_guard",
+        "enable_ojama_column_stack_fix",
+        "enable_next_history_starvation_fix",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1738,11 +1744,54 @@ def main() -> int:
         "--enable-floating-gap-restore", action="store_true", default=False,
         dest="enable_floating_gap_restore",
         help=(
-            "R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用) を有効化する。"
+            "R2 浮きぷよ是正機構 (RECOGNITION_ADOPTED 採用 2026-08-17、"
+            "user承認・5フラグ一括構成F) を有効化する。"
             "TSUMO_FALL/OJAMA_FALL→STABLE 遷移で「下が空・上に puyo」の物理"
             "矛盾を検出したら、上を消すのでなく遷移前 confirmed_board から"
             "色を復元する (docs/KNOWN_WEAKNESSES.md W13 の第二防衛線)。"
             "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-landing-color-guard", action="store_true", default=False,
+        dest="enable_landing_color_guard",
+        help=(
+            "W10観測補正継続ガード (RECOGNITION_ADOPTED 採用 2026-08-17、"
+            "user承認・5フラグ一括構成F) を有効化する。着地セル色の継続監視"
+            "ガードで着地直後の一時的な色観測ブレによる誤確定を防ぐ "
+            "(docs/KNOWN_WEAKNESSES.md W10節)。既定は無効 (後方互換、"
+            "collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-override-color-guard", action="store_true", default=False,
+        dest="enable_override_color_guard",
+        help=(
+            "cycle71n長期投票overrideの安全網 (RECOGNITION_ADOPTED 採用 "
+            "2026-08-17、user承認・5フラグ一括構成F) を有効化する。真因は "
+            "W23 と判明したため位置づけは根治でなく安全網。既定は無効 "
+            "(後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-column-stack-fix", action="store_true", default=False,
+        dest="enable_ojama_column_stack_fix",
+        help=(
+            "持続誤認26件系統2根治 (RECOGNITION_ADOPTED 採用 2026-08-17、"
+            "user承認・5フラグ一括構成F) を有効化する。おじゃま配分ロジックが"
+            "同一列に二重書き込みで衝突する不具合を根治する (c109実例)。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-next-history-starvation-fix", action="store_true", default=False,
+        dest="enable_next_history_starvation_fix",
+        help=(
+            "W23根治 (RECOGNITION_ADOPTED 採用 2026-08-17、user承認・5フラグ"
+            "一括構成F) を有効化する。_validate_next_history の ever_seen "
+            "飢餓状態対策 (NEXT履歴が長期間更新されず検証ロジックが機能不全に"
+            "なる不具合の根治)。既定は無効 (後方互換、collect_boards_lean.py "
+            "と同一パターン)。"
         ),
     )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
@@ -2126,8 +2175,15 @@ def main() -> int:
         # RECOGNITION_ADOPTED 採用 (2026-08-17): --enable-patch-fp-hsv-guard
         # (W13根治案2、末尾追加)。
         enable_patch_fp_hsv_guard=args.enable_patch_fp_hsv_guard,
-        # R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用、末尾追加)。
+        # RECOGNITION_ADOPTED 採用 (2026-08-17、5フラグ一括・user承認・構成F、
+        # 末尾追加)。
         enable_floating_gap_restore=args.enable_floating_gap_restore,
+        enable_landing_color_guard=args.enable_landing_color_guard,
+        enable_override_color_guard=args.enable_override_color_guard,
+        enable_ojama_column_stack_fix=args.enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=(
+            args.enable_next_history_starvation_fix
+        ),
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定

@@ -331,6 +331,18 @@ user: 「認識精度が全ての元なのでそちらの品質強化が最優�
 - [x] **認識の現在地を測る指標を新設**:
       **盤面完全一致率 = 87.0%** (同一フレーム限定 n=23、セル正解率98.79%との差は13pt)。
       **これがビームサーチの実質的な上限**。8枚に1枚はどこか誤っている
+- [x] **5フラグ一括採用・登録完了** (user承認2026-08-17、構成F、`src/production_config.py`
+      `RECOGNITION_ADOPTED` へ追記): `--enable-floating-gap-restore` (R2根治) /
+      `--enable-landing-color-guard` (W10観測補正継続ガード) /
+      `--enable-override-color-guard` (cycle71n override安全網) /
+      `--enable-ojama-column-stack-fix` (系統2根治、c109) /
+      `--enable-next-history-starvation-fix` (W23根治)。
+      構成A→F の積み上げで持続誤認 **106→70件**・stage2セル正解率 **98.80%→99.43%**・
+      W10_red_purple誤読 **10→0**・盤面完全一致 **33→35/51**。
+      副産物: 配線漏れを再検出・是正 (`visualize_recognition.py` の
+      `resolve_production_config_overrides` に4フラグ、`measure_stable_cell_acc.py` の
+      `resolve_production_recognition_flags` 系統 (9箇所) に5フラグ、正引数チェーン全域配線)。
+      フルpytest 5,079 passed / 0 failed、既定OFF時 bit-identical
 
 ## 判明した律速 (W20 → W21)
 連鎖数の食い違い検出器を試作 → **541件中441件の食い違いの大半が「勝敗演出の幻盤面」**だった (W20)。
@@ -349,7 +361,9 @@ RT配信の勝者即時確定にも必須で、Phase J で実装予定だった�
 - [ ] 実装 → 検証 → W20フィルタの再測定 → 連鎖数検出器の完成
 
 ## 残っている認識課題
-- [ ] R2. 浮きぷよ是正機構の新設 (`clear_floating_above_gap` は「床が消えて上だけ残る」形を見ない)
+- [x] R2. 浮きぷよ是正機構の新設 (`clear_floating_above_gap` は「床が消えて上だけ残る」形を見ない)
+      → **`--enable-floating-gap-restore` として採用登録完了** (user承認2026-08-17、
+      5フラグ一括・構成F)
 - [ ] R4. W1 (連鎖の連結欠損) の実態測定 ← 境界検知が直ってから
 - [ ] R5. W10 (赤→紫の系統誤り) の頻度計測
 - [ ] R6. 認識可視化デモ → userレビュー
