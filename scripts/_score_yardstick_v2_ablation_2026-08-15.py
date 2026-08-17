@@ -51,6 +51,9 @@ NPZ_DIRS: dict[str, Path] = {
     # c1' (2026-08-15修正版): _confirm_placement_evidence のヒステリシス+
     # chain除外修正を適用した placement_override 単体の再収集。
     "c1p": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_c1p_fix_2026-08-15",
+    # W13根治 (2026-08-16): c1p (現行本番採用構成) + --enable-highlight-override
+    # 単体の再収集。 c1p が現行の正しい比較基準 (94.08%→95.63%採用済み)。
+    "w13": _ROOT / "data" / "indicators_v2" / "yardstick_v2_boards_w13_2026-08-16",
 }
 
 

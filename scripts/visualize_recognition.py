@@ -1223,6 +1223,11 @@ def resolve_production_config_overrides(
         # 2026-08-15 追加 (RECOGNITION_ADOPTED 採用に伴う横展開是正、
         # test_common_flag_also_exists_in_visualizer 回帰テスト対応)。
         "enable_ojama_fall_placement_override",
+        # 2026-08-17 追加 (RECOGNITION_ADOPTED 採用 --enable-patch-fp-hsv-guard
+        # の配線漏れ是正、W13根治案2)。
+        "enable_patch_fp_hsv_guard",
+        # R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用)。
+        "enable_floating_gap_restore",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1717,6 +1722,29 @@ def main() -> int:
             "場面1)。既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
         ),
     )
+    parser.add_argument(
+        "--enable-patch-fp-hsv-guard", action="store_true", default=False,
+        dest="enable_patch_fp_hsv_guard",
+        help=(
+            "W13 根治 案2 (2026-08-17、src.production_config.RECOGNITION_ADOPTED "
+            "採用 2026-08-17) を有効化する。tier1 patch-NCC の EMPTY 判定に HSV "
+            "色域 AND ガードを追加し、試合開始直後の背景指紋強制採取が既設置ぷよを "
+            "『背景』として焼き込み以降そのセルが無条件 EMPTY 化される事故 "
+            "(docs/KNOWN_WEAKNESSES.md W13) を防ぐ。既定は無効 (後方互換、"
+            "collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-floating-gap-restore", action="store_true", default=False,
+        dest="enable_floating_gap_restore",
+        help=(
+            "R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用) を有効化する。"
+            "TSUMO_FALL/OJAMA_FALL→STABLE 遷移で「下が空・上に puyo」の物理"
+            "矛盾を検出したら、上を消すのでなく遷移前 confirmed_board から"
+            "色を復元する (docs/KNOWN_WEAKNESSES.md W13 の第二防衛線)。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
     # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
     # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
@@ -2095,6 +2123,11 @@ def main() -> int:
         enable_ojama_fall_placement_override=(
             args.enable_ojama_fall_placement_override
         ),
+        # RECOGNITION_ADOPTED 採用 (2026-08-17): --enable-patch-fp-hsv-guard
+        # (W13根治案2、末尾追加)。
+        enable_patch_fp_hsv_guard=args.enable_patch_fp_hsv_guard,
+        # R2 浮きぷよ是正機構 (2026-08-17、未採用・実験用、末尾追加)。
+        enable_floating_gap_restore=args.enable_floating_gap_restore,
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定

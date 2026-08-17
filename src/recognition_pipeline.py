@@ -322,6 +322,7 @@ from src.next_slide_detector import (
 from src.placement_inferrer import (
     infer_placement, resolve_after_placement,
     correct_landing_cells_by_observed_color,
+    apply_persistent_landing_color_guard,
     DEFERRED_MAX_FRAMES,
 )
 from src.score_ocr import ScoreOcr, ScoreTracker
@@ -967,6 +968,17 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_landing_observed_color: bool = True,
+        # W10根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md): 着地セル色の継続監視ガード。
+        # correct_landing_cells_by_observed_color (上記 enable_landing_observed_color)
+        # は着地直後 1 回限りしか働かないため、NEXT 読取誤り等で infer_placement が
+        # 誤色を書き込むと、その誤色が数秒間 (実測 c11 で1.7秒) 残ることがある。
+        # True にすると着地セルを LANDING_VOTE_SEC 秒間 (既存の着地投票と同じ窓を
+        # 流用、新規定数は増やさない) 継続監視し、CNN==HSV が一致した時点で即座に
+        # confirmed_board を上書きする。STABLE 確定盤面のみに適用 (physics_only 原則)。
+        # enable_landing_observed_color=False の場合は無効 (base 機構への追加拡張のため)。
+        # デフォルト False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user 承認前の savepoint 実装)。
+        enable_landing_color_guard: bool = False,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True にすると着地セルで CNN 観測色が baseline (P2 推論結果) と
         # 食い違う「疑わしいセル」を検出し、着地投票 (P7,
@@ -1424,6 +1436,12 @@ class RecognitionPipeline:
         # 検証できるようにする。default False = 従来挙動完全維持
         # (トラッカー不在時は signal が None のまま = 短縮ロジック不発動)。
         enable_ojama_fall_scoped_exit_accounting: bool = False,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # BoardStateMachine (1P/2P 両方) にそのまま伝播する。詳細は
+        # src/board_state_machine.py の `_apply_gravity_filter` docstring
+        # 参照。default False = 従来挙動完全維持・bit-identical
+        # (backwards compat、user承認前の savepoint 実装)。
+        enable_floating_gap_restore: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1944,6 +1962,10 @@ class RecognitionPipeline:
             if self._enable_ojama_fall_scoped_exit_accounting
             else None
         )
+        # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
+        self._enable_floating_gap_restore: bool = bool(
+            enable_floating_gap_restore
+        )
         # バーストガード緊急較正 (2026-08-05): None なら既存定数
         # BURST_GATE_OPEN_THRESHOLD (=0.97) を使う (bit-identical)。
         self._burst_gate_open_threshold: float = (
@@ -2088,6 +2110,7 @@ class RecognitionPipeline:
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
+            enable_floating_gap_restore=self._enable_floating_gap_restore,
         )
         self._sm_2p = self._build_state_machine(
             stable_frame_count, enable_warmup_guard=enable_warmup_guard,
@@ -2134,6 +2157,7 @@ class RecognitionPipeline:
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
+            enable_floating_gap_restore=self._enable_floating_gap_restore,
         )
         # 推論 / drift
         self._gen_1p = InferenceBoardGenerator()
@@ -2253,6 +2277,13 @@ class RecognitionPipeline:
         # True で infer_placement 出力に post-correction を適用。
         # default False = 従来挙動完全維持 (backwards compat)。
         self._enable_landing_observed_color: bool = bool(enable_landing_observed_color)
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        self._enable_landing_color_guard: bool = bool(enable_landing_color_guard)
+        # 監視中の着地セル: side ごとに [(cell, deadline_time_sec), ...]。
+        # LANDING_VOTE_SEC 秒経過 or CNN==HSV 一致で解決したセルから除去される。
+        self._landing_color_watch_1p: list[tuple[tuple[int, int], float]] = []
+        self._landing_color_watch_2p: list[tuple[tuple[int, int], float]] = []
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
         # True で着地セルの CNN 観測色/baseline 不一致フラグを計算し、
         # P7 (着地投票) に伝播する。default False = 従来挙動完全維持
@@ -2517,6 +2548,9 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # 148動画収集走行中のため既定OFF必須)。
         enable_ojama_fall_scoped_exit: bool = False,
+        # R2 浮きぷよ是正機構 (2026-08-17): BoardStateMachine にそのまま伝播。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_floating_gap_restore: bool = False,
     ) -> BoardStateMachine:
         # cycle 49 (2026-05-20): ChainPhaseDetector に ChainSimulator を注入。
         # 前 STABLE 盤面に 4 連結がない場合の chain 偽遷移を拒否する gate を有効化。
@@ -2614,6 +2648,7 @@ class RecognitionPipeline:
             effect_gate_hard_freeze=effect_gate_hard_freeze,
             enable_transition_merge_guard=enable_transition_merge_guard,
             stable_majority_window=stable_majority_window,
+            enable_floating_gap_restore=enable_floating_gap_restore,
         )
 
     # cycle 71v (2026-05-14): val 98.87% を達成した Large CNN を system default に昇格.
@@ -2656,6 +2691,9 @@ class RecognitionPipeline:
         # 2026-07-25 user レビュー (c34 v6) 承認で既定 ON 化。
         # False を明示指定すれば旧挙動 (bit-identical) に戻せる (backwards compat)。
         enable_landing_observed_color: bool = True,
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # default False = 従来挙動完全維持 (backwards compat)。
+        enable_landing_color_guard: bool = False,
         # 色フリッカ根因への防御的修正 案(iii) (2026-07-25)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_placement_color_cnn_check: bool = False,
@@ -2912,6 +2950,10 @@ class RecognitionPipeline:
         # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
         # (backwards compat、案1 との A/B/併用測定用)。
         enable_patch_fp_hsv_guard: bool = False,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # __init__ へそのまま伝播する。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_floating_gap_restore: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3063,6 +3105,7 @@ class RecognitionPipeline:
             enable_chain_min_display=enable_chain_min_display,
             enable_hsv_classify_fallback=enable_hsv_classify_fallback,
             enable_landing_observed_color=enable_landing_observed_color,
+            enable_landing_color_guard=enable_landing_color_guard,
             enable_placement_color_cnn_check=enable_placement_color_cnn_check,
             enable_placement_cnn_veto=enable_placement_cnn_veto,
             placement_cnn_veto_mode=placement_cnn_veto_mode,
@@ -3141,6 +3184,7 @@ class RecognitionPipeline:
             enable_ojama_fall_scoped_exit_accounting=(
                 enable_ojama_fall_scoped_exit_accounting
             ),
+            enable_floating_gap_restore=enable_floating_gap_restore,
         )
 
     # ------------------------------------------------------------------
@@ -6109,6 +6153,32 @@ class RecognitionPipeline:
                         frame_bgr,
                         region_for_side,
                     )
+                    # W10根治 (2026-08-17): 上記の 1 回限り補正では拾いきれない
+                    # ケース (この frame の CNN==HSV が偶然一致しない等) に備え、
+                    # 着地 2 cell を LANDING_VOTE_SEC 秒間の継続監視対象に登録する。
+                    # enable_landing_color_guard=False (既定) では登録自体を行わず
+                    # bit-identical を維持する。
+                    if self._enable_landing_color_guard:
+                        _guard_landing_cells: list[tuple[int, int]] = [
+                            (r, c)
+                            for r in range(BOARD_ROWS)
+                            for c in range(BOARD_COLS)
+                            if (
+                                int(prev_confirmed.get(r, c))
+                                in (COLOR_EMPTY, COLOR_UNKNOWN)
+                                and int(inferred_landing.get(r, c)) not in (
+                                    COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA,
+                                )
+                            )
+                        ]
+                        _guard_deadline = time_sec + self.LANDING_VOTE_SEC
+                        _guard_entries = [
+                            (cell, _guard_deadline) for cell in _guard_landing_cells
+                        ]
+                        if side == "1P":
+                            self._landing_color_watch_1p = _guard_entries
+                        else:
+                            self._landing_color_watch_2p = _guard_entries
                 # T5: NextDetector 統合 — 着地直後 confirmed の色が NEXT にない場合 alert。
                 # next_pair (= 今消費された NEXT) が明示されていれば整合性チェック。
                 # alert のみ (= 棄却はしない。 現時点は fail-silent 検知用)。
@@ -6670,6 +6740,59 @@ class RecognitionPipeline:
                 self._landing_grace_1p = None
             else:
                 self._landing_grace_2p = None
+
+        # W10根治 (2026-08-17): 着地セル色の継続監視ガード。
+        # docs/KNOWN_WEAKNESSES.md W10 — infer_placement が NEXT 読取誤りで
+        # 誤色を確定すると、 着地直後 1 回限りの補正 (enable_landing_observed_color)
+        # では取りこぼし、 誤色が数秒間残ることがある (実測 c11 で 1.7 秒)。
+        # 着地時に登録された監視対象セル (self._landing_color_watch_1p/2p) を
+        # STABLE 確定盤面に対してのみ毎フレーム再チェックし、 CNN==HSV が一致
+        # した時点で即座に上書きする (physics_only 原則: NON-STABLE では不実行)。
+        # enable_landing_color_guard=False (既定) では watch リストが常に空の
+        # ため本ブロックは実質何もせず bit-identical。
+        if (
+            self._enable_landing_color_guard
+            and ctx.state == BoardState.STABLE
+            and ctx.confirmed_board is not None
+            and frame_bgr is not None
+        ):
+            _watch = (
+                self._landing_color_watch_1p if side == "1P"
+                else self._landing_color_watch_2p
+            )
+            if _watch:
+                # 期限切れセルは監視終了 (無期限凍結を防ぐ)。
+                _active_watch = [
+                    (cell, deadline) for (cell, deadline) in _watch
+                    if deadline > time_sec
+                ]
+                if _active_watch:
+                    _guard_region = (
+                        DEFAULT_P1_REGION if side == "1P" else DEFAULT_P2_REGION
+                    )
+                    _guard_classifier = getattr(self._reader, "_classifier", None)
+                    _guard_hsv_clf = getattr(
+                        _guard_classifier, "_hsv", _guard_classifier,
+                    )
+                    ctx.confirmed_board, _resolved_cells = (
+                        apply_persistent_landing_color_guard(
+                            ctx.confirmed_board,
+                            [cell for (cell, _d) in _active_watch],
+                            cnn_board,
+                            _guard_hsv_clf,
+                            frame_bgr,
+                            _guard_region,
+                        )
+                    )
+                    ctx.pending_board = ctx.confirmed_board.copy()
+                    _active_watch = [
+                        (cell, deadline) for (cell, deadline) in _active_watch
+                        if cell not in _resolved_cells
+                    ]
+                if side == "1P":
+                    self._landing_color_watch_1p = _active_watch
+                else:
+                    self._landing_color_watch_2p = _active_watch
 
         # cycle 71h: 着地後 vote refinement.
         # TSUMO_FALL→STABLE 着地時に登録された pending エントリの cnn 観測色を蓄積、

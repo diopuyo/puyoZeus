@@ -867,6 +867,190 @@ def test_ojama_fall_exit_majority_value_recovers_flicker_e2e() -> None:
     assert sm_on.context.confirmed_board.get(12, 0) == COLOR_OJAMA
 
 
+# ============================
+# R2 浮きぷよ是正機構 テスト (2026-08-17)
+# ============================
+
+
+def test_apply_gravity_filter_history_board_restores_gap() -> None:
+    """R2: history_board が同 cell に非空色を持つなら誤EMPTY疑いとして
+    復元し、上の puyo を消さない (= 消す方向でなく疑う方向)。
+
+    row11/12 (盤面最下段2段) の物理的に正当なスタックを想定 (row12=床)。
+    """
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)  # 床の1つ上は正しく観測されている
+    # row12 (床) は EMPTY (誤EMPTY疑い)
+    history = Board()
+    history.set(12, 0, COLOR_RED)  # 直前 STABLE では row12 (床) も赤だった
+
+    _apply_gravity_filter(board, history_board=history)
+    assert board.get(12, 0) == COLOR_RED  # 履歴から復元
+    assert board.get(11, 0) == COLOR_RED  # 上も消えず維持
+
+
+def test_apply_gravity_filter_history_board_none_falls_back_to_erase() -> None:
+    """R2: history_board=None (履歴なし) なら従来通り浮き ban (フォールバック)。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)  # 床 (row12) が空のまま浮いている puyo
+    _apply_gravity_filter(board, history_board=None)
+    assert board.get(11, 0) == COLOR_EMPTY  # 従来通り消去
+
+
+def test_apply_gravity_filter_history_board_also_empty_falls_back_to_erase() -> None:
+    """R2: history_board があっても同 cell が EMPTY/UNKNOWN (履歴なし相当) なら
+    復元不能 → 従来通り浮き ban にフォールバックする。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)
+    history = Board()  # row12 col0 は history 側も EMPTY のまま
+    _apply_gravity_filter(board, history_board=history)
+    assert board.get(11, 0) == COLOR_EMPTY  # 復元不能 → 消去
+
+
+def test_apply_gravity_filter_default_bit_identical_with_history_board_omitted() -> None:
+    """回帰防止: history_board 省略時と None 明示時が bit-identical。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    def _make() -> Board:
+        b = Board()
+        b.set(11, 0, COLOR_RED)
+        return b
+
+    board_a = _make()
+    board_b = _make()
+    _apply_gravity_filter(board_a)
+    _apply_gravity_filter(board_b, history_board=None)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert board_a.get(r, c) == board_b.get(r, c)
+
+
+def test_merge_diff_history_board_default_bit_identical() -> None:
+    """回帰防止: `_merge_diff_only` の history_board 省略時と None 明示時が
+    bit-identical であること。"""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_RED)
+    baseline.set(12, 0, COLOR_RED)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_RED)
+    cnn.set(12, 0, COLOR_EMPTY)
+
+    legacy = _merge_diff_only(baseline, cnn)
+    explicit_none = _merge_diff_only(baseline, cnn, history_board=None)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_none.get(r, c)
+
+
+def test_merge_diff_floating_gap_restore_recovers_stale_empty() -> None:
+    """R2: baseline に色があった cell が単一フレーム誤読で EMPTY になり、
+    その上に puyo が残る (物理矛盾) 場合、 history_board=baseline を渡すと
+    誤 EMPTY を復元し上の puyo を消さない。 history_board 無し (従来挙動)
+    では浮き判定が増幅し上の puyo も消える (回帰確認)。
+
+    row11/12 (盤面最下段2段) の物理的に正当なスタックを想定 (row12=床)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_RED)
+    baseline.set(12, 0, COLOR_RED)  # 2段 赤スタック (床から詰まっている)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_RED)  # 上は正しく観測
+    cnn.set(12, 0, COLOR_EMPTY)  # 床が誤読で消える (W13型)
+
+    merged_off = _merge_diff_only(baseline, cnn)
+    assert merged_off.get(12, 0) == COLOR_EMPTY
+    assert merged_off.get(11, 0) == COLOR_EMPTY  # バグ: 上も消える (増幅)
+
+    merged_on = _merge_diff_only(baseline, cnn, history_board=baseline)
+    assert merged_on.get(12, 0) == COLOR_RED  # 復元
+    assert merged_on.get(11, 0) == COLOR_RED  # 上も維持
+
+
+def test_board_state_machine_stores_floating_gap_restore_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること。"""
+    sm_on = BoardStateMachine(enable_floating_gap_restore=True)
+    assert sm_on._enable_floating_gap_restore is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_floating_gap_restore is False
+
+
+def test_floating_gap_restore_e2e_tsumo_fall_recovers_stale_empty() -> None:
+    """R2 e2e: TSUMO_FALL → STABLE 遷移で「床が誤EMPTY」の物理矛盾を検出したら
+    遷移前 confirmed_board から復元し、上の puyo を守る。
+    flag OFF (default) では従来通り増幅 (上も消える、回帰確認)。"""
+    stack_both = Board()
+    stack_both.set(11, 0, COLOR_RED)
+    stack_both.set(12, 0, COLOR_RED)
+    cnn_floor_lost = Board()
+    cnn_floor_lost.set(11, 0, COLOR_RED)
+    cnn_floor_lost.set(12, 0, COLOR_EMPTY)  # 誤EMPTY (bg_fp汚染想定)
+
+    def _run(*, enable_floating_gap_restore: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.TSUMO_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_floating_gap_restore=enable_floating_gap_restore,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = stack_both.copy()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, stack_both))
+        sm.update(6, _signal(0.30, cnn_floor_lost))
+        return sm
+
+    sm_off = _run(enable_floating_gap_restore=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(12, 0) == 0
+    assert sm_off.context.confirmed_board.get(11, 0) == 0  # 従来: 増幅で上も消える
+
+    sm_on = _run(enable_floating_gap_restore=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(12, 0) == COLOR_RED  # 復元
+    assert sm_on.context.confirmed_board.get(11, 0) == COLOR_RED  # 維持
+
+
+def test_floating_gap_restore_scoped_out_during_chain_transition() -> None:
+    """R2: CHAIN → STABLE 遷移では色→空 が連鎖による正当な消去でありうる
+    ため history_board を渡さない (= 復元を試みない)。 flag ON でも
+    CHAIN 遷移由来の色消滅までは保護しない (= 連鎖直後の誤発火なし)。"""
+    stack_both = Board()
+    stack_both.set(11, 0, COLOR_RED)
+    stack_both.set(12, 0, COLOR_RED)
+    cnn_after_chain = Board()
+    cnn_after_chain.set(11, 0, COLOR_RED)
+    cnn_after_chain.set(12, 0, COLOR_EMPTY)  # 連鎖で本当に消えた想定
+
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.CHAIN, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=6),
+        ],
+        enable_floating_gap_restore=True,
+    )
+    sm.update(0, _signal(0.0, _empty_board()))
+    sm.context.confirmed_board = stack_both.copy()
+    for i in range(1, 6):
+        sm.update(i, _signal(0.05 * i, stack_both))
+    sm.update(6, _signal(0.30, cnn_after_chain))
+
+    assert sm.context.confirmed_board is not None
+    # スコープ外 (CHAIN) のため復元されない = 従来の浮き ban のまま
+    assert sm.context.confirmed_board.get(12, 0) == 0
+    assert sm.context.confirmed_board.get(11, 0) == 0
+
+
 def test_non_stable_history_accumulates_in_chain_state() -> None:
     """F: CHAIN state 中、 cnn_board 履歴が context に蓄積される."""
     sm = BoardStateMachine(
