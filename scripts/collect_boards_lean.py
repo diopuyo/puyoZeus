@@ -267,6 +267,15 @@ OJAMA_FORECAST_UNKNOWN: float = float("nan")
 # 古い pipeline フェイク等では常にこの値になる)。
 MATCH_END_LOCKED_UNKNOWN: int = -1
 
+# post_match_lockdown_active (次試合開始までのラッチ活性フラグ、
+# 2026-08-18 追加、境界実装の仕上げ): RecognitionPipeline._post_match_
+# lockdown_active (enable_post_match_lockdown_latch 有効時のみ意味を持つ、
+# match_end_locked と同じ形式の列) が未取得の場合の埋め値。値は
+# 0 (非活性) / 1 (活性) の二値のため -1 は安全な sentinel
+# (enable_post_match_lockdown_latch=False の収集、または本属性未対応の古い
+# pipeline フェイク等では常にこの値になる)。
+POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN: int = -1
+
 
 # ============================
 # 蓄積バッファ
@@ -337,6 +346,15 @@ class _LeanNpzAccumulator:
     # 保存する。既存呼び出し (match_end_locked 省略) では常に -1 のまま保存
     # される (後方互換: 挙動不変)。
     match_end_lockeds: list[int] = field(default_factory=list)
+    # 次試合開始までのラッチ活性フラグ (0/1、2026-08-18 追加、境界実装の
+    # 仕上げ)。RecognitionPipeline._post_match_lockdown_active
+    # (enable_post_match_lockdown_latch 有効時のみ意味を持つ) をそのまま
+    # 記録する。match_end_lockeds と同じマーカー列方式 (除外は行わない、
+    # 学習データビルダー側のオプトインフィルタで使う)。None は
+    # POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) として保存する。既存呼び出し
+    # (post_match_lockdown_active 省略) では常に -1 のまま保存される
+    # (後方互換: 挙動不変)。
+    post_match_lockdown_actives: list[int] = field(default_factory=list)
 
     def append(
         self,
@@ -356,6 +374,7 @@ class _LeanNpzAccumulator:
         ojama_net_balance: float | None = None,
         ojama_forecast: float | None = None,
         match_end_locked: bool | None = None,
+        post_match_lockdown_active: bool | None = None,
     ) -> None:
         """1 STABLE snapshot を追加する。won は NaN で仮置き。
 
@@ -400,6 +419,13 @@ class _LeanNpzAccumulator:
                 0/1/bool/None を受け付ける。None は MATCH_END_LOCKED_UNKNOWN
                 (-1) で保存する (後方互換: 省略時は既存呼び出しと同じ挙動、
                 2026-08-17 追加、W20/W21根治)。
+            post_match_lockdown_active: この snapshot 時点の
+                RecognitionPipeline._post_match_lockdown_active (次試合開始
+                までのラッチ活性フラグ、enable_post_match_lockdown_latch
+                有効時のみ意味を持つ) の値。0/1/bool/None を受け付ける。
+                None は POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動、2026-08-18 追加、
+                境界実装の仕上げ)。
         """
         self.grids.append(grid.copy())
         self.video_ids.append(video_id)
@@ -439,6 +465,11 @@ class _LeanNpzAccumulator:
         self.match_end_lockeds.append(
             int(match_end_locked) if match_end_locked is not None
             else MATCH_END_LOCKED_UNKNOWN
+        )
+        self.post_match_lockdown_actives.append(
+            int(post_match_lockdown_active)
+            if post_match_lockdown_active is not None
+            else POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN
         )
 
     def assign_won_labels(
@@ -527,6 +558,12 @@ class _LeanNpzAccumulator:
         追加保存する (既存キーは不変、後方互換)。match_end_locked 未指定の
         既存呼び出しでは全て MATCH_END_LOCKED_UNKNOWN (-1) になる (後方互換、
         既存 npz 読み出し側の挙動には影響しない新規キー)。
+
+        post_match_lockdown_active (int8、2026-08-18 追加、境界実装の仕上げ)
+        も同様に常に追加保存する (既存キーは不変、後方互換)。
+        post_match_lockdown_active 未指定の既存呼び出しでは全て
+        POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) になる (後方互換、既存 npz
+        読み出し側の挙動には影響しない新規キー)。
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         save_kwargs: dict[str, np.ndarray] = dict(
@@ -549,6 +586,9 @@ class _LeanNpzAccumulator:
             ojama_net_balance=np.array(self.ojama_net_balances, dtype=np.float32),
             ojama_forecast=np.array(self.ojama_forecasts, dtype=np.float32),
             match_end_locked=np.array(self.match_end_lockeds, dtype=np.int8),
+            post_match_lockdown_active=np.array(
+                self.post_match_lockdown_actives, dtype=np.int8,
+            ),
         )
         if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
             save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
@@ -1132,6 +1172,23 @@ def collect_lean(
     # (RT スコープ外の意図的な非対称配線)。既定 False = 従来挙動完全維持・
     # bit-identical (backwards compat、user承認前の savepoint 実装)。
     enable_stable_persistence_gate: bool = False,
+    # (b-1) match_end持続時間ゲート (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来
+    # 挙動完全維持・bit-identical (backwards compat)。
+    enable_match_end_persist_override: bool = False,
+    # (b-2) 次試合開始までのラッチ (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+    # RecognitionPipeline 本体へそのまま forward する。post_match_lockdown_
+    # active npz 列 (境界実装の仕上げ、2026-08-18) はこのフラグが False の
+    # 間は常に POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) のまま (意味を持たない)。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_post_match_lockdown_latch: bool = False,
+    # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+    # 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md):
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来
+    # 挙動完全維持・bit-identical (backwards compat)。
+    enable_result_screen_hardening: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1422,6 +1479,9 @@ def collect_lean(
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
         enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1477,6 +1537,15 @@ def collect_lean(
         # is_match_active 同様、未対応の古い pipeline フェイクでは None のまま
         # (後方互換: _process_side_lean 側で MATCH_END_LOCKED_UNKNOWN に埋める)。
         match_end_locked_flag = getattr(result, "match_end_locked", None)
+        # 次試合開始までのラッチ活性フラグ (2026-08-18 追加、境界実装の仕上げ)。
+        # PipelineResult の公開フィールドではなく pipeline 側の private
+        # attribute のため getattr で参照する (enable_post_match_lockdown_
+        # latch=False の収集、または本属性未対応の古い pipeline フェイクでは
+        # None のまま、後方互換: _process_side_lean 側で
+        # POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN に埋める)。
+        post_match_lockdown_active_flag = getattr(
+            pipeline, "_post_match_lockdown_active", None,
+        )
 
         # 試合開始からの確定ツモ設置数 (2026-08-12 追加、着地イベント代理指標用)。
         # pipeline が tsumo_count 未対応 (フェイク等) の場合は None のまま
@@ -1537,6 +1606,7 @@ def collect_lean(
             ojama_forecast=ojama_forecast_1p,
             match_end_locked=match_end_locked_flag,
             raw_pixel_stable=raw_pixel_stable_1p,
+            post_match_lockdown_active=post_match_lockdown_active_flag,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -1550,6 +1620,7 @@ def collect_lean(
             ojama_forecast=ojama_forecast_2p,
             raw_pixel_stable=raw_pixel_stable_2p,
             match_end_locked=match_end_locked_flag,
+            post_match_lockdown_active=post_match_lockdown_active_flag,
         )
     cap.release()
 
@@ -1661,6 +1732,7 @@ def _process_side_lean(
     ojama_forecast: float | None = None,
     match_end_locked: bool | None = None,
     raw_pixel_stable: bool = True,
+    post_match_lockdown_active: bool | None = None,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -1704,6 +1776,11 @@ def _process_side_lean(
         raw_pixel_stable: (d) STABLE持続確認 (2026-08-18)。False ならこの
             snapshot をスキップする (_should_emit 参照)。既定 True = 従来
             挙動完全維持 (backwards compat)。
+        post_match_lockdown_active: この snapshot 時点の RecognitionPipeline.
+            _post_match_lockdown_active (次試合開始までのラッチ活性フラグ)。
+            None は acc.append 側で POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1)
+            に埋められる (後方互換: 既存呼び出しは省略可・挙動不変、
+            2026-08-18 追加、境界実装の仕上げ)。
     """
     _update_game_boundary(
         state, score, shared=shared_game, t_sec=t_sec, side_label=side_label,
@@ -1723,6 +1800,7 @@ def _process_side_lean(
         tsumo_count=tsumo_count, all_clear_pending=all_clear_pending,
         ojama_net_balance=ojama_net_balance, ojama_forecast=ojama_forecast,
         match_end_locked=match_end_locked,
+        post_match_lockdown_active=post_match_lockdown_active,
     )
     state.last_emitted_grid = board._grid.tobytes()
 
@@ -2159,6 +2237,43 @@ def main() -> int:
             "重畳の疑い) をスキップする。既定は無効 (後方互換、bit-identical)。"
         ),
     )
+    parser.add_argument(
+        "--enable-match-end-persist-override", action="store_true",
+        dest="enable_match_end_persist_override",
+        help=(
+            "(b-1) match_end持続時間ゲート (2026-08-18、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1))。"
+            "match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC(1.0秒) 秒以上"
+            "連続 True の場合のみ chain_in_progress による hard_match_off "
+            "抑制を上書きする。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-post-match-lockdown-latch", action="store_true",
+        dest="enable_post_match_lockdown_latch",
+        help=(
+            "(b-2) 次試合開始までのラッチ (2026-08-18、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2))。"
+            "match_end_locked の立ち上がりから、次の本物の試合開始 "
+            "(score_zero_both 持続+盤面ROI実ゲームプレイ確認) が確認される"
+            "まで試合外とみなす。post_match_lockdown_active npz 列にも"
+            "このフラグの状態が反映される。既定は無効 (後方互換、"
+            "bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-result-screen-hardening", action="store_true",
+        dest="enable_result_screen_hardening",
+        help=(
+            "境界実装の仕上げ (2026-08-18、診断 data/verify/"
+            "boundary_impl_verify_2026-08-18/reignition_diag.md)。"
+            "score_actively_moving (cycle 71f) が対戦カード紹介の装飾スコア"
+            "カウントアップ演出を実スコアリングと誤認する再点火バグに対処。"
+            "match_end_locked/latch 活性時のみ盤面ROI実ゲームプレイ確認で"
+            "score_actively_moving の信頼性を裏取りする。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2211,6 +2326,9 @@ def main() -> int:
         ),
         enable_ojama_cnn_override_warmup=args.enable_ojama_cnn_override_warmup,
         enable_stable_persistence_gate=args.enable_stable_persistence_gate,
+        enable_match_end_persist_override=args.enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=args.enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=args.enable_result_screen_hardening,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

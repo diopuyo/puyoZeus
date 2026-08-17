@@ -1497,7 +1497,8 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     precise_seek / enable_highlight_override / enable_patch_fp_hsv_guard /
     enable_boundary_multisignal / enable_winner_panel_crosscheck /
     enable_floating_gap_restore / enable_landing_color_guard /
-    enable_stable_persistence_gate
+    enable_stable_persistence_gate / enable_match_end_persist_override /
+    enable_post_match_lockdown_latch / enable_result_screen_hardening
     が末尾に順次 optional 追加され、既存引数の並び・デフォルト値
     が一切変わっていないこと (backwards compat)。
     """
@@ -1524,120 +1525,130 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # enable_ojama_cnn_override_warmup / enable_stable_persistence_gate の
     # 5件が末尾にさらに追加された分、元の値から一律 -5 シフトしてある
     # (旧値は git log 参照)。
-    assert params[-32] == "enable_effect_gate"
+    assert params[-35] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-31] == "effect_gate_persist_sec"
+    assert params[-34] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-30] == "enable_effect_visual_gate"
+    assert params[-33] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-29] == "enable_burst_guard_v2"
+    assert params[-32] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-28] == "enable_transition_merge_guard"
+    assert params[-31] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-27] == "burst_gate_open_threshold"
+    assert params[-30] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-26] == "enable_hidden_row_burst_guard"
+    assert params[-29] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-25] == "enable_burst_close_extension"
+    assert params[-28] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-24] == "burst_chain_gap_max_sec"
+    assert params[-27] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-23] == "enable_online_hsv_refresh"
+    assert params[-26] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-22] == "enable_match_transition_debounce"
+    assert params[-25] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
     # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
     # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
-    assert params[-21] == "enable_ojama_entry_gravity_settle_guard"
+    assert params[-24] == "enable_ojama_entry_gravity_settle_guard"
     assert (
         sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
     )
-    assert params[-20] == "enable_gravity_settle_reset_on_exit"
+    assert params[-23] == "enable_gravity_settle_reset_on_exit"
     assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
     # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
-    assert params[-19] == "enable_phantom_board_guard"
+    assert params[-22] == "enable_phantom_board_guard"
     assert sig.parameters["enable_phantom_board_guard"].default is False
     # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
-    assert params[-18] == "enable_margin_time_rate"
+    assert params[-21] == "enable_margin_time_rate"
     assert sig.parameters["enable_margin_time_rate"].default is False
     # 盤面確定窓 3中2多数決 (2026-08-13 user承認): さらに末尾に追加、既定 OFF。
-    assert params[-17] == "enable_stable_majority_window"
+    assert params[-20] == "enable_stable_majority_window"
     assert sig.parameters["enable_stable_majority_window"].default is False
     # OJAMA_FALL誤分類根因調査 案2/案4-lite/案3 (2026-08-13):
     # さらに末尾に追加、既定 OFF (全 OFF で bit-identical)。
-    assert params[-16] == "enable_ojama_fall_placement_override"
+    assert params[-19] == "enable_ojama_fall_placement_override"
     assert (
         sig.parameters["enable_ojama_fall_placement_override"].default is False
     )
-    assert params[-15] == "enable_ojama_fall_entry_hardening"
+    assert params[-18] == "enable_ojama_fall_entry_hardening"
     assert sig.parameters["enable_ojama_fall_entry_hardening"].default is False
-    assert params[-14] == "enable_chain_gate_raw_fallback"
+    assert params[-17] == "enable_chain_gate_raw_fallback"
     assert sig.parameters["enable_chain_gate_raw_fallback"].default is False
     # OJAMA_FALL出口の根治 案1 (2026-08-13、フル物差し回帰タスク#5向け新設):
     # さらに末尾に追加、既定 OFF (bit-identical)。collect_boards_lean.py には
     # 元々 RecognitionPipeline 側の実装のみ存在し CLI 未配線だったギャップの
     # 是正 (config (c) = OJAMA_FALL系3種の物差し比較に必要)。
-    assert params[-13] == "enable_ojama_fall_scoped_exit"
+    assert params[-16] == "enable_ojama_fall_scoped_exit"
     assert sig.parameters["enable_ojama_fall_scoped_exit"].default is False
     # フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した測定器
     # 事故の修正): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-12] == "precise_seek"
+    assert params[-15] == "precise_seek"
     assert sig.parameters["precise_seek"].default is False
     # W13根治 案1 (2026-08-16): highlight override 配線。さらに末尾に追加、
     # 既定 OFF (bit-identical、物差しv2 A/B測定用)。
-    assert params[-11] == "enable_highlight_override"
+    assert params[-14] == "enable_highlight_override"
     assert sig.parameters["enable_highlight_override"].default is False
     # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
     # さらに末尾に追加、既定 OFF (bit-identical、案1 との A/B/併用測定用)。
-    assert params[-10] == "enable_patch_fp_hsv_guard"
+    assert params[-13] == "enable_patch_fp_hsv_guard"
     assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
     # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-9] == "enable_boundary_multisignal"
+    assert params[-12] == "enable_boundary_multisignal"
     assert sig.parameters["enable_boundary_multisignal"].default is False
     # W20/W21根治 (2026-08-17): 勝者パネルクロスチェック配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-8] == "enable_winner_panel_crosscheck"
+    assert params[-11] == "enable_winner_panel_crosscheck"
     assert sig.parameters["enable_winner_panel_crosscheck"].default is False
     # R2 浮きぷよ是正機構 (2026-08-17): さらに末尾に追加、既定 OFF
     # (bit-identical、hsv-guard 併用/単独 A/B 測定用)。
-    assert params[-7] == "enable_floating_gap_restore"
+    assert params[-10] == "enable_floating_gap_restore"
     assert sig.parameters["enable_floating_gap_restore"].default is False
     # W10根治 (2026-08-17): 着地セル色の継続監視ガード CLI 配線漏れの是正
     # (認識強化統一測定タスクで発見)。さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-6] == "enable_landing_color_guard"
+    assert params[-9] == "enable_landing_color_guard"
     assert sig.parameters["enable_landing_color_guard"].default is False
     # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-5] == "enable_override_color_guard"
+    assert params[-8] == "enable_override_color_guard"
     assert sig.parameters["enable_override_color_guard"].default is False
-    assert params[-4] == "enable_ojama_column_stack_fix"
+    assert params[-7] == "enable_ojama_column_stack_fix"
     assert sig.parameters["enable_ojama_column_stack_fix"].default is False
     # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
     # の ever_seen 飢餓状態対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-3] == "enable_next_history_starvation_fix"
+    assert params[-6] == "enable_next_history_starvation_fix"
     assert sig.parameters["enable_next_history_starvation_fix"].default is False
     # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): おじゃま落下
     # 白雲パーティクル誤認対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-2] == "enable_ojama_cnn_override_warmup"
+    assert params[-5] == "enable_ojama_cnn_override_warmup"
     assert sig.parameters["enable_ojama_cnn_override_warmup"].default is False
     # (d) STABLE持続確認 (2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_
     # 2026-08-17.md §5): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-1] == "enable_stable_persistence_gate"
+    assert params[-4] == "enable_stable_persistence_gate"
     assert sig.parameters["enable_stable_persistence_gate"].default is False
+    # (b-1) match_end持続時間ゲート (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
+    assert params[-3] == "enable_match_end_persist_override"
+    assert sig.parameters["enable_match_end_persist_override"].default is False
+    # (b-2) 次試合開始までのラッチ (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
+    assert params[-2] == "enable_post_match_lockdown_latch"
+    assert sig.parameters["enable_post_match_lockdown_latch"].default is False
+    # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
+    assert params[-1] == "enable_result_screen_hardening"
+    assert sig.parameters["enable_result_screen_hardening"].default is False
+
 
 
 def test_collect_lean_enable_chain_tracker_default_false_backward_compat() -> None:
@@ -2455,6 +2466,155 @@ class TestMatchEndLockedColumn:
 
 
 # ============================
+# 次試合開始までのラッチ活性フラグ列 (境界実装の仕上げ、2026-08-18 追加)
+# ============================
+
+class TestPostMatchLockdownActiveColumn:
+    """_LeanNpzAccumulator の post_match_lockdown_active 列の記録・保存を
+    検証する (match_end_lockeds と同じマーカー列方式)。"""
+
+    def test_append_default_omitted_uses_unknown_sentinel(
+        self, tmp_path: Path,
+    ) -> None:
+        """省略時は POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1、後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 10)
+        assert acc.post_match_lockdown_actives == [
+            mod.POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN
+        ]
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert (
+                data["post_match_lockdown_active"][0]
+                == mod.POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN
+            )
+
+    def test_append_explicit_values_roundtrip(self, tmp_path: Path) -> None:
+        """True/False が npz に 1/0 でそのまま保存される。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(
+            board._grid, "v1", "1P", 1.0, 0, 10,
+            post_match_lockdown_active=True,
+        )
+        acc.append(
+            board._grid, "v1", "1P", 2.0, 0, 11,
+            post_match_lockdown_active=False,
+        )
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert list(data["post_match_lockdown_active"]) == [1, 0]
+
+    def test_existing_match_end_locked_column_unaffected(
+        self, tmp_path: Path,
+    ) -> None:
+        """新列の追加が既存 match_end_locked 列の挙動を変えないこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(
+            board._grid, "v1", "1P", 1.0, 0, 10,
+            match_end_locked=True, post_match_lockdown_active=False,
+        )
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert data["match_end_locked"][0] == 1
+            assert data["post_match_lockdown_active"][0] == 0
+
+
+class _FakeLeanPipelinePostMatchLockdown(_FakeLeanPipeline):
+    """pipeline._post_match_lockdown_active を保持する最小フェイク
+    (2026-08-18 追加、main loop の getattr 配線をフル経路で確認する用)。
+    1 フレームだけ STABLE を返し、他は MENU (dedup/空盤面ガードを回避)。
+    """
+
+    def __init__(self, lockdown_active: bool) -> None:
+        super().__init__()
+        self._post_match_lockdown_active = lockdown_active
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        board = _make_board(COLOR_RED) if fi == 0 else Board.from_list(
+            [[0] * BOARD_COLS for _ in range(BOARD_ROWS)],
+        )
+        state = BoardState.STABLE if fi == 0 else BoardState.MENU
+        side = SimpleNamespace(
+            state=state, score=100, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(
+            p1=side, p2=side, is_match_active=True, match_end_locked=False,
+        )
+
+
+def test_collect_lean_wires_post_match_lockdown_active_to_npz(
+    tmp_path: Path,
+) -> None:
+    """main loop が pipeline._post_match_lockdown_active を getattr し、
+    npz の post_match_lockdown_active 列にそのまま反映することをフル配線で
+    確認する (True の場合)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+    fake_pipeline = _FakeLeanPipelinePostMatchLockdown(lockdown_active=True)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+        )
+    # frame 0 (STABLE) は 1P/2P 両方が emit される (同一 side オブジェクトを
+    # 両方に使うフェイクの仕様のため)。
+    assert n == 2
+    with np.load(out_npz) as data:
+        assert list(data["post_match_lockdown_active"]) == [1, 1]
+
+
+def test_collect_lean_post_match_lockdown_active_unknown_when_absent(
+    tmp_path: Path,
+) -> None:
+    """pipeline が _post_match_lockdown_active 属性を持たない (旧フェイク等)
+    場合は POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) のまま (後方互換)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+
+    class _FakeNoLockdownAttr(_FakeLeanPipeline):
+        def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+            self.update_calls.append(fi)
+            board = _make_board(COLOR_RED) if fi == 0 else Board.from_list(
+                [[0] * BOARD_COLS for _ in range(BOARD_ROWS)],
+            )
+            state = BoardState.STABLE if fi == 0 else BoardState.MENU
+            side = SimpleNamespace(
+                state=state, score=100, confirmed_board=board,
+                next_pair=None, dnext_pair=None, chain_event=None,
+            )
+            return SimpleNamespace(
+                p1=side, p2=side, is_match_active=True, match_end_locked=False,
+            )
+
+    fake_pipeline = _FakeNoLockdownAttr()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+        )
+    with np.load(out_npz) as data:
+        assert list(data["post_match_lockdown_active"]) == [
+            mod.POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN,
+            mod.POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN,
+        ]
+
+
+# ============================
 # 勝者パネルクロスチェック (W20/W21根治、2026-08-17 追加)
 # ============================
 
@@ -2796,3 +2956,46 @@ def test_main_cli_enable_stable_persistence_gate_flag_sets_true() -> None:
     """--enable-stable-persistence-gate 指定時は True が渡ること。"""
     captured = _run_fake_main_lean(["--enable-stable-persistence-gate"])
     assert captured["enable_stable_persistence_gate"] is True
+
+
+# ============================
+# CLI 配線: --enable-match-end-persist-override /
+# --enable-post-match-lockdown-latch / --enable-result-screen-hardening
+# (境界実装の仕上げ、2026-08-18)
+# ============================
+
+
+def test_main_cli_enable_match_end_persist_override_default_false() -> None:
+    """CLI で --enable-match-end-persist-override 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_match_end_persist_override"] is False
+
+
+def test_main_cli_enable_match_end_persist_override_flag_sets_true() -> None:
+    """--enable-match-end-persist-override 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-match-end-persist-override"])
+    assert captured["enable_match_end_persist_override"] is True
+
+
+def test_main_cli_enable_post_match_lockdown_latch_default_false() -> None:
+    """CLI で --enable-post-match-lockdown-latch 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_post_match_lockdown_latch"] is False
+
+
+def test_main_cli_enable_post_match_lockdown_latch_flag_sets_true() -> None:
+    """--enable-post-match-lockdown-latch 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-post-match-lockdown-latch"])
+    assert captured["enable_post_match_lockdown_latch"] is True
+
+
+def test_main_cli_enable_result_screen_hardening_default_false() -> None:
+    """CLI で --enable-result-screen-hardening 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_result_screen_hardening"] is False
+
+
+def test_main_cli_enable_result_screen_hardening_flag_sets_true() -> None:
+    """--enable-result-screen-hardening 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-result-screen-hardening"])
+    assert captured["enable_result_screen_hardening"] is True
