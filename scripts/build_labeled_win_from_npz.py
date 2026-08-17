@@ -1860,8 +1860,61 @@ def _build_meta_rows(
     ]
 
 
+class _RowMaskedNpz:
+    """np.load() の NpzFile を行マスクで透過的にフィルタするビュー
+    (境界実装の仕上げ、2026-08-18、--exclude-match-end-locked 専用)。
+
+    既存コードは全て `d[key]` (numpy 配列の再構築) / `key in d.files` の
+    形式でのみアクセスするため、この最小プロキシで __getitem__ にだけ
+    マスクを適用すればフィルタを一箇所に閉じ込められる (呼び出し側の
+    convert_one_npz 本体は一切変更不要)。
+    """
+
+    def __init__(self, d: object, mask: np.ndarray) -> None:
+        self._d = d
+        self._mask = mask
+
+    @property
+    def files(self) -> list[str]:
+        return self._d.files  # type: ignore[attr-defined]
+
+    def __getitem__(self, key: str) -> np.ndarray:
+        return self._d[key][self._mask]  # type: ignore[index]
+
+
+def _apply_match_end_locked_filter(d: object) -> "tuple[object, int]":
+    """match_end_locked==1 or post_match_lockdown_active==1 の行を除外する
+    マスクビューを返す (--exclude-match-end-locked 専用、2026-08-18 追加、
+    境界実装の仕上げ)。
+
+    match_end_lockeds (W20/W21根治、2026-08-17) / post_match_lockdown_
+    actives (2026-08-18) はいずれも「勝敗演出パネル表示中〜次試合開始まで
+    のマーカー列」(collect_boards_lean.py 参照、除外は行わずマーキングのみ
+    で収集する設計)。本フィルタは学習データ生成時にオプトインで初めて
+    実際の除外を行う。
+
+    値 -1 (未取得・旧npz、後方互換の UNKNOWN sentinel) は除外しない
+    (fail-safe: 「わかっている」行だけを除外し、わからない行は残す)。
+    両列が存在しない旧npzでは何もしない (mask 全True、後方互換)。
+
+    Returns:
+        (フィルタ後のビュー (除外0件なら元の d をそのまま返す), 除外行数)。
+    """
+    n = int(len(d["grids"]))  # type: ignore[index]
+    mask = np.ones(n, dtype=bool)
+    if "match_end_locked" in d.files:  # type: ignore[attr-defined]
+        mask &= d["match_end_locked"] != 1  # type: ignore[index]
+    if "post_match_lockdown_active" in d.files:  # type: ignore[attr-defined]
+        mask &= d["post_match_lockdown_active"] != 1  # type: ignore[index]
+    n_excluded = int(n - int(mask.sum()))
+    if n_excluded == 0:
+        return d, 0
+    return _RowMaskedNpz(d, mask), n_excluded
+
+
 def convert_one_npz(
     npz_path: Path, registry: dict[str, Callable[[Board], "iv.IndicatorV2Value"]],
+    exclude_match_end_locked: bool = False,
 ) -> list[dict]:
     """1 npz ファイルを labeled_win 形式の行リストに変換する。
 
@@ -1874,8 +1927,22 @@ def convert_one_npz(
     b-2/全消しボーナスフラグの詳細はモジュール docstring 参照
     (「指標大整理」節)。1 npz = 1 動画・1P/2P混在という前提で処理する
     (実データで確認済み)。
+
+    Args:
+        exclude_match_end_locked: True で match_end_locked==1 または
+            post_match_lockdown_active==1 の行を変換対象から除外する
+            (境界実装の仕上げ、2026-08-18 追加、オプトイン・既定 False で
+            後方互換)。列が存在しない旧npzでは無効化される (何も除外しない)。
     """
     d = np.load(str(npz_path), allow_pickle=True)
+    if exclude_match_end_locked:
+        d, n_excluded = _apply_match_end_locked_filter(d)
+        if n_excluded:
+            print(
+                f"[exclude-match-end-locked] {npz_path.name}: "
+                f"{n_excluded}行除外 (match_end_locked/post_match_lockdown_"
+                f"active==1)",
+            )
     grids = d["grids"]
     n = len(grids)
     scores = d["score"] if "score" in d.files else np.full(n, -1, dtype=np.int64)
@@ -1935,6 +2002,7 @@ def _split_broken_videos(
 def convert_dir(
     npz_dir: Path, out_csv: Path, profile: str = "light", use_native: bool = True,
     exclude_broken: bool = True, with_saturation_chain: bool = False,
+    exclude_match_end_locked: bool = False,
 ) -> tuple[int, float]:
     """npz_dir 内の全 npz を変換し out_csv に書き出す。
 
@@ -1950,6 +2018,13 @@ def convert_dir(
             (2026-08-13追加、既定 False、後方互換の optional 引数)。実測で
             1行8〜18秒という桁違いのコストが判明したため既定OFF
             (`OPTIONAL_HEAVY_INDICATOR_NAMES` 直上コメント参照)。
+        exclude_match_end_locked: True で match_end_locked==1 または
+            post_match_lockdown_active==1 の行 (勝敗演出パネル〜次試合開始
+            までのマーカー列、collect_boards_lean.py 参照) を学習データから
+            除外する (境界実装の仕上げ、2026-08-18 追加、オプトイン・既定
+            False で後方互換)。exclude_broken と同様に動画・行単位で必ず
+            ログ出力する。両列が存在しない旧npzでは無効化される
+            (何も除外しない)。
 
     Returns:
         (書き出し行数, 所要秒数)。
@@ -1970,7 +2045,9 @@ def convert_dir(
                 f" (計 {total_excluded_rows} 行) — {detail}",
             )
     for i, p in enumerate(npz_files):
-        rows = convert_one_npz(p, registry)
+        rows = convert_one_npz(
+            p, registry, exclude_match_end_locked=exclude_match_end_locked,
+        )
         all_rows.extend(rows)
         print(f"[{i+1}/{len(npz_files)}] {p.name}: {len(rows)} rows "
               f"(累計 {len(all_rows)}, {time.time()-t0:.1f}s)")
@@ -2023,11 +2100,24 @@ def main() -> int:
             "`OPTIONAL_HEAVY_INDICATOR_NAMES` 直上コメント参照)。"
         ),
     )
+    ap.add_argument(
+        "--exclude-match-end-locked", dest="exclude_match_end_locked",
+        action="store_true", default=False,
+        help=(
+            "境界実装の仕上げ (2026-08-18)。match_end_locked==1 または"
+            "post_match_lockdown_active==1 の行 (勝敗演出パネル〜次試合"
+            "開始までのマーカー列、collect_boards_lean.py --enable-post-"
+            "match-lockdown-latch 併用収集で記録) を学習データから除外する。"
+            "既定は無効 (オプトイン、後方互換)。両列が存在しない旧npzでは"
+            "無効化される (何も除外しない)。"
+        ),
+    )
     a = ap.parse_args()
     convert_dir(
         a.npz_dir, a.out, profile=a.profile, use_native=a.use_native,
         exclude_broken=a.exclude_broken,
         with_saturation_chain=a.with_saturation_chain,
+        exclude_match_end_locked=a.exclude_match_end_locked,
     )
     return 0
 
