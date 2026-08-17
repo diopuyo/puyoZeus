@@ -81,15 +81,22 @@ CHAIN_SCORE_EARLY_FIRE_DELTA: int = 80
 # 既存 STABLE_WARMUP_FRAMES=12 (0.4s @30fps) より短く設定 (0.1s で十分な残光吸収)。
 CHAIN_EXIT_WARMUP_SEC: float = 0.1
 
-# W25根治 (enable_ojama_cnn_override_warmup, 2026-08-17、
+# W25根治 おじゃま落下窓 総合ガード warmup (enable_ojama_cnn_override_warmup、
 # docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/):
 # おじゃま落下時の白雲パーティクル (HSV S≈14-20/V≈250) が下段セル群を
-# 0.85〜1.0秒覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する。
-# cycle 71n override の STABLE_CNN_HISTORY_FRAMES(=18≈0.6s) 窓を雲の持続が
-# 上回るため、雲を正しい観測と誤認して確定セルを上書きしてしまう
+# 0.85〜1.0秒覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する
 # (c13 実測 t=289.98-290.87 / 292.10〜 の2波、対象9セル)。
-# OJAMA_FALL→STABLE 遷移直後この秒数だけ cycle 71n override の発火のみを
-# 抑制する (history 蓄積自体は継続、機能C の CHAIN_EXIT_WARMUP_SEC と同型の
+# 案4 (2026-08-17): cycle 71n override の STABLE_CNN_HISTORY_FRAMES
+# (=18≈0.6s) 窓を雲の持続が上回るため、雲を正しい観測と誤認して確定セルを
+# 上書きしてしまう問題に対し、OJAMA_FALL entry〜exit の間この秒数だけ
+# cycle 71n override の発火を抑制する。
+# 第2弾 (2026-08-17、w25_guard_gap.md): 案4単独では実害9セルが0/9解消だった
+# ため根因を再調査し、雲による CNN⇔inferred 持続不一致が DriftDetector
+# needs_resync を誘発→sm.reset()で confirmed_board が丸ごと None化→直後の
+# 遷移で既存ガード (enable_ojama_column_stack_fix) が「baseline is None
+# (初回確定)」分岐で無効化される、という第2の実害経路を確定。同じ warmup
+# タイマーで needs_resync による sm.reset() も抑制範囲に追加した
+# (history 蓄積自体は継続、機能C の CHAIN_EXIT_WARMUP_SEC と同型の
 # 時間ベース warmup)。実測 0.85-1.0s に安全マージンを加えた値
 # (フレーム基準禁止、W4 教訓により SEC 基準必須)。
 OJAMA_OVERRIDE_EXIT_WARMUP_SEC: float = 1.3
@@ -1495,12 +1502,21 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_next_history_starvation_fix: bool = False,
-        # W25根治 案4 (enable_ojama_cnn_override_warmup, 2026-08-17、
+        # W25根治 おじゃま落下窓の総合ガード (enable_ojama_cnn_override_warmup、
         # docs/KNOWN_WEAKNESSES.md W25): おじゃま落下時の白雲パーティクル誤認
-        # 対策。OJAMA_FALL→STABLE 遷移直後 OJAMA_OVERRIDE_EXIT_WARMUP_SEC 秒間、
-        # cycle 71n の STABLE 長期不一致 override の発火のみを抑制する
-        # (機能C enable_chain_exit_warmup と同型、作用点は cycle 71n に限定し
-        # 設置反映経路 _update_landing_votes には触れない)。
+        # 対策。OJAMA_FALL の entry/dwell/exit の間 (= おじゃま落下窓、
+        # OJAMA_OVERRIDE_EXIT_WARMUP_SEC 秒の warmup タイマーで管理)、以下2箇所
+        # を抑制する:
+        #   (案4, 2026-08-17): cycle 71n の STABLE 長期不一致 override の発火。
+        #   (第2弾, 2026-08-17、data/verify/diag_c13c22_recheck_2026-08-17/
+        #    w25_guard_gap.md): DriftDetector needs_resync による sm.reset()。
+        #    雲混入で CNN⇔inferred が持続不一致になり resync が誘発される→
+        #    confirmed_board が丸ごと None化→直後の遷移で
+        #    enable_ojama_column_stack_fix ガードが「baseline is None
+        #    (初回確定)」分岐に落ちて無効化される、という実害経路への対処。
+        # 機能C enable_chain_exit_warmup と同型の時間ベース warmup。
+        # 設置反映経路 _update_landing_votes、_merge_diff_only 自体、
+        # _filter_transition_new_cnn_for_burst_guard 自体には一切触れない。
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
@@ -2140,6 +2156,10 @@ class RecognitionPipeline:
         self._drift_resync_start_guard_suppressed_2p: int = 0
         self._drift_resync_hsv_gate_suppressed_1p: int = 0
         self._drift_resync_hsv_gate_suppressed_2p: int = 0
+        # W25根治 第2弾 (2026-08-17): おじゃま落下窓 warmup 中の needs_resync
+        # 抑制回数 (1P/2P 別)。既存2ガードと同様の効果測定用カウンタ。
+        self._drift_resync_ojama_warmup_suppressed_1p: int = 0
+        self._drift_resync_ojama_warmup_suppressed_2p: int = 0
         # 1P/2P state machine (独立)
         # B1 (M1 warmup guard): enable_warmup_guard=True で STABLE 遷移直後 N frame confirmed 凍結。
         # フェーズ A 精緻化: OjamaVisualDetector 登録フラグを伝播。
@@ -3054,9 +3074,12 @@ class RecognitionPipeline:
         # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
         # (backwards compat、user承認前の savepoint 実装)。
         enable_next_history_starvation_fix: bool = False,
-        # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): __init__ へ
-        # そのまま伝播する。default False = 従来挙動完全維持・bit-identical
-        # (backwards compat、user承認前の savepoint 実装)。
+        # W25根治 おじゃま落下窓の総合ガード (2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/
+        # w25_guard_gap.md): cycle 71n override 抑制 + DriftDetector
+        # needs_resync 抑制の2箇所に効く。__init__ へそのまま伝播する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装)。
         enable_ojama_cnn_override_warmup: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
@@ -6678,19 +6701,34 @@ class RecognitionPipeline:
             else:
                 self._chain_exit_until_2p = warmup_until
 
-        # W25根治 案4 (2026-08-17): OJAMA_FALL → STABLE 遷移直後の
-        # cycle 71n override 発火抑制 warmup。おじゃま落下時の白雲パーティクル
-        # (HSV S≈14-20/V≈250) が下段セル群を覆い、CNN/HSV 双方が誤って
-        # おじゃま(9)と一致観測することで cycle 71n の長期不一致 override が
-        # 誤発火する (docs/KNOWN_WEAKNESSES.md W25、
-        # data/verify/diag_c13c22_recheck_2026-08-17/ で OJAMA_FALL 経由を
-        # 実測確認済)。 enable_ojama_cnn_override_warmup=True の場合のみ有効。
-        # 作用点は cycle 71n override のみ (設置反映経路
-        # _update_landing_votes / LANDING_VOTE_SEC には触れない)。
-        if (
-            self._enable_ojama_cnn_override_warmup
-            and prev_state == BoardState.OJAMA_FALL
-            and ctx.state == BoardState.STABLE
+        # W25根治 案4+第2弾 (2026-08-17): おじゃま落下窓の総合ガード warmup。
+        # おじゃま落下時の白雲パーティクル (HSV S≈14-20/V≈250) が下段セル群を
+        # 覆い、CNN/HSV 双方が誤っておじゃま(9)と一致観測する
+        # (docs/KNOWN_WEAKNESSES.md W25、data/verify/diag_c13c22_recheck_2026-08-17/
+        # で機構を実測確認済)。 当初は cycle 71n override 発火抑制のみだったが、
+        # 第2弾の根因調査 (data/verify/diag_c13c22_recheck_2026-08-17/
+        # w25_guard_gap.md) で「雲によるCNN⇔inferred持続不一致が
+        # DriftDetector 再同期 (sm.reset) を誘発 → confirmed_board が丸ごと
+        # None化 → 既存の enable_ojama_column_stack_fix ガードが
+        # 『baseline is None (初回確定)』分岐で無効化される」という第2の
+        # 実害経路が確定したため、本 warmup の抑制範囲を drift 再同期
+        # (_check_baseline_broken_reset とは別の needs_resync 経路) にも
+        # 拡張する (6960行目付近の抑制条件を参照)。
+        # トリガはOJAMA_FALL ENTRY (dwell中の毎frame延長を含む) と
+        # OJAMA_FALL→STABLE EXIT の両方: entry 側が無いと「雲混入直後・
+        # まだ1度もexitしていない」最初の drift-resync 発火 (実測: c13
+        # t=289.733 が該当) を防げない。
+        # enable_ojama_cnn_override_warmup=True の場合のみ有効。
+        # 作用点は cycle 71n override + drift 再同期抑制の2箇所のみ
+        # (設置反映経路 _update_landing_votes / LANDING_VOTE_SEC、
+        # _merge_diff_only 自体、_filter_transition_new_cnn_for_burst_guard
+        # 自体には一切触れない)。
+        if self._enable_ojama_cnn_override_warmup and (
+            ctx.state == BoardState.OJAMA_FALL
+            or (
+                prev_state == BoardState.OJAMA_FALL
+                and ctx.state == BoardState.STABLE
+            )
         ):
             ojama_override_warmup_until = (
                 time_sec + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
@@ -6788,6 +6826,26 @@ class RecognitionPipeline:
                         self._drift_resync_hsv_gate_suppressed_1p += 1
                     else:
                         self._drift_resync_hsv_gate_suppressed_2p += 1
+            # W25根治 第2弾 (2026-08-17、data/verify/diag_c13c22_recheck_2026-08-17/
+            # w25_guard_gap.md): おじゃま落下窓の白雲パーティクルが CNN⇔inferred
+            # の持続不一致を作り、この needs_resync を誘発 → sm.reset() で
+            # confirmed_board が丸ごと None化 → 直後の OJAMA_FALL→STABLE 遷移で
+            # enable_ojama_column_stack_fix ガードが「baseline is None (初回確定)」
+            # 分岐に落ちて無効化される、という第2の実害経路が実測で確定した。
+            # おじゃま落下 warmup 窓 (_ojama_override_exit_until_*、cycle 71n
+            # override 抑制と共用) 中は本 reset も抑制する。他2ガードと独立に
+            # 単独評価 (OR 条件、既存ガードと排他ではない)。
+            if self._enable_ojama_cnn_override_warmup:
+                _ojama_warmup_until = (
+                    self._ojama_override_exit_until_1p if side == "1P"
+                    else self._ojama_override_exit_until_2p
+                )
+                if time_sec < _ojama_warmup_until:
+                    _drift_resync_suppress = True
+                    if side == "1P":
+                        self._drift_resync_ojama_warmup_suppressed_1p += 1
+                    else:
+                        self._drift_resync_ojama_warmup_suppressed_2p += 1
             if not _drift_resync_suppress:
                 sm.reset(keep_match_state=True)
                 drift.reset()

@@ -1058,9 +1058,11 @@ def collect_lean(
     # 本体へそのまま forward する。既定 False = 従来挙動完全維持
     # (backwards compat、統一測定 構成F 用に末尾追加)。
     enable_next_history_starvation_fix: bool = False,
-    # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): RecognitionPipeline
-    # 本体へそのまま forward する。既定 False = 従来挙動完全維持
-    # (backwards compat、統一測定 構成F+本フラグ の A/B 用に末尾追加)。
+    # W25根治 おじゃま落下窓の総合ガード (2026-08-17、docs/KNOWN_WEAKNESSES.md
+    # W25): RecognitionPipeline 本体へそのまま forward する。cycle 71n
+    # override 抑制 (案4) + DriftDetector needs_resync 抑制 (第2弾) の
+    # 2箇所に効く。既定 False = 従来挙動完全維持 (backwards compat、
+    # 統一測定 構成F+本フラグ の A/B 用に末尾追加)。
     enable_ojama_cnn_override_warmup: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
@@ -2051,11 +2053,14 @@ def main() -> int:
         "--enable-ojama-cnn-override-warmup", action="store_true",
         dest="enable_ojama_cnn_override_warmup",
         help=(
-            "W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25)。"
-            "おじゃま落下時の白雲パーティクル誤認対策。OJAMA_FALL→STABLE "
-            "遷移直後 OJAMA_OVERRIDE_EXIT_WARMUP_SEC(1.3s) 秒間、cycle 71n "
-            "の STABLE 長期不一致 override の発火のみを抑制する。既定は"
-            "無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
+            "W25根治 おじゃま落下窓の総合ガード (2026-08-17、"
+            "docs/KNOWN_WEAKNESSES.md W25)。おじゃま落下時の白雲パーティクル"
+            "誤認対策。OJAMA_FALL entry〜exit の間 "
+            "OJAMA_OVERRIDE_EXIT_WARMUP_SEC(1.3s) 秒間、(1) cycle 71n の "
+            "STABLE 長期不一致 override の発火、(2) DriftDetector "
+            "needs_resync による sm.reset() (雲混入で confirmed_board が"
+            "丸ごと None 化される第2の実害経路への対処) の両方を抑制する。"
+            "既定は無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
         ),
     )
     args = parser.parse_args()
