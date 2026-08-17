@@ -142,6 +142,13 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.board import Board  # noqa: E402
+from src.board_motion import (  # noqa: E402
+    STABLE_PERSISTENCE_DIFF_THRESHOLD,
+    STABLE_PERSISTENCE_WINDOW_SEC,
+    board_roi_gray,
+    frame_diff_mean,
+    is_raw_pixel_stable,
+)
 from src.board_quality import is_phantom_board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
@@ -617,6 +624,12 @@ class _SideState:
     # pipeline.tsumo_count() を再度呼ばず main loop が既に取得済みの値を
     # 再利用するための保持先 (呼び出し回数を変えないための設計)。
     ojama_prev_tsumo: int = 0
+    # (d) STABLE持続確認 (2026-08-18 追加、enable_stable_persistence_gate
+    # 専用): 直前フレームの盤面 ROI grayscale (src.board_motion 入力用)。
+    # enable_stable_persistence_gate=False (既定) では一切書き込まれない。
+    motion_prev_gray: "np.ndarray | None" = None
+    # 直近 STABLE_PERSISTENCE_WINDOW_SEC 秒分の (t_sec, diff_mean) 履歴。
+    motion_diffs: "list[tuple[float, float]]" = field(default_factory=list)
 
 
 @dataclass
@@ -859,6 +872,7 @@ def _reconcile_boundary_anomalies(shared: "_SharedGameCounter") -> None:
 def _should_emit(
     state: _SideState, board: Board, bstate: BoardState,
     exclude_phantom: bool = False,
+    raw_pixel_stable: bool = True,
 ) -> bool:
     """STABLE かつ重複でない盤面かを判定する。
 
@@ -872,6 +886,15 @@ def _should_emit(
             (幻 min=0.0 / 正常 max=226.9 で完全に重なる)、 盤面の物理的
             整合 (src/board_quality.py) で弾く。
             既定 False = 従来挙動完全維持 (backwards compat)。
+        raw_pixel_stable: (d) STABLE持続確認 (2026-08-18、
+            enable_stable_persistence_gate 専用)。False の場合、直近
+            STABLE_PERSISTENCE_WINDOW_SEC 秒の盤面 ROI 生ピクセルが持続
+            静止していない (= 連鎖アニメ中/送付フラッシュ重畳の疑い) と
+            判断し、この snapshot をスキップする。既存 dedup 機構により、
+            後続フレームで本当に静止すれば自動的に記録される (defer 不要)。
+            既定 True = 従来挙動完全維持 (backwards compat、
+            enable_stable_persistence_gate=False の呼び出し元は常に
+            True を渡す)。
     """
     if bstate != BoardState.STABLE or board is None:
         return False
@@ -881,11 +904,46 @@ def _should_emit(
     # 幻盤面ガード: 実戦なら窒息死が目前で安定継続し得ない盤面を弾く
     if exclude_phantom and is_phantom_board(board._grid):
         return False
+    # (d) STABLE持続確認: 連鎖アニメ中/送付フラッシュ重畳の疑いのある
+    # 瞬間の snapshot をスキップする。
+    if not raw_pixel_stable:
+        return False
     # 直前と同一盤面なら間引き
     grid_bytes = board._grid.tobytes()
     if grid_bytes == state.last_emitted_grid:
         return False
     return True
+
+
+def _update_raw_pixel_stable(
+    state: _SideState, frame: np.ndarray, side_label: str, t_sec: float,
+    enable_stable_persistence_gate: bool,
+) -> bool:
+    """(d) STABLE持続確認 (2026-08-18): 1 side の rolling diff 窓を更新し、
+    直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の生ピクセル持続静止判定を返す。
+
+    src.board_motion (stateless 純関数) の呼び出し側 wrapper。 state
+    (motion_prev_gray / motion_diffs) の保持はこちら (collect_boards_lean.py
+    = 外部 wrapper) の責務とする (CLAUDE.md「観測指標は stateless 実装」)。
+
+    既定 False (enable_stable_persistence_gate) では計算を一切行わず
+    True を返す (bit-identical、計算コストも発生しない)。
+    """
+    if not enable_stable_persistence_gate:
+        return True
+    gray = board_roi_gray(frame, side_label)
+    if state.motion_prev_gray is not None:
+        diff = frame_diff_mean(state.motion_prev_gray, gray)
+        state.motion_diffs.append((t_sec, diff))
+        state.motion_diffs = [
+            (t, d) for t, d in state.motion_diffs
+            if t_sec - t <= STABLE_PERSISTENCE_WINDOW_SEC
+        ]
+    state.motion_prev_gray = gray
+    return is_raw_pixel_stable(
+        [d for _t, d in state.motion_diffs],
+        diff_threshold=STABLE_PERSISTENCE_DIFF_THRESHOLD,
+    )
 
 
 # ============================
@@ -1064,6 +1122,16 @@ def collect_lean(
     # 2箇所に効く。既定 False = 従来挙動完全維持 (backwards compat、
     # 統一測定 構成F+本フラグ の A/B 用に末尾追加)。
     enable_ojama_cnn_override_warmup: bool = False,
+    # (d) STABLE持続確認 (2026-08-18、収集限定、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5): True で
+    # _should_emit の直前に、直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の盤面 ROI
+    # 生ピクセルが持続静止しているか (src.board_motion.is_raw_pixel_stable)
+    # を要求する。連鎖アニメ中/送付フラッシュ重畳の疑いのある STABLE
+    # snapshot をスキップする (既存 dedup 機構により後で本当に静止すれば
+    # 自動記録される、defer 不要)。RecognitionPipeline 本体には実装しない
+    # (RT スコープ外の意図的な非対称配線)。既定 False = 従来挙動完全維持・
+    # bit-identical (backwards compat、user承認前の savepoint 実装)。
+    enable_stable_persistence_gate: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1447,6 +1515,16 @@ def collect_lean(
         all_clear_pending_1p = getattr(chain_tracker_1p, "all_clear_pending", None)
         all_clear_pending_2p = getattr(chain_tracker_2p, "all_clear_pending", None)
 
+        # (d) STABLE持続確認 (2026-08-18、enable_stable_persistence_gate 専用):
+        # 既定 False では _update_raw_pixel_stable が計算を一切行わず True を
+        # 返す (bit-identical)。
+        raw_pixel_stable_1p = _update_raw_pixel_stable(
+            state_p1, frame, "1P", t_sec, enable_stable_persistence_gate,
+        )
+        raw_pixel_stable_2p = _update_raw_pixel_stable(
+            state_p2, frame, "2P", t_sec, enable_stable_persistence_gate,
+        )
+
         _process_side_lean(
             acc, state_p1, "1P", result.p1.confirmed_board,
             result.p1.state, result.p1.score, video_id, t_sec, fi,
@@ -1458,6 +1536,7 @@ def collect_lean(
             ojama_net_balance=ojama_net_1p,
             ojama_forecast=ojama_forecast_1p,
             match_end_locked=match_end_locked_flag,
+            raw_pixel_stable=raw_pixel_stable_1p,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -1469,6 +1548,7 @@ def collect_lean(
             all_clear_pending=all_clear_pending_2p,
             ojama_net_balance=ojama_net_2p,
             ojama_forecast=ojama_forecast_2p,
+            raw_pixel_stable=raw_pixel_stable_2p,
             match_end_locked=match_end_locked_flag,
         )
     cap.release()
@@ -1580,6 +1660,7 @@ def _process_side_lean(
     ojama_net_balance: float | None = None,
     ojama_forecast: float | None = None,
     match_end_locked: bool | None = None,
+    raw_pixel_stable: bool = True,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -1620,12 +1701,16 @@ def _process_side_lean(
             acc.append 側で MATCH_END_LOCKED_UNKNOWN (-1) に埋められる
             (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-17 追加、
             W20/W21根治)。
+        raw_pixel_stable: (d) STABLE持続確認 (2026-08-18)。False ならこの
+            snapshot をスキップする (_should_emit 参照)。既定 True = 従来
+            挙動完全維持 (backwards compat)。
     """
     _update_game_boundary(
         state, score, shared=shared_game, t_sec=t_sec, side_label=side_label,
     )
     if board is None or not _should_emit(
         state, board, bstate, exclude_phantom=exclude_phantom,
+        raw_pixel_stable=raw_pixel_stable,
     ):
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
@@ -2063,6 +2148,17 @@ def main() -> int:
             "既定は無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
         ),
     )
+    parser.add_argument(
+        "--enable-stable-persistence-gate", action="store_true",
+        dest="enable_stable_persistence_gate",
+        help=(
+            "(d) STABLE持続確認 (2026-08-18、収集限定、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5)。"
+            "直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の盤面 ROI 生ピクセルが"
+            "持続静止していない STABLE snapshot (連鎖アニメ中/送付フラッシュ"
+            "重畳の疑い) をスキップする。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2114,6 +2210,7 @@ def main() -> int:
             args.enable_next_history_starvation_fix
         ),
         enable_ojama_cnn_override_warmup=args.enable_ojama_cnn_override_warmup,
+        enable_stable_persistence_gate=args.enable_stable_persistence_gate,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
