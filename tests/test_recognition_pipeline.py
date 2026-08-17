@@ -1723,6 +1723,329 @@ def test_enable_landing_observed_color_default_false_no_regression():
 
 
 # ---------------------------------------------------------------------------
+# W10根治 (2026-08-17): enable_landing_color_guard フラグテスト
+# docs/KNOWN_WEAKNESSES.md W10 — 着地セル色の継続監視ガード。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_landing_color_guard(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_landing_color_guard フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_landing_color_guard=enable_flag,
+    )
+
+
+def test_enable_landing_color_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_landing_color_guard が False。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    assert not pipe._enable_landing_color_guard, (
+        "default OFF: _enable_landing_color_guard は False であるべき"
+    )
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_enable_landing_color_guard_flag_on():
+    """フラグ ON → _enable_landing_color_guard が True。"""
+    pipe = _make_pipe_landing_color_guard(True)
+    assert pipe._enable_landing_color_guard, (
+        "ON時: _enable_landing_color_guard は True であるべき"
+    )
+
+
+def test_enable_landing_color_guard_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def test_enable_landing_color_guard_off_never_populates_watch_list():
+    """フラグ OFF ではフル pipeline を回しても watch リストは常に空のまま
+    (= bit-identical: 監視自体が一切走らない)。"""
+    pipe = _make_pipe_landing_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(10):
+        pipe.update(i, i * 0.033, frame)
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_landing_color_guard_continuous_overwrite_when_cnn_hsv_agree():
+    """W10根治の中核: watch リストに登録済セルは、CNN==HSV が一致した
+    フレームで即座に confirmed_board が上書きされる (= 1回限りでなく継続)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    class _HsvAgreesPurple:
+        """HSV-only 分類器スタブ: 常に紫を返す。"""
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_PURPLE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvAgreesPurple()
+
+    # cnn_board (= 当該フレームの CNN 観測): (11,2) は紫 (真の色)
+    cnn_purple = Board()
+    cnn_purple.set(11, 2, COLOR_PURPLE)
+    reader = _StubImageReader(cnn_purple, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    # confirmed_board (= 誤って確定済の色): (11,2) は赤 (NEXT誤読等による誤色)
+    wrong_confirmed = Board()
+    wrong_confirmed.set(11, 2, COLOR_RED)
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = wrong_confirmed.copy()
+
+    # 監視リストに (11,2) を登録 (期限は十分先)
+    pipe._landing_color_watch_1p = [((11, 2), 999.0)]
+
+    result = pipe.update(0, 0.5, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(11, 2)) == COLOR_PURPLE, (
+        "CNN==HSV が一致した紫へ即座に上書きされるべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "解決済セルは監視リストから除去されるべき"
+    )
+
+
+def test_landing_color_guard_no_overwrite_when_cnn_hsv_disagree():
+    """CNN != HSV の場合は上書きせず、watch リストにも残り続ける
+    (保守的、誤補正しない)。"""
+    from src.board import COLOR_BLUE, COLOR_RED, COLOR_YELLOW
+
+    class _HsvReturnsBlue:
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_BLUE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvReturnsBlue()
+
+    cnn_yellow = Board()
+    cnn_yellow.set(11, 2, COLOR_YELLOW)  # CNN=黄, HSV=青 → 不一致
+    reader = _StubImageReader(cnn_yellow, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    wrong_confirmed = Board()
+    wrong_confirmed.set(11, 2, COLOR_RED)
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = wrong_confirmed.copy()
+    pipe._landing_color_watch_1p = [((11, 2), 999.0)]
+
+    result = pipe.update(0, 0.5, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(11, 2)) == COLOR_RED, (
+        "CNN != HSV では上書きしない (保守的)"
+    )
+    assert pipe._landing_color_watch_1p == [((11, 2), 999.0)], (
+        "不一致の間は監視リストを維持し続けるべき"
+    )
+
+
+def test_landing_color_guard_expires_after_deadline():
+    """監視期限 (deadline) を過ぎたセルは監視リストから除去される
+    (= 無期限凍結を防ぐ安全弁)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_landing_color_guard(True, reader=reader)
+
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    ctx.confirmed_board = Board()
+    # 期限切れ (time_sec=0.5 の呼び出しに対し deadline=0.1 は既に過去)
+    pipe._landing_color_watch_1p = [((11, 2), 0.1)]
+
+    pipe.update(0, 0.5, _dummy_frame())
+
+    assert pipe._landing_color_watch_1p == [], (
+        "期限切れセルは自動的に監視終了するべき"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 持続誤認26件系統1 (2026-08-17): enable_override_color_guard フラグテスト
+# docs/KNOWN_WEAKNESSES.md W10 — cycle 71n の STABLE 長期不一致 override が
+# 誤発火した際、書き込まれたセルを watch リストに合流登録して即時再訂正する。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_override_color_guard(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_override_color_guard フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_override_color_guard=enable_flag,
+    )
+
+
+def test_enable_override_color_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_override_color_guard が False。"""
+    pipe = _make_pipe_override_color_guard(False)
+    assert not pipe._enable_override_color_guard, (
+        "default OFF: _enable_override_color_guard は False であるべき"
+    )
+    assert pipe._landing_color_watch_1p == []
+    assert pipe._landing_color_watch_2p == []
+
+
+def test_enable_override_color_guard_flag_on():
+    """フラグ ON → _enable_override_color_guard が True。"""
+    pipe = _make_pipe_override_color_guard(True)
+    assert pipe._enable_override_color_guard, (
+        "ON時: _enable_override_color_guard は True であるべき"
+    )
+
+
+def test_enable_override_color_guard_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_override_color_guard(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def _fire_cycle71n_override(
+    pipe: RecognitionPipeline,
+    *,
+    cell: tuple[int, int],
+    correct_color: int,
+    wrong_color: int,
+    frame_bgr: "np.ndarray",
+    time_sec: float = 10.0,
+) -> "PipelineResult":
+    """cycle 71n の長期不一致 override を 1 回の update() で発火させる
+    テスト用ヘルパー。history を「あと 1 フレームで閾値到達」まで事前充填し、
+    このフレームの CNN 観測 (wrong_color) を追加して override を発火させる。
+    """
+    from src.board import Board as _Board
+
+    r, c = cell
+    ctx = pipe._sm_1p.context
+    ctx.state = BoardState.STABLE
+    confirmed = _Board()
+    confirmed.set(r, c, correct_color)
+    ctx.confirmed_board = confirmed.copy()
+    ctx.pending_board = confirmed.copy()
+    # STABLE_CNN_HISTORY_FRAMES - 1 個の wrong_color を事前充填
+    # (このフレームで 1 個追加され閾値到達、ratio=1.0 >= 0.75 で override 発火)。
+    pipe._stable_cnn_history_1p[(r, c)] = (
+        [wrong_color] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    return pipe.update(0, time_sec, frame_bgr)
+
+
+def test_override_color_guard_registers_watch_entry_when_override_fires():
+    """フラグ ON: cycle 71n override 発火セルが watch リストに登録され、
+    期限は LANDING_VOTE_SEC 秒後 (新規定数を増やさず既存定数を流用)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_override_color_guard(True, reader=reader)
+
+    result = _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "override は従来通り発火し、誤色が書き込まれるべき"
+    )
+    assert len(pipe._landing_color_watch_1p) == 1
+    (watched_cell, deadline) = pipe._landing_color_watch_1p[0]
+    assert watched_cell == (12, 1)
+    assert deadline == pytest.approx(10.0 + pipe.LANDING_VOTE_SEC)
+
+
+def test_override_color_guard_off_does_not_register_watch_entry():
+    """フラグ OFF: override は従来通り発火するが watch リストへの登録は
+    発生しない (= 既存 cycle 71n 挙動そのまま、bit-identical)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_override_color_guard(False, reader=reader)
+
+    result = _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "override 自体はフラグ OFF でも従来通り発火するべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "フラグ OFF では watch リストへの登録は一切起きないべき (bit-identical)"
+    )
+
+
+def test_override_color_guard_self_corrects_within_one_frame_when_cnn_hsv_agree():
+    """持続誤認26件系統1 の中核再現テスト: override 誤発火の直後、
+    次フレームで CNN==HSV が正解に一致すれば LANDING_VOTE_SEC (0.4秒) を
+    待たず 1 フレームで自己訂正される (c23/c10 実例の 0.47〜6.0 秒放置を
+    大幅短縮できることの証明)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    class _HsvAgreesPurple:
+        def classify(self, patch: object) -> int:  # noqa: ANN001
+            return COLOR_PURPLE
+
+    class _ClassifierWithHsv:
+        def __init__(self) -> None:
+            self._hsv = _HsvAgreesPurple()
+
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    reader._classifier = _ClassifierWithHsv()  # type: ignore[attr-defined]
+    pipe = _make_pipe_override_color_guard(True, reader=reader)
+
+    # frame 0: override 誤発火 (バースト末尾、まだ CNN=赤のまま)
+    _fire_cycle71n_override(
+        pipe, cell=(12, 1), correct_color=COLOR_PURPLE, wrong_color=COLOR_RED,
+        frame_bgr=_dummy_frame(), time_sec=10.0,
+    )
+    assert int(pipe._sm_1p.context.confirmed_board.get(12, 1)) == COLOR_RED
+    assert len(pipe._landing_color_watch_1p) == 1
+
+    # frame 1: バースト終了、CNN が正解 (紫) に復帰。 HSV も紫で一致。
+    reader._p1 = Board()
+    reader._p1.set(12, 1, COLOR_PURPLE)
+    result = pipe.update(1, 10.0 + 1 / 60, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "CNN==HSV が正解に一致した次フレームで即座に自己訂正されるべき"
+    )
+    assert pipe._landing_color_watch_1p == [], (
+        "解決済セルは監視リストから除去されるべき"
+    )
+
+
+# ---------------------------------------------------------------------------
 # 色フリッカ根因への防御的修正 案(iii) (2026-07-25):
 # _flag_landing_distrust_cells 単体テスト
 # ---------------------------------------------------------------------------
@@ -2893,6 +3216,497 @@ def test_legitimate_match_end_detected_after_chain_state_exits() -> None:
 
 
 # ============================
+# (b-1) match_end持続時間ゲート (2026-08-18、
+# docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1))
+# ============================
+
+
+def test_match_end_persist_override_default_off_bit_identical() -> None:
+    """既定 False では従来ロジックと bit-identical (瞬間誤爆は抑制継続)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=False,
+    )
+    t = 5.0
+    for i in range(120):
+        # state machine が自律的に CHAIN から遷移してしまうため、毎フレーム
+        # 強制する (chain_in_progress 判定は update() 冒頭で読まれるため、
+        # _step_side による事後遷移とは競合しない)。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(i, t, _dummy_frame())
+        t += 0.05
+    assert res.is_match_active is True, (
+        "既定 False では 6 秒連続 match_end_locked でも CHAIN 中は"
+        "従来通り抑制され続けるべき (bit-identical)"
+    )
+
+
+def test_match_end_persist_override_suppresses_instant_false_positive() -> None:
+    """flag ON でも瞬間誤爆 (persist 時間未満) は従来通り抑制される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    # 1 フレームだけの瞬間誤爆 (MATCH_END_PERSIST_OVERRIDE_SEC=1.0秒未満)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "persist 時間未満の match_end_locked は瞬間誤爆として"
+        "抑制され続けるべき (flag ON でも)"
+    )
+
+
+def test_match_end_persist_override_detects_after_persist_duration() -> None:
+    """flag ON かつ match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上
+    連続すれば、CHAIN 中でも正規の試合終了検出が反映される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    t = 5.0
+    frame_idx = 0
+    res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.is_match_active is True, "立ち上がり直後はまだ抑制されるべき"
+    # MATCH_END_PERSIST_OVERRIDE_SEC (=1.0秒) を超えるまで進める。
+    while t - 5.0 < RecognitionPipeline.MATCH_END_PERSIST_OVERRIDE_SEC + 0.2:
+        frame_idx += 1
+        t += 0.1
+        # state machine が自律的に CHAIN から遷移してしまうため毎フレーム強制。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(frame_idx, t, _dummy_frame())
+    assert res.is_match_active is False, (
+        "match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC 秒以上連続すれば、"
+        "CHAIN 中の抑制を上書きして正規の試合終了検出が反映されるべき"
+    )
+
+
+def test_match_end_persist_override_resets_when_locked_flickers() -> None:
+    """match_end_locked が一度 False に戻ると持続タイマーがリセットされる。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+
+    class _FlickerMatchEndDetector:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def update(self, frame: np.ndarray, time_sec: float) -> bool:
+            self.calls += 1
+            # 3 回に 1 回だけ False に落ちる (真の持続にはならない)。
+            return self.calls % 3 != 0
+
+        def is_locked(self, time_sec: float) -> bool:
+            return False
+
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_FlickerMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_match_end_persist_override=True,
+    )
+    t = 5.0
+    res = None
+    for i in range(60):
+        # state machine が自律的に CHAIN から遷移してしまうため毎フレーム強制。
+        pipe._sm_1p.context.state = BoardState.CHAIN
+        res = pipe.update(i, t, _dummy_frame())
+        t += 0.1
+    assert res is not None
+    assert res.is_match_active is True, (
+        "match_end_locked が持続せずフリッカーする場合は、持続タイマーが"
+        "都度リセットされるため誤って正規検出扱いされてはいけない"
+    )
+
+
+# ============================
+# (b-2) 次試合開始までのラッチ (2026-08-18、
+# docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2))
+# ============================
+
+
+def test_post_match_lockdown_latch_default_off_bit_identical() -> None:
+    """既定 False では従来ロジックと bit-identical。
+
+    match_end_locked が 5 秒ロックダウン後に False へ戻り、raw_active も
+    False (待機画面) のままだと、既定 False では is_match_active が
+    (score_zero 等の他条件次第だが) match_end_locked=False の時点で
+    通常判定に戻る (= ラッチ機構が一切効かない)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=False,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "既定 False では self._post_match_lockdown_active は常に False の"
+        "まま更新されるべき (bit-identical)"
+    )
+
+
+def test_post_match_lockdown_latch_activates_and_forces_inactive() -> None:
+    """flag ON: match_end_locked の立ち上がりでラッチが ON になり、
+    match_end_locked が False に戻った後 (5秒ロックダウン切れ相当) も
+    raw_active が False (対戦カード紹介等の待機画面) の間は
+    is_match_active=False が維持される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+
+    class _OneShotMatchEndDetector:
+        """1 回目の update() のみ True (ロックダウン切れ後の再現)。"""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def update(self, frame: np.ndarray, time_sec: float) -> bool:
+            self.calls += 1
+            return self.calls == 1
+
+        def is_locked(self, time_sec: float) -> bool:
+            return False
+
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_OneShotMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is False
+    assert pipe._post_match_lockdown_active is True, (
+        "match_end_locked の立ち上がりでラッチが ON になるべき"
+    )
+    # match_end_locked は 2 フレーム目以降 False に戻るが、raw_active
+    # (MatchStateDetector) は依然 False (待機画面) のため is_active=False
+    # が継続すべき。
+    res2 = pipe.update(1, 6.0, _dummy_frame())
+    assert res2.is_match_active is False, (
+        "ラッチが ON の間は match_end_locked が False に戻っても"
+        "試合外判定を維持するべき"
+    )
+    assert pipe._post_match_lockdown_active is True
+
+
+def _high_variance_frame() -> np.ndarray:
+    """盤面 ROI (P1/P2) が高分散になる合成フレーム (実ゲームプレイ相当)。
+
+    src.board_motion.REAL_GAMEPLAY_BOARD_STD_THRESHOLD (=35.0) を確実に
+    超えるよう、ランダムノイズで埋める (実測: 実ゲームプレイの std 最小値
+    47.33、乱数ノイズの std は理論上 ~73.9 で安定して超える)。
+    """
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    rng = np.random.default_rng(0)
+    for region in (DEFAULT_P1_REGION, DEFAULT_P2_REGION):
+        frame[
+            region.y: region.y + region.height,
+            region.x: region.x + region.width,
+        ] = rng.integers(
+            0, 256, size=(region.height, region.width, 3), dtype=np.uint8,
+        )
+    return frame
+
+
+def test_post_match_lockdown_latch_releases_after_score_zero_persists_with_real_gameplay() -> None:
+    """flag ON: ラッチON後、score_zero_both が
+    CHAIN_BAN_SEC_AFTER_MATCH_START 秒以上連続 **かつ** 盤面ROIが実ゲーム
+    プレイらしい (追加安全弁) 場合にラッチが解除される (2026-08-18
+    アーキ確定: 解除信号を raw_active→match_res.state→score_zero_both
+    persistence + 盤面ROI分散ガードへ置換)。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+
+    # match_end_detector を切り離し match_end_locked=False にする
+    # (score_zero_both 持続の検証に無関係な信号を消す)。
+    pipe._match_end_detector = None
+    # score_zero_both を True に切り替え、CHAIN_BAN_SEC_AFTER_MATCH_START
+    # 秒超連続させる。盤面は高分散フレーム (実ゲームプレイ確認用)。
+    pipe._score_zero_detector._both_zero = True  # type: ignore[attr-defined]
+    t = 6.0
+    frame_idx = 1
+    persist_sec = RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+    while t - 6.0 < persist_sec + 0.2:
+        frame_idx += 1
+        t += 0.05
+        res = pipe.update(frame_idx, t, _high_variance_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "score_zero_both 持続 + 盤面ROI実ゲームプレイ確認でラッチは"
+        "解除されるべき"
+    )
+    # ラッチ自体は解除されたが、この時点ではまだ score_zero_both=True の
+    # ため既存の hard_match_off (score_zero 系) が別途 is_active=False を
+    # 維持している (このスタブでは confirmed_board が空のため
+    # puyo_observed 救済が働かない、実運用では実ぷよが CNN 側にも反映され
+    # 両方同時に解消される想定)。score_zero_both の解消と MatchStateDetector
+    # の実試合再開確認 (raw_active) が揃った後のフレームで is_active が
+    # 正しく True に戻ることを確認する。
+    pipe._score_zero_detector._both_zero = False  # type: ignore[attr-defined]
+    detector._in_match = True
+    res = pipe.update(frame_idx + 1, t + 0.05, _high_variance_frame())
+    assert res.is_match_active is True
+
+
+def test_post_match_lockdown_latch_stays_active_when_zero_score_lacks_real_gameplay() -> None:
+    """flag ON: score_zero_both が持続しても、盤面ROIが実ゲームプレイらしく
+    ない (装飾画面の疑い) 間はラッチが解除され続けない。
+
+    2026-08-18 実写検証 (c18/c20) で判明した回帰シナリオ: 対戦カード紹介の
+    装飾スコアカウントアップ演出が「00000000」を最大2.68秒持続して経由する
+    ため、score_zero_both 持続だけでは誤って早期解除されてしまう。追加
+    安全弁 _board_shows_real_gameplay (盤面ROI画素分散) がこれを防ぐ。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+
+    pipe._match_end_detector = None
+    pipe._score_zero_detector._both_zero = True  # type: ignore[attr-defined]
+    t = 6.0
+    frame_idx = 1
+    # 装飾スコアカウントアップ演出を模擬した実測上限 (2.68秒) を大きく超えて
+    # 持続させても、盤面ROIが低分散 (_dummy_frame の全 0 埋め) のままなら
+    # 解除されないことを確認する。
+    persist_sec = RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+    while t - 6.0 < persist_sec + 3.0:
+        frame_idx += 1
+        t += 0.05
+        res = pipe.update(frame_idx, t, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間は score_zero_both 持続だけで"
+        "ラッチが解除されてはいけない (対戦カード紹介の装飾スコア誤爆対策)"
+    )
+    assert res.is_match_active is False
+
+
+def test_post_match_lockdown_latch_safety_valve_releases_after_max_sec() -> None:
+    """flag ON: raw_active が一度も持続しなくても、
+    POST_MATCH_LOCKDOWN_MAX_SEC 秒経過すれば安全弁でラッチが強制解除される。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+    # raw_active は False のまま (次試合が一度も始まらない異常系)。
+    t = 5.0 + RecognitionPipeline.POST_MATCH_LOCKDOWN_MAX_SEC + 1.0
+    res = pipe.update(1, t, _dummy_frame())
+    assert pipe._post_match_lockdown_active is False, (
+        "安全弁 POST_MATCH_LOCKDOWN_MAX_SEC 秒経過でラッチは強制解除される"
+        "べき (raw_active が一度も持続しなくても無限残留しない)"
+    )
+
+
+def test_board_shows_real_gameplay_true_for_high_variance_frame() -> None:
+    """_board_shows_real_gameplay: 高分散フレーム (実ゲームプレイ相当) は
+    True。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._board_shows_real_gameplay(_high_variance_frame()) is True
+
+
+def test_board_shows_real_gameplay_false_for_flat_frame() -> None:
+    """_board_shows_real_gameplay: 全 0 埋め (装飾画面相当の低分散) は
+    False。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    assert pipe._board_shows_real_gameplay(_dummy_frame()) is False
+
+
+def test_board_shows_real_gameplay_requires_both_sides() -> None:
+    """_board_shows_real_gameplay: 片側のみ高分散では False (両側 AND、
+    fail-safe: 判定不能ならラッチ継続側に倒す)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board())
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    rng = np.random.default_rng(1)
+    frame[
+        DEFAULT_P1_REGION.y: DEFAULT_P1_REGION.y + DEFAULT_P1_REGION.height,
+        DEFAULT_P1_REGION.x: DEFAULT_P1_REGION.x + DEFAULT_P1_REGION.width,
+    ] = rng.integers(
+        0, 256,
+        size=(DEFAULT_P1_REGION.height, DEFAULT_P1_REGION.width, 3),
+        dtype=np.uint8,
+    )
+    # 2P 側は全 0 のまま (低分散)。
+    assert pipe._board_shows_real_gameplay(frame) is False
+
+
+# ============================
+# 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+# 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md で
+# 確定した再点火バグの修正)
+# ============================
+
+
+def test_result_screen_hardening_default_off_bit_identical() -> None:
+    """既定 False では score_actively_moving が装飾演出でも従来通り
+    effective_hard_off を打ち消す (再点火バグ再現、bit-identical)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=False,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    # 低分散フレーム (対戦カード紹介の装飾画面相当)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "既定 False では score_actively_moving が match_end_locked を"
+        "打ち消してしまうべき (再点火バグ、bit-identical)"
+    )
+
+
+def test_result_screen_hardening_blocks_reignition_from_decorative_screen() -> None:
+    """flag ON: match_end_locked 活性下で盤面ROIが実ゲームプレイらしく
+    ない (装飾画面) 間は、score_actively_moving=True だけでは
+    effective_hard_off を打ち消せない (再点火バグの修正本体)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is False, (
+        "flag ON では盤面ROIが装飾画面のままの間、score_actively_moving だけ"
+        "で再点火してはいけない"
+    )
+
+
+def test_result_screen_hardening_preserves_cycle71f_rescue_when_match_end_inactive() -> None:
+    """match_end_locked/latch が非活性なら score_actively_moving は無条件で
+    信用される (cycle 71f 本来の救済シナリオ、v50 51-63s を壊さない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        score_zero_detector=_StubScoreZeroDetector(both_zero=True),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    # match_end_detector=None なので match_end_locked/latch は常に False。
+    # 盤面ROIも低分散のまま (救済には盤面ROIを問わないことの確認)。
+    res = pipe.update(0, 5.0, _dummy_frame())
+    assert res.is_match_active is True, (
+        "match_end_locked/latch が非活性なら score_actively_moving 単独の"
+        "救済 (cycle 71f) は無条件で維持されるべき"
+    )
+
+
+def test_result_screen_hardening_allows_reignition_with_real_gameplay() -> None:
+    """flag ON でも、盤面ROIが実ゲームプレイらしければ score_actively_moving
+    は信用され、match_end_locked 活性下でも is_active=True に復帰できる。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_result_screen_hardening=True,
+    )
+    pipe._is_score_actively_moving = lambda recent_scores: True  # type: ignore[method-assign]
+    res = pipe.update(0, 5.0, _high_variance_frame())
+    assert res.is_match_active is True, (
+        "盤面ROIが実ゲームプレイらしい (高分散) なら、match_end_locked 活性"
+        "下でも score_actively_moving による復帰を認めるべき"
+    )
+
+
+# ============================
 # 反復4 (2026-07-23): confirmed_board=None 理由分類 診断計装テスト
 # ============================
 
@@ -3609,6 +4423,158 @@ def test_ojama_dropout_fix_flags_explicit_false_restores_legacy() -> None:
 
 
 # ============================
+# W13根治 案1: use_highlight_override 配線 (2026-08-16)
+# ============================
+
+
+def test_highlight_override_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_highlight_override"].default is False
+
+
+def test_load_default_wires_highlight_override_to_reader_hybrid_path() -> None:
+    """CNN モデル存在時 (_build_hybrid_reader 経路) で
+    enable_highlight_override が ImageReader まで配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._reader._use_highlight_override is False  # noqa: SLF001
+    assert pipe_on._reader._use_highlight_override is True  # noqa: SLF001
+
+
+def test_load_default_wires_highlight_override_to_reader_hsv_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CNN モデル不在 (HSV-only fallback、else 分岐) 経路でも配線されることを
+    確認する (2箇所ある ImageReader 構築の両方をカバー、配線漏れ再発防止)。"""
+    from pathlib import Path
+    monkeypatch.setattr(
+        RecognitionPipeline, "DEFAULT_CNN_MODEL_PATH",
+        Path("__no_such_model_2026-08-16__.pt"),
+    )
+    try:
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=True,
+        )
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_highlight_override=False,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_on._reader._use_highlight_override is True  # noqa: SLF001
+    assert pipe_off._reader._use_highlight_override is False  # noqa: SLF001
+
+
+# ============================
+# W13根治 案2: enable_patch_fp_hsv_guard 配線 (2026-08-17)
+# ============================
+
+
+def test_patch_fp_hsv_guard_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
+
+
+def test_load_default_wires_patch_fp_hsv_guard_to_reader_hybrid_path() -> None:
+    """CNN モデル存在時 (_build_hybrid_reader 経路) で
+    enable_patch_fp_hsv_guard が ImageReader まで配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._reader._enable_patch_fp_hsv_guard is False  # noqa: SLF001
+    assert pipe_on._reader._enable_patch_fp_hsv_guard is True  # noqa: SLF001
+
+
+def test_load_default_wires_patch_fp_hsv_guard_to_reader_hsv_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CNN モデル不在 (HSV-only fallback、else 分岐) 経路でも配線されることを
+    確認する (2箇所ある ImageReader 構築の両方をカバー、配線漏れ再発防止)。"""
+    from pathlib import Path
+    monkeypatch.setattr(
+        RecognitionPipeline, "DEFAULT_CNN_MODEL_PATH",
+        Path("__no_such_model_2026-08-17__.pt"),
+    )
+    try:
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=True,
+        )
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_patch_fp_hsv_guard=False,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_on._reader._enable_patch_fp_hsv_guard is True  # noqa: SLF001
+    assert pipe_off._reader._enable_patch_fp_hsv_guard is False  # noqa: SLF001
+
+
+# ============================
+# R2: 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17)
+# ============================
+
+
+def test_floating_gap_restore_default_false_on_load_default() -> None:
+    """load_default の既定値が False (bit-identical, backwards compat)。"""
+    import inspect
+    sig = inspect.signature(RecognitionPipeline.load_default)
+    assert sig.parameters["enable_floating_gap_restore"].default is False
+
+
+def test_load_default_wires_floating_gap_restore_to_state_machines() -> None:
+    """enable_floating_gap_restore が BoardStateMachine (1P/2P 両方) まで
+    配線されることを確認する。"""
+    try:
+        pipe_off = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_floating_gap_restore=False,
+        )
+        pipe_on = RecognitionPipeline.load_default(
+            stable_frame_count=2, load_score_ocr=False,
+            enable_chain_tracker=False, load_next_detector=False,
+            enable_floating_gap_restore=True,
+        )
+    except FileNotFoundError as e:
+        pytest.skip(f"必須テンプレ未配置: {e}")
+    assert pipe_off._sm_1p._enable_floating_gap_restore is False  # noqa: SLF001
+    assert pipe_on._sm_1p._enable_floating_gap_restore is True  # noqa: SLF001
+    assert pipe_off._sm_2p._enable_floating_gap_restore is False  # noqa: SLF001
+    assert pipe_on._sm_2p._enable_floating_gap_restore is True  # noqa: SLF001
+
+
+# ============================
 # DriftDetector 再同期ループ暴走ガード (2026-07-25, c34 実測)
 #
 # 試合開始直後は HSV 較正が浅く CNN 誤読が残り、推論盤面と cnn_board の
@@ -4101,4 +5067,1093 @@ def test_score_reset_strict_ignores_single_frame_both_side_glitch() -> None:
         "単発 1 フレームだけの両側急落 (直後に復帰) では 3 フレーム連続に"
         "満たないため発火してはならない"
     )
+
+
+# ---------------------------------------------------------------------------
+# W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23):
+# enable_next_history_starvation_fix フラグテスト
+# _validate_next_history は「NEXT履歴+ever_seen に無い色を強制置換」するが、
+# 試合開始直後 ever_seen が4色 (NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION) 未満
+# しか観測していない「飢餓状態」では和集合が不完全なため、正しく観測された
+# 色を誤って別の既知色へ強制変換してしまう (c23/c10 実測)。
+# ---------------------------------------------------------------------------
+
+
+def test_validate_next_history_default_off_replaces_unseen_color_bit_identical():
+    """既定 (enable_starvation_fix=False): 従来通り、履歴外色は HSV 距離
+    最寄りの既知色へ強制置換される (bit-identical 確認)。"""
+    from src.board import COLOR_PURPLE
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)  # next_queue/ever_seen に無い色
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+    )
+
+    replaced = int(out.get(12, 1))
+    assert replaced != COLOR_PURPLE, (
+        "既定挙動: 履歴外色 (紫) は強制置換されるべき (置換されないのは回帰)"
+    )
+    assert replaced in (COLOR_RED, COLOR_BLUE), (
+        "置換先は next_queue に現れた既知色 (赤/青) のいずれかであるべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_preserves_observed_color_when_below_threshold():
+    """enable_starvation_fix=True: ever_seen∪next_queue の puyo 色数が
+    NEXT_HISTORY_MIN_COLORS_FOR_VALIDATION (既定4) 未満の飢餓状態では、
+    正しく観測された色 (紫) を強制置換せずそのまま通す (W23根治の中核)。"""
+    from src.board import COLOR_PURPLE
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # 2色のみ = 飢餓状態
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) == COLOR_PURPLE, (
+        "飢餓状態 (観測済み2色<4) では正しい観測色 (紫) を保持するべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_resumes_validation_once_4_colors_seen():
+    """enable_starvation_fix=True でも、ever_seen∪next_queue が4色そろえば
+    検証を再開し、履歴外色は従来通り強制置換される (飢餓状態を脱したら
+    元の4色ルールが機能することの確認)。"""
+    from src.board import COLOR_PURPLE, COLOR_YELLOW
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)  # next_queue の4色に含まれない
+    next_queue = [
+        (COLOR_RED, COLOR_BLUE), (COLOR_GREEN, COLOR_YELLOW),
+    ]  # 4色そろっている
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) != COLOR_PURPLE, (
+        "4色そろい飢餓状態を脱していれば、履歴外色は従来通り置換されるべき"
+    )
+
+
+def test_validate_next_history_starvation_fix_counts_ever_seen_union_with_next_queue():
+    """飢餓判定は next_queue 単独でなく ever_seen との和集合で行う: NEXT cap
+    スクロールアウトで next_queue が2色しか見えなくても、ever_seen に
+    既に4色蓄積済みなら飢餓状態でないとみなし検証を継続する。"""
+    from src.board import COLOR_PURPLE, COLOR_YELLOW
+
+    board = Board()
+    board.set(12, 1, COLOR_PURPLE)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # next_queue 自体は2色のみ
+    ever_seen = {COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW}  # 蓄積済み4色
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=ever_seen,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(12, 1)) != COLOR_PURPLE, (
+        "ever_seen が4色そろっていれば next_queue が2色のみでも飢餓状態と"
+        "みなしてはならない"
+    )
+
+
+def test_validate_next_history_starvation_fix_still_applies_gravity_filter():
+    """飢餓状態でステップ1 (履歴外色置換) をスキップしても、ステップ2
+    (浮きぷよ除去、物理推論) は従来通り継続実施されるべき。"""
+    board = Board()
+    # col=0: row=5 に puyo、 row=6 は空 → 浮きぷよ (下に隙間)
+    board.set(5, 0, COLOR_RED)
+    next_queue = [(COLOR_RED, COLOR_BLUE)] * 3  # 2色のみ = 飢餓状態
+
+    out = RecognitionPipeline._validate_next_history(
+        board, next_queue,
+        ever_seen=None,
+        frame_bgr=_dummy_frame(),
+        region=DEFAULT_P1_REGION,
+        enable_starvation_fix=True,
+        min_colors_for_validation=4,
+    )
+
+    assert int(out.get(5, 0)) == COLOR_EMPTY, (
+        "飢餓状態中でも浮きぷよ除去 (物理推論) は継続実施されるべき"
+    )
+
+
+def _make_pipe_starvation_fix(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_next_history_starvation_fix フラグ付きの pipeline を構築する。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        enable_next_history_starvation_fix=enable_flag,
+    )
+
+
+def test_enable_next_history_starvation_fix_flag_off_default():
+    """フラグ OFF (default) → _enable_next_history_starvation_fix が False。"""
+    pipe = _make_pipe_starvation_fix(False)
+    assert not pipe._enable_next_history_starvation_fix, (
+        "default OFF: _enable_next_history_starvation_fix は False であるべき"
+    )
+
+
+def test_enable_next_history_starvation_fix_flag_on():
+    """フラグ ON → _enable_next_history_starvation_fix が True。"""
+    pipe = _make_pipe_starvation_fix(True)
+    assert pipe._enable_next_history_starvation_fix, (
+        "ON時: _enable_next_history_starvation_fix は True であるべき"
+    )
+
+
+def test_enable_next_history_starvation_fix_default_false_no_regression():
+    """フラグ OFF の pipeline では update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_starvation_fix(False)
+    frame = _dummy_frame()
+    for i in range(3):
+        result = pipe.update(i, float(i), frame)
+        assert result is not None, "update は None を返さない"
+
+
+def test_next_history_starvation_fix_end_to_end_preserves_correct_color():
+    """W23実例の再現: STABLE中、next_queue (=ever_seen) が2色しか観測して
+    いない飢餓状態で、正しく観測された第3の色 (紫) が published_confirmed
+    (SideResult.confirmed_board) に汚染されず届くことを確認する
+    (フラグ OFF では汚染される・ON では汚染されない、の対比)。"""
+    from src.board import COLOR_PURPLE
+
+    def _build(enable_flag: bool) -> "PipelineResult":  # noqa: F821
+        board = Board()
+        board.set(12, 1, COLOR_PURPLE)
+        reader = _StubImageReader(board.copy(), _empty_board())
+        pipe = _make_pipe_starvation_fix(enable_flag, reader=reader)
+        ctx = pipe._sm_1p.context
+        ctx.state = BoardState.STABLE
+        ctx.confirmed_board = board.copy()
+        ctx.pending_board = board.copy()
+        # 飢餓状態を作る: next_queue は赤/青の2色のみ (ever_seen もこれで埋まる)
+        ctx.next_queue = [(COLOR_RED, COLOR_BLUE)] * 3
+        return pipe.update(0, 10.0, _dummy_frame())
+
+    result_off = _build(False)
+    assert int(result_off.p1.confirmed_board.get(12, 1)) != COLOR_PURPLE, (
+        "フラグ OFF (既定): 飢餓状態では従来通り正しい観測色が汚染されるはず "
+        "(W23実測の再現、既存挙動が変わっていないことの確認)"
+    )
+
+    result_on = _build(True)
+    assert int(result_on.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "フラグ ON: 飢餓状態でも正しい観測色 (紫) が published_confirmed に "
+        "そのまま届くべき (W23根治)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25):
+# enable_ojama_cnn_override_warmup フラグテスト。おじゃま落下時の白雲
+# パーティクル誤認による cycle 71n override の誤発火対策。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_ojama_override_warmup(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_ojama_cnn_override_warmup フラグ付きの pipeline を構築する。
+
+    enable_ojama_fall_board_settle=False を明示して OJAMA_FALL 退出判定を
+    単純な「ROI お邪魔数 0 で即 STABLE」経路 (`_detect_ojama_fall_exit`) に
+    固定する (実プロダクション既定 True の全盤面 settle 判定は、
+    プロダクション環境の複雑な signals 依存があり単体テストで駆動する
+    には不向きなため、_make_pipe_with_chain_exit_warmup が
+    enable_gravity_settle_state=False を明示するのと同じ理由で除外する)。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_fall_board_settle=False,
+        enable_ojama_cnn_override_warmup=enable_flag,
+    )
+
+
+def test_enable_ojama_cnn_override_warmup_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_cnn_override_warmup が False。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    assert not pipe._enable_ojama_cnn_override_warmup, (
+        "default OFF: _enable_ojama_cnn_override_warmup は False であるべき"
+    )
+
+
+def test_enable_ojama_cnn_override_warmup_flag_on():
+    """フラグ ON → _enable_ojama_cnn_override_warmup が True。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    assert pipe._enable_ojama_cnn_override_warmup, (
+        "ON時: _enable_ojama_cnn_override_warmup は True であるべき"
+    )
+
+
+def test_ojama_override_warmup_initial_until_zero():
+    """初期状態では _ojama_override_exit_until_* は 0.0。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    assert pipe._ojama_override_exit_until_1p == 0.0
+    assert pipe._ojama_override_exit_until_2p == 0.0
+
+
+def test_ojama_override_warmup_reset_clears_until():
+    """reset() 後は _ojama_override_exit_until_* が 0.0 に戻る。"""
+    pipe = _make_pipe_ojama_override_warmup(True)
+    pipe._ojama_override_exit_until_1p = 99.0
+    pipe._ojama_override_exit_until_2p = 99.0
+    pipe.reset()
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "reset 後は 1P warmup until が 0 になるべき"
+    )
+    assert pipe._ojama_override_exit_until_2p == 0.0, (
+        "reset 後は 2P warmup until が 0 になるべき"
+    )
+
+
+def test_ojama_override_warmup_off_no_regression():
+    """フラグ OFF (default): update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+def test_ojama_override_warmup_constant_exists():
+    """OJAMA_OVERRIDE_EXIT_WARMUP_SEC 定数が正の float で存在する。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    assert isinstance(OJAMA_OVERRIDE_EXIT_WARMUP_SEC, float)
+    assert OJAMA_OVERRIDE_EXIT_WARMUP_SEC > 0.0
+
+
+def test_ojama_override_warmup_triggers_on_ojama_fall_to_stable_transition():
+    """OJAMA_FALL→STABLE 遷移 (score_delta 無しで自然に1frameで遷移、
+    OjamaPhaseDetector の既存挙動) で _ojama_override_exit_until_1p が
+    time_sec + OJAMA_OVERRIDE_EXIT_WARMUP_SEC にセットされる。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+
+    pipe = _make_pipe_ojama_override_warmup(True)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.STABLE, (
+        "score_delta 無しで OJAMA_FALL は自然に STABLE へ復帰するはず "
+        "(OjamaPhaseDetector 既存挙動)"
+    )
+    assert pipe._ojama_override_exit_until_1p == pytest.approx(
+        10.0 + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    )
+    # 2P 側は無関係のため 0.0 のまま
+    assert pipe._ojama_override_exit_until_2p == 0.0
+
+
+def test_ojama_override_warmup_off_does_not_set_until():
+    """フラグ OFF: OJAMA_FALL→STABLE 遷移が起きても
+    _ojama_override_exit_until_1p は更新されない (bit-identical)。"""
+    pipe = _make_pipe_ojama_override_warmup(False)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.STABLE
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "フラグ OFF では warmup until が一切更新されないべき (bit-identical)"
+    )
+
+
+def test_ojama_override_warmup_suppresses_cycle71n_override_during_window():
+    """W25 中核再現: OJAMA_FALL→STABLE warmup 中は cycle 71n の長期不一致
+    override が誤発火しない (白雲パーティクル起因の誤 CNN 観測を反映しない)。
+    """
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_ojama_override_warmup(True, reader=reader)
+
+    # frame 0: OJAMA_FALL → STABLE 遷移 (盤面不一致のないクリーンな遷移) で
+    # warmup を起動する。
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+    pipe.update(0, 10.0, _dummy_frame())
+    warmup_until = pipe._ojama_override_exit_until_1p
+    assert warmup_until > 10.0
+
+    # frame 1: 続けて STABLE 中 (prev_state==STABLE、warmup は継続中)。
+    # CNN が誤って赤 (雲パーティクル起因の誤観測を模擬) を観測、confirmed は
+    # 正解の紫。history を override 閾値-1個まで充填 (既存
+    # _fire_cycle71n_override と同一パターン)。
+    confirmed = Board()
+    confirmed.set(12, 1, COLOR_PURPLE)
+    pipe._sm_1p.context.confirmed_board = confirmed.copy()
+    pipe._sm_1p.context.pending_board = confirmed.copy()
+    pipe._stable_cnn_history_1p[(12, 1)] = (
+        [COLOR_RED] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader._p1 = cnn_wrong  # type: ignore[attr-defined]
+
+    result = pipe.update(1, warmup_until - 0.01, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_PURPLE, (
+        "warmup 中は cycle 71n override が誤色書込みを抑制するべき"
+    )
+
+
+def test_ojama_override_warmup_allows_override_after_window_expires():
+    """warmup 終了後は cycle 71n override が通常通り発火する
+    (雲が晴れた後の正当な override は妨げない、既存挙動を保持)。"""
+    from src.board import COLOR_PURPLE, COLOR_RED
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_ojama_override_warmup(True, reader=reader)
+
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+    pipe.update(0, 10.0, _dummy_frame())
+    warmup_until = pipe._ojama_override_exit_until_1p
+
+    confirmed = Board()
+    confirmed.set(12, 1, COLOR_PURPLE)
+    pipe._sm_1p.context.confirmed_board = confirmed.copy()
+    pipe._sm_1p.context.pending_board = confirmed.copy()
+    pipe._stable_cnn_history_1p[(12, 1)] = (
+        [COLOR_RED] * (pipe.STABLE_CNN_HISTORY_FRAMES - 1)
+    )
+    cnn_wrong = Board()
+    cnn_wrong.set(12, 1, COLOR_RED)
+    reader._p1 = cnn_wrong  # type: ignore[attr-defined]
+
+    result = pipe.update(1, warmup_until + 0.01, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(12, 1)) == COLOR_RED, (
+        "warmup 終了後は通常の cycle 71n override が発火するべき"
+    )
+
+
+# ---------------------------------------------------------------------------
+# W25根治 第2弾 (2026-08-17): おじゃま落下窓の総合ガード拡張。
+# data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md で確定した
+# 根因 (雲混入→CNN⇔inferred不一致→DriftDetector needs_resync→
+# sm.reset()でconfirmed_boardがNone化→既存の enable_ojama_column_stack_fix
+# ガードが「baseline is None (初回確定)」分岐で無効化される) への対処。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_ojama_override_warmup_boardsettle_default(
+    enable_flag: bool, reader: object | None = None,
+) -> RecognitionPipeline:
+    """enable_ojama_fall_board_settle をライブラリ既定 (True) のまま使う
+    variant。 OJAMA_FALL dwell (settle判定の1frame目は必ず継続する既存挙動)
+    を利用した entry/dwell-trigger テスト専用
+    (他の W25 テストは enable_ojama_fall_board_settle=False で単純な即時
+    exit経路を使うため、dwell を作れない)。"""
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_cnn_override_warmup=enable_flag,
+    )
+
+
+def test_ojama_override_warmup_triggers_on_ojama_fall_entry_dwell():
+    """OJAMA_FALL 継続中 (exit未達、settle判定の最初のフレームは既存挙動で
+    必ず継続) でも entry/dwell 時点で warmup がセットされる。
+    第2弾拡張の理由: 実測 (c13, t=289.733) で「雲混入直後、まだ1度も
+    OJAMA_FALL→STABLE 遷移(=旧トリガ)を経ていない」時点で最初の
+    drift-resync が発火していたため、entry/dwell 起動が無いと防げない。"""
+    from src.recognition_pipeline import OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+
+    pipe = _make_pipe_ojama_override_warmup_boardsettle_default(True)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.OJAMA_FALL, (
+        "settle判定の最初のフレームは必ず継続するはず "
+        "(OjamaVisualDetector 既存挙動、_settle_start_frame<0 分岐)"
+    )
+    assert pipe._ojama_override_exit_until_1p == pytest.approx(
+        10.0 + OJAMA_OVERRIDE_EXIT_WARMUP_SEC
+    ), "OJAMA_FALL dwell 時点でも warmup が起動するべき (第2弾拡張)"
+
+
+def test_ojama_override_warmup_entry_dwell_off_does_not_set_until():
+    """フラグ OFF: OJAMA_FALL dwell 中でも warmup until は更新されない
+    (bit-identical)。"""
+    pipe = _make_pipe_ojama_override_warmup_boardsettle_default(False)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._sm_1p.context.confirmed_board = _empty_board().copy()
+    pipe._sm_1p.context.pending_board = _empty_board().copy()
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert result.p1.state == BoardState.OJAMA_FALL
+    assert pipe._ojama_override_exit_until_1p == 0.0, (
+        "フラグ OFF では dwell 中も warmup until が一切更新されないべき"
+    )
+
+
+def test_drift_resync_ojama_warmup_suppressed_counters_init_zero():
+    """新規カウンタは construction 直後は全て 0 (既存2ガードのカウンタと同型)。"""
+    pipe = _make_pipe(_empty_board(), _empty_board(), stable_n=2)
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+    assert pipe._drift_resync_ojama_warmup_suppressed_2p == 0
+
+
+def test_ojama_override_warmup_suppresses_drift_resync_within_window():
+    """第2弾中核: おじゃま落下 warmup 窓中は、DriftDetector
+    needs_resync=True でも sm.reset() が抑制される
+    (根因: baseline=None 化で enable_ojama_column_stack_fix ガードが
+    無効化される問題への対処)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # warmup を手動で有効化 (OJAMA_FALL 経由の起動自体は別テストで確認済み、
+    # 本テストは抑制ロジック単体を検証する)。
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())  # 10.0 < 100.0 → window 内
+
+    assert sm_calls["n"] == 0, "warmup 窓中は resync が抑制されるべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p >= 1
+    assert pipe._drift_1p.reset_calls == 0
+
+
+def test_ojama_override_warmup_does_not_suppress_resync_outside_window():
+    """warmup 窓外 (time_sec >= until) では従来通り resync が発火する
+    (雲と無関係な正当な drift-resync を妨げない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe._ojama_override_exit_until_1p = 5.0  # 既に warmup 終了 (過去)
+    pipe.update(0, 10.0, _dummy_frame())  # 10.0 >= 5.0 → window 外
+
+    assert sm_calls["n"] >= 1, "warmup 窓外では resync が抑制されないべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+
+
+def test_ojama_override_warmup_off_does_not_suppress_resync():
+    """フラグ OFF (既定): resync 抑制ロジック自体が発火しない
+    (bit-identical、既存 drift-resync 挙動を一切変えない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=False,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    # 手動で until をセットしてもフラグ OFF なら無視されるべき。
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert sm_calls["n"] >= 1, "フラグ OFF なら従来通り resync が発火するべき"
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p == 0
+
+
+def test_ojama_override_warmup_resync_suppression_independent_of_other_guards():
+    """新ガードは既存2ガードと独立 (OR 条件): 他ガードが抑制しない状況でも
+    本ガード単体で抑制でき、抑制時に他ガードのカウンタは増えない。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_cnn_override_warmup=True,
+        enable_drift_resync_match_start_guard=False,
+        enable_drift_resync_hsv_gate=False,
+    )
+    pipe._drift_1p = _FakeAlwaysResyncDrift()
+    sm_calls = _count_calls(pipe._sm_1p, "reset")
+
+    pipe._ojama_override_exit_until_1p = 100.0
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert sm_calls["n"] == 0
+    assert pipe._drift_resync_ojama_warmup_suppressed_1p >= 1
+    assert pipe._drift_resync_start_guard_suppressed_1p == 0, (
+        "他ガード (match_start_guard) は OFF かつ無関係なので増えないべき"
+    )
+    assert pipe._drift_resync_hsv_gate_suppressed_1p == 0, (
+        "他ガード (hsv_gate) は OFF かつ無関係なので増えないべき"
+    )
+
+
+# ---------------------------------------------------------------------------
+# W25根治 第3弾・最終 (2026-08-18): CNN観測入力段の会計整合フィルタ。
+# docs/KNOWN_WEAKNESSES.md W25、
+# data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md 参照。
+# ---------------------------------------------------------------------------
+
+
+class _FakeOjamaSnapshot:
+    """OjamaAccountingTracker.get_snapshot() 互換スタブ (duck-typed)。"""
+
+    def __init__(self, pending_p1: int, pending_p2: int) -> None:
+        self.pending_p1 = pending_p1
+        self.pending_p2 = pending_p2
+
+
+class _FakeOjamaAccountingTracker:
+    """OjamaAccountingTracker 互換スタブ: 固定 pending 値を返す。"""
+
+    def __init__(self, pending_p1: int = 0, pending_p2: int = 0) -> None:
+        self._pending_p1 = pending_p1
+        self._pending_p2 = pending_p2
+
+    def get_snapshot(self, t_sec: float) -> _FakeOjamaSnapshot:  # noqa: ANN001
+        return _FakeOjamaSnapshot(self._pending_p1, self._pending_p2)
+
+    def on_state_transition(self, *args: object, **kwargs: object) -> None:
+        pass
+
+    def reset(self) -> None:
+        pass
+
+
+def _make_pipe_write_accounting_guard(
+    enable_flag: bool, reader: object | None = None,
+    pending_p1: int = 0, pending_p2: int = 0,
+) -> RecognitionPipeline:
+    """enable_ojama_write_accounting_guard フラグ付きの pipeline を構築する。
+
+    トラッカーは自動生成される (enable_ojama_fall_scoped_exit_accounting を
+    別途指定する必要はない、第3弾の会計配線要件)。テストで pending 値を
+    固定するため、_FakeOjamaAccountingTracker に差し替える。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=enable_flag,
+    )
+    pipe._ojama_fall_accounting_tracker = _FakeOjamaAccountingTracker(
+        pending_p1, pending_p2,
+    )
+    return pipe
+
+
+def test_enable_ojama_write_accounting_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_write_accounting_guard が False。"""
+    pipe = _make_pipe_write_accounting_guard(False)
+    assert not pipe._enable_ojama_write_accounting_guard
+
+
+def test_enable_ojama_write_accounting_guard_flag_on():
+    """フラグ ON → _enable_ojama_write_accounting_guard が True。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._enable_ojama_write_accounting_guard
+
+
+def test_ojama_write_accounting_guard_auto_creates_tracker_without_other_flag():
+    """会計配線要件: enable_ojama_fall_scoped_exit_accounting を指定せずとも
+    enable_ojama_write_accounting_guard=True だけでトラッカーが自動生成される。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        enable_ojama_write_accounting_guard=True,
+    )
+    assert pipe._ojama_fall_accounting_tracker is not None
+
+
+def test_ojama_write_accounting_guard_off_tracker_stays_none_by_default():
+    """両会計フラグ OFF (既定) ではトラッカーは None のまま
+    (bit-identical、既存 enable_ojama_fall_scoped_exit_accounting 単体の
+    挙動を変えない)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+    )
+    assert pipe._ojama_fall_accounting_tracker is None
+
+
+def test_stable_color_memory_init_empty():
+    """直近安定色メモリは construction 直後は空辞書。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._stable_color_memory_1p == {}
+    assert pipe._stable_color_memory_2p == {}
+
+
+def test_stable_color_memory_cleared_on_pipeline_reset():
+    """pipeline reset() (試合境界) で直近安定色メモリがクリアされる。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+    pipe._stable_color_memory_2p[(3, 2)] = COLOR_GREEN
+    pipe.reset()
+    assert pipe._stable_color_memory_1p == {}
+    assert pipe._stable_color_memory_2p == {}
+
+
+def test_stable_color_memory_not_populated_when_flag_off():
+    """フラグ OFF: STABLE 確定があってもメモリは更新されない
+    (bit-identical、不要な計算コストも発生しない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(board.copy(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert pipe._stable_color_memory_1p == {}
+
+
+def test_stable_color_memory_populated_when_flag_on():
+    """フラグ ON: STABLE 確定で直近安定色メモリが confirmed_board の値で
+    更新される。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(board.copy(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    pipe.update(0, 10.0, _dummy_frame())
+
+    assert pipe._stable_color_memory_1p.get((9, 1)) == COLOR_RED
+
+
+def test_ojama_write_accounting_guard_rejects_spurious_ojama_end_to_end():
+    """核心 end-to-end: 直近安定色が赤のセルに雲混入で9が観測されても、
+    pending クレジット0 (会計上おじゃまが来ていない) なら confirmed/cnn_board
+    共に赤のまま保たれる (フィルタが入力段で訂正するため、cycle71n や
+    transition-merge に9が渡らない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)  # COLOR_OJAMA=9、雲混入による誤観測を模擬
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "入力段フィルタで cnn_board 自体が訂正されているべき"
+    )
+    assert int(result.p1.confirmed_board.get(9, 1)) == COLOR_RED, (
+        "confirmed_board も赤のまま維持されるべき (9書込みが下流に一切渡らない)"
+    )
+
+
+def test_ojama_write_accounting_guard_allows_genuine_landing_end_to_end():
+    """設計要件(c) end-to-end: 空セルへの正規のおじゃま着弾は pending
+    クレジット0でも常に反映される (フィルタ対象外、退行なし)。"""
+    empty_board = Board()
+    cnn_landing = Board()
+    cnn_landing.set(3, 2, 9)  # 空セルへの新規おじゃま着弾を模擬
+    reader = _StubImageReader(cnn_landing, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = empty_board.copy()
+    pipe._sm_1p.context.pending_board = empty_board.copy()
+    # memory に (3,2) の登録がない (= 未観測、EMPTY 扱い) 状態で着弾させる。
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(3, 2)) == 9, (
+        "空セルへの正規着弾はフィルタ対象外、素通しされるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_rejects_even_when_credit_positive():
+    """実測に基づく設計修正 (2026-08-18、c13実測): 当初は会計上 pending が
+    十分 (credit>0) なら colored→9 を素通しする設計だったが、score OCR
+    異常由来の巨大クレジットが実害の温床であることが c13 実測で確定した。
+    ぷよぷよのルール上おじゃまは空セルにのみ着弾するため、credit の大小に
+    関わらず colored→9 は常に棄却する。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=6)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "pending クレジットの大小に関わらず colored→9 は棄却されるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_falls_back_when_tracker_unavailable():
+    """会計崩壊フォールバック (W2破綻動画相当): トラッカーが利用不能
+    (None) な場合、フィルタは適用されず cnn_board がそのまま通る
+    (既存 enable_ojama_cnn_override_warmup のみに委ねるフェイルセーフ)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+    pipe._ojama_fall_accounting_tracker = None  # 会計利用不能を模擬
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == 9, (
+        "会計が利用不能ならフィルタは無効化され、cnn_board はそのまま通るべき"
+    )
+
+
+def test_ojama_write_accounting_guard_rejects_even_at_sanity_cap_forecast():
+    """c13実測の直接再現: pending 予告量が OjamaAccountingTracker 自身の
+    絶対サニティ上限 (PENDING_ABS_CAP=216、score OCR 異常由来) に達していた
+    実際のケースでも、credit を判定に使わない現行実装なら正しく棄却される
+    (この実測が現行実装への設計修正の直接の動機になった、回帰テスト)。"""
+    from src.ojama_accounting import PENDING_ABS_CAP
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(
+        True, reader=reader, pending_p1=PENDING_ABS_CAP,
+    )
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "PENDING_ABS_CAP 到達 (floor(216/6)=36 相当) でも colored→9 は"
+        "棄却されるべき (c13 実測の直接再現)"
+    )
+
+
+def test_ojama_write_accounting_guard_applies_regardless_of_forecast_magnitude():
+    """pending 予告量の大小に関わらず (取得できていれば) 一貫して
+    colored→9 を棄却する (credit を判定から除外した現行実装の確認)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=5)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.confirmed_board.get(9, 1)) == COLOR_RED
+
+
+def test_ojama_write_accounting_guard_w2_broken_video_simulation_no_crash():
+    """検証観点(e): W2破綻動画 (score OCR 常時失敗) 相当のシミュレーション。
+    c26/c58/c69 実ファイルが手元に無いため (project_video_difficulty_
+    3broken_2026-07-29 参照)、score=None を毎フレーム返す ScoreTracker
+    スタブで代替する。実 (非スタブ) OjamaAccountingTracker を使い、
+    (1) 例外なく複数フレーム処理できる、(2) 空セルへの正規おじゃま着弾は
+    会計破綻時でも反映される (design要件(c)は会計状態に依存しない)、
+    ことを確認する。"""
+    empty_board = Board()
+    cnn_landing = Board()
+    cnn_landing.set(3, 2, 9)  # 空セルへの新規おじゃま着弾を模擬
+    reader = _StubImageReader(cnn_landing, _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=True,
+    )
+    # score OCR 常時失敗 (W2破綻動画相当) を模擬。
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq([None, None, None, None])
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = empty_board.copy()
+    pipe._sm_1p.context.pending_board = empty_board.copy()
+
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, _dummy_frame())
+        assert result is not None, "score OCR 破綻でも例外なく動作するべき"
+
+    assert int(result.p1.cnn_board.get(3, 2)) == 9, (
+        "会計破綻時でも空セルへの正規おじゃま着弾は反映されるべき (設計要件c)"
+    )
+
+
+def test_ojama_write_accounting_guard_off_no_regression():
+    """フラグ OFF (default): update が従来通り例外なしで動作する (回帰テスト)。"""
+    pipe = _make_pipe_write_accounting_guard(False)
+    frame = _dummy_frame()
+    for i in range(4):
+        result = pipe.update(i, float(i) * 0.033, frame)
+        assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# W25固着対策 (2026-08-18): 連続9観測タイムアウトによる棄却解除。
+# data/verify/diag_w25_regression2_2026-08-18/ (c10/c109 永久固着の実測)
+# 参照。
+# ---------------------------------------------------------------------------
+
+
+def test_ojama_raw9_streak_init_empty():
+    """連続9観測ストリーク辞書は construction 直後は空。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    assert pipe._ojama_raw9_streak_start_1p == {}
+    assert pipe._ojama_raw9_streak_start_2p == {}
+
+
+def test_ojama_raw9_streak_cleared_on_pipeline_reset():
+    """pipeline reset() (試合境界) でストリーク辞書がクリアされる。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    pipe._ojama_raw9_streak_start_1p[(9, 1)] = 10.0
+    pipe._ojama_raw9_streak_start_2p[(3, 2)] = 5.0
+    pipe.reset()
+    assert pipe._ojama_raw9_streak_start_1p == {}
+    assert pipe._ojama_raw9_streak_start_2p == {}
+
+
+def test_update_ojama_raw9_streak_starts_and_computes_duration():
+    """_update_ojama_raw9_streak: 初回9観測でストリーク開始、以降は経過秒を
+    返す (SEC基準)。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    cnn = Board()
+    cnn.set(9, 1, 9)
+
+    d1 = pipe._update_ojama_raw9_streak("1P", cnn, 10.0)
+    assert d1[(9, 1)] == 0.0
+    assert pipe._ojama_raw9_streak_start_1p[(9, 1)] == 10.0
+
+    d2 = pipe._update_ojama_raw9_streak("1P", cnn, 11.5)
+    assert d2[(9, 1)] == pytest.approx(1.5)
+    assert pipe._ojama_raw9_streak_start_1p[(9, 1)] == 10.0, (
+        "ストリーク開始時刻は9観測が続く間は更新されないべき"
+    )
+
+
+def test_update_ojama_raw9_streak_clears_immediately_on_non_ojama_observation():
+    """フリッカ許容なし: 1frameでも9以外を観測したら即座にストリークを
+    破棄する (アーキ指定、許容フレームなし)。"""
+    pipe = _make_pipe_write_accounting_guard(True)
+    cnn9 = Board()
+    cnn9.set(9, 1, 9)
+    pipe._update_ojama_raw9_streak("1P", cnn9, 10.0)
+    assert (9, 1) in pipe._ojama_raw9_streak_start_1p
+
+    cnn_clear = Board()  # (9,1) は 9 以外 (COLOR_EMPTY)
+    pipe._update_ojama_raw9_streak("1P", cnn_clear, 10.017)
+
+    assert (9, 1) not in pipe._ojama_raw9_streak_start_1p, (
+        "9以外を観測した瞬間にストリークが破棄されるべき"
+    )
+
+
+def test_ojama_write_accounting_guard_off_streak_never_updated():
+    """フラグ OFF (default): ストリーク辞書は一切更新されない
+    (bit-identical、_update_ojama_raw9_streak 自体が呼ばれない)。"""
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+
+    for i in range(4):
+        pipe.update(i, float(i) * 0.5, _dummy_frame())
+
+    assert pipe._ojama_raw9_streak_start_1p == {}
+
+
+def test_ojama_write_accounting_guard_timeout_accepts_stale_memory_after_duration():
+    """固着対策 核心 (c10/c109 永久固着の再現・解消確認): 直近安定色メモリが
+    陳腐化 (stale) している場合でも、生CNN観測が連続
+    OJAMA_REJECT_TIMEOUT_SEC 秒9を示したら棄却を解除し9を受理する。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, 9)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    # frame 0 (t=0.0): ストリーク開始、タイムアウト未到達 → 棄却 (従来通り)。
+    result0 = pipe.update(0, 0.0, _dummy_frame())
+    assert int(result0.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+    # frame 1 (t=OJAMA_REJECT_TIMEOUT_SEC): タイムアウト到達 → 受理。
+    result1 = pipe.update(1, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())
+    assert int(result1.p1.cnn_board.get(9, 1)) == 9, (
+        "タイムアウト到達で陳腐化メモリの棄却を解除し9を受理するべき"
+    )
+
+
+def test_ojama_write_accounting_guard_flicker_resets_timeout_progress():
+    """フリッカ許容なし (アーキ指定): 1frameでも9以外を観測すると
+    ストリークが即リセットされ、タイムアウトへの進行が失われる。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    board = Board()
+    board.set(9, 1, COLOR_RED)
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_write_accounting_guard(True, reader=reader, pending_p1=0)
+    pipe._sm_1p.context.state = BoardState.STABLE
+    pipe._sm_1p.context.confirmed_board = board.copy()
+    pipe._sm_1p.context.pending_board = board.copy()
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    cnn9 = Board()
+    cnn9.set(9, 1, 9)
+    cnn_red = Board()
+    cnn_red.set(9, 1, COLOR_RED)
+
+    reader._p1 = cnn9  # type: ignore[attr-defined]
+    pipe.update(0, 0.0, _dummy_frame())  # ストリーク開始 t=0.0
+    reader._p1 = cnn_red  # type: ignore[attr-defined]
+    pipe.update(1, 1.0, _dummy_frame())  # フリッカ (9以外を観測) → リセット
+    reader._p1 = cnn9  # type: ignore[attr-defined]
+    result = pipe.update(2, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())  # t=1.5
+
+    # フリッカ後の再開 (次に9を観測したt=1.5) からのdurationは0.0 (<1.5) の
+    # ため棄却される (フリッカ前の t=0.0 からの継続とはみなされない)。
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "フリッカでストリークがリセットされ、タイムアウトに届いていないため"
+        "棄却されるべき"
+    )
+    assert pipe._ojama_raw9_streak_start_1p.get((9, 1)) == pytest.approx(
+        OJAMA_REJECT_TIMEOUT_SEC,
+    ), (
+        "ストリーク開始時刻はフリッカ後に9を再度観測したframeの time_sec に"
+        "更新されているべき (フリッカ前の開始時刻は引き継がれない)"
+    )
+
+
+def test_ojama_write_accounting_guard_default_false_on_init_and_load_default():
+    """__init__ / load_default 両方で既定 False。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters["enable_ojama_write_accounting_guard"].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
 

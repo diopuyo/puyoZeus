@@ -174,6 +174,80 @@ def test_pending_count_resets_on_change() -> None:
 
 
 # ============================
+# 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13)
+# ============================
+
+
+def test_stable_majority_window_confirms_on_alternating_noise() -> None:
+    """2値交互ノイズ (A,B,A) でも window 中 2/3 一致すれば即時確定する (ON時の新機能)."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    a = _board_with_red(12, 0)
+    b = _board_with_red(12, 1)
+    sm.update(0, _signal(0.0, a.copy()))
+    sm.update(1, _signal(0.05, b.copy()))
+    ctx = sm.update(2, _signal(0.10, a.copy()))
+    assert ctx.state == BoardState.STABLE
+    assert ctx.confirmed_board is not None
+    assert ctx.confirmed_board == a
+
+
+def test_stable_majority_window_off_never_confirms_on_alternating_noise() -> None:
+    """既定 OFF (stable_majority_window=False) では2値交互ノイズは確定しない (回帰防止)."""
+    sm = BoardStateMachine(stable_frame_count=3)
+    a = _board_with_red(12, 0)
+    b = _board_with_red(12, 1)
+    ctx = None
+    for i in range(9):
+        board = a if i % 2 == 0 else b
+        ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert ctx is not None
+    assert ctx.state != BoardState.STABLE
+    assert ctx.confirmed_board is None
+
+
+def test_stable_majority_window_all_distinct_stays_unconfirmed() -> None:
+    """window 内が全て不一致 (3中2に達する組が無い) なら ON でも確定しない."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    boards = [_board_with_red(12, c) for c in range(BOARD_COLS)]
+    ctx = None
+    for i, board in enumerate(boards):
+        ctx = sm.update(i, _signal(0.05 * i, board))
+    assert ctx is not None
+    assert ctx.state != BoardState.STABLE
+    assert ctx.confirmed_board is None
+    assert ctx.pending_count == 0
+
+
+def test_stable_majority_window_confirms_uniform_sequence_like_strict() -> None:
+    """同一盤面が連続する通常ケースでは strict (OFF) と同じ挙動 (回帰防止)."""
+    sm = BoardStateMachine(stable_frame_count=3, stable_majority_window=True)
+    board = _board_with_red(12, 0)
+    last_ctx = None
+    for i in range(3):
+        last_ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert last_ctx is not None
+    assert last_ctx.state == BoardState.STABLE
+    assert last_ctx.confirmed_board == board
+
+
+def test_stable_majority_window_skips_during_non_stable() -> None:
+    """NON-STABLE 中は ON でも window 履歴を積まない (認識を盤面確定に使わない)."""
+    sm = BoardStateMachine(
+        detectors=[_ForceState(BoardState.CHAIN, fire_at_frame=0)],
+        stable_frame_count=3, stable_majority_window=True,
+    )
+    board = _board_with_red(12, 0)
+    ctx = None
+    for i in range(5):
+        ctx = sm.update(i, _signal(0.05 * i, board.copy()))
+    assert ctx is not None
+    assert ctx.state == BoardState.CHAIN
+    assert ctx.pending_count == 0
+    assert ctx.confirmed_board is None
+    assert ctx.confirm_window_history == []
+
+
+# ============================
 # 強制遷移
 # ============================
 
@@ -791,6 +865,319 @@ def test_ojama_fall_exit_majority_value_recovers_flicker_e2e() -> None:
     sm_on = _run(merge_use_majority_value=True)
     assert sm_on.context.confirmed_board is not None
     assert sm_on.context.confirmed_board.get(12, 0) == COLOR_OJAMA
+
+
+# ============================
+# R2 浮きぷよ是正機構 テスト (2026-08-17)
+# ============================
+
+
+def test_apply_gravity_filter_history_board_restores_gap() -> None:
+    """R2: history_board が同 cell に非空色を持つなら誤EMPTY疑いとして
+    復元し、上の puyo を消さない (= 消す方向でなく疑う方向)。
+
+    row11/12 (盤面最下段2段) の物理的に正当なスタックを想定 (row12=床)。
+    """
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)  # 床の1つ上は正しく観測されている
+    # row12 (床) は EMPTY (誤EMPTY疑い)
+    history = Board()
+    history.set(12, 0, COLOR_RED)  # 直前 STABLE では row12 (床) も赤だった
+
+    _apply_gravity_filter(board, history_board=history)
+    assert board.get(12, 0) == COLOR_RED  # 履歴から復元
+    assert board.get(11, 0) == COLOR_RED  # 上も消えず維持
+
+
+def test_apply_gravity_filter_history_board_none_falls_back_to_erase() -> None:
+    """R2: history_board=None (履歴なし) なら従来通り浮き ban (フォールバック)。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)  # 床 (row12) が空のまま浮いている puyo
+    _apply_gravity_filter(board, history_board=None)
+    assert board.get(11, 0) == COLOR_EMPTY  # 従来通り消去
+
+
+def test_apply_gravity_filter_history_board_also_empty_falls_back_to_erase() -> None:
+    """R2: history_board があっても同 cell が EMPTY/UNKNOWN (履歴なし相当) なら
+    復元不能 → 従来通り浮き ban にフォールバックする。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    board = Board()
+    board.set(11, 0, COLOR_RED)
+    history = Board()  # row12 col0 は history 側も EMPTY のまま
+    _apply_gravity_filter(board, history_board=history)
+    assert board.get(11, 0) == COLOR_EMPTY  # 復元不能 → 消去
+
+
+def test_apply_gravity_filter_default_bit_identical_with_history_board_omitted() -> None:
+    """回帰防止: history_board 省略時と None 明示時が bit-identical。"""
+    from src.board_state_machine import _apply_gravity_filter
+
+    def _make() -> Board:
+        b = Board()
+        b.set(11, 0, COLOR_RED)
+        return b
+
+    board_a = _make()
+    board_b = _make()
+    _apply_gravity_filter(board_a)
+    _apply_gravity_filter(board_b, history_board=None)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert board_a.get(r, c) == board_b.get(r, c)
+
+
+def test_merge_diff_history_board_default_bit_identical() -> None:
+    """回帰防止: `_merge_diff_only` の history_board 省略時と None 明示時が
+    bit-identical であること。"""
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_RED)
+    baseline.set(12, 0, COLOR_RED)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_RED)
+    cnn.set(12, 0, COLOR_EMPTY)
+
+    legacy = _merge_diff_only(baseline, cnn)
+    explicit_none = _merge_diff_only(baseline, cnn, history_board=None)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert legacy.get(r, c) == explicit_none.get(r, c)
+
+
+def test_merge_diff_floating_gap_restore_recovers_stale_empty() -> None:
+    """R2: baseline に色があった cell が単一フレーム誤読で EMPTY になり、
+    その上に puyo が残る (物理矛盾) 場合、 history_board=baseline を渡すと
+    誤 EMPTY を復元し上の puyo を消さない。 history_board 無し (従来挙動)
+    では浮き判定が増幅し上の puyo も消える (回帰確認)。
+
+    row11/12 (盤面最下段2段) の物理的に正当なスタックを想定 (row12=床)。
+    """
+    from src.board_state_machine import _merge_diff_only
+
+    baseline = Board()
+    baseline.set(11, 0, COLOR_RED)
+    baseline.set(12, 0, COLOR_RED)  # 2段 赤スタック (床から詰まっている)
+    cnn = Board()
+    cnn.set(11, 0, COLOR_RED)  # 上は正しく観測
+    cnn.set(12, 0, COLOR_EMPTY)  # 床が誤読で消える (W13型)
+
+    merged_off = _merge_diff_only(baseline, cnn)
+    assert merged_off.get(12, 0) == COLOR_EMPTY
+    assert merged_off.get(11, 0) == COLOR_EMPTY  # バグ: 上も消える (増幅)
+
+    merged_on = _merge_diff_only(baseline, cnn, history_board=baseline)
+    assert merged_on.get(12, 0) == COLOR_RED  # 復元
+    assert merged_on.get(11, 0) == COLOR_RED  # 上も維持
+
+
+def test_board_state_machine_stores_floating_gap_restore_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること。"""
+    sm_on = BoardStateMachine(enable_floating_gap_restore=True)
+    assert sm_on._enable_floating_gap_restore is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_floating_gap_restore is False
+
+
+def test_floating_gap_restore_e2e_tsumo_fall_recovers_stale_empty() -> None:
+    """R2 e2e: TSUMO_FALL → STABLE 遷移で「床が誤EMPTY」の物理矛盾を検出したら
+    遷移前 confirmed_board から復元し、上の puyo を守る。
+    flag OFF (default) では従来通り増幅 (上も消える、回帰確認)。"""
+    stack_both = Board()
+    stack_both.set(11, 0, COLOR_RED)
+    stack_both.set(12, 0, COLOR_RED)
+    cnn_floor_lost = Board()
+    cnn_floor_lost.set(11, 0, COLOR_RED)
+    cnn_floor_lost.set(12, 0, COLOR_EMPTY)  # 誤EMPTY (bg_fp汚染想定)
+
+    def _run(*, enable_floating_gap_restore: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.TSUMO_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_floating_gap_restore=enable_floating_gap_restore,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = stack_both.copy()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, stack_both))
+        sm.update(6, _signal(0.30, cnn_floor_lost))
+        return sm
+
+    sm_off = _run(enable_floating_gap_restore=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(12, 0) == 0
+    assert sm_off.context.confirmed_board.get(11, 0) == 0  # 従来: 増幅で上も消える
+
+    sm_on = _run(enable_floating_gap_restore=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(12, 0) == COLOR_RED  # 復元
+    assert sm_on.context.confirmed_board.get(11, 0) == COLOR_RED  # 維持
+
+
+def test_floating_gap_restore_scoped_out_during_chain_transition() -> None:
+    """R2: CHAIN → STABLE 遷移では色→空 が連鎖による正当な消去でありうる
+    ため history_board を渡さない (= 復元を試みない)。 flag ON でも
+    CHAIN 遷移由来の色消滅までは保護しない (= 連鎖直後の誤発火なし)。"""
+    stack_both = Board()
+    stack_both.set(11, 0, COLOR_RED)
+    stack_both.set(12, 0, COLOR_RED)
+    cnn_after_chain = Board()
+    cnn_after_chain.set(11, 0, COLOR_RED)
+    cnn_after_chain.set(12, 0, COLOR_EMPTY)  # 連鎖で本当に消えた想定
+
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.CHAIN, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=6),
+        ],
+        enable_floating_gap_restore=True,
+    )
+    sm.update(0, _signal(0.0, _empty_board()))
+    sm.context.confirmed_board = stack_both.copy()
+    for i in range(1, 6):
+        sm.update(i, _signal(0.05 * i, stack_both))
+    sm.update(6, _signal(0.30, cnn_after_chain))
+
+    assert sm.context.confirmed_board is not None
+    # スコープ外 (CHAIN) のため復元されない = 従来の浮き ban のまま
+    assert sm.context.confirmed_board.get(12, 0) == 0
+    assert sm.context.confirmed_board.get(11, 0) == 0
+
+
+# ============================
+# 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17)
+# docs/KNOWN_WEAKNESSES.md W10、c109 実測: OJAMA_FALL 一斉着地バッチで
+# 同一列に既存の色ぷよがあるのに CNN がおじゃま誤読し上書きする物理違反。
+# ============================
+
+
+def test_board_state_machine_stores_ojama_column_stack_fix_flag() -> None:
+    """フラグが BoardStateMachine に格納され既定 False であること。"""
+    sm_on = BoardStateMachine(enable_ojama_column_stack_fix=True)
+    assert sm_on._enable_ojama_column_stack_fix is True
+    sm_default = BoardStateMachine()
+    assert sm_default._enable_ojama_column_stack_fix is False
+
+
+def test_ojama_column_stack_fix_e2e_prevents_existing_puyo_overwrite() -> None:
+    """持続誤認26件系統2 (c109 実測再現): OJAMA_FALL → STABLE 遷移で、
+    一斉おじゃま着地バッチが同一列内で二重書き込みし、既存の色ぷよ (赤) を
+    おじゃま(9) に上書きする物理違反を防ぐ。
+    flag OFF (default) では従来通り既存ぷよが上書きされる (c109 と同型の回帰確認)。
+    flag ON では base が EMPTY でない diff (= 既存ぷよ→おじゃま) を却下し、
+    正当な着地 (base=EMPTY→おじゃま) のみ許可する。"""
+    baseline = Board()
+    baseline.set(2, 4, COLOR_RED)
+    baseline.set(3, 4, COLOR_RED)
+    baseline.set(4, 4, COLOR_RED)  # 既存スタック (c109 実測の col4 row2-4 相当)
+    # row0/row1 (col4) は空のまま (= おじゃまの正当な着地先)
+    for _r in range(5, BOARD_ROWS):
+        baseline.set(_r, 4, COLOR_RED)  # 床までの物理的支持 (浮きぷよ扱い防止)
+
+    cnn_collision = baseline.copy()
+    cnn_collision.set(1, 4, COLOR_OJAMA)  # 正当な着地 (空 → おじゃま)
+    cnn_collision.set(4, 4, COLOR_OJAMA)  # 衝突: 既存赤が誤っておじゃまに化ける (c109型)
+
+    def _run(*, enable_ojama_column_stack_fix: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = baseline.copy()
+        # OJAMA_FALL 滞在中 (煙/バーストが持続) は毎フレーム cnn_collision を
+        # 観測させる (= F ガードの多数決履歴にも正当な着地 (row1) を反映させる)。
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, cnn_collision))
+        sm.update(6, _signal(0.30, cnn_collision))
+        return sm
+
+    sm_off = _run(enable_ojama_column_stack_fix=False)
+    assert sm_off.context.confirmed_board is not None
+    assert sm_off.context.confirmed_board.get(1, 4) == COLOR_OJAMA  # 正当着地
+    assert sm_off.context.confirmed_board.get(4, 4) == COLOR_OJAMA  # バグ: 既存赤が上書きされる
+    assert sm_off.context.confirmed_board.get(2, 4) == COLOR_RED  # 中間は無事
+
+    sm_on = _run(enable_ojama_column_stack_fix=True)
+    assert sm_on.context.confirmed_board is not None
+    assert sm_on.context.confirmed_board.get(1, 4) == COLOR_OJAMA  # 正当着地は維持
+    assert sm_on.context.confirmed_board.get(4, 4) == COLOR_RED  # 修正: 既存赤が保持される
+    assert sm_on.context.confirmed_board.get(2, 4) == COLOR_RED
+    assert sm_on.context.confirmed_board.get(3, 4) == COLOR_RED
+
+
+def test_ojama_column_stack_fix_applies_regardless_of_effect_gate_window() -> None:
+    """c109 実測: 衝突フレームは effect_gate_window_active の窓終了後だった
+    (`enable_transition_merge_guard` の既存条件では捕捉できない)。
+    `enable_ojama_column_stack_fix` は OJAMA_FALL からの遷移である限り、
+    effect_gate_window_active に関係なく物理フィルタを適用する。"""
+    baseline = Board()
+    baseline.set(4, 4, COLOR_RED)
+    for _r in range(5, BOARD_ROWS):
+        baseline.set(_r, 4, COLOR_RED)  # 床までの物理的支持 (浮きぷよ扱い防止)
+    cnn_collision = baseline.copy()
+    cnn_collision.set(4, 4, COLOR_OJAMA)
+
+    sm = BoardStateMachine(
+        detectors=[
+            _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+            _ForceState(BoardState.STABLE, fire_at_frame=6),
+        ],
+        enable_ojama_column_stack_fix=True,
+        # enable_transition_merge_guard は既定 False のまま (= 未併用でも効く)
+    )
+    sm.update(0, _signal(0.0, _empty_board()))
+    sm.context.confirmed_board = baseline.copy()
+    for i in range(1, 6):
+        sm.update(i, _signal(0.05 * i, baseline))
+    # effect_gate_window_active は _signal() のデフォルト (False) のまま
+    sm.update(6, _signal(0.30, cnn_collision))
+
+    assert sm.context.confirmed_board is not None
+    assert sm.context.confirmed_board.get(4, 4) == COLOR_RED  # 窓非活性でも保護される
+
+
+def test_ojama_column_stack_fix_off_bit_identical_default() -> None:
+    """回帰防止: enable_ojama_column_stack_fix 省略時と False 明示時が
+    bit-identical であること (default False)。"""
+    baseline = Board()
+    baseline.set(4, 4, COLOR_RED)
+    cnn_collision = baseline.copy()
+    cnn_collision.set(4, 4, COLOR_OJAMA)
+
+    def _run(**kwargs: bool) -> BoardStateMachine:
+        sm = BoardStateMachine(
+            detectors=[
+                _ForceState(BoardState.OJAMA_FALL, fire_at_frame=0),
+                _ForceState(BoardState.STABLE, fire_at_frame=6),
+            ],
+            **kwargs,
+        )
+        sm.update(0, _signal(0.0, _empty_board()))
+        sm.context.confirmed_board = baseline.copy()
+        for i in range(1, 6):
+            sm.update(i, _signal(0.05 * i, baseline))
+        sm.update(6, _signal(0.30, cnn_collision))
+        return sm
+
+    sm_omitted = _run()
+    sm_explicit_false = _run(enable_ojama_column_stack_fix=False)
+    for r in range(BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            assert (
+                sm_omitted.context.confirmed_board.get(r, c)
+                == sm_explicit_false.context.confirmed_board.get(r, c)
+            )
 
 
 def test_non_stable_history_accumulates_in_chain_state() -> None:

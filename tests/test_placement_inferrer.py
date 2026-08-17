@@ -856,6 +856,156 @@ class TestCorrectLandingCellsByObservedColor:
         assert int(result.get(5, 3)) == COLOR_PURPLE
 
 
+class TestApplyPersistentLandingColorGuard:
+    """apply_persistent_landing_color_guard の単体テスト (W10根治、2026-08-17).
+
+    docs/KNOWN_WEAKNESSES.md W10: correct_landing_cells_by_observed_color は
+    着地直後 1 回限りしか働かないため、 NEXT 読取誤り等で誤色が確定すると
+    数秒間残ることがある (実測 c11 で 1.7 秒)。 本関数はその制約を取り払い、
+    呼出側が保持する監視セルリストを複数フレームにわたって再チェックできる。
+    """
+
+    class _StubRegion:
+        def cell_sample_rect(self, row, col):  # noqa: ANN001
+            return (0, 0, 4, 4)
+
+    def test_overwrites_when_cnn_hsv_agree(self):
+        """CNN == HSV かつ有効色 → confirmed を観測色で上書きし、
+        該当セルを resolved リストに含める。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(11, 2, COLOR_RED)  # 誤って確定済の色
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_PURPLE)  # CNN は紫と観測
+
+        class _HsvPurple:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_PURPLE  # HSV も紫 (CNN と一致)
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [(11, 2)], cnn_board, _HsvPurple(), frame,
+            self._StubRegion(),
+        )
+        assert int(result.get(11, 2)) == COLOR_PURPLE
+        assert resolved == [(11, 2)]
+
+    def test_no_overwrite_when_cnn_hsv_disagree(self):
+        """CNN != HSV → 上書きせず、resolved にも含めない (監視継続)。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(11, 2, COLOR_RED)
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_YELLOW)  # CNN=黄
+
+        class _HsvBlue:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_BLUE  # HSV=青 (不一致)
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [(11, 2)], cnn_board, _HsvBlue(), frame,
+            self._StubRegion(),
+        )
+        assert int(result.get(11, 2)) == COLOR_RED
+        assert resolved == []
+
+    def test_no_overwrite_when_cnn_invalid_color(self):
+        """CNN が無効色 (お邪魔/空/UNKNOWN) → 上書きしない。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(11, 2, COLOR_GREEN)
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_OJAMA)
+
+        class _HsvOjama:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_OJAMA
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [(11, 2)], cnn_board, _HsvOjama(), frame,
+            self._StubRegion(),
+        )
+        assert int(result.get(11, 2)) == COLOR_GREEN
+        assert resolved == []
+
+    def test_multiple_watch_cells_partial_resolution(self):
+        """複数監視セルのうち一致したものだけ resolved に入る (部分解決)。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(11, 2, COLOR_RED)
+        confirmed.set(5, 0, COLOR_BLUE)
+
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_PURPLE)  # 一致予定
+        cnn_board.set(5, 0, COLOR_YELLOW)   # 不一致予定
+
+        class _MixedHsv:
+            def classify(self, patch):  # noqa: ANN001
+                # 座標を区別できないスタブなので、常に紫を返す
+                # (11,2) は CNN=紫と一致 / (5,0) は CNN=黄と不一致になる想定
+                return COLOR_PURPLE
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [(11, 2), (5, 0)], cnn_board, _MixedHsv(), frame,
+            self._StubRegion(),
+        )
+        assert int(result.get(11, 2)) == COLOR_PURPLE
+        assert int(result.get(5, 0)) == COLOR_BLUE  # 不一致 → 元のまま
+        assert resolved == [(11, 2)]
+
+    def test_hsv_classifier_none_no_crash(self):
+        """hsv_classifier が None (取得失敗) でも例外を出さず confirmed を
+        そのまま返す (保守的フォールバック)。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(11, 2, COLOR_RED)
+        cnn_board = _empty_board()
+        cnn_board.set(11, 2, COLOR_PURPLE)
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [(11, 2)], cnn_board, None, frame, self._StubRegion(),
+        )
+        assert int(result.get(11, 2)) == COLOR_RED
+        assert resolved == []
+
+    def test_empty_watch_cells_returns_unchanged(self):
+        """監視セルが空リスト → confirmed をそのまま返す (no-op)。"""
+        import numpy as np
+        from src.placement_inferrer import apply_persistent_landing_color_guard
+
+        confirmed = _empty_board()
+        confirmed.set(3, 3, COLOR_GREEN)
+        cnn_board = _empty_board()
+
+        class _Hsv:
+            def classify(self, patch):  # noqa: ANN001
+                return COLOR_GREEN
+
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        result, resolved = apply_persistent_landing_color_guard(
+            confirmed, [], cnn_board, _Hsv(), frame, self._StubRegion(),
+        )
+        assert int(result.get(3, 3)) == COLOR_GREEN
+        assert resolved == []
+
+
 # ============================
 # 案 Y-4 HSV-first commit + deferred consensus テスト
 # ============================

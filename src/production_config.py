@@ -82,6 +82,125 @@ RECOGNITION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "--enable-match-transition-debounce", "2026-08-06",
         "長時間劣化修正 A'。Phase I 合格構成に含まれる",
     ),
+    AdoptedFlag(
+        "--enable-ojama-fall-placement-override", "2026-08-15",
+        "案2修正版 (2026-08-13導入/2026-08-15 evidence一発判定のchain-active"
+        "除外修正、コミット9dc5e35、user承認)。OJAMA_FALL滞在中の場面1振動 "
+        "(0.15-0.3秒周期でOJAMA_FALL<->STABLE往復、docs/DEMO_REVIEW_2026-08-13.md) "
+        "を根治する。物差しv2 (55盤面、既存人手ラベル): 94.08%→95.63%、新規劣化"
+        "46→25セル (5盤面。内訳: 48%=W9系一過性ドロップアウトへの偶発的巻き込み"
+        "でplacement_override自体のロジック誤りではない、40%=slide_motion経路"
+        "がヒステリシス対象外のまま残る既知の残存リスク、12%=既存の色誤認ノイズ"
+        "で無関係、data/verify/yardstick_v2_2026-08-14/diag_c1p/review_sheet.html "
+        "参照)。scene1再現チェック (logs/diag_scene1_oscillation_recheck_2026-08-15.json)"
+        "で往復振動0件を個別確認済み (旧15回/秒規模から根絶)。"
+        "拡張代表サンプル全域バックテスト (2026-08-15 user承認、フルサイズでなく"
+        "序盤/中盤/終盤 各2分×16動画中15本有効 [video_c15/c19はファイル破損で"
+        "全チャンク0件、無関係な既知データ品質問題]、2構成、"
+        "data/verify/backtest_placement_override_2026-08-15/summary.md): "
+        "OJAMA_FALL滞在時間 中央値0.300→0.133秒・p95 1.5→0.933秒 (短縮、狙い通り "
+        "= 過去の「全盤面ぷよ数静止待ち」による張り付き時間の縮小)。盤面churn "
+        "(隣接STABLE間セル変化量、中央値2.0で同一)・幻連鎖疑い件数 (266→265) は "
+        "悪化なし。品質ゲートPASS/FAIL比率はほぼ同水準 (42チャンク中PASS17→20/"
+        "FAIL14→15)。**残課題 (悪化側、要監視)**: (a) 往復振動0.35秒未満のカウント"
+        "自体は増加 (224+241→432+564、突入数あたり率0.186→0.318) — 直接調査の"
+        "結果、大連鎖直後の複数波おじゃま降下 (STABLE挟みつつ短時間で再度降下する"
+        "正規の物理パターン) を巻き込んでいるためと判明 (実フレーム系列確認済み、"
+        "場面1の単発往復振動パターンとは別種)。(b) 重力違反セル数が39→69に増加"
+        "したが、うち30件差分の17件はc22_chunk1の1スナップショットに集中した"
+        "外れ値 (単一frame内18セル同時、認識自体の一過性乱れの可能性が高い) で、"
+        "除けば39→51 (+31%) 相当。早期STABLE復帰が物理未確定フレームを捉える"
+        "リスクとして小さく残る。両残課題とも次回148動画再収集 (本フラグ込み) "
+        "でのより大規模な再測定を推奨",
+    ),
+    AdoptedFlag(
+        "--enable-patch-fp-hsv-guard", "2026-08-17",
+        "W13 根治 (user承認2026-08-17)。**tier1 patch-NCC の EMPTY 判定に HSV 色域 AND "
+        "ガードを追加**する (`src/image_reader.py:1044-1115` `_is_empty_tier1`)。"
+        "patch-NCC が閾値 (PATCH_NCC_EMPTY_THRESHOLD=0.92) 以上で背景と一致しても、"
+        "現フレームのパッチを単独 HSV 分類器にかけて EMPTY/UNKNOWN 以外を返すなら EMPTY 化を却下する。"
+        "**新規閾値のシーン逆算はしていない** — 2026-05 cycle17-19 で median 距離ベースの "
+        "`is_empty_by_fp` に作られた AND ガードを、その後移行した patch-NCC 経路へ**移植したもの** "
+        "(移植漏れがW13の一因だった)。"
+        "【W13の症状】試合開始2.0秒の背景指紋強制採取 (鶏卵問題対策で puyo 数上限を実質無制限に緩和) が "
+        "既に設置済みの実在ぷよを『背景』として焼き込み、以降そのセルが patch-NCC 一致で無条件 EMPTY 化 "
+        "→ **列が8〜10秒まるごと消える** (userレビュー指摘16、本番採用構成でも再現)。"
+        "【測定 (物差しv2、55盤面、user全数レビュー済みラベル)】W16教訓に従い測定構成を明記: "
+        "ベース=c1p (現行本番採用構成)。OFF/ONで STABLE snapshot の間引き周期が変わり分母がズレるため "
+        "2段階で公平化した。**stage1 共通突合 (n=48/55、3453セル): 95.66% → 96.84%**。"
+        "**stage2 同一フレーム限定 (n=22/55、1584セル): 98.61% → 98.74%**。"
+        "方向別内訳で**新規悪化 (元々正解だったセルを壊す) は0件**、W9/W10/color_to_ojama 系の "
+        "既知誤り軸には一切干渉なし。"
+        "【案1を撤回した根拠】同時に検討した案1 `--enable-highlight-override` "
+        "(白ハイライトblob検出でtier1のEMPTY判定を却下) は stage2 で **98.17% とベースより悪化** し、"
+        "13セル/2盤面の新規退行を出した。根因は W19 に登録: (a) 救済がセル単位で白blobの写り方が "
+        "フレームごとにばらつくため1セル救済に失敗すると穴が開き、`clear_floating_above_gap` が "
+        "その上を全部 EMPTY 化して**列ごと道連れ**にする (b) **highlight_override が他セルを救済して "
+        "puyo 数差を埋めてしまい、自己修復 `_apply_baseline_broken_counter` の発火条件に入らず "
+        "汚染 bg_fp が生き残った** = 修正Aが修正Bの症状を隠す新種の副作用連鎖。"
+        "本フラグは**案1の悪化13セルを全13セルとも解消**する。"
+        "また案1+2 併用構成は STABLE 盤面 npz 全2023スナップショットで**本フラグ単体とbit-identical** "
+        "(案1は本フラグが既に救済済みのセルにしか作用せず追加効果ゼロ) のため、併用は採用しない。"
+        "【残リスク】stage2 の n=22 は小標本で1セル変化が±0.06pt動く規模。方向は明確だが "
+        "**148動画での広域バックテストは別途必須**。全体テスト 5,043 passed / 0 failed、"
+        "既定OFF時は bit-identical を静的テストで担保",
+    ),
+    AdoptedFlag(
+        "--enable-floating-gap-restore", "2026-08-17",
+        "R2浮きぷよ是正 (user承認2026-08-17、5フラグ一括採用・構成F)。TSUMO_FALL/"
+        "OJAMA_FALL→STABLE 遷移で「下が空・上に puyo」の物理矛盾を検出したら、"
+        "上を消すのでなく遷移前 confirmed_board から色を復元する "
+        "(docs/KNOWN_WEAKNESSES.md R2)。**単独では持続誤認±0** (構成A→B: 106→106) "
+        "だが物理矛盾是正の保険としてF構成 (5フラグ一括) に同梱採用。"
+        "根拠データ: data/verify/diag_r2_floating_gap_restore_2026-08-17/。"
+        "測定は必ずF構成 (5フラグ揃い) で行っており本フラグ単体の効果を測った"
+        "数値ではない",
+    ),
+    AdoptedFlag(
+        "--enable-landing-color-guard", "2026-08-17",
+        "W10観測補正継続ガード (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "着地セル色の継続監視ガードで、着地直後の一時的な色観測ブレを"
+        "追跡し続けて誤確定を防ぐ。構成B→C (+本フラグ) で持続誤認106→105"
+        "(-1)。根拠: docs/KNOWN_WEAKNESSES.md W10節、コミット85e39b3で観測補正"
+        "継続ガードの実測を記録、d1c60f9でCLI配線漏れ (collect_boards_lean.py) "
+        "を是正済み。測定はF構成 (5フラグ揃い) での積み上げ値",
+    ),
+    AdoptedFlag(
+        "--enable-override-color-guard", "2026-08-17",
+        "cycle71n長期投票overrideの安全網 (user承認2026-08-17、5フラグ一括採用・"
+        "構成F)。真因は W23 (_validate_next_history のever_seen飢餓状態) と"
+        "判明したため、本フラグ自体の位置づけは根治でなく安全網 "
+        "(persistent_misread_e.json 系統1ガード)。コミットa43d3fbで実装。"
+        "測定はF構成 (5フラグ揃い) での積み上げ値であり、単独の増減は"
+        "分離測定していない",
+    ),
+    AdoptedFlag(
+        "--enable-ojama-column-stack-fix", "2026-08-17",
+        "持続誤認26件の系統2根治 (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "おじゃま配分ロジックが同一列に対して二重に書き込み衝突する不具合を"
+        "根治する (c109 実例で確認)。構成D→E (+本フラグ+override-color-guard) "
+        "で持続誤認105→104 (-1)。コミットa43d3fbで実装。"
+        "測定はF構成 (5フラグ揃い) での積み上げ値",
+    ),
+    AdoptedFlag(
+        "--enable-next-history-starvation-fix", "2026-08-17",
+        "W23根治 (user承認2026-08-17、5フラグ一括採用・構成F)。"
+        "_validate_next_history の ever_seen 飢餓状態 (NEXT履歴が長期間"
+        "更新されず検証ロジックが機能不全になる不具合) を根治する。"
+        "構成E→F (+本フラグ) で **stage2 同一フレーム限定セル正解率 "
+        "98.80%→99.43%、持続誤認104→70 (-34)**。W23直接検証25件は100%解消"
+        "(persistent_misread_e.json 記載の25件が全て解消を個別確認)。"
+        "新規出現3件は別機構の露出であり本フラグの副作用ではない "
+        "(docs/KNOWN_WEAKNESSES.md 615-648行に詳細記録)。コミット19dc93aで実装。"
+        "【5フラグ一括の位置づけ】本エントリを含む上記4フラグ (floating-gap-"
+        "restore/landing-color-guard/override-color-guard/ojama-column-stack-fix) "
+        "とセットで構成F として測定・採用 (2026-08-17統一測定、data/verify/"
+        "recognition_unified_2026-08-17/persistent_misread_{a..f}.json)。"
+        "構成A (現本番、持続誤認106) を基準に B→C→D→E→F の順で積み上げ、"
+        "最終構成Fで持続誤認70・stage2セル正解率99.43%・W10_red_purple誤読"
+        "10→0完全解消・盤面完全一致33→35/51を実測。フルpytest 5,113 passed / "
+        "0 failed、既定OFF時は bit-identical (静的テストで担保)",
+    ),
 )
 
 # ============================
@@ -94,10 +213,11 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "無効だと両者 STABLE まで判定が凍結し、大連鎖中に有利不利が逆転する "
         "(2026-08-08 実測: 無効=2P有利24/77% -> 有効=互角52% -> 1P有利60%)",
     ),
-    AdoptedFlag(
-        "--platt-calibration", "2026-08-04",
-        "表示勝率の post-hoc 較正。未較正だと自信過剰 (80%表示の実勝率 64%)",
-    ),
+    # --platt-calibration は 2026-08-12 user承認で撤回 (採用 2026-08-04)。
+    # 根拠: 自信過剰 (80%表示→実勝率64%) の真因は対称化バグで B-1 修正済み
+    # (8/11)。修正後は素の出力が ECE 0.0125 で最良、旧モデル向け補正の適用は
+    # 逆に歪める (逆効果を実測)。148 本再学習後に新たな自信過剰が出た場合は
+    # 新モデルのデータで較正を作り直して再導入する (旧補正の使い回し禁止)。
     AdoptedFlag(
         "--per-side-settled", "2026-08-09",
         "片側でも STABLE なら再計算する。従来の両者同時 STABLE ゲートは実測で "
@@ -122,7 +242,114 @@ ADVANTAGE_ADOPTED: tuple[AdoptedFlag, ...] = (
         "毎フレーム更新。0.5 秒間引きだとおじゃま会計がスコア変化・連鎖終了を"
         "取りこぼし net/forecast=0 になる (ADVANTAGE_OVERLAY_2026-07-13 §2-3)",
     ),
+    AdoptedFlag(
+        "--counter-reach", "2026-08-12",
+        "打ち合い応手確率 (モンテカルロ、mc_counter_estimator経由) の正式採用 "
+        "(指標大整理提案書 0-4)。三つ巴比較 (案D実データ学習 / 急所3修正シミュ / "
+        "併用) で全位相 (序盤/中盤/終盤) 有意勝ち (rho=0.808, AUC=0.837、"
+        "memory project_exchange_triple_comparison_results_2026-08-02)。"
+        "過去に「採用」とコードコメントのみ先行し、本ファイル未登録・"
+        "visualize_advantage_overlay.py の CLI 既定値も OFF のままという"
+        "食い違いがあった (0-4 の確認依頼で発覚)。COUNTER_REACH_ENABLED_"
+        "BY_DEFAULT=True で CLI 既定値も同時に ON 化する",
+    ),
+    AdoptedFlag(
+        "--normalize-fps-30", "2026-08-12",
+        "60fps 動画を stride-2 相当 (実効30fps) に間引く "
+        "(src.fps_normalize.resolve_normalize_fps_30_stride、"
+        "collect_boards_lean.py が 2026-07-30 から既定採用済みの正規化と"
+        "同一関数)。従来オーバーレイのみ全フレーム処理のままで、認識状態機械の"
+        "フレーム数定数 (STABLE_RECOVERY_MIN_FRAMES 等、30fps前提でコメント"
+        "済み) が実時間半分で発火し STABLE 遷移が23%%過多になる非調整領域で"
+        "動いていた (収集・学習データと違う認識意味論の不一致)。"
+        "OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT=True で CLI 既定値も"
+        "同時に ON 化し、収集側と同じ意味論に揃える",
+    ),
+    AdoptedFlag(
+        "--production-recognition", "2026-08-13",
+        "本番採用の認識フラグ群 (RECOGNITION_ADOPTED: effect-gate/"
+        "burst-guard-v2/transition-merge-guard/burst-gate-open-threshold "
+        "0.954/hidden-row-burst-guard/match-transition-debounce) を "
+        "load_default() へ自動適用する (recognition_load_default_kwargs() 経由)。"
+        "根因調査 (2026-08-13) の副次発見: 従来 overlay はこれらを一切転送して"
+        "おらず、デモ/レビュー動画が本番より劣化した認識で生成されていた "
+        "(2026-08-08の--early-fire-reaction付け忘れ事故と同型)。"
+        "OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT=True で CLI 既定値も"
+        "同時に ON 化する",
+    ),
+    AdoptedFlag(
+        "--resize-1080p", "2026-08-13",
+        "認識入力を1920x1080へ正規化してから RecognitionPipeline.update() に"
+        "渡す (collect_boards_lean.py:1050 と同一の正規化)。根因調査 "
+        "(2026-08-13) の副次発見: 従来 overlay は表示キャンバス用サイズ "
+        "OUT_W/OUT_H(1280x720) へ直接縮小したフレームをそのまま認識にも渡して"
+        "おり、BoardRegion の絶対px座標較正 (1920x1080前提) と不整合だった "
+        "(CLAUDE.md「他解像度は1920x1080にリサイズしてから認識する」原則違反)。"
+        "OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT=True で CLI 既定値も同時に "
+        "ON 化する (認識用と表示用のフレームは独立に生成、表示解像度は不変)",
+    ),
+    AdoptedFlag(
+        "--resolved-live-defender-strict", "2026-08-15",
+        "指摘14 案1 (user承認2026-08-15、コミット53129bb)。決着ホールド中の "
+        "受け側再評価 (_reevaluate_live_defender、指摘13で導入) の起動条件を "
+        "状態機械ベースに厳格化する。従来は「ちょうど片側の chain_event が "
+        "None」という XOR のみで受け側を「自由」と判定していたが、ChainEvent は "
+        "trigger 検知時に1度発行され hold 秒後に None へ戻るパルス方式のため、"
+        "「旧連鎖の hold 切れ〜新連鎖の trigger 検知」の settle gap にいる側も "
+        "ev=None になり誤って自由扱いされていた。実測 (t=195.30): "
+        "ev1_cc=9 (1P継続中) / ev2=None かつ state2=GRAVITY_SETTLE の 2P を "
+        "自由な受け側と誤分類し、着弾前の綺麗な盤面をモデルへ渡して "
+        "hold_p1 96.1%→81.1% へ退行 (真の飛来おじゃま589個=回避不能死なのに "
+        "2P 18.9% を5.2秒表示)。修正 = defender 側の状態が "
+        "_LIVE_DEFENDER_BUSY_STATES {CHAIN, GRAVITY_SETTLE} なら再評価を "
+        "スキップし直前値を維持する。TSUMO_FALL/OJAMA_FALL は指摘13が意図した "
+        "正当な自由行動を塞がないため意図的に非busy。A/B実測 "
+        "(logs/_diag_issue14_flags_ab_v2_2026-08-15.log): 指摘14窓 "
+        "(194.53-201秒) は退行が完全消滅し 96.1% を窓全体で維持。指摘13 正当窓 "
+        "(234.87-245.5秒) は t=236.27 以降 baseline と完全一致・0.5秒ごとに "
+        "連続変化 (凍結の再発なし)、冒頭0.9秒のみ 2P 77%→84.3% に変化 "
+        "(defender が実際に busy だった瞬間を正しくスキップした結果。この値は "
+        "指摘12で決着した84.3%と一致)",
+    ),
+    AdoptedFlag(
+        "--resolved-kill-override", "2026-08-15",
+        "指摘14 案2 (user承認2026-08-15、コミット8f8a577)。既存の致死上書き "
+        "安全弁 kill_override を決着ホールド表示値にも配線する。従来は "
+        "ライブ per-frame 経路にのみ配線されており、決着ホールド中は "
+        "disp_adv/disp_p1 を丸ごと上書きする経路が通常経路を迂回するため "
+        "pending/room 比が致死水準でも安全弁が絶対に発火しなかった "
+        "(実測 589/50≈11.8 ≫ KILL_RATIO_FULL=1.5 で無発火)。材料は新規に "
+        "増やさず既存の観測量のみ再利用 (pending=_incoming_total_p1/p2 = "
+        "指摘11の着弾完了判定と同一値、room=board_room(b1)/board_room(b2))。"
+        "二重計上防止はライブ経路と同じく kill_override を最終段として適用 "
+        "(g=1 の完全上書き時は amplify 由来の寄与も自動的に上書きされる)。"
+        "A/B実測 (logs/_diag_issue14_flags_ab_2026-08-15.log): 指摘14窓の "
+        "全時刻で adv=+100/p1=99.3% (2P 19%→0.7%)。案1が誤爆機構そのものを "
+        "断つのに対し、本フラグは致死場面の最終防波堤として併用する",
+    ),
 )
+
+# --counter-reach の CLI 既定値。visualize_advantage_overlay.py の argparse
+# default / generate() の関数既定値はここを import して使う
+# (CHAIN_SIM_ADOPTED の GHOST_CHAIN_RULE_ENABLED と同じパターン。
+# 「採用済みなのに初期値OFF」という食い違いの再発防止、2026-08-12)。
+COUNTER_REACH_ENABLED_BY_DEFAULT: bool = True
+
+# --normalize-fps-30 の CLI 既定値/generate() 既定値 (2026-08-12 追加、上記
+# ADVANTAGE_ADOPTED エントリ参照)。COUNTER_REACH_ENABLED_BY_DEFAULT と同じ
+# パターンで単一情報源化する。
+OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT: bool = True
+
+# --production-recognition の CLI 既定値/generate() 既定値 (2026-08-13 追加、
+# 上記2定数と同じパターン)。True で RECOGNITION_ADOPTED (本番採用の認識
+# フラグ群) を recognition_load_default_kwargs() 経由で自動適用する。
+OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT: bool = True
+
+# --resize-1080p の CLI 既定値/generate() 既定値 (2026-08-13 追加)。True で
+# 認識入力を 1920x1080 へ正規化してから RecognitionPipeline.update() に渡す
+# (collect_boards_lean.py と同一正規化、CLAUDE.md「他解像度は1920x1080に
+# リサイズしてから認識する」原則)。
+OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT: bool = True
 
 # ============================
 # 表示 (visualize_recognition の overlay 系)
@@ -137,7 +364,30 @@ VISUALIZATION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "user 要望「連鎖中はずっと chain であってほしい」。"
         "連鎖中の異常な離脱 20 回 -> 0 回",
     ),
+    AdoptedFlag(
+        "--production-recognition", "2026-08-13",
+        "横展開監査 (docs/CROSS_CUTTING_AUDIT_2026-08-13.md P1) の配線漏れ是正。"
+        "visualize_recognition.py が RECOGNITION_ADOPTED (バーストガード等6"
+        "フラグ) を明示指定しない限り一切適用しておらず、レビュー動画が本番"
+        "より劣化した認識で生成されていた (visualize_advantage_overlay.py の "
+        "eacb1f3 と同型の事故)。recognition_load_default_kwargs() 経由で "
+        "load_default() へ自動適用する。--no-production-recognition で無効化",
+    ),
+    AdoptedFlag(
+        "--production-visualization", "2026-08-13",
+        "同上の是正。上記2フラグ (chain-formula-simulate-verify/"
+        "overlay-chain-hold-until-end) 自体を CLI 既定 ON にする配線 "
+        "(resolve_production_config_overrides() 経由)。"
+        "--no-production-visualization で無効化",
+    ),
 )
+
+# measure_stable_cell_acc.py (物差し) にも同型の配線漏れがあった (P1)。
+# --no-production-recognition の明示指定で過去測定と bit-identical な旧構成
+# (各フラグ明示指定必須) を再現できる (物差しの継続性維持)。専用の
+# AdoptedFlag タプルは持たず、RECOGNITION_ADOPTED を単一情報源として
+# resolve_production_recognition_flags() (同ファイル内) が消費する
+# (recognition_load_default_kwargs() と同じ変換ロジック)。
 
 
 # ============================
@@ -199,6 +449,222 @@ ATTRIBUTION_EXCLUDED_INDICATORS: tuple[str, ...] = (
 )
 
 
+# ============================
+# 指標大整理 (2026-08-12 user確定、docs/INDICATOR_REORG_PROPOSAL_2026-08-12.md
+# 「決定記録」節) — scripts/build_labeled_win_from_npz.py への実装
+# ============================
+# 実体の定数群 (DIFF_REPLACE_OWN_COLUMNS 等) は同ファイル側に置く
+# (npz→CSV変換ツール専用の分類のため)。ここには決定内容の記録のみ残す
+# (「採用日+根拠を必須記録」規約、production_config.py が単一情報源)。
+INDICATOR_REORG_DECISIONS: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        "a-1: *_raw列8種+saturated_chain_count を削除", "2026-08-12",
+        "*_raw は score の定数倍で完全重複 (記録・学習の両方から削除)。"
+        "saturated_chain_count は current_max_chain と19万場面で完全一致 "
+        "(作成時のバグで同じものを2回計算していた、"
+        "ATTRIBUTION_EXCLUDED_INDICATORS の根拠と同一)。absorption_capacity "
+        "は build_labeled_win_from_npz.py では元々未収集のため対応不要",
+    ),
+    AdoptedFlag(
+        "b-1: center_bulge を center_bulge_color/_ojama に分解", "2026-08-12",
+        "合成版は当てやすさ0.509でほぼ無価値だが、分解すると不利の大部分は"
+        "おじゃま由来 (影響は色ぷよの12倍) と判明。色ぷよ由来分は小さいが"
+        "本物の効果 (おじゃまゼロ33万場面でも検出)。indicators_v2.py の"
+        "center_bulge() 本体は backwards compat のため変更なし、"
+        "center_bulge_color/_ojama を新規追加",
+    ),
+    AdoptedFlag(
+        "b-2: 相手との差 (diff_) 列への置き換え", "2026-08-12",
+        "63動画実測: 11項目中10項目で「自分のみ」より「差」の方が当てやすい "
+        "(連結最大サイズは終盤0.508→0.567)。例外2つ (色ぷよ総数・3個連結) は"
+        "置き換えず own/diff の使い分けを列ごとに分類 (詳細は"
+        "scripts/build_labeled_win_from_npz.py の DIFF_* 定数群)。"
+        "色ぷよ総数は user指示8/12によりおじゃま総数とのペア特徴として"
+        "own+diff+比率+交互作用の4列で表現 (単純な差では向きが逆転する謎の答え)",
+    ),
+)
+
+
+@dataclass(frozen=True)
+class RemovedIndicator:
+    """死亡確定・削除決定済みの指標 1 件 (REORG_REMOVED_INDICATORS 用)。"""
+
+    name: str        # 指標名 (collect_indicators_v2.INDICATOR_COLUMNS 等の表記に合わせる base 列名)
+    confirmed: str    # 死亡・削除の確定日 (YYYY-MM-DD)
+    reason: str       # 死因 (実測結果 または重複判定の根拠)
+
+
+# ============================
+# 指標大整理 — 削除台帳 (2026-08-13 新設、横展開監査 P2)
+# ============================
+# 背景: saturated_chain_count の削除決定 (a-1、INDICATOR_REORG_DECISIONS 参照、
+# 2026-08-12) が3箇所中1箇所 (build_labeled_win_from_npz.py) にしか反映されて
+# おらず、scripts/visualize_advantage_overlay.py の FEATURE_CANDIDATES /
+# scripts/model_indicator_win.py の REDUNDANT_COLS には残ったままだった
+# (「片方の経路だけ直して他方が古いまま」の型A事故、
+# docs/CROSS_CUTTING_AUDIT_2026-08-13.md P2)。加えて過去に死亡確定したのに
+# 公式の除外リストへ一度も登録されていなかった3件 (honsen_output/
+# taiou_capacity/disturbance_rejection、docs/INDICATOR_PROPOSAL_ROUND2_
+# 2026-08-13.md D節) をここで台帳化する。
+#
+# 使い方: 学習・モデル特徴量の候補リストを組み立てる箇所は
+# `reorg_removed_indicator_names()` の集合を除外候補として参照すること
+# (FEATURE_CANDIDATES / REDUNDANT_COLS がこのパターンに追従済み)。
+REORG_REMOVED_INDICATORS: tuple[RemovedIndicator, ...] = (
+    RemovedIndicator(
+        "saturated_chain_count", "2026-08-12",
+        "current_max_chain と19万場面で完全一致 (作成時のバグで同じものを"
+        "2回計算していた)。a-1決定 (INDICATOR_REORG_DECISIONS 参照、"
+        "ATTRIBUTION_EXCLUDED_INDICATORS と同根拠)",
+    ),
+    RemovedIndicator(
+        "absorption_capacity", "2026-08-12",
+        "board_puyo_total と完全重複。a-1決定 (INDICATOR_REORG_DECISIONS 参照)。"
+        "scripts/model_indicator_win.py の REDUNDANT_COLS では既に先行して"
+        "除外済みだった",
+    ),
+    RemovedIndicator(
+        "honsen_output", "2026-07-17",
+        "催促・条件1 (本線打ち合い収支)。中盤AUC 0.512 = current_max_chain の"
+        "生値0.514と同等で無寄与と確定 (memory "
+        "project_midgame_indicator_failures_2026-07-17)",
+    ),
+    RemovedIndicator(
+        "taiou_capacity", "2026-07-20",
+        "対応力 (相手催促を本線温存で上回る)。単純な受け容量 (当てやすさ0.52)"
+        "に負け、blend不採用と確定 (docs/INDICATOR_CANDIDATES_2026-07-20.md "
+        "分類4)",
+    ),
+    RemovedIndicator(
+        "disturbance_rejection", "2026-08-13",
+        "外乱除去比 (C4、returned÷incoming お邪魔)。docs/INDICATOR_CANDIDATES_"
+        "2026-07-20.md では候補提示のみ (「既存会計から実装ゼロ」) のまま構想"
+        "倒れで終わっている。同系統の潰し・相殺設計である ojama_disruption "
+        "(催促・条件2) が478行全ゼロの完全失敗 (memory "
+        "project_midgame_indicator_failures_2026-07-17) で決着済みのため、"
+        "docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md D節の判定に従い死亡"
+        "確定として登録する (独立実測が無い旨は正直に記録)",
+    ),
+)
+
+
+def reorg_removed_indicator_names() -> frozenset[str]:
+    """REORG_REMOVED_INDICATORS の指標名集合を返す (除外リスト構築用)。"""
+    return frozenset(r.name for r in REORG_REMOVED_INDICATORS)
+
+
+@dataclass(frozen=True)
+class PipelineGap:
+    """collect_indicators_v2 (旧) → build_labeled_win_from_npz (新) の意図的な
+    列欠落 1 件 (KNOWN_PIPELINE_GAPS 用)。"""
+
+    column: str       # collect_indicators_v2.INDICATOR_COLUMNS 側の base 列名 (*_raw等を除く)
+    confirmed: str     # 欠落を意図的と確認した日付 (YYYY-MM-DD)
+    reason: str        # 欠落の理由 (設計上の構造的制約 または明示的な削除決定)
+
+
+# ============================
+# npz→CSV 変換ツールのレジストリ整合 — 既知の意図的ギャップ許容リスト
+# (2026-08-13 新設、横展開監査 P1/P2 台帳監査の提案4本の1)
+# ============================
+# collect_indicators_v2.INDICATOR_COLUMNS (旧収集) と
+# build_labeled_win_from_npz._final_fieldnames("full") (新変換) の差分のうち、
+# **設計上意図的で危険でない**ものだけをここに列挙する。
+#
+# 重要: 2026-08-13 時点で判明している「意図的でない脱落11列」
+# (main_linked_pair_count 等、docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md
+# A-1、user採否待ち) はここに **含めない**。含めてしまうと A-1 の問題が
+# テストから見えなくなり「直したことにする」事故を再生産するため
+# (tests/test_indicator_pipeline_registry_2026-08-13.py が11列の存在を
+# 継続的に検出する)。
+KNOWN_PIPELINE_GAPS: tuple[PipelineGap, ...] = (
+    PipelineGap(
+        "tsumo_count_rate", "2026-08-13",
+        "累積手数カウンタ (フレーム間の state) が必要。npz は盤面グリッドの"
+        "みを保持する grid-only ツールのため構造的に計算不可 "
+        "(build_labeled_win_from_npz.py 冒頭「現状カバー範囲」参照)",
+    ),
+    PipelineGap(
+        "margin_time_rate", "2026-08-13",
+        "試合相対経過秒 (state) が必要。tsumo_count_rate と同じ構造的制約",
+    ),
+    PipelineGap(
+        "chain_duration_sec", "2026-08-13",
+        "連鎖の実時間長 (フレーム間の state) が必要。同上の構造的制約",
+    ),
+    # ojama_net_balance/ojama_forecast はタスク#8 (2026-08-13、
+    # docs/CROSS_CUTTING_AUDIT_2026-08-13.md P4決着) で再接続済みのため本
+    # 許容リストから削除した (収集側 collect_boards_lean.py が
+    # OjamaAccountingTracker を実駆動して真値を npz に保存するようになった、
+    # build_labeled_win_from_npz.py の OJAMA_TRUTH_COLUMNS 参照。許容リストが
+    # 陳腐化したまま残すと再接続の事実がテストから見えなくなるため削除する
+    # ルール、test_known_pipeline_gaps_entries_are_actually_absent 参照)。
+    PipelineGap(
+        "reach_fire_power", "2026-08-13",
+        "next_pair/dnext_pair 依存。npz は --with-next 収集時のみ next1_a/b を"
+        "保持し、本ツールでは next 依存指標は未実装 (冒頭「現状カバー範囲」"
+        "に既存記載)",
+    ),
+    PipelineGap(
+        "near_future_fire_k1", "2026-08-13", "reach_fire_power と同じ next_pair 依存の制約",
+    ),
+    PipelineGap(
+        "near_future_fire_k2", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k3", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "near_future_fire_k5", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "fire_stability_k2", "2026-08-13", "同上 (near_future_fire_power と同じビーム machinery の副産物)",
+    ),
+    PipelineGap(
+        "fire_stability_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "fire_stability_k6", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k1", "2026-08-13", "同上 next_pair 依存 (ランダム色ツモのモンテカルロ平均)",
+    ),
+    PipelineGap(
+        "expected_fire_k2", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k3", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "expected_fire_k4", "2026-08-13", "同上",
+    ),
+    PipelineGap(
+        "saturated_chain_count", "2026-08-12",
+        "a-1決定 (INDICATOR_REORG_DECISIONS 参照)。REORG_REMOVED_INDICATORS と"
+        "同一根拠 (current_max_chain と完全一致のため削除)",
+    ),
+    PipelineGap(
+        "absorption_capacity", "2026-08-12",
+        "a-1決定。REORG_REMOVED_INDICATORS と同一根拠 (board_puyo_total と"
+        "完全重複)",
+    ),
+    PipelineGap(
+        "center_bulge", "2026-08-12",
+        "b-1決定 (INDICATOR_REORG_DECISIONS 参照)。center_bulge_color/_ojama "
+        "に分解済みのため合成列は出力しない (機能は分解後の2列として存続、"
+        "削除ではない)",
+    ),
+)
+
+
+def known_pipeline_gap_columns() -> frozenset[str]:
+    """KNOWN_PIPELINE_GAPS の列名集合を返す (整合テスト用)。"""
+    return frozenset(g.column for g in KNOWN_PIPELINE_GAPS)
+
+
 def _join(flags: tuple[AdoptedFlag, ...]) -> str:
     """フラグ文字列を空白区切りで連結する。"""
     return " ".join(f.flag for f in flags)
@@ -207,6 +673,29 @@ def _join(flags: tuple[AdoptedFlag, ...]) -> str:
 def recognition_flags() -> str:
     """認識の本番構成フラグを返す (収集・表示の両方が受け付けるもの)。"""
     return _join(RECOGNITION_ADOPTED)
+
+
+def recognition_load_default_kwargs() -> dict[str, "float | bool"]:
+    """RECOGNITION_ADOPTED を RecognitionPipeline.load_default() 用 kwargs に変換する。
+
+    2026-08-13 是正 (根因調査の副次発見): scripts/visualize_advantage_overlay.py が
+    RECOGNITION_ADOPTED (本番採用の認識フラグ群) を load_default() へ一切
+    転送しておらず、デモ/レビュー動画が本番より劣化した認識 (バーストガード等が
+    無効) で生成されていた (2026-08-08 の --early-fire-reaction 付け忘れ事故と
+    同型)。collect_boards_lean.py の argparse dest 名 (enable_effect_gate 等、
+    同ファイル 769-1009 行) は RecognitionPipeline.load_default() のキーワード
+    引数名と完全に一致しているため、 "--xxx-yyy" 形式のフラグ名を dest 名
+    "xxx_yyy" へ機械的に変換するだけで両者と同じ呼出し経路になる (RECOGNITION_
+    ADOPTED に新しいフラグを追記するだけで overlay 側も自動追従し、個別配線の
+    抜け漏れを構造的に根絶する)。値付きフラグ ("--burst-gate-open-threshold
+    0.954" 等) は float にパースし、値無しフラグ (store_true 系) は True にする。
+    """
+    kwargs: dict[str, "float | bool"] = {}
+    for f in RECOGNITION_ADOPTED:
+        parts = f.flag.split()
+        name = parts[0].lstrip("-").replace("-", "_")
+        kwargs[name] = True if len(parts) == 1 else float(parts[1])
+    return kwargs
 
 
 def collect_flags() -> str:
@@ -233,6 +722,7 @@ def describe() -> str:
         ("有利不利", ADVANTAGE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
+        ("指標大整理", INDICATOR_REORG_DECISIONS),
     ):
         lines.append(f"[{title}]")
         for f in flags:

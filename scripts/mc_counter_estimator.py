@@ -43,6 +43,98 @@ current_max_chain (=takapt定石、色を選べる前提の潜在力) を毎手�
 上振れの有無を必ず確認する。
 
 本モジュールは stateless (盤面を破壊しない、内部状態を持たない)。
+
+## v3 Rust ネイティブ拡張載せ替え (2026-08-13、意味論保存)
+
+大連鎖時 (持ち時間5秒超→7〜8手の先読み) にロールアウト内側の連鎖
+シミュレーションが1回あたり数秒かかることが実測で判明した
+(内訳は `scripts/_profile_mc_counter_estimator_2026-08-13.py` 参照、
+`ChainSimulator.simulate` 呼び出しが総時間の9割超、その大半は「組む
+フェーズ」の tie-break 由来: `current_max_chain` 約12%・
+`potential_fire_power` 約87%)。**推定ロジック・乱数系列は一切変えず**、
+内側の連鎖シミュレーション呼び出しのみ `native/puyo_core` (Rust拡張)
+の等価APIに置換する (`use_native: bool = True` 引数、拡張未導入環境では
+自動的に純Pythonへフォールバック、backwards compat)。
+
+厳密得点 (`calculate_chain_score` 相当) が必要な箇所
+(`potential_fire_power`/`_select_best_placement` の tie-break) のために、
+`native/puyo_core/src/bitboard.rs` に `exact_score` (連結ボーナス反映) を
+2026-08-13 に新規追加した (既存 `score_approx` は連結ボーナス0近似で
+値が異なるため使えなかった)。`tests/test_puyo_core_parity.py::
+test_exact_score_parity_with_chain_simulator` で実盤面600件、
+`ChainSimulator`+`calculate_chain_score` との完全一致を確認済み。
+`src.indicators_v2` 自体は一切変更していない (そちらの呼び出し元は
+全て従来どおり Python 実装を使い続ける)。
+
+さらに、列×色30通り (takapt定石探索・潜在火力ビーム探索の1手先候補) を
+1候補ずつ native 呼び出しすると Python<->Rust 境界の変換コストが支配的に
+なることが実測で判明したため (プロファイル詳細は上記スクリプト参照)、
+`simulate_after_drops`/`chain_metrics_after_drops` (`src/puyo_core_bridge.py`
+2026-08-13 追加) で30通りを1回のバッチ呼び出しにまとめている
+(`_current_max_chain_value`/`_pfp_first_pass_native`/
+`_pfp_second_pass_native` 参照)。
+
+## v3.1 重力違反盤面の安全弁 (2026-08-13 追加)
+
+`scripts/build_labeled_win_from_npz.py` の `_board_is_gravity_consistent`
+(同日発見) と同根の既知 native 制約: puyo_core の重力実装は入力盤面が
+既に重力一貫であることを前提にした定数時間最適化であり、認識由来の
+浮きぷよ盤面 (実測0.28%、`project_gravity_violation_regen_lead_2026-07-30`
+系の既知欠陥) を渡すと消去後の重力適用が不完全になり、2手目以降の
+連鎖判定がズレる (実例: 2連鎖と判定すべき盤面が1連鎖と誤判定、Pythonが
+正)。`estimate_counter_distribution` が受け取る「実盤面」(呼び出し元が
+渡す STABLE 確定盤面) は認識由来のためこの違反を持ち得るが、ロールアウト
+内部で `_select_build_placement`/`_deadline_trigger_value` 等が生成する
+盤面は全てシミュレーション産 (`ChainSimulator.simulate`/native
+`simulate_chain` の出力) であり、重力一貫は連鎖シミュレーションの後処理
+として保証される (シミュレータ自身が重力を適用してから返す) ため
+再チェック不要 (`build_labeled_win_from_npz.py` の全 native 呼び出し直前
+チェックとは異なり、本モジュールはロールアウトの**入口 1 箇所のみ**で
+チェックすれば十分)。よって `estimate_counter_distribution` の入口で
+`board` を1回だけ `_board_is_gravity_consistent` で判定し、違反時は
+そのロールアウト呼び出し全体 (`n_rollouts` 本すべて) を `use_native=False`
+(純Python経路) で実行することで「完全一致」を保証する (native の恒久修正
+は別課題、native/puyo_core 自体は本タスクで変更しない)。
+
+## v3.2 選択ロジックの境界コスト削減 (2026-08-13 追加)
+
+v3 (`simulate_after_drops`/`chain_metrics_after_drops` 経由のバッチ化) の後も
+`_select_best_placement`/`_select_build_placement` (内部の
+`_enumerate_placements_dispatch`) は「22配置列挙 (1回) + 配置ごとの
+`simulate_chain` (最大22回)」という計最大23回の Python<->Rust 往復を毎手
+1回 (組むフェーズは毎手、発火フェーズはロールアウト末尾に1回) 行っていた
+(実測 0.24s/rollout の主要因)。`src/puyo_core_bridge.py` に
+`enumerate_and_simulate_placements` (2026-08-13 追加、`native/puyo_core/
+src/lib.rs::enumerate_and_simulate_placements_py` を1回呼ぶだけで22配置+
+シミュレーション結果一式を取得するバッチAPI) を新設し、両関数の native
+分岐をこれ1回の呼び出しに置き換えた (推定ロジック・選択則は一切変えず、
+往復回数のみ削減、値は旧実装と完全一致。速度計測は
+`scripts/_bench_mc_counter_native_2026-08-13.py` で新旧比較する)。
+
+さらに実測すると、上記だけでは効果が限定的だった (「1手分の列挙+選択」の
+往復は1回に減ったが、`_select_build_placement` の tie-break
+[潜在連鎖 `current_max_chain` 評価] が build_only 候補盤面ごとに
+`_current_max_chain_value` を個別呼び出ししており [最大22回]、これが
+実際の主要コストだった)。`native/puyo_core/src/lib.rs::
+max_chain_after_drops_for_boards_py` (複数盤面×列×色30通りを1回で評価) と
+`src/puyo_core_bridge.max_chain_after_drops_for_boards` を追加し、
+`_current_max_chain_values_batch` 経由でこの tie-break も1回のバッチ
+呼び出しに統合した (値は完全一致)。
+
+それでもなお速度改善が体感できなかったため、一時診断スクリプトで
+`_select_build_placement` の候補構成を実測したところ、**`current_max_chain`
+が同値タイになる候補数 (`tied`) が中央値10件・最大22件** と判明した
+(60盤面サンプル、`build_only` 自体も中央値19件)。`tied` 全件に対して
+`max(tied, key=_potential_fire_power_value)` を呼ぶと、候補1件あたり
+最大 `1+POTENTIAL_FIRE_POWER_BEAM_K` (=6) 回の native往復が発生するため、
+これが実測上のロールアウト主要コストだった (前段の enumerate+simulate
+統合・current_max_chain バッチ化はいずれも0.3〜0.5ms/手規模で、この
+tie-break の方が桁違いに大きかった)。`native/puyo_core/src/lib.rs::
+potential_fire_power_raw_for_boards_py` (複数盤面×2手先ビームを1回で評価)
+と `src/puyo_core_bridge.potential_fire_power_raw_for_boards` を追加し、
+`_potential_fire_power_values_batch` 経由でこの tie-break も1回のバッチ
+呼び出しに統合した (`POTENTIAL_FIRE_POWER_MAX_ADD==2` [現行値] の場合のみ、
+値は完全一致)。
 """
 from __future__ import annotations
 
@@ -52,9 +144,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.board import COLOR_OJAMA, Board
+from src.board import BOARD_COLS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN, Board
 from src.chain import ChainSimulator
 from src.indicators_v2 import (
+    IGNITION_TRIAL_COLORS,
+    POTENTIAL_FIRE_POWER_BEAM_K,
+    POTENTIAL_FIRE_POWER_MAX_ADD,
     _SHARED_SIMULATOR,
     _enumerate_placements,
     _near_future_active_colors,
@@ -64,6 +159,19 @@ from src.indicators_v2 import (
     immediate_fire_power,
     potential_fire_power,
 )
+from src.puyo_core_bridge import NATIVE_AVAILABLE
+from src.puyo_core_bridge import chain_metrics_after_drops as _native_chain_metrics_after_drops
+from src.puyo_core_bridge import (
+    enumerate_and_simulate_placements as _native_enumerate_and_simulate_placements,
+)
+from src.puyo_core_bridge import (
+    max_chain_after_drops_for_boards as _native_max_chain_after_drops_for_boards,
+)
+from src.puyo_core_bridge import (
+    potential_fire_power_raw_for_boards as _native_potential_fire_power_raw_for_boards,
+)
+from src.puyo_core_bridge import simulate_after_drops as _native_simulate_after_drops
+from src.puyo_core_bridge import simulate_chain as _native_simulate_chain
 from src.scoring import calculate_chain_score
 
 # ============================
@@ -143,8 +251,204 @@ class McRolloutOutcome:
     time_used_sec: float    # 消費した時間 (段別テーブルの積分値)
 
 
+# ============================
+# Rust ネイティブ拡張 (puyo_core) 載せ替えヘルパー (2026-08-13)
+# ============================
+# モジュール docstring の「v3 Rust ネイティブ拡張載せ替え」参照。
+# 各関数は use_native=False (または NATIVE_AVAILABLE=False) で既存
+# src.indicators_v2 の実装にそのまま委譲する (完全一致・fail-safe)。
+
+
+def _board_is_gravity_consistent(board: Board) -> bool:
+    """各列に「浮きぷよ」由来のギャップが無いか判定する (native 載せ替えの
+    安全弁、モジュール docstring「v3.1 重力違反盤面の安全弁」参照)。
+
+    `scripts/build_labeled_win_from_npz.py::_board_is_gravity_consistent`
+    と全く同一の意味論・実装 (相互参照コメント: 両ファイルとも
+    scripts/ 直下のスクリプトであり、片方をもう片方から import すると
+    npz変換CLI一式 (argparse・pandas等の重い依存) が本番オーバーレイ経路
+    [`scripts/visualize_advantage_overlay.py` 等] に引き込まれてしまうため
+    複製している。ロジックを変える場合は両ファイル両方を修正すること)。
+    UNKNOWN セルは占有扱いしない (`Board.height_of`/Rust `occ` と同じ意味論)。
+    """
+    grid = board._grid
+    unoccupied = (grid == COLOR_EMPTY) | (grid == COLOR_UNKNOWN)
+    for col in range(BOARD_COLS):
+        occupied_rows = np.where(~unoccupied[:, col])[0]
+        if len(occupied_rows) == 0:
+            continue
+        top_row = int(occupied_rows[0])
+        if np.any(unoccupied[top_row:, col]):
+            return False
+    return True
+
+
+# 列×色30通り (takapt定石/潜在火力探索の1手先候補) の (col, color) 一覧。
+# `_takapt_best_drop`/`_pfp_first_pass` と同一探索順 (col昇順→色昇順)。
+_DROP_CANDIDATES_30: "tuple[tuple[int, int], ...]" = tuple(
+    (col, color) for col in range(BOARD_COLS) for color in IGNITION_TRIAL_COLORS
+)
+
+
+def _current_max_chain_value(
+    board: Board, sim: ChainSimulator, use_native: bool,
+) -> int:
+    """既存指標 III-1 current_max_chain の raw 値 (takapt定石、列×色30通り
+    探索の最大連鎖数) を native/Python 切替可能な形で返す。
+
+    use_native=False (または拡張未導入) の場合は既存
+    `src.indicators_v2.current_max_chain` にそのまま委譲する (完全一致、
+    indicators_v2.py 自体は無変更)。use_native=True の場合は同じ30通りを
+    `chain_metrics_after_drops` (盤面を返さない軽量バッチAPI、2026-08-13
+    追加) で1回の呼び出しにまとめて評価する (chain_count のみ必要なため
+    盤面のシリアライズを完全に省く、`_takapt_best_drop` と同一探索順・
+    同一比較則 [`>` で更新])。
+    """
+    if not (use_native and NATIVE_AVAILABLE):
+        return int(current_max_chain(board, simulator=sim).raw)
+    best_chain = 0
+    for r in _native_chain_metrics_after_drops(board, _DROP_CANDIDATES_30):
+        if r is None:
+            continue
+        chain_count, _exact_score = r
+        if chain_count > best_chain:
+            best_chain = chain_count
+    return best_chain
+
+
+def _current_max_chain_values_batch(
+    boards: "list[Board]", sim: ChainSimulator, use_native: bool,
+) -> "list[float]":
+    """`_current_max_chain_value` を複数候補盤面にわたって評価する
+    (`_select_build_placement` の tie-break 専用、2026-08-13 追加)。
+
+    use_native=True かつ拡張導入済みの場合、候補盤面ごとに個別呼び出しして
+    いた `_current_max_chain_value` (盤面数 = 最大22回の native 往復) を
+    `max_chain_after_drops_for_boards` (1回のバッチ呼び出しで全候補盤面×
+    列×色30通りをまとめて評価) に置き換え、往復を1回に削減する
+    (`v3.2 選択ロジックの境界コスト削減` docstring参照、値は
+    `_current_max_chain_value` を1件ずつ呼んだ場合と完全一致)。
+    """
+    if not (use_native and NATIVE_AVAILABLE):
+        return [float(_current_max_chain_value(b, sim, use_native)) for b in boards]
+    return [
+        float(v) for v in _native_max_chain_after_drops_for_boards(boards, _DROP_CANDIDATES_30)
+    ]
+
+
+def _pfp_first_pass_native(board: Board, beam_k: int) -> "list[tuple[int, Board]]":
+    """潜在火力1手目 (native版、`indicators_v2._pfp_first_pass` と同一探索順)。
+
+    バッチAPI `simulate_after_drops` で30通りを1回にまとめて評価する。
+    `dropped_board` (連鎖解決前の落下直後盤面) を候補として保持する点が
+    `_pfp_first_pass` の意味論そのもの (2手目探索は未解決のまま積む)。
+    """
+    candidates: "list[tuple[int, Board]]" = [
+        (r.chain_result.chain_count, r.dropped_board)
+        for r in _native_simulate_after_drops(board, _DROP_CANDIDATES_30)
+        if r is not None
+    ]
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[:beam_k]
+
+
+def _pfp_second_pass_native(candidates: "list[tuple[int, Board]]") -> int:
+    """潜在火力2手目 (native版、`indicators_v2._pfp_second_pass` と同一)。
+
+    候補ごとに `chain_metrics_after_drops` (盤面を返さない軽量バッチAPI) を
+    1回呼び (計 beam_k 回、90通りを1手先候補ごとにまとめて評価)、
+    exact_score をお邪魔換算する。盤面 (final_board) はこの2手目探索では
+    使わないため軽量版で十分 (意味論に影響しない、速度目的の選択)。
+    elapsed_sec は呼び出し元 (`_select_build_placement` の tie-break) が
+    常に 0.0 で呼んでいた既存挙動をそのまま踏襲する (意味論保存のため本関数
+    自体は elapsed_sec を受け取らない設計にして呼び間違いを防ぐ)。
+    """
+    best_ojama = 0
+    for _chain, board1 in candidates:
+        for r in _native_chain_metrics_after_drops(board1, _DROP_CANDIDATES_30):
+            if r is None:
+                continue
+            _chain_count, exact_score = r
+            ojama = _score_to_ojama_count(float(exact_score), 0.0)
+            if ojama > best_ojama:
+                best_ojama = ojama
+    return best_ojama
+
+
+def _potential_fire_power_value(
+    board: Board, sim: ChainSimulator, use_native: bool,
+) -> float:
+    """既存指標 III-8 potential_fire_power の raw 値 (elapsed_sec=0.0固定、
+    既存 `_select_build_placement` の呼び出し方に合わせる) を native/Python
+    切替可能な形で返す。use_native=False の場合は既存
+    `src.indicators_v2.potential_fire_power` にそのまま委譲する。
+    """
+    if not (use_native and NATIVE_AVAILABLE):
+        return float(potential_fire_power(board, elapsed_sec=0.0, simulator=sim).raw)
+    top_k = _pfp_first_pass_native(board, POTENTIAL_FIRE_POWER_BEAM_K)
+    if not top_k:
+        return 0.0
+    if POTENTIAL_FIRE_POWER_MAX_ADD == 1:
+        best_ojama = max(
+            _score_to_ojama_count(float(_native_simulate_chain(b).exact_score), 0.0)
+            for _, b in top_k
+        )
+    else:
+        best_ojama = _pfp_second_pass_native(top_k)
+    return float(best_ojama)
+
+
+def _potential_fire_power_values_batch(
+    boards: "list[Board]", sim: ChainSimulator, use_native: bool,
+) -> "list[float]":
+    """`_potential_fire_power_value` を複数候補盤面にわたって評価する
+    (`_select_build_placement` の tie-break 専用、2026-08-13 追加)。
+
+    実測診断で `_select_build_placement` の tied 候補数は中央値10件・
+    最大22件と判明し (60盤面サンプル)、候補ごとに `_potential_fire_power_
+    value` (最大 1+beam_k 回の native往復) を個別呼び出しすることが
+    ロールアウトの残存コストの主因だった (`v3.2 選択ロジックの境界コスト
+    削減` docstring参照)。native経路かつ `POTENTIAL_FIRE_POWER_MAX_ADD==2`
+    (現行値) の場合のみ `potential_fire_power_raw_for_boards`
+    (1回のバッチ呼び出し) に置き換え、それ以外 (将来 MAX_ADD が変わった
+    場合・フォールバック) は既存 `_potential_fire_power_value` の個別
+    呼び出しをそのまま維持する (値は完全一致)。
+    """
+    if not (use_native and NATIVE_AVAILABLE) or POTENTIAL_FIRE_POWER_MAX_ADD != 2:
+        return [_potential_fire_power_value(b, sim, use_native) for b in boards]
+    raw = _native_potential_fire_power_raw_for_boards(
+        boards, _DROP_CANDIDATES_30, POTENTIAL_FIRE_POWER_BEAM_K,
+    )
+    return [float(_score_to_ojama_count(float(v), 0.0)) for v in raw]
+
+
+def _enumerate_placements_dispatch(
+    current: Board, pair: "tuple[int, int]", sim: ChainSimulator, use_native: bool,
+) -> "list[tuple[int, Board]]":
+    """既存 `_enumerate_placements` (indicators_v2) と同一の
+    (chain_count, placed_board) 集合を native/Python 切替可能な形で返す。
+
+    native 経路は元実装の「chain_count 降順ソート」を行わない (元の列挙順
+    =rotation昇順→col昇順のみを返す)。呼び出し元 `_select_build_placement`
+    の tie-break は常に「同じ chain_count 値の候補群」内での min/max であり、
+    Python の安定ソートは同値キー内の相対順序を変えないため、この省略は
+    選択結果に影響しない (報告書の設計判断参照、意味論保存)。
+
+    2026-08-13: native経路は `enumerate_and_simulate_placements` (1回の
+    バッチ呼び出しで22配置+連鎖シミュレーション結果一式を取得) に置き換え、
+    従来「列挙1回+配置ごとに simulate_chain 最大22回」だった Python<->Rust
+    往復を1回に削減した (`v3.2 選択ロジックの境界コスト削減` docstring参照、
+    値は完全一致)。
+    """
+    if not (use_native and NATIVE_AVAILABLE):
+        return _enumerate_placements(current, pair, sim)
+    results = _native_enumerate_and_simulate_placements(current, pair, filter_dead=False)
+    return [(r.chain_result.chain_count, r.placed_board) for r in results]
+
+
 def _select_best_placement(
     current: Board, pair: "tuple[int, int]", sim: ChainSimulator,
+    use_native: bool = True,
 ) -> "tuple[float, Board, Board] | None":
     """22配置 (既存 _enumerate_placements、再実装しない) のうち、
     calculate_chain_score (既存) の素点が最大の配置を選ぶ (=即時発火優先、
@@ -157,7 +461,26 @@ def _select_best_placement(
 
     Returns:
         (素点, 設置直後[発火前]の盤面, 発火後の最終盤面) または None。
+
+    use_native=True (既定) かつ拡張導入済みの場合、native puyo_core の
+    `exact_score` (連結ボーナス反映、`calculate_chain_score` とパリティ
+    確認済み) を使う。2026-08-13: 22配置列挙+配置ごとの連鎖シミュレーション
+    (最大22回の個別 native 呼び出し) を `enumerate_and_simulate_placements`
+    (1回のバッチ呼び出し) に統合し、Python<->Rust 往復を削減した
+    (`v3.2 選択ロジックの境界コスト削減` docstring参照、選択則・値は完全一致)。
     """
+    if use_native and NATIVE_AVAILABLE:
+        results = _native_enumerate_and_simulate_placements(current, pair, filter_dead=False)
+        # 元の _enumerate_placements と同じ安定ソート (chain_count降順)。
+        results.sort(key=lambda r: r.chain_result.chain_count, reverse=True)
+        best_native: "tuple[float, Board, Board] | None" = None
+        for r in results:
+            if r.is_dead:
+                continue
+            score = float(r.chain_result.exact_score)
+            if best_native is None or score > best_native[0]:
+                best_native = (score, r.placed_board, r.chain_result.final_board)
+        return best_native
     best: "tuple[float, Board, Board] | None" = None
     for _chain_count, placed in _enumerate_placements(current, pair, sim):
         if placed.is_dead():
@@ -171,6 +494,7 @@ def _select_best_placement(
 
 def _select_build_placement(
     current: Board, pair: "tuple[int, int]", sim: ChainSimulator,
+    use_native: bool = True,
 ) -> "Board | None":
     """v2「組むフェーズ」の配置選択: 消去を起こさず、潜在連鎖が最大の配置を選ぶ。
 
@@ -192,23 +516,42 @@ def _select_build_placement(
     であり、この事故的な発火分の得点はどこにも加算しない = 過小評価の
     可能性を承知の上での単純化、正直な注記)。置き場所が全く無い場合は
     None。
+
+    use_native=True (既定) かつ拡張導入済みの場合、内側の連鎖評価
+    (chain_count/current_max_chain/potential_fire_power 相当) を native
+    puyo_core に置換する (`_enumerate_placements_dispatch`/
+    `_current_max_chain_values_batch`/`_potential_fire_power_value` 参照、
+    推定ロジック自体はここでは一切変えない)。2026-08-13: tie-break の
+    current_max_chain 評価は候補盤面ごとの個別呼び出し (最大22回の native
+    往復) から `_current_max_chain_values_batch` (1回のバッチ呼び出し) に
+    置き換えた (`v3.2 選択ロジックの境界コスト削減` docstring参照、値は
+    従来と完全一致)。
     """
-    candidates = _enumerate_placements(current, pair, sim)
+    candidates = _enumerate_placements_dispatch(current, pair, sim, use_native)
     build_only = [(c, p) for c, p in candidates if c == 0 and not p.is_dead()]
     if not build_only:
         non_dead = [(c, p) for c, p in candidates if not p.is_dead()]
         if not non_dead:
             return None
         _chain_count, placed = min(non_dead, key=lambda cp: cp[0])
+        if use_native and NATIVE_AVAILABLE:
+            return _native_simulate_chain(placed).final_board
         return sim.simulate(placed).final_board
     if len(build_only) == 1:
         return build_only[0][1]
-    scored = [(float(current_max_chain(p, simulator=sim).raw), p) for _c, p in build_only]
+    build_boards = [p for _c, p in build_only]
+    chain_values = _current_max_chain_values_batch(build_boards, sim, use_native)
+    scored = list(zip(chain_values, build_boards))
     best_potential = max(potential for potential, _p in scored)
     tied = [p for potential, p in scored if potential == best_potential]
     if len(tied) == 1:
         return tied[0]
-    return max(tied, key=lambda p: float(potential_fire_power(p, simulator=sim).raw))
+    # 2026-08-13: tied 全件への _potential_fire_power_value 個別呼び出し
+    # (実測でロールアウトの主要コスト) を1回のバッチ呼び出しに統合
+    # (`_potential_fire_power_values_batch` 参照、値は完全一致)。
+    pfp_values = _potential_fire_power_values_batch(tied, sim, use_native)
+    best_idx = max(range(len(tied)), key=lambda i: pfp_values[i])
+    return tied[best_idx]
 
 
 def _deadline_trigger_value(
@@ -217,6 +560,7 @@ def _deadline_trigger_value(
     known_used: int,
     sim: ChainSimulator,
     elapsed_sec: float,
+    use_native: bool = True,
 ) -> float:
     """v2「発火フェーズ」: 期限到達時に「最良のトリガー1手」を撃った場合の
     反撃値 (お邪魔換算) を返す。ロールアウト全体でこの1回だけが発火。
@@ -225,12 +569,14 @@ def _deadline_trigger_value(
     22配置探索 (v1 _select_best_placement を再利用、実際に来る2色が分かって
     いるのでこれを使う)。既知ツモが無い/使い切っている場合は、既存指標
     III-2 immediate_fire_power (「任意1色の最良トリガー」を探す既存機構、
-    再実装しない) にフォールバックする。
+    再実装しない) にフォールバックする (immediate_fire_power はロールアウト
+    1回あたり最大1回しか呼ばれないため native 化の優先度は低く、
+    indicators_v2 の既存 Python 実装をそのまま使う)。
     """
     if final_board.is_dead():
         return 0.0
     if known_used < len(known_pairs) and _near_future_is_valid_pair(known_pairs[known_used]):
-        best = _select_best_placement(final_board, known_pairs[known_used], sim)
+        best = _select_best_placement(final_board, known_pairs[known_used], sim, use_native)
         score = best[0] if best is not None else 0.0
         return float(_score_to_ojama_count(score, elapsed_sec))
     return float(immediate_fire_power(final_board, elapsed_sec=elapsed_sec, simulator=sim).raw)
@@ -244,6 +590,7 @@ def _rollout_once(
     sim: ChainSimulator,
     rng: "random.Random",
     elapsed_sec: float,
+    use_native: bool = True,
 ) -> McRolloutOutcome:
     """1本のロールアウト (v2: 「積んで、期限に発火」)。既知ツモ→以降ランダム
     4色で、時間予算を段別テーブルで動的に消費しながら**発火せず組み続け**、
@@ -268,7 +615,7 @@ def _rollout_once(
             pair = (rng.choice(colors), rng.choice(colors))
             using_known = False
 
-        placed = _select_build_placement(current, pair, sim)
+        placed = _select_build_placement(current, pair, sim, use_native)
         if placed is None:
             break  # 置き場所が無い (満杯)
         row_index = _placement_row_index(current._grid, placed._grid)
@@ -281,7 +628,9 @@ def _rollout_once(
             known_used += 1
         current = placed
 
-    achieved_ojama = _deadline_trigger_value(current, known_pairs, known_used, sim, elapsed_sec)
+    achieved_ojama = _deadline_trigger_value(
+        current, known_pairs, known_used, sim, elapsed_sec, use_native,
+    )
     return McRolloutOutcome(achieved_ojama=achieved_ojama, hands_used=hands_used, time_used_sec=elapsed)
 
 
@@ -330,6 +679,7 @@ def estimate_counter_distribution(
     active_colors: "tuple[int, ...] | None" = None,
     simulator: "ChainSimulator | None" = None,
     elapsed_sec: float = 0.0,
+    use_native: bool = True,
 ) -> McCounterDistribution:
     """時間予算 (秒) 内で応手側が実現できる反撃力 (お邪魔換算) の分布をMCで
     推定する (#24 K拡張、K=4飽和の代わりに実時間手数まで近似する)。
@@ -350,12 +700,24 @@ def estimate_counter_distribution(
         simulator: ChainSimulator (省略時は共有インスタンス)。
         elapsed_sec: 試合相対経過秒 (お邪魔換算のマージンタイム補正用、
             既存 score_to_ojama 系と同じ意味)。
+        use_native: True (既定) で内側の連鎖シミュレーションに native
+            puyo_core 拡張を使う (2026-08-13 追加、意味論保存の載せ替え)。
+            拡張未導入環境では自動的に純Python実装へフォールバックする
+            (`src.puyo_core_bridge.NATIVE_AVAILABLE` 判定、fail-safe)。
+            False を明示すれば拡張の有無に関わらず常に純Python経路を使う
+            (パリティ検証用)。**`board` が重力違反 (認識由来の浮きぷよ)
+            を含む場合、この値に関わらずこの呼び出し全体が自動的に純
+            Python経路に固定される** (モジュール docstring「v3.1 重力違反
+            盤面の安全弁」参照、`_board_is_gravity_consistent` で入口1回
+            のみ判定)。
 
     Returns:
         McCounterDistribution: mean/p25/p75/到達確率/平均打手数。
 
     シードは盤面+時間予算から決定論的に導出する (_mc_counter_seed、
-    stateless: 同一入力には常に同一結果)。
+    stateless: 同一入力には常に同一結果)。use_native の値は乱数系列
+    (rng の使い方) に一切影響しない (内側の連鎖評価バックエンドのみが
+    変わる)。
     """
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead() or n_rollouts <= 0:
@@ -363,10 +725,21 @@ def estimate_counter_distribution(
     colors = active_colors if active_colors is not None else _near_future_active_colors(board)
     rng = random.Random(_mc_counter_seed(board, time_budget_sec))
 
+    # 重力違反盤面の安全弁 (モジュール docstring「v3.1」参照): 入口の実盤面
+    # (認識由来、認識起因の浮きぷよを持ち得る) をここで1回だけ判定する。
+    # ロールアウト内部で生成される盤面は全てシミュレーション産で重力一貫が
+    # 保証されるため再チェック不要 (再チェックすると全ロールアウトで
+    # O(BOARD_COLS)判定を毎手繰り返す無駄が生じる)。違反時はこの呼び出し
+    # 全体を純Python経路に固定し、native/Python混在による不整合を防ぐ。
+    effective_use_native = use_native and _board_is_gravity_consistent(board)
+
     ojama_values = np.empty(n_rollouts, dtype=float)
     hands_values = np.empty(n_rollouts, dtype=float)
     for i in range(n_rollouts):
-        outcome = _rollout_once(board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec)
+        outcome = _rollout_once(
+            board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec,
+            effective_use_native,
+        )
         ojama_values[i] = outcome.achieved_ojama
         hands_values[i] = float(outcome.hands_used)
 

@@ -458,6 +458,48 @@ def is_score_consistent(
     return ratio_min <= ratio <= ratio_max
 
 
+# ============================
+# 純粋連鎖得点の層別判定 (タスク#7 追加、2026-08-14)
+# ============================
+#
+# 背景 (userドメイン知見 2026-08-13、docs/KNOWN_WEAKNESSES.md W2):
+# 連鎖ボーナスは必ず10点単位 (calculate_step_score = erased_count * 10 * bonus)
+# であり、連鎖アニメーション中は新規設置が発生しないため、連鎖アニメ区間の
+# delta_score は「純粋な連鎖得点のみ」= 必ず10の倍数になる。一方、連鎖外
+# (設置直後等) の delta_score には1点単位の落下ボーナスが混入し得るため
+# 10の倍数である保証がない (全消し2100点等の既知例外を除く)。
+# この構造的性質を「得点逆算による連鎖数推定 (chain_count_truth の高信頼帯)」
+# の事前フィルタとして使い、連鎖外の増分が誤って混入したイベントを層別で
+# 除外する。
+CHAIN_SCORE_MULTIPLE_OF: int = 10
+# 連鎖外 (設置直後) の得点変化のおおよその上限 (userドメイン知見、全消し
+# 2100点等の例外を除く)。本モジュールでは判定に直接使わないが、混入疑いの
+# 大きさを説明するための参考値として公開する。
+NON_CHAIN_SCORE_DELTA_MAX_APPROX: int = 250
+
+
+def is_pure_chain_score_delta(
+    delta_score: int, multiple_of: int = CHAIN_SCORE_MULTIPLE_OF,
+) -> bool:
+    """delta_score が「連鎖中のみの純粋な連鎖得点」の構造的性質を満たすかを返す。
+
+    False の場合、設置直後の落下ボーナス (1点単位) が混入している疑いがあり、
+    得点逆算による連鎖数推定の入力として使うべきでない
+    (docs/KNOWN_WEAKNESSES.md W2、根治④として層別を明記)。
+
+    Args:
+        delta_score: 検証対象の得点差分。
+        multiple_of: 判定に使う倍数 (既定 10、通常ルールの連鎖ボーナス基準)。
+
+    Returns:
+        True = multiple_of の倍数 (連鎖のみの変化として整合)。
+        delta_score が 0 以下の場合は連鎖が起きていない (整合とみなさない)。
+    """
+    if delta_score <= 0:
+        return False
+    return delta_score % multiple_of == 0
+
+
 def compute_effective_rate(
     elapsed_sec: float,
     rate_base: int = OJAMA_RATE_STANDARD,

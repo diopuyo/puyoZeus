@@ -169,6 +169,22 @@ CNN_FLICKER_MIN_CHANGES: int = 3
 EFFECT_GATE_TOP_ROWS: "frozenset[int]" = frozenset({1, 2, 3})
 EFFECT_PERSIST_SEC: float = 0.4
 
+# 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認):
+# 現行の初回STABLE確定窓 (`_update_within_current_state` の pending_count/
+# pending_board、stable_frame_count=3 連続で厳密一致) は 1 フレームのノイズ
+# 混入で連続カウンタが 1 に戻り、2値交互ノイズには原理的に無限に弱い
+# (実測: scripts/_measure_stable_window_restart_2026-08-13.py、
+# logs/stable_window_restart_measure_2026-08-13.json。確定の 8.3% で延び
+# 発生・最悪 9.05 秒、3中2多数決の反実仮想で超過時間 -99.6%)。
+# 本フラグ ON 時は直近 STABLE_MAJORITY_WINDOW_FRAMES 観測 (raw cnn_board) の
+# うち STABLE_MAJORITY_MIN_VOTES 以上一致した盤面を、その場で確定候補として
+# 採用する (`_majority_window_vote` 参照)。認識精度の物差し (99.5%基準)
+# 回帰検証を条件に採用確定 (2026-08-13)。
+# default False (stable_majority_window) = 従来の厳密連続一致を完全維持
+# (backwards compat、148動画収集走行中のため既定OFF必須)。
+STABLE_MAJORITY_WINDOW_FRAMES: int = 3
+STABLE_MAJORITY_MIN_VOTES: int = 2
+
 
 class BoardState(Enum):
     """1 プレイヤー側盤面の状態。"""
@@ -276,6 +292,13 @@ class StateContext:
     effect_gate_hold: "dict[tuple[int, int], tuple[int, float]]" = field(
         default_factory=dict,
     )
+    # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13): 直近
+    # STABLE_MAJORITY_WINDOW_FRAMES 分の raw cnn_board 履歴 (最新が末尾)。
+    # `_majority_window_vote` の入力。state 遷移 (`_apply_transition`) の
+    # pending リセットに合わせてクリアする。
+    # backwards compat: stable_majority_window=False (default) の間は
+    # 一切書き込まれない (常に空リストのまま)。
+    confirm_window_history: "list[Board]" = field(default_factory=list)
 
     def is_stable(self) -> bool:
         """STABLE 確定中か (= 認識結果を盤面確定に使う)。"""
@@ -363,6 +386,36 @@ class DetectorSignals:
     # None = 未取得 (この場合は従来の固定レートへフォールバックし、
     # 推測で減衰させない)。 backwards compat: default None で既存動作と同一。
     elapsed_since_first_move_sec: float | None = None
+    # 案2 (enable_ojama_fall_placement_override, 2026-08-13、OJAMA_FALL
+    # 誤分類根因調査): 自 side (score_delta フィールドは相手側のため区別する)
+    # の今フレーム score 増分 (常に 0 以上、RecognitionPipeline._step_side の
+    # score_d_for_self をそのまま渡す)。 OJAMA_FALL 滞在中に自 score が動く
+    # ことは通常無い (おじゃま受け側は連鎖しないため) ため、 増分があれば
+    # 実設置イベント (落下ボーナス等) の証拠として使う。
+    # backwards compat: default 0 で既存動作と完全同一。
+    own_score_delta: int = 0
+    # 案4-lite 拡張 (coordinator追加指示, 2026-08-13、OJAMA_FALL誤分類根因
+    # 調査 場面2): 自 side の直近 chain hold 終了予定時刻
+    # (RecognitionPipeline._chain_until_1p/_chain_until_2p をそのまま渡す。
+    # 新規の状態追跡を増やさず既存の追跡値を再利用する)。 chain_event が
+    # 現在アクティブなら time_sec 以降の未来時刻、 終了済みなら最後に更新
+    # された時刻のまま残る (試合開始時は 0.0)。
+    # OjamaVisualDetector が `signals.time_sec - own_chain_hold_until_sec` で
+    # 「直近まで自 chain がアクティブだったか」を state 非依存に判定する
+    # (ctx.state==CHAIN の瞬間条件だけでは chain_event 検出の瞬間空白で
+    # state が既に CHAIN を離れた後の割り込みを捉えられないため)。
+    # backwards compat: default 0.0 で既存動作と完全同一
+    # (0.0 は「経過大 = 直近アクティブでない」と等価に働く)。
+    own_chain_hold_until_sec: float = 0.0
+    # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の根治):
+    # 自 side の未着弾おじゃま予告量 (お邪魔会計トラッカー由来)。
+    # RecognitionPipeline が会計トラッカーを有効化している構成でのみ算出して
+    # 渡す (`_all_clear_pending` と同じ「外部で計算し signals に注入する」
+    # パターン、 detector 側は getattr で安全参照する)。
+    # None = 未計測/トラッカー無効構成を意味し、 OjamaVisualDetector は
+    # 滞在短縮ロジックを一切適用しない (= 従来相当のフレーム数で判定)。
+    # backwards compat: default None で既存動作と完全同一。
+    own_pending_ojama_forecast: int | None = None
 
 
 class StateTransitionDetector(Protocol):
@@ -466,6 +519,44 @@ def _vote_majority_board(
     return result
 
 
+def _majority_window_vote(
+    history: "list[Board]", min_votes: int,
+) -> "Board | None":
+    """直近 history (最大 window frame) 中で min_votes 以上一致する盤面を返す.
+
+    盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13) のコア判定。
+    厳密な N 連続一致 (pending_count 方式) は 1 フレームのノイズ混入で連続
+    カウンタが 1 に戻ってしまい、2値交互ノイズには原理的に無限に弱い
+    (実測: scripts/_measure_stable_window_restart_2026-08-13.py)。
+    本関数は window 内の raw cnn_board を厳密一致 (`Board.grid_bytes()` を
+    キーにした投票) で集計し、最多得票の盤面が min_votes 以上ならそれを
+    返す (= 過半数でなくても「window 中で最も支持された盤面」を採用する)。
+
+    Args:
+        history: 直近 window frame 分の raw cnn_board (append 順、最新が末尾)。
+        min_votes: 採用に必要な最低一致票数。
+
+    Returns:
+        多数決で選ばれた盤面 (票数最多)。history が min_votes 未満、または
+        全 window 内で min_votes に達する盤面が無い場合は None
+        (= 未確定、呼び出し側は従来通り継続観測する)。
+    """
+    if len(history) < min_votes:
+        return None
+    counts: "dict[bytes, tuple[Board, int]]" = {}
+    for b in history:
+        key = b.grid_bytes()
+        prev = counts.get(key)
+        if prev is None:
+            counts[key] = (b, 1)
+        else:
+            counts[key] = (prev[0], prev[1] + 1)
+    best_board, best_n = max(counts.values(), key=lambda item: item[1])
+    if best_n >= min_votes:
+        return best_board
+    return None
+
+
 def _build_initial_confirmed_board(
     new_cnn: Board,
     initial_confirm_history: list[Board] | None,
@@ -544,6 +635,7 @@ def _merge_diff_only(
     initial_confirm_min_votes: int = DEFAULT_INITIAL_CONFIRM_MIN_VOTES,
     hsv_board: Board | None = None,
     enable_puyo_to_empty_hsv_guard: bool = False,
+    history_board: Board | None = None,
 ) -> Board:
     """baseline をベースに、CNN との差分 cell のみ new_cnn 値で上書き.
 
@@ -590,6 +682,11 @@ def _merge_diff_only(
             gravity filter で上のぷよまで連鎖消去される列デッドロック
             (c34 1P col=1, frame 14332 実測) を根で止める。
             default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        history_board: R2 浮きぷよ是正機構 (2026-08-17)。 `_apply_gravity_filter`
+            にそのまま渡す (直前 STABLE 盤面を想定)。呼び出し側が
+            from_state スコープ判定 (色→空 が物理的に説明可能な遷移か) を
+            済ませた上で渡す前提。 default None = 従来挙動完全維持
+            (backwards compat)。
 
     Returns:
         merged: baseline + 物理整合性 filter 後の差分のみ更新された盤面
@@ -647,7 +744,9 @@ def _merge_diff_only(
     support_board = (
         empty_to_color_guard if enable_gravity_filter_support else None
     )
-    _apply_gravity_filter(merged, support_board=support_board)
+    _apply_gravity_filter(
+        merged, support_board=support_board, history_board=history_board,
+    )
     return merged
 
 
@@ -706,6 +805,7 @@ def _filter_transition_new_cnn_for_burst_guard(
 
 def _apply_gravity_filter(
     board: Board, *, support_board: Board | None = None,
+    history_board: Board | None = None,
 ) -> None:
     """浮きぷよ ban (Phase C-6 の A): 空 cell の上に puyo がある場合、
     その上の puyo を空に戻す。連鎖中の重力再配置中に CNN が誤検出した
@@ -727,6 +827,16 @@ def _apply_gravity_filter(
             F ガード (empty_to_color_guard) 起因で EMPTY のまま残った cell が
             積もり中のおじゃまを浮きぷよ誤消去するのを防ぐ目的で渡す想定。
             default None = 従来挙動完全維持 (backwards compat)。
+        history_board: R2 浮きぷよ是正機構 (2026-08-17)。 None でない場合、
+            gap 判定される EMPTY cell について history_board の同 cell が
+            非空色ならその色で復元し gap 扱いにしない (= 「上の puyo が
+            浮いている」でなく「下が誤 EMPTY」という解釈を優先する)。
+            復元できなければ (history_board が None、または同 cell が
+            EMPTY/UNKNOWN) 従来通り gap 扱い (= 上の puyo を消す) に
+            フォールバックする。呼び出し側 (BoardStateMachine) が直前
+            STABLE 盤面を保持・供給する外部 wrapper であり、本関数自身は
+            history を保持しない (stateless)。
+            default None = 従来挙動完全維持・bit-identical (backwards compat)。
     """
     from src.board import COLOR_EMPTY, COLOR_UNKNOWN
 
@@ -741,9 +851,16 @@ def _apply_gravity_filter(
                     sup_v = support_board.get(r, c)
                     if sup_v != COLOR_EMPTY and sup_v != COLOR_UNKNOWN:
                         continue
+                # R2: history_board が同 cell に非空色の記録を持つなら
+                # 「誤 EMPTY 疑い」として復元する (= 消す方向でなく疑う方向)。
+                if history_board is not None:
+                    hist_v = history_board.get(r, c)
+                    if hist_v != COLOR_EMPTY and hist_v != COLOR_UNKNOWN:
+                        board.set(r, c, hist_v)
+                        continue  # 復元成功、 gap 扱いにしない
                 gap_found = True
             elif gap_found:
-                # 空 cell の上に puyo → 浮き → 空に戻す
+                # 空 cell の上に puyo → 浮き → 空に戻す (復元不能時のフォールバック)
                 board.set(r, c, COLOR_EMPTY)
 
 
@@ -828,6 +945,40 @@ class BoardStateMachine:
         # `_merge_diff_only` 自体・既存引数は一切変更しない。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_transition_merge_guard: bool = False,
+        # 盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認、
+        # 認識99.5%物差し条件付き採用)。True にすると `_update_within_current_state`
+        # の初回STABLE確定窓が「stable_frame_count 連続厳密一致」から
+        # 「直近 stable_majority_window_frames 観測中 stable_majority_min_votes
+        # 以上一致」に切り替わる (`_majority_window_vote` 参照)。
+        # default False = 従来の厳密連続一致を完全維持・bit-identical
+        # (backwards compat、148動画収集走行中のため既定OFF必須)。
+        stable_majority_window: bool = False,
+        stable_majority_window_frames: int = STABLE_MAJORITY_WINDOW_FRAMES,
+        stable_majority_min_votes: int = STABLE_MAJORITY_MIN_VOTES,
+        # R2 浮きぷよ是正機構 (enable_floating_gap_restore, 2026-08-17):
+        # True にすると、 TSUMO_FALL/OJAMA_FALL → STABLE 遷移の
+        # `_merge_diff_only` で「下が空・上に puyo」の物理矛盾を検出した際、
+        # 上の puyo を消すのでなく直前 confirmed_board (= 直近 STABLE 盤面)
+        # の同 cell から色ぷよ復元を試みる (`_apply_gravity_filter` 参照)。
+        # CHAIN/GRAVITY_SETTLE 遷移では色→空 が物理的に正当な消去でありうる
+        # ため対象外 (`_TRANSITION_MERGE_GUARD_SCOPE` と同じスコープを再利用)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_floating_gap_restore: bool = False,
+        # 持続誤認26件系統2 (enable_ojama_column_stack_fix, 2026-08-17、
+        # docs/KNOWN_WEAKNESSES.md W10 参照、c109 実測): OJAMA_FALL → STABLE
+        # 遷移 merge で、既存の色ぷよ (1-5) が同フレームの CNN 誤読で
+        # おじゃま(9) に上書きされる物理違反 (= 同一列内の二重着地衝突、
+        # 煙/バーストの半透明重畳で既存puyoがおじゃま色に誤分類される事故)
+        # を防ぐ。True の場合、`_filter_transition_new_cnn_for_burst_guard`
+        # (既存関数、無改修で再利用) を OJAMA_FALL からの遷移merge時に
+        # signals.effect_gate_window_active に関係なく必ず適用し、
+        # 「base が EMPTY でない cell が おじゃま(9) に化ける」diff を
+        # 却下する (base=EMPTY→9 の正当な着地のみ許可)。
+        # `enable_transition_merge_guard` (Stage1.5) と独立フラグ
+        # (effect_gate_window_active 依存を外した狭いスコープの方が
+        # 効果を確認しやすいため)。default False = 従来挙動完全維持・
+        # bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_column_stack_fix: bool = False,
     ) -> None:
         self._non_stable_history_size = int(non_stable_history_size)
         self._empty_to_color_min_votes = int(empty_to_color_min_votes)
@@ -859,6 +1010,12 @@ class BoardStateMachine:
         # (backwards compat)。
         self._enable_gravity_filter_support = bool(enable_gravity_filter_support)
         self._merge_use_majority_value = bool(merge_use_majority_value)
+        # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
+        self._enable_floating_gap_restore = bool(enable_floating_gap_restore)
+        # 持続誤認26件系統2 (2026-08-17)。 default False = bit-identical。
+        self._enable_ojama_column_stack_fix = bool(
+            enable_ojama_column_stack_fix
+        )
         # 列ゲート緩和 (enable_column_partial_support, 2026-07-25):
         # True で _apply_stable_recovery_gate の安全弁C浮き判定/最終重力
         # フィルタに stable_recovery_counters 由来の support を渡す。
@@ -926,6 +1083,12 @@ class BoardStateMachine:
         self._effect_gate_hard_freeze = bool(effect_gate_hard_freeze)
         # バーストガード Stage1.5 (2026-08-05): default False = 従来挙動完全維持。
         self._enable_transition_merge_guard = bool(enable_transition_merge_guard)
+        # 盤面確定窓 3中2多数決 (2026-08-13): default False = 従来挙動完全維持。
+        self._enable_stable_majority_window = bool(stable_majority_window)
+        self._stable_majority_window_frames = max(
+            2, int(stable_majority_window_frames),
+        )
+        self._stable_majority_min_votes = max(1, int(stable_majority_min_votes))
         self._detectors: list[StateTransitionDetector] = (
             list(detectors) if detectors else []
         )
@@ -1081,6 +1244,10 @@ class BoardStateMachine:
         # state 切り替えで pending をリセット
         self._ctx.pending_board = None
         self._ctx.pending_count = 0
+        # 盤面確定窓 3中2多数決 (2026-08-13): pending リセットと同じタイミングで
+        # window 履歴もクリアする (前 state の観測を次 window に持ち込まない)。
+        if self._enable_stable_majority_window:
+            self._ctx.confirm_window_history = []
         # NON-STABLE → STABLE 復帰時: 差分のみ反映で baseline 維持
         # (Phase C-5: 全 cell コピーは CNN ぶれを取り込むため廃止)
         if (
@@ -1117,13 +1284,34 @@ class BoardStateMachine:
             # `_merge_diff_only` 自体・既存引数 (signals.cnn_board) は不変、
             # ローカル変数 new_cnn_for_merge を新たに merge の入力に使うのみ。
             new_cnn_for_merge = signals.cnn_board
+            # 持続誤認26件系統2 (2026-08-17): OJAMA_FALL からの遷移では
+            # effect_gate_window_active の狭い窓に関係なく物理フィルタを
+            # 常時適用する (c109 実測=衝突フレームは窓終了後だった)。
+            _apply_ojama_stack_fix = (
+                self._enable_ojama_column_stack_fix
+                and self._ctx.state == BoardState.OJAMA_FALL
+            )
             if (
-                self._enable_transition_merge_guard
-                and signals.effect_gate_window_active
+                (
+                    self._enable_transition_merge_guard
+                    and signals.effect_gate_window_active
+                )
+                or _apply_ojama_stack_fix
             ):
                 new_cnn_for_merge = _filter_transition_new_cnn_for_burst_guard(
                     self._ctx.confirmed_board, signals.cnn_board, self._ctx.state,
                 )
+            # R2 浮きぷよ是正機構 (2026-08-17): 色→空 が物理的に正当化できない
+            # from_state (TSUMO_FALL/OJAMA_FALL、`_TRANSITION_MERGE_GUARD_SCOPE`
+            # と同じスコープ) のときのみ history_board (= 遷移前 confirmed_board)
+            # を渡す。CHAIN/EFFECT/GRAVITY_SETTLE 等では色ぷよの消滅が正当な
+            # 物理事象でありうるため None のまま (= 復元を試みない)。
+            _floating_restore_history: "Board | None" = None
+            if (
+                self._enable_floating_gap_restore
+                and self._ctx.state in _TRANSITION_MERGE_GUARD_SCOPE
+            ):
+                _floating_restore_history = self._ctx.confirmed_board
             self._ctx.confirmed_board = _merge_diff_only(
                 self._ctx.confirmed_board, new_cnn_for_merge,
                 empty_to_color_guard=empty_guard,
@@ -1135,6 +1323,7 @@ class BoardStateMachine:
                 enable_puyo_to_empty_hsv_guard=(
                     self._enable_puyo_to_empty_hsv_guard
                 ),
+                history_board=_floating_restore_history,
             )
             self._ctx.last_stable_idx = self._ctx.frame_idx
             self._ctx.pending_board = self._ctx.confirmed_board.copy()
@@ -1204,6 +1393,44 @@ class BoardStateMachine:
             self._ctx.cnn_flicker_history.clear()
             self._ctx.non_stable_entry_time_sec = None
 
+    def _update_pending_confirmation(self, cnn_board: "Board") -> None:
+        """初回STABLE確定窓の pending_board/pending_count を1frame分更新する.
+
+        盤面確定窓 3中2多数決 (stable_majority_window, 2026-08-13 user承認):
+        True 時は直近 window 観測 (`confirm_window_history`) の多数決
+        (`_majority_window_vote`) で判定し、多数決が成立した瞬間に
+        pending_count を self._stable_n まで進めて即時確定させる
+        (呼び出し元の `pending_count >= self._stable_n` 判定を変更せずに
+        再利用するため)。不成立なら pending を未確定 (None/0) にリセットする。
+        False (default) 時は従来の厳密連続一致を維持する
+        (backwards compat、bit-identical)。
+
+        Args:
+            cnn_board: 現フレームの raw CNN 観測盤面。
+        """
+        if self._enable_stable_majority_window:
+            self._ctx.confirm_window_history.append(cnn_board.copy())
+            if (
+                len(self._ctx.confirm_window_history)
+                > self._stable_majority_window_frames
+            ):
+                self._ctx.confirm_window_history.pop(0)
+            majority_board = _majority_window_vote(
+                self._ctx.confirm_window_history, self._stable_majority_min_votes,
+            )
+            if majority_board is not None:
+                self._ctx.pending_board = majority_board
+                self._ctx.pending_count = self._stable_n
+            else:
+                self._ctx.pending_board = None
+                self._ctx.pending_count = 0
+            return
+        if _boards_equal(self._ctx.pending_board, cnn_board):
+            self._ctx.pending_count += 1
+        else:
+            self._ctx.pending_board = cnn_board.copy()
+            self._ctx.pending_count = 1
+
     def _update_within_current_state(
         self, signals: DetectorSignals,
     ) -> None:
@@ -1248,11 +1475,7 @@ class BoardStateMachine:
         # MENU (試合復帰直後) または STABLE: 連続多数決で confirmed を更新。
         # MENU から N 連続一致で STABLE へ自動遷移する。
         cnn_board = signals.cnn_board
-        if _boards_equal(self._ctx.pending_board, cnn_board):
-            self._ctx.pending_count += 1
-        else:
-            self._ctx.pending_board = cnn_board.copy()
-            self._ctx.pending_count = 1
+        self._update_pending_confirmation(cnn_board)
 
         if self._ctx.pending_count >= self._stable_n:
             # Phase C-7 (E-1): CNN を盤面更新ソースから完全排除

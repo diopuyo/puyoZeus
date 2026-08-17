@@ -1,0 +1,17 @@
+metric	value
+n_videos	66.0
+n_matches_estimated	1224.0
+tsumo_q33	17.0
+tsumo_q67	36.0
+n_early_pairs_total	24947.0
+n_mid_pairs_total	25355.0
+auc_construction_a_all_early	0.5950939545468285
+auc_mid_model_quality	0.6630925170676386
+coverage_rate_early_to_mid	0.9080851404978555
+n_early_pairs_covered	22654.0
+auc_construction_a_covered_subset	0.5812198020116702
+auc_construction_b_covered_subset	0.5352370661323962
+diff_b_minus_a_point	-0.04598273587927404
+diff_b_minus_a_ci_low	-0.08633288064128625
+diff_b_minus_a_ci_high	-0.007988169786207583
+diff_n_resamples	2000.0

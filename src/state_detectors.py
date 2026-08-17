@@ -85,29 +85,26 @@ class ChainPhaseDetector:
     # default False = 従来挙動完全維持 (backwards compat)。
     # A/B 対照実験用フラグ; gsettle 統合判断後に恒常化予定。
     enable_slide_override_ojama_hold: bool = False
+    # 案3 (enable_chain_gate_raw_fallback, 2026-08-13、OJAMA_FALL誤分類根因調査、
+    # 優先度最下位: 場面2 の真因は stride 下の entry hardening 側と判明済み、
+    # 4連結ゲート自体は反証済みだが無害な保険として実装する)。
+    # True にすると 4 連結ゲートが ctx.confirmed_board (CHAIN 中は凍結) 上で
+    # erasable なしと判定した場合でも、 signals.cnn_board (常時最新の生認識
+    # 盤面) に erasable があれば chain_event を通す。 適用は
+    # ctx.state == BoardState.CHAIN **継続中のみ** に限定する
+    # (= 4連結ゲートの主目的である「chain_hold 残響の誤 CHAIN 突入拒否」
+    # (実測 t188-193、 confirmed_board にも cnn_board にも 4連結が無い状態での
+    # chain_event 誤検知を正しく退けているケース) を壊さないため。 初回 CHAIN
+    # 突入判定 (ctx.state != CHAIN) には適用しない)。
+    # default False = 従来挙動完全維持 (backwards compat)。
+    enable_chain_gate_raw_fallback: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
     ) -> BoardState | None:
         if signals.chain_event is not None:
-            # cycle 49 (2026-05-20): 4 連結必須化 gate
-            # 強化アナリスト retrospective_chain_missing / chain_no_puyo_loss が
-            # 全動画で 12-30 件検出 = chain 誤判定が普遍的問題。
-            # 前 STABLE 盤面に 4 連結 (= erasable) が無ければ chain 遷移を拒否。
-            # ただし: ctx.confirmed_board が None or UNKNOWN だらけの認識不確実時は
-            # 真の連鎖を見逃さないため遷移許容 (= fail-silent 防止)。
-            if self.chain_sim is not None and ctx.confirmed_board is not None:
-                from src.board import COLOR_UNKNOWN as _CU
-                grid = ctx.confirmed_board._grid
-                # UNKNOWN cell が 3 個以上ある場合は認識不確実 → gate skip
-                unknown_count = int((grid == _CU).sum())
-                if unknown_count < 3:
-                    erasable = self.chain_sim.find_erasable_groups(
-                        ctx.confirmed_board,
-                    )
-                    if not erasable:
-                        # 4 連結なし = 偽 chain event を無視
-                        return None  # state 維持
+            if not self._passes_erasable_gate(ctx, signals):
+                return None  # state 維持
             return BoardState.CHAIN
         if ctx.state == BoardState.CHAIN:
             # フェーズ A 精緻化: ojama_top_positive かつ chain_ojama_exit ON なら
@@ -137,6 +134,39 @@ class ChainPhaseDetector:
                 return BoardState.GRAVITY_SETTLE
             return BoardState.STABLE
         return None
+
+    def _passes_erasable_gate(
+        self, ctx: StateContext, signals: DetectorSignals,
+    ) -> bool:
+        """cycle 49 の 4 連結ゲート (+ 案3 cnn_board フォールバック) を判定する.
+
+        True を返せば chain_event を通す (= CHAIN 遷移許可)。 False は
+        「4 連結なし = 偽 chain event」として遷移拒否 (state 維持)。
+
+        判定不能 (chain_sim 未注入 or confirmed_board 未確定) の場合は
+        fail-silent 防止のため許容する (= 従来挙動、cycle 49 と同一)。
+        UNKNOWN cell が 3 個以上 (認識不確実) の場合もゲートを skip する
+        (従来挙動)。
+        """
+        if self.chain_sim is None or ctx.confirmed_board is None:
+            return True
+        from src.board import COLOR_UNKNOWN as _CU
+        grid = ctx.confirmed_board._grid
+        unknown_count = int((grid == _CU).sum())
+        if unknown_count >= 3:
+            return True
+        if self.chain_sim.find_erasable_groups(ctx.confirmed_board):
+            return True
+        # 案3 (2026-08-13): CHAIN 継続中のみ cnn_board (常時最新) でフォール
+        # バック確認する。理由はクラス docstring 側フラグ定義のコメント参照
+        # (= 4連結ゲートが chain_hold 残響を正しく拒否しているケースを
+        # 壊さないため、初回 CHAIN 突入判定には適用しない)。
+        if (
+            self.enable_chain_gate_raw_fallback
+            and ctx.state == BoardState.CHAIN
+        ):
+            return bool(self.chain_sim.find_erasable_groups(signals.cnn_board))
+        return False
 
 
 # ============================

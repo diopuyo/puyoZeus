@@ -26,6 +26,7 @@
 """
 from __future__ import annotations
 
+import math
 import random
 import zlib
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ from src.board import (
     Board,
     VISIBLE_ROWS,
 )
-from src.chain import MIN_ERASE_COUNT, ChainResult, ChainSimulator
+from src.chain import ChainResult, ChainSimulator, ChainStep, MIN_ERASE_COUNT
 from src.chain_bitboard import (
     batch_adjacency_tiebreak,
     batch_from_boards,
@@ -69,6 +70,18 @@ MAX_COL_HEIGHT: int = VISIBLE_ROWS  # = 12
 NORM_BUMPINESS: float = 60.0
 # II-3 窒息余裕: 近接 3 列 = 1,2,3 列目 (0-indexed)。仕様書準拠。
 DEATH_NEIGHBOR_COLS: tuple[int, ...] = (1, 2, 3)
+
+# II-4 中央凸度 (2026-08-12 壁打ちuser仕様): 「真ん中(3,4列目)が外周より
+# 高いと不利」という定性認識をデータ検証するための観測軸。
+# 下 BASE_ROWS 段は土台なので無視 (クリップ)。user指示の固定値 3。
+BASE_ROWS: int = 3
+# 中央列 = 3,4列目 (0-indexed: 2,3)。DEATH_COL(=2, 3列目) と同じ数え方。
+CENTER_BULGE_CENTER_COLS: tuple[int, ...] = (2, 3)
+# 外周列 = 1,2,5,6列目 (0-indexed: 0,1,4,5)。
+CENTER_BULGE_OUTER_COLS: tuple[int, ...] = (0, 1, 4, 5)
+# raw の理論上限 |raw| (中央列が満杯・外周列が空 or 逆の極限)。
+# VISIBLE_ROWS(=12) - BASE_ROWS(=3) = 9。 仕様書の値域 [-9,+9] はこれで導出。
+CENTER_BULGE_RAW_ABS_MAX: float = float(VISIBLE_ROWS - BASE_ROWS)
 
 # III-1 現在の最大連鎖数: eスポーツ上級者の実用上限 ~19 連鎖。暫定。データ後決定。
 NORM_MAX_CHAIN: float = 19.0
@@ -275,6 +288,135 @@ def death_margin_neighbor(board: Board) -> IndicatorV2Value:
     max_h = max(board.height_of(c) for c in DEATH_NEIGHBOR_COLS)
     raw = float(MAX_COL_HEIGHT - max_h)
     return IndicatorV2Value(score=_clamp01(raw / MAX_COL_HEIGHT), raw=raw)
+
+
+def center_bulge(board: Board) -> IndicatorV2Value:
+    """II-4 中央凸度 (2026-08-12 壁打ちuser仕様)。
+
+    プレイヤー共通認識「真ん中(3,4列目)が外周(1,2,5,6列目)より高いと不利」を
+    データ検証するための観測軸。「N段以上で不利」の閾値は決め打ちせず連続値
+    のみ提供し、重要度・閾値は学習(HistGBC)に発見させる (CLAUDE.md
+    「観測軸を提供→学習で重要度を発見」)。二値版は作らない。
+
+    h'[c] = max(0, height_of(c) - BASE_ROWS)  # 下3段は土台なので無視
+    raw   = mean(h'[中央2列]) - mean(h'[外周4列])  # 範囲 [-9, +9]
+    score = (raw + 9) / 18  # 0〜1、0.5 がフラット (中央=外周)
+
+    height_of() はお邪魔も高さに数える (Board.height_of の既存仕様を継承)。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット、1に近いほど中央凸)、
+            raw=中央平均-外周平均 (クリップ後、範囲 [-9,+9])。
+    """
+    heights = [float(board.height_of(c)) for c in range(BOARD_COLS)]
+    return _center_bulge_from_column_heights(heights)
+
+
+def _center_bulge_from_column_heights(heights: list[float]) -> IndicatorV2Value:
+    """中央凸度の共通計算 (center_bulge / center_bulge_color / _ojama で共有)。
+
+    b-1 分解 (2026-08-12 user確定、指標大整理提案書) に伴い、center_bulge()
+    本体からロジックを切り出した内部共通部品。center_bulge() の計算結果・
+    定数は変更しない (backwards compat)。
+
+    Args:
+        heights: 列ごとの高さ (計算基準はセル種別に応じて呼び出し側が決める。
+            例: 全種別なら height_of()、色ぷよのみなら
+            `_column_height_by_predicate(board, c, _is_color_puyo)`)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央平均-外周平均。
+    """
+    clipped_heights = [max(0.0, h - BASE_ROWS) for h in heights]
+    center_mean = (
+        sum(clipped_heights[c] for c in CENTER_BULGE_CENTER_COLS)
+        / len(CENTER_BULGE_CENTER_COLS)
+    )
+    outer_mean = (
+        sum(clipped_heights[c] for c in CENTER_BULGE_OUTER_COLS)
+        / len(CENTER_BULGE_OUTER_COLS)
+    )
+    raw = center_mean - outer_mean
+    score = (raw + CENTER_BULGE_RAW_ABS_MAX) / (2.0 * CENTER_BULGE_RAW_ABS_MAX)
+    return IndicatorV2Value(score=_clamp01(score), raw=raw)
+
+
+def _is_color_puyo_cell(value: int) -> bool:
+    """色ぷよ (1〜5) セル判定 (お邪魔・空・UNKNOWN を除く)。"""
+    return value not in (COLOR_EMPTY, COLOR_UNKNOWN, COLOR_OJAMA)
+
+
+def _is_ojama_cell(value: int) -> bool:
+    """おじゃまぷよセル判定。"""
+    return value == COLOR_OJAMA
+
+
+def _column_height_by_predicate(board: Board, col: int, is_match) -> int:
+    """height_of() と同じ「最上段からの距離」方式で、対象セルを is_match に
+    絞った部分高さを返す (b-1 分解、色ぷよのみ/おじゃまのみの高さ測定用)。
+
+    height_of() は「空・UNKNOWN以外」の最上段を基準にするが、本関数は
+    その基準セル集合を is_match で絞る。一致セルが列内に無ければ 0。
+    重なり (色ぷよの上におじゃまが乗る等) があっても、is_match に一致する
+    最上段セルの位置だけを見る単純な定義 (height_of と同じ精神)。
+
+    Args:
+        board: 対象盤面。
+        col: 列インデックス (0-5)。
+        is_match: セル色値 (int) -> bool の判定関数。
+
+    Returns:
+        int: is_match に一致する最上段セルの、最下段からの距離。0 なら一致
+            セルなし。
+    """
+    column = board._grid[:, col]
+    for row in range(BOARD_ROWS):
+        if is_match(int(column[row])):
+            return BOARD_ROWS - row
+    return 0
+
+
+def center_bulge_color(board: Board) -> IndicatorV2Value:
+    """II-4' 中央凸度・色ぷよ由来 (b-1 分解, 2026-08-12 user確定)。
+
+    center_bulge() と同じ式だが、高さの基準セルを色ぷよ (1〜5) のみに絞る。
+    指標大整理提案書 b-1 の検証結果 (中央凸度の不利の大部分はおじゃま由来、
+    色ぷよ由来は小さいが本物の効果) を受け、合成版を色ぷよ/おじゃまの2指標に
+    分解する。合成版 center_bulge() は backwards compat のため残す。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央-外周 (色ぷよのみ)。
+    """
+    heights = [
+        float(_column_height_by_predicate(board, c, _is_color_puyo_cell))
+        for c in range(BOARD_COLS)
+    ]
+    return _center_bulge_from_column_heights(heights)
+
+
+def center_bulge_ojama(board: Board) -> IndicatorV2Value:
+    """II-4'' 中央凸度・おじゃま由来 (b-1 分解, 2026-08-12 user確定)。
+
+    center_bulge_color() のおじゃま版。詳細は center_bulge_color() の
+    docstring を参照。
+
+    Args:
+        board: 評価対象の確定盤面 (STABLE 時のみ)。
+
+    Returns:
+        IndicatorV2Value: score=0〜1 (0.5=フラット)、raw=中央-外周 (おじゃまのみ)。
+    """
+    heights = [
+        float(_column_height_by_predicate(board, c, _is_ojama_cell))
+        for c in range(BOARD_COLS)
+    ]
+    return _center_bulge_from_column_heights(heights)
 
 
 # ============================
@@ -1222,6 +1364,84 @@ CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11: float = 0.17
 CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11: int = 15
 
 
+# ============================
+# 較正 Phase 2 (2026-08-14、連鎖数別演出時間の実測テーブル較正)
+# ============================
+#
+# 背景: docs/DEMO_REVIEW_2026-08-13.md #12 の残課題「応手確率が依然0%
+# (予算4.06秒 vs 実演出8.1秒) = user目視『対応可能』と矛盾」。v2026_08_11
+# の固定バイアス較正 (0.4秒×N + 0.17秒) は連鎖数依存の傾きを変えない前提
+# だったが、実測 (data/verify/chain_anim_duration_2026-08-14/
+# table_by_chain_count.csv、旧23動画+新10動画Phase L、ピクセルdiffベース
+# 盤面settle実測) では大連鎖ほど傾きが 0.4秒/連鎖を大きく超える
+# (6連鎖=中央値9.50秒、8連鎖=中央値11.97秒。旧定数ならそれぞれ2.4秒/
+# 3.2秒で3〜4倍過小)。本較正は連鎖数別の実測中央値テーブルを直接使う
+# (診断報告 案B、docs/DEMO_REVIEW_2026-08-13.md #12 のフォローアップ)。
+#
+# テーブルは N=1..12 (実測サンプル数 n=11〜105件、十分な母数) のみ保持
+# する。N=13以上 (n=6/3/3件と極小、単独の中央値は信頼できない) は生の
+# 中央値を採用せず、線形フィット a + b*N (a=3.3, b=0.89、診断報告 案B
+# 指定値) で外挿する。整数点間 (呼び出し元 _expected_final_chain_count
+# が非整数の期待値を返す場合) は線形補間する。
+#
+# 呼び出しは明示的opt-in (calibration="empirical_table_2026_08_14") のみ。
+# calibration 省略時 (="legacy") には一切関与せず、既存呼び出し
+# (母数多数) は bit-identical (backwards compat、CLAUDE.md 準拠)。
+CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14: "dict[int, float]" = {
+    1: 2.633339436848985,
+    2: 3.8666788736979356,
+    3: 5.324864691490291,
+    4: 6.6666605631510265,
+    5: 8.099788809652864,
+    6: 9.499958349006874,
+    7: 10.72486165364586,
+    8: 11.966739908854265,
+    9: 13.54989029947933,
+    10: 11.458198025916658,
+    11: 13.891654459635419,
+    12: 14.083327229817712,
+}
+
+# N=13以上の外挿式パラメータ (data/verify/chain_anim_duration_2026-08-14/
+# README.txt 記載の実測に対する線形フィット、診断報告 案B 指定値)。
+CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14: float = 3.3
+CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14: float = 0.89
+CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14: int = 13
+
+
+def _estimate_chain_anim_duration_empirical_table_2026_08_14(n: float) -> float:
+    """calibration="empirical_table_2026_08_14" の内部実装 (n>0 前提)。
+
+    N=1..12 はテーブルの整数点間を線形補間 (0<N<1 は原点0.0を仮のアンカー
+    として補間する)。N>=13 は外挿式に切り替える。テーブル最終点(N=12)と
+    外挿式(N=13)の連続性は保証しない (実測とフィットの切れ目のため、
+    生じるギャップは小さい: N=12→13で約+0.8秒)。
+
+    Args:
+        n: 連鎖数 (float可、0より大きい前提。呼び出し元
+            estimate_chain_anim_duration_sec が n<=0 を0.0にガード済み)。
+
+    Returns:
+        推定所要秒数 (float, >= 0)。
+    """
+    table = CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14
+    min_extrapolate = float(CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14)
+    if n >= min_extrapolate:
+        return (
+            CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14
+            + CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14 * n
+        )
+    max_table_n = max(table)
+    lo = min(int(n), max_table_n)
+    if lo >= max_table_n:
+        return table[max_table_n]
+    hi = lo + 1
+    frac = n - lo
+    y_lo = table[lo] if lo >= 1 else 0.0
+    y_hi = table[hi]
+    return y_lo + (y_hi - y_lo) * frac
+
+
 def estimate_chain_anim_duration_sec(
     chain_count: float,
     calibration: str = "legacy",
@@ -1238,7 +1458,11 @@ def estimate_chain_anim_duration_sec(
             "v2026_08_11" (chain_end_sec_gap 全域再測定ベースの固定バイアス
             較正、CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11 のコメント参照。
             chain_count は CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11
-            でクランプする)。既存呼び出し (省略時) は影響を受けない。
+            でクランプする) または "empirical_table_2026_08_14"
+            (連鎖数別演出時間の実測中央値テーブル較正、
+            CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14 のコメント
+            ブロック参照。N=13以上は線形フィットで外挿しクランプしない)。
+            既存呼び出し (省略時) は影響を受けない。
 
     Returns:
         推定所要秒数 (float, >= 0)。
@@ -1257,6 +1481,10 @@ def estimate_chain_anim_duration_sec(
             CHAIN_ANIM_PER_STEP_SEC * n_clamped
             + CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11
         )
+    if calibration == "empirical_table_2026_08_14":
+        if n <= 0.0:
+            return 0.0
+        return _estimate_chain_anim_duration_empirical_table_2026_08_14(n)
     raise ValueError(f"未知の calibration 指定: {calibration!r}")
 
 
@@ -2138,6 +2366,97 @@ def saturation_chain(
     return IndicatorV2Value(
         score=_clamp01(float(best_chain) / NORM_SATURATED_CHAIN),
         raw=float(best_chain),
+    )
+
+
+# ============================
+# XII-1c' 忠実な飽和連鎖量 上部限定軽量版 (saturation_chain_upper)
+# ============================
+# user簡略化決定 (2026-08-13): 「おじゃまぷよの数がイコール飽和現象に
+# 繋がる」ため、疎らな盤面の飽和はシミュレーション不要 (既存
+# board_ojama_count が現象の代理指標になる)。saturation_chain の全域探索
+# (空盤面から最大73手積む、実測12500ms/行) を「盤面が既に高く積まれている
+# 局面」限定に絞り、対象外は NaN (0 ではない、「未計測」と「飽和ゼロ」を
+# 区別する) にすることでビームの負荷を減らす。
+#
+# 【SATURATION_UPPER_MIN_FILL の導出根拠 (2026-08-13、コスト実測→予算→
+# バッファのチェーンから導出。シーン逆算ではなく実測コストからの逆算)】
+#
+# 1. ビーム構築1ステップ (`_sat_expand_step` 1回) の native化を試みたが
+#    **bit-identical要件を満たせず断念した** (重要な負の実験結果):
+#    native `chain_metrics_after_drops` で「発火する配置」を
+#    `chain_count>0` 判定に置き換えると、既存 `_sat_group_size_after_drop`
+#    (新規セル自身の連結成分サイズのみを見る、盤面全体の既存グループは見ない)
+#    と食い違うケースが実データで発生する。実測 (data/indicators_v2/
+#    boards_lean_phase_l_2026-08-11、fill 0.60-0.90 の 424 件サンプル):
+#    「盤面自体が置く前から4連結以上を含む」(chain_count>0 の状態) が
+#    fill>=0.70 のサブセットで 2/14 件 (約14%) 見つかった。npz の
+#    grids は STABLE snapshot が前提だが、ojama落下等の中間状態や希少な
+#    認識誤りにより、この不変条件 (盤面は常に非発火) が実データでは
+#    厳密には保証されない。既存 `saturation_chain`/`_sat_expand_step` は
+#    この前提のズレを認識していない (=変更しない、既存動作を保存する
+#    という本タスクの制約と、native化のパリティ要件が衝突するため
+#    native化を断念した)。**ビーム構築ステップは既存 Python 実装を無変更で
+#    再利用し、終端測定 (takapt 30通り) のみ既存 `saturation_chain` と同じ
+#    native分岐で高速化する** (詳細: scripts/build_labeled_win_from_npz.py
+#    `_native_saturation_chain_upper` 参照)。
+# 2-4. 上記の制約下でビーム構築ステップの実測コストのみで予算を組む:
+#    軽負荷単発実行で 1 ステップ ≈3-5ms、過去実測 (2026-08-13、
+#    システム高負荷下30サンプル、build_labeled_win_from_npz.py モジュール
+#    docstring「saturation_chain の opt-in化」節) で ≈258ms/ステップ。
+#    本プロジェクトは複数エージェント並行実行が前提 (CLAUDE.md 自律運転
+#    方針) のため保守的に高負荷値 258ms を採用する。
+#    148本フル生成に許容する追加時間予算を 1.5 時間 (user提示「1〜2時間」
+#    の中間、保守的側に選択) とし、実データ (63動画 453,146行、148本換算
+#    ≈1,064,533行) の充填率分布から「予算内に収まる最も緩い閾値」
+#    X_raw≈0.885 (この時点で追加時間 ≈1.14時間、対象行あたり平均残り
+#    ステップ数 avg_steps≈1.63) を実測した。安全係数 0.7 を平均残り
+#    ステップ数に適用すると N_operational=floor(1.63*0.7)=1 となり、
+#    fill = 0.93 − 1/78 ≈ 0.917 が導出される。この近傍は fill が
+#    0.02 変わるだけで avg_steps が 1.1〜2.2 と大きく振れる離散的な領域
+#    (残りセル数が一桁の整数のため) であり、0.917 という値自体に強い
+#    精度は無い。丸めた 0.90 を採用する (実測見込み: 対象行出現率
+#    0.671%・148本換算 7,139 行・追加時間 ≈0.57時間 [予算 1.5時間の
+#    約38%、十分なバッファを残す])。将来ビーム構築ステップ自体が
+#    native化されればこの閾値は自然に下げられる (低くなるほど対象が
+#    増える設計、上記の native化断念が唯一のブロッカー)。
+SATURATION_UPPER_MIN_FILL: float = 0.90
+
+
+def saturation_chain_upper(
+    board: Board,
+    fill_ratio: float = SATURATION_FILL_RATIO_DEFAULT,
+    beam_width: int = SATURATION_BEAM_WIDTH_DEFAULT,
+    min_fill: float = SATURATION_UPPER_MIN_FILL,
+    simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XII-1c' saturation_chain の上部限定軽量版 (user簡略化決定 2026-08-13)。
+
+    現在の充填率 (count_puyos()/FULL_BOARD_CAP) が min_fill 未満の場合は
+    score=raw=NaN を返す (0 ではない: 「未計測」と「飽和ゼロ」を区別し、
+    学習側が両者を混同しないようにする)。min_fill 以上の場合は既存
+    `saturation_chain` を無変更のままそのまま呼ぶ (アルゴリズム・
+    パラメータ完全同一、この関数が追加するのは「計測するか否か」の
+    門番のみ)。閾値の導出根拠は `SATURATION_UPPER_MIN_FILL` 直上コメント
+    参照。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        fill_ratio: 目標充填率 (`saturation_chain` にそのまま渡す)。
+        beam_width: ビーム幅 (`saturation_chain` にそのまま渡す)。
+        min_fill: 計測を実行する最低充填率 (既定 SATURATION_UPPER_MIN_FILL)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: 閾値未満は score=raw=NaN。閾値以上は
+            `saturation_chain(board, fill_ratio, beam_width, simulator)`
+            と完全同一の値。
+    """
+    current_fill = board.count_puyos() / FULL_BOARD_CAP
+    if current_fill < min_fill:
+        return IndicatorV2Value(score=float("nan"), raw=float("nan"))
+    return saturation_chain(
+        board, fill_ratio=fill_ratio, beam_width=beam_width, simulator=simulator,
     )
 
 
@@ -3726,6 +4045,169 @@ def ojama_damage(
     return IndicatorV2Value(score=_clamp01(_ojama_damage_from_margin(remaining)), raw=remaining)
 
 
+# ============================
+# XX 盤面直読み新指標3種 (C-4, docs/INDICATOR_PROPOSAL_ROUND2_2026-08-13.md
+# user採用済み。末尾追加・既存に非依存)
+# ============================
+
+# XX-1 色多様性の均等度: 5色 (IGNITION_TRIAL_COLORS) 均等分布時の理論上限
+# エントロピー = log(5)。試合は実際には4色のみ使用 (reference_four_colors_
+# per_match_2026-07-22) だが、これは board-only 関数からは判別できないため
+# 固定5色ユニバースで正規化する (どの試合・どの時点でも一律の天井が乗るのみ
+# なので相対比較=学習でのranking自体は歪めない)。
+COLOR_DIVERSITY_EVENNESS_NORM: float = math.log(len(IGNITION_TRIAL_COLORS))  # ≈1.609
+
+# XX-2 埋没穴数: 盤面容量72 (ON_FIELD_CAP) で正規化 (board_ojama_count 等と同じ天井)。
+
+# XX-3 連鎖関節点数: 1ステップあたりの急所グループ数の経験的上限 (暫定6、
+# NORM_SIMULTANEOUS_POP と同水準。データ後決定)。
+NORM_CHAIN_ARTICULATION_POINT: float = 6.0
+
+
+def color_diversity_evenness(board: Board) -> IndicatorV2Value:
+    """XX-1 色多様性の均等度 (Shannon evenness、C-4 提案)。
+
+    盤面上の色ぷよ (IGNITION_TRIAL_COLORS の5色) の出現比率から Shannon
+    エントロピー H=-Σp_i*log(p_i) を求め、5色均等分布時の理論上限
+    log(5) で正規化する。色ぷよが0個 (未着手盤面等) は多様性ゼロとして
+    score=raw=0.0 を返す (0除算回避)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+
+    Returns:
+        IndicatorV2Value: score=正規化エントロピー(0〜1), raw=エントロピー(nats)。
+    """
+    grid = board._grid
+    counts: dict[int, int] = {c: 0 for c in IGNITION_TRIAL_COLORS}
+    total = 0
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            v = int(grid[row, col])
+            if v in counts:
+                counts[v] += 1
+                total += 1
+    if total == 0:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    entropy = 0.0
+    for c in counts.values():
+        if c == 0:
+            continue
+        p = c / total
+        entropy -= p * math.log(p)
+    return IndicatorV2Value(
+        score=_clamp01(entropy / COLOR_DIVERSITY_EVENNESS_NORM), raw=entropy,
+    )
+
+
+def buried_hole_count(board: Board) -> IndicatorV2Value:
+    """XX-2 埋没穴数 (テトリス由来、C-4 提案)。
+
+    各列の最上段占有セル (色ぷよ/おじゃま。EMPTY/UNKNOWN は非占有、
+    `_board_is_gravity_consistent` と同じ意味論) より下に残る空きセルを
+    「埋没穴」として数える (重力で自然には埋まらない歪みの量)。
+
+    正規化: raw / ON_FIELD_CAP (盤面容量72の理論上限、実際の最大はもっと小さい)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+
+    Returns:
+        IndicatorV2Value: score=raw/72, raw=埋没穴セル数。
+    """
+    grid = board._grid
+    holes = 0
+    for col in range(BOARD_COLS):
+        top_row: int | None = None
+        for row in range(BOARD_ROWS):
+            v = int(grid[row, col])
+            if v != COLOR_EMPTY and v != COLOR_UNKNOWN:
+                top_row = row
+                break
+        if top_row is None:
+            continue
+        for row in range(top_row, BOARD_ROWS):
+            v = int(grid[row, col])
+            if v == COLOR_EMPTY or v == COLOR_UNKNOWN:
+                holes += 1
+    raw = float(holes)
+    return IndicatorV2Value(score=_clamp01(raw / ON_FIELD_CAP), raw=raw)
+
+
+def _count_critical_erase_groups(
+    steps: "list[ChainStep]", sim: ChainSimulator,
+) -> int:
+    """連鎖ステップ列のうち、消えなかったら以降の連鎖が短くなる急所グループ数。
+
+    `scripts/_tmp_g3_articulation_pilot.py` の予備計算 (2026-08-13、C-4提案)
+    を正式実装として移植。各ステップの各グループを「消えなかった」ことに
+    した反実仮想盤面 (held グループをおじゃま色に凍結し連結判定から外し、
+    他グループは通常通り消去) を作り、続きを再simulateして残り連鎖数が
+    元より短くなるかで急所か判定する。
+
+    Args:
+        steps: ChainResult.steps (chain_count>=2 の場合のみ呼び出すこと)。
+        sim: ChainSimulator インスタンス (`_erase_groups`/`apply_gravity` 使用)。
+
+    Returns:
+        int: 急所グループ数 (連鎖の生命線となるグループの総数)。
+    """
+    critical = 0
+    chain_count = len(steps)
+    for i, step in enumerate(steps):
+        groups = step.erased_groups
+        remaining_orig = chain_count - i
+        for g_idx in range(len(groups)):
+            held = groups[g_idx]
+            other_groups = [g for j, g in enumerate(groups) if j != g_idx]
+            wb = step.board_before.copy()
+            for (r, c) in held.cells:
+                wb.set(r, c, COLOR_OJAMA)
+            if other_groups:
+                sim._erase_groups(wb, other_groups)
+            sim.apply_gravity(wb)
+            alt_result = sim.simulate(wb)
+            remaining_alt = (1 + alt_result.chain_count) if other_groups else alt_result.chain_count
+            if remaining_alt < remaining_orig:
+                critical += 1
+    return critical
+
+
+def chain_articulation_point_count(
+    board: Board, simulator: ChainSimulator | None = None,
+) -> IndicatorV2Value:
+    """XX-3 連鎖関節点数 (C-4 提案、`_tmp_g3_articulation_pilot.py` の正式実装)。
+
+    best takapt発火 (`_takapt_best_drop`) で見つけた最良連鎖のステップに
+    対し `_count_critical_erase_groups` で「そこを潰されると連鎖が壊れる」
+    急所グループ数を数える。連鎖1以下 (急所の概念が無意味) または発火不能
+    なら0。重い指標 (ステップ×グループ数回の追加再simulateを要する) のため
+    full profile 限定 (native化は非対応: `_erase_groups`/ChainStep 内部が
+    Rust拡張 puyo_core に未露出のため)。
+
+    正規化: raw / NORM_CHAIN_ARTICULATION_POINT (暫定6、データ後決定)。
+
+    Args:
+        board: STABLE 確定盤面 (stateless: 破壊しない)。
+        simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+
+    Returns:
+        IndicatorV2Value: score=raw/6, raw=急所グループ数。
+    """
+    sim = simulator or _SHARED_SIMULATOR
+    best_chain, best_board = _takapt_best_drop(board, sim)
+    if best_board is None or best_chain < 2:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    result = sim.simulate(best_board)
+    if len(result.steps) < 2:
+        return IndicatorV2Value(score=0.0, raw=0.0)
+    critical = _count_critical_erase_groups(result.steps, sim)
+    raw = float(critical)
+    return IndicatorV2Value(
+        score=_clamp01(raw / NORM_CHAIN_ARTICULATION_POINT), raw=raw,
+    )
+
+
 __all__ = [
     "IndicatorV2Value",
     "GroupObservation",
@@ -3775,6 +4257,11 @@ __all__ = [
     # VII-4b 較正 Phase 1 (2026-08-11、chain_end_sec_gap 全域再測定)
     "CHAIN_ANIM_DURATION_BIAS_SEC_2026_08_11",
     "CHAIN_ANIM_DURATION_MAX_CHAIN_COUNT_2026_08_11",
+    # VII-4c 較正 Phase 2 (2026-08-14、連鎖数別演出時間の実測テーブル較正)
+    "CHAIN_ANIM_DURATION_MEDIAN_SEC_TABLE_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_A_SEC_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_B_SEC_PER_CHAIN_2026_08_14",
+    "CHAIN_ANIM_DURATION_EXTRAPOLATION_MIN_CHAIN_COUNT_2026_08_14",
     # VII-2 テンポ核 (時間窓つき打ち合い収支)
     "honsen_tempo_output",
     "SEC_PER_HAND",
@@ -3820,6 +4307,10 @@ __all__ = [
     "SATURATION_FILL_RATIO_DEFAULT",
     "SATURATION_BEAM_WIDTH_DEFAULT",
     "SATURATION_MAX_BUILD_STEPS",
+    # XII-1c' 忠実な飽和連鎖量 上部限定軽量版 (saturation_chain_upper)
+    # — user簡略化決定 (2026-08-13、末尾追加・既存に非依存)。
+    "saturation_chain_upper",
+    "SATURATION_UPPER_MIN_FILL",
     # XIII 催促保持 (saisoku_hold) — 検証中の新規指標 (末尾追加、既存に非依存)
     "saisoku_hold",
     "SAISOKU_CONSUME_RATIO",
@@ -3873,4 +4364,22 @@ __all__ = [
     "OJAMA_DAMAGE_FLOOR",
     "OJAMA_DAMAGE_MID",
     "OJAMA_DAMAGE_CEIL",
+    # XIX 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+    # (末尾追加・既存に非依存、EXTRA_INDICATOR_NAMES 相当の追加規約に準拠)
+    "center_bulge",
+    "BASE_ROWS",
+    "CENTER_BULGE_CENTER_COLS",
+    "CENTER_BULGE_OUTER_COLS",
+    "CENTER_BULGE_RAW_ABS_MAX",
+    # XIX' 中央凸度 分解版 (b-1, 2026-08-12 user確定 指標大整理)
+    # — 末尾追加・既存に非依存。center_bulge() 本体は変更なし。
+    "center_bulge_color",
+    "center_bulge_ojama",
+    # XX 盤面直読み新指標3種 (C-4, 2026-08-13 ラウンド2提案書 user採用済み)
+    # — 末尾追加・既存に非依存。
+    "color_diversity_evenness",
+    "buried_hole_count",
+    "chain_articulation_point_count",
+    "COLOR_DIVERSITY_EVENNESS_NORM",
+    "NORM_CHAIN_ARTICULATION_POINT",
 ]

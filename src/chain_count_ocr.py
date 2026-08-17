@@ -402,17 +402,24 @@ _DigitMatch = tuple[float, tuple[int, int], tuple[int, int]]
 
 
 def _match_all_digits_in_roi(
-    gray_roi: np.ndarray, templates_gray: dict[int, np.ndarray],
+    gray_roi: np.ndarray, templates_gray: dict[int, list[np.ndarray]],
 ) -> dict[int, _DigitMatch]:
     """登録済み全クラスを ROI 全体でスキャンし、クラスごとの最良一致を返す。
 
     2桁結合判定 (_try_combine_two_digit) のため、単一の最良クラスだけでなく
-    クラスごとの結果を全て保持する。
+    クラスごとの結果を全て保持する。1クラスに複数テンプレ (マルチソース、
+    2026-08-14 タスク#7) が登録されている場合は、そのクラス内の全テンプレの
+    うち最良スコアを採用する (単一テンプレのみの場合は旧来と bit-identical)。
     """
     out: dict[int, _DigitMatch] = {}
-    for label, tpl in templates_gray.items():
-        score, loc = _match_digit_in_roi(gray_roi, tpl)
-        out[label] = (score, loc, (tpl.shape[0], tpl.shape[1]))
+    for label, tpls in templates_gray.items():
+        best: _DigitMatch | None = None
+        for tpl in tpls:
+            score, loc = _match_digit_in_roi(gray_roi, tpl)
+            if best is None or score > best[0]:
+                best = (score, loc, (tpl.shape[0], tpl.shape[1]))
+        if best is not None:
+            out[label] = best
     return out
 
 
@@ -466,6 +473,7 @@ class ChainCountOcr:
         self,
         templates: dict[int, np.ndarray] | None = None,
         min_confidence: float = CHAIN_NCC_MIN_CONFIDENCE,
+        extra_templates: dict[int, list[np.ndarray]] | None = None,
     ) -> None:
         """Args:
             templates: 0-9 → テンプレ画像 (BGR or grayscale) の辞書。
@@ -475,13 +483,26 @@ class ChainCountOcr:
                 score_ocr と異なり共通サイズへのリサイズは行わない
                 (各テンプレは採取時の実寸のまま保持する)。
             min_confidence: NCC 最低スコア。これ未満なら None。
+            extra_templates: クラスごとの追加テンプレ画像リスト (optional、
+                backwards compat のため末尾に追加、2026-08-14 タスク#7)。
+                単一動画採取 (W3、docs/KNOWN_WEAKNESSES.md) の脆弱性対策として、
+                同一クラスに複数動画由来のテンプレを持たせマルチテンプレ
+                マッチング (クラスごとに全テンプレの最良スコアを採用) を行う。
+                None または省略時は単一テンプレ (旧来と bit-identical) の
+                挙動になる。
         """
-        self._templates_gray: dict[int, np.ndarray] = {}
+        self._templates_gray: dict[int, list[np.ndarray]] = {}
         if templates:
             for label, tpl in templates.items():
                 if tpl is None:
                     continue
-                self._templates_gray[int(label)] = _to_gray(tpl)
+                self._templates_gray.setdefault(int(label), []).append(_to_gray(tpl))
+        if extra_templates:
+            for label, tpls in extra_templates.items():
+                for tpl in tpls:
+                    if tpl is None:
+                        continue
+                    self._templates_gray.setdefault(int(label), []).append(_to_gray(tpl))
         self._min_confidence = float(min_confidence)
         self._warned_missing = False
         if not self._templates_gray:
@@ -505,25 +526,43 @@ class ChainCountOcr:
         template_dir: Path = DEFAULT_CHAIN_TEMPLATE_DIR,
         min_confidence: float = CHAIN_NCC_MIN_CONFIDENCE,
     ) -> "ChainCountOcr":
-        """models/ui_templates/chain_count_digits/ から digit_N.png を読み込む。"""
-        templates = cls._load_templates_from_dir(template_dir)
-        return cls(templates=templates, min_confidence=min_confidence)
+        """models/ui_templates/chain_count_digits/ から digit_N.png (+ 追加ソース) を読み込む。
+
+        2026-08-14 タスク#7 (W3対処) 以降、`digit_{N}.png` (primary、既存資産と
+        同一パス・同一意味) に加え、同ディレクトリの `digit_{N}_src{M}.png`
+        (M=2,3,...、複数動画から採取した追加ソース) も自動的にマルチテンプレ
+        として取り込む。追加ソースが1つも無いディレクトリでは旧来と
+        bit-identical (primary のみの単一テンプレ) になる。
+        """
+        primary, extra = cls._load_template_sources_from_dir(template_dir)
+        return cls(templates=primary, min_confidence=min_confidence, extra_templates=extra)
 
     @staticmethod
-    def _load_templates_from_dir(template_dir: Path) -> dict[int, np.ndarray]:
-        """digit_N.png を全部スキャンする (N=0..9)。"""
-        templates: dict[int, np.ndarray] = {}
+    def _load_template_sources_from_dir(
+        template_dir: Path,
+    ) -> tuple[dict[int, np.ndarray], dict[int, list[np.ndarray]]]:
+        """digit_N.png (primary) + digit_N_srcM.png (追加ソース) を全部スキャンする。
+
+        追加ソースの命名規約 `digit_{label}_src{M}.png` (M は任意の識別子文字列。
+        本タスクでは採取元動画IDを埋め込む想定、例: `digit_5_src_c11.png`) は
+        `glob("digit_{label}_src*.png")` で拾う。ファイル名の英数字順で決定的に
+        ソートするため、テンプレの適用順は再現可能。
+        """
+        primary: dict[int, np.ndarray] = {}
+        extra: dict[int, list[np.ndarray]] = {}
         if not template_dir.is_dir():
-            return templates
+            return primary, extra
         for label in CHAIN_DIGIT_LABELS:
             path = template_dir / f"digit_{label}.png"
-            if not path.is_file():
-                continue
-            img = cv2.imread(str(path))
-            if img is None:
-                continue
-            templates[label] = img
-        return templates
+            if path.is_file():
+                img = cv2.imread(str(path))
+                if img is not None:
+                    primary[label] = img
+            for extra_path in sorted(template_dir.glob(f"digit_{label}_src*.png")):
+                img = cv2.imread(str(extra_path))
+                if img is not None:
+                    extra.setdefault(label, []).append(img)
+        return primary, extra
 
     # ============================
     # 公開: 読取り

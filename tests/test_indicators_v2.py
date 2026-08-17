@@ -91,6 +91,9 @@ def test_all_scalar_indicators_in_range(board: Board) -> None:
         iv.column_bumpiness(board),
         iv.death_margin(board),
         iv.death_margin_neighbor(board),
+        iv.center_bulge(board),
+        iv.center_bulge_color(board),
+        iv.center_bulge_ojama(board),
         iv.current_max_chain(board),
         iv.immediate_fire_power(board),
         iv.chain_efficiency(board),
@@ -170,6 +173,163 @@ def test_death_margin_decreases_with_height() -> None:
     v = iv.death_margin(Board.from_list(g))
     assert v.raw == 8.0  # 12 - 4
     assert v.score < 1.0
+
+
+# ============================
+# II-4 中央凸度 (center_bulge) — 2026-08-12 壁打ちuser仕様
+# ============================
+
+
+def _set_column_height(
+    grid: list[list[int]], col: int, height: int, color: int = COLOR_RED,
+) -> None:
+    """指定列の最下段から height 段を color で積む (テスト用ヘルパ)。"""
+    for row in range(BOARD_ROWS - 1, BOARD_ROWS - 1 - height, -1):
+        grid[row][col] = color
+
+
+def test_center_bulge_empty_board_is_flat() -> None:
+    """空盤面: 中央・外周とも高さ0でフラット (score=0.5, raw=0.0)。"""
+    v = iv.center_bulge(_empty_board())
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_flat_board_is_flat() -> None:
+    """全列同高 (フラット地形) なら中央=外周で raw=0.0, score=0.5。"""
+    g = _empty_grid()
+    for col in range(BOARD_COLS):
+        _set_column_height(g, col, height=5)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_center_tower_is_above_flat() -> None:
+    """中央 (3,4列目) だけ高いタワーは raw>0, score>0.5 (中央凸=定性的に不利側)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw > 0.0
+    assert v.score > 0.5
+
+
+def test_center_bulge_outer_only_is_below_flat() -> None:
+    """外周 (1,2,5,6列目) だけ高いと raw<0, score<0.5 (中央が低い=定性的に安全側)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_OUTER_COLS:
+        _set_column_height(g, col, height=10)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw < 0.0
+    assert v.score < 0.5
+
+
+def test_center_bulge_base_rows_only_is_clipped_flat() -> None:
+    """下 BASE_ROWS(=3) 段のみに積んだ盤面はクリップで全列 h'=0 → フラット扱い。
+
+    「土台は無視する」という仕様の直接検証: 中央だけ土台3段分を積んでも
+    中央凸とは判定されないこと。
+    """
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=iv.BASE_ROWS)
+    v = iv.center_bulge(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_counts_ojama_as_height() -> None:
+    """おじゃまも高さに数える (Board.height_of の既存仕様を継承)。
+
+    色ぷよタワーと同じ高さのおじゃまタワーで同じ raw になることを確認する。
+    """
+    g_color = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g_color, col, height=10, color=COLOR_RED)
+    g_ojama = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g_ojama, col, height=10, color=COLOR_OJAMA)
+    v_color = iv.center_bulge(Board.from_list(g_color))
+    v_ojama = iv.center_bulge(Board.from_list(g_ojama))
+    assert v_ojama.raw == pytest.approx(v_color.raw)
+    assert v_ojama.raw > 0.0
+
+
+def test_center_bulge_score_matches_normalization_formula() -> None:
+    """score = (raw + 9) / 18 の仕様式と一致すること (定数直書き禁止の裏取り)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=12)
+    v = iv.center_bulge(Board.from_list(g))
+    expected = (v.raw + iv.CENTER_BULGE_RAW_ABS_MAX) / (2.0 * iv.CENTER_BULGE_RAW_ABS_MAX)
+    assert v.score == pytest.approx(expected)
+
+
+# ============================
+# II-4' / II-4'' 中央凸度 分解版 (center_bulge_color / _ojama)
+# — b-1 (2026-08-12 user確定、指標大整理)
+# ============================
+
+
+def test_center_bulge_color_ignores_ojama_only_tower() -> None:
+    """中央列がおじゃまだけのタワーなら center_bulge_color はフラット (0.5)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    v = iv.center_bulge_color(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_ojama_ignores_color_only_tower() -> None:
+    """中央列が色ぷよだけのタワーなら center_bulge_ojama はフラット (0.5)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    v = iv.center_bulge_ojama(Board.from_list(g))
+    assert v.raw == pytest.approx(0.0)
+    assert v.score == pytest.approx(0.5)
+
+
+def test_center_bulge_color_detects_color_tower() -> None:
+    """中央列が色ぷよタワーなら center_bulge_color は合成版と同じ値になる
+    (色のみの盤面なので分解しても値は変わらないはず)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    board = Board.from_list(g)
+    v_color = iv.center_bulge_color(board)
+    v_composite = iv.center_bulge(board)
+    assert v_color.raw == pytest.approx(v_composite.raw)
+    assert v_color.raw > 0.0
+
+
+def test_center_bulge_ojama_detects_ojama_tower() -> None:
+    """中央列がおじゃまタワーなら center_bulge_ojama は合成版と同じ値になる。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    board = Board.from_list(g)
+    v_ojama = iv.center_bulge_ojama(board)
+    v_composite = iv.center_bulge(board)
+    assert v_ojama.raw == pytest.approx(v_composite.raw)
+    assert v_ojama.raw > 0.0
+
+
+def test_center_bulge_color_and_ojama_are_independent_on_mixed_board() -> None:
+    """混在盤面 (中央=色ぷよタワー、外周=おじゃまタワー) では、色版は中央凸
+    (raw>0)・おじゃま版は外周の方が高いので raw<0 になる (独立に測れる)。"""
+    g = _empty_grid()
+    for col in iv.CENTER_BULGE_CENTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_RED)
+    for col in iv.CENTER_BULGE_OUTER_COLS:
+        _set_column_height(g, col, height=10, color=COLOR_OJAMA)
+    board = Board.from_list(g)
+    v_color = iv.center_bulge_color(board)
+    v_ojama = iv.center_bulge_ojama(board)
+    assert v_color.raw > 0.0
+    assert v_ojama.raw < 0.0
 
 
 # ============================
@@ -1444,6 +1604,110 @@ def test_full_board_cap_is_78() -> None:
     """FULL_BOARD_CAP は盤面全体 (6列×13行、隠し段 row0 含む) = 78。"""
     assert iv.FULL_BOARD_CAP == BOARD_ROWS * BOARD_COLS
     assert iv.FULL_BOARD_CAP == 78
+
+
+# ============================
+# XII-1c' saturation_chain_upper (上部限定軽量版、2026-08-13 user簡略化決定)
+# ============================
+
+
+def _checkerboard_high_fill_board(free_cols: "tuple[int, ...]" = ()) -> Board:
+    """充填率 SATURATION_UPPER_MIN_FILL 以上の非発火 (4連結なし) 盤面を作る。
+
+    赤/青の市松模様で可視12段 (row1〜row12、隠し段row0除く) を埋める
+    (縦横とも隣接同色が無いため4連結しない配置、充填率72/78≈0.923)。
+    free_cols で指定した列は最下段 1 マスだけ空ける (最大1列まで、2列以上
+    空けると充填率が0.90を下回るため呼出側で使用範囲に注意)。
+    """
+    g = _empty_grid()
+    colors = [COLOR_RED, COLOR_BLUE]
+    for row in range(1, BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            if col in free_cols and row == BOARD_ROWS - 1:
+                continue
+            g[row][col] = colors[(row + col) % 2]
+    return Board.from_list(g)
+
+
+def test_saturation_chain_upper_below_threshold_returns_nan() -> None:
+    """充填率が SATURATION_UPPER_MIN_FILL 未満なら score/raw ともに NaN。
+
+    0 ではない (「未計測」と「飽和ゼロ」を区別する、モジュール docstring
+    「SATURATION_UPPER_MIN_FILL の導出根拠」節参照)。
+    """
+    board = _empty_board()
+    v = iv.saturation_chain_upper(board)
+    assert v.score != v.score  # NaN の自己不等式 (import math を避ける簡易判定)
+    assert v.raw != v.raw
+
+
+def test_saturation_chain_upper_four_chain_board_below_threshold_returns_nan() -> None:
+    """4連結発火盤面 (充填率は低い) も同様に閾値未満で NaN。"""
+    board = _four_chain_board()
+    assert board.count_puyos() / iv.FULL_BOARD_CAP < iv.SATURATION_UPPER_MIN_FILL
+    v = iv.saturation_chain_upper(board)
+    assert v.score != v.score
+    assert v.raw != v.raw
+
+
+def test_saturation_chain_upper_at_threshold_matches_saturation_chain() -> None:
+    """充填率が閾値以上なら既存 saturation_chain と完全一致する値を返す。
+
+    ビーム構築・終端測定のアルゴリズムは無変更のまま呼ぶだけ (delegation)
+    のため、bit-identical (score/raw とも == で一致) を確認する。
+    """
+    board = _checkerboard_high_fill_board()
+    assert board.count_puyos() / iv.FULL_BOARD_CAP >= iv.SATURATION_UPPER_MIN_FILL
+    upper = iv.saturation_chain_upper(board)
+    full = iv.saturation_chain(board)
+    assert upper.score == full.score
+    assert upper.raw == full.raw
+
+
+def test_saturation_chain_upper_min_fill_override_allows_low_fill_board() -> None:
+    """min_fill を明示的に下げれば、既定では NaN になる低充填盤面も計測する。"""
+    board = _four_chain_board()
+    v = iv.saturation_chain_upper(board, min_fill=0.0)
+    full = iv.saturation_chain(board)
+    assert v.score == full.score
+    assert v.raw == full.raw
+
+
+def test_saturation_chain_upper_does_not_mutate_board() -> None:
+    """stateless 原則: 呼出前後で盤面が変化しない (非破壊、閾値以上のケース)。"""
+    board = _checkerboard_high_fill_board()
+    before = board.copy()
+    iv.saturation_chain_upper(board)
+    for row in range(BOARD_ROWS):
+        for col in range(BOARD_COLS):
+            assert board.get(row, col) == before.get(row, col)
+
+
+def test_saturation_chain_upper_score_in_range_above_threshold() -> None:
+    """閾値以上の盤面では score が 0〜1 に収まる (NaN にならない)。
+
+    free_cols は最大1列まで (2列以上空けると充填率70/78≈0.897<0.90 に
+    落ちて NaN になってしまうため、`_checkerboard_high_fill_board` の
+    充填率制約に従う)。
+    """
+    for free_cols in ((), (0,)):
+        board = _checkerboard_high_fill_board(free_cols)
+        assert board.count_puyos() / iv.FULL_BOARD_CAP >= iv.SATURATION_UPPER_MIN_FILL
+        v = iv.saturation_chain_upper(board)
+        assert 0.0 <= v.score <= 1.0
+
+
+def test_saturation_chain_upper_exported_in_all() -> None:
+    """saturation_chain_upper が __all__ に含まれること (既存 saturation_chain
+    は末尾追加規約により無変更のまま残る)。"""
+    assert "saturation_chain_upper" in iv.__all__
+    assert "SATURATION_UPPER_MIN_FILL" in iv.__all__
+    assert "saturation_chain" in iv.__all__  # 既存指標は互換維持で残存
+
+
+def test_saturation_chain_upper_min_fill_constant_in_unit_range() -> None:
+    """SATURATION_UPPER_MIN_FILL は充填率 (0〜1) として妥当な範囲。"""
+    assert 0.0 < iv.SATURATION_UPPER_MIN_FILL < iv.SATURATION_FILL_RATIO_DEFAULT
 
 
 # ============================

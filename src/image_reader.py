@@ -799,6 +799,7 @@ class ImageReader:
         patch_ncc_threshold: float | None = None,
         use_highlight_override: bool = False,
         puyo_profile_db: "PuyoColorProfileDB | None" = None,
+        enable_patch_fp_hsv_guard: bool = False,
     ) -> None:
         """
         Args:
@@ -823,6 +824,15 @@ class ImageReader:
             puyo_profile_db: 案 R3 改 per-video ぷよ色プロファイル DB。
                 指定すると classify 後の色に対してプロファイル距離チェックを行い、
                 不一致なら EMPTY 化 (= 幻ぷよ抑制)。None で無効 (既存挙動)。
+            enable_patch_fp_hsv_guard: W13根治 案2 (2026-08-17)。tier1
+                patch-NCC 経路 (`_is_empty_tier1` の CellPatchFingerprint 分岐)
+                に cycle17-19 (2026-05, docs/CYCLE_FINDINGS.md) の AND ガードを
+                移植する。NCC が EMPTY 一致 (>= 閾値) でも、現フレームパッチを
+                単独 HSV 分類器で分類した結果が EMPTY/UNKNOWN でなければ
+                (= 明確な色相にヒット) EMPTY 判定を却下する。均一パッチ
+                (std<1e-6) が無条件 FALLBACK=1.0 で EMPTY 化される W13 の
+                根本機構への対処。False (既定) = 従来挙動と bit-identical
+                (backwards compat、docs/KNOWN_WEAKNESSES.md W13)。
         """
         self._classifier: ColorClassifier = classifier or ColorClassifier()
         # 側別 彩度適応較正 (2026-07-31)。既定 OFF = 従来と bit-identical。
@@ -857,6 +867,9 @@ class ImageReader:
         # 案 P2: 白ハイライト blob override (tier1 EMPTY 判定後に救済チェック)
         # 2026-05-28 案 R3 改: デフォルト False (= 案 P2 同時撤回)
         self._use_highlight_override: bool = bool(use_highlight_override)
+        # W13根治 案2 (2026-08-17): tier1 patch-NCC 経路への HSV AND ガード移植
+        # (cycle17-19 の従来 is_empty_by_fp 経路にあった移植漏れ)
+        self._enable_patch_fp_hsv_guard: bool = bool(enable_patch_fp_hsv_guard)
         # 案 R3 改: per-video ぷよ色プロファイル DB (classify 後の下段 EMPTY 化用)
         self._puyo_profile_db: "PuyoColorProfileDB | None" = puyo_profile_db
         self._apply_inference: bool = bool(apply_inference)
@@ -1035,6 +1048,7 @@ class ImageReader:
         cur_fp: "CellFingerprint",
         visible_row: int,
         col: int,
+        raw_bgr_patch: "np.ndarray | None" = None,
     ) -> bool:
         """tier 1 (EXTREME) 空判定。案 d の NCC 経路と従来の距離経路を切り替える。
 
@@ -1047,6 +1061,9 @@ class ImageReader:
             cur_fp: 現在フレームの CellFingerprint (median 3 値)。
             visible_row: 表示行インデックス (0〜VISIBLE_ROWS-1)。
             col: 列インデックス (0〜BOARD_COLS-1)。
+            raw_bgr_patch: 現在フレームのセルパッチ BGR (生画素)。
+                W13根治 案2 (`_enable_patch_fp_hsv_guard`) の HSV 単独分類に使う。
+                None の場合はガードをスキップ (backwards compat)。
 
         Returns:
             True = 空 (背景と同じ)、False = ぷよあり (次 tier に進む)。
@@ -1070,10 +1087,28 @@ class ImageReader:
             )
             # NCC sweep: None なら is_empty_by_patch_fp が PATCH_NCC_EMPTY_THRESHOLD を使用
             if self._patch_ncc_threshold is not None:
-                return is_empty_by_patch_fp(
+                ncc_empty = is_empty_by_patch_fp(
                     cur_cell_patch, bg_cell, threshold=self._patch_ncc_threshold,
                 )
-            return is_empty_by_patch_fp(cur_cell_patch, bg_cell)
+            else:
+                ncc_empty = is_empty_by_patch_fp(cur_cell_patch, bg_cell)
+            if not ncc_empty:
+                return False
+            # W13根治 案2 (2026-08-17): cycle17-19 の AND ガード移植。
+            # 「距離 (ここでは NCC) < 閾値 で EMPTY 一致」でも「HSV 単独でも
+            # puyo 色と判定されない」の両方が必要。均一パッチ (std<1e-6) が
+            # NCC FALLBACK=1.0 で無条件 EMPTY 化される機構 (W13 の根本原因) を
+            # HSV 単独分類でせき止める。既定 False = 従来挙動 bit-identical。
+            if self._enable_patch_fp_hsv_guard and raw_bgr_patch is not None:
+                hsv_target = getattr(self._classifier, "_hsv", self._classifier)
+                hsv_only_color = COLOR_EMPTY
+                try:
+                    hsv_only_color = int(hsv_target.classify(raw_bgr_patch))
+                except Exception:
+                    hsv_only_color = COLOR_EMPTY
+                if hsv_only_color not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                    return False  # HSV 単独で puyo 色 → EMPTY 却下
+            return True
         # 従来の距離閾値比較 (BackgroundFingerprint 経路)
         tier1_threshold = self._resolve_tier1_threshold(visible_row, col)
         dist = cur_fp.distance_to(bg_cell)
@@ -1361,7 +1396,7 @@ class ImageReader:
                             bg_cell_for_tier1 = bg_cell
                         if not skip_tier1 and self._is_empty_tier1(
                             bg_cell_for_tier1, hsv_patch, cur_fp,
-                            visible_row, col,
+                            visible_row, col, raw_bgr_patch=patch,
                         ):
                             # 案 P2: 白ハイライト blob override
                             # tier1 が EMPTY 判定しても、ぷよ固有の白ハイライト円が

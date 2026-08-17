@@ -30,9 +30,9 @@ def test_generate_raises_before_video_open_when_calibration_missing(
     monkeypatch.setattr(vao, "PLATT_CALIBRATION_PATH", missing_path)
 
     def _fail_if_called(*_a: object, **_k: object) -> None:
-        raise AssertionError("_train_model が呼ばれた = fail-fast 配線が壊れている")
+        raise AssertionError("_acquire_model が呼ばれた = fail-fast 配線が壊れている")
 
-    monkeypatch.setattr(vao, "_train_model", _fail_if_called)
+    monkeypatch.setattr(vao, "_acquire_model", _fail_if_called)
     with pytest.raises(CalibrationFileMissingError):
         vao.generate(
             Path("dummy_video_never_opened.mp4"), tmp_path / "out.mp4",
@@ -45,19 +45,21 @@ def test_generate_does_not_require_calibration_file_when_flag_off(
 ) -> None:
     """enable_platt_calibration=False (従来挙動) なら校正器ファイル欠損でも
     エラーにならず先へ進む(後方互換、旧挙動の完全再現)。
-    _train_model 以降は重いため、そこに到達したら成功とみなし打ち切る。
+    モデル確保 (`_acquire_model`、2026-08-14 成果物直読み追加により
+    `_train_model` 直呼びから置き換わった) 以降は重いため、そこに到達したら
+    成功とみなし打ち切る。
     """
     missing_path = tmp_path / "no_such_platt_calibration.json"
     monkeypatch.setattr(vao, "PLATT_CALIBRATION_PATH", missing_path)
 
-    class _ReachedTrainModel(Exception):
+    class _ReachedAcquireModel(Exception):
         pass
 
     def _reached(*_a: object, **_k: object) -> None:
-        raise _ReachedTrainModel()
+        raise _ReachedAcquireModel()
 
-    monkeypatch.setattr(vao, "_train_model", _reached)
-    with pytest.raises(_ReachedTrainModel):
+    monkeypatch.setattr(vao, "_acquire_model", _reached)
+    with pytest.raises(_ReachedAcquireModel):
         vao.generate(
             Path("dummy_video_never_opened.mp4"), tmp_path / "out.mp4",
             max_sec=1.0, sample_interval=0.15, enable_platt_calibration=False,
@@ -78,9 +80,9 @@ def test_generate_raises_before_video_open_when_phase_calibration_missing(
     monkeypatch.setattr(vao, "PHASE_CALIBRATION_PATH", missing_path)
 
     def _fail_if_called(*_a: object, **_k: object) -> None:
-        raise AssertionError("_train_model が呼ばれた = fail-fast 配線が壊れている")
+        raise AssertionError("_acquire_model が呼ばれた = fail-fast 配線が壊れている")
 
-    monkeypatch.setattr(vao, "_train_model", _fail_if_called)
+    monkeypatch.setattr(vao, "_acquire_model", _fail_if_called)
     with pytest.raises(CalibrationFileMissingError):
         vao.generate(
             Path("dummy_video_never_opened.mp4"), tmp_path / "out.mp4",
@@ -92,19 +94,20 @@ def test_generate_does_not_require_phase_calibration_file_when_flag_off(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """enable_phase_calibration=False (既定) なら校正器ファイル欠損でもエラーに
-    ならない (後方互換、既存呼出元は挙動不変)。
+    ならない (後方互換、既存呼出元は挙動不変)。モデル確保 (`_acquire_model`、
+    2026-08-14 成果物直読み追加) 以降は重いため到達したら成功とみなし打ち切る。
     """
     missing_path = tmp_path / "no_such_phase_platt_calibration.json"
     monkeypatch.setattr(vao, "PHASE_CALIBRATION_PATH", missing_path)
 
-    class _ReachedTrainModel(Exception):
+    class _ReachedAcquireModel(Exception):
         pass
 
     def _reached(*_a: object, **_k: object) -> None:
-        raise _ReachedTrainModel()
+        raise _ReachedAcquireModel()
 
-    monkeypatch.setattr(vao, "_train_model", _reached)
-    with pytest.raises(_ReachedTrainModel):
+    monkeypatch.setattr(vao, "_acquire_model", _reached)
+    with pytest.raises(_ReachedAcquireModel):
         vao.generate(
             Path("dummy_video_never_opened.mp4"), tmp_path / "out.mp4",
             max_sec=1.0, sample_interval=0.15, enable_phase_calibration=False,
