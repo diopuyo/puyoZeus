@@ -702,6 +702,21 @@ W13修正 (`use_highlight_override` 配線) の副作用13セルを計装した�
 - **対処方針** (計装済み・未実装): 測定器側の再検証ロジック追加が推奨。cycle71n側の変更 (STABLE再突入
   1フレーム目も多数決保護) は**不採用として記録** — 本事案は測定器の誤りであり、コード側変更は
   設置反映8フレーム基準 (feedback_placement_reflection_8frames) に抵触するリスクがある
+- **【対策実装完了 2026-08-18】測定器改修 (コードのみ、全域再測定は148動画再収集完了後に実施)**:
+  `scripts/_diag_persistent_misread_truth_recheck_2026-08-18.py` を新設。npzに既存の
+  `tsumo_count` (物理時計、新規設置ごとに増分) を使い、`_find_run` が返す区間 [lo,hi] のうち
+  アンカーframeの tsumo_count と完全一致するアンカー隣接の最大連続部分区間だけを "truth_stable"
+  区間として再判定する。1回でも設置イベントを跨げば `truth_may_have_changed=True` を立て、
+  truth_stable側の持続フレーム数が閾値未満なら persistent から除外 (区間分割/除外の実装)。
+  遷移回数から3段階の確信度タグ (`no_transition` / `ambiguous` / `high_confidence_artifact`、
+  閾値 `HIGH_CONFIDENCE_TRANSITION_COUNT=3`) を付与し機械的な二値判定で握りつぶさない。
+  旧 `persistent_misread_{tag}.json` は一切変更せず、`persistent_misread_{tag}_truth_rechecked.json`
+  に新旧比較可能な形で出力 (既存資産保護)。**構成Fで実行確認 (小規模再集計、全域再測定ではない)**:
+  旧65件→新40件 (高確信除外17件・要人手レビュー8件)。c21系7件 (本事案の実例) は全件
+  tsumo遷移8〜19回で高確信除外に一致し、既知事案として回帰テストにピン留め済み
+  (`tests/test_persistent_misread_truth_recheck_2026-08-18.py`、13件、実データ依存分はskipif guard)。
+  副産物: 019_c23 r4c0/r4c1・022_c17・028_c16・033_c13・034_c11 も高確信除外候補として新規に浮上
+  (未監査、148動画再収集後の全域再測定+人手照合が必要)。src/・scripts/collect_boards_lean.py は無変更
 
 ### W25: おじゃま落下時の白雲パーティクルエフェクトによる一時遮蔽誤分類 (2026-08-17)
 - **症状**: 大連鎖でおじゃまが落下する際に発生する白い雲 (もくもく) パーティクルが落下経路上の
