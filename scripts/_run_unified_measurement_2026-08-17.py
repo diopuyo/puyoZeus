@@ -20,14 +20,14 @@ _persist = importlib.import_module("scripts._diag_persistent_misread_2026-08-17"
 def main() -> None:
     print("=== 1. 採点 (a/b/c/d/e) ===")
     _score._ensure_score_a()
-    for tag in ("b", "c", "d", "e"):
+    for tag in ("b", "c", "d", "e", "f"):
         _score.score_one(tag)
 
     print("\n=== 2. 5構成比較 ===")
     _score.compare_all()
 
     print("\n=== 3. 持続誤認診断 (1次目標②) ===")
-    for tag in ("a", "b", "c", "d", "e"):
+    for tag in ("a", "b", "c", "d", "e", "f"):
         result = _persist.analyze_tag(tag)
         out_path = _persist.OUT_DIR / f"persistent_misread_{tag}.json"
         _persist.OUT_DIR.mkdir(parents=True, exist_ok=True)
