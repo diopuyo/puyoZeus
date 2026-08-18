@@ -6157,3 +6157,209 @@ def test_ojama_write_accounting_guard_default_false_on_init_and_load_default():
         default = sig.parameters["enable_ojama_write_accounting_guard"].default
         assert default is False, f"{target} の既定は False であるべき: {default}"
 
+
+# ---------------------------------------------------------------------------
+# 色→別色棄却 (enable_ojama_fall_color_swap_guard、2026-08-18):
+# user発見の閃光エフェクトによる色→別色誤読 (青→緑、赤→黄 等) への対処。
+# docs/KNOWN_WEAKNESSES.md W26 参照。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_color_swap_guard(
+    enable_flag: bool, reader: object | None = None,
+    enable_base_guard: bool = False,
+) -> RecognitionPipeline:
+    """enable_ojama_fall_color_swap_guard フラグ付きの pipeline を構築する。
+
+    `enable_base_guard` (既定 False) で enable_ojama_write_accounting_guard
+    を併用するかを選べる (独立性確認テストのため)。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=enable_base_guard,
+        enable_ojama_fall_color_swap_guard=enable_flag,
+    )
+
+
+def test_enable_ojama_fall_color_swap_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_fall_color_swap_guard が False。"""
+    pipe = _make_pipe_color_swap_guard(False)
+    assert not pipe._enable_ojama_fall_color_swap_guard
+
+
+def test_enable_ojama_fall_color_swap_guard_flag_on():
+    """フラグ ON → _enable_ojama_fall_color_swap_guard が True。"""
+    pipe = _make_pipe_color_swap_guard(True)
+    assert pipe._enable_ojama_fall_color_swap_guard
+
+
+def test_ojama_fall_color_swap_guard_rejects_color_swap_during_ojama_fall_end_to_end():
+    """核心 end-to-end: OJAMA_FALL 中に直近安定色 (赤) のセルが閃光で緑と
+    誤読されても、cnn_board 入力段で赤に訂正される (user発見の閃光誤読
+    [青→緑、赤→黄] の直接シミュレーション)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)  # 閃光による色→別色誤読を模擬
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "OJAMA_FALL 中の色→別色誤読は入力段で直近安定色へ訂正されるべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_off_no_regression():
+    """フラグ OFF (既定) では OJAMA_FALL 中でも色→別色は従来通り素通しされる
+    (bit-identical)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "フラグ OFF では色→別色棄却は一切発火しないべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_scoped_to_ojama_fall_not_chain():
+    """スコープ限定確認: CHAIN 中は色→別色棄却が発火しない (OJAMA_FALL
+    限定、CHAIN 中の多段消去・重力補充との高速遷移エイリアシングは
+    未精査のため今回は対象外、モジュール docstring参照)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "CHAIN 中は色→別色棄却が発火せず素通しされるべき (スコープ外)"
+    )
+
+
+def test_ojama_fall_color_swap_guard_works_without_base_write_accounting_guard():
+    """enable_ojama_write_accounting_guard=False でも
+    enable_ojama_fall_color_swap_guard=True 単独で機能する
+    (会計トラッカー不在でも動作する独立フラグ設計の確認)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader, enable_base_guard=False)
+    assert pipe._ojama_fall_accounting_tracker is None, (
+        "色→別色棄却単独ではトラッカーを生成しないはず (pending 予告量不要)"
+    )
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+
+def test_ojama_fall_color_swap_guard_passthrough_new_placement_on_empty_cell():
+    """空セルへの新規色設置は棄却対象外 (prev_stable_color が色ぷよ範囲外、
+    設計要件どおり新規設置を誤って巻き込まない)。"""
+    cnn_new = Board()
+    cnn_new.set(3, 2, COLOR_GREEN)  # 未観測セル (memory 未登録 = EMPTY 扱い)
+    reader = _StubImageReader(cnn_new, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(3, 2)) == COLOR_GREEN
+
+
+def test_ojama_fall_color_swap_guard_timeout_accepts_stale_memory_after_duration():
+    """固着対策 核心 (W25と同型): 直近安定色メモリが陳腐化 (stale) して
+    いる場合でも、生CNN観測が連続 OJAMA_REJECT_TIMEOUT_SEC 秒同一の誤色を
+    示したら棄却を解除し新色を受理する。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    # frame 0 (t=0.0): ストリーク開始、タイムアウト未到達 → 棄却 (従来通り)。
+    result0 = pipe.update(0, 0.0, _dummy_frame())
+    assert int(result0.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+    # frame 1 (t=OJAMA_REJECT_TIMEOUT_SEC): タイムアウト到達 → 受理。
+    result1 = pipe.update(1, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())
+    assert int(result1.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "タイムアウト到達で陳腐化メモリの棄却を解除し新色を受理するべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_flicker_resets_timeout_progress():
+    """フリッカ許容なし (W25と同じ規約): 誤色が別の誤色へ切り替わると
+    ストリークが再起動し、タイムアウトへの進行が失われる。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    cnn_green = Board()
+    cnn_green.set(9, 1, COLOR_GREEN)
+    cnn_blue = Board()
+    cnn_blue.set(9, 1, COLOR_BLUE)
+
+    reader._p1 = cnn_green  # type: ignore[attr-defined]
+    pipe.update(0, 0.0, _dummy_frame())  # ストリーク開始 (緑) t=0.0
+    reader._p1 = cnn_blue  # type: ignore[attr-defined]
+    pipe.update(1, 1.0, _dummy_frame())  # 誤色切替 (緑→青) → 再起動
+    result = pipe.update(2, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())  # t=1.5
+
+    # 誤色切替後の再開 (t=1.0) からの duration は 0.5 (<1.5) のため棄却される。
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "誤色切替でストリークが再起動され、タイムアウトに届いていないため"
+        "棄却されるべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_off_streak_never_updated():
+    """フラグ OFF (default): 色→別色ストリーク辞書は一切更新されない
+    (bit-identical、_update_ojama_color_swap_streak 自体が呼ばれない)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    for i in range(4):
+        pipe.update(i, float(i) * 0.5, _dummy_frame())
+
+    assert pipe._ojama_color_swap_streak_1p == {}
+
+
+def test_ojama_fall_color_swap_guard_default_false_on_init_and_load_default():
+    """__init__ / load_default 両方で既定 False。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters["enable_ojama_fall_color_swap_guard"].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
+

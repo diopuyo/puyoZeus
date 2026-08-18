@@ -317,3 +317,148 @@ def test_apply_filter_duration_dict_missing_cell_defaults_to_zero():
     )
 
     assert int(out.get(9, 1)) == COLOR_RED
+
+
+# ---------------------------------------------------------------------------
+# 色→別色棄却 (拡張、2026-08-18): 連鎖発火の閃光エフェクトによる
+# 色→別色誤読への対処。docs/KNOWN_WEAKNESSES.md W26 参照。
+# ---------------------------------------------------------------------------
+
+
+def test_filter_color_swap_default_off_passes_through():
+    """reject_color_swap 既定 False では色→別色は従来通り常に素通し
+    (backwards compat、bit-identical)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_GREEN,
+        column_pending_ojama_credit=0,
+    )
+    assert out == COLOR_GREEN
+
+
+def test_filter_color_swap_rejected_when_enabled():
+    """核心: reject_color_swap=True で色→別色 (赤→緑) が直近安定色へ
+    差し替えられる (user発見の閃光誤読、青→緑/赤→黄 と同型)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_GREEN,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+    )
+    assert out == COLOR_RED
+
+
+def test_filter_color_swap_passthrough_same_color():
+    """色→同色 (実質無変化) は reject_color_swap=True でも素通し
+    (new_cnn_value != prev_stable_color 条件で対象外)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_RED,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+    )
+    assert out == COLOR_RED
+
+
+def test_filter_color_swap_passthrough_empty_to_color():
+    """空→色 (正当な新規設置) は reject_color_swap=True でも対象外
+    (prev_stable_color が色ぷよ範囲外のため)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_EMPTY, new_cnn_value=COLOR_GREEN,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+    )
+    assert out == COLOR_GREEN
+
+
+def test_filter_color_swap_passthrough_color_to_ojama_still_uses_base_rule():
+    """色→9 (W25本体の対象) は reject_color_swap=True でも base ルール
+    (reject_ojama_write、既定 True) が先に適用される (排他、二重棄却しない)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+    )
+    assert out == COLOR_RED
+
+
+def test_filter_color_swap_timeout_accepts_after_duration():
+    """色→別色棄却の固着対策: duration が OJAMA_REJECT_TIMEOUT_SEC に
+    達したら陳腐化メモリの屈服として新色を受理する (W25本体と同型)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_GREEN,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+        consecutive_color_swap_duration_sec=OJAMA_REJECT_TIMEOUT_SEC,
+    )
+    assert out == COLOR_GREEN
+
+
+def test_filter_color_swap_timeout_still_rejects_below_threshold():
+    """duration がタイムアウト未到達なら引き続き棄却する。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_GREEN,
+        column_pending_ojama_credit=0,
+        reject_color_swap=True,
+        consecutive_color_swap_duration_sec=OJAMA_REJECT_TIMEOUT_SEC - 0.01,
+    )
+    assert out == COLOR_RED
+
+
+def test_apply_filter_color_swap_disabled_by_default_full_board():
+    """盤面全体適用: reject_color_swap 既定 False では色→別色を書き換えない
+    (bit-identical)。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_GREEN)  # 直近安定色は赤 (memory) だが素通しのはず
+    memory = {(9, 1): COLOR_RED}
+
+    out = apply_ojama_write_accounting_filter(cnn, memory, column_pending_ojama_credit=0)
+
+    assert int(out.get(9, 1)) == COLOR_GREEN
+
+
+def test_apply_filter_color_swap_enabled_rejects_full_board():
+    """盤面全体適用: reject_color_swap=True で色→別色セルのみ書き換わり、
+    無関係セルは無変化。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_GREEN)  # 誤読対象 (直近安定色=赤)
+    cnn.set(5, 3, COLOR_GREEN)  # 無関係 (直近安定色も緑)
+    memory = {(9, 1): COLOR_RED, (5, 3): COLOR_GREEN}
+
+    out = apply_ojama_write_accounting_filter(
+        cnn, memory, column_pending_ojama_credit=0, reject_color_swap=True,
+    )
+
+    assert int(out.get(9, 1)) == COLOR_RED, "誤読セルは直近安定色 (赤) へ差し替えられるべき"
+    assert int(out.get(5, 3)) == COLOR_GREEN, "無関係セルは無変化のはず"
+
+
+def test_apply_filter_color_swap_timeout_dict_per_cell():
+    """盤面全体適用: consecutive_color_swap_duration_by_cell で
+    セル単位にタイムアウト到達可否が独立に効く。"""
+    cnn = Board()
+    cnn.set(9, 1, COLOR_GREEN)  # タイムアウト到達 → 受理
+    cnn.set(10, 2, COLOR_GREEN)  # 未到達 → 棄却
+    memory = {(9, 1): COLOR_RED, (10, 2): COLOR_RED}
+    duration_by_cell = {
+        (9, 1): OJAMA_REJECT_TIMEOUT_SEC,
+        (10, 2): 0.1,
+    }
+
+    out = apply_ojama_write_accounting_filter(
+        cnn, memory, column_pending_ojama_credit=0,
+        reject_color_swap=True,
+        consecutive_color_swap_duration_by_cell=duration_by_cell,
+    )
+
+    assert int(out.get(9, 1)) == COLOR_GREEN, "タイムアウト到達セルは受理されるべき"
+    assert int(out.get(10, 2)) == COLOR_RED, "タイムアウト未到達セルは棄却されたままのはず"
+
+
+def test_filter_reject_ojama_write_can_be_disabled_independently():
+    """reject_ojama_write=False で W25本体 (色→9棄却) を単独無効化できる
+    (色→別色棄却とは独立、enable_ojama_fall_color_swap_guard 単独稼働を
+    支える設計確認)。"""
+    out = filter_ojama_write_by_accounting(
+        prev_stable_color=COLOR_RED, new_cnn_value=COLOR_OJAMA,
+        column_pending_ojama_credit=0,
+        reject_ojama_write=False,
+    )
+    assert out == COLOR_OJAMA, "reject_ojama_write=False では色→9も素通しするべき"
