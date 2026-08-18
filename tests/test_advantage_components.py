@@ -2385,6 +2385,129 @@ def test_acquire_model_skips_artifact_when_exclude_video_given(monkeypatch) -> N
     assert load_calls == []  # 成果物ロード自体を試みない
 
 
+# ============================
+# --model-dir オプション (2026-08-18 追加)
+# ============================
+# user要望「新しく収集したデータで学習したモデルを使って解析動画を作りたい」
+# に対応するため、モデル成果物ディレクトリを CLI から差し替え可能にした。
+# 既定 (未指定) は従来通り MODEL_ARTIFACT_DIR を使う (後方互換)。
+# 明示指定時はファイル欠如・特徴量列不一致を fail-silent フォールバックせず
+# 即座に例外化する (無言で旧モデルにフォールバックする事故を防ぐ)。
+
+
+def test_load_artifact_model_default_dir_unchanged(monkeypatch, tmp_path) -> None:
+    """model_dir 省略時は従来通り MODEL_ARTIFACT_PATH/_FEATURE_COLS_PATH を
+    そのまま使う (後方互換、既存呼出元・既存テストの monkeypatch と完全互換)。"""
+    import scripts.visualize_advantage_overlay as vao
+    monkeypatch.setattr(vao, "MODEL_ARTIFACT_PATH", tmp_path / "no_such_model.joblib")
+    monkeypatch.setattr(
+        vao, "MODEL_ARTIFACT_FEATURE_COLS_PATH", tmp_path / "no_such_cols.json")
+    assert vao._load_artifact_model() is None  # 引数無しでも従来通り fail-safe
+
+
+def test_load_artifact_model_explicit_dir_missing_is_fail_safe_by_default(
+    tmp_path,
+) -> None:
+    """model_dir 指定時でも strict=False (既定) なら従来通り None を返す
+    (`_load_artifact_model` 単体は fail-safe のまま、strict 化は呼出元
+    `_acquire_model` の責務)。"""
+    import scripts.visualize_advantage_overlay as vao
+    assert vao._load_artifact_model(tmp_path / "no_such_dir") is None
+
+
+def test_load_artifact_model_explicit_dir_missing_raises_when_strict(tmp_path) -> None:
+    """model_dir 指定 + strict=True で成果物が無い場合は
+    ModelArtifactMissingError を送出する (フォールバックしない、fail-silent禁止)。"""
+    import scripts.visualize_advantage_overlay as vao
+    with pytest.raises(vao.ModelArtifactMissingError):
+        vao._load_artifact_model(tmp_path / "no_such_dir", strict=True)
+
+
+def test_load_artifact_model_explicit_dir_partial_files_raises_when_strict(
+    tmp_path,
+) -> None:
+    """model_dir 配下に joblib はあるが feature_cols_full.json が無い場合も
+    strict=True では例外 (片方欠損も見逃さない)。"""
+    import scripts.visualize_advantage_overlay as vao
+    model_dir = tmp_path / "custom_model"
+    model_dir.mkdir()
+    (model_dir / "model_full148_full_features.joblib").write_bytes(b"dummy")
+    with pytest.raises(vao.ModelArtifactMissingError):
+        vao._load_artifact_model(model_dir, strict=True)
+
+
+def test_load_artifact_model_feature_count_mismatch_raises(tmp_path) -> None:
+    """モデルが期待する特徴量数 (n_features_in_) と feature_cols_full.json の
+    列数が食い違う場合、strict の値に関わらず ModelArtifactFeatureMismatchError
+    を送出する (成果物ペアの整合性は常に検証する)。"""
+    import json as _json
+
+    import joblib
+
+    import scripts.visualize_advantage_overlay as vao
+    model_dir = tmp_path / "mismatched_model"
+    model_dir.mkdir()
+    fake_model = types.SimpleNamespace(n_features_in_=47)
+    joblib.dump(fake_model, model_dir / "model_full148_full_features.joblib")
+    (model_dir / "feature_cols_full.json").write_text(
+        _json.dumps(["col_a", "col_b"]), encoding="utf-8")  # 2列 != 47
+    with pytest.raises(vao.ModelArtifactFeatureMismatchError):
+        vao._load_artifact_model(model_dir)  # strict=False でも不一致は必ずエラー
+
+
+def test_acquire_model_explicit_model_dir_missing_raises_without_fallback(
+    monkeypatch, tmp_path,
+) -> None:
+    """`--model-dir` 明示指定先に成果物が無い場合、_acquire_model は
+    _train_model へフォールバックせず即座に例外を送出する (fail-silent禁止、
+    「無言で古いモデルを使う」事故の再発防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    def _fail_if_called(exclude_video=None):
+        raise AssertionError("_train_model が呼ばれた = fail-silent フォールバックが復活している")
+
+    monkeypatch.setattr(vao, "_train_model", _fail_if_called)
+    with pytest.raises(vao.ModelArtifactMissingError):
+        vao._acquire_model(None, tmp_path / "no_such_dir")
+
+
+def test_acquire_model_exclude_video_overrides_model_dir(monkeypatch, tmp_path) -> None:
+    """exclude_video と model_dir が同時指定された場合、リーク防止を優先し
+    model_dir を無視して CSV 起動時学習にフォールバックする (model_dir が
+    存在しないディレクトリでも例外にならない = 無視されている証拠)。"""
+    import scripts.visualize_advantage_overlay as vao
+    sentinel = object()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        vao, "_train_model", lambda exclude_video=None: (calls.append(exclude_video), sentinel)[1])
+    result = vao._acquire_model("video_29", tmp_path / "no_such_dir")
+    assert result is sentinel
+    assert calls == ["video_29"]
+
+
+def test_generate_model_dir_default_is_none() -> None:
+    """generate() の model_dir 既定が None であること
+    (後方互換、未指定時は MODEL_ARTIFACT_DIR を使う従来挙動)。"""
+    import inspect
+
+    import scripts.visualize_advantage_overlay as vao
+    params = inspect.signature(vao.generate).parameters
+    assert "model_dir" in params
+    assert params["model_dir"].default is None
+
+
+def test_main_wires_model_dir_cli_option_through_to_generate() -> None:
+    """main() の argparse に --model-dir が配線され、generate() まで
+    届いていること (2026-08-18 追加のCLIオプション配線の回帰テスト)。"""
+    import inspect
+
+    import scripts.visualize_advantage_overlay as vao
+    src = inspect.getsource(vao.main)
+    assert "--model-dir" in src
+    assert 'dest="model_dir"' in src
+    assert "model_dir=a.model_dir" in src
+
+
 def test_score_advantage_dispatches_to_full_row_when_artifact_mode(monkeypatch) -> None:
     """model._puyo_feature_mode == 'full_row' なら _score_advantage_full_row に
     完全委譲する (従来 diff ベース経路とは別関数、混在しない)。"""
