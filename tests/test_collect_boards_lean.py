@@ -339,13 +339,19 @@ class TestShouldEmit:
         board = _make_board(COLOR_RED)
         assert mod._should_emit(state, board, BoardState.STABLE)
 
-    def test_raw_pixel_stable_false_blocks_emit(self) -> None:
-        """(d) STABLE持続確認: raw_pixel_stable=False の snapshot は
-        emit されない (連鎖アニメ中/送付フラッシュ重畳の疑い)。"""
+    def test_raw_pixel_stable_false_no_longer_blocks_emit(self) -> None:
+        """(2026-08-18 二次追加、STABLE持続ゲートの役割転用):
+        raw_pixel_stable=False を渡しても emit は拒否されない。
+
+        旧仕様は記録拒否 (61%収集減 + 局面偏りが実測で判明したため撤回)。
+        判定結果は npz の stable_persistence_confidence 列にタグとして残す
+        方式に変わった (_process_side_lean 参照)。raw_pixel_stable 引数
+        自体は後方互換のため signature に残すが _should_emit 内では無視する。
+        """
         mod = _import_lean()
         state = mod._SideState()
         board = _make_board(COLOR_RED)
-        assert not mod._should_emit(
+        assert mod._should_emit(
             state, board, BoardState.STABLE, raw_pixel_stable=False,
         )
 
@@ -1519,139 +1525,157 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     assert sig.parameters["normalize_fps_30"].default is True
     # エフェクト時間ゲート (2026-08-03、A/B 計測用): 末尾に追加、既定 OFF。
     # 注記 (2026-08-17 発見・W23根治タスクで是正、W25根治タスクでさらに
-    # -1シフト、2026-08-18 (d) STABLE持続確認タスクでさらに -1シフト):
+    # -1シフト、2026-08-18 (d) STABLE持続確認タスクでさらに -1シフト、
+    # 連鎖中物理推論配線タスクでさらに -1シフト、盤面収集作り替え
+    # (1手区切りスケジューラ+持続的物理制約フィルタ) タスクでさらに
+    # -2シフト):
     # 以下のインデックスは enable_override_color_guard /
     # enable_ojama_column_stack_fix / enable_next_history_starvation_fix /
-    # enable_ojama_cnn_override_warmup / enable_stable_persistence_gate の
-    # 5件が末尾にさらに追加された分、元の値から一律 -5 シフトしてある
-    # (旧値は git log 参照)。
-    assert params[-36] == "enable_effect_gate"
+    # enable_ojama_cnn_override_warmup / enable_stable_persistence_gate /
+    # enable_chain_estimate_recording / enable_move_segmented_recording /
+    # enable_physics_persistence_filter の 8件が末尾にさらに追加された分、
+    # 元の値から一律 -8 シフトしてある (旧値は git log 参照)。
+    assert params[-39] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-35] == "effect_gate_persist_sec"
+    assert params[-38] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-34] == "enable_effect_visual_gate"
+    assert params[-37] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-33] == "enable_burst_guard_v2"
+    assert params[-36] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-32] == "enable_transition_merge_guard"
+    assert params[-35] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-31] == "burst_gate_open_threshold"
+    assert params[-34] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-30] == "enable_hidden_row_burst_guard"
+    assert params[-33] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-29] == "enable_burst_close_extension"
+    assert params[-32] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-28] == "burst_chain_gap_max_sec"
+    assert params[-31] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-27] == "enable_online_hsv_refresh"
+    assert params[-30] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-26] == "enable_match_transition_debounce"
+    assert params[-29] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
     # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
     # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
-    assert params[-25] == "enable_ojama_entry_gravity_settle_guard"
+    assert params[-28] == "enable_ojama_entry_gravity_settle_guard"
     assert (
         sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
     )
-    assert params[-24] == "enable_gravity_settle_reset_on_exit"
+    assert params[-27] == "enable_gravity_settle_reset_on_exit"
     assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
     # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
-    assert params[-23] == "enable_phantom_board_guard"
+    assert params[-26] == "enable_phantom_board_guard"
     assert sig.parameters["enable_phantom_board_guard"].default is False
     # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
-    assert params[-22] == "enable_margin_time_rate"
+    assert params[-25] == "enable_margin_time_rate"
     assert sig.parameters["enable_margin_time_rate"].default is False
     # 盤面確定窓 3中2多数決 (2026-08-13 user承認): さらに末尾に追加、既定 OFF。
-    assert params[-21] == "enable_stable_majority_window"
+    assert params[-24] == "enable_stable_majority_window"
     assert sig.parameters["enable_stable_majority_window"].default is False
     # OJAMA_FALL誤分類根因調査 案2/案4-lite/案3 (2026-08-13):
     # さらに末尾に追加、既定 OFF (全 OFF で bit-identical)。
-    assert params[-20] == "enable_ojama_fall_placement_override"
+    assert params[-23] == "enable_ojama_fall_placement_override"
     assert (
         sig.parameters["enable_ojama_fall_placement_override"].default is False
     )
-    assert params[-19] == "enable_ojama_fall_entry_hardening"
+    assert params[-22] == "enable_ojama_fall_entry_hardening"
     assert sig.parameters["enable_ojama_fall_entry_hardening"].default is False
-    assert params[-18] == "enable_chain_gate_raw_fallback"
+    assert params[-21] == "enable_chain_gate_raw_fallback"
     assert sig.parameters["enable_chain_gate_raw_fallback"].default is False
     # OJAMA_FALL出口の根治 案1 (2026-08-13、フル物差し回帰タスク#5向け新設):
     # さらに末尾に追加、既定 OFF (bit-identical)。collect_boards_lean.py には
     # 元々 RecognitionPipeline 側の実装のみ存在し CLI 未配線だったギャップの
     # 是正 (config (c) = OJAMA_FALL系3種の物差し比較に必要)。
-    assert params[-17] == "enable_ojama_fall_scoped_exit"
+    assert params[-20] == "enable_ojama_fall_scoped_exit"
     assert sig.parameters["enable_ojama_fall_scoped_exit"].default is False
     # フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した測定器
     # 事故の修正): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-16] == "precise_seek"
+    assert params[-19] == "precise_seek"
     assert sig.parameters["precise_seek"].default is False
     # W13根治 案1 (2026-08-16): highlight override 配線。さらに末尾に追加、
     # 既定 OFF (bit-identical、物差しv2 A/B測定用)。
-    assert params[-15] == "enable_highlight_override"
+    assert params[-18] == "enable_highlight_override"
     assert sig.parameters["enable_highlight_override"].default is False
     # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
     # さらに末尾に追加、既定 OFF (bit-identical、案1 との A/B/併用測定用)。
-    assert params[-14] == "enable_patch_fp_hsv_guard"
+    assert params[-17] == "enable_patch_fp_hsv_guard"
     assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
     # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-13] == "enable_boundary_multisignal"
+    assert params[-16] == "enable_boundary_multisignal"
     assert sig.parameters["enable_boundary_multisignal"].default is False
     # W20/W21根治 (2026-08-17): 勝者パネルクロスチェック配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-12] == "enable_winner_panel_crosscheck"
+    assert params[-15] == "enable_winner_panel_crosscheck"
     assert sig.parameters["enable_winner_panel_crosscheck"].default is False
     # R2 浮きぷよ是正機構 (2026-08-17): さらに末尾に追加、既定 OFF
     # (bit-identical、hsv-guard 併用/単独 A/B 測定用)。
-    assert params[-11] == "enable_floating_gap_restore"
+    assert params[-14] == "enable_floating_gap_restore"
     assert sig.parameters["enable_floating_gap_restore"].default is False
     # W10根治 (2026-08-17): 着地セル色の継続監視ガード CLI 配線漏れの是正
     # (認識強化統一測定タスクで発見)。さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-10] == "enable_landing_color_guard"
+    assert params[-13] == "enable_landing_color_guard"
     assert sig.parameters["enable_landing_color_guard"].default is False
     # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-9] == "enable_override_color_guard"
+    assert params[-12] == "enable_override_color_guard"
     assert sig.parameters["enable_override_color_guard"].default is False
-    assert params[-8] == "enable_ojama_column_stack_fix"
+    assert params[-11] == "enable_ojama_column_stack_fix"
     assert sig.parameters["enable_ojama_column_stack_fix"].default is False
     # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
     # の ever_seen 飢餓状態対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-7] == "enable_next_history_starvation_fix"
+    assert params[-10] == "enable_next_history_starvation_fix"
     assert sig.parameters["enable_next_history_starvation_fix"].default is False
     # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): おじゃま落下
     # 白雲パーティクル誤認対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-6] == "enable_ojama_cnn_override_warmup"
+    assert params[-9] == "enable_ojama_cnn_override_warmup"
     assert sig.parameters["enable_ojama_cnn_override_warmup"].default is False
     # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25):
     # CNN観測入力段の会計整合フィルタ。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-5] == "enable_ojama_write_accounting_guard"
+    assert params[-8] == "enable_ojama_write_accounting_guard"
     assert sig.parameters["enable_ojama_write_accounting_guard"].default is False
     # (d) STABLE持続確認 (2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_
     # 2026-08-17.md §5): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-4] == "enable_stable_persistence_gate"
+    assert params[-7] == "enable_stable_persistence_gate"
     assert sig.parameters["enable_stable_persistence_gate"].default is False
     # (b-1) match_end持続時間ゲート (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-3] == "enable_match_end_persist_override"
+    assert params[-6] == "enable_match_end_persist_override"
     assert sig.parameters["enable_match_end_persist_override"].default is False
     # (b-2) 次試合開始までのラッチ (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-2] == "enable_post_match_lockdown_latch"
+    assert params[-5] == "enable_post_match_lockdown_latch"
     assert sig.parameters["enable_post_match_lockdown_latch"].default is False
     # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-1] == "enable_result_screen_hardening"
+    assert params[-4] == "enable_result_screen_hardening"
     assert sig.parameters["enable_result_screen_hardening"].default is False
+    # 連鎖中物理推論の配線 (enable_chain_estimate_recording、2026-08-18):
+    # さらに末尾に追加、既定 OFF (bit-identical)。
+    assert params[-3] == "enable_chain_estimate_recording"
+    assert sig.parameters["enable_chain_estimate_recording"].default is False
+    # 1手区切り観測スケジューラ (enable_move_segmented_recording、
+    # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
+    # (bit-identical)。
+    assert params[-2] == "enable_move_segmented_recording"
+    assert sig.parameters["enable_move_segmented_recording"].default is False
+    # 持続的物理制約フィルタ (enable_physics_persistence_filter、
+    # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
+    # (bit-identical)。
+    assert params[-1] == "enable_physics_persistence_filter"
+    assert sig.parameters["enable_physics_persistence_filter"].default is False
 
 
 
@@ -2619,6 +2643,174 @@ def test_collect_lean_post_match_lockdown_active_unknown_when_absent(
 
 
 # ============================
+# STABLE持続confidenceタグ (2026-08-18 二次追加、収集ゲート→confidence
+# タグへの役割転用)
+# ============================
+
+class TestStablePersistenceConfidenceColumn:
+    """_LeanNpzAccumulator の stable_persistence_confidence 列の記録・保存を
+    検証する (match_end_lockeds/post_match_lockdown_actives と同じ
+    マーカー列方式)。"""
+
+    def test_append_default_omitted_uses_unknown_sentinel(
+        self, tmp_path: Path,
+    ) -> None:
+        """省略時は STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1、後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(board._grid, "v1", "1P", 1.0, 0, 10)
+        assert acc.stable_persistence_confidences == [
+            mod.STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN
+        ]
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert (
+                data["stable_persistence_confidence"][0]
+                == mod.STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN
+            )
+
+    def test_append_explicit_values_roundtrip(self, tmp_path: Path) -> None:
+        """True/False が npz に 1/0 でそのまま保存される。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(
+            board._grid, "v1", "1P", 1.0, 0, 10,
+            stable_persistence_confidence=True,
+        )
+        acc.append(
+            board._grid, "v1", "1P", 2.0, 0, 11,
+            stable_persistence_confidence=False,
+        )
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert list(data["stable_persistence_confidence"]) == [1, 0]
+
+    def test_existing_columns_unaffected(self, tmp_path: Path) -> None:
+        """新列の追加が既存 match_end_locked/post_match_lockdown_active 列の
+        挙動を変えないこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        board = _make_board(COLOR_RED)
+        acc.append(
+            board._grid, "v1", "1P", 1.0, 0, 10,
+            match_end_locked=True, post_match_lockdown_active=False,
+            stable_persistence_confidence=True,
+        )
+        out = tmp_path / "out.npz"
+        acc.save(out)
+        with np.load(out) as data:
+            assert data["match_end_locked"][0] == 1
+            assert data["post_match_lockdown_active"][0] == 0
+            assert data["stable_persistence_confidence"][0] == 1
+
+
+class _FakeCaptureLeanVaryingBrightness:
+    """フレームごとに輝度が変わる cv2.VideoCapture フェイク (2026-08-18
+    二次追加、stable_persistence_confidence 実配線検証用)。輝度差により
+    src.board_motion の diff 計算が意味のある 0/1 混在を生む。"""
+
+    def __init__(self, values: list[int], fps: float = 30.0) -> None:
+        self._values = values
+        self._fps = fps
+        self._i = 0
+        mod = _import_lean()
+        self._h, self._w = mod.TARGET_H, mod.TARGET_W
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop: int) -> float:
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(len(self._values))
+        return 0.0
+
+    def set(self, prop: int, value: float) -> None:  # noqa: D401 - フェイクなので no-op
+        pass
+
+    def read(self) -> "tuple[bool, np.ndarray | None]":
+        if self._i >= len(self._values):
+            return False, None
+        v = self._values[self._i]
+        self._i += 1
+        frame = np.full((self._h, self._w, 3), v, dtype=np.uint8)
+        return True, frame
+
+    def release(self) -> None:
+        pass
+
+
+class _FakeLeanPipelineStablePersistence(_FakeLeanPipeline):
+    """2 フレームとも STABLE を返すが、盤面色をフレームごとに変えて dedup を
+    回避するフェイク (2026-08-18 二次追加)。"""
+
+    def update(self, fi: int, t_sec: float, frame: np.ndarray) -> SimpleNamespace:
+        self.update_calls.append(fi)
+        color = COLOR_RED if fi == 0 else COLOR_BLUE
+        board = _make_board(color)
+        side = SimpleNamespace(
+            state=BoardState.STABLE, score=100, confirmed_board=board,
+            next_pair=None, dnext_pair=None, chain_event=None,
+        )
+        return SimpleNamespace(
+            p1=side, p2=side, is_match_active=True, match_end_locked=False,
+        )
+
+
+def test_collect_lean_stable_persistence_confidence_does_not_block_emit(
+    tmp_path: Path,
+) -> None:
+    """enable_stable_persistence_gate=True で confidence が 0/1 混在しても、
+    いずれの snapshot も記録される (旧仕様=記録拒否は撤回済み、2026-08-18
+    二次追加、STABLE持続ゲートの役割転用)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLeanVaryingBrightness([0, 200])
+    fake_pipeline = _FakeLeanPipelineStablePersistence()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        n = mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+            enable_stable_persistence_gate=True,
+        )
+    # 2 フレーム (輝度 0 → 200 の急変) × 1P/2P = 4 行、いずれも拒否されない。
+    assert n == 4
+    with np.load(out_npz) as data:
+        # frame0: 立ち上がり直後で diff 計算不能 → 保守的に True(1)。
+        # frame1: 輝度急変で diff >= 閾値 → False(0)。emit は拒否されない。
+        assert list(data["stable_persistence_confidence"]) == [1, 1, 0, 0]
+
+
+def test_collect_lean_stable_persistence_confidence_unknown_when_gate_disabled(
+    tmp_path: Path,
+) -> None:
+    """enable_stable_persistence_gate=False (既定) では計算自体を行わず、
+    STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1) のまま保存される
+    (bit-identical、2026-08-18 二次追加)。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+    fake_pipeline = _FakeLeanPipelinePostMatchLockdown(lockdown_active=True)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        out_npz = tmp_path / "out.npz"
+        mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+        )
+    with np.load(out_npz) as data:
+        assert list(data["stable_persistence_confidence"]) == [
+            mod.STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN,
+            mod.STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN,
+        ]
+
+
+# ============================
 # 勝者パネルクロスチェック (W20/W21根治、2026-08-17 追加)
 # ============================
 
@@ -3003,3 +3195,692 @@ def test_main_cli_enable_result_screen_hardening_flag_sets_true() -> None:
     """--enable-result-screen-hardening 指定時は True が渡ること。"""
     captured = _run_fake_main_lean(["--enable-result-screen-hardening"])
     assert captured["enable_result_screen_hardening"] is True
+
+
+# ============================
+# 連鎖中物理推論の配線 (2026-08-18、user確定要件)
+# ============================
+
+
+def test_main_cli_enable_chain_estimate_recording_default_false() -> None:
+    """CLI で --enable-chain-estimate-recording 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_chain_estimate_recording"] is False
+
+
+def test_main_cli_enable_chain_estimate_recording_flag_sets_true() -> None:
+    """--enable-chain-estimate-recording 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-chain-estimate-recording"])
+    assert captured["enable_chain_estimate_recording"] is True
+
+
+def test_main_cli_enable_move_segmented_recording_default_false() -> None:
+    """CLI で --enable-move-segmented-recording 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_move_segmented_recording"] is False
+
+
+def test_main_cli_enable_move_segmented_recording_flag_sets_true() -> None:
+    """--enable-move-segmented-recording 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-move-segmented-recording"])
+    assert captured["enable_move_segmented_recording"] is True
+
+
+def test_main_cli_enable_physics_persistence_filter_default_false() -> None:
+    """CLI で --enable-physics-persistence-filter 未指定なら False。"""
+    captured = _run_fake_main_lean([])
+    assert captured["enable_physics_persistence_filter"] is False
+
+
+def test_main_cli_enable_physics_persistence_filter_flag_sets_true() -> None:
+    """--enable-physics-persistence-filter 指定時は True が渡ること。"""
+    captured = _run_fake_main_lean(["--enable-physics-persistence-filter"])
+    assert captured["enable_physics_persistence_filter"] is True
+
+
+class TestChainEstimateRecording:
+    """_process_side_lean の estimated_board 代替記録ロジックを検証する。"""
+
+    def test_default_off_ignores_estimated_board_and_skips(self) -> None:
+        """既定 False (enable_chain_estimate_recording 省略) では
+        confirmed_board=None・CHAIN 中でも記録しない (bit-identical、
+        従来挙動完全維持)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        estimated = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.CHAIN, 100, "v29", 1.0, 10,
+            estimated_board=estimated, board_provenance="chain_estimate",
+        )
+        assert len(acc.grids) == 0
+
+    def test_enabled_records_estimated_board_during_chain(self) -> None:
+        """enable_chain_estimate_recording=True かつ confirmed_board=None・
+        CHAIN 中なら estimated_board を代わりに記録し、board_provenance も
+        伝搬すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        estimated = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.CHAIN, 100, "v29", 1.0, 10,
+            estimated_board=estimated, board_provenance="chain_estimate",
+            enable_chain_estimate_recording=True,
+        )
+        assert len(acc.grids) == 1
+        assert np.array_equal(acc.grids[0], estimated._grid)
+        assert acc.board_provenances[0] == "chain_estimate"
+
+    def test_enabled_records_estimated_board_during_gravity_settle(self) -> None:
+        """GRAVITY_SETTLE 中でも同様に estimated_board を記録すること。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        estimated = _make_board(COLOR_GREEN)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.GRAVITY_SETTLE, 100, "v29",
+            1.0, 10,
+            estimated_board=estimated, board_provenance="chain_estimate",
+            enable_chain_estimate_recording=True,
+        )
+        assert len(acc.grids) == 1
+        assert np.array_equal(acc.grids[0], estimated._grid)
+
+    def test_enabled_rejects_low_confidence_provenance(self) -> None:
+        """board_provenance == chain_estimate_low_confidence (起点誤認疑い)
+        は enable_chain_estimate_recording=True でも採用しない。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        estimated = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.CHAIN, 100, "v29", 1.0, 10,
+            estimated_board=estimated,
+            board_provenance="chain_estimate_low_confidence",
+            enable_chain_estimate_recording=True,
+        )
+        assert len(acc.grids) == 0
+
+    def test_enabled_does_not_use_estimated_board_for_ojama_fall(self) -> None:
+        """OJAMA_FALL 中は estimated_board が渡されていても記録しない
+        (user明言「降り終わるまで待つ」。実運用では estimated_board 自体が
+        常に None だが、本テストは念のため状態チェック自体も直接検証する)。
+        """
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        estimated = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.OJAMA_FALL, 100, "v29", 1.0, 10,
+            estimated_board=estimated, board_provenance="chain_estimate",
+            enable_chain_estimate_recording=True,
+        )
+        assert len(acc.grids) == 0
+
+    def test_enabled_does_not_override_real_observed_board(self) -> None:
+        """confirmed_board が非 None (実測 STABLE) のときは
+        enable_chain_estimate_recording=True でも estimated_board で
+        上書きしない (実測が最優先)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        observed = _make_board(COLOR_RED)
+        estimated = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", observed, BoardState.STABLE, 100, "v29", 1.0,
+            10,
+            estimated_board=estimated, board_provenance="observed",
+            enable_chain_estimate_recording=True,
+        )
+        assert len(acc.grids) == 1
+        assert np.array_equal(acc.grids[0], observed._grid)
+        assert acc.board_provenances[0] == "observed"
+
+    def test_board_provenance_recorded_regardless_of_flag(self) -> None:
+        """board_provenance 列は enable_chain_estimate_recording の値に
+        関わらず、実測 STABLE snapshot では常に記録される (npz に必ず残す
+        という要件)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        observed = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", observed, BoardState.STABLE, 100, "v29", 1.0,
+            10,
+            board_provenance="observed",
+        )
+        assert acc.board_provenances[0] == "observed"
+
+    def test_default_board_provenance_is_unknown_sentinel(self) -> None:
+        """board_provenance を渡さない場合 (既定 None) は
+        BOARD_PROVENANCE_UNKNOWN ("") で埋められる (後方互換)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+        )
+        assert acc.board_provenances[0] == mod.BOARD_PROVENANCE_UNKNOWN
+
+    def test_save_writes_board_provenance_key(self, tmp_path: Path) -> None:
+        """save() が board_provenance 列を npz に書き出すこと (末尾追加、
+        既存キー・キー順は不変)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board, BoardState.STABLE, 100, "v29", 1.0, 10,
+            board_provenance="observed",
+        )
+        out = tmp_path / "test.npz"
+        acc.save(out)
+        data = np.load(out, allow_pickle=False)
+        assert "board_provenance" in data
+        assert data["board_provenance"][0] == "observed"
+
+    def test_full_loop_default_fake_pipeline_no_crash_with_flag_on(
+        self, tmp_path: Path,
+    ) -> None:
+        """estimated_board/board_provenance 属性を持たない旧式フェイク
+        pipeline (_FakeLeanPipeline、SimpleNamespace) でも
+        enable_chain_estimate_recording=True で AttributeError にならない
+        こと (getattr フォールバック安全性の確認)。"""
+        n, _ = _run_fake_collect_lean(
+            tmp_path, 3, enable_chain_estimate_recording=True,
+        )
+        assert n == 0  # state=MENU のため元々何も記録されない
+
+    def test_full_loop_records_estimated_board_via_collect_lean(
+        self, tmp_path: Path,
+    ) -> None:
+        """collect_lean() の main loop を通しても estimated_board が
+        npz に記録され、board_provenance 列も正しく保存されること
+        (エンドツーエンド配線確認)。"""
+        mod = _import_lean()
+        estimated = _make_board(COLOR_BLUE)
+
+        class _FakeChainEstimatePipeline(_FakeLeanPipeline):
+            def update(self, fi: int, t_sec: float, frame: np.ndarray):
+                self.update_calls.append(fi)
+                side = SimpleNamespace(
+                    state=BoardState.CHAIN, score=100, confirmed_board=None,
+                    next_pair=None, dnext_pair=None, chain_event=None,
+                    estimated_board=estimated, board_provenance="chain_estimate",
+                )
+                return SimpleNamespace(p1=side, p2=side)
+
+        fake_cap = _FakeCaptureLean(1)
+
+        def _fake_video_capture(_path: str) -> _FakeCaptureLean:
+            return fake_cap
+
+        fake_pipeline = _FakeChainEstimatePipeline()
+
+        def _fake_load_default(*args: object, **kwargs: object):
+            return fake_pipeline
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(mod.cv2, "VideoCapture", _fake_video_capture)
+            mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+            out_npz = tmp_path / "out.npz"
+            n = mod.collect_lean(
+                Path("dummy_video.mp4"), out_npz,
+                enable_chain_estimate_recording=True,
+            )
+        assert n == 2  # 1P/2P 両方 (同一フェイク side を共有)
+        data = np.load(out_npz, allow_pickle=False)
+        assert np.array_equal(data["grids"][0], estimated._grid)
+        assert data["board_provenance"][0] == "chain_estimate"
+
+
+# ============================
+# 1手区切り観測スケジューラ + 持続的物理制約フィルタ (2026-08-18)
+# ============================
+
+
+def _gravity_violation_board() -> Board:
+    """col=0 の row=11 が浮遊 (row=12 が空) している合成盤面を返す。"""
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    g[11][0] = COLOR_RED  # row12 (最下段) が空なのに row11 に puyo → 重力違反
+    return Board.from_list(g)
+
+
+def _erasable_violation_board() -> Board:
+    """2x2 の同色4連結 (消去可能グループ) を持つ合成盤面を返す。"""
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    g[11][0] = COLOR_RED
+    g[11][1] = COLOR_RED
+    g[12][0] = COLOR_RED
+    g[12][1] = COLOR_RED
+    return Board.from_list(g)
+
+
+def _clean_board() -> Board:
+    """物理制約違反のない合成盤面 (最下段を4色交互に敷き詰め、4連結なし)。"""
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_BLUE]
+    for col in range(BOARD_COLS):
+        g[BOARD_ROWS - 1][col] = colors[col]
+    return Board.from_list(g)
+
+
+class TestMoveWindowScheduler:
+    """_update_move_scheduler / _move_window_candidate_ok を検証する。"""
+
+    def test_disabled_is_noop(self) -> None:
+        """enable=False では state を一切変更しないこと (bit-identical)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), 1, BoardState.STABLE, 10, enable=False,
+        )
+        assert state.move_window_deadline_fi is None
+        assert state.prev_next_pair is None
+        assert state.prev_tsumo_count is None
+
+    def test_next_pair_first_observation_does_not_open_window(self) -> None:
+        """初回観測 (prev_next_pair が None) では窓を開かず、比較基準だけ記録する。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), None, BoardState.STABLE, 10, enable=True,
+        )
+        assert state.move_window_deadline_fi is None
+        assert state.prev_next_pair == (1, 2)
+
+    def test_next_pair_change_opens_window(self) -> None:
+        """NEXT 繰り上がり (next_pair 変化) で猶予窓が開くこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), None, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, (2, 3), None, BoardState.STABLE, 20, enable=True,
+        )
+        assert state.move_window_deadline_fi == 20 + mod.MOVE_SEGMENT_GRACE_FRAMES
+        assert state.move_window_recorded is False
+
+    def test_next_pair_no_change_does_not_reopen_window(self) -> None:
+        """next_pair が変化しなければ窓は開かない (既存窓の状態も変えない)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), None, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, (1, 2), None, BoardState.STABLE, 20, enable=True,
+        )
+        assert state.move_window_deadline_fi is None
+
+    def test_tsumo_count_fallback_when_next_pair_none(self) -> None:
+        """capture_next=False (next_pair=None) では tsumo_count 増分に
+        フォールバックして窓を開くこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, None, 5, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, None, 6, BoardState.STABLE, 21, enable=True,
+        )
+        assert state.move_window_deadline_fi == 21 + mod.MOVE_SEGMENT_GRACE_FRAMES
+
+    def test_tsumo_count_decrease_does_not_open_window(self) -> None:
+        """試合境界等で tsumo_count が減少しても窓は開かない (負の delta 無視)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, None, 10, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, None, 0, BoardState.STABLE, 20, enable=True,
+        )
+        assert state.move_window_deadline_fi is None
+
+    def test_ojama_fall_extends_open_window_deadline(self) -> None:
+        """窓が開いている間、OJAMA_FALL 中は締切を押し戻すこと
+        (user明言「降り終わるまで待つ」)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), None, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, (2, 3), None, BoardState.STABLE, 20, enable=True,
+        )
+        first_deadline = state.move_window_deadline_fi
+        mod._update_move_scheduler(
+            state, (2, 3), None, BoardState.OJAMA_FALL, 40, enable=True,
+        )
+        assert state.move_window_deadline_fi == 40 + mod.MOVE_SEGMENT_GRACE_FRAMES
+        assert state.move_window_deadline_fi > first_deadline
+
+    def test_ojama_fall_without_open_window_does_nothing(self) -> None:
+        """窓が開いていない状態で OJAMA_FALL が来ても窓を新設しないこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, None, None, BoardState.OJAMA_FALL, 40, enable=True,
+        )
+        assert state.move_window_deadline_fi is None
+
+
+class TestMoveWindowCandidateOk:
+    """_move_window_candidate_ok の判定条件を検証する。"""
+
+    def test_no_window_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        assert mod._move_window_candidate_ok(state, 10) is False
+
+    def test_within_deadline_and_unrecorded_accepts(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        state.move_window_recorded = False
+        assert mod._move_window_candidate_ok(state, 20) is True
+
+    def test_already_recorded_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        state.move_window_recorded = True
+        assert mod._move_window_candidate_ok(state, 20) is False
+
+    def test_past_deadline_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        state.move_window_recorded = False
+        assert mod._move_window_candidate_ok(state, 26) is False
+
+    def test_exact_deadline_frame_accepts(self) -> None:
+        """締切ちょうどのフレームは猶予内として許容する (境界値)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        state.move_window_recorded = False
+        assert mod._move_window_candidate_ok(state, 25) is True
+
+
+class TestPhysicsPersistenceFilter:
+    """_physics_violation_signature / _update_physics_transition_marker /
+
+    _is_physics_violation_persistent を検証する。
+    """
+
+    def test_signature_empty_for_clean_board(self) -> None:
+        mod = _import_lean()
+        sim = mod.ChainSimulator()
+        sig = mod._physics_violation_signature(sim, _clean_board())
+        assert sig == frozenset()
+
+    def test_signature_detects_gravity_violation(self) -> None:
+        mod = _import_lean()
+        sim = mod.ChainSimulator()
+        sig = mod._physics_violation_signature(sim, _gravity_violation_board())
+        assert (11, 0, "gravity") in sig
+
+    def test_signature_detects_erasable_violation(self) -> None:
+        mod = _import_lean()
+        sim = mod.ChainSimulator()
+        sig = mod._physics_violation_signature(sim, _erasable_violation_board())
+        assert any(kind == "erasable" for _r, _c, kind in sig)
+
+    def test_first_observation_never_persistent(self) -> None:
+        """違反があっても初回観測 (比較対象なし) では棄却しないこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        sim = mod.ChainSimulator()
+        rejected = mod._is_physics_violation_persistent(
+            state, _gravity_violation_board(), sim,
+        )
+        assert rejected is False
+        assert state.prev_violation_signature is not None
+
+    def test_second_consecutive_same_violation_without_transition_rejected(
+        self,
+    ) -> None:
+        """同一違反が正当な遷移を挟まず2回連続観測されたら棄却すること。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        sim = mod.ChainSimulator()
+        board = _gravity_violation_board()
+        mod._is_physics_violation_persistent(state, board, sim)
+        rejected = mod._is_physics_violation_persistent(state, board, sim)
+        assert rejected is True
+
+    def test_legit_transition_clears_persistence(self) -> None:
+        """間に正当な状態遷移 (TSUMO_FALL 等) を挟めば連続観測でも棄却しない
+        こと (W24 教訓: 単純な連続回数閾値にしない)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        sim = mod.ChainSimulator()
+        board = _gravity_violation_board()
+        mod._is_physics_violation_persistent(state, board, sim)
+        mod._update_physics_transition_marker(state, BoardState.TSUMO_FALL, True)
+        rejected = mod._is_physics_violation_persistent(state, board, sim)
+        assert rejected is False
+
+    def test_transition_marker_disabled_is_noop(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_physics_transition_marker(state, BoardState.TSUMO_FALL, False)
+        assert state.legit_transition_pending is False
+
+    def test_transition_marker_tsumo_count_increment_sets_legit_transition(
+        self,
+    ) -> None:
+        """tsumo_count 増分も正当な遷移として扱うこと (2026-08-18 是正、
+
+        60fps stride-2 間引きで TSUMO_FALL 観測が漏れても検知できるようにする
+        フォールバック信号)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_physics_transition_marker(
+            state, BoardState.STABLE, True, tsumo_count=5,
+        )
+        assert state.legit_transition_pending is False  # 初回は比較対象なし
+        mod._update_physics_transition_marker(
+            state, BoardState.STABLE, True, tsumo_count=6,
+        )
+        assert state.legit_transition_pending is True
+
+    def test_transition_marker_tsumo_count_independent_of_scheduler_field(
+        self,
+    ) -> None:
+        """物理制約フィルタ単独使用 (enable_move_segmented_recording=False)
+
+        でも tsumo_count 増分検知が機能すること (_update_move_scheduler の
+        prev_tsumo_count とは独立フィールドで追跡するため)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_physics_transition_marker(
+            state, BoardState.STABLE, True, tsumo_count=1,
+        )
+        mod._update_physics_transition_marker(
+            state, BoardState.STABLE, True, tsumo_count=2,
+        )
+        assert state.legit_transition_pending is True
+        assert state.prev_tsumo_count is None  # scheduler 側フィールドは無傷
+
+    def test_different_violation_not_treated_as_persistent(self) -> None:
+        """違反 signature が変われば (別セル/別種別) 単発扱いで棄却しないこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        sim = mod.ChainSimulator()
+        mod._is_physics_violation_persistent(state, _gravity_violation_board(), sim)
+        rejected = mod._is_physics_violation_persistent(
+            state, _erasable_violation_board(), sim,
+        )
+        assert rejected is False
+
+    def test_sim_none_never_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        assert mod._is_physics_violation_persistent(
+            state, _gravity_violation_board(), None,
+        ) is False
+
+
+class TestShouldEmitMoveSegmentedAndPhysicsFilter:
+    """_should_emit の新規ゲート (move-segmented / physics-persistence) を
+
+    既存ゲート (STABLE/重複除外) と組み合わせて検証する。
+    """
+
+    def test_move_segmented_default_off_bit_identical(self) -> None:
+        """新フラグを一切渡さない呼び出しは従来と完全に同じ挙動であること。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _clean_board()
+        assert mod._should_emit(state, board, BoardState.STABLE) is True
+
+    def test_move_segmented_no_window_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _clean_board()
+        assert mod._should_emit(
+            state, board, BoardState.STABLE,
+            enable_move_segmented_recording=True, frame_idx=10,
+        ) is False
+
+    def test_move_segmented_within_window_accepts(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        board = _clean_board()
+        assert mod._should_emit(
+            state, board, BoardState.STABLE,
+            enable_move_segmented_recording=True, frame_idx=20,
+        ) is True
+
+    def test_move_segmented_past_deadline_rejects(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        state.move_window_deadline_fi = 25
+        board = _clean_board()
+        assert mod._should_emit(
+            state, board, BoardState.STABLE,
+            enable_move_segmented_recording=True, frame_idx=30,
+        ) is False
+
+    def test_physics_filter_rejects_persistent_violation(self) -> None:
+        mod = _import_lean()
+        state = mod._SideState()
+        sim = mod.ChainSimulator()
+        board = _gravity_violation_board()
+        # 1回目: 違反はあるが比較対象なしなので許容される
+        assert mod._should_emit(
+            state, board, BoardState.STABLE,
+            enable_physics_persistence_filter=True, physics_sim=sim,
+        ) is True
+        state.last_emitted_grid = None  # 重複除外に引っかからないよう間に挟む
+        # 2回目: 同一違反が正当な遷移なしで再度観測される → 棄却
+        assert mod._should_emit(
+            state, board, BoardState.STABLE,
+            enable_physics_persistence_filter=True, physics_sim=sim,
+        ) is False
+
+    def test_physics_filter_default_off_bit_identical(self) -> None:
+        """物理制約フィルタ無効時は違反があっても記録可否に影響しないこと。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        board = _gravity_violation_board()
+        assert mod._should_emit(state, board, BoardState.STABLE) is True
+
+
+class TestProcessSideLeanMoveSchedulerIntegration:
+    """_process_side_lean 経由での1手区切りスケジューラ統合動作を検証する。"""
+
+    def test_default_off_records_every_stable_change_like_before(
+        self, tmp_path: Path,
+    ) -> None:
+        """新フラグ省略時は従来通り STABLE かつ非重複なら毎回記録されること
+        (bit-identical、既存の event-driven 挙動を維持)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board_a = _make_board(COLOR_RED)
+        board_b = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 0.0, 0,
+        )
+        mod._process_side_lean(
+            acc, state, "1P", board_b, BoardState.STABLE, 100,
+            "vid", 1.0, 1,
+        )
+        assert len(acc.grids) == 2
+
+    def test_move_segmented_records_only_first_stable_in_window(
+        self, tmp_path: Path,
+    ) -> None:
+        """1手区切りモードでは、猶予窓内で最初に得られた STABLE のみ記録し、
+
+        同一窓内の以降の STABLE 変化 (認識のブレ) は記録しないこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        # フレーム0: NEXT 初回観測 (窓は開かない)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.MENU, None,
+            "vid", 0.0, 0, next_pair=(1, 2),
+            enable_move_segmented_recording=True,
+        )
+        # フレーム5: NEXT 繰り上がり → 猶予窓が開く (締切 = 5+15=20)
+        board_a = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 5 / 30, 5, next_pair=(2, 3),
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 1
+        # フレーム8: 同一窓内で認識がブレて別盤面が観測されても記録しない
+        board_b = _make_board(COLOR_BLUE)
+        mod._process_side_lean(
+            acc, state, "1P", board_b, BoardState.STABLE, 100,
+            "vid", 8 / 30, 8, next_pair=(2, 3),
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 1
+        assert np.array_equal(acc.grids[0], board_a._grid)
+
+    def test_move_segmented_drops_move_when_grace_expires(
+        self, tmp_path: Path,
+    ) -> None:
+        """猶予切れまで STABLE が得られなければその手は記録せず、
+
+        次の手区切りへ回すこと (無理な穴埋めをしない)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.MENU, None,
+            "vid", 0.0, 0, next_pair=(1, 2),
+            enable_move_segmented_recording=True,
+        )
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.TSUMO_FALL, 100,
+            "vid", 1 / 30, 1, next_pair=(2, 3),
+            enable_move_segmented_recording=True,
+        )
+        # 猶予切れ後 (frame_idx=1+15+1=17) に STABLE が得られても記録しない
+        board_a = _make_board(COLOR_RED)
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 17 / 30, 17, next_pair=(2, 3),
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 0
+        # 次の手区切り (NEXT 再度繰り上がり) では新しい窓で記録できる
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 20 / 30, 20, next_pair=(3, 4),
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 1
