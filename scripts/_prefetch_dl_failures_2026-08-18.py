@@ -61,6 +61,9 @@ DL_RETRY_SLEEP_SEC = 45.0
 BETWEEN_VIDEOS_SLEEP_SEC = 30.0
 # status.tsv に新しい失敗が現れるのを待つポーリング間隔。
 POLL_SLEEP_SEC = 300.0
+# 1周して1本でも失敗したら、次の周回まで空ける時間。403 の連続はレート制限
+# 由来のことがあり (2026-08-18 に c104〜c108 が連続失敗)、時間を置くと回復する。
+ROUND_COOLDOWN_SEC = 900.0
 TOTAL_TARGETS = 148
 
 
@@ -122,12 +125,14 @@ def download_one(target_id: str, video_filename: str, video_id: str) -> bool:
 def main() -> int:
     manifest = load_manifest()
     done: set[str] = set()
-    give_up: set[str] = set()
+    skip: set[str] = set()   # 恒久的に対象外 (manifest欠落・video_id無し)
     print("[prefetch] 開始", flush=True)
+    round_no = 0
 
     while True:
+        round_no += 1
         failed, total = load_failed_ids()
-        todo = [t for t in failed if t not in done and t not in give_up]
+        todo = [t for t in failed if t not in done and t not in skip]
 
         if not todo:
             # パイプラインが148本すべてを status.tsv に記録し終え、かつ
@@ -135,29 +140,44 @@ def main() -> int:
             if total >= TOTAL_TARGETS:
                 print(
                     f"[prefetch] 完了 (status {total}/{TOTAL_TARGETS}行、"
-                    f"回収成功={len(done)} 断念={len(give_up)})", flush=True,
+                    f"回収成功={len(done)} 対象外={len(skip)})", flush=True,
                 )
                 return 0
             time.sleep(POLL_SLEEP_SEC)
             continue
 
+        print(f"[prefetch] 第{round_no}周 未回収={len(todo)}本 {todo}", flush=True)
+        failed_this_round = 0
         for target_id in todo:
             if target_id not in manifest:
-                print(f"[prefetch][{target_id}] manifest に無い、skip", flush=True)
-                give_up.add(target_id)
+                print(f"[prefetch][{target_id}] manifest に無い、対象外", flush=True)
+                skip.add(target_id)
                 continue
             video_filename, video_id = manifest[target_id]
             if not video_id:
                 # origin=derived_c96 等、URL から取れないもの。
-                print(f"[prefetch][{target_id}] video_id 無し、skip", flush=True)
-                give_up.add(target_id)
+                print(f"[prefetch][{target_id}] video_id 無し、対象外", flush=True)
+                skip.add(target_id)
                 continue
             if download_one(target_id, video_filename, video_id):
                 done.add(target_id)
             else:
-                give_up.add(target_id)
-                print(f"[prefetch][{target_id}] 断念", flush=True)
+                # ここで諦めない。403 の連続はレート制限由来のことがあり、
+                # 時間を置けば回復する (2026-08-18 に c104〜c108 が連続失敗した
+                # 実例あり)。次の周回で再試行する。
+                failed_this_round += 1
+                print(
+                    f"[prefetch][{target_id}] 今周は失敗、次周で再試行", flush=True,
+                )
             time.sleep(BETWEEN_VIDEOS_SLEEP_SEC)
+
+        if failed_this_round:
+            # レート制限を疑って周回間は長めに空ける。
+            print(
+                f"[prefetch] 第{round_no}周で{failed_this_round}本失敗、"
+                f"{ROUND_COOLDOWN_SEC/60:.0f}分待機してから再試行", flush=True,
+            )
+            time.sleep(ROUND_COOLDOWN_SEC)
 
 
 if __name__ == "__main__":
