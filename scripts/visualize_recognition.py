@@ -1243,6 +1243,8 @@ def resolve_production_config_overrides(
         "enable_match_end_persist_override",
         "enable_post_match_lockdown_latch",
         "enable_result_screen_hardening",
+        # RECOGNITION_ADOPTED 採用 (2026-08-18、W26根治、末尾追加)。
+        "enable_ojama_fall_color_swap_guard",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1857,6 +1859,16 @@ def main() -> int:
             "無効 (後方互換、collect_boards_lean.py と同一パターン)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-fall-color-swap-guard", action="store_true", default=False,
+        dest="enable_ojama_fall_color_swap_guard",
+        help=(
+            "W26根治 (RECOGNITION_ADOPTED 採用 2026-08-18、docs/"
+            "KNOWN_WEAKNESSES.md W26節) を有効化する。連鎖発火の閃光による"
+            "色→別色誤読 (青→緑/赤→黄等) をOJAMA_FALL中に限定して拒否する。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
     # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
     # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
@@ -2256,6 +2268,8 @@ def main() -> int:
         enable_match_end_persist_override=args.enable_match_end_persist_override,
         enable_post_match_lockdown_latch=args.enable_post_match_lockdown_latch,
         enable_result_screen_hardening=args.enable_result_screen_hardening,
+        # RECOGNITION_ADOPTED 採用 (2026-08-18、W26根治、末尾追加)。
+        enable_ojama_fall_color_swap_guard=args.enable_ojama_fall_color_swap_guard,
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定
