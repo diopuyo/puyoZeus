@@ -307,6 +307,35 @@ RECOGNITION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "誤混入5/5を列フィルタで除外)。b-1/b-2 と同一の検証セット "
         "(c18/c20/c21 実写5アンカー) で確認済み",
     ),
+    AdoptedFlag(
+        "--enable-ojama-fall-color-swap-guard", "2026-08-18",
+        "W26 (docs/KNOWN_WEAKNESSES.md W26節、user承認2026-08-18、コミット"
+        "ca03275で実装済み・既定OFF)。連鎖発火の閃光 (白〜青) による色→別色"
+        "誤読 (例: 青→緑、赤→黄) をOJAMA_FALL中に限定して拒否する。"
+        "`src/ojama_write_accounting.py` の `filter_ojama_write_by_accounting` "
+        "に `reject_color_swap` (既定 False) を追加し、`prev_stable_color` と "
+        "`new_cnn_value` が共に色ぷよ (1〜5) かつ不一致の場合を追加棄却する。"
+        "`enable_ojama_write_accounting_guard` (W25) とは独立のフラグ (単独"
+        "稼働をテストで確認済み)。**実測 (scripts/_verify_color_swap_guard_"
+        "2026-08-18.py、対戦区間t≥120sのみ)**: user報告の具体箇所 "
+        "(video36 t=141-148s、2P、青→緑/赤→黄の実例) 22件→0件 (完全解消)、"
+        "実画面フレームと突合済み。広域窓: video36(120-160s) 2P 406→114件 "
+        "(-72%)、video52(120-160s) 2P 2→0件 (-100%)、c100(570-660s) 1P "
+        "134→36件 (-73%)/2P 70→7件 (-90%)。固着チェック: 全ケースで"
+        "flagged_stuck_count=0 (OJAMA_REJECT_TIMEOUT_SEC=1.5秒タイムアウトは"
+        "未発動、観測された違反の最大持続は1.0秒未満)。フルpytest "
+        "5,388 passed / 0 failed。**既知の限界 (3点、必ず認識のこと)**: "
+        "①完全解消ではない (72〜90%削減)。本フィルタは cnn_board が state "
+        "machine に入る**前**に適用されるため「現フレームが OJAMA_FALL か」を"
+        "前フレームの確定 state でしか判定できず、OJAMA_FALL 突入の最初の"
+        "1フレーム (約33ms@30fps) は保護対象外 (W25本体と共通のアーキ制約)。"
+        "根治には pipeline のフレーム遅延アーキ変更が必要でスコープ外。"
+        "②残存 violation の全量説明には至っていない (上記①は残差の一部説明"
+        "に過ぎず、追加調査の余地あり)。③CHAIN中は対象外 (同種の違反が大量に"
+        "出ている: video36 で 1P 104ep / 2P 131ep / 40秒だが、多段消去と重力"
+        "補充の高速遷移のエイリアシングが未精査のため意図的にスコープ外。"
+        "CHAIN中は一切発火しない設計をテストで確認済み)",
+    ),
 )
 
 # ============================
