@@ -62,6 +62,25 @@ _NODE24_PATH = "/home/ryouj/.nvm/versions/node/v24.19.0/bin/node"
 _DL_RETRY_COUNT = 4
 _DL_RETRY_SLEEP_SEC = 8.0
 
+# YouTube の bot 対策で高画質フォーマットのURLが約20MBで無効化される事象
+# (2026-08-18 実測。速度制限2M/s・分割DL(5M/10M)・player_client変更のいずれでも
+# 回避不可で、mweb は 640x360 しか取れず認識に使えない) への対処として、
+# ログイン済み Cookie があれば渡す (user承認 2026-08-18、Edge のCookieを使用)。
+# **認証情報のため scratchpad にのみ置き、git 管理下には絶対に置かない**。
+# 存在しなければ Cookie 無しで動作する (後方互換)。
+_COOKIES_TXT = Path(
+    "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
+    "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
+    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies.txt"
+)
+
+
+def _cookie_args() -> list:
+    """Cookie ファイルがあれば yt-dlp 引数を返す。無ければ空。"""
+    if _COOKIES_TXT.exists() and _COOKIES_TXT.stat().st_size > 0:
+        return ["--cookies", str(_COOKIES_TXT)]
+    return []
+
 
 def _download_video_node24(t):  # noqa: ANN001, ANN201 (orch.Target 型を再利用)
     """orch.download_video の複製+修正版 (node24パス差し替え+リトライ強化)。
@@ -81,6 +100,7 @@ def _download_video_node24(t):  # noqa: ANN001, ANN201 (orch.Target 型を再利
             str(PROJECT_ROOT / "venv" / "bin" / "python"), "-m", "yt_dlp",
             "--ffmpeg-location", str(orch.FFMPEG_LOCATION),
             "--js-runtimes", f"node:{_NODE24_PATH}",
+            *_cookie_args(),
             "-f", orch.YT_DLP_FORMAT,
             "--remux-video", "mp4", "--no-playlist", "--no-progress",
             "-o", str(out_path), url,
