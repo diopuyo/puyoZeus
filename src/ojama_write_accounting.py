@@ -93,6 +93,36 @@ c13 実機検証 (`scripts/_verify_w25_3rd_fix_2026-08-17.py`) で、対象9セ�
 最大許容陳腐化期間」としても採用する、という設計判断であることに注意
 (単一の値が2つの異なる論拠を同時に満たすように選定されている)。
 
+## 色→別色棄却 (拡張、2026-08-18、user発見・原因特定済み)
+
+user がレビューで発見した別現象への対処: 連鎖発火時の白〜青の閃光
+エフェクトが画面全体を覆い、既に置かれている色ぷよが別の色へ誤読される
+(例: 青→緑、赤→黄)。 W25 本体 (上記) は `new_cnn_value == COLOR_OJAMA`
+の場合しか介入しないため、この「色→別色」(new_cnn_value が 1〜5 のまま)
+は素通ししていた (スコープの取りこぼし、実装不具合ではない)。
+
+`filter_ojama_write_by_accounting` に `reject_color_swap` (既定 False) を
+追加し、True の場合のみ「`prev_stable_color` と `new_cnn_value` が共に
+色ぷよ (1〜5) かつ不一致」を追加で棄却する。`_stable_color_memory_1p/2p`
+をそのまま流用し (別メモリを新設しない)、固着対策も W25 と同型
+(`OJAMA_REJECT_TIMEOUT_SEC` 秒連続で同一の誤色を観測したら陳腐化メモリの
+屈服として受理、呼出し側 `_update_ojama_color_swap_streak` 参照)。
+
+**スコープを OJAMA_FALL 中に限定** (呼出し側 `RecognitionPipeline.
+_step_side` が `sm.context.state == BoardState.OJAMA_FALL` の場合のみ
+`reject_color_swap=True` を渡す): おじゃま落下中は物理的に色ぷよが
+別の色へ変わることはあり得ないため、副作用が理論上ゼロ。CHAIN 中も同種の
+違反が大量に観測されているが、多段消去・重力補充の高速遷移とのエイリア
+シングが未精査のため、今回は対象外 (フラグ
+`enable_ojama_fall_color_swap_guard` は OJAMA_FALL 限定、CHAIN では
+一切発火しない設計)。
+
+既存の `reject_ojama_write` (既定 True、W25 本体の色→9棄却の有効/無効
+切替) と独立した引数のため、`enable_ojama_write_accounting_guard` が
+False でも `enable_ojama_fall_color_swap_guard` 単独で機能する
+(呼出し側でどちらか一方が True なら本モジュールが呼ばれ、それぞれの
+判定は個別の flag で独立に有効化される)。
+
 ### フリッカ許容なし (重要)
 
 ストリーム判定は 1 フレームでも生CNN観測が9以外を示したら即座にリセット
@@ -114,10 +144,29 @@ c13 実機検証 (`scripts/_verify_w25_3rd_fix_2026-08-17.py`) で、対象9セ�
 既存の着弾遅延基準 (reference_ojama_landing_gated_by_placement 等) も
 サブ秒精度を要求しない構造 (連鎖アニメ時間・ターン単位の粒度) のため、
 本タイムアウトによる新規許容は既存基準と抵触しない。
+
+### 色→別色棄却の固着対策 (2026-08-18)
+
+「色→別色棄却」も W25 同様に永久固着リスクを持つ (直近安定色メモリが
+陳腐化した状態で、閃光後の本当の色変化 [連鎖消去に伴う次の色ぷよ設置等]
+を誤って棄却し続ける可能性)。 呼出し側 (`RecognitionPipeline.
+_update_ojama_color_swap_streak`) が「セル単位の連続同一誤色観測時間」を
+追跡し、`OJAMA_REJECT_TIMEOUT_SEC` 到達で受理する、W25 と同型のタイムアウト
+機構を持つ。 フリッカ許容なし (観測値が変わったら新しいストリークとして
+再起動、W25 と同じ理由)。
 """
 from __future__ import annotations
 
-from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, HIDDEN_ROWS, Board
+from src.board import (
+    BOARD_COLS,
+    BOARD_ROWS,
+    COLOR_EMPTY,
+    COLOR_OJAMA,
+    COLOR_PURPLE,
+    COLOR_RED,
+    HIDDEN_ROWS,
+    Board,
+)
 
 # W25固着対策 (2026-08-18): 直近安定色メモリが陳腐化 (stale) している場合の
 # 永久固着防止タイムアウト。 生CNN観測が連続してこの秒数だけ9を示したら、
@@ -128,7 +177,16 @@ from src.board import BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_OJAMA, HIDDEN_R
 #     1.5倍相当の安全マージン → 雲由来の誤観測はこの秒数に届かない。
 #   - 受理側: 陳腐化したメモリはいつか実観測に屈服すべき、という構造的な
 #     永久固着防止原則 (雲の実測とは無関係な別の要請)。
+# 色→別色棄却 (拡張、2026-08-18) のタイムアウトにも同じ定数を流用する
+# (モジュール docstring「色→別色棄却の固着対策」節参照、閃光の持続時間は
+# 雲パーティクルと同系の演出エフェクトのため同一マージンで安全)。
 OJAMA_REJECT_TIMEOUT_SEC: float = 1.5
+
+# 色→別色棄却 (2026-08-18) が対象とする「色ぷよ」値の範囲 (おじゃま(9)・
+# 空(0)・不明(10) を含まない、board.py の COLOR_RED〜COLOR_PURPLE が連番で
+# あることに依存、マジックナンバー回避)。
+_MIN_COLOR_PUYO: int = COLOR_RED
+_MAX_COLOR_PUYO: int = COLOR_PURPLE
 
 
 def filter_ojama_write_by_accounting(
@@ -136,11 +194,16 @@ def filter_ojama_write_by_accounting(
     new_cnn_value: int,
     column_pending_ojama_credit: int,
     consecutive_raw9_duration_sec: float = 0.0,
+    *,
+    reject_ojama_write: bool = True,
+    reject_color_swap: bool = False,
+    consecutive_color_swap_duration_sec: float = 0.0,
 ) -> int:
     """1 セル分の会計整合フィルタ (純関数、stateless)。
 
-    「非空色セルへの 9 書込み」は常に直近安定色 (`prev_stable_color`) へ
-    差し替える (= 棄却)。ぷよぷよのルール上おじゃまは空セルにのみ着弾する
+    「非空色セルへの 9 書込み」は (`reject_ojama_write=True`、既定 True =
+    従来挙動) 常に直近安定色 (`prev_stable_color`) へ差し替える (= 棄却)。
+    ぷよぷよのルール上おじゃまは空セルにのみ着弾する
     (reference_ojama_landing_pattern) ため、非空色セルへの 9 は
     column_pending_ojama_credit の大小に関わらず物理的に説明不可能であり、
     実測 (c13、本モジュール docstring 冒頭「実測に基づく設計修正」参照) でも
@@ -156,6 +219,14 @@ def filter_ojama_write_by_accounting(
     (stale) している場合の永久固着を防ぐ (棄却側の論拠とは独立、詳細は
     モジュール docstring 参照)。
 
+    色→別色棄却 (拡張、2026-08-18、モジュール docstring「色→別色棄却」節
+    参照): `reject_color_swap=True` の場合のみ、`prev_stable_color` と
+    `new_cnn_value` が共に色ぷよ (1〜5) かつ不一致のケースも追加で棄却する
+    (連鎖発火の閃光エフェクトによる色→別色誤読への対処、既定 False =
+    従来挙動と bit-identical)。 固着対策は W25 本体と同型
+    (`consecutive_color_swap_duration_sec` が `OJAMA_REJECT_TIMEOUT_SEC`
+    以上ならタイムアウト受理)。
+
     Args:
         prev_stable_color: このセルの直近安定色 (state machine reset の
             影響を受けない外部メモリから取得、未観測セルは COLOR_EMPTY 扱い)。
@@ -168,16 +239,33 @@ def filter_ojama_write_by_accounting(
             持続時間 (秒、呼び出し側が算出。フリッカ [1frameでも9以外を
             観測] があれば即0にリセットされた値を渡すこと)。既定 0.0
             (backwards compat、渡さなければタイムアウト機能は無効)。
+        reject_ojama_write: W25 本体 (色→9棄却) の有効/無効切替。既定 True
+            (backwards compat、既存呼出しは全て従来挙動のまま)。
+        reject_color_swap: 色→別色棄却 (拡張) の有効/無効切替。既定 False
+            (backwards compat、既定 OFF = 従来挙動 bit-identical)。
+        consecutive_color_swap_duration_sec: 生CNN観測が連続して同一の
+            (直近安定色と異なる) 色を示している持続時間 (秒)。既定 0.0。
 
     Returns:
         フィルタ後の値 (書換えが起きなければ `new_cnn_value` そのもの)。
     """
     del column_pending_ojama_credit  # 実測に基づき判定には使わない (docstring参照)
-    if prev_stable_color == COLOR_EMPTY or new_cnn_value != COLOR_OJAMA:
+    if prev_stable_color == COLOR_EMPTY:
         return new_cnn_value
-    if consecutive_raw9_duration_sec >= OJAMA_REJECT_TIMEOUT_SEC:
-        return new_cnn_value  # 固着対策: タイムアウト到達→実観測を受理
-    return prev_stable_color
+    if reject_ojama_write and new_cnn_value == COLOR_OJAMA:
+        if consecutive_raw9_duration_sec >= OJAMA_REJECT_TIMEOUT_SEC:
+            return new_cnn_value  # 固着対策: タイムアウト到達→実観測を受理
+        return prev_stable_color
+    if (
+        reject_color_swap
+        and _MIN_COLOR_PUYO <= prev_stable_color <= _MAX_COLOR_PUYO
+        and _MIN_COLOR_PUYO <= new_cnn_value <= _MAX_COLOR_PUYO
+        and new_cnn_value != prev_stable_color
+    ):
+        if consecutive_color_swap_duration_sec >= OJAMA_REJECT_TIMEOUT_SEC:
+            return new_cnn_value  # 固着対策: タイムアウト到達→実観測を受理
+        return prev_stable_color
+    return new_cnn_value
 
 
 def apply_ojama_write_accounting_filter(
@@ -185,6 +273,10 @@ def apply_ojama_write_accounting_filter(
     stable_color_memory: "dict[tuple[int, int], int]",
     column_pending_ojama_credit: int,
     consecutive_raw9_duration_by_cell: "dict[tuple[int, int], float] | None" = None,
+    *,
+    reject_ojama_write: bool = True,
+    reject_color_swap: bool = False,
+    consecutive_color_swap_duration_by_cell: "dict[tuple[int, int], float] | None" = None,
 ) -> Board:
     """盤面全体に会計整合フィルタを適用する (純関数、stateless)。
 
@@ -204,19 +296,35 @@ def apply_ojama_write_accounting_filter(
             (= タイムアウト未到達、従来の棄却ロジックのみ適用)。
             既定 None (backwards compat、渡さなければタイムアウト機能は
             全セルで無効)。
+        reject_ojama_write: W25 本体 (色→9棄却) の有効/無効切替。既定 True
+            (backwards compat)。
+        reject_color_swap: 色→別色棄却 (拡張、2026-08-18) の有効/無効切替。
+            既定 False (backwards compat、既定 OFF = 従来挙動 bit-identical)。
+        consecutive_color_swap_duration_by_cell: (row, col) -> 生CNN観測が
+            連続して同一の (直近安定色と異なる) 色を示している持続時間
+            (秒)。未登録セルは 0.0 扱い。既定 None。
 
     Returns:
         フィルタ適用後の新規 Board (`cnn_board` 自体は変更しない)。
     """
     consecutive_raw9_duration_by_cell = consecutive_raw9_duration_by_cell or {}
+    consecutive_color_swap_duration_by_cell = (
+        consecutive_color_swap_duration_by_cell or {}
+    )
     filtered = cnn_board.copy()
     for r in range(HIDDEN_ROWS, BOARD_ROWS):
         for c in range(BOARD_COLS):
             prev = stable_color_memory.get((r, c), COLOR_EMPTY)
             cur = int(cnn_board.get(r, c))
-            duration = consecutive_raw9_duration_by_cell.get((r, c), 0.0)
+            duration9 = consecutive_raw9_duration_by_cell.get((r, c), 0.0)
+            duration_swap = consecutive_color_swap_duration_by_cell.get(
+                (r, c), 0.0,
+            )
             out = filter_ojama_write_by_accounting(
-                prev, cur, column_pending_ojama_credit, duration,
+                prev, cur, column_pending_ojama_credit, duration9,
+                reject_ojama_write=reject_ojama_write,
+                reject_color_swap=reject_color_swap,
+                consecutive_color_swap_duration_sec=duration_swap,
             )
             if out != cur:
                 filtered.set(r, c, out)
