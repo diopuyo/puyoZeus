@@ -1611,6 +1611,11 @@ def collect_lean(
     # 単純な連続回数閾値だけで棄却しない)。既定 False = 従来挙動完全維持
     # (backwards compat、bit-identical、ChainSimulator 自体を生成しない)。
     enable_physics_persistence_filter: bool = False,
+    # W26根治 (2026-08-18、docs/KNOWN_WEAKNESSES.md W26節、RECOGNITION_ADOPTED
+    # 採用 2026-08-18): 連鎖発火の閃光による色→別色誤読 (青→緑等) をOJAMA_FALL
+    # 中に限定して拒否する。RecognitionPipeline 本体へそのまま forward する。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat、末尾追加)。
+    enable_ojama_fall_color_swap_guard: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1905,6 +1910,7 @@ def collect_lean(
         enable_match_end_persist_override=enable_match_end_persist_override,
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -2883,6 +2889,17 @@ def main() -> int:
             "棄却しない)。既定は無効 (後方互換、bit-identical)。"
         ),
     )
+    parser.add_argument(
+        "--enable-ojama-fall-color-swap-guard", action="store_true",
+        dest="enable_ojama_fall_color_swap_guard",
+        help=(
+            "W26根治 (2026-08-18、docs/KNOWN_WEAKNESSES.md W26節、"
+            "RECOGNITION_ADOPTED 採用 2026-08-18)。連鎖発火の閃光による"
+            "色→別色誤読 (青→緑/赤→黄等) をOJAMA_FALL中に限定して拒否する。"
+            "enable_ojama_write_accounting_guard (W25) とは独立のフラグ。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2941,6 +2958,7 @@ def main() -> int:
         enable_match_end_persist_override=args.enable_match_end_persist_override,
         enable_post_match_lockdown_latch=args.enable_post_match_lockdown_latch,
         enable_result_screen_hardening=args.enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=args.enable_ojama_fall_color_swap_guard,
         enable_chain_estimate_recording=args.enable_chain_estimate_recording,
         enable_move_segmented_recording=args.enable_move_segmented_recording,
         enable_physics_persistence_filter=args.enable_physics_persistence_filter,
