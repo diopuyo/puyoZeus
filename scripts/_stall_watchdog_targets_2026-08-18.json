@@ -1,0 +1,41 @@
+{
+  "_comment": "scripts/_stall_watchdog_2026-08-18.py の監視対象定義。パスは全てプロジェクトルート相対。",
+  "_comment2": "旧番人 scripts/_watchdog_regen148_2026-08-18.py は本設定の regen148_recollect に役割統合済み。今後は起動しないこと (2026-08-18 事故: 旧番人が意図的停止中の本体を誤って再開)。",
+  "poll_interval_sec": 300,
+  "state_file": "logs/_stall_watchdog_state.json",
+  "global_pause_flag": "logs/.stall_watchdog_paused",
+  "default_stall_threshold_sec": 1800,
+  "default_min_restart_interval_sec": 1800,
+  "default_max_restarts": 10,
+  "targets": [
+    {
+      "name": "regen148_recollect",
+      "_comment": "148動画再収集の本体。1本の収集に約3時間かかるため停滞閾値は長め。pause_flag が存在する間 (方式見直し等での意図的停止中) は死亡していても再起動しない。",
+      "process_pattern": "_regen148_recollect_2026-08-18",
+      "progress": {
+        "type": "tsv_count",
+        "path": "data/verify/regen_2026-08-18/status.tsv",
+        "column": "collect_status",
+        "value": "OK"
+      },
+      "stall_threshold_sec": 5400,
+      "restart_cmd": ["setsid", "-f", "bash", "scripts/_run_regen148_recollect_2026-08-18.sh"],
+      "min_restart_interval_sec": 1800,
+      "max_restarts": 10,
+      "pause_flag": "data/verify/regen_2026-08-18/.paused"
+    },
+    {
+      "name": "prefetch_dl_failures",
+      "_comment": "DL失敗分の先回りDL。周回クールダウン900秒があるため閾値はそれより長く。",
+      "process_pattern": "_prefetch_dl_failures_2026-08-18",
+      "progress": {
+        "type": "mtime",
+        "path": "logs/prefetch_dl_failures_2026-08-18.log"
+      },
+      "stall_threshold_sec": 1800,
+      "restart_cmd": ["setsid", "-f", "bash", "scripts/_run_prefetch_dl_2026-08-18.sh"],
+      "min_restart_interval_sec": 900,
+      "max_restarts": 10
+    }
+  ]
+}
