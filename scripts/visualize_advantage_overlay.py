@@ -1816,43 +1816,110 @@ def _side_feats_full(
     return feat
 
 
-def _load_artifact_model():
-    """評価済みモデル成果物 (MODEL_ARTIFACT_PATH) をロードする (2026-08-14
-    coordinator指示)。
+class ModelArtifactMissingError(RuntimeError):
+    """--model-dir 明示指定時、モデル成果物ファイルが見つからない/ロードできない場合に送出。
 
-    成果物または隣接列リストが無い/壊れている場合は None を返す
-    (fail-safe、呼出元 `_acquire_model` が従来の起動時学習へフォールバックする)。
+    (2026-08-18 追加) 既定ディレクトリ (MODEL_ARTIFACT_DIR) 使用時は従来通り
+    fail-safe (None を返して CSV 起動時学習にフォールバック) を維持するが、
+    ユーザーが明示的に `--model-dir` で別モデルを指定した場合は
+    「無言で古いモデルにフォールバックする」事故 (fail-silent) を防ぐため、
+    ここで即座に例外化する。
+    """
+
+
+class ModelArtifactFeatureMismatchError(RuntimeError):
+    """モデルが学習時に期待する特徴量数と feature_cols_full.json の列数が
+    食い違う場合に送出 (2026-08-18 追加)。model_dir 指定の有無に関わらず、
+    この不一致は成果物ディレクトリの取り違え/破損を示す実データ異常のため
+    常にエラーにする (数値だけで採否を決めず、まず測定器=成果物ペアの
+    整合性を確認する原則)。
+    """
+
+
+def _load_artifact_model(model_dir: Path | None = None, *, strict: bool = False):
+    """評価済みモデル成果物をロードする (2026-08-14 coordinator指示、
+    2026-08-18 model_dir/strict 追加)。
+
+    model_dir: 省略時 (None) は従来通り module 定数 MODEL_ARTIFACT_PATH /
+        MODEL_ARTIFACT_FEATURE_COLS_PATH をそのまま使う (既存呼出元・既存
+        テストの monkeypatch と完全互換、後方互換必須)。指定時はそのディレ
+        クトリ配下の同名ファイル (model_full148_full_features.joblib /
+        feature_cols_full.json) を使う (`--model-dir`)。
+    strict: True の場合、ファイル欠如・ロード失敗・特徴量列不一致を
+        fail-silent フォールバックせず即座に例外を送出する
+        (`--model-dir` 明示指定時のみ `_acquire_model` が True で呼ぶ)。
+        False (既定) では従来通り None を返し、呼出元 `_acquire_model` が
+        起動時学習へフォールバックする。
+
     ロードしたモデルには `_puyo_feature_mode="full_row"` を付与し、
     `_score_advantage` がこの属性を見て行単位 (side単独) 推論に分岐する
     (`_score_advantage_full_row` 参照、既存の diff ベース経路は無変更)。
     """
-    if not MODEL_ARTIFACT_PATH.exists() or not MODEL_ARTIFACT_FEATURE_COLS_PATH.exists():
+    if model_dir is None:
+        model_path, cols_path = MODEL_ARTIFACT_PATH, MODEL_ARTIFACT_FEATURE_COLS_PATH
+    else:
+        model_path = model_dir / MODEL_ARTIFACT_PATH.name
+        cols_path = model_dir / MODEL_ARTIFACT_FEATURE_COLS_PATH.name
+    if not model_path.exists() or not cols_path.exists():
+        if strict:
+            missing = [str(p) for p in (model_path, cols_path) if not p.exists()]
+            raise ModelArtifactMissingError(
+                f"--model-dir で指定されたモデル成果物が見つかりません: {missing}"
+                " (フォールバックせずに停止します)"
+            )
         return None
     try:
         import joblib
-        model = joblib.load(MODEL_ARTIFACT_PATH)
-        cols = json.loads(MODEL_ARTIFACT_FEATURE_COLS_PATH.read_text(encoding="utf-8"))
+        model = joblib.load(model_path)
+        cols = json.loads(cols_path.read_text(encoding="utf-8"))
     except (ImportError, OSError, ValueError) as e:
+        if strict:
+            raise ModelArtifactMissingError(
+                f"--model-dir 指定先のモデルロードに失敗しました"
+                f" (model={model_path}, cols={cols_path}): {e!r}"
+            ) from e
         print(f"[model] 成果物ロード失敗 ({e!r})。CSV起動時学習にフォールバックします。")
         return None
+    cols = [str(c) for c in cols]
+    n_expected = getattr(model, "n_features_in_", None)
+    if n_expected is not None and n_expected != len(cols):
+        raise ModelArtifactFeatureMismatchError(
+            f"モデルが期待する特徴量数 ({n_expected}) と {cols_path} の列数"
+            f" ({len(cols)}) が不一致です (model={model_path})"
+        )
     model._puyo_feature_mode = "full_row"
-    model._puyo_full_cols = [str(c) for c in cols]
-    print(f"[model] 評価済み成果物をロード: {MODEL_ARTIFACT_PATH} (列数={len(cols)})")
+    model._puyo_full_cols = cols
+    print(f"[model] 評価済み成果物をロード: {model_path} (列数={len(cols)})")
     return model
 
 
-def _acquire_model(exclude_video: str | None = None):
+def _acquire_model(exclude_video: str | None = None, model_dir: Path | None = None):
     """モデルを確保する: 評価済み成果物を優先ロードし、無ければ従来の起動時
-    学習 (`_train_model`) にフォールバックする (2026-08-14 coordinator指示)。
+    学習 (`_train_model`) にフォールバックする (2026-08-14 coordinator指示、
+    2026-08-18 model_dir 追加)。
 
     exclude_video (動画リーク防止用) 指定時は成果物 (全144動画で学習済み・
     除外不可) を使わず、必ず CSV起動時学習にフォールバックする
     (黙って全動画学習済みモデルを返すサイレント不整合を防ぐ、fail-silent警戒)。
+    model_dir より exclude_video を優先する (リーク防止が最優先)。
+
+    model_dir: 省略時 (None) は従来通り既定ディレクトリ (MODEL_ARTIFACT_DIR)
+        を fail-safe (欠如時は CSV 起動時学習へフォールバック) でロードする
+        (既存動作・後方互換、既存呼出元は挙動不変)。指定時 (`--model-dir`)
+        はそのディレクトリの成果物のみを使い、欠如/列不一致は
+        ModelArtifactMissingError / ModelArtifactFeatureMismatchError を
+        送出して即座に停止する (フォールバックしない、fail-silent 厳禁)。
     """
     if exclude_video is not None:
+        if model_dir is not None:
+            print(f"[model] exclude_video={exclude_video!r} 指定のため --model-dir"
+                  f" ({model_dir}) は無視し CSV起動時学習にフォールバックします"
+                  " (動画リーク防止を優先)。")
         print(f"[model] exclude_video={exclude_video!r} 指定のため成果物"
               f" (全144動画で学習済み・除外不可) を使わず CSV起動時学習にフォールバックします。")
         return _train_model(exclude_video)
+    if model_dir is not None:
+        return _load_artifact_model(model_dir, strict=True)
     model = _load_artifact_model()
     if model is not None:
         return model
@@ -3609,6 +3676,7 @@ def _build_counter_text(counter_p1: float, counter_p2: float) -> str:
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
+             model_dir: Path | None = None,
              show_recognition: bool = False,
              enable_landing_observed_color: bool | None = None,
              force_in_match: bool = True,
@@ -3657,6 +3725,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     warmup_sec: start_sec の何秒前から「処理だけ」始めるか (状態機械/会計の初期化用。
         この区間は認識を通すが動画には書き出さない)。
     end_sec: 書き出し終了秒。
+    model_dir: 有利不利判定に使う学習済みモデル成果物のディレクトリ
+        (`--model-dir`、2026-08-18 追加)。配下に
+        `model_full148_full_features.joblib` / `feature_cols_full.json` を
+        置く (`scripts/_retrain148_2026-08-14.py` の出力形式と同一)。
+        既定 None = 従来通り MODEL_ARTIFACT_DIR
+        (data/verify/retrain148_2026-08-14) を使う (後方互換、既存呼出元は
+        挙動不変)。指定時にファイル欠如・特徴量列不一致があれば
+        ModelArtifactMissingError / ModelArtifactFeatureMismatchError を
+        送出して即座に停止する (黙って旧モデルにフォールバックしない、
+        fail-silent 厳禁)。exclude_video 指定時は model_dir より
+        exclude_video を優先し CSV 起動時学習にフォールバックする
+        (`_acquire_model` 参照)。
     show_recognition: True で scripts/visualize_recognition.py の認識色 overlay
         (盤面セルに認識色記号+ state 枠) を合成する (2026-07-23 追加)。
         既定 False = 従来通り無地の盤面 (後方互換、既存呼出元は挙動不変)。
@@ -3989,7 +4069,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         phase_platt_params = load_phase_platt_calibration(
             PHASE_CALIBRATION_PATH, required=True,
         )
-    model = _acquire_model(exclude_video)
+    model = _acquire_model(exclude_video, model_dir)
     _draw_recog_cells = _draw_recog_state = None
     _vr_rois: tuple[int, int, int, int] | None = None
     _vr_roi_size: tuple[int, int] | None = None
@@ -4580,6 +4660,18 @@ def main() -> None:
                     help="start_sec の何秒前から処理だけ始めるか (状態機械初期化用)")
     ap.add_argument("--exclude-video", default=None,
                     help="学習から除外する動画ID (対象動画のリーク防止)")
+    ap.add_argument(
+        "--model-dir", type=Path, default=None, dest="model_dir",
+        help=(
+            "有利不利判定に使う学習済みモデルのディレクトリ (2026-08-18 追加)。"
+            " 配下に model_full148_full_features.joblib / feature_cols_full.json"
+            " が必要 (scripts/_retrain148_2026-08-14.py の出力形式と同一)。"
+            f" 既定 None = 従来通り {MODEL_ARTIFACT_DIR} を使う"
+            " (後方互換、未指定時は挙動不変)。指定先にファイルが無い場合や"
+            " モデルが期待する特徴量数と feature_cols_full.json の列数が"
+            " 食い違う場合は、フォールバックせず即座にエラー終了する。"
+        ),
+    )
     ap.add_argument("--sample-interval", type=float, default=0.15)
     ap.add_argument(
         "--show-recognition", action="store_true", dest="show_recognition",
@@ -4953,6 +5045,7 @@ def main() -> None:
     generate(Path(a.video), Path(a.out), a.max_sec, a.sample_interval,
              start_sec=a.start_sec, end_sec=a.end_sec,
              exclude_video=a.exclude_video, warmup_sec=a.warmup_sec,
+             model_dir=a.model_dir,
              show_recognition=a.show_recognition,
              enable_landing_observed_color=a.enable_landing_observed_color,
              force_in_match=a.force_in_match,
