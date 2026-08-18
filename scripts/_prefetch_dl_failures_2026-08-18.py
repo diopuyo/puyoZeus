@@ -54,6 +54,24 @@ YT_DLP_FORMAT = (
     "b[height<=1080][vcodec!*=av01]/b[ext=mp4]"
 )
 
+# YouTube の bot 対策で高画質フォーマットのURLが約20MBで無効化される事象
+# (2026-08-18 実測: 速度制限・分割DL・クライアント変更のいずれでも回避不可)
+# への対処として、ログイン済み Cookie があれば渡す。**認証情報のため
+# scratchpad にのみ置き、git 管理下には絶対に置かない**。
+# 存在しなければ Cookie 無しで動作する (後方互換)。
+COOKIES_TXT = Path(
+    "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
+    "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
+    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies.txt"
+)
+
+
+def _cookie_args() -> list[str]:
+    """Cookie ファイルがあれば yt-dlp 引数を返す。無ければ空。"""
+    if COOKIES_TXT.exists() and COOKIES_TXT.stat().st_size > 0:
+        return ["--cookies", str(COOKIES_TXT)]
+    return []
+
 # 本体 (4回/8秒) よりゆっくり・粘り強く。403 がレート由来なら間隔を空けるほど当たる。
 DL_RETRY_COUNT = 6
 DL_RETRY_SLEEP_SEC = 45.0
@@ -103,6 +121,7 @@ def download_one(target_id: str, video_filename: str, video_id: str) -> bool:
             str(PROJECT_ROOT / "venv" / "bin" / "python"), "-m", "yt_dlp",
             "--ffmpeg-location", str(FFMPEG_LOCATION),
             "--js-runtimes", f"node:{NODE24_PATH}",
+            *_cookie_args(),
             "-f", YT_DLP_FORMAT,
             "--remux-video", "mp4", "--no-playlist", "--no-progress",
             "-o", str(out_path), url,
