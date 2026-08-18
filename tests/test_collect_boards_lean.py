@@ -3568,6 +3568,75 @@ class TestMoveWindowScheduler:
         )
         assert state.move_window_deadline_fi is None
 
+    def test_or_condition_tsumo_increment_opens_window_despite_unchanged_next_pair(
+        self,
+    ) -> None:
+        """OR条件化 (2026-08-18 二次追補): NEXT ペアが偶然同色で変化しなくても
+
+        tsumo_count 増分だけで窓が開くこと (4色パレットでの同色ペア衝突
+        対策、coordinator指示)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), 5, BoardState.STABLE, 10, enable=True,
+        )
+        # next_pair は (1, 2) のまま変化しない (同色ペア衝突を模擬) が
+        # tsumo_count は増分する
+        mod._update_move_scheduler(
+            state, (1, 2), 6, BoardState.STABLE, 20, enable=True,
+        )
+        assert state.move_window_deadline_fi == 20 + mod.MOVE_SEGMENT_GRACE_FRAMES
+        assert state.move_window_recorded is False
+
+    def test_or_condition_next_change_opens_window_despite_no_tsumo_increment(
+        self,
+    ) -> None:
+        """OR条件化: tsumo_count が増分しなくても next_pair 変化だけで
+
+        窓が開くこと (従来通りの経路も維持されていることの確認)。"""
+        mod = _import_lean()
+        state = mod._SideState()
+        mod._update_move_scheduler(
+            state, (1, 2), 5, BoardState.STABLE, 10, enable=True,
+        )
+        mod._update_move_scheduler(
+            state, (2, 3), 5, BoardState.STABLE, 20, enable=True,
+        )
+        assert state.move_window_deadline_fi == 20 + mod.MOVE_SEGMENT_GRACE_FRAMES
+
+    def test_or_condition_both_signals_fire_for_same_move_no_duplicate_via_dedup(
+        self,
+    ) -> None:
+        """OR条件化での多重記録対策確認: NEXT変化とtsumo_count増分が別
+
+        フレームで届いても (同一手を指す場合)、_should_emit の重複除外
+        (grid_bytes 一致) により2回目は記録されないこと。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        state = mod._SideState()
+        board_a = _make_board(COLOR_RED)
+        # フレーム0: 初回観測 (比較基準の記録のみ、窓は開かない)
+        mod._process_side_lean(
+            acc, state, "1P", None, BoardState.MENU, None,
+            "vid", 0.0, 0, next_pair=(1, 2), tsumo_count=5,
+            enable_move_segmented_recording=True,
+        )
+        # フレーム10: tsumo_count 増分で窓が開く (NEXT は未変化)
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 10 / 30, 10, next_pair=(1, 2), tsumo_count=6,
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 1
+        # フレーム20: 同じ手を指す NEXT 変化がやや遅れて到着 (窓は再オープン
+        # されるが、盤面は変化していないので dedup が2回目の記録を阻止する)
+        mod._process_side_lean(
+            acc, state, "1P", board_a, BoardState.STABLE, 100,
+            "vid", 20 / 30, 20, next_pair=(2, 3), tsumo_count=6,
+            enable_move_segmented_recording=True,
+        )
+        assert len(acc.grids) == 1  # 二重記録されていないこと
+
 
 class TestMoveWindowCandidateOk:
     """_move_window_candidate_ok の判定条件を検証する。"""
