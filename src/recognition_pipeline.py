@@ -1634,6 +1634,23 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_result_screen_hardening: bool = False,
+        # 色→別色棄却 (enable_ojama_fall_color_swap_guard, 2026-08-18、
+        # user発見・原因特定済み、docs/KNOWN_WEAKNESSES.md W26 [新規]):
+        # OJAMA_FALL 中に連鎖発火の閃光エフェクト (白〜青の発火演出) で
+        # 既設置の色ぷよが別色へ誤読される現象への対処 (例: 青→緑、赤→黄)。
+        # W25 (src/ojama_write_accounting.py) の直近安定色メモリ・固着対策
+        # タイムアウト機構をそのまま流用し、対象を「非空色セルへの9書込み」
+        # から「色→別色 (1〜5同士の不一致)」へ拡張する。 副作用ゼロの根拠:
+        # OJAMA_FALL 中は物理的に色ぷよが別色へ変わることはあり得ない
+        # (お邪魔落下=重力補充のみ)。 CHAIN 中への拡張は多段消去・重力補充
+        # との高速遷移エイリアシングが未精査のため対象外 (本フラグは
+        # OJAMA_FALL 限定、CHAIN では一切発火しない)。
+        # `enable_ojama_write_accounting_guard` とは独立 (どちらか一方が
+        # True なら会計整合フィルタ本体が呼ばれ、それぞれの判定は個別の
+        # flag で有効化される、src/ojama_write_accounting.py 参照)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat、
+        # user承認前の savepoint 実装、production_config 未登録)。
+        enable_ojama_fall_color_swap_guard: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2156,6 +2173,12 @@ class RecognitionPipeline:
         self._enable_ojama_write_accounting_guard: bool = bool(
             enable_ojama_write_accounting_guard
         )
+        # 色→別色棄却 (2026-08-18、モジュール docstring・__init__ 引数
+        # コメント参照): W25 本体とは独立のフラグ。 pending 予告量 (会計
+        # トラッカー) を必要としないため、トラッカー生成条件には加えない。
+        self._enable_ojama_fall_color_swap_guard: bool = bool(
+            enable_ojama_fall_color_swap_guard
+        )
         self._ojama_fall_accounting_tracker: "OjamaAccountingTracker | None" = (
             OjamaAccountingTracker()
             if (
@@ -2184,6 +2207,14 @@ class RecognitionPipeline:
         # `_update_ojama_raw9_streak` 参照)。
         self._ojama_raw9_streak_start_1p: dict[tuple[int, int], float] = {}
         self._ojama_raw9_streak_start_2p: dict[tuple[int, int], float] = {}
+        # 色→別色棄却の固着対策 (2026-08-18、src/ojama_write_accounting.py
+        # モジュール docstring「色→別色棄却の固着対策」節参照): セル単位の
+        # (直近誤色観測値, 開始time_sec) を保持する (1P/2P 別)。 観測値が
+        # 変わったら (異なる誤色へ切替わっても) 新しいストリークとして
+        # 再起動する (フリッカ許容なし、W25 と同じ理由)。
+        # `_update_ojama_color_swap_streak` 参照。
+        self._ojama_color_swap_streak_1p: dict[tuple[int, int], tuple[int, float]] = {}
+        self._ojama_color_swap_streak_2p: dict[tuple[int, int], tuple[int, float]] = {}
         # R2 浮きぷよ是正機構 (2026-08-17)。 default False = bit-identical。
         self._enable_floating_gap_restore: bool = bool(
             enable_floating_gap_restore
@@ -3265,6 +3296,10 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装)。
         enable_result_screen_hardening: bool = False,
+        # 色→別色棄却 (enable_ojama_fall_color_swap_guard, 2026-08-18):
+        # __init__ へそのまま forward する。default False = 従来挙動完全
+        # 維持・bit-identical (backwards compat、user承認前の savepoint 実装)。
+        enable_ojama_fall_color_swap_guard: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3506,6 +3541,7 @@ class RecognitionPipeline:
             enable_match_end_persist_override=enable_match_end_persist_override,
             enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
             enable_result_screen_hardening=enable_result_screen_hardening,
+            enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
         )
 
     # ------------------------------------------------------------------
@@ -3700,6 +3736,9 @@ class RecognitionPipeline:
         # (新試合に前試合のストリーク開始時刻を持ち込まない)。
         self._ojama_raw9_streak_start_1p.clear()
         self._ojama_raw9_streak_start_2p.clear()
+        # 色→別色棄却の固着対策ストリークも試合境界でクリアする (同上理由)。
+        self._ojama_color_swap_streak_1p.clear()
+        self._ojama_color_swap_streak_2p.clear()
         # NEXT slide detector + prev_frame もリセット
         if self._slide_detector_1p is not None:
             self._slide_detector_1p.reset()
@@ -6232,17 +6271,73 @@ class RecognitionPipeline:
                     streak_start.pop(key, None)
         return duration_by_cell
 
+    def _update_ojama_color_swap_streak(
+        self, side: str, cnn_board: Board,
+        stable_color_memory: "dict[tuple[int, int], int]", time_sec: float,
+    ) -> "dict[tuple[int, int], float]":
+        """色→別色棄却の固着対策 (2026-08-18): セル単位「生CNN観測が連続して
+        同一の (直近安定色と異なる) 色を示している持続時間」を更新し、今
+        フレームの duration 辞書を返す。
+
+        `_update_ojama_raw9_streak` (W25本体) と同型の設計 (フリッカ許容
+        なし、SEC基準)。唯一の違いは対象値が固定 (9) でなく「そのセルの
+        直近安定色と異なる色ぷよ値」である点。観測値が変わったら (異なる
+        誤色へ切替わっても) 新しいストリークとして再起動する (= 同一の
+        誤色が連続することを要求、雲の断続フリッカと同様の理由で許容
+        しない、src/ojama_write_accounting.py モジュール docstring
+        「色→別色棄却の固着対策」節参照)。
+
+        Args:
+            side: "1P" or "2P"。
+            cnn_board: 今フレームの生 CNN 観測盤面 (会計整合フィルタ適用前)。
+            stable_color_memory: このセルの直近安定色メモリ (呼出し元と
+                同一辞書をそのまま渡す、二重管理を避ける)。
+            time_sec: 今フレームの time_sec。
+
+        Returns:
+            (row, col) -> 連続同一誤色観測の持続時間 (秒)。色ぷよ同士の
+            不一致でないセルは辞書に含めない。
+        """
+        from src.board import COLOR_PURPLE, COLOR_RED
+        streak = (
+            self._ojama_color_swap_streak_1p if side == "1P"
+            else self._ojama_color_swap_streak_2p
+        )
+        duration_by_cell: dict[tuple[int, int], float] = {}
+        for r in range(HIDDEN_ROWS, BOARD_ROWS):
+            for c in range(BOARD_COLS):
+                key = (r, c)
+                prev = stable_color_memory.get(key, COLOR_EMPTY)
+                cur = int(cnn_board.get(r, c))
+                is_mismatch = (
+                    COLOR_RED <= prev <= COLOR_PURPLE
+                    and COLOR_RED <= cur <= COLOR_PURPLE
+                    and cur != prev
+                )
+                if is_mismatch:
+                    existing = streak.get(key)
+                    if existing is None or existing[0] != cur:
+                        streak[key] = (cur, time_sec)
+                    duration_by_cell[key] = time_sec - streak[key][1]
+                else:
+                    # フリッカ許容なし: 不一致でなくなった瞬間に即クリア。
+                    streak.pop(key, None)
+        return duration_by_cell
+
     def _apply_ojama_write_accounting_filter(
         self, side: str, cnn_board: Board, own_pending_ojama_forecast: int | None,
-        time_sec: float,
+        time_sec: float, is_ojama_fall_phase: bool = False,
     ) -> Board:
         """W25根治 第3弾: CNN観測入力段の会計整合フィルタ (呼出し側)。
 
-        enable_ojama_write_accounting_guard=True の場合のみ呼ばれる。
+        enable_ojama_write_accounting_guard=True または
+        enable_ojama_fall_color_swap_guard=True のいずれかの場合に呼ばれる
+        (2026-08-18、色→別色棄却の拡張で条件を OR に拡大、
+        src/recognition_pipeline.py `_step_side` 呼出し箇所参照)。
         pending 予告量が取得できない (トラッカー無効、通常は起こらないが
-        防御的に None も許容) 場合は cnn_board をそのまま返す
-        (= 会計を信用しないフォールバック、既存 enable_ojama_cnn_
-        override_warmup のみに委ねる)。
+        防御的に None も許容) 場合でも、色→別色棄却は pending 予告量を
+        必要としないため、`enable_ojama_fall_color_swap_guard=True` なら
+        引き続きフィルタを適用する (色→9棄却側のみ無効化される)。
 
         実測に基づく設計修正 (2026-08-18、
         data/verify/diag_c13c22_recheck_2026-08-17/w25_guard_gap.md
@@ -6272,6 +6367,13 @@ class RecognitionPipeline:
         `_update_ojama_raw9_streak` 側で常時更新する (会計が一時的に
         利用不能でもストリークの連続性を保つため)。
 
+        色→別色棄却 (拡張、2026-08-18、is_ojama_fall_phase): 対象を
+        OJAMA_FALL 中に限定するため、呼出し元 (`_step_side`) が
+        `sm.context.state == BoardState.OJAMA_FALL` を渡す。 OJAMA_FALL 中
+        は物理的に色ぷよが別色へ変わることはあり得ないため副作用が理論上
+        ゼロ (CHAIN 中は多段消去・重力補充との高速遷移エイリアシングが
+        未精査のため対象外、`is_ojama_fall_phase=False` なら常に発火しない)。
+
         Args:
             side: "1P" or "2P"。
             cnn_board: フィルタ対象の CNN 観測盤面。
@@ -6279,21 +6381,38 @@ class RecognitionPipeline:
                 戻り値をそのまま渡す (二重計算を避けるため呼出し元で1回だけ
                 算出済みの値)。
             time_sec: 今フレームの time_sec (ストリーク更新に使う)。
+            is_ojama_fall_phase: 今フレームが OJAMA_FALL 状態か
+                (色→別色棄却のスコープ限定に使う)。既定 False (backwards
+                compat、渡さなければ色→別色棄却は発火しない)。
 
         Returns:
             フィルタ適用後の Board (対象外なら cnn_board そのもの)。
         """
         duration_by_cell = self._update_ojama_raw9_streak(side, cnn_board, time_sec)
-        if own_pending_ojama_forecast is None:
-            return cnn_board
-        from src.ojama_write_accounting import apply_ojama_write_accounting_filter
-        credit = max(0, own_pending_ojama_forecast) // 6
         memory = (
             self._stable_color_memory_1p if side == "1P"
             else self._stable_color_memory_2p
         )
+        # 色→別色棄却は OJAMA_FALL 中のみ有効 (スコープ限定、モジュール
+        # docstring・本メソッド docstring参照)。ストリークはフラグ ON の
+        # ときだけ更新する (フラグ OFF なら計算・保持コストも発生しない)。
+        swap_active = self._enable_ojama_fall_color_swap_guard and is_ojama_fall_phase
+        swap_duration_by_cell: "dict[tuple[int, int], float]" = (
+            self._update_ojama_color_swap_streak(side, cnn_board, memory, time_sec)
+            if swap_active else {}
+        )
+        if own_pending_ojama_forecast is None and not swap_active:
+            return cnn_board
+        from src.ojama_write_accounting import apply_ojama_write_accounting_filter
+        credit = (
+            max(0, own_pending_ojama_forecast)
+            if own_pending_ojama_forecast is not None else 0
+        ) // 6
         return apply_ojama_write_accounting_filter(
             cnn_board, memory, credit, duration_by_cell,
+            reject_ojama_write=self._enable_ojama_write_accounting_guard,
+            reject_color_swap=swap_active,
+            consecutive_color_swap_duration_by_cell=swap_duration_by_cell,
         )
 
     def _step_side(
@@ -6332,9 +6451,16 @@ class RecognitionPipeline:
         _own_pending_ojama_forecast = self._get_own_pending_ojama_forecast(
             side, time_sec,
         )
-        if self._enable_ojama_write_accounting_guard:
+        # 色→別色棄却 (2026-08-18) は enable_ojama_write_accounting_guard
+        # とは独立に発火し得るため、OR で本フィルタ呼出し自体をゲートする
+        # (両方 False なら従来通り一切呼ばれない = bit-identical)。
+        if (
+            self._enable_ojama_write_accounting_guard
+            or self._enable_ojama_fall_color_swap_guard
+        ):
             cnn_board = self._apply_ojama_write_accounting_filter(
                 side, cnn_board, _own_pending_ojama_forecast, time_sec,
+                is_ojama_fall_phase=(sm.context.state == BoardState.OJAMA_FALL),
             )
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
         # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
@@ -6560,7 +6686,13 @@ class RecognitionPipeline:
         # 既に「入力段で訂正済みの正しい観測」を反映しているはずなので、
         # ここでの更新は自己整合的 (次フレームの filter が正しい
         # prev_stable_color を参照できる)。
-        if self._enable_ojama_write_accounting_guard and (
+        # 色→別色棄却 (2026-08-18) もこのメモリを流用するため、OR で更新
+        # 条件を拡大する (どちらか一方が True ならメモリを維持する必要が
+        # ある。両方 False なら従来通り一切更新しない = bit-identical)。
+        if (
+            self._enable_ojama_write_accounting_guard
+            or self._enable_ojama_fall_color_swap_guard
+        ) and (
             ctx.state == BoardState.STABLE and ctx.confirmed_board is not None
         ):
             memory = (
