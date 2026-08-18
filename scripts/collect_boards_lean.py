@@ -1182,15 +1182,34 @@ def _update_move_scheduler(
     frame_idx: int,
     enable: bool,
 ) -> None:
-    """1手区切り観測スケジューラ (2026-08-18) の毎フレーム状態更新。
+    """1手区切り観測スケジューラ (2026-08-18、2026-08-18 二次追補で OR 条件化)
+    の毎フレーム状態更新。
 
-    NEXT 繰り上がり (next1_a/next1_b の変化) を主信号として「1手確定」
-    イベントを検知し、猶予 MOVE_SEGMENT_GRACE_FRAMES フレームの記録候補窓を
-    開く。NEXT 未取得 (capture_next=False の収集) では tsumo_count 増分に
-    自動フォールバックする。
+    NEXT 繰り上がり (next1_a/next1_b の変化) OR tsumo_count 増分の**どちらか**
+    を「1手確定」イベントとして検知し、猶予 MOVE_SEGMENT_GRACE_FRAMES フレーム
+    の記録候補窓を開く (coordinator指示、2026-08-18 二次追補)。
+
+    **経緯 (OR化した理由)**: 当初は NEXT 繰り上がりを主信号、tsumo_count を
+    capture_next=False 時限定のフォールバックとする設計だった。だが試合は
+    4色のみ使用 (reference_four_colors_per_match_2026-07-22) のため、連続
+    する2ツモが偶然同じ色ペアになる確率が無視できない (概算6〜10%)。この
+    場合 next_pair の値が変化せず繰り上がりを検出できず、その手を丸ごと
+    取りこぼしていた (3動画実測で旧構成比77.9%の一因)。NEXT/tsumo_count の
+    どちらが先に観測されるかは実測でも拮抗 (N-before-T 52.9% / T-before-N
+    46.1%、_diag_move_segmentation_design_2026-08-18.py) だったため、
+    「どちらが先でも取りこぼさない」OR条件が素直な設計となる。
+
+    **多重記録対策**: 同一の手に対して NEXT 変化と tsumo_count 増分の両方が
+    (別フレームで) 観測されると、本関数は 2 回とも event=True を検知し
+    window_deadline/recorded をリセットしうる。しかし `_should_emit` の
+    既存の重複除外 (`grid_bytes == state.last_emitted_grid`) が実質的な
+    ラッチとして働く: 2 回目の信号が指す盤面は 1 回目の信号で既に記録
+    済みの盤面と同一 (同じ手なので新しい設置は発生していない) であり、
+    dedup チェックで棄却されるため実際に二重記録は起きない
+    (scripts/_diag_move_seg_reject_breakdown_2026-08-18.py 実測で0件確認)。
 
     user確認済みのゲーム内部順序 (2026-08-18)「ぷよが盤面に固定される→
-    その後NEXTが繰り上がる」により、繰り上がり検知の時点で盤面は既に
+    その後NEXTが繰り上がる」により、いずれの信号でも検知時点で盤面は既に
     物理的に確定している。猶予は「待つべき時間」ではなく「認識側の一時的な
     乱れを吸収する上限」であり、窓内で最も早く得られた STABLE を採用する
     (`_move_window_candidate_ok` の move_window_recorded ラッチが担保)。
@@ -1204,16 +1223,18 @@ def _update_move_scheduler(
     """
     if not enable:
         return
-    event = False
+    next_changed = False
     if next_pair is not None:
         if state.prev_next_pair is not None and next_pair != state.prev_next_pair:
-            event = True
+            next_changed = True
         state.prev_next_pair = next_pair
-    elif tsumo_count is not None and state.prev_tsumo_count is not None:
+    tsumo_incremented = False
+    if tsumo_count is not None and state.prev_tsumo_count is not None:
         if tsumo_count > state.prev_tsumo_count:
-            event = True
+            tsumo_incremented = True
     if tsumo_count is not None:
         state.prev_tsumo_count = tsumo_count
+    event = next_changed or tsumo_incremented
     if event:
         state.move_window_deadline_fi = frame_idx + MOVE_SEGMENT_GRACE_FRAMES
         state.move_window_recorded = False
