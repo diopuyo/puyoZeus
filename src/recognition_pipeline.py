@@ -1651,6 +1651,27 @@ class RecognitionPipeline:
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
         # user承認前の savepoint 実装、production_config 未登録)。
         enable_ojama_fall_color_swap_guard: bool = False,
+        # (b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前
+        # スコアは0。スコアのリセットによりラッチの失敗に気づける」):
+        # score_zero_both (「00000000」画像テンプレNCC>=0.85) は配信レイアウト
+        # 依存で 42本中31本で一度も成立せず (c132実測: 13,500フレームで成立
+        # 0回・NCC最大0.60、シフト±80px×スケール0.70〜1.10全探索でも0.66)、
+        # 解除手段が45秒安全弁のみになりラッチが実試合を最長178秒飲み込んだ
+        # (c132: 全体の57%が試合外扱い、うち99.1%が実対戦データ)。
+        # 本フラグは解除信号に「score OCR の数値が両側 0」を OR で加える
+        # (レイアウト非依存の物理的事実)。持続確認 + 盤面ROI実ゲームプレイ
+        # 確認 (装飾スコア対策) は既存条件をそのまま共用する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_lockdown_score_numeric_release: bool = False,
+        # (b-2)ラッチ解除の補助信号 (2026-08-19): score_actively_moving
+        # (スコアが直近1秒で5以上動いている = 確実に試合中) でもラッチを解除
+        # する。装飾スコアカウントアップ演出 (過去の誤認事故あり) 対策として
+        # _board_shows_real_gameplay (盤面ROI画素分散) の裏取りを AND で要求
+        # し、match_end_locked (決着パネル表示中) の間は解除しない。
+        # 数値スコア解除 (上記) が初期の「00000000」を読み損ねた場合の
+        # 相補経路 (スコアが動く = 0 を経由済み)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_lockdown_score_moving_release: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2255,6 +2276,15 @@ class RecognitionPipeline:
         # raw_active が連続 True になり始めた time_sec (ラッチOFF判定用)。
         # -1.0 = 現在 False (連続区間の外、またはラッチ非活性)。
         self._post_match_lockdown_raw_active_since: float = -1.0
+        # (b-2)ラッチ解除の数値スコア化 (2026-08-19)。 default False =
+        # bit-identical (解除信号は従来の score_zero_both テンプレのみ)。
+        self._enable_lockdown_score_numeric_release: bool = bool(
+            enable_lockdown_score_numeric_release
+        )
+        # (b-2)ラッチ解除の補助信号 (2026-08-19)。 default False = bit-identical。
+        self._enable_lockdown_score_moving_release: bool = bool(
+            enable_lockdown_score_moving_release
+        )
         # 境界実装の仕上げ (2026-08-18)。 default False = bit-identical。
         self._enable_result_screen_hardening: bool = bool(
             enable_result_screen_hardening
@@ -3300,6 +3330,18 @@ class RecognitionPipeline:
         # __init__ へそのまま forward する。default False = 従来挙動完全
         # 維持・bit-identical (backwards compat、user承認前の savepoint 実装)。
         enable_ojama_fall_color_swap_guard: bool = False,
+        # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示
+        # 「必ず試合前スコアは0」): __init__ へそのまま forward する。
+        # 両方 default False = 従来挙動完全維持・bit-identical (backwards
+        # compat、user承認前の savepoint 実装)。
+        enable_lockdown_score_numeric_release: bool = False,
+        enable_lockdown_score_moving_release: bool = False,
+        # MatchEndDetector の NCC 閾値上書き (2026-08-19): 既定 0.55 が低すぎ
+        # 試合中の「全消し」テロップを敗北演出と誤検出する (実測: 誤検出
+        # 0.72、本物 0.98)。None (default) = DEFAULT_NCC_THRESHOLD (0.55) の
+        # まま bit-identical。値指定時のみ MatchEndDetector.load_default の
+        # threshold を上書きする (分布確認のうえで採用値を決める)。
+        match_end_ncc_threshold: float | None = None,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3403,7 +3445,15 @@ class RecognitionPipeline:
         except Exception as e:
             print(f"[pipeline] score_zero load skipped: {e}")
         try:
-            match_end_det = MatchEndDetector.load_default()
+            # match_end_ncc_threshold=None (default) は既定閾値 0.55 のまま
+            # (bit-identical)。値指定時のみ上書き (2026-08-19、全消しテロップ
+            # 誤検出対策の A/B 用)。
+            if match_end_ncc_threshold is not None:
+                match_end_det = MatchEndDetector.load_default(
+                    threshold=float(match_end_ncc_threshold),
+                )
+            else:
+                match_end_det = MatchEndDetector.load_default()
         except Exception as e:
             print(f"[pipeline] match_end load skipped: {e}")
         try:
@@ -3542,6 +3592,12 @@ class RecognitionPipeline:
             enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
             enable_result_screen_hardening=enable_result_screen_hardening,
             enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+            enable_lockdown_score_numeric_release=(
+                enable_lockdown_score_numeric_release
+            ),
+            enable_lockdown_score_moving_release=(
+                enable_lockdown_score_moving_release
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -3595,6 +3651,77 @@ class RecognitionPipeline:
             )
         except Exception:
             return False
+
+    def _update_post_match_lockdown_latch(
+        self,
+        frame: np.ndarray,
+        time_sec: float,
+        match_end_locked: bool,
+        score_zero_both: bool,
+        cur_score_1p: int | None,
+        cur_score_2p: int | None,
+        score_actively_moving: bool,
+    ) -> None:
+        """(b-2) 次試合開始までのラッチの状態更新 (update() から毎フレーム呼ぶ)。
+
+        enable_post_match_lockdown_latch=False では呼び出し側でスキップされる
+        (bit-identical)。解除信号は3系統の OR:
+          1. score_zero_both (画像テンプレNCC、従来) の持続 + 盤面ROI確認
+          2. 数値スコア両側0 (enable_lockdown_score_numeric_release、
+             2026-08-19 user指示「必ず試合前スコアは0」。テンプレは配信
+             レイアウト依存で42本中31本が盲目だった) の持続 + 盤面ROI確認
+          3. score_actively_moving (enable_lockdown_score_moving_release、
+             スコアが動いている=確実に試合中) + 盤面ROI確認。装飾スコア
+             演出誤認 (過去事故) 対策で match_end_locked 中は解除しない
+        """
+        if match_end_locked and not self._post_match_lockdown_prev_end_locked:
+            self._post_match_lockdown_active = True
+            self._post_match_lockdown_started_time = time_sec
+            self._post_match_lockdown_raw_active_since = -1.0
+        self._post_match_lockdown_prev_end_locked = match_end_locked
+        if not self._post_match_lockdown_active:
+            return
+        # 解除系統1+2: 「スコア0」持続 (テンプレ OR 数値) + 盤面ROI確認。
+        # 数値側は ScoreTracker.last_score (前フレームまでの OCR 確定値、
+        # 読めない間は前回値を保持する sticky) を使う。試合終了時は最終
+        # スコア (非0) が残るため即時誤解除しない。
+        zero_signal = score_zero_both
+        if self._enable_lockdown_score_numeric_release:
+            zero_signal = zero_signal or (
+                cur_score_1p == 0 and cur_score_2p == 0
+            )
+        if zero_signal:
+            if self._post_match_lockdown_raw_active_since < 0.0:
+                self._post_match_lockdown_raw_active_since = time_sec
+            persisted = (
+                time_sec - self._post_match_lockdown_raw_active_since
+                >= self.CHAIN_BAN_SEC_AFTER_MATCH_START
+            )
+            # persisted 成立後も毎フレーム再チェックする (盤面ROI確認が
+            # 同一フレームで揃わなくても取り零さないため)。
+            if persisted and self._board_shows_real_gameplay(frame):
+                self._post_match_lockdown_active = False
+        else:
+            self._post_match_lockdown_raw_active_since = -1.0
+        # 解除系統3: スコアが実際に動いている = 確実に試合中 (補助信号)。
+        if (
+            self._post_match_lockdown_active
+            and self._enable_lockdown_score_moving_release
+            and score_actively_moving
+            and not match_end_locked
+            and self._board_shows_real_gameplay(frame)
+        ):
+            self._post_match_lockdown_active = False
+        # 安全弁: 誤爆等でラッチが無限残留しないよう上限で強制解除。
+        if (
+            self._post_match_lockdown_active
+            and self._post_match_lockdown_started_time >= 0.0
+            and (
+                time_sec - self._post_match_lockdown_started_time
+                >= self.POST_MATCH_LOCKDOWN_MAX_SEC
+            )
+        ):
+            self._post_match_lockdown_active = False
 
     def tsumo_count(self, side: str) -> int:
         """試合開始からの確定ツモ設置数 (手数, I-1 指標用 getter)。
@@ -3863,66 +3990,36 @@ class RecognitionPipeline:
                 match_end_locked = self._last_match_end_locked
         # (b-2) 次試合開始までのラッチ (2026-08-18、
         # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)、
-        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換):
+        # 2026-08-18 アーキ確定で解除信号を score_zero_both 持続方式に置換、
+        # 2026-08-19 解除信号の数値スコア化で _update_post_match_lockdown_latch
+        # ヘルパーへ抽出し、score_actively_moving 計算後 (下) に移設):
         # match_end_locked の False→True 立ち上がりをトリガーに、次の本物の
-        # 試合開始 (score_zero_both 持続 + 盤面ROI実ゲームプレイ確認) が
-        # 確認されるまで試合外とみなす。結果パネル・対戦カード紹介・次
-        # ラウンド待機を一括カバーし、MatchEndDetector 自身の 5 秒ロック
-        # ダウン切れ後の再活性を防ぐ。
-        # 解除信号の変遷 (2026-08-18):
+        # 試合開始が確認されるまで試合外とみなす。結果パネル・対戦カード
+        # 紹介・次ラウンド待機を一括カバーし、MatchEndDetector 自身の 5 秒
+        # ロックダウン切れ後の再活性を防ぐ。
+        # 解除信号の変遷:
         #   1st: raw_active → force_in_match=True 環境で常に True になり
         #        無意味と判明 (実写検証、c21)。
         #   2nd: match_res.state==IN_MATCH → パネル表示中も IN_MATCH と
         #        判定され続け、0.5秒でほぼ即解除されてしまうと判明。
-        #   3rd (現行): score_zero_both (ScoreZeroDetector の
-        #        「00000000」テンプレNCC、ZERO_NCC_THRESHOLD=0.85) の
-        #        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒 (=
-        #        CHAIN_BAN_SEC_AFTER_MATCH_START、既存定数を再利用) 持続。
-        #        対戦カード紹介のダミースコアは通常 score_zero_both=False
-        #        側に落ちるはずだが、実測 (2026-08-18、c18/c20、
-        #        data/verify/boundary_impl_verify_2026-08-18/
-        #        score_zero_ncc_cardintro_scan.csv) で「装飾スコア
-        #        カウントアップ演出」が離陸前に一時的に「00000000」を
-        #        経由し、0.5秒を超えて持続する区間 (最大2.68秒) が確認され
-        #        た (保留条件チェックで発見、跨ぎ件数241/2702行)。そのため
-        #        追加安全弁 _board_shows_real_gameplay (盤面ROIの画素分散、
-        #        puyo_observedガード同系) を AND 条件で要求する: 装飾画面は
-        #        単色に近いイラスト背景で低分散 (実測最大std 21.48)、実
-        #        ゲームプレイは色ぷよ/グリッド線で高分散 (実測最小std
-        #        47.33) と分離できる (src.board_motion 参照)。
-        # 既定 False (enable_post_match_lockdown_latch) では以下の状態更新を
-        # 一切行わず self._post_match_lockdown_active は常に False のまま
-        # (= bit-identical)。
-        if self._enable_post_match_lockdown_latch:
-            if match_end_locked and not self._post_match_lockdown_prev_end_locked:
-                self._post_match_lockdown_active = True
-                self._post_match_lockdown_started_time = time_sec
-                self._post_match_lockdown_raw_active_since = -1.0
-            self._post_match_lockdown_prev_end_locked = match_end_locked
-            if self._post_match_lockdown_active:
-                if score_zero_both:
-                    if self._post_match_lockdown_raw_active_since < 0.0:
-                        self._post_match_lockdown_raw_active_since = time_sec
-                    persisted = (
-                        time_sec - self._post_match_lockdown_raw_active_since
-                        >= self.CHAIN_BAN_SEC_AFTER_MATCH_START
-                    )
-                    # persisted 成立後も毎フレーム再チェックする (盤面ROI
-                    # 確認が同一フレームで揃わなくても取り零さないため)。
-                    if persisted and self._board_shows_real_gameplay(frame):
-                        self._post_match_lockdown_active = False
-                else:
-                    self._post_match_lockdown_raw_active_since = -1.0
-                # 安全弁: 誤爆等でラッチが無限残留しないよう上限で強制解除。
-                if (
-                    self._post_match_lockdown_active
-                    and self._post_match_lockdown_started_time >= 0.0
-                    and (
-                        time_sec - self._post_match_lockdown_started_time
-                        >= self.POST_MATCH_LOCKDOWN_MAX_SEC
-                    )
-                ):
-                    self._post_match_lockdown_active = False
+        #   3rd: score_zero_both (ScoreZeroDetector の「00000000」テンプレ
+        #        NCC、ZERO_NCC_THRESHOLD=0.85) の 0.5 秒持続 +
+        #        _board_shows_real_gameplay (盤面ROI画素分散、装飾スコア
+        #        カウントアップ演出対策)。
+        #   4th (現行、2026-08-19): テンプレNCC は配信レイアウト依存
+        #        (盤面枠/ステージ背景/名前バーの写り込み) で 42本中31本が
+        #        一度も成立せず (c132: 13,500フレームで成立0回・NCC最大
+        #        0.60)、解除手段が45秒安全弁のみとなりラッチが実試合を最長
+        #        178秒飲み込んだ。user指示「必ず試合前スコアは0」に基づき
+        #        数値スコアベース解除 (enable_lockdown_score_numeric_release)
+        #        と score 動き解除 (enable_lockdown_score_moving_release) を
+        #        OR で追加 (_update_post_match_lockdown_latch 参照)。
+        # 状態更新は score_actively_moving の計算後に移設した (解除系統3が
+        # 参照するため)。移設は既存フラグ構成でも挙動不変: 間に挟まる処理
+        # (score 窓の追記/トリム) はラッチ状態を読まず、ラッチ更新も score 窓
+        # を書かない (hard_match_off の合流点は従来と同じく下)。
+        # 既定 False (enable_post_match_lockdown_latch) では状態更新を一切
+        # 行わず self._post_match_lockdown_active は常に False (= bit-identical)。
         # cycle 71f (提案 A): score 動き情報を追跡 (= 試合 2 開始直後の演出で
         # MatchStateDetector / MatchEndDetector が「試合外」 と判定しても、
         # score が継続的に動いていれば「試合中」 と判定する確実な信号).
@@ -3954,6 +4051,12 @@ class RecognitionPipeline:
         score_actively_moving = self._is_score_actively_moving(
             self._recent_scores_1p
         ) or self._is_score_actively_moving(self._recent_scores_2p)
+        # (b-2) ラッチ状態更新 (移設、詳細は上の変遷コメント参照)。
+        if self._enable_post_match_lockdown_latch:
+            self._update_post_match_lockdown_latch(
+                frame, time_sec, match_end_locked, score_zero_both,
+                cur_score_1p, cur_score_2p, score_actively_moving,
+            )
         # 強い「試合外」シグナル (hysteresis を上書き)
         # 2026-05-10 FIX-C: score=0 でも cnn_board に puyo があれば試合中継続
         # (試合開始直後の最初の数手が menu 誤判定される問題を回避)。

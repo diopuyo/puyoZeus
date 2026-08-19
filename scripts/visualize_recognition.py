@@ -1245,6 +1245,9 @@ def resolve_production_config_overrides(
         "enable_result_screen_hardening",
         # RECOGNITION_ADOPTED 採用 (2026-08-18、W26根治、末尾追加)。
         "enable_ojama_fall_color_swap_guard",
+        # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+        "enable_lockdown_score_numeric_release",
+        "enable_lockdown_score_moving_release",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1869,6 +1872,25 @@ def main() -> int:
             "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
         ),
     )
+    parser.add_argument(
+        "--enable-lockdown-score-numeric-release", action="store_true",
+        default=False, dest="enable_lockdown_score_numeric_release",
+        help=(
+            "(b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前"
+            "スコアは0」)。score_zero_both 画像テンプレ (配信レイアウト依存で"
+            "42本中31本が盲目) に加え、score OCR 数値が両側0であることを解除"
+            "信号に OR で加える。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-lockdown-score-moving-release", action="store_true",
+        default=False, dest="enable_lockdown_score_moving_release",
+        help=(
+            "(b-2)ラッチ解除の補助信号 (2026-08-19)。score_actively_moving + "
+            "盤面ROI実ゲームプレイ確認でラッチを解除する。既定は無効 "
+            "(後方互換)。"
+        ),
+    )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
     # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
     # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
@@ -2270,6 +2292,13 @@ def main() -> int:
         enable_result_screen_hardening=args.enable_result_screen_hardening,
         # RECOGNITION_ADOPTED 採用 (2026-08-18、W26根治、末尾追加)。
         enable_ojama_fall_color_swap_guard=args.enable_ojama_fall_color_swap_guard,
+        # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+        enable_lockdown_score_numeric_release=(
+            args.enable_lockdown_score_numeric_release
+        ),
+        enable_lockdown_score_moving_release=(
+            args.enable_lockdown_score_moving_release
+        ),
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定

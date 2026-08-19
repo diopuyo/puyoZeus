@@ -423,6 +423,9 @@ def resolve_production_recognition_flags(
         "enable_result_screen_hardening",
         # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治)。
         "enable_ojama_fall_color_swap_guard",
+        # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+        "enable_lockdown_score_numeric_release",
+        "enable_lockdown_score_moving_release",
     ):
         resolved[name] = bool(getattr(args, name, False)) or bool(
             production.get(name, False)
@@ -522,6 +525,9 @@ def _make_pipeline_cnn(
     enable_result_screen_hardening: bool = False,
     # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -641,6 +647,8 @@ def _make_pipeline_cnn(
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -937,6 +945,9 @@ def _process_video(
     enable_result_screen_hardening: bool = False,
     # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -1039,6 +1050,8 @@ def _process_video(
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -1152,6 +1165,9 @@ def _process_video_worker(
     # (backwards compat、executor.submit の位置引数タプルにも同じ末尾
     # 位置で追加すること)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1229,6 +1245,8 @@ def _process_video_worker(
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2950,6 +2968,24 @@ def _parse_args() -> argparse.Namespace:
             "既定は無効 (後方互換)。"
         ),
     )
+    p.add_argument(
+        "--enable-lockdown-score-numeric-release", action="store_true",
+        default=False, dest="enable_lockdown_score_numeric_release",
+        help=(
+            "(b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前"
+            "スコアは0」)。score OCR 数値が両側0であることを解除信号に OR で"
+            "加える。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-lockdown-score-moving-release", action="store_true",
+        default=False, dest="enable_lockdown_score_moving_release",
+        help=(
+            "(b-2)ラッチ解除の補助信号 (2026-08-19)。score_actively_moving + "
+            "盤面ROI実ゲームプレイ確認でラッチを解除する。既定は無効 "
+            "(後方互換)。"
+        ),
+    )
     # 本番構成の自動適用 (2026-08-13 是正、横展開監査 P1)。
     # scripts/visualize_recognition.py / visualize_advantage_overlay.py と同一パターン。
     p.add_argument(
@@ -3067,6 +3103,9 @@ def _collect_results(
     enable_result_screen_hardening: bool = False,
     # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -3173,6 +3212,8 @@ def _collect_results(
             enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
             enable_result_screen_hardening=enable_result_screen_hardening,
             enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+            enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+            enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -3232,6 +3273,8 @@ def _collect_results(
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
     )
 
 
@@ -3312,6 +3355,9 @@ def _collect_serial(
     enable_result_screen_hardening: bool = False,
     # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -3380,6 +3426,8 @@ def _collect_serial(
             enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
             enable_result_screen_hardening=enable_result_screen_hardening,
             enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+            enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+            enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3479,6 +3527,9 @@ def _collect_parallel(
     # 位置で追加すること。_process_video_worker の末尾引数順と完全一致
     # させること)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3574,6 +3625,8 @@ def _collect_parallel(
                 # _process_video_worker の末尾引数と完全一致させること
                 # (順序ズレ厳禁)。
                 enable_ojama_fall_color_swap_guard,
+                enable_lockdown_score_numeric_release,
+                enable_lockdown_score_moving_release,
             )
             futures[fut] = vid
 
@@ -3852,6 +3905,13 @@ def main() -> int:
     enable_ojama_fall_color_swap_guard: bool = (
         _prf["enable_ojama_fall_color_swap_guard"]
     )
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = (
+        _prf["enable_lockdown_score_numeric_release"]
+    )
+    enable_lockdown_score_moving_release: bool = (
+        _prf["enable_lockdown_score_moving_release"]
+    )
     print(
         f"[measure] production_recognition="
         f"{'ON' if use_production_recognition else 'OFF'} "
@@ -3984,6 +4044,8 @@ def main() -> int:
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
