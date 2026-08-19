@@ -53,16 +53,42 @@ COLLECT_ONLY_ADOPTED: tuple[AdoptedFlag, ...] = (
     ),
     AdoptedFlag(
         "--enable-stable-persistence-gate", "2026-08-18",
-        "(d) STABLE確定の持続確認 (収集限定、RecognitionPipeline には足さない意図的"
-        "非対称配線、docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5)。"
-        "`_should_emit` 直前で直近 STABLE_PERSISTENCE_WINDOW_SEC=0.25 秒の盤面ROI"
-        "生ピクセルdiffが全て閾値未満のときだけ確定を許可し、連鎖アニメ中・送付"
-        "フラッシュ重畳による静止誤認を除外する。閾値 STABLE_PERSISTENCE_DIFF_"
-        "THRESHOLD=1.0 は実測分離ギャップから決定 (汚染側029最小値1.07、綺麗な"
-        "21枚側の最大値0.858、0.858<1.0<1.07に収まるラウンド値、src/board_motion.py "
-        "コメント参照)。シーン逆算でなく物理量の分離ギャップから固定 (過学習禁止"
-        "規約準拠)。③試合外は静止画面のため本機構では検出不能 (差分ゼロ、"
-        "(b) 系列が担当)",
+        "**2026-08-18 二次追加で役割変更**: 「収集ゲート (記録可否)」から"
+        "「confidenceタグ付与」へ転用。当初の設計 (2026-08-18 初回採用時点、"
+        "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5) は `_should_emit`"
+        "直前で直近 STABLE_PERSISTENCE_WINDOW_SEC=0.25 秒の盤面ROI生ピクセル"
+        "diffが全て閾値未満のときだけ記録を許可し、それ以外は snapshot ごと"
+        "破棄していた。だが 148再収集の実データで検証したところ"
+        "(scripts/_diag_stable_persistence_loss_breakdown_2026-08-18.py) "
+        "収集行数が**61%減**という致命的な被覆率損失が判明した。内訳は"
+        "①窓長0.25秒だけで理論上届かない分=21.4% ②相手バースト中は自盤面が"
+        "静止していても画面全体は動くため追加で弾かれる分 (窓外0.40倍 vs "
+        "窓内0.33倍、bursts中により重い) ③残り約40ポイントは「静止が原理的"
+        "に存在しない」ことによるもの (盤面ROIは13段分あり次ツモ落下域を含む"
+        "ため、盤面が確定していても画面は動き続ける、user指摘)。しかも欠落が"
+        "「おじゃまが降る前の構え」という戦術的に重要な局面に偏っており、"
+        "単なるデータ量減でなく学習の偏りになることが分かった。"
+        "**アーキ再判断 (2026-08-18)**: 判定ロジック自体 (実測分離ギャップ"
+        "0.858<1.0<1.07に基づく汚染検出、下記の閾値根拠は変更なし) は無価値"
+        "ではないため、記録拒否をやめ npz 列 `stable_persistence_confidence`"
+        "(bool、末尾追加、既存列順不変) として残す方式に転用した。除外要否は"
+        "学習データビルダー側のオプトインフィルタ (--exclude-match-end-locked"
+        "と同じ設計思想) に委ねる (本転用時点では除外ロジック自体は未実装、"
+        "列を持つところまでがスコープ)。"
+        "**経緯の記録 (fail-silent警戒)**: 設計文書の検証項目④「STABLE "
+        "snapshot総数の変化率 (過度な減少=閾値過剰)」は、2026-08-18の初回"
+        "採用登録タイミングでは実施されておらず、この61%減という規模の"
+        "退行が採用直後の148再収集停止まで表面化しなかった。以後の閾値付き"
+        "ゲート導入では検証項目④相当 (行数変化率の実データ確認) を採用前に"
+        "必須とする。"
+        "以下は当初設計の閾値根拠 (変更なし、confidence列の値計算に引き続き"
+        "使用): `_update_raw_pixel_stable` が直近 STABLE_PERSISTENCE_WINDOW_"
+        "SEC=0.25 秒の盤面ROI生ピクセルdiffを計算し、閾値 STABLE_PERSISTENCE_"
+        "DIFF_THRESHOLD=1.0 (実測分離ギャップ: 汚染側029最小値1.07、綺麗な"
+        "21枚側の最大値0.858、0.858<1.0<1.07に収まるラウンド値、"
+        "src/board_motion.py コメント参照、シーン逆算でなく物理量の分離"
+        "ギャップから固定、過学習禁止規約準拠) 未満かで confidence を決める。"
+        "③試合外は静止画面のため本機構では検出不能 (差分ゼロ、(b) 系列が担当)",
     ),
     AdoptedFlag(
         "--enable-boundary-multisignal", "2026-08-18",
@@ -74,6 +100,33 @@ COLLECT_ONLY_ADOPTED: tuple[AdoptedFlag, ...] = (
         "(docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §2「(a)既存境界マル"
         "チシグナルの本採用判断」は正式なA/B測定を前提としていたが、user承認"
         "『全群採用』により本実測をもって先行登録する)",
+    ),
+    AdoptedFlag(
+        "--enable-boundary-newmatch-evidence", "2026-08-20",
+        "境界の偽検出ゲート (コミット b646d9f)。直上の --enable-boundary-"
+        "multisignal による「視覚立ち上がりでの境界確定」に対し、新試合の"
+        "証拠 (両者スコア数値0 or 両者盤面ほぼ空、`_compute_newmatch_"
+        "evidence`) を要求する。演出・対戦カード紹介の立ち上がりを試合開始と"
+        "誤認して1試合を細切れにする偽境界を抑止する。実装が scripts/collect_"
+        "boards_lean.py 内 (`_SharedGameCounter.require_newmatch_evidence`) "
+        "のみで RecognitionPipeline を経由しないため、直上の boundary-"
+        "multisignal と同じく COLLECT_ONLY 扱い (可視化ツールには配線しない"
+        "＝ゲート対象の boundary-multisignal 自体が可視化に無いため)。"
+        "**2026-08-20 配線事故の是正**: b646d9f (2026-08-19) 実装時に既定OFF"
+        "のまま採用登録が漏れ、`collect_flags()` に含まれず 2026-08-19 の"
+        "50本収集で一度も発火していなかった。検証スクリプト `_recollect_"
+        "lockfix_2026-08-19.py` だけが手書きで渡していたため、c109 単体では"
+        "改善が見えるのに全体では無変化という食い違いが生じた "
+        "(memory feedback_wiring_check_needs_nongeneric_scripts_2026-08-18 "
+        "の再発3回目)。"
+        "実測 (同一動画10本の対等比較、`scripts/_diag_paired_boundary_fix_"
+        "effect_2026-08-20.py`、下記2フラグとまとめての効果): 勝敗ラベル"
+        "欠損 16.0%→3.9% / ラッチON比率 14.8%→1.7% / 収集行数 47,861→52,405 "
+        "(+9.5%) / 試合数 691→530 (c132 は 114→45・欠損 43.9%→0.0%)。"
+        "試合数の減少はデータ喪失ではなく分割の解消であり、同時に行数が"
+        "増えている点で裏取りできる。母集団を固定した比較である点が重要 "
+        "(当初の「38.3%→45.2% に悪化」は before 50本 vs after 20本という"
+        "異母集団比較による錯覚だった)",
     ),
     AdoptedFlag(
         "--enable-winner-panel-crosscheck", "2026-08-18",
@@ -332,6 +385,37 @@ RECOGNITION_ADOPTED: tuple[AdoptedFlag, ...] = (
         "(「盤面が無いと確定している区間の延長」のため指摘13リスクなし)。"
         "実測: data/verify/boundary_impl_verify_2026-08-18/final_verify_"
         "summary.json で rt_blocked_count=4/rt_total=5 (試合外RT遮断4/5)",
+    ),
+    AdoptedFlag(
+        "--enable-lockdown-score-numeric-release", "2026-08-20",
+        "境界RT系 (b-2 の解除信号、コミット b646d9f)。上記ラッチは「次の本物の"
+        "試合開始が確認されるまで試合外」とみなすが、その**解除条件**が視覚"
+        "シグナル頼みで、解除が遅れると試合中がまるごと試合外に落ちて収集行が"
+        "消える。本フラグは数値スコア両側0を解除信号として使う (score が両側 0 "
+        "に戻る = 新試合の初期化が済んだ、という物理的裏取り)。"
+        "**2026-08-20 配線事故の是正**: 本フラグは b646d9f (2026-08-19) で"
+        "実装されたが既定OFFのまま本採用登録が漏れ、`collect_flags()` に"
+        "含まれなかったため 2026-08-19 の50本収集で**一度も発火していなかった**"
+        "(検証スクリプト `_recollect_lockfix_2026-08-19.py` だけが手書きで"
+        "渡していたため、c109 単体では改善が見えるのに全体では無変化という"
+        "食い違いが生じた)。memory feedback_wiring_check_needs_nongeneric_"
+        "scripts_2026-08-18 の再発3回目。"
+        "実測 (同一動画10本の対等比較、`scripts/_diag_paired_boundary_fix_"
+        "effect_2026-08-20.py`、下記3フラグまとめての効果): 勝敗ラベル欠損 "
+        "16.0%→3.9% / ラッチON比率 14.8%→1.7% / 収集行数 47,861→52,405 "
+        "(+9.5%) / 試合数 691→530 (偽境界の消滅、c132 は 114→45・欠損 "
+        "43.9%→0.0%)。母集団を固定した比較である点が重要 (当初の"
+        "「38.3%→45.2% に悪化」は before 50本 vs after 20本という異母集団"
+        "比較による錯覚だった)",
+    ),
+    AdoptedFlag(
+        "--enable-lockdown-score-moving-release", "2026-08-20",
+        "境界RT系 (b-2 の解除信号その2、コミット b646d9f)。score_actively_"
+        "moving (スコアが実際に動いている = 試合が進行している) を解除信号に"
+        "使う。数値スコア両側0 (上記) が初期化の瞬間しか捉えられないのに対し、"
+        "こちらは「もう試合が始まって進んでいる」という事後の裏取りとして働く"
+        "二段構え。採用根拠・実測は上記 --enable-lockdown-score-numeric-"
+        "release と共通 (3フラグまとめての A/B、単独分離はしていない)",
     ),
     AdoptedFlag(
         "--enable-result-screen-hardening", "2026-08-18",
