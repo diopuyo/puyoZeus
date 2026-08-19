@@ -3578,6 +3578,119 @@ def test_board_shows_real_gameplay_true_for_high_variance_frame() -> None:
     assert pipe._board_shows_real_gameplay(_high_variance_frame()) is True
 
 
+# ============================
+# (b-2) ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示
+# 「必ず試合前スコアは0」。score_zero_both 画像テンプレは配信レイアウト
+# 依存で42本中31本が盲目だった対策)
+# ============================
+
+
+def _make_latched_pipe(
+    scores: list[int],
+    enable_numeric: bool = False,
+    enable_moving: bool = False,
+) -> RecognitionPipeline:
+    """ラッチON状態の pipeline を作る (score tracker はシーケンススタブ)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+        enable_lockdown_score_numeric_release=enable_numeric,
+        enable_lockdown_score_moving_release=enable_moving,
+        # 隔離: 既定 True の match_start_full_clear は「両者スコアほぼ0」で
+        # pipeline 全体を reset() しラッチ状態ごと初期化してしまうため、
+        # ラッチ解除経路そのものの検証では無効化する (別機構の混入防止)。
+        enable_match_start_full_clear=False,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+    # match_end_locked=False にし、score tracker をスタブに差し替える。
+    pipe._match_end_detector = None
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq(list(scores))  # type: ignore[assignment]
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(list(scores))  # type: ignore[assignment]
+    return pipe
+
+
+def _run_latched_frames(
+    pipe: RecognitionPipeline, n: int, frame_fn, t0: float = 6.0,
+) -> None:
+    """ラッチ検証用に n フレーム進める (0.05 秒刻み)。"""
+    for i in range(n):
+        pipe.update(1 + i, t0 + 0.05 * i, frame_fn())
+
+
+def test_lockdown_numeric_release_flag_off_keeps_template_only() -> None:
+    """フラグ OFF (既定): 数値スコアが両側 0 でも解除信号にならない
+    (= 従来のテンプレ score_zero_both のみ、bit-identical)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=False)
+    # persist (0.5秒) を大きく超えて高分散フレームを流しても解除されない。
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "既定 OFF では数値スコア0はラッチ解除に影響してはいけない"
+        " (bit-identical)"
+    )
+
+
+def test_lockdown_numeric_release_releases_on_zero_scores() -> None:
+    """フラグ ON: 両側の score OCR 数値が 0 で持続 + 盤面ROI実ゲームプレイ
+    確認でラッチが解除される (画像テンプレ不成立でも解除できる)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is False, (
+        "数値スコア両側0の持続 + 盤面ROI確認でラッチは解除されるべき"
+    )
+
+
+def test_lockdown_numeric_release_blocked_on_decorative_screen() -> None:
+    """フラグ ON でも盤面ROIが低分散 (装飾画面の疑い) の間は数値スコア0
+    だけでは解除されない (装飾スコアカウントアップ演出対策の継承)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=True)
+    _run_latched_frames(pipe, 60, _dummy_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間は数値スコア0でも解除しない"
+    )
+
+
+def test_lockdown_numeric_release_not_triggered_by_final_scores() -> None:
+    """フラグ ON: 前試合の最終スコア (非0、sticky) が残っている間は数値
+    解除は発火しない (試合終了直後の誤解除防止)。"""
+    pipe = _make_latched_pipe([48200, 48200], enable_numeric=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "非0スコアが残っている間は数値解除が発火してはいけない"
+    )
+
+
+def test_lockdown_score_moving_release_releases_when_score_moves() -> None:
+    """補助解除 ON: スコアが実際に動いている (+盤面ROI実ゲームプレイ確認)
+    ならラッチを解除する (数値0の読み損ね時の相補経路)。"""
+    scores = [100 + 10 * i for i in range(40)]  # 毎フレーム+10 (>= MIN_DELTA)
+    pipe = _make_latched_pipe(scores, enable_moving=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is False, (
+        "スコアが動いている + 盤面ROI確認でラッチは解除されるべき"
+    )
+
+
+def test_lockdown_score_moving_release_blocked_on_decorative_screen() -> None:
+    """補助解除 ON でも盤面ROIが低分散 (装飾スコアカウントアップ演出の
+    疑い) の間は解除しない (過去の誤認事故の再発防止)。"""
+    scores = [100 + 10 * i for i in range(80)]
+    pipe = _make_latched_pipe(scores, enable_moving=True)
+    _run_latched_frames(pipe, 60, _dummy_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間はスコアが動いても解除しない"
+    )
+
+
 def test_board_shows_real_gameplay_false_for_flat_frame() -> None:
     """_board_shows_real_gameplay: 全 0 埋め (装飾画面相当の低分散) は
     False。"""

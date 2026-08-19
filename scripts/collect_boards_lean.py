@@ -207,6 +207,53 @@ BOUNDARY_VISUAL_RISE_PERSIST_SEC: float = (
     RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
 )
 
+# 「新しい試合が始まった証拠」ゲート (2026-08-19、user指示「必ず試合前
+# スコアは0」)。視覚信号 (is_match_active 立ち上がり) だけで境界を確定すると、
+# 試合中の is_active 乱れ (ラッチ解除失敗等) が偽境界を量産する
+# (実測: 50本で試合総数 2,689→4,040 に断片化、欠損試合直後ギャップ中央値
+# 0.6秒 vs 正常な試合間 10.1秒)。立ち上がり確定時に加えて
+# 「両者スコアが数値0 (score OCR、画像テンプレでない)」または
+# 「両者の確定盤面がほぼ空」のどちらかを要求する。証拠は立ち上がり確定から
+# BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC 秒以内に観測されればよい
+# (score OCR/盤面確定のラグ吸収。値は既存の BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+# と同根拠 = OCR検知ラグ<1秒より十分大きく、試合の最短長より十分小さい)。
+BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC: float = BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+
+# 「盤面がほぼ空」の上限ぷよ数 (両側それぞれ)。物理根拠: 立ち上がり確定
+# (0.5秒) + 証拠窓 (3秒) の最大3.5秒では高々3ツモ=6個しか設置できない。
+# 試合中の偽境界時点の盤面は数十個 (実測 c109 t=1669.3s は完全な試合中盤面)。
+NEW_MATCH_BOARD_MAX_PUYOS: int = 6
+
+
+def _compute_newmatch_evidence(result: object) -> bool:
+    """「新しい試合が始まった証拠」を1フレーム分判定する (stateless)。
+
+    証拠 = 両者スコアが数値0 (ScoreTracker.last_score、読めない間は前値
+    保持のため試合中は直近の実スコア>0が残る) **または** 両者の確定盤面が
+    ほぼ空 (NEW_MATCH_BOARD_MAX_PUYOS 以下。score OCR が壊れた動画
+    (c26/c58等) のフォールバック)。確定盤面が無い (None) side は盤面証拠に
+    使わない (試合中の一時クリアを空盤面と誤認しないため)。
+
+    Args:
+        result: PipelineResult (getattr ベースで古いフェイクにも安全)。
+
+    Returns:
+        証拠が観測できたら True。
+    """
+    p1 = getattr(result, "p1", None)
+    p2 = getattr(result, "p2", None)
+    if p1 is None or p2 is None:
+        return False
+    if getattr(p1, "score", None) == 0 and getattr(p2, "score", None) == 0:
+        return True
+    b1 = getattr(p1, "confirmed_board", None)
+    b2 = getattr(p2, "confirmed_board", None)
+    return (
+        b1 is not None and b2 is not None
+        and b1.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
+        and b2.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
+    )
+
 # サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
 MIN_SAMPLE_INTERVAL_FRAMES: int = 1
 
@@ -907,6 +954,15 @@ class _SharedGameCounter:
     # score-reset のみを記録する (視覚信号で確認済みの通常ケースは記録しない)。
     # _reconcile_boundary_anomalies による事後フィルタ前の生記録。
     anomalies: list[dict] = field(default_factory=list)
+    # 「新しい試合が始まった証拠」ゲート (2026-08-19、user指示「必ず試合前
+    # スコアは0」)。True のとき、視覚立ち上がりの確定に加えて
+    # _compute_newmatch_evidence (両者スコア数値0 or 両者盤面ほぼ空) の
+    # 観測を BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC 秒以内に要求する。
+    # 既定 False = 従来挙動 (立ち上がりだけで無条件確定、bit-identical)。
+    require_newmatch_evidence: bool = False
+    # 証拠が出ないまま窓切れで破棄した立ち上がり時刻 (偽境界候補の
+    # レビュー用記録。game_idx には影響しない)。
+    rejected_rise_times: list[float] = field(default_factory=list)
 
     def advance_if_new(self, t_sec: float) -> bool:
         """境界を進める (デバウンス内なら進めない)。進めたら True。"""
@@ -920,7 +976,12 @@ class _SharedGameCounter:
         self.advance_times.append(t_sec)
         return True
 
-    def observe_visual_signal(self, is_active: bool, t_sec: float) -> None:
+    def observe_visual_signal(
+        self,
+        is_active: bool,
+        t_sec: float,
+        new_match_evidence: bool | None = None,
+    ) -> None:
         """フレーム毎の is_match_active を観測し、False→True 立ち上がりで
         境界を進める (multisignal_mode=True 限定、2026-08-17 追加)。
 
@@ -935,9 +996,22 @@ class _SharedGameCounter:
         無条件で記録する (「早い者勝ち」競合で advance が失敗しても記録が
         永久に欠落しないようにするため)。
 
+        新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」):
+        require_newmatch_evidence=True のとき、持続確認を満たした候補は
+        さらに new_match_evidence=True の観測 (両者スコア数値0 or 両者盤面
+        ほぼ空、_compute_newmatch_evidence 参照) を待つ。立ち上がりから
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC + BOUNDARY_NEWMATCH_EVIDENCE_
+        WINDOW_SEC 秒以内に証拠が出なければ偽境界 (試合中の is_active 乱れ)
+        として破棄する (rejected_rise_times に記録)。境界時刻は証拠の観測
+        時刻でなく元の立ち上がり時刻を使う (従来の意味論を維持)。
+        require_newmatch_evidence=False (既定) では new_match_evidence は
+        無視され従来挙動と bit-identical。
+
         Args:
             is_active: このフレームの PipelineResult.is_match_active。
             t_sec: 現在時刻 [秒]。
+            new_match_evidence: このフレームの新試合証拠 (省略可、
+                require_newmatch_evidence=False の間は未使用)。
         """
         if not self.multisignal_mode:
             self._prev_is_active = is_active
@@ -953,11 +1027,25 @@ class _SharedGameCounter:
                 >= BOUNDARY_VISUAL_RISE_PERSIST_SEC
             ):
                 confirmed_sec = self._pending_visual_rise_sec
-                self._pending_visual_rise_sec = None
-                self.last_visual_rise_sec = confirmed_sec
-                self.visual_rise_times.append(confirmed_sec)
-                if self.advance_if_new(confirmed_sec):
-                    self.last_visual_advance_sec = confirmed_sec
+                if (
+                    self.require_newmatch_evidence
+                    and new_match_evidence is not True
+                ):
+                    # 証拠待ち: 窓内は候補を保持したまま次フレームで再判定。
+                    # 窓切れなら偽境界として破棄 (境界は進めない)。
+                    if (
+                        t_sec - confirmed_sec
+                        >= BOUNDARY_VISUAL_RISE_PERSIST_SEC
+                        + BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC
+                    ):
+                        self._pending_visual_rise_sec = None
+                        self.rejected_rise_times.append(confirmed_sec)
+                else:
+                    self._pending_visual_rise_sec = None
+                    self.last_visual_rise_sec = confirmed_sec
+                    self.visual_rise_times.append(confirmed_sec)
+                    if self.advance_if_new(confirmed_sec):
+                        self.last_visual_advance_sec = confirmed_sec
         self._prev_is_active = is_active
 
     def record_score_reset_anomaly(
@@ -1616,6 +1704,25 @@ def collect_lean(
     # 中に限定して拒否する。RecognitionPipeline 本体へそのまま forward する。
     # 既定 False = 従来挙動完全維持・bit-identical (backwards compat、末尾追加)。
     enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示「必ず
+    # 試合前スコアは0」): RecognitionPipeline 本体へそのまま forward する。
+    # score_zero_both 画像テンプレは配信レイアウト依存で42本中31本が盲目
+    # (解除不能→45秒安全弁のみ→最長178秒の試合飲み込み) だった対策。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    # MatchEndDetector NCC 閾値上書き (2026-08-19): 全消しテロップ誤検出
+    # (実測: 誤検出0.72 vs 本物0.98、既定0.55が低すぎる) の A/B 用。
+    # None (既定) = 既定閾値 0.55 のまま bit-identical。
+    match_end_ncc_threshold: "float | None" = None,
+    # 新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」):
+    # enable_boundary_multisignal の視覚立ち上がりによる境界確定に
+    # 「両者スコア数値0 or 両者盤面ほぼ空」の観測を AND で要求する
+    # (_SharedGameCounter.observe_visual_signal / _compute_newmatch_evidence
+    # 参照)。試合中の is_active 乱れによる偽境界の量産 (実測: 50本で試合
+    # 総数+50%断片化、won欠損38.3%) への対処。収集専用 (本番RTに波及
+    # しない)。既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_boundary_newmatch_evidence: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -1911,6 +2018,13 @@ def collect_lean(
         enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
         enable_result_screen_hardening=enable_result_screen_hardening,
         enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=(
+            enable_lockdown_score_numeric_release
+        ),
+        enable_lockdown_score_moving_release=(
+            enable_lockdown_score_moving_release
+        ),
+        match_end_ncc_threshold=match_end_ncc_threshold,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -1924,7 +2038,12 @@ def collect_lean(
     # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
     # multisignal_mode は enable_boundary_multisignal 引数をそのまま伝える
     # (既定 False = 従来の score-reset 単独判定、W20/W21根治 2026-08-17)。
-    shared_game = _SharedGameCounter(multisignal_mode=enable_boundary_multisignal)
+    # require_newmatch_evidence (2026-08-19): 視覚立ち上がりの境界確定に
+    # 新試合証拠 (スコア数値0 or 盤面ほぼ空) を要求する (既定 False)。
+    shared_game = _SharedGameCounter(
+        multisignal_mode=enable_boundary_multisignal,
+        require_newmatch_evidence=enable_boundary_newmatch_evidence,
+    )
     # クロスチェック用に処理した最終フレーム時刻を追跡 (2026-08-17 追加)。
     last_t_sec = start_sec
 
@@ -1968,8 +2087,15 @@ def collect_lean(
         # getattr フォールバック True: is_match_active 未対応の古い pipeline
         # フェイク (テスト用) でも例外にならないための安全策
         # (multisignal_mode=False の間は観測結果自体に副作用がないため無害)。
+        # 新試合証拠 (2026-08-19): ゲート有効時のみ毎フレーム計算する
+        # (無効時は計算自体を行わない = 従来コストのまま bit-identical)。
+        newmatch_evidence: "bool | None" = (
+            _compute_newmatch_evidence(result)
+            if enable_boundary_newmatch_evidence else None
+        )
         shared_game.observe_visual_signal(
             getattr(result, "is_match_active", True), t_sec,
+            new_match_evidence=newmatch_evidence,
         )
         # 勝敗演出ロックダウン区間フラグ (2026-08-17 追加、W20/W21根治)。
         # is_match_active 同様、未対応の古い pipeline フェイクでは None のまま
@@ -2103,6 +2229,15 @@ def collect_lean(
     # 視覚信号全履歴と再照合して取り除く。multisignal_mode=False では
     # anomalies/visual_rise_times が常に空のため no-op (bit-identical)。
     _reconcile_boundary_anomalies(shared_game)
+
+    # 新試合証拠ゲート (2026-08-19) が破棄した偽境界候補のレビュー用ログ
+    # (game_idx には影響しない。既定 OFF では常に空 = 出力なし)。
+    if shared_game.rejected_rise_times:
+        print(
+            f"[lean] boundary rises rejected (no new-match evidence): "
+            f"{len(shared_game.rejected_rise_times)} at "
+            f"{[round(t, 1) for t in shared_game.rejected_rise_times[:20]]}",
+        )
 
     # 勝敗ラベルを付与して保存
     combined_final = _merge_final_scores(state_p1, state_p2)
@@ -2900,6 +3035,45 @@ def main() -> int:
             "既定は無効 (後方互換、bit-identical)。"
         ),
     )
+    parser.add_argument(
+        "--enable-lockdown-score-numeric-release", action="store_true",
+        dest="enable_lockdown_score_numeric_release",
+        help=(
+            "(b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前"
+            "スコアは0」)。score_zero_both 画像テンプレ (配信レイアウト依存で"
+            "42本中31本が盲目) に加え、score OCR の数値が両側0であることを"
+            "解除信号に OR で加える。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-lockdown-score-moving-release", action="store_true",
+        dest="enable_lockdown_score_moving_release",
+        help=(
+            "(b-2)ラッチ解除の補助信号 (2026-08-19)。score_actively_moving "
+            "(スコアが動いている=確実に試合中) + 盤面ROI実ゲームプレイ確認で"
+            "ラッチを解除する。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--match-end-ncc-threshold", type=float, default=None,
+        dest="match_end_ncc_threshold",
+        help=(
+            "MatchEndDetector の NCC 閾値上書き (2026-08-19)。全消しテロップ"
+            "誤検出 (実測: 誤検出0.72 vs 本物0.98) 対策の A/B 用。省略時は"
+            "既定 0.55 のまま (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-boundary-newmatch-evidence", action="store_true",
+        dest="enable_boundary_newmatch_evidence",
+        help=(
+            "新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」)。"
+            "--enable-boundary-multisignal の視覚立ち上がりによる境界確定に"
+            "「両者スコア数値0 or 両者盤面ほぼ空」の観測を AND で要求し、"
+            "試合中の is_active 乱れによる偽境界 (実測: 試合総数+50%断片化・"
+            "won欠損38.3%) を破棄する。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -2962,6 +3136,16 @@ def main() -> int:
         enable_chain_estimate_recording=args.enable_chain_estimate_recording,
         enable_move_segmented_recording=args.enable_move_segmented_recording,
         enable_physics_persistence_filter=args.enable_physics_persistence_filter,
+        enable_lockdown_score_numeric_release=(
+            args.enable_lockdown_score_numeric_release
+        ),
+        enable_lockdown_score_moving_release=(
+            args.enable_lockdown_score_moving_release
+        ),
+        match_end_ncc_threshold=args.match_end_ncc_threshold,
+        enable_boundary_newmatch_evidence=(
+            args.enable_boundary_newmatch_evidence
+        ),
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
