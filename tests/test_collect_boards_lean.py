@@ -2893,6 +2893,81 @@ class TestAssignWonLabelsPanelCrosscheck:
         )
         assert all(math.isnan(w) for w in acc.wons)
 
+    def _suffocated_grid(self) -> "np.ndarray":
+        """1P 窒息盤面 (row=1, col=2 にぷよ) の grid を返す (2026-08-19)。"""
+        g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+        g[1][2] = COLOR_RED
+        return Board.from_list(g)._grid
+
+    def test_panel_unavailable_falls_back_to_survival_only(self) -> None:
+        """PANEL_UNAVAILABLE (端点でパネル物理不可視、2026-08-19) は
+        窒息判定のみで確定し、score 単独には緩和しないこと。
+
+        score 系統は 1P 勝ちを示すが、盤面は 1P 窒息 (=2P 勝ち)。
+        score 単独へ緩和していれば 1P 勝ちになるはずで、窒息判定 (2P) が
+        採用されることが「緩和していない」ことの証明になる (score 単独緩和は
+        断片化試合で 44.8% 誤ラベルの実測があるため禁止)。
+        """
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(self._suffocated_grid(), "v1", "1P", 1.0, 0, 1)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels(
+            {0: {"1P": 5000, "2P": 3000}},
+            panel_winners={0: mod.PANEL_UNAVAILABLE},
+        )
+        # 2P 勝ち → 1P 視点 won: 1P side=0.0 / 2P side=1.0
+        assert acc.wons == [0.0, 1.0]
+
+    def test_panel_unavailable_without_survival_stays_unknown(self) -> None:
+        """PANEL_UNAVAILABLE かつ窒息判定も不能 → unknown (NaN のまま)。"""
+        mod = _import_lean()
+        acc = mod._LeanNpzAccumulator()
+        acc.append(_make_board(COLOR_RED)._grid, "v1", "1P", 1.0, 0, 1)
+        acc.append(_make_board(COLOR_BLUE)._grid, "v1", "2P", 1.0, 0, 1)
+        acc.assign_won_labels(
+            {0: {"1P": 5000, "2P": 3000}},
+            panel_winners={0: mod.PANEL_UNAVAILABLE},
+        )
+        assert all(math.isnan(w) for w in acc.wons)
+
+
+def test_detect_panel_winners_crosscheck_maps_unavailable_to_sentinel() -> None:
+    """panel_unavailable=True の結果が番兵値 PANEL_UNAVAILABLE に、
+    それ以外は従来通り winner にマップされること (2026-08-19)。"""
+    mod = _import_lean()
+
+    class _Result:
+        def __init__(self, winner: str | None, unavailable: bool) -> None:
+            self.winner = winner
+            self.panel_unavailable = unavailable
+
+    class _LegacyResult:
+        """panel_unavailable フィールドを持たない旧 API 互換の結果。"""
+
+        def __init__(self, winner: str | None) -> None:
+            self.winner = winner
+
+    class _Det:
+        def detect_all_winners(
+            self, cap: object, match_starts: list[float],
+            last_observable_sec: float, offset_before: float = 1.0,
+        ) -> list[object]:
+            return [_Result(None, True), _Result("1P", False), _LegacyResult("2P")]
+
+    class _DetCls:
+        @classmethod
+        def load_default(cls) -> _Det:
+            return _Det()
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod, "MatchWinnerDetector", _DetCls)
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(1, fps=30.0))
+        out = mod._detect_panel_winners_crosscheck(
+            Path("dummy.mp4"), 0.0, [50.0, 100.0], 150.0,
+        )
+    assert out == {0: mod.PANEL_UNAVAILABLE, 1: "1P", 2: "2P"}
+
 
 # ============================
 # collect_lean() フル配線の結合テスト (W20/W21根治、2026-08-17 追加)

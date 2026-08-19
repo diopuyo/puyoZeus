@@ -162,7 +162,7 @@ from src.board_quality import is_phantom_board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
-from src.match_winner import MatchWinnerDetector  # noqa: E402
+from src.match_winner import PANEL_UNAVAILABLE, MatchWinnerDetector  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
     OjamaAccountSnapshot,
@@ -658,7 +658,10 @@ class _LeanNpzAccumulator:
                 bit-identical)。指定時は score 系統との 2 系統一致を要求し、
                 不一致または片方でも None なら判定不能 (unknown、won は
                 NaN のまま) とする (単一系統を無条件の正解にしない設計、
-                fail-silent 警戒)。
+                fail-silent 警戒)。値が PANEL_UNAVAILABLE (番兵値、
+                2026-08-19 追加) の試合はパネルが物理的に映らず読取不能
+                だったことを意味し、窒息判定 (_winner_by_survival) のみに
+                フォールバックする (score 単独への緩和はしない)。
         """
         winner_by_game: dict[int, str | None] = {}
         for gidx, scores in game_final_scores.items():
@@ -674,12 +677,23 @@ class _LeanNpzAccumulator:
                 winner_by_game[gidx] = score_winner
             else:
                 panel_winner = panel_winners.get(gidx)
-                # 2 系統一致要求: 両者が一致したときのみ採用、それ以外は unknown
-                winner_by_game[gidx] = (
-                    score_winner
-                    if (score_winner is not None and score_winner == panel_winner)
-                    else None
-                )
+                if panel_winner == PANEL_UNAVAILABLE:
+                    # 端点 (動画冒頭イントロ / 最終試合後にリザルト画面なし)
+                    # でパネルが物理的に映らず、パネル系統が原理的に読取
+                    # 不能だった試合 (2026-08-19)。score 単独への緩和は
+                    # 断片化試合で 44.8% 誤ラベルになると実測済みのため
+                    # 行わず、物理的に確実な窒息判定 (_winner_by_survival)
+                    # のみで判定する (判定できなければ unknown のまま)。
+                    winner_by_game[gidx] = _winner_by_survival(self, gidx)
+                else:
+                    # 2 系統一致要求: 両者が一致したときのみ採用、
+                    # それ以外は unknown
+                    winner_by_game[gidx] = (
+                        score_winner
+                        if (score_winner is not None
+                            and score_winner == panel_winner)
+                        else None
+                    )
 
         for i in range(len(self.wons)):
             gidx = self.game_idxs[i]
@@ -2295,7 +2309,9 @@ def _detect_panel_winners_crosscheck(
         last_observable_sec: 最終処理フレームの時刻 (最終試合判定の探索起点)。
 
     Returns:
-        {game_idx: "1P"|"2P"|None}。全体失敗時は None。
+        {game_idx: "1P"|"2P"|PANEL_UNAVAILABLE|None}。全体失敗時は None。
+        PANEL_UNAVAILABLE は端点でパネルが物理的に映らず読取不能だった
+        試合 (2026-08-19 追加、assign_won_labels が窒息判定へフォールバック)。
     """
     match_starts = [start_sec, *advance_times]
     try:
@@ -2317,7 +2333,17 @@ def _detect_panel_winners_crosscheck(
             file=sys.stderr,
         )
         return None
-    return {i: r.winner for i, r in enumerate(results)}
+    # panel_unavailable (端点でパネルが物理的に映らず読取不能、2026-08-19) は
+    # 番兵値 PANEL_UNAVAILABLE にマップし、assign_won_labels 側で窒息判定
+    # フォールバックを許可する。getattr 既定 False は旧 API の結果オブジェクト
+    # (フィールドなし) との後方互換のため。
+    return {
+        i: (
+            PANEL_UNAVAILABLE
+            if getattr(r, "panel_unavailable", False) else r.winner
+        )
+        for i, r in enumerate(results)
+    }
 
 
 def _process_side_lean(
