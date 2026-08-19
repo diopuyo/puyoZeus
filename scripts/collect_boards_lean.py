@@ -180,8 +180,16 @@ TARGET_W: int = 1920
 TARGET_H: int = 1080
 DEFAULT_FPS: float = 30.0
 
-# 試合境界検知: score がこの値以上減少したら新しい試合とみなす
+# 試合境界検知(旧方式): score がこの値以上減少したら新しい試合とみなす。
+# --enable-score-reset-requires-zero 指定時は使われない (減少は誤読とみなす)。
 SCORE_RESET_THRESHOLD: int = 500
+
+# 試合境界検知(新方式、2026-08-20): 「score が 0 になった」ことを境界の条件と
+# する際に、0 とみなす上限。新しい試合はスコアが必ず 0 から始まるという
+# ゲーム仕様から決めた物理的な値であり、シーンからの逆算ではない
+# (過学習禁止規約準拠)。0 ちょうどを既定とし、OCR の桁欠けを緩く拾うための
+# 余裕は設けない (余裕を持たせると連鎖中の低位誤読を再び拾うため)。
+SCORE_RESET_ZERO_MAX: int = 0
 
 # ゲーム境界の共有カウンタのデバウンス幅 [秒] (2026-07-31)。
 # 1P/2P が同じ境界を検知したときに 2 回進めないための窓。
@@ -1080,6 +1088,7 @@ def _update_game_boundary(
     shared: "_SharedGameCounter | None" = None,
     t_sec: float = 0.0,
     side_label: str | None = None,
+    require_zero: bool = False,
 ) -> None:
     """score リセット検知で game_idx を進める。旧ゲームの最終 score は
     リセット直前の prev_score (高値) を記録する。
@@ -1108,13 +1117,36 @@ def _update_game_boundary(
         shared: 共有カウンタ。None なら side 独立 (旧挙動)。
         t_sec: 現在時刻 [秒]。shared のデバウンス判定に使う。
         side_label: "1P"/"2P" (異常イベント記録用、省略可)。
+        require_zero: True のとき、境界を「score が 0 になった」ときだけ
+            認め、単なる減少は無視する (2026-08-20、user 指摘)。既定 False
+            は従来の減少幅判定で bit-identical。
     """
     if score is None:
         return
-    is_reset = (
-        state.prev_score is not None
-        and state.prev_score - score >= SCORE_RESET_THRESHOLD
-    )
+    if require_zero:
+        # 試合中のスコアは単調増加しかしない。したがって「減った」は
+        # ほぼ全てが OCR 誤読であり、境界の根拠にしてはならない
+        # (user 指摘 2026-08-20「減るのはただの誤認」)。新しい試合は
+        # スコアが 0 にリセットされるので、0 への遷移だけを境界とする。
+        #
+        # 旧実装 (減少幅 >= SCORE_RESET_THRESHOLD=500) の実害: 連鎖中は
+        # スコアが猛烈に増える (実測 39番 636秒台で1.6秒に3.5万点) ため、
+        # 連鎖の閃光による 1 桁の誤読が容易に 500 点超の「減少」に化け、
+        # 試合の真っ最中に偽の境界が引かれていた。実測2件とも1桁誤読:
+        #   310.4秒 5,759 -> 5,259 (7を2と誤読、差500=閾値ちょうど)
+        #   636.8秒 56,085 -> 55,085 (6を5と誤読、差1,000)
+        # 偽境界の区間は勝敗パネルが変化しないため、その試合の勝敗
+        # ラベルが丸ごと落ちる (39番: 欠損15試合中9件がこの形)。
+        is_reset = (
+            state.prev_score is not None
+            and state.prev_score > SCORE_RESET_ZERO_MAX
+            and score <= SCORE_RESET_ZERO_MAX
+        )
+    else:
+        is_reset = (
+            state.prev_score is not None
+            and state.prev_score - score >= SCORE_RESET_THRESHOLD
+        )
     if is_reset:
         # 旧ゲームの最終スコア = リセット直前の高値を確定
         state.final_scores[state.game_idx] = state.prev_score
@@ -1737,6 +1769,13 @@ def collect_lean(
     # 総数+50%断片化、won欠損38.3%) への対処。収集専用 (本番RTに波及
     # しない)。既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
     enable_boundary_newmatch_evidence: bool = False,
+    # 試合境界を「score が 0 になった」ときだけ認める (2026-08-20、user 指摘
+    # 「減るのはただの誤認」)。試合中の score は単調増加しかしないため、
+    # 減少はほぼ全てが OCR 誤読であり境界の根拠にならない。新しい試合は
+    # score が 0 から始まるので、0 への遷移だけを境界とする。
+    # 既定 False = 従来の減少幅判定 (SCORE_RESET_THRESHOLD=500) で
+    # bit-identical (backwards compat、末尾追加)。
+    enable_score_reset_requires_zero: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -2214,6 +2253,7 @@ def collect_lean(
             enable_move_segmented_recording=enable_move_segmented_recording,
             enable_physics_persistence_filter=enable_physics_persistence_filter,
             physics_sim=physics_sim,
+            score_reset_requires_zero=enable_score_reset_requires_zero,
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -2235,6 +2275,7 @@ def collect_lean(
             enable_move_segmented_recording=enable_move_segmented_recording,
             enable_physics_persistence_filter=enable_physics_persistence_filter,
             physics_sim=physics_sim,
+            score_reset_requires_zero=enable_score_reset_requires_zero,
         )
     cap.release()
 
@@ -2375,6 +2416,7 @@ def _process_side_lean(
     enable_move_segmented_recording: bool = False,
     enable_physics_persistence_filter: bool = False,
     physics_sim: "ChainSimulator | None" = None,
+    score_reset_requires_zero: bool = False,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -2461,9 +2503,13 @@ def _process_side_lean(
             (bit-identical、_update_physics_transition_marker は no-op)。
         physics_sim: 持続的物理制約フィルタが使う ChainSimulator インスタンス
             (呼出元 collect_lean() で使い回す)。
+        score_reset_requires_zero: 試合境界を「score が 0 になった」ときだけ
+            認める (2026-08-20)。既定 False = 従来の減少幅判定で
+            bit-identical。
     """
     _update_game_boundary(
         state, score, shared=shared_game, t_sec=t_sec, side_label=side_label,
+        require_zero=score_reset_requires_zero,
     )
     # 1手区切り観測スケジューラ + 持続的物理制約フィルタの毎フレーム状態更新
     # (2026-08-18): 実際の (置換前の) bstate/next_pair/tsumo_count を見る。
@@ -3040,6 +3086,20 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-score-reset-requires-zero", action="store_true",
+        dest="enable_score_reset_requires_zero",
+        help=(
+            "試合境界を「score が 0 になった」ときだけ認める (2026-08-20、"
+            "user 指摘「減るのはただの誤認」)。試合中の score は単調増加"
+            "しかしないため、減少はほぼ全てが OCR 誤読であり境界の根拠に"
+            "ならない。旧方式 (減少幅>=500) は連鎖中の1桁誤読で誤発火し、"
+            "試合の真っ最中に偽の境界を引いていた (実測: 39番 310.4秒 "
+            "5,759->5,259 / 636.8秒 56,085->55,085)。偽境界の区間は勝敗"
+            "パネルが変化しないため、その試合の勝敗ラベルが丸ごと落ちる。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-physics-persistence-filter", action="store_true",
         dest="enable_physics_persistence_filter",
         help=(
@@ -3162,6 +3222,7 @@ def main() -> int:
         enable_chain_estimate_recording=args.enable_chain_estimate_recording,
         enable_move_segmented_recording=args.enable_move_segmented_recording,
         enable_physics_persistence_filter=args.enable_physics_persistence_filter,
+        enable_score_reset_requires_zero=args.enable_score_reset_requires_zero,
         enable_lockdown_score_numeric_release=(
             args.enable_lockdown_score_numeric_release
         ),
