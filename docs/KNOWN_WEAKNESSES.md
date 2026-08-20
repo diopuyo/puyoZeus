@@ -962,3 +962,66 @@ W12で効果測定済み (216+のズレ 2.87pt→1.21pt、「深刻度は過大�
 
 証拠: `logs/_diag_ojama_forecast_cap_2026-08-18.log`、
 診断スクリプト `scripts/_diag_ojama_forecast_cap_2026-08-18.py`
+
+---
+
+## W27: 認識速度の残存ボトルネック (2026-08-20、取り置き)
+
+HSV セル分類の Rust 化 (9.4倍、1 frame -8.73ms) を採用した時点で**見送った**
+高速化候補の台帳。user 判断「1〜1.5ms なら見送り」「リスクと効果が見合って
+いないものは先送り」に従う。**破棄ではなく取り置き**であり、収集頻度が上がる
+・リアルタイムのテール性能が問題になる等で費用対効果が変われば着手する。
+
+### 実測で確定している内訳 (すべて 2026-08-20、CPU を空けた単独実行)
+
+`scripts/_diag_pipeline_vs_collect_gap_2026-08-20.py` (video_c34 600秒から
+3,990frame、中盤=試合中を多く含む代表区間):
+
+| 成分 | ms/frame | 割合 |
+|---|---|---|
+| classify 起因 | 19.64 | 57% |
+| ベース (classify=0 のフレーム) | 12.03 | 35% |
+| decode | 2.65 | 8% |
+| 合計 | 34.69 (28.8fps) | |
+
+`scripts/_diag_diffuse_breakdown_2026-07-30.py` (静穏区間、1 frame 15.3ms):
+read_both_boards 11.0 (71.5%) / _step_side 4.0 (26%) / ui_mask 1.7 /
+next_detector 1.6 / score_zero 1.3 / match_end 1.1 / telop 0.7
+
+`scripts/_diag_classify_internals_2026-08-20.py`:
+V median 2.04ms (688回/frame) / S median 1.63 (229回) / H median 1.46 (229回)
+/ cv2.cvtColor 1.32 (431.7回) → **median 3種で 5.13ms、呼び出し 1,146回/frame**
+
+### 見送った項目 (優先度順)
+
+| 項目 | 期待削減 | 工数 | bit-identical | 見送り理由 |
+|---|---|---|---|---|
+| 1st pass median の rects 一括 native 化 | 1.0〜1.5ms | 1日 | 可 | user 判断「1〜1.5ms なら見送り」。作成済み Rust カーネル (`native/puyo_core/src/hsv_classify.rs`) を再利用できるので**再開時は想定より安い** |
+| CNN 前処理の一括化 (resize後パッチ縦連結→cvtColor 1回、(N,16,16,6) プリアロケ、classify_batch 後段の argmax ベクトル化) | 0.7〜1.2ms | 1日 | 可 | 1日で1ms = Rust化 (8.73ms) の 1/8 の効率 |
+| `_step_side` の未帰属 3.8ms (全フレームに乗る) | 不明 | 0.5日 (計測) + α | 困難 | 巨大な状態管理関数でパリティ担保が事実上不可能。**内訳も未測定**なので、着手するなら perf_counter をブロック 8-10 分割で置く計測が先 |
+| 試合外の盤面認識スキップ | 試合外比率 × 約10ms | 1〜1.5日 | 要監査 | **`use_match_state=False`** (`src/recognition_pipeline.py:2787, 3393`) のため試合外でも 144 セルのフル認識が毎フレーム走っている (`image_reader.py:1624-1628` の早期リターンは本番で発火しない)。純粋な無駄だが、スキップすると CNN smoothing 履歴 deque (`recognition_pipeline.py:1766-1767`) や `_step_side` 内の会計フィルタが inactive 中に消費していた副作用と食い違う恐れがある。監査 + T2 + 陽性対照が必要。**試合外比率が未測定**なので効果も未確定 |
+| 間引きフレームの `grab()` 化 (retrieve の色変換+コピーを省く) | 0.2ms | 0.5日 | 可 | デコードは全体の **4.6%** と実測済み (単独 read 230fps / grab 467fps に対し収集全体 10.5fps)。ほぼ無意味 |
+| NVDEC デコードオフロード | — | — | — | **正式棄却** (上記 4.6% により) |
+| matchTemplate の GPU 化 | 不明 | 大 | **不可に近い** | 浮動小数点差で閾値ぎわ判定が反転しうる。pip の opencv は CUDA 無効なので torch conv2d で NCC 再実装が必要 |
+| CNN の 156→1 バッチ統合 | 小 | 1日 | 中 | GPU は律速でない (使用率34%、CUDA 無効でも classify_batch 7.4→7.2ms でほぼ不変)。転送・起動固定費の半減のみ |
+
+### 棄却済み (再検討不要)
+
+- **スレッド競合**: 1プロセス72スレッド×14=1,008スレッドを16コアで回していたが、
+  1スレッドに固定しても 10.5→10.3fps で**効果なし**。load average が論理コア数と
+  ほぼ同値だったため余剰スレッドは sleep しており無駄燃焼は小さかった
+- **PC の物理制約**: クロック2918MHz安定 (熱による低下なし)、メモリ19GB中10GB・
+  スワップ0、ディスクI/O待ち0%
+- **GPU 依存**: CUDA 無効でも 1.22倍 (15.3→18.7ms) にとどまる。GPU 非搭載PCでの
+  配布に支障なし
+
+### リアルタイム (Phase J) との関係
+
+decode + update = 23.91ms = **41.8fps** で中央値では 30fps を満たす (collect 側
+15.5ms は RT に載らない)。ただし **update の p90 が 40.74ms で予算 33.3ms を超過**
+しており、連鎖帯の中央値 32.75ms もボーダー。RT はテール性能の勝負なので
+「達成済み」とは言えない。Rust 化 (-8.73ms) がそのままテールを押し下げる。
+
+参照: `native/puyo_core/src/hsv_classify.rs`、
+`scripts/_verify_native_hsv_parity_2026-08-20.py` (T1/T3)、
+`scripts/_bench_native_hsv_2026-08-20.py`、コミット 0f195e4

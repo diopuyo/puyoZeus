@@ -1405,6 +1405,8 @@ class RecognitionPipeline:
         # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
         enable_side_sat_calibration: bool = False,
         enable_large_roi_throttle: bool = True,
+        # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = bit-identical。
+        enable_native_hsv_classifier: bool = False,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): True で NON-STABLE→STABLE 復帰
         # merge の色→空 遷移について HSV が色を保持する cell を消さない。
@@ -1687,6 +1689,16 @@ class RecognitionPipeline:
             else self.BG_FP_FORCE_MAX_PUYO
         )
         self._reader = image_reader
+        # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = 従来の Python
+        # 経路のまま bit-identical。有効時は ImageReader 経由で
+        # ColorClassifier (HybridClassifier._hsv 含む) に伝播する。
+        # 実測 6.4倍 (1盤面 5.115→0.800ms、cvtColor と境界越えを含む実効値)、
+        # 1 frame あたり約 8.6ms 削減。パリティは合成パッチ4,732枚×フラグ4構成
+        # で不一致0 (scripts/_verify_native_hsv_parity_2026-08-20.py、陽性対照つき)。
+        # native が使えない環境では黙って従来経路になる (戻り値で判別可能)。
+        self._native_hsv_active: bool = False
+        if enable_native_hsv_classifier and hasattr(image_reader, "enable_native_hsv"):
+            self._native_hsv_active = bool(image_reader.enable_native_hsv(True))
         # fix/v70-zeropatch-redyellow (2026-06-02): 赤色相折り返し補正を
         # ColorClassifier に伝播する (HybridClassifier._hsv 経由も含む)。
         if enable_red_hue_wrap_fix:
@@ -3197,6 +3209,8 @@ class RecognitionPipeline:
         # 領域の実測彩度から s_min スケールを較正する。既定 OFF = bit-identical。
         enable_side_sat_calibration: bool = False,
         enable_large_roi_throttle: bool = True,
+        # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = bit-identical。
+        enable_native_hsv_classifier: bool = False,
         large_roi_throttle_frames: int = LARGE_ROI_THROTTLE_FRAMES,
         # 色→空 HSV 照合ガード (2026-07-30): c34 型の列デッドロックには有効だが、
         # 4動画測定 (c34/c58/c26/c69) で c58/c26 の 2P tail 悪化、c26/c69 の 1P
@@ -3560,6 +3574,7 @@ class RecognitionPipeline:
             initial_confirm_min_votes=initial_confirm_min_votes,
             enable_side_sat_calibration=enable_side_sat_calibration,
             enable_large_roi_throttle=enable_large_roi_throttle,
+            enable_native_hsv_classifier=enable_native_hsv_classifier,
             large_roi_throttle_frames=large_roi_throttle_frames,
             enable_puyo_to_empty_hsv_guard=enable_puyo_to_empty_hsv_guard,
             enable_asymmetric_recovery_min_frames=(

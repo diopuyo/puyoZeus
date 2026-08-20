@@ -73,10 +73,15 @@ def main() -> None:
     ap.add_argument("--video", type=Path, default=Path("data/frames/video_c34.mp4"))
     ap.add_argument("--start-sec", type=float, default=0.0)
     ap.add_argument("--frames", type=int, default=4000)
+    ap.add_argument("--native-hsv", action="store_true",
+                    help="ネイティブ(Rust) HSV 分類を有効にして測る")
     args = ap.parse_args()
 
     _pipeline_kwargs()
-    pipe = RecognitionPipeline.load_default()
+    pipe = RecognitionPipeline.load_default(
+        enable_native_hsv_classifier=args.native_hsv,
+    )
+    print(f'[config] native HSV: {getattr(pipe, "_native_hsv_active", None)}')
     cap = cv2.VideoCapture(str(args.video))
     if not cap.isOpened():
         print(f"[error] 動画を開けない: {args.video}")
