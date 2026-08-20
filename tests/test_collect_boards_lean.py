@@ -1537,177 +1537,181 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # enable_physics_persistence_filter / enable_ojama_fall_color_swap_guard の
     # 9件が末尾にさらに追加された分、元の値から一律 -9 シフトしてある
     # (旧値は git log 参照)。
-    assert params[-46] == "enable_effect_gate"
+    assert params[-47] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-45] == "effect_gate_persist_sec"
+    assert params[-46] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-44] == "enable_effect_visual_gate"
+    assert params[-45] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-43] == "enable_burst_guard_v2"
+    assert params[-44] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-42] == "enable_transition_merge_guard"
+    assert params[-43] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-41] == "burst_gate_open_threshold"
+    assert params[-42] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-40] == "enable_hidden_row_burst_guard"
+    assert params[-41] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-39] == "enable_burst_close_extension"
+    assert params[-40] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-38] == "burst_chain_gap_max_sec"
+    assert params[-39] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-37] == "enable_online_hsv_refresh"
+    assert params[-38] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-36] == "enable_match_transition_debounce"
+    assert params[-37] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
     # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
     # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
-    assert params[-35] == "enable_ojama_entry_gravity_settle_guard"
+    assert params[-36] == "enable_ojama_entry_gravity_settle_guard"
     assert (
         sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
     )
-    assert params[-34] == "enable_gravity_settle_reset_on_exit"
+    assert params[-35] == "enable_gravity_settle_reset_on_exit"
     assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
     # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
-    assert params[-33] == "enable_phantom_board_guard"
+    assert params[-34] == "enable_phantom_board_guard"
     assert sig.parameters["enable_phantom_board_guard"].default is False
     # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
-    assert params[-32] == "enable_margin_time_rate"
+    assert params[-33] == "enable_margin_time_rate"
     assert sig.parameters["enable_margin_time_rate"].default is False
     # 盤面確定窓 3中2多数決 (2026-08-13 user承認): さらに末尾に追加、既定 OFF。
-    assert params[-31] == "enable_stable_majority_window"
+    assert params[-32] == "enable_stable_majority_window"
     assert sig.parameters["enable_stable_majority_window"].default is False
     # OJAMA_FALL誤分類根因調査 案2/案4-lite/案3 (2026-08-13):
     # さらに末尾に追加、既定 OFF (全 OFF で bit-identical)。
-    assert params[-30] == "enable_ojama_fall_placement_override"
+    assert params[-31] == "enable_ojama_fall_placement_override"
     assert (
         sig.parameters["enable_ojama_fall_placement_override"].default is False
     )
-    assert params[-29] == "enable_ojama_fall_entry_hardening"
+    assert params[-30] == "enable_ojama_fall_entry_hardening"
     assert sig.parameters["enable_ojama_fall_entry_hardening"].default is False
-    assert params[-28] == "enable_chain_gate_raw_fallback"
+    assert params[-29] == "enable_chain_gate_raw_fallback"
     assert sig.parameters["enable_chain_gate_raw_fallback"].default is False
     # OJAMA_FALL出口の根治 案1 (2026-08-13、フル物差し回帰タスク#5向け新設):
     # さらに末尾に追加、既定 OFF (bit-identical)。collect_boards_lean.py には
     # 元々 RecognitionPipeline 側の実装のみ存在し CLI 未配線だったギャップの
     # 是正 (config (c) = OJAMA_FALL系3種の物差し比較に必要)。
-    assert params[-27] == "enable_ojama_fall_scoped_exit"
+    assert params[-28] == "enable_ojama_fall_scoped_exit"
     assert sig.parameters["enable_ojama_fall_scoped_exit"].default is False
     # フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した測定器
     # 事故の修正): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-26] == "precise_seek"
+    assert params[-27] == "precise_seek"
     assert sig.parameters["precise_seek"].default is False
     # W13根治 案1 (2026-08-16): highlight override 配線。さらに末尾に追加、
     # 既定 OFF (bit-identical、物差しv2 A/B測定用)。
-    assert params[-25] == "enable_highlight_override"
+    assert params[-26] == "enable_highlight_override"
     assert sig.parameters["enable_highlight_override"].default is False
     # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
     # さらに末尾に追加、既定 OFF (bit-identical、案1 との A/B/併用測定用)。
-    assert params[-24] == "enable_patch_fp_hsv_guard"
+    assert params[-25] == "enable_patch_fp_hsv_guard"
     assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
     # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-23] == "enable_boundary_multisignal"
+    assert params[-24] == "enable_boundary_multisignal"
     assert sig.parameters["enable_boundary_multisignal"].default is False
     # W20/W21根治 (2026-08-17): 勝者パネルクロスチェック配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-22] == "enable_winner_panel_crosscheck"
+    assert params[-23] == "enable_winner_panel_crosscheck"
     assert sig.parameters["enable_winner_panel_crosscheck"].default is False
     # R2 浮きぷよ是正機構 (2026-08-17): さらに末尾に追加、既定 OFF
     # (bit-identical、hsv-guard 併用/単独 A/B 測定用)。
-    assert params[-21] == "enable_floating_gap_restore"
+    assert params[-22] == "enable_floating_gap_restore"
     assert sig.parameters["enable_floating_gap_restore"].default is False
     # W10根治 (2026-08-17): 着地セル色の継続監視ガード CLI 配線漏れの是正
     # (認識強化統一測定タスクで発見)。さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-20] == "enable_landing_color_guard"
+    assert params[-21] == "enable_landing_color_guard"
     assert sig.parameters["enable_landing_color_guard"].default is False
     # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-19] == "enable_override_color_guard"
+    assert params[-20] == "enable_override_color_guard"
     assert sig.parameters["enable_override_color_guard"].default is False
-    assert params[-18] == "enable_ojama_column_stack_fix"
+    assert params[-19] == "enable_ojama_column_stack_fix"
     assert sig.parameters["enable_ojama_column_stack_fix"].default is False
     # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
     # の ever_seen 飢餓状態対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-17] == "enable_next_history_starvation_fix"
+    assert params[-18] == "enable_next_history_starvation_fix"
     assert sig.parameters["enable_next_history_starvation_fix"].default is False
     # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): おじゃま落下
     # 白雲パーティクル誤認対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-16] == "enable_ojama_cnn_override_warmup"
+    assert params[-17] == "enable_ojama_cnn_override_warmup"
     assert sig.parameters["enable_ojama_cnn_override_warmup"].default is False
     # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25):
     # CNN観測入力段の会計整合フィルタ。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-15] == "enable_ojama_write_accounting_guard"
+    assert params[-16] == "enable_ojama_write_accounting_guard"
     assert sig.parameters["enable_ojama_write_accounting_guard"].default is False
     # (d) STABLE持続確認 (2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_
     # 2026-08-17.md §5): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-14] == "enable_stable_persistence_gate"
+    assert params[-15] == "enable_stable_persistence_gate"
     assert sig.parameters["enable_stable_persistence_gate"].default is False
     # (b-1) match_end持続時間ゲート (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-13] == "enable_match_end_persist_override"
+    assert params[-14] == "enable_match_end_persist_override"
     assert sig.parameters["enable_match_end_persist_override"].default is False
     # (b-2) 次試合開始までのラッチ (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-12] == "enable_post_match_lockdown_latch"
+    assert params[-13] == "enable_post_match_lockdown_latch"
     assert sig.parameters["enable_post_match_lockdown_latch"].default is False
     # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-11] == "enable_result_screen_hardening"
+    assert params[-12] == "enable_result_screen_hardening"
     assert sig.parameters["enable_result_screen_hardening"].default is False
     # 連鎖中物理推論の配線 (enable_chain_estimate_recording、2026-08-18):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-10] == "enable_chain_estimate_recording"
+    assert params[-11] == "enable_chain_estimate_recording"
     assert sig.parameters["enable_chain_estimate_recording"].default is False
     # 1手区切り観測スケジューラ (enable_move_segmented_recording、
     # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-9] == "enable_move_segmented_recording"
+    assert params[-10] == "enable_move_segmented_recording"
     assert sig.parameters["enable_move_segmented_recording"].default is False
     # 持続的物理制約フィルタ (enable_physics_persistence_filter、
     # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-8] == "enable_physics_persistence_filter"
+    assert params[-9] == "enable_physics_persistence_filter"
     assert sig.parameters["enable_physics_persistence_filter"].default is False
     # W26根治 (enable_ojama_fall_color_swap_guard、2026-08-18、
     # docs/KNOWN_WEAKNESSES.md W26節): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-7] == "enable_ojama_fall_color_swap_guard"
+    assert params[-8] == "enable_ojama_fall_color_swap_guard"
     assert sig.parameters["enable_ojama_fall_color_swap_guard"].default is False
     # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示「必ず
     # 試合前スコアは0」): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-6] == "enable_lockdown_score_numeric_release"
+    assert params[-7] == "enable_lockdown_score_numeric_release"
     assert (
         sig.parameters["enable_lockdown_score_numeric_release"].default is False
     )
-    assert params[-5] == "enable_lockdown_score_moving_release"
+    assert params[-6] == "enable_lockdown_score_moving_release"
     assert (
         sig.parameters["enable_lockdown_score_moving_release"].default is False
     )
     # MatchEndDetector NCC 閾値上書き (2026-08-19、全消しテロップ誤検出対策の
     # A/B 用): さらに末尾に追加、既定 None (bit-identical)。
-    assert params[-4] == "match_end_ncc_threshold"
+    assert params[-5] == "match_end_ncc_threshold"
     assert sig.parameters["match_end_ncc_threshold"].default is None
     # 新試合証拠ゲート (2026-08-19、偽境界の断片化対策): さらに末尾に追加、
     # 既定 OFF (bit-identical)。
-    assert params[-3] == "enable_boundary_newmatch_evidence"
+    assert params[-4] == "enable_boundary_newmatch_evidence"
     # 試合境界の 0 リセット要求 (2026-08-20、user 指摘「減るのはただの誤認」):
     # さらに末尾へ追加、既定 OFF。試合中の score は単調増加しかしないため、
     # 減少を境界の根拠にしない (連鎖中の1桁誤読による偽境界を根絶する)。
-    assert params[-2] == "enable_score_reset_requires_zero"
+    assert params[-3] == "enable_score_reset_requires_zero"
     # 勝者判定のパネル優先 (2026-08-20、user 決定「パネル優先でいいです」):
     # さらに末尾へ追加、既定 OFF。得点系統の「高い方が勝ち」は約98%しか
     # 成立しないため、明確に読めたパネルを優先する。
-    assert params[-1] == "enable_winner_panel_priority"
+    assert params[-2] == "enable_winner_panel_priority"
+    # ネイティブ (Rust) HSV セル分類 (2026-08-20): さらに末尾へ追加、既定 OFF。
+    # 認識結果は bit-identical で、実測 1 frame 34.69→29.05ms (1.19倍)。
+    assert params[-1] == "enable_native_hsv_classifier"
+    assert sig.parameters["enable_native_hsv_classifier"].default is False
     assert sig.parameters["enable_winner_panel_priority"].default is False
     assert sig.parameters["enable_score_reset_requires_zero"].default is False
     assert (
