@@ -1802,6 +1802,10 @@ def collect_lean(
     # (memory reference_score_winner_98pct_2026-08-20)。
     # 既定 False = 従来の2系統一致要求で bit-identical (末尾追加)。
     enable_winner_panel_priority: bool = False,
+    # ネイティブ (Rust) HSV セル分類 (2026-08-20)。認識結果は bit-identical
+    # (合成パッチ4,732枚×フラグ4構成で不一致0、陽性対照つき) で、実測は
+    # 1 frame 34.69→29.05ms (1.19倍)。既定 False = 従来の Python 経路。
+    enable_native_hsv_classifier: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -2057,6 +2061,7 @@ def collect_lean(
     # (enable_chain_tracker=True の場合のみ VideoChainTracker を有効化、
     #  2026-07-30 基準データ収集で CHAIN 期間中の盤面凍結を機能させるため追加)
     pipeline = RecognitionPipeline.load_default(
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
         stable_frame_count=3,
         load_score_ocr=True,
         enable_chain_tracker=enable_chain_tracker,
@@ -3115,6 +3120,20 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-native-hsv-classifier", action="store_true",
+        dest="enable_native_hsv_classifier",
+        help=(
+            "HSV セル分類を Rust ネイティブ実装で行う (2026-08-20)。"
+            "認識結果は bit-identical (合成パッチ4,732枚×フラグ4構成で"
+            "不一致0、陽性対照で比較器の検出力も確認済み)。実測 1 frame "
+            "34.69→29.05ms (1.19倍)、1盤面あたりでは 5.115→0.800ms (6.4倍)。"
+            "効いているのは演算量ではなく per-call オーバーヘッドの消滅 "
+            "(median だけで 1,146 回/frame の Python/numpy 呼び出しがあった)。"
+            "cvtColor は移植せず Python 側 (cv2) のまま = OpenCV の整数丸めを"
+            "再現するリスクを構造的に回避。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-winner-panel-priority", action="store_true",
         dest="enable_winner_panel_priority",
         help=(
@@ -3271,6 +3290,7 @@ def main() -> int:
         enable_physics_persistence_filter=args.enable_physics_persistence_filter,
         enable_score_reset_requires_zero=args.enable_score_reset_requires_zero,
         enable_winner_panel_priority=args.enable_winner_panel_priority,
+        enable_native_hsv_classifier=args.enable_native_hsv_classifier,
         enable_lockdown_score_numeric_release=(
             args.enable_lockdown_score_numeric_release
         ),
