@@ -94,7 +94,11 @@ if __name__ == "__main__":
     orch.download_video = _download_video
     # 並列14が実測最適 (memory project_collect_indicators_v2_perf_2026-07-20、
     # 10->14 で1本あたりの時間はほぼ変わらずスループットだけ上がる)。
-    orch.MAX_COLLECT_PARALLEL = 14
+    # 並列数は環境変数で上書きできる (2026-08-20、飽和検証のため)。
+    # 物理8コア(論理16)に14プロセスは詰め込みすぎで、1プロセスあたりの
+    # 実効コアが0.57しかない。落とせば総スループットが上がるかを実測する。
+    import os as _os
+    orch.MAX_COLLECT_PARALLEL = int(_os.environ.get('COLLECT_PARALLEL', '14'))
     orch.TOTAL_HOLD_SLOTS = orch.MAX_COLLECT_PARALLEL + orch.DOWNLOAD_QUEUE_SIZE
     orch._HOLD_SEMAPHORE = threading.Semaphore(orch.TOTAL_HOLD_SLOTS)
 
