@@ -13,6 +13,10 @@ crate-type = ["cdylib"]
 # extension-module: Python 側の libpython にリンクしない (maturin 標準構成)
 pyo3 = { version = "0.22", features = ["extension-module"] }
 rayon = "1.10"
+# HSV セル分類 (2026-08-20 追加): 盤面 ROI を numpy 配列のまま借用して
+# ゼロコピーで受け取るために使う。pyo3 と同じメジャー版を選ぶ必要がある
+# (pyo3-ffi が links="python" を宣言するため、異版が混在すると解決不能)。
+numpy = "0.22"
 
 [profile.release]
 # リアルタイム応手探索用途なので最適化を強めに掛ける

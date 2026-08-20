@@ -120,7 +120,13 @@ CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 # リスク (有界): match_end の検出が遅れると lockdown (盤面凍結) の開始が遅れる。
 # ただし MatchEndDetector の lockdown_sec=5.0 に対し遅延は最大 THROTTLE_FRAMES 分なので
 # 相対的に小さい。また hard_match_off は score_zero_both との OR なので独立経路がある。
-# bit-identical にはならないため既定 OFF (enable_large_roi_throttle)。
+# bit-identical にはならない (間引き間は前回結果を流用する) が、実測の
+# 効果が大きく検証済みのため **既定 ON** (enable_large_roi_throttle=True、
+# 1401/3193行)。2026-07-31 の実測で 53.3→39.0ms、試合終了検出のずれ 0f /
+# 0/1800 を確認して採用した (memory project_speed_4to26fps_2026-07-31)。
+# 注記 (2026-08-20): 本コメントは長らく「既定 OFF」と書かれており実既定値と
+# 乖離していた。そのため「未採用だから配線すれば 1.3〜2 倍」という誤った
+# 期待が一度立った。既定値を変えたらこのコメントも必ず直すこと。
 LARGE_ROI_THROTTLE_FRAMES: int = 8
 
 # エフェクト時間ゲート (enable_effect_gate, 2026-08-03):
@@ -3977,7 +3983,10 @@ class RecognitionPipeline:
         if self._match_end_detector is not None:
             # 大 ROI 走査 (800x600) の間引き: 有効時は LARGE_ROI_THROTTLE_FRAMES に
             # 1 回だけ実行し、間のフレームは前回結果を流用する。
-            # 既定 OFF (フラグ無効時は従来通り毎フレーム実行 = bit-identical)。
+            # **既定 ON** (2026-08-20 訂正。以前ここは「既定 OFF」と書かれていたが
+            # 実既定値は True で、実測でも match_end/telop は 0.1 回/frame しか
+            # 呼ばれていない = 間引きが稼働している)。無効化すると従来通り毎
+            # フレーム実行 = bit-identical になる。
             if self._should_run_large_roi_scan(frame_idx):
                 try:
                     match_end_locked = bool(
