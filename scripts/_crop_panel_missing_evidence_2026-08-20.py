@@ -114,12 +114,15 @@ def main() -> int:
         reads = det._resolve_read_times(cap, starts, float(t.max()), 1.0)
         results = det.detect_all_winners(cap, starts, float(t.max()))
 
+        # 欠損した試合は理由を問わず全て拾う (2026-08-20 変更: 当初は
+        # 「パネルは映っているが勝者不定」だけを対象にしていたが、
+        # 得点との食い違い (winner は出ているが score と不一致) も
+        # 目視で決着させたいため条件を緩めた)。
         missing, normal = [], []
         for i, (g, r) in enumerate(zip(games, results)):
             sel = game == g
             if bool(np.isnan(won[sel]).all()):
-                if not r.panel_unavailable and r.winner is None:
-                    missing.append((i, g, r))
+                missing.append((i, g, r))
             elif r.winner is not None:
                 normal.append((i, g, r))
 

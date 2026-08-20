@@ -651,6 +651,7 @@ class _LeanNpzAccumulator:
         self,
         game_final_scores: dict[int, dict[str, int | None]],
         panel_winners: dict[int, str | None] | None = None,
+        panel_priority: bool = False,
     ) -> None:
         """各 game_idx の最終 score から 1P 視点 won を付与する。
 
@@ -670,6 +671,11 @@ class _LeanNpzAccumulator:
                 2026-08-19 追加) の試合はパネルが物理的に映らず読取不能
                 だったことを意味し、窒息判定 (_winner_by_survival) のみに
                 フォールバックする (score 単独への緩和はしない)。
+            panel_priority: True のとき、panel_winner が非 None (片側の星数
+                だけが明確に増えたと読めた場合) ならそれを無条件に採用する
+                (2026-08-20、user 決定)。得点系統の「高い方が勝ち」は約98%
+                しか成立しない近似のため、明確に読めたパネルの方を信じる。
+                既定 False は従来の 2 系統一致要求で bit-identical。
         """
         winner_by_game: dict[int, str | None] = {}
         for gidx, scores in game_final_scores.items():
@@ -693,6 +699,20 @@ class _LeanNpzAccumulator:
                     # 行わず、物理的に確実な窒息判定 (_winner_by_survival)
                     # のみで判定する (判定できなければ unknown のまま)。
                     winner_by_game[gidx] = _winner_by_survival(self, gidx)
+                elif panel_priority and panel_winner is not None:
+                    # パネル優先 (2026-08-20、user 決定「パネル優先でいい
+                    # です」)。panel_winner が非 None ということは「片側の
+                    # 星数だけが明確に増えた」と読めた場合であり (両側変化・
+                    # 変化なしは None になる)、勝敗の直接表示として最も
+                    # 信頼できる。得点系統は「得点が高い方が勝ち」という
+                    # 近似で、user 伝授によれば約98%しか成立しない
+                    # (memory reference_score_winner_98pct_2026-08-20)。
+                    # 実測した食い違い (39番 試合6) は得点 1P=9,987 /
+                    # 2P=9,780 と差わずか207点の拮抗試合で、パネルは右側の
+                    # 星が 3->4 と明確に増えており (変化量39、正常試合の
+                    # 47/31 と同水準) 2P の勝ちが正しかった。従来はこれを
+                    # unknown に倒して 79 行を捨てていた。
+                    winner_by_game[gidx] = panel_winner
                 else:
                     # 2 系統一致要求: 両者が一致したときのみ採用、
                     # それ以外は unknown
@@ -1776,6 +1796,12 @@ def collect_lean(
     # 既定 False = 従来の減少幅判定 (SCORE_RESET_THRESHOLD=500) で
     # bit-identical (backwards compat、末尾追加)。
     enable_score_reset_requires_zero: bool = False,
+    # 勝者判定でパネルを優先する (2026-08-20、user 決定「パネル優先でいい
+    # です」)。panel_winner が非 None なら得点系統と食い違ってもパネルを
+    # 採用する。得点系統の「高い方が勝ち」は約98%しか成立しない近似のため
+    # (memory reference_score_winner_98pct_2026-08-20)。
+    # 既定 False = 従来の2系統一致要求で bit-identical (末尾追加)。
+    enable_winner_panel_priority: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -2304,7 +2330,10 @@ def collect_lean(
         panel_winners = _detect_panel_winners_crosscheck(
             video_path, start_sec, shared_game.advance_times, last_t_sec,
         )
-    acc.assign_won_labels(combined_final, panel_winners=panel_winners)
+    acc.assign_won_labels(
+        combined_final, panel_winners=panel_winners,
+        panel_priority=enable_winner_panel_priority,
+    )
     acc.save(out_npz)
 
     # 試合境界異常イベントの永続化 (W20/W21根治、2026-08-17)。
@@ -3086,6 +3115,21 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-winner-panel-priority", action="store_true",
+        dest="enable_winner_panel_priority",
+        help=(
+            "勝者判定でWIN★パネルを優先する (2026-08-20、user 決定)。"
+            "従来は得点系統とパネル系統の2系統一致を要求し、食い違えば"
+            "判定不能にしていた。だが得点系統の「得点が高い方が勝ち」は"
+            "約98%%しか成立しない近似であり (user 伝授)、パネルが片側の星"
+            "だけ明確に増えたと読めた場合はそちらが正しい。実測 (39番 "
+            "試合6): 得点 1P=9,987 / 2P=9,780 で差207点の拮抗試合、"
+            "パネルは右の星が3->4と明確に増加 (変化量39) で2Pの勝ちが"
+            "正解だった。従来はこの79行を捨てていた。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-score-reset-requires-zero", action="store_true",
         dest="enable_score_reset_requires_zero",
         help=(
@@ -3226,6 +3270,7 @@ def main() -> int:
         enable_move_segmented_recording=args.enable_move_segmented_recording,
         enable_physics_persistence_filter=args.enable_physics_persistence_filter,
         enable_score_reset_requires_zero=args.enable_score_reset_requires_zero,
+        enable_winner_panel_priority=args.enable_winner_panel_priority,
         enable_lockdown_score_numeric_release=(
             args.enable_lockdown_score_numeric_release
         ),
