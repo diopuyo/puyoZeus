@@ -16,6 +16,9 @@ mod bitboard;
 
 use std::sync::OnceLock;
 
+// HSV セル分類のネイティブ実装 (2026-08-20 追加)
+mod hsv_classify;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::ThreadPool;
@@ -604,6 +607,7 @@ fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(enumerate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_and_simulate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_py, m)?)?;
+    m.add_function(wrap_pyfunction!(hsv_classify::classify_cells_hsv, m)?)?;
     m.add_class::<ChainSimResultPy>()?;
     m.add_class::<ChainStepInfoPy>()?;
     m.add_class::<DropSimResultPy>()?;
