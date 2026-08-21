@@ -1922,35 +1922,83 @@ def _attach_counter_reach_columns(
                 hi = mid
         opp_idx = opp_list[lo - 1][1] if lo > 0 else None
 
-        own_board = Board.from_list(np.asarray(grids[i]).tolist())
         # 経過秒は 0.0 固定にする。マージンタイム (試合が長引くと送り量が
         # 増える補正) を掛けると同じ盤面でも試合の進み具合で閾値が変わり、
         # 既存の第1層 (`_native_board_fire_ojama` は elapsed_sec=0.0 固定、
         # scripts/build_labeled_win_from_npz.py:712-716) と食い違う。
         # まず「盤面から返せるか」を素で測り、マージンタイムの扱いは
         # 効果が確認できてから揃える (2026-08-21)。
-        elapsed_for_thr = 0.0
         # 閾値1: 相手が今撃てる連鎖が送ってくるおじゃま量。
-        # `immediate_fire_power` の raw が**おじゃま換算の個数そのもの**
-        # (takapt 探索の最良配置に calculate_chain_score → score_to_ojama、
-        # src/indicators_v2.py:447-470)。連鎖数から個数を仮定する必要はない。
         # user 指示「対応は相手が連鎖を撃ってきた時にその連鎖に対して返す
         # ことがどれだけ可能かをモンテカルロで確認する」に対応する閾値。
+        #
+        # **相手盤面から再計算してはいけない** (2026-08-21 実測):
+        # `immediate_fire_power` は takapt 探索 (全配置を試す) なので重く、
+        # 毎行×相手盤面で呼ぶと 1本25分でも終わらなかった。第1層が既に
+        # 全行ぶんを計算済み (しかも Rust 版 `_native_immediate_fire_power`)
+        # なので、相手の行から**引くだけ**にする。
+        #
+        # 列の値は 0-1 に正規化された score (raw ではない)。ON_FIELD_CAP=72 で
+        # 割られているので個数に戻す (src/indicators_v2.py:468-470)。
+        #
+        # 注記: `immediate_fire_power` は 2026-08-21 に**学習からは除外**した
+        # (他3列と r=0.91〜0.98 の重複、scripts/_retrain148_2026-08-14.py の
+        # DUPLICATE_COLS)。しかし CSV の列としては残るので、ここで閾値の材料
+        # として使うことはできる。「学習の入力として冗長」と「他の計算の材料
+        # として有用」は別の話であり、矛盾しない。
         if opp_idx is not None:
-            opp_board = Board.from_list(np.asarray(grids[opp_idx]).tolist())
-            thr_opp = float(
-                iv.immediate_fire_power(opp_board, elapsed_sec=elapsed_for_thr).raw,
+            opp_fire_score = float(
+                rows[opp_idx].get("immediate_fire_power", float("nan")),
+            )
+            thr_opp = (
+                opp_fire_score * float(iv.ON_FIELD_CAP)
+                if np.isfinite(opp_fire_score) else float("nan")
             )
         else:
             thr_opp = float("nan")
         # 閾値2: 実際の予告量 (上限なしの生値)
         thr_fc = float(r.get("ojama_forecast_uncapped", float("nan")))
-        elapsed = elapsed_for_thr  # 上記と同じ理由で 0.0 固定
+        # 盤面の復元はどちらかの閾値が正のときだけ行う (復元自体も
+        # 34万行では無駄にできないコスト)
+        need_board = (
+            (np.isfinite(thr_opp) and thr_opp > 0.0)
+            or (np.isfinite(thr_fc) and thr_fc > 0.0)
+        )
+        own_board = (
+            Board.from_list(np.asarray(grids[i]).tolist()) if need_board else None
+        )
+        elapsed = 0.0  # 上記の理由で固定
 
         for label, thr in (("vs_opp_fire", thr_opp), ("vs_forecast", thr_fc)):
             if not np.isfinite(thr):
                 for k in _COUNTER_REACH_K_LEVELS:
                     r[f"counter_reach_k{k}_{label}"] = float("nan")
+                continue
+            # 閾値が0以下なら「返す必要がない」= 到達確率は定義上1.0。
+            # counter_reach_probability の docstring にも「0以下を渡すと常に
+            # 到達 (確率1.0、窒息盤面を除く)」と明記されており、計算しても
+            # 同じ値が返る。**情報を失わずに計算量を大幅に削れる**。
+            #
+            # コストの実測 (2026-08-21、40件の平均):
+            #   精密版 3,106ms/件 → 62本34万行×2閾値で 14並列 42時間 (非現実的)
+            #   絞り込むと予告のある行は実データで全体の約4% → 約1.7時間
+            # 記録にあった「528ms」は測定条件が違った (実測は6倍)。
+            # user 判断で精密版のまま対象を絞る方針を採った。
+            if thr <= 0.0:
+                for k in _COUNTER_REACH_K_LEVELS:
+                    r[f"counter_reach_k{k}_{label}"] = 1.0
+                continue
+            # ここに来るのは thr > 0 のときだけなので need_board が真
+            # (= own_board は None でない)。防御的に確認する。
+            if own_board is None:
+                for k in _COUNTER_REACH_K_LEVELS:
+                    r[f"counter_reach_k{k}_{label}"] = float("nan")
+                continue
+            # 窒息盤面は返せないので 0.0 (関数側も同じ扱いだが、
+            # 呼び出す前に確定させて計算を省く)
+            if own_board.is_dead():
+                for k in _COUNTER_REACH_K_LEVELS:
+                    r[f"counter_reach_k{k}_{label}"] = 0.0
                 continue
             res = iv.counter_reach_probability(
                 own_board, thr, elapsed_sec=elapsed,
