@@ -727,6 +727,7 @@ class ResolvedExchangeTracker:
         enable_decisive_amplify: bool = False,
         enable_live_defender_reeval: bool = False,
         enable_live_defender_strict: bool = False,
+        enable_pending_landing_gate: bool = False,
         enable_kill_override_counter_aware: bool = False,
         enable_resolved_victim_gen_live: bool = False,
     ) -> None:
@@ -740,6 +741,15 @@ class ResolvedExchangeTracker:
         # クラス docstring 指摘14節参照)。enable_live_defender_reeval=False の
         # 間は本フラグの値に関わらず _reevaluate_live_defender 自体が呼ばれない。
         self._enable_live_defender_strict = enable_live_defender_strict
+        # [予告おじゃまの降下条件、2026-08-21 user 仕様伝授] 既定 OFF。
+        # user 判断「一旦は振らせていい」により従来の挙動 (予告量>0なら
+        # 降らせる) を既定のまま維持する。True にすると攻撃側が連鎖中の間は
+        # 降らせず、受け側の生盤面で評価する (仕様に忠実だが、学習モデルが
+        # 予告をほぼ無視するため受け側が無傷に見える副作用が戻る恐れがあり、
+        # 効果確認前に既定 ON にはしない)。
+        # 実装位置: _reevaluate_live_defender 内の land_pending_ojama_onto_board
+        # 呼び出し直前。
+        self._enable_pending_landing_gate = enable_pending_landing_gate
         # [指摘19、2026-08-15、状態ゲート方式] hold_after_kill_override の
         # 致死断定を受け側の状態機械 state (_LIVE_DEFENDER_BUSY_STATES) で
         # ゲートする (既定OFF、hold_after_kill_override docstring 参照)。
@@ -1083,8 +1093,37 @@ class ResolvedExchangeTracker:
             self._result.board_p2_after if defender_side == "1P"
             else self._result.board_p1_after)
         remaining = self._live_remaining_incoming(defender_side, live_defender_board, snap)
-        landed_defender_board, _dropped_now, leftover_now = land_pending_ojama_onto_board(
-            live_defender_board, attacker_board_frozen, remaining)
+        # [予告おじゃまの降下条件、2026-08-21 user 仕様伝授]
+        #
+        # おじゃまが実際に降るには順に3条件が必要:
+        #   (1) 相手の連鎖が確定する (相手のネクストが動き始める瞬間)
+        #   (2) 受け側の現在の手がフィールドに置かれる
+        #   (3) その手で連鎖が起きない
+        # (3) で連鎖が起きた場合はその連鎖終了後に降るが、相殺で予告が
+        # 消えれば降らない。
+        #
+        # 従来はこの条件を一切見ず「予告量 > 0 なら降らせる」だった
+        # (land_pending_ojama_onto_board は量だけを見る)。そのため
+        # **攻撃側がまだ連鎖している最中に受け側へ降らせて評価**しており、
+        # 受け側がその間に連鎖を撃って相殺できる可能性を潰して不利に
+        # 見せていた。指摘13 (受け側の生盤面をそのまま渡すと無傷に見える)
+        # への対処として降らせる方式を採ったが、逆方向に振れた形。
+        #
+        # 修正: 攻撃側が連鎖中 (= 条件(1)未成立) の間は降らせない。
+        # 予告は「迫っている量」として snapshot 側 (_live_defender_snap) が
+        # forecast として保持し続けるので、情報が失われるわけではない。
+        # 攻撃側の連鎖が終わっていれば従来どおり降らせる (条件(2)(3)は
+        # 受け側 state が BUSY でないこと=上の strict ガードで近似される)。
+        attacker_state = state2 if defender_side == "1P" else state1
+        attacker_still_chaining = attacker_state in _LIVE_DEFENDER_BUSY_STATES
+        if self._enable_pending_landing_gate and attacker_still_chaining:
+            # まだ降っていない: 受け側の生盤面をそのまま評価に使う。
+            landed_defender_board = live_defender_board
+            leftover_now = int(round(max(0.0, remaining)))
+        else:
+            landed_defender_board, _dropped_now, leftover_now = (
+                land_pending_ojama_onto_board(
+                    live_defender_board, attacker_board_frozen, remaining))
         board_p1 = (
             landed_defender_board if defender_side == "1P" else self._result.board_p1_after)
         board_p2 = (
