@@ -727,7 +727,7 @@ class ResolvedExchangeTracker:
         enable_decisive_amplify: bool = False,
         enable_live_defender_reeval: bool = False,
         enable_live_defender_strict: bool = False,
-        enable_pending_landing_gate: bool = False,
+        enable_pending_landing_gate: bool = True,
         enable_kill_override_counter_aware: bool = False,
         enable_resolved_victim_gen_live: bool = False,
     ) -> None:
@@ -741,12 +741,15 @@ class ResolvedExchangeTracker:
         # クラス docstring 指摘14節参照)。enable_live_defender_reeval=False の
         # 間は本フラグの値に関わらず _reevaluate_live_defender 自体が呼ばれない。
         self._enable_live_defender_strict = enable_live_defender_strict
-        # [予告おじゃまの降下条件、2026-08-21 user 仕様伝授] 既定 OFF。
-        # user 判断「一旦は振らせていい」により従来の挙動 (予告量>0なら
-        # 降らせる) を既定のまま維持する。True にすると攻撃側が連鎖中の間は
-        # 降らせず、受け側の生盤面で評価する (仕様に忠実だが、学習モデルが
-        # 予告をほぼ無視するため受け側が無傷に見える副作用が戻る恐れがあり、
-        # 効果確認前に既定 ON にはしない)。
+        # [予告おじゃまの降下条件、2026-08-21 user 仕様伝授] **既定 ON**。
+        # 当初は「一旦は振らせていい」で既定OFFにしたが、user から
+        # 「モデルが予告があっても無傷では不利ではない、は時系列を無視すれば
+        # あっている (相殺の可能性があるため)」という指摘を受けて既定ONに
+        # 変更した。物理的に降らせる処理は「相殺できるかもしれない予告」を
+        # 「もう降った確定事項」として扱う**過剰補正**であり、正しい判断を
+        # 歪めていた (docs/KNOWN_WEAKNESSES.md W12 の訂正参照)。
+        # True では攻撃側が連鎖中の間は降らせず、受け側の生盤面で評価する。
+        # 予告は snapshot 側が forecast として保持し続けるので情報は失われない。
         # 実装位置: _reevaluate_live_defender 内の land_pending_ojama_onto_board
         # 呼び出し直前。
         self._enable_pending_landing_gate = enable_pending_landing_gate
