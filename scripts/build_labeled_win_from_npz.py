@@ -1166,6 +1166,12 @@ CARRY_OPPONENT_COLUMNS: tuple[str, ...] = (
 # (向きの決定は学習に委ねる、CLAUDE.md「観測軸を提供→学習で重要度を発見」)。
 # 0除算防止の epsilon はマジックナンバー化を避けて定数化。
 COLOR_OJAMA_RATIO_EPS: float = 1e-6
+# 色ぷよの打ち消す力の減衰スパン (2026-08-21)。
+# 「相手よりこれだけ多くおじゃまを抱えたら、色ぷよで打ち消す力がゼロになる」
+# 量。diff_board_ojama_count の実測片側最大 (0.694、62本 32.5万行) をそのまま
+# 使う。盤面に載るおじゃま量の物理的な上限側から決めた値であり、特定シーンから
+# 逆算した調整値ではない (過学習禁止規約準拠)。
+_COLOR_OFFSET_DECAY_SPAN: float = 0.694
 PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     "color_ojama_ratio_own", "color_diff_x_ojama_diff",
     # --- W12根治 (2026-08-16、アーキ設計確定分) ---
@@ -1174,6 +1180,30 @@ PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     # アーキ指示)。own専用の比率で side非依存の絶対量、diff化・対称化の
     # 一括変換は通さない (このタプル自体が既に own-only レーン)。
     "color_forecast_ratio_own",
+    # --- 色ぷよの打ち消す力 (2026-08-21、user 伝授) ---
+    # color_offset_power: 色ぷよ数の差 × 減衰係数。
+    #
+    # user 伝授の構造:
+    #   「状態によって大きく変わる。
+    #     ほぼ互角かつ保留なし → 多い方が有利。
+    #     相手よりお邪魔多くなるほど → お邪魔の不利を打ち消す力が弱まる」
+    #   減衰の効き方は「ある程度比例しそう」「普通に単純に増えるほど減る」
+    #   (2026-08-21 の往復で確定。閾値・条件分岐は入れない)。
+    #
+    # つまり色ぷよは「おじゃまの不利を打ち消す力」として働くが、相手より
+    # おじゃまを多く抱えるほどその力が減衰する (材料はあるのに組み直す
+    # 余地が無くなる)。おじゃま差が0なら減衰せず色ぷよ差がそのまま効くので、
+    # 「ほぼ互角かつ保留なし → 多い方が有利」は同じ式で自然に表現される
+    # (状態を条件で切り出す必要がない)。
+    #
+    # 既存の `color_ojama_ratio_own` (色ぷよ÷おじゃま) や
+    # `color_diff_x_ojama_diff` (色ぷよ差×おじゃま差) では減衰を表せない:
+    #   - 比は単調に下がるだけで「打ち消す力の減衰」という向きを持たない
+    #   - 積は符号が反転する (相手よりおじゃまが少ないとき負になる) ため
+    #     「多くなるほど弱まる」という片側の効果として読めない
+    # 実測でも両者は 21位/35位 とほぼ死んでいる
+    # (data/verify/retrain_model62_2col_2026-08-21/permutation_importance_full.csv)。
+    "color_offset_power",
 )
 
 # ============================
@@ -1777,6 +1807,27 @@ def _add_pair_interaction_columns(rows: list[dict]) -> list[dict]:
         diff_color = float(row.get("diff_board_color_puyo_total", float("nan")))
         diff_ojama = float(row.get("diff_board_ojama_count", float("nan")))
         row["color_diff_x_ojama_diff"] = diff_color * diff_ojama
+        # 色ぷよの打ち消す力 (2026-08-21、user 伝授)。
+        #
+        # diff_* の規約 (実データで確認、2026-08-21):
+        #   diff_<col> = 自分の値 - 相手の直近値。**0 が互角**で、
+        #   0.5 基準ではない (実測レンジ -0.694〜+0.694、中央値0)。
+        #   diff_board_ojama_count が**プラス = 自分のおじゃまが多い = 不利**
+        #   (実測勝率: +0.10超で0.207 / 0付近で0.496 / -0.10未満で0.744)。
+        #
+        # 相手より多く抱えているおじゃまの量 = max(0, diff_ojama)。
+        # 減衰は単純な比例 (user 判断「普通に単純に増えるほど減る」)。
+        # 係数の分母 _COLOR_OFFSET_DECAY_SPAN は「これだけ相手より多く
+        # 抱えたら打ち消す力がゼロになる」量。実測の片側最大 0.694 を
+        # そのまま使う (盤面に載るおじゃまの物理的な上限側であり、
+        # シーンから逆算した調整値ではない)。
+        if np.isfinite(diff_color) and np.isfinite(diff_ojama):
+            excess = max(0.0, diff_ojama)  # 相手より多く抱えている分
+            decay = max(0.0, 1.0 - excess / _COLOR_OFFSET_DECAY_SPAN)
+            # 色ぷよ差そのものを減衰させる (0 が互角なのでそのまま掛ける)
+            row["color_offset_power"] = diff_color * decay
+        else:
+            row["color_offset_power"] = float("nan")
     return rows
 
 
