@@ -2347,17 +2347,26 @@ def test_expected_fire_power_constants_values() -> None:
 
 
 def _headroom_board(height: int) -> Board:
-    """DEATH_COL(列2)の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
+    """**全列**の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
 
     隣接同色を作らないため 1 手追加でも4連結が完成せず、
-    _takapt_best_drop が best_board=None (発火点フォールバック=DEATH_COL) を
-    返すことを保証する (height<=11 なら窒息もしない)。
+    _takapt_best_drop が best_board=None (発火点が決まらない) を返すことを
+    保証する (height<=11 なら窒息もしない)。
+
+    2026-08-21 変更: 発火点が決まらないときの代用値を DEATH_COL 単独から
+    **全列平均**に変えた (user 判断)。3列目だけに積む旧 fixture では
+    「3列目は9段だが他5列は空」= 全列平均の余裕が 11.5段 になり、
+    12個/18個 (2〜3段) では何も動かず折れ点を検証できなくなる。
+    全列を同じ高さに積めば全列平均 = その列の余裕と一致し、
+    「余裕 height 段の盤面」という検証意図がそのまま保てる。
     """
     g = _empty_grid()
     colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN]
     top = BOARD_ROWS - 1
-    for i in range(height):
-        g[top - i][2] = colors[i % 3]
+    for col in range(BOARD_COLS):
+        for i in range(height):
+            # 列ごとに色の位相をずらし、横方向にも同色が並ばないようにする
+            g[top - i][col] = colors[(i + col) % 3]
     return Board.from_list(g)
 
 

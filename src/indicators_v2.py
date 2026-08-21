@@ -3981,13 +3981,28 @@ def _ignition_headroom_dan(board: Board, sim: ChainSimulator) -> float:
     Returns:
         float: 余裕段数 (0〜MAX_COL_HEIGHT の範囲、通常は正)。
     """
-    from src.board import DEATH_COL
+    from src.board import BOARD_COLS, DEATH_COL
     _, best_board = _takapt_best_drop(board, sim)
     ignite_col = (
         _diff_dropped_column(board, best_board) if best_board is not None else None
     )
-    col = ignite_col if ignite_col is not None else DEATH_COL
-    return float(MAX_COL_HEIGHT - board.height_of(col))
+    if ignite_col is not None:
+        return float(MAX_COL_HEIGHT - board.height_of(ignite_col))
+    # 発火点が決まらない盤面 (1手で連鎖が撃てない、序盤に頻出) の代用。
+    #
+    # 2026-08-21 user 判断で **全列平均** に変更 (従来は DEATH_COL 1本)。
+    # 従来は窒息判定列 (3列目) だけの余裕で代用していたが、発火点が未確定な
+    # 局面では「盤面全体にどれだけ積む余地が残っているか」の方が実態に近い
+    # (発火点は特定の1列に決まっておらず、どの列にも組む可能性がある)。
+    # 序盤はほぼ全行がこの経路を通るため、代用値の選び方がそのまま序盤の
+    # 値の意味を決める。
+    #
+    # DEATH_COL 単独をやめた理由: 3列目だけが低いが他列は高い盤面、あるいは
+    # その逆で、同じ「余裕」が全く違う危険度を意味してしまう。平均なら
+    # 盤面全体の圧迫を反映する。
+    total = sum(MAX_COL_HEIGHT - board.height_of(c) for c in range(BOARD_COLS))
+    _ = DEATH_COL  # 旧実装の参照列 (履歴のため名前を残す)
+    return float(total) / float(BOARD_COLS)
 
 
 def _ojama_damage_from_margin(remaining_margin_dan: float) -> float:
