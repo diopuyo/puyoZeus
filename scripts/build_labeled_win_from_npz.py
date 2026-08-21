@@ -278,6 +278,7 @@ import functools
 import math
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Callable
 
@@ -1172,6 +1173,32 @@ COLOR_OJAMA_RATIO_EPS: float = 1e-6
 # 使う。盤面に載るおじゃま量の物理的な上限側から決めた値であり、特定シーンから
 # 逆算した調整値ではない (過学習禁止規約準拠)。
 _COLOR_OFFSET_DECAY_SPAN: float = 0.694
+# ============================
+# 応手の到達確率 (2026-08-21、user 指示で学習へ合流)
+# ============================
+# 「返せるか」を計算して渡す列。予告おじゃまが効かない根本原因は、予告量に
+# **返せる分と返せない分が混ざっている**ことだった (user 指摘 2026-08-21
+# 「予告は帰るものも帰らないものも見るからそうなるんです」)。相関の実測でも
+# 予告6列は互いに r=0.93〜1.00 で同じ量の言い換えにすぎず、全て40位以下。
+# 表現を増やしても解決しないため、**返せる見込みそのもの**を渡す。
+#
+# user 提示の目指す形:
+#   予告が自分側にあるとき (1) 相手の連鎖が確定するまでの時間を予測し
+#   (2) その時間から打てるツモ数を割り出し (3) 受けるか対応するかを判定する。
+#
+# 閾値は2種類作る (どちらが効くかは実測で決める):
+#   - vs_opp_fire: 相手が今撃てる連鎖の送りおじゃま量 = 「撃たれたら返せるか」
+#   - vs_forecast: 実際の予告量 = 「いま飛んできている分を返せるか」
+#     (予告の分離が目的なので、こちらが本命)
+# K は 2手/4手の2水準に絞る (列の増えすぎを防ぐ。K=1は情報が薄く、
+# K=3 は K=2/K=4 の間で冗長)。
+COUNTER_REACH_COLUMNS: tuple[str, ...] = (
+    "counter_reach_k2_vs_opp_fire", "counter_reach_k4_vs_opp_fire",
+    "counter_reach_k2_vs_forecast", "counter_reach_k4_vs_forecast",
+)
+# 到達確率を計算する K 水準 (上記列名と対応)
+_COUNTER_REACH_K_LEVELS: tuple[int, ...] = (2, 4)
+
 PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     "color_ojama_ratio_own", "color_diff_x_ojama_diff",
     # --- W12根治 (2026-08-16、アーキ設計確定分) ---
@@ -1831,6 +1858,110 @@ def _add_pair_interaction_columns(rows: list[dict]) -> list[dict]:
     return rows
 
 
+def _attach_counter_reach_columns(
+    rows: list[dict],
+    grids: "np.ndarray | None" = None,
+) -> None:
+    """応手の到達確率 (返せる見込み) を in-place で追加する (2026-08-21)。
+
+    第1層のレジストリ (Board→score の純関数) には乗らない列。相手の盤面と
+    経過秒を必要とするため、第2層 (相手関係・時系列を付ける後段パス) の
+    住人として実装する。`_compute_row` と既存 attach 群は無変更。
+
+    ## 何を計算するか
+
+    自分の盤面から「K手 (2手/4手) 積んで、閾値以上のおじゃまを返せる確率」。
+    閾値は2種類:
+      - vs_opp_fire: 相手が今撃てる連鎖の送りおじゃま量 (撃たれたら返せるか)
+      - vs_forecast: 実際の予告量 (いま飛んできている分を返せるか)
+
+    ## なぜ必要か
+
+    予告おじゃまが学習で効かない根本原因は、予告量に**返せる分と返せない分が
+    混ざっている**こと (user 指摘 2026-08-21)。相関の実測でも予告6列は互いに
+    r=0.93〜1.00 で同じ量の言い換えにすぎず全て40位以下だった。表現を増やす
+    のではなく「返せる見込み」そのものを渡すのが分離の唯一の道。
+
+    ## コスト
+
+    精密版 (`counter_reach_probability`) を使う。実測 528ms/件、62本34万行で
+    直列47.8時間 / 動画単位14並列で205分 (user 判断で精密版を選択、
+    高速版は連結ボーナス0近似の誤差があるため)。盤面のユニーク率が95.3%
+    (1手ごとに撮る方式では同じ盤面がほぼ続かない) なのでキャッシュはほぼ
+    効かない — この実測が着工判断の前提だった。
+
+    Args:
+        rows: 1動画分の行 (side/t_sec/game_idx を含む、in-place で列を足す)。
+        grids: 同じ npz の盤面配列。None なら列を作らない (従来挙動)。
+    """
+    if grids is None:
+        return
+    # 相手の直近盤面を引くための索引: (game_idx, side) ごとに t_sec 昇順の
+    # (t_sec, 行index) を持つ。merge_asof と同じ「直近過去」の考え方を
+    # 軽量に実装する (pandas を通さず行数分のループで済ませる)。
+    by_key: dict[tuple, list[tuple[float, int]]] = defaultdict(list)
+    for i, r in enumerate(rows):
+        by_key[(r.get("game_idx"), r.get("side"))].append(
+            (float(r.get("t_sec", 0.0)), i),
+        )
+    for v in by_key.values():
+        v.sort()
+
+    for i, r in enumerate(rows):
+        side = r.get("side")
+        opp_side = "2P" if side == "1P" else "1P"
+        opp_list = by_key.get((r.get("game_idx"), opp_side), [])
+        t = float(r.get("t_sec", 0.0))
+        # 相手の「同時刻以前で最も新しい」行を二分探索で引く
+        lo, hi = 0, len(opp_list)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if opp_list[mid][0] <= t:
+                lo = mid + 1
+            else:
+                hi = mid
+        opp_idx = opp_list[lo - 1][1] if lo > 0 else None
+
+        own_board = Board.from_list(np.asarray(grids[i]).tolist())
+        # 経過秒は 0.0 固定にする。マージンタイム (試合が長引くと送り量が
+        # 増える補正) を掛けると同じ盤面でも試合の進み具合で閾値が変わり、
+        # 既存の第1層 (`_native_board_fire_ojama` は elapsed_sec=0.0 固定、
+        # scripts/build_labeled_win_from_npz.py:712-716) と食い違う。
+        # まず「盤面から返せるか」を素で測り、マージンタイムの扱いは
+        # 効果が確認できてから揃える (2026-08-21)。
+        elapsed_for_thr = 0.0
+        # 閾値1: 相手が今撃てる連鎖が送ってくるおじゃま量。
+        # `immediate_fire_power` の raw が**おじゃま換算の個数そのもの**
+        # (takapt 探索の最良配置に calculate_chain_score → score_to_ojama、
+        # src/indicators_v2.py:447-470)。連鎖数から個数を仮定する必要はない。
+        # user 指示「対応は相手が連鎖を撃ってきた時にその連鎖に対して返す
+        # ことがどれだけ可能かをモンテカルロで確認する」に対応する閾値。
+        if opp_idx is not None:
+            opp_board = Board.from_list(np.asarray(grids[opp_idx]).tolist())
+            thr_opp = float(
+                iv.immediate_fire_power(opp_board, elapsed_sec=elapsed_for_thr).raw,
+            )
+        else:
+            thr_opp = float("nan")
+        # 閾値2: 実際の予告量 (上限なしの生値)
+        thr_fc = float(r.get("ojama_forecast_uncapped", float("nan")))
+        elapsed = elapsed_for_thr  # 上記と同じ理由で 0.0 固定
+
+        for label, thr in (("vs_opp_fire", thr_opp), ("vs_forecast", thr_fc)):
+            if not np.isfinite(thr):
+                for k in _COUNTER_REACH_K_LEVELS:
+                    r[f"counter_reach_k{k}_{label}"] = float("nan")
+                continue
+            res = iv.counter_reach_probability(
+                own_board, thr, elapsed_sec=elapsed,
+                k_levels=_COUNTER_REACH_K_LEVELS,
+            )
+            for k in _COUNTER_REACH_K_LEVELS:
+                r[f"counter_reach_k{k}_{label}"] = float(
+                    res.probabilities.get(k, float("nan")),
+                )
+
+
 def _all_clear_next_state(state: float, delta: float, chain_tag: str) -> float:
     """1ステップ分の状態遷移 (ON/OFF 判定の核心。定数の意味は
     ALL_CLEAR_JUMP_LOWER/UPPER_BOUND_SCORE・MAX_DROP_BONUS_SCORE 直上の
@@ -2083,6 +2214,10 @@ def convert_one_npz(
     # ため必ず _attach_opponent_diff_columns の後に呼ぶ (関数docstring参照)。
     _attach_ojama_forecast_log_columns(rows, grids)
     rows = _add_pair_interaction_columns(rows)
+    # 応手の到達確率 (2026-08-21)。相手の盤面を引くため、相手関係の列が
+    # 揃った後に呼ぶ。精密版を使うので重い (実測 528ms/件) — 動画単位の
+    # 並列で吸収する前提。
+    _attach_counter_reach_columns(rows, grids)
     return rows
 
 
