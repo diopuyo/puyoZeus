@@ -1283,6 +1283,37 @@ OJAMA_TRUTH_COLUMNS: tuple[str, ...] = (
     #   終盤11.3%) ことを1列に圧縮して表現する (位相を列で分けない、
     #   アーキ指示=列数節約)。
     "ojama_forecast_log", "ojama_forecast_progress_interaction",
+    # --- 局面(試合の進み具合)を独立列として追加 (2026-08-21) ---
+    # match_progress: 両者の board_puyo_total 平均 (0-1)。従来は
+    #   ojama_forecast_progress_interaction の内部にだけ埋まっていたため、
+    #   学習器 (HistGradientBoostingClassifier, max_depth=4) が「局面ごとに
+    #   同じ数値の意味が変わる」構造を自力で学べなかった。素の列として渡すと
+    #   全52列 × 局面 の交互作用を木が自力で発見できる (積列を人が決め打ち
+    #   しない = 「観測軸を提供して学習で重要度を発見する」設計方針に沿う)。
+    # 注意: 試合の相対進行率 (終端でスケールする形) にしてはならない。
+    #   終端は未来情報でリークになり、リアルタイム実況でも計算不能。
+    #   本列は「いま盤面にどれだけぷよが載っているか」の両者平均であり、
+    #   その時点の情報だけで決まる。
+    # 注意: 両者で同じ値になる (side 対称) ため単独では勝敗を識別できない。
+    #   効果は交互作用経由でのみ出る = 単独 permutation が小さくても
+    #   「効いていない」とは判定できない。
+    "match_progress",
+    # --- おじゃまの非線形な重み (2026-08-21、user指示) ---
+    # ojama_damage_forecast: iv.ojama_damage(own_board, forecast_uncapped_raw)。
+    #   これまで予告おじゃまは線形の正規化 (ojama_forecast = x/72、
+    #   ojama_net_balance = (x+72)/144) だけで学習に入っていた。しかし user
+    #   伝授では「おじゃま3個は無害、60個はほぼ死」「折れ点が12個(2段)と
+    #   18個(3段)」「盤面が埋まるほど1個あたりの効きが増幅する」という
+    #   明確な非線形がある (memory reference_ojama_damage_nonlinear_2026-07-29 /
+    #   reference_ojama_damage_function_2026-07-29)。
+    #   iv.ojama_damage() はこの構造を「発火点までの余裕段数 − おじゃまの
+    #   段数」の引き算1本に統合して実装済みだったが、呼び出し元が打ち合いの
+    #   測定スクリプトだけで、勝敗予測には繋がっていなかった (2026-08-21 調査)。
+    #   同じ予告量でも盤面の埋まり具合で致命度が変わることを学習に渡す。
+    # 上限なしの生値を渡す理由: 予告は 72個で頭打ちにすると「もう死ぬ」域の
+    #   差が消える。ojama_damage 側が段数換算で飽和を扱うので、入力は
+    #   打ち切らない方が情報が残る。
+    "ojama_damage_forecast",
 )
 
 
@@ -1405,7 +1436,10 @@ def _attach_ojama_margin_column(rows: list[dict]) -> None:
         r["ojama_margin"] = iv.ojama_net_balance(margin_raw).score
 
 
-def _attach_ojama_forecast_log_columns(rows: list[dict]) -> None:
+def _attach_ojama_forecast_log_columns(
+    rows: list[dict],
+    grids: "np.ndarray | None" = None,
+) -> None:
     """W12根治 (2026-08-16、アーキ設計確定分) の3列を in-place で追加する。
 
     docs/KNOWN_WEAKNESSES.md W12「学習モデルが未着弾おじゃま予告をほぼ
@@ -1453,7 +1487,10 @@ def _attach_ojama_forecast_log_columns(rows: list[dict]) -> None:
     で代替)、猶予時間はn不足で保留 (63本の再収集後に再検討)。
     """
     log_denom = math.log1p(PENDING_ABS_CAP)
-    for r in rows:
+    # grids[i] を引くため enumerate にする (2026-08-21、ojama_damage_forecast)。
+    # rows と grids は同一 npz の同じ行順なので index が一致する
+    # (convert_one_npz が rows[i] を grids[i] から作っている)。
+    for i, r in enumerate(rows):
         forecast_raw = float(r.get("ojama_forecast_uncapped", float("nan")))
         color_score = float(r.get("board_color_puyo_total", float("nan")))
         color_raw = color_score * iv.ON_FIELD_CAP
@@ -1468,12 +1505,15 @@ def _attach_ojama_forecast_log_columns(rows: list[dict]) -> None:
 
         own_total_score = float(r.get("board_puyo_total", float("nan")))
         diff_total = float(r.get("diff_board_puyo_total", float("nan")))
-        if (
-            np.isfinite(forecast_log)
-            and np.isfinite(own_total_score)
-            and np.isfinite(diff_total)
-        ):
+        # 局面は予告の可否とは独立に決まるので、先に単独で確定させる
+        # (2026-08-21)。従来は交互作用の内部でしか計算しておらず、
+        # 予告が読めない行では局面も失われていた。
+        if np.isfinite(own_total_score) and np.isfinite(diff_total):
             match_progress = iv._clamp01(own_total_score - diff_total / 2.0)
+        else:
+            match_progress = float("nan")
+        r["match_progress"] = match_progress
+        if np.isfinite(forecast_log) and np.isfinite(match_progress):
             r["ojama_forecast_progress_interaction"] = forecast_log * match_progress
         else:
             r["ojama_forecast_progress_interaction"] = float("nan")
@@ -1484,6 +1524,22 @@ def _attach_ojama_forecast_log_columns(rows: list[dict]) -> None:
             )
         else:
             r["color_forecast_ratio_own"] = float("nan")
+
+        # おじゃまの非線形な重み (2026-08-21、user指示)。
+        # grids が渡されないとき (旧い呼び出し) は列を作らない = 従来の挙動。
+        if grids is None:
+            continue
+        if not np.isfinite(forecast_raw):
+            r["ojama_damage_forecast"] = float("nan")
+            continue
+        # Board の復元は _compute_row と同じ流儀 (from_list) を使う。
+        # 例外は握りつぶさない: 握りつぶすと全行 NaN になっていても
+        # 「欠測が多い列」に見えてしまい、実装ミスに気づけない
+        # (2026-08-21 実際にそれで一度全欠測を作った)。
+        board = Board.from_list(np.asarray(grids[i]).tolist())
+        r["ojama_damage_forecast"] = float(
+            iv.ojama_damage(board, int(max(0.0, forecast_raw))).score,
+        )
 
 
 def _resolve_indicator_registry(
@@ -1974,7 +2030,7 @@ def convert_one_npz(
     rows = _attach_opponent_diff_columns(rows, diff_cols, tuple(carry_cols))
     # W12根治 (2026-08-16): diff_board_puyo_total (直上で計算済み) を要する
     # ため必ず _attach_opponent_diff_columns の後に呼ぶ (関数docstring参照)。
-    _attach_ojama_forecast_log_columns(rows)
+    _attach_ojama_forecast_log_columns(rows, grids)
     rows = _add_pair_interaction_columns(rows)
     return rows
 
