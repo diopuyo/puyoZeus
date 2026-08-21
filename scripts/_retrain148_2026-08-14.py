@@ -42,6 +42,39 @@ META_COLS: frozenset = frozenset({
 
 SOURCE_COLS: frozenset = frozenset({"all_clear_source", "ojama_source"})
 
+# 完全重複・強重複により学習から外す列 (2026-08-21、相関の実測にもとづく)。
+#
+# scripts/_diag_feature_correlation_2026-08-21.py で 62本 32.5万行の相関を
+# 測ったところ、同じものを測っている列が15組あった。重複列は学習を不安定に
+# する (木がどれか1本しか使わず、重要度が割れて全部弱く見える = 共食い)。
+#
+# ここで外すのは**判断の余地がない3列だけ**にする。数字の上では他にも候補が
+# あるが、user 方針で保留した:
+#   - board_color_puyo_total (49位、board_puyo_total と r=0.950) は user 伝授の
+#     絶対律「色ぷよの多さは未構造でも構造化に向かえば強い構造につながる
+#     (材料=潜在力)」に関わるため残す。2026-08-21 追加の color_offset_power
+#     (色ぷよの打ち消す力) がこれを救う設計なので効果確認が先
+#   - diff_board_puyo_total (17位) は効いているので削ると情報が減る恐れ
+#   - color_ojama_ratio_own (21位) は 148本では4位。どちらが選ばれるかの揺れ
+#     なので、148本に戻したときに困る可能性がある
+#
+# 除外は精度を上げる作業ではなく**学習を安定させる作業**なので、迷うものを
+# 削るメリットは薄い (user 判断 2026-08-21)。
+DUPLICATE_COLS: frozenset = frozenset({
+    # ojama_net_balance と **r=+1.000** (完全に同一)。情報がゼロ。46位
+    "ojama_net_balance_uncapped",
+    # chain_efficiency r=+0.976 / chain_articulation_point_count r=+0.929 /
+    # current_max_chain r=+0.907 と三重に重複。38位。
+    # 「火力の生値は無価値」(memory project_indicator_win_eval_2026-07-05) は
+    # 同じものを4通りで測っていたためと説明がつく
+    "immediate_fire_power",
+    # ojama_forecast r=+0.964 / ojama_forecast_progress_interaction r=+0.940。
+    # 予告の言い換えで貢献度ほぼゼロ (45位)。予告が効かない根本原因は
+    # 「返せる分と返せない分が混ざっている」ことなので表現を増やしても無意味
+    # (user 指摘 2026-08-21)
+    "ojama_forecast_log",
+})
+
 LIGHT63_EQUIV_COLS = (
     "board_color_puyo_total",
     "board_puyo_total",
@@ -79,7 +112,7 @@ def load_data(csv_path: str, quick_n_videos):
 
 
 def resolve_full_feature_cols(df):
-    exclude = META_COLS | SOURCE_COLS
+    exclude = META_COLS | SOURCE_COLS | DUPLICATE_COLS
     cols = []
     for c in df.columns:
         if c in exclude:
