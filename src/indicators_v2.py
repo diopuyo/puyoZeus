@@ -677,7 +677,8 @@ def dig_resistance(
     限界: drop_ojama は「6列に均等配分 (floor(N/6)) + 端数はランダム列」
     (chain.py._calc_ojama_drop_counts、user伝授済の実際の着弾仕様) で
     お邪魔落下オフセット未反映 + 載りきらない分サイレントスキップ
-    (窒息寸前の評価が甘い)。
+    (窒息寸前の評価が甘い)。端数列は 2026-08-25 (W39) から盤面由来の
+    決定論的シードで固定 (同一盤面→同一結果、単一実現値である点は不変)。
     """
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead():
@@ -840,9 +841,20 @@ def _search_min_ignite(
 def _dig_resistance_one(
     board: Board, sim: ChainSimulator, base_chain: int, n_ojama: int,
 ) -> float:
-    """掘り耐性: お邪魔 n_ojama 個落下後の (0.7×survival + 0.3×dig)。"""
+    """掘り耐性: お邪魔 n_ojama 個落下後の (0.7×survival + 0.3×dig)。
+
+    おじゃま端数列の選択は盤面由来の決定論的シードで固定する
+    (2026-08-25 W39 根治)。seed 省略 (OS乱数) だと端数列が呼び出しごとに
+    変わり、落下後盤面の生存/窒息が反転して同一入力でも 0.0↔1/3 の
+    離散フリップが起きていた (有利不利スコアで最大 ±12.34 点の実行間差)。
+    シード規約は `_expected_fire_seed` (zlib.crc32、プロセス非依存) を流用し、
+    n_ojama を XOR して 10/20/30 の各テスト点を独立させる。
+    """
     try:
-        ojama_board = sim.drop_ojama(board, n_ojama)
+        # 同一 (盤面, n_ojama) → 常に同一の端数列 (stateless・決定論的)
+        ojama_board = sim.drop_ojama(
+            board, n_ojama, seed=_expected_fire_seed(board) ^ n_ojama,
+        )
     except Exception:
         return 0.0
     if ojama_board.is_dead():
@@ -3524,7 +3536,8 @@ def counter_reach_probability(
     k_levels: "tuple[int, ...]" = EXPECTED_FIRE_K_LEVELS,
     active_colors: "tuple[int, ...] | None" = None,
     rng_seed: "int | None" = None,
-) -> CounterReachResult:
+    thresholds_ojama: "tuple[float, ...] | None" = None,
+) -> "CounterReachResult | dict[float, CounterReachResult]":
     """XVII 打ち合い応手確率 (precise mode、ChainSimulator厳密得点)。
 
     盤面 (通常は相手側の STABLE 確定盤面) から、試合4色のツモを K手 (1..4)
@@ -3546,49 +3559,85 @@ def counter_reach_probability(
         active_colors: 試合別4色 (省略時は盤面出現色フォールバック)。
         rng_seed: K=3,4用乱数シード明示指定 (省略時は盤面内容から自動導出、
             stateless: 同一盤面には常に同一結果)。
+        thresholds_ojama: 追加の閾値群 (2026-08-21 S1b、無料の半減)。到達
+            スコアのロールアウト自体は閾値に無依存 (hits 比較にしか使わ
+            れない) なので、ここに複数閾値を渡すと**1回のシミュレーション
+            だけ**で threshold_ojama と合わせた全閾値ぶんの結果をまとめて
+            返せる (vs_opp_fire/vs_forecast の2閾値を2回丸ごと回していた
+            従来呼び出しをコスト半減できる)。省略時 (None、既定) は従来
+            通り単一 CounterReachResult を返す (完全後方互換、既存呼び出し
+            は無変更で同じ値)。
 
     Returns:
-        CounterReachResult: K別到達確率 + 評価件数。
+        thresholds_ojama が None (既定): CounterReachResult (従来どおり)。
+        thresholds_ojama を指定した場合: `{閾値: CounterReachResult}` の
+        dict (threshold_ojama 自身も含めた全閾値、値が重複する閾値は
+        1エントリに統合)。いずれの経路でも、各閾値を個別に単独呼び出し
+        した場合と完全に同じ値 (浮動小数ビット一致) になる — K=3,4 の
+        乱数消費 (rng.choice) は閾値と無関係に毎サンプル同じ順序で行われ、
+        シードも盤面のみ由来 (_expected_fire_seed) のため乱数系列が
+        個別呼び・まとめ呼びで一致する。
     """
     sim = simulator or _SHARED_SIMULATOR
+    # 重複除去しつつ順序保持 (dict.fromkeys は Python 3.7+ で順序保持)。
+    all_thresholds: "tuple[float, ...]" = tuple(dict.fromkeys(
+        (threshold_ojama,) if thresholds_ojama is None
+        else (threshold_ojama, *thresholds_ojama),
+    ))
     if board.is_dead():
-        return _counter_reach_empty_result(k_levels)
+        empty = _counter_reach_empty_result(k_levels)
+        return empty if thresholds_ojama is None else {th: empty for th in all_thresholds}
     colors = active_colors if active_colors is not None else _near_future_active_colors(board)
 
-    hits: "dict[int, tuple[int, int]]" = {}
+    hits_by_threshold: "dict[float, dict[int, tuple[int, int]]]" = {
+        th: {} for th in all_thresholds
+    }
     if any(k in EXPECTED_FIRE_EXACT_LEVELS for k in k_levels):
-        hits.update(_counter_reach_exact_k1k2(
-            board, colors, sim, exact_beam_width, threshold_ojama, elapsed_sec,
-        ))
+        exact_multi = _counter_reach_exact_k1k2_multi(
+            board, colors, sim, exact_beam_width, all_thresholds, elapsed_sec,
+        )
+        for th in all_thresholds:
+            hits_by_threshold[th].update(exact_multi[th])
     if any(k in EXPECTED_FIRE_MC_LEVELS for k in k_levels):
         seed = rng_seed if rng_seed is not None else _expected_fire_seed(board)
         rng = random.Random(seed)
-        hits.update(_counter_reach_mc_k3k4(
-            board, colors, sim, mc_beam_width, mc_n_samples, rng, threshold_ojama, elapsed_sec,
-        ))
-    return _counter_reach_finalize(hits, k_levels)
+        mc_multi = _counter_reach_mc_k3k4_multi(
+            board, colors, sim, mc_beam_width, mc_n_samples, rng, all_thresholds, elapsed_sec,
+        )
+        for th in all_thresholds:
+            hits_by_threshold[th].update(mc_multi[th])
+
+    results = {
+        th: _counter_reach_finalize(hits_by_threshold[th], k_levels)
+        for th in all_thresholds
+    }
+    return results[threshold_ojama] if thresholds_ojama is None else results
 
 
-def _counter_reach_exact_k1k2(
+def _counter_reach_exact_k1k2_multi(
     board: Board,
     colors: "tuple[int, ...]",
     sim: ChainSimulator,
     beam_width: int,
-    threshold_ojama: float,
+    thresholds: "tuple[float, ...]",
     elapsed_sec: float,
-) -> "dict[int, tuple[int, int]]":
-    """K=1,2 の厳密到達判定 (_expected_fire_exact_k1k2 と同じ列挙構造、
+) -> "dict[float, dict[int, tuple[int, int]]]":
+    """K=1,2 の厳密到達判定を複数閾値まとめて計算する (S1b 2026-08-21)。
 
-    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    _expected_fire_exact_k1k2 と同じ列挙構造。到達スコア自体は閾値に
+    無依存なので、1回だけ求めて全閾値と比較する (シミュレーション再実行
+    を避ける、counter_reach_probability docstring 参照)。
     """
     pairs = _expected_fire_all_pairs(colors)
-    hits = {1: 0, 2: 0}
+    hits: "dict[float, dict[int, int]]" = {th: {1: 0, 2: 0} for th in thresholds}
     counts = {1: 0, 2: 0}
 
     for pair1 in pairs:
         expanded1 = _near_future_known_expand([(0.0, board)], pair1, sim)
         score_h1 = expanded1[0][0] if expanded1 else 0.0
-        hits[1] += int(_score_to_ojama_count(score_h1, elapsed_sec) >= threshold_ojama)
+        ojama_h1 = _score_to_ojama_count(score_h1, elapsed_sec)
+        for th in thresholds:
+            hits[th][1] += int(ojama_h1 >= th)
         counts[1] += 1
 
         frontier_h1 = [(s, b) for s, b, _c in expanded1[:beam_width]] if expanded1 else []
@@ -3596,27 +3645,36 @@ def _counter_reach_exact_k1k2(
             expanded2 = _near_future_known_expand(frontier_h1, pair2, sim) if frontier_h1 else []
             top_h2 = expanded2[0][0] if expanded2 else 0.0
             value_k2 = max(score_h1, top_h2)
-            hits[2] += int(_score_to_ojama_count(value_k2, elapsed_sec) >= threshold_ojama)
+            ojama_k2 = _score_to_ojama_count(value_k2, elapsed_sec)
+            for th in thresholds:
+                hits[th][2] += int(ojama_k2 >= th)
             counts[2] += 1
 
-    return {1: (hits[1], counts[1]), 2: (hits[2], counts[2])}
+    return {
+        th: {1: (hits[th][1], counts[1]), 2: (hits[th][2], counts[2])}
+        for th in thresholds
+    }
 
 
-def _counter_reach_mc_k3k4(
+def _counter_reach_mc_k3k4_multi(
     board: Board,
     colors: "tuple[int, ...]",
     sim: ChainSimulator,
     beam_width: int,
     n_samples: int,
     rng: "random.Random",
-    threshold_ojama: float,
+    thresholds: "tuple[float, ...]",
     elapsed_sec: float,
-) -> "dict[int, tuple[int, int]]":
-    """K=3,4 のモンテカルロ到達判定 (_expected_fire_mc_k3k4 と同じロールアウト、
+) -> "dict[float, dict[int, tuple[int, int]]]":
+    """K=3,4 のモンテカルロ到達判定を複数閾値まとめて計算する (S1b 2026-08-21)。
 
-    集計を「平均」から「閾値到達件数」に差し替えたもの)。
+    _expected_fire_mc_k3k4 と同じロールアウト。乱数消費 (rng.choice) は
+    閾値と無関係に毎サンプル同じ順序で行われるため、ここで複数閾値を
+    まとめても単一閾値を個別に呼んだ場合と完全に同じ乱数系列・同じ
+    best_score 系列になる (rng が同一シードから生成されていれば結果は
+    ビット一致、counter_reach_probability docstring 参照)。
     """
-    hits = {3: 0, 4: 0}
+    hits: "dict[float, dict[int, int]]" = {th: {3: 0, 4: 0} for th in thresholds}
     for _ in range(n_samples):
         frontier: "list[tuple[float, Board]]" = [(0.0, board)]
         best_score = 0.0
@@ -3632,10 +3690,10 @@ def _counter_reach_mc_k3k4(
                 else:
                     frontier = []
             if hand in (3, 4):
-                hits[hand] += int(
-                    _score_to_ojama_count(best_score, elapsed_sec) >= threshold_ojama,
-                )
-    return {3: (hits[3], n_samples), 4: (hits[4], n_samples)}
+                ojama = _score_to_ojama_count(best_score, elapsed_sec)
+                for th in thresholds:
+                    hits[th][hand] += int(ojama >= th)
+    return {th: {3: (hits[th][3], n_samples), 4: (hits[th][4], n_samples)} for th in thresholds}
 
 
 def _counter_reach_finalize(
@@ -4024,10 +4082,51 @@ def _ojama_damage_from_margin(remaining_margin_dan: float) -> float:
     return OJAMA_DAMAGE_CEIL
 
 
+def _ojama_damage_virtual_landing(
+    board: Board, ojama_count: float, sim: ChainSimulator,
+) -> IndicatorV2Value:
+    """仮想着弾方式のおじゃまダメージ (Q-04 修正、fable architect 設計確定版)。
+
+    「発火点余裕 − おじゃま段数」の引き算近似 (旧方式、発火点が決まらない
+    盤面では全6列平均に希釈され窒息寸前の列でも無害帯に埋没するバグが
+    あった) をやめ、`ChainSimulator.drop_ojama` (reference_ojama_landing_
+    pattern.md 準拠、均等floor(N/6)+端数ランダム) で実際に着弾させてから
+    死亡判定・余裕評価を行う。
+
+    端数 (6で割った余り) はシード依存の実現値を避けるため、着弾後の余裕
+    段数から連続量 (端数/6段) として控除する期待値近似とする
+    (feedback_overfitting_awareness_2026-08-04: 単一実現値への過適合回避)。
+    6の倍数分 (base) は端数が0なので `drop_ojama` は乱数経路に入らず
+    完全決定的。
+
+    Args:
+        board: 着弾前の自分側盤面 (STABLE 確定盤面、非破壊)。
+        ojama_count: 評価したいおじゃま量 (個数、生値、負値は0扱い)。
+        sim: ChainSimulator インスタンス。
+
+    Returns:
+        IndicatorV2Value: score=0〜1、raw=着弾後の残り余裕段数
+            (端数控除後、負値あり得る)。
+    """
+    if board.is_dead():
+        return IndicatorV2Value(score=OJAMA_DAMAGE_CEIL, raw=REMAINING_MARGIN_FLOOR_DAN)
+    count = max(0.0, float(ojama_count))
+    floor_dan = math.floor(count / OJAMA_DAMAGE_PER_DAN)
+    base_count = int(floor_dan * OJAMA_DAMAGE_PER_DAN)
+    remainder = count - base_count
+    landed_board = sim.drop_ojama(board, base_count)
+    if landed_board.is_dead():
+        return IndicatorV2Value(score=OJAMA_DAMAGE_CEIL, raw=REMAINING_MARGIN_FLOOR_DAN)
+    headroom_after = _ignition_headroom_dan(landed_board, sim)
+    remaining = headroom_after - (remainder / OJAMA_DAMAGE_PER_DAN)
+    return IndicatorV2Value(score=_clamp01(_ojama_damage_from_margin(remaining)), raw=remaining)
+
+
 def ojama_damage(
     board: Board,
     ojama_count: int,
     simulator: ChainSimulator | None = None,
+    virtual_landing: bool = False,
 ) -> IndicatorV2Value:
     """XVIII おじゃまダメージ (発火点埋没モデル、user構造伝授の暫定実装)。
 
@@ -4045,13 +4144,24 @@ def ojama_damage(
             別の「評価したい量」を渡すこと、二重計上防止)。
         ojama_count: 評価したいおじゃま量 (個数、生値)。
         simulator: ChainSimulator インスタンス (省略時は共有インスタンス)。
+        virtual_landing: True で仮想着弾方式 (Q-04修正版、
+            `_ojama_damage_virtual_landing` 参照) に切り替える。
+            既定 False (旧方式、発火点までの引き算近似) で
+            **既存呼び出し元の挙動は完全に維持される** (backwards
+            compat、optional 引数追加のみ)。発火点が決まらない盤面
+            (序盤等) で全6列平均に希釈され窒息寸前の列でも無害帯に
+            埋没する既知の意味論不一致 (Q-04) を解消したい場合のみ
+            True を渡すこと。
 
     Returns:
         IndicatorV2Value: score=0〜1 ダメージ (大きいほど不利、
             折れ線3水準 OJAMA_DAMAGE_FLOOR/MID/CEIL で正規化済み)、
-            raw=残り余裕段数 (headroom_dan − ojama_dan、負値あり得る)。
+            raw=残り余裕段数 (virtual_landing=False: headroom_dan −
+            ojama_dan。True: 仮想着弾後の残り余裕段数、負値あり得る)。
     """
     sim = simulator or _SHARED_SIMULATOR
+    if virtual_landing:
+        return _ojama_damage_virtual_landing(board, ojama_count, sim)
     if board.is_dead():
         return IndicatorV2Value(score=OJAMA_DAMAGE_CEIL, raw=REMAINING_MARGIN_FLOOR_DAN)
     headroom_dan = _ignition_headroom_dan(board, sim)

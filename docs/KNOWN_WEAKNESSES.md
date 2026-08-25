@@ -131,8 +131,86 @@
   必ず既存ゲートを素通しで満たす (tests/test_scoring.py の不変条件テストで固定)。
   ResolvedExchangeTracker のコードは無変更、誤った回帰テスト
   (test_resolved_inactive_when_score_below_noise_gate) のみ意図を訂正
-- **チケット (バックテスト必須)**: ②CHAIN保持定数の実測ベース再較正 (cycle71系への回帰リスク)
-  ④「連鎖中の差分は10の倍数」制約によるクロスチェック層 (W2の制約を再利用)
+- **チケット②CHAIN保持定数の実測ベース再較正 — 2026-08-21のW30移管は誤りだった
+  (2026-08-22 訂正)**: 「論点は保持定数ではない」という2026-08-21の再定義は
+  誤り。**実測較正式 (固定項2.61s + 係数1.17s×連鎖数、23動画418イベント、
+  R²=0.356、`src/recognition_pipeline.py:731-736` に2026-07-24実装済み) は
+  `scripts/visualize_advantage_overlay.py` (本番オーバーレイ経路) へ一度も
+  配線されておらず、常にライブラリ既定 (固定項0.0 + 0.3秒/連鎖) のまま
+  だった**ため、本チケットは未実装のまま放置されていた。
+  **実害 (2026-08-22 実測で確定)**: `formula` 機構
+  (`_apply_chain_formula_early_fire`) は「既にアクティブな疑似 ChainEvent
+  があれば新規発火しない」設計のため、保持時間切れのたびに「その時点で
+  残っている分」だけを対象にした新しい ChainEvent に置き換わる。t=6717.5
+  の実例 (1P 15連鎖、実アニメ約14秒) では `chain_hold_per_step_sec=0.3` ×
+  誤検知連鎖数5 = 1.5秒ごとに再トリガーし、**全断片が同一の cc=5・
+  再現性のある約1.37〜1.4秒間隔**で分裂 (`logs/_diag_t6717_kill_override_
+  root_cause_2026-08-22/detail_v3_fullseg.log`)。この断片化が
+  `kill_override` (致死判定安全弁) への入力を大幅に過小評価させ、
+  致死判定符号の誤り (2P窒息なのに2P勝者表示、等) の直接原因になっていた。
+  **根治 (2026-08-22 実装)**: `scripts/visualize_advantage_overlay.py` の
+  `generate()` に `chain_hold_base_sec`/`chain_hold_per_step_sec` の
+  optional 引数と CLI フラグ (`--chain-hold-base-sec`/
+  `--chain-hold-per-step-sec`) を新設し、`RecognitionPipeline.load_default`
+  へ配線した (既定 None = 従来のライブラリ既定のまま、backwards compat)。
+  実測較正値 (2.61 / 1.17) を指定すると 15連鎖の保持時間が
+  0.3×15=4.5秒 → 2.61+1.17×15=20.2秒 に伸び、実アニメ約14秒を1本の
+  ChainEvent でカバーできる見込み (全編再走査で検証中)。
+  **注意**: 連鎖数の誤検知自体 (15連鎖をcc=5と検知) は保持時間の較正だけ
+  では直らない。真因は formula 経路の連鎖数がsimulate(前回confirmed_board)
+  由来で、connectivity認識欠損により過小評価される
+  (`project_chain_count_both_untrustworthy_2026-07-30` と同型の問題、
+  simulateは一方向に壊滅的過小)。掛け算式 (`N×M`) を段ごとに読み取る
+  真の根治 (`reference_chain_formula_per_step_2026-08-22`) は判断材料を
+  提示済みだが、2026-08-22時点ではuser判断により「まず較正配線のみで
+  全編再走査し効果を見る」方針で保留。
+  ④「連鎖中の差分は10の倍数」制約によるクロスチェック層 (W2の制約を再利用、
+  上記④番の判断材料は掛け算式OCR実装時に活用する) は引き続き未実装。
+
+### W30: 落下待ち (GRAVITY_SETTLE) の間に ChainEvent が消える = 連鎖の点滅 (2026-08-21 発見)
+- **訂正 (2026-08-22)**: 2026-08-21時点で本節にW7チケット②(CHAIN保持定数の
+  実測ベース再較正)を移管したのは誤りだった。W7側に訂正済みの記述を復元した
+  (「論点は保持定数ではない」という判断そのものが誤りで、保持定数の未配線が
+  formula機構の再トリガー周期を直接支配していた)。本節はGRAVITY_SETTLE中の
+  ChainEvent点滅という別の現象を扱う (両者は独立した問題、混同しないこと)。
+- **user 伝授の絶対律 (2026-08-21)**: 連鎖の終わり = **連鎖している側**のネクストが
+  動いた瞬間 OR **連鎖している側**にお邪魔が落ちた瞬間。両方とも連鎖側のフィールドで観測
+- **実測 (14連鎖の途中、内部信号を単一実行で同時記録)**:
+  | t_sec | chain_event | state | next |
+  |---|---|---|---|
+  | 3306.167 | 非None | CHAIN | [5,4] |
+  | 3306.200〜3306.633 | **None** | **GRAVITY_SETTLE** | **[5,4] 不変** |
+  | 3306.667 | 非None | CHAIN | [5,4] |
+  **ネクストは0.43秒間不変、おじゃま信号は実装なし。それでも chain_event が None になる。**
+  原因は「消去→落下待ち」の中間状態では chain_event を signals に乗せない設計
+- **律に照らせば誤検知**: 連鎖は続いているのに終了扱いになる。連鎖は
+  「消える→落ちる→消える→落ちる」を繰り返すので**同じ連鎖の途中で何度も点滅する**
+- **実害は限定的**: `ResolvedExchangeTracker.update()` の維持条件は
+  `ev1 is None and ev2 is None` (**両方**同時にNone) なので、片側の点滅では
+  セッションが切れない。影響が出るのは初回トリガー
+  (`ev1 is not None and ev2 is not None`) で、両者の点滅が噛み合わないと検知が遅れる
+- **ただしトリガーは十分に発火している**: 直接実測で30先動画3区間 (15分) に
+  両者同時区間が **143件** (持続時間 中央値0.57秒 / p90 4.17秒 / 最大4.47秒)。
+  連鎖数の分布は中央値2・平均3.27・1〜14連鎖
+- **根治 (律に沿う方向)**: GRAVITY_SETTLE の間も chain_event を維持する。
+  修正は小さいが**認識の出力が変わるので全域バックテスト必須**
+  (memory `feedback_overfitting_awareness_2026-08-04`)
+- **30先動画への影響**: トリガーが十分発火しているため**納品をブロックしない**。
+  修正は動画の後
+- **併せて確定 (2026-08-21)**: お邪魔側の終了信号は 2026-06-01 に撤去されたまま
+  未復活 (`src/recognition_pipeline.py:8638-8641` のコメントのみ残存)。
+  撤去理由は「confirmed 凍結が連鎖終了後に『既存お邪魔に追いつく』だけで新規落下と
+  誤認し、短連鎖を0.1秒で早期終了させていた」= **認識精度ではなくロジックの誤り**
+  なので、その後の認識強化では直らない。現在は `src/ojama_accounting.py` に
+  増分ベースの落下検知があるので作り直せる可能性がある。**律の半分が欠落した状態**
+- **呼び出し元コメントの腐敗**: `src/recognition_pipeline.py:4866-4872` の
+  「①次ツモ変化 ②連鎖側お邪魔降下 どちらかを検知したら」は**撤去後に更新されていない
+  残骸**。これを読んで実体を見ずに報告した結果、2エージェントの報告が食い違った
+- **side の配線は正しいことを確認済み**: 1P/2P のネクストを別々に読み、
+  1Pの判定には "_1p" のみを使用 (`src/recognition_pipeline.py:4776-4906`)。
+  命名が一貫していて途中でswapされている形跡なし
+- **測定の教訓**: **異なる暖機条件で取ったデータを同じ絶対時刻で突合するのは無効**
+  (同じ時刻でも認識結果が全く違う)。単一実行内のデータで比較すること
 
 ### W6: 暗黙前提の非自衛 (解像度・色数・レンジ)
 - **対処済み**: 解像度assert化 / ガードテスト24件
@@ -1056,6 +1134,51 @@ decode + update = 23.91ms = **41.8fps** で中央値では 30fps を満たす (c
 `scripts/_verify_native_hsv_parity_2026-08-20.py` (T1/T3)、
 `scripts/_bench_native_hsv_2026-08-20.py`、コミット 0f195e4
 
+### 訂正 (2026-08-21、デバッガ計装): 「9.4倍・-8.73ms」は合成画像ベンチの投影値、実測はもっと小さい
+
+上記「-8.73ms」の出典 `scripts/_bench_native_hsv_2026-08-20.py` を再実行して
+確認した結果、この値は**ランダム合成画像でのclassify()単体呼び出しの差分
+(9.5倍、5.089ms/盤面) を「1frameは盤面2枚」として単純に2倍した投影値**であり、
+**実画像・実end-to-endでの計測ではない** (同スクリプトの出力コメントにも
+「実画像でのサブパッチ再判定の発生頻度は反映されていない」と明記されている)。
+
+**実測 (2026-08-21、単独実行・負荷1未満)** で end-to-end 差分を2系統で確認:
+
+| 測定方法 | native ON | native OFF | 差分 |
+|---|---|---|---|
+| video_c34 30fps全フレーム、1frame(resize+update) | 25.96ms | 32.20ms | **-6.24ms** |
+| video_c34 30fps全フレーム、update()単体 | 24.10ms | 30.34ms | -6.24ms |
+| video_zenchi 60fps stride=2 (本番セマンティクス)、update()サイクル | 27.44ms | 30.30ms | **-2.86ms** |
+
+production_config.py の採用根拠1 (video_c34実測「34.69→29.05ms」差5.64ms、
+「31.67→26.32ms」差5.35ms) とは大筋一致するが、**KNOWN_WEAKNESSES.md の
+-8.73msとは production_config.py 自身の記録とも食い違っていた**
+(8.73msはどちらの実測とも一致しない、合成ベンチ投影値のみを引いていた
+ことが原因)。
+
+**見送り判断の再検討が必要**: 本entry内「見送った項目」表の「1日で1ms =
+Rust化(8.73ms)の1/8の効率」という比較の分母が過大だった。真の分母は
+5.4〜6.2ms (c34条件) 〜 2.9ms (本番stride条件) であり、1msの改修は
+**1/3〜1/6の効率** (見た目より悪くない)。特に「CNN前処理の一括化
+(0.7〜1.2ms、1日)」は本番stride条件の分母(2.9ms)に対しては**24〜41%**の
+比率になり、見送り優先度を上げて再検討する価値がある。
+
+再現: `scripts/_diag_recognition_only_fps_2026-08-21.py`
+
+### 追記 (2026-08-21): native HSV はレンダ/オーバーレイ経路に配線されていない
+
+`--enable-native-hsv-classifier` は `src/production_config.py` の
+`COLLECT_ONLY_ADOPTED` に登録されており、`RECOGNITION_ADOPTED` には無い。
+`scripts/visualize_advantage_overlay.py` は `recognition_load_default_kwargs()`
+(= `RECOGNITION_ADOPTED` のみを変換) を使うため、**`--enable-native-hsv-classifier`
+を明示指定しない限りレンダ/オーバーレイの認識は常に Python 経路のまま**
+(`recognition_load_default_kwargs()` 経由で `pipe._native_hsv_active=False` を
+実測確認済み)。収集 (`collect_boards_lean.py`) はこの kwargs を使わず
+`collect_flags()` (=`RECOGNITION_ADOPTED + COLLECT_ONLY_ADOPTED`) 経由で有効化
+されるため収集は既に速い。**bit-identical (T1/T2/T3済み) なので、レンダ経路にも
+配線すれば安全に2.9〜6.2ms/frameの追加削減が得られる** (工数小、config配列への
+1行追加のみ)。
+
 ### W27-b: p90 の正体は大ROI走査 (2026-08-20 確定、RT向け対策あり)
 
 Rust 化後も p90 が中央値より 12ms 高い理由を実測で確定した
@@ -1221,3 +1344,793 @@ user 指示で「返せるか」を学習に合流させる実装は完了した
 実装とテストは完了している (`_attach_counter_reach_columns`、
 scripts/build_labeled_win_from_npz.py)。現在は `grids=None` を渡して列を
 作らないようにしているだけなので、**速度が解決すれば1行の変更で復帰できる**。
+
+### 追記 (2026-08-21、デバッガ計装): オーバーレイ (レンダ) 文脈では既に無罪
+
+上記「4,195ms/件」「表示が追いつかない」は **`n_rollouts=200` (学習用) の話**。
+オーバーレイ (`scripts/visualize_advantage_overlay.py`) は
+`COUNTER_N_ROLLOUTS=60` + 0.5秒間引き + 盤面キャッシュを使っており、
+**実測 (60秒区間×4回、負荷1前後の単独実行)** では:
+
+| 項目 | 実測値 |
+|---|---|
+| 呼び出し回数 (60秒区間、実際にMC計算した回数) | 11〜14回 |
+| 1回あたり平均 | 86〜260ms (区間差は連鎖の長さ差、負荷にも敏感) |
+| レンダ全体壁時間に対する割合 | **0.4〜1.3%** |
+| `CounterReachTracker.update()` 呼び出し総数のうち内訳 | zero_budget 91% / 時間間引きヒット 7% / 実評価 2% |
+
+さらに別エージェントによる `_select_build_placement` の Rust 融合
+(2026-08-21 17:50) で短い連鎖 (2連鎖) は53.7ms→10.0ms (5.4倍)。
+**オーバーレイ/レンダ経路において応手計算は主犯ではない** (計装スクリプト
+`scripts/_diag_render_breakdown_2026-08-21.py`、陽性対照
+[n_rollouts 2倍] でも壁時間に有意差なし)。上記の「4,195ms/追いつかない」の
+記述は**学習データ生成 (`n_rollouts=200`) の文脈のみ有効**と明記し直す。
+
+---
+
+## W30: 動画レンダの実時間12倍問題 — 主犯は認識+パネル描画、応手は無罪 (2026-08-21、取り置き+訂正)
+
+30先動画 (117分、video_zenchi_c0BQoMJwwQU) のレンダが実時間の12倍かかると
+報告された事案の計装結果。**「応手判定が主犯」という仮説は完全に外れた**
+(W29追記参照、0.4〜1.3%)。
+
+### 内訳 (60秒区間×4回、負荷1前後の単独実行でクリーン計測、`--show-recognition`込み)
+
+| 項目 | 割合 | 1回あたり | 呼数/60秒 |
+|---|---|---|---|
+| **パネル描画** (`_draw_panel_layout`、PIL) | **58〜60%** | 92〜103ms | 1,800 |
+| **認識** (`RecognitionPipeline.update`) | 21〜24% | 37ms | 1,800 |
+| ループ直下resize | 6.9〜7.8% | 4.1ms | 5,412 |
+| 動画書き出し (`VideoWriter.write`) | 3.5〜3.9% | 6.2ms | 1,800 |
+| 認識色overlay描画 (`--show-recognition`) | 2.6〜3.0% | 1.2ms | 6,891 |
+| 有利不利の判定 (`HeavyAdvCache.update`) | 1.0〜1.5% | 9〜13ms | 351 |
+| decode (`cap.read`) | 1.5〜1.7% | 1.3ms | 3,600 |
+| **応手の計算** (`estimate_counter_distribution`) | **0.4〜0.9%** | 86〜260ms | 11〜14 |
+| 説明できた割合合計 | 95〜100% | | |
+
+**測定の妥当性**: baseline→baseline (順序効果チェック、負荷ほぼ一定条件下) で
+壁時間差 -7.6%。**8%未満の差はノイズとして判定不能**とする。陽性対照
+(n_rollouts 2倍) は該当区間 (応手) だけ伸びることを確認済み (計装は正常に
+劣化を検出できる)。
+
+### パネル描画の内部要因: `_font()` が毎フレーム再ロード (2026-08-21 本採用済み、下記追記)
+
+パネル描画の**70〜71%** (呼数22,419回=1frameあたり約12.5回) が
+`_font(size)` (`ImageFont.truetype(path, size)` を毎回ディスクから読み直す
+だけの薄い関数、キャッシュ皆無) に費やされていた。`_font` は size のみに
+依存する純関数なので `functools.lru_cache` で包むだけで bit-identical に
+高速化できる (実測: 同一60秒区間でキャッシュ版は壁時間294〜318s→**150.7s
+[約2倍]**、パネル描画は176〜184s→**17.1s**、font_load自体は124〜131s→
+**0.03s**。text描画自体も26〜27ms→5.2msに縮む、理由は同一ImageFontオブジェクト
+再利用でグリフラスタキャッシュが効くため)。
+
+**当初の取り置き理由 (user 決定 2026-08-21)**: 配信オーバーレイはリアルタイム時
+OBSブラウザソース+WebSocket設計であり、**本経路(PIL描画)は動画レンダ専用**
+でリアルタイム製品には存在しない。パネル描画の内部最適化そのものへの投資は
+一旦不要としていたが、30先動画レンダの高速化が必要になったため
+**2026-08-21 本採用**(`scripts/visualize_advantage_overlay.py:1729`
+`@functools.lru_cache(maxsize=32)`)。`_draw_panel_layout`/`_draw_overlay` の
+直接比較で bit-identical (画素差分ゼロ) を確認済み。実測速度向上は
+cv2スレッド設定・環境依存で1.2〜6.7倍の幅(詳細はW31参照)。
+
+計装: `scripts/_diag_render_breakdown_2026-08-21.py` (cache_font フラグで
+A/B可能)。**本採用後に発見した end-to-end 側の限界は W31 参照**
+(壁時間差が大きい条件でのみ dump-timeline が微小にずれる、`_font()` 自体は
+無罪)。
+
+### 認識単独は実時間に近い (主犯ではない)
+
+`scripts/_diag_recognition_only_fps_2026-08-21.py` で単独計測: video_zenchi
+60fps・本番stride=2条件で **update()サイクル (decode+resize+update) 27.44ms
+(native HSV ON) 〜 30.30ms (OFF)**、実時間倍率 1.05〜1.16倍
+(=認識だけなら実時間と同程度かそれより速い)。**W27の「native HSVがレンダ
+経路に未配線」問題を解消しても数%の改善に留まる** (認識は元々ボトルネックの
+主要因ではない)。
+
+### 次の手 (実装しない、方向のみ)
+
+1. **区間並列レンダ** (user決定、本命): 試合開始点で分割し並列実行。
+   HSV自動較正の引き継ぎのためウォームアップが必要 (下記参照)
+2. ~~`_font()` キャッシュ化~~ → **2026-08-21 本採用済み** (上記)
+3. ~~native HSV をレンダ経路にも配線~~ → **2026-08-21 本採用済み**
+   (`src/production_config.py`: `RECOGNITION_ADOPTED` へ移設、配線漏れ6件目の
+   是正。`pipe._native_hsv_active=True` を実測確認、dump-timeline bit-identical
+   635/635行)
+
+参照: `scripts/_diag_render_breakdown_2026-08-21.py`、
+`scripts/_diag_recognition_only_fps_2026-08-21.py`、
+`data/verify/zenchi_render_diag_2026-08-21/`
+
+## W31: レンダ壁時間の変化でスコアが微小にずれる (2026-08-21、実測。仮説段階・未確定)
+
+`scripts/visualize_advantage_overlay.py:_font()` の `lru_cache` 化 (W30 の
+取り置き案、本採用) の bit-identical 検証中に発見。**`_font()` 自体は描画専用
+でスコア計算経路と無関係** (dump-timeline の書き込みは `_draw_*` 系と別コード
+パス、コード上も確認済み) にもかかわらず、同一動画・同一フラグで
+`generate()` を **壁時間が大きく異なる2条件** (フォントキャッシュ有無、
+最大6.7倍の壁時間差) で2回走らせると、dump-timeline の後半 18/594行 (約3%、
+t=35.2s 以降) で `adv_raw`/`adv_ema`/`p1`/`p1_raw` が小さくずれた
+(差は数点規模、暴走はしない)。
+
+### 切り分け結果
+
+- **同一速度での二重呼び出し (font変更なし)** → 完全一致 (プロセス内グローバル
+  状態の残留は無罪)
+- **`cv2.setNumThreads(1)` (本番 `main()` と同じ設定) にしても再現** → cv2 の
+  内部マルチスレッドは無罪 (壁時間差 1.21倍でも発生を確認)
+- `src/recognition_pipeline.py` / `src/board_motion.py` に `time.time()` /
+  `time.perf_counter()` 系のコードは無い → 明示的な wall-clock 依存ロジックは
+  見当たらない
+- `RecognitionPipeline` は CUDA (`cnn.to_device("cuda")`) を使用
+  (`torch.cuda.is_available()=True` の環境で検証)。**GPU推論の非決定性
+  (floating-pointの丸め順序が実行タイミング・スレッド競合状況で変わりうる、
+  PyTorch/CUDAの一般的既知事象) が、閾値ギリギリの状態機械判定を境目で反転
+  させている可能性が最も高いという仮説**に達したが、**根治的な原因確定には
+  至っていない** (時間の都合で打ち切り、2026-08-21 コーダ作業)。
+- 修正②(native-hsv-classifier のレンダ経路配線、壁時間差 3〜19% 程度の
+  小さいケース) の bit-identical 検証では 635/635 行が完全一致しており、
+  **大きな壁時間差でのみ露出する現象**と考えられる。
+
+### 重要な留保
+
+- **user 指摘の通り、これは今回作った `_font()` キャッシュのバグではない**
+  (キャッシュ自体は `_draw_panel_layout`/`_draw_overlay` の直接呼び出し比較で
+  bit-identical を証明済み)。**既存でも機種・負荷・GPU混雑状況が変われば
+  同じリスクがあった**、という位置づけ (今回の測定作業全般に関わる注意点)。
+- 2026-08-21 の暖機 (warmup) 検証 (26秒で94.9%一致) の残差の一部がこれで
+  説明できる可能性がある (user 指摘、要再検証)。
+- 恒久対策 (`torch.use_deterministic_algorithms(True)` 等) は性能コスト・
+  互換性コストを伴うため **user 判断が必要な別タスク**。本項目は「仮説の
+  記録」に留め、対策の実装はスコープ外とする。
+
+### 次の手 (実装しない、記録のみ)
+
+1. 原因の確定: CNN推論を CPU 固定 (`cnn.to_device("cpu")`) にして同じ A/B を
+   再現するか確認 (GPU起因なら CPU固定で消えるはず)
+2. `torch.use_deterministic_algorithms(True)` を一時的に有効化してA/Bが
+   一致するか確認 (根治策の効果測定、性能コストは別途計測)
+3. warmup 残差 (user 指摘) との関連を追加調査
+
+参照: `scripts/visualize_advantage_overlay.py:_font()` (2026-08-21 lru_cache
+化の副次発見)、`docs/KNOWN_WEAKNESSES.md` W27 (フォントキャッシュ本採用)
+
+### 【2026-08-25 決着】W39 と同一現象だった — GPU CNN 非決定仮説は反証
+
+根因調査 (`data/verify/adv_nondeterminism_2026-08-25/`) により、本項の
+「壁時間差でスコアがずれる」現象は **W39 (dig_resistance のおじゃま端数
+抽選が OS乱数)** と同一現象だったと確定した。
+
+- **GPU 推論の非決定性という上記仮説は反証された**。同一入力 (盤面 grid の
+  crc32 一致) に対して `_side_feats_full_base` の戻り値のうち
+  `dig_resistance`/`ukeyasusa` 系4列だけが揺れており、CNN や壁時間とは
+  無関係。同一プロセス内で同一盤面の連続3呼出が3値を返すことも確認済み
+  (乱数であって実行タイミングではない)
+- 「壁時間が大きく異なる2条件でのみ露出」に見えたのは偶然 (毎 run 揺れる
+  ので、どの2 run を比べても数%の行が不一致になる。実測: 同一条件
+  run 同士でも adv_raw 155/5186 行不一致・最大差 12.34 点)
+- 根治は W39 参照 (2026-08-25 実施済み)。上記「次の手」の CPU固定/
+  deterministic_algorithms 検証は不要になった
+
+- **契約違反**: `src/board.py: Board.is_dead()` は docstring で「STABLE
+  (連鎖解決後) の静止盤面への静的判定として使う」と明記しているが、
+  `--per-side-settled` (2026-08-09 本番採用済み) 下では
+  `scripts/visualize_advantage_overlay.py` の settled 再計算が「相手側だけ
+  STABLE でも True」の OR 条件になるため、自分側が CHAIN/GRAVITY_SETTLE/
+  TSUMO_FALL/OJAMA_FALL 中でも、直前に凍結された確定盤面
+  (`r.p1.confirmed_board` を `r.p1.state==STABLE` の瞬間だけ更新して
+  非STABLE中は保持し続ける、原則4の仕様通りの動作) に対して
+  `_build_timeline_dump_row` (旧 :3740) が毎行 `is_dead()` を呼び続けていた。
+- **規模 (実測、`scripts/_diag_is_dead_persist_2026-08-23.py`、
+  `data/verify/zenchi_render_slide_exit_guard_v2_2026-08-22/` 8区間
+  ≈118.9分)**: CHAIN 等の活動状態を含み試合が終わっていない「is_dead=True
+  連続区間」= 118件・合計685.1秒 (動画比9.6%)。うち own-state に CHAIN を
+  含む「最も確実な誤判定」= 71件・569.3秒 (動画比7.98%)。
+  t=6717.5 では `b1_hash` が15.4秒間不変のまま `is_dead1=True` を出し続け、
+  実画面は6連鎖でほぼ空になっていた
+  (証拠: `logs/is_dead_persist_2026-08-23/01〜04_seg08_1P_*.jpg`)。
+- **根本原因の実像 (2026-08-24 実測で確定、前任の推測とは異なる)**:
+  単純な「検出ラグで1〜2フレームだけ古い」話ではない。証拠画像01は
+  `state1P=STABLE` の表示のまま画面に「2れんさ」の発火エフェクトが
+  写っており、**連鎖検知そのものが数フレーム〜十数秒規模で STABLE
+  誤判定される既存の別バグ (未特定・本チケットのスコープ外)** が
+  誘因になっている。この誤判定 STABLE 瞬間に「天井まで積まれた盤面」が
+  正しく (誤読ではなく) 確定され、その後 CHAIN に入って盤面が凍結される
+  ため、`is_dead()` 自体は凍結盤面に対して正しい値を返している一方、
+  「連鎖が解決すれば生き残る」という後の情報を反映できない
+  (user伝授 `reference_full_board_is_not_death_2026-08-22`
+  「盤面が高い ≠ 窒息」)。
+- **対処 (既定OFF、`--stable-confirmed-is-dead` /
+  `enable_stable_confirmed_is_dead`)**: `scripts/visualize_advantage_
+  overlay.py` に `_retroactively_correct_dead_dump_rows` を追加。
+  **dump_rows (npz保存直前のメモリ上リストのみ) への後処理**として、
+  同一 `game_idx` 内で「非STABLE中に凍結された is_dead」の直後に
+  該当 side が STABLE へ復帰する行があれば、その値で遡って上書きする。
+  **試合終了 (`game_idx` 変化) まで一度も STABLE に復帰しない区間は
+  一切変更しない** (「最後の STABLE 時点では生きていた」を誤って
+  False に書き換えるリスクを排除する安全側設計、受け入れ条件「死亡
+  見逃しゼロ」を最優先)。ライブの `adv_ema`/`kill_override`/描画/
+  `indicators_v2` には一切触れないため副作用範囲は診断dumpに限定される。
+- **実測検証 (`scripts/_verify_stable_only_isdead_2026-08-24.py`、本番
+  実装 `_retroactively_correct_dead_dump_rows` を直接呼び出し、
+  再レンダリング不要)**:
+  - t=6701.67〜6717.03 (ticket指定窓): 訂正後 `is_dead1=True` の行数 **0**
+    (受け入れ条件2 達成)。
+  - 全123箇所の `game_idx` 境界直前で、訂正前後の値の差分 **0件**
+    (受け入れ条件4「死亡見逃しゼロ」達成。terminal区間は無変更のため
+    数学的に退行不可能)。
+  - is_dead=True の総行数: 1P 8616→7432 (-1184行)、2P 7008→5124 (-1884行)。
+  - 「CHAINを含み試合未終了」の残存疑わしい区間は 1P 75→74件・
+    354.3→251.1秒、2P 58→63件・340.7→227.4秒 (件数はほぼ横ばいだが
+    合計秒数は約3割減少)。残存分は個別に目視追跡し、「連鎖が解決した
+    後の real STABLE 読み取りも True のまま」という**正しく再確認された
+    長期危険状態** (例: t=169.9〜170.13 で STABLE=True が連続後、
+    t=170.167 で連鎖解決し STABLE=False に反転) であり、アルゴリズムの
+    バグではないことを個別追跡で確認済み。
+- **【未対処・既知の残存スコープ】呼び出し元の監査 (45箇所以上、下記)**:
+  1. **`src/indicators_v2.py`** の `board.is_dead()` 呼び出し (dig_
+     resistance 等9箇所、top-level `board` 引数=呼出元が渡す確定盤面
+     そのもの) は、同じ `visualize_advantage_overlay.py` の
+     `hcache.update(b1, b2, ...)` 経由で**同一の凍結 b1/b2** を受け取る
+     ため、**理論上は同じ誤判定に晒される** (dig_resistance 等が
+     score=0.0 を誤って返す等、ライブの表示スコア・drivers に波及する
+     可能性)。ただし `collect_boards_lean.py:1286` は保存条件を
+     `bstate == BoardState.STABLE` (own-side限定、per-side-settled の
+     OR混合を使わない) にしているため、**学習データ生成経路は本問題の
+     影響を受けない** (確認済み)。**ライブ overlay 表示への影響有無は
+     未計測** (本チケットは「dump/走査器の誤検出根治」にスコープを
+     限定、indicators_v2 側の是正は hcache 呼び出し条件の見直しという
+     別アーキ判断が必要なため未着手)。
+  2. **`scripts/scan_judgment_anomalies.py` の npz直接ペアリングモード**
+     (`--from-dump` を使わない経路、モジュール内 docstring
+     「npz -> JudgmentRecord (per-side-settled 相当のペアリング)」)
+     も、trigger側の最新STABLE盤面と相手側の「直近以前」の盤面を
+     ペアにする設計上、同型の凍結問題に晒され得る。本チケットの
+     `_retroactively_correct_dead_dump_rows` は `--from-dump` 専用
+     (`TimelineDumpRow` の密な時系列を前提) のため、このモードは
+     未対応 (別データ構造のため同じ実装を流用できない、要フォロー
+     アップ)。
+  3. **CHAIN 誤判定 STABLE バグ本体** (証拠画像01、`state1P=STABLE`
+     表示中に発火エフェクトが写っている) は未特定・未修正。今回の
+     遡及訂正は症状 (is_dead の誤フリーズ) を根治するが、誘因
+     (連鎖検知の見逃し自体) は別チケットで追う必要がある。
+  4. その他の `.is_dead()` 呼び出し (`src/chain_bitboard.py` 系
+     ベンチ/検証スクリプト、`src/exchange_virtual_board.py`、
+     `scripts/mc_counter_estimator.py`、`src/puyo_core_bridge.py` の
+     `simulate_drop` 等) は **シミュレーションで明示的に構築した
+     (完全解決済みの) 仮想盤面**に対する呼び出しであり、ライブ
+     recognition の凍結盤面を受け取らないため無関係と確認 (対象外)。
+     `scripts/build_labeled_win_from_npz.py` の `_native_dig_resistance`
+     等は `indicators_v2.dig_resistance` の native 再実装で、受け取る
+     `board` 引数は同スクリプトが `collect_boards_lean.py` 由来の npz
+     (own-side STABLE 限定で記録、上記1と同じ理由で安全) から読むため
+     入力自体は安全と確認 (「シミュレーション専用」という分類は不正確
+     だったため訂正、安全性の結論自体は変わらない)。
+  5. `scripts/label_exchange_outcome.py` / `measure_exchange_
+     effectiveness.py` / `physics_violation_audit.py` /
+     `proto_effective_saisoku.py` 等の分析専用スクリプト、および
+     `scripts/_bench_*` / `_diag_*` / `_tmp_*` 系の使い捨て診断スクリプト
+     群は、本番の判定・学習パイプラインの一部ではない (一回性の分析
+     ツール) ため、時間の都合で個別監査を省略した。読み込み元データの
+     生成経路 (`collect_boards_lean.py` か `--per-side-settled` 系の
+     ペアリングか) を個別に確認しないまま「安全」と断定しないこと
+     (フォローアップ推奨)。
+- 実装: `scripts/visualize_advantage_overlay.py`
+  (`_correct_dead_run_for_side`/`_retroactively_correct_dead_dump_rows`、
+  `enable_stable_confirmed_is_dead` 引数・`--stable-confirmed-is-dead`
+  CLI)。テスト: `tests/test_advantage_overlay_timeline_dump.py`
+  `TestRetroactiveDeadCorrection` (5ユニットテスト+配線テスト2件)。
+  検証: `scripts/_verify_stable_only_isdead_2026-08-24.py`
+  (本番実装 `_retroactively_correct_dead_dump_rows` を直接呼び出して
+  8区間の実dumpに対し受け入れ条件2・4を assert する)。
+
+## W33: `ojama_damage` 仮想着弾方式は端数の死亡確率を近似で省略している (2026-08-24、Q-04修正)
+
+- **背景 (Q-04「おじゃまダメージの意味論不一致」)**: 旧方式 `ojama_damage`
+  (`virtual_landing=False`、既定) は、発火点が決まらない盤面 (序盤等)
+  では「全6列平均の余裕」を使うため、窒息寸前の1列だけが危険でも他5列の
+  空きに希釈され、空盤面と窒息寸前盤面が同じ「受けても無害」帯 (score
+  =OJAMA_DAMAGE_FLOOR) に同値化するバグがあった (48個おじゃま・col2余裕
+  1段の盤面が空盤面と同じ0.05になる実例で確認)。fable architect レビュー
+  確定の設計 (仮想着弾+着弾後の余裕評価、`virtual_landing=True`、
+  `src/indicators_v2.py: _ojama_damage_virtual_landing`) で修正した。
+- **今回あえて省略した近似 (既知の限界)**: `ChainSimulator.drop_ojama`
+  は6の倍数分 (base) を実際に均等floor(N/6)着弾させ決定的に評価するが、
+  6で割った余り (端数 r = N mod 6、0〜5個) は「着弾後の余裕から r/6段を
+  連続量として控除する」期待値近似のみを行い、**端数が実際に窒息列
+  (col2) に乗って死ぬ確率 (≒r/6、他5列のいずれかに乗れば死なない)** を
+  混合分布として評価していない。
+- **影響範囲**: col2 (DEATH_COL) の残り余裕が1段未満 (=着弾後あと1個で
+  窒息する極限状態) のときのみ、端数の着地列次第で実際には死ぬケースと
+  死なないケースが混在するが、本近似は常に「死なない側」の連続近似
+  (r/6段の控除) で評価する。それ以外の余裕帯 (2段以上) では端数1個の
+  着地先による生死の分岐が発生しないため実質無影響。
+- **根治しない理由**: シード1本の実現値を採用すると「ある偶然の1標本」
+  への過適合になる (feedback_overfitting_awareness_2026-08-04)。正しい
+  根治は「端数r個が窒息列に乗る確率 × CEIL + 乗らない確率 × 現行近似」の
+  混合分布だが、初版では実装コスト対効果が低いと判断し見送った
+  (影響が極限的な1段未満の境界のみのため)。
+- **【user 判断 2026-08-24】着弾後 `is_dead()` の CEIL は一段のステップである**
+  (勾配ではない)。おじゃまは6列均等に降るので、窒息列の余裕が足りなければ
+  必ず 12段目に乗って CEIL に達する。user 伝授の絶対律
+  (`reference_full_board_is_not_death_2026-08-22`「盤面が高い＝窒息ではない」)
+  に照らすと過大に出る方向のバイアスになりうる、と user から指摘があった。
+  ただし **「上部ほどダメージが大きくなるのは間違いない事実」** との user 判断により、
+  現行のステップ形のまま進める。将来ここを触るときは、この経緯を踏まえること。
+- **次の一手 (未着手)**: col2残り余裕が1段未満の場合に限定して混合分布
+  評価に切り替える分岐を追加すれば根治できる (該当条件のみ計算コストが
+  増える設計にできるため全体への性能影響は小さい見込み)。優先度は低
+  (影響範囲が極限的なため)、次回 ojama_damage 関連の改修時にまとめて
+  対応する。
+- 実装: `src/indicators_v2.py: ojama_damage`
+  (`virtual_landing: bool = False` 追加、既定 False で旧値と bit 一致)、
+  `_ojama_damage_virtual_landing` (新規)。呼び出し配線:
+  `scripts/measure_exchange_effectiveness.py: estimate_expected_net_damage`
+  のみ `virtual_landing=True` を明示指定 (Q-04本体の直接修正箇所)。
+  `scripts/visualize_advantage_overlay.py`/`scripts/build_labeled_win_
+  from_npz.py` 等の既存呼び出し元は write lock 中のため今回は無改修
+  (既定 False のまま、挙動不変)。
+  テスト: `tests/test_ojama_damage_virtual_landing.py` (9本)、
+  `tests/test_expected_net_damage_step5.py::
+  test_fuller_opp_board_yields_larger_damage_for_same_net_expected`
+  (無改変のまま緑化)。
+
+## W34: 掛け算式の段の区切りを「幕間」で判定するが、幕間が観測できない区間は旧規則に落ちる (2026-08-24、Q-01修正)
+
+- **背景 (Codex 品質精査 Q-01)**: `FormulaStepAccumulator` は「右辺 (ボーナス
+  倍率) は同一連鎖内で単調増加する」という前提で段の同一性を判定していたが、
+  `src/scoring.py` の公式ボーナステーブルに照らして**誤り**だった。
+  右辺 = `max(1, 連鎖ボーナス + 連結ボーナス + 色数ボーナス)` で、
+  連鎖ボーナスの 1→2 段の増分は **+8** しかないのに、連結 (最大10/グループの和)
+  + 色数 (4色で12) の変動幅は **最大22程度**ある。よって右辺は同一連鎖内で
+  減少も同値もし得る。
+- **旧実装の壊れ方 (実測)**: 閾値 `FORMULA_NEW_SESSION_MIN_GAP_SEC = 0.5秒` が
+  実測の幕間分布 0.433〜0.634 秒の**ど真ん中に刺さっていた**ため、
+  右辺が一度でも減ると幕間 0.1 秒の揺らぎだけで真逆に壊れた。
+
+  | 幕間 | 動作 | 残る段 | 火力 |
+  |---|---|---|---|
+  | 13f (0.433秒) | 2段目を棄却 | (110,10) | 1,100 |
+  | 15〜19f (0.5〜0.633秒) | セッション破棄 | (40,8) | 320 |
+
+  正しくは **2段・1,420**。同じ現象で火力が **3.4 倍**ずれていた。
+- **修正**: 段の区切りを「幕間」(通常スコアが読めた = 掛け算式は非表示) で
+  判定する。掛け算式と通常スコアは排他
+  (`src/recognition_pipeline.py:_read_formula_value`)。実測で段の表示は
+  各 28 フレーム (0.933秒) で一定、段間の幕間は 13〜19 フレーム
+  (0.433〜0.634秒)、幕間中のスコア増分は直前段の「左×右」と完全一致 (12/12)。
+  **新しい時間定数は導入していない** (区切りがイベント駆動になるため)。
+- **残る限界 ①: 幕間が観測できない区間は旧規則にフォールバックする。**
+  `enable_formula_step_interlude=False` (既定) の構成、および通常スコアも
+  読めない区間では、従来の「右辺の単調増加」規則で判定する。
+  bit-identical を保つための意図的なフォールバックだが、**その区間では
+  上表の壊れ方が残る**。フラグを本番採用するまで解消しない。
+- **残る限界 ②: 幕間のフレーム単位実測は 1 連鎖 (14段・13境界)・1 動画のみ。**
+  段周期は 10 ケース 288 間隔で横断確認済みだが、「幕間で必ず通常スコアが
+  読める」の一般化は未確認。**採用前に別動画 2〜3 連鎖で同じフレーム単位
+  トレースを取り直すことを検収条件とする**
+  (ドライバ `scripts/_diag_formula_fix_e2e_2026-08-24.py` が既にあり安価)。
+- **残る限界 ③: `src/score_ocr.py:107` の「段間の読めない区間 最大≈1.4秒」は
+  裏取り不能** (今回の実測最大は 0.634 秒)。安全側で
+  `FORMULA_SESSION_RESET_SEC=2.0` を維持している。
+- **教訓**: `src/score_ocr.py:113` の「同一連鎖中は掛け算式が連続表示される
+  (402フレーム実測)」は**測定結果の誤引用**だった。402 フレームの実測は
+  `reference_chain_formula_layout_2026-08-24.md:41` の**レイアウト不変性**
+  (y=30±1、倍率1.0) の測定であり、時間的連続性は測っていない。
+  **コード内コメントの「実測」表記を、出典に当たらず前提として使わないこと。**
+- 実装: `src/score_ocr.py: FormulaStepAccumulator.update`
+  (`score_displayed: bool = False` 追加)、
+  `src/recognition_pipeline.py: _notify_formula_interlude` (新規、
+  `enable_formula_step_interlude` 既定 False)。
+  テスト: `tests/test_formula_step_identity_q01_2026_08_24.py` (23本、
+  配線テスト5本を含む)。既存 `tests/test_formula_value_read.py` は無改変で 32本緑。
+
+## W35: 認識精度の物差しスクリプトが一部フラグをログに出さないため、構成不一致を検出できない (2026-08-24、Q-03)
+
+- **事象**: `scripts/measure_stable_cell_acc.py` は `constraint_fill=DISABLED`、
+  `game_event_chain_exit ENABLED` 等の構成を `[measure]` 行で echo するが、
+  **slide-exit 系・formula 系のフラグは 1 行も echo しない**。
+- **実害**: 複合フラグ `--enable-formula-freeze-fix` が説明上 3 要素を ON に
+  するはずが、3 つ目 `enable_slide_exit_no_min_display` は親ガード
+  `enable_slide_exit_min_display_guard` が False だと
+  `src/recognition_pipeline.py:5171-5203` の and 短絡で**一度も参照されない
+  (no-op)**。この構成不一致がログから確認できず、
+  Codex 品質精査 (Q-03) で指摘されるまで気づけなかった。
+- **測定し直した結果 (実害の大きさ)**: 別出力先
+  `data/verify/formula_read_backtest_full_2026-08-24/` で完全構成を測定したところ、
+  **親ガード単独 (F1) は OFF と MD5 完全一致** (8動画で一度も発火しない)、
+  **完全構成 (F2) は「式読取2要素のみ」と全指標一致** (差分は
+  `disagreement_cells` の並列完了順と出力パスのみ)。
+  つまり構成不一致は事実だったが、**取りこぼしていた効果は無かった**。
+- **【是正済み 2026-08-24】** 物差しスクリプトが実際に pipeline へ渡したフラグを
+  `[measure]` 行と結果 JSON の `meta` に出すようにした。複合フラグは展開後の個別値を出し、
+  親子関係があるフラグは「親ガード OFF のため無効 (no-op)」と明示する
+  (`meta.enable_slide_exit_no_min_display_is_noop` で機械可読にもした)。
+  出力例:
+
+  ```
+  [measure] slide_exit_min_display_guard=DISABLED (親ガード。--enable-slide-exit-min-display-guard)
+  [measure] formula_freeze_fix=DISABLED (複合フラグ。ON なら下記 3 要素 [*] を強制 ON)
+  [measure] chain_formula_read_verify [*]=DISABLED
+  [measure] formula_chain_count_update [*]=DISABLED
+  [measure] slide_exit_no_min_display [*]=DISABLED
+  [measure] formula_step_interlude=DISABLED
+  ```
+
+  あわせて構成要素を個別指定できる CLI (`--enable-chain-formula-read-verify` 等 4 種) を
+  追加し、寄与の切り分けができるようにした。
+- **【副産物 2026-08-24】もっと危険な配線漏れが同時に見つかった。**
+  個別フラグを追加した際、`_process_video` → `_make_pipeline_cnn` の 1 経路だけ
+  値の転送が抜けており、**シグネチャは全 6 箇所揃っているのに CLI が実質何もしない**
+  状態だった。「引数を足した」ことと「値が届いている」ことは別で、
+  署名の確認だけでは検出できない
+  (`feedback_wiring_gap_vs_wiring_error_2026-08-22` の「漏れ」に該当)。
+- **【恒久対策 2026-08-24】位置引数の順序ズレを機械検証するテストを追加した。**
+  `_collect_parallel` の `executor.submit(_process_video_worker, ...)` は
+  **約 50 個の位置引数**で呼んでおり、「順序ズレ厳禁」というコメントが 8 回書かれていた。
+  `tests/test_measure_worker_arg_order_2026_08_24.py` が
+  `inspect.signature` と `ast` で仮引数名と実引数名を突合し、完全一致を要求する。
+  **測定器自体の健全性も確認済み**: 故意に 2 つ入れ替えると具体的な位置とフラグ名を示して
+  FAIL することを実測し、その後バイト一致で復元した。
+- 関連: Q-10 (追跡性)、`feedback_wiring_check_needs_nongeneric_scripts_2026-08-18`
+  (`--help` 突合では配線漏れを検出できない)、
+  `feedback_use_single_source_for_flags_2026-08-22`。
+
+## W36: 物差しスクリプトで `--gravity-settle-state` が死んでおり、本番と違うフレーム母集団を測っている (2026-08-24)
+
+**Gate 0 の Q-03 配線作業の副産物として発見。認識精度の合格判定そのものに関わる。**
+
+### 事象
+
+`scripts/measure_stable_cell_acc.py` の `--gravity-settle-state` /
+`--no-gravity-settle-state` が**まったく効かない**。
+
+| 層 | `enable_gravity_settle_state` |
+|---|---|
+| CLI (`:2846-2849`) | 既定 **True** |
+| `main()` のローカル変数 (`:4089-4090`) | `getattr(args, ..., True)` で取得**している** |
+| `main()` → `_collect_results(...)` (`:4294-4364`) | **渡していない** ← ここが抜け |
+| `_collect_results` のシグネチャ既定 (`:3204`) | **False** |
+| `_collect_results` → 下流 (`:3347`, `:3417`) | その False を**明示的に**転送 |
+| `RecognitionPipeline.load_default` の既定 | **True** (2026-06-06 採用) |
+| `src/production_config.recognition_load_default_kwargs()` | **含まれていない** (22 件中に gravity 関連なし) |
+
+明示的に `False` を渡すのでライブラリ既定 True を上書きしてしまう。
+
+### 実測による裏付け
+
+v40 単体で `--gravity-settle-state` と `--no-gravity-settle-state` を走らせ、
+`scripts/_hash_measure_result_2026-08-24.py` の正規化 sha256 を比較:
+
+```
+e60943dc4232b491ff0affe48dfaef955f4115db47ef66e7bd59e816af7e35d9  gs_on.json
+e60943dc4232b491ff0affe48dfaef955f4115db47ef66e7bd59e816af7e35d9  gs_off.json
+```
+
+**完全一致。CLI は結果を 1 ビットも変えない。**
+(一次証拠はコード読解。この実測はそれと整合することの確認。)
+
+成果物: `data/verify/gravity_settle_wiring_2026-08-24/`
+
+### 何が問題か
+
+GRAVITY_SETTLE は「連鎖終了直後の重力 settle / 着地中を**採点外・confirmed 凍結**として
+扱う」機能で、2026-06-06 に「退行ゼロ + 連鎖境界正確化」として採用されている。
+
+無効だと **settle 中のフレームも STABLE として評価対象に入る**。
+つまり物差しは**本番が使うのとは違うフレーム母集団の精度を測っている**。
+
+Phase I の合格判定 99.54%、および 2026-08-24 の 99.77% を含む、
+**この物差しで出した全ての認識精度が本番構成の数値ではない**ことになる。
+
+### まだ分かっていないこと
+
+- **精度が過大に出るのか過小に出るのかは未測定。** settle 中は盤面が動いている最中なので
+  難しいフレームが増える = 過小評価の方向が自然だが、**推測であって実測していない**。
+- 影響の大きさも未測定。`_collect_results` に 1 行足して A/B を取れば分かる。
+
+### 必要な対応 (未着手)
+
+1. `main()` → `_collect_results` に `enable_gravity_settle_state` を渡す。
+2. **渡した状態で 8 動画の A/B を取り、精度がどれだけ動くかを実測する。**
+3. 過去の合格判定 (Phase I 99.54% 等) をどう扱うか user 判断を仰ぐ。
+   同じ物差しで測り直すのか、本番構成で測り直すのか。
+4. **同種の配線漏れが他にもないかを機械的に検査する。**
+   `_collect_results` のシグネチャにあるのに `main()` から渡していない引数を
+   `ast` で洗い出すテストを追加するのが筋
+   (W35 で追加した位置引数の順序テストと同じ発想)。
+
+### 教訓
+
+`feedback_wiring_gap_vs_wiring_error_2026-08-22` の「漏れ (届かない)」の典型。
+**シグネチャに引数があること、`main()` がローカル変数に取り出していること、
+CLI が存在すること — どれも「値が届いている」ことを意味しない。**
+今回は 3 つとも揃っていたのに届いていなかった。
+`--help` を見ても、コードのシグネチャを見ても検出できない。
+
+## W37: 物差しが「試合終了テロップ中の盤面非表示区間」を STABLE として評価している (2026-08-24)
+
+### 事象
+
+勝敗が決まると「ばたんきゅー」「やった!」のテロップが出て、**負けた側の盤面が画面から
+完全に消える**。そこには背景のマスコット (淡い緑・黄の大きなぷよ型オブジェ) が見えている。
+
+`scripts/measure_stable_cell_acc.py` はこの区間を STABLE として評価対象に含めてしまい、
+**CNN が背景を「おじゃま」「青」と読んだものを認識誤りとして計上する**。
+正解が定義できない領域なので、認識の良し悪しとは無関係な数字が混ざる。
+
+実画面の証拠: `data/verify/formula_v51_diag_2026-08-24/evidence_frames/v51_t061.0s.png`
+(1P 盤面が消え「ばたんきゅー」表示。同じ画面の統計パネルに 最大れんさ数 1P=9 が出ている)。
+
+### 規模 (v51 で実測)
+
+v51 の不一致セル 1,102 件のうち **991 件 (90%)** が 3 つのテロップ窓
+(冒頭の全消し / 1 回目の死亡 / 2 回目の死亡) 由来。
+
+窓の内外で分けると:
+
+| | 窓内 acc (cells) | 窓外 = 生きた盤面 acc (cells) |
+|---|---|---|
+| 掛け算式 OFF | 0.983633 (60,548) | 0.999443 (199,231) |
+| 掛け算式 ON | 0.976105 (61,561) | **0.999548 (194,489)** |
+
+**生きた盤面では ON が OFF を上回る。** v51 の OFF 99.576% が合格ライン 99.5% の
+境界ぎりぎりだったのも、この穴が理由。
+
+### なぜ 2026-08-24 まで表に出なかったか
+
+**OFF では連鎖会計の断片化バグが偶然この窓を隠していた。**
+
+v51 の 1P は t≈42-56 に 9 連鎖を打ち、直後に撃ち返されて t≈58.5 に死亡する。
+OFF はこの 9 連鎖を cc=1 の断片 (formula t=43.3 / 48.3、baseline t=53.3) で追跡し、
+さらに **t=56.37 に「実際には連鎖が無いのに」baseline 断片が発火**して
+game-event 安全弁 `_chain_event_max_until_1p = 61.37` (5 秒) を再武装していた。
+その結果 CHAIN が t=56.4〜61.4 を覆い、死亡テロップが評価から外れていた。
+
+掛け算式修正で会計が正しくなると (formula_read が cc=3→9 と成長し、
+画面の「最大れんさ数 9」と一致)、幻の断片が消えて安全弁の再武装が起きなくなり、
+**隠れていた穴が露出した**。
+
+つまり **v51 の −0.1847pt は掛け算式修正の退行ではない。**
+共通フレームでの劣化は +4 件 (実質ゼロ)、悪化の全量 (+483 件) は非表示区間に集中。
+
+### 影響範囲
+
+- 他 7 動画では「死の直前に自側の大連鎖の幻断片が安全弁を再武装する」偶然が無く、
+  死亡テロップ窓は OFF でも既に露出していた
+  (v51 の 2 回目の死亡テロップは OFF 428 件 / ON 425 件でほぼ不変)。
+- したがってこの汚染は**掛け算式修正の有無にかかわらず常に混ざっている**。
+  今回は「たまたま v51 の 1 箇所で窓の露出がフリップした」だけ。
+- **この物差しで出した全ての認識精度に、正解が定義できない区間の数字が混ざっている。**
+
+### 【是正済み 2026-08-24】user 伝授の判定規則で除外
+
+**使えなかった案**: 既存の `MatchEndDetector` が `PipelineResult.match_end_locked` を
+毎フレーム公開しているのでそれを読めば済む、という筋の良い話に見えたが、
+**v51 の t=50〜70 で実測したところ発火 0 件**。
+コード内コメントに「テンプレ NCC は配信レイアウト依存で 42 本中 31 本が
+一度も成立せず」とあり、v51 もその 31 本側だった。
+`is_match_active=False` になるのも t=63.333 以降で、汚染区間の**後**。
+
+**採用した規則 (user 伝授、2026-08-24)**:
+
+    ネクストが動かない + スコアが動かない + スコアが 0 でない
+    が 2 秒続いたら「試合外」。さらにそこから遡って 2 秒も試合外。
+
+| 場面 | ネクスト | スコア | 判定 |
+|---|---|---|---|
+| 通常のプレイ | 設置のたびに変わる | 変わる | 試合中 |
+| **連鎖中** | 止まる | **増え続ける** | 試合中 (スコアで除外) |
+| 試合開始前 | 止まる | **0** | 対象外 |
+| **試合終了テロップ** | 止まる | 止まる | **試合外** |
+
+連鎖中を分離できるのが要。「ネクストが止まる」だけでは連鎖と区別できない。
+遡り 2 秒は、凍結の検知に 2 秒かかるぶんを戻すもの
+(**物差しはオフライン処理なので先読みが許される**)。
+
+実装: `src/off_match_window.py` (純関数)、
+`scripts/measure_stable_cell_acc.py` の `compute_offmatch_excluded_acc`。
+**主指標 `acc` は未除外のまま変えず**、`per_video.<vid>.offmatch` に併記する
+(`feedback_paired_comparison_fixed_population_2026-08-20`: 新旧併記)。
+テスト: `tests/test_off_match_window_2026_08_24.py` (12 本)。
+
+**v51 (ON 構成) での効果:**
+
+| | acc | セル |
+|---|---|---|
+| 全区間 (従来) | 0.993848 | 254,221 |
+| **試合外を除外** | **0.997700** | 205,689 |
+| 除外された区間内 | **0.977520** | 48,532 |
+
+除外区間の精度 97.75% は生きた盤面 (99.77%) と桁違いに悪く、
+**正解が存在しない区間を測っていた**ことが数字で裏付けられた。
+検出された区間も妥当 (1P `52.07-63.23` / `84.9-94.53` = 2 回の死亡テロップ)。
+
+**実装中に踏んだ自分のバグ**: 凍結が「スコア 0 リセット」で終わる場合に、
+蓄積中の区間を確定させずに捨てていた。**試合終了はまさにスコア 0 リセットで
+終わる**ので、本命のケースを丸ごと取り逃していた。
+観測列を直接ダンプして発見し、回帰テストを追加した
+(`test_freeze_ending_with_score_reset_is_still_detected`)。
+
+### 残る対応
+
+1. 8 動画の再基準化 (実行中)。
+2. 本体側で勝敗確定を検出し、該当 side を MENU 相当に倒して STABLE を出さない案は
+   **未着手**。本番オーバーレイの試合終了後表示も健全化するが、
+   `project_is_dead_stable_misdetect_2026-08-24` 系と干渉するので回帰ゲートが要る。
+3. **全消しテロップは対象にしない** (下記)。
+
+### 全消しテロップは対象外とする (2026-08-24 判断)
+
+全消しのテロップは**盤面枠が見えたまま**で、中身も定義できる
+(実画面 `evidence_frames/v51_t002.0s.png`: 「全消し」の文字と背景キャラクターの
+シルエットが重なるが、1P は右下に 4 個、2P は左列に数個、実際にぷよが残っている)。
+
+そこでの誤読は**本物の認識課題**であって測定汚染ではない。
+全消しは本番でも必ず起きるので、**除外したら弱点を隠すことになる**。
+
+数値上も OFF 383 件 / ON 383 件で完全に同数であり、OFF/ON の比較を歪めていない。
+
+### 教訓
+
+**バグが別のバグを隠していた。** 会計の断片化 (悪) が安全弁を余分に張り、
+物差しの穴 (別の悪) を覆っていた。片方を直したら、もう片方が数字として現れた。
+**「修正したら悪化した」を額面どおり受け取ると、正しい修正を捨てることになる。**
+
+関連: `project_yardstick_first_results_2026-07-31` (罪の序列トップは背景誤検出)、
+`project_background_fp_meter_blind_on_full_boards_2026-08-02`、
+`project_chain_event_fragmentation_accumulator_2026-08-22`、W36 (同じ物差しの別の穴)。
+
+---
+
+## W38: `ChainEvent.ojama_sent` の経過秒が「動画の先頭から」になっている (2026-08-25 確定)
+
+### 事象
+
+`src/chain_detector.py:186` の `VideoChainTracker.__init__(..., match_start_sec: float = 0.0, ...)`
+が、`src/recognition_pipeline.py` の**4箇所の生成点 (`:3577` / `:3581` / `:4000` / `:4004`)
+すべてから一度も上書きされていない**。
+
+その結果 `src/chain_detector.py:295` の
+`elapsed = max(0.0, self._last_stable_t - self._match_start_sec)` は
+**常に「動画の絶対時刻」**になる。
+
+`src/scoring.py:503 compute_effective_rate` は試合開始から 96 秒以降、
+16 秒ごとに 0.75 倍・最大14回減衰し、下限は `OJAMA_RATE_MIN = 1`。
+`96 + 14×16 = 320` 秒を超えると **レートが 1** になり、
+**点数がそのままおじゃま個数**になる。
+
+### 実測 (母数16イベント、`video_zenchi_c0BQoMJwwQU` t=780〜1080)
+
+- `compute_effective_rate() == 1` になったイベント: **16 / 16 (100%)**
+- 厳密な再現: t=803.7 の連鎖 (total_score=110,540) について
+  - 正しい経過秒 52.4秒 → レート 70 → **1,579 個**
+  - 壊れた経過秒 803.7秒 → レート 1 → **110,540 個**
+  - 差 **108,961** = 交換エピソード会計の自己検算が報告した
+    `self_check_max_abs_diff` と**完全一致**
+
+計測: `scripts/_diag_gate3_rate_2026-08-25.py`、
+結果: `data/verify/gate3_rate_diag_2026-08-25/report.json`。
+
+### 影響範囲 (実測で切り分け済み)
+
+| 経路 | 影響 |
+|---|---|
+| **本番の表示** (`scripts/visualize_advantage_overlay.py:5441-5444`) | **影響なし**。`OjamaAccountingTracker._elapsed(t)` を直接使っており、`ojama_sent` を読んでいない |
+| `src/ojama_accounting.py` の確定会計 | **影響なし**。`:1023 _reset_side_boundary` で試合境界ごとに `_match_start_sec` を正しく再設定している (実測で 751.3 に収束、実画面で本物の境界と確認) |
+| `scripts/recognition_physics_review.py` | **影響あり** (`ojama_sent` を消費) |
+| `scripts/verify_ojama_score_inference.py` | **影響あり** (同) |
+| `src/old/timeline_analyzer.py` | 影響あり (旧資産) |
+| 交換エピソード会計の自己検算 (`src/exchange_episode_tracker.py:485-492`) | **影響あり**。`ojama_sent` を「権威ある値」として比較していた前提が崩れた |
+
+> **検証ツールが壊れた値を読んでいた。測定器事故として17件目。**
+
+### 既知の痕跡
+
+`tests/test_advantage_components.py:545-550` に
+「`ChainEvent.ojama_sent` は使わない設計」と明記されている。
+**しかし「なぜ使わないのか」の理由としてこの欠陥が記録された形跡はない。**
+知らずに避けていた可能性が高い。
+
+### 対処 (user恒久指示「根治 or user承認つきガード」に従い、先に決める)
+
+| # | 内容 | 状態 |
+|---|---|---|
+| 1 | **自己検算の比較対象を差し替える** — `ojama_sent` を権威扱いせず、`OjamaAccountingTracker` の確定結果と比べる。仕様 §4.1.2 の前提を訂正する | **即実施** (tracker 側のみ、既定OFF) |
+| 2 | **根治**: `recognition_pipeline.py` の4箇所から `match_start_sec` を配線する。`OjamaAccountingTracker` が既に持つ値を流用できる | **✅ 根治実施 (2026-08-25、user指示)**。詳細は下記「根治記録」 |
+| 3 | 影響を受ける検証ツール2本に、`ojama_sent` が W38 の影響下にあることを明記する | **✅ 実施 (2026-08-25)**。`recognition_physics_review.py` に窓先頭区間の残存注意を明記。`verify_ojama_score_inference.py` は**実測の結果 W38 の影響下に無かった** (自前 tracker に試合相対時刻を渡している。video_97 試合5=絶対417s〜 で effective_rate=70 を確認、レート1張り付き無し) — 本表の「影響あり (同)」は誤りだったので訂正 |
+
+### 根治記録 (2026-08-25)
+
+- 実装: `RecognitionPipeline.reset()` に optional 引数 `match_start_sec` を追加
+  (無引数は従来通り 0.0 = 外部 caller は bit-identical)。score リセット境界の
+  内部 `self.reset()` が境界フレームの `time_sec` を渡す。
+  回帰テスト: `tests/test_w38_match_start_wiring_2026-08-25.py` (6本)。
+- `:3577`/`:3581` (動画先頭・load_default 生成) は 0.0 のまま =
+  **最初の score リセット境界を通過するまでの区間は旧挙動が残る**。
+  実害の実測 (video_97 先頭 0〜230s、PUYO_DEBUG_RESET_PROBE=1):
+  最初の内部境界 reset は t=188.7s (両者 score=0)。**その前の t=171.5〜
+  183.3s に ChainEvent 8 件が emit されており (ojama_sent 最大 462、
+  レート16相当)、この区間は根治後も未修正**。ただし reset_probe の
+  tsumo_before=0 が示す通り、この 8 件は実試合の連鎖でなく試合外画面の
+  誤検出イベントの疑いあり (未切り分け)。この区間は「試合開始が未観測」
+  なので原理的に正しい開始時刻が存在しない — 消費側は最初の境界通過前の
+  ojama_sent を信用しないこと (recognition_physics_review.py の
+  docstring に明記済み)。処理窓を試合の途中から開始した場合も同様
+  (窓414-509s の実測で、窓内最初の境界 469.4s より前の 6 イベントは
+  before/after 同値のままだった)。
+- 実測 (video_97 窓414-509s、同一窓 before/after ペア比較):
+  境界通過後のイベントで before=3220→after=46、3840→55、3580→51、
+  1820→26、740→10、1180→17 (= レート1→70 の正常化)。
+- 本番オーバーレイは before/after で **bit-identical を実測確認**
+  (`--no-render --dump-timeline` npz 全配列一致、かつ同条件2回実行の
+  再現性も bit-identical)。`ChainEvent.ojama_sent`/`leftover_score` を
+  消費する本番表示経路が存在しないため。
+- `tests/test_chain_detector.py:126` の期待値変更は**不要だった**
+  (同テストは tracker 単体を t=0〜1 秒で駆動しており挙動不変)。
+
+### 学び
+
+**「本番は無事」で終わらせてはいけない。** 壊れていたのは測定器で、
+このプロジェクトでは測定器の誤りが「正しい修正を捨てる」判断に何度もつながっている
+(直近: 8/24 に v51 の「悪化」が物差しの穴だった件)。
+
+## W39: dig_resistance のおじゃま端数抽選が OS乱数で、同一入力でも有利不利スコアが実行ごとに最大 ±12.34 点揺れていた (2026-08-25 確定・根治済み)
+
+### 事象 (実測で根因確定)
+
+1. `src/indicators_v2.py` `_dig_resistance_one` が `sim.drop_ojama(board, n_ojama)`
+   を **seed 省略**で呼んでいた
+2. `src/chain.py` `_calc_ojama_drop_counts` は seed=None のとき
+   `random.Random(None)` (OSエントロピー) で端数列を毎回抽選する。テスト
+   落下量 10/20/30 個の端数は 4/2/0 なので **10個・20個のケースで落下先が
+   毎回変わる**
+3. 端数列の違いで落下後盤面の連鎖生存/窒息が変わり `_dig_resistance_one` が
+   0.0↔1.0 に反転 → 3量平均の `dig_resistance` が **±1/3 の離散フリップ**
+4. `ukeyasusa` は内部で `dig_resistance` を**再抽選** (W_DIG=0.6 → ±0.2 が独立
+   に発生)
+5. モデル52列中 **4列** (`dig_resistance` / `ukeyasusa` / `diff_dig_resistance`
+   / `diff_ukeyasusa`) が汚染。学習データ生成
+   (`scripts/build_labeled_win_from_npz.py`) の同4列も収集runごとに非決定
+
+実測 (zenchi 先頭5試合 t=0-420s、母数5186行): `adv_raw` が run 間で
+155/5186 行不一致、**最大差 12.34 点**、符号食い違い 45/5186 行。実ゲーム
+盤面での `dig_resistance` 300回計算は **0.0 が203回 / 0.3333 が97回の
+二峰分布** (`data/verify/adv_nondeterminism_2026-08-25/`)。
+
+### 台帳漏れとしての記録
+
+この乱数は `scripts/build_labeled_win_from_npz.py` (2026-08-13 native化
+コメント) に「既存の非決定性はこの載せ替えでは変えない・直さない」と
+**注記があるだけで、本台帳に項目が無かった**。8/13 の user 恒久指示
+「既知の弱点はあらかじめ潰す (根治 or user承認つきガードを先に決める)」に
+対する台帳登録漏れ。既知の非決定性を「注記のみ」で放置した結果、W31 で
+GPU 非決定という誤った仮説に調査コストを払った。
+
+### 根治 (2026-08-25 実施)
+
+- `src/indicators_v2.py` `_dig_resistance_one`: 盤面由来の決定論的シード
+  `_expected_fire_seed(board) ^ n_ojama` (zlib.crc32 既存規約) を
+  `drop_ojama` に渡す
+- `scripts/build_labeled_win_from_npz.py` `_native_dig_resistance_one`:
+  **完全同一の導出式**で seed を渡す (native/Python パリティ維持 +
+  学習データの決定化)
+- 再発防止ガード: `src/chain.py` `_calc_ojama_drop_counts` が
+  「seed=None + 端数>0」の非決定経路に入ったら RuntimeWarning
+  (**既定挙動は不変**、警告のみ)
+- 回帰テスト: `tests/test_indicators_v2.py` (seed 配線 + 繰り返し同一値)、
+  `tests/test_chain.py` (警告ガード3本)、
+  `tests/test_build_labeled_win_from_npz.py` (native 側 seed 配線)
+
+### 副作用の性質
+
+4列の値が「ランダムな1実現値」→「盤面ごとに固定された1実現値」になるだけで
+**分布は不変・モデル互換** (再学習不要)。ただし**過去の timeline dump との
+bit-identical 比較基準は変わる** (修正前 dump とは一致しない。修正後
+run 同士は一致)。
+
+### 残る限界 (根治後も残る、別項)
+
+- 端数落下は依然「単一実現値」の評価 (期待値化していない)。W33 の
+  `ojama_damage` 連続量近似のような期待値化は別課題
+- `ojama_disruption` (`indicators_v2.py`、seed=i の n_samples 平均) は
+  元から決定的で無関係
