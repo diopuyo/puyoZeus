@@ -7,6 +7,7 @@ indicators.py が必要とする連鎖情報（連鎖数・参加ぷよ数・発
 
 from __future__ import annotations
 
+import warnings
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -339,6 +340,8 @@ class ChainSimulator:
             board: おじゃまを落とす前の盤面。
             ojama_count: 落とすおじゃまの数。
             seed: 端数列選択の乱数シード (None = 毎回ランダム)。後方互換 optional。
+                端数 (ojama_count % 6 > 0) があるのに None のままだと
+                RuntimeWarning が出る (W39 再発防止、挙動は不変)。
 
         Returns:
             Board: おじゃまを落とした後の新しい盤面。
@@ -498,7 +501,9 @@ class ChainSimulator:
         (user 伝授ルール: 端数はランダム列。旧実装の「左から順」は誤り。)
 
         dig_resistance 等の精度にも影響するため、呼び出し元が再現性を
-        必要とする場合は seed を指定すること。
+        必要とする場合は seed を指定すること。seed 未指定のまま端数抽選に
+        入った場合は RuntimeWarning を出す (2026-08-25 W39 再発防止ガード、
+        挙動自体は従来通り OS乱数のまま = 既定挙動は不変)。
 
         Args:
             ojama_count: 落とすおじゃまの総数。
@@ -515,6 +520,18 @@ class ChainSimulator:
             drop_counts[col] += full_rows
 
         if remainder > 0:
+            if seed is None:
+                # 端数抽選が非決定 (OS乱数) 経路に入った = 呼び出しごとに
+                # 結果が変わる。指標経路で踏むと実行間で値が揺れる
+                # (docs/KNOWN_WEAKNESSES.md W39 の根因そのもの) ため警告する。
+                # 挙動は変えない (backwards compat、警告のみ)。
+                warnings.warn(
+                    "drop_ojama: 端数列の抽選が seed 未指定 (OS乱数) で呼ばれた。"
+                    "再現性が必要な経路では盤面由来の決定論的 seed を渡すこと"
+                    " (docs/KNOWN_WEAKNESSES.md W39)。",
+                    RuntimeWarning,
+                    stacklevel=3,  # drop_ojama の呼び出し元を指す
+                )
             rng = _random.Random(seed)
             cols_for_remainder = rng.sample(range(BOARD_COLS), remainder)
             for col in cols_for_remainder:

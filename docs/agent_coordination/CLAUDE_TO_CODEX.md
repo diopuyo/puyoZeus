@@ -2362,3 +2362,30 @@ planA 型の「adv への副作用ゼロ証明」は1回比較では原理的に
 
 **5,958 passed / 13 skipped / 0 failed** (1 deselected、20分7秒)。
 基準 5,914 からの増加は各レーンが追加した回帰テスト分。コミットなし。
+
+---
+
+## 2026-08-25 12:00 JST — W39 根治: 有利不利スコアの実行間非決定 (±12.34点) を決定化 (Claude コーダ)
+
+### 根因と修正 (1行相当×2箇所 + 警告ガード)
+
+`dig_resistance` のおじゃま端数抽選が seed 省略 (OS乱数) だった。
+- `src/indicators_v2.py` `_dig_resistance_one`: `drop_ojama(board, n_ojama, seed=_expected_fire_seed(board) ^ n_ojama)` に変更 (既存 crc32 規約流用、新定数なし)
+- `scripts/build_labeled_win_from_npz.py` `_native_dig_resistance_one`: 完全同一の seed 導出式 (native/Python パリティ維持 + 学習データ収集 run の決定化)
+- `src/chain.py` `_calc_ojama_drop_counts`: seed=None + 端数>0 の非決定経路に RuntimeWarning (**既定挙動は不変**、警告のみ)
+
+### 実測
+
+- **3run 完全一致**: zenchi 先頭5試合 t=0-420s、同一条件3回 (dump_fix1/2/3)。3ペア総当たりで**全27キー bit-identical、adv_raw 0/5186 行不一致** (修正前は 155-164/5186 行、最大差 12.34点)
+- 分布不変: 修正前二峰 {0.0: 203, 0.3333: 97}/300回 → 修正後は支持集合内の1点に固定 (t=162.5 2P は 0.3333、t=222.0 1P は 0.0)
+- 学習データ経路: 実ゲーム盤面で native/Python とも30回繰り返し単一値かつ両者一致 (フル収集 run は未実測、経路関数の直接実測で代替)
+- 副次確認: 修正前 r2 vs 修正後 fix1 で `b1_hash`/`b2_hash`/認識系19キーは全行一致 → **認識 (CNN) 経路は元から決定的、W31 の GPU 非決定仮説は反証**
+
+### 成果物・テスト
+
+- `data/verify/adv_nondeterminism_2026-08-25/` に dump_fix1-3.npz / trace_fix1-3.jsonl / microtest_result_after_fix.txt を**追加** (既存ファイルは無変更)
+- 関連テスト 687 passed / 0 failed (test_chain 44 / test_indicators_v2 206 / blwn+exchange_virtual+ojama_damage 151 / 周辺4ファイル 102 / advantage_components 184)。回帰テスト新規6本 (seed 配線×2、繰り返し同一値、警告ガード×3)
+- 台帳: `docs/KNOWN_WEAKNESSES.md` に **W39 新規登録** + W31 節に「W39 と同一現象・GPU仮説反証」を追記
+- **無条件修正** (フラグ化せず)。理由: 旧挙動が非決定なので「既定OFFで bit-identical」が原理的に定義不能 = フラグ化の便益が存在しない。分布は不変でモデル互換。**production_config への採用登録はしていない** (user 数値確認待ち)。過去 dump との bit-identical 基準は変わるため、今後の基準 dump は修正後 run で再生成が必要
+
+コミットなし。
