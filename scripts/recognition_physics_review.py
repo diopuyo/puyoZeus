@@ -17,6 +17,13 @@ scripts/measure_opponent_estimate_accuracy.py と同じ外部消費パターン)
     4. お邪魔会計整合: ChainEvent.ojama_sent (発火側の期待送り量) と
        相手盤面の可視お邪魔増加 (実測着弾量、measure_ojama_landing_delay.py
        の着弾検出ロジックを流用) の乖離。
+       ※ W38 (docs/KNOWN_WEAKNESSES.md) 注記 (2026-08-25 根治済み):
+       ojama_sent のマージンタイム減衰は、処理窓の中で最初の score リセット
+       境界 (試合開始) を通過した後は試合相対時刻で正しく計算される。
+       ただし窓の先頭〜最初の境界までの区間は pipeline 生成直後の tracker
+       (match_start_sec=0.0) のままなので、窓を試合の途中から開始した場合の
+       当該区間の ojama_sent は動画絶対時刻ベース (旧 W38 挙動) になる。
+       窓は試合開始より前から始めること。
     5. is_match_active 誤 False の発生率: CHAIN 状態中に confirmed_board が
        None になる割合 (Stage 0 で発見した既知の穴、cf.
        measure_opponent_estimate_accuracy.py)。

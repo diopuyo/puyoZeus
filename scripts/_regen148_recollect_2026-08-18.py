@@ -33,6 +33,7 @@ DL関数は w12 スクリプトと同じ node v24.19.0 + リトライ強化版�
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import subprocess
 import sys
 import threading
@@ -68,18 +69,33 @@ _DL_RETRY_SLEEP_SEC = 8.0
 # ログイン済み Cookie があれば渡す (user承認 2026-08-18、Edge のCookieを使用)。
 # **認証情報のため scratchpad にのみ置き、git 管理下には絶対に置かない**。
 # 存在しなければ Cookie 無しで動作する (後方互換)。
-_COOKIES_TXT = Path(
+_COOKIES_MASTER = Path(
     "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
     "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
-    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies.txt"
+    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_master.txt"
 )
 
 
-def _cookie_args() -> list:
-    """Cookie ファイルがあれば yt-dlp 引数を返す。無ければ空。"""
-    if _COOKIES_TXT.exists() and _COOKIES_TXT.stat().st_size > 0:
-        return ["--cookies", str(_COOKIES_TXT)]
-    return []
+def _cookie_args(target_id: str) -> list:
+    """Cookie の使い捨てコピーを作って yt-dlp 引数を返す。無ければ空。
+
+    yt-dlp は `--cookies` で渡したファイルにセッション更新を**書き戻す**ため、
+    複数プロセスが同一ファイルを指すと競合してファイルが壊れる (2026-08-18 実測:
+    3並列で 2459行/LOGIN_INFO 2件 -> 1138行/LOGIN_INFO 0件 に退化し、回復して
+    いた403が再発した)。マスターは読み取り専用で保持し、使い捨てコピーを渡す。
+    """
+    if not (_COOKIES_MASTER.exists() and _COOKIES_MASTER.stat().st_size > 0):
+        return []
+    work = _COOKIES_MASTER.parent / f"yt_cookies_work_orch_{target_id}.txt"
+    try:
+        shutil.copyfile(_COOKIES_MASTER, work)
+        # マスターは読み取り専用にしてあるが、yt-dlp は Cookie ファイルへ
+        # セッション更新を書き戻すため、作業コピーには書き込み権限が要る
+        # (2026-08-18: 444 のままで PermissionError となり 403 が再発した)。
+        work.chmod(0o644)
+    except OSError:
+        return []
+    return ["--cookies", str(work)]
 
 
 def _download_video_node24(t):  # noqa: ANN001, ANN201 (orch.Target 型を再利用)
@@ -100,7 +116,7 @@ def _download_video_node24(t):  # noqa: ANN001, ANN201 (orch.Target 型を再利
             str(PROJECT_ROOT / "venv" / "bin" / "python"), "-m", "yt_dlp",
             "--ffmpeg-location", str(orch.FFMPEG_LOCATION),
             "--js-runtimes", f"node:{_NODE24_PATH}",
-            *_cookie_args(),
+            *_cookie_args(t.target_id),
             "-f", orch.YT_DLP_FORMAT,
             "--remux-video", "mp4", "--no-playlist", "--no-progress",
             "-o", str(out_path), url,

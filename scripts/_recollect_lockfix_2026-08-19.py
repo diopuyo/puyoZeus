@@ -37,7 +37,7 @@ EXTRA_FLAGS = [
 # subset50 収集 (orchestrator) と同一の追加引数
 BASE_ARGS = ["--with-next", "--enable-phantom-board-guard",
              "--max-sec", "0", "--sample-interval", "0"]
-PARALLEL = 12
+PARALLEL = 7  # 2026-08-19: 12並列+レプレイ併走でメモリ圧TERM (rc=-15) が出たため引き下げ
 
 
 def run_one(stem: str) -> tuple[str, bool]:

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import inspect
 import json
 import math
@@ -33,8 +34,9 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import src.indicators_v2 as iv  # noqa: E402
-from src.board import BOARD_COLS, BOARD_ROWS, Board  # noqa: E402
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_OJAMA, Board  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.chain import ChainSimulator  # noqa: E402
 from src.chain_count_truth import select_chain_count_high_confidence_band  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
 from src.exchange_virtual_board import (  # noqa: E402
@@ -57,12 +59,14 @@ from src.probability_calibration import (  # noqa: E402
 from src.production_config import (  # noqa: E402
     ATTRIBUTION_EXCLUDED_INDICATORS,
     COUNTER_REACH_ENABLED_BY_DEFAULT,
+    GHOST_CHAIN_RULE_ENABLED,  # kill_override 連鎖完走後是正のフォールバック simulate 用
     OVERLAY_NORMALIZE_FPS_30_ENABLED_BY_DEFAULT,
     OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT,
     OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
     recognition_load_default_kwargs,
     reorg_removed_indicator_names,
 )
+from src.scoring import calculate_chain_score  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import scripts.mc_counter_estimator as mc_counter  # noqa: E402
@@ -243,6 +247,14 @@ def board_room(board) -> int:
     return max(0, PLAYABLE_CELLS - int(np.count_nonzero(board._grid[1:])))
 
 
+# kill_override 連鎖完走後是正 (2026-08-22 修正①) のフォールバック simulate
+# 専用の共有インスタンス。幽霊連鎖ルールは本番採用フラグ (production_config.py
+# が単一情報源) と同じ設定を使う (他の simulate 経路 exchange_virtual_board.py
+# 等と同一の考え方)。フレーム毎の新規生成コストを避けるためモジュール定数化。
+_CHAIN_COMPLETION_SIMULATOR = ChainSimulator(
+    exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
+
+
 def _board_hash(board: "Board | None") -> int:
     """盤面グリッドの決定論的ハッシュ (タイムラインdump用、2026-08-11 追加)。
 
@@ -275,6 +287,447 @@ def kill_override(adv: float, inc1: float, inc2: float,
     return (1.0 - g) * adv + g * target
 
 
+def _chain_event_gen_ojama(ev: "ChainEvent", elapsed_sec: float) -> float:
+    """1つの ChainEvent が生成するお邪魔換算量を求める (既存資産のみ再利用)。
+
+    `ev.total_score` が信頼できる値 (baseline 実測、または W7
+    `enable_pseudo_chain_score_fill` 充填済み推定、`>= CHAIN_TOTAL_MIN_SCORE`)
+    ならそのまま使う (`ResolvedExchangeTracker._resolve()` と同一の使い方、
+    追加 simulate なし)。信頼できない場合 (formula/landing 経路 +
+    `enable_pseudo_chain_score_fill=False`、現行本番既定、`total_score=0`
+    固定になる W7 既知の弱点) のみ、`ev.before_board` を自前で simulate し
+    `calculate_chain_score` (`_fill_pseudo_chain_score` と同一関数) で得点を
+    確定するフォールバックに落ちる。simulate は最悪1回のみ。
+
+    既知の近似 (黙って握りつぶさず明記する): フォールバック simulate は
+    全消し持ち越しボーナス (`ALL_CLEAR_BONUS`、`VideoChainTracker`/
+    `RecognitionPipeline` 内部の外部状態でボード単体からは復元不能) を
+    含まない。大型連鎖の判定への影響は軽微と判断し許容する。
+    """
+    if ev.total_score >= CHAIN_TOTAL_MIN_SCORE:
+        return float(iv._score_to_ojama_count(float(ev.total_score), elapsed_sec))
+    fallback = _CHAIN_COMPLETION_SIMULATOR.simulate(ev.before_board)
+    if fallback.chain_count < 1:
+        return 0.0  # 起点盤面に連鎖が実在しない (ノイズ疑い)
+    fallback_score = calculate_chain_score(fallback).total_score
+    return float(iv._score_to_ojama_count(float(fallback_score), elapsed_sec))
+
+
+class ChainGenerationAccumulator:
+    """連鎖中の自分の生成量 (お邪魔換算) を、複数回に分かれる chain_event
+    トリガーにまたがって累積する (2026-08-22 改良②、根治①の実測で確認した
+    根本原因への対処)。
+
+    【実測で確認した問題】t=6717.5 (logs/_diag_t6717_kill_override_root_
+    cause_2026-08-22) で計装したところ、1P の連鎖は t=6708.1 (CHAIN 突入)
+    から t=6718.3 (STABLE 復帰) まで約10.2秒続き、その間に盤面の空きは
+    5→67 まで回復する本物の大型連鎖だった。しかし単発の `ChainEvent` だけを
+    見ると t=6713.5 時点で観測できるのは chain_count=5・生成量84個の
+    イベント1個だけで、連鎖全体のごく一部にすぎなかった (是正① 単体では
+    pending 216→102 までしか下がらず、kill_override の閾値 KILL_RATIO_FULL
+    =1.5 を依然大きく上回り続けて誤爆が解消しなかった)。
+
+    原因: `_apply_chain_formula_early_fire` (formula 機構) は「既に
+    アクティブな疑似 ChainEvent があれば新規発火しない」設計のため、長い
+    連鎖はホールド期限 (`chain_hold_base_sec + chain_hold_per_step_sec ×
+    chain_count`) が切れるたびに「その時点で残っている分」だけを対象にした
+    **新しい**疑似イベントに置き換わる。単発の ChainEvent だけを見ると
+    連鎖全体の生成量を大幅に過小評価する。`EarlyFireTracker`
+    (2026-07-29 指摘1/2) が全く同じ理由で「trigger_sec の変化を見て加算」
+    を採用しているのと同じ対処をここでも行う (新しい発想ではなく既存の
+    確立されたパターンの横展開)。
+
+    生成量は `trigger_sec` が変わるたびに加算 (二重計上防止)。busy状態
+    (CHAIN/GRAVITY_SETTLE) を離れたら (=真の連鎖終了、以後は本物の確定
+    盤面で判定できる) 累積をリセットする。完走後盤面 (room 算出用) は
+    直近の `chain_event.before_board` を使う (連鎖生理上、最新の途中経過
+    盤面を完走までシミュレートすれば最終結果に収束するため、履歴を
+    保持する必要はない — 生成量の累積とは異なり冪等)。
+
+    [2026-08-22 user指摘・対症療法の実測欠陥] 累積 (`accumulate=True`) は
+    「まだ画面に見えていない残り連鎖ぶんまで既に生成し終えた」という架空の
+    完了状態を仮定するため、raw モデル (実際の盤面画素を見ている) との
+    間に新しい不一致時間帯を作る実測結果が出た (t=6717.5: 元の2.03秒の
+    符号不一致は解消したが、直前に6.63秒の新しい不一致が発生、
+    logs/_diag_kill_override_chain_completion_v2 系列の全編再走査で確認)。
+    根治 (CHAIN 保持時間の実測較正 `chain_hold_base_sec`/
+    `chain_hold_per_step_sec` 配線) が入れば断片化そのものが減るため、
+    `accumulate=False` (既定) では「直近1件の chain_event が示す生成量を
+    そのまま使う」(=trigger_sec が変わるたびに **加算せず置き換える**)
+    保守的な動作にする。掛け算式表示等で connectivity が失われ本当に
+    複数フラグメントに分裂してしまう残存ケースの保険として `accumulate=True`
+    を明示指定すれば残せる (対症療法として完全に削除はしない、
+    ただし根治との併用時は二重計上にならないよう `accumulate=False` を
+    既定にした)。
+    """
+
+    def __init__(self, accumulate: bool = False) -> None:
+        self._accumulate = bool(accumulate)
+        self._accum_gen: dict[str, float] = {"1p": 0.0, "2p": 0.0}
+        self._last_trigger: dict[str, "float | None"] = {"1p": None, "2p": None}
+        self._latest_before_board: dict[str, "Board | None"] = {"1p": None, "2p": None}
+
+    def _update_side(
+        self, key: str, r_side, elapsed_sec: float,
+    ) -> "tuple[float, Board | None]":
+        busy = getattr(r_side, "state", None) in _LIVE_DEFENDER_BUSY_STATES
+        if not busy:
+            self._accum_gen[key] = 0.0
+            self._last_trigger[key] = None
+            self._latest_before_board[key] = None
+            return 0.0, None
+        ev = getattr(r_side, "chain_event", None)
+        if ev is not None and ev.chain_count >= 1:
+            self._latest_before_board[key] = ev.before_board
+            if ev.trigger_sec != self._last_trigger[key]:
+                self._last_trigger[key] = ev.trigger_sec
+                gen = _chain_event_gen_ojama(ev, elapsed_sec)
+                if self._accumulate:
+                    self._accum_gen[key] += gen
+                else:
+                    # [対症療法回避、2026-08-22] 架空の完了状態を仮定せず、
+                    # 直近1件の chain_event が示す生成量だけを使う (置き換え)。
+                    self._accum_gen[key] = gen
+        return self._accum_gen[key], self._latest_before_board[key]
+
+    def update(
+        self, r_p1, r_p2, elapsed_sec: float,
+    ) -> "tuple[float, Board | None, float, Board | None]":
+        """毎フレーム呼ぶ (settled 有無に関わらず、EarlyFireTracker と同じ理由:
+        settled ゲートの外側でも trigger_sec の変化を取りこぼさないため)。
+
+        Returns:
+            (1P累積生成量, 1Pの直近before_board, 2P累積生成量, 2Pの直近before_board)。
+            非busy中はそれぞれ (0.0, None)。
+        """
+        gen1, board1 = self._update_side("1p", r_p1, elapsed_sec)
+        gen2, board2 = self._update_side("2p", r_p2, elapsed_sec)
+        return gen1, board1, gen2, board2
+
+
+def _kill_override_chain_completion_inputs(
+    snap: OjamaAccountSnapshot,
+    b1: "Board", b2: "Board", room1: int, room2: int,
+    gen1: float, before1: "Board | None",
+    gen2: float, before2: "Board | None",
+    pending_p1_override: "float | None" = None,
+    pending_p2_override: "float | None" = None,
+) -> "tuple[int, int, float, float]":
+    """`kill_override` への入力を「連鎖完走後」に是正する (2026-08-22 修正①)。
+
+    背景 (根治対象、6日越しの user 判断待ち事項): 2026-08-03 user決定
+    「修正B: 連鎖中の仮想盤面評価」— 発火前の凍結盤面をそのまま致死判定に
+    使うと「消費中の連鎖を保有火力として二重計上」する。2026-08-13 指摘#9で
+    その完成形として `resolve_mutual_exchange` (両者決着の完走シミュレーション
+    + 相殺 + 1ターン上限着弾) を実装したが、起動条件が
+    `ev1 is not None and ev2 is not None` (両者同時発火) のため、**片側だけ
+    連鎖している場面 (実際の誤爆7件全てがこれ) ではクラス全体が起動せず**、
+    無条件で毎フレーム呼ばれる per-frame `kill_override` (`:4764` 付近) には
+    この保護が一切配線されていなかった。
+
+    生成量・完走前盤面は呼出側 (`ChainGenerationAccumulator.update()`) が
+    複数トリガーにまたがって解決済みのものを渡す設計に変更した (2026-08-22
+    改良②、`ChainGenerationAccumulator` docstring の実測根拠参照)。
+    本関数自体は「解決済みの (生成量, 起点盤面) を `resolve_mutual_exchange`
+    に渡して完走後の room/pending を得るだけ」の薄い純関数に単純化した。
+
+    発火していない側 (`before1`/`before2` が None、または `gen<=0`) は
+    「現在の確定盤面 + 生成量0」として渡す。両側とも生成量0ならこの完走
+    シミュレーション自体を呼ばず入力をそのまま返す (=無関係フレームでは
+    bit-identical、余計な simulate コストも払わない)。
+
+    Returns:
+        (room1_有効値, room2_有効値, pending1_有効値, pending2_有効値)。
+        どちらの側も発火していなければ (room1, room2, pending_p1, pending_p2)
+        をそのまま返す。
+
+    pending_p1_override/pending_p2_override (2026-08-24 A案「規模の比較」、
+    optional 引数のみ追加 = backwards compat): None (既定) なら従来通り
+    snap.pending_p1/p2 (PENDING_ABS_CAP=216 で丸め済みの額面) を使う。
+    値が渡された場合はそれを相殺の基礎 pending として使う。呼出側は
+    「cap 前の実額 (snap.pending_p1/p2_uncapped) + 未登録送付分
+    (PostChainUnregisteredSentTracker)」を渡す設計 (根因①②の同時是正)。
+    """
+    base_pending1 = (
+        float(snap.pending_p1) if pending_p1_override is None
+        else float(pending_p1_override))
+    base_pending2 = (
+        float(snap.pending_p2) if pending_p2_override is None
+        else float(pending_p2_override))
+    if gen1 <= 0.0 and gen2 <= 0.0:
+        return room1, room2, base_pending1, base_pending2
+    before1_final = before1 if before1 is not None else b1
+    before2_final = before2 if before2 is not None else b2
+    result = resolve_mutual_exchange(
+        before1_final, before2_final, int(round(gen1)), int(round(gen2)),
+        int(round(base_pending1)), int(round(base_pending2)))
+    return (
+        board_room(result.board_p1_after), board_room(result.board_p2_after),
+        float(result.leftover_p1), float(result.leftover_p2),
+    )
+
+
+# ============================
+# B案: 致死上書きの確信度ゲート (2026-08-24、±100即断の構造的禁止)
+# 根因: memory project_pm100_display_flip_2026-08-24。per-frame kill_override
+# の g=1 完全上書きが ChainEvent 断片化等の観測ノイズ1フレームで ±100→∓100
+# へ反転し、EMA (τ=0.116秒) は段差入力を実質素通しする。表示の安定は平滑化
+# では作れないため、上書き側で「確信度は持続時間で獲得する」構造にする。
+# 定数は全て物理量からの導出 (シーン逆算禁止、feedback_overfitting_awareness)。
+# ============================
+
+# 設置→盤面反映の受け入れ基準 8フレーム (memory feedback_placement_reflection_
+# 8frames_2026-07-25) を実効30fps (--normalize-fps-30 済み) の秒に換算した認識
+# 反映遅延。持続確認の時間窓に認識側の遅れぶんのマージンとして加える。
+PLACEMENT_REFLECTION_LATENCY_SEC: float = 8.0 / 30.0
+
+# 方向反転のクールダウン = 1手の平均設置時間 (0.348秒、24.6万件実測の
+# PLACEMENT_SPEED_BY_ROW_SEC 単純平均 = mc_counter.BEAM_ROLLOUT_AVG_STEP_TIME_SEC)。
+# 物理根拠: おじゃまは受け側の設置でしか降らず (reference_ojama_landing_gated_
+# by_placement)、新しい連鎖の発火にも設置が要る。1手も置けない時間内に致死の
+# 「向き」が実世界で入れ替わることはないため、その間の逆向き上書きは観測ノイズ
+# (ChainEvent 断片化 = 根因③) として保留する。
+KILL_FLIP_COOLDOWN_SEC: float = mc_counter.BEAM_ROLLOUT_AVG_STEP_TIME_SEC
+
+# 完全上書き (±100) を許すまでの同方向持続時間。
+# 物理根拠: 受け側が反証 (撃ち返しの発火) に即座に使える持ち手は「現在手 +
+# ネクスト」の2手 (画面に見えており思考済みで置ける分)。その設置時間
+# 2×0.348秒 の間、致死判定が同方向のまま反証が観測されなければ確定とみなす。
+# 認識の設置→盤面反映遅延 (上記 8f≈0.267秒) をマージンとして加算 → ≈0.963秒。
+KILL_CONFIRM_PERSIST_SEC: float = (
+    2.0 * mc_counter.BEAM_ROLLOUT_AVG_STEP_TIME_SEC + PLACEMENT_REFLECTION_LATENCY_SEC)
+
+# 持続確認前の上書き上限 (絶対値)。根拠: 生モデルが全編で実際に出す上限帯は
+# p99=91〜96 / max 99.4 (logs/_diag_zenchi_pm100_stats_2026-08-24.log 実測)。
+# 未確定の致死推定がモデル自身の出力域を超えて断定する (99%/1% を名乗る) のを
+# 禁じ、その下側の 90 に置く。方向情報は失わない (±90 ≈ 勝率9割台の強い有利)。
+KILL_UNCONFIRMED_ABS_CAP: float = 90.0
+
+
+class KillOverrideConfidenceGate:
+    """per-frame `kill_override` の出力に確信度制御を掛ける (2026-08-24 B案)。
+
+    3つの規則 (すべて時間ベース、settled フレームの粗密に依存しない):
+      1. 方向反転時クールダウン: 前回と逆方向の致死上書きは、反転検知から
+         KILL_FLIP_COOLDOWN_SEC (1手時間) の間は適用を保留し、上書き前の
+         ブレンド値 (adv_pre) をそのまま返す。1フレームだけの反転
+         (根因③ ChainEvent 断片化) はこれで構造的に表示へ出なくなる。
+      2. 持続による確定: 同一方向の上書きが KILL_CONFIRM_PERSIST_SEC 続いて
+         初めて完全上書き (±100 到達) を許す。
+      3. 未確定中の上限: 確定前は |adv| ≤ KILL_UNCONFIRMED_ABS_CAP に丸める
+         (adv_pre 自身が既にそれを超えている場合は adv_pre を下限に採用し、
+         安全弁がモデルより弱い方向へ働かないようにする)。
+
+    stateless 実装原則の例外 (状態は外部 wrapper とする CLAUDE.md 規約に従い、
+    kill_override 純関数自体は変更せず、状態を持つ本ゲートを外側に置く)。
+    試合境界では呼出側 (generate ループ) が本オブジェクトを作り直す。
+    """
+
+    def __init__(self) -> None:
+        self._direction: int = 0            # +1=2P致死(adv増側) / -1=1P致死 / 0=なし
+        self._dir_since_sec: float = 0.0    # 現在方向の開始時刻
+        self._last_fired_sec: "float | None" = None
+        self._cooldown_until_sec: float = float("-inf")
+
+    def apply(self, adv_pre: float, adv_post: float, t_sec: float) -> float:
+        """kill_override 適用前後の値からゲート済みの adv を返す。
+
+        adv_pre: kill_override 適用前の4成分ブレンド値。
+        adv_post: kill_override 適用後の値 (未発火なら adv_pre と同一)。
+        """
+        fired = adv_post != adv_pre
+        if not fired:
+            # 発火が1手時間を超えて途切れた = 判定根拠 (pending/room比) が
+            # 非致死へ戻った。方向の記憶を破棄し、次の発火は新規事象として扱う。
+            if (self._last_fired_sec is not None
+                    and t_sec - self._last_fired_sec > KILL_FLIP_COOLDOWN_SEC):
+                self._direction = 0
+                self._last_fired_sec = None
+            return adv_post
+        direction = 1 if adv_post > adv_pre else -1
+        if direction != self._direction:
+            reversal = self._direction != 0
+            self._direction = direction
+            self._dir_since_sec = t_sec
+            if reversal:
+                self._cooldown_until_sec = t_sec + KILL_FLIP_COOLDOWN_SEC
+        self._last_fired_sec = t_sec
+        if t_sec < self._cooldown_until_sec:
+            return adv_pre  # 反転直後 (1手未満) は上書きを保留
+        if t_sec - self._dir_since_sec >= KILL_CONFIRM_PERSIST_SEC:
+            return adv_post  # 同方向の持続で確定 → 完全上書きを許可
+        lower = min(adv_pre, -KILL_UNCONFIRMED_ABS_CAP)
+        upper = max(adv_pre, KILL_UNCONFIRMED_ABS_CAP)
+        return float(min(max(adv_post, lower), upper))
+
+
+# ============================
+# A案(i-a): 連鎖完走後の未登録送付分トラッカー (2026-08-24「規模の比較」)
+# ============================
+
+# 未登録送付分の保持期限。導出: 会計 finalize の実測最大遅延 11.5秒
+# (t=186.0 の1P連鎖完走 → t=197.53 の pending 登録、memory project_pm100_
+# display_flip_2026-08-24 根因①) + score settle 待ち (K_SETTLE_FRAMES=20f
+# ≈0.67秒) + 連鎖合体窓 (CHAIN_COALESCE_WINDOW_SEC=2.5秒) ≈ 14.7秒 を包含する
+# 安全側の丸め。期限までに会計登録 (pending増加) にも盤面着弾 (おじゃまセル
+# 増加) にも現れない送付分は、生成量推定の誤observationとみなして破棄する。
+UNREGISTERED_SENT_EXPIRE_SEC: float = 20.0
+
+
+class PostChainUnregisteredSentTracker:
+    """「送付済みだが会計未登録」のおじゃまを連鎖完走時に即時捕捉する (A案(i-a))。
+
+    根因① (memory project_pm100_display_flip_2026-08-24): お邪魔会計の
+    finalize は score settle 待ちを要するため、撃ち合いでは相手側の pending
+    登録が連鎖完走から最大11.5秒遅れる。その間に相手が撃ち返すと、送付済みの
+    実弾 (例: 1Pの517個) が相殺の計算から丸ごと欠落し、撃ち返し (720個) の
+    全量が新規攻撃として kill_override に渡って方向が反転する。
+
+    本トラッカーは各サイドの busy (CHAIN/GRAVITY_SETTLE) → 非busy 遷移を
+    連鎖完走とみなし (reference_chain_end_absolute_signals と同じ観測面)、
+    ChainGenerationAccumulator の生成量推定を「宛先側への未登録 pending」
+    として保持する。保持分は次のいずれかで減額/消滅する (全て実観測駆動):
+      - 会計登録: 宛先の snap.pending_*_uncapped が増えた分だけ減額
+        (会計が追い付いた)。
+      - 盤面着弾: 宛先の凍結盤面のおじゃまセルが増えた分だけ減額
+        (会計を経ずに降った)。
+      - 相互相殺: 宛先側が自分の連鎖を完走したら、その生成量でまず消す
+        (ゲーム内の相殺と同じ向き)。
+      - 期限切れ: UNREGISTERED_SENT_EXPIRE_SEC。
+    減額は二重に効く場合があるが、常に「供給不足側」(=従来挙動に近づく側)
+    に倒れる保守設計 (架空の攻撃を作らない)。kill_override の入力専用で、
+    会計本体・表示値には一切書き込まない。
+    """
+
+    def __init__(self) -> None:
+        self._prev_busy: dict[str, bool] = {"1p": False, "2p": False}
+        self._last_gen: dict[str, float] = {"1p": 0.0, "2p": 0.0}
+        self._held: dict[str, float] = {"1p": 0.0, "2p": 0.0}  # key=送り主
+        self._held_since: dict[str, float] = {"1p": 0.0, "2p": 0.0}
+        self._prev_pending_unc: dict[str, "float | None"] = {"1p": None, "2p": None}
+        self._prev_board_ojama: dict[str, "int | None"] = {"1p": None, "2p": None}
+
+    @staticmethod
+    def _ojama_cells(board: "Board | None") -> "int | None":
+        """可視領域 (row1-12、board_room と同じ範囲) のおじゃまセル数。"""
+        if board is None:
+            return None
+        return int(np.count_nonzero(board._grid[1:] == COLOR_OJAMA))
+
+    def _absorb_dest_observations(
+        self, dest_key: str, pending_unc_now: float, board: "Board | None",
+    ) -> None:
+        """宛先側の観測 (会計登録/盤面着弾) で送り主の保持分を減額する。"""
+        sender = "2p" if dest_key == "1p" else "1p"
+        prev_pend = self._prev_pending_unc[dest_key]
+        if prev_pend is not None and pending_unc_now > prev_pend:
+            self._held[sender] = max(
+                0.0, self._held[sender] - (pending_unc_now - prev_pend))
+        self._prev_pending_unc[dest_key] = pending_unc_now
+        cells = self._ojama_cells(board)
+        prev_cells = self._prev_board_ojama[dest_key]
+        if cells is not None:
+            if prev_cells is not None and cells > prev_cells:
+                self._held[sender] = max(
+                    0.0, self._held[sender] - float(cells - prev_cells))
+            self._prev_board_ojama[dest_key] = cells
+
+    def _track_completion(
+        self, key: str, r_side, gen: float, own_pending_unc: float, t_sec: float,
+    ) -> None:
+        """busy→非busy 遷移 (連鎖完走) で未登録送付分を捕捉する。"""
+        busy = getattr(r_side, "state", None) in _LIVE_DEFENDER_BUSY_STATES
+        if busy:
+            # 断片化 (根因③) で gen が瞬間的に落ちても、同一連鎖内の最大値は
+            # 「少なくともこれだけは生成した」の下限として保持できる。
+            self._last_gen[key] = max(self._last_gen[key], float(gen))
+            self._prev_busy[key] = True
+            return
+        if self._prev_busy[key]:
+            sent = self._last_gen[key]
+            other = "2p" if key == "1p" else "1p"
+            # (1) 自分宛てに飛翔中の相手の未登録分をまず相殺 (ゲーム内と同じ向き)
+            consumed = min(self._held[other], sent)
+            self._held[other] -= consumed
+            sent -= consumed
+            # (2) 自分宛ての会計 pending は実会計が finalize 時に自ら相殺する
+            #     ため、ここでは保持へ登録する量から差し引くだけ (二重相殺防止)。
+            sent = max(0.0, sent - own_pending_unc)
+            if sent > 0.0:
+                self._held[key] += sent
+                self._held_since[key] = t_sec
+        self._last_gen[key] = 0.0
+        self._prev_busy[key] = False
+
+    def update(
+        self, r_p1, r_p2, snap: OjamaAccountSnapshot,
+        b1: "Board | None", b2: "Board | None",
+        gen1: float, gen2: float, t_sec: float,
+    ) -> tuple[float, float]:
+        """毎フレーム呼ぶ (settled 有無に関わらず、完走遷移と登録差分を逃さない)。
+
+        Returns:
+            (1P宛て未登録分 [=2Pが送った], 2P宛て未登録分 [=1Pが送った])。
+        """
+        for key in ("1p", "2p"):
+            if (self._held[key] > 0.0
+                    and t_sec - self._held_since[key] > UNREGISTERED_SENT_EXPIRE_SEC):
+                self._held[key] = 0.0
+        self._absorb_dest_observations("1p", float(snap.pending_p1_uncapped), b1)
+        self._absorb_dest_observations("2p", float(snap.pending_p2_uncapped), b2)
+        self._track_completion("1p", r_p1, gen1, float(snap.pending_p1_uncapped), t_sec)
+        self._track_completion("2p", r_p2, gen2, float(snap.pending_p2_uncapped), t_sec)
+        return self._held["2p"], self._held["1p"]
+
+
+# 主因表示に使う合成キー (2026-08-22 修正④)。JP_LABEL に対応する日本語文言を
+# 登録する (下記 JP_LABEL 定義参照)。実指標ではなく表示専用の合成キーのため
+# ATTRIBUTION_EXCLUDED_INDICATORS 等の指標系リストには含めない。
+KILL_OVERRIDE_DRIVER_KEY_P1: str = "kill_override_p1_lethal"
+KILL_OVERRIDE_DRIVER_KEY_P2: str = "kill_override_p2_lethal"
+
+
+def _kill_override_attribution_entry(
+    adv_before: float, adv_after: float,
+    pending1: float, pending2: float, room1: int, room2: int,
+) -> "tuple[str, float]":
+    """`kill_override` 発火時の主因表示エントリを作る (2026-08-22 修正④)。
+
+    従来は安全弁 (`kill_override`) が結論を上書きしても、主因欄には安全弁
+    適用前の生モデル寄与度だけが並び、「主因は1P有利の根拠なのに結論は
+    2P有利」という自己矛盾した表示になっていた (2026-08-22 実測: t=6717.5
+    で主因1位「連結対数差差 +8.00」= 1P有利根拠、結論は2P有利99%)。
+    本関数は予測値には一切関与せず、表示する (キー, 値) を1件返すだけ。
+
+    致死判定された側 (adv が悪化した側) を、`adv_before` と `adv_after` の
+    大小関係から特定する (`kill_override` 内部の `lead>0 → target=-100`
+    という規約と同じ向き: adv が下がった = 1P が致死判定された)。
+    値には「死ぬと判定された側が受ける相殺後 pending」を渡す
+    (画面には既存の `f"{JP_LABEL[c]}差 {v:+.2f}"` 形式でそのまま乗る)。
+    """
+    if adv_after < adv_before:
+        return KILL_OVERRIDE_DRIVER_KEY_P1, float(pending1)
+    return KILL_OVERRIDE_DRIVER_KEY_P2, float(pending2)
+
+
+def _drivers_for_display(
+    drivers: list[tuple[str, float]],
+    kill_override_note: "tuple[str, float] | None",
+) -> list[tuple[str, float]]:
+    """表示直前に安全弁の理由を主因先頭へ差し込む (2026-08-22 修正④)。
+
+    dump 用の `drivers` (raw モデル寄与度、自己無矛盾性が要件) は一切変更
+    せず、新しいリストを返すだけ。`kill_override_note` が None (安全弁
+    未発火、またはフラグ既定 False) の場合は `drivers` をそのまま返す
+    (bit-identical)。
+    """
+    if kill_override_note is None:
+        return drivers
+    _override_keys = (KILL_OVERRIDE_DRIVER_KEY_P1, KILL_OVERRIDE_DRIVER_KEY_P2)
+    rest = [d for d in drivers if d[0] not in _override_keys]
+    return [kill_override_note] + rest[:2]
+
+
 # (早期発火) 2026-07-29 userレビュー指摘1/2 対処: adv 全体が「両者STABLE」
 #   (settled) までフリーズする設計(下記 generate() の settled ゲート参照) のため、
 #   12連鎖のような返せない本線を撃っても連鎖アニメ中は勝率が動かず、連鎖完了の
@@ -305,6 +758,11 @@ class EarlyFireTracker:
         self.bias = 0.0  # 1P視点 (正=1P有利)、範囲 ±EARLY_FIRE_CAP
         self._last_trigger_1p: float | None = None
         self._last_trigger_2p: float | None = None
+        # [2026-08-22 修正②] 直近に確認した OjamaAccountSnapshot.
+        # chain_total_score_p1/p2 (finalize 検知用、finalized_since_last_check
+        # 参照)。None = 未確認 (初回呼び出しでは「変化あり」と誤判定しない)。
+        self._prev_chain_total_p1: int | None = None
+        self._prev_chain_total_p2: int | None = None
 
     def _fire_damage(self, before: "Board | None", opponent: "Board | None",
                      elapsed: float) -> float:
@@ -330,9 +788,46 @@ class EarlyFireTracker:
         self.bias = max(-EARLY_FIRE_CAP, min(EARLY_FIRE_CAP, self.bias))
         return self.bias
 
-    def on_settled(self) -> None:
-        """settled(確定)再計算が入ったら速報バイアスをクリアする(二重計上防止)。"""
-        self.bias = 0.0
+    def on_settled(self, finalized: bool = True) -> None:
+        """settled(確定)再計算が入ったら速報バイアスをクリアする(二重計上防止)。
+
+        finalized: [2026-08-22 修正② 追加、optional] 既定 True = 従来通り
+            「settled 再計算が走ったら常にクリア」(bit-identical)。
+            `--per-side-settled` 下では相手が STABLE の間 settled 再計算が
+            毎フレーム走るため、大連鎖の速報バイアスが連鎖の finalize
+            (会計反映) より前に毎フレーム消えてしまう不具合があった。
+            呼出側が `finalized_since_last_check()` 等で「今回の settled
+            再計算で実際に finalize が起きたか」を判定し False を渡すと
+            クリアをスキップして bias を維持できる。
+        """
+        if finalized:
+            self.bias = 0.0
+
+    def finalized_since_last_check(
+        self, chain_total_p1: int, chain_total_p2: int,
+    ) -> bool:
+        """直近の確認以降に連鎖の finalize が会計に反映されたかを判定する。
+
+        [2026-08-22 修正②] `OjamaAccountSnapshot.chain_total_score_p1/p2`
+        (docstring「最後の連鎖合計得点(検証用)」) は
+        `OjamaAccountingTracker._finalize_chain_end` の中でのみ更新される
+        (ojama_accounting.py:691 `s.last_chain_total_score = chain_total`)。
+        よって前回確認時からの値の変化を検知すれば、その間に少なくとも
+        1回 finalize が実行され pending の相殺・繰越が会計に反映された
+        ことが分かる (新しい会計ロジックは作らず既存フィールドの読み取りの
+        みで判定する)。呼出側が settled 再計算のたびに呼ぶことを想定
+        (`update()`/`on_settled()` と同じ呼び出し頻度)。
+
+        初回呼び出し (内部状態が未確認 None) は必ず False を返す
+        (=「変化なし」の安全側、finalize 済みかどうか判断材料が無いため
+        誤ってクリアしない)。
+        """
+        prev1, prev2 = self._prev_chain_total_p1, self._prev_chain_total_p2
+        self._prev_chain_total_p1 = chain_total_p1
+        self._prev_chain_total_p2 = chain_total_p2
+        if prev1 is None or prev2 is None:
+            return False
+        return chain_total_p1 != prev1 or chain_total_p2 != prev2
 
 
 # ============================
@@ -730,6 +1225,8 @@ class ResolvedExchangeTracker:
         enable_pending_landing_gate: bool = False,
         enable_kill_override_counter_aware: bool = False,
         enable_resolved_victim_gen_live: bool = False,
+        enable_counter_placement_reuse: bool = False,
+        enable_counter_budget_quantize: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
@@ -775,6 +1272,18 @@ class ResolvedExchangeTracker:
         # を、chain_end_triggered_pX が True の間 0.5秒ごとに追従する方式へ
         # 緩和する (既定OFF、クラス docstring 指摘19根治節参照)。
         self._enable_resolved_victim_gen_live = enable_resolved_victim_gen_live
+        # [2026-08-21 user承認・設置ごと量子化] 受け側限定応手MC
+        # (CounterReachTracker._update_defender_only) の再計算を「受け側の
+        # 盤面bytesが変化した (=設置が起きた) とき」だけに限定する近似
+        # (既定OFF、CounterReachTracker クラス docstring 参照)。
+        # `self._counter_tracker.update(..., reuse_if_board_unchanged=...)`
+        # へそのまま貫通させるだけで、本クラス自身は判定ロジックを持たない。
+        self._enable_counter_placement_reuse = enable_counter_placement_reuse
+        # [2026-08-21 user承認・残り秒数の量子化、上記とは独立の別機構]
+        # `self._counter_tracker.update(..., quantize_budget_sec=...)` へ
+        # そのまま貫通させる (CounterReachTracker クラス docstring 参照)。
+        # 盤面一致による再利用 (上記) とは独立に効果を測れるよう別フラグ。
+        self._enable_counter_budget_quantize = enable_counter_budget_quantize
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -963,6 +1472,8 @@ class ResolvedExchangeTracker:
         _, cp1, cp2 = self._counter_tracker.update(
             result.board_p1_pre_landing, result.board_p2_pre_landing, budget,
             defender_side=defender_side, threshold_ojama=incoming,
+            reuse_if_board_unchanged=self._enable_counter_placement_reuse,
+            quantize_budget_sec=self._enable_counter_budget_quantize,
         )
         defender_prob = cp1 if defender_side == "1P" else cp2
         self.hold_defender_prob = defender_prob
@@ -1167,6 +1678,8 @@ class ResolvedExchangeTracker:
             _, cp1, cp2 = self._counter_tracker.update(
                 counter_b1, counter_b2, budget,
                 defender_side=defender_side, threshold_ojama=incoming, t_sec=self._t_sec,
+                reuse_if_board_unchanged=self._enable_counter_placement_reuse,
+                quantize_budget_sec=self._enable_counter_budget_quantize,
             )
             defender_prob = cp1 if defender_side == "1P" else cp2
             self.hold_defender_side, self.hold_incoming_ojama, self.hold_defender_prob = (
@@ -1612,6 +2125,9 @@ JP_LABEL: dict[str, str] = {
     "diff_center_bulge_ojama": "中央凸度差(おじゃま)", "diff_current_max_chain": "現在最大連鎖差",
     "diff_dig_resistance": "掘り耐性差", "diff_ukeyasusa": "受けやすさ差",
     "diff_sub_chain_count": "副砲連鎖数差",
+    # --- 主因表示の合成キー (2026-08-22 修正④、実指標ではなく表示専用) ---
+    "kill_override_p1_lethal": "致死判定(1P着弾見込)",
+    "kill_override_p2_lethal": "致死判定(2P着弾見込)",
 }
 FONT_CANDIDATES = (
     r"C:\Windows\Fonts\meiryo.ttc", "/mnt/c/Windows/Fonts/meiryo.ttc",
@@ -1680,25 +2196,51 @@ PANEL_CHAIN_MISMATCH_COLOR = (255, 140, 0)
 PANEL_INFO_ELAPSED_BOTTOM_MARGIN = 50  # 経過時刻行 (情報パネル下端からの距離)
 
 
-def panel_layout_regions() -> dict[str, tuple[int, int, int, int]]:
+def panel_layout_regions(
+    subtitle_h: int = PANEL_SUBTITLE_H,
+) -> dict[str, tuple[int, int, int, int]]:
     """パネルレイアウトの4領域 (video/graph/info/subtitle) を (x0, y0, w, h) で返す。
 
     stateless な純関数 (座標計算のみ、副作用なし)。generate() と
     _draw_panel_layout() の両方が本関数を参照することで、座標がずれる
     バグ (二重管理) を構造的に防ぐ。4領域は 1920x1080 を隙間・重複なく分割する
-    (video+graph の左列と info の右列が上部 940px を占め、下端 140px は
+    (video+graph の左列と info の右列が上部コンテンツ高を占め、下端は
     subtitle が全幅で占める)。
+
+    subtitle_h: 下端字幕帯の高さ (2026-08-21 user指示「グラフ広げて」で追加)。
+        既定 PANEL_SUBTITLE_H (140) = 従来と完全一致 (backwards compat)。
+        0 を渡すと字幕帯を無くし、その分をグラフ (左下) と情報パネル (右)
+        の高さへ丸ごと回す。PANEL_CONTENT_H/PANEL_GRAPH_H の定数値自体は
+        変更せず、本関数内で subtitle_h から動的に導出する
+        (定数は「既定呼び出し時の従来値」を表す資料値として残す)。
     """
+    content_h = PANEL_CANVAS_H - subtitle_h  # 字幕帯を除いた上部コンテンツ高
+    graph_h = content_h - PANEL_VIDEO_H      # グラフはコンテンツ高から映像分を引いた残り
     return {
         "video": (0, 0, PANEL_VIDEO_W, PANEL_VIDEO_H),
-        "graph": (0, PANEL_VIDEO_H, PANEL_VIDEO_W, PANEL_GRAPH_H),
-        "info": (PANEL_VIDEO_W, 0, PANEL_INFO_W, PANEL_CONTENT_H),
-        "subtitle": (0, PANEL_CONTENT_H, PANEL_CANVAS_W, PANEL_SUBTITLE_H),
+        "graph": (0, PANEL_VIDEO_H, PANEL_VIDEO_W, graph_h),
+        "info": (PANEL_VIDEO_W, 0, PANEL_INFO_W, content_h),
+        "subtitle": (0, content_h, PANEL_CANVAS_W, subtitle_h),
     }
 
 
+@functools.lru_cache(maxsize=32)
 def _font(size: int) -> ImageFont.ImageFont:
-    """meiryo を取得 (無ければ default)。"""
+    """meiryo を取得 (無ければ default)。
+
+    2026-08-21 速度改善: `size` のみに依存する純関数のため `lru_cache` で
+    包む。改修前は 1 フレームあたり平均 12.5 回 (60秒区間で 22,419 回) 呼ばれ、
+    毎回 `ImageFont.truetype` がディスクからフォントファイルを再読込していた
+    (実測: フォント読み込みだけで 124〜131 秒 / 全体 294〜318 秒)。呼出し側
+    (本ファイル内 `_font(...)` の全呼出し箇所) が渡す size は全て整数リテラル
+    (`{15, 16, 18, 20, 22, 24, 26, 52}` の 8 種、`_draw_bar` の
+    label_font_size/verdict_font_size 引数経由の値も含む) で種類数は有限のため
+    maxsize=32 (実測種類数の4倍の余裕) でメモリ増大の心配なく全件キャッシュ
+    できる。フォント不在時の fallback (`ImageFont.load_default()`) も
+    size ごとに同じ戻り値を返す純関数のままなのでキャッシュ対象として安全
+    (2 回目以降のディスク存在チェックも省略される、後方互換: 戻り値は
+    キャッシュ前と bit-identical)。
+    """
     for p in FONT_CANDIDATES:
         if Path(p).exists():
             return ImageFont.truetype(p, size)
@@ -2302,6 +2844,21 @@ RESOLVED_AMPLIFY_SCALE: float = COUNTER_SCALE * W_COUNTER
 # 思想で 0.5 秒間引きを入れる。
 COUNTER_RECOMPUTE_INTERVAL_SEC: float = 0.5
 
+# [2026-08-21 user承認・残り秒数の量子化] `_update_defender_only` の
+# キャッシュキーに入る budget_sec (着弾までの残り秒) を、受け側が打てる
+# 手数の単位 (= 1手あたりの平均設置時間) に丸めてからキーへ入れる近似。
+# 「受け側が打てる手数は floor(残り時間 ÷ 1手の時間) で決まる」
+# (memory reference_ojama_landing_gated_by_placement) ため、同じ商になる
+# budget_sec は同じ答えのはず、という前提でキャッシュの粒度を粗くする
+# (実際の MC 計算 `_reach` には常に元の budget_sec を渡すため、
+# キャッシュミス時の計算結果自体は量子化の影響を一切受けない)。
+#
+# 量子化幅は mc_counter_estimator.BEAM_ROLLOUT_AVG_STEP_TIME_SEC
+# (`PLACEMENT_SPEED_BY_ROW_SEC` 段別実測値 0.134〜0.496秒の単純平均、
+# 既存の物理実測値からの導出であり本ファイルで再フィットはしない
+# feedback_overfitting_awareness_2026-08-04 準拠)。実測値 ≈0.348秒。
+COUNTER_BUDGET_QUANTUM_SEC: float = mc_counter.BEAM_ROLLOUT_AVG_STEP_TIME_SEC
+
 
 class CounterReachTracker:
     """相手が返せるかを時間予算ベースのモンテカルロで見る打ち合い優位。
@@ -2310,6 +2867,17 @@ class CounterReachTracker:
     さらに (2026-08-12) 呼び出し側が `t_sec` を渡した場合、
     `COUNTER_RECOMPUTE_INTERVAL_SEC` 未満の間隔では前回の結果を再利用する
     (t_sec 省略時は従来通り毎回計算=後方互換)。
+
+    [2026-08-21 user承認・設置ごと量子化] `_update_defender_only` 経路 (受け側
+    限定) は時間予算 (残り秒) をキャッシュキーに含むため、盤面が変わらない
+    間も残り時間が単調減少し続け `f"{budget_sec:.2f}"` が毎回変わる。実測
+    (scripts配下の一時計測、60秒クリップ2本) でキャッシュヒット率は共に
+    **0.00%** だった (盤面同一でも時間差で必ずミスする設計上の必然)。
+    user承認の近似「自分の盤面は自分が置いた時しか変わらないので、置くまでは
+    前回の答えを使い回してよい」を `reuse_if_board_unchanged` (既定 False)
+    で実装し、有効時のみ `_placement_reuse` (受け側+閾値のスコープごとに
+    直近の盤面bytesと結果を保持) を参照する。閾値が変われば別スコープになり
+    自動的に再計算される (「閾値が違えば再計算が必要」という指摘を反映)。
     """
 
     def __init__(self) -> None:
@@ -2320,6 +2888,9 @@ class CounterReachTracker:
         # 時間間引き用の直近状態 (2026-08-12 追加)
         self._last_result: tuple[float, float, float] | None = None
         self._last_t_sec: float | None = None
+        # 設置ごと量子化 (2026-08-21 追加、既定 reuse_if_board_unchanged=False
+        # の間は一切参照されない=完全に無害)。scope_key -> (直近盤面bytes, (p, h))。
+        self._placement_reuse: "dict[str, tuple[bytes, tuple[float, float]]]" = {}
 
     def _reach(
         self, board: Board, budget_sec: float,
@@ -2350,6 +2921,8 @@ class CounterReachTracker:
         t_sec: float | None = None,
         defender_side: str | None = None,
         threshold_ojama: float | None = None,
+        reuse_if_board_unchanged: bool = False,
+        quantize_budget_sec: bool = False,
     ) -> tuple[float, float, float]:
         """(1P視点の優位[-100,100], 1Pの応手確率, 2Pの応手確率) を返す。
 
@@ -2373,10 +2946,26 @@ class CounterReachTracker:
         threshold_ojama: defender_side 指定時に使う到達確率の閾値 (お邪魔
             換算、実際の飛来量)。None なら COUNTER_THRESHOLD_OJAMA へ
             フォールバックする。
+        reuse_if_board_unchanged: [2026-08-21 追加] defender_side 指定時のみ
+            有効。True で「受け側の盤面bytesが前回計算時と同一なら、時間予算
+            (budget_sec) が変わっていても前回の (応手確率, 平均打手数) を
+            再利用する」近似 (user承認、クラス docstring 参照)。閾値
+            (threshold_ojama) が変わればスコープが別物になり自動的に
+            再計算される。既定 False = 従来通り毎回 budget_sec も一致条件に
+            含める (backwards compat)。defender_side が None の経路
+            (両側同時計算) では未対応 (該当なし、無視される)。
+        quantize_budget_sec: [2026-08-21 追加、reuse_if_board_unchanged とは
+            独立の別機構] defender_side 指定時のみ有効。True で budget_sec
+            (残り秒数) をキャッシュキーに入れる際 `COUNTER_BUDGET_QUANTUM_SEC`
+            (1手あたりの平均設置時間、物理実測値由来) 単位に丸める
+            (`_budget_cache_key_part` 参照)。実際の MC 計算には常に元の
+            budget_sec を渡すため、キャッシュミス時の計算結果自体は不変。
+            既定 False = 従来通り `.2f` 精度 (backwards compat)。
         """
         if defender_side is not None:
-            return self._update_defender_only(b1, b2, budget_sec, next1, next2,
-                                              t_sec, defender_side, threshold_ojama)
+            return self._update_defender_only(
+                b1, b2, budget_sec, next1, next2, t_sec, defender_side,
+                threshold_ojama, reuse_if_board_unchanged, quantize_budget_sec)
         budget_transitioned = (
             (budget_sec <= 0.0) != (self.last_budget_sec <= 0.0)
         )
@@ -2414,10 +3003,47 @@ class CounterReachTracker:
         self._last_t_sec = t_sec
         return result
 
+    def _placement_reuse_scope_key(self, defender_side: str, threshold_ojama: float) -> str:
+        """設置ごと量子化のスコープキー (受け側 + 閾値で分離)。
+
+        閾値が変わればスコープが別物になるため、盤面が同じでも閾値が違えば
+        自動的に再計算される (別スコープ=直近盤面が未記録=キャッシュ不成立)。
+        """
+        return f"def={defender_side}|th={threshold_ojama:.2f}"
+
+    def _try_reuse_by_board(
+        self, scope_key: str, base: bytes,
+    ) -> "tuple[float, float] | None":
+        """同一スコープで直近盤面bytesと完全一致する場合のみ前回結果を返す。
+
+        時間予算 (budget_sec) の差異は無視する近似 (クラス docstring
+        「設置ごと量子化」参照、user承認)。不一致・未記録なら None。
+        """
+        cached = self._placement_reuse.get(scope_key)
+        if cached is None:
+            return None
+        last_base, last_ph = cached
+        return last_ph if last_base == base else None
+
+    def _budget_cache_key_part(self, budget_sec: float, quantize: bool) -> str:
+        """キャッシュキーに入れる budget_sec 部分を返す (量子化 optional)。
+
+        quantize=True: 1手あたりの平均設置時間 (COUNTER_BUDGET_QUANTUM_SEC)
+        単位に floor 量子化したバケット番号を返す (「同じ手数=同じ答え」
+        近似、クラス docstring 参照)。quantize=False (既定) は従来通り
+        `.2f` 精度の生値を返す (backwards compat)。
+        """
+        if not quantize:
+            return f"{budget_sec:.2f}"
+        bucket = int(budget_sec // COUNTER_BUDGET_QUANTUM_SEC)
+        return f"qbucket={bucket}"
+
     def _update_defender_only(
         self, b1: Board, b2: Board, budget_sec: float,
         next1: "tuple[int, int] | None", next2: "tuple[int, int] | None",
         t_sec: float | None, defender_side: str, threshold_ojama: float | None,
+        reuse_if_board_unchanged: bool = False,
+        quantize_budget_sec: bool = False,
     ) -> tuple[float, float, float]:
         """`update()` の defender_side 指定時の実体 (#4/#5 修正、2026-08-13)。
 
@@ -2425,6 +3051,16 @@ class CounterReachTracker:
         コストが半分で済む)。既存の `_cache` を再利用するが、キーに
         defender_side/threshold を含めて対称経路のキャッシュと衝突しない
         ようにする。時間ベース間引きは適用しない (docstring 参照)。
+
+        reuse_if_board_unchanged: [2026-08-21 追加] True で設置ごと量子化
+        (クラス docstring 参照) を有効化する。既定 False では
+        `_placement_reuse` を一切読み書きせず従来と完全に同一の挙動。
+        quantize_budget_sec: [2026-08-21 追加、reuse_if_board_unchanged とは
+        独立の別機構] True で budget_sec をキャッシュキーに入れる際だけ
+        `COUNTER_BUDGET_QUANTUM_SEC` 単位に丸める (`_budget_cache_key_part`
+        参照)。キャッシュミス時に `_reach` へ渡す budget_sec は常に元の値
+        (量子化しない) なので、ミス時の計算結果自体は不変。既定 False =
+        従来通り `.2f` 精度をキーに使う (backwards compat)。
         """
         if budget_sec <= 0.0:
             result = (0.0, float("nan"), float("nan"))
@@ -2438,12 +3074,23 @@ class CounterReachTracker:
         th = COUNTER_THRESHOLD_OJAMA if threshold_ojama is None else threshold_ojama
         known = (nx,) if nx and nx[0] > 0 and nx[1] > 0 else ()
         base = board.grid_bytes() if hasattr(board, "grid_bytes") else board._grid.tobytes()
-        key = base + f"|{budget_sec:.2f}|{known}|def={defender_side}|th={th:.2f}".encode()
-        if key not in self._cache:
-            if len(self._cache) > 256:
-                self._cache.clear()
-            self._cache[key] = self._reach(board, budget_sec, known, threshold_ojama=th)
-        p, h = self._cache[key]
+        scope_key = self._placement_reuse_scope_key(defender_side, th)
+        reused = (
+            self._try_reuse_by_board(scope_key, base)
+            if reuse_if_board_unchanged else None
+        )
+        if reused is not None:
+            p, h = reused
+        else:
+            budget_part = self._budget_cache_key_part(budget_sec, quantize_budget_sec)
+            key = base + f"|{budget_part}|{known}|def={defender_side}|th={th:.2f}".encode()
+            if key not in self._cache:
+                if len(self._cache) > 256:
+                    self._cache.clear()
+                self._cache[key] = self._reach(board, budget_sec, known, threshold_ojama=th)
+            p, h = self._cache[key]
+            if reuse_if_board_unchanged:
+                self._placement_reuse[scope_key] = (base, (p, h))
         self.last_hands = h
         result = (
             (0.0, p, float("nan")) if defender_side == "1P" else (0.0, float("nan"), p)
@@ -3163,26 +3810,32 @@ class HeavyAdvCache:
 def _fresh_trackers(
     model,
     attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
+    enable_chain_gen_accumulate: bool = False,
 ) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
            PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
-           EarlyFireTracker]:
+           EarlyFireTracker, "ChainGenerationAccumulator"]:
     """スコアリセット検知時に持続トラッカー一式を初期状態で作り直す。
 
     各トラッカーは内部 state が僅少 (数個の float/Counter) のため、都度
     再生成するだけで「初期化」と等価であり専用 reset() の追加は不要
     (OjamaAccountingTracker のみ既存 reset() を呼び互換 API を維持する)。
-    戻り値末尾に EarlyFireTracker を追加 (2026-07-29、既存呼出元は1箇所のみで
-    アンパック先も同時更新済みのため後方互換上の実害なし)。
+    戻り値末尾に EarlyFireTracker (2026-07-29)、続けて
+    ChainGenerationAccumulator (2026-08-22 修正① 改良②) を追加 (既存呼出元は
+    1箇所のみでアンパック先も同時更新済みのため後方互換上の実害なし)。
 
     attribution_exclude: HeavyAdvCache へそのまま渡す主因除外リスト
     (2026-08-11 追加、optional 引数。後方互換)。
+    enable_chain_gen_accumulate: ChainGenerationAccumulator の累積モード
+    (2026-08-22 user判断で既定 False に変更、`ChainGenerationAccumulator`
+    docstring 参照。optional 引数、後方互換)。
     """
     tracker = OjamaAccountingTracker()
     tracker.reset()
     return (tracker, _SideTracker(), _SideTracker(),
             PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
             HeavyAdvCache(model, attribution_exclude=attribution_exclude),
-            EarlyFireTracker())
+            EarlyFireTracker(),
+            ChainGenerationAccumulator(accumulate=enable_chain_gen_accumulate))
 
 
 # ============================
@@ -3250,6 +3903,32 @@ class TimelineDumpRow:
     b2_hash: int
     state1: str
     state2: str
+    # (2026-08-23 根治①) kill_override に実際に渡された「連鎖完走後」是正値
+    # (`_kill_override_chain_completion_inputs` の戻り値、生成呼び出し側
+    # :5149-5160 参照)。enable_kill_override_chain_completion が False、
+    # または是正条件が成立しなかったフレームでは pending_p1/p2・room1/room2
+    # と完全に同じ値になる (=「是正が効いたか」は k* と生値の等値比較だけで
+    # 判定できる、専用フラグ列は追加しない)。
+    # None を渡すと生値をそのまま複製する (__post_init__ 参照、後方互換:
+    # 旧呼び出し・旧npz を読んだ場合もこのフィールドが自動的に埋まる)。
+    kpending_p1: float | None = None
+    kpending_p2: float | None = None
+    kroom1: int | None = None
+    kroom2: int | None = None
+
+    def __post_init__(self) -> None:
+        """新4フィールドが未指定 (None) なら生値で埋める (後方互換の要)。
+
+        frozen dataclass のため object.__setattr__ で直接書き込む。
+        """
+        if self.kpending_p1 is None:
+            object.__setattr__(self, "kpending_p1", float(self.pending_p1))
+        if self.kpending_p2 is None:
+            object.__setattr__(self, "kpending_p2", float(self.pending_p2))
+        if self.kroom1 is None:
+            object.__setattr__(self, "kroom1", int(self.room1))
+        if self.kroom2 is None:
+            object.__setattr__(self, "kroom2", int(self.room2))
 
 
 def _pad_drivers_top3(
@@ -3270,21 +3949,40 @@ def _build_timeline_dump_row(
     pending_p1: int, pending_p2: int, room1: int, room2: int,
     b1: Board, b2: Board, drivers: list[tuple[str, float]],
     score1: int | None, score2: int | None, state1: str, state2: str,
+    kpending_p1: float | None = None, kpending_p2: float | None = None,
+    kroom1: int | None = None, kroom2: int | None = None,
+    is_dead1: bool | None = None, is_dead2: bool | None = None,
 ) -> TimelineDumpRow:
-    """1回分の settled 更新から TimelineDumpRow を組み立てる (純関数)。"""
+    """1回分の settled 更新から TimelineDumpRow を組み立てる (純関数)。
+
+    kpending_p1/p2・kroom1/kroom2 (2026-08-23 根治①追加): kill_override に
+    実際に渡された是正後の値。省略時 (既定 None) は pending_p1/p2・room1/room2
+    と同じ値になる (TimelineDumpRow.__post_init__ 参照、旧呼び出し元との
+    bit-identical を保証する optional 引数)。
+
+    is_dead1/is_dead2 (2026-08-25 Gate 3R-6 案A追加): 記録する窒息判定の
+    override。省略時 (既定 None) は従来通り b1/b2 の Board.is_dead() を
+    その場で評価する (旧呼び出し元との bit-identical を保証する optional
+    引数)。enable_nonstable_hold_is_dead=True の呼出元が「非STABLE中は
+    保留 (False)」に解決済みの値を渡す用途 (_resolve_nonstable_hold_is_dead
+    参照)。
+    """
     top1_name, top1_val = drivers[0] if drivers else ("", 0.0)
     top3_names, top3_vals = _pad_drivers_top3(list(drivers))
     return TimelineDumpRow(
         t_sec=t_sec, game_idx=game_idx, adv_raw=adv_raw, adv_ema=adv_ema, p1=p1,
         p1_raw=p1_raw,
         pending_p1=pending_p1, pending_p2=pending_p2, room1=room1, room2=room2,
-        is_dead1=b1.is_dead(), is_dead2=b2.is_dead(),
+        is_dead1=b1.is_dead() if is_dead1 is None else is_dead1,
+        is_dead2=b2.is_dead() if is_dead2 is None else is_dead2,
         drivers_top1_name=top1_name, drivers_top1_val=top1_val,
         drivers_top3_names=top3_names, drivers_top3_vals=top3_vals,
         score1=score1 if score1 is not None else TIMELINE_DUMP_SCORE_NONE_SENTINEL,
         score2=score2 if score2 is not None else TIMELINE_DUMP_SCORE_NONE_SENTINEL,
         b1_hash=_board_hash(b1), b2_hash=_board_hash(b2),
         state1=state1, state2=state2,
+        kpending_p1=kpending_p1, kpending_p2=kpending_p2,
+        kroom1=kroom1, kroom2=kroom2,
     )
 
 
@@ -3327,31 +4025,209 @@ def save_timeline_dump(path: Path, video_id: str, rows: list[TimelineDumpRow]) -
         b2_hash=np.array([r.b2_hash for r in rows], dtype=np.int64),
         state1=np.array([r.state1 for r in rows], dtype=object),
         state2=np.array([r.state2 for r in rows], dtype=object),
+        # (2026-08-23 根治①) kill_override 是正後の実入力値。旧 dump にはこの
+        # 4キーが存在しない (load_timeline_dump 側の後方互換分岐で吸収する)。
+        kpending_p1=np.array([r.kpending_p1 for r in rows], dtype=np.float64),
+        kpending_p2=np.array([r.kpending_p2 for r in rows], dtype=np.float64),
+        kroom1=np.array([r.kroom1 for r in rows], dtype=np.int32),
+        kroom2=np.array([r.kroom2 for r in rows], dtype=np.int32),
+    )
+
+
+def _correct_dead_run_for_side(
+    rows: list[TimelineDumpRow], is_dead_attr: str, state_attr: str,
+) -> list[bool]:
+    """1side分の is_dead 列を、同一 game_idx 内で「非STABLE中に凍結された
+    is_dead」を「直後に STABLE 復帰した行の値」で遡及訂正した配列を返す
+    (2026-08-24、`_retroactively_correct_dead_dump_rows` の内部ヘルパー)。
+
+    game_idx が変わらない範囲を後方 (未来 -> 過去) に走査する。
+    STABLE 行に出会うたびに `pending` (直近未来側の真値) を更新し、
+    非STABLE 行はその `pending` で上書きする。**game_idx 終端まで一度も
+    STABLE に出会わない (=試合終了まで復帰しない) 区間は pending が
+    定まらないため一切変更しない** (死亡見逃しゼロを最優先する安全側)。
+    1関数50行以内のため配列構築本体は呼出元 `_retroactively_correct_
+    dead_dump_rows` に任せ、ここでは1side分の訂正ロジックのみを担う。
+    """
+    n = len(rows)
+    corrected = [bool(getattr(r, is_dead_attr)) for r in rows]
+    game_idx = [r.game_idx for r in rows]
+    state = [getattr(r, state_attr) for r in rows]
+    group_start = 0
+    for i in range(1, n + 1):
+        if i == n or game_idx[i] != game_idx[group_start]:
+            pending: bool | None = None
+            for k in range(i - 1, group_start - 1, -1):
+                if state[k] == BoardState.STABLE.name:
+                    pending = corrected[k]
+                elif pending is not None:
+                    corrected[k] = pending
+            group_start = i
+    return corrected
+
+
+def _retroactively_correct_dead_dump_rows(
+    rows: list[TimelineDumpRow],
+) -> list[TimelineDumpRow]:
+    """`enable_stable_confirmed_is_dead` 用の後処理 (2026-08-24 追加)。
+
+    dump_rows (npz保存直前、メモリ上のリスト) に対してのみ作用する純関数。
+    ライブの adv_ema/kill_override/描画/indicators_v2 には一切触れない
+    (これらは別経路で b1/b2 を直接消費しており、本関数の戻り値を参照
+    しないため無関係、`generate()` の enable_stable_confirmed_is_dead
+    docstring 参照)。
+
+    アルゴリズム: 同一 game_idx 内で、is_dead が非STABLE 中に凍結されて
+    いた区間の直後に該当 side が STABLE へ復帰する行があれば、その値で
+    遡って上書きする。試合終了まで復帰がない区間は変更しない
+    (死亡見逃しゼロを最優先する安全側、docstring 参照)。
+    """
+    new_is_dead1 = _correct_dead_run_for_side(rows, "is_dead1", "state1")
+    new_is_dead2 = _correct_dead_run_for_side(rows, "is_dead2", "state2")
+    return [
+        dataclass_replace(r, is_dead1=new_is_dead1[i], is_dead2=new_is_dead2[i])
+        for i, r in enumerate(rows)
+    ]
+
+
+def _resolve_nonstable_hold_is_dead(
+    raw_dead: bool, state_name: str,
+) -> tuple[bool, bool]:
+    """非STABLE中の is_dead 判定を保留する (Gate 3R-6 案A、2026-08-25)。
+
+    user 伝授の絶対律「盤面が高い ＝ 窒息ではない。設置前 / 積み上げ中 /
+    連鎖直前 / 連鎖中は窒息としない」(memory
+    `reference_full_board_is_not_death_2026-08-22`) をリアルタイム制約下で
+    実装する。**未来参照なし** — 「own state が STABLE でない = 今この側は
+    落ち着いていない」という現在の状態だけで保留を決める
+    (`enable_stable_confirmed_is_dead` の遡及訂正は未来の STABLE 値を使う
+    後処理でリアルタイム不可、本関数はその代替でなく併存する別機構)。
+
+    保留の表現は「False + 保留フラグ」の2値ペア (= unknown の明示エンコード。
+    dump の state 列が STABLE か否かで保留行は完全に復元できるため、
+    npz に新列は追加しない)。窒息を**主張しない**だけで「生存確定」の
+    意味ではない点に注意。
+
+    stateless な純関数 (コーディング規約: 観測ロジックは state を持たない。
+    保留回数の集計は外部 wrapper `_IsDeadHoldStats` が担う)。
+
+    Args:
+        raw_dead: Board.is_dead() の生判定 (非STABLE中は凍結盤面由来)。
+        state_name: その side の現在 state 名 (BoardState.*.name)。
+
+    Returns:
+        (記録する is_dead 値, 保留したか)。STABLE なら (raw_dead, False)。
+    """
+    if state_name == BoardState.STABLE.name:
+        return raw_dead, False
+    return False, True
+
+
+@dataclass
+class _IsDeadHoldStats:
+    """is_dead 保留の母数付きカウンタ (Gate 3R-6 案A、2026-08-25)。
+
+    「0 が『起きていない』のか『測っていない』のか」を区別するため、
+    保留数は必ず母数 (dump 行数) 付きの `held/total` 形式で表示する
+    (memory `feedback_zero_needs_denominator_2026-08-25`)。
+    suppressed = 生判定 True を保留で False に変えた行数 (実効行数)。
+    """
+
+    total: int = 0
+    held1: int = 0
+    held2: int = 0
+    suppressed1: int = 0
+    suppressed2: int = 0
+
+    def record(self, held1: bool, suppressed1: bool,
+               held2: bool, suppressed2: bool) -> None:
+        """dump 1行分の保留結果を集計する。"""
+        self.total += 1
+        self.held1 += int(held1)
+        self.held2 += int(held2)
+        self.suppressed1 += int(suppressed1)
+        self.suppressed2 += int(suppressed2)
+
+    def summary(self) -> str:
+        """母数付きの可視化文字列 (例: 1P 保留 3/29 行 ...)。"""
+        return (
+            f"1P 保留 {self.held1}/{self.total} 行"
+            f" (生判定True抑制 {self.suppressed1}/{self.total}) / "
+            f"2P 保留 {self.held2}/{self.total} 行"
+            f" (生判定True抑制 {self.suppressed2}/{self.total})"
+        )
+
+
+_TIMELINE_DUMP_ARRAY_KEYS: tuple[str, ...] = (
+    "t_sec", "game_idx", "adv_raw", "adv_ema", "p1", "p1_raw",
+    "pending_p1", "pending_p2", "room1", "room2",
+    "is_dead1", "is_dead2",
+    "drivers_top1_name", "drivers_top1_val",
+    "drivers_top3_names", "drivers_top3_vals",
+    "score1", "score2", "b1_hash", "b2_hash", "state1", "state2",
+)
+
+
+def _load_timeline_dump_k_fields(
+    d: "np.lib.npyio.NpzFile",
+) -> "tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None, np.ndarray | None]":
+    """kill_override 是正値4列 (kpending_p1/p2, kroom1/kroom2) を読み込む
+    (2026-08-23 根治①)。旧 dump にはこの4キーが存在しないため、無ければ
+    全て None を返す (呼出側で TimelineDumpRow.__post_init__ の自動補完
+    =生値と同じ値、に委ねる後方互換)。
+    """
+    if "kpending_p1" not in d.files:
+        return None, None, None, None
+    return d["kpending_p1"], d["kpending_p2"], d["kroom1"], d["kroom2"]
+
+
+def _timeline_dump_row_from_arrays(
+    f: "dict[str, np.ndarray]", i: int,
+    kpending_p1: "np.ndarray | None", kpending_p2: "np.ndarray | None",
+    kroom1: "np.ndarray | None", kroom2: "np.ndarray | None",
+) -> TimelineDumpRow:
+    """事前ロード済み配列辞書 (npz から1回だけ読み出し済み) から1行を組み立てる。"""
+    return TimelineDumpRow(
+        t_sec=float(f["t_sec"][i]), game_idx=int(f["game_idx"][i]),
+        adv_raw=float(f["adv_raw"][i]), adv_ema=float(f["adv_ema"][i]),
+        p1=float(f["p1"][i]), p1_raw=float(f["p1_raw"][i]),
+        pending_p1=int(f["pending_p1"][i]), pending_p2=int(f["pending_p2"][i]),
+        room1=int(f["room1"][i]), room2=int(f["room2"][i]),
+        is_dead1=bool(f["is_dead1"][i]), is_dead2=bool(f["is_dead2"][i]),
+        drivers_top1_name=str(f["drivers_top1_name"][i]),
+        drivers_top1_val=float(f["drivers_top1_val"][i]),
+        drivers_top3_names=tuple(str(x) for x in f["drivers_top3_names"][i]),
+        drivers_top3_vals=tuple(float(x) for x in f["drivers_top3_vals"][i]),
+        score1=int(f["score1"][i]), score2=int(f["score2"][i]),
+        b1_hash=int(f["b1_hash"][i]), b2_hash=int(f["b2_hash"][i]),
+        state1=str(f["state1"][i]), state2=str(f["state2"][i]),
+        kpending_p1=float(kpending_p1[i]) if kpending_p1 is not None else None,
+        kpending_p2=float(kpending_p2[i]) if kpending_p2 is not None else None,
+        kroom1=int(kroom1[i]) if kroom1 is not None else None,
+        kroom2=int(kroom2[i]) if kroom2 is not None else None,
     )
 
 
 def load_timeline_dump(path: Path) -> tuple[str, list[TimelineDumpRow]]:
-    """save_timeline_dump() が書いた npz を (video_id, レコード列) に復元する。"""
+    """save_timeline_dump() が書いた npz を (video_id, レコード列) に復元する。
+
+    (2026-08-23 根治③・性能バグ修正) 旧実装は `d["t_sec"][i]` のように
+    各フィールドをレコード毎に npz から直接参照しており、圧縮 npz
+    (savez_compressed) は参照のたびに該当配列を丸ごと解凍するため、
+    1区間 (n≈2万行) の読込で27GB超の read が発生していた。本修正は
+    全フィールドをループの外で1回だけ読み出す形に直す。出力はビット同一
+    (tests/test_advantage_overlay_timeline_dump.py 参照)。
+    """
     d = np.load(str(path), allow_pickle=True)
     video_id = str(d["video_id"])
-    n = int(d["t_sec"].shape[0])
-    rows: list[TimelineDumpRow] = []
-    for i in range(n):
-        rows.append(TimelineDumpRow(
-            t_sec=float(d["t_sec"][i]), game_idx=int(d["game_idx"][i]),
-            adv_raw=float(d["adv_raw"][i]), adv_ema=float(d["adv_ema"][i]),
-            p1=float(d["p1"][i]), p1_raw=float(d["p1_raw"][i]),
-            pending_p1=int(d["pending_p1"][i]), pending_p2=int(d["pending_p2"][i]),
-            room1=int(d["room1"][i]), room2=int(d["room2"][i]),
-            is_dead1=bool(d["is_dead1"][i]), is_dead2=bool(d["is_dead2"][i]),
-            drivers_top1_name=str(d["drivers_top1_name"][i]),
-            drivers_top1_val=float(d["drivers_top1_val"][i]),
-            drivers_top3_names=tuple(str(x) for x in d["drivers_top3_names"][i]),
-            drivers_top3_vals=tuple(float(x) for x in d["drivers_top3_vals"][i]),
-            score1=int(d["score1"][i]), score2=int(d["score2"][i]),
-            b1_hash=int(d["b1_hash"][i]), b2_hash=int(d["b2_hash"][i]),
-            state1=str(d["state1"][i]), state2=str(d["state2"][i]),
-        ))
+    fields = {k: d[k] for k in _TIMELINE_DUMP_ARRAY_KEYS}
+    kpending_p1, kpending_p2, kroom1, kroom2 = _load_timeline_dump_k_fields(d)
+    n = int(fields["t_sec"].shape[0])
+    rows = [
+        _timeline_dump_row_from_arrays(
+            fields, i, kpending_p1, kpending_p2, kroom1, kroom2)
+        for i in range(n)
+    ]
     return video_id, rows
 
 
@@ -3653,6 +4529,7 @@ def _draw_panel_layout(
     state1: str, state2: str, counter_text: str, elapsed_sec: float,
     chain_text_p1: str = "", chain_text_p2: str = "",
     chain_mismatch_p1: bool = False, chain_mismatch_p2: bool = False,
+    subtitle_h: int = PANEL_SUBTITLE_H,
 ) -> np.ndarray:
     """パネルレイアウト (左上映像+左下グラフ+右情報パネル+下端字幕帯、1920x1080)
     で1フレーム描画する。
@@ -3662,8 +4539,14 @@ def _draw_panel_layout(
     した経路であり、 --layout panel 指定時のみ呼ばれる (既定 layout=overlay
     では未使用、既存出力は一切変わらない)。下端の字幕帯 (regions["subtitle"])
     には背景色を塗るだけで文字・図形を一切描かない (user要求の絶対条件)。
+
+    subtitle_h: 字幕帯の高さ (既定 PANEL_SUBTITLE_H = 従来と完全一致、
+        2026-08-21 追加)。panel_layout_regions() へそのまま渡す
+        (座標計算の単一情報源はそちら、本関数は描画のみ)。0 を渡すと
+        字幕帯領域が高さ0となり矩形塗り自体が no-op になる (PIL は
+        ゼロ高矩形を安全に無視する)。
     """
-    regions = panel_layout_regions()
+    regions = panel_layout_regions(subtitle_h=subtitle_h)
     canvas = Image.new("RGB", (PANEL_CANVAS_W, PANEL_CANVAS_H), (12, 12, 16))
     vx, vy, vw, vh = regions["video"]
     video_rgb = cv2.cvtColor(
@@ -3671,7 +4554,8 @@ def _draw_panel_layout(
     canvas.paste(Image.fromarray(video_rgb), (vx, vy))
     d = ImageDraw.Draw(canvas, "RGBA")
     sx, sy, sw, sh = regions["subtitle"]
-    d.rectangle([sx, sy, sx + sw, sy + sh], fill=PANEL_SUBTITLE_BG_COLOR)  # 字幕帯: 無描画
+    if sh > 0:
+        d.rectangle([sx, sy, sx + sw, sy + sh], fill=PANEL_SUBTITLE_BG_COLOR)  # 字幕帯: 無描画
     if history:
         _draw_graph(d, history, t_rel, total, render_area=regions["graph"])
     _draw_panel_info(d, regions["info"], adv, p1, waiting, drivers,
@@ -3754,15 +4638,26 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_resolved_live_defender: bool = False,
              enable_resolved_live_defender_strict: bool = False,
              enable_resolved_kill_override: bool = False,
+             enable_kill_override_chain_completion: bool = False,
+             enable_kill_override_chain_gen_accumulate: bool = False,
+             enable_kill_override_attribution: bool = False,
+             enable_early_fire_clear_on_finalize: bool = False,
              enable_resolved_kill_override_counter_aware: bool = False,
              enable_resolved_victim_gen_live: bool = False,
+             enable_resolved_counter_placement_reuse: bool = False,
+             enable_resolved_counter_budget_quantize: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
              enable_ojama_fall_entry_hardening: bool | None = None,
              enable_ojama_fall_scoped_exit: bool | None = None,
              enable_pseudo_chain_score_fill: bool = False,
+             chain_hold_base_sec: "float | None" = None,
+             chain_hold_per_step_sec: "float | None" = None,
+             enable_slide_exit_min_display_guard: bool = False,
              layout: str = "overlay",
+             panel_subtitle_h: int = PANEL_SUBTITLE_H,
+             enable_resolved_pending_landing_gate: bool = False,
              show_excluded_attribution: bool = False,
              render: bool = True,
              dump_timeline_path: Path | None = None,
@@ -3772,6 +4667,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                  OVERLAY_PRODUCTION_RECOGNITION_ENABLED_BY_DEFAULT),
              resize_1080p: bool = OVERLAY_RESIZE_1080P_ENABLED_BY_DEFAULT,
              show_chain_count: bool = False,
+             enable_stable_confirmed_is_dead: bool = False,
+             enable_kill_override_hysteresis: bool = False,
+             enable_kill_override_scale_compare: bool = False,
+             enable_nonstable_hold_is_dead: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -3979,6 +4878,68 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         `board_room` をそのまま再利用、新規の観測量は増やさない)。
         `enable_resolved_exchange_eval=False` の場合は無視される (#9 サブ
         フラグ)。既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_kill_override_chain_completion: True で per-frame `kill_override`
+        (`:4764` 付近、無条件で毎フレーム呼ばれる経路) の入力を「連鎖完走後」
+        に是正する (2026-08-22 修正①、`_kill_override_chain_completion_inputs`
+        参照)。従来は死ぬと判定されうる側が自分自身の連鎖 (CHAIN/
+        GRAVITY_SETTLE) を撃っている最中でも、発火前の凍結盤面の空きと
+        相殺前の額面 pending をそのまま使っており、「自分の連鎖が pending を
+        相殺しきる」ケースまで致死断定してしまっていた (実測7件、
+        logs/killoverride_wrong_2026-08-22/一覧.tsv)。True にすると、
+        発火中の側の `chain_event.total_score` (simulate 由来の完走予測、
+        アニメ進行度に非依存) を使って既存 `resolve_mutual_exchange`
+        (#9 決着計算と同一関数、新規の会計計算は追加しない) で完走後の
+        盤面空き・相殺後の残存 pending を求め、それを `kill_override` へ渡す。
+        どちらの側も発火していないフレームでは完全に従来と同一の値を返す
+        (bit-identical)。既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_kill_override_chain_gen_accumulate: `ChainGenerationAccumulator`
+        の累積モード切替 (2026-08-22 user判断)。`enable_kill_override_
+        chain_completion=False` の場合は無視される (孫フラグ)。既定 False =
+        累積せず直近1件の chain_event の値に置き換える (対症療法の実測欠陥
+        により既定を非累積化、`ChainGenerationAccumulator` docstring 参照:
+        累積は「まだ画面に見えていない残り連鎖ぶんまで既に生成し終えた」
+        架空の完了状態を仮定するため raw モデルとの間に新しい不一致時間帯を
+        作ることが全編再走査の実測で判明した)。True にすると従来の累積動作
+        (複数の formula 再トリガーにまたがって生成量を合算) に戻せる
+        (CHAIN 保持時間の実測較正 [chain_hold_base_sec/chain_hold_per_step_sec]
+        で断片化そのものを減らす根治と併用する場合、二重計上を避けるため
+        既定 False のままにすること)。
+    enable_kill_override_hysteresis: True で per-frame `kill_override` の出力に
+        確信度ゲート (`KillOverrideConfidenceGate`、2026-08-24 B案) を適用する。
+        同一方向に KILL_CONFIRM_PERSIST_SEC (≈0.96秒 = 受け側の持ち手2手 +
+        認識反映8f) 持続して初めて完全上書き (±100) を許し、それまでは
+        |adv| ≤ KILL_UNCONFIRMED_ABS_CAP (90) に制限、方向反転時は
+        KILL_FLIP_COOLDOWN_SEC (≈0.35秒 = 1手時間) のクールダウンで上書きを
+        保留する。根因③ (ChainEvent 断片化による1フレーム ±100→∓100 反転、
+        memory project_pm100_display_flip_2026-08-24) の構造的禁止。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_kill_override_scale_compare: True で per-frame `kill_override` の
+        pending 入力を「規模の比較」に是正する (2026-08-24 A案、根因①②)。
+        (i) 会計 finalize 遅延中の「送付済み未登録」分を
+        `PostChainUnregisteredSentTracker` が連鎖完走時に即時捕捉して受け側
+        pending に加算し、(ii) 相殺の引き算には PENDING_ABS_CAP=216 で丸める
+        前の実額 (`snap.pending_p1/p2_uncapped`、src/ojama_accounting.py の
+        並行帳簿) を使う。表示用の pending_p1/p2 (cap 済み) は従来のまま
+        (docs/KNOWN_WEAKNESSES.md:1010- の cap は表示用として維持)。
+        `enable_kill_override_chain_completion` と独立に動作するが、納品構成
+        では併用する (完走シミュレーションの基礎 pending がこの是正値になる)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_early_fire_clear_on_finalize: True で `EarlyFireTracker` の速報
+        バイアスをクリアする条件を「settled 再計算が走った」から「連鎖の
+        finalize (`OjamaAccountingTracker._finalize_chain_end`) が会計に
+        反映された」に変える (2026-08-22 修正②、`EarlyFireTracker.
+        finalized_since_last_check` 参照)。`--per-side-settled` 下では相手が
+        STABLE の間 settled 再計算が毎フレーム走るため、従来 (既定 False)
+        は大連鎖の速報バイアスが finalize 前に毎フレーム消えていた。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+        `enable_early_fire_reaction=False` の場合は無視される (孫フラグ)。
+    enable_kill_override_attribution: True で `kill_override` が発火したフレーム
+        の主因表示 (パネルの「主因:」欄) に致死判定の理由を明示する
+        (2026-08-22 修正④、`_kill_override_attribution_entry` 参照)。
+        従来は安全弁適用前の生モデル寄与度だけが並び、安全弁が結論を上書き
+        した場合に表示と結論が矛盾していた (例: 主因1位が1P有利の根拠なのに
+        結論は2P有利)。**予測値 (adv/p1) には一切影響しない表示専用の追加**。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_resolved_kill_override_counter_aware: True で
         `enable_resolved_kill_override` の致死断定を「受け側が実際に応手
         可能か」で減衰する (2026-08-15 指摘19、docs/DEMO_REVIEW_2026-08-13.md
@@ -4006,6 +4967,31 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         まま残っていた)。`--resolved-exchange-eval` 無効時は無視される
         (#9 サブフラグ)。既定 False = 従来挙動と完全に同一 (backwards
         compat)。
+    enable_resolved_counter_placement_reuse: [2026-08-21 user承認・配線]
+        `CounterReachTracker._update_defender_only` (受け側限定応手MC) の
+        再計算を「受け側の盤面bytesが変化した (=設置が起きた) とき」だけに
+        限定する近似 (ResolvedExchangeTracker/CounterReachTracker docstring
+        参照)。実測 (60秒クリップ2本、_measure_counter_cache_hitrate
+        スクリプト) では従来キャッシュのヒット率が **0.00%** だった
+        (時間予算がキーに入っており毎回ミスする設計上の必然)。閾値
+        (相手の予告おじゃま量) が変わればスコープが別物になり自動的に
+        再計算される。表示更新の周期 (`COUNTER_RECOMPUTE_INTERVAL_SEC`
+        0.5秒ごと) 自体は変えない (計算頻度だけを盤面変化に紐づける)。
+        `--resolved-exchange-eval` 無効時は無視される (#9 サブフラグ)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_resolved_counter_budget_quantize: [2026-08-21 user承認、上記
+        counter_placement_reuse とは独立の別機構] `CounterReachTracker` の
+        キャッシュキーに入る budget_sec (着弾までの残り秒) を
+        `COUNTER_BUDGET_QUANTUM_SEC` (1手あたりの平均設置時間、
+        `mc_counter_estimator.PLACEMENT_SPEED_BY_ROW_SEC` の単純平均
+        ≈0.348秒、既存の物理実測値からの導出であり再フィットしない) 単位に
+        丸めてからキーへ入れる。「受け側が打てる手数は floor(残り時間÷1手の
+        時間) で決まる」ため、同じ商になる budget_sec は同じ答えのはず、
+        という近似 (根拠: memory reference_ojama_landing_gated_by_placement)。
+        キャッシュミス時に実際の MC 計算へ渡す budget_sec は常に元の値
+        (量子化しない) のため、ミス時の計算結果自体は不変。
+        `--resolved-exchange-eval` 無効時は無視される (#9 サブフラグ)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_puyo_to_empty_hsv_guard: RecognitionPipeline.load_default に渡す
         色→空 HSV 照合ガード (コミット 97445cc, 2026-07-30 追加)。True にすると
         NON-STABLE→STABLE 復帰 merge の色→空 遷移について HSV が色を保持する
@@ -4024,6 +5010,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         右に縦長情報パネルを配置する新レイアウト、出力キャンバスは1920x1080)。
         既定 "overlay" = 従来挙動不変 (backwards compat)。認識・有利不利の
         計算経路は layout に関わらず完全に同一で、最終合成のみ分岐する。
+    panel_subtitle_h: --layout panel 時の下端字幕帯の高さ (2026-08-21
+        user指示「グラフ広げて」で追加)。既定 PANEL_SUBTITLE_H (140px) =
+        従来と完全一致 (backwards compat)。0 を指定すると字幕帯を無くし、
+        その分を左下グラフ (148→288px) と右の情報パネル (940→1080px) の
+        高さへ丸ごと回す (panel_layout_regions() 参照、layout="overlay"
+        では無視される)。
+    enable_resolved_pending_landing_gate: ResolvedExchangeTracker の
+        enable_pending_landing_gate をCLI/generate() から渡すための配線
+        (2026-08-21 追加。クラス定義側は2026-08-21 導入済みだったが
+        generate() のシグネチャに引数が無く渡す手段が存在しなかった配線漏れの
+        是正)。攻撃側が連鎖中の間、予告おじゃまを受け側の生盤面へ着地させず
+        保留する (ResolvedExchangeTracker docstring 参照)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
     show_excluded_attribution: True で「主因」候補から
         src.production_config.ATTRIBUTION_EXCLUDED_INDICATORS
         (勝敗と無相関と実測済みの指標、根拠は同定数コメント参照) を除外**しない**
@@ -4095,6 +5094,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         経路の疑似 ChainEvent の total_score/base_score に simulate 推定値を
         充填する。既定 False = 従来挙動 (backwards compat、未採用のため
         use_production_recognition 経由でも自動 ON にはならない)。
+    chain_hold_base_sec / chain_hold_per_step_sec: RecognitionPipeline.
+        load_default に渡す CHAIN 保持時間モデルの実測較正値 (2026-08-22
+        修正②根治)。`src/recognition_pipeline.py:731-736` (A0、2026-07-24
+        計装実測) で「固定項2.61s + 係数1.17s×連鎖数」が原点通過モデルより
+        有意に良く適合 (23動画418イベント、R²=0.356) と較正済みだったが、
+        **本ファイルには一度も配線されておらず既定 (base=0.0、
+        per_step=0.3固定) のまま**だった (2026-08-22 実測で発覚: formula
+        機構の再トリガー間隔が保持時間切れの周期と一致し、長い連鎖が
+        複数の断片 ChainEvent に分裂する直接原因)。既定 None = 従来通り
+        ライブラリ既定 (0.0 / 0.3、backwards compat)。値を指定すると
+        `RecognitionPipeline` へそのまま渡る (未検証のため既定では有効化
+        しない、`--chain-hold-base-sec 2.61 --chain-hold-per-step-sec 1.17`
+        で明示指定して A/B 比較すること)。
     show_chain_count: True で --layout panel の情報パネルに「推定連鎖数
         (ChainEvent.chain_count、simulate 由来) / 実測得点差
         (OjamaAccountSnapshot.chain_total_score_pX、score OCR 由来) / 得点逆算
@@ -4107,6 +5119,46 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         色に切り替えて強調する)。既定 False = 行を一切描かない
         (bit-identical、backwards compat)。layout="overlay" には未配線
         (_draw_overlay は変更していないため無関係)。
+    enable_stable_confirmed_is_dead: True で dump_timeline_path 出力の
+        is_dead1/is_dead2 列を「凍結盤面への誤判定」から根治する
+        (2026-08-24、`src.board.Board.is_dead` docstring 「STABLE確定盤面
+        への静的判定として使う」契約の是正)。
+        根因: b1/b2 (settled 再計算に使う確定盤面) は該当 side が
+        `BoardState.STABLE` の瞬間にのみ更新され、非STABLE中 (CHAIN/
+        GRAVITY_SETTLE/TSUMO_FALL/OJAMA_FALL) は直前の確定盤面が凍結
+        される (原則4「非STABLE中は前回STABLE盤面を凍結」通りの仕様動作)。
+        `--per-side-settled` 採用後は「相手側だけSTABLEでも再計算」する
+        ため、この凍結盤面に対して is_dead() が連鎖中も呼ばれ続け、
+        実測で試合時間の約8%・569秒 (CHAINを含む区間に限定、走査器
+        D1a の過検出原因の過半) が「連鎖で盤面がほぼ空になっている実画面
+        なのに窒息判定 True」という誤りになっていた
+        (証拠: logs/is_dead_persist_2026-08-23/)。
+        本フラグは **dump_rows (npz保存直前の診断用リストのみ) を
+        後処理で遡及訂正**する (ライブの adv_ema/kill_override/描画/
+        indicators_v2 には一切触れない、docstring 冒頭の
+        `_retroactively_correct_dead_dump_rows` 参照)。
+        同一 game_idx 内で「非STABLE中に凍結されていた is_dead」の
+        直後に該当 side が STABLE へ復帰する行があれば、その復帰後
+        最初の STABLE 行の is_dead 値で遡って上書きする (=連鎖が
+        解決してから初めて分かる真の生死を過去に反映)。
+        試合終了 (game_idx 変化) まで一度も STABLE に復帰しない区間は
+        **一切変更しない** (受け入れ条件「死亡見逃しゼロ」を最優先し、
+        「最後の STABLE 時点では生きていた」ケースを誤って False に
+        書き換えるリスクを排除する安全側設計、2026-08-24)。
+        既定 False = 従来通り b1.is_dead()/b2.is_dead() をそのまま記録
+        (bit-identical、backwards compat)。dump_timeline_path が None
+        (=dump しない) のときは no-op。
+    enable_nonstable_hold_is_dead: True で dump の is_dead1/is_dead2 を
+        「own state が STABLE でない行では判定保留 (False+state列で復元可能)」
+        として記録する (2026-08-25 Gate 3R-6 案A、
+        `_resolve_nonstable_hold_is_dead` docstring 参照)。
+        enable_stable_confirmed_is_dead (未来の STABLE 値で遡及訂正する
+        dump後処理、リアルタイム不可) と異なり、**現在の state だけ**で
+        決めるためリアルタイム (配信オーバーレイ) でも成立する。
+        保留した行数は終了時に母数付き (`保留 x/y 行`) で必ず表示する
+        (0 が「起きていない」のか「測っていない」のかを区別するため)。
+        既定 False = 従来通り (bit-identical、backwards compat)。
+        dump_timeline_path が None のときは no-op。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -4233,6 +5285,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 未採用のため RECOGNITION_ADOPTED には含めず、直接引き渡す
         # (既定 False、backwards compat)。
         enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        # CHAIN 保持時間の実測較正値 (2026-08-22 修正②根治、上記docstring参照)。
+        # 既定 None ならキー自体を渡さずライブラリ既定 (0.0/0.3) のまま
+        # (backwards compat、未採用のため自動 ON にはしない)。
+        **({"chain_hold_base_sec": chain_hold_base_sec}
+           if chain_hold_base_sec is not None else {}),
+        **({"chain_hold_per_step_sec": chain_hold_per_step_sec}
+           if chain_hold_per_step_sec is not None else {}),
+        # スライド誤検知抑制ガード (2026-08-22 修正③根治、上記docstring参照)。
+        # 既定 False = 従来挙動完全維持 (backwards compat、未採用のため自動 ON
+        # にはしない、明示指定のみで有効化)。
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
         # 本番採用の認識フラグ群 (2026-08-13 是正)。RECOGNITION_ADOPTED の
         # 残り6キーは上記の個別 kwargs と重複しないため ** 展開で安全に合流できる
         # (重複時は TypeError で早期に気付ける設計、静かな上書きは起きない)。
@@ -4253,6 +5316,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     adv_ema = 0.0
     p1_last = 0.5
     drivers: list[tuple[str, float]] = []
+    # kill_override が直近の settled 再計算で実際に発火したか (2026-08-22
+    # 修正④、_kill_override_attribution_entry 参照)。dump 用の drivers
+    # (raw モデル寄与度、self己無矛盾性が要件) には一切混ぜず、表示専用の
+    # 別変数として持ち回る。settled 再計算のたびに更新、非 settled 中は
+    # 直前値を保持 (adv_ema 等と同じ「凍結」パターン)。
+    kill_override_note: "tuple[str, float] | None" = None
     # 受けやすさ・飽和連鎖量キャッシュ初期値 (HeavyAdvCache が更新するまで 0.0)
     ukey1: float = 0.0
     ukey2: float = 0.0
@@ -4285,6 +5354,23 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     attribution_exclude = () if show_excluded_attribution else ATTRIBUTION_EXCLUDED_INDICATORS
     hcache = HeavyAdvCache(model, attribution_exclude=attribution_exclude)
     efire_tracker = EarlyFireTracker()  # (早期発火) 既定 OFF 時も生成のみ(コスト僅少)
+    # 修正① 既定OFF時も生成のみ(コスト僅少)。累積モードは既定 False (2026-08-22
+    # user判断、ChainGenerationAccumulator docstring 参照)。
+    chain_gen_tracker = ChainGenerationAccumulator(
+        accumulate=enable_kill_override_chain_gen_accumulate)
+    # kill_override 連鎖完走後是正 (修正①) の当該フレーム分プレースホルダ。
+    # enable_kill_override_chain_completion=True の間は毎フレーム
+    # chain_gen_tracker.update() で上書きされる (settled ゲートの外側で
+    # 更新、詳細はその呼出し箇所のコメント参照)。False の間は未使用。
+    chain_gen1 = chain_gen2 = 0.0
+    chain_gen_before1: "Board | None" = None
+    chain_gen_before2: "Board | None" = None
+    # (2026-08-24 B案) 致死上書きの確信度ゲート。既定 OFF 時は生成のみで
+    # apply() を一切呼ばない (bit-identical、コストゼロ)。
+    kill_gate = KillOverrideConfidenceGate()
+    # (2026-08-24 A案(i-a)) 未登録送付分トラッカー。既定 OFF 時は生成のみ。
+    unregistered_sent_tracker = PostChainUnregisteredSentTracker()
+    unregistered_extra_p1 = unregistered_extra_p2 = 0.0
     # れんさ数表示 (--show-chain-count、2026-08-15)。show_chain_count=False 時も
     # 生成・update() 自体は行うが (コスト僅少)、_draw_panel_layout へ渡す文字列を
     # 組み立てないため描画には一切現れない (bit-identical、後方互換)。
@@ -4298,7 +5384,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_live_defender_reeval=enable_resolved_live_defender,
         enable_live_defender_strict=enable_resolved_live_defender_strict,
         enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
-        enable_resolved_victim_gen_live=enable_resolved_victim_gen_live)
+        enable_resolved_victim_gen_live=enable_resolved_victim_gen_live,
+        enable_pending_landing_gate=enable_resolved_pending_landing_gate,
+        enable_counter_placement_reuse=enable_resolved_counter_placement_reuse,
+        enable_counter_budget_quantize=enable_resolved_counter_budget_quantize)
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -4321,6 +5410,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     game_idx = 0  # スコアリセット検知で進む試合境界カウンタ (video 内ローカル)
     _last_boundary_advance_t: float | None = None
     dump_rows: list[TimelineDumpRow] = []
+    # (2026-08-25 Gate 3R-6 案A) is_dead 保留の母数付きカウンタ。
+    # enable_nonstable_hold_is_dead=False では一切 record されない
+    # (dump 経路も従来と bit-identical)。
+    isdead_hold_stats = _IsDeadHoldStats()
     for fi in range(start_frame, n):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -4377,6 +5470,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 _last_boundary_advance_t = t
             b1 = b2 = None
             adv_ema, p1_last, drivers = 0.0, 0.5, []
+            kill_override_note = None  # 前試合の安全弁理由を持ち越さない (修正④)
             ukey1 = ukey2 = sat1 = sat2 = 0.0
             counter_p1 = counter_p2 = float("nan")
             defender_side, incoming_ojama = None, 0.0
@@ -4386,8 +5480,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # 巻き直す (試合ごとに巻き直してよい、簡明な実装を優先)。
             game_start_sec, graph_total = _reset_graph_origin(t, start_sec, n, fps)
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
-             efire_tracker) = _fresh_trackers(
-                model, attribution_exclude=attribution_exclude)
+             efire_tracker, chain_gen_tracker) = _fresh_trackers(
+                model, attribution_exclude=attribution_exclude,
+                enable_chain_gen_accumulate=enable_kill_override_chain_gen_accumulate)
+            chain_gen1 = chain_gen2 = 0.0
+            chain_gen_before1 = chain_gen_before2 = None
+            # (2026-08-24) 確信度ゲート/未登録送付分も前試合の状態を持ち越さない
+            kill_gate = KillOverrideConfidenceGate()
+            unregistered_sent_tracker = PostChainUnregisteredSentTracker()
+            unregistered_extra_p1 = unregistered_extra_p2 = 0.0
             cap_ptracker = CapabilityPressureTracker()
             counter_tracker = CounterReachTracker()
             resolved_tracker = ResolvedExchangeTracker(
@@ -4396,7 +5497,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 enable_live_defender_reeval=enable_resolved_live_defender,
                 enable_live_defender_strict=enable_resolved_live_defender_strict,
                 enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
-                enable_resolved_victim_gen_live=enable_resolved_victim_gen_live)
+                enable_resolved_victim_gen_live=enable_resolved_victim_gen_live,
+                enable_pending_landing_gate=enable_resolved_pending_landing_gate,
+                enable_counter_placement_reuse=enable_resolved_counter_placement_reuse,
+                enable_counter_budget_quantize=enable_resolved_counter_budget_quantize)
             # 試合境界で前試合の保持中パルス(推定連鎖数/実測得点差)を持ち越さない
             # (2026-08-15、前試合最後の連鎖表示が次試合冒頭に残る誤表示を防止)。
             chain_display_tracker = ChainCountDisplayTracker()
@@ -4418,6 +5522,26 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_early_fire_reaction:
             efire_tracker.update(r.p1.chain_event, r.p2.chain_event, b2, b1,
                                  tracker._elapsed(t))
+        # (2026-08-22 修正① 改良②) kill_override 連鎖完走後是正の生成量累積。
+        # settled ゲートの外側で毎フレーム呼ぶことが要 (efire_tracker.update と
+        # 同じ理由: formula 機構の再トリガー [trigger_sec の変化] を settled
+        # 間引きの間に取りこぼさないため、ChainGenerationAccumulator docstring
+        # 参照)。既定 False では呼ぶだけでコスト僅少 (busy 判定のみ)。
+        # (2026-08-24 A案) scale-compare も生成量推定を使うため同じ条件で更新する
+        # (完走時の未登録送付分の捕捉に必要。chain_completion=False でも
+        # scale-compare=True なら回す。両方 False なら従来通り呼ばない =
+        # bit-identical)。
+        if enable_kill_override_chain_completion or enable_kill_override_scale_compare:
+            (chain_gen1, chain_gen_before1,
+             chain_gen2, chain_gen_before2) = chain_gen_tracker.update(
+                r.p1, r.p2, tracker._elapsed(t))
+        # (2026-08-24 A案(i-a)) 未登録送付分の更新も settled ゲートの外側で
+        # 毎フレーム行う (busy→非busy の完走遷移・会計登録の増分・盤面着弾は
+        # settled フレーム以外でも起きるため)。
+        if enable_kill_override_scale_compare:
+            unregistered_extra_p1, unregistered_extra_p2 = (
+                unregistered_sent_tracker.update(
+                    r.p1, r.p2, snap, b1, b2, chain_gen1, chain_gen2, t))
         # (#9 決着先読み) settled ゲートの外側 (= 非STABLE中も毎フレーム) で
         # 呼ぶことが要 (chain_event の両側同時アクティブ検知は STABLE ゲート内
         # では起きない、EarlyFireTracker と同じ理由)。
@@ -4546,8 +5670,68 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # ローカル変数に保持する (値は従来の board_room(b1)/board_room(b2)
             # 直呼び出しと完全に同一、キャッシュしただけで挙動不変)。
             room1, room2 = board_room(b1), board_room(b2)
-            adv = kill_override(adv, fctracker.inc1, fctracker.inc2,  # (B)キル判定で生存側へ
-                                room1, room2)
+            # (2026-08-22 修正) 従来は fctracker.inc1/inc2 (得点差÷70ヒューリ
+            # スティック+ツモ毎30個減衰の粗い推定) を渡していたが、実測
+            # (t=886.5s) で真値は2Pに216個なのに inc1=616.73/inc2=0.00 と
+            # 1P側へ逆方向に出る事故があった (scripts/_diag_kill_override_
+            # wiring_2026-08-22.py)。確定会計 (OjamaAccountingTracker.snap.
+            # pending_p1/p2、resolve_mutual_exchange や hold_after_kill_
+            # override の _incoming_total_p1/p2 と同系統の値) に差し替える。
+            # fc(4成分ブレンドの予告項、直上 fctracker.update() 呼出し)は
+            # 据え置き(安全弁の入力だけを正す局所修正、二重計上ではない)。
+            # (2026-08-22 修正①、改良②で生成量を複数トリガー累積対応に変更)
+            # 死ぬと判定されうる側が自分の連鎖 (CHAIN/GRAVITY_SETTLE) を
+            # 撃っている最中なら、連鎖前の凍結盤面の空きと相殺前の額面
+            # pending ではなく「連鎖完走後」の値で判定する
+            # (`_kill_override_chain_completion_inputs`/
+            # `ChainGenerationAccumulator` docstring 参照。既定 False では
+            # room1/room2・snap.pending_p1/p2 をそのまま返すため bit-identical)。
+            # (2026-08-24 A案「規模の比較」) scale-compare 有効時は kill の
+            # pending 基礎値を「cap 前の実額 (並行帳簿) + 未登録送付分」に
+            # 差し替える。None のままなら従来入力 (snap.pending_p1/p2) =
+            # bit-identical。表示用 pending (cap 済み) はここでは触らない。
+            if enable_kill_override_scale_compare:
+                kill_base_pend1 = (
+                    float(snap.pending_p1_uncapped) + unregistered_extra_p1)
+                kill_base_pend2 = (
+                    float(snap.pending_p2_uncapped) + unregistered_extra_p2)
+            else:
+                kill_base_pend1 = kill_base_pend2 = None
+            if enable_kill_override_chain_completion:
+                kroom1, kroom2, kpending1, kpending2 = (
+                    _kill_override_chain_completion_inputs(
+                        snap, b1, b2, room1, room2,
+                        chain_gen1, chain_gen_before1,
+                        chain_gen2, chain_gen_before2,
+                        pending_p1_override=kill_base_pend1,
+                        pending_p2_override=kill_base_pend2))
+            elif enable_kill_override_scale_compare:
+                kroom1, kroom2 = room1, room2
+                kpending1, kpending2 = kill_base_pend1, kill_base_pend2
+            else:
+                kroom1, kroom2 = room1, room2
+                kpending1, kpending2 = float(snap.pending_p1), float(snap.pending_p2)
+            adv_pre_kill_override = adv
+            adv = kill_override(adv, kpending1, kpending2,  # (B)キル判定で生存側へ
+                                kroom1, kroom2)
+            # (2026-08-24 B案) 確信度ゲート: 反転クールダウン + 持続確認 +
+            # 未確定中の ±90 上限。既定 OFF ではこの分岐自体を通らない
+            # (bit-identical)。ゲートが上書きを保留した場合 adv は
+            # adv_pre_kill_override へ戻るため、下の kill_override_note も
+            # 自然に None になる (矛盾した主因表示を出さない)。
+            if enable_kill_override_hysteresis:
+                adv = kill_gate.apply(adv_pre_kill_override, adv, t)
+            # (2026-08-22 修正④) 安全弁 (kill_override) が結論を決めた場合、
+            # その理由を主因表示に明示する (`_kill_override_attribution_entry`
+            # docstring 参照)。予測値 (adv/p1) には一切影響しない表示専用の
+            # 追加情報で、dump 用の `drivers` (raw モデル寄与度) には混ぜない。
+            kill_override_note = (
+                _kill_override_attribution_entry(
+                    adv_pre_kill_override, adv, kpending1, kpending2,
+                    kroom1, kroom2)
+                if enable_kill_override_attribution and adv != adv_pre_kill_override
+                else None
+            )
             p1 = adv_to_winprob(adv)  # 表示用勝率(較正sigmoid or 直線)
             # Platt後段校正 (全位相共通 or 位相別、2026-08-11 Phase1-2)。
             # 両方 False (既定) なら progress 計算自体を省き従来経路とビット一致させる。
@@ -4559,7 +5743,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             adv_ema = EMA_ALPHA * adv + (1 - EMA_ALPHA) * adv_ema
             p1_last = EMA_ALPHA * p1 + (1 - EMA_ALPHA) * p1_last
             if enable_early_fire_reaction:
-                efire_tracker.on_settled()  # 確定計算が入ったので速報バイアスをクリア
+                # (2026-08-22 修正②) 既定 False では従来通り settled 再計算の
+                # たびに無条件クリア (bit-identical)。True では finalize が
+                # 実際に会計へ反映されたときだけクリアする。
+                if enable_early_fire_clear_on_finalize:
+                    _finalized = efire_tracker.finalized_since_last_check(
+                        snap.chain_total_score_p1, snap.chain_total_score_p2)
+                    efire_tracker.on_settled(finalized=_finalized)
+                else:
+                    efire_tracker.on_settled()  # 確定計算が入ったので速報バイアスをクリア
             if dump_timeline_path is not None:
                 # settled 更新のたびに1レコード追記する (本番の間引き
                 # HeavyAdvCache.every はそのまま=dump は本番が実際に出す
@@ -4567,6 +5759,22 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 # p1_raw: adv_to_winprob(model_adv)。kill_override/4成分
                 # ブレンド/校正/EMA を一切通していない生モデル勝率
                 # (2026-08-11 アーキ審査追加、D1a/D1b の raw 段階判定に使う)。
+                # (2026-08-25 Gate 3R-6 案A) 非STABLE中の is_dead 判定保留。
+                # 既定 False では dead1_rec/dead2_rec は None のままで
+                # _build_timeline_dump_row が従来通り b1/b2.is_dead() を
+                # 評価する (bit-identical)。adv/p1 の判定値には一切影響
+                # しない (is_dead は dump 記録専用列)。
+                dead1_rec: bool | None = None
+                dead2_rec: bool | None = None
+                if enable_nonstable_hold_is_dead:
+                    _raw_dead1, _raw_dead2 = b1.is_dead(), b2.is_dead()
+                    dead1_rec, _held1 = _resolve_nonstable_hold_is_dead(
+                        _raw_dead1, r.p1.state.name)
+                    dead2_rec, _held2 = _resolve_nonstable_hold_is_dead(
+                        _raw_dead2, r.p2.state.name)
+                    isdead_hold_stats.record(
+                        held1=_held1, suppressed1=(_raw_dead1 and not dead1_rec),
+                        held2=_held2, suppressed2=(_raw_dead2 and not dead2_rec))
                 dump_rows.append(_build_timeline_dump_row(
                     t_sec=t, game_idx=game_idx, adv_raw=model_adv,
                     adv_ema=adv_ema, p1=p1_last, p1_raw=adv_to_winprob(model_adv),
@@ -4574,6 +5782,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     room1=room1, room2=room2, b1=b1, b2=b2, drivers=drivers,
                     score1=r.p1.score, score2=r.p2.score,
                     state1=r.p1.state.name, state2=r.p2.state.name,
+                    is_dead1=dead1_rec, is_dead2=dead2_rec,
+                    # (2026-08-23 根治①) kill_override に実際に渡された
+                    # 是正後の値 (:5149-5160 kroom1/kroom2/kpending1/kpending2)。
+                    # enable_kill_override_chain_completion=False、または
+                    # 是正未発火のフレームでは room1/room2・snap.pending_p1/p2
+                    # と完全に同じ値 (_kill_override_chain_completion_inputs
+                    # 仕様通り)。
+                    kpending_p1=kpending1, kpending_p2=kpending2,
+                    kroom1=kroom1, kroom2=kroom2,
                 ))
         # (早期発火) 表示直前にのみ bias を加算する (adv_ema/p1_last の EMA 内部状態
         # 自体には混ぜない = 無効時は従来経路とビット一致)。
@@ -4603,6 +5820,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     adv_ema, p1_last = resolved_tracker.hold_after_kill_override(
                         b1, b2, state1=r.p1.state, state2=r.p2.state)
                 disp_adv, disp_p1 = adv_ema, p1_last
+        # (2026-08-22 修正④) 安全弁の発火理由を主因先頭へ差し込む。決着ホールド
+        # 中 (resolved_active) は `drivers` が `resolved_tracker.hold_drivers`
+        # (別経路の生成物) に差し替わっており、ライブ per-frame kill_override
+        # の note (`kill_override_note`) は無関係になるため対象外にする
+        # (混線防止、既定 False では本行自体が no-op で bit-identical)。
+        if enable_kill_override_attribution and not (
+                enable_resolved_exchange_eval and resolved_active):
+            drivers = _drivers_for_display(drivers, kill_override_note)
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
         # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
         # (t - start_sec) と一致するため必ず 0 から始まる。境界が一度も
@@ -4678,9 +5903,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     resolved_tracker.hold_defender_prob,
                     resolved_tracker.hold_incoming_ojama,
                     defender_side, counter_p1, counter_p2, incoming_ojama),
-                elapsed_sec=t - start_sec,
+                # (2026-08-22 修正) 従来の t - start_sec は動画全体の絶対
+                # 経過秒で、試合境界 (game_start_sec リセット) を反映しな
+                # かったため区間分割の継ぎ目 (t=893.7s等) で 893秒→6秒と
+                # 逆行していた。グラフ横軸 (:4826 の t_rel =
+                # _graph_relative_time(t, start_sec, game_start_sec)) と
+                # 同じ試合相対時間に揃える
+                # (境界が一度も起きない動画では game_start_sec=0.0 のまま
+                # なので従来値と完全一致、backwards compat)。
+                elapsed_sec=t_rel,
                 chain_text_p1=chain_text_p1, chain_text_p2=chain_text_p2,
-                chain_mismatch_p1=chain_mismatch_p1, chain_mismatch_p2=chain_mismatch_p2)
+                chain_mismatch_p1=chain_mismatch_p1, chain_mismatch_p2=chain_mismatch_p2,
+                subtitle_h=panel_subtitle_h)
         else:
             frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
                                       history, t_rel, graph_total,
@@ -4694,8 +5928,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         writer.release()
     if dump_timeline_path is not None:
         video_id = video.stem
+        # (2026-08-24) is_dead1/is_dead2 の凍結盤面誤判定の遡及訂正。
+        # dump_rows (診断用リストのみ) に作用し、ライブ判定には無関係
+        # (enable_stable_confirmed_is_dead docstring 参照)。既定 False では
+        # 呼ばないため save_timeline_dump への入力は従来と完全一致する。
+        if enable_stable_confirmed_is_dead:
+            dump_rows = _retroactively_correct_dead_dump_rows(dump_rows)
         save_timeline_dump(dump_timeline_path, video_id, dump_rows)
         print(f"[dump] {len(dump_rows)} records -> {dump_timeline_path}")
+        # (2026-08-25 Gate 3R-6 案A) 保留カウンタは母数付きで必ず表示する
+        # (0/0 なら「dump行なし=測っていない」、0/N なら「保留は起きていない」
+        # と区別できる、memory feedback_zero_needs_denominator_2026-08-25)。
+        if enable_nonstable_hold_is_dead:
+            print(f"[is_dead保留] {isdead_hold_stats.summary()}")
     if render:
         print(f"[done] {written} frames -> {out}")
     else:
@@ -4704,6 +5949,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
 
 
 def main() -> None:
+    # 2026-08-21: 1プロセス1コアに固定する (並列実行時のスレッド過剰生成の防止)。
+    # 30先動画を8並列でレンダしたところ、各プロセスが 109 スレッドを立てて
+    # 16コアに 872 スレッドが群がり、実効スループットが事前実測の 5.7分の1
+    # (0.668 -> 0.1166 動画秒/壁秒、完了見込み3.0時間 -> 16.5時間) に落ちた。
+    # 収集側は「cv2.setNumThreads(1) × 14並列が最適」と実測済み
+    # (memory project_collect_indicators_v2_perf) だが、レンダ経路は未適用だった。
+    # 単独実行時は 1 コアに絞られるが、認識だけなら実時間並みの速度が出ており
+    # (27.44ms/update 実測)、並列数でスケールさせる方が総スループットは高い。
+    cv2.setNumThreads(1)
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", default="data/frames/video_124_4min.mp4")
     ap.add_argument("--out", default="data/indicators_v2/overlay/advantage_v124.mp4")
@@ -4820,6 +6074,69 @@ def main() -> None:
              "対処)。既定 OFF = 従来挙動不変 (backwards compat)。A/B比較用。",
     )
     ap.add_argument(
+        "--early-fire-clear-on-finalize", action="store_true", default=False,
+        dest="enable_early_fire_clear_on_finalize",
+        help="EarlyFireTracker の速報バイアスをクリアする条件を「settled再計算"
+             "が走った」から「連鎖の finalize が会計に反映された」に変える"
+             "(2026-08-22 修正②)。--per-side-settled 下では相手STABLE中は"
+             "settled が毎フレーム走り、finalize前に速報が毎回消えていた。"
+             "既定 OFF = 従来挙動不変 (backwards compat)。--early-fire-reaction"
+             "が OFF の場合は無視される (孫フラグ)。",
+    )
+    ap.add_argument(
+        "--kill-override-chain-completion", action="store_true", default=False,
+        dest="enable_kill_override_chain_completion",
+        help="致死判定 (kill_override) の入力を「連鎖完走後」に是正する"
+             "(2026-08-22 修正①)。死ぬと判定されうる側が自分自身の連鎖"
+             "(CHAIN/GRAVITY_SETTLE) を撃っている最中でも従来は発火前の凍結"
+             "盤面の空きと相殺前の額面 pending を使っており、自分の連鎖が"
+             "pending を相殺しきるケースまで致死断定していた (実測7件、"
+             "logs/killoverride_wrong_2026-08-22/一覧.tsv)。既存"
+             "resolve_mutual_exchange を再利用して完走後の盤面・相殺後の"
+             "残存pendingで判定し直す。既定 OFF = 従来挙動不変 (backwards"
+             "compat)。",
+    )
+    ap.add_argument(
+        "--kill-override-chain-gen-accumulate", action="store_true", default=False,
+        dest="enable_kill_override_chain_gen_accumulate",
+        help="ChainGenerationAccumulator の累積モード (2026-08-22 user判断)。"
+             "既定OFF=直近1件のchain_eventの値に置き換える(合算しない)。"
+             "累積は架空の完了状態を仮定し新しい不一致時間帯を作ると実測で"
+             "判明したため既定OFFにした。--kill-override-chain-completion"
+             "がOFFの場合は無視される(孫フラグ)。",
+    )
+    ap.add_argument(
+        "--kill-override-attribution", action="store_true", default=False,
+        dest="enable_kill_override_attribution",
+        help="kill_override 発火時に主因表示欄へ致死判定の理由を明示する"
+             "(2026-08-22 修正④、表示専用・予測値には影響しない)。従来は"
+             "安全弁が結論を上書きしても主因欄は適用前の生モデル寄与度の"
+             "ままで、表示と結論が矛盾していた。既定 OFF = 従来挙動不変。",
+    )
+    ap.add_argument(
+        "--kill-override-hysteresis", action="store_true", default=False,
+        dest="enable_kill_override_hysteresis",
+        help="致死上書き (kill_override) に確信度ゲートを掛ける (2026-08-24 "
+             "B案)。同一方向に約0.96秒 (受け側の持ち手2手+認識反映8f) 持続して"
+             "初めて完全上書き (±100) を許し、それまでは |adv|≤90 に制限、"
+             "方向反転時は1手時間 (約0.35秒) のクールダウンで上書きを保留する。"
+             "ChainEvent 断片化による1フレーム ±100→∓100 反転 (納品動画で"
+             "実測、memory project_pm100_display_flip_2026-08-24 根因③) の"
+             "構造的禁止。既定 OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
+        "--kill-override-scale-compare", action="store_true", default=False,
+        dest="enable_kill_override_scale_compare",
+        help="致死上書きの pending 入力を「規模の比較」に是正する (2026-08-24 "
+             "A案、根因①②)。(i) 会計 finalize 遅延 (実測最大11.5秒) 中の"
+             "「送付済み未登録」分を連鎖完走時に即時捕捉して受け側 pending に"
+             "供給し、(ii) 相殺の引き算には PENDING_ABS_CAP=216 で丸める前の"
+             "実額 (会計の並行帳簿 pending_p1/p2_uncapped) を使う。表示用の"
+             "cap は従来のまま。撃ち返し全量が新規攻撃として誤計上され方向が"
+             "反転する事故 (納品動画 seg01 game2 で実測) の根治。"
+             "既定 OFF = 従来挙動不変 (backwards compat)。",
+    )
+    ap.add_argument(
         "--counter-reach", action="store_true", default=COUNTER_REACH_ENABLED_BY_DEFAULT,
         dest="enable_counter_reach",
         help="打ち合い応手確率 (モンテカルロ) を有利不利に加える。相手が閾値"
@@ -4907,7 +6224,7 @@ def main() -> None:
         help="--resolved-kill-override の致死断定を受け側の応手確率で減衰する "
              "(2026-08-15 指摘19、docs/DEMO_REVIEW_2026-08-13.md #19)。従来は"
              "pending/room 比のみで致死断定するため、受け側がSTABLEで応手"
-             "可能な局面でも致死断定していた (実測 t=201.4-203.4: 1P 0.7%"
+             "可能な局面でも致死断定していた (実測 t=201.4-203.4: 1P 0.7%%"
              "と誤表示、直後に撃ち返し勝利)。既存の CounterReachTracker が"
              "同一フレームで算出済みの hold_defender_prob/hold_defender_side"
              "を再利用し新規の推測ロジックは追加しない。--resolved-kill-"
@@ -4925,6 +6242,40 @@ def main() -> None:
              "自分の連鎖を処理中の側の生成お邪魔量が過小評価される直接原因"
              "だった。--resolved-exchange-eval 無効時は無視される。"
              "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
+        "--resolved-pending-landing-gate", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_pending_landing_gate",
+        help="ResolvedExchangeTracker.enable_pending_landing_gate の配線 "
+             "(2026-08-21 配線是正。クラス引数自体は2026-08-21導入済みだったが "
+             "generate()/CLIに渡す手段が無く常にFalse固定だった配線漏れの是正)。"
+             "攻撃側が連鎖中の間は予告おじゃまを受け側の生盤面へ着地させず "
+             "保留する。--resolved-exchange-eval 無効時は無視される。"
+             "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
+        "--resolved-counter-placement-reuse", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_counter_placement_reuse",
+        help="受け側限定応手MC (CounterReachTracker._update_defender_only) の "
+             "再計算を「受け側の盤面bytesが変化した(=設置が起きた)とき」だけに "
+             "限定する近似 (2026-08-21 user承認)。実測で従来キャッシュのヒット率は "
+             "0.00%% (時間予算がキーに入り毎回ミスする設計上の必然)。閾値が変われば "
+             "別スコープとなり自動的に再計算される。表示更新周期 (0.5秒ごと) は "
+             "変えない。--resolved-exchange-eval 無効時は無視される。"
+             "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
+        "--resolved-counter-budget-quantize", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_counter_budget_quantize",
+        help="応手MCのキャッシュキーに入る budget_sec (着弾までの残り秒) を "
+             "COUNTER_BUDGET_QUANTUM_SEC (1手あたりの平均設置時間、"
+             "mc_counter_estimator.PLACEMENT_SPEED_BY_ROW_SEC の単純平均 "
+             "≈0.348秒、物理実測値からの導出) 単位に丸める (2026-08-21 "
+             "user承認)。--resolved-counter-placement-reuse とは独立の別機構 "
+             "(盤面一致による再利用/残り秒数の丸め、それぞれ単独でも効果を "
+             "測れる)。キャッシュミス時に実際の MC 計算へ渡す budget_sec は "
+             "常に元の値 (量子化しない)。--resolved-exchange-eval 無効時は "
+             "無視される。既定 OFF = 従来挙動と完全に同一。",
     )
     ap.add_argument(
         "--no-pressure", action="store_true", default=False,
@@ -4988,10 +6339,35 @@ def main() -> None:
              "経路の疑似ChainEventにsimulate推定スコアを充填する。既定OFF"
              " (bit-identical)。")
     ap.add_argument(
+        "--chain-hold-base-sec", type=float, default=None,
+        dest="chain_hold_base_sec",
+        help="CHAIN保持時間モデルの固定項 (2026-08-22 修正②根治)。実測較正値"
+             " (recognition_pipeline.py:731-736、23動画418イベント) は2.61。"
+             "既定None=ライブラリ既定0.0のまま (backwards compat)。")
+    ap.add_argument(
+        "--chain-hold-per-step-sec", type=float, default=None,
+        dest="chain_hold_per_step_sec",
+        help="CHAIN保持時間モデルの連鎖数係数 (2026-08-22 修正②根治)。実測較正値"
+             "は1.17。既定None=ライブラリ既定0.3のまま (backwards compat)。")
+    ap.add_argument(
+        "--enable-slide-exit-min-display-guard",
+        action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_slide_exit_min_display_guard",
+        help="修正③根治 (2026-08-22): NextSlide即終了経路のX1/X4誤検知抑制ガード"
+             " (連鎖中1.37秒周期の断片化対策)。既定OFF (bit-identical)。")
+    ap.add_argument(
         "--layout", choices=VALID_LAYOUTS, default="overlay", dest="layout",
         help="出力レイアウト (2026-08-10 user指示追加)。'overlay'(既定)は従来通り"
              "盤面に直接バー等を重ねる。'panel' は左上に映像・左下にタイムライン"
              "グラフ・右に縦長情報パネルを配置する新レイアウト (1920x1080)。",
+    )
+    ap.add_argument(
+        "--panel-subtitle-h", type=int, default=PANEL_SUBTITLE_H,
+        dest="panel_subtitle_h",
+        help="--layout panel の下端字幕帯の高さ (px、2026-08-21 user指示"
+             "「グラフ広げて」で追加)。既定 140px = 従来と完全一致。0を指定"
+             "すると字幕帯を無くし、その分を左下グラフと右の情報パネルの"
+             "高さへ丸ごと回す (layout=overlay 時は無視される)。",
     )
     ap.add_argument(
         "--show-chain-count", action="store_true", default=False,
@@ -5023,6 +6399,27 @@ def main() -> None:
              "scripts/scan_judgment_anomalies.py --from-dump がこれを読むだけで"
              "検出でき、判定の再計算(148動画で約39日と実測済み)が不要になる。"
              "既定 None = 保存しない。",
+    )
+    ap.add_argument(
+        "--stable-confirmed-is-dead", action="store_true", default=False,
+        dest="enable_stable_confirmed_is_dead",
+        help="--dump-timeline の is_dead1/is_dead2 列を、非STABLE中(連鎖等)に"
+             "凍結された盤面への誤判定から遡及訂正する (2026-08-24)。実測で"
+             "試合時間の約8%%が「連鎖で盤面が空になった実画面なのに窒息判定"
+             "True」の誤りだった (logs/is_dead_persist_2026-08-23/)。dump専用の"
+             "後処理でライブ判定/描画には無関係。既定 OFF = 従来通り"
+             "(bit-identical)。",
+    )
+    ap.add_argument(
+        "--nonstable-hold-is-dead", action="store_true", default=False,
+        dest="enable_nonstable_hold_is_dead",
+        help="--dump-timeline の is_dead1/is_dead2 を、own state が STABLE で"
+             "ない行では判定保留 (False) として記録する (2026-08-25 Gate 3R-6 "
+             "案A)。user伝授の絶対律「設置前/積み上げ中/連鎖直前/連鎖中は"
+             "窒息としない」の実装で、未来参照なし=リアルタイム可能 "
+             "(--stable-confirmed-is-dead の遡及訂正はリアルタイム不可の後処理"
+             "、併用時は遡及訂正が後段で上書きする)。保留行数は終了時に母数"
+             "付きで表示。既定 OFF = 従来通り (bit-identical)。",
     )
     # collect_boards_lean.py と同名・同既定 (2026-08-12 追加、対称化)。
     ap.add_argument(
@@ -5111,6 +6508,14 @@ def main() -> None:
              enable_platt_calibration=a.enable_platt_calibration,
              enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
+             enable_early_fire_clear_on_finalize=a.enable_early_fire_clear_on_finalize,
+             enable_kill_override_chain_completion=a.enable_kill_override_chain_completion,
+             enable_kill_override_chain_gen_accumulate=(
+                 a.enable_kill_override_chain_gen_accumulate),
+             enable_kill_override_attribution=a.enable_kill_override_attribution,
+             enable_kill_override_hysteresis=a.enable_kill_override_hysteresis,
+             enable_kill_override_scale_compare=(
+                 a.enable_kill_override_scale_compare),
              enable_per_side_settled=a.enable_per_side_settled,
              disable_score_lead_bias=a.disable_score_lead_bias,
              enable_capability_pressure=a.enable_capability_pressure,
@@ -5126,20 +6531,32 @@ def main() -> None:
              enable_resolved_kill_override_counter_aware=(
                  a.enable_resolved_kill_override_counter_aware),
              enable_resolved_victim_gen_live=a.enable_resolved_victim_gen_live,
+             enable_resolved_counter_placement_reuse=(
+                 a.enable_resolved_counter_placement_reuse),
+             enable_resolved_counter_budget_quantize=(
+                 a.enable_resolved_counter_budget_quantize),
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
              enable_ojama_fall_entry_hardening=a.enable_ojama_fall_entry_hardening,
              enable_ojama_fall_scoped_exit=a.enable_ojama_fall_scoped_exit,
              enable_pseudo_chain_score_fill=a.enable_pseudo_chain_score_fill,
+             chain_hold_base_sec=a.chain_hold_base_sec,
+             chain_hold_per_step_sec=a.chain_hold_per_step_sec,
+             enable_slide_exit_min_display_guard=(
+                 a.enable_slide_exit_min_display_guard),
              layout=a.layout,
+             panel_subtitle_h=a.panel_subtitle_h,
+             enable_resolved_pending_landing_gate=a.enable_resolved_pending_landing_gate,
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
              dump_timeline_path=a.dump_timeline_path,
              normalize_fps_30=normalize_fps_30,
              use_production_recognition=use_production_recognition,
              resize_1080p=resize_1080p,
-             show_chain_count=a.show_chain_count)
+             show_chain_count=a.show_chain_count,
+             enable_stable_confirmed_is_dead=a.enable_stable_confirmed_is_dead,
+             enable_nonstable_hold_is_dead=a.enable_nonstable_hold_is_dead)
 
 
 if __name__ == "__main__":

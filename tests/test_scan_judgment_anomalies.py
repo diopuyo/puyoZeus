@@ -15,6 +15,7 @@ import pytest
 
 from src.board import DEATH_COL, DEATH_ROW, Board
 from scripts.scan_judgment_anomalies import (
+    CHAIN_PHASE_STATE_NAMES,
     GAME_BOUNDARY_GUARD_SEC,
     STAGE_BOTH,
     STAGE_DISPLAY,
@@ -30,6 +31,7 @@ from scripts.scan_judgment_anomalies import (
     scan_video_from_dump,
 )
 from scripts.visualize_advantage_overlay import (
+    KILL_MIN_PENDING,
     KILL_RATIO_FULL,
     KILL_ROOM_FLOOR,
     TimelineDumpRow,
@@ -163,6 +165,48 @@ class TestDetectD1a:
         suspects = detect_d1a(rec)
         sides = {"1P" if "1P" in s.evidence else "2P" for s in suspects}
         assert "1P" in sides
+
+    def test_negative_chain_phase_own_side_suppressed(self) -> None:
+        """1Pが CHAIN 中なら is_dead_p1=True でも保留する (2026-08-23 根治②、
+        reference_death_judgment_during_chain_2026-08-22)。"""
+        rec = _record(is_dead_p1=True, is_dead_p2=False, adv=30.0, p1=0.65, state1="CHAIN")
+        assert detect_d1a(rec) == []
+
+    def test_negative_gravity_settle_own_side_suppressed(self) -> None:
+        """GRAVITY_SETTLE も同様に保留対象 (連鎖終了直後の重力settle中)。"""
+        rec = _record(
+            is_dead_p1=True, is_dead_p2=False, adv=30.0, p1=0.65,
+            state1="GRAVITY_SETTLE",
+        )
+        assert detect_d1a(rec) == []
+
+    def test_negative_chain_guard_is_per_side(self) -> None:
+        """連鎖中ガードは判定対象側だけに効く。1Pが連鎖中でも2Pの窒息確定は
+        通常通り検出する。"""
+        rec = _record(
+            is_dead_p1=False, is_dead_p2=True, adv=-2.0, p1=0.51,
+            state1="CHAIN", state2="STABLE",
+        )
+        suspects = detect_d1a(rec)
+        assert len(suspects) == 1
+        assert "2P" in suspects[0].evidence
+
+    def test_positive_stable_state_not_suppressed(self) -> None:
+        """state1="STABLE" (連鎖中でない) は従来通り検出する (回帰防止)。"""
+        rec = _record(is_dead_p1=True, is_dead_p2=False, adv=30.0, p1=0.65, state1="STABLE")
+        assert len(detect_d1a(rec)) == 1
+
+    def test_positive_default_empty_state_not_suppressed(self) -> None:
+        """state 未設定 ("", npz再計算モード相当) はガード非適用=従来通り
+        検出する (後方互換、`TestScanVideoEndToEnd` の既存挙動と整合)。"""
+        rec = _record(is_dead_p1=True, is_dead_p2=False, adv=30.0, p1=0.65)
+        assert rec.state1 == "" and rec.state2 == ""
+        assert len(detect_d1a(rec)) == 1
+
+    def test_chain_phase_state_names_content(self) -> None:
+        """ガード対象は CHAIN と GRAVITY_SETTLE の2つのみ (それ以外の
+        BoardState.name は STABLE と同様に扱われる)。"""
+        assert CHAIN_PHASE_STATE_NAMES == frozenset({"CHAIN", "GRAVITY_SETTLE"})
 
     def test_stage_raw_only_when_display_corrected(self) -> None:
         """raw (adv/p1_raw) は1P窒息を無視して1P有利だが、display (adv_ema/p1) は
@@ -308,13 +352,65 @@ class TestDetectD1b:
 
     def test_boundary_ratio_uses_kill_room_floor(self) -> None:
         """room が KILL_ROOM_FLOOR 未満でも 0 除算せず、下限で丸められる
-        (kill_override() と同じ規約)。"""
+        (kill_override() と同じ規約)。pending は KILL_MIN_PENDING (=40) 以上
+        (2026-08-23 根治②追加分) を満たす値にする (床下限クランプの検証が
+        目的で、下限自体の境界は別テストで確認する)。"""
         rec = _record(
-            pending_p1=KILL_ROOM_FLOOR * KILL_RATIO_FULL, room1=1, pending_p2=0, room2=72,
+            pending_p1=max(KILL_MIN_PENDING, KILL_ROOM_FLOOR * KILL_RATIO_FULL),
+            room1=1, pending_p2=0, room2=72, adv=30.0, p1=0.7,
+        )
+        # room=1 < KILL_ROOM_FLOOR なので分母は KILL_ROOM_FLOOR に丸められる。
+        assert len(detect_d1b(rec)) == 1
+
+    def test_negative_below_kill_min_pending_not_flagged(self) -> None:
+        """pending < KILL_MIN_PENDING (=40) は比が KILL_RATIO_FULL 以上でも
+        本番 kill_override() 自体が致死扱いしない量のため検出しない
+        (2026-08-23 根治②、実測: D1bの96.2%がこのケースだった)。"""
+        rec = _record(
+            pending_p1=KILL_MIN_PENDING - 1, room1=4, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7,  # 比 = 39/4 = 9.75 ≫ KILL_RATIO_FULL
+        )
+        assert detect_d1b(rec) == []
+
+    def test_positive_at_kill_min_pending_boundary_flagged(self) -> None:
+        """pending == KILL_MIN_PENDING ちょうどは境界内 (>= 判定) で検出する。"""
+        rec = _record(
+            pending_p1=KILL_MIN_PENDING, room1=4, pending_p2=0, room2=72,
             adv=30.0, p1=0.7,
         )
-        # room=1 < KILL_ROOM_FLOOR なので分母は KILL_ROOM_FLOOR に丸められ、
-        # ratio = KILL_RATIO_FULL ちょうど (>= 判定なので検出される)
+        assert len(detect_d1b(rec)) == 1
+
+    def test_negative_chain_phase_own_side_suppressed(self) -> None:
+        """判定対象側 (1P) が CHAIN 中なら、致死確定条件を満たしていても
+        検出しない (2026-08-23 根治②、reference_death_judgment_during_chain_
+        2026-08-22: 連鎖中は保留)。"""
+        rec = _record(
+            pending_p1=100, room1=4, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7, state1="CHAIN",
+        )
+        assert detect_d1b(rec) == []
+
+    def test_negative_gravity_settle_own_side_suppressed(self) -> None:
+        """GRAVITY_SETTLE も CHAIN と同様に保留対象。"""
+        rec = _record(
+            pending_p1=100, room1=4, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7, state1="GRAVITY_SETTLE",
+        )
+        assert detect_d1b(rec) == []
+
+    def test_positive_stable_state_not_suppressed(self) -> None:
+        """state1="STABLE" (連鎖中でない) は従来通り検出する (回帰防止)。"""
+        rec = _record(
+            pending_p1=100, room1=4, pending_p2=0, room2=72,
+            adv=30.0, p1=0.7, state1="STABLE",
+        )
+        assert len(detect_d1b(rec)) == 1
+
+    def test_positive_default_empty_state_not_suppressed(self) -> None:
+        """state 未設定 ("", npz再計算モード相当) はガード非適用=従来通り
+        検出する (後方互換)。"""
+        rec = _record(pending_p1=100, room1=4, pending_p2=0, room2=72, adv=30.0, p1=0.7)
+        assert rec.state1 == ""  # 前提確認 (既定値)
         assert len(detect_d1b(rec)) == 1
 
     def test_stage_raw_only_when_kill_override_corrected(self) -> None:
@@ -426,6 +522,49 @@ class TestScanVideoFromDumpEndToEnd:
         dump_path = tmp_path / "v_dump_empty.npz"
         save_timeline_dump(dump_path, "v_dump_empty", [])
         assert scan_video_from_dump(dump_path) == []
+
+    def test_state_wired_into_record_suppresses_d1a_during_chain(
+        self, tmp_path: Path,
+    ) -> None:
+        """(2026-08-23 根治②) dump の state1/state2 が JudgmentRecord に配線
+        され、CHAIN 中の is_dead1=True は D1a が保留する。従来は state が
+        レコードに存在せず (フィールド自体が無かった)、連鎖中の凍結満杯盤面を
+        全部「異常」と数えていた。"""
+        rows = [
+            _dump_row(t_sec=0.0, game_idx=4),
+            _dump_row(
+                t_sec=50.0, game_idx=4, is_dead1=True, adv_raw=30.0, p1=0.65,
+                state1="CHAIN",
+            ),
+        ]
+        dump_path = tmp_path / "v_dump_chain_guard.npz"
+        save_timeline_dump(dump_path, "v_dump_chain_guard", rows)
+
+        records = scan_video_from_dump(dump_path)
+        assert records[1].state1 == "CHAIN"
+        suspects = [s for r in records for s in detect_d1a(r)]
+        assert suspects == []
+
+    def test_kpending_kroom_used_for_d1b_not_raw_values(self, tmp_path: Path) -> None:
+        """(2026-08-23 根治①②連携) D1b は kill_override へ実際に渡された
+        是正後の値 (kpending_p1/kroom1) を見る。生値だけなら致死確定だが
+        是正後は安全な値になっているフレームは検出しない (盲点の根治、
+        raw pending/room をそのまま使うと誤検出していたケース)。"""
+        rows = [
+            _dump_row(t_sec=0.0, game_idx=5),
+            _dump_row(
+                t_sec=50.0, game_idx=5, adv_raw=30.0, p1=0.7,
+                pending_p1=216, room1=5,  # 生値だけなら致死確定 (216/5=43.2)
+                kpending_p1=0.0, kroom1=62,  # 是正後は安全 (連鎖完走後の相殺済み)
+            ),
+        ]
+        dump_path = tmp_path / "v_dump_kfields.npz"
+        save_timeline_dump(dump_path, "v_dump_kfields", rows)
+
+        records = scan_video_from_dump(dump_path)
+        assert records[1].pending_p1 == 0
+        assert records[1].room1 == 62
+        assert detect_d1b(records[1]) == []
 
 
 # ============================

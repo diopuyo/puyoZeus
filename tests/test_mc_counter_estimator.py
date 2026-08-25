@@ -12,26 +12,42 @@ scripts/_bench_mc_counter_v2_2026-08-04.py の実測ベンチで別途確認す�
 """
 from __future__ import annotations
 
+import math
+import random
+
 import numpy as np
 import pytest
 
 import src.indicators_v2 as iv
-from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_RED, Board
+from src.board import BOARD_COLS, BOARD_ROWS, COLOR_BLUE, COLOR_GREEN, COLOR_RED, Board
 from scripts.mc_counter_estimator import (
+    BEAM_ROLLOUT_AVG_STEP_TIME_SEC,
+    EXACT_SHALLOW_MAX_DEPTH,
+    EXACT_SHALLOW_PRUNE_HEIGHT,
+    EXACT_SHALLOW_SEED_DEPTH,
     MC_COUNTER_MAX_HANDS_HARD_CAP,
     PLACEMENT_SPEED_BY_ROW_SEC,
     PLACEMENT_SPEED_FALLBACK_SEC,
     _board_is_gravity_consistent,
+    _canonical_pair,
     _clamp_row_index,
     _deadline_trigger_value,
+    _draw_beam_tsumo_sequence,
+    _lookup_or_compute_exact_shallow_seed,
     _mc_counter_seed,
+    _ojama_threshold_to_score_threshold,
     _placement_row_index,
+    _resolve_auto_rollout_mode,
+    _rollout_once_beam,
+    _rollout_once_exact_shallow,
     _select_best_placement,
     _select_build_placement,
+    _time_budget_to_beam_depth,
     estimate_counter_distribution,
 )
 from src.chain import ChainSimulator
-from src.puyo_core_bridge import NATIVE_AVAILABLE
+from src.indicators_v2 import _score_to_ojama_count
+from src.puyo_core_bridge import NATIVE_AVAILABLE, exact_shallow_search
 
 
 def _seed_board_ready_to_fire() -> Board:
@@ -377,6 +393,493 @@ class TestDistributionShape:
             board, time_budget_sec=1.0, thresholds_ojama=(400.0,), n_rollouts=3,
         )
         assert dist.prob_at_least[400.0] < 0.1
+
+
+class TestKnownPrefixDedup:
+    """v3.3 (2026-08-21、既知ツモ重複計算排除) の回帰確認。
+
+    既知ツモ区間 (乱数不使用) を1回だけ計算して全ロールアウトで共有する
+    `enable_prefix_dedup=True` (既定) が、毎ロールアウトでフルに
+    再計算する `enable_prefix_dedup=False` (旧挙動相当) と完全一致することを
+    直接確認する (最適化自体が値を変えていないことの保証)。
+    """
+
+    def test_dedup_matches_full_recompute_with_known_pairs(self) -> None:
+        board = _seed_board_ready_to_fire()
+        dedup = estimate_counter_distribution(
+            board, time_budget_sec=2.0, n_rollouts=5,
+            known_pairs=((COLOR_RED, COLOR_BLUE), (COLOR_RED, COLOR_RED)),
+        )
+        full_recompute = estimate_counter_distribution(
+            board, time_budget_sec=2.0, n_rollouts=5,
+            known_pairs=((COLOR_RED, COLOR_BLUE), (COLOR_RED, COLOR_RED)),
+            enable_prefix_dedup=False,
+        )
+        assert dedup.mean == pytest.approx(full_recompute.mean)
+        assert dedup.p25 == pytest.approx(full_recompute.p25)
+        assert dedup.p75 == pytest.approx(full_recompute.p75)
+        assert dedup.mean_hands_used == pytest.approx(full_recompute.mean_hands_used)
+
+    def test_dedup_matches_full_recompute_without_known_pairs(self) -> None:
+        """既知ツモが空 (=既知区間が0手) でも安全に動作し、値が変わらないこと。"""
+        board = _seed_board_ready_to_fire()
+        dedup = estimate_counter_distribution(board, time_budget_sec=1.5, n_rollouts=5)
+        full_recompute = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=5, enable_prefix_dedup=False,
+        )
+        assert dedup.mean == pytest.approx(full_recompute.mean)
+        assert dedup.mean_hands_used == pytest.approx(full_recompute.mean_hands_used)
+
+    def test_dedup_matches_full_recompute_with_zero_time_budget(self) -> None:
+        """既知手の1手目で即座に時間予算超過になるケース (early_stop分岐)。"""
+        board = _seed_board_ready_to_fire()
+        dedup = estimate_counter_distribution(
+            board, time_budget_sec=0.0, n_rollouts=4,
+            known_pairs=((COLOR_RED, COLOR_BLUE),),
+        )
+        full_recompute = estimate_counter_distribution(
+            board, time_budget_sec=0.0, n_rollouts=4,
+            known_pairs=((COLOR_RED, COLOR_BLUE),), enable_prefix_dedup=False,
+        )
+        assert dedup.mean == pytest.approx(full_recompute.mean)
+
+    def test_dedup_matches_full_recompute_with_invalid_known_pair(self) -> None:
+        """既知ペアが無効 (-1,-1) で即座に乱数区間へ移る境界ケース。"""
+        board = _seed_board_ready_to_fire()
+        dedup = estimate_counter_distribution(
+            board, time_budget_sec=1.0, n_rollouts=4, known_pairs=((-1, -1),),
+        )
+        full_recompute = estimate_counter_distribution(
+            board, time_budget_sec=1.0, n_rollouts=4, known_pairs=((-1, -1),),
+            enable_prefix_dedup=False,
+        )
+        assert dedup.mean == pytest.approx(full_recompute.mean)
+        assert dedup.mean_hands_used == pytest.approx(full_recompute.mean_hands_used)
+
+
+@pytest.mark.skipif(
+    not NATIVE_AVAILABLE, reason="puyo_core ネイティブ拡張が未ビルド (maturin develop 要)",
+)
+class TestBeamRolloutWiring:
+    """v4 (2026-08-21、ビームロールアウト方式、user決定 project_counter_
+    beam_rollout_design_2026-08-21) の配線確認。既定は greedy のまま
+    (backwards compat)、rollout_mode="beam" を明示した場合のみ有効になる。
+    """
+
+    def test_default_rollout_mode_is_greedy_unchanged(self) -> None:
+        """rollout_mode を省略した場合、既存 (greedy) と完全一致すること。"""
+        board = _seed_board_ready_to_fire()
+        implicit = estimate_counter_distribution(board, time_budget_sec=1.5, n_rollouts=5)
+        explicit = estimate_counter_distribution(
+            board, time_budget_sec=1.5, n_rollouts=5, rollout_mode="greedy",
+        )
+        assert implicit.mean == pytest.approx(explicit.mean)
+        assert implicit.mean_hands_used == pytest.approx(explicit.mean_hands_used)
+
+    def test_beam_mode_without_beam_width_raises(self) -> None:
+        board = _seed_board_ready_to_fire()
+        with pytest.raises(ValueError, match="beam_width"):
+            estimate_counter_distribution(
+                board, time_budget_sec=1.5, n_rollouts=2, rollout_mode="beam",
+            )
+
+    def test_invalid_rollout_mode_raises(self) -> None:
+        board = _seed_board_ready_to_fire()
+        with pytest.raises(ValueError, match="rollout_mode"):
+            estimate_counter_distribution(
+                board, time_budget_sec=1.5, n_rollouts=2, rollout_mode="not_a_mode",
+            )
+
+    def test_beam_mode_is_deterministic(self) -> None:
+        board = _seed_board_ready_to_fire()
+        d1 = estimate_counter_distribution(
+            board, time_budget_sec=2.0, n_rollouts=3, rollout_mode="beam", beam_width=5,
+        )
+        d2 = estimate_counter_distribution(
+            board, time_budget_sec=2.0, n_rollouts=3, rollout_mode="beam", beam_width=5,
+        )
+        assert d1.mean == pytest.approx(d2.mean)
+        assert d1.mean_hands_used == pytest.approx(d2.mean_hands_used)
+
+    def test_beam_mode_dead_board_returns_zero(self) -> None:
+        g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+        g[1][2] = COLOR_RED
+        dead_board = Board.from_list(g)
+        dist = estimate_counter_distribution(
+            dead_board, time_budget_sec=2.0, n_rollouts=2, rollout_mode="beam", beam_width=5,
+        )
+        assert dist.n_rollouts == 0
+
+    def test_beam_mode_zero_budget_never_places(self) -> None:
+        board = _seed_board_ready_to_fire()
+        dist = estimate_counter_distribution(
+            board, time_budget_sec=0.0, n_rollouts=2, rollout_mode="beam", beam_width=5,
+        )
+        assert dist.mean == 0.0
+        assert dist.mean_hands_used == 0.0
+
+    def test_time_budget_to_beam_depth_matches_avg_step_time(self) -> None:
+        depth = _time_budget_to_beam_depth(BEAM_ROLLOUT_AVG_STEP_TIME_SEC * 5.0)
+        assert depth == 5
+
+    def test_time_budget_to_beam_depth_never_exceeds_hard_cap(self) -> None:
+        depth = _time_budget_to_beam_depth(1000.0)
+        assert depth == MC_COUNTER_MAX_HANDS_HARD_CAP
+
+    def test_draw_beam_tsumo_sequence_uses_known_pairs_first(self) -> None:
+        rng = random.Random(0)
+        seq = _draw_beam_tsumo_sequence(
+            depth=3, known_pairs=((COLOR_RED, COLOR_BLUE),), colors=(1, 2, 3, 4), rng=rng,
+        )
+        assert len(seq) == 3
+        assert seq[0] == (COLOR_RED, COLOR_BLUE)
+
+    def test_rollout_once_beam_uses_known_material_for_higher_score(self) -> None:
+        """既知ツモ (赤,青) で2連鎖が組める盤面では、素点0でないこと
+        (`_rollout_once_beam` がビームサーチ経路に正しく配線されている
+        ことの直接確認、native puyo_core への配線が切れていれば0になる)。
+        """
+        board = _seed_board_ready_to_fire()
+        rng = random.Random(1)
+        outcome = _rollout_once_beam(
+            board, time_budget_sec=2.0, colors=(1, 2, 3, 4),
+            known_pairs=((COLOR_RED, COLOR_BLUE),), rng=rng, elapsed_sec=0.0, beam_width=5,
+        )
+        assert outcome.achieved_ojama > 0.0
+        assert outcome.hands_used > 0
+
+
+def _seed_two_red_stack_board() -> Board:
+    """col0 に赤2個 (高さ2) だけ置いた盤面 (exact_shallow の陽性対照用)。
+
+    (赤,緑) を繰り返し引くロールアウトでは、1手だけでは4連結を完成できず
+    (3連結止まり、非発火)、2手目でようやく4連結が完成して発火する
+    (深さ1では過小評価=0、深さ2以降で40点、深さ3で100点になることを
+    対話実行で確認済み、`TestExactShallowPositiveControl` 参照)。
+    """
+    g = [[0] * BOARD_COLS for _ in range(BOARD_ROWS)]
+    g[12][0] = COLOR_RED
+    g[11][0] = COLOR_RED
+    return Board.from_list(g)
+
+
+class TestExactShallowCorrectness:
+    """v5 exact_shallow (ama方式の浅い完全探索) の正しさ (message2 受け入れ
+    条件1「小さい盤面で手計算と一致するユニットテスト」)。深さ2なら
+    22+22²=484通りの全列挙なので決定的・手計算で検証可能。
+    """
+
+    def test_two_same_color_pairs_ignite_4_connect_on_empty_board(self) -> None:
+        """空盤面に (赤,赤) を2手続けて同じ列に積むと4連結40点で発火する
+        (手計算: 4個ちょうどの連結、連結ボーナス0、4*10=40)。
+        """
+        r1 = exact_shallow_search(Board(), [(COLOR_RED, COLOR_RED)], exclude_hidden_row_from_pop=True)
+        r2 = exact_shallow_search(
+            Board(), [(COLOR_RED, COLOR_RED), (COLOR_RED, COLOR_RED)],
+            exclude_hidden_row_from_pop=True,
+        )
+        assert r1.best_score == 0, "1手だけでは赤2個で4連結未完成、発火しない"
+        assert r2.best_score == 40, "2手で赤4個ちょうど連結、40点"
+
+    def test_frontier_size_matches_placement_count(self) -> None:
+        """深さ1の完全探索フロンティア数は `enumerate_placements` の22通り
+        と一致する (空盤面・2色ペアでは誰も発火しないため全件残るはず)。
+        """
+        r = exact_shallow_search(Board(), [(COLOR_RED, COLOR_BLUE)], exclude_hidden_row_from_pop=True)
+        assert len(r.final_frontier) == 22
+
+    def test_max_height_prunes_vertical_placements_at_low_threshold(self) -> None:
+        """max_height=2 (=高さ2以上を枝刈り) を空盤面+2色ペアに適用すると、
+        縦置き12通り (どの列でも高さ2になる) が枝刈りされ、横置き10通り
+        (各列高さ1) のみ残るはず (手計算で検証可能)。
+        """
+        r = exact_shallow_search(
+            Board(), [(COLOR_RED, COLOR_BLUE)], exclude_hidden_row_from_pop=True, max_height=2,
+        )
+        assert len(r.final_frontier) == 10
+
+    def test_max_height_none_keeps_all_22(self) -> None:
+        r = exact_shallow_search(
+            Board(), [(COLOR_RED, COLOR_BLUE)], exclude_hidden_row_from_pop=True, max_height=None,
+        )
+        assert len(r.final_frontier) == 22
+
+    def test_prune_height_derived_from_death_row_physical_constant(self) -> None:
+        """`EXACT_SHALLOW_PRUNE_HEIGHT` (=12) が `BOARD_ROWS - DEATH_ROW`
+        から導出されていること (ama の `11` を直接持ち込んでいない確認、
+        モジュール docstring「v5」参照)。"""
+        assert EXACT_SHALLOW_PRUNE_HEIGHT == BOARD_ROWS - 1  # DEATH_ROW=1
+
+
+class TestExactShallowPositiveControl:
+    """message2 受け入れ条件4: 深さを1に落とすと過小評価が悪化すること。"""
+
+    def test_depth_one_underestimates_vs_deeper_search(self) -> None:
+        board = _seed_two_red_stack_board()
+        r1 = exact_shallow_search(
+            board, [(COLOR_RED, COLOR_GREEN)], exclude_hidden_row_from_pop=True,
+        )
+        r2 = exact_shallow_search(
+            board, [(COLOR_RED, COLOR_GREEN)] * 2, exclude_hidden_row_from_pop=True,
+        )
+        r3 = exact_shallow_search(
+            board, [(COLOR_RED, COLOR_GREEN)] * 3, exclude_hidden_row_from_pop=True,
+        )
+        assert r1.best_score == 0
+        assert r2.best_score == 40
+        assert r3.best_score == 100
+        assert r1.best_score < r2.best_score < r3.best_score
+
+    def test_rollout_once_exact_shallow_depth_override_reproduces_underestimate(self) -> None:
+        """`_rollout_once_exact_shallow` の `_max_depth_override` (テスト専用
+        フック) を1に落とすと、既定 (`EXACT_SHALLOW_MAX_DEPTH`) より
+        反撃値が下がること (実際のロールアウト関数経由での確認)。
+        """
+        board = _seed_two_red_stack_board()
+        # 既定深さ (EXACT_SHALLOW_MAX_DEPTH=3) までランダムを使わず全て
+        # 既知ツモにする (乱数分岐を排除し、決定的に比較するため)。
+        known_pairs = ((COLOR_RED, COLOR_GREEN),) * EXACT_SHALLOW_MAX_DEPTH
+        rng_depth1 = random.Random(0)
+        outcome_depth1 = _rollout_once_exact_shallow(
+            board, time_budget_sec=2.0, colors=(1, 2, 3, 4), known_pairs=known_pairs,
+            rng=rng_depth1, elapsed_sec=0.0, _max_depth_override=1,
+        )
+        rng_default = random.Random(0)
+        outcome_default = _rollout_once_exact_shallow(
+            board, time_budget_sec=2.0, colors=(1, 2, 3, 4), known_pairs=known_pairs,
+            rng=rng_default, elapsed_sec=0.0,
+        )
+        assert outcome_depth1.achieved_ojama < outcome_default.achieved_ojama
+
+
+class TestAutoRolloutDispatch:
+    """v5 `rollout_mode="auto"` の物理量に基づく振り分け
+    (message2 受け入れ条件3)。"""
+
+    def test_short_budget_resolves_to_exact_shallow(self) -> None:
+        # depth<=EXACT_SHALLOW_MAX_DEPTH になる短い予算
+        budget = BEAM_ROLLOUT_AVG_STEP_TIME_SEC * EXACT_SHALLOW_MAX_DEPTH
+        assert _resolve_auto_rollout_mode(budget) == "exact_shallow"
+
+    def test_long_budget_resolves_to_beam(self) -> None:
+        budget = BEAM_ROLLOUT_AVG_STEP_TIME_SEC * (EXACT_SHALLOW_MAX_DEPTH + 5)
+        assert _resolve_auto_rollout_mode(budget) == "beam"
+
+    def test_auto_mode_matches_exact_shallow_for_short_budget(self) -> None:
+        board = _seed_board_ready_to_fire()
+        budget = BEAM_ROLLOUT_AVG_STEP_TIME_SEC * 2.0
+        known_pairs = ((COLOR_RED, COLOR_BLUE),)
+        auto_dist = estimate_counter_distribution(
+            board, budget, known_pairs=known_pairs, n_rollouts=4, rollout_mode="auto",
+            beam_width=10,
+        )
+        exact_dist = estimate_counter_distribution(
+            board, budget, known_pairs=known_pairs, n_rollouts=4, rollout_mode="exact_shallow",
+        )
+        assert auto_dist.mean == pytest.approx(exact_dist.mean)
+        assert auto_dist.mean_hands_used == pytest.approx(exact_dist.mean_hands_used)
+
+    def test_auto_mode_matches_beam_for_long_budget(self) -> None:
+        board = _seed_board_ready_to_fire()
+        budget = BEAM_ROLLOUT_AVG_STEP_TIME_SEC * (EXACT_SHALLOW_MAX_DEPTH + 5)
+        known_pairs = ((COLOR_RED, COLOR_BLUE),)
+        auto_dist = estimate_counter_distribution(
+            board, budget, known_pairs=known_pairs, n_rollouts=3, rollout_mode="auto",
+            beam_width=10,
+        )
+        beam_dist = estimate_counter_distribution(
+            board, budget, known_pairs=known_pairs, n_rollouts=3, rollout_mode="beam",
+            beam_width=10,
+        )
+        assert auto_dist.mean == pytest.approx(beam_dist.mean)
+
+    def test_auto_mode_without_beam_width_raises(self) -> None:
+        """'auto' は beam に振り分けられる可能性があるため beam_width を
+        常に必須とする (振り分け結果に関わらず事前に要求、安全側)。
+        """
+        board = _seed_board_ready_to_fire()
+        with pytest.raises(ValueError, match="beam_width"):
+            estimate_counter_distribution(
+                board, time_budget_sec=1.5, n_rollouts=2, rollout_mode="auto",
+            )
+
+
+class TestEarlyExitAtThreshold:
+    """v5 user指示②「答えを変えない打ち切り」。確率チャネル
+    (`prob_at_least`) は打ち切り有無に関わらず完全一致すること
+    (message3 受け入れ条件1②)。分布 (mean/p25/p75) は一致を要求しない
+    (仕様通り、打ち切り時点の下限値になる)。
+    """
+
+    def test_score_threshold_inversion_is_exact(self) -> None:
+        """`_ojama_threshold_to_score_threshold` が `_score_to_ojama_count`
+        の厳密な逆変換になっているか (境界値で直接確認)。
+        """
+        elapsed_sec = 0.0
+        for ojama_threshold in (1.0, 5.0, 12.0, 12.5, 100.0):
+            score_threshold = _ojama_threshold_to_score_threshold(ojama_threshold, elapsed_sec)
+            # score_threshold-1 はまだ閾値未満、score_threshold は閾値以上のはず
+            below = float(_score_to_ojama_count(float(score_threshold - 1), elapsed_sec))
+            at = float(_score_to_ojama_count(float(score_threshold), elapsed_sec))
+            assert below < math.ceil(ojama_threshold)
+            assert at >= math.ceil(ojama_threshold)
+
+    @pytest.mark.parametrize("rollout_mode,extra_kwargs", [
+        ("beam", {"beam_width": 20}),
+        ("exact_shallow", {}),
+    ])
+    def test_prob_at_least_matches_regardless_of_early_exit(
+        self, rollout_mode: str, extra_kwargs: dict,
+    ) -> None:
+        board = _seed_two_red_stack_board()
+        known_pairs = ((COLOR_RED, COLOR_GREEN), (COLOR_RED, COLOR_GREEN))
+        thresholds = (0.0, 1.0, 5.0)
+        common = dict(
+            board=board, time_budget_sec=3.0, known_pairs=known_pairs, n_rollouts=15,
+            thresholds_ojama=thresholds, rollout_mode=rollout_mode, **extra_kwargs,
+        )
+        with_exit = estimate_counter_distribution(**common, early_exit_at_threshold=True)
+        without_exit = estimate_counter_distribution(**common, early_exit_at_threshold=False)
+        for th in thresholds:
+            assert with_exit.prob_at_least[th] == pytest.approx(without_exit.prob_at_least[th]), (
+                f"threshold={th}: with_exit={with_exit.prob_at_least[th]} "
+                f"without_exit={without_exit.prob_at_least[th]}"
+            )
+
+    def test_early_exit_disabled_when_thresholds_empty(self) -> None:
+        """thresholds_ojama が空だと打ち切り基準が無いため無効化され、
+        early_exit_at_threshold=True でも通常と完全一致すること。
+        """
+        board = _seed_two_red_stack_board()
+        known_pairs = ((COLOR_RED, COLOR_GREEN),)
+        with_flag = estimate_counter_distribution(
+            board, time_budget_sec=2.0, known_pairs=known_pairs, n_rollouts=5,
+            rollout_mode="exact_shallow", early_exit_at_threshold=True,
+        )
+        without_flag = estimate_counter_distribution(
+            board, time_budget_sec=2.0, known_pairs=known_pairs, n_rollouts=5,
+            rollout_mode="exact_shallow", early_exit_at_threshold=False,
+        )
+        assert with_flag.mean == pytest.approx(without_flag.mean)
+
+
+class TestSeedFrontierRegression:
+    """v5 user指示① 初期集団の質を上げる (message3 受け入れ条件1①)。
+
+    幅を十分広く (探索空間全体を上回る) 取れば、exact_shallow の完全探索
+    結果をビームサーチの初期集団として使っても・使わなくても最終結果は
+    完全一致するはず (打ち切りが起きない極限では「初期集団の質」自体が
+    結果に影響しないことの regression確認、①の効果自体は幅を絞った場面で
+    測る、`scripts/_bench_counter_beam_rollout_2026-08-21.py` 参照)。
+    """
+
+    def test_seeded_matches_unseeded_at_exhaustive_width(self) -> None:
+        board = _seed_two_red_stack_board()
+        pairs = [(COLOR_RED, COLOR_GREEN)] * 4
+        exhaustive_width = 22 ** 4  # 深さ4を打ち切らない幅
+
+        from src.puyo_core_bridge import beam_search, beam_search_continue, exact_shallow_search as ess
+
+        unseeded = beam_search(
+            board, pairs, exhaustive_width, exclude_hidden_row_from_pop=True, use_exact_score=True,
+        )
+
+        seed = ess(board, pairs[:EXACT_SHALLOW_SEED_DEPTH], exclude_hidden_row_from_pop=True)
+        seeded = beam_search_continue(
+            seed.final_frontier, seed.best_score, pairs[EXACT_SHALLOW_SEED_DEPTH:],
+            exhaustive_width, exclude_hidden_row_from_pop=True, use_exact_score=True,
+        )
+        assert seeded.best_score == unseeded.best_score
+
+    def test_rollout_once_beam_matches_plain_beam_search_when_width_ge_22(self) -> None:
+        """**実測で判明した重要な事実**: `EXACT_SHALLOW_SEED_DEPTH=2` の下では
+        22配置が常に seed_depth=1 の全候補数なので、`beam_width>=22`
+        (実務上ほぼ常にこの範囲) では seed の有無で最終結果が**完全に
+        一致する** (`_truncate_frontier_by_running_best` による絞り込みが
+        `beam_search` 自身の depth1 での非絞り込みと同じ結果になるため)。
+        つまり ① の「質が上がる」効果は beam_width<22 の範囲でのみ生じる
+        (`scripts/_bench_counter_beam_speedups_2026-08-21.py` の実測で
+        beam_width=30/100 では改善0/15件・beam_width=10では改善5/15件
+        だが速度は逆に1.5〜3倍遅くなることを確認済み — ①は「コストが
+        増えない」という前提が崩れており、費用対効果は薄いことをuserに
+        報告する)。本テストはその regression 確認 (production 経路
+        `_rollout_once_beam` を直接使う)。
+        """
+        from src.puyo_core_bridge import beam_search
+
+        board = _seed_two_red_stack_board()
+        known_pairs = ((COLOR_RED, COLOR_GREEN),) * 6
+        beam_width = 30  # >= 22 (22配置の総数)
+        rng = random.Random(0)
+        outcome = _rollout_once_beam(
+            board, time_budget_sec=BEAM_ROLLOUT_AVG_STEP_TIME_SEC * 6, colors=(1, 2, 3, 4),
+            known_pairs=known_pairs, rng=rng, elapsed_sec=0.0, beam_width=beam_width,
+        )
+        pairs = [(COLOR_RED, COLOR_GREEN)] * 6
+        reference = beam_search(
+            board, pairs, beam_width, exclude_hidden_row_from_pop=False, use_exact_score=True,
+        )
+        reference_ojama = float(_score_to_ojama_count(float(reference.best_score), 0.0))
+        assert outcome.achieved_ojama == pytest.approx(reference_ojama)
+
+    def test_truncate_frontier_keeps_top_n_by_running_best(self) -> None:
+        from scripts.mc_counter_estimator import _truncate_frontier_by_running_best
+        from src.puyo_core_bridge import FrontierEntry
+
+        entries = [FrontierEntry(board=Board(), running_best=v) for v in (5, 1, 9, 3, 7)]
+        top3 = _truncate_frontier_by_running_best(entries, 3)
+        assert [e.running_best for e in top3] == [9, 7, 5]
+
+
+class TestDepth1To2FrontierSharing:
+    """v5 user指示④ 深さ1〜2限定の部分木共有 (`_lookup_or_compute_
+    exact_shallow_seed`)。キャッシュの有無で結果が変わらないこと (答えを
+    変えない共有であることの確認)。
+    """
+
+    def test_cache_hit_matches_fresh_computation(self) -> None:
+        board = _seed_two_red_stack_board()
+        seed_pairs = (COLOR_RED, COLOR_GREEN), (COLOR_RED, COLOR_GREEN)
+        cache: dict = {}
+        first = _lookup_or_compute_exact_shallow_seed(board, seed_pairs, None, cache)
+        second = _lookup_or_compute_exact_shallow_seed(board, seed_pairs, None, cache)
+        assert first.best_score == second.best_score
+        assert len(cache) == 1, "同じ接頭辞は1件にまとまるはず"
+
+    def test_canonical_pair_order_invariance(self) -> None:
+        """(赤,緑) と (緑,赤) は到達可能盤面集合が同一なので、キャッシュ
+        キーとして同一視されるはず (`_canonical_pair` の数学的根拠通り)。
+        """
+        assert _canonical_pair((COLOR_RED, COLOR_GREEN)) == _canonical_pair((COLOR_GREEN, COLOR_RED))
+
+    def test_beam_rollout_seed_cache_reduces_native_calls(self, monkeypatch) -> None:
+        """`seed_cache` を渡すと既知ツモ (乱数なし、常に同一接頭辞) の
+        exact_shallow_search 呼び出しが1回に減ること (呼び出し回数を
+        直接計装して確認)。
+        """
+        import scripts.mc_counter_estimator as mc_mod
+
+        board = _seed_two_red_stack_board()
+        call_count = {"n": 0}
+        original = mc_mod._native_exact_shallow_search
+
+        def counting_wrapper(*args, **kwargs):
+            call_count["n"] += 1
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(mc_mod, "_native_exact_shallow_search", counting_wrapper)
+
+        cache: dict = {}
+        for seed in range(5):
+            rng = random.Random(seed)
+            _rollout_once_beam(
+                board, time_budget_sec=BEAM_ROLLOUT_AVG_STEP_TIME_SEC * 6, colors=(1, 2, 3, 4),
+                known_pairs=((COLOR_RED, COLOR_GREEN), (COLOR_RED, COLOR_GREEN)), rng=rng,
+                elapsed_sec=0.0, beam_width=10, seed_cache=cache,
+            )
+        # 既知ツモ2手は乱数不使用で全ロールアウト共通のため、キャッシュ
+        # ヒットにより exact_shallow_search 呼び出しは1回だけになるはず。
+        assert call_count["n"] == 1
 
 
 class TestBackwardCompatWithRealizableCounterOjama:

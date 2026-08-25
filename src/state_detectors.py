@@ -98,6 +98,14 @@ class ChainPhaseDetector:
     # 突入判定 (ctx.state != CHAIN) には適用しない)。
     # default False = 従来挙動完全維持 (backwards compat)。
     enable_chain_gate_raw_fallback: bool = False
+    # STABLE凍結デッドロック根治 (2026-08-24、memory project_stable_freeze_
+    # deadlock_2026-08-24): mechanism="formula_read" の chain_event は
+    # 「画面の掛け算式を実際に読めた」という直接証拠つきの発火であり、
+    # 凍結 confirmed_board 上の 4 連結有無 (erasable gate) で棄却しない。
+    # 4連結ゲートは凍結盤面を入力とするため、盤面が stale な場合に本物の
+    # 連鎖を却下し STABLE から抜けられない循環の一端になっていた。
+    # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_formula_read_gate_bypass: bool = False
 
     def detect(
         self, ctx: StateContext, signals: DetectorSignals,
@@ -147,7 +155,18 @@ class ChainPhaseDetector:
         fail-silent 防止のため許容する (= 従来挙動、cycle 49 と同一)。
         UNKNOWN cell が 3 個以上 (認識不確実) の場合もゲートを skip する
         (従来挙動)。
+
+        2026-08-24: enable_formula_read_gate_bypass=True の場合、
+        mechanism="formula_read" (掛け算式の実読で検証済み) のイベントは
+        凍結盤面によるゲートを通さず許容する (クラス側フラグコメント参照)。
         """
+        if self.enable_formula_read_gate_bypass:
+            from src.chain_detector import CHAIN_MECHANISM_FORMULA_READ
+            if (
+                getattr(signals.chain_event, "mechanism", None)
+                == CHAIN_MECHANISM_FORMULA_READ
+            ):
+                return True
         if self.chain_sim is None or ctx.confirmed_board is None:
             return True
         from src.board import COLOR_UNKNOWN as _CU

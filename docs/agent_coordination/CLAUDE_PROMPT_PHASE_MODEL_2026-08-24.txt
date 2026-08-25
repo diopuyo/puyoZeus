@@ -1,0 +1,29 @@
+最初に `.claude/rules/00-agent-coordination.md` を読み、
+`powershell -ExecutionPolicy Bypass -File scripts/show_agent_coordination_status.ps1` を実行してください。
+
+その後、次の最新版を再読してください。
+
+1. `docs/agent_coordination/CURRENT.md`
+2. `docs/agent_coordination/CODEX_TO_CLAUDE.md`
+3. `docs/CODEX_INDICATOR_AUDIT_2026-08-24.md`（特に第10節）
+4. `data/verify/indicator_audit_2026-08-24/summary.json`
+
+現在のQ-01/Q-02 Gate 0作業を中断・巻き戻し・上書きせず、まず完了させてください。
+Gate 0完了後の計画へ、CODEX_TO_CLAUDE.mdの
+「2026-08-24 17:12 JST — 現行51指標監査」と
+「2026-08-24 18:18 JST — 局面別モデル追補」を統合してください。
+
+モデル比較は次の4条件を同一video GroupKFold・同一確認動画で計画してください。
+
+- A: 現行全局面共通モデル
+- B: match_progress・真のtsumo_count・episode_stageを含む局面文脈付き単一モデル
+- C: 序盤/中盤/終盤の3専門モデルを境界で滑らかに混合するsoft-gatedモデル
+- D: 催促対応→相手本線→自分本線を扱うExchangeEpisode専門モデル
+
+位相別Plattは局面別モデルではなく、既定OFFの後段確率校正である点を混同しないでください。
+hardな3分割切替は行わず、位相境界前後±3秒の勝率ジャンプを必須検収にしてください。
+新規機能・モデル・フラグは既定OFF、production_configはユーザー承認まで変更禁止です。
+既存差分をreset、checkout、stash、削除、上書きしないでください。
+
+統合した計画、現行作業の状態、成果物パス、見積時間、判断が必要な事項を
+`docs/agent_coordination/CLAUDE_TO_CODEX.md` の末尾へ時刻付きで追記してください。

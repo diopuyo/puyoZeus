@@ -123,8 +123,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.board import Board  # noqa: E402
 from src.ojama_accounting import OjamaAccountSnapshot  # noqa: E402
 from scripts.visualize_advantage_overlay import (  # noqa: E402
-    JP_LABEL, KILL_RATIO_FULL, KILL_ROOM_FLOOR, _score_advantage, _train_model,
-    board_room, load_timeline_dump,
+    JP_LABEL, KILL_MIN_PENDING, KILL_RATIO_FULL, KILL_ROOM_FLOOR,
+    _score_advantage, _train_model, board_room, load_timeline_dump,
 )
 
 # 既定スレッド上限 (2026-08-11 実測に基づく、モジュール docstring 参照)。
@@ -148,6 +148,13 @@ SEVERITY_CRITICAL: str = "CRITICAL"
 # 更新でも起こりうり、dump は「誰の更新か」を記録しないため) ときのプレース
 # ホルダ。npz 再計算モードの "1P"/"2P" とは異なる第三の値として明示する。
 TRIGGER_SIDE_UNKNOWN: str = "dump"
+
+# 連鎖中/重力settle中は STABLE 凍結盤面が「連鎖前の満杯状態」のまま更新
+# されない (CLAUDE.md 設計思想4「NON-STABLE 中は前回 STABLE 盤面を凍結」)。
+# その側の窒息/致死判定は保留する (2026-08-23 根治②、user判断 memory
+# `reference_death_judgment_during_chain_2026-08-22`: 「双方窒息はどちらかが
+# 連鎖中なら保留」)。BoardState.name の文字列 (dump に記録済み) と突合する。
+CHAIN_PHASE_STATE_NAMES: frozenset[str] = frozenset({"CHAIN", "GRAVITY_SETTLE"})
 
 # デフォルト npz ディレクトリの探索パターン (Phase L 系の全域盤面収集)
 _PHASE_L_GLOB: str = "boards_lean_phase_l_*"
@@ -198,6 +205,12 @@ class JudgmentRecord:
     room2: int = 0       # D1b用: 2P の空き容量 (board_room、両モードとも実値)
     p1_raw: float = 0.5  # D1a/D1bのraw判定用。adv と対の生勝率 (kill_override等適用前)
     adv_ema: float = 0.0  # D1a/D1bのdisplay判定用。4成分ブレンド+kill_override+校正+EMA後
+    # (2026-08-23 根治②) D1a/D1b の連鎖中ガード用。BoardState.name
+    # ("STABLE"/"CHAIN"/"GRAVITY_SETTLE"等)。npz再計算モード (`scan_video`) は
+    # state 遷移履歴を持たないため既定 "" のまま (=ガード非適用、後方互換。
+    # 既存呼び出しは変更不要)。dump モードは実値が入る。
+    state1: str = ""
+    state2: str = ""
 
 
 # Suspect.stage の3値 (2026-08-11 アーキ審査で追加)。
@@ -299,19 +312,31 @@ def detect_d1a(record: JudgmentRecord) -> list[Suspect]:
     raw (`adv`/`p1_raw`) と display (`adv_ema`/`p1`) を別々に判定し、
     どちらか一方でも矛盾すれば Suspect を作る (`_classify_stage()` 参照、
     2026-08-11 アーキ審査)。
+
+    (2026-08-23 根治②) 判定対象側が CHAIN/GRAVITY_SETTLE 中
+    (`CHAIN_PHASE_STATE_NAMES`) なら保留する。STABLE 凍結盤面は連鎖前の
+    満杯状態のままで、実際は連鎖で消えている最中の可能性が高いため
+    (`reference_death_judgment_during_chain_2026-08-22`)。state が未設定
+    (""、npz再計算モード) の場合はガード非適用=従来通り (後方互換)。
+
+    user伝授 (`reference_full_board_is_not_death_2026-08-22`) により
+    「未設置/操作中」「セカンドへの意図的な積み上げ」「連鎖直前」も
+    窒息ではないと判明しているが、これらは現行の dump/npz に手掛かりと
+    なる信号 (操作中フラグ・次手の意図・発火予定の先読み) が一切無く、
+    走査器では判別できない (対応不可、user レビューに委ねる)。
     """
     if record.near_game_boundary:
         return []
     suspects: list[Suspect] = []
     checks = (
-        ("1P", record.is_dead_p1, record.adv > 0.0, record.p1_raw > 0.5,
+        ("1P", record.state1, record.is_dead_p1, record.adv > 0.0, record.p1_raw > 0.5,
          record.adv_ema > 0.0, record.p1 > 0.5, record.p1, record.p1_raw),
-        ("2P", record.is_dead_p2, record.adv < 0.0, record.p1_raw < 0.5,
+        ("2P", record.state2, record.is_dead_p2, record.adv < 0.0, record.p1_raw < 0.5,
          record.adv_ema < 0.0, record.p1 < 0.5, 1.0 - record.p1, 1.0 - record.p1_raw),
     )
-    for (side, is_dead, raw_adv_fav, raw_p1_fav, disp_adv_fav, disp_p1_fav,
+    for (side, own_state, is_dead, raw_adv_fav, raw_p1_fav, disp_adv_fav, disp_p1_fav,
          winprob_disp, winprob_raw) in checks:
-        if not is_dead:
+        if not is_dead or own_state in CHAIN_PHASE_STATE_NAMES:
             continue
         raw_hit = raw_adv_fav or raw_p1_fav
         display_hit = disp_adv_fav or disp_p1_fav
@@ -342,18 +367,30 @@ def detect_d1b(record: JudgmentRecord) -> list[Suspect]:
     D1a と同じくゲーム境界近傍は既知の正当例外としてガードし、raw
     (`adv`/`p1_raw`) と display (`adv_ema`/`p1`) を別々に判定する
     (`_classify_stage()` 参照、2026-08-11 アーキ審査)。
+
+    (2026-08-23 根治②) 2点是正:
+      1. D1a と同じ連鎖中ガード (`CHAIN_PHASE_STATE_NAMES`)。
+      2. `pending < KILL_MIN_PENDING` (=40) の側は本番 `kill_override()`
+         (`:279-280`) 自体が致死扱いしない量 (1ターン配送で受け側が凌げる)
+         ため、比だけで「致死確定」と主張しない (実測: D1bの96.2%が
+         この下限未満だった)。KILL_RATIO_FULL 単独判定はこの下限を
+         再現しておらず、本番なら発火しない状況を誤検出していた。
     """
     if record.near_game_boundary:
         return []
     suspects: list[Suspect] = []
     checks = (
-        ("1P", record.pending_p1, record.room1, record.adv > 0.0, record.p1_raw > 0.5,
+        ("1P", record.state1, record.pending_p1, record.room1,
+         record.adv > 0.0, record.p1_raw > 0.5,
          record.adv_ema > 0.0, record.p1 > 0.5, record.p1, record.p1_raw),
-        ("2P", record.pending_p2, record.room2, record.adv < 0.0, record.p1_raw < 0.5,
+        ("2P", record.state2, record.pending_p2, record.room2,
+         record.adv < 0.0, record.p1_raw < 0.5,
          record.adv_ema < 0.0, record.p1 < 0.5, 1.0 - record.p1, 1.0 - record.p1_raw),
     )
-    for (side, pending, room, raw_adv_fav, raw_p1_fav, disp_adv_fav, disp_p1_fav,
-         winprob_disp, winprob_raw) in checks:
+    for (side, own_state, pending, room, raw_adv_fav, raw_p1_fav, disp_adv_fav,
+         disp_p1_fav, winprob_disp, winprob_raw) in checks:
+        if own_state in CHAIN_PHASE_STATE_NAMES or pending < KILL_MIN_PENDING:
+            continue
         ratio = pending / max(KILL_ROOM_FLOOR, room)
         if ratio < KILL_RATIO_FULL:
             continue
@@ -583,11 +620,17 @@ def scan_video_from_dump(dump_path: Path) -> list[JudgmentRecord]:
             adv=row.adv_raw, p1=row.p1, drivers=drivers,
             is_dead_p1=row.is_dead1, is_dead_p2=row.is_dead2,
             near_game_boundary=_is_near_boundary(row.t_sec, boundary_times),
-            pending_p1=row.pending_p1, pending_p2=row.pending_p2,
-            room1=row.room1, room2=row.room2,
+            # (2026-08-23 根治①②連携) D1b は kill_override が実際に致死判定に
+            # 使った値と同じものを見るべき (根治①と同じ理由: 生値のままだと
+            # 是正で無害化された状況を誤って「致死確定の無視」と主張する)。
+            # row.kpending_p1 等は是正未発火/旧dump では生値と同じ
+            # (TimelineDumpRow.__post_init__ 参照、bit-identical フォールバック)。
+            pending_p1=int(row.kpending_p1), pending_p2=int(row.kpending_p2),
+            room1=row.kroom1, room2=row.kroom2,
             # raw/display 分離 (2026-08-11 アーキ審査)。dump モードは両方が
             # 本物として揃う唯一のモード (モジュール docstring 参照)。
             p1_raw=row.p1_raw, adv_ema=row.adv_ema,
+            state1=row.state1, state2=row.state2,  # (2026-08-23 根治②) 連鎖中ガード用
         ))
     return records
 

@@ -196,3 +196,11 @@ class TestAttributionExcludedIndicatorsAreWellFormed:
         informative = {"current_max_chain", "board_ojama_count", "board_color_puyo_total",
                        "ukeyasusa", "sub_chain_count"}
         assert informative.isdisjoint(ATTRIBUTION_EXCLUDED_INDICATORS)
+
+    def test_excludes_diff_conn_pair_count_2026_08_22(self) -> None:
+        """2026-08-22 修正④で追加。permutation_importance_full.csv
+        (data/verify/retrain_model62_2026-08-21) 実測で52列中52位・負の寄与
+        (importance_mean=-0.000376) と確認済み (production_config.py コメント
+        参照)。生の整数カウント値のため未正規化な指標より絶対値が大きくなり
+        やすく、無情報でも主因1位に出ていた (実測 t=6717.5s)。"""
+        assert "diff_conn_pair_count" in ATTRIBUTION_EXCLUDED_INDICATORS

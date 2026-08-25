@@ -33,6 +33,7 @@ from src.puyo_core_bridge import (
     enumerate_placements,
     max_chain_after_drops_for_boards,
     potential_fire_power_raw_for_boards,
+    select_build_placement,
     simulate_after_drops,
     simulate_chain,
     simulate_chain_with_steps,
@@ -484,6 +485,68 @@ def test_potential_fire_power_raw_for_boards_parity_with_reference(
     )
 
 
+def _select_build_placement_reference(
+    board: Board, pair: "tuple[int, int]", drops: "list[tuple[int, int]]", beam_k: int,
+) -> "Board | None":
+    """`select_build_placement` (2026-08-21追加、選択ロジック全体のRust融合)
+    の正解基準となる素朴なリファレンス実装。既存の個別バッチAPI
+    (`enumerate_and_simulate_placements`/`max_chain_after_drops_for_boards`/
+    `potential_fire_power_raw_for_boards`、いずれも本ファイルの他テストで
+    パリティ確認済み) を素直に3段ネストで呼ぶだけ (`scripts/mc_counter_
+    estimator.py::_select_build_placement` の融合前ロジックと同一意味論)。
+    """
+    candidates = enumerate_and_simulate_placements(board, pair, filter_dead=False)
+    build_only = [
+        r.placed_board for r in candidates
+        if r.chain_result.chain_count == 0 and not r.is_dead
+    ]
+    if not build_only:
+        non_dead = [(r.chain_result.chain_count, r.placed_board) for r in candidates if not r.is_dead]
+        if not non_dead:
+            return None
+        _chain_count, placed = min(non_dead, key=lambda cp: cp[0])
+        return simulate_chain(placed).final_board
+    if len(build_only) == 1:
+        return build_only[0]
+    chain_values = max_chain_after_drops_for_boards(build_only, drops)
+    best_potential = max(chain_values)
+    tied = [p for v, p in zip(chain_values, build_only) if v == best_potential]
+    if len(tied) == 1:
+        return tied[0]
+    pfp_values = potential_fire_power_raw_for_boards(tied, drops, beam_k)
+    best_idx = max(range(len(tied)), key=lambda i: pfp_values[i])
+    return tied[best_idx]
+
+
+def test_select_build_placement_parity_with_reference(sample_boards: "list[Board]") -> None:
+    """`select_build_placement` (native融合版、`scripts/mc_counter_
+    estimator.py::_select_build_placement` v3.3の本体) が、既存の個別バッチ
+    API3段ネストのリファレンス実装と完全一致するか (`build_only`が0件/1件/
+    複数件でタイになるケースを広くカバーするため実盤面120件×3ペアで確認)。
+    """
+    drops = [(col, color) for col in range(BOARD_COLS) for color in (1, 2, 3, 4, 5)]
+    beam_k = 5
+    pairs = ((1, 2), (3, 4), (1, 1))
+    subset = sample_boards[:120]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        for pair in pairs:
+            fused = select_build_placement(board, pair, drops, beam_k)
+            reference = _select_build_placement_reference(board, pair, drops, beam_k)
+            if (fused is None) != (reference is None):
+                mismatches.append(f"[{i}] pair={pair}: None判定が不一致")
+                continue
+            if fused is None:
+                continue
+            if not np.array_equal(fused._grid, reference._grid):
+                mismatches.append(f"[{i}] pair={pair}: 選択された盤面が不一致")
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件で融合版がリファレンス実装と不一致:\n"
+        + "\n".join(mismatches[:20])
+    )
+
+
 # ビームサーチが枝刈りされない幅 (22配置 × 22配置 = 484通り以下) で使う値。
 # `scripts/_verify_beam_miss_2026-08-09.py` と同じ全探索比較の考え方
 # (task指示: 接続可能な形にしておく)。
@@ -491,9 +554,11 @@ _EXHAUSTIVE_BEAM_WIDTH: int = 500
 
 
 def _brute_force_best_score(
-    board: Board, pairs: "list[tuple[int, int]]",
+    board: Board, pairs: "list[tuple[int, int]]", use_exact_score: bool = False,
 ) -> int:
-    """ツモ列を全探索して到達できる最大 score_approx (running max) を返す (真値)。"""
+    """ツモ列を全探索して到達できる最大 score_approx/exact_score (running max)
+    を返す (真値、`use_exact_score` で厳密得点版に切り替え、2026-08-21追加)。
+    """
     frontier = [board]
     best = 0
     for pair in pairs:
@@ -501,7 +566,8 @@ def _brute_force_best_score(
         for b in frontier:
             for _col, _rot, placed in enumerate_placements(b, pair, filter_dead=True):
                 sim = simulate_chain(placed, exclude_hidden_row_from_pop=True)
-                best = max(best, sim.score_approx)
+                score = sim.exact_score if use_exact_score else sim.score_approx
+                best = max(best, score)
                 nxt.append(sim.final_board)
         frontier = nxt
         if not frontier:
@@ -541,3 +607,69 @@ def test_beam_search_matches_brute_force_at_shallow_depth(
         f"{len(mismatches)} 件でビームサーチが全探索真値と不一致:\n"
         + "\n".join(mismatches[:20])
     )
+
+
+def test_beam_search_use_exact_score_matches_brute_force_at_shallow_depth(
+    sample_boards: "list[Board]",
+) -> None:
+    """`use_exact_score=True` (2026-08-21追加、user指示のビームロールアウト
+    検証用) でも running-max ロジック自体が全探索真値 (厳密得点版) と
+    一致するか (`score_approx` 版と同じ検証を厳密得点側でも行う)。
+    """
+    subset = sample_boards[:30]
+    pairs_1 = [(1, 2)]
+    pairs_2 = [(1, 2), (3, 4)]
+    mismatches: "list[str]" = []
+    for i, board in enumerate(subset):
+        for pairs in (pairs_1, pairs_2):
+            truth = _brute_force_best_score(board, pairs, use_exact_score=True)
+            result = beam_search(
+                board, pairs, beam_width=_EXHAUSTIVE_BEAM_WIDTH,
+                exclude_hidden_row_from_pop=True, use_exact_score=True,
+            )
+            if result.best_score != truth:
+                mismatches.append(
+                    f"[{i}] depth={len(pairs)}: beam={result.best_score} truth={truth}",
+                )
+
+    assert not mismatches, (
+        f"{len(mismatches)} 件で厳密得点版ビームサーチが全探索真値と不一致:\n"
+        + "\n".join(mismatches[:20])
+    )
+
+
+def test_beam_search_exact_score_is_never_less_than_approx(
+    sample_boards: "list[Board]",
+) -> None:
+    """連結ボーナスは非負のため、`exact_score` 評価版の best_score は
+    `score_approx` 評価版以上になるはず (単調性の健全性チェック)。
+    """
+    subset = sample_boards[:20]
+    pairs = [(1, 2), (3, 4), (1, 1)]
+    for board in subset:
+        approx_result = beam_search(
+            board, pairs, beam_width=30, exclude_hidden_row_from_pop=True,
+            use_exact_score=False,
+        )
+        exact_result = beam_search(
+            board, pairs, beam_width=30, exclude_hidden_row_from_pop=True,
+            use_exact_score=True,
+        )
+        assert exact_result.best_score >= approx_result.best_score
+
+
+def test_beam_search_use_exact_score_default_matches_explicit_false(
+    sample_boards: "list[Board]",
+) -> None:
+    """`use_exact_score` 省略時は既定 False (従来 `score_approx` 評価) と
+    完全一致すること (backwards compat の直接確認)。
+    """
+    subset = sample_boards[:10]
+    pairs = [(1, 2), (3, 4)]
+    for board in subset:
+        implicit = beam_search(board, pairs, beam_width=30, exclude_hidden_row_from_pop=True)
+        explicit = beam_search(
+            board, pairs, beam_width=30, exclude_hidden_row_from_pop=True,
+            use_exact_score=False,
+        )
+        assert implicit.best_score == explicit.best_score

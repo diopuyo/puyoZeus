@@ -1248,6 +1248,14 @@ def resolve_production_config_overrides(
         # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
         "enable_lockdown_score_numeric_release",
         "enable_lockdown_score_moving_release",
+        # RECOGNITION_ADOPTED 採用 (2026-08-21、COLLECT_ONLY_ADOPTED からの
+        # 移設是正。native HSV 分類器の高速化をレンダ経路にも配線)。
+        "enable_native_hsv_classifier",
+        # RECOGNITION_ADOPTED 採用 (2026-08-24、STABLE 凍結デッドロック根治
+        # 3 フラグ、user承認。根拠は src.production_config 参照、末尾追加)。
+        "enable_chain_formula_read_verify",
+        "enable_formula_chain_count_update",
+        "enable_formula_step_interlude",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
@@ -1891,6 +1899,43 @@ def main() -> int:
             "(後方互換)。"
         ),
     )
+    parser.add_argument(
+        "--enable-native-hsv-classifier", action="store_true", default=False,
+        dest="enable_native_hsv_classifier",
+        help=(
+            "HSV セル分類を Rust ネイティブ実装で行う (RECOGNITION_ADOPTED 採用 "
+            "2026-08-21、COLLECT_ONLY_ADOPTED からの移設是正。認識結果は "
+            "bit-identical で高速化のみが目的、src.production_config 参照)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-formula-read-verify", action="store_true", default=False,
+        dest="enable_chain_formula_read_verify",
+        help=(
+            "STABLE 凍結デッドロック根治 (RECOGNITION_ADOPTED 採用 "
+            "2026-08-24、user承認)。根拠は src.production_config 参照。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-chain-count-update", action="store_true", default=False,
+        dest="enable_formula_chain_count_update",
+        help=(
+            "STABLE 凍結デッドロック根治 (RECOGNITION_ADOPTED 採用 "
+            "2026-08-24、user承認)。根拠は src.production_config 参照。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-step-interlude", action="store_true", default=False,
+        dest="enable_formula_step_interlude",
+        help=(
+            "STABLE 凍結デッドロック根治 (RECOGNITION_ADOPTED 採用 "
+            "2026-08-24、user承認)。根拠は src.production_config 参照。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
     # 復旧ゲート方向別しきい値 非対称化 (2026-07-30 実装、2026-08-08 配線)。
     # 設置確定レイテンシA/B実験 (data/verify/recovery_min_frames_ab_2026-08-08)
     # で「空→色のみ短縮・色→空/色→色は現行8維持」が一律短縮より効果大・
@@ -2299,6 +2344,16 @@ def main() -> int:
         enable_lockdown_score_moving_release=(
             args.enable_lockdown_score_moving_release
         ),
+        # RECOGNITION_ADOPTED 採用 (2026-08-21、COLLECT_ONLY_ADOPTED からの
+        # 移設是正、末尾追加)。
+        enable_native_hsv_classifier=args.enable_native_hsv_classifier,
+        # RECOGNITION_ADOPTED 採用 (2026-08-24、STABLE 凍結デッドロック根治
+        # 3 フラグ、user承認、末尾追加)。
+        enable_chain_formula_read_verify=args.enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=(
+            args.enable_formula_chain_count_update
+        ),
+        enable_formula_step_interlude=args.enable_formula_step_interlude,
         # 復旧ゲート方向別しきい値 非対称化 (2026-08-08 配線):
         # --enable-asymmetric-recovery-min-frames で有効化。
         # --recovery-add-min-frames は None ならライブラリ既定

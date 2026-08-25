@@ -6476,3 +6476,252 @@ def test_ojama_fall_color_swap_guard_default_false_on_init_and_load_default():
         default = sig.parameters["enable_ojama_fall_color_swap_guard"].default
         assert default is False, f"{target} の既定は False であるべき: {default}"
 
+
+# ============================
+# 修正③根治 (2026-08-22): NextSlide即終了経路の X1/X4 誤検知抑制ガード
+# (enable_slide_exit_min_display_guard) テスト
+#
+# 背景: enable_chain_exit_next_signal=True (enable_gravity_settle_state=True
+# 採用済により強制ON) のスライド即終了経路 (l.4934-4972 付近) は timing hold /
+# max_until に一切関係なく即座に active_chain をクリアする。連鎖中に
+# NextSlideDetector が1.37秒周期で誤検知し、断片化 (cc=5等の過小連鎖数検知)
+# を引き起こしていた。信号自体は user 伝授の絶対律
+# (reference_chain_end_absolute_signals_2026-08-21) 通り正しいため、
+# 既存 X1/X4 ガード (_should_suppress_game_event_exit) と同条件をスライド
+# 経路にも適用し、誤検知だけを弾く。
+# ============================
+
+
+@dataclass
+class _StubNextSide:
+    """NextDetectionBothResult.p1/p2 相当の最小スタブ (next_pair固定)。"""
+
+    next_pair: tuple[int, int] = (1, 2)
+    dnext_pair: tuple[int, int] = (1, 2)
+
+
+@dataclass
+class _StubNextBoth:
+    p1: "_StubNextSide"
+    p2: "_StubNextSide"
+
+
+class _StubNextDetectorFixedPair:
+    """next_pair/dnext_pair が常に一定値のスタブ next_detector。
+
+    NEXT 変化に基づく game-event exit (enable_game_event_chain_exit、
+    既定 True) を誤発火させないため、値を固定して独立変数化する。
+    """
+
+    def detect_both(self, frame: np.ndarray) -> "_StubNextBoth":
+        return _StubNextBoth(p1=_StubNextSide(), p2=_StubNextSide())
+
+
+class _StubNextDetectorMutablePair:
+    """next_pair を外部から書き換え可能なスタブ next_detector。
+
+    「NEXT が実際に変化した」corroboration 経路 (_should_suppress_slide_exit)
+    を単体検証するために使う (pair 属性を test 側で更新する)。
+    """
+
+    def __init__(self, pair: tuple[int, int] = (1, 2)) -> None:
+        self.pair = pair
+
+    def detect_both(self, frame: np.ndarray) -> "_StubNextBoth":
+        side = _StubNextSide(next_pair=self.pair, dnext_pair=self.pair)
+        return _StubNextBoth(p1=side, p2=side)
+
+
+def _make_pipe_with_slide_exit_guard(
+    chain_event_1p: object,
+    enable_slide_exit_min_display_guard: bool,
+    next_detector: object | None = None,
+    enable_game_event_chain_exit: bool = True,
+) -> RecognitionPipeline:
+    """スライド誤検知抑制ガードのテスト用 pipeline を構築する。
+
+    enable_chain_exit_next_signal=True で案X(B)経路を有効化し、next_detector
+    スタブで NEXT 変化ベース game-event exit (次ツモ固定なので発火しない)
+    と分離した状態でスライド即終了経路だけを単体検証できるようにする。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(chain_event_1p)
+    if next_detector is None:
+        next_detector = _StubNextDetectorFixedPair()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        next_detector=next_detector,  # type: ignore[arg-type]
+        enable_chain_exit_next_signal=True,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        force_in_match=True,
+    )
+
+
+def _force_slide_1p(pipe: RecognitionPipeline) -> None:
+    """pipe._slide_detector_1p.update() が常に slide_motion=True を返すよう
+    monkeypatch する (実画面の next ROI 変化を伴わずスライド検知を強制発火)。
+    """
+    from src.next_slide_detector import SlideMotionResult
+
+    def _always_slide(prev_frame: object, curr_frame: object) -> SlideMotionResult:
+        return SlideMotionResult(
+            slide_motion=True, diff_score=99.0, threshold_used=8.0,
+        )
+
+    assert pipe._slide_detector_1p is not None
+    pipe._slide_detector_1p.update = _always_slide  # type: ignore[method-assign]
+
+
+def test_slide_exit_min_display_guard_default_false_on_init_and_load_default() -> None:
+    """__init__ / load_default 両方で既定 False (backwards compat)。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters[
+            "enable_slide_exit_min_display_guard"
+        ].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
+
+
+def test_slide_exit_guard_off_clears_chain_immediately_bit_identical() -> None:
+    """フラグ OFF (既定): スライド誤検知でも従来通り即座に連鎖をクリアする
+    (回帰テスト、bit-identical の配線先固定)。
+
+    CHAIN 突入直後 (0.1秒後、X1 の 0.8秒未満) でもガード OFF なら
+    抑止されず即終了する = 従来挙動が完全に保持されていることを確認する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=False,
+    )
+    assert pipe._enable_slide_exit_min_display_guard is False
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None, "前提: CHAIN 突入済であること"
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 0.1, _dummy_frame())
+    assert pipe._active_chain_1p is None, (
+        "ガード OFF: スライド検知で従来通り即座にクリアされるべき (回帰)"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_within_min_display_window() -> None:
+    """フラグ ON + X1: CHAIN 突入から 0.8 秒未満のスライド誤検知は抑止する
+    (断片化の直接原因だった 1.37 秒周期誤検知を弾く)。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 0.1, _dummy_frame())
+    assert pipe._active_chain_1p is not None, (
+        "ガード ON + X1: 突入 0.1秒後のスライド誤検知は抑止され、"
+        "連鎖が維持されるべき (断片化防止)"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_short_chain_after_min_display() -> None:
+    """フラグ ON + X4: 最小表示時間経過後でも短連鎖 (chain_count<3) は
+    スライド即終了を抑止する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=2)  # 短連鎖
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 1.0, _dummy_frame())  # X1 は通過 (>=0.8s)
+    assert pipe._active_chain_1p is not None, (
+        "ガード ON + X4: 短連鎖 (count=2<3) は最小表示時間経過後も"
+        "スライド即終了を抑止すべき"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_when_next_unchanged() -> None:
+    """corroboration 主機構: NEXT 値が CHAIN 開始時から変化していなければ、
+    X1/X4 (時間・連鎖数) を満たしていてもスライド即終了を抑止する。
+
+    実測 (t=6700-6720, 1P 15連鎖区間) で X1/X4 単独では 10 件中 1 件しか
+    抑止できなかった (再点火のたび chain_entry_t がリセットされ 1.37秒周期
+    > 0.8秒閾値のため無力) 事実に対応する回帰テスト。NEXT 値が不変なら
+    時間・連鎖数条件を満たしても必ず抑止されることを確認する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)  # X4 も通過する値
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    # X1(>=0.8s)/X4(count>=3) は両方通過する条件だが、next_detector は固定値
+    # のため NEXT は変化していない → corroboration 不成立で抑止されるべき。
+    pipe.update(41, t_fire + 1.0, _dummy_frame())
+    assert pipe._active_chain_1p is not None, (
+        "NEXT 値が不変なら X1/X4 を満たしていても corroboration 不成立で"
+        "抑止されるべき (演出由来ノイズの可能性が高いため)"
+    )
+
+
+def test_slide_exit_guard_on_still_fires_when_next_actually_changed() -> None:
+    """user 伝授の絶対律維持確認: NEXT 値が実際に CHAIN 開始時から変化して
+    いれば、ガード ON でもスライド検知で確実に即終了する (信号を殺さない)。
+
+    enable_game_event_chain_exit=False にして NEXT 変化ベース game-event
+    経路を無効化し、スライド経路の corroboration 単体の効果を分離検証する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    next_det = _StubNextDetectorMutablePair(pair=(1, 2))
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+        next_detector=next_det, enable_game_event_chain_exit=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+    assert pipe._chain_start_next_1p == (1, 2)
+
+    # NEXT が実際に変化した状態を、スライドを強制する前のフレームで安定
+    # 観測させる (slide=False のフレームでのみ _last_seen_next_1p が更新
+    # される実装のため)。
+    next_det.pair = (3, 4)
+    pipe.update(41, t_fire + 0.2, _dummy_frame())
+    assert pipe._last_seen_next_1p == (3, 4)
+    assert pipe._active_chain_1p is not None, (
+        "前提: game-event 経路を無効化しているため NEXT 変化だけでは"
+        "まだクリアされないこと"
+    )
+
+    _force_slide_1p(pipe)
+    pipe.update(42, t_fire + 1.0, _dummy_frame())  # X1/X4 も通過する時刻
+    assert pipe._active_chain_1p is None, (
+        "NEXT 値が実際に変化していれば、ガード ON でもスライド検知で"
+        "従来通り即終了させるべき (律の維持)"
+    )
+

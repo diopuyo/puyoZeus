@@ -31,6 +31,8 @@ from scripts.visualize_advantage_overlay import (  # noqa: E402
     kill_override, board_room, _detect_score_reset, _apply_platt_to_display,
     EarlyFireTracker, EARLY_FIRE_CAP,
     _match_progress_for_boards, _resolve_display_platt,
+    _kill_override_chain_completion_inputs, _kill_override_attribution_entry,
+    _drivers_for_display, KILL_OVERRIDE_DRIVER_KEY_P1, KILL_OVERRIDE_DRIVER_KEY_P2,
 )
 
 
@@ -427,6 +429,361 @@ def test_early_fire_none_board_is_safe() -> None:
     ev1 = _make_chain_event(trigger_sec=1.0)
     v = ft.update(ev1, None, None, None, 0.0)
     assert v == 0.0
+
+
+# ============================
+# EarlyFireTracker.finalized_since_last_check / on_settled(finalized=...)
+# (2026-08-22 修正②)
+# ============================
+
+def test_on_settled_default_still_clears_bias_unconditionally() -> None:
+    """既定 (引数省略) は従来通り無条件クリア (backwards compat, bit-identical)。"""
+    ft = EarlyFireTracker()
+    ft.bias = 12.3
+    ft.on_settled()
+    assert ft.bias == 0.0
+
+
+def test_on_settled_finalized_true_clears_bias() -> None:
+    """finalized=True (旧来と同じ意味) は無条件クリア。"""
+    ft = EarlyFireTracker()
+    ft.bias = 12.3
+    ft.on_settled(finalized=True)
+    assert ft.bias == 0.0
+
+
+def test_on_settled_finalized_false_preserves_bias() -> None:
+    """finalized=False は bias を維持する (修正②の核心)。"""
+    ft = EarlyFireTracker()
+    ft.bias = 12.3
+    ft.on_settled(finalized=False)
+    assert ft.bias == 12.3
+
+
+def test_finalized_since_last_check_first_call_is_false() -> None:
+    """初回呼び出しは判断材料が無いため False (安全側、誤ってクリアしない)。"""
+    ft = EarlyFireTracker()
+    assert ft.finalized_since_last_check(1260, 0) is False
+
+
+def test_finalized_since_last_check_detects_change() -> None:
+    """chain_total_score_p1/p2 の値が変化したら finalize が起きたと判定する。"""
+    ft = EarlyFireTracker()
+    ft.finalized_since_last_check(0, 0)  # 初回 (基準値確立)
+    assert ft.finalized_since_last_check(0, 0) is False  # 変化なし
+    assert ft.finalized_since_last_check(4020, 0) is True  # p1側finalize検知
+    assert ft.finalized_since_last_check(4020, 0) is False  # 以後は変化なし
+    assert ft.finalized_since_last_check(4020, 1260) is True  # p2側finalize検知
+
+
+def test_finalized_since_last_check_new_instance_per_match_is_safe() -> None:
+    """試合境界で EarlyFireTracker を作り直す既存設計 (_fresh_trackers) と
+    整合し、新インスタンスは前試合の値を引き継がない。"""
+    ft_prev_match = EarlyFireTracker()
+    ft_prev_match.finalized_since_last_check(9999, 9999)
+    ft_new_match = EarlyFireTracker()
+    # 新インスタンスは未確認 (None) から始まるため初回は必ず False。
+    assert ft_new_match.finalized_since_last_check(0, 0) is False
+
+
+# ============================
+# _kill_override_chain_completion_inputs (2026-08-22 修正①)
+# + ChainGenerationAccumulator (2026-08-22 改良②)
+# ============================
+
+def _busy_side(chain_event) -> types.SimpleNamespace:
+    return types.SimpleNamespace(chain_event=chain_event, state=BoardState.CHAIN)
+
+
+def _idle_side() -> types.SimpleNamespace:
+    return types.SimpleNamespace(chain_event=None, state=BoardState.STABLE)
+
+
+def _fake_snap_pending(pending_p1: int, pending_p2: int) -> types.SimpleNamespace:
+    return types.SimpleNamespace(pending_p1=pending_p1, pending_p2=pending_p2)
+
+
+def _make_4connect_board() -> Board:
+    """最下段に赤4個 (1連鎖確定) を並べた盤面 (tests/test_exchange_virtual_board.py
+    make_4connect_board と同一方式)。"""
+    b = Board()
+    for col in range(4):
+        b.set(BOARD_ROWS - 1, col, 1)
+    return b
+
+
+# ---- _chain_event_gen_ojama (単発イベントのお邪魔換算、module-level関数) ----
+
+def test_chain_event_gen_ojama_uses_total_score_directly_when_reliable(
+    monkeypatch,
+) -> None:
+    """total_score が信頼できる場合 (>=CHAIN_TOTAL_MIN_SCORE) は追加simulateを
+    一切行わない (無駄な再計算を避ける、2026-08-22 user指摘の核心)。"""
+    import scripts.visualize_advantage_overlay as vao
+    calls = {"n": 0}
+    orig_simulate = vao._CHAIN_COMPLETION_SIMULATOR.simulate
+
+    def _spy_simulate(board):
+        calls["n"] += 1
+        return orig_simulate(board)
+
+    monkeypatch.setattr(vao._CHAIN_COMPLETION_SIMULATOR, "simulate", _spy_simulate)
+    before1 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=1.0, before_board=before1, total_score=100_000)
+    gen = vao._chain_event_gen_ojama(ev1, elapsed_sec=0.0)
+    assert calls["n"] == 0  # フォールバック simulate は呼ばれない
+    assert gen > 0.0
+
+
+def test_chain_event_gen_ojama_w7_fallback_simulates_when_total_score_zero(
+    monkeypatch,
+) -> None:
+    """[2026-08-22 user指摘対応・核心テスト] total_score=0 (formula/landing経路
+    + enable_pseudo_chain_score_fill=False、現行本番既定) でも、before_board
+    に本物の連鎖があれば自前simulateで得点を確定する。t=6717.5 (画面に
+    「50×386」の掛け算式表示=score OCR不能) の実運用条件を再現する。
+    ChainEvent.ojama_sent は使わない設計のため ojama_sent=0 のままでも
+    成立することも確認する。"""
+    import scripts.visualize_advantage_overlay as vao
+    before1 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=1.0, before_board=before1, total_score=0)
+    assert ev1.ojama_sent == 0  # 現行本番のpseudo ChainEventと同条件
+
+    calls = {"n": 0}
+    orig_calc = vao.calculate_chain_score
+
+    def _spy_calc(result):
+        calls["n"] += 1
+        r = orig_calc(result)
+        return type(r)(steps=r.steps, total_score=100_000, is_all_clear=r.is_all_clear)
+
+    monkeypatch.setattr(vao, "calculate_chain_score", _spy_calc)
+    gen = vao._chain_event_gen_ojama(ev1, elapsed_sec=0.0)
+    assert calls["n"] == 1  # フォールバックsimulate経路が実際に発動した証拠
+    assert gen > 0.0
+
+
+def test_chain_event_gen_ojama_zero_when_before_board_has_no_real_chain() -> None:
+    """total_score が低く、before_board にも本物の連鎖が無ければ 0。"""
+    import scripts.visualize_advantage_overlay as vao
+    ev = _make_chain_event(trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE - 1)
+    assert vao._chain_event_gen_ojama(ev, elapsed_sec=0.0) == 0.0
+
+
+# ---- ChainGenerationAccumulator (複数トリガーにまたがる累積、改良②) ----
+
+def test_chain_gen_accumulator_zero_when_idle() -> None:
+    """busy でない側は常に (0.0, None)。"""
+    import scripts.visualize_advantage_overlay as vao
+    acc = vao.ChainGenerationAccumulator()
+    gen1, before1, gen2, before2 = acc.update(_idle_side(), _idle_side(), 0.0)
+    assert (gen1, before1, gen2, before2) == (0.0, None, 0.0, None)
+
+
+def test_chain_gen_accumulator_single_trigger_matches_single_event() -> None:
+    """単発トリガーのみなら _chain_event_gen_ojama と同じ値になる。"""
+    import scripts.visualize_advantage_overlay as vao
+    before1 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=10.0, before_board=before1, total_score=100_000)
+    acc = vao.ChainGenerationAccumulator()
+    gen1, got_before1, gen2, _ = acc.update(_busy_side(ev1), _idle_side(), 0.0)
+    expected = vao._chain_event_gen_ojama(ev1, 0.0)
+    assert gen1 == expected
+    assert got_before1 is before1
+    assert gen2 == 0.0
+
+
+def test_chain_gen_accumulator_accumulates_across_multiple_triggers_2026_08_22() -> None:
+    """[根治②・核心テスト] t=6717.5 で実測した根本原因の再現:
+    formula 機構は「アクティブな疑似イベントがあれば新規発火しない」ため、
+    長い連鎖はホールド期限切れのたびに新しい ChainEvent (別の trigger_sec)
+    に置き換わる。単発イベントだけを見ると連鎖全体を大幅に過小評価する
+    (実測: 216のpendingに対し1個目の断片だけでは84個しか生成が見えず
+    KILL_RATIO_FULL=1.5を大きく超えたまま=誤爆継続)。本アキュムレータは
+    trigger_sec の変化ごとに加算し、断片の合計を返さねばならない。"""
+    import scripts.visualize_advantage_overlay as vao
+    before_a = _make_4connect_board()
+    ev_a = _make_chain_event(trigger_sec=10.0, before_board=before_a, total_score=1000)
+    before_b = _make_4connect_board()
+    ev_b = _make_chain_event(trigger_sec=10.5, before_board=before_b, total_score=2000)
+
+    # [2026-08-22 user判断] 既定は accumulate=False (対症療法の実測欠陥により
+    # 非累積が既定に変更された)。本テストは「累積モードを明示指定した場合の
+    # 挙動」を固定するため accumulate=True を明示する。
+    acc = vao.ChainGenerationAccumulator(accumulate=True)
+    gen_a, _, _, _ = acc.update(_busy_side(ev_a), _idle_side(), 0.0)
+    gen_ab, before_ab, _, _ = acc.update(_busy_side(ev_b), _idle_side(), 0.0)
+
+    expected_a = vao._chain_event_gen_ojama(ev_a, 0.0)
+    expected_b = vao._chain_event_gen_ojama(ev_b, 0.0)
+    assert gen_a == expected_a
+    # 2個目のトリガー (trigger_sec が変化) で累積加算される (二重計上ではなく合算)。
+    assert gen_ab == pytest.approx(expected_a + expected_b)
+    assert before_ab is before_b  # room算出用は直近のbefore_boardを使う
+
+
+def test_chain_gen_accumulator_default_replaces_instead_of_accumulating_2026_08_22() -> None:
+    """[2026-08-22 user判断・核心テスト] 既定 (accumulate=False) は複数トリガーに
+    またがって合算せず、直近1件の chain_event の値に**置き換える**。
+
+    背景: 累積 (旧既定) は「まだ画面に見えていない残り連鎖ぶんまで既に生成
+    し終えた」という架空の完了状態を仮定するため、実測 (全編再走査) で
+    raw モデルとの間に新しい不一致時間帯 (t=6717.5 直前に6.63秒) を作ることが
+    判明した。既定を非累積に変更し、根治 (CHAIN保持時間の実測較正配線) と
+    併用したときに二重計上しない設計にした。"""
+    import scripts.visualize_advantage_overlay as vao
+    before_a = _make_4connect_board()
+    ev_a = _make_chain_event(trigger_sec=10.0, before_board=before_a, total_score=1000)
+    before_b = _make_4connect_board()
+    ev_b = _make_chain_event(trigger_sec=10.5, before_board=before_b, total_score=2000)
+
+    acc = vao.ChainGenerationAccumulator()  # 既定 accumulate=False
+    gen_a, _, _, _ = acc.update(_busy_side(ev_a), _idle_side(), 0.0)
+    gen_b, before_b_out, _, _ = acc.update(_busy_side(ev_b), _idle_side(), 0.0)
+
+    expected_a = vao._chain_event_gen_ojama(ev_a, 0.0)
+    expected_b = vao._chain_event_gen_ojama(ev_b, 0.0)
+    assert gen_a == expected_a
+    assert gen_b == expected_b  # 合算されず直近値に置き換わる (expected_a + expected_bにはならない)
+    assert before_b_out is before_b
+
+
+def test_chain_gen_accumulator_same_trigger_not_double_counted() -> None:
+    """同一 trigger_sec の chain_event を複数フレームで受けても二重加算しない
+    (EarlyFireTracker と同じ規約)。"""
+    import scripts.visualize_advantage_overlay as vao
+    before1 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=10.0, before_board=before1, total_score=1000)
+    acc = vao.ChainGenerationAccumulator()
+    gen_first, _, _, _ = acc.update(_busy_side(ev1), _idle_side(), 0.0)
+    gen_second, _, _, _ = acc.update(_busy_side(ev1), _idle_side(), 0.0)
+    assert gen_first == gen_second  # 同じイベントの再提示では増えない
+
+
+def test_chain_gen_accumulator_resets_when_leaving_busy_state() -> None:
+    """busy 状態を離れたら (=真の連鎖終了) 累積をリセットする。"""
+    import scripts.visualize_advantage_overlay as vao
+    before1 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=10.0, before_board=before1, total_score=100_000)
+    acc = vao.ChainGenerationAccumulator()
+    gen1, _, _, _ = acc.update(_busy_side(ev1), _idle_side(), 0.0)
+    assert gen1 > 0.0
+    gen1_after_stable, before1_after_stable, _, _ = acc.update(
+        _idle_side(), _idle_side(), 0.0)
+    assert gen1_after_stable == 0.0
+    assert before1_after_stable is None
+    # 同じ trigger_sec が再度来ても (通常は起きないが) 新規カウントとして扱える
+    # ようリセットされていること (内部状態の直接確認)。
+    assert acc._last_trigger["1p"] is None
+
+
+def test_chain_gen_accumulator_two_sides_independent() -> None:
+    """1P/2P の累積は互いに独立している。"""
+    import scripts.visualize_advantage_overlay as vao
+    before1 = _make_4connect_board()
+    before2 = _make_4connect_board()
+    ev1 = _make_chain_event(trigger_sec=1.0, before_board=before1, total_score=100_000)
+    ev2 = _make_chain_event(trigger_sec=2.0, before_board=before2, total_score=0)
+    acc = vao.ChainGenerationAccumulator()
+    gen1, _, gen2, _ = acc.update(_busy_side(ev1), _busy_side(ev2), 0.0)
+    assert gen1 > 0.0
+    assert gen2 == 0.0  # before_boardが空盤面 (連鎖なし) のためW7フォールバックも0
+
+
+# ---- _kill_override_chain_completion_inputs (簡素化後、gen/before_board を直接受け取る) ----
+
+def test_chain_completion_inputs_noop_when_neither_side_firing() -> None:
+    """どちらの側も生成量0 (発火していない) なら入力は完全不変。"""
+    b1, b2 = Board(), Board()
+    snap = _fake_snap_pending(216, 0)
+    r1, r2, p1, p2 = _kill_override_chain_completion_inputs(
+        snap, b1, b2, room1=5, room2=59,
+        gen1=0.0, before1=None, gen2=0.0, before2=None)
+    assert (r1, r2, p1, p2) == (5, 59, 216.0, 0.0)
+
+
+def test_chain_completion_inputs_fully_cancels_when_own_gen_large() -> None:
+    """t=6717.5 の再現: 自分の連鎖が pending を相殺しきる → 残存 pending は0。
+
+    余剰 (pending を超えた分) は実ゲーム仕様通り相手へ送られる
+    (cancel_own_pending_then_send_surplus と同じ規約、二重会計を避けるため
+    独自の相殺ロジックは作らず resolve_mutual_exchange をそのまま使う)。
+    """
+    before1 = _make_4connect_board()
+    b2 = Board()
+    snap = _fake_snap_pending(216, 0)
+    room1_eff, room2_eff, pending1_eff, pending2_eff = (
+        _kill_override_chain_completion_inputs(
+            snap, before1, b2, room1=5, room2=59,
+            gen1=9999.0, before1=before1, gen2=0.0, before2=None))
+    assert pending1_eff == 0.0  # 216個をはるかに超える生成量で完全相殺
+    assert pending2_eff > 0.0  # 余剰は2Pへの反撃として送られる (相殺前より悪化はしない=1P有利の裏付け)
+    assert room1_eff == 72  # 4連結が消えて盤面が完全に空になった
+
+
+def test_chain_completion_inputs_partial_residual_when_own_gen_small() -> None:
+    """自分の連鎖が小さく相殺しきれない場合は残存 pending が残る (発火継続)。"""
+    before1 = _make_4connect_board()
+    b2 = Board()
+    snap = _fake_snap_pending(216, 0)
+    _, _, pending1_eff, _ = _kill_override_chain_completion_inputs(
+        snap, before1, b2, room1=5, room2=59,
+        gen1=1.0, before1=before1, gen2=0.0, before2=None)
+    assert 0.0 < pending1_eff < 216.0  # 一部は相殺されるが残存 (未対策時と同じ方向)
+
+
+def test_chain_completion_inputs_falls_back_to_board_now_when_before_none() -> None:
+    """gen>0 だが before_board が None (呼出側の防御的既定) の場合は
+    現在の確定盤面 (board_now) を使う (b1/b2 引数のフォールバック)。"""
+    b1, b2 = _make_4connect_board(), Board()
+    snap = _fake_snap_pending(0, 0)
+    room1_eff, room2_eff, pending1_eff, pending2_eff = (
+        _kill_override_chain_completion_inputs(
+            snap, b1, b2, room1=5, room2=59,
+            gen1=10.0, before1=None, gen2=0.0, before2=None))
+    assert room1_eff == 72  # b1 (4連結あり) がそのまま simulate された証拠
+
+
+# ============================
+# _kill_override_attribution_entry / _drivers_for_display (2026-08-22 修正④)
+# ============================
+
+def test_kill_override_attribution_entry_identifies_dying_side() -> None:
+    """adv が悪化 (1P不利化) した場合は1P側キー、改善した場合は2P側キー。"""
+    key1, val1 = _kill_override_attribution_entry(
+        adv_before=42.0, adv_after=-100.0, pending1=216.0, pending2=0.0,
+        room1=5, room2=59)
+    assert key1 == KILL_OVERRIDE_DRIVER_KEY_P1
+    assert val1 == 216.0
+    key2, val2 = _kill_override_attribution_entry(
+        adv_before=-30.0, adv_after=100.0, pending1=0.0, pending2=200.0,
+        room1=60, room2=8)
+    assert key2 == KILL_OVERRIDE_DRIVER_KEY_P2
+    assert val2 == 200.0
+
+
+def test_kill_override_attribution_entry_key_is_valid_jp_label() -> None:
+    """合成キーは JP_LABEL に登録済み (描画時の KeyError 防止)。"""
+    import scripts.visualize_advantage_overlay as vao
+    assert KILL_OVERRIDE_DRIVER_KEY_P1 in vao.JP_LABEL
+    assert KILL_OVERRIDE_DRIVER_KEY_P2 in vao.JP_LABEL
+
+
+def test_drivers_for_display_none_note_is_bit_identical() -> None:
+    """kill_override_note が None (未発火 or フラグ既定OFF) なら drivers は不変。"""
+    drivers = [("board_ojama_count", 1.0), ("current_max_chain", 0.5)]
+    assert _drivers_for_display(drivers, None) is drivers
+
+
+def test_drivers_for_display_prepends_note_and_caps_at_three() -> None:
+    """発火時は先頭に挿入され、全体は3件までに収まる。"""
+    drivers = [("board_ojama_count", 1.0), ("current_max_chain", 0.5),
+               ("diff_max_column_height", 0.3)]
+    note = (KILL_OVERRIDE_DRIVER_KEY_P1, 216.0)
+    result = _drivers_for_display(drivers, note)
+    assert result[0] == note
+    assert len(result) == 3
+    assert result[1:] == drivers[:2]
 
 
 # ============================
@@ -2575,3 +2932,283 @@ def test_side_feats_full_diff_targets_own_removed() -> None:
     for c in vao.DIFF_KEEP_OWN_PAIR_COLUMNS + vao.DIFF_KEEP_OWN_HEAVY_COLUMNS:
         assert c in feat  # own側は残る (own+diff両方)
         assert f"diff_{c}" in feat
+
+
+# ============================
+# 2026-08-22 修正: kill_override ライブ経路の入力差し替え + elapsed_sec の
+# game_start_sec 対応化 (配線事故、致死の安全弁に誤値が渡っていた)
+# ============================
+def test_generate_source_wires_kill_override_to_confirmed_accounting() -> None:
+    """静的回帰テスト: generate() のライブ per-frame 経路 (通常4成分ブレンド)
+    にある kill_override 呼び出しが、確定会計 (OjamaAccountingTracker.snap.
+    pending_p1/p2) を使っており、旧世代の粗い推定 (RealtimeForecastTracker.
+    fctracker.inc1/inc2) を使っていないことを固定する。
+
+    背景 (2026-08-22 実測、scripts/_diag_kill_override_wiring_2026-08-22.py):
+    fctracker.inc1/inc2 は得点差÷70ヒューリスティック+ツモ毎30個減衰の粗い
+    推定で、t=886.5s において真値は2Pに216個 pending なのに inc1=616.73/
+    inc2=0.00 と1P側へ**逆方向**に出る事故を起こしていた。安全弁自体
+    (kill_override 関数) は正しく動作しており、入力が誤っていたことが原因。
+    fc (4成分ブレンドの予告項、fctracker.update() 呼び出し自体) は本修正の
+    対象外 (据え置き)。
+    """
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.generate)
+    code_only = src.replace(vao.generate.__doc__ or "", "")  # docstring内の言及を除外
+    # (2026-08-22 修正① 追加) 既定 (enable_kill_override_chain_completion=False)
+    # では kpending1/kpending2 は snap.pending_p1/p2 の単純代入であることを固定
+    # (bit-identical fallback)。
+    assert "kpending1, kpending2 = float(snap.pending_p1), float(snap.pending_p2)" in code_only
+    assert "adv = kill_override(adv, kpending1, kpending2," in code_only
+    # 旧・誤配線 (逆方向発火/見落としの原因) が復活していないことを固定する。
+    assert "kill_override(adv, fctracker.inc1, fctracker.inc2," not in code_only
+    assert "kill_override(adv, snap.pending_p1, snap.pending_p2," not in code_only
+    # fc成分自体 (fctracker.update呼び出し) は本修正の対象外、残っていること。
+    assert "fctracker.update(" in code_only
+
+
+def test_generate_source_uses_relative_elapsed_sec_for_panel_display() -> None:
+    """静的回帰テスト: panel レイアウトの「経過X秒」表示 (_draw_panel_layout
+    の elapsed_sec) が、グラフ横軸と同じ試合相対時間 t_rel を使っており、
+    試合境界を反映しない動画全体の絶対経過秒 (t - start_sec) に戻っていない
+    ことを固定する。
+
+    背景 (2026-08-22): 区間分割の継ぎ目 (t=893.7s 等) で「経過893秒」の直後に
+    「経過6秒」へ逆行して見えるバグだった。境界が一度も起きない動画では
+    game_start_sec=0.0 のままなので t_rel は従来の t - start_sec と完全一致
+    し (backwards compat)、この修正は表示バグの解消のみで挙動を変えない。
+    """
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    src = inspect.getsource(vao.generate)
+    code_only = src.replace(vao.generate.__doc__ or "", "")
+    assert "elapsed_sec=t_rel," in code_only
+    assert "elapsed_sec=t - start_sec," not in code_only
+
+
+# ============================
+# 2026-08-22 修正①②④: kill_override 連鎖完走後是正 / EarlyFireTracker
+# finalize連動クリア / 主因表示への安全弁理由明示 (静的回帰テスト)
+# ============================
+
+class TestKillOverrideChainCompletionWiring:
+    """修正①: 新フラグの既定値・配線・bit-identical フォールバックを固定する。"""
+
+    def test_generate_has_new_flags_default_false(self) -> None:
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        sig = inspect.signature(vao.generate)
+        for name in (
+            "enable_kill_override_chain_completion",
+            "enable_kill_override_attribution",
+            "enable_early_fire_clear_on_finalize",
+        ):
+            assert name in sig.parameters, f"{name} が generate() に無い"
+            assert sig.parameters[name].default is False
+
+    def test_cli_flags_wired_to_main(self) -> None:
+        import scripts.visualize_advantage_overlay as vao
+        text = Path(vao.__file__).read_text(encoding="utf-8")
+        assert "--kill-override-chain-completion" in text
+        assert (
+            "enable_kill_override_chain_completion="
+            "a.enable_kill_override_chain_completion" in text
+        )
+        assert "--kill-override-attribution" in text
+        assert (
+            "enable_kill_override_attribution=a.enable_kill_override_attribution"
+            in text
+        )
+        assert "--early-fire-clear-on-finalize" in text
+        assert (
+            "enable_early_fire_clear_on_finalize="
+            "a.enable_early_fire_clear_on_finalize" in text
+        )
+
+    def test_call_site_falls_back_to_raw_snap_pending_when_flag_off(self) -> None:
+        """既定 False では kpending1/kpending2 = snap.pending_p1/p2 の単純代入
+        (=修正前と bit-identical) であることをソースで固定する。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        assert (
+            "if enable_kill_override_chain_completion:" in code_only
+        )
+        assert (
+            "kroom1, kroom2 = room1, room2" in code_only
+        )
+
+    def test_call_site_early_fire_default_path_still_unconditional_clear(self) -> None:
+        """既定 False では efire_tracker.on_settled() (引数無し=無条件クリア)
+        が実行されるパスが残っていることを固定する (backwards compat)。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        assert "efire_tracker.on_settled()  # 確定計算が入ったので速報バイアスをクリア" in code_only
+        assert "efire_tracker.on_settled(finalized=_finalized)" in code_only
+
+
+class TestChainGenerationAccumulatorWiring:
+    """2026-08-22 改良②: ChainGenerationAccumulator が generate() から実際に
+    使われ、その累積値が kill_override まで届く配線を固定する (静的回帰テスト)。
+
+    背景 (coordinator指摘、2026-08-22 20:40): 単発検証 (t=6664.17起点の短区間)
+    では accum_gen1=840 まで累積したのに、全編再走査 (t=6131.6起点) では
+    効果が出ず (112→112、v1単発版とほぼ同一)。配線漏れの可能性が疑われた
+    ため、以下の4点をソーステキストで固定する
+    (本日 (2026-08-22) 同種の配線漏れを複数捕まえている前例に倣う形)。
+    """
+
+    def test_fresh_trackers_signature_includes_chain_gen_accumulator(self) -> None:
+        """_fresh_trackers() の戻り値型注釈に ChainGenerationAccumulator が
+        含まれること (未使用のまま追加しただけ、で終わっていないかの入口確認)。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao._fresh_trackers)
+        assert "ChainGenerationAccumulator" in src
+        assert "return (tracker" in src
+        assert "ChainGenerationAccumulator(accumulate=enable_chain_gen_accumulate)" in src
+
+    def test_generate_source_creates_chain_gen_tracker_instance(self) -> None:
+        """generate() 内でインスタンスが実際に作られている (初期生成+match境界
+        再生成の両方)。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        assert (
+            "chain_gen_tracker = ChainGenerationAccumulator(\n"
+            "        accumulate=enable_kill_override_chain_gen_accumulate)"
+            in code_only
+        )
+        assert "efire_tracker, chain_gen_tracker) = _fresh_trackers(" in code_only
+
+    def test_generate_source_calls_update_unconditionally_every_frame(self) -> None:
+        """settled ゲートの外側 (毎フレーム実行される箇所) で
+        chain_gen_tracker.update() が呼ばれていることを固定する
+        (EarlyFireTracker.update と同じ間引き回避パターン)。呼び出しが
+        settled ブロックの**内側**に紛れ込むと、per-side-settled 下での
+        高頻度更新のたびに再計算はされても、settled=False の間の
+        trigger_sec 変化を取りこぼす退行になる。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        # 「settled 内側の呼出し箇所 (_kill_override_chain_completion_inputs)」
+        # より前に「毎フレーム呼出し箇所 (chain_gen_tracker.update)」が
+        # 出現することをテキスト位置で固定する (settled ブロックの外側にある
+        # ことの代理検査)。
+        # 実際の呼出し文だけにマッチする (コメント中の言及と区別するため代入文
+        # まるごとを検索文字列にする)。
+        idx_update = code_only.index(
+            "chain_gen2, chain_gen_before2) = chain_gen_tracker.update(")
+        idx_settled_use = code_only.index("_kill_override_chain_completion_inputs(\n                        snap,")
+        assert idx_update < idx_settled_use, (
+            "chain_gen_tracker.update() が settled 内側の使用箇所より後ろに"
+            "ある = settled ゲートの外側で毎フレーム呼ばれていない疑い"
+        )
+        # settled ブロックの外側 (efire_tracker.update と同じ if ブロック群) に
+        # あることも直接固定する: efire_tracker.update 呼出しと
+        # chain_gen_tracker.update 呼出しの間に settled 判定
+        # (`if b1 is not None and b2 is not None and settled:`) が
+        # 挟まっていないこと。
+        idx_efire = code_only.index("efire_tracker.update(")
+        idx_settled_gate = code_only.index(
+            "if b1 is not None and b2 is not None and settled:")
+        assert idx_efire < idx_update < idx_settled_gate
+
+    def test_generate_source_wires_accumulator_output_into_kill_override_inputs(
+        self,
+    ) -> None:
+        """settled ブロック内で chain_gen_tracker.update() の戻り値
+        (chain_gen1/chain_gen_before1/chain_gen2/chain_gen_before2) が
+        そのまま _kill_override_chain_completion_inputs へ渡り、その戻り値
+        (kroom1/kroom2/kpending1/kpending2) がそのまま kill_override() へ
+        渡ることを固定する (途中で握りつぶされていないか)。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        # (2026-08-24 更新) A案「規模の比較」で pending_p1/p2_override が末尾に
+        # 追加されたため、終端は `))` ではなく `,` になった (accumulator 出力
+        # 4値がそのまま渡る事実は不変)。
+        assert (
+            "chain_gen1, chain_gen_before1,\n                        "
+            "chain_gen2, chain_gen_before2," in code_only
+        )
+        assert "adv = kill_override(adv, kpending1, kpending2," in code_only
+        assert "kroom1, kroom2)" in code_only
+
+    def test_generate_has_accumulate_flag_default_false_and_wired(self) -> None:
+        """[2026-08-22 user判断] 累積モード切替フラグが generate() の両方の
+        ChainGenerationAccumulator 生成箇所 (初期生成+match境界再生成) へ
+        正しく届いていることを固定する。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        sig = inspect.signature(vao.generate)
+        assert "enable_kill_override_chain_gen_accumulate" in sig.parameters
+        assert sig.parameters["enable_kill_override_chain_gen_accumulate"].default is False
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        assert (
+            "accumulate=enable_kill_override_chain_gen_accumulate)" in code_only
+        )
+        assert (
+            "enable_chain_gen_accumulate=enable_kill_override_chain_gen_accumulate)"
+            in code_only
+        )
+
+    def test_cli_flag_wired_to_main(self) -> None:
+        import scripts.visualize_advantage_overlay as vao
+        text = Path(vao.__file__).read_text(encoding="utf-8")
+        assert "--kill-override-chain-gen-accumulate" in text
+        assert (
+            "enable_kill_override_chain_gen_accumulate=(\n"
+            "                 a.enable_kill_override_chain_gen_accumulate)"
+            in text
+        )
+
+
+class TestChainHoldCalibrationWiring:
+    """2026-08-22 修正②根治: CHAIN 保持時間の実測較正値 (src/recognition_
+    pipeline.py:731-736、2.61+1.17×N) が generate() から RecognitionPipeline
+    へ渡る配線を固定する (静的回帰テスト)。
+
+    背景: この較正値は 2026-07-24 に実測済みだったが、visualize_advantage_
+    overlay.py には一度も CLI フラグ化されておらず、本番は常にライブラリ既定
+    (base=0.0, per_step=0.3固定) のままだった。これが t=6717.5 の formula
+    再トリガー間隔 (~1.4秒 ≒ 0.3×5) と一致する断片化の直接原因だった。
+    """
+
+    def test_generate_has_new_params_default_none(self) -> None:
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        sig = inspect.signature(vao.generate)
+        for name in ("chain_hold_base_sec", "chain_hold_per_step_sec"):
+            assert name in sig.parameters, f"{name} が generate() に無い"
+            assert sig.parameters[name].default is None
+
+    def test_cli_flags_wired_to_main(self) -> None:
+        import scripts.visualize_advantage_overlay as vao
+        text = Path(vao.__file__).read_text(encoding="utf-8")
+        assert "--chain-hold-base-sec" in text
+        assert "chain_hold_base_sec=a.chain_hold_base_sec" in text
+        assert "--chain-hold-per-step-sec" in text
+        assert "chain_hold_per_step_sec=a.chain_hold_per_step_sec" in text
+
+    def test_generate_source_passes_through_only_when_not_none(self) -> None:
+        """既定 None ではキー自体を RecognitionPipeline.load_default に渡さず
+        (=ライブラリ既定 0.0/0.3 のまま、bit-identical)、明示指定時のみ渡る。"""
+        import inspect
+        import scripts.visualize_advantage_overlay as vao
+        src = inspect.getsource(vao.generate)
+        code_only = src.replace(vao.generate.__doc__ or "", "")
+        assert '"chain_hold_base_sec": chain_hold_base_sec' in code_only
+        assert '"chain_hold_per_step_sec": chain_hold_per_step_sec' in code_only
+        assert "if chain_hold_base_sec is not None else {}" in code_only
+        assert "if chain_hold_per_step_sec is not None else {}" in code_only

@@ -1806,6 +1806,12 @@ def collect_lean(
     # (合成パッチ4,732枚×フラグ4構成で不一致0、陽性対照つき) で、実測は
     # 1 frame 34.69→29.05ms (1.19倍)。既定 False = 従来の Python 経路。
     enable_native_hsv_classifier: bool = False,
+    # STABLE 凍結デッドロック根治 3 フラグ (2026-08-24、RECOGNITION_ADOPTED
+    # 採用、src.production_config 参照)。既定 False = 従来挙動完全維持
+    # (backwards compat、bit-identical)。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_formula_step_interlude: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -2109,6 +2115,9 @@ def collect_lean(
             enable_lockdown_score_moving_release
         ),
         match_end_ncc_threshold=match_end_ncc_threshold,
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -3226,6 +3235,33 @@ def main() -> int:
             "won欠損38.3%%) を破棄する。既定は無効 (後方互換、bit-identical)。"
         ),
     )
+    parser.add_argument(
+        "--enable-chain-formula-read-verify", action="store_true",
+        dest="enable_chain_formula_read_verify",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-chain-count-update", action="store_true",
+        dest="enable_formula_chain_count_update",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-step-interlude", action="store_true",
+        dest="enable_formula_step_interlude",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -3301,6 +3337,11 @@ def main() -> int:
         enable_boundary_newmatch_evidence=(
             args.enable_boundary_newmatch_evidence
         ),
+        enable_chain_formula_read_verify=args.enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=(
+            args.enable_formula_chain_count_update
+        ),
+        enable_formula_step_interlude=args.enable_formula_step_interlude,
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0
