@@ -111,6 +111,16 @@ from src.score_ocr import SCORE_ROI_INK_RATIO_MIN as CHAIN_FORMULA_INK_RATIO_MIN
 # 実データ(v70m2): formula が 2-3 frame 持続する。1 frame は偶発ノイズと区別しにくいため 2 を採用。
 CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 
+# 根治②③ (2026-08-24): 掛け算式 実読発火イベント (mechanism="formula_read") の
+# 最小 hold 秒数。読取発火は初期 chain_count=1 のことが多く、従来式
+# (base 0.0 + per_step 0.3 × cc) では次の段確定 (段周期 実測 ≈1.4 秒、
+# memory reference_chain_formula_per_step_2026-08-22) より先に hold が切れて
+# CHAIN が細切れになる。段周期 + 安全マージン = 2.0 秒
+# (score_ocr.FORMULA_SESSION_RESET_SEC と同じ物理根拠) を下限とする。
+# game-event モード (本番) では安全弁上限 (_chain_event_max_until) が支配的な
+# ため実質影響しないが、timing-hold のみの構成での頑健性を担保する。
+CHAIN_FORMULA_READ_HOLD_SEC: float = 2.0
+
 # 大 ROI 走査 (MatchEndDetector 800x600 / TelopDetector 720x400) の間引き間隔。
 # 2026-07-30 プロファイル実測: match_end 4.9ms x 2回/フレーム、telop 2.6ms x 2回/フレーム
 # = 合計約15ms/フレームで、認識時間の約12%を占める。
@@ -324,6 +334,7 @@ from src.background_fingerprint import (
 )
 from src.chain_detector import (
     CHAIN_MECHANISM_FORMULA,
+    CHAIN_MECHANISM_FORMULA_READ,
     CHAIN_MECHANISM_LANDING,
     CHAIN_MECHANISM_SCORE_JUMP,
     DEBOUNCE_CONFIRM_FRAMES,
@@ -351,8 +362,16 @@ from src.placement_inferrer import (
     apply_persistent_landing_color_guard,
     DEFERRED_MAX_FRAMES,
 )
-from src.score_ocr import ScoreOcr, ScoreTracker
+from src.score_ocr import FormulaReadResult, ScoreOcr, ScoreTracker
 from src.ui_mask import UI_MASK_TARGET_CELLS
+
+# 根治⑤ (2026-08-24、Q-01): 幕間 (通常スコア表示中 = 掛け算式は非表示) を
+# 段累積器へ届けるときに渡す不変のセンチネル。値は使われず、
+# score_displayed=True のフラグだけが意味を持つ。
+_FORMULA_ABSENT: FormulaReadResult = FormulaReadResult(
+    valid=False, left=None, right=None, product=None,
+    mult_ncc=0.0, reject_reason="score_displayed",
+)
 from src.state_detectors import (
     ChainPhaseDetector,
     EffectPhaseDetector,
@@ -1217,6 +1236,82 @@ class RecognitionPipeline:
         # NextDetector 精度 100% 確認済 (memory: project_next_detector_perfect_accuracy.md)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_next_signal: bool = False,
+        # スライド誤検知抑制ガード (2026-08-22、docs/KNOWN_WEAKNESSES.md 根治対応)。
+        # 連鎖中に NextSlideDetector が約 1.37 秒周期で誤検知し、
+        # enable_chain_exit_next_signal の即終了経路 (l.4938 付近) が
+        # timing hold / max_until を無視して連鎖イベントを強制終了 → 断片化
+        # する問題への対処。user 伝授 (reference_chain_end_absolute_signals_
+        # 2026-08-21) の「ネクストが動いた瞬間=連鎖終了」信号自体は正しいため
+        # 信号を殺さず、_should_suppress_slide_exit() (X1/X4 の
+        # _should_suppress_game_event_exit に加え、NextDetector が実際に
+        # 観測した next_pair が CHAIN 開始時から変化したかの corroboration
+        # を追加) をスライド即終了経路にも適用する。
+        # 実測: X1/X4 単独 (時間・連鎖数のみ) では誤検知のたび chain_entry_t
+        # がリセットされ 1.37秒周期 > 0.8秒閾値のため無力 (10件中1件しか
+        # 抑止できず) だったが、NEXT 値 corroboration の追加で全件抑止を確認
+        # (scripts/_diag_slide_exit_guard_fix_2026-08-22.py)。
+        # 本当にネクストが動いた場合は従来通り即終了する (律は維持)。
+        # enable_chain_min_display とは独立フラグ (game-event 経路とは別ゲート
+        # のため個別に on/off できる設計、効果分解を容易にする)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_slide_exit_min_display_guard: bool = False,
+        # ============================
+        # STABLE凍結デッドロック根治 4フラグ (2026-08-24、memory
+        # project_stable_freeze_deadlock_2026-08-24)。根因: 凍結 confirmed_board
+        # が「連鎖検知の入力」と「連鎖検知の結果で更新される対象」の両方に
+        # なっており、片側連鎖では STABLE から抜けられない構造的循環。
+        # ============================
+        # ① 掛け算式 実読 (読取器 + 段累積器 FormulaStepAccumulator の起動)。
+        # score OCR が None (掛け算式表示) のフレームで、既存のセル分類結果を
+        # 再利用して「左辺×右辺」を実読し、段数 (=連鎖数) と素点 (=火力) を
+        # 累積する。読取り自体は観測のみで state 遷移には影響しない
+        # (②③が観測値を消費する)。user 伝授 (reference_chain_formula_per_
+        # step_2026-08-22)「回数を数えれば連鎖数、値を足せば火力。推定も
+        # simulate も不要」の実装。②③のいずれかが True なら内部で強制 ON。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_formula_value_read: bool = False,
+        # ② 機能D 発火検証の実読置換。従来の enable_chain_formula_simulate_
+        # verify は凍結盤面を simulate して「消せる4連結なし=連鎖数0」と
+        # 判定し、本物の連鎖を毎フレーム却下していた (実測: t=6697.5〜6701.7
+        # の 4.17 秒握りつぶし)。True にすると、現フレームの掛け算式が
+        # 実読できた (FormulaReadResult.valid) 場合は simulate 検証を通さず
+        # 発火する (mechanism="formula_read")。実読できないフレームは従来の
+        # simulate 検証にフォールバック (= 検証の OR、W7 偽イベント対策の
+        # 網は維持)。同時に ChainPhaseDetector の 4 連結ゲート (これも凍結
+        # 盤面入力) を formula_read イベントに限りバイパスする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_chain_formula_read_verify: bool = False,
+        # ③ 進行中 formula 系イベントの段更新。掛け算式の段が新規確定する
+        # たびに active_chain (mechanism=formula/formula_read) の chain_count/
+        # total_score を観測値で上書きし、chain_hold と安全弁上限を延長する。
+        # 長連鎖の断片化 (1.4秒周期の hold 切れ) と chain_count=1 固定の
+        # 過小報告 (連鎖数的中 3/10、火力半分未満 7/10) への対処。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_formula_chain_count_update: bool = False,
+        # ④ スライド即終了抑止ガードから X1 (最小表示 0.8 秒) を外す。
+        # user 伝授 (reference_chain_end_absolute_signals_2026-08-21):
+        # 「最低表示 0.8 秒ガードは ON にしない」(正しい終了検知を遅らせる)。
+        # 実測では抑止 10 件中 9 件が NEXT 値 corroboration によるもので
+        # X1/X4 単独は 1 件のみ。True にすると _should_suppress_slide_exit の
+        # X1 を外し、X4 (短連鎖) と NEXT 値 corroboration のみで抑止する。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_slide_exit_no_min_display: bool = False,
+        # ⑤ 掛け算式の段の区切りに「幕間」を使う (2026-08-24、Codex 品質精査 Q-01)。
+        # 掛け算式と通常スコアは排他 (_read_formula_value:6272-6273) なので、
+        # 段と段の間には通常スコアが出る幕間が必ず入る (実測 13〜19 フレーム =
+        # 0.433〜0.634 秒、logs/_diag_formula_fix_e2e_2026-08-24/trace_on.jsonl)。
+        # True にすると、掛け算式が読めず通常スコアが読めたフレームで
+        # FormulaStepAccumulator へ score_displayed=True を届け、
+        # 段の区切りを「右辺の単調増加」ではなく幕間で判定させる。
+        #
+        # 幕間を届けないと累積器は段の区切りを観測できず、旧規則
+        # (右辺が減ったら棄却 or セッション破棄) にフォールバックする。
+        # 旧規則は閾値 0.5 秒が実測の幕間分布のど真ん中に刺さっており、
+        # 右辺が一度でも減ると火力が 3.4 倍ずれる (詳細は
+        # FormulaStepAccumulator の docstring と
+        # docs/FORMULA_STEP_IDENTITY_FIX_2026-08-24.md)。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_formula_step_interlude: bool = False,
         # feat/gravity-settle-2026-06-05: 連鎖終了直後の GRAVITY_SETTLE 状態を有効化。
         # True にすると CHAIN → GRAVITY_SETTLE → STABLE の遷移経路を有効化し、
         # 連鎖終了直後の重力 settle/着地中を採点外 (confirmed 凍結) として扱う。
@@ -2454,6 +2549,9 @@ class RecognitionPipeline:
                 self._enable_ojama_fall_entry_hardening
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            # STABLE凍結デッドロック根治② (2026-08-24): self 属性はこの時点で
+            # 未代入のためローカル引数を直接使う (代入は後段ブロック)。
+            enable_formula_read_gate_bypass=bool(enable_chain_formula_read_verify),
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
             enable_floating_gap_restore=self._enable_floating_gap_restore,
             enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
@@ -2502,6 +2600,9 @@ class RecognitionPipeline:
                 self._enable_ojama_fall_entry_hardening
             ),
             enable_chain_gate_raw_fallback=self._enable_chain_gate_raw_fallback,
+            # STABLE凍結デッドロック根治② (2026-08-24): self 属性はこの時点で
+            # 未代入のためローカル引数を直接使う (代入は後段ブロック)。
+            enable_formula_read_gate_bypass=bool(enable_chain_formula_read_verify),
             enable_ojama_fall_scoped_exit=self._enable_ojama_fall_scoped_exit,
             enable_floating_gap_restore=self._enable_floating_gap_restore,
             enable_ojama_column_stack_fix=self._enable_ojama_column_stack_fix,
@@ -2693,6 +2794,44 @@ class RecognitionPipeline:
         #   warmup 連動: enable_chain_exit_warmup を内部で自動 ON
         # default False = 従来挙動完全維持。
         self._enable_chain_exit_next_signal: bool = bool(enable_chain_exit_next_signal)
+        # スライド誤検知抑制ガード (2026-08-22)。X1/X4 と同じ定数を流用するため
+        # 専用定数は追加しない。default False = 従来挙動完全維持。
+        self._enable_slide_exit_min_display_guard: bool = bool(
+            enable_slide_exit_min_display_guard
+        )
+        # STABLE凍結デッドロック根治 4フラグ (2026-08-24)。定義は __init__
+        # 引数側コメント参照。②③は①の観測値を消費するため①を強制 ON にする。
+        self._enable_chain_formula_read_verify: bool = bool(
+            enable_chain_formula_read_verify
+        )
+        self._enable_formula_chain_count_update: bool = bool(
+            enable_formula_chain_count_update
+        )
+        self._enable_formula_step_interlude: bool = bool(
+            enable_formula_step_interlude
+        )
+        self._enable_formula_value_read: bool = bool(enable_formula_value_read) or (
+            self._enable_chain_formula_read_verify
+            or self._enable_formula_chain_count_update
+            # ⑤ も累積器の観測を消費するため ① を強制 ON にする。
+            or self._enable_formula_step_interlude
+        )
+        self._enable_slide_exit_no_min_display: bool = bool(
+            enable_slide_exit_no_min_display
+        )
+        # ① の状態: 段累積器 (1P/2P 別) と現フレームの実読結果キャッシュ。
+        from src.score_ocr import FormulaStepAccumulator as _FSA
+        self._formula_accum_1p: "_FSA | None" = (
+            _FSA() if self._enable_formula_value_read else None
+        )
+        self._formula_accum_2p: "_FSA | None" = (
+            _FSA() if self._enable_formula_value_read else None
+        )
+        self._formula_last_read_1p: "object | None" = None
+        self._formula_last_read_2p: "object | None" = None
+        # ③ で今フレーム新規確定した段 (update() 内の一時受け渡し)。
+        self._formula_new_step_1p: "object | None" = None
+        self._formula_new_step_2p: "object | None" = None
         # warmup 連動: フラグ ON 時は enable_chain_exit_warmup も強制 ON にする。
         # フラグ OFF の場合は enable_chain_exit_warmup の指定をそのまま使う。
         if self._enable_chain_exit_next_signal:
@@ -2896,6 +3035,10 @@ class RecognitionPipeline:
         # 案3 (2026-08-13、優先度最下位): ChainPhaseDetector へそのまま伝播する。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_chain_gate_raw_fallback: bool = False,
+        # STABLE凍結デッドロック根治② (2026-08-24): ChainPhaseDetector へ
+        # そのまま伝播する (mechanism="formula_read" イベントの 4連結ゲート
+        # バイパス)。default False = 従来挙動完全維持・bit-identical。
+        enable_formula_read_gate_bypass: bool = False,
         # 案1 (enable_ojama_fall_scoped_exit, 2026-08-13、OJAMA_FALL出口の
         # 根治): OjamaVisualDetector へそのまま伝播する。
         # default False = 従来挙動完全維持・bit-identical (backwards compat、
@@ -2940,6 +3083,7 @@ class RecognitionPipeline:
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
+            enable_formula_read_gate_bypass=enable_formula_read_gate_bypass,
         )
         detectors: list = [
             chain_det,
@@ -3113,6 +3257,16 @@ class RecognitionPipeline:
         # 案X*(A)(B)+warmup: NextSlide signal による CHAIN 即終了 (2026-06-05)。
         # default False = 従来挙動完全維持 (backwards compat)。
         enable_chain_exit_next_signal: bool = False,
+        # スライド誤検知抑制ガード (2026-08-22)。詳細は __init__ 側 docstring 参照。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_slide_exit_min_display_guard: bool = False,
+        # STABLE凍結デッドロック根治 5フラグ (2026-08-24)。詳細は __init__ 側
+        # コメント参照。default False = 従来挙動完全維持・bit-identical。
+        enable_formula_value_read: bool = False,
+        enable_chain_formula_read_verify: bool = False,
+        enable_formula_chain_count_update: bool = False,
+        enable_slide_exit_no_min_display: bool = False,
+        enable_formula_step_interlude: bool = False,
         # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化。
         # 2026-06-06 採用: 退行ゼロ + 連鎖境界正確化。False で無効化可。
         enable_gravity_settle_state: bool = True,
@@ -3548,6 +3702,12 @@ class RecognitionPipeline:
             enable_ojama_warning_glow_guard=enable_ojama_warning_glow_guard,
             enable_chain_max_hold_override=enable_chain_max_hold_override,
             enable_chain_exit_next_signal=enable_chain_exit_next_signal,
+            enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+            enable_formula_value_read=enable_formula_value_read,
+            enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+            enable_formula_chain_count_update=enable_formula_chain_count_update,
+            enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+            enable_formula_step_interlude=enable_formula_step_interlude,
             enable_gravity_settle_state=enable_gravity_settle_state,
             enable_slide_override_ojama_hold=enable_slide_override_ojama_hold,
             enable_chain_estimate_stale_hold=enable_chain_estimate_stale_hold,
@@ -3762,8 +3922,18 @@ class RecognitionPipeline:
         counter = self._tsumo_count_1p if side == "1P" else self._tsumo_count_2p
         return int(sum(counter.values()) // 2)
 
-    def reset(self) -> None:
-        """全 state を初期化 (試合切替時など)。"""
+    def reset(self, match_start_sec: float | None = None) -> None:
+        """全 state を初期化 (試合切替時など)。
+
+        Args:
+            match_start_sec: 新しい試合の開始時刻 (動画絶対秒)。
+                W38 根治 (2026-08-25): 指定時は再構築する VideoChainTracker
+                に渡し、マージンタイム (試合開始96秒からのレート減衰、
+                src/scoring.py compute_effective_rate) を試合相対時刻で
+                計算させる。None (既定, backwards compat) は従来通り
+                VideoChainTracker 既定の 0.0 (= 動画絶対時刻がそのまま
+                elapsed になる旧挙動) を維持する。
+        """
         self._sm_1p.reset()
         self._sm_2p.reset()
         self._gen_1p.reset()
@@ -3825,15 +3995,33 @@ class RecognitionPipeline:
             self._score_tracker_1p.reset()
         if self._score_tracker_2p is not None:
             self._score_tracker_2p.reset()
+        # 根治① (2026-08-24): 掛け算式 段累積器も試合切替でクリアする。
+        if self._formula_accum_1p is not None:
+            self._formula_accum_1p.reset()
+        if self._formula_accum_2p is not None:
+            self._formula_accum_2p.reset()
+        self._formula_last_read_1p = None
+        self._formula_last_read_2p = None
+        self._formula_new_step_1p = None
+        self._formula_new_step_2p = None
         # chain tracker 内部 state は再構築 (リセット API なし)。
         # 修正C: debounce 設定は _chain_debounce_confirm_frames から引き継ぐ。
+        # W38 根治 (2026-08-25): match_start_sec を渡して ojama_sent の
+        # マージンタイム減衰を試合相対時刻で計算させる。未指定 (None) は
+        # VideoChainTracker 既定 0.0 と同じ (= 従来挙動、外部 caller の
+        # reset() 無引数呼び出しは bit-identical)。
+        _tracker_match_start: float = (
+            float(match_start_sec) if match_start_sec is not None else 0.0
+        )
         if self._chain_tracker_1p is not None:
             self._chain_tracker_1p = VideoChainTracker(
                 debounce_confirm_frames=self._chain_debounce_confirm_frames,
+                match_start_sec=_tracker_match_start,
             )
         if self._chain_tracker_2p is not None:
             self._chain_tracker_2p = VideoChainTracker(
                 debounce_confirm_frames=self._chain_debounce_confirm_frames,
+                match_start_sec=_tracker_match_start,
             )
         # cycle 71d (案 D8): VideoChainTracker 入力 cache もリセット.
         self._prev_confirmed_1p = None
@@ -4314,6 +4502,12 @@ class RecognitionPipeline:
             # 機能D: 試合切替で掛け算式 連続フレームカウンタをリセット
             self._formula_consec_1p = 0
             self._formula_consec_2p = 0
+            # 根治① (2026-08-24): 段累積器も試合外でリセット (前試合の
+            # セッションが次試合に持ち越されるのを防ぐ)。
+            if self._formula_accum_1p is not None:
+                self._formula_accum_1p.reset()
+            if self._formula_accum_2p is not None:
+                self._formula_accum_2p.reset()
 
         # 2. CNN raw board 取得 (BG FP 採取より先に必要)
         # I1 対応 A: bg_fp 採取前は pre_capture_mode を on にして tier 1 を無効化
@@ -4482,17 +4676,23 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
-                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
+                # game-event モード: 安全弁上限を記録。
                 # enable_game_event_chain_exit=False 時も安全弁は無害 (使われない)。
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_1p = (
                         time_sec + self._chain_max_hold_sec
                     )
-                    self._chain_start_next_1p = self._last_seen_next_1p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
                 # enable_game_event_chain_exit 非依存で常に更新。
                 self._chain_entry_t_1p = time_sec
+                # 連鎖開始時 next_pair snapshot (2026-08-22 是正): 従来は
+                # enable_game_event_chain_exit=True 時のみ記録していたが、
+                # enable_slide_exit_min_display_guard の NEXT 値 corroboration
+                # (_should_suppress_slide_exit) が enable_game_event_chain_exit
+                # 非依存で必要とするため、_chain_entry_t_1p と同様に常に更新する
+                # (未使用時は dead value のまま、既存経路への副作用ゼロ)。
+                self._chain_start_next_1p = self._last_seen_next_1p
         if is_active and self._chain_tracker_2p is not None:
             ev = self._chain_tracker_2p.update(time_sec, board_for_tracker_2p)
             if ev is not None and not chain_banned:
@@ -4508,16 +4708,19 @@ class RecognitionPipeline:
                     + self._chain_hold_per_step_sec * ev.chain_count
                     + extra_all_clear
                 )
-                # game-event モード: 安全弁上限 + 連鎖開始時 next_pair snapshot を記録。
+                # game-event モード: 安全弁上限を記録。
                 # ※②お邪魔信号撤去 (2026-06-01) により board snapshot は不要になった。
                 if self._enable_game_event_chain_exit:
                     self._chain_event_max_until_2p = (
                         time_sec + self._chain_max_hold_sec
                     )
-                    self._chain_start_next_2p = self._last_seen_next_2p
                 # X1: CHAIN 突入時刻を記録 (enable_chain_min_display 用)。
                 # enable_game_event_chain_exit 非依存で常に更新。
                 self._chain_entry_t_2p = time_sec
+                # 連鎖開始時 next_pair snapshot (2026-08-22 是正): 1P 側と同様
+                # enable_game_event_chain_exit 非依存で常に更新する (詳細は
+                # 1P 側コメント参照)。
+                self._chain_start_next_2p = self._last_seen_next_2p
 
         # 有効期限内の chain_event を signals に乗せる
         # game-event モード (enable_game_event_chain_exit=True) の場合、
@@ -4568,11 +4771,19 @@ class RecognitionPipeline:
         # 修正1 (2026-07-30): 生 score 値 (_score_ocr_val_Xp) も同時に受け取り、
         # 機能D (_check_formula_detected) が同一 frame・同一 side のスコアを
         # 再度フルで読み直す (score_ocr.read_side 完全重複呼び出し) のを防ぐ。
-        score_d_1p, _score_ocr_val_1p = self._update_score_tracker(
-            self._score_tracker_1p, frame,
+        # 2026-08-24: enable_formula_value_read 時のみセル分類の詳細も受け取る
+        # (掛け算式実読での再分類を省くため)。OFF 時は従来経路 (bit-identical)。
+        score_d_1p, _score_ocr_val_1p, _score_cells_1p, _score_confs_1p = (
+            self._update_score_tracker(
+                self._score_tracker_1p, frame,
+                want_detail=self._enable_formula_value_read,
+            )
         )
-        score_d_2p, _score_ocr_val_2p = self._update_score_tracker(
-            self._score_tracker_2p, frame,
+        score_d_2p, _score_ocr_val_2p, _score_cells_2p, _score_confs_2p = (
+            self._update_score_tracker(
+                self._score_tracker_2p, frame,
+                want_detail=self._enable_formula_value_read,
+            )
         )
 
         # 追修 (2026-07-25): force_in_match=True 構成では is_match_active=False
@@ -4633,7 +4844,10 @@ class RecognitionPipeline:
                         f"tsumo_2p_before_reset={tsumo_2p_before}",
                         flush=True,
                     )
-                self.reset()
+                # W38 根治 (2026-08-25): 境界検知フレームの時刻 = 新試合の
+                # 開始時刻として VideoChainTracker に渡す (ojama_sent の
+                # マージンタイム減衰を試合相対時刻で計算させる)。
+                self.reset(match_start_sec=time_sec)
                 self._match_start_boundary_latched = True
             elif not boundary_candidate:
                 self._match_start_boundary_latched = False
@@ -4678,6 +4892,37 @@ class RecognitionPipeline:
                 )
                 if time_sec < eff_until_2p:
                     chain_ev_2p = self._active_chain_2p
+
+        # 4c-0. STABLE凍結デッドロック根治① (2026-08-24): 掛け算式の実読と段累積。
+        # score OCR が None (掛け算式表示の可能性) のフレームのみ実読する
+        # (通常スコア表示中は掛け算式と排他なのでコストゼロ)。セル分類は
+        # 4. の _update_score_tracker(want_detail=True) の結果を再利用し、
+        # 新規の照合は「×」セル 1 枚分のみ。読取りは観測のみで、消費者は
+        # ②発火検証 (4c) と ③進行中イベント更新 (4c')。
+        self._formula_new_step_1p = None
+        self._formula_new_step_2p = None
+        self._formula_last_read_1p = None
+        self._formula_last_read_2p = None
+        if self._enable_formula_value_read and is_active:
+            self._formula_last_read_1p = self._read_formula_value(
+                frame, "1P", _score_ocr_val_1p, _score_cells_1p, _score_confs_1p,
+            )
+            self._formula_last_read_2p = self._read_formula_value(
+                frame, "2P", _score_ocr_val_2p, _score_cells_2p, _score_confs_2p,
+            )
+            if self._formula_accum_1p is not None and self._formula_last_read_1p is not None:
+                self._formula_new_step_1p = self._formula_accum_1p.update(
+                    time_sec, self._formula_last_read_1p,
+                )
+            if self._formula_accum_2p is not None and self._formula_last_read_2p is not None:
+                self._formula_new_step_2p = self._formula_accum_2p.update(
+                    time_sec, self._formula_last_read_2p,
+                )
+            # 根治⑤ (2026-08-24、Q-01): 幕間の観測を累積器へ届ける。
+            # ここを配線しないと累積器は段の区切りを一度も観測できず、
+            # 旧規則 (右辺の単調増加) にフォールバックしたままになる。
+            self._notify_formula_interlude("1P", time_sec, _score_ocr_val_1p)
+            self._notify_formula_interlude("2P", time_sec, _score_ocr_val_2p)
 
         # 4c. 機能D: 掛け算式検知 CHAIN 早期発火 (enable_chain_formula_detection=True 時のみ)。
         # score ROI の OCR が None (掛け算式表示) かつ ink_ratio > MIN かつ last_score > 0 が
@@ -4765,6 +5010,26 @@ class RecognitionPipeline:
                     )
                     if time_sec < eff_until_2p:
                         chain_ev_2p = self._active_chain_2p
+
+        # 4c'. STABLE凍結デッドロック根治③ (2026-08-24): 掛け算式の段が新規
+        # 確定したフレームで、進行中の formula 系疑似イベント (mechanism=
+        # formula/formula_read) の chain_count / total_score を観測値で更新し
+        # hold と安全弁上限を延長する。user 伝授 (reference_chain_formula_
+        # per_step_2026-08-22)「回数を数えれば連鎖数、値を足せば火力」の
+        # 消費側。案X*(A) が CHAIN 中の再発火を抑止するため、長連鎖の継続は
+        # この経路が担う (従来は chain_count=1 固定のまま hold 切れ → 断片化)。
+        if (
+            self._enable_formula_chain_count_update
+            and is_active and not chain_banned
+        ):
+            if self._formula_new_step_1p is not None:
+                _updated_1p = self._apply_formula_step_update("1P", time_sec)
+                if _updated_1p is not None:
+                    chain_ev_1p = _updated_1p
+            if self._formula_new_step_2p is not None:
+                _updated_2p = self._apply_formula_step_update("2P", time_sec)
+                if _updated_2p is not None:
+                    chain_ev_2p = _updated_2p
 
         # 4b. next_pair 検出 (1P/2P 両方、共通色なので detect_both で OK)
         # 2026-05-10: slide motion 中は ネクスト puyo が画面で動いており認識結果が
@@ -4918,12 +5183,52 @@ class RecognitionPipeline:
             # slide_1p / slide_2p は 4c (l.2035-2036) で定義済みのローカル変数
             _slide_1p_now: bool = bool(slide_1p)
             _slide_2p_now: bool = bool(slide_2p)
-            if _slide_1p_now and self._active_chain_1p is not None:
+            # スライド誤検知抑制ガード (2026-08-22): enable_slide_exit_min_display_
+            # guard=True の場合のみ、X1/X4 + NEXT値未変化 corroboration で
+            # スライド即終了を抑止する (詳細は _should_suppress_slide_exit
+            # docstring 参照)。抑止された場合は active_chain を維持し、
+            # timing hold / game-event 経路に判定を委ねる
+            # (信号を殺すのではなく誤検知だけを弾く)。
+            _suppress_slide_1p = (
+                self._enable_slide_exit_min_display_guard
+                and self._active_chain_1p is not None
+                and _should_suppress_slide_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_1p,
+                    chain_count=self._active_chain_1p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                    current_next=self._last_seen_next_1p,
+                    start_next=self._chain_start_next_1p,
+                    # 根治④ (2026-08-24): X1 (0.8秒最小表示) の除外。
+                    include_min_display_guard=(
+                        not self._enable_slide_exit_no_min_display
+                    ),
+                )
+            )
+            _suppress_slide_2p = (
+                self._enable_slide_exit_min_display_guard
+                and self._active_chain_2p is not None
+                and _should_suppress_slide_exit(
+                    time_sec=time_sec,
+                    chain_entry_t=self._chain_entry_t_2p,
+                    chain_count=self._active_chain_2p.chain_count,
+                    chain_min_display_sec=self.CHAIN_MIN_DISPLAY_SEC,
+                    chain_game_event_min_count=self.CHAIN_GAME_EVENT_MIN_COUNT,
+                    current_next=self._last_seen_next_2p,
+                    start_next=self._chain_start_next_2p,
+                    # 根治④ (2026-08-24): X1 (0.8秒最小表示) の除外。
+                    include_min_display_guard=(
+                        not self._enable_slide_exit_no_min_display
+                    ),
+                )
+            )
+            if _slide_1p_now and self._active_chain_1p is not None and not _suppress_slide_1p:
                 # 1P 側: slide 検知 → CHAIN 即終了
                 # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
                 self._stash_and_clear_active_chain("1P")
                 chain_ev_1p = None
-            if _slide_2p_now and self._active_chain_2p is not None:
+            if _slide_2p_now and self._active_chain_2p is not None and not _suppress_slide_2p:
                 # 2P 側: slide 検知 → CHAIN 即終了
                 # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
                 self._stash_and_clear_active_chain("2P")
@@ -5626,22 +5931,36 @@ class RecognitionPipeline:
 
     @staticmethod
     def _update_score_tracker(
-        tracker: ScoreTracker | None, frame: np.ndarray,
-    ) -> tuple[int, int | None]:
+        tracker: ScoreTracker | None,
+        frame: np.ndarray,
+        want_detail: bool = False,
+    ) -> tuple[
+        int, int | None,
+        "tuple[int | None, ...] | None", "tuple[float, ...] | None",
+    ]:
         """tracker があれば update。
 
-        戻り値は (delta (>=0 のみ), 今回 frame の生 score OCR 値)。
+        戻り値は (delta (>=0 のみ), 今回 frame の生 score OCR 値,
+        セル別ラベル, セル別 NCC)。
         修正1 (2026-07-30): 生 score 値は機能D (_check_formula_detected) が
         同一 frame・同一 side のスコア再読み取り (score_ocr.read_side) を
         避けるためのキャッシュとして呼出元から渡される。
-        戻り値の tuple 化は private staticmethod (呼出元はこのファイル内の
-        2 箇所のみ) のため backwards compat 上の懸念はない。
+        2026-08-24: want_detail=True (enable_formula_value_read) のとき
+        ScoreTracker.update_with_detail を使い、掛け算式実読が同一フレームの
+        セル分類結果を再利用できるようにする (False なら従来と同一経路で
+        detail は None、bit-identical)。
+        戻り値の arity 変更は private staticmethod (呼出元はこのファイル内の
+        2 箇所のみ) のため backwards compat 上の懸念はない (修正1 と同判断)。
         """
         if tracker is None:
-            return 0, None
-        d = tracker.update(frame)
+            return 0, None, None, None
+        if want_detail:
+            d, labels, confs = tracker.update_with_detail(frame)
+        else:
+            d = tracker.update(frame)
+            labels = confs = None
         delta = max(0, d.delta) if d.is_valid else 0
-        return delta, d.cur_score
+        return delta, d.cur_score, labels, confs
 
     def _apply_chain_score_early_fire(
         self,
@@ -5695,6 +6014,9 @@ class RecognitionPipeline:
         # (before) は prev_confirmed 由来で cold_start 等では信頼度が
         # 低い場合があるが、それは Step3(a)(b)(c) の答え合わせで拾う。
         self._start_chain_estimate(side, pseudo)
+        # 連鎖開始時 next_pair snapshot (2026-08-22 是正): enable_game_event_
+        # chain_exit 非依存で常に更新する (l.4520 コメント参照、
+        # enable_slide_exit_min_display_guard の corroboration が必要とする)。
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
@@ -5702,8 +6024,8 @@ class RecognitionPipeline:
                 self._chain_event_max_until_1p = (
                     time_sec + self._chain_max_hold_sec
                 )
-                self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
+            self._chain_start_next_1p = self._last_seen_next_1p
         else:
             self._active_chain_2p = pseudo
             self._chain_until_2p = chain_until
@@ -5711,8 +6033,8 @@ class RecognitionPipeline:
                 self._chain_event_max_until_2p = (
                     time_sec + self._chain_max_hold_sec
                 )
-                self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
+            self._chain_start_next_2p = self._last_seen_next_2p
 
     @staticmethod
     def _check_formula_detected(
@@ -5882,6 +6204,15 @@ class RecognitionPipeline:
         抑制する (偽イベント対策)。False を明示指定した場合のみ従来通り
         検証なしで chain_count=1 固定発火 (旧挙動, bit-identical)。
 
+        根治② (2026-08-24、STABLE凍結デッドロック): enable_chain_formula_
+        read_verify=True の場合、現フレームで掛け算式そのものが実読できて
+        いれば (FormulaReadResult.valid) 凍結盤面 simulate を通さず発火する
+        (mechanism="formula_read")。simulate 検証は「凍結盤面に消せる4連結が
+        無い=連鎖数0」と誤判定して本物の連鎖を却下する構造的欠陥があった
+        (実測 t=6697.5〜6701.7 の 4.17 秒握りつぶし)。実読できないフレームは
+        従来の simulate 検証にフォールバックする (検証の OR、W7 偽イベント
+        対策の網は維持)。
+
         Args:
             side: "1P" or "2P"
             time_sec: 現フレームの時刻。
@@ -5894,16 +6225,42 @@ class RecognitionPipeline:
             if self._active_chain_2p is not None:
                 return
         before = prev_confirmed.copy() if prev_confirmed is not None else Board()
-        chain_count, verified = self._resolve_formula_chain_count(before)
-        if chain_count is None:
-            return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
-        # 根治① (W7, 2026-08-13): 既に持っている検証済み ChainResult (verified)
-        # から calculate_chain_score() で推定スコアを充填する (追加 simulate
-        # ゼロ)。フラグ OFF または verified が None (検証 OFF 時の固定1発火)
-        # の場合は従来通り (0, 0, False) (bit-identical, backwards compat)。
-        total_score, base_score, score_estimated = (
-            self._fill_pseudo_chain_score(verified)
+        # 根治②: 実読検証 (詳細は docstring 参照)。
+        read_res = (
+            self._formula_last_read_1p if side == "1P"
+            else self._formula_last_read_2p
         )
+        accum = (
+            self._formula_accum_1p if side == "1P" else self._formula_accum_2p
+        )
+        read_fire = (
+            self._enable_chain_formula_read_verify
+            and read_res is not None
+            and bool(getattr(read_res, "valid", False))
+        )
+        if read_fire:
+            # 実読値ベース: 段累積器が既に確定した段数/素点を初期値に使う
+            # (発火時点では通常 1 段 / 未確定 0。以後は 4c' の
+            # enable_formula_chain_count_update が観測値で更新する)。
+            chain_count = max(1, accum.step_count if accum is not None else 1)
+            verified = None
+            total_score = accum.total_power if accum is not None else 0
+            base_score = total_score
+            score_estimated = False
+            mechanism = CHAIN_MECHANISM_FORMULA_READ
+        else:
+            chain_count, verified = self._resolve_formula_chain_count(before)
+            if chain_count is None:
+                return  # 起点盤面に連鎖が実在しない (検証ON) → 疑似発火を抑制
+            # 根治① (W7, 2026-08-13): 既に持っている検証済み ChainResult
+            # (verified) から calculate_chain_score() で推定スコアを充填する
+            # (追加 simulate ゼロ)。フラグ OFF または verified が None (検証
+            # OFF 時の固定1発火) の場合は従来通り (0, 0, False)
+            # (bit-identical, backwards compat)。
+            total_score, base_score, score_estimated = (
+                self._fill_pseudo_chain_score(verified)
+            )
+            mechanism = CHAIN_MECHANISM_FORMULA
         pseudo = ChainEvent(
             trigger_sec=time_sec,
             end_sec=(
@@ -5916,31 +6273,180 @@ class RecognitionPipeline:
             all_clear_bonus_applied=0,
             ojama_sent=0, leftover_score=0,
             is_all_clear=False,
-            mechanism=CHAIN_MECHANISM_FORMULA,
+            mechanism=mechanism,
             score_estimated=score_estimated,
         )
         chain_until = (
             time_sec + self._chain_hold_base_sec
             + self._chain_hold_per_step_sec * chain_count
         )
+        if read_fire:
+            # 根治②: 実読発火は初期 cc が小さく従来式では段周期 (≈1.4s) より
+            # 先に hold が切れるため、専用の最小 hold を適用する。
+            chain_until = max(
+                chain_until, time_sec + CHAIN_FORMULA_READ_HOLD_SEC,
+            )
         # 反復5 修正2 (2026-07-23): 疑似連鎖経路 (機能D 掛け算式早期発火) も
         # 物理推論スルーの対象にする。修正D: 検証済みなら precomputed_result
         # を渡して _start_chain_estimate 内での二重 simulate を避ける。
         self._start_chain_estimate(side, pseudo, precomputed_result=verified)
+        # 連鎖開始時 next_pair snapshot (2026-08-22 是正): enable_game_event_
+        # chain_exit 非依存で常に更新する (l.4529 コメント参照)。
         if side == "1P":
             self._active_chain_1p = pseudo
             self._chain_until_1p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_1p = time_sec + self._chain_max_hold_sec
-                self._chain_start_next_1p = self._last_seen_next_1p
             self._chain_entry_t_1p = time_sec
+            self._chain_start_next_1p = self._last_seen_next_1p
         else:
             self._active_chain_2p = pseudo
             self._chain_until_2p = chain_until
             if self._enable_game_event_chain_exit:
                 self._chain_event_max_until_2p = time_sec + self._chain_max_hold_sec
-                self._chain_start_next_2p = self._last_seen_next_2p
             self._chain_entry_t_2p = time_sec
+            self._chain_start_next_2p = self._last_seen_next_2p
+
+    def _read_formula_value(
+        self,
+        frame: "np.ndarray",
+        side: str,
+        cached_score_val: "int | None",
+        cell_labels: "tuple[int | None, ...] | None",
+        cell_confs: "tuple[float, ...] | None",
+    ) -> "object | None":
+        """根治① (2026-08-24): 掛け算式「左辺×右辺」を 1 サイド分実読する。
+
+        通常スコアが読めたフレーム (cached_score_val が非 None) は掛け算式と
+        排他なのでスキップ (コストゼロ)。セル分類は呼出元が
+        _update_score_tracker(want_detail=True) で得た結果を再利用し、
+        新規照合は「×」セル 1 枚のみ (score_ocr.ScoreOcr.read_formula_side)。
+
+        Returns:
+            FormulaReadResult | None (スキップ時 None)。
+        """
+        if self._score_ocr is None:
+            return None
+        if cached_score_val is not None:
+            return None  # 通常スコア表示中 (掛け算式と排他)
+        try:
+            return self._score_ocr.read_formula_side(
+                frame, side,  # type: ignore[arg-type]
+                digit_labels=cell_labels,
+                digit_confs=cell_confs,
+            )
+        except Exception:
+            return None  # fail-safe: 読取り失敗は「観測なし」に倒す
+
+    def _notify_formula_interlude(
+        self, side: str, time_sec: float, cached_score_val: "int | None",
+    ) -> None:
+        """幕間 (通常スコアが読めたフレーム) を段累積器へ届ける (根治⑤, Q-01)。
+
+        掛け算式と通常スコアは排他 (`_read_formula_value`) なので、
+        **通常スコアが読めた = 掛け算式は表示されていない**が確定する。
+        これが段の区切りの信号になる。
+
+        「読取り失敗」を幕間と誤認しないこと。`cached_score_val is not None`
+        (= 通常スコアが実際に読めた) のときだけ通知する。読めなかった場合は
+        掛け算式が出ているのか単に読めないのか区別できず、誤って通知すると
+        **存在しない段を積む** (過大方向の事故)。
+
+        Args:
+            side: "1P" / "2P"。
+            time_sec: 現フレーム時刻。
+            cached_score_val: 通常スコア OCR の結果 (読めなければ None)。
+        """
+        if not self._enable_formula_step_interlude:
+            return
+        if cached_score_val is None:
+            return
+        accum = self._formula_accum_1p if side == "1P" else self._formula_accum_2p
+        if accum is None:
+            return
+        accum.update(time_sec, _FORMULA_ABSENT, score_displayed=True)
+
+    def _apply_formula_step_update(
+        self, side: str, time_sec: float,
+    ) -> "ChainEvent | None":
+        """根治③ (2026-08-24): 段確定を進行中 formula 系イベントへ反映する。
+
+        呼出元 (update 4c') は段が新規確定したフレームのみ呼ぶ。
+        active_chain が formula 系 (mechanism=formula/formula_read) の場合に
+        限り、chain_count / total_score を段累積器の観測値へ引き上げ、
+        chain_hold と安全弁上限 (game-event モード時) を延長する。
+        baseline (puyo数減少検知) 等の実測イベントには触れない。
+
+        Returns:
+            更新後イベント (hold 窓内のとき)。それ以外は None。
+        """
+        from dataclasses import replace as _dc_replace
+        accum = (
+            self._formula_accum_1p if side == "1P" else self._formula_accum_2p
+        )
+        ev = self._active_chain_1p if side == "1P" else self._active_chain_2p
+        if accum is None or ev is None:
+            return None
+        if ev.mechanism not in (
+            CHAIN_MECHANISM_FORMULA, CHAIN_MECHANISM_FORMULA_READ,
+        ):
+            return None
+        new_cc = max(accum.step_count, ev.chain_count)
+        new_score = accum.total_power
+        adopt_score = new_score > ev.total_score
+        if new_cc <= ev.chain_count and not adopt_score:
+            return None  # 引き上げる観測なし
+        new_end = (
+            ev.trigger_sec + self._chain_hold_base_sec
+            + self._chain_hold_per_step_sec * new_cc
+        )
+        new_ev = _dc_replace(
+            ev,
+            chain_count=new_cc,
+            total_score=new_score if adopt_score else ev.total_score,
+            base_score=new_score if adopt_score else ev.base_score,
+            end_sec=max(new_end, ev.end_sec),
+            # 実読値を採用したら「観測値」になる (simulate 推定ではない)
+            score_estimated=False if adopt_score else ev.score_estimated,
+        )
+        # hold 延長: 段を観測した = 連鎖は継続中 (最強の直接証拠)。
+        # 少なくとも今から「段周期 + マージン」ぶんは CHAIN を維持する
+        # (CHAIN_FORMULA_READ_HOLD_SEC の定数コメント参照)。
+        hold_ext = time_sec + max(
+            self._chain_hold_base_sec + self._chain_hold_per_step_sec,
+            CHAIN_FORMULA_READ_HOLD_SEC,
+        )
+        if side == "1P":
+            self._active_chain_1p = new_ev
+            self._chain_until_1p = max(self._chain_until_1p, hold_ext)
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_1p = (
+                    time_sec + self._chain_max_hold_sec
+                )
+            eff_until = (
+                self._chain_event_max_until_1p
+                if (
+                    self._enable_game_event_chain_exit
+                    and self._chain_event_max_until_1p > self._chain_until_1p
+                )
+                else self._chain_until_1p
+            )
+        else:
+            self._active_chain_2p = new_ev
+            self._chain_until_2p = max(self._chain_until_2p, hold_ext)
+            if self._enable_game_event_chain_exit:
+                self._chain_event_max_until_2p = (
+                    time_sec + self._chain_max_hold_sec
+                )
+            eff_until = (
+                self._chain_event_max_until_2p
+                if (
+                    self._enable_game_event_chain_exit
+                    and self._chain_event_max_until_2p > self._chain_until_2p
+                )
+                else self._chain_until_2p
+            )
+        return new_ev if time_sec < eff_until else None
 
     def _start_chain_estimate(
         self,
@@ -8657,6 +9163,75 @@ def _is_game_event_chain_exit(
         return True
 
     return False
+
+
+def _should_suppress_slide_exit(
+    time_sec: float,
+    chain_entry_t: float,
+    chain_count: int,
+    chain_min_display_sec: float,
+    chain_game_event_min_count: int,
+    current_next: "tuple[int, int] | None",
+    start_next: "tuple[int, int] | None",
+    include_min_display_guard: bool = True,
+) -> bool:
+    """スライド誤検知抑制ガード (X1/X4 + NEXT値未変化 corroboration、2026-08-22)。
+
+    NextSlideDetector の pixel diff は連鎖演出 (発光/背景明滅等) にも反応し、
+    連鎖中に約1.37秒周期で誤検知することが計装で判明した
+    (docs/KNOWN_WEAKNESSES.md 根治対応、scripts/_diag_slide_false_positive_
+    2026-08-22.py)。X1/X4 (_should_suppress_game_event_exit と同一条件) に
+    加えて、より根本的な corroboration として「NextDetector が実際に観測した
+    next_pair が CHAIN 開始時から変化していない」場合も抑止する。ピクセル差分
+    (ノイズに弱い) と色分類済み next 値 (100%精度確認済、
+    project_next_detector_perfect_accuracy.md) の 2 信号が食い違う場合は
+    後者を信じる設計 (信号を殺すのではなく、独立信号で裏取りするだけ)。
+
+    実測 (t=6700-6720、1P 15連鎖区間、scripts/_diag_slide_exit_guard_fix_
+    2026-08-22.py): X1/X4 単独では 10 件中 1 件しか抑止できなかった
+    (誤検知のたび chain_tracker が新規 ChainEvent を発行して chain_entry_t が
+    リセットされ、1.37秒周期 > 0.8秒 X1 閾値のため無力化していた)。
+    本 corroboration 追加により、NEXT 値が真に変化するまで残り 9 件を
+    全て抑止できることを確認した (陽性対照: 抑止を外すと再現)。
+
+    Args:
+        time_sec: 現在の動画内時刻 (秒)。
+        chain_entry_t: CHAIN (再)突入時の time_sec。
+        chain_count: 連鎖数 (再点火直後は暫定値のことがある)。
+        chain_min_display_sec: X1 の最小表示時間 (秒)。
+        chain_game_event_min_count: X4 の最小連鎖数。
+        current_next: 直近で NextDetector が観測した安定 next_pair
+            (self._last_seen_next_1p/2p 相当)。
+        start_next: CHAIN (再)突入時に記録した next_pair snapshot
+            (self._chain_start_next_1p/2p 相当)。
+        include_min_display_guard: X1 (最小表示 0.8 秒) を抑止条件に含めるか
+            (2026-08-24 追加、enable_slide_exit_no_min_display の実装)。
+            user 伝授 (reference_chain_end_absolute_signals_2026-08-21)
+            「最低表示 0.8 秒ガードは ON にしない」に従い False にすると
+            X1 を外し、X4 (短連鎖) + NEXT 値 corroboration のみで判定する。
+            default True = 従来挙動完全維持 (bit-identical, backwards compat)。
+
+    Returns:
+        True = スライド即終了を抑止する。
+    """
+    if include_min_display_guard:
+        if _should_suppress_game_event_exit(
+            time_sec=time_sec,
+            chain_entry_t=chain_entry_t,
+            chain_count=chain_count,
+            chain_min_display_sec=chain_min_display_sec,
+            chain_game_event_min_count=chain_game_event_min_count,
+        ):
+            return True
+    else:
+        # X1 (最小表示時間) を除外し、X4 (短連鎖抑止) のみ維持する。
+        if chain_count < chain_game_event_min_count:
+            return True
+    # NEXT 値が CHAIN 開始時から変化していない = 実際の置きではなく演出由来の
+    # ピクセルノイズの可能性が高いため抑止する (corroboration 不成立)。
+    return not _is_game_event_chain_exit(
+        current_next=current_next, start_next=start_next,
+    )
 
 
 def _should_suppress_game_event_exit(

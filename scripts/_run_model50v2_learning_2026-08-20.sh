@@ -16,15 +16,15 @@ cd /mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer || exit 1
 exec >> logs/model50v2_learning_2026-08-20.log 2>&1
 
 NPZ_DIR=data/indicators_v2/boards_lean_model50v2_2026-08-20
-CSV_DIR=data/verify/labeled_win_model50v2_2026-08-20
-OUT_DIR=data/verify/retrain_model50v2_2026-08-20
-GATE_DIR=data/verify/quality_gate_model50v2_2026-08-20
+CSV_DIR=data/verify/labeled_win_model62_2026-08-21
+OUT_DIR=data/verify/retrain_model62_2026-08-21
+GATE_DIR=data/verify/quality_gate_model62_2026-08-21
 
 echo "=== 学習工程 start $(date +%F_%T) ==="
 N=$(ls "$NPZ_DIR"/*.npz 2>/dev/null | wc -l)
 echo "[入力] npz $N 本"
-if [ "$N" -lt 48 ]; then
-  echo "[中止] 48本揃っていない ($N 本)。収集完了を待つこと。"
+if [ "$N" -lt 62 ]; then
+  echo "[中止] 62本揃っていない ($N 本)。収集完了を待つこと。"
   echo "  欠測のまま学習すると前回結果と比較できなくなる (手順書の警告)"
   exit 1
 fi
@@ -38,14 +38,14 @@ echo "--- 2. 学習CSVビルド $(date +%T) ---"
 mkdir -p "$CSV_DIR"
 PYTHONPATH=. ./venv/bin/python -m scripts.build_labeled_win_from_npz \
     --npz-dir "$NPZ_DIR" \
-    --out "$CSV_DIR/labeled_win_model50v2.csv" \
+    --out "$CSV_DIR/labeled_win_model62.csv" \
     --profile full \
     --exclude-match-end-locked
 echo "  rc=$?"
 
 echo "--- 3. 再学習・評価 $(date +%T) ---"
 PYTHONPATH=. ./venv/bin/python scripts/_retrain148_2026-08-14.py \
-    --csv "$CSV_DIR/labeled_win_model50v2.csv" \
+    --csv "$CSV_DIR/labeled_win_model62.csv" \
     --out-dir "$OUT_DIR"
 echo "  rc=$?"
 

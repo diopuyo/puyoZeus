@@ -37,6 +37,46 @@ def test_panel_layout_regions_cover_canvas_without_gap_or_overlap() -> None:
     assert sy == vao.PANEL_CONTENT_H and sy + sh == vao.PANEL_CANVAS_H
 
 
+def test_panel_layout_regions_default_matches_legacy_values() -> None:
+    """既定呼び出し (subtitle_h指定なし) は従来の4領域サイズと完全一致する
+
+    (2026-08-21 グラフ拡張のための subtitle_h 引数追加。受け入れ条件#2:
+    既定の呼び出しが従来値と完全一致することを保証する回帰テスト)。
+    """
+    regions = vao.panel_layout_regions()
+    assert regions["video"] == (0, 0, 1408, 792)
+    assert regions["graph"] == (0, 792, 1408, 148)
+    assert regions["info"] == (1408, 0, 512, 940)
+    assert regions["subtitle"] == (0, 940, 1920, 140)
+
+
+def test_panel_layout_regions_subtitle_h_zero_covers_canvas_without_gap() -> None:
+    """subtitle_h=0 でも4領域が 1920x1080 を隙間・重複なく分割する
+
+    (2026-08-21 「グラフ広げて」対応。字幕帯を無くした分は左下グラフと
+    右の情報パネルへ丸ごと回る)。
+    """
+    regions = vao.panel_layout_regions(subtitle_h=0)
+    vx, vy, vw, vh = regions["video"]
+    gx, gy, gw, gh = regions["graph"]
+    ix, iy, iw, ih = regions["info"]
+    sx, sy, sw, sh = regions["subtitle"]
+    # 字幕帯は高さ0 (存在しない) になる
+    assert sh == 0
+    assert sy == vao.PANEL_CANVAS_H
+    # グラフ・情報パネルはキャンバス下端まで伸びる
+    assert gy + gh == vao.PANEL_CANVAS_H
+    assert iy + ih == vao.PANEL_CANVAS_H
+    assert gh == 288  # 148 + 140 (字幕帯分がそのまま加算される)
+    assert ih == 1080  # 940 + 140
+    # 隙間・重複なく分割する不変条件は subtitle_h に関わらず維持される
+    assert vw == gw and vx == gx == 0
+    assert vy == 0 and gy == vh
+    assert ix == vw == gw and iy == 0
+    assert ix + iw == vao.PANEL_CANVAS_W
+    assert sx == 0 and sw == vao.PANEL_CANVAS_W
+
+
 def test_panel_layout_video_region_keeps_16_9_aspect() -> None:
     """左上映像領域は元動画と同じ 16:9 を維持する (引き伸ばし歪み防止)。"""
     vx, vy, vw, vh = vao.panel_layout_regions()["video"]

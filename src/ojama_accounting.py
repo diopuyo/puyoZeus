@@ -90,6 +90,16 @@ CHAIN_TOTAL_MIN_SCORE: int = CHAIN_FIRE_MIN_SCORE  # = 40
 # 実測: ぷよぷよeスポーツ上級者試合で最大でも約 200,000 点以内
 CHAIN_TOTAL_SANITY_MAX: int = 200_000
 
+# cap 切り捨てなし並行帳簿 (pending_p1/p2_uncapped) のサニティ上限 (2026-08-24)。
+# PENDING_ABS_CAP(216) は表示/指標用の絶対上限として妥当だが、致死判定
+# (kill_override) の「相殺の引き算」に使うと、実送付517個が216に丸められた後で
+# 相手の720個との差を取る形になり、架空の攻撃 (720-216=504、真値は 720-517=203)
+# が生まれる (memory project_pm100_display_flip_2026-08-24 根因②)。
+# 並行帳簿は cap で切らず、既存サニティ定数 CHAIN_TOTAL_SANITY_MAX
+# (1連鎖の得点上限200,000点) をおじゃま換算した値だけを防波堤にする
+# (新しいマジックナンバーを導入しない。200,000点 ÷ 70点/個 = 2,857個)。
+PENDING_UNCAPPED_SANITY_MAX: int = CHAIN_TOTAL_SANITY_MAX // OJAMA_RATE_STANDARD
+
 # 連鎖終了後 score None が続いた場合のタイムアウトフレーム数(≒ 1秒 @ 30fps)
 CHAIN_END_PENDING_TIMEOUT_FRAMES: int = 30
 
@@ -203,6 +213,14 @@ class OjamaAccountSnapshot:
     chain_end_triggered_p2: bool = False  # この時刻に連鎖終了イベントが立ったか (2P)
     score_at_chain_start_p1: int | None = None   # 連鎖開始直前 score (1P)
     score_at_chain_start_p2: int | None = None   # 連鎖開始直前 score (2P)
+    # --- cap切り捨てなし並行帳簿 (2026-08-24、kill判定入力専用。末尾追加) ---
+    # PENDING_ABS_CAP(216) の切り捨てを行わずに同じ相殺/落下規則で回した値。
+    # 表示/指標には使わない (従来の pending_p1/p2 を維持)。cap 適用後に相殺が
+    # 走ると capped 側は「架空の余剰」を相手へ送るため、本フィールドは
+    # pending_p1/p2 より小さくなることがある (どちらが大きいかは履歴依存)。
+    # 既定 0 = 本 dataclass を直接構築する旧来コード (テスト等) では未使用のまま。
+    pending_p1_uncapped: int = 0
+    pending_p2_uncapped: int = 0
 
 
 # ============================
@@ -217,6 +235,10 @@ class _SideState:
     total_offset: int = 0               # 累積相殺量
     total_dropped: int = 0              # 累積落下 drain 量
     forecast_incoming: int = 0          # 自分に向かう予告お邪魔個数
+    # cap切り捨てなし並行帳簿 (2026-08-24)。forecast_incoming と同じ相殺/落下
+    # 規則で更新するが PENDING_ABS_CAP で切らない (サニティ上限は
+    # PENDING_UNCAPPED_SANITY_MAX のみ)。kill_override の相殺の引き算専用。
+    forecast_incoming_uncapped: int = 0
     # --- 連鎖終了検知 ---
     chain_active: bool = False           # 連鎖中フラグ
     score_at_chain_start: int | None = None  # 連鎖開始直前の score (last_valid_score から設定)
@@ -506,6 +528,14 @@ class OjamaAccountingTracker:
             t_sec: 現在時刻 (秒)。
         """
         s = self._side(side)
+        # (2026-08-24 並行帳簿) cap切り捨てなし側も同じ落下規則で drain する。
+        # capped 側の早期 return (forecast<=0) より前に行う: cap 由来の乖離で
+        # capped=0 / uncapped>0 になっても実際の落下は起きるため。drain 量は
+        # 各帳簿の残量から独立に計算する (capped が 216 で頭打ちの間、実残量
+        # 517 側は 30個/手 で減り続けるのが物理的に正しい)。
+        if s.forecast_incoming_uncapped > 0:
+            s.forecast_incoming_uncapped -= min(
+                THEORY_DROP_PER_TURN, s.forecast_incoming_uncapped)
         if s.forecast_incoming <= 0:
             return
         drain = min(THEORY_DROP_PER_TURN, s.forecast_incoming)
@@ -703,6 +733,19 @@ class OjamaAccountingTracker:
         s.forecast_incoming, other.forecast_incoming = cancel_own_pending_then_send_surplus(
             gen, s.forecast_incoming, other.forecast_incoming,
         )
+        # (2026-08-24 並行帳簿) cap切り捨てなし側にも同一 gen で同じ相殺を適用。
+        # capped 側が 216 に丸められた後だと余剰 (gen - 216) が架空の攻撃として
+        # 相手へ送られるが、こちらは実額 (例: 517) で相殺するため余剰が正しく
+        # 小さくなる (kill_override の入力専用、根因② project_pm100_display_
+        # flip_2026-08-24)。サニティ上限のみ適用 (下の cap 節参照)。
+        (s.forecast_incoming_uncapped,
+         other.forecast_incoming_uncapped) = cancel_own_pending_then_send_surplus(
+            gen, s.forecast_incoming_uncapped, other.forecast_incoming_uncapped,
+        )
+        s.forecast_incoming_uncapped = min(
+            s.forecast_incoming_uncapped, PENDING_UNCAPPED_SANITY_MAX)
+        other.forecast_incoming_uncapped = min(
+            other.forecast_incoming_uncapped, PENDING_UNCAPPED_SANITY_MAX)
         s.total_offset += canceled
         surplus = gen - canceled
         logger.info(
@@ -951,6 +994,7 @@ class OjamaAccountingTracker:
             label, s.forecast_incoming, s.leftover, t_sec,
         )
         s.forecast_incoming = 0
+        s.forecast_incoming_uncapped = 0  # 並行帳簿も試合境界で必ずゼロ (2026-08-24)
         s.leftover = 0
         s.chain_active = False
         s.score_at_chain_start = None
@@ -1083,6 +1127,9 @@ class OjamaAccountingTracker:
             chain_end_triggered_p2=self._p2.chain_end_triggered,
             score_at_chain_start_p1=self._p1.score_at_chain_start,
             score_at_chain_start_p2=self._p2.score_at_chain_start,
+            # cap切り捨てなし並行帳簿 (2026-08-24、kill判定入力専用)
+            pending_p1_uncapped=self._p1.forecast_incoming_uncapped,
+            pending_p2_uncapped=self._p2.forecast_incoming_uncapped,
         )
 
 
@@ -1099,6 +1146,7 @@ __all__ = [
     "ON_FIELD_CAP",
     "PENDING_HARD_CAP",
     "PENDING_ABS_CAP",
+    "PENDING_UNCAPPED_SANITY_MAX",
     "CHAIN_COALESCE_WINDOW_SEC",
     "K_SETTLE_FRAMES",
     "OjamaAccountSnapshot",

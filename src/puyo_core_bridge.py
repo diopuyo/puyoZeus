@@ -42,6 +42,18 @@ import 自体は失敗しない (`try/except ImportError` で optional import)�
   全件」に個別呼び出しされていた `_potential_fire_power_value`
   (実測: tied件数中央値10・最大22件、往復の主要コストと判明) を1回に
   統合するための API (2026-08-13 追加)。
+
+## 2026-08-21 追加 (v3.3、選択ロジック全体のRust融合)
+
+- `select_build_placement`: `scripts/mc_counter_estimator.py::
+  _select_build_placement` の選択ロジック全体 (22配置列挙+連鎖判定+
+  current_max_chain/potential_fire_power の2段tie-break) を1回のnative
+  呼び出しに融合する。従来は毎手最大3回のPython<->Rust往復と、往復ごとの
+  候補盤面ぶんのBoardオブジェクト生成 (最大44個/手) が必要だったが、
+  本関数は途中候補を一切Python境界に出さず、選ばれた1盤面のみを返す
+  (memory `project_counter_reach_cost_breakdown_2026-08-21` の実測根拠、
+  700万盤面規模のMCロールアウトのうち75%を占めていたtie-break経路の
+  往復・Board生成コストを削減する狙い)。
 """
 from __future__ import annotations
 
@@ -120,6 +132,30 @@ class BeamSearchResult:
     best_score: int
     best_path: "list[tuple[int, int]]"
     best_score_per_depth: "list[int]"
+
+
+@dataclass(frozen=True)
+class FrontierEntry:
+    """ビームサーチのフロンティア1件 (盤面+running_best、2026-08-21 追加、
+    `exact_shallow_search`/`beam_search_continue` の継続用)。"""
+    board: Board
+    running_best: int
+
+
+@dataclass(frozen=True)
+class BeamSearchWithFrontierResult:
+    """フロンティア付きビームサーチ結果 (2026-08-21 追加)。
+
+    `BeamSearchResult` に `final_frontier` (探索終了時点の全候補) を
+    加えたもの。`beam_search` は毎ロールアウトの高頻度呼び出しのため
+    フロンティアのシリアライズコストを避けて `BeamSearchResult` のまま
+    (通常呼び出しへの影響ゼロ)、`exact_shallow_search`/`beam_search_
+    continue` (呼び出し頻度が低い/1回で深い探索を担う) のみ本型を返す。
+    """
+    best_score: int
+    best_path: "list[tuple[int, int]]"
+    best_score_per_depth: "list[int]"
+    final_frontier: "list[FrontierEntry]"
 
 
 def _grid_to_flat_list(board: Board) -> "list[int]":
@@ -667,6 +703,58 @@ def enumerate_and_simulate_placements(
     return results
 
 
+def select_build_placement(
+    board: Board,
+    pair: "tuple[int, int]",
+    drops: "list[tuple[int, int]]",
+    beam_k: int,
+    exclude_hidden_row_from_pop: bool = False,
+) -> "Board | None":
+    """`scripts/mc_counter_estimator.py::_select_build_placement` の選択
+    ロジック全体 (22配置列挙+連鎖判定+2段tie-break) を1回のnative呼び出しに
+    融合する (2026-08-21 追加、v3.3 選択ロジックの境界コスト削減 続き)。
+
+    従来は本関数呼び出し元が `enumerate_and_simulate_placements` (1回) +
+    `max_chain_after_drops_for_boards` (1回) + `potential_fire_power_raw_
+    for_boards` (1回) を個別に呼び、そのたびに候補盤面ぶんの Board
+    オブジェクトを生成していた (最大44個/手、実測の主要コスト、memory
+    `project_counter_reach_cost_breakdown_2026-08-21` 参照)。本関数は
+    native側でこの3回を1回に統合し、Python側には選ばれた1盤面のみを渡す
+    (途中候補は一切 Board 化されない)。
+
+    native 未導入環境向けのフォールバックは持たない (呼び出し元が
+    `NATIVE_AVAILABLE` を判定し、False の場合は既存の個別呼び出し経路
+    [`enumerate_and_simulate_placements` 等] を使うこと、backwards compat)。
+
+    Args:
+        board: 判定対象の盤面 (破壊しない)。
+        pair: 設置するペア (top, bot)。
+        drops: `[(col, color), ...]` の候補リスト (通常は列×色30通り)。
+        beam_k: potential_fire_power 1手目で残す上位候補数。
+        exclude_hidden_row_from_pop: 幽霊連鎖ルール (既定 False、呼び出し元
+            `_select_build_placement` の既存呼び出しは全て既定Falseで統一)。
+
+    Returns:
+        選択された配置後盤面。置き場所が全く無い場合は None。値は
+        `enumerate_and_simulate_placements`+`max_chain_after_drops_for_
+        boards`+`potential_fire_power_raw_for_boards` を個別に呼んで同じ
+        tie-break ロジックを適用した場合と完全一致する
+        (`tests/test_puyo_core_parity.py` で確認)。
+    """
+    assert NATIVE_AVAILABLE, (
+        "select_build_placement は native 未導入環境では呼び出せません "
+        "(呼び出し元が NATIVE_AVAILABLE を判定して既存の個別呼び出し経路に"
+        "フォールバックすること)。"
+    )
+    flat = _grid_to_flat_list(board)
+    raw = _native.select_build_placement_py(
+        flat, pair[0], pair[1], drops, beam_k, exclude_hidden_row_from_pop,
+    )
+    if raw is None:
+        return None
+    return _flat_list_to_board(raw)
+
+
 # ============================
 # ビームサーチ
 # ============================
@@ -678,6 +766,9 @@ def beam_search(
     beam_width: int,
     exclude_hidden_row_from_pop: bool = False,
     num_threads: "int | None" = None,
+    use_exact_score: bool = False,
+    max_height: "int | None" = None,
+    early_exit_score: "int | None" = None,
 ) -> BeamSearchResult:
     """リアルタイム応手探索ビームサーチ (深さ=len(pairs)、幅=beam_width)。
 
@@ -690,65 +781,184 @@ def beam_search(
             `src.production_config.GHOST_CHAIN_RULE_ENABLED` を明示的に渡す)。
         num_threads: 拡張利用時の rayon 並列スレッド数 (None=単スレッド)。
             フォールバック経路では無視する (常に単スレッド)。
+        use_exact_score: True で評価に厳密得点 `exact_score` (連結ボーナス
+            反映) を使う (既定 False = 従来の `score_approx` 近似、
+            2026-08-21 追加、backwards compat)。`simulate_chain` は
+            `score_approx`/`exact_score` を常に両方計算しているため
+            (native/Python フォールバックとも)、この切替自体に追加の
+            シミュレーションコストは発生しない。
+        max_height: Some(h) で盤面のいずれかの列が高さ h 以上になった候補を
+            枝刈りする (既定 None = 枝刈りしない、2026-08-21 追加、
+            backwards compat)。
+        early_exit_score: Some(t) で running_best が t 以上になった時点で
+            打ち切る (既定 None = 打ち切らない、2026-08-21 追加、
+            backwards compat)。「閾値到達確率」用途限定 (呼び出し元
+            `scripts/mc_counter_estimator.py` の `early_exit_at_threshold`
+            docstring 参照、mean/percentile 用途には使わないこと)。
     """
-    if NATIVE_AVAILABLE:
-        flat = _grid_to_flat_list(board)
-        r = _native.beam_search_py(
-            flat, list(pairs), beam_width, exclude_hidden_row_from_pop, num_threads,
-        )
-        return BeamSearchResult(
-            best_score=r.best_score,
-            best_path=list(r.best_path),
-            best_score_per_depth=list(r.best_score_per_depth),
-        )
-    return _beam_search_fallback(board, pairs, beam_width, exclude_hidden_row_from_pop)
+    result = _beam_search_dispatch(
+        [(board, 0)], 0, pairs, beam_width, exclude_hidden_row_from_pop, num_threads,
+        use_exact_score, max_height, early_exit_score,
+    )
+    return BeamSearchResult(
+        best_score=result.best_score, best_path=result.best_path,
+        best_score_per_depth=result.best_score_per_depth,
+    )
 
 
-def _beam_search_fallback(
-    board: Board,
+def _beam_search_dispatch(
+    initial_frontier: "list[tuple[Board, int]]",
+    global_best_in: int,
     pairs: "list[tuple[int, int]]",
     beam_width: int,
     exclude_hidden_row_from_pop: bool,
-) -> BeamSearchResult:
-    """拡張未導入環境向け Python フォールバック (低速、正当性優先)。
-
-    ネイティブ側 `native/puyo_core/src/beam.rs::beam_search` と同一の
-    アルゴリズム (running max 方式) を Python で複製する。
+    num_threads: "int | None",
+    use_exact_score: bool,
+    max_height: "int | None",
+    early_exit_score: "int | None",
+) -> BeamSearchWithFrontierResult:
+    """`beam_search`/`beam_search_continue` 共通の native/フォールバック
+    振り分け本体 (2026-08-21 追加、可読性のため抽出)。
     """
-    frontier: "list[tuple[Board, int, int, tuple[int,int] | None]]" = [
-        (board, 0, -1, None),
-    ]
-    # history[d] = そのフロンティア (親indexは1つ前の history[d-1] を指す)
-    history: "list[list[tuple[Board, int, int, tuple[int,int] | None]]]" = [frontier]
-    best_score_per_depth: "list[int]" = []
-    global_best = 0
+    if NATIVE_AVAILABLE:
+        frontier_py = [
+            _native.FrontierEntryPy(grid=_grid_to_flat_list(b), running_best=rb)
+            for b, rb in initial_frontier
+        ]
+        r = _native.beam_search_continue_py(
+            frontier_py, global_best_in, list(pairs), beam_width, exclude_hidden_row_from_pop,
+            num_threads, use_exact_score, max_height, early_exit_score,
+        )
+        return BeamSearchWithFrontierResult(
+            best_score=r.best_score,
+            best_path=list(r.best_path),
+            best_score_per_depth=list(r.best_score_per_depth),
+            final_frontier=[
+                FrontierEntry(board=_flat_list_to_board(f.grid), running_best=f.running_best)
+                for f in r.final_frontier
+            ],
+        )
+    return _beam_search_from_frontier_fallback(
+        initial_frontier, global_best_in, pairs, beam_width, exclude_hidden_row_from_pop,
+        use_exact_score, max_height, early_exit_score,
+    )
 
-    for pair in pairs:
-        prev = history[-1]
-        candidates: "list[tuple[Board, int, int, tuple[int,int] | None]]" = []
-        if prev:
-            for idx, (b, running_best, _parent, _placement) in enumerate(prev):
-                for col, rotation, placed in enumerate_placements(b, pair, filter_dead=True):
-                    sim = simulate_chain(placed, exclude_hidden_row_from_pop)
-                    new_best = max(running_best, sim.score_approx)
-                    candidates.append((sim.final_board, new_best, idx, (col, rotation)))
-        if not candidates:
-            best_score_per_depth.append(global_best)
-            history.append([])
-            continue
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        candidates = candidates[:beam_width]
-        depth_best = max(c[1] for c in candidates)
-        global_best = max(global_best, depth_best)
-        best_score_per_depth.append(global_best)
-        history.append(candidates)
 
+def exact_shallow_search(
+    board: Board,
+    pairs: "list[tuple[int, int]]",
+    exclude_hidden_row_from_pop: bool = False,
+    use_exact_score: bool = True,
+    max_height: "int | None" = None,
+    early_exit_score: "int | None" = None,
+) -> BeamSearchWithFrontierResult:
+    """ama方式の浅い完全探索 (2026-08-21 追加、user指示「両方併用」)。
+
+    `beam_search` と異なり幅の打ち切りを一切行わない (`pairs` の深さだけ
+    完全に列挙する、`scripts/mc_counter_estimator.py::_rollout_once_
+    exact_shallow` から呼ばれる想定)。返り値の `final_frontier` を
+    `beam_search_continue` に渡すことで、深さ2までは完全探索・深さ3以降を
+    ビームサーチにする「両方併用」を実現できる。
+
+    Args: `beam_search` と同一意味論 (beam_width は無い、常に完全探索)。
+    """
+    if NATIVE_AVAILABLE:
+        flat = _grid_to_flat_list(board)
+        r = _native.exact_shallow_search_py(
+            flat, list(pairs), exclude_hidden_row_from_pop, use_exact_score, max_height,
+            early_exit_score,
+        )
+        return BeamSearchWithFrontierResult(
+            best_score=r.best_score,
+            best_path=list(r.best_path),
+            best_score_per_depth=list(r.best_score_per_depth),
+            final_frontier=[
+                FrontierEntry(board=_flat_list_to_board(f.grid), running_best=f.running_best)
+                for f in r.final_frontier
+            ],
+        )
+    return _beam_search_from_frontier_fallback(
+        [(board, 0)], 0, pairs, _EXHAUSTIVE_BEAM_WIDTH_FALLBACK, exclude_hidden_row_from_pop,
+        use_exact_score, max_height, early_exit_score,
+    )
+
+
+def beam_search_continue(
+    frontier: "list[FrontierEntry]",
+    global_best_in: int,
+    pairs: "list[tuple[int, int]]",
+    beam_width: int,
+    exclude_hidden_row_from_pop: bool = False,
+    num_threads: "int | None" = None,
+    use_exact_score: bool = True,
+    max_height: "int | None" = None,
+    early_exit_score: "int | None" = None,
+) -> BeamSearchWithFrontierResult:
+    """既存フロンティアから探索を継続する (2026-08-21 追加)。
+
+    `exact_shallow_search`/本関数自身の `final_frontier` を渡すことで、
+    「深さ2まで完全探索→深さ3以降ビームサーチ」を実現する
+    (`scripts/mc_counter_estimator.py::_rollout_once_beam` から呼ばれる、
+    深さ1〜2限定の部分木共有キャッシュにも使う)。
+    """
+    initial_frontier = [(f.board, f.running_best) for f in frontier]
+    return _beam_search_dispatch(
+        initial_frontier, global_best_in, pairs, beam_width, exclude_hidden_row_from_pop,
+        num_threads, use_exact_score, max_height, early_exit_score,
+    )
+
+
+# ama方式の完全探索 (`exact_shallow_search`) のフォールバック経路が使う
+# 「実質無制限」幅 (2026-08-21 追加)。native経路は `usize::MAX` を使うが
+# Python 側は `list[:beam_width]` の負でないスライスとして扱える大きさで
+# 十分 (22^4=234,256 が exact_shallow の想定深さ [<=3] を大きく超える安全
+# マージン、マジックナンバーではなく「深さ4まで完全探索しても余裕を持って
+# 超えない」ことから導出した値)。
+_EXHAUSTIVE_BEAM_WIDTH_FALLBACK: int = 22 ** 4
+
+
+def _expand_one_depth_fallback(
+    prev: "list[tuple[Board, int, int, tuple[int,int] | None]]",
+    pair: "tuple[int, int]",
+    exclude_hidden_row_from_pop: bool,
+    use_exact_score: bool,
+    max_height: "int | None",
+    beam_width: int,
+) -> "list[tuple[Board, int, int, tuple[int,int] | None]]":
+    """1 深さ分の展開+高さ枝刈り+幅打ち切り (`beam::expand_one_depth` の
+    Python フォールバック複製、2026-08-21 追加)。
+    """
+    candidates: "list[tuple[Board, int, int, tuple[int,int] | None]]" = []
+    for idx, (b, running_best, _parent, _placement) in enumerate(prev):
+        for col, rotation, placed in enumerate_placements(b, pair, filter_dead=True):
+            sim = simulate_chain(placed, exclude_hidden_row_from_pop)
+            score = sim.exact_score if use_exact_score else sim.score_approx
+            new_best = max(running_best, score)
+            candidates.append((sim.final_board, new_best, idx, (col, rotation)))
+    if max_height is not None:
+        candidates = [
+            c for c in candidates
+            if max(c[0].height_of(col) for col in range(BOARD_COLS)) < max_height
+        ]
+    if not candidates:
+        return candidates
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    return candidates[:beam_width]
+
+
+def _finalize_beam_fallback_result(
+    history: "list[list[tuple[Board, int, int, tuple[int,int] | None]]]",
+    best_score_per_depth: "list[int]",
+) -> BeamSearchWithFrontierResult:
+    """最終フロンティアから最良ノードを選び手順復元する (`beam::
+    finalize_result` の Python フォールバック複製、2026-08-21 追加)。
+    """
     best_depth = len(history) - 1
     while not history[best_depth] and best_depth > 0:
         best_depth -= 1
     last = history[best_depth]
     if not last:
-        return BeamSearchResult(best_score=0, best_path=[], best_score_per_depth=best_score_per_depth)
+        return BeamSearchWithFrontierResult(0, [], best_score_per_depth, [])
     best_local_idx = max(range(len(last)), key=lambda i: last[i][1])
     best_score = last[best_local_idx][1]
 
@@ -761,6 +971,52 @@ def _beam_search_fallback(
         cur_depth -= 1
     path.reverse()
 
-    return BeamSearchResult(
-        best_score=best_score, best_path=path, best_score_per_depth=best_score_per_depth,
-    )
+    final_frontier = [FrontierEntry(board=b, running_best=rb) for b, rb, _p, _pl in last]
+    return BeamSearchWithFrontierResult(best_score, path, best_score_per_depth, final_frontier)
+
+
+def _beam_search_from_frontier_fallback(
+    initial_frontier: "list[tuple[Board, int]]",
+    global_best_in: int,
+    pairs: "list[tuple[int, int]]",
+    beam_width: int,
+    exclude_hidden_row_from_pop: bool,
+    use_exact_score: bool,
+    max_height: "int | None",
+    early_exit_score: "int | None",
+) -> BeamSearchWithFrontierResult:
+    """拡張未導入環境向け Python フォールバック本体 (低速、正当性優先、
+    2026-08-21 追加、`beam::beam_search_from_frontier` と同一アルゴリズム)。
+    `beam_search`/`exact_shallow_search`/`beam_search_continue` 共通。
+    """
+    frontier: "list[tuple[Board, int, int, tuple[int,int] | None]]" = [
+        (b, rb, -1, None) for b, rb in initial_frontier
+    ]
+    history: "list[list[tuple[Board, int, int, tuple[int,int] | None]]]" = [frontier]
+    best_score_per_depth: "list[int]" = []
+    global_best = global_best_in
+
+    if early_exit_score is not None and global_best >= early_exit_score:
+        return _finalize_beam_fallback_result(history, best_score_per_depth)
+
+    for pair in pairs:
+        prev = history[-1]
+        if not prev:
+            best_score_per_depth.append(global_best)
+            history.append([])
+            continue
+        candidates = _expand_one_depth_fallback(
+            prev, pair, exclude_hidden_row_from_pop, use_exact_score, max_height, beam_width,
+        )
+        if not candidates:
+            best_score_per_depth.append(global_best)
+            history.append([])
+            continue
+        depth_best = max(c[1] for c in candidates)
+        global_best = max(global_best, depth_best)
+        best_score_per_depth.append(global_best)
+        history.append(candidates)
+        if early_exit_score is not None and global_best >= early_exit_score:
+            break
+
+    return _finalize_beam_fallback_result(history, best_score_per_depth)

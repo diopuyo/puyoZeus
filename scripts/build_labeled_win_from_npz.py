@@ -423,9 +423,15 @@ BROKEN_VIDEOS: tuple[str, ...] = ("c26", "c30", "c58", "c69")
 # で担保)。幽霊連鎖ルール (`_SHARED_SIMULATOR` の設定) と揃えるため、native
 # 呼び出しは必ず exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED を
 # 明示する。dig_resistance のおじゃま落下 (`ChainSimulator.drop_ojama`) は
-# 乱数 (端数列のランダム選択) を含むため native化せず既存 Python 実装のまま
-# 保持する (載せ替え対象は連鎖シミュレーション部分のみ、既存の非決定性は
-# この載せ替えでは変えない・直さない)。
+# native化せず既存 Python 実装のまま保持する (載せ替え対象は連鎖
+# シミュレーション部分のみ)。
+# 【2026-08-25 W39 根治で更新】端数列のランダム選択は当初「変えない・
+# 直さない」としていたが、有利不利スコアの実行間非決定 (最大±12.34点) の
+# 根因と確定したため、`iv._dig_resistance_one` / 本ファイル
+# `_native_dig_resistance_one` の双方で盤面由来の決定論的シード
+# (`iv._expected_fire_seed(board) ^ n_ojama`) を渡す方式に変更済み
+# (docs/KNOWN_WEAKNESSES.md W39)。収集runごとの dig_resistance/ukeyasusa
+# 4列の揺れもこれで決定化される。
 #
 # **既知の native 制約 (2026-08-13 発見、`_board_is_gravity_consistent`
 # 参照)**: puyo_core の重力実装は入力盤面が既に gravity一貫であることを
@@ -540,12 +546,17 @@ def _native_dig_resistance_one(
 ) -> float:
     """dig_resistance 1点分の native 版 (`iv._dig_resistance_one` と同一計算)。
 
-    おじゃま落下 (`drop_ojama`) は乱数を含むため既存 Python 実装
-    (`iv._SHARED_SIMULATOR`、上部コメント参照) をそのまま再利用し、連鎖
-    シミュレーションのみ native に置き換える。
+    おじゃま落下 (`drop_ojama`) は既存 Python 実装 (`iv._SHARED_SIMULATOR`、
+    上部コメント参照) をそのまま再利用し、連鎖シミュレーションのみ native に
+    置き換える。端数列の選択シードは `iv._dig_resistance_one` (2026-08-25
+    W39 根治) と**完全同一の導出式**にする — ここがズレると native/Python の
+    パリティが壊れ、学習データ (収集run) も非決定に戻る。
     """
     try:
-        ojama_board = iv._SHARED_SIMULATOR.drop_ojama(board, n_ojama)
+        # iv._dig_resistance_one と同一シード (盤面crc32 ^ n_ojama、決定論的)
+        ojama_board = iv._SHARED_SIMULATOR.drop_ojama(
+            board, n_ojama, seed=iv._expected_fire_seed(board) ^ n_ojama,
+        )
     except Exception:
         return 0.0
     if ojama_board.is_dead():
@@ -1192,12 +1203,29 @@ _COLOR_OFFSET_DECAY_SPAN: float = 0.694
 #     (予告の分離が目的なので、こちらが本命)
 # K は 2手/4手の2水準に絞る (列の増えすぎを防ぐ。K=1は情報が薄く、
 # K=3 は K=2/K=4 の間で冗長)。
+#
+# **対称化パイプラインのレビュー** (2026-08-10 user 恒久指示、side非依存の
+# 絶対量を無条件反転したバグの教訓): 本4列は 0-1 の到達確率 (own視点、
+# 「自分がK手積んで返せる確率」) であり符号の概念がない。対称化で必要な
+# 操作は 1P/2P のスワップのみ (相手の値と入れ替える) で、値そのものを反転
+# する処理は一切不要。本ツール自体には一括反転パイプラインは存在しない
+# (OJAMA_TRUTH_COLUMNS 直上コメント「対称化パイプライン非該当」と同じ理由、
+# 視覚オーバーレイ側 mirror/symmetrize とは別系統) ため、この4列がそちらの
+# 影響を受けることもない。
 COUNTER_REACH_COLUMNS: tuple[str, ...] = (
     "counter_reach_k2_vs_opp_fire", "counter_reach_k4_vs_opp_fire",
     "counter_reach_k2_vs_forecast", "counter_reach_k4_vs_forecast",
 )
 # 到達確率を計算する K 水準 (上記列名と対応)
 _COUNTER_REACH_K_LEVELS: tuple[int, ...] = (2, 4)
+
+# S1a gate (2026-08-21) が付与するフラグ列。0-1 の確率とは違い常に 0/1 の
+# 二値 (all_clear_bonus_pending と同じ性質)。counter_reach_probability 系列
+# 同様、side非依存の own 値 (自分視点で「相手が連鎖中か」) であり diff化・
+# carry化はしない (own only)。対称化 (1P/2P スワップのみ・符号反転なし) の
+# 一括変換に通しても安全な不変列として扱う (CLAUDE.md 2026-08-10 恒久指示、
+# 本セクション末尾の「対称化パイプラインのレビュー」節参照)。
+COUNTER_REACH_FLAG_COLUMNS: tuple[str, ...] = ("opp_chaining_active",)
 
 PAIR_INTERACTION_COLUMNS: tuple[str, ...] = (
     "color_ojama_ratio_own", "color_diff_x_ojama_diff",
@@ -1694,6 +1722,12 @@ def _final_fieldnames(
     return (
         list(META_COLUMNS) + own_output_cols + diff_output_cols
         + carry_output_cols + list(PAIR_INTERACTION_COLUMNS)
+        # COUNTER_REACH_COLUMNS/_FLAG_COLUMNS (2026-08-21 追加、末尾追加規約):
+        # `_attach_counter_reach_columns` が rows に書き込む値をここに登録
+        # しないと DictWriter (extrasaction="ignore") が黙って CSV から
+        # 落としてしまう (2026-08-21 発見・修正、配線漏れの再発パターン
+        # feedback_wiring_check_needs_nongeneric_scripts_2026-08-18 と同種)。
+        + list(COUNTER_REACH_COLUMNS) + list(COUNTER_REACH_FLAG_COLUMNS)
     )
 
 
@@ -1858,6 +1892,112 @@ def _add_pair_interaction_columns(rows: list[dict]) -> list[dict]:
     return rows
 
 
+def _bisect_latest_opp_row(
+    opp_list: "list[tuple[float, int]]", t: float,
+) -> "int | None":
+    """(t_sec, 行index) の昇順リストから「t 以前で最も新しい行」の index を返す。
+
+    `_attach_counter_reach_columns` 専用の二分探索 (元実装から関数抽出、
+    ロジック自体は無変更)。該当が無ければ None。
+    """
+    lo, hi = 0, len(opp_list)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if opp_list[mid][0] <= t:
+            lo = mid + 1
+        else:
+            hi = mid
+    return opp_list[lo - 1][1] if lo > 0 else None
+
+
+def _opp_row_is_chaining(rows: list[dict], opp_idx: "int | None") -> bool:
+    """相手の直近既知行が「連鎖発火タグ付きの行」かどうかを返す (S1a gate)。
+
+    chain_mechanism 系列を第一候補として採用する。実データ2動画
+    (backtest_placement_override_2026-08-15、c109+c10、計2,063行) で
+    chain_trigger_sec 系列 (発火有無の有限判定) との食い違い率を実測した
+    結果 0.0% (完全一致) だったため、単独採用で十分と判断した
+    (chain_trigger_sec は本列追加より前の旧npzでは未収録のことがあり、
+    chain_mechanism の方が判定列として安定)。相手の行がまだ無い
+    (試合最初) 場合は「連鎖中の証拠なし」として False (安全側デフォルト)。
+    """
+    if opp_idx is None:
+        return False
+    mechanism = str(rows[opp_idx].get("chain_mechanism", "")).strip().lower()
+    return mechanism not in _NO_CHAIN_TAG_VALUES
+
+
+def _counter_reach_opp_thresholds(
+    rows: list[dict], r: dict, opp_idx: "int | None",
+) -> "tuple[float, float]":
+    """(vs_opp_fire 閾値, vs_forecast 閾値) を求める (元実装のロジックを無変更で抽出)。
+
+    vs_opp_fire は相手の直近行の `immediate_fire_power` から算出する
+    (相手盤面からの再計算は禁止、2026-08-21 実測でコスト的に不可能だった。
+    列の値は 0-1 正規化 score のため ON_FIELD_CAP=72 で個数に戻す)。
+    vs_forecast は自分の予告おじゃま量 (上限なしの生値) そのもの。
+    """
+    if opp_idx is not None:
+        opp_fire_score = float(rows[opp_idx].get("immediate_fire_power", float("nan")))
+        thr_opp = (
+            opp_fire_score * float(iv.ON_FIELD_CAP)
+            if np.isfinite(opp_fire_score) else float("nan")
+        )
+    else:
+        thr_opp = float("nan")
+    thr_fc = float(r.get("ojama_forecast_uncapped", float("nan")))
+    return thr_opp, thr_fc
+
+
+def _write_counter_reach_value(r: dict, label: str, value: float) -> None:
+    """counter_reach_k{2,4}_{label} 列に同じ value を書き込む共通ヘルパー。"""
+    for k in _COUNTER_REACH_K_LEVELS:
+        r[f"counter_reach_k{k}_{label}"] = value
+
+
+def _compute_counter_reach_labels(
+    r: dict, own_board: "Board | None", thresholds: "dict[str, float]", elapsed: float,
+) -> None:
+    """gate を通過した行について、閾値ごとに応手到達確率を書き込む。
+
+    NaN/thr<=0 の label は即決 (計算不要)、thr>0 の label だけが実際の
+    シミュレーション対象になる。2つとも thr>0 なら S1b
+    (`thresholds_ojama`) で1回のシミュレーションにまとめる — 個別に
+    呼んだ場合と完全に同じ値になる (src/indicators_v2.py 実装保証)。
+    """
+    to_compute: list[tuple[str, float]] = []
+    for label, thr in thresholds.items():
+        if not np.isfinite(thr):
+            _write_counter_reach_value(r, label, float("nan"))
+        elif thr <= 0.0:
+            # 「返す必要がない」= 到達確率は定義上1.0 (counter_reach_probability
+            # docstring 参照、計算しても同じ値になるためショートカットする)。
+            _write_counter_reach_value(r, label, 1.0)
+        else:
+            to_compute.append((label, thr))
+    if not to_compute:
+        return
+    if own_board is None:
+        for label, _thr in to_compute:
+            _write_counter_reach_value(r, label, float("nan"))
+        return
+    if own_board.is_dead():
+        for label, _thr in to_compute:
+            _write_counter_reach_value(r, label, 0.0)
+        return
+    primary_label, primary_thr = to_compute[0]
+    extra_thrs = tuple(thr for _label, thr in to_compute[1:])
+    res = iv.counter_reach_probability(
+        own_board, primary_thr, elapsed_sec=elapsed,
+        k_levels=_COUNTER_REACH_K_LEVELS, thresholds_ojama=extra_thrs or None,
+    )
+    results_by_threshold = res if isinstance(res, dict) else {primary_thr: res}
+    for label, thr in to_compute:
+        single = results_by_threshold[thr]
+        for k in _COUNTER_REACH_K_LEVELS:
+            r[f"counter_reach_k{k}_{label}"] = float(single.probabilities.get(k, float("nan")))
+
+
 def _attach_counter_reach_columns(
     rows: list[dict],
     grids: "np.ndarray | None" = None,
@@ -1882,17 +2022,27 @@ def _attach_counter_reach_columns(
     r=0.93〜1.00 で同じ量の言い換えにすぎず全て40位以下だった。表現を増やす
     のではなく「返せる見込み」そのものを渡すのが分離の唯一の道。
 
-    ## コスト
+    ## gate (S1a、2026-08-21)
 
-    精密版 (`counter_reach_probability`) を使う。実測 528ms/件、62本34万行で
-    直列47.8時間 / 動画単位14並列で205分 (user 判断で精密版を選択、
-    高速版は連結ボーナス0近似の誤差があるため)。盤面のユニーク率が95.3%
-    (1手ごとに撮る方式では同じ盤面がほぼ続かない) なのでキャッシュはほぼ
-    効かない — この実測が着工判断の前提だった。
+    「相手が連鎖中 (chain_mechanism) OR 自分の予告おじゃま>0」の行だけ
+    実際に計算する (実データで7.5%前後、`_opp_row_is_chaining` 参照)。
+    それ以外の行は counter_reach_k* 列を NaN にし、`opp_chaining_active`
+    (0/1 フラグ、常時付与) だけ書き込む。1.0 埋めはしない
+    (「返せる」と「返す必要がない」を混同するため、user 指示で禁止)。
+
+    ## コスト・2閾値の1回化 (S1b)
+
+    精密版 (`counter_reach_probability`) を使う。gate 内で thr_opp/thr_fc
+    が両方 >0 の行は `thresholds_ojama` で1回のシミュレーションにまとめる
+    (`_compute_counter_reach_labels` 参照、コスト実質半減・値は完全一致)。
+    盤面のユニーク率が95.3% (1手ごとに撮る方式では同じ盤面がほぼ続かない)
+    なのでキャッシュはほぼ効かない。
 
     Args:
-        rows: 1動画分の行 (side/t_sec/game_idx を含む、in-place で列を足す)。
-        grids: 同じ npz の盤面配列。None なら列を作らない (従来挙動)。
+        rows: 1動画分の行 (side/t_sec/game_idx/chain_mechanism/
+            _source_grid_idx を含む、in-place で列を足す)。
+        grids: 同じ npz の盤面配列 (元の並び順、`_source_grid_idx` で
+            引く)。None なら列を作らない (従来挙動)。
     """
     if grids is None:
         return
@@ -1912,15 +2062,17 @@ def _attach_counter_reach_columns(
         opp_side = "2P" if side == "1P" else "1P"
         opp_list = by_key.get((r.get("game_idx"), opp_side), [])
         t = float(r.get("t_sec", 0.0))
-        # 相手の「同時刻以前で最も新しい」行を二分探索で引く
-        lo, hi = 0, len(opp_list)
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if opp_list[mid][0] <= t:
-                lo = mid + 1
-            else:
-                hi = mid
-        opp_idx = opp_list[lo - 1][1] if lo > 0 else None
+        opp_idx = _bisect_latest_opp_row(opp_list, t)
+
+        opp_chaining = _opp_row_is_chaining(rows, opp_idx)
+        r["opp_chaining_active"] = 1.0 if opp_chaining else 0.0
+
+        thr_opp, thr_fc = _counter_reach_opp_thresholds(rows, r, opp_idx)
+        gate_open = opp_chaining or (np.isfinite(thr_fc) and thr_fc > 0.0)
+        if not gate_open:
+            _write_counter_reach_value(r, "vs_opp_fire", float("nan"))
+            _write_counter_reach_value(r, "vs_forecast", float("nan"))
+            continue
 
         # 経過秒は 0.0 固定にする。マージンタイム (試合が長引くと送り量が
         # 増える補正) を掛けると同じ盤面でも試合の進み具合で閾値が変わり、
@@ -1928,86 +2080,26 @@ def _attach_counter_reach_columns(
         # scripts/build_labeled_win_from_npz.py:712-716) と食い違う。
         # まず「盤面から返せるか」を素で測り、マージンタイムの扱いは
         # 効果が確認できてから揃える (2026-08-21)。
-        # 閾値1: 相手が今撃てる連鎖が送ってくるおじゃま量。
-        # user 指示「対応は相手が連鎖を撃ってきた時にその連鎖に対して返す
-        # ことがどれだけ可能かをモンテカルロで確認する」に対応する閾値。
-        #
-        # **相手盤面から再計算してはいけない** (2026-08-21 実測):
-        # `immediate_fire_power` は takapt 探索 (全配置を試す) なので重く、
-        # 毎行×相手盤面で呼ぶと 1本25分でも終わらなかった。第1層が既に
-        # 全行ぶんを計算済み (しかも Rust 版 `_native_immediate_fire_power`)
-        # なので、相手の行から**引くだけ**にする。
-        #
-        # 列の値は 0-1 に正規化された score (raw ではない)。ON_FIELD_CAP=72 で
-        # 割られているので個数に戻す (src/indicators_v2.py:468-470)。
-        #
-        # 注記: `immediate_fire_power` は 2026-08-21 に**学習からは除外**した
-        # (他3列と r=0.91〜0.98 の重複、scripts/_retrain148_2026-08-14.py の
-        # DUPLICATE_COLS)。しかし CSV の列としては残るので、ここで閾値の材料
-        # として使うことはできる。「学習の入力として冗長」と「他の計算の材料
-        # として有用」は別の話であり、矛盾しない。
-        if opp_idx is not None:
-            opp_fire_score = float(
-                rows[opp_idx].get("immediate_fire_power", float("nan")),
-            )
-            thr_opp = (
-                opp_fire_score * float(iv.ON_FIELD_CAP)
-                if np.isfinite(opp_fire_score) else float("nan")
-            )
-        else:
-            thr_opp = float("nan")
-        # 閾値2: 実際の予告量 (上限なしの生値)
-        thr_fc = float(r.get("ojama_forecast_uncapped", float("nan")))
-        # 盤面の復元はどちらかの閾値が正のときだけ行う (復元自体も
-        # 34万行では無駄にできないコスト)
         need_board = (
             (np.isfinite(thr_opp) and thr_opp > 0.0)
             or (np.isfinite(thr_fc) and thr_fc > 0.0)
         )
+        # `_source_grid_idx` (2026-08-21 発見・修正): この時点の `rows` は
+        # 既に `_attach_ojama_net_balance_synced_column`/`_attach_opponent_
+        # diff_columns` (1P全行→2P全行の順に組み直す、b-2) を通過済みのため、
+        # 並び順は `grids` の元の順序 (1P/2P 時系列インターリーブ) と
+        # 一致しない。`grids[i]` を直接使うと**別の瞬間の盤面**を誤って読む
+        # ため、`_build_meta_rows` が刻んだ元インデックスで引く
+        # (キー不在時は `i` にフォールバックし、旧挙動 (テスト等で手組みの
+        # rows を渡す場合) と後方互換を保つ)。
+        grid_idx = int(r.get("_source_grid_idx", i))
         own_board = (
-            Board.from_list(np.asarray(grids[i]).tolist()) if need_board else None
+            Board.from_list(np.asarray(grids[grid_idx]).tolist()) if need_board else None
         )
         elapsed = 0.0  # 上記の理由で固定
-
-        for label, thr in (("vs_opp_fire", thr_opp), ("vs_forecast", thr_fc)):
-            if not np.isfinite(thr):
-                for k in _COUNTER_REACH_K_LEVELS:
-                    r[f"counter_reach_k{k}_{label}"] = float("nan")
-                continue
-            # 閾値が0以下なら「返す必要がない」= 到達確率は定義上1.0。
-            # counter_reach_probability の docstring にも「0以下を渡すと常に
-            # 到達 (確率1.0、窒息盤面を除く)」と明記されており、計算しても
-            # 同じ値が返る。**情報を失わずに計算量を大幅に削れる**。
-            #
-            # コストの実測 (2026-08-21、40件の平均):
-            #   精密版 3,106ms/件 → 62本34万行×2閾値で 14並列 42時間 (非現実的)
-            #   絞り込むと予告のある行は実データで全体の約4% → 約1.7時間
-            # 記録にあった「528ms」は測定条件が違った (実測は6倍)。
-            # user 判断で精密版のまま対象を絞る方針を採った。
-            if thr <= 0.0:
-                for k in _COUNTER_REACH_K_LEVELS:
-                    r[f"counter_reach_k{k}_{label}"] = 1.0
-                continue
-            # ここに来るのは thr > 0 のときだけなので need_board が真
-            # (= own_board は None でない)。防御的に確認する。
-            if own_board is None:
-                for k in _COUNTER_REACH_K_LEVELS:
-                    r[f"counter_reach_k{k}_{label}"] = float("nan")
-                continue
-            # 窒息盤面は返せないので 0.0 (関数側も同じ扱いだが、
-            # 呼び出す前に確定させて計算を省く)
-            if own_board.is_dead():
-                for k in _COUNTER_REACH_K_LEVELS:
-                    r[f"counter_reach_k{k}_{label}"] = 0.0
-                continue
-            res = iv.counter_reach_probability(
-                own_board, thr, elapsed_sec=elapsed,
-                k_levels=_COUNTER_REACH_K_LEVELS,
-            )
-            for k in _COUNTER_REACH_K_LEVELS:
-                r[f"counter_reach_k{k}_{label}"] = float(
-                    res.probabilities.get(k, float("nan")),
-                )
+        _compute_counter_reach_labels(
+            r, own_board, {"vs_opp_fire": thr_opp, "vs_forecast": thr_fc}, elapsed,
+        )
 
 
 def _all_clear_next_state(state: float, delta: float, chain_tag: str) -> float:
@@ -2135,12 +2227,23 @@ def _build_meta_rows(
     video_ids: np.ndarray, game_idxs: np.ndarray, t_secs: np.ndarray,
     frame_idxs: np.ndarray, sides: np.ndarray, wons: np.ndarray,
 ) -> list[dict]:
-    """npz のメタ配列群から meta 列のみの行リストを組み立てる。"""
+    """npz のメタ配列群から meta 列のみの行リストを組み立てる。
+
+    `_source_grid_idx` (2026-08-21 S1a 追加): この行が元の npz `grids`
+    配列で何番目だったかを内部専用キーとして刻んでおく。
+    `_attach_opponent_diff_columns` (1P全行→2P全行の順に組み直す、b-2) を
+    経由すると `rows` の並びは `grids` の元の順序 (1P/2P 時系列インター
+    リーブ) と一致しなくなるため、`_attach_counter_reach_columns` が
+    `grids[i]` を直接使うと**別の瞬間の盤面を誤って読む** (2026-08-21
+    発見・修正、`_final_fieldnames` には含めないため CSV には出ない
+    内部専用列)。
+    """
     return [
         {
             "video_id": str(video_ids[i]), "game_idx": int(game_idxs[i]),
             "t_sec": float(t_secs[i]), "frame": int(frame_idxs[i]),
             "side": str(sides[i]), "won": float(wons[i]),
+            "_source_grid_idx": i,
         }
         for i in range(len(video_ids))
     ]
@@ -2241,6 +2344,13 @@ def convert_one_npz(
     _approx_tsumo(rows)
     for i in range(n):
         rows[i].update(_compute_row(grids[i], registry))
+        # S1a gate (2026-08-21) が「相手が連鎖中か」を判定するための材料。
+        # rows[i] に持たせておけば、後段の並び替え (_attach_opponent_diff_
+        # columns 等) を経ても各行が自分の値を保持し続ける (dict のキーは
+        # 並び替えで消えない、_source_grid_idx と同じ考え方)。CSV には出さ
+        # ない (_final_fieldnames 非登録、DictWriter extrasaction="ignore"
+        # で自動除外)。
+        rows[i]["chain_mechanism"] = str(chain_mechanisms[i])
     # A-4 (2026-08-13): npz に VideoChainTracker 真値があればそれを優先採用、
     # 無い旧npzのみ近似ヒューリスティックにフォールバックする。
     if "all_clear_pending" in d.files:

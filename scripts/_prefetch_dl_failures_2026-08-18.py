@@ -34,9 +34,11 @@
 from __future__ import annotations
 
 import csv
+import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -59,17 +61,26 @@ YT_DLP_FORMAT = (
 # への対処として、ログイン済み Cookie があれば渡す。**認証情報のため
 # scratchpad にのみ置き、git 管理下には絶対に置かない**。
 # 存在しなければ Cookie 無しで動作する (後方互換)。
-COOKIES_TXT = Path(
+COOKIES_LIVE = Path(
     "/mnt/c/Users/ryouj/AppData/Local/Temp/claude/"
     "C--Users-ryouj--gemini-antigravity-scratch-puyo-analyzer/"
-    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies.txt"
+    "22abd085-8e57-4d2a-857e-8516be642774/scratchpad/yt_cookies_live.txt"
 )
 
 
-def _cookie_args() -> list[str]:
-    """Cookie ファイルがあれば yt-dlp 引数を返す。無ければ空。"""
-    if COOKIES_TXT.exists() and COOKIES_TXT.stat().st_size > 0:
-        return ["--cookies", str(COOKIES_TXT)]
+def _cookie_args(target_id: str) -> list[str]:
+    """Cookie ファイルがあれば yt-dlp 引数を返す。無ければ空。
+
+    **単一ファイルをそのまま渡し、yt-dlp による書き戻しを許可する**のが要点。
+    YouTube はアクセスのたびにセッションを更新し、yt-dlp はそれを Cookie
+    ファイルへ書き戻す。コピーを渡すと更新が捨てられ、元の Cookie は
+    ローテーションで無効化されて 403 に戻る (2026-08-18 実測: 固定マスターを
+    使い回したところ、一度成功していた動画まで 20MB 打ち切りに戻った)。
+    書き戻しを活かすため、DL は直列 (DL_PARALLEL=1) にしてある。
+    """
+    del target_id  # 単一ファイル方式では使わない (呼び出し側の互換のため残す)
+    if COOKIES_LIVE.exists() and COOKIES_LIVE.stat().st_size > 0:
+        return ["--cookies", str(COOKIES_LIVE)]
     return []
 
 # 本体 (4回/8秒) よりゆっくり・粘り強く。403 がレート由来なら間隔を空けるほど当たる。
@@ -77,6 +88,12 @@ DL_RETRY_COUNT = 6
 DL_RETRY_SLEEP_SEC = 45.0
 # 1本DLし終えてから次を始めるまでの間隔。
 BETWEEN_VIDEOS_SLEEP_SEC = 30.0
+# 同時DL数は 1 (直列)。Cookie を使う場合、YouTube はアクセスごとにセッションを
+# 更新し yt-dlp はそれを Cookie ファイルへ書き戻す。並列にすると書き戻しが競合し、
+# セッションが壊れて 403 が再発する (2026-08-18 実測: 3並列で Cookie が
+# 2459行/LOGIN_INFO 2件 -> 1138行/0件 に退化し、成功していた動画まで 403 化した)。
+# 単一プロセスが単一ファイルを読み書きし続ける形が唯一安全。
+DL_PARALLEL = 1
 # status.tsv に新しい失敗が現れるのを待つポーリング間隔。
 POLL_SLEEP_SEC = 300.0
 # 1周して1本でも失敗したら、次の周回まで空ける時間。403 の連続はレート制限
@@ -121,7 +138,7 @@ def download_one(target_id: str, video_filename: str, video_id: str) -> bool:
             str(PROJECT_ROOT / "venv" / "bin" / "python"), "-m", "yt_dlp",
             "--ffmpeg-location", str(FFMPEG_LOCATION),
             "--js-runtimes", f"node:{NODE24_PATH}",
-            *_cookie_args(),
+            *_cookie_args(target_id),
             "-f", YT_DLP_FORMAT,
             "--remux-video", "mp4", "--no-playlist", "--no-progress",
             "-o", str(out_path), url,
@@ -165,8 +182,11 @@ def main() -> int:
             time.sleep(POLL_SLEEP_SEC)
             continue
 
-        print(f"[prefetch] 第{round_no}周 未回収={len(todo)}本 {todo}", flush=True)
-        failed_this_round = 0
+        print(
+            f"[prefetch] 第{round_no}周 未回収={len(todo)}本 "
+            f"(並列{DL_PARALLEL}) {todo}", flush=True,
+        )
+        runnable: list[tuple[str, str, str]] = []
         for target_id in todo:
             if target_id not in manifest:
                 print(f"[prefetch][{target_id}] manifest に無い、対象外", flush=True)
@@ -178,17 +198,32 @@ def main() -> int:
                 print(f"[prefetch][{target_id}] video_id 無し、対象外", flush=True)
                 skip.add(target_id)
                 continue
-            if download_one(target_id, video_filename, video_id):
-                done.add(target_id)
-            else:
-                # ここで諦めない。403 の連続はレート制限由来のことがあり、
-                # 時間を置けば回復する (2026-08-18 に c104〜c108 が連続失敗した
-                # 実例あり)。次の周回で再試行する。
-                failed_this_round += 1
-                print(
-                    f"[prefetch][{target_id}] 今周は失敗、次周で再試行", flush=True,
-                )
-            time.sleep(BETWEEN_VIDEOS_SLEEP_SEC)
+            runnable.append((target_id, video_filename, video_id))
+
+        failed_this_round = 0
+        with ThreadPoolExecutor(max_workers=DL_PARALLEL) as pool:
+            futures = {
+                pool.submit(download_one, tid, fname, vid): tid
+                for tid, fname, vid in runnable
+            }
+            for fut in as_completed(futures):
+                target_id = futures[fut]
+                try:
+                    ok = fut.result()
+                except Exception as e:  # noqa: BLE001
+                    ok = False
+                    print(f"[prefetch][{target_id}] 例外: {e}", flush=True)
+                if ok:
+                    done.add(target_id)
+                else:
+                    # ここで諦めない。403 の連続はレート制限由来のことがあり、
+                    # 時間を置けば回復する (2026-08-18 に c104〜c108 が連続失敗
+                    # した実例あり)。次の周回で再試行する。
+                    failed_this_round += 1
+                    print(
+                        f"[prefetch][{target_id}] 今周は失敗、次周で再試行",
+                        flush=True,
+                    )
 
         if failed_this_round:
             # レート制限を疑って周回間は長めに空ける。

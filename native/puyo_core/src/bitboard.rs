@@ -572,7 +572,7 @@ pub const NUM_ROTATIONS: u8 = 4;
 /// `src/board.py::Board.height_of` と同一の意味論 (トップの物理行から算出、
 /// popcount ではなく最上位セットビット位置を使う。列に浮きぷよ由来の
 /// ギャップがあっても Python 版と一致させるため)。
-fn height_of(b: &BitBoard, col: usize) -> u32 {
+pub fn height_of(b: &BitBoard, col: usize) -> u32 {
     let mut occ: u16 = 0;
     for ci in 0..NUM_TRACKED_COLORS {
         occ |= b.colors[ci][col];
@@ -583,6 +583,13 @@ fn height_of(b: &BitBoard, col: usize) -> u32 {
     } else {
         (16 - occ.leading_zeros()) as u32
     }
+}
+
+/// 全列にわたる最大高さ (2026-08-21 追加、ama方式の浅い完全探索
+/// [`exact_shallow`] 用の枝刈り判定に使う。`beam::beam_search` の
+/// `max_height` 引数参照)。
+pub fn max_column_height(b: &BitBoard) -> u32 {
+    (0..BOARD_COLS).map(|col| height_of(b, col)).max().unwrap_or(0)
 }
 
 fn set_cell(b: &mut BitBoard, col: usize, bit: u32, color: u8) {

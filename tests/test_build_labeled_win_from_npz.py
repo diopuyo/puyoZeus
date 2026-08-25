@@ -507,13 +507,12 @@ def native_parity_boards() -> "list":
 def deterministic_drop_ojama(monkeypatch: pytest.MonkeyPatch) -> None:
     """`ChainSimulator.drop_ojama` の端数列選択をテスト内で決定的にする。
 
-    本番コード (dig_resistance/ukeyasusa) は `drop_ojama(board, n_ojama)` を
-    seed無しで呼ぶため、おじゃま個数が6の倍数でない限り毎回OS乱数由来の
-    非決定的な結果になる (既存の既知の性質、この載せ替えでは変えない)。
-    Python版/native版のどちらも `ChainSimulator.drop_ojama` を通るため、
-    同一 n_ojama に対して決定的な seed を強制すれば両者は同一の
-    おじゃま落下盤面を得る (パリティ検証のための一時パッチ、本番動作は
-    無変更)。
+    【2026-08-25 W39 根治後の位置づけ】本番コード (dig_resistance/ukeyasusa)
+    は Python版・native版とも `iv._expected_fire_seed(board) ^ n_ojama` の
+    決定論的 seed を渡すようになった (それ以前は seed 無し = OS乱数で
+    非決定だった)。本フィクスチャは「両者が同一の落下盤面を得る」ことを
+    seed 導出式の詳細に依存せず担保するための独立パッチとして維持する
+    (パリティ検証のための一時パッチ、本番動作は無変更)。
     """
     original = _ChainSimulator.drop_ojama
 
@@ -522,6 +521,32 @@ def deterministic_drop_ojama(monkeypatch: pytest.MonkeyPatch) -> None:
         return original(self, board, ojama_count, seed=1_000_000 + ojama_count)
 
     monkeypatch.setattr(_ChainSimulator, "drop_ojama", _patched)
+
+
+def test_native_dig_resistance_one_seed_wiring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_native_dig_resistance_one` が `iv._dig_resistance_one` と同一の
+    決定論的 seed (`iv._expected_fire_seed(board) ^ n_ojama`) を渡すこと
+    (W39 配線検証)。ここがズレると native/Python パリティが壊れ、学習データ
+    (収集run) の dig_resistance/ukeyasusa 4列が非決定に戻る。
+    native 拡張の有無に依存しない (drop_ojama 呼び出しは native化の外側)。
+    """
+    captured: list[tuple[int, "int | None"]] = []
+    original = _ChainSimulator.drop_ojama
+
+    def _spy(
+        self: "_ChainSimulator", board: Board, ojama_count: int,
+        seed: "int | None" = None,
+    ) -> Board:
+        captured.append((ojama_count, seed))
+        return original(self, board, ojama_count, seed=seed)
+
+    monkeypatch.setattr(_ChainSimulator, "drop_ojama", _spy)
+    board = Board()
+    blwn._native_dig_resistance_one(board, base_chain=1, n_ojama=10)
+    expected_seed = blwn.iv._expected_fire_seed(board) ^ 10
+    assert captured == [(10, expected_seed)]
 
 
 @pytestmark_native_parity
@@ -1733,3 +1758,204 @@ def test_existing_columns_unaffected_by_w12_architect_columns_addition(
     assert rows_sorted[0]["color_ojama_ratio_own"] == pytest.approx(
         color / (color + ojama + blwn.COLOR_OJAMA_RATIO_EPS),
     )
+
+
+# ============================
+# S1a: 応手到達確率の gate (相手が連鎖中 OR 自分の予告>0) + opp_chaining_active
+# S1b: 2閾値1回化 (thresholds_ojama) の CSV パイプライン組み込み確認
+# ============================
+
+
+def _write_npz_for_counter_reach_gate(
+    path: Path,
+    opp_height: int,
+    opp_mechanism: str,
+    self_forecast: float,
+    self_height: int = 0,
+) -> None:
+    """S1a gate 検証用の2行 (2P@t=0.5, 1P@t=1.0) 合成npzを書く。
+
+    1P (自分) の t=1.0 時点での「相手の直近既知行」は必ずこの2P@t=0.5 行に
+    なる (試合最初の1点のみのため二分探索の結果が一意に決まる)。
+    """
+    grids = np.array(
+        [_make_grid(height=opp_height), _make_grid(height=self_height)],
+        dtype=np.int8,
+    )
+    np.savez_compressed(
+        str(path),
+        grids=grids, video_id=np.array(["v"] * 2), side=np.array(["2P", "1P"]),
+        t_sec=np.array([0.5, 1.0], dtype=np.float32),
+        game_idx=np.zeros(2, dtype=np.int32), frame_idx=np.arange(2, dtype=np.int32),
+        won=np.array([0.0, 1.0], dtype=np.float32), score=np.full(2, -1, dtype=np.int32),
+        chain_mechanism=np.array([opp_mechanism, ""]),
+        ojama_net_balance=np.array([0.0, 0.0], dtype=np.float32),
+        ojama_forecast=np.array([0.0, self_forecast], dtype=np.float32),
+    )
+
+
+def _self_row(rows: list[dict]) -> dict:
+    """2行合成npz用ヘルパー: side=="1P" (自分) の行を返す。"""
+    matches = [r for r in rows if r["side"] == "1P"]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_opp_chaining_active_true_when_opp_row_has_chain_mechanism_tag() -> None:
+    """相手の直近行が chain_mechanism タグ付きなら opp_chaining_active=1.0。"""
+    assert blwn._opp_row_is_chaining(
+        [{"chain_mechanism": "baseline"}], opp_idx=0,
+    ) is True
+
+
+def test_opp_chaining_active_false_when_opp_row_untagged_or_missing() -> None:
+    """相手行が無タグ/相手行自体が無い場合は opp_chaining_active=0.0 (安全側)。"""
+    assert blwn._opp_row_is_chaining([{"chain_mechanism": ""}], opp_idx=0) is False
+    assert blwn._opp_row_is_chaining([{"chain_mechanism": "nan"}], opp_idx=0) is False
+    assert blwn._opp_row_is_chaining([{"chain_mechanism": "baseline"}], opp_idx=None) is False
+
+
+def test_gate_closed_yields_nan_not_shortcut_even_if_thr_opp_positive(
+    tmp_path: Path,
+) -> None:
+    """相手が連鎖中でなく自分の予告も0なら gate 閉。
+
+    相手の盤面に大量のぷよ (immediate_fire_power > 0 確実) を積んでいても、
+    gate が閉じている以上 counter_reach_k*_vs_opp_fire/vs_forecast は
+    NaN になる (1.0埋めではない — 「返せる」と「返す必要がない」の混同を
+    避ける、S1a 受け入れ条件)。"""
+    npz_path = tmp_path / "gate_closed.npz"
+    _write_npz_for_counter_reach_gate(
+        npz_path, opp_height=8, opp_mechanism="", self_forecast=0.0, self_height=0,
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    r = _self_row(rows)
+    assert r["opp_chaining_active"] == 0.0
+    for col in blwn.COUNTER_REACH_COLUMNS:
+        assert np.isnan(r[col]), f"{col} が NaN でない (gate閉のはず): {r[col]}"
+
+
+def test_gate_open_via_chaining_flag_alone_computes_columns(tmp_path: Path) -> None:
+    """予告が0でも相手が連鎖中なら gate が開き、列が計算される
+
+    (この構成では両閾値<=0 のため 1.0 ショートカットが働く想定)。
+    profile="full" を使う (vs_opp_fire の材料 immediate_fire_power は
+    GRID_ONLY_HEAVY_INDICATORS 限定=light では未収録、2026-08-21 判明)。"""
+    npz_path = tmp_path / "gate_open_chaining.npz"
+    _write_npz_for_counter_reach_gate(
+        npz_path, opp_height=0, opp_mechanism="baseline", self_forecast=0.0,
+    )
+    registry = blwn._resolve_indicator_registry("full")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    r = _self_row(rows)
+    assert r["opp_chaining_active"] == 1.0
+    for col in blwn.COUNTER_REACH_COLUMNS:
+        assert r[col] == pytest.approx(1.0), f"{col} が1.0でない: {r[col]}"
+
+
+def test_gate_open_via_forecast_alone_computes_columns(tmp_path: Path) -> None:
+    """相手が連鎖中でなくても自分の予告>0 なら gate が開く
+
+    (vs_forecast は thr>0 のため実際にシミュレーションが走る、
+    vs_opp_fire は相手盤面が空なので閾値<=0 で1.0ショートカット)。"""
+    npz_path = tmp_path / "gate_open_forecast.npz"
+    _write_npz_for_counter_reach_gate(
+        npz_path, opp_height=0, opp_mechanism="", self_forecast=6.0, self_height=2,
+    )
+    registry = blwn._resolve_indicator_registry("full")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    r = _self_row(rows)
+    assert r["opp_chaining_active"] == 0.0
+    assert r["counter_reach_k2_vs_opp_fire"] == pytest.approx(1.0)
+    assert r["counter_reach_k4_vs_opp_fire"] == pytest.approx(1.0)
+    for col in ("counter_reach_k2_vs_forecast", "counter_reach_k4_vs_forecast"):
+        assert not np.isnan(r[col]), f"{col} が NaN (gate開のはず): {r[col]}"
+        assert 0.0 <= r[col] <= 1.0
+
+
+def test_final_fieldnames_includes_counter_reach_and_flag_columns() -> None:
+    """出力CSVの列一覧に counter_reach_* / opp_chaining_active が含まれること
+
+    (2026-08-21 発見: 追加済みなのに `_final_fieldnames` に登録されておらず
+    DictWriter の extrasaction="ignore" で黙って落ちていた配線漏れの回帰
+    防止)。"""
+    fields = set(blwn._final_fieldnames("light"))
+    for col in blwn.COUNTER_REACH_COLUMNS:
+        assert col in fields, f"{col} が _final_fieldnames に無い (配線漏れ)"
+    for col in blwn.COUNTER_REACH_FLAG_COLUMNS:
+        assert col in fields, f"{col} が _final_fieldnames に無い (配線漏れ)"
+
+
+def test_counter_reach_columns_reach_final_csv_output(tmp_path: Path) -> None:
+    """convert_dir が書く実際の CSV にも counter_reach_*/opp_chaining_active
+
+    が列として現れること (in-memory row dict だけでなく CSV まで届くこと
+    を end-to-end で確認する)。"""
+    npz_dir = tmp_path / "npzs"
+    npz_dir.mkdir()
+    _write_npz_for_counter_reach_gate(
+        npz_dir / "a.npz", opp_height=0, opp_mechanism="baseline", self_forecast=0.0,
+    )
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    for col in (*blwn.COUNTER_REACH_COLUMNS, *blwn.COUNTER_REACH_FLAG_COLUMNS):
+        assert col in df.columns, f"{col} が最終CSVに無い"
+
+
+def test_source_grid_idx_survives_reordering_and_points_to_correct_board(
+    tmp_path: Path,
+) -> None:
+    """`_source_grid_idx` が並び替え後も自分の元の grids インデックスを保持し、
+
+    そこから復元した盤面が自分自身の (登録時に計算済みの) board_puyo_total
+    と一致すること (2026-08-21 発見・修正した索引ずれの回帰防止)。
+    `_attach_opponent_diff_columns` は 1P全行→2P全行の順に rows を組み直す
+    ため、この確認は「並び替えが実際に起きた後でも整合する」ことの直接証拠
+    になる。
+    """
+    npz_path = tmp_path / "reorder.npz"
+    n = 6
+    _write_synthetic_npz(npz_path, n=n)  # 1P/2P交互、高さ 3+i (全行が区別可能)
+    registry = blwn._resolve_indicator_registry("light")
+    d = np.load(str(npz_path), allow_pickle=True)
+    grids = d["grids"]
+    rows = blwn.convert_one_npz(npz_path, registry)
+    assert len(rows) == n
+    for r in rows:
+        grid_idx = int(r["_source_grid_idx"])
+        board = blwn.Board.from_list(np.asarray(grids[grid_idx]).tolist())
+        recomputed = blwn.iv.board_puyo_total(board).score
+        assert recomputed == pytest.approx(float(r["board_puyo_total"])), (
+            f"_source_grid_idx={grid_idx} が自分の盤面を指していない "
+            f"(t_sec={r['t_sec']}, side={r['side']})"
+        )
+
+
+def test_source_grid_idx_not_in_final_csv(tmp_path: Path) -> None:
+    """`_source_grid_idx` は内部専用列であり最終CSVには出ないこと。"""
+    npz_dir = tmp_path / "npzs"
+    npz_dir.mkdir()
+    _write_synthetic_npz(npz_dir / "a.npz", n=4)
+    out_csv = tmp_path / "out.csv"
+    blwn.convert_dir(npz_dir, out_csv, profile="light")
+    df = pd.read_csv(out_csv)
+    assert "_source_grid_idx" not in df.columns
+
+
+def test_counter_reach_flag_column_is_binary_and_not_sign_flipped(
+    tmp_path: Path,
+) -> None:
+    """opp_chaining_active は常に 0.0 か 1.0 のみ (対称化の一括変換を通しても
+
+    符号反転は起きない不変列であることのドキュメント的確認、2026-08-10
+    user恒久指示)。"""
+    npz_path = tmp_path / "gate_open_chaining.npz"
+    _write_npz_for_counter_reach_gate(
+        npz_path, opp_height=0, opp_mechanism="baseline", self_forecast=0.0,
+    )
+    registry = blwn._resolve_indicator_registry("light")
+    rows = blwn.convert_one_npz(npz_path, registry)
+    for r in rows:
+        assert r["opp_chaining_active"] in (0.0, 1.0)
