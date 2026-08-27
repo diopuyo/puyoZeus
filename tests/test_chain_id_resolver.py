@@ -23,6 +23,7 @@ import copy
 import dataclasses
 
 from src.chain_id_resolver import (
+    ActiveChainSnapshot,
     CHAIN_ID_MAX_SEC,
     ChainIdResolver,
     ChainObservation,
@@ -74,6 +75,22 @@ def test_gate3_split_pattern_merges_into_one_chain_id() -> None:
     assert chain.finalized_source == "score_ocr_diff"
     assert chain.opened_at_sec == 777.37
     assert chain.closed_at_sec == 793.30
+
+
+def test_same_chain_keeps_running_max_when_cumulative_score_decreases() -> None:
+    """累積点の一時的な下振れは物理的に不可能なので記録して無視する。"""
+    resolver = ChainIdResolver()
+    resolver.push(_obs(
+        "1P", 1.0, ObservationKind.FORMULA_STEP,
+        chain_count=1, total_score=70))
+    resolver.push(_obs(
+        "1P", 1.1, ObservationKind.FORMULA_STEP,
+        chain_count=1, total_score=0))
+
+    active = resolver.active()[0]
+    assert active.provisional_score == 70
+    assert resolver.stats().formula_step_observation_count == 2
+    assert resolver.stats().provisional_score_decrease_ignored_count == 1
 
 
 def test_next_physical_chain_gets_a_new_chain_id() -> None:
@@ -392,6 +409,72 @@ def test_resolved_chain_and_stats_are_frozen_dataclasses() -> None:
         raise AssertionError("ResolvedChain は frozen であるべき")
 
 
+def test_active_tracks_formula_steps_in_side_order_as_an_independent_copy() -> None:
+    """FORMULA_STEP の開始・更新を side 順の不変コピーとして公開する。"""
+    resolver = ChainIdResolver()
+    resolver.push(_obs("2P", 10.0, ObservationKind.FORMULA_STEP,
+                       chain_count=1, total_score=40))
+    resolver.push(_obs("1P", 10.1, ObservationKind.FORMULA_STEP,
+                       chain_count=2, total_score=300))
+    before_update = resolver.active()
+    resolver.push(_obs("2P", 11.0, ObservationKind.FORMULA_STEP,
+                       chain_count=3, total_score=1320))
+
+    active = resolver.active()
+    assert [snapshot.side for snapshot in active] == ["1P", "2P"]
+    assert active[0] == ActiveChainSnapshot(
+        chain_id=2, side="1P", opened_at_sec=10.1, last_t_sec=10.1,
+        step_count=2, provisional_score=300, growth_observed=True,
+        score_base=0, awaiting_finalize=False,
+    )
+    assert active[1].step_count == 3
+    assert active[1].provisional_score == 1320
+    assert active[1].last_t_sec == 11.0
+    assert before_update[1].step_count == 1, "過去のコピーが内部更新で変化した"
+    try:
+        active[0].chain_id = 999  # type: ignore[misc]
+    except dataclasses.FrozenInstanceError:
+        pass
+    else:
+        raise AssertionError("ActiveChainSnapshot は frozen であるべき")
+
+
+def test_active_marks_settled_and_end_signal_as_awaiting_finalize() -> None:
+    """CHAIN_SETTLED/END は既存契約どおり確定待ちとして公開する。"""
+    resolver = ChainIdResolver()
+    resolver.push(_obs("1P", 0.0, ObservationKind.FORMULA_STEP,
+                       chain_count=1, total_score=100))
+    resolver.push(_obs("1P", 1.0, ObservationKind.CHAIN_SETTLED,
+                       chain_count=1, total_score=999999))
+    settled = resolver.active()[0]
+    assert settled.awaiting_finalize is True
+    assert settled.last_t_sec == 1.0
+    assert settled.provisional_score == 100, "settled 推定値を公開値へ混入させない"
+
+    resolver.push(_obs("1P", 2.0, ObservationKind.CHAIN_END_SIGNAL))
+    ended = resolver.active()[0]
+    assert ended.awaiting_finalize is True
+    assert ended.last_t_sec == 2.0
+
+
+def test_active_disappears_after_finalize_boundary_and_flush() -> None:
+    """確定・試合境界・ストリーム終端で公開中の連鎖が消滅する。"""
+    for close_kind in (ObservationKind.SCORE_FINALIZE, ObservationKind.MATCH_BOUNDARY):
+        resolver = ChainIdResolver()
+        resolver.push(_obs("1P", 0.0, ObservationKind.FORMULA_STEP,
+                           chain_count=1, total_score=100))
+        resolver.push(_obs("1P", 1.0, ObservationKind.CHAIN_END_SIGNAL))
+        assert resolver.active()[0].awaiting_finalize is True
+        resolver.push(_obs("1P", 2.0, close_kind, chain_count=1, total_score=95))
+        assert resolver.active() == []
+
+    resolver = ChainIdResolver()
+    resolver.push(_obs("2P", 3.0, ObservationKind.FORMULA_STEP,
+                       chain_count=2, total_score=300))
+    resolver.flush()
+    assert resolver.active() == []
+
+
 # ===========================================================================
 # CHAIN_SETTLED / SCORE_FINALIZE の分離 (2026-08-25 追加、fable アーキ裁定)
 # ===========================================================================
@@ -684,6 +767,34 @@ def test_p1_2_settled_echo_after_formula_chain_finalize_is_absorbed() -> None:
     resolved = resolver.resolved()
     assert len(resolved) == 1, "残響の settled が幻の simulate 連鎖を生んだ"
     assert resolver.stats().settled_echo_absorbed_count == 1
+
+
+def test_settled_with_different_chain_count_inside_echo_window_is_not_absorbed() -> None:
+    """K6: 時間が近いだけの別連鎖 (cc=8→1) を残響として消さない。"""
+    resolver = ChainIdResolver()
+    resolver.push(_obs("1P", 10.0, ObservationKind.SCORE_FINALIZE,
+                       chain_count=8, total_score=500))
+    resolver.push(_obs("1P", 10.2, ObservationKind.CHAIN_SETTLED,
+                       chain_count=1, total_score=400))
+    resolver.flush()
+    assert len(resolver.resolved()) == 2
+    assert resolver.stats().settled_echo_absorbed_count == 0
+
+
+def test_formula_settled_with_different_score_inside_echo_window_is_not_absorbed() -> None:
+    """K6: 成長観測済みでは段数だけでなく同経路の累積点も一致させる。"""
+    resolver = ChainIdResolver()
+    resolver.push(_obs("1P", 0.0, ObservationKind.FORMULA_STEP,
+                       chain_count=1, total_score=100))
+    resolver.push(_obs("1P", 1.0, ObservationKind.FORMULA_STEP,
+                       chain_count=3, total_score=1320))
+    resolver.push(_obs("1P", 2.0, ObservationKind.SCORE_FINALIZE,
+                       chain_count=3, total_score=19))
+    resolver.push(_obs("1P", 2.2, ObservationKind.CHAIN_SETTLED,
+                       chain_count=3, total_score=1400))
+    resolver.flush()
+    assert len(resolver.resolved()) == 2
+    assert resolver.stats().settled_echo_absorbed_count == 0
 
 
 def test_p1_2_settled_far_after_finalize_is_not_absorbed() -> None:

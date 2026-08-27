@@ -238,6 +238,7 @@ _RESOLVED_FLAG_PARENT: dict[str, str] = {
     "--resolved-pending-landing-gate": "--resolved-exchange-eval",
     "--resolved-counter-placement-reuse": "--resolved-exchange-eval",
     "--resolved-counter-budget-quantize": "--resolved-exchange-eval",
+    "--resolved-absolute-chain-end": "--resolved-exchange-eval",
 }
 
 

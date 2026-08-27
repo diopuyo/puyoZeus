@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import sys
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -900,6 +901,110 @@ def test_resolved_activates_on_minimum_estimated_score(monkeypatch) -> None:
     assert len(calls) == 1
 
 
+def test_minimum_prediction_guard_only_during_physical_chain(monkeypatch) -> None:
+    """1連鎖40点の下限予測は物理CHAIN中だけ未確定として扱う。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    minimum = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    normal = _make_chain_event(trigger_sec=1.0, total_score=1960)
+    tracker.update(
+        _make_signal(minimum, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(normal, 1960), _make_snapshot(), 0.0)
+
+    assert tracker.has_untrusted_minimum_active_chain(
+        BoardState.CHAIN, BoardState.CHAIN)
+    assert not tracker.has_untrusted_minimum_active_chain(
+        BoardState.STABLE, BoardState.CHAIN)
+
+
+def test_minimum_prediction_guard_does_not_block_real_multi_chain(monkeypatch) -> None:
+    """40点でも chain_count>1 なら最小値への縮退ではないため保留しない。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    minimum = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    multi = dataclass_replace(minimum, chain_count=2)
+    normal = _make_chain_event(trigger_sec=1.0, total_score=1960)
+    tracker.update(
+        _make_signal(multi, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(normal, 1960), _make_snapshot(), 0.0)
+
+    assert not tracker.has_untrusted_minimum_active_chain(
+        BoardState.CHAIN, BoardState.CHAIN)
+
+
+def test_minimum_prediction_guard_does_not_freeze_mutual_minimum(monkeypatch) -> None:
+    """双方40点なら非対称な過小評価ではなく、小連鎖同士として通常評価する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    minimum1 = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    minimum2 = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    tracker.update(
+        _make_signal(minimum1, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(minimum2, CHAIN_TOTAL_MIN_SCORE), _make_snapshot(), 0.0)
+
+    assert not tracker.has_untrusted_minimum_active_chain(
+        BoardState.CHAIN, BoardState.CHAIN)
+
+
+def test_minimum_prediction_guard_ends_after_confirmed_score_growth(monkeypatch) -> None:
+    """確定得点で再決着した後は、root eventが40点でも新しい予測を採用する。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    minimum = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    normal = _make_chain_event(trigger_sec=1.0, total_score=1960)
+    tracker.update(
+        _make_signal(minimum, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(normal, 1960), _make_snapshot(), 0.0)
+    tracker._pred_score1 = 1260.0
+
+    assert not tracker.has_untrusted_minimum_active_chain(
+        BoardState.CHAIN, BoardState.CHAIN)
+
+
+def test_minimum_prediction_display_guard_requires_extreme_direction_flip(
+    monkeypatch,
+) -> None:
+    """下限予測でも、極端でない値や直前STABLEと同方向なら表示を保留しない。"""
+    import scripts.visualize_advantage_overlay as vao
+    stub, _ = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    minimum = _make_chain_event(
+        trigger_sec=1.0, total_score=CHAIN_TOTAL_MIN_SCORE,
+        score_estimated=True)
+    normal = _make_chain_event(trigger_sec=1.0, total_score=1960)
+    tracker.update(
+        _make_signal(minimum, CHAIN_TOTAL_MIN_SCORE),
+        _make_signal(normal, 1960), _make_snapshot(), 0.0)
+
+    tracker.hold_adv = -80.0
+    assert vao._minimum_prediction_guard_applies(
+        tracker, BoardState.CHAIN, BoardState.CHAIN, 5.0)
+    assert not vao._minimum_prediction_guard_applies(
+        tracker, BoardState.CHAIN, BoardState.CHAIN, -5.0)
+    tracker.hold_adv = -20.0
+    assert not vao._minimum_prediction_guard_applies(
+        tracker, BoardState.CHAIN, BoardState.CHAIN, 5.0)
+
+
 def test_resolved_activates_on_mutual_fire_above_gate(monkeypatch) -> None:
     """両側とも CHAIN_TOTAL_MIN_SCORE 以上で同時発火 → 即座に決着計算する。"""
     import scripts.visualize_advantage_overlay as vao
@@ -999,6 +1104,155 @@ def test_resolved_no_redecide_when_settled_score_not_exceeding(monkeypatch) -> N
     snap_settled = _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=100)
     tracker.update(_make_signal(ev1, 5000), _make_signal(ev2, 300), snap_settled, 0.0)
     assert len(calls) == 1  # 予測(5000) > 確定値(100) のため再決着しない
+
+
+def test_episode_physical_redecide_follows_unresolved_net_growth(monkeypatch) -> None:
+    """進行中の台帳純残量5→21を、連鎖終了を待たず決着へ順次反映する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, score_calls = _stub_score_advantage_factory()
+    original = vao.resolve_mutual_exchange
+    exchange_calls: list[tuple[int, int, int, int]] = []
+
+    def capture(b1, b2, gen1, gen2, pending1, pending2, simulator=None):
+        exchange_calls.append((gen1, gen2, pending1, pending2))
+        return original(b1, b2, gen1, gen2, pending1, pending2, simulator)
+
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", capture)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_redecide=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    s1, s2, snap = _make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot()
+
+    tracker.update(s1, s2, snap, 0.0)
+    tracker.update(
+        s1, s2, snap, 0.1, physical_net_raw=5.0,
+        physical_is_unresolved=True)
+    tracker.update(
+        s1, s2, snap, 0.2, physical_net_raw=5.0,
+        physical_is_unresolved=True)
+    tracker.update(
+        s1, s2, snap, 0.3, physical_net_raw=21.0,
+        physical_is_unresolved=True)
+
+    assert len(score_calls) == 3  # 初回 + 5個 + 21個。同値5個では再計算しない
+    assert exchange_calls[-2:] == [(5, 0, 0, 0), (21, 0, 0, 0)]
+    assert tracker.episode_physical_redecide_count == 2
+
+
+def test_episode_physical_redecide_default_off_ignores_net(monkeypatch) -> None:
+    """新フラグOFFでは台帳純残量を渡しても従来の1回計算だけを維持する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=100)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    s1, s2, snap = _make_signal(ev1, 100), _make_signal(ev2, 300), _make_snapshot()
+    tracker.update(s1, s2, snap, 0.0)
+    tracker.update(
+        s1, s2, snap, 0.1, physical_net_raw=21.0,
+        physical_is_unresolved=True)
+    assert len(calls) == 1
+
+
+def test_episode_physical_stats_survive_tracker_recreation() -> None:
+    """試合境界で本体を再生成しても動画全体の保留母数を保持する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    first = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True)
+    first._t_sec = 10.0
+    first.apply_episode_consistency(
+        -20.0, 0.2, 15.0, 0.7, 10.0, 5.0,
+        is_unresolved=True, allows_hard_override=False)
+    second = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True,
+        episode_physical_stats=first.episode_physical_stats)
+    second._t_sec = 20.0
+    second.apply_episode_consistency(
+        -30.0, 0.1, 25.0, 0.8, 12.0, 8.0,
+        is_unresolved=True, allows_hard_override=False)
+
+    assert second.episode_consistency_fallback_count == 2
+    assert second.episode_consistency_fallback_times == [10.0, 20.0]
+
+
+def test_episode_consistency_holds_three_way_conflict() -> None:
+    """40秒局面: 台帳+5・直前モデル+25に対するhold -44を直前値へ保留する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True)
+    tracker._t_sec = 126.467
+    adv, p1, applied = tracker.apply_episode_consistency(
+        -44.11, 0.0991, 24.20, 0.7684, 25.98, 5.0,
+        is_unresolved=True, allows_hard_override=False)
+    assert (adv, p1) == pytest.approx((24.20, 0.7684))
+    assert applied is True
+    assert tracker.episode_consistency_fallback_times == [126.467]
+
+
+@pytest.mark.parametrize("stable", [2.9, -2.9, -84.0])
+def test_episode_consistency_uses_model_when_stable_memory_is_polluted(
+    stable: float,
+) -> None:
+    """旧hold由来のstable値が弱い/逆でも、台帳+生モデル一致を採用する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True)
+    adv, p1, applied = tracker.apply_episode_consistency(
+        -44.0, 0.1, stable, 0.7, 25.0, 5.0,
+        is_unresolved=True, allows_hard_override=False)
+    assert adv == 25.0
+    assert p1 == pytest.approx(vao.adv_to_winprob(25.0))
+    assert applied is True
+
+
+@pytest.mark.parametrize(
+    ("stable", "model"), [(24.0, 2.9), (24.0, -2.9)],
+)
+def test_episode_consistency_does_not_use_even_model_as_direction_vote(
+    stable: float, model: float,
+) -> None:
+    """生モデルがEVEN帯なら、台帳だけを根拠にholdを差し替えない。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True)
+    adv, p1, applied = tracker.apply_episode_consistency(
+        -44.0, 0.1, stable, 0.7, model, 5.0,
+        is_unresolved=True, allows_hard_override=False)
+    assert (adv, p1) == (-44.0, 0.1)
+    assert applied is False
+
+
+@pytest.mark.parametrize(
+    "candidate,stable,model,net,unresolved,allows",
+    [
+        (44.0, 24.0, 25.0, 5.0, True, False),   # holdも台帳と同方向
+        (-44.0, 24.0, -25.0, 5.0, True, False), # 直前モデルは2P支持
+        (-44.0, 24.0, 25.0, 5.0, False, False), # episode解決済み
+        (-44.0, 24.0, 25.0, 5.0, True, True),   # 物理的なhard確定あり
+    ],
+)
+def test_episode_consistency_does_not_mask_supported_or_final_result(
+    candidate, stable, model, net, unresolved, allows,
+) -> None:
+    """同方向・別根拠・解決済み・物理確定の結論は保留しない。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_episode_physical_consistency_guard=True)
+    adv, _p1, applied = tracker.apply_episode_consistency(
+        candidate, 0.2, stable, 0.7, model, net,
+        is_unresolved=unresolved, allows_hard_override=allows)
+    assert adv == candidate
+    assert applied is False
 
 
 # ============================
@@ -1662,22 +1916,56 @@ def test_live_defender_reeval_default_off_is_bit_identical(monkeypatch) -> None:
     assert len(calls) == 1  # _score_advantage は再度呼ばれない
 
 
-def test_live_defender_reeval_skipped_when_both_sides_still_chaining(monkeypatch) -> None:
-    """両者ともまだ連鎖中 (ev1/ev2 とも None でない) 間はライブ再評価をせず
-    完全凍結を維持する (指摘13の設計: ケース1「両者連鎖中」とケース2
-    「片側のみ連鎖中」の区別が正しく効いていることの確認)。"""
+def test_live_defender_reeval_skipped_when_defender_is_physically_busy(monkeypatch) -> None:
+    """イベントが両側に残っていても、受け側が物理連鎖中なら凍結する。"""
     import scripts.visualize_advantage_overlay as vao
     stub, calls = _stub_score_advantage_factory()
     monkeypatch.setattr(vao, "_score_advantage", stub)
-    tracker = vao.ResolvedExchangeTracker(model=object(), enable_live_defender_reeval=True)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
     ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
     ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
     tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
     assert len(calls) == 1
     live_board = _board_with_ojama(1)
-    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 1.0,
+    signal1 = types.SimpleNamespace(
+        chain_event=ev1, score=500, state=BoardState.CHAIN)
+    signal2 = types.SimpleNamespace(
+        chain_event=ev2, score=300, state=BoardState.CHAIN)
+    tracker.update(signal1, signal2, _make_snapshot(), 1.0,
                    t_sec=1.0, b1=live_board, b2=live_board)
-    assert len(calls) == 1  # 両側継続中はライブ再評価が起動しない
+    assert len(calls) == 1  # 受け側の物理 state が busy の間は再評価しない
+
+
+def test_live_defender_reeval_runs_when_event_is_stale_but_defender_is_free(
+    monkeypatch,
+) -> None:
+    """両側eventが残っても、受け側STABLEなら現在盤面を再評価する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+    assert len(calls) == 1
+
+    signal1 = types.SimpleNamespace(
+        chain_event=ev1, score=500, state=BoardState.STABLE)
+    signal2 = types.SimpleNamespace(
+        chain_event=ev2, score=300, state=BoardState.CHAIN)
+    tracker.update(
+        signal1, signal2, _make_snapshot(), 1.0, t_sec=1.0,
+        b1=_board_with_ojama(1), b2=_board_with_ojama(1))
+
+    assert len(calls) == 2
+    assert tracker.hold_adv == 20.0
 
 
 def test_live_defender_reeval_feeds_live_defender_board_and_frozen_attacker_board(
@@ -2178,6 +2466,493 @@ def test_live_defender_strict_still_reevaluates_when_defender_state_stable(
     assert len(calls) == 2  # 正当なケースは strict でも再評価される
 
 
+def test_live_defender_strict_reevaluates_stable_nondefender_while_defender_busy(
+    monkeypatch,
+) -> None:
+    """[2026-08-27 userレビュー 3:50] 初回STABLE復帰は基準化だけにし、
+    hold後に開始→終了を両方観測した新規side-local chainの前後差分だけを
+    decisive holdへ加える。chain_endは補正トリガーでなくARMにだけ使う。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    captured: list[tuple[Board, Board, object]] = []
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        captured.append((b1, b2, snap))
+        n = len(captured)
+        return float(n * 10), 0.5 + n * 0.05, []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    # decisive defender=1P。ただし1PはまだCHAIN中で、2PだけSTABLEへ復帰する。
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    first_stable_p2 = _board_with_ojama(3)
+
+    # 初回STABLE復帰 (実動画 source=312.933) はARMだけで、値を変えない。
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=first_stable_p2,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    assert len(captured) == 1
+    assert tracker.hold_adv == pytest.approx(10.0)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=first_stable_p2,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+
+    # その後の新規1連鎖 (実動画 source=316.5→318.467) を開始から観測。
+    before_chain_p2 = _make_4connect_board()
+    follow_ev2 = _make_chain_event(
+        trigger_sec=2.0, before_board=before_chain_p2, total_score=50)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(follow_ev2, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=before_chain_p2,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    after_chain_p2 = Board()
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(follow_ev2, 350, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p1=True, chain_total_score_p1=700),
+        3.0, t_sec=3.0, b1=None, b2=after_chain_p2,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    # 相手側の確定得点で再決着しても追跡を失わない。paired-delta は仮想の
+    # result側盤面でなく、同じ実盤面系列の before→after を比較する。
+    assert len(captured) == 4
+    assert captured[2][0] is result_stub.board_p1_after  # busy側だけ同じ盤面に凍結
+    assert captured[3][0] is result_stub.board_p1_after
+    assert captured[2][1] == before_chain_p2
+    assert captured[2][1] is not result_stub.board_p2_after
+    assert captured[3][1] is after_chain_p2
+    assert captured[2][2] is captured[3][2] is tracker._resolved_snap
+    assert tracker.hold_adv == pytest.approx(30.0)
+    assert tracker.nondef_cycle_stats["applied"] == 1
+
+
+def test_live_defender_strict_does_not_use_nonstable_nondefender_board(
+    monkeypatch,
+) -> None:
+    """反対側も非STABLEなら、sticky盤面が渡っていても新しい確定盤面とは
+    見なさず、両側とも決着値を凍結する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=None, b2=_board_with_ojama(3))
+
+    assert len(calls) == 1
+
+
+def test_nondefender_cycle_does_not_arm_on_fragment_stable_without_chain_end(
+    monkeypatch,
+) -> None:
+    """同一本線の断片間STABLE gapだけではARMせず、後続CHAINを新しい応手
+    連鎖として数えない。物理連鎖終了の確認が必要。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(), 1.0, t_sec=1.0, b1=None, b2=_board_with_ojama(4))
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(
+            _make_chain_event(2.0, before_board=_board_with_ojama(4), total_score=1000),
+            300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=_board_with_ojama(4))
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 1300, state=BoardState.STABLE),
+        _make_snapshot(), 3.0, t_sec=3.0, b1=None, b2=_board_with_ojama(1))
+
+    assert len(calls) == 1
+    assert tracker.nondef_cycle_stats["armed"] == 0
+    assert tracker.nondef_cycle_stats["started"] == 0
+    assert tracker.nondef_cycle_stats["applied"] == 0
+
+
+def test_nondefender_cycle_rejects_direct_reopen_without_new_hand(monkeypatch) -> None:
+    """終了候補でARMしても、新ツモ設置を挟まず直接CHAINへ戻る段継続は
+    新しい応手連鎖として開始しない。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(1.0, total_score=500)
+    ev2 = _make_chain_event(1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(
+            _make_chain_event(2.0, before_board=_make_4connect_board(), total_score=1000),
+            300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    assert len(calls) == 1
+    assert tracker.nondef_cycle_stats["armed"] == 1
+    assert tracker.nondef_cycle_stats["started"] == 0
+    assert tracker.nondef_cycle_stats["rejected_no_new_hand"] == 1
+
+
+def test_nondefender_cycle_ignores_stale_chain_end_and_subminimum_score(
+    monkeypatch,
+) -> None:
+    """残留したchain_endフラグだけでは補正せず、開始を観測しても得点増分が
+    40未満なら新規連鎖として採用しない。終了後のSTABLE反復でも再適用しない。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    stale_end = _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        stale_end, 1.0, t_sec=1.0, b1=None, b2=_board_with_ojama(4))
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=_board_with_ojama(4),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(
+            _make_chain_event(2.0, before_board=_board_with_ojama(4), total_score=39),
+            300, state=BoardState.CHAIN),
+        stale_end, 2.0, t_sec=2.0, b1=None, b2=_board_with_ojama(4),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 339, state=BoardState.STABLE),
+        stale_end, 3.0, t_sec=3.0, b1=None, b2=_board_with_ojama(1),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 339, state=BoardState.STABLE),
+        stale_end, 4.0, t_sec=4.0, b1=None, b2=_board_with_ojama(0),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    assert len(calls) == 1
+    assert tracker.nondef_cycle_stats["rejected_score"] == 1
+    assert tracker.nondef_cycle_stats["applied"] == 0
+
+
+def test_nondefender_cycle_fallback_is_once_and_fresh_board_replaces(monkeypatch) -> None:
+    """終了盤面がstaleなら整合済みsimulateを一度だけ使い、同じSTABLE中に
+    fresh盤面が来た時は元anchorから置換する（fallbackへ加算しない）。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    same = _make_4connect_board()
+    same_event = _make_chain_event(2.0, before_board=same, total_score=50)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=same,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=same,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=same,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 350, state=BoardState.STABLE),
+        _make_snapshot(), 3.0, t_sec=3.0, b1=None, b2=same.copy(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 350, state=BoardState.STABLE),
+        _make_snapshot(), 3.6, t_sec=3.6, b1=None, b2=same.copy(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    assert len(calls) == 3
+    assert tracker.hold_adv == pytest.approx(20.0)
+    assert tracker.nondef_cycle_stats["fallback_applied"] == 1
+
+    # 後着fresh盤面はfallback値へ足さず、同じanchor=10から置換する。
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 350, state=BoardState.STABLE),
+        _make_snapshot(), 3.7, t_sec=3.7, b1=None, b2=Board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    assert len(calls) == 5
+    assert tracker.hold_adv == pytest.approx(20.0)
+    assert tracker.nondef_cycle_stats["fresh_replaced"] == 1
+
+    # 同じevent idは再開しない。
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 350, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 3.8, t_sec=3.8, b1=None, b2=Board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(same_event, 350, state=BoardState.CHAIN),
+        _make_snapshot(), 4.0, t_sec=4.0, b1=None, b2=Board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    assert len(calls) == 5
+    assert tracker.nondef_cycle_stats["rejected_stale_event"] == 1
+    assert tracker.nondef_cycle_stats["applied"] == 1
+
+
+def test_nondefender_cycle_rejects_simulation_score_mismatch(monkeypatch) -> None:
+    """fallback simulateの得点が観測増分と許容差を超える場合は表示を変えない。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(1.0, total_score=500)
+    ev2 = _make_chain_event(1.0, total_score=300)
+    chain_board = _make_4connect_board()  # simulate得点40
+    mismatch_event = _make_chain_event(2.0, before_board=chain_board, total_score=500)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=chain_board,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=chain_board,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(mismatch_event, 300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=chain_board,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(mismatch_event, 500, state=BoardState.STABLE),
+        _make_snapshot(), 3.0, t_sec=3.0, b1=None, b2=chain_board,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(mismatch_event, 500, state=BoardState.STABLE),
+        _make_snapshot(), 3.6, t_sec=3.6, b1=None, b2=chain_board,
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    assert len(calls) == 1
+    assert tracker.hold_adv == pytest.approx(10.0)
+    assert tracker.nondef_cycle_stats["rejected_sim_mismatch"] == 1
+
+
+def test_nondefender_cycle_rejects_same_physical_chain_after_state_noise(
+    monkeypatch,
+) -> None:
+    """TSUMO/STABLEが途中に揺れても、決着を構成した同一chain_idの再開は
+    新しい応手連鎖として補正しない。実動画t=302.833の再現を固定する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_live_defender_reeval=True,
+        enable_live_defender_strict=True)
+    ev1 = _make_chain_event(1.0, total_score=500)
+    ev2 = _make_chain_event(1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(
+            _make_chain_event(2.0, before_board=_make_4connect_board(), total_score=1000),
+            300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+
+    assert len(calls) == 1
+    assert tracker.nondef_cycle_stats["started"] == 0
+    assert tracker.nondef_cycle_stats["rejected_stale_event"] == 1
+
+
+def test_nondefender_cycle_rejects_direction_reversal_correction(monkeypatch) -> None:
+    """モデル差分だけでholdの符号を反転させる補正は適用せず監査へ残す。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    values = iter((10.0, 20.0, -80.0))
+
+    def _stub(model, b1, b2, snap, feature_cols=None, attribution_exclude=()):
+        adv = next(values)
+        return adv, vao.adv_to_winprob(adv), []
+
+    monkeypatch.setattr(vao, "_score_advantage", _stub)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(model=object())
+    ev1 = _make_chain_event(1.0, total_score=500)
+    ev2 = _make_chain_event(1.0, total_score=300)
+    tracker.update(_make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0)
+
+    applied = tracker._apply_nondefender_cycle_after(
+        "2P", Board(), 10.0, "test", before=_make_4connect_board())
+
+    assert applied is False
+    assert tracker.hold_adv == pytest.approx(10.0)
+    assert tracker.nondef_cycle_stats["rejected_direction"] == 1
+
+
+def test_stable_nondefender_update_freezes_ledger_and_decisive_amplify(
+    monkeypatch,
+) -> None:
+    """非decisive側の盤面更新は、交換結果・会計・incomingを変更せず、応手MCも
+    再実行しない。決着時の増幅差分だけを新しい基礎値へ固定加算する。"""
+    import scripts.visualize_advantage_overlay as vao
+
+    stub, calls = _stub_score_advantage_factory()
+    monkeypatch.setattr(vao, "_score_advantage", stub)
+    monkeypatch.setattr(vao, "_load_chain_length_conditional_table", lambda: {})
+    monkeypatch.setattr(vao, "_counter_defender_adv", lambda *a, **k: 7.0)
+    result_stub = _stub_exchange_result_distinct_boards(dropped_to_p1=30)
+    monkeypatch.setattr(vao, "resolve_mutual_exchange", lambda *a, **k: result_stub)
+    tracker = vao.ResolvedExchangeTracker(
+        model=object(), enable_decisive_amplify=True,
+        enable_live_defender_reeval=True, enable_live_defender_strict=True)
+    tracker._counter_tracker.update = lambda *a, **k: (0.0, 0.5, 0.5)
+    ev1 = _make_chain_event(trigger_sec=1.0, total_score=500)
+    ev2 = _make_chain_event(trigger_sec=1.0, total_score=300)
+    tracker.update(
+        _make_signal(ev1, 500), _make_signal(ev2, 300), _make_snapshot(), 0.0,
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    frozen_result = tracker._result
+    frozen_snap = tracker._resolved_snap
+    frozen_incoming = (tracker._incoming_total_p1, tracker._incoming_total_p2)
+    assert tracker.hold_adv == pytest.approx(17.0)  # 基礎10 + 増幅7
+
+    def _mc_must_not_run(*args, **kwargs):
+        raise AssertionError("非decisive側の更新で応手MCを再実行してはならない")
+
+    tracker._counter_tracker.update = _mc_must_not_run
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.STABLE),
+        _make_snapshot(chain_end_triggered_p2=True, chain_total_score_p2=300),
+        1.0, t_sec=1.0, b1=None, b2=_board_with_ojama(3),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 300, state=BoardState.TSUMO_FALL),
+        _make_snapshot(), 1.5, t_sec=1.5, b1=None, b2=_board_with_ojama(3),
+        physical_chain_id_p1=11, physical_chain_id_p2=12)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(
+            _make_chain_event(2.0, before_board=_make_4connect_board(), total_score=50),
+            300, state=BoardState.CHAIN),
+        _make_snapshot(), 2.0, t_sec=2.0, b1=None, b2=_make_4connect_board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+    tracker.update(
+        _make_signal_full(ev1, 500, state=BoardState.CHAIN),
+        _make_signal_full(ev2, 350, state=BoardState.STABLE),
+        _make_snapshot(), 3.0, t_sec=3.0, b1=None, b2=Board(),
+        physical_chain_id_p1=11, physical_chain_id_p2=13)
+
+    assert len(calls) == 3
+    assert tracker.hold_adv == pytest.approx(27.0)  # 元17 + paired-delta(30-20)
+    assert tracker._result is frozen_result
+    assert tracker._resolved_snap is frozen_snap
+    assert (tracker._incoming_total_p1, tracker._incoming_total_p2) == frozen_incoming
+
+
 def test_live_defender_strict_still_reevaluates_when_defender_state_tsumo_fall(
     monkeypatch,
 ) -> None:
@@ -2316,7 +3091,7 @@ def test_generate_source_gates_hold_kill_override_calls_by_flag() -> None:
     assert len(hit_lines) == 2
     for idx in hit_lines:
         preceding = "\n".join(lines[max(0, idx - 2):idx])
-        assert "if enable_resolved_kill_override:" in preceding
+        assert "if enable_resolved_kill_override" in preceding
 
 
 def test_generate_signature_new_flags_default_false() -> None:
@@ -2676,6 +3451,30 @@ def test_main_source_wires_victim_gen_live_cli_flag() -> None:
     assert '"--resolved-victim-gen-live"' in src
     assert "dest=\"enable_resolved_victim_gen_live\"" in src
     assert "enable_resolved_victim_gen_live=a.enable_resolved_victim_gen_live" in src
+
+
+def test_episode_physical_redecide_defaults_and_wiring() -> None:
+    """新機能は既定OFFで、CLI→generate→trackerの2生成箇所まで配線される。"""
+    import inspect
+    import scripts.visualize_advantage_overlay as vao
+
+    tracker_sig = inspect.signature(vao.ResolvedExchangeTracker.__init__)
+    generate_sig = inspect.signature(vao.generate)
+    assert tracker_sig.parameters["enable_episode_physical_redecide"].default is False
+    assert tracker_sig.parameters[
+        "enable_episode_physical_consistency_guard"].default is False
+    assert generate_sig.parameters[
+        "enable_resolved_episode_physical_redecide"].default is False
+    assert generate_sig.parameters[
+        "enable_resolved_episode_physical_consistency_guard"].default is False
+    source = inspect.getsource(vao.generate)
+    assert source.count("enable_episode_physical_redecide=") == 2
+    assert source.count("enable_episode_physical_consistency_guard=") == 2
+    main_source = inspect.getsource(vao.main)
+    assert '"--resolved-episode-physical-redecide"' in main_source
+    assert '"--resolved-episode-physical-consistency-guard"' in main_source
+    assert "a.enable_resolved_episode_physical_redecide" in main_source
+    assert "a.enable_resolved_episode_physical_consistency_guard" in main_source
 
 
 # ============================

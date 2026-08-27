@@ -479,6 +479,20 @@ class SideResult:
     #     を補正した (起点誤認が事後に判明したケース)。
     # backwards compat のため default None。
     answer_check_result: str | None = None
+    # [2026-08-26 決着ホールド根治、Codex 第27報レビュー] NEXT ROI の
+    # **物理的な**スライド動作 (`NextSlideDetector.slide_motion`)。
+    # 既に `_step_side` の引数としては渡っていたが公開されていなかったため、
+    # backwards-compatible な optional フィールドとして露出する。
+    #
+    # なぜ必要か: 連鎖終了の絶対律「ネクストが動いた」を `next_pair` の
+    # 値比較だけで判定すると、**次ツモがたまたま同じ色ペアだった場合に
+    # 検出できない** (4色なら約6.25%)。物理的な移動信号ならその取りこぼしが無い。
+    #
+    # 注意: `slide_motion` 単独は既知の事故源で、連鎖演出の発光により連鎖中に
+    # 1.37秒周期で誤検知する実測がある (`_should_suppress_slide_exit` の
+    # コメント参照)。単独の判定根拠にせず、必ずデバウンスや他信号と併用すること。
+    # None = 未算出 (テストダブル等)。
+    next_slide_motion: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -8639,6 +8653,9 @@ class RecognitionPipeline:
             estimated_board=estimated_board,
             board_provenance=board_provenance,
             answer_check_result=answer_check_result,
+            # [2026-08-26] 既に引数として受け取っていた物理スライド信号を公開する
+            # (SideResult.next_slide_motion の docstring 参照)。
+            next_slide_motion=slide_motion,
         )
 
 

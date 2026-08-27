@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import scripts.visualize_advantage_overlay as vao  # noqa: E402
 from src.board_state_machine import BoardState  # noqa: E402
+from src.ojama_accounting import GrossOjamaCounters, OjamaAccountingTracker  # noqa: E402
 
 
 # ============================
@@ -426,6 +427,194 @@ class TestGenerateRenderAndDumpWiring:
 
 
 # ============================
+# Gate 3R-5 (2026-08-25): gross累積カウンタ dump 列の既定OFF配線
+# docs/EXCHANGE_GROSS_SUPPLY_DESIGN_2026-08-25.md §3.3/§3.4 参照。
+# ============================
+
+def _gross(t_sec: float, **overrides: int) -> GrossOjamaCounters:
+    """gross 累積カウンタのテスト用生成関数 (test_exchange_episode_tracker.py
+    の同名ヘルパーと同じ既定値、テストファイル間で共有しない方針のため複製)。
+    """
+    values = {
+        "generated_p1": 0, "generated_p2": 0,
+        "offset_uncapped_p1": 0, "offset_uncapped_p2": 0,
+        "dropped_uncapped_p1": 0, "dropped_uncapped_p2": 0,
+        "boundary_wiped_uncapped_p1": 0, "boundary_wiped_uncapped_p2": 0,
+        "boundary_resets_p1": 0, "boundary_resets_p2": 0,
+        "clamp_loss_p1": 0, "clamp_loss_p2": 0,
+    }
+    values.update(overrides)
+    return GrossOjamaCounters(t_sec=t_sec, **values)
+
+
+class TestBuildGrossDumpFields:
+    """`_build_gross_dump_fields` (純関数) の prev=None分岐と委譲先の確認。"""
+
+    def test_prev_none_marks_row_as_uninspected(self) -> None:
+        """処理開始直後の1行は「検査していない」で記録し、0 と未検査を
+        区別する (feedback_zero_needs_denominator_2026-08-25)。
+        """
+        curr = _gross(1.0, generated_p1=50)
+        fields = vao._build_gross_dump_fields(None, curr, None, (30, 0), 0)
+        assert fields["gross_inspected_sides"] == 0
+        assert fields["gross_gen_p1"] == 0  # 未検査=差分は出さない (推測しない)
+        assert fields["gross_pending_unc_p1"] == 30
+        assert fields["gross_pending_unc_p2"] == 0
+        assert fields["gross_residual_p1"] == 0.0
+
+    def test_prev_given_delegates_to_classify_gross_counter_delta(self) -> None:
+        """prev が渡された行は classify_gross_counter_delta の分解結果を
+        そのまま列へ写す (推測しない、design doc T1 相当)。"""
+        prev = _gross(0.0)
+        curr = _gross(1.0, generated_p1=50, generated_p2=30, offset_uncapped_p1=50)
+        fields = vao._build_gross_dump_fields(prev, curr, (100, 0), (80, 0), 0)
+        assert fields["gross_inspected_sides"] == 2
+        assert fields["gross_offset_p1"] == 50
+        assert fields["gross_gen_p2"] == 30
+        assert fields["gross_residual_p1"] == 0.0
+        assert fields["gross_residual_p2"] == 0.0
+        assert fields["gross_pending_unc_p1"] == 80
+
+    def test_returns_exactly_the_declared_key_set(self) -> None:
+        fields = vao._build_gross_dump_fields(None, _gross(0.0), None, (0, 0), 0)
+        assert set(fields) == set(vao._TIMELINE_GROSS_KEYS)
+
+    def test_preserved_tracker_reports_boundary_wipe_with_zero_residual(self) -> None:
+        """境界で会計 tracker を保持すると、旧 pending がワイプ量として残る。"""
+        tracker = OjamaAccountingTracker()
+        tracker.reset()
+        tracker.update_from_score(0, 5000, 0.0)
+        before_snap = tracker.update_from_score(
+            7000, 5000, 1.0, chain_p1=True)
+        assert before_snap.pending_p2_uncapped > 0
+        before = tracker.get_gross_counters(1.0)
+
+        fresh = vao._fresh_trackers(None, accounting_tracker=tracker)
+        assert fresh[0] is tracker
+        tracker.on_state_transition(
+            "p1", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=2.0)
+        tracker.on_state_transition(
+            "p2", BoardState.STABLE, BoardState.STABLE, score=0, t_sec=2.0)
+        after_snap = tracker.get_snapshot(2.0)
+        fields = vao._build_gross_dump_fields(
+            before, tracker.get_gross_counters(2.0),
+            (before_snap.pending_p1_uncapped, before_snap.pending_p2_uncapped),
+            (after_snap.pending_p1_uncapped, after_snap.pending_p2_uncapped), 1)
+
+        assert fields["gross_wiped_p2"] == before_snap.pending_p2_uncapped
+        assert fields["gross_inspected_sides"] == 2
+        assert fields["gross_residual_p1"] == 0.0
+        assert fields["gross_residual_p2"] == 0.0
+
+
+class TestGrossDumpStats:
+    """母数付き集計 (0 が「合っている」のか「測っていない」のかを区別する)。"""
+
+    def test_uninspected_rows_do_not_count_toward_denominator(self) -> None:
+        stats = vao._GrossDumpStats()
+        uninspected = vao._build_gross_dump_fields(None, _gross(0.0), None, (0, 0), 0)
+        stats.record(uninspected)
+        assert stats.rows_total == 1
+        assert stats.rows_inspected == 0
+        assert stats.sides_inspected == 0
+        s = stats.summary()
+        assert "0/0 side" in s
+        assert "検査 0/1 行" in s
+
+    def test_zero_residual_recorded_with_denominator(self) -> None:
+        stats = vao._GrossDumpStats()
+        prev = _gross(0.0)
+        curr = _gross(1.0, generated_p1=50, generated_p2=30, offset_uncapped_p1=50)
+        fields = vao._build_gross_dump_fields(prev, curr, (100, 0), (80, 0), 0)
+        stats.record(fields)
+        assert stats.nonzero_residual_sides == 0
+        assert stats.sides_inspected == 2
+        assert "0/2 side" in stats.summary()
+
+    def test_nonzero_residual_is_counted_not_hidden(self) -> None:
+        """恒等式が破れる入力 (保存則違反の回帰再現) では残差を握り潰さない。"""
+        stats = vao._GrossDumpStats()
+        prev = _gross(0.0)
+        curr = _gross(1.0, generated_p1=50, generated_p2=30, offset_uncapped_p1=50)
+        # curr_pending_unc を恒等式の期待値 (-20) からずらし、片側だけ残差を作る。
+        fields = vao._build_gross_dump_fields(prev, curr, (100, 0), (70, 0), 0)
+        stats.record(fields)
+        assert fields["gross_residual_p1"] == pytest.approx(-10.0)
+        assert fields["gross_residual_p2"] == 0.0
+        assert stats.nonzero_residual_sides == 1
+        assert "1/2 side" in stats.summary()
+
+
+class TestGrossLedgerDumpRoundTrip:
+    """save_timeline_dump/load_timeline_dump の gross列往復整合 + 既定OFF構造。"""
+
+    @staticmethod
+    def _gross_row(t_sec: float, game_idx: int) -> vao.TimelineDumpRow:
+        board = _empty_board()
+        prev = _gross(0.0)
+        curr = _gross(1.0, generated_p1=50, generated_p2=30, offset_uncapped_p1=50)
+        fields = vao._build_gross_dump_fields(prev, curr, (100, 0), (80, 0), game_idx)
+        return vao._build_timeline_dump_row(
+            t_sec=t_sec, game_idx=game_idx, adv_raw=0.0, adv_ema=0.0, p1=0.5,
+            p1_raw=0.5, pending_p1=0, pending_p2=0, room1=72, room2=72,
+            b1=board, b2=board, drivers=[], score1=0, score2=0,
+            state1="STABLE", state2="STABLE", gross_fields=fields,
+        )
+
+    def test_gross_columns_round_trip(self, tmp_path: Path) -> None:
+        rows = [self._gross_row(0.0, 0), self._gross_row(1.0, 0)]
+        path = tmp_path / "v_gross.npz"
+        vao.save_timeline_dump(path, "v_gross", rows)
+        d = np.load(str(path), allow_pickle=True)
+        assert "gross_gen_p1" in d.files
+        assert "gross_inspected_sides" in d.files
+        video_id, loaded = vao.load_timeline_dump(path)
+        assert video_id == "v_gross"
+        for original, restored in zip(rows, loaded):
+            assert restored == original
+
+    def test_off_default_never_adds_gross_keys(self, tmp_path: Path) -> None:
+        """gross_fields を渡さない (既定) 行は npz に gross_* キーを一切追加
+        しない (Gate 3R-5 既定OFF bit-identical要件の構造面の証拠)。"""
+        rows = _sample_rows()
+        path = tmp_path / "v_off.npz"
+        vao.save_timeline_dump(path, "v_off", rows)
+        d = np.load(str(path), allow_pickle=True)
+        assert not (set(d.files) & set(vao._TIMELINE_GROSS_KEYS))
+
+
+class TestGrossLedgerDumpFlagWiring:
+    """generate()/CLI の既定OFF配線確認。"""
+
+    def test_generate_accepts_gross_ledger_dump_flag_smoke(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        """generate() が enable_gross_ledger_dump を受け付ける
+        (optional 引数追加のみ = backwards compat)。"""
+        written = vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False,
+            dump_timeline_path=tmp_path / "dump.npz",
+            enable_gross_ledger_dump=True,
+        )
+        assert written > 0
+        assert (tmp_path / "dump.npz").exists()
+
+    def test_generate_default_off_matches_baseline_keys(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        """enable_gross_ledger_dump 省略時 (既定False) は npz に gross_* キーが
+        一切追加されない (MENU固定スタブでも構造面のbit-identicalを確認)。"""
+        vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False,
+            dump_timeline_path=tmp_path / "dump.npz",
+        )
+        d = np.load(str(tmp_path / "dump.npz"), allow_pickle=True)
+        assert not (set(d.files) & set(vao._TIMELINE_GROSS_KEYS))
+
+
+# ============================
 # is_dead 凍結盤面誤判定の遡及訂正 (2026-08-24 根治、enable_stable_confirmed_is_dead)
 # ============================
 
@@ -681,3 +870,176 @@ class TestBuildRowIsDeadOverride:
         )
         assert written > 0
         assert (tmp_path / "dump.npz").exists()
+
+
+# ============================
+# 死亡確定の時間的ロジック (Gate 3R-6 本体、2026-08-25、enable_death_confirm_sequence)
+# ============================
+
+
+class TestDeathConfirmDumpRoundTrip:
+    """save_timeline_dump/load_timeline_dump の is_dead*_confirmed 列往復整合。"""
+
+    @staticmethod
+    def _row_with_confirm(
+        is_dead1_confirmed: bool | None, is_dead2_confirmed: bool | None,
+    ) -> vao.TimelineDumpRow:
+        return vao.TimelineDumpRow(
+            t_sec=0.0, game_idx=0, adv_raw=0.0, adv_ema=0.0, p1=0.5, p1_raw=0.5,
+            pending_p1=0, pending_p2=0, room1=72, room2=72,
+            is_dead1=False, is_dead2=False,
+            drivers_top1_name="", drivers_top1_val=0.0,
+            drivers_top3_names=("", "", ""), drivers_top3_vals=(0.0, 0.0, 0.0),
+            score1=0, score2=0, b1_hash=0, b2_hash=0,
+            state1="STABLE", state2="STABLE",
+            is_dead1_confirmed=is_dead1_confirmed,
+            is_dead2_confirmed=is_dead2_confirmed,
+        )
+
+    def test_round_trip_preserves_confirmed_columns(self, tmp_path: Path) -> None:
+        rows = [
+            self._row_with_confirm(False, False),
+            self._row_with_confirm(True, False),
+        ]
+        path = tmp_path / "v_death.npz"
+        vao.save_timeline_dump(path, "v_death", rows)
+        d = np.load(str(path), allow_pickle=True)
+        assert "is_dead1_confirmed" in d.files
+        assert "is_dead2_confirmed" in d.files
+        _, loaded = vao.load_timeline_dump(path)
+        assert [r.is_dead1_confirmed for r in loaded] == [False, True]
+        assert [r.is_dead2_confirmed for r in loaded] == [False, False]
+
+    def test_off_default_never_adds_death_confirm_keys(self, tmp_path: Path) -> None:
+        """is_dead1_confirmed を渡さない (既定 None) 行は npz にキーを
+        一切追加しない (bit-identical、backwards compat)。"""
+        rows = [self._row_with_confirm(None, None)]
+        path = tmp_path / "v_death_off.npz"
+        vao.save_timeline_dump(path, "v_death_off", rows)
+        d = np.load(str(path), allow_pickle=True)
+        assert "is_dead1_confirmed" not in d.files
+        assert "is_dead2_confirmed" not in d.files
+
+    def test_old_dump_without_columns_loads_as_none(self, tmp_path: Path) -> None:
+        """旧 dump (is_dead1_confirmed 列が無い) を読んでも
+        is_dead1_confirmed/is_dead2_confirmed は None のまま復元される
+        (後方互換、_load_timeline_dump_death_confirm_fields 参照)。"""
+        rows = [self._row_with_confirm(None, None)]
+        path = tmp_path / "v_old.npz"
+        vao.save_timeline_dump(path, "v_old", rows)
+        _, loaded = vao.load_timeline_dump(path)
+        assert loaded[0].is_dead1_confirmed is None
+        assert loaded[0].is_dead2_confirmed is None
+
+
+class TestDeathConfirmSequenceFlagWiring:
+    """generate()/CLI の既定OFF配線確認 (Gate 3R-6 本体)。"""
+
+    def test_generate_accepts_death_confirm_sequence_flag_smoke(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        """generate() が enable_death_confirm_sequence を受け付ける
+        (optional 引数追加のみ = backwards compat)。
+
+        _stub_heavy_pipeline は常に MENU を返す (b1/b2 が STABLE に
+        ならない) ため settled 再計算が一度も走らず dump_rows は 0 件になる
+        (`TestGrossLedgerDumpFlagWiring` と同じ既知の制約)。npz キー追加の
+        確認は `TestDeathConfirmDumpRoundTrip` (直接構築した行) で行う。
+        """
+        written = vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False,
+            dump_timeline_path=tmp_path / "dump.npz",
+            enable_death_confirm_sequence=True,
+        )
+        assert written > 0
+        assert (tmp_path / "dump.npz").exists()
+
+    def test_generate_default_off_no_death_confirm_keys(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        """enable_death_confirm_sequence 省略時 (既定False) は npz に
+        is_dead1_confirmed/is_dead2_confirmed が一切追加されない。"""
+        vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False,
+            dump_timeline_path=tmp_path / "dump.npz",
+        )
+        d = np.load(str(tmp_path / "dump.npz"), allow_pickle=True)
+        assert "is_dead1_confirmed" not in d.files
+        assert "is_dead2_confirmed" not in d.files
+
+    def test_death_tracker_update_called_every_frame_regardless_of_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        _stub_heavy_pipeline: None,
+    ) -> None:
+        """enable_death_confirm_sequence=False でも DeathConfirmTracker.update()
+        自体は毎フレーム呼ばれる (settled ゲート外側の state 遷移監視、
+        コスト僅少だが no-op ではないことの配線確認)。"""
+        calls: list[int] = []
+        orig = vao.DeathConfirmTracker.update
+
+        def _spy(self: "vao.DeathConfirmTracker", *args: object, **kwargs: object):
+            calls.append(1)
+            return orig(self, *args, **kwargs)
+
+        monkeypatch.setattr(vao.DeathConfirmTracker, "update", _spy)
+        vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.3, sample_interval=0.15, render=False,
+            dump_timeline_path=tmp_path / "dump.npz",
+        )
+        assert len(calls) > 0
+
+
+class TestExchangeEpisodeGateFlagWiring:
+    """Gate 4条件5のgenerate既定OFF・sidecar分離配線。"""
+
+    def test_episode_dump_requires_gate(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        with pytest.raises(ValueError, match="enable_exchange_episode_gate=True"):
+            vao.generate(
+                Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+                max_sec=0.1, sample_interval=0.15, render=False,
+                dump_exchange_episode_timeline_path=tmp_path / "episode.npz")
+
+    def test_generate_gate_writes_separate_sidecar(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        path = tmp_path / "episode.npz"
+        written = vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False,
+            enable_exchange_episode_gate=True,
+            dump_exchange_episode_timeline_path=path)
+        assert written > 0
+        with np.load(str(path), allow_pickle=True) as data:
+            assert data["t_sec"].size > 0
+            assert set(vao.EpisodeTimelineRow.__dataclass_fields__) <= set(data.files)
+
+    @pytest.mark.parametrize(
+        "old_flags",
+        [
+            {"enable_kill_override_chain_completion": True},
+            {"enable_kill_override_scale_compare": True},
+        ],
+    )
+    def test_old_chain_accumulator_is_mutually_exclusive(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+        old_flags: dict[str, bool],
+    ) -> None:
+        with pytest.raises(ValueError, match="ChainGenerationAccumulator は排他"):
+            vao.generate(
+                Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+                max_sec=0.1, sample_interval=0.15, render=False,
+                enable_exchange_episode_gate=True, **old_flags)
+
+    def test_default_off_creates_no_episode_sidecar(
+        self, tmp_path: Path, _stub_heavy_pipeline: None,
+    ) -> None:
+        path = tmp_path / "episode.npz"
+        vao.generate(
+            Path("dummy_never_opened.mp4"), tmp_path / "out.mp4",
+            max_sec=0.1, sample_interval=0.15, render=False)
+        assert not path.exists()

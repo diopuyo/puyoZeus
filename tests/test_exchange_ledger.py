@@ -613,6 +613,20 @@ def test_episode_max_sec_forces_close_and_counts() -> None:
     assert led.snapshot().forced_close_count >= 1
 
 
+def test_deferred_max_sec_accepts_same_frame_settlement_before_close() -> None:
+    """live原子frameでは期限判定より先に同時刻の相殺を要約へ含める。"""
+    led = ExchangeLedger(defer_max_sec_close=True)
+    ctx = _ctx()
+    led.push(_fire(Side.P1, 0.0, 1), ctx)
+    led.push(_step(Side.P1, 0.0, 1, 100.0, cc=6), ctx)
+    led.push(_cancel(Side.P1, 61.0, 1, 30.0), ctx)
+    led.close_expired(61.0)
+    closed = led.closed_episodes()[-1]
+    assert closed.close_reason == "max_sec"
+    assert closed.total_canceled == pytest.approx(30.0)
+    assert led.snapshot().post_close_settlement_dropped_count == 0
+
+
 # ===========================================================================
 # I15 / I8 / §7.4: 未解決ゲートと早期解除
 # ===========================================================================
@@ -643,6 +657,7 @@ def test_hard_override_forbidden_while_outcome_depends_on_provisional() -> None:
         _fire(Side.P1, 176.3, 1), _step(Side.P1, 176.3, 1, 525.0, cc=9),
     ], ctx)
     assert led.snapshot(ctx).allows_hard_override is False
+    assert led.snapshot(ctx).hard_override_target is None
 
 
 def test_hard_override_allowed_when_receiver_dies_regardless() -> None:
@@ -659,6 +674,57 @@ def test_hard_override_allowed_when_receiver_dies_regardless() -> None:
         _fire(Side.P1, 176.3, 1), _step(Side.P1, 176.3, 1, 525.0, cc=9),
     ], ctx)
     assert led.snapshot(ctx).allows_hard_override is True
+    assert led.snapshot(ctx).hard_override_target == 100.0
+
+
+def test_hard_override_target_does_not_allow_opposite_direction() -> None:
+    """2P死亡の確定は+100だけを許し、逆向きの許可にはならない。"""
+    led = ExchangeLedger()
+    ctx = _ctx(p2_dead=True, p2_room=0)
+    _push_all(led, [
+        _fire(Side.P1, 1.0, 1), _step(Side.P1, 1.0, 1, 100.0, cc=4),
+    ], ctx)
+    snap = led.snapshot(ctx)
+    assert snap.allows_hard_override is True
+    assert snap.hard_override_target == 100.0
+
+
+def test_hard_override_target_rejects_certain_direction_opposite_total_net() -> None:
+    """小さい確定連鎖だけで、逆側の大きい暫定連鎖を無視して勝者断定しない。"""
+    led = ExchangeLedger()
+    ctx = _ctx(p1_room=5, p2_room=5)
+    _push_all(led, [
+        _fire(Side.P2, 1.0, 1), _step(Side.P2, 1.0, 1, 110.0, cc=8),
+        _fire(Side.P1, 2.0, 2), _step(Side.P1, 2.0, 2, 20.0, cc=2),
+        _finalize(Side.P1, 2.5, 2, 20.0),
+    ], ctx)
+    snap = led.snapshot(ctx)
+    assert snap.net_raw == pytest.approx(-90.0)
+    assert snap.is_unresolved is True
+    assert snap.allows_hard_override is False
+    assert snap.hard_override_target is None
+
+
+def test_hard_override_target_keeps_certain_kill_when_total_net_agrees() -> None:
+    """確定量と交換全体が同方向なら、真の致死を従来どおり弱めない。"""
+    led = ExchangeLedger()
+    ctx = _ctx(p2_room=5)
+    _push_all(led, [
+        _fire(Side.P1, 1.0, 1), _step(Side.P1, 1.0, 1, 20.0, cc=2),
+        _finalize(Side.P1, 1.5, 1, 20.0),
+        _fire(Side.P1, 2.0, 2), _step(Side.P1, 2.0, 2, 110.0, cc=8),
+    ], ctx)
+    snap = led.snapshot(ctx)
+    assert snap.net_raw == pytest.approx(130.0)
+    assert snap.hard_override_target == 100.0
+
+
+def test_resolved_episode_has_no_direction_constraint() -> None:
+    """episode不在時は両向き許可なので、片方向targetを残さない。"""
+    snap = ExchangeLedger().snapshot(_ctx(p2_dead=True))
+    assert snap.is_unresolved is False
+    assert snap.allows_hard_override is True
+    assert snap.hard_override_target is None
 
 
 # ===========================================================================
@@ -1269,3 +1335,65 @@ def test_p2_1_downward_hold_is_cleared_by_subsequent_normal_finalize() -> None:
     assert snap.unreconciled == pytest.approx(0.0), (
         f"解消済みの保留差が unreconciled に残った (実測 {snap.unreconciled})"
     )
+
+
+def test_post_close_backfill_does_not_join_new_open_episode() -> None:
+    """旧要約への後着イベントを、同時に開いている新episodeへ混入させない。"""
+    ledger = ExchangeLedger(defer_max_sec_close=True)
+    ctx = _ctx(game_idx=0)
+    _push_all(ledger, [
+        _fire(Side.P1, 0.0, 1),
+        _step(Side.P1, 0.0, 1, 10.0),
+    ], ctx)
+    ledger.close_expired(61.0)
+    _push_all(ledger, [
+        _fire(Side.P2, 62.0, 2),
+        _step(Side.P2, 62.0, 2, 20.0),
+        _cancel(Side.P1, 63.0, 1, 3.0),
+    ], ctx)
+
+    ledger.push(_tsumo(Side.P1, 64.0), _ctx(game_idx=1))
+
+    assert ledger.snapshot().duplicate_generated_suppressed_count == 0
+    assert ledger.closed_episodes()[-1].total_generated == pytest.approx(20.0)
+
+
+def test_post_close_outstanding_delta_isolated_from_concurrent_episode() -> None:
+    """後着分の残量増減を、新episodeの同frame増減と混ぜず累積する。"""
+    ledger = ExchangeLedger(defer_max_sec_close=True)
+    ctx = _ctx(game_idx=0)
+    _push_all(ledger, [
+        _fire(Side.P1, 0.0, 1),
+        _step(Side.P1, 0.0, 1, 10.0),
+    ], ctx)
+    ledger.close_expired(61.0)
+    ledger.push(_cancel(Side.P1, 62.0, 1, 3.0), ctx)
+
+    assert ledger.snapshot().post_close_outstanding_delta_total == pytest.approx(-3.0)
+
+
+def test_post_close_step_backfills_old_summary_without_joining_new_episode() -> None:
+    """close後の同一chain成長は旧要約だけを更新し、新episodeへ混入させない。"""
+    ledger = ExchangeLedger(defer_max_sec_close=True)
+    ctx = _ctx(game_idx=0)
+    _push_all(ledger, [
+        _fire(Side.P1, 0.0, 1),
+        _step(Side.P1, 0.0, 1, 5.0),
+    ], ctx)
+    ledger.close_expired(61.0)
+    _push_all(ledger, [
+        _fire(Side.P2, 62.0, 2),
+        _step(Side.P2, 62.0, 2, 20.0),
+        _step(Side.P1, 63.0, 1, 10.0),
+    ], ctx)
+
+    first = ledger.closed_episodes()[0]
+    assert first.total_generated == pytest.approx(15.0)
+    assert first.unreconciled == pytest.approx(15.0)
+    snap = ledger.snapshot()
+    assert snap.post_close_growth_backfilled_count == 1
+    assert snap.post_close_growth_backfilled_amount == pytest.approx(10.0)
+    assert snap.post_close_outstanding_delta_total == pytest.approx(10.0)
+
+    ledger.push(_tsumo(Side.P1, 64.0), _ctx(game_idx=1))
+    assert ledger.snapshot().duplicate_generated_suppressed_count == 0

@@ -31,7 +31,7 @@ seg01 game2 の実測 (`logs/_diag_zenchi_seg01_pm100_trace_2026-08-24.log`):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 
 # ============================
@@ -264,6 +264,9 @@ class LedgerSnapshot:
     is_unresolved: bool
     # ±100 の完全上書きを許してよいか (§7.4 の決定不変性)
     allows_hard_override: bool
+    # 未解決中に決定不変性で許可できる向き。+100=1P、-100=2P、None=未確定。
+    # episode 解決済みでは向きに制約がないため None のまま allows=True になる。
+    hard_override_target: float | None = None
     # 強制終了カウンタ 3 種 (D3。黙って切らないための実体)
     forced_close_count: int = 0
     chain_id_force_cut_count: int = 0
@@ -313,14 +316,29 @@ class LedgerSnapshot:
     retired_generated: float = 0.0
     # 【コーディネーター指摘、2026-08-25 追加】close 済み (`_counted_chain_ids`
     # に大域計上済み) chain へ、close 後に届いた相殺・着弾の件数・量。
-    # **根治は未着手。この値が大きければ close の判定が早すぎる証拠。**
-    # CLOSED_FORCED の chain は outstanding>0 のまま `self._chains` に残る
-    # ため、close 後も FIFO 帰属で相殺・着弾を受け取り続けられるが、その
-    # episode の要約 (`ClosedEpisodeSummary`) は close 時点のスナップ
-    # ショットなので、以後増えた分はどの合計にも現れない
-    # (`_maybe_count_post_close_settlement` 参照)。
+    # live原子frame経路のmax_sec要約は後着決済をbackfillする。ここに残るのは
+    # 対応要約を特定できず回収不能だった件で、0が必須。
     post_close_settlement_dropped_count: int = 0
     post_close_settlement_dropped_amount: float = 0.0
+    # live原子frame経路でmax_sec後の要約へ回収できた遅延決済。
+    post_close_settlement_backfilled_count: int = 0
+    post_close_settlement_backfilled_amount: float = 0.0
+    # max_sec close 後に届いた確定値を同じ要約へ反映した件数・確定量。
+    post_close_finalize_backfilled_count: int = 0
+    post_close_finalize_backfilled_amount: float = 0.0
+    # close 済みchainの確定値を要約へ帰属できなかった件数・確定量。
+    post_close_finalize_dropped_count: int = 0
+    post_close_finalize_dropped_amount: float = 0.0
+    # side wipeで退役済みの同一chainへ後着イベントを反映した件数・量。
+    post_retire_backfilled_count: int = 0
+    post_retire_backfilled_amount: float = 0.0
+    # close済みchainへの後着イベントだけが変化させたoutstandingの符号付き累計。
+    # 同frameの新規生成と混ぜず、closed要約の追従を直接検算するための値。
+    post_close_outstanding_delta_total: float = 0.0
+    post_close_growth_backfilled_count: int = 0
+    post_close_growth_backfilled_amount: float = 0.0
+    post_close_growth_dropped_count: int = 0
+    post_close_growth_dropped_amount: float = 0.0
 
 
 # ============================
@@ -334,6 +352,7 @@ class LedgerSnapshot:
 # その幅をおじゃま個数へ換算して 250/70 ≈ 3.6 個、丸めて 4 個。
 # シーンからの逆算ではなく、得点式に含まれる差分から導出している。
 FINALIZE_DOWNWARD_TOLERANCE: float = 4.0
+LATE_FINALIZE_AFTER_NORMAL_CLOSE: str = "late_finalize_after_normal_close"
 
 # 表示用 pending の上限。src/ojama_accounting.py の PENDING_ABS_CAP と同値。
 # **判定 (net_raw) には使わない。** cap 後の値どうしを引き算すると
@@ -427,7 +446,10 @@ class ExchangeLedger:
     同じイベント列を与えれば必ず同じ結果になる。
     """
 
-    def __init__(self, *, allow_simulate_fallback: bool = False) -> None:
+    def __init__(
+        self, *, allow_simulate_fallback: bool = False,
+        defer_max_sec_close: bool = False,
+    ) -> None:
         """
         Args:
             allow_simulate_fallback: I16 (FINALIZE の値供給源の限定) を
@@ -462,6 +484,9 @@ class ExchangeLedger:
         self._duplicate_generated_suppressed_amount: float = 0.0
         # I16: FINALIZE の値供給源ゲート (2026-08-25 追加)。
         self._allow_simulate_fallback = allow_simulate_fallback
+        # live経路は同一frameのFINALIZE/CANCEL/LANDを原子的に反映してから
+        # max_secを判定する。既定Falseはoffline再生との後方互換を保つ。
+        self._defer_max_sec_close = defer_max_sec_close
         self._finalize_rejected_count: int = 0
         self._finalize_rejected_amount: float = 0.0
         # 【実装2、2026-08-25 追加】退役で削除される chain の相殺・着弾・
@@ -470,9 +495,26 @@ class ExchangeLedger:
         self._retired_landed: float = 0.0
         self._retired_generated: float = 0.0
         # 【コーディネーター指摘、2026-08-25 追加】close 済み chain へ
-        # 届いた相殺・着弾 (黙って落とさず数えるだけ、根治は未着手)。
+        # 届いた相殺・着弾。回収不能分と要約へbackfillした分を分けて数える。
         self._post_close_settlement_dropped_count: int = 0
         self._post_close_settlement_dropped_amount: float = 0.0
+        self._post_close_settlement_backfilled_count: int = 0
+        self._post_close_settlement_backfilled_amount: float = 0.0
+        self._post_close_finalize_backfilled_count: int = 0
+        self._post_close_finalize_backfilled_amount: float = 0.0
+        self._post_close_finalize_dropped_count: int = 0
+        self._post_close_finalize_dropped_amount: float = 0.0
+        self._closed_summary_index_by_chain: dict[int, int] = {}
+        self._closed_summary_chains: dict[int, set[int]] = {}
+        self._retired_chains: dict[int, ChainRecord] = {}
+        self._retired_totals_chain_ids: set[int] = set()
+        self._post_retire_backfilled_count: int = 0
+        self._post_retire_backfilled_amount: float = 0.0
+        self._post_close_outstanding_delta_total: float = 0.0
+        self._post_close_growth_backfilled_count: int = 0
+        self._post_close_growth_backfilled_amount: float = 0.0
+        self._post_close_growth_dropped_count: int = 0
+        self._post_close_growth_dropped_amount: float = 0.0
 
     # ------------------------------
     # 受付
@@ -531,7 +573,14 @@ class ExchangeLedger:
             self._force_close("match_boundary")
             self._game_idx = ctx.game_idx
         ep = self._episode
-        if ep is not None and ev.t_sec - ep.opened_at_sec > EPISODE_MAX_SEC:
+        if (not self._defer_max_sec_close and ep is not None
+                and ev.t_sec - ep.opened_at_sec > EPISODE_MAX_SEC):
+            self._force_close("max_sec")
+
+    def close_expired(self, t_sec: float) -> None:
+        """原子的な同一frame入力を反映した後でmax_secを判定する。"""
+        ep = self._episode
+        if ep is not None and t_sec - ep.opened_at_sec > EPISODE_MAX_SEC:
             self._force_close("max_sec")
 
     # ------------------------------
@@ -543,31 +592,72 @@ class ExchangeLedger:
         if ev.kind is EventKind.TSUMO_PLACED or ev.chain_id is None:
             return
         rec = self._chains.get(ev.chain_id)
+        retired = False
+        if rec is None:
+            rec = self._retired_chains.get(ev.chain_id)
+            retired = rec is not None
         if rec is None:
             rec = ChainRecord(
                 chain_id=ev.chain_id, side=ev.side, opened_at_sec=ev.t_sec,
             )
             self._chains[ev.chain_id] = rec
+        backfill_index = self._post_close_summary_index(ev)
+        outstanding_before = rec.outstanding if backfill_index is not None else 0.0
+        retired_before = self._retired_values(rec) if retired else None
+        global_unreconciled_before = self._unreconciled if retired else None
         if ev.kind in (EventKind.FIRE, EventKind.STEP):
             rec.provisional_amount += ev.amount
             rec.chain_count = max(rec.chain_count, ev.chain_count)
         elif ev.kind is EventKind.FINALIZE:
             self._finalize(rec, ev.amount)
         elif ev.kind is EventKind.CANCEL:
-            self._maybe_count_post_close_settlement(ev)
             rec.canceled += ev.amount
             rec.state = ChainState.RECONCILED
         elif ev.kind is EventKind.LAND:
             # LAND の side は「受けた側」。生成した chain は相手側にある。
-            self._maybe_count_post_close_settlement(ev)
             rec.landed += ev.amount
             rec.state = ChainState.LANDED
-        if self._episode is not None:
+        if retired and retired_before is not None:
+            if backfill_index is None and global_unreconciled_before is not None:
+                self._unreconciled = global_unreconciled_before
+            self._update_retired_totals(rec, retired_before, ev)
+        if backfill_index is not None:
+            # forced close時に加えた未照合量を、後着FINALIZEによる増減と
+            # CANCEL/LANDによる減少のどちらにも追従させる。
+            outstanding_delta = rec.outstanding - outstanding_before
+            self._post_close_outstanding_delta_total += outstanding_delta
+            self._unreconciled = max(0.0, self._unreconciled + outstanding_delta)
+            self._refresh_backfilled_summary(
+                backfill_index,
+                settlement_observed=ev.kind in (EventKind.CANCEL, EventKind.LAND))
+        # close済みchainへの後着イベントは旧要約だけへ帰属する。同時にOPENな
+        # 新episodeへtouchすると、同じchain_idが2要約へ入り二重計上になる。
+        is_counted = ev.chain_id in self._counted_chain_ids
+        if (self._episode is not None and not retired
+                and backfill_index is None and not is_counted):
             self._episode.touch(ev)
 
-    def _maybe_count_post_close_settlement(self, ev: ExchangeEvent) -> None:
-        """close 済み chain へ届いた相殺・着弾を黙って落とさず数える
-        (コーディネーター指摘、2026-08-25 追加。**根治は未着手**)。
+    def _retired_values(
+        self, rec: ChainRecord,
+    ) -> tuple[float, float, float, float]:
+        return rec.amount, rec.canceled, rec.landed, rec.outstanding
+
+    def _update_retired_totals(
+        self, rec: ChainRecord, before: tuple[float, float, float, float],
+        ev: ExchangeEvent,
+    ) -> None:
+        """side wipe後の遅延確定を退役台帳へ差分反映する。"""
+        if rec.chain_id in self._retired_totals_chain_ids:
+            self._retired_generated += rec.amount - before[0]
+            self._retired_canceled += rec.canceled - before[1]
+            self._retired_landed += rec.landed - before[2]
+            self._retired_unreconciled = max(
+                0.0, self._retired_unreconciled + rec.outstanding - before[3])
+        self._post_retire_backfilled_count += 1
+        self._post_retire_backfilled_amount += ev.amount
+
+    def _post_close_summary_index(self, ev: ExchangeEvent) -> int | None:
+        """close 済み chain へ届いた相殺・着弾の回収先を解決する。
 
         `_counted_chain_ids` は大域で一度でも `ClosedEpisodeSummary` に
         計上した chain_id の永続集合 (`_split_chains_by_global_dedup` 参照)。
@@ -578,14 +668,68 @@ class ExchangeLedger:
         した瞬間のスナップショットであり、以後増えた分はどの合計にも
         現れない (retired_* も、後で退役するまでは捕捉しない)。
 
-        **この値が大きければ、close (`_should_close`/`_force_close`) の
-        判定が早すぎる証拠である。** 根治 (close 済み chain には最初から
-        イベントを帰属させない等) は別タスクとし、ここでは黙って落とさず
-        件数・量を可視化するだけに留める。
+        live経路のmax_sec要約は `_closed_summary_index_by_chain` で再特定し、
+        後着決済を同じ要約へbackfillする。対応先が無いclose済みchainだけを
+        droppedとして残す。
         """
+        supported = (
+            EventKind.FIRE, EventKind.STEP, EventKind.FINALIZE,
+            EventKind.CANCEL, EventKind.LAND)
+        if ev.kind not in supported:
+            return None
+        index = self._closed_summary_index_by_chain.get(ev.chain_id or -1)
+        if index is not None:
+            if ev.kind is EventKind.FINALIZE:
+                self._post_close_finalize_backfilled_count += 1
+                self._post_close_finalize_backfilled_amount += ev.amount
+            elif ev.kind in (EventKind.FIRE, EventKind.STEP):
+                self._post_close_growth_backfilled_count += 1
+                self._post_close_growth_backfilled_amount += ev.amount
+            else:
+                self._post_close_settlement_backfilled_count += 1
+                self._post_close_settlement_backfilled_amount += ev.amount
+            return index
         if ev.chain_id in self._counted_chain_ids:
-            self._post_close_settlement_dropped_count += 1
-            self._post_close_settlement_dropped_amount += ev.amount
+            if ev.kind is EventKind.FINALIZE:
+                self._post_close_finalize_dropped_count += 1
+                self._post_close_finalize_dropped_amount += ev.amount
+            elif ev.kind in (EventKind.FIRE, EventKind.STEP):
+                self._post_close_growth_dropped_count += 1
+                self._post_close_growth_dropped_amount += ev.amount
+            else:
+                self._post_close_settlement_dropped_count += 1
+                self._post_close_settlement_dropped_amount += ev.amount
+        return None
+
+    def _refresh_backfilled_summary(
+        self, index: int, *, settlement_observed: bool,
+    ) -> None:
+        """max_sec要約を、遅れて到着した決済を含む最新値へ置換する。"""
+        chain_ids = self._closed_summary_chains[index]
+        chains = [
+            rec for cid in chain_ids
+            if (rec := self._chains.get(cid) or self._retired_chains.get(cid)) is not None
+        ]
+        old = self._closed_episodes[index]
+        unreconciled = sum(c.outstanding for c in chains)
+        status = old.status
+        close_reason = old.close_reason
+        if old.status is EpisodeStatus.CLOSED and unreconciled > 1e-9:
+            # normal close後に大きいFINALIZEが届いた場合、I7の「CLOSEDなら
+            # 未照合0」を破ったままにしない。episodeを二重に開かず、要約を
+            # 強制終了へ再分類して未解決ゲートの根拠を監査可能に残す。
+            status = EpisodeStatus.CLOSED_FORCED
+            close_reason = LATE_FINALIZE_AFTER_NORMAL_CLOSE
+        self._closed_episodes[index] = replace(
+            old, status=status, close_reason=close_reason,
+            total_generated=sum(c.amount for c in chains),
+            total_canceled=sum(c.canceled for c in chains),
+            total_landed=sum(c.landed for c in chains),
+            unreconciled=unreconciled,
+            has_settlement_input=old.has_settlement_input or settlement_observed,
+            oversettled=sum(c.oversettled for c in chains),
+            oversettled_chain_count=sum(1 for c in chains if c.oversettled > 0.0),
+        )
 
     def _finalize(self, rec: ChainRecord, confirmed: float) -> None:
         """確定スコアで**置換**する (§4.1)。加算しない。冪等。
@@ -652,7 +796,18 @@ class ExchangeLedger:
             return
         ep.status = EpisodeStatus.CLOSED
         ep.closed_at_sec = t_sec
+        chains = self._chains_for_episode(ep)
+        fresh_ids = {
+            rec.chain_id for rec in chains
+            if rec.chain_id not in self._counted_chain_ids}
+        summary_index = len(self._closed_episodes)
         self._closed_episodes.append(self._summarize_episode(ep, reason))
+        # live経路では正常close後にもscore OCR確定が遅れて届き得る。
+        # 同じ要約へ帰属させ、別episodeとして再生成しない。
+        if self._defer_max_sec_close:
+            self._closed_summary_chains[summary_index] = fresh_ids
+            for chain_id in fresh_ids:
+                self._closed_summary_index_by_chain[chain_id] = summary_index
         self._episode = None
 
     def _fire_events_of_open_chains(self) -> list[ExchangeEvent]:
@@ -672,7 +827,9 @@ class ExchangeLedger:
                 kind=EventKind.FIRE, side=r.side, t_sec=r.opened_at_sec,
                 chain_id=r.chain_id, source="lazy_open",
             )
-            for r in self._chains.values() if r.outstanding > 0.0
+            for r in self._chains.values()
+            if (r.outstanding > 0.0
+                and r.chain_id not in self._closed_summary_index_by_chain)
         ]
 
     def _largest_open_amount(self) -> float:
@@ -680,7 +837,11 @@ class ExchangeLedger:
 
         **合計ではなく最大**を見る。整地が何本あっても撃ち合いにはならない。
         """
-        vals = [r.amount for r in self._chains.values() if r.outstanding > 0.0]
+        vals = [
+            r.amount for r in self._chains.values()
+            if (r.outstanding > 0.0
+                and r.chain_id not in self._closed_summary_index_by_chain)
+        ]
         return max(vals) if vals else 0.0
 
     def _should_close(self, ctx: PhysicalContext) -> bool:
@@ -755,9 +916,15 @@ class ExchangeLedger:
             self._unreconciled += sum(r.outstanding for r in chains)
             self._episode.status = EpisodeStatus.CLOSED_FORCED
             self._episode.close_reason = reason
-            self._closed_episodes.append(
-                self._summarize_episode(self._episode, reason),
-            )
+            fresh_ids = {
+                r.chain_id for r in chains
+                if r.chain_id not in self._counted_chain_ids}
+            summary_index = len(self._closed_episodes)
+            self._closed_episodes.append(self._summarize_episode(self._episode, reason))
+            if self._defer_max_sec_close and reason == "max_sec":
+                self._closed_summary_chains[summary_index] = fresh_ids
+                for chain_id in fresh_ids:
+                    self._closed_summary_index_by_chain[chain_id] = summary_index
             self._episode = None
             self._forced_close_count += 1
         if reason == "match_boundary":
@@ -819,6 +986,8 @@ class ExchangeLedger:
             if r.chain_id not in self._counted_chain_ids:
                 self._record_chain_retirement_totals(r)
         self._chains.clear()
+        self._retired_chains.clear()
+        self._retired_totals_chain_ids.clear()
 
     def retire_side_chains(
         self, side: Side, t_sec: float, ctx: PhysicalContext, reason: str = "side_wipe",
@@ -854,13 +1023,19 @@ class ExchangeLedger:
             if r.side is side.other and r.outstanding > 0.0
         ]
         if residual:
-            self._retired_unreconciled += sum(r.outstanding for r in residual)
-            self._retired_chain_count += len(residual)
+            fresh_residual = [
+                r for r in residual if r.chain_id not in self._counted_chain_ids]
+            self._retired_unreconciled += sum(
+                r.outstanding for r in fresh_residual)
+            self._retired_chain_count += len(fresh_residual)
             # 【実装2】削除は summarize より**前**に起こるため、削除前に
             # 必ず退避する (`_record_chain_retirement_totals` docstring参照)。
             for r in residual:
                 if r.chain_id not in self._counted_chain_ids:
                     self._record_chain_retirement_totals(r)
+                    self._retired_totals_chain_ids.add(r.chain_id)
+                if self._defer_max_sec_close:
+                    self._retired_chains[r.chain_id] = r
                 del self._chains[r.chain_id]
         if self._episode is not None and self._should_close(ctx):
             self._close_current_episode(t_sec, reason)
@@ -932,6 +1107,14 @@ class ExchangeLedger:
         """CLOSED / CLOSED_FORCED した episode の要約一覧 (D1 用、追加のみ)。"""
         return list(self._closed_episodes)
 
+    def closed_normal_unreconciled_count(self) -> int:
+        """normal close後に未照合が復活している要約数。"""
+        return sum(
+            item.status is EpisodeStatus.CLOSED
+            and item.close_reason == "normal_close"
+            and item.unreconciled > 1e-9
+            for item in self._closed_episodes)
+
     def open_chain_ids(self, side: Side) -> list[int]:
         """side の未決着 (outstanding>0) chain の chain_id を、開いた順に返す
         (2026-08-24 追加、追加のみ)。
@@ -940,10 +1123,10 @@ class ExchangeLedger:
         帰属は古い chain から消化する (FIFO)。chain_id は発行順に単調
         増加するため、昇順ソートがそのまま FIFO になる。
         """
+        records = {**self._retired_chains, **self._chains}
         return sorted(
-            cid for cid, rec in self._chains.items()
-            if rec.side is side and rec.outstanding > 0.0
-        )
+            cid for cid, rec in records.items()
+            if rec.side is side and rec.outstanding > 0.0)
 
     def open_episode_outstanding(self) -> float:
         """いま OPEN な episode に属する chain の outstanding 合計
@@ -979,7 +1162,7 @@ class ExchangeLedger:
         経路 (`unattributed_settlement_total`) を既に持っているため、
         ここで例外にして二重に扱う必要が無い。
         """
-        rec = self._chains.get(chain_id)
+        rec = self._chains.get(chain_id) or self._retired_chains.get(chain_id)
         return rec.outstanding if rec is not None else 0.0
 
     # ------------------------------
@@ -1032,7 +1215,10 @@ class ExchangeLedger:
 
     def is_unresolved(self) -> bool:
         """撃ち合いが未解決か。"""
-        return self._episode is not None
+        return self._episode is not None or any(
+            self._chains[cid].outstanding > 1e-9
+            for cid in self._closed_summary_index_by_chain
+            if cid in self._chains)
 
     def allows_hard_override(self, ctx: PhysicalContext) -> bool:
         """±100 の完全上書きを許してよいか (§7.4 の決定不変性)。
@@ -1043,26 +1229,47 @@ class ExchangeLedger:
         これにより「未解決中は断定しない」と「真の致死を弱めない」が
         構造的に両立する。
         """
-        if ctx.p1_dead or ctx.p2_dead:
-            return True          # 実死亡は物理的に確定している
         if not self.is_unresolved():
             return True          # 撃ち合いが無ければ従来どおり
-        return self._dies_even_in_best_case(ctx)
+        return self.hard_override_target(ctx) is not None
 
-    def _dies_even_in_best_case(self, ctx: PhysicalContext) -> bool:
+    def hard_override_target(self, ctx: PhysicalContext) -> float | None:
+        """未解決中でも物理的に確定している勝者方向を返す。
+
+        boolean だけでは「どちらかの死亡が確定した」後に逆方向の完全上書きまで
+        許してしまう。実死亡を最優先し、それ以外は確定済み純残量で死ぬ側だけを
+        返す。両者死亡や反撃中は方向を断定しない。
+        """
+        if not self.is_unresolved():
+            return None
+        if ctx.p1_dead != ctx.p2_dead:
+            return -100.0 if ctx.p1_dead else 100.0
+        if ctx.p1_dead and ctx.p2_dead:
+            return None
+        return self._decision_invariant_target(ctx)
+
+    def _decision_invariant_target(self, ctx: PhysicalContext) -> float | None:
         """未確定量を受け側に最も有利に倒しても受け側が死ぬか。
 
         受け側に有利 = 未確定の生成はすべて無かったことにし、
         受け側が撃ち返せる可能性 (進行中の連鎖) は最大限効いたとみなす。
         """
-        net = self._net_certain()
-        if abs(net) < 1e-9:
-            return False
-        victim_room = ctx.p2_room if net > 0 else ctx.p1_room
-        victim_chaining = ctx.p2_chaining if net > 0 else ctx.p1_chaining
+        net_raw = self._net_raw()
+        net_certain = self._net_certain()
+        if abs(net_raw) < 1e-9 or abs(net_certain) < 1e-9:
+            return None
+        # 確定済み部分だけの方向が、暫定分を含む交換全体と逆なら、
+        # 「物理的に勝者確定」とは言えない。相手の大連鎖がOCR確定前の間に
+        # 自分の小さい確定連鎖だけを見て逆側を断定する事故を防ぐ。
+        if net_raw * net_certain <= 0.0:
+            return None
+        victim_room = ctx.p2_room if net_certain > 0 else ctx.p1_room
+        victim_chaining = ctx.p2_chaining if net_certain > 0 else ctx.p1_chaining
         if victim_chaining:
-            return False         # 撃ち返しの結果が未確定
-        return abs(net) > victim_room
+            return None          # 撃ち返しの結果が未確定
+        if abs(net_certain) <= victim_room:
+            return None
+        return 100.0 if net_certain > 0 else -100.0
 
     def _net_certain(self) -> float:
         """確定済みの生成だけで見た純残量 (受け側に最も有利な仮定)。"""
@@ -1089,6 +1296,7 @@ class ExchangeLedger:
             provisional_residual=self._provisional_residual_all(),
             is_unresolved=self.is_unresolved(),
             allows_hard_override=self.allows_hard_override(ctx),
+            hard_override_target=self.hard_override_target(ctx),
             forced_close_count=self._forced_close_count,
             chain_id_force_cut_count=self._chain_id_force_cut_count,
             unbacked_residual_count=self._unbacked_residual_count,
@@ -1106,6 +1314,30 @@ class ExchangeLedger:
             retired_generated=self._retired_generated,
             post_close_settlement_dropped_count=self._post_close_settlement_dropped_count,
             post_close_settlement_dropped_amount=self._post_close_settlement_dropped_amount,
+            post_close_settlement_backfilled_count=(
+                self._post_close_settlement_backfilled_count),
+            post_close_settlement_backfilled_amount=(
+                self._post_close_settlement_backfilled_amount),
+            post_close_finalize_backfilled_count=(
+                self._post_close_finalize_backfilled_count),
+            post_close_finalize_backfilled_amount=(
+                self._post_close_finalize_backfilled_amount),
+            post_close_finalize_dropped_count=(
+                self._post_close_finalize_dropped_count),
+            post_close_finalize_dropped_amount=(
+                self._post_close_finalize_dropped_amount),
+            post_retire_backfilled_count=self._post_retire_backfilled_count,
+            post_retire_backfilled_amount=self._post_retire_backfilled_amount,
+            post_close_outstanding_delta_total=(
+                self._post_close_outstanding_delta_total),
+            post_close_growth_backfilled_count=(
+                self._post_close_growth_backfilled_count),
+            post_close_growth_backfilled_amount=(
+                self._post_close_growth_backfilled_amount),
+            post_close_growth_dropped_count=(
+                self._post_close_growth_dropped_count),
+            post_close_growth_dropped_amount=(
+                self._post_close_growth_dropped_amount),
         )
 
 

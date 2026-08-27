@@ -41,8 +41,10 @@ from src.exchange_episode_tracker import (
     ExchangeEpisodeDiagnostics,
     ExchangeEpisodeTracker,
     GenerationObservation,
+    GrossCounterDeltaClassification,
     PendingUncappedFrame,
     SettlementObservation,
+    classify_gross_counter_delta,
     classify_pending_uncapped_delta,
 )
 from src.exchange_ledger import (
@@ -52,6 +54,7 @@ from src.exchange_ledger import (
     PhysicalContext,
     Side,
 )
+from src.ojama_accounting import GrossOjamaCounters
 from src.scoring import OJAMA_RATE_STANDARD, compute_effective_rate
 
 
@@ -840,6 +843,68 @@ def test_pending_delta_uncapped_survives_beyond_216_cap() -> None:
     assert result2.settlement.canceled_by_1p == pytest.approx(300.0), (
         "216 で切り捨てられていたら 216 にしかならないはずの量が満額観測できている"
     )
+
+
+def _gross(t_sec: float, **overrides: int) -> GrossOjamaCounters:
+    """gross 累積カウンタのテスト用生成関数。"""
+    values = {
+        "generated_p1": 0, "generated_p2": 0,
+        "offset_uncapped_p1": 0, "offset_uncapped_p2": 0,
+        "dropped_uncapped_p1": 0, "dropped_uncapped_p2": 0,
+        "boundary_wiped_uncapped_p1": 0, "boundary_wiped_uncapped_p2": 0,
+        "boundary_resets_p1": 0, "boundary_resets_p2": 0,
+        "clamp_loss_p1": 0, "clamp_loss_p2": 0,
+    }
+    values.update(overrides)
+    return GrossOjamaCounters(t_sec=t_sec, **values)
+
+
+def test_gross_delta_keeps_simultaneous_incoming_and_cancel_separate() -> None:
+    """pending 100→80でも、gross cancel=50 と incoming=30を別々に復元する。"""
+    result = classify_gross_counter_delta(
+        _gross(0.0),
+        _gross(1.0, generated_p1=50, generated_p2=30, offset_uncapped_p1=50),
+        prev_pending=(100.0, 0.0), curr_pending=(80.0, 0.0), game_idx=0,
+    )
+    assert isinstance(result, GrossCounterDeltaClassification)
+    assert result.settlement is not None
+    assert result.settlement.canceled_by_1p == 50
+    assert result.generated_by_2p == 30
+    assert result.conservation_residual_p1 == 0.0
+    assert result.conservation_residual_p2 == 0.0
+    assert result.inspected_side_count == 2
+
+
+def test_gross_delta_reconstructs_land_plus_incoming_without_guessing() -> None:
+    result = classify_gross_counter_delta(
+        _gross(0.0),
+        _gross(1.0, generated_p2=10, dropped_uncapped_p1=30),
+        prev_pending=(100.0, 0.0), curr_pending=(80.0, 0.0), game_idx=0,
+    )
+    assert result.settlement is not None
+    assert result.settlement.landed_on_1p == 30
+    assert result.generated_by_2p == 10
+    assert result.conservation_residual_p1 == 0.0
+    assert result.conservation_residual_p2 == 0.0
+
+
+def test_gross_delta_uses_cumulative_wipe_amount_after_frame_skip() -> None:
+    result = classify_gross_counter_delta(
+        _gross(0.0),
+        _gross(2.0, boundary_wiped_uncapped_p1=40, boundary_resets_p1=1),
+        prev_pending=(40.0, 0.0), curr_pending=(0.0, 0.0), game_idx=1,
+    )
+    assert result.wiped_sides == (Side.P1,)
+    assert result.boundary_wiped_on_1p == 40
+    assert result.conservation_residual_p1 == 0.0
+
+
+def test_gross_delta_rejects_cross_reset_counter_decrease() -> None:
+    with pytest.raises(ValueError, match="generated_p1"):
+        classify_gross_counter_delta(
+            _gross(0.0, generated_p1=10), _gross(1.0),
+            prev_pending=(0.0, 0.0), curr_pending=(0.0, 0.0), game_idx=0,
+        )
 
 
 # ===========================================================================

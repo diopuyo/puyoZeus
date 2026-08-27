@@ -39,6 +39,29 @@ from src.board_state_machine import BoardState  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.chain_count_truth import select_chain_count_high_confidence_band  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
+from src.death_confirmation import (  # noqa: E402
+    DeathConfirmStats,  # Gate 3R-6 本体: 候補/猶予/確定/解除の母数付きカウンタ (dump専用)
+    DeathConfirmTracker,  # Gate 3R-6 本体: 1サイド分の死亡確定状態機械 (既定OFF)
+    NEXT_STATIONARY_CONFIRM_SEC,  # ネクスト不動確定閾値の既定値 (user指定の暫定値)
+    # 2026-08-26 決着ホールド根治: 新しいツモの落下開始 (*→TSUMO_FALL) は
+    # 「ネクストが動いた」ことの物理的な証拠。色ペア値の比較と違い、次ツモが
+    # 同じ色ペアでも取りこぼさない。既存の純関数をそのまま再利用する。
+    is_new_tsumo_fall_start,
+    # 2026-08-25 第3版 (Codex 承認条件対応): 両側 pending の ambiguous 判定を
+    # 含む境界処理の単一実装 (二重実装防止)。
+    resolve_boundary_confirmations,
+)
+from src.exchange_episode_tracker import (  # noqa: E402
+    ChainEventObservation,
+    GenerationObservation,
+    GrossCounterDeltaClassification,
+    classify_gross_counter_delta,  # Gate 3R-5: gross 累積カウンタ差分の会計分類 (dump 専用)
+)
+from src.exchange_ledger import LedgerSnapshot, PhysicalContext, Side  # noqa: E402
+from src.live_exchange_episode_tracker import (  # noqa: E402
+    LiveEpisodeSnapshot,
+    LiveExchangeEpisodeTracker,
+)
 from src.exchange_virtual_board import (  # noqa: E402
     land_pending_ojama_onto_board,
     resolve_mutual_exchange,
@@ -46,6 +69,7 @@ from src.exchange_virtual_board import (  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     CHAIN_TOTAL_MIN_SCORE,  # #9 決着先読みの発火ノイズガードに流用 (ResolvedExchangeTracker)
+    GrossOjamaCounters,  # Gate 3R-5: cap 前 gross 累積カウンタ (dump 専用、既定 OFF)
     OjamaAccountingTracker, OjamaAccountSnapshot,
     PENDING_ABS_CAP,  # ホールド延長の安全弁 (RESOLVED_HOLD_LANDING_MAX_WAIT_SEC) 算出用
     SCORE_RESET_THRESHOLD,  # 試合境界(score大幅減少)検知の既存定数を流用
@@ -67,7 +91,15 @@ from src.production_config import (  # noqa: E402
     reorg_removed_indicator_names,
 )
 from src.scoring import calculate_chain_score  # noqa: E402
-from src.recognition_pipeline import RecognitionPipeline  # noqa: E402
+from src.recognition_pipeline import (  # noqa: E402
+    PipelineResult,
+    RecognitionPipeline,
+    # 連鎖の終わりの絶対律のうち「ネクストが動いた」判定 (stateless)。
+    # 2026-08-26: 決着ホールドの解除条件を絶対律へ差し替えるにあたり、
+    # 同じ判定を書き直さず本番稼働中の実装をそのまま再利用する
+    # (memory feedback_check_existing_before_building_2026-08-21)。
+    _is_game_event_chain_exit,
+)
 from scripts.collect_indicators_v2 import _SideTracker, _drive_ojama  # noqa: E402
 import scripts.mc_counter_estimator as mc_counter  # noqa: E402
 from scripts.model_indicator_win import (  # noqa: E402
@@ -502,6 +534,12 @@ KILL_CONFIRM_PERSIST_SEC: float = (
 # 未確定の致死推定がモデル自身の出力域を超えて断定する (99%/1% を名乗る) のを
 # 禁じ、その下側の 90 に置く。方向情報は失わない (±90 ≈ 勝率9割台の強い有利)。
 KILL_UNCONFIRMED_ABS_CAP: float = 90.0
+# episode の「未解決」は勝率99%相当まで出してよいという意味ではない。
+# 既存の評価→勝率較正を逆変換し、勝率90%/10%を専用の表示上限にする。
+# B案の時間ヒステリシス用 KILL_UNCONFIRMED_ABS_CAP は互換維持のため不変。
+EPISODE_UNRESOLVED_WINPROB_CAP: float = 0.90
+EPISODE_UNRESOLVED_ABS_CAP: float = _winprob_to_adv(
+    EPISODE_UNRESOLVED_WINPROB_CAP)
 
 
 class KillOverrideConfidenceGate:
@@ -984,6 +1022,26 @@ RESOLVED_HOLD_LANDING_MAX_WAIT_SEC: float = (
     math.ceil(PENDING_ABS_CAP / THEORY_DROP_PER_TURN) * iv.SEC_PER_HAND
 )
 
+# [2026-08-26] 決着ホールドを「連鎖の終わりの絶対律」で解除するときの確認フレーム数。
+# 絶対律の2信号 (ネクストが動いた / お邪魔が落ちた) はどちらも保持セッション開始時の
+# スナップショットとの比較なので、いったん成立すれば下がらない (ラッチ性がある)。
+# それでも next_pair の単発誤読で早期解除しないよう、連続フレームの確認を挟む。
+# 値は既存の「連続2フレーム確認」の作法 (src/score_ocr.py FormulaStepAccumulator の
+# confirm_frames) に合わせる。シーンからの逆算ではない
+# (memory feedback_overfitting_awareness_2026-08-04)。
+RESOLVED_ABS_END_CONFIRM_FRAMES: int = 2
+# 発火させた設置による NEXT 移動を「連鎖終了」と誤認しないため、保持開始直後は
+# 終了判定の基準値を取らない。RecognitionPipeline が短い疑似 CHAIN を抑えるために
+# 実運用している最小表示時間を単一情報源として再利用する。
+RESOLVED_ABS_BASELINE_DELAY_SEC: float = RecognitionPipeline.CHAIN_MIN_DISPLAY_SEC
+RESOLVED_ABS_BASELINE_CONFIRM_FRAMES: int = 2
+# 同一物理連鎖の段間最大1.4秒 (`src/chain_count_ocr.py`) に30fps量子化と
+# OCR遅延の余裕0.1秒を足す。この間の40点以上の得点段は物理継続証拠になる。
+RESOLVED_ABS_CHAIN_ACTIVITY_QUIET_SEC: float = 1.5
+# 同じ物理交換の断片化イベントを再武装しないための中立継続時間。新しい1手を
+# 置く実測中央値を単一情報源として使い、瞬間的な None gap を中立とみなさない。
+RESOLVED_ABS_REARM_NEUTRAL_SEC: float = iv.SEC_PER_HAND
+
 # [指摘14 案1、2026-08-15] `enable_live_defender_strict=True` 時に
 # 「defender_side が今まさに自分の連鎖を処理中」とみなす状態機械 state の集合
 # (ResolvedExchangeTracker docstring 指摘14節参照)。BoardState.CHAIN =
@@ -1060,7 +1118,8 @@ class ResolvedExchangeTracker:
     「決着済みの攻撃側の帰結」と「生きている受け側の応手力」を区別せず
     両方凍結する設計不備だった (user指摘: 受け側は連鎖中も置き続けており、
     実際に応手力は変化する)。`enable_live_defender_reeval=True` の場合、
-    片側のみ連鎖中 (攻撃側継続・受け側は自由行動) の間、
+    片側のみ連鎖中 (攻撃側継続・受け側は自由行動) の間、または strict ONで
+    両側eventが残っていても受け側の物理stateが自由な間、
     `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定周期と同一) ごとに
     以下を再評価する (`_reevaluate_live_defender` 参照):
       - 凍結維持: 攻撃側の連鎖帰結 (`_decisive_defender` が返す飛来量
@@ -1225,8 +1284,12 @@ class ResolvedExchangeTracker:
         enable_pending_landing_gate: bool = False,
         enable_kill_override_counter_aware: bool = False,
         enable_resolved_victim_gen_live: bool = False,
+        enable_episode_physical_redecide: bool = False,
+        enable_episode_physical_consistency_guard: bool = False,
+        episode_physical_stats: "dict | None" = None,
         enable_counter_placement_reuse: bool = False,
         enable_counter_budget_quantize: bool = False,
+        enable_absolute_chain_end: bool = False,
     ) -> None:
         self._model = model
         self._attribution_exclude = attribution_exclude
@@ -1272,6 +1335,13 @@ class ResolvedExchangeTracker:
         # を、chain_end_triggered_pX が True の間 0.5秒ごとに追従する方式へ
         # 緩和する (既定OFF、クラス docstring 指摘19根治節参照)。
         self._enable_resolved_victim_gen_live = enable_resolved_victim_gen_live
+        # 交換台帳の純残量を、進行中連鎖の物理下限として決着値へ戻す。
+        # 既定OFFでは純残量を参照せず、従来経路と同一にする。
+        self._enable_episode_physical_redecide = enable_episode_physical_redecide
+        # 台帳・直前モデル・直前確定値の3者が同方向の時だけ、未解決中の
+        # 単独逆転を保留する。再決着とは独立にA/Bできる既定OFFの安全策。
+        self._enable_episode_physical_consistency_guard = (
+            enable_episode_physical_consistency_guard)
         # [2026-08-21 user承認・設置ごと量子化] 受け側限定応手MC
         # (CounterReachTracker._update_defender_only) の再計算を「受け側の
         # 盤面bytesが変化した (=設置が起きた) とき」だけに限定する近似
@@ -1284,6 +1354,67 @@ class ResolvedExchangeTracker:
         # そのまま貫通させる (CounterReachTracker クラス docstring 参照)。
         # 盤面一致による再利用 (上記) とは独立に効果を測れるよう別フラグ。
         self._enable_counter_budget_quantize = enable_counter_budget_quantize
+        # [2026-08-26 決着ホールド根治、user決定] **既定 OFF**。
+        # ホールドの解除条件は従来「両側の chain_event が None」だが、ChainEvent は
+        # 長い連鎖で 1.4秒ごとに断片化するため打ち合い中は長時間 None にならず、
+        # 実測で最大 45.07秒 settled 再計算が止まっていた (ホールドが潰した settled
+        # 1880/3964 = 47.43%)。True では user 伝授の絶対律
+        # 「連鎖の終わり = 連鎖している側のネクストが動いた瞬間 OR
+        #   連鎖している側にお邪魔が落ちた瞬間」
+        # (memory reference_chain_end_absolute_signals_2026-08-21) を観測する。
+        # NEXT系の終了候補は次段CHAINで撤回し、物理連鎖の段間では解除しない。
+        # 安全弁 RESOLVED_HOLD_LANDING_MAX_WAIT_SEC は従来どおり維持する。
+        self._enable_absolute_chain_end = enable_absolute_chain_end
+        # 絶対律の side 別追跡。index 0=1P / 1=2P。本クラスの他の状態は _ev1/_ev2 の
+        # ように数字サフィックスで持つが、ここは 1P/2P で完全に同じ処理を1つの
+        # ヘルパーで回したいため2要素リストにする (処理の二重実装を避ける)。
+        self._abs_next_at_start: list = [None, None]
+        self._abs_dropped_at_start: list = [0.0, 0.0]
+        self._abs_ended: list = [False, False]
+        self._abs_end_kind: list[str | None] = [None, None]
+        self._abs_pending_frames: list = [0, 0]
+        # 直前フレームの state 名 (`*→TSUMO_FALL` の立ち上がり検出用)。
+        self._abs_prev_state: list = [None, None]
+        self._abs_prev_score: list[int | None] = [None, None]
+        self._abs_last_chain_activity_sec: list[float | None] = [None, None]
+        # TSUMO_FALL の立ち上がりは1フレームだけの**エッジ**なので、そのままでは
+        # 連続フレーム確認 (デバウンス) を通れない。セッション内で一度観測したら
+        # ラッチして保持する (next 値比較と着弾量は開始時との比較なので元々ラッチ性がある)。
+        self._abs_saw_tsumo: list = [False, False]
+        # セッション開始時の NEXT は、発火させた設置に伴うスライド途中でありうる。
+        # 実際の CHAIN を観測し、開始直後の物理待ちを過ぎた後に初めて基準化する。
+        self._abs_arm_t_sec: float = 0.0
+        self._abs_saw_chain: list[bool] = [False, False]
+        self._abs_baseline_ready: list[bool] = [False, False]
+        self._abs_baseline_candidate: list = [None, None]
+        self._abs_baseline_frames: list[int] = [0, 0]
+        # 絶対律で解放した直後、同じ lingering ChainEvent から別セッションを
+        # 作らない。両側のイベントが一度ともに None になるまで再武装を禁止する。
+        self._abs_rearm_blocked: bool = False
+        self._abs_rearm_neutral_started_sec: float | None = None
+        self._abs_legacy_neutral_frames: int = 0
+        # どの信号で閉じたかの母数付きカウンタ。0 が「起きなかった」なのか
+        # 「測っていない」なのかを取り違えないため、必ず母数と並べて出す
+        # (memory feedback_zero_needs_denominator_2026-08-25)。
+        self.abs_end_stats: dict = {
+            "sessions": 0,          # 保持セッションの総数 (母数)
+            "released_by_abs": 0,   # 絶対律で解除したセッション数
+            "released_by_legacy": 0,  # 旧条件 (両側 chain_event None) で解除
+            "ended_by_boundary": 0,  # 保持中に試合そのものが終了したセッション
+            "total_boundaries": 0,   # 観測した正式試合境界 (母数)
+            "end_by_next": [0, 0],   # side 別: ネクストの色ペアが変わって終了
+            "end_by_slide": [0, 0],  # side 別: NEXT の物理スライドで終了
+            "end_by_tsumo": [0, 0],  # side 別: 新ツモの落下開始で終了
+            "end_by_ojama": [0, 0],  # side 別: お邪魔着弾で終了
+            "reopened_by_chain": [0, 0],  # 終了候補後の次段 CHAIN で撤回
+            "rearm_blocked_frames": 0,  # 同一交換の再武装を拒否したフレーム数
+            # 実解除の瞬間の観測 (t, state1, state2, 終了候補の根拠)。
+            # dump の空白終端ではなく、実際に _release() へ進む箇所で記録する。
+            "release_states": [],
+            # 終了候補が成立し着弾待ちへ入った瞬間。次段 CHAIN で候補を
+            # 撤回した場合も残るため、release_states とは意味を分ける。
+            "end_candidate_states": [],
+        }
         self._active = False
         self._ev1: "ChainEvent | None" = None
         self._ev2: "ChainEvent | None" = None
@@ -1299,13 +1430,47 @@ class ResolvedExchangeTracker:
         # 開始時 (update() の trigger ブロック) に None へ戻す。
         self._victim_live_last_t1: "float | None" = None
         self._victim_live_last_t2: "float | None" = None
+        self._episode_physical_net_last: "float | None" = None
+        # 試合境界で tracker 本体を作り直しても、動画全体の母数を失わない共有器。
+        # None の場合は単体利用として新規作成するため、既存呼出元は不変。
+        self._episode_physical_stats: dict = (
+            episode_physical_stats if episode_physical_stats is not None else {
+                "redecide": 0, "fallback": 0, "fallback_times": []})
         self.hold_adv = 0.0    # 保持中の決着後有利不利 (1P視点)
         self.hold_p1 = 0.5     # 保持中の決着後1P勝率
         self.hold_drivers: list[tuple[str, float]] = []
+        # [2026-08-27 userレビュー 3:50] decisive defender が連鎖中に、反対側が
+        # hold開始後に新しく発火した side-local chain の前後だけを追跡する。
+        self._nondef_cycle_armed: list[bool] = [False, False]
+        self._nondef_cycle_in_chain: list[bool] = [False, False]
+        self._nondef_cycle_prev_state: list[BoardState | None] = [None, None]
+        self._nondef_cycle_before_board: list[Board | None] = [None, None]
+        self._nondef_cycle_score_start: list[int | None] = [None, None]
+        self._nondef_cycle_stable_since: list[float | None] = [None, None]
+        self._nondef_cycle_event: list[ChainEvent | None] = [None, None]
+        self._nondef_cycle_hold_anchor: list[float | None] = [None, None]
+        self._nondef_cycle_saw_new_hand: list[bool] = [False, False]
+        self._nondef_fallback_active: list[bool] = [False, False]
+        self._nondef_fallback_anchor: list[float | None] = [None, None]
+        self._nondef_fallback_before: list[Board | None] = [None, None]
+        self._nondef_cycle_chain_id: list[int | None] = [None, None]
+        self._nondef_applied_event_keys: set[tuple[str, int]] = set()
+        self._resolved_root_chain_id: list[int | None] = [None, None]
+        self.nondef_cycle_stats: dict[str, int] = {
+            "armed": 0, "started": 0, "applied": 0,
+            "rejected_score": 0, "rejected_same_board": 0,
+            "rejected_late": 0, "rejected_stale_event": 0,
+            "rejected_no_new_hand": 0,
+            "rejected_sim_mismatch": 0, "rejected_direction": 0,
+            "fresh_replaced": 0, "fallback_applied": 0,
+        }
+        self.nondef_cycle_deltas: list[tuple] = []
+        self.nondef_cycle_trace: list[tuple] = []
         # [指摘11] 着弾完了待ちの延長フェーズ管理用 (両側 chain_event が
         # None化した後、着弾完了までの間だけ True)。
         self._awaiting_landing: bool = False
         self._landing_wait_started_sec: "float | None" = None
+        self._landing_end_kind: "str | None" = None
         # [指摘11] 決着計算時点で予測した各 side の最終お邪魔到達量 (着弾
         # 完了判定①用)。incoming が 0 なら「元々受け側でない」= 常に達成扱い。
         self._target_ojama_p1: float = 0.0
@@ -1347,17 +1512,11 @@ class ResolvedExchangeTracker:
         # 即座に1回評価させる (段差回避)。
         self._last_live_reeval_t: "float | None" = None
 
-    def _resolve(
-        self, snap: OjamaAccountSnapshot, elapsed_sec: float,
-        score1: float, score2: float,
+    def _store_resolved_result(
+        self, snap: OjamaAccountSnapshot, result: "MutualExchangeResult",
+        *, reset_nondefender_cycles: bool = True,
     ) -> None:
-        """resolve_mutual_exchange → _score_advantage の2段で決着値を計算・保持する。"""
-        gen1 = iv._score_to_ojama_count(score1, elapsed_sec)
-        gen2 = iv._score_to_ojama_count(score2, elapsed_sec)
-        result = resolve_mutual_exchange(
-            self._ev1.before_board, self._ev2.before_board, gen1, gen2,
-            snap.pending_p1, snap.pending_p2,
-        )
+        """決着結果をモデル評価し、ホールド用の状態へ原子的に反映する。"""
         self._update_landing_targets(result)
         # 決着後盤面には着弾分 (leftover 未満) が既に反映済みのため、snap の
         # forecast/net_balance だけを決着後の残り (leftover) に差し替える
@@ -1376,8 +1535,124 @@ class ResolvedExchangeTracker:
         )
         if self._enable_decisive_amplify:
             adv, p1 = self._amplify_decisive(adv, result)
+        if reset_nondefender_cycles:
+            self._reset_nondefender_cycles()
+        else:
+            self._refresh_nondefender_cycle_anchors(adv)
         self.hold_adv, self.hold_p1, self.hold_drivers = adv, p1, drivers
+
+    def _resolve(
+        self, snap: OjamaAccountSnapshot, elapsed_sec: float,
+        score1: float, score2: float,
+        *, reset_nondefender_cycles: bool = True,
+    ) -> None:
+        """発火時または確定時の得点から、従来どおり決着値を計算する。"""
+        gen1 = iv._score_to_ojama_count(score1, elapsed_sec)
+        gen2 = iv._score_to_ojama_count(score2, elapsed_sec)
+        result = resolve_mutual_exchange(
+            self._ev1.before_board, self._ev2.before_board, gen1, gen2,
+            snap.pending_p1, snap.pending_p2,
+        )
+        self._store_resolved_result(
+            snap, result,
+            reset_nondefender_cycles=reset_nondefender_cycles)
         self._pred_score1, self._pred_score2 = score1, score2
+
+    def _maybe_redecide_physical_net(
+        self, snap: OjamaAccountSnapshot, physical_net_raw: "float | None",
+        physical_is_unresolved: bool,
+    ) -> None:
+        """未解決交換の純残量が変化した時だけ、物理下限で再決着する。"""
+        if not self._enable_episode_physical_redecide or not physical_is_unresolved:
+            return
+        if physical_net_raw is None or abs(physical_net_raw) < 1e-9:
+            return
+        if self._episode_physical_net_last == physical_net_raw:
+            return
+        gen1 = max(0, int(round(physical_net_raw)))
+        gen2 = max(0, int(round(-physical_net_raw)))
+        result = resolve_mutual_exchange(
+            self._ev1.before_board, self._ev2.before_board, gen1, gen2, 0, 0)
+        self._store_resolved_result(
+            snap, result, reset_nondefender_cycles=False)
+        self._episode_physical_net_last = float(physical_net_raw)
+        self._episode_physical_stats["redecide"] += 1
+
+    @property
+    def episode_physical_stats(self) -> dict:
+        """試合境界をまたいで共有する動画全体の物理追従カウンタ。"""
+        return self._episode_physical_stats
+
+    @property
+    def episode_physical_redecide_count(self) -> int:
+        return int(self._episode_physical_stats["redecide"])
+
+    @property
+    def episode_consistency_fallback_count(self) -> int:
+        return int(self._episode_physical_stats["fallback"])
+
+    @property
+    def episode_consistency_fallback_times(self) -> list[float]:
+        return self._episode_physical_stats["fallback_times"]
+
+    def has_untrusted_minimum_active_chain(
+        self, state1: BoardState, state2: BoardState,
+    ) -> bool:
+        """進行中連鎖の完走予測が最小40点に潰れているかを返す。
+
+        ChainEvent の simulate は認識連結欠損時に本物の多連鎖を1連鎖・40点と
+        過小評価する。物理 state が CHAIN の間だけ「未確定の下限」と扱い、
+        終了後の実測確定値まで否定しない。
+        """
+        if not self._active:
+            return False
+        pairs = (
+            (self._ev1, state1, self._pred_score1),
+            (self._ev2, state2, self._pred_score2),
+        )
+        untrusted = [
+            state == BoardState.CHAIN
+            and event is not None
+            and event.chain_count == 1
+            and event.total_score == CHAIN_TOTAL_MIN_SCORE
+            and predicted_score <= CHAIN_TOTAL_MIN_SCORE
+            for event, state, predicted_score in pairs
+        ]
+        if sum(untrusted) != 1:
+            return False
+        other_index = 1 - untrusted.index(True)
+        return pairs[other_index][2] > CHAIN_TOTAL_MIN_SCORE
+
+    def apply_episode_consistency(
+        self, candidate_adv: float, candidate_p1: float,
+        stable_adv: float, stable_p1: float, model_adv: float,
+        physical_net_raw: float, *, is_unresolved: bool,
+        allows_hard_override: bool,
+    ) -> "tuple[float, float, bool]":
+        """台帳と生モデルの両方に逆らう未解決中の単独反転を保留する。
+
+        `stable_adv` は直前の resolved hold を解除時に引き継ぐため、常に独立な
+        STABLE評価とは限らない。台帳と生モデルが一致した場合はこの2票を採用し、
+        stableも同方向なら較正済みstable値、そうでなければ生モデル値へ戻す。
+        """
+        enabled = self._enable_episode_physical_consistency_guard and is_unresolved
+        if not enabled or allows_hard_override or abs(physical_net_raw) < 1e-9:
+            return candidate_adv, candidate_p1, False
+        conflicts = candidate_adv * physical_net_raw < 0.0
+        model_supports = (
+            abs(model_adv) > EVEN_THRESHOLD
+            and model_adv * physical_net_raw > 0.0)
+        if not conflicts or not model_supports:
+            return candidate_adv, candidate_p1, False
+        stable_supports = (
+            abs(stable_adv) > EVEN_THRESHOLD
+            and stable_adv * physical_net_raw > 0.0)
+        self._episode_physical_stats["fallback"] += 1
+        self._episode_physical_stats["fallback_times"].append(
+            round(float(self._t_sec), 3))
+        if stable_supports:
+            return stable_adv, stable_p1, True
+        return model_adv, adv_to_winprob(model_adv), True
 
     def _update_landing_targets(self, result: "MutualExchangeResult") -> None:
         """決着計算が予測した各 side の最終お邪魔到達量 (着弾完了判定①用) を保持する。
@@ -1542,17 +1817,262 @@ class ResolvedExchangeTracker:
         current = float(iv.board_ojama_count(live_defender_board).raw)
         return max(0.0, target - current)
 
+    def _reset_nondefender_cycles(self) -> None:
+        """新しい決着結果では side-local chain の基準を取り直す。"""
+        self._nondef_cycle_armed = [False, False]
+        self._nondef_cycle_in_chain = [False, False]
+        self._nondef_cycle_prev_state = [None, None]
+        self._nondef_cycle_before_board = [None, None]
+        self._nondef_cycle_score_start = [None, None]
+        self._nondef_cycle_stable_since = [None, None]
+        self._nondef_cycle_event = [None, None]
+        self._nondef_cycle_hold_anchor = [None, None]
+        self._nondef_cycle_saw_new_hand = [False, False]
+        self._nondef_cycle_chain_id = [None, None]
+        self._nondef_fallback_active = [False, False]
+        self._nondef_fallback_anchor = [None, None]
+        self._nondef_fallback_before = [None, None]
+
+    def _refresh_nondefender_cycle_anchors(self, adv: float) -> None:
+        """同じ交換内の再決着後も観測中の連鎖を残し、基準値だけ更新する。"""
+        for idx, in_chain in enumerate(self._nondef_cycle_in_chain):
+            if in_chain:
+                self._nondef_cycle_hold_anchor[idx] = adv
+
+    def _apply_nondefender_cycle_after(
+        self, side: str, after: Board, anchor: float, source: str,
+        before: "Board | None" = None,
+    ) -> bool:
+        """同じ実盤面系列の連鎖前後差だけを反映し、方向反転は拒否する。"""
+        idx = 0 if side == "1P" else 1
+        observed_before = (
+            before if before is not None else self._nondef_cycle_before_board[idx])
+        if (
+            self._result is None or self._resolved_snap is None
+            or observed_before is None
+        ):
+            return False
+        frozen = (
+            self._result.board_p2_after if side == "1P"
+            else self._result.board_p1_after)
+        ref_b1, ref_b2 = (
+            (observed_before, frozen) if side == "1P"
+            else (frozen, observed_before))
+        new_b1, new_b2 = (after, frozen) if side == "1P" else (frozen, after)
+        ref_adv, _ref_p1, _ref_drivers = _score_advantage(
+            self._model, ref_b1, ref_b2, self._resolved_snap,
+            attribution_exclude=self._attribution_exclude)
+        new_adv, _new_p1, _new_drivers = _score_advantage(
+            self._model, new_b1, new_b2, self._resolved_snap,
+            attribution_exclude=self._attribution_exclude)
+        delta = new_adv - ref_adv
+        candidate = max(-100.0, min(100.0, anchor + delta))
+        if abs(anchor) > EVEN_THRESHOLD and anchor * candidate < 0.0:
+            self.nondef_cycle_stats["rejected_direction"] += 1
+            self.nondef_cycle_trace.append((
+                "direction_reject", round(float(self._t_sec), 3), side, source,
+                anchor, ref_adv, new_adv, delta, candidate,
+                _board_hash(observed_before), _board_hash(after)))
+            return False
+        self.hold_adv, self.hold_p1 = candidate, adv_to_winprob(candidate)
+        self.nondef_cycle_deltas.append((
+            round(float(self._t_sec), 3), side, source,
+            anchor, ref_adv, new_adv, delta, candidate))
+        return True
+
+    @staticmethod
+    def _simulate_cycle_after(
+        event: "ChainEvent | None", observed_score_delta: int,
+    ) -> "Board | None":
+        """観測得点・連鎖数と整合する時だけChainEventの完走盤面を返す。"""
+        if event is None or observed_score_delta < CHAIN_TOTAL_MIN_SCORE:
+            return None
+        result = _CHAIN_COMPLETION_SIMULATOR.simulate(event.before_board)
+        if result.chain_count < 1 or result.chain_count != event.chain_count:
+            return None
+        expected_score = int(calculate_chain_score(result).total_score)
+        tolerance = max(10, int(0.05 * expected_score))
+        if abs(observed_score_delta - expected_score) > tolerance:
+            return None
+        return result.final_board
+
+    def nondef_cycle_summary(self) -> str:
+        """side-local chain補正の母数・棄却数・実効果を1行へ整形する。"""
+        s = self.nondef_cycle_stats
+        return (
+            f"ARM {s['armed']} / 開始 {s['started']} / 適用 {s['applied']} / "
+            f"得点棄却 {s['rejected_score']} / 同盤面棄却 {s['rejected_same_board']} / "
+            f"遅延棄却 {s['rejected_late']} / stale event {s['rejected_stale_event']} / "
+            f"新規手なし {s['rejected_no_new_hand']} / "
+            f"simulate不整合 {s['rejected_sim_mismatch']} / "
+            f"方向拒否 {s['rejected_direction']} / fallback {s['fallback_applied']} / "
+            f"fresh置換 {s['fresh_replaced']} / "
+            f"差分 {self.nondef_cycle_deltas} / trace {self.nondef_cycle_trace}"
+        )
+
+    def _clear_nondefender_cycle(self, idx: int) -> None:
+        """side-local chain 1周期分の一時状態だけを解放する。"""
+        self._nondef_cycle_in_chain[idx] = False
+        self._nondef_cycle_before_board[idx] = None
+        self._nondef_cycle_score_start[idx] = None
+        self._nondef_cycle_stable_since[idx] = None
+        self._nondef_cycle_event[idx] = None
+        self._nondef_cycle_hold_anchor[idx] = None
+        self._nondef_cycle_chain_id[idx] = None
+
+    def _replace_nondefender_fallback_if_fresh(
+        self, idx: int, side: str, board: "Board | None",
+        state: "BoardState | None",
+    ) -> bool:
+        """fallback後、次の行動前にfresh盤面が来た時だけanchorから置換する。"""
+        if not self._nondef_fallback_active[idx]:
+            return False
+        if state != BoardState.STABLE:
+            self._nondef_fallback_active[idx] = False
+            self._nondef_fallback_anchor[idx] = None
+            self._nondef_fallback_before[idx] = None
+            return False
+        before = self._nondef_fallback_before[idx]
+        if board is None or before is None or board == before:
+            return True
+        anchor = self._nondef_fallback_anchor[idx]
+        if anchor is not None and self._apply_nondefender_cycle_after(
+                side, board, anchor, "fresh_replace", before=before):
+            self.nondef_cycle_stats["fresh_replaced"] += 1
+        self._nondef_fallback_active[idx] = False
+        self._nondef_fallback_anchor[idx] = None
+        self._nondef_fallback_before[idx] = None
+        return True
+
+    def _start_nondefender_cycle(
+        self, idx: int, side: str, board: "Board | None", score: "int | None",
+        event: "ChainEvent | None", physical_chain_id: "int | None",
+    ) -> None:
+        """ARM後の新しいeventだけをside-local chain開始として保存する。"""
+        original = self._ev1 if side == "1P" else self._ev2
+        trigger = getattr(event, "trigger_sec", None)
+        original_trigger = getattr(original, "trigger_sec", None)
+        key = (side, int(physical_chain_id)) if physical_chain_id is not None else None
+        stale = (
+            key is None or key in self._nondef_applied_event_keys
+            or physical_chain_id == self._resolved_root_chain_id[idx]
+            or (original_trigger is not None and trigger <= original_trigger))
+        if stale:
+            self.nondef_cycle_stats["rejected_stale_event"] += 1
+            return
+        event_before = event.before_board if event is not None else None
+        before = event_before if event_before is not None else board
+        self._nondef_cycle_in_chain[idx] = True
+        self._nondef_cycle_before_board[idx] = before.copy() if before is not None else None
+        self._nondef_cycle_score_start[idx] = score
+        self._nondef_cycle_stable_since[idx] = None
+        self._nondef_cycle_event[idx] = event
+        self._nondef_cycle_hold_anchor[idx] = self.hold_adv
+        self._nondef_cycle_chain_id[idx] = physical_chain_id
+        self.nondef_cycle_stats["started"] += 1
+        self.nondef_cycle_trace.append((
+            "start", round(float(self._t_sec), 3), side, score,
+            trigger, original_trigger, physical_chain_id,
+            self._resolved_root_chain_id[idx],
+            _board_hash(board), _board_hash(event_before)))
+
+    def _finish_nondefender_cycle(
+        self, idx: int, side: str, board: "Board | None", score: "int | None",
+    ) -> bool:
+        """fresh盤面を優先し、0.5秒後は整合済みsimulateへ限定fallbackする。"""
+        before = self._nondef_cycle_before_board[idx]
+        start = self._nondef_cycle_score_start[idx]
+        anchor = self._nondef_cycle_hold_anchor[idx]
+        event = self._nondef_cycle_event[idx]
+        observed_delta = score - start if score is not None and start is not None else -1
+        score_ready = observed_delta >= CHAIN_TOTAL_MIN_SCORE
+        board_ready = before is not None and board is not None and before != board
+        stable_since = self._nondef_cycle_stable_since[idx]
+        waited = 0.0 if stable_since is None else self._t_sec - stable_since
+        if score_ready and board_ready and anchor is not None:
+            applied = self._apply_nondefender_cycle_after(
+                side, board, anchor, "fresh", before=before)
+        elif waited <= COUNTER_RECOMPUTE_INTERVAL_SEC:
+            return False
+        elif not score_ready:
+            self.nondef_cycle_stats["rejected_score"] += 1
+            applied = False
+        else:
+            simulated = self._simulate_cycle_after(event, observed_delta)
+            if simulated is None or anchor is None:
+                self.nondef_cycle_stats["rejected_sim_mismatch"] += 1
+                applied = False
+            else:
+                applied = self._apply_nondefender_cycle_after(
+                    side, simulated, anchor, "simulate_fallback", before=before)
+                if applied:
+                    self.nondef_cycle_stats["fallback_applied"] += 1
+                    self._nondef_fallback_active[idx] = True
+                    self._nondef_fallback_anchor[idx] = anchor
+                    self._nondef_fallback_before[idx] = before
+        physical_chain_id = self._nondef_cycle_chain_id[idx]
+        if physical_chain_id is not None:
+            self._nondef_applied_event_keys.add((side, int(physical_chain_id)))
+        self.nondef_cycle_stats["applied"] += int(applied)
+        self._clear_nondefender_cycle(idx)
+        return True
+
+    def _observe_nondefender_cycle(
+        self, side: str, board: "Board | None", state: "BoardState | None",
+        score: "int | None", chain_event: "ChainEvent | None",
+        chain_end_confirmed: bool, physical_chain_id: "int | None",
+    ) -> None:
+        """hold後に開始から終了まで見えた新規side-local chainだけを補正する。"""
+        idx = 0 if side == "1P" else 1
+        prev = self._nondef_cycle_prev_state[idx]
+        self._nondef_cycle_prev_state[idx] = state
+        if self._replace_nondefender_fallback_if_fresh(idx, side, board, state):
+            return
+        if not self._nondef_cycle_armed[idx]:
+            if (
+                chain_end_confirmed and state == BoardState.STABLE
+                and board is not None
+            ):
+                self._nondef_cycle_armed[idx] = True
+                self._nondef_cycle_saw_new_hand[idx] = False
+                self.nondef_cycle_stats["armed"] += 1
+            return
+        if state == BoardState.TSUMO_FALL:
+            self._nondef_cycle_saw_new_hand[idx] = True
+        if not self._nondef_cycle_in_chain[idx]:
+            if state == BoardState.CHAIN and prev not in _LIVE_DEFENDER_BUSY_STATES:
+                if self._nondef_cycle_saw_new_hand[idx]:
+                    self._start_nondefender_cycle(
+                        idx, side, board, score, chain_event, physical_chain_id)
+                    self._nondef_cycle_saw_new_hand[idx] = False
+                else:
+                    self.nondef_cycle_stats["rejected_no_new_hand"] += 1
+            return
+        if state != BoardState.STABLE:
+            self._nondef_cycle_stable_since[idx] = None
+            return
+        before = self._nondef_cycle_before_board[idx]
+        if self._nondef_cycle_stable_since[idx] is None:
+            self._nondef_cycle_stable_since[idx] = self._t_sec
+            self.nondef_cycle_trace.append((
+                "stable", round(float(self._t_sec), 3), side, score,
+                _board_hash(before), _board_hash(board)))
+        self._finish_nondefender_cycle(idx, side, board, score)
+
     def _reevaluate_live_defender(
         self, b1: "Board | None", b2: "Board | None",
         snap: "OjamaAccountSnapshot | None" = None,
         state1: "BoardState | None" = None, state2: "BoardState | None" = None,
+        score1: "int | None" = None, score2: "int | None" = None,
+        event1: "ChainEvent | None" = None, event2: "ChainEvent | None" = None,
+        chain_id1: "int | None" = None, chain_id2: "int | None" = None,
     ) -> None:
-        """[指摘13、2026-08-15] 片側のみ連鎖中の間、受け側の現在盤面+残り
+        """[指摘13、2026-08-15] 交換中、受け側の現在盤面+残り
         時間逓減で hold_adv/hold_p1/hold_drivers を再評価する。
 
-        `update()` 側で `enable_live_defender_reeval=True` かつ「ちょうど
-        片側の chain_event が None (=攻撃側継続・受け側自由行動)」の場合のみ
-        呼ばれる。`COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定
+        `update()` 側で `enable_live_defender_reeval=True` かつ、従来の片側event
+        条件、または strict ONで受け側の物理stateがfreeの場合に呼ばれる。
+        `COUNTER_RECOMPUTE_INTERVAL_SEC` (0.5秒、既存の応手判定
         周期と同一) 未満の連続呼び出しは即 return しキャッシュ値を保持する
         (無効化中の判定は行わない=呼出元のフラグゲートが単一情報源)。
 
@@ -1584,11 +2104,6 @@ class ResolvedExchangeTracker:
         `leftover_now` のみに揃え、凍結経路 `_resolve()` (forecast=leftover)
         と意味論を一致させる (二重計上しない)。
         """
-        if (
-            self._last_live_reeval_t is not None
-            and (self._t_sec - self._last_live_reeval_t) < COUNTER_RECOMPUTE_INTERVAL_SEC
-        ):
-            return
         if self._result is None or self._resolved_snap is None:
             return  # _resolve 未実行 (理論上到達しない、安全側 no-op)
         defender_side, incoming = self._decisive_defender(self._result)
@@ -1608,7 +2123,25 @@ class ResolvedExchangeTracker:
             # そのまま使う)。
             defender_state = state1 if defender_side == "1P" else state2
             if defender_state in _LIVE_DEFENDER_BUSY_STATES:
+                # 初回STABLE復帰は基準化だけ。その後に開始→終了を両方観測した
+                # 反対側の新規連鎖だけを paired-delta で1回補正する。
+                side = "2P" if defender_side == "1P" else "1P"
+                self._observe_nondefender_cycle(
+                    side, b2 if side == "2P" else b1,
+                    state2 if side == "2P" else state1,
+                    score2 if side == "2P" else score1,
+                    event2 if side == "2P" else event1,
+                    bool(
+                        getattr(snap, "chain_end_triggered_p2", False)
+                        if side == "2P" else
+                        getattr(snap, "chain_end_triggered_p1", False)),
+                    chain_id2 if side == "2P" else chain_id1)
                 return
+        if (
+            self._last_live_reeval_t is not None
+            and (self._t_sec - self._last_live_reeval_t) < COUNTER_RECOMPUTE_INTERVAL_SEC
+        ):
+            return
         attacker_event = self._ev2 if defender_side == "1P" else self._ev1
         if attacker_event is None:
             return  # 攻撃側イベント不明(理論上到達しない防御的ガード)
@@ -1832,6 +2365,7 @@ class ResolvedExchangeTracker:
         self._resolve(
             snap, elapsed_sec,
             max(self._pred_score1, obs1 or 0.0), max(self._pred_score2, obs2 or 0.0),
+            reset_nondefender_cycles=False,
         )
 
     def _landing_complete(self, r_p1, r_p2, snap: OjamaAccountSnapshot) -> bool:
@@ -1863,7 +2397,245 @@ class ResolvedExchangeTracker:
         self._active = False
         self._awaiting_landing = False
         self._landing_wait_started_sec = None
+        self._landing_end_kind = None
         return False, True
+
+    def on_game_boundary(self) -> None:
+        """正式試合境界で、保持中セッションを物理終端として記録する。"""
+        if not self._enable_absolute_chain_end:
+            return
+        self.abs_end_stats["total_boundaries"] += 1
+        if self._active:
+            self.abs_end_stats["ended_by_boundary"] += 1
+
+    def _abs_side_inputs(self, r_side, snap, idx: int) -> "tuple":
+        """絶対律の入力を返す。
+
+        Returns:
+            (next_pair, その side への累積お邪魔着弾量, 物理スライド中か, state名)。
+
+        `getattr` で防御するのは、軽量テストダブル (Signals スタブ) が属性を
+        持たない場合があるため。本番の `SideResult` は全て持つ。
+        """
+        nxt = getattr(r_side, "next_pair", None)
+        key = "total_dropped_to_p1" if idx == 0 else "total_dropped_to_p2"
+        dropped = float(getattr(snap, key, 0.0) or 0.0)
+        slide = bool(getattr(r_side, "next_slide_motion", False) or False)
+        st = getattr(r_side, "state", None)
+        return nxt, dropped, slide, getattr(st, "name", "") if st is not None else ""
+
+    def _update_abs_baseline(
+        self, idx: int, nxt, slide: bool, state: str,
+    ) -> None:
+        """実CHAIN観測後、開始設置の移動が収まったNEXTを基準化する。"""
+        if state == BoardState.CHAIN.name:
+            self._abs_saw_chain[idx] = True
+        if self._abs_baseline_ready[idx] or not self._abs_saw_chain[idx]:
+            return
+        if self._t_sec - self._abs_arm_t_sec < RESOLVED_ABS_BASELINE_DELAY_SEC:
+            return
+        if nxt is None or slide:
+            self._abs_baseline_candidate[idx] = None
+            self._abs_baseline_frames[idx] = 0
+            return
+        if nxt != self._abs_baseline_candidate[idx]:
+            self._abs_baseline_candidate[idx] = nxt
+            self._abs_baseline_frames[idx] = 1
+            return
+        self._abs_baseline_frames[idx] += 1
+        if self._abs_baseline_frames[idx] >= RESOLVED_ABS_BASELINE_CONFIRM_FRAMES:
+            self._abs_next_at_start[idx] = nxt
+            self._abs_baseline_ready[idx] = True
+
+    def _abs_end_signal(self, idx: int, r_side, snap) -> "str | None":
+        """その side に「連鎖が終わった」信号が出ていれば種別名を返す (純判定)。
+
+        user 伝授の絶対律「連鎖の終わり = 連鎖している側のネクストが動いた瞬間
+        OR 連鎖している側にお邪魔が落ちた瞬間」を、取りこぼしの無い形で見る:
+
+          - "next":  ネクストの**色ペア値**が変わった (`_is_game_event_chain_exit`)。
+                     精度は高いが、次ツモが同じ色ペアだと検出できない (4色で約6.25%)。
+          - "slide": NEXT ROI の**物理スライド**。色が同じでも取りこぼさない。
+                     ただし連鎖演出の発光で誤検知する既知の事故源なので、
+                     必ず連続フレーム確認と併用する (単独の根拠にしない)。
+          - "tsumo": 新しいツモの落下開始 (`*→TSUMO_FALL`)。置けた = ネクストが
+                     動いた、の物理的な証拠。エッジなのでセッション内でラッチする。
+          - "ojama": その side への累積着弾量がセッション開始時より増えた。
+        """
+        nxt, dropped, slide, state = self._abs_side_inputs(r_side, snap, idx)
+        new_tsumo = is_new_tsumo_fall_start(self._abs_prev_state[idx] or "", state)
+        self._update_abs_baseline(idx, nxt, slide, state)
+        if not self._abs_saw_chain[idx]:
+            return None
+        last_activity = self._abs_last_chain_activity_sec[idx]
+        chain_recent = (
+            state == BoardState.CHAIN.name
+            and last_activity is not None
+            and self._t_sec - last_activity <= RESOLVED_ABS_CHAIN_ACTIVITY_QUIET_SEC
+        )
+        if chain_recent:
+            return None
+        if dropped > self._abs_dropped_at_start[idx]:
+            return "ojama"
+        if not self._abs_baseline_ready[idx]:
+            return None
+        # NEXT変化は発火させた設置でも起きる。変化自体は開始時基準との比較で
+        # ラッチされるため、own state が CHAIN を抜けるまで確定を待てば、終了後に
+        # 同じ信号を回収できる。state遅延は解除を遅らせるだけで早めない。
+        if new_tsumo:
+            self._abs_saw_tsumo[idx] = True
+        if _is_game_event_chain_exit(nxt, self._abs_next_at_start[idx]):
+            return "next"
+        if slide:
+            return "slide"
+        if self._abs_saw_tsumo[idx]:
+            return "tsumo"
+        return None
+
+    def _arm_absolute_chain_end(self, r_p1, r_p2, snap) -> None:
+        """保持セッション開始時に、絶対律の基準スナップショットを取る。
+
+        以後の判定は「この時点から変わったか」で見るため、いったん成立すれば
+        下がらない (ラッチ性がある)。瞬間値の比較ではないので、連鎖アニメ中の
+        chain_event 点滅 (W30) に引きずられない。
+        """
+        self._abs_arm_t_sec = float(self._t_sec)
+        for idx, r_side in ((0, r_p1), (1, r_p2)):
+            nxt, dropped, _slide, state = self._abs_side_inputs(r_side, snap, idx)
+            self._abs_next_at_start[idx] = None
+            self._abs_dropped_at_start[idx] = dropped
+            self._abs_ended[idx] = False
+            self._abs_end_kind[idx] = None
+            self._abs_pending_frames[idx] = 0
+            self._abs_prev_state[idx] = state
+            score = getattr(r_side, "score", None)
+            self._abs_prev_score[idx] = None if score is None else int(score)
+            self._abs_last_chain_activity_sec[idx] = (
+                float(self._t_sec) if state == BoardState.CHAIN.name else None)
+            self._abs_saw_tsumo[idx] = False
+            self._abs_saw_chain[idx] = state == BoardState.CHAIN.name
+            self._abs_baseline_ready[idx] = False
+            self._abs_baseline_candidate[idx] = None
+            self._abs_baseline_frames[idx] = 0
+        self.abs_end_stats["sessions"] += 1
+
+    def _observe_absolute_chain_end(self, r_p1, r_p2, snap) -> bool:
+        """毎フレーム呼ぶ。両 side とも絶対律で連鎖が終わっていれば True。
+
+        side ごとの終了条件 (user 伝授の絶対律、どちらか成立で終了):
+          A. その side のネクストが動いた (`_is_game_event_chain_exit` を再利用。
+             `next_pair=None` は「未検知」であって「不動」ではないため、
+             両方が有効値のときだけ比較される)
+          B. その side にお邪魔が落ちた (累積着弾量がセッション開始時より増えた)
+
+        単発の誤読で早期解除しないよう、`RESOLVED_ABS_END_CONFIRM_FRAMES`
+        フレーム連続で成立してから確定させる。
+
+        長連鎖では段間に一時的な非CHAINが入り、次段で再びCHAINになる。
+        その場合、前段末尾で立った終了候補を撤回する。撤回しないと5連鎖と
+        6連鎖の段間を物理連鎖の終了と誤認する。
+        """
+        for idx, r_side in ((0, r_p1), (1, r_p2)):
+            state = self._abs_side_inputs(r_side, snap, idx)[3]
+            score_value = getattr(r_side, "score", None)
+            score = None if score_value is None else int(score_value)
+            prev_score = self._abs_prev_score[idx]
+            chain_started = (
+                state == BoardState.CHAIN.name
+                and self._abs_prev_state[idx] != BoardState.CHAIN.name)
+            score_step = (
+                score is not None and prev_score is not None
+                and score - prev_score >= CHAIN_TOTAL_MIN_SCORE)
+            physical_activity = chain_started or score_step
+            if physical_activity:
+                self._abs_last_chain_activity_sec[idx] = float(self._t_sec)
+            if self._abs_ended[idx] and physical_activity:
+                self._abs_ended[idx] = False
+                self._abs_end_kind[idx] = None
+                self._abs_pending_frames[idx] = 0
+                self.abs_end_stats["reopened_by_chain"][idx] += 1
+            sig = self._abs_end_signal(idx, r_side, snap)
+            # prev_state は「終了済み」の side でも更新し続ける (次セッションの
+            # 立ち上がり判定が前セッションの残骸に引きずられないように)。
+            self._abs_prev_state[idx] = state
+            self._abs_prev_score[idx] = score
+            if self._abs_ended[idx]:
+                continue
+            if sig is None:
+                self._abs_pending_frames[idx] = 0
+                continue
+            self._abs_pending_frames[idx] += 1
+            if self._abs_pending_frames[idx] < RESOLVED_ABS_END_CONFIRM_FRAMES:
+                continue
+            self._abs_ended[idx] = True
+            self._abs_end_kind[idx] = sig
+            self.abs_end_stats["end_by_" + sig][idx] += 1
+        return self._abs_ended[0] and self._abs_ended[1]
+
+    def _safe_abs_legacy_done(self, r_p1, r_p2, ev1, ev2, snap) -> bool:
+        """ON時だけ、断片化Noneを除外した旧終了条件を返す。"""
+        if ev1 is not None or ev2 is not None:
+            self._abs_legacy_neutral_frames = 0
+            return False
+        states = (
+            self._abs_side_inputs(r_p1, snap, 0)[3],
+            self._abs_side_inputs(r_p2, snap, 1)[3],
+        )
+        if (not all(self._abs_saw_chain)
+                or BoardState.CHAIN.name in states):
+            self._abs_legacy_neutral_frames = 0
+            return False
+        self._abs_legacy_neutral_frames += 1
+        return self._abs_legacy_neutral_frames >= RESOLVED_ABS_END_CONFIRM_FRAMES
+
+    def _wait_abs_rearm_neutral(self, ev1, ev2) -> bool:
+        """両イベントNoneが1手分続けば再武装を許す。待機中はTrue。"""
+        if ev1 is not None or ev2 is not None:
+            self._abs_rearm_neutral_started_sec = None
+            self.abs_end_stats["rearm_blocked_frames"] += 1
+            return True
+        if self._abs_rearm_neutral_started_sec is None:
+            self._abs_rearm_neutral_started_sec = float(self._t_sec)
+        waited = float(self._t_sec) - self._abs_rearm_neutral_started_sec
+        if waited < RESOLVED_ABS_REARM_NEUTRAL_SEC:
+            self.abs_end_stats["rearm_blocked_frames"] += 1
+            return True
+        self._abs_rearm_blocked = False
+        self._abs_rearm_neutral_started_sec = None
+        return False
+
+    def abs_end_summary(self) -> str:
+        """絶対律による解除の母数付きサマリ (診断用)。
+
+        母数 (保持セッション総数) と必ず並べて出す。`0` が「起きなかった」
+        なのか「測っていない」なのかを取り違えないため
+        (memory feedback_zero_needs_denominator_2026-08-25)。
+        """
+        st = self.abs_end_stats
+        n = st["sessions"]
+        def _pair(key: str) -> str:
+            return "1P={} 2P={}".format(st[key][0], st[key][1])
+
+        rel = st["release_states"]
+        # 解除の瞬間にどちらかが CHAIN = 連鎖アニメ中に解いた疑い (早期解除)。
+        early = [r for r in rel if r[1] == "CHAIN" or r[2] == "CHAIN"]
+        return (
+            "保持セッション {n} / 絶対律で解除 {a}/{n} / 旧条件で解除 {b}/{n} / "
+            "試合境界で終端 {c}/{n} (正式境界 {bc}) / "
+            "終了信号[色ペア変化 {s1}] [物理スライド {s2}] [新ツモ落下 {s3}] "
+            "[お邪魔着弾 {s4}] / 次段CHAINで撤回 {s5} / "
+            "**実解除時にCHAIN継続 {e}/{r}** / "
+            "再武装拒否 {q}frame {ex}"
+        ).format(
+            n=n, a=st["released_by_abs"], b=st["released_by_legacy"],
+            c=st["ended_by_boundary"], bc=st["total_boundaries"],
+            s1=_pair("end_by_next"), s2=_pair("end_by_slide"),
+            s3=_pair("end_by_tsumo"), s4=_pair("end_by_ojama"),
+            s5=_pair("reopened_by_chain"),
+            e=len(early), r=len(rel), q=st["rearm_blocked_frames"],
+            ex=("-> " + str([(r[0], r[1], r[2], r[3]) for r in early[:6]])
+                if early else ""),
+        )
 
     def _await_landing(
         self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
@@ -1876,10 +2648,23 @@ class ResolvedExchangeTracker:
         if not self._awaiting_landing:
             self._awaiting_landing = True
             self._landing_wait_started_sec = elapsed_sec
-        if self._landing_complete(r_p1, r_p2, snap):
-            return self._release()
-        waited = elapsed_sec - self._landing_wait_started_sec
-        if waited >= RESOLVED_HOLD_LANDING_MAX_WAIT_SEC:
+        release_reason = "landing" if self._landing_complete(r_p1, r_p2, snap) else None
+        if release_reason is None:
+            waited = elapsed_sec - self._landing_wait_started_sec
+            if waited >= RESOLVED_HOLD_LANDING_MAX_WAIT_SEC:
+                release_reason = "timeout"
+        if release_reason is not None:
+            kind = self._landing_end_kind or "unknown"
+            self._abs_rearm_blocked = True
+            self._abs_rearm_neutral_started_sec = None
+            key = "released_by_legacy" if kind == "legacy" else "released_by_abs"
+            self.abs_end_stats[key] += 1
+            self.abs_end_stats["release_states"].append((
+                round(float(self._t_sec), 3),
+                self._abs_side_inputs(r_p1, snap, 0)[3],
+                self._abs_side_inputs(r_p2, snap, 1)[3],
+                f"{kind}:{release_reason}",
+            ))
             return self._release()
         return True, False
 
@@ -1887,6 +2672,10 @@ class ResolvedExchangeTracker:
         self, r_p1, r_p2, snap: OjamaAccountSnapshot, elapsed_sec: float,
         t_sec: "float | None" = None,
         b1: "Board | None" = None, b2: "Board | None" = None,
+        physical_net_raw: "float | None" = None,
+        physical_is_unresolved: bool = False,
+        physical_chain_id_p1: "int | None" = None,
+        physical_chain_id_p2: "int | None" = None,
     ) -> "tuple[bool, bool]":
         """毎フレーム呼ぶ。(is_active, just_deactivated) を返す
 
@@ -1902,7 +2691,7 @@ class ResolvedExchangeTracker:
         b1/b2: [指摘13、2026-08-15 追加の optional 引数] 呼出側 generate() が
             保持する「受け側の現在の STABLE 確定盤面」(sticky、片側STABLE時
             のみ更新・非STABLE中は前回値を保持)。`enable_live_defender_reeval
-            =True` かつ片側のみ連鎖中の間だけ `_reevaluate_live_defender` が
+            =True` かつ受け側が物理的に自由な間だけ `_reevaluate_live_defender` が
             参照する。省略時 (None、backwards compat) はライブ再評価自体が
             盤面欠損として no-op になる (既存呼出元は無変化)。
         snap: 既存の必須引数 (`_maybe_redecide` 用) を `_reevaluate_live_
@@ -1912,6 +2701,9 @@ class ResolvedExchangeTracker:
         self._t_sec = elapsed_sec if t_sec is None else t_sec
         ev1, ev2 = r_p1.chain_event, r_p2.chain_event
         if not self._active:
+            if self._enable_absolute_chain_end and self._abs_rearm_blocked:
+                if self._wait_abs_rearm_neutral(ev1, ev2):
+                    return False, False
             # CHAIN_TOTAL_MIN_SCORE 未満 (OCR誤読ノイズ由来の疑いが濃い極小連鎖、
             # ojama_accounting.py と同じ判断基準) はトリガー対象外にする。
             #
@@ -1938,30 +2730,74 @@ class ResolvedExchangeTracker:
                 # リセットする (enable_resolved_victim_gen_live=False では
                 # 未使用のため実害なし)。
                 self._victim_live_last_t1 = self._victim_live_last_t2 = None
+                self._episode_physical_net_last = None
                 self._awaiting_landing = False
                 self._landing_wait_started_sec = None
+                self._landing_end_kind = None
                 self._resolve(
                     snap, elapsed_sec, float(ev1.total_score), float(ev2.total_score))
+                # この決着を構成した物理連鎖IDを基準として保存する。状態機械の
+                # TSUMO/STABLE揺れで同じ連鎖が再びCHAINへ見えても、新しい応手
+                # として二重に補正しないための識別子。省略時は安全側で補正しない。
+                self._resolved_root_chain_id = [
+                    physical_chain_id_p1, physical_chain_id_p2]
                 self._active = True
+                # [2026-08-26 決着ホールド根治] 既定 OFF では呼ばない
+                # (状態も統計も一切動かないため bit-identical)。
+                if self._enable_absolute_chain_end:
+                    self._arm_absolute_chain_end(r_p1, r_p2, snap)
+                    self._abs_legacy_neutral_frames = 0
             return self._active, False
         self._maybe_redecide(snap, elapsed_sec)
-        if ev1 is None and ev2 is None:
+        self._maybe_redecide_physical_net(
+            snap, physical_net_raw, physical_is_unresolved)
+        # [2026-08-26 決着ホールド根治、user決定] 絶対律による終了判定。
+        # 既定 OFF では `_abs_done` は常に False で、下の条件式は従来と同一。
+        _abs_done = False
+        if self._enable_absolute_chain_end:
+            _abs_done = self._observe_absolute_chain_end(r_p1, r_p2, snap)
+        _legacy_done = (
+            self._safe_abs_legacy_done(r_p1, r_p2, ev1, ev2, snap)
+            if self._enable_absolute_chain_end
+            else ev1 is None and ev2 is None)
+        # ON時の旧条件は、瞬間的なNone gapを除外した安全版だけをORする。
+        # OFF時は従来の `ev1 is None and ev2 is None` と完全に同一。
+        if _legacy_done or _abs_done:
             # [指摘11] 連鎖アニメは終わったが、相殺後おじゃまの着弾完了までは
             # ホールドを延長する (「着弾前の空白」で通常評価に戻さない)。
+            if self._enable_absolute_chain_end and not self._awaiting_landing:
+                self._landing_end_kind = "legacy" if _legacy_done else "abs"
+                # これは実解除でなく、着弾待ちへ入る終了候補。次段 CHAIN が
+                # 見えた場合は下の継続分岐へ戻り、候補を撤回する。
+                self.abs_end_stats["end_candidate_states"].append((
+                    round(float(self._t_sec), 3),
+                    self._abs_side_inputs(r_p1, snap, 0)[3],
+                    self._abs_side_inputs(r_p2, snap, 1)[3],
+                    self._landing_end_kind,
+                ))
             return self._await_landing(r_p1, r_p2, snap, elapsed_sec)
         # 連鎖アニメがまだ続いている (片側だけ終わった場合も含む、検収指摘⑤)。
         self._awaiting_landing = False
         self._landing_wait_started_sec = None
-        if self._enable_live_defender_reeval and (ev1 is None) != (ev2 is None):
-            # [指摘13] ちょうど片側だけ chain_event が None (=攻撃側継続・
-            # 受け側自由行動)。従来はここも完全凍結ブランチに合流していたが、
-            # 受け側成分だけ生値で再評価する (無効時は本行に到達しても何もしない
-            # フラグゲートを通らないため、既定挙動は完全に不変)。
+        self._landing_end_kind = None
+        should_live_reevaluate = (
+            (ev1 is None) != (ev2 is None)
+            or self._enable_live_defender_strict)
+        if self._enable_live_defender_reeval and should_live_reevaluate:
+            # [指摘13 + 2026-08-27 userレビュー] chain_event は保持パルスであり、
+            # 受け側が既に自由でも両側に古い event が残ることがある。strict ON
+            # では XOR を入口にせず、受け側の物理 state が CHAIN/
+            # GRAVITY_SETTLE かを `_reevaluate_live_defender` 内で直接判定する。
+            # strict OFF は従来の XOR 条件を維持して後方互換を保つ。
             # getattr フォールバック (state 属性を持たない軽量テスト
             # ダブルとの後方互換用。本番の Signals は必ず state を持つ)。
             self._reevaluate_live_defender(
                 b1, b2, snap,
-                state1=getattr(r_p1, "state", None), state2=getattr(r_p2, "state", None))
+                state1=getattr(r_p1, "state", None), state2=getattr(r_p2, "state", None),
+                score1=getattr(r_p1, "score", None), score2=getattr(r_p2, "score", None),
+                event1=ev1, event2=ev2,
+                chain_id1=physical_chain_id_p1,
+                chain_id2=physical_chain_id_p2)
         return True, False
 
 
@@ -1985,6 +2821,18 @@ def resolved_hold_freezes_settled(
     `enable_resolved_exchange_eval` 無効時は常に False (従来挙動と完全一致)。
     """
     return enable_resolved_exchange_eval and resolved_active
+
+
+def _minimum_prediction_guard_applies(
+    tracker: ResolvedExchangeTracker, state1: BoardState, state2: BoardState,
+    stable_adv: float,
+) -> bool:
+    """40点下限予測だけで直前評価を極端に反転する場合に限り保留する。"""
+    return (
+        tracker.has_untrusted_minimum_active_chain(state1, state2)
+        and abs(tracker.hold_adv) > EPISODE_UNRESOLVED_ABS_CAP
+        and tracker.hold_adv * stable_adv < 0.0
+    )
 
 
 # (改修1) スコアリセット検知: 新ゲーム開始/全消し等でスコアが「前フレームから
@@ -2021,6 +2869,74 @@ def _detect_score_reset(
     if prev2 is not None and prev2 - score2 >= SCORE_RESET_THRESHOLD:
         return True
     return score1 <= SCORE_NEAR_ZERO_THRESHOLD and score2 <= SCORE_NEAR_ZERO_THRESHOLD
+
+
+def accept_formal_boundary(
+    reset_now: bool, latched: bool, t_sec: float,
+    last_formal_t: float | None,
+    debounce_sec: float = GAME_BOUNDARY_DEBOUNCE_SEC,
+) -> bool:
+    """この reset 信号を「正式な試合境界イベント」として受理するか (純関数)。
+
+    【P1 是正 2026-08-26、Codex 第26報レビュー】`_detect_score_reset()` は
+    両スコアが `SCORE_NEAR_ZERO_THRESHOLD` 以下の間**毎フレーム True** を返す。
+    従来は `game_idx += 1` だけが debounce されており、死亡確定の境界処理
+    (`resolve_boundary_confirmations`) は debounce の外にあったため、実境界
+    約6件に対し `total_boundaries=715` 回呼ばれていた (Codex 実測)。
+    `DeathConfirmTracker.on_game_boundary()` は毎回 `_post_boundary_armed`
+    を False へ戻すので、新試合冒頭の再武装や死亡候補を取りこぼしうる。
+
+    受理条件は次の両方。片方だけでは不足する:
+      1. reset 信号の**立ち上がり** (`latched` が False)。低得点が続く間の
+         毎フレーム再受理を防ぐ。時間ではなく信号の縁で切るので、低得点が
+         5秒より長く続いても同一境界を再受理しない。
+      2. 前回受理から `debounce_sec` 秒以上経過。OCR ちらつきで信号が一瞬
+         落ちて再度立ち上がる場合に、同一境界を2回受理しないための保険。
+
+    実試合は最短でも14秒あるため、この二重条件で真の境界は落とさない。
+
+    Args:
+        reset_now: このフレームの `_detect_score_reset()` の結果。
+        latched: 直前フレームで reset 信号が立っていたか
+            (`update_score_reset_latch()` の戻り値を持ち回る)。
+        t_sec: 現在時刻 (秒)。
+        last_formal_t: 最後に正式受理した境界の時刻。未受理なら None。
+        debounce_sec: 再受理を抑制する秒数。既定は `GAME_BOUNDARY_DEBOUNCE_SEC`。
+
+    Returns:
+        受理するなら True。
+    """
+    if not reset_now or latched:
+        return False
+    return last_formal_t is None or (t_sec - last_formal_t) >= debounce_sec
+
+
+def update_score_reset_latch(
+    latched: bool, reset_now: bool, score1: int | None, score2: int | None,
+) -> bool:
+    """reset 信号の立ち上がりラッチを更新する (純関数)。
+
+    `_detect_score_reset()` は score が None (OCR 失敗) のとき False を返すが、
+    それは「境界が終わった」ではなく「**判定不能**」である。ここでラッチを
+    解除すると、OCR の瞬断のたびに同じ境界を再受理してしまう
+    (`0` が「合格」なのか「測っていない」なのかを取り違える誤りと同型)。
+    そのため、両者のスコアが実際に読めていて、かつ reset 条件を満たさなく
+    なったときだけ解除する。
+
+    Args:
+        latched: 現在のラッチ状態。
+        reset_now: このフレームの `_detect_score_reset()` の結果。
+        score1: 1P のスコア。None は OCR 失敗。
+        score2: 2P のスコア。None は OCR 失敗。
+
+    Returns:
+        更新後のラッチ状態。
+    """
+    if reset_now:
+        return True
+    if score1 is None or score2 is None:
+        return latched
+    return False
 
 # 学習・推論で共通の安価な差分特徴 (重い火力系は除外)。
 # 既存の呼出元 (plot_move_diagnostics.py 等) がこの定数を直接 import して
@@ -3811,14 +4727,17 @@ def _fresh_trackers(
     model,
     attribution_exclude: tuple[str, ...] = ATTRIBUTION_EXCLUDED_INDICATORS,
     enable_chain_gen_accumulate: bool = False,
+    accounting_tracker: OjamaAccountingTracker | None = None,
 ) -> tuple[OjamaAccountingTracker, "_SideTracker", "_SideTracker",
            PressureTracker, RealtimeForecastTracker, ScoreLeadTracker, HeavyAdvCache,
            EarlyFireTracker, "ChainGenerationAccumulator"]:
     """スコアリセット検知時に持続トラッカー一式を初期状態で作り直す。
 
     各トラッカーは内部 state が僅少 (数個の float/Counter) のため、都度
-    再生成するだけで「初期化」と等価であり専用 reset() の追加は不要
-    (OjamaAccountingTracker のみ既存 reset() を呼び互換 API を維持する)。
+    再生成するだけで「初期化」と等価であり専用 reset() の追加は不要。
+    `accounting_tracker` 指定時だけ OjamaAccountingTracker を保持する
+    (Gate 3R-5 gross dump の境界ワイプ累積用)。省略時は従来どおり新規生成し
+    reset() を呼ぶため、既定 OFF の実行経路は変わらない。
     戻り値末尾に EarlyFireTracker (2026-07-29)、続けて
     ChainGenerationAccumulator (2026-08-22 修正① 改良②) を追加 (既存呼出元は
     1箇所のみでアンパック先も同時更新済みのため後方互換上の実害なし)。
@@ -3829,8 +4748,13 @@ def _fresh_trackers(
     (2026-08-22 user判断で既定 False に変更、`ChainGenerationAccumulator`
     docstring 参照。optional 引数、後方互換)。
     """
-    tracker = OjamaAccountingTracker()
-    tracker.reset()
+    # gross dump 有効時だけ、累積会計トラッカーを試合境界越しに保持する。
+    # 境界フレームは呼出元の通常の _drive_ojama で一度だけ処理されるため、
+    # 旧 tracker 内の pending が boundary_wiped_uncapped_* へ記録される。
+    tracker = accounting_tracker
+    if tracker is None:
+        tracker = OjamaAccountingTracker()
+        tracker.reset()
     return (tracker, _SideTracker(), _SideTracker(),
             PressureTracker(), RealtimeForecastTracker(), ScoreLeadTracker(),
             HeavyAdvCache(model, attribution_exclude=attribution_exclude),
@@ -3876,6 +4800,79 @@ TIMELINE_DUMP_SCORE_NONE_SENTINEL: int = -1  # score OCR失敗(None)の npz 格�
 
 
 @dataclass(frozen=True)
+class DisplayTimelineRow:
+    """画面へ実際に出した値の密な1サンプル。settled限定dumpとは分離する。"""
+
+    t_sec: float
+    game_idx: int
+    state1: str
+    state2: str
+    display_adv: float
+    display_p1: float
+    adv_raw_last: float
+    source: str
+    resolved_active: bool
+    settled_ran: bool
+    state1: str
+    state2: str
+    score1: int
+    score2: int
+
+
+def _display_timeline_source(
+    resolved_active: bool, just_deactivated: bool, settled_ran: bool,
+    episode_consistency_fallback: bool = False,
+    minimum_prediction_guarded: bool = False,
+) -> str:
+    """表示値の由来を、優先順位どおりに分類する。"""
+    if episode_consistency_fallback:
+        return "episode_guard"
+    if minimum_prediction_guarded:
+        return "minimum_prediction_guard"
+    if resolved_active:
+        return "resolved_hold"
+    if just_deactivated and not settled_ran:
+        return "resolved_release"
+    return "settled" if settled_ran else "frozen"
+
+
+def save_display_timeline(
+    path: Path, video_id: str, rows: list[DisplayTimelineRow],
+) -> None:
+    """実表示の密な時系列をnpzへ保存する。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    keys = tuple(DisplayTimelineRow.__dataclass_fields__)
+    cols = {key: np.asarray([getattr(row, key) for row in rows]) for key in keys}
+    np.savez_compressed(path, video_id=np.asarray(video_id), **cols)
+
+# (2026-08-25 Gate 3R-5) gross 累積カウンタ dump 列のキー名 (単一情報源)。
+# TimelineDumpRow のフィールド名 = npz キー名。値は settled 更新間の差分
+# (単調カウンタの Δ、classify_gross_counter_delta の出力) を記録する。
+# gross_pending_unc_* のみ絶対値 (uncapped 純残量)、gross_residual_* のみ float
+# (保存則残差)。gross_inspected_sides は検査母数 (0=この行は未検査、2=両side検査。
+# 残差0が「合っている」のか「測っていない」のかを行単位で区別する、
+# memory feedback_zero_needs_denominator_2026-08-25)。
+_TIMELINE_GROSS_INT_KEYS: tuple[str, ...] = (
+    "gross_gen_p1", "gross_gen_p2",            # gross 生成 (cap前) Δ
+    "gross_offset_p1", "gross_offset_p2",      # cap前 相殺 Δ
+    "gross_dropped_p1", "gross_dropped_p2",    # cap前 着弾 Δ
+    "gross_wiped_p1", "gross_wiped_p2",        # 境界ワイプ量 Δ (回数ではなく量)
+    "gross_clamp_loss_p1", "gross_clamp_loss_p2",  # サニティ切り捨て量 Δ
+    "gross_pending_unc_p1", "gross_pending_unc_p2",  # uncapped 純残量 (絶対値)
+    "gross_inspected_sides",                   # 検査母数 (0 or 2)
+)
+_TIMELINE_GROSS_FLOAT_KEYS: tuple[str, ...] = (
+    "gross_residual_p1", "gross_residual_p2",  # 保存則残差 (期待値 0)
+)
+_TIMELINE_GROSS_KEYS: tuple[str, ...] = (
+    _TIMELINE_GROSS_INT_KEYS + _TIMELINE_GROSS_FLOAT_KEYS
+)
+# 保存則残差の非0判定の許容誤差 (probe v5 `_record_result` と同じ値。
+# シーン逆算ではなく浮動小数点比較の一般的な許容誤差)。
+_GROSS_RESIDUAL_EPS: float = 1e-9
+
+
+@dataclass(frozen=True)
 class TimelineDumpRow:
     """タイムラインdump 1レコード (1回の settled 更新に対応)。"""
 
@@ -3915,6 +4912,32 @@ class TimelineDumpRow:
     kpending_p2: float | None = None
     kroom1: int | None = None
     kroom2: int | None = None
+    # (2026-08-25 Gate 3R-5) gross 累積カウンタ列 (既定 OFF)。
+    # None = 未記録 (フラグ OFF / 旧 npz)。k* 系と異なり __post_init__ で
+    # 代替値を埋めない (「測っていない」を None で明示し、0 と区別する)。
+    # フィールドの意味は _TIMELINE_GROSS_INT_KEYS 定義部コメント参照。
+    gross_gen_p1: int | None = None
+    gross_gen_p2: int | None = None
+    gross_offset_p1: int | None = None
+    gross_offset_p2: int | None = None
+    gross_dropped_p1: int | None = None
+    gross_dropped_p2: int | None = None
+    gross_wiped_p1: int | None = None
+    gross_wiped_p2: int | None = None
+    gross_clamp_loss_p1: int | None = None
+    gross_clamp_loss_p2: int | None = None
+    gross_pending_unc_p1: int | None = None
+    gross_pending_unc_p2: int | None = None
+    gross_inspected_sides: int | None = None
+    gross_residual_p1: float | None = None
+    gross_residual_p2: float | None = None
+    # (2026-08-25 Gate 3R-6 本体) 候補→猶予→確定の時間的死亡確定 (既定 OFF)。
+    # None = 未記録 (フラグ OFF / 旧 npz)。is_dead1/is_dead2 (Board.is_dead()
+    # の静的占有判定、即時反映) とは異なる列として並存させる
+    # (`--death-confirm-sequence` docstring 参照。既存 is_dead1/is_dead2 は
+    # 一切変更しない、backwards compat)。
+    is_dead1_confirmed: bool | None = None
+    is_dead2_confirmed: bool | None = None
 
     def __post_init__(self) -> None:
         """新4フィールドが未指定 (None) なら生値で埋める (後方互換の要)。
@@ -3943,6 +4966,501 @@ def _pad_drivers_top3(
     return (names[0], names[1], names[2]), (vals[0], vals[1], vals[2])
 
 
+def _build_gross_dump_fields(
+    prev: GrossOjamaCounters | None, curr: GrossOjamaCounters,
+    prev_pending_unc: tuple[int, int] | None, curr_pending_unc: tuple[int, int],
+    game_idx: int,
+) -> dict[str, int | float]:
+    """settled 1回分の gross dump 列 kwargs を組み立てる (Gate 3R-5、純関数)。
+
+    prev が None (処理開始直後) の行は
+    差分を計算できないため、全 Δ を 0・`gross_inspected_sides=0` で返す
+    (=「この行は検査していない」の明示。残差 0 の行と区別できる、
+    memory feedback_zero_needs_denominator_2026-08-25)。
+    それ以外は classify_gross_counter_delta (推測なしのカテゴリ別 Δ 復元)
+    の結果をそのまま列に写す。uncapped 純残量は常に絶対値で記録する。
+    """
+    fields: dict[str, int | float] = {key: 0 for key in _TIMELINE_GROSS_INT_KEYS}
+    fields.update({key: 0.0 for key in _TIMELINE_GROSS_FLOAT_KEYS})
+    fields["gross_pending_unc_p1"] = int(curr_pending_unc[0])
+    fields["gross_pending_unc_p2"] = int(curr_pending_unc[1])
+    if prev is None or prev_pending_unc is None:
+        return fields  # gross_inspected_sides=0 のまま = 未検査行
+    c = classify_gross_counter_delta(
+        prev, curr,
+        (float(prev_pending_unc[0]), float(prev_pending_unc[1])),
+        (float(curr_pending_unc[0]), float(curr_pending_unc[1])), game_idx)
+    s = c.settlement
+    fields.update(
+        gross_gen_p1=c.generated_by_1p, gross_gen_p2=c.generated_by_2p,
+        gross_offset_p1=int(s.canceled_by_1p) if s is not None else 0,
+        gross_offset_p2=int(s.canceled_by_2p) if s is not None else 0,
+        gross_dropped_p1=int(s.landed_on_1p) if s is not None else 0,
+        gross_dropped_p2=int(s.landed_on_2p) if s is not None else 0,
+        gross_wiped_p1=c.boundary_wiped_on_1p,
+        gross_wiped_p2=c.boundary_wiped_on_2p,
+        gross_clamp_loss_p1=c.clamp_loss_on_1p,
+        gross_clamp_loss_p2=c.clamp_loss_on_2p,
+        gross_residual_p1=c.conservation_residual_p1,
+        gross_residual_p2=c.conservation_residual_p2,
+        gross_inspected_sides=c.inspected_side_count,
+    )
+    return fields
+
+
+@dataclass
+class _GrossDumpStats:
+    """gross dump 列の母数付き集計 (Gate 3R-5、2026-08-25)。
+
+    0 は必ず母数と並べて表示する (「残差非0が0 side」は検査 side 数が
+    0 より大きいときにのみ「合っている」を意味する、
+    memory feedback_zero_needs_denominator_2026-08-25)。
+    """
+
+    rows_total: int = 0            # gross 列を記録した dump 行数 (母数)
+    rows_inspected: int = 0        # 差分検査を実行できた行数
+    sides_inspected: int = 0       # 検査 side 数の合計 (=検査母数)
+    nonzero_residual_sides: int = 0  # 保存則残差が非0だった side 数
+    residual_abs_max: float = 0.0  # |残差| の最大値
+    wiped_total: int = 0           # 境界ワイプ量の合計 (回数ではなく量)
+    clamp_loss_total: int = 0      # サニティ切り捨て量の合計 (期待値 0)
+
+    def record(self, fields: dict[str, int | float]) -> None:
+        """dump 1行分の gross 列を集計する。"""
+        self.rows_total += 1
+        if int(fields["gross_inspected_sides"]) <= 0:
+            return
+        self.rows_inspected += 1
+        self.sides_inspected += int(fields["gross_inspected_sides"])
+        residuals = (float(fields["gross_residual_p1"]),
+                     float(fields["gross_residual_p2"]))
+        self.nonzero_residual_sides += sum(
+            abs(r) > _GROSS_RESIDUAL_EPS for r in residuals)
+        self.residual_abs_max = max(
+            self.residual_abs_max, *(abs(r) for r in residuals))
+        self.wiped_total += (int(fields["gross_wiped_p1"])
+                             + int(fields["gross_wiped_p2"]))
+        self.clamp_loss_total += (int(fields["gross_clamp_loss_p1"])
+                                  + int(fields["gross_clamp_loss_p2"]))
+
+    def summary(self) -> str:
+        """母数付きの可視化文字列 (0/0 = 一度も検査していない、と区別可能)。"""
+        return (
+            f"保存則残差非0 {self.nonzero_residual_sides}/{self.sides_inspected} side"
+            f" (検査 {self.rows_inspected}/{self.rows_total} 行、"
+            f"|残差|最大 {self.residual_abs_max:.6g}、"
+            f"境界ワイプ量 {self.wiped_total}、clamp loss {self.clamp_loss_total})"
+        )
+
+
+@dataclass(frozen=True)
+class EpisodeTimelineRow:
+    """条件5専用の密な交換episode監査行。既存timelineとは別ファイルに保存する。"""
+
+    t_sec: float
+    game_idx: int
+    state1: str
+    state2: str
+    episode_id: int
+    stage: str
+    status: str
+    net_raw: float
+    net_display: float
+    total_generated: float
+    total_canceled: float
+    total_landed: float
+    unreconciled: float
+    provisional_residual: float
+    is_unresolved: bool
+    allows_hard_override: bool
+    hard_override_target: float
+    chain_id_p1: int
+    chain_id_p2: int
+    generation_p1: float
+    generation_p2: float
+    resolved_chain_count: int
+    active_chain_count: int
+    closed_episode_count: int
+    closed_unreconciled_total: float
+    closed_normal_unreconciled_count: int
+    last_close_reason: str
+    last_closed_status: str
+    last_closed_generated: float
+    last_closed_canceled: float
+    last_closed_landed: float
+    last_closed_unreconciled: float
+    last_closed_has_settlement: bool
+    last_closed_oversettled: float
+    last_closed_oversettled_chain_count: int
+    unattributed_settlement_total: float
+    open_episode_outstanding: float
+    ledger_residual_all: float
+    simulate_excluded_chain_count: int
+    simulate_excluded_amount: float
+    formula_step_observation_count: int
+    provisional_score_decrease_ignored_count: int
+    boundary_count: int
+    boundary_settlement_excluded_count: int
+    boundary_settlement_excluded_amount: float
+    forced_close_count: int
+    chain_id_force_cut_count: int
+    unbacked_residual_count: int
+    finalize_divergence: float
+    finalize_gate_held: bool
+    oversettled_total: float
+    retired_chain_count: int
+    retired_unreconciled: float
+    duplicate_generated_suppressed_count: int
+    duplicate_generated_suppressed_amount: float
+    finalize_rejected_count: int
+    finalize_rejected_amount: float
+    retired_canceled: float
+    retired_landed: float
+    retired_generated: float
+    post_close_settlement_dropped_count: int
+    post_close_settlement_dropped_amount: float
+    post_close_settlement_backfilled_count: int
+    post_close_settlement_backfilled_amount: float
+    post_close_finalize_backfilled_count: int
+    post_close_finalize_backfilled_amount: float
+    post_close_finalize_dropped_count: int
+    post_close_finalize_dropped_amount: float
+    post_retire_backfilled_count: int
+    post_retire_backfilled_amount: float
+    post_close_outstanding_delta_total: float
+    post_close_growth_backfilled_count: int
+    post_close_growth_backfilled_amount: float
+    post_close_growth_dropped_count: int
+    post_close_growth_dropped_amount: float
+    gross_inspected_sides: int
+    gross_residual_p1: float
+    gross_residual_p2: float
+    hard_override_candidate: bool
+    hard_override_applied: bool
+    hard_override_path: str
+    hard_override_hold_reason: str
+
+
+@dataclass(frozen=True)
+class _EpisodeDriveResult:
+    """毎フレームのlive台帳とgross保存則検査結果。"""
+
+    snapshot: LiveEpisodeSnapshot
+    gross_inspected_sides: int = 0
+    gross_residual_p1: float = 0.0
+    gross_residual_p2: float = 0.0
+
+
+def _exchange_chain_event_key(ev: ChainEvent | None) -> tuple | None:
+    """公開ChainEventの値変化だけをresolverへ送るための同一性キー。"""
+    if ev is None:
+        return None
+    return (round(ev.trigger_sec, 3), ev.mechanism, ev.chain_count, ev.total_score)
+
+
+class _LiveEpisodeOverlayAdapter:
+    """overlayの公開観測をLiveExchangeEpisodeTrackerへ毎フレーム供給する。"""
+
+    def __init__(self) -> None:
+        self.tracker = LiveExchangeEpisodeTracker(enabled=True)
+        self._last_chain_key: dict[str, tuple | None] = {"1P": None, "2P": None}
+        self._prev_gross: GrossOjamaCounters | None = None
+        self._prev_pending: tuple[float, float] | None = None
+
+    def update(
+        self, *, result: PipelineResult, accounting: OjamaAccountingTracker,
+        account_snapshot: OjamaAccountSnapshot, t_sec: float, game_idx: int,
+        room1: int, room2: int, dead1: bool, dead2: bool,
+    ) -> _EpisodeDriveResult:
+        """認識・gross・死亡確定を同一frameの原子的入力として台帳へ渡す。"""
+        curr_gross = accounting.get_gross_counters(t_sec)
+        curr_pending = (
+            float(account_snapshot.pending_p1_uncapped),
+            float(account_snapshot.pending_p2_uncapped))
+        classification = self._classify(curr_gross, curr_pending, game_idx)
+        chains = self._chain_observations(
+            result, t_sec, game_idx, accounting._elapsed(t_sec))
+        generations = self._generation_observations(classification, t_sec, game_idx)
+        context = PhysicalContext(
+            p1_chaining=result.p1.state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE),
+            p2_chaining=result.p2.state in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE),
+            p1_pending_uncapped=curr_pending[0], p2_pending_uncapped=curr_pending[1],
+            p1_room=room1, p2_room=room2, p1_dead=dead1, p2_dead=dead2,
+            game_idx=game_idx)
+        live = self.tracker.observe_frame(
+            t_sec=t_sec, context=context, chain_observations=chains,
+            generation_observations=generations,
+            settlement=(classification.settlement if classification else None),
+            wiped_sides=(classification.wiped_sides if classification else ()))
+        self._prev_gross, self._prev_pending = curr_gross, curr_pending
+        return self._drive_result(live, classification)
+
+    def _classify(
+        self, curr: GrossOjamaCounters, pending: tuple[float, float], game_idx: int,
+    ) -> GrossCounterDeltaClassification | None:
+        if self._prev_gross is None or self._prev_pending is None:
+            return None
+        return classify_gross_counter_delta(
+            self._prev_gross, curr, self._prev_pending, pending, game_idx)
+
+    def _chain_observations(
+        self, result: PipelineResult, t_sec: float, game_idx: int, elapsed_sec: float,
+    ) -> tuple[ChainEventObservation, ...]:
+        observations: list[ChainEventObservation] = []
+        for label, side_result in (("1P", result.p1), ("2P", result.p2)):
+            ev = side_result.chain_event
+            key = _exchange_chain_event_key(ev)
+            # chain_event は煙や認識gapで一時的に None になり、同じ物理連鎖が
+            # 同じ値で再出現する。None を前回キーにすると、再出現が別IDになる。
+            if ev is None or key == self._last_chain_key[label]:
+                continue
+            self._last_chain_key[label] = key
+            observations.append(ChainEventObservation(
+                side=label, t_sec=t_sec, mechanism=ev.mechanism or "",
+                chain_count=ev.chain_count, total_score=ev.total_score,
+                ojama_sent=ev.ojama_sent, game_idx=game_idx,
+                elapsed_sec=elapsed_sec))
+        return tuple(observations)
+
+    def _generation_observations(
+        self, classification: GrossCounterDeltaClassification | None,
+        t_sec: float, game_idx: int,
+    ) -> tuple[GenerationObservation, ...]:
+        if classification is None:
+            return ()
+        generated = (
+            ("1P", classification.generated_by_1p),
+            ("2P", classification.generated_by_2p))
+        return tuple(GenerationObservation(
+            side=side, t_sec=t_sec, game_idx=game_idx, generated_delta=amount)
+            for side, amount in generated if amount > 0)
+
+    def _drive_result(
+        self, live: LiveEpisodeSnapshot,
+        classification: GrossCounterDeltaClassification | None,
+    ) -> _EpisodeDriveResult:
+        if classification is None:
+            return _EpisodeDriveResult(snapshot=live)
+        return _EpisodeDriveResult(
+            snapshot=live,
+            gross_inspected_sides=classification.inspected_side_count,
+            gross_residual_p1=classification.conservation_residual_p1,
+            gross_residual_p2=classification.conservation_residual_p2)
+
+
+def _apply_episode_hard_override_gate(
+    before: float, after: float, allows_hard_override: bool,
+    *, is_unresolved: bool = False,
+    hard_override_target: float | None = None,
+    physical_net_raw: float | None = None,
+) -> tuple[float, bool, bool, str]:
+    """未解決episode中の±100完全上書きだけを方向付きで制御する。"""
+    if is_unresolved and hard_override_target is not None:
+        lower = min(before, -EPISODE_UNRESOLVED_ABS_CAP)
+        upper = max(before, EPISODE_UNRESOLVED_ABS_CAP)
+        capped = max(lower, min(upper, hard_override_target))
+        candidate = capped != before
+        if not candidate:
+            return capped, False, False, ""
+        return capped, True, False, "episode_physical_target_capped"
+    candidate = after != before and abs(after) >= 100.0 - 1e-9
+    if not candidate:
+        return after, False, False, ""
+    if (is_unresolved and physical_net_raw is not None
+            and abs(physical_net_raw) > 1e-9
+            and after * physical_net_raw < 0.0):
+        return before, True, False, "episode_direction_conflict"
+    if not allows_hard_override:
+        lower = min(before, -EPISODE_UNRESOLVED_ABS_CAP)
+        upper = max(before, EPISODE_UNRESOLVED_ABS_CAP)
+        return (
+            max(lower, min(upper, after)), True, False,
+            "episode_unresolved_capped")
+    if is_unresolved:
+        lower = min(before, -EPISODE_UNRESOLVED_ABS_CAP)
+        upper = max(before, EPISODE_UNRESOLVED_ABS_CAP)
+        return (
+            max(lower, min(upper, after)), True, False,
+            "episode_unresolved_capped")
+    return after, True, True, ""
+
+
+def _sync_probability_after_episode_gate(
+    before_adv: float, before_p1: float, gated_adv: float,
+) -> float:
+    """episode gate が表示値を変えた場合だけ勝率表示を同期する。"""
+    if abs(gated_adv - before_adv) <= 1e-9:
+        return before_p1
+    return adv_to_winprob(gated_adv)
+
+
+def _cap_unresolved_episode_display(
+    adv: float, p1: float, *, is_unresolved: bool,
+) -> tuple[float, float, bool]:
+    """未解決交換の最終表示を勝率10〜90%相当へ制限する。
+
+    live kill override だけでなく、古い resolved hold・EMA・整合性fallback の
+    再露出も表示直前で一律に覆う。内部の学習値やhold状態は変更せず、交換が
+    解決した次フレームから確定値をそのまま表示できるようにする。
+    """
+    if not is_unresolved or abs(adv) <= EPISODE_UNRESOLVED_ABS_CAP + 1e-9:
+        return adv, p1, False
+    capped = math.copysign(EPISODE_UNRESOLVED_ABS_CAP, adv)
+    return capped, adv_to_winprob(capped), True
+
+
+def _ensure_display_probability_direction(adv: float, p1: float) -> float:
+    """EVEN外で有利側と勝率50%超側が食い違う表示だけを同期する。"""
+    if abs(adv) <= EVEN_THRESHOLD:
+        return p1
+    if (adv > 0.0 and p1 >= 0.5) or (adv < 0.0 and p1 <= 0.5):
+        return p1
+    return adv_to_winprob(adv)
+
+
+def _episode_kill_override_inputs(net_raw: float) -> tuple[float, float]:
+    """交換台帳の1P視点純残量を、受け側別の致死入力へ変換する。
+
+    正値は1Pが2Pへ送る残量、負値は2Pが1Pへ送る残量。相殺後の純残量なので
+    同時に両側へ足さず、負けている受け側だけへcapなしで渡す。
+    """
+    return max(0.0, -net_raw), max(0.0, net_raw)
+
+
+def _append_episode_hard_path(current: str, path: str, candidate: bool) -> str:
+    """同一frameでlive/hold両候補が出ても供給経路を失わない。"""
+    if not candidate or path in current.split("+"):
+        return current
+    return path if not current else f"{current}+{path}"
+
+
+def _episode_timeline_row(
+    drive: _EpisodeDriveResult, *, t_sec: float, game_idx: int,
+    state1: str, state2: str,
+    hard_candidate: bool, hard_applied: bool, hard_path: str, hard_reason: str,
+) -> EpisodeTimelineRow:
+    """live snapshotを固定スキーマのsidecar行へ変換する。"""
+    snap = drive.snapshot
+    ledger = snap.ledger
+    values: dict[str, object] = dict(
+        t_sec=t_sec, game_idx=game_idx, state1=state1, state2=state2,
+        episode_id=-1 if ledger.episode_id is None else ledger.episode_id,
+        stage="" if ledger.stage is None else ledger.stage.name,
+        status="" if ledger.status is None else ledger.status.name,
+        net_raw=ledger.net_raw, net_display=ledger.net_display,
+        total_generated=ledger.total_generated, total_canceled=ledger.total_canceled,
+        total_landed=ledger.total_landed, unreconciled=ledger.unreconciled,
+        provisional_residual=ledger.provisional_residual,
+        is_unresolved=ledger.is_unresolved,
+        allows_hard_override=ledger.allows_hard_override,
+        hard_override_target=(
+            0.0 if ledger.hard_override_target is None
+            else ledger.hard_override_target),
+        **_episode_live_audit_fields(snap),
+        **_episode_ledger_audit_fields(ledger),
+        gross_inspected_sides=drive.gross_inspected_sides,
+        gross_residual_p1=drive.gross_residual_p1,
+        gross_residual_p2=drive.gross_residual_p2,
+        hard_override_candidate=hard_candidate,
+        hard_override_applied=hard_applied,
+        hard_override_path=hard_path,
+        hard_override_hold_reason=hard_reason)
+    return EpisodeTimelineRow(**values)
+
+
+def _episode_live_audit_fields(snap: LiveEpisodeSnapshot) -> dict[str, object]:
+    """resolver・close要約・未帰属量をsidecar列へ展開する。"""
+    return dict(
+        chain_id_p1=-1 if snap.latest_chain_id_p1 is None else snap.latest_chain_id_p1,
+        chain_id_p2=-1 if snap.latest_chain_id_p2 is None else snap.latest_chain_id_p2,
+        generation_p1=snap.latest_generation_p1,
+        generation_p2=snap.latest_generation_p2,
+        resolved_chain_count=snap.resolved_chain_count,
+        active_chain_count=len(snap.active_chains),
+        closed_episode_count=snap.closed_episode_count,
+        closed_unreconciled_total=snap.closed_unreconciled_total,
+        closed_normal_unreconciled_count=snap.closed_normal_unreconciled_count,
+        last_close_reason=snap.last_close_reason,
+        last_closed_status=snap.last_closed_status,
+        last_closed_generated=snap.last_closed_generated,
+        last_closed_canceled=snap.last_closed_canceled,
+        last_closed_landed=snap.last_closed_landed,
+        last_closed_unreconciled=snap.last_closed_unreconciled,
+        last_closed_has_settlement=snap.last_closed_has_settlement,
+        last_closed_oversettled=snap.last_closed_oversettled,
+        last_closed_oversettled_chain_count=(
+            snap.last_closed_oversettled_chain_count),
+        unattributed_settlement_total=snap.unattributed_settlement_total,
+        open_episode_outstanding=snap.open_episode_outstanding,
+        ledger_residual_all=snap.ledger_residual_all,
+        simulate_excluded_chain_count=snap.simulate_excluded_chain_count,
+        simulate_excluded_amount=snap.simulate_excluded_amount,
+        formula_step_observation_count=snap.formula_step_observation_count,
+        provisional_score_decrease_ignored_count=(
+            snap.provisional_score_decrease_ignored_count),
+        boundary_count=snap.boundary_count,
+        boundary_settlement_excluded_count=snap.boundary_settlement_excluded_count,
+        boundary_settlement_excluded_amount=snap.boundary_settlement_excluded_amount)
+
+
+def _episode_ledger_audit_fields(ledger: LedgerSnapshot) -> dict[str, object]:
+    """台帳の異常検知カウンタをsidecar列へ展開する。"""
+    return dict(
+        forced_close_count=ledger.forced_close_count,
+        chain_id_force_cut_count=ledger.chain_id_force_cut_count,
+        unbacked_residual_count=ledger.unbacked_residual_count,
+        finalize_divergence=ledger.finalize_divergence,
+        finalize_gate_held=ledger.finalize_gate_held,
+        oversettled_total=ledger.oversettled_total,
+        retired_chain_count=ledger.retired_chain_count,
+        retired_unreconciled=ledger.retired_unreconciled,
+        duplicate_generated_suppressed_count=(
+            ledger.duplicate_generated_suppressed_count),
+        duplicate_generated_suppressed_amount=(
+            ledger.duplicate_generated_suppressed_amount),
+        finalize_rejected_count=ledger.finalize_rejected_count,
+        finalize_rejected_amount=ledger.finalize_rejected_amount,
+        retired_canceled=ledger.retired_canceled,
+        retired_landed=ledger.retired_landed,
+        retired_generated=ledger.retired_generated,
+        post_close_settlement_dropped_count=(
+            ledger.post_close_settlement_dropped_count),
+        post_close_settlement_dropped_amount=(
+            ledger.post_close_settlement_dropped_amount),
+        post_close_settlement_backfilled_count=(
+            ledger.post_close_settlement_backfilled_count),
+        post_close_settlement_backfilled_amount=(
+            ledger.post_close_settlement_backfilled_amount),
+        post_close_finalize_backfilled_count=(
+            ledger.post_close_finalize_backfilled_count),
+        post_close_finalize_backfilled_amount=(
+            ledger.post_close_finalize_backfilled_amount),
+        post_close_finalize_dropped_count=(
+            ledger.post_close_finalize_dropped_count),
+        post_close_finalize_dropped_amount=(
+            ledger.post_close_finalize_dropped_amount),
+        post_retire_backfilled_count=ledger.post_retire_backfilled_count,
+        post_retire_backfilled_amount=ledger.post_retire_backfilled_amount,
+        post_close_outstanding_delta_total=(
+            ledger.post_close_outstanding_delta_total),
+        post_close_growth_backfilled_count=(
+            ledger.post_close_growth_backfilled_count),
+        post_close_growth_backfilled_amount=(
+            ledger.post_close_growth_backfilled_amount),
+        post_close_growth_dropped_count=ledger.post_close_growth_dropped_count,
+        post_close_growth_dropped_amount=ledger.post_close_growth_dropped_amount)
+
+
+def save_episode_timeline(
+    path: Path, video_id: str, rows: list[EpisodeTimelineRow],
+) -> None:
+    """条件5 sidecarを既存dumpとは独立したnpzへ保存する。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    keys = tuple(EpisodeTimelineRow.__dataclass_fields__)
+    columns = {key: np.asarray([getattr(row, key) for row in rows]) for key in keys}
+    np.savez_compressed(path, video_id=np.asarray(video_id), **columns)
+
+
 def _build_timeline_dump_row(
     t_sec: float, game_idx: int, adv_raw: float, adv_ema: float, p1: float,
     p1_raw: float,
@@ -3952,6 +5470,8 @@ def _build_timeline_dump_row(
     kpending_p1: float | None = None, kpending_p2: float | None = None,
     kroom1: int | None = None, kroom2: int | None = None,
     is_dead1: bool | None = None, is_dead2: bool | None = None,
+    gross_fields: dict[str, int | float] | None = None,
+    is_dead1_confirmed: bool | None = None, is_dead2_confirmed: bool | None = None,
 ) -> TimelineDumpRow:
     """1回分の settled 更新から TimelineDumpRow を組み立てる (純関数)。
 
@@ -3966,6 +5486,17 @@ def _build_timeline_dump_row(
     引数)。enable_nonstable_hold_is_dead=True の呼出元が「非STABLE中は
     保留 (False)」に解決済みの値を渡す用途 (_resolve_nonstable_hold_is_dead
     参照)。
+
+    gross_fields (2026-08-25 Gate 3R-5追加): `_build_gross_dump_fields` が
+    返す gross_* 列の kwargs 辞書。省略時 (既定 None) は TimelineDumpRow の
+    gross_* が全て既定値 None のまま (旧呼び出し元との bit-identical を
+    保証する optional 引数)。
+
+    is_dead1_confirmed/is_dead2_confirmed (2026-08-25 Gate 3R-6 本体追加):
+    `DeathConfirmTracker.resolved_is_dead()` の値。省略時 (既定 None) は
+    TimelineDumpRow の is_dead1_confirmed/is_dead2_confirmed が None のまま
+    (旧呼び出し元との bit-identical を保証する optional 引数、既存
+    is_dead1/is_dead2 列は一切変更しない)。
     """
     top1_name, top1_val = drivers[0] if drivers else ("", 0.0)
     top3_names, top3_vals = _pad_drivers_top3(list(drivers))
@@ -3983,6 +5514,11 @@ def _build_timeline_dump_row(
         state1=state1, state2=state2,
         kpending_p1=kpending_p1, kpending_p2=kpending_p2,
         kroom1=kroom1, kroom2=kroom2,
+        is_dead1_confirmed=is_dead1_confirmed, is_dead2_confirmed=is_dead2_confirmed,
+        # (2026-08-25 Gate 3R-5) gross_fields=None (既定) では何も追加せず
+        # TimelineDumpRow の gross_* は全て既定値 None のまま
+        # (bit-identical、backwards compat)。
+        **(gross_fields if gross_fields is not None else {}),
     )
 
 
@@ -4000,8 +5536,7 @@ def save_timeline_dump(path: Path, video_id: str, rows: list[TimelineDumpRow]) -
     for i, row in enumerate(rows):
         names3[i] = row.drivers_top3_names
         vals3[i] = row.drivers_top3_vals
-    np.savez_compressed(
-        str(path),
+    data: dict[str, np.ndarray] = dict(
         video_id=np.array(video_id),
         t_sec=np.array([r.t_sec for r in rows], dtype=np.float64),
         game_idx=np.array([r.game_idx for r in rows], dtype=np.int32),
@@ -4032,6 +5567,48 @@ def save_timeline_dump(path: Path, video_id: str, rows: list[TimelineDumpRow]) -
         kroom1=np.array([r.kroom1 for r in rows], dtype=np.int32),
         kroom2=np.array([r.kroom2 for r in rows], dtype=np.int32),
     )
+    data.update(_gross_dump_columns(rows))
+    data.update(_death_confirm_dump_columns(rows))
+    np.savez_compressed(str(path), **data)
+
+
+def _death_confirm_dump_columns(rows: list[TimelineDumpRow]) -> dict[str, np.ndarray]:
+    """死亡確定 (Gate 3R-6 本体、2026-08-25) の2列を npz 保存用配列辞書へ変換する。
+
+    `enable_death_confirm_sequence=False` (既定) では全行
+    `is_dead1_confirmed` が None のままなので空辞書を返し、npz へキー自体を
+    一切追加しない (旧 dump と bit-identical、`_gross_dump_columns` と同じ
+    設計。load_timeline_dump 側は `"is_dead1_confirmed" not in d.files` で判定)。
+    """
+    if not rows or rows[0].is_dead1_confirmed is None:
+        return {}
+    return {
+        "is_dead1_confirmed": np.array(
+            [r.is_dead1_confirmed for r in rows], dtype=bool),
+        "is_dead2_confirmed": np.array(
+            [r.is_dead2_confirmed for r in rows], dtype=bool),
+    }
+
+
+def _gross_dump_columns(rows: list[TimelineDumpRow]) -> dict[str, np.ndarray]:
+    """gross累積カウンタ列 (Gate 3R-5、2026-08-25) を npz 保存用配列辞書へ変換する。
+
+    `enable_gross_ledger_dump=False` (既定) では全行 `gross_inspected_sides`
+    が None のままなので空辞書を返し、npz へキー自体を一切追加しない
+    (旧 dump と bit-identical、backwards compat。load_timeline_dump 側は
+    `"gross_inspected_sides" not in d.files` で判定する)。
+    """
+    if not rows or rows[0].gross_inspected_sides is None:
+        return {}
+    cols: dict[str, np.ndarray] = {
+        key: np.array([getattr(r, key) for r in rows], dtype=np.int64)
+        for key in _TIMELINE_GROSS_INT_KEYS
+    }
+    cols.update({
+        key: np.array([getattr(r, key) for r in rows], dtype=np.float64)
+        for key in _TIMELINE_GROSS_FLOAT_KEYS
+    })
+    return cols
 
 
 def _correct_dead_run_for_side(
@@ -4181,10 +5758,59 @@ def _load_timeline_dump_k_fields(
     return d["kpending_p1"], d["kpending_p2"], d["kroom1"], d["kroom2"]
 
 
+def _load_timeline_dump_gross_fields(
+    d: "np.lib.npyio.NpzFile",
+) -> "dict[str, np.ndarray] | None":
+    """gross累積カウンタ dump列 (Gate 3R-5、2026-08-25) を読み込む。
+
+    旧 dump にはこの列が存在しないため、無ければ None を返す
+    (呼出側で TimelineDumpRow の gross_* を既定値 None のままにする
+    後方互換分岐、_load_timeline_dump_k_fields と同じ設計)。
+    """
+    if "gross_inspected_sides" not in d.files:
+        return None
+    return {key: d[key] for key in _TIMELINE_GROSS_KEYS}
+
+
+def _load_timeline_dump_death_confirm_fields(
+    d: "np.lib.npyio.NpzFile",
+) -> "tuple[np.ndarray | None, np.ndarray | None]":
+    """死亡確定2列 (Gate 3R-6 本体、2026-08-25) を読み込む。
+
+    旧 dump にはこの列が存在しないため、無ければ (None, None) を返す
+    (呼出側で TimelineDumpRow の is_dead1_confirmed/is_dead2_confirmed を
+    既定値 None のままにする後方互換分岐、_load_timeline_dump_k_fields と
+    同じ設計)。
+    """
+    if "is_dead1_confirmed" not in d.files:
+        return None, None
+    return d["is_dead1_confirmed"], d["is_dead2_confirmed"]
+
+
+def _gross_kwargs_from_arrays(
+    gross: "dict[str, np.ndarray] | None", i: int,
+) -> dict[str, int | float]:
+    """gross配列辞書から1行分の TimelineDumpRow kwargs を組み立てる。
+
+    gross=None (旧 dump / フラグ OFF) なら空辞書を返し、呼出元の
+    TimelineDumpRow 構築が gross_* を既定値 None のままにする。
+    """
+    if gross is None:
+        return {}
+    return {
+        key: (float(gross[key][i]) if key in _TIMELINE_GROSS_FLOAT_KEYS
+              else int(gross[key][i]))
+        for key in _TIMELINE_GROSS_KEYS
+    }
+
+
 def _timeline_dump_row_from_arrays(
     f: "dict[str, np.ndarray]", i: int,
     kpending_p1: "np.ndarray | None", kpending_p2: "np.ndarray | None",
     kroom1: "np.ndarray | None", kroom2: "np.ndarray | None",
+    gross: "dict[str, np.ndarray] | None" = None,
+    death_confirm1: "np.ndarray | None" = None,
+    death_confirm2: "np.ndarray | None" = None,
 ) -> TimelineDumpRow:
     """事前ロード済み配列辞書 (npz から1回だけ読み出し済み) から1行を組み立てる。"""
     return TimelineDumpRow(
@@ -4205,6 +5831,11 @@ def _timeline_dump_row_from_arrays(
         kpending_p2=float(kpending_p2[i]) if kpending_p2 is not None else None,
         kroom1=int(kroom1[i]) if kroom1 is not None else None,
         kroom2=int(kroom2[i]) if kroom2 is not None else None,
+        is_dead1_confirmed=(
+            bool(death_confirm1[i]) if death_confirm1 is not None else None),
+        is_dead2_confirmed=(
+            bool(death_confirm2[i]) if death_confirm2 is not None else None),
+        **_gross_kwargs_from_arrays(gross, i),
     )
 
 
@@ -4217,15 +5848,24 @@ def load_timeline_dump(path: Path) -> tuple[str, list[TimelineDumpRow]]:
     1区間 (n≈2万行) の読込で27GB超の read が発生していた。本修正は
     全フィールドをループの外で1回だけ読み出す形に直す。出力はビット同一
     (tests/test_advantage_overlay_timeline_dump.py 参照)。
+
+    gross_* 列 (2026-08-25 Gate 3R-5) は旧 dump / フラグ OFF の dump には
+    存在しないため `_load_timeline_dump_gross_fields` が None を返し、
+    全行の gross_* が既定値 None のまま復元される (bit-identical)。
+    is_dead1_confirmed/is_dead2_confirmed 列 (2026-08-25 Gate 3R-6 本体) も
+    同様に旧 dump / フラグ OFF では存在せず、None のまま復元される。
     """
     d = np.load(str(path), allow_pickle=True)
     video_id = str(d["video_id"])
     fields = {k: d[k] for k in _TIMELINE_DUMP_ARRAY_KEYS}
     kpending_p1, kpending_p2, kroom1, kroom2 = _load_timeline_dump_k_fields(d)
+    gross = _load_timeline_dump_gross_fields(d)
+    death_confirm1, death_confirm2 = _load_timeline_dump_death_confirm_fields(d)
     n = int(fields["t_sec"].shape[0])
     rows = [
         _timeline_dump_row_from_arrays(
-            fields, i, kpending_p1, kpending_p2, kroom1, kroom2)
+            fields, i, kpending_p1, kpending_p2, kroom1, kroom2, gross,
+            death_confirm1, death_confirm2)
         for i in range(n)
     ]
     return video_id, rows
@@ -4644,8 +6284,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_early_fire_clear_on_finalize: bool = False,
              enable_resolved_kill_override_counter_aware: bool = False,
              enable_resolved_victim_gen_live: bool = False,
+             enable_resolved_episode_physical_redecide: bool = False,
+             enable_resolved_episode_physical_consistency_guard: bool = False,
+             enable_resolved_minimum_prediction_guard: bool = False,
              enable_resolved_counter_placement_reuse: bool = False,
              enable_resolved_counter_budget_quantize: bool = False,
+             enable_resolved_absolute_chain_end: bool = False,
              enable_puyo_to_empty_hsv_guard: bool | None = None,
              stable_majority_window: bool | None = None,
              enable_ojama_fall_placement_override: bool | None = None,
@@ -4671,6 +6315,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_kill_override_hysteresis: bool = False,
              enable_kill_override_scale_compare: bool = False,
              enable_nonstable_hold_is_dead: bool = False,
+             enable_gross_ledger_dump: bool = False,
+             enable_death_confirm_sequence: bool = False,
+             death_next_stationary_sec: float = NEXT_STATIONARY_CONFIRM_SEC,
+             dump_display_timeline_path: Path | None = None,
+             enable_exchange_episode_gate: bool = False,
+             dump_exchange_episode_timeline_path: Path | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -4967,6 +6617,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         まま残っていた)。`--resolved-exchange-eval` 無効時は無視される
         (#9 サブフラグ)。既定 False = 従来挙動と完全に同一 (backwards
         compat)。
+    enable_resolved_minimum_prediction_guard: True で、物理的に連鎖中の
+        ChainEvent 完走予測が1連鎖・40点の最小値に潰れた場合、その値を
+        決着確定として表示せず直前の STABLE 評価を維持する。認識の連結欠損で
+        本物の多連鎖が1連鎖へ縮む既知事故への安全策で、連鎖終了後は実測結果を
+        通常どおり評価する。既定 False = 従来挙動と完全に同一。
     enable_resolved_counter_placement_reuse: [2026-08-21 user承認・配線]
         `CounterReachTracker._update_defender_only` (受け側限定応手MC) の
         再計算を「受け側の盤面bytesが変化した (=設置が起きた) とき」だけに
@@ -4977,6 +6632,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         (相手の予告おじゃま量) が変わればスコープが別物になり自動的に
         再計算される。表示更新の周期 (`COUNTER_RECOMPUTE_INTERVAL_SEC`
         0.5秒ごと) 自体は変えない (計算頻度だけを盤面変化に紐づける)。
+        `--resolved-exchange-eval` 無効時は無視される (#9 サブフラグ)。
+        既定 False = 従来挙動と完全に同一 (backwards compat)。
+    enable_resolved_absolute_chain_end: [2026-08-26 決着ホールド根治、
+        user決定] 決着ホールドの解除条件に、user 伝授の絶対律
+        「連鎖の終わり = 連鎖している側のネクストが動いた瞬間 OR
+        連鎖している側にお邪魔が落ちた瞬間」を **OR で足す**。
+        従来の解除条件「両側の chain_event が None」は、ChainEvent が長い
+        連鎖で 1.4秒ごとに断片化するため打ち合い中は長時間成立せず、実測で
+        最大 45.07秒 settled 再計算が止まっていた (ホールドが潰した settled
+        1880/3964 = 47.43%、評価行が旧比 −26%)。新条件は解除を早めるだけで
+        遅くはしないため、無限ホールドの新規リスクを作らない。
         `--resolved-exchange-eval` 無効時は無視される (#9 サブフラグ)。
         既定 False = 従来挙動と完全に同一 (backwards compat)。
     enable_resolved_counter_budget_quantize: [2026-08-21 user承認、上記
@@ -5053,6 +6719,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         の全サンプルが得られる (#9 の乱高下削減効果を分散で数値検証するための
         側路であり、本番挙動には一切影響しない)。既定 None = 何もしない
         (backwards compat、既存呼出元は挙動不変)。
+    dump_display_timeline_path: 指定すると、非settled中の凍結値・決着ホールド値を
+        含む「実際の表示」を sample_interval と同じ密度で別npzへ保存する。
+        settled限定の dump_timeline_path は会計・認識監査用として変更しない。
+        既定 None では分岐内へ入らず、既存出力に影響しない。
+    enable_exchange_episode_gate: 交換episodeが未解決の間、ライブ経路と決着
+        ホールド経路の完全上書き±100を禁止する。既定Falseではtracker生成・
+        gross毎frame分類・判定分岐を一切行わず、従来出力と互換。
+    dump_exchange_episode_timeline_path: 条件5専用の密な台帳sidecar。既定Noneでは
+        ファイルも列も生成しない。enable_exchange_episode_gate=Trueが必須。
     normalize_fps_30: True (既定、2026-08-12 追加) で 60fps 等の動画を
         stride 相当 (実効30fps) に間引く
         (src.fps_normalize.resolve_normalize_fps_30_stride)。
@@ -5159,6 +6834,45 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         (0 が「起きていない」のか「測っていない」のかを区別するため)。
         既定 False = 従来通り (bit-identical、backwards compat)。
         dump_timeline_path が None のときは no-op。
+    enable_gross_ledger_dump: True で dump に cap前 gross 累積カウンタ列
+        (`_TIMELINE_GROSS_KEYS`) を追加する (2026-08-25 Gate 3R-5、
+        `docs/EXCHANGE_GROSS_SUPPLY_DESIGN_2026-08-25.md` §3.3/§3.4)。
+        `OjamaAccountingTracker.get_gross_counters()` の cap 前累積値を
+        settled 更新ごとに読み、`classify_gross_counter_delta` で
+        生成/相殺/着弾/境界ワイプ量/clamp loss/保存則残差へ**推測せず**
+        分解する (交換台帳・production_config には一切配線しない、
+        dump 専用の読み取り経路)。試合境界では会計トラッカーだけを保持し、
+        既存 `_drive_ojama` が旧 pending の境界ワイプ量を累積値へ記録する。
+        これにより境界をまたいでも単調カウンタ差分と保存則を検査できる。
+        終了時に検査 side 数を分母とした母数付き要約を必ず表示する。
+        既定 False = 全 gross_* 列は None のまま (save_timeline_dump は
+        列自体を npz へ追加しない、旧 dump と bit-identical、
+        backwards compat)。dump_timeline_path が None のときは no-op。
+    enable_death_confirm_sequence: True で dump に
+        `is_dead1_confirmed`/`is_dead2_confirmed` 列を追加する
+        (2026-08-25 Gate 3R-6 本体、`src/death_confirmation.py` 参照)。
+        user伝授の死亡確定条件「12段目に設置して連鎖が起きない」「おじゃまが
+        降って12段目が埋まる」を「候補→猶予/解除→確定」の3段階として
+        リアルタイムに実装する。既存の `is_dead1`/`is_dead2` (即時の占有
+        判定、`Board.is_dead()`) は一切変更せず**別列として並存**させる。
+        確定条件は【設計訂正 2026-08-25】済み: 当初案「次の事象 (次のツモ
+        が置けた/さらにおじゃまが降った)」は死亡すると発火しない
+        (死亡=次のツモを置けない、の逆理)ため撤回し、**「own chain が
+        始まらないまま `death_next_stationary_sec` 秒ネクストが動かない」**
+        簡易検出に差し替えた (`DeathConfirmTracker` docstring 参照。
+        底抜け演出検出による根治は後回し、user承認済み)。
+        候補・解除・確定・閾値未到達での境界消滅 (いずれも発生源別:
+        設置/おじゃま) の回数と確定遅延分布は終了時に母数付きで必ず表示
+        する。既定 False = is_dead1_confirmed/is_dead2_confirmed 列は npz
+        に一切追加されない (旧 dump と bit-identical、backwards compat)。
+        dump_timeline_path が None のときは no-op。
+        `src/production_config.py` へは未登録 (測定値を user が確認して
+        から採否判断)。
+    death_next_stationary_sec: enable_death_confirm_sequence の確定閾値
+        (秒、既定 `NEXT_STATIONARY_CONFIRM_SEC`=1.5)。**user 指定の暫定値
+        であり Claude がシーンから逆算した値ではない** (2026-08-25 user
+        指示。底抜け演出検出による根治までの簡易実装)。感度を事後測定
+        できるよう CLI (`--death-next-stationary-sec`) から変更可能。
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
@@ -5167,6 +6881,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             "enable_platt_calibration と enable_phase_calibration は同時指定不可"
             " (どちらを使うか呼出元が明示すること)"
         )
+    if dump_exchange_episode_timeline_path is not None and not enable_exchange_episode_gate:
+        raise ValueError(
+            "dump_exchange_episode_timeline_path は enable_exchange_episode_gate=True が必須")
+    if enable_exchange_episode_gate and (
+        enable_kill_override_chain_completion or enable_kill_override_scale_compare
+    ):
+        raise ValueError(
+            "exchange episode gate と旧 ChainGenerationAccumulator は排他")
     platt_params: PlattCalibrationParams | None = None
     if enable_platt_calibration:
         platt_params = load_platt_calibration(PLATT_CALIBRATION_PATH, required=True)
@@ -5311,10 +7033,20 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         pipe.set_video_id(m.group(1))
     tracker = OjamaAccountingTracker(); tracker.reset()
     tp1, tp2 = _SideTracker(), _SideTracker()
+    # (2026-08-25 Gate 3R-6 本体) 死亡確定の時間的ロジック。2サイド分の
+    # 独立インスタンス (_SideTracker と同じ「1サイド1インスタンス」パターン)。
+    # enable_death_confirm_sequence=False でも生成・update() 自体は行うが
+    # (コスト僅少)、dump 列へは一切反映しない (bit-identical)。
+    # stationary_confirm_sec: user 指定の暫定閾値 (既定 NEXT_STATIONARY_
+    # CONFIRM_SEC=1.5秒、--death-next-stationary-sec で変更可能)。
+    death_tracker1 = DeathConfirmTracker(stationary_confirm_sec=death_next_stationary_sec)
+    death_tracker2 = DeathConfirmTracker(stationary_confirm_sec=death_next_stationary_sec)
+    death_confirm_stats = DeathConfirmStats()
     ps1 = ps2 = BoardState.MENU
     b1 = b2 = None
     adv_ema = 0.0
     p1_last = 0.5
+    model_adv_last = float("nan")
     drivers: list[tuple[str, float]] = []
     # kill_override が直近の settled 再計算で実際に発火したか (2026-08-22
     # 修正④、_kill_override_attribution_entry 参照)。dump 用の drivers
@@ -5385,9 +7117,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         enable_live_defender_strict=enable_resolved_live_defender_strict,
         enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
         enable_resolved_victim_gen_live=enable_resolved_victim_gen_live,
+        enable_episode_physical_redecide=enable_resolved_episode_physical_redecide,
+        enable_episode_physical_consistency_guard=(
+            enable_resolved_episode_physical_consistency_guard),
         enable_pending_landing_gate=enable_resolved_pending_landing_gate,
         enable_counter_placement_reuse=enable_resolved_counter_placement_reuse,
-        enable_counter_budget_quantize=enable_resolved_counter_budget_quantize)
+        enable_counter_budget_quantize=enable_resolved_counter_budget_quantize,
+        enable_absolute_chain_end=enable_resolved_absolute_chain_end)
+    # (2026-08-26 決着ホールド根治) 試合境界をまたいで母数付きカウンタを積む器。
+    # 同じ dict オブジェクトを後続の tracker へ渡すため、動画全体の合計になる。
+    _abs_end_stats_carry = resolved_tracker.abs_end_stats
+    _episode_physical_stats_carry = resolved_tracker.episode_physical_stats
     prev_score1: int | None = None  # (改修1) スコアリセット検知用の前フレーム値
     prev_score2: int | None = None
     history: list[tuple[float, float]] = []  # (試合開始からの秒, 有利不利) 累積
@@ -5408,12 +7148,43 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     # 判定は「常に空リストを回すだけ」で済むよう、dump_rows は常に生成する
     # (dump 無効時のコストは空リスト append 判定1回のみ、無視できる)。
     game_idx = 0  # スコアリセット検知で進む試合境界カウンタ (video 内ローカル)
-    _last_boundary_advance_t: float | None = None
+    # 【P1 是正 2026-08-26、Codex 第26報レビュー】`_detect_score_reset` は
+    # 両スコアが SCORE_NEAR_ZERO_THRESHOLD 以下の間**毎フレーム True** になる。
+    # 従来は `game_idx += 1` だけが debounce されており、
+    # `resolve_boundary_confirmations()` は debounce の外にあったため、
+    # 実境界 約6件に対して total_boundaries=715 回呼ばれていた (Codex 実測)。
+    # `on_game_boundary()` は毎回 `_post_boundary_armed=False` へ戻すので、
+    # 新試合冒頭の再武装や死亡候補を取りこぼしうる。
+    # そこで reset 信号を**立ち上がりでラッチ**し、低得点状態が何秒続いても
+    # 同一境界を再受理しないようにする。
+    #
+    # 【第2版 2026-08-26、Codex 第27報レビュー】第1版は `resolve_boundary_
+    # confirmations` だけを正式境界へ寄せ、`game_idx` 加算と各種トラッカーの
+    # 初期化は従来の「raw reset の各フレーム」に残していた。しかしそれでは
+    # 低得点が debounce 秒より長く続くと**正式境界なしに game_idx が進み**、
+    # 死亡候補の `_pending_game_idx` と次の `_ending_game_idx` が食い違って
+    # **真の死亡が `rejected_game_idx_mismatch` になりうる**。
+    # 第1版が据え置いた理由 (OFF 出力の bit-identical 維持) は、pre-gate
+    # 条件1〜4 の再取得が決定済みであるため成立しない。よって境界処理
+    # 全体を**正式境界イベント1回**へ統合する。
+    _score_reset_latched = False       # 直前フレームで reset 信号が立っていたか
+    _last_formal_boundary_t: float | None = None  # 最後に「正式受理」した境界の時刻
     dump_rows: list[TimelineDumpRow] = []
+    display_dump_rows: list[DisplayTimelineRow] = []
+    episode_dump_rows: list[EpisodeTimelineRow] = []
+    episode_adapter = (
+        _LiveEpisodeOverlayAdapter() if enable_exchange_episode_gate else None)
     # (2026-08-25 Gate 3R-6 案A) is_dead 保留の母数付きカウンタ。
     # enable_nonstable_hold_is_dead=False では一切 record されない
     # (dump 経路も従来と bit-identical)。
     isdead_hold_stats = _IsDeadHoldStats()
+    # (2026-08-25 Gate 3R-5) gross累積カウンタ dump 用の前回値。dump 有効時は
+    # 会計 tracker 自体を試合境界越しに保持するため、ここも破棄せず単調差分を
+    # 継続する。dump 無効時は一切更新されず _build_gross_dump_fields も
+    # 呼ばれない (bit-identical、backwards compat)。
+    prev_gross_counters: "GrossOjamaCounters | None" = None
+    prev_gross_pending_unc: tuple[int, int] | None = None
+    gross_dump_stats = _GrossDumpStats()
     for fi in range(start_frame, n):
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -5458,18 +7229,33 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         r = pipe.update(fi, t, recog_frame)
         # (改修1) 試合境界(score大幅減少/両者0付近)を検知したら凍結盤面・持続
         # トラッカー・表示状態を全て初期化する(前試合の「幻の差」持ち越し防止)。
-        if _detect_score_reset(r.p1.score, r.p2.score, prev_score1, prev_score2):
+        _reset_now = _detect_score_reset(
+            r.p1.score, r.p2.score, prev_score1, prev_score2)
+        # 【P1 是正 第2版】この reset 信号を「正式な境界イベント」として受理する
+        # かをまず決める (判定本体は accept_formal_boundary の docstring 参照)。
+        # 受理しなかったフレームでは境界処理を**一切**行わない。
+        _formal_boundary = accept_formal_boundary(
+            reset_now=_reset_now, latched=_score_reset_latched,
+            t_sec=t, last_formal_t=_last_formal_boundary_t)
+        if _formal_boundary:
             print(f"[reset] t={t:.1f}s score大幅減少/0付近を検知 -> 評価を互角にリセット")
-            # タイムラインdump用の試合境界カウンタ (2026-08-11 追加)。スコアが
-            # 0付近に留まる間は毎フレーム検知されうるため、デバウンス
-            # (GAME_BOUNDARY_DEBOUNCE_SEC 秒未満の再進行を抑制) してから進める
-            # (collect_boards_lean.py の _SharedGameCounter と同じ設計)。
-            if (_last_boundary_advance_t is None
-                    or t - _last_boundary_advance_t >= GAME_BOUNDARY_DEBOUNCE_SEC):
-                game_idx += 1
-                _last_boundary_advance_t = t
+            # (2026-08-25 第3版、Codex 承認条件対応) 死亡確定の境界判定
+            # (`resolve_boundary_confirmations`) に渡す game_idx は、この
+            # フレームで加算される**前**の値 (=今終わろうとしている試合の
+            # game_idx) を使う。加算後の値を渡すと、候補発生時に記録した
+            # `_pending_game_idx` (終わろうとしている試合の game_idx) と
+            # 一致しなくなり、正常系まで `rejected_game_idx_mismatch` に
+            # 誤判定してしまうため (`DeathConfirmTracker.on_game_boundary`
+            # docstring 参照)。
+            # 【P1 是正 第2版】加算前スナップショットと game_idx 加算を、この
+            # 正式境界イベントの中で**1回だけ**行う。両者が同じイベントで動く
+            # ので、候補発生時の `_pending_game_idx` と食い違わない。
+            _ending_game_idx = game_idx
+            _last_formal_boundary_t = t
+            game_idx += 1
             b1 = b2 = None
             adv_ema, p1_last, drivers = 0.0, 0.5, []
+            model_adv_last = float("nan")
             kill_override_note = None  # 前試合の安全弁理由を持ち越さない (修正④)
             ukey1 = ukey2 = sat1 = sat2 = 0.0
             counter_p1 = counter_p2 = float("nan")
@@ -5482,6 +7268,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             (tracker, tp1, tp2, ptracker, fctracker, svtracker, hcache,
              efire_tracker, chain_gen_tracker) = _fresh_trackers(
                 model, attribution_exclude=attribution_exclude,
+                # 境界ワイプ量を失わないため、dump 有効時だけ会計 tracker を保持。
+                # OFF は従来どおり新規 tracker を生成し、実行経路を変えない。
+                accounting_tracker=(
+                    tracker if (enable_gross_ledger_dump or enable_exchange_episode_gate)
+                    else None),
                 enable_chain_gen_accumulate=enable_kill_override_chain_gen_accumulate)
             chain_gen1 = chain_gen2 = 0.0
             chain_gen_before1 = chain_gen_before2 = None
@@ -5491,6 +7282,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             unregistered_extra_p1 = unregistered_extra_p2 = 0.0
             cap_ptracker = CapabilityPressureTracker()
             counter_tracker = CounterReachTracker()
+            # 決着ホールド中に試合自体が終わった場合は、未解除ではなく正式な
+            # 物理終端として母数を閉じてから、次試合用 tracker へ差し替える。
+            if enable_resolved_absolute_chain_end:
+                resolved_tracker.on_game_boundary()
             resolved_tracker = ResolvedExchangeTracker(
                 model, attribution_exclude=attribution_exclude,
                 enable_decisive_amplify=enable_resolved_decisive_amplify,
@@ -5498,20 +7293,117 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 enable_live_defender_strict=enable_resolved_live_defender_strict,
                 enable_kill_override_counter_aware=enable_resolved_kill_override_counter_aware,
                 enable_resolved_victim_gen_live=enable_resolved_victim_gen_live,
+                enable_episode_physical_redecide=(
+                    enable_resolved_episode_physical_redecide),
+                enable_episode_physical_consistency_guard=(
+                    enable_resolved_episode_physical_consistency_guard),
+                episode_physical_stats=(
+                    _episode_physical_stats_carry
+                    if (enable_resolved_episode_physical_redecide
+                        or enable_resolved_episode_physical_consistency_guard)
+                    else None),
                 enable_pending_landing_gate=enable_resolved_pending_landing_gate,
                 enable_counter_placement_reuse=enable_resolved_counter_placement_reuse,
-                enable_counter_budget_quantize=enable_resolved_counter_budget_quantize)
+                enable_counter_budget_quantize=enable_resolved_counter_budget_quantize,
+                enable_absolute_chain_end=enable_resolved_absolute_chain_end)
+            # (2026-08-26 決着ホールド根治) 判定状態は試合ごとに作り直すが、
+            # **母数付きカウンタだけは引き継ぐ**。引き継がないと動画全体の
+            # サマリが「最後の試合ぶんだけ」になり、母数が壊れる
+            # (memory feedback_zero_needs_denominator_2026-08-25)。
+            # 既定 OFF では代入自体を行わない (実行経路を変えない)。
+            if enable_resolved_absolute_chain_end:
+                resolved_tracker.abs_end_stats = _abs_end_stats_carry
             # 試合境界で前試合の保持中パルス(推定連鎖数/実測得点差)を持ち越さない
             # (2026-08-15、前試合最後の連鎖表示が次試合冒頭に残る誤表示を防止)。
             chain_display_tracker = ChainCountDisplayTracker()
+            # (2026-08-25 Gate 3R-6 本体、実測で根治) 死亡確定の候補/猶予中の
+            # 遷移追跡は即座にリセットするが、確定済みフラグは新規インスタンス
+            # への差し替えでは消さない (`DeathConfirmTracker.on_game_boundary`
+            # docstring 参照)。実測 (2P・実試合2・t=223 真の窒息) で、旧実装
+            # (即時差し替え) は決着演出〜結果表示中の settled recompute 空白
+            # 区間の内側でこの境界検知が発生し、確定フラグが dump に一度も
+            # 現れず見逃しに見える不具合があった。
+            # 【設計の穴の是正 2026-08-25 第2版・第3版 (Codex 承認条件対応)】
+            # 境界検知の瞬間にまだ猶予中 (未確定・未解除) だった候補は
+            # 「閾値未到達で消滅」させるのではなく、以下をすべて満たす場合に
+            # 限り**その場で死亡確定する** (`resolve_boundary_confirmations`
+            # 内部で `on_game_boundary()` を呼ぶ、`death_confirmation.py`
+            # モジュール docstring「候補のまま試合終了 = 死亡確定」/
+            # 「Codex 条件付き承認・追加要件」節参照): (1) 候補発生時と同一
+            # game_idx、(2) own CHAIN 開始で解除されていない、(3) next変化/
+            # 新規ツモ落下等の生存証拠が無い、(4) 両側同時 pending
+            # (ambiguous) ではない。人が本当に詰んだとき試合はその場で
+            # 終わるため、ネクスト不動猶予の条件は真の死亡では原理的に
+            # 満たせない (実測: t=223 真の窒息が候補後0.37秒で試合終了、
+            # 旧設計では検出0/5083行だった)。境界処理の結果は母数付きで
+            # 記録する (0/0 と区別するため enable_death_confirm_sequence の
+            # ときのみ記録、既定 False では record 自体を呼ばない)。
+            # 【P1 是正】`resolve_boundary_confirmations` の docstring は元から
+            # 「1境界イベントにつき本関数を1回だけ呼ぶこと」と定めており、契約が
+            # 書かれていたのに呼出側が守っていなかった。第2版ではブロック全体が
+            # 正式境界の内側なので、ここでの追加判定は不要。
+            resolve_boundary_confirmations(
+                death_tracker1, death_tracker2, game_idx=_ending_game_idx,
+                stats=(death_confirm_stats
+                       if enable_death_confirm_sequence else None))
+        # 【P1 是正 2026-08-26、要件3】reset 信号の立ち上がりラッチを更新する
+        # (判定本体は update_score_reset_latch の docstring 参照)。
+        _score_reset_latched = update_score_reset_latch(
+            _score_reset_latched, _reset_now, r.p1.score, r.p2.score)
         prev_score1, prev_score2 = r.p1.score, r.p2.score
         if r.p1.state == BoardState.STABLE and r.p1.confirmed_board is not None:
             b1 = r.p1.confirmed_board
         if r.p2.state == BoardState.STABLE and r.p2.confirmed_board is not None:
             b2 = r.p2.confirmed_board
+        # (2026-08-25 Gate 3R-6 本体) settled ゲートの外側 (=非STABLE中も
+        # 毎フレーム) で state 遷移を観測する必要がある (efire_tracker.update()
+        # と同じ理由、死亡候補は STABLE 以外の state 遷移も見て判定するため)。
+        # 既定 False (enable_death_confirm_sequence) でも呼ぶだけでコスト僅少
+        # (dump へは反映しない、bit-identical)。
+        _death_occ1 = (
+            r.p1.state == BoardState.STABLE and b1 is not None and b1.is_dead())
+        _death_occ2 = (
+            r.p2.state == BoardState.STABLE and b2 is not None and b2.is_dead())
+        # (2026-08-25 設計訂正) 確定条件は「ネクスト不動」(次の事象では
+        # ない、死亡確定の項参照)。next_pair は既存公開フィールド
+        # (`SideResult.next_pair`)。テスト用モック (_FakeResult 等) には
+        # 存在しない場合があるため getattr で安全に None へ倒す
+        # (既存の同種防御パターンと同じ)。is_match_active (2026-08-25
+        # 実測で追加): まちうけ画面の背景誤検出+ネクスト固定表示による
+        # 誤確定を防ぐ (DeathConfirmTracker.update docstring 参照)。
+        _match_active = getattr(r, "is_match_active", True)
+        _death_event1, _death_delay1 = death_tracker1.update(
+            r.p1.state.name, _death_occ1, t,
+            next_key=getattr(r.p1, "next_pair", None),
+            is_match_active=_match_active, game_idx=game_idx)
+        _death_event2, _death_delay2 = death_tracker2.update(
+            r.p2.state.name, _death_occ2, t,
+            next_key=getattr(r.p2, "next_pair", None),
+            is_match_active=_match_active, game_idx=game_idx)
+        if enable_death_confirm_sequence:
+            death_confirm_stats.record(_death_event1, _death_delay1)
+            death_confirm_stats.record(_death_event2, _death_delay2)
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         ps1, ps2 = r.p1.state, r.p2.state
+        episode_drive: _EpisodeDriveResult | None = None
+        episode_hard_candidate = False
+        episode_hard_applied = False
+        episode_hard_path = ""
+        episode_hard_reason = ""
+        if episode_adapter is not None:
+            episode_dead1 = (
+                death_tracker1.resolved_is_dead_for_game(game_idx)
+                if enable_death_confirm_sequence else _death_occ1)
+            episode_dead2 = (
+                death_tracker2.resolved_is_dead_for_game(game_idx)
+                if enable_death_confirm_sequence else _death_occ2)
+            episode_drive = episode_adapter.update(
+                result=r, accounting=tracker, account_snapshot=snap,
+                t_sec=t, game_idx=game_idx,
+                room1=(board_room(b1) if b1 is not None else BOARD_ROWS * BOARD_COLS),
+                room2=(board_room(b2) if b2 is not None else BOARD_ROWS * BOARD_COLS),
+                dead1=episode_dead1, dead2=episode_dead2)
         # れんさ数表示 (--show-chain-count) 用の保持更新。adv/history/その他の
         # コアロジックには一切影響しない (表示専用トラッカー、毎フレーム更新
         # してもコスト僅少なため show_chain_count フラグでのゲートは不要)。
@@ -5551,7 +7443,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # (指摘13、enable_resolved_live_defender=False では tracker 内部で
             # 未使用のため無害)。
             resolved_active, resolved_just_deactivated = resolved_tracker.update(
-                r.p1, r.p2, snap, tracker._elapsed(t), t_sec=t, b1=b1, b2=b2)
+                r.p1, r.p2, snap, tracker._elapsed(t), t_sec=t, b1=b1, b2=b2,
+                physical_net_raw=(
+                    episode_drive.snapshot.ledger.net_raw
+                    if episode_drive is not None else None),
+                physical_is_unresolved=(
+                    episode_drive.snapshot.ledger.is_unresolved
+                    if episode_drive is not None else False),
+                physical_chain_id_p1=(
+                    episode_drive.snapshot.latest_chain_id_p1
+                    if episode_drive is not None else None),
+                physical_chain_id_p2=(
+                    episode_drive.snapshot.latest_chain_id_p2
+                    if episode_drive is not None else None))
         # (改修2) 両者STABLE(=連鎖終了+お邪魔会計済み)の瞬間のみ有利不利を再計算。
         # 連鎖中/非STABLE中(どちらかが未着地)は前回確定した adv_ema/p1_last/drivers
         # を保持する(着弾前に生値で乱高下させない)。お邪魔会計自体は上の
@@ -5590,6 +7494,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # 重い盤面由来(モデルadv/threat/ukeyasusa/飽和連鎖)はキャッシュ間引き、安価な圧力/リードは毎フレーム
             model_adv, threat, drivers, ukey1, ukey2, sat1, sat2 = hcache.update(
                 b1, b2, snap, r.p1, r.p2, tracker._elapsed(t))
+            model_adv_last = float(model_adv)
             # 圧力の測り方 (2026-08-09 user伝授)。
             # 従来: 相手のおじゃま「個数」の増加を累積 → 個数は現象であって
             #       盤面がどれだけ壊れたかを表さない (同じ10個でも土台を割られた
@@ -5708,6 +7613,13 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             elif enable_kill_override_scale_compare:
                 kroom1, kroom2 = room1, room2
                 kpending1, kpending2 = kill_base_pend1, kill_base_pend2
+            elif episode_drive is not None and episode_drive.snapshot.ledger.is_unresolved:
+                # 条件5は旧ChainGenerationAccumulatorと排他。単に旧経路をOFFに
+                # するだけでは掛け算式の累積生成量が致死判定から消えるため、
+                # chain_idで統合・相殺済みの台帳純残量を置換入力として使う。
+                kroom1, kroom2 = room1, room2
+                kpending1, kpending2 = _episode_kill_override_inputs(
+                    episode_drive.snapshot.ledger.net_raw)
             else:
                 kroom1, kroom2 = room1, room2
                 kpending1, kpending2 = float(snap.pending_p1), float(snap.pending_p2)
@@ -5721,6 +7633,17 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             # 自然に None になる (矛盾した主因表示を出さない)。
             if enable_kill_override_hysteresis:
                 adv = kill_gate.apply(adv_pre_kill_override, adv, t)
+            if episode_drive is not None:
+                (adv, episode_hard_candidate, episode_hard_applied,
+                 episode_hard_reason) = _apply_episode_hard_override_gate(
+                    adv_pre_kill_override, adv,
+                    episode_drive.snapshot.ledger.allows_hard_override,
+                    is_unresolved=episode_drive.snapshot.ledger.is_unresolved,
+                    hard_override_target=(
+                        episode_drive.snapshot.ledger.hard_override_target),
+                    physical_net_raw=episode_drive.snapshot.ledger.net_raw)
+                episode_hard_path = _append_episode_hard_path(
+                    episode_hard_path, "live", episode_hard_candidate)
             # (2026-08-22 修正④) 安全弁 (kill_override) が結論を決めた場合、
             # その理由を主因表示に明示する (`_kill_override_attribution_entry`
             # docstring 参照)。予測値 (adv/p1) には一切影響しない表示専用の
@@ -5775,6 +7698,31 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     isdead_hold_stats.record(
                         held1=_held1, suppressed1=(_raw_dead1 and not dead1_rec),
                         held2=_held2, suppressed2=(_raw_dead2 and not dead2_rec))
+                # (2026-08-25 Gate 3R-5) gross累積カウンタ列。既定 False では
+                # gross_fields=None のまま _build_timeline_dump_row に渡り、
+                # TimelineDumpRow の gross_* は全て None (bit-identical)。
+                gross_fields: dict[str, int | float] | None = None
+                if enable_gross_ledger_dump:
+                    curr_gross = tracker.get_gross_counters(t)
+                    curr_pending_unc = (
+                        int(snap.pending_p1_uncapped), int(snap.pending_p2_uncapped))
+                    gross_fields = _build_gross_dump_fields(
+                        prev_gross_counters, curr_gross,
+                        prev_gross_pending_unc, curr_pending_unc, game_idx)
+                    gross_dump_stats.record(gross_fields)
+                    prev_gross_counters = curr_gross
+                    prev_gross_pending_unc = curr_pending_unc
+                # (2026-08-25 Gate 3R-6 本体) 死亡確定の時間的ロジック。
+                # 既定 False では is_dead1_confirmed/is_dead2_confirmed は
+                # None のままで npz へ列自体が追加されない (bit-identical)。
+                # death_tracker1/2.update() は settled ゲートの外側で毎フレーム
+                # 既に呼び済み (上記 :5837-5848 参照)、ここでは現在の確定状態
+                # (resolved_is_dead()) を読むだけ。
+                death1_rec: bool | None = None
+                death2_rec: bool | None = None
+                if enable_death_confirm_sequence:
+                    death1_rec = death_tracker1.resolved_is_dead()
+                    death2_rec = death_tracker2.resolved_is_dead()
                 dump_rows.append(_build_timeline_dump_row(
                     t_sec=t, game_idx=game_idx, adv_raw=model_adv,
                     adv_ema=adv_ema, p1=p1_last, p1_raw=adv_to_winprob(model_adv),
@@ -5791,10 +7739,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     # 仕様通り)。
                     kpending_p1=kpending1, kpending_p2=kpending2,
                     kroom1=kroom1, kroom2=kroom2,
+                    gross_fields=gross_fields,
+                    is_dead1_confirmed=death1_rec, is_dead2_confirmed=death2_rec,
                 ))
         # (早期発火) 表示直前にのみ bias を加算する (adv_ema/p1_last の EMA 内部状態
         # 自体には混ぜない = 無効時は従来経路とビット一致)。
         disp_adv, disp_p1 = adv_ema, p1_last
+        drivers_before_resolved = drivers
+        episode_consistency_fallback = False
+        minimum_prediction_guarded = False
         if enable_early_fire_reaction and efire_tracker.bias != 0.0:
             disp_adv = max(-100.0, min(100.0, adv_ema + efire_tracker.bias))
             disp_p1 = adv_to_winprob(disp_adv)
@@ -5806,19 +7759,85 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # (実装は簡明優先、既定 False 時は本ブロック自体を評価しない)。
         if enable_resolved_exchange_eval:
             if resolved_active:
-                disp_adv, disp_p1 = resolved_tracker.hold_adv, resolved_tracker.hold_p1
+                minimum_prediction_guarded = (
+                    enable_resolved_minimum_prediction_guard
+                    and _minimum_prediction_guard_applies(
+                        resolved_tracker, r.p1.state, r.p2.state, adv_ema))
+                disp_adv, disp_p1 = (
+                    resolved_tracker.hold_adv, resolved_tracker.hold_p1)
                 drivers = resolved_tracker.hold_drivers
                 # [指摘14 案2、2026-08-15] 決着ホールド値にも致死上書きを通す
                 # (既定 OFF、ResolvedExchangeTracker.hold_after_kill_override
                 # docstring 参照)。
-                if enable_resolved_kill_override:
-                    disp_adv, disp_p1 = resolved_tracker.hold_after_kill_override(
+                if enable_resolved_kill_override and not minimum_prediction_guarded:
+                    candidate_adv, candidate_p1 = resolved_tracker.hold_after_kill_override(
                         b1, b2, state1=r.p1.state, state2=r.p2.state)
+                    if episode_drive is not None:
+                        before_gated_adv = disp_adv
+                        (gated_adv, candidate, applied,
+                         reason) = _apply_episode_hard_override_gate(
+                            disp_adv, candidate_adv,
+                            episode_drive.snapshot.ledger.allows_hard_override,
+                            is_unresolved=(
+                                episode_drive.snapshot.ledger.is_unresolved),
+                            hard_override_target=(
+                                episode_drive.snapshot.ledger.hard_override_target),
+                            physical_net_raw=(
+                                episode_drive.snapshot.ledger.net_raw))
+                        disp_p1 = _sync_probability_after_episode_gate(
+                            before_gated_adv, disp_p1, gated_adv)
+                        disp_adv = gated_adv
+                        episode_hard_candidate |= candidate
+                        episode_hard_applied |= applied
+                        episode_hard_path = _append_episode_hard_path(
+                            episode_hard_path, "hold_active", candidate)
+                        episode_hard_reason = episode_hard_reason or reason
+                    else:
+                        disp_adv, disp_p1 = candidate_adv, candidate_p1
+                if episode_drive is not None:
+                    ledger = episode_drive.snapshot.ledger
+                    (disp_adv, disp_p1,
+                     episode_consistency_fallback) = (
+                        resolved_tracker.apply_episode_consistency(
+                            disp_adv, disp_p1, adv_ema, p1_last,
+                            model_adv_last, ledger.net_raw,
+                            is_unresolved=ledger.is_unresolved,
+                            allows_hard_override=ledger.allows_hard_override))
+                    if episode_consistency_fallback:
+                        drivers = drivers_before_resolved
+                # 40点の下限予測より、実量を確認済みの episode fallback を優先する。
+                # fallback も無い間だけ、誤った確定表示を直前STABLE値へ保留する。
+                if (minimum_prediction_guarded
+                        and not episode_consistency_fallback):
+                    disp_adv, disp_p1 = adv_ema, p1_last
+                    drivers = drivers_before_resolved
             elif resolved_just_deactivated and not settled_ran_this_frame:
                 adv_ema, p1_last = resolved_tracker.hold_adv, resolved_tracker.hold_p1
                 if enable_resolved_kill_override:
-                    adv_ema, p1_last = resolved_tracker.hold_after_kill_override(
+                    candidate_adv, candidate_p1 = resolved_tracker.hold_after_kill_override(
                         b1, b2, state1=r.p1.state, state2=r.p2.state)
+                    if episode_drive is not None:
+                        before_gated_adv = adv_ema
+                        (gated_adv, candidate, applied,
+                         reason) = _apply_episode_hard_override_gate(
+                            adv_ema, candidate_adv,
+                            episode_drive.snapshot.ledger.allows_hard_override,
+                            is_unresolved=(
+                                episode_drive.snapshot.ledger.is_unresolved),
+                            hard_override_target=(
+                                episode_drive.snapshot.ledger.hard_override_target),
+                            physical_net_raw=(
+                                episode_drive.snapshot.ledger.net_raw))
+                        p1_last = _sync_probability_after_episode_gate(
+                            before_gated_adv, p1_last, gated_adv)
+                        adv_ema = gated_adv
+                        episode_hard_candidate |= candidate
+                        episode_hard_applied |= applied
+                        episode_hard_path = _append_episode_hard_path(
+                            episode_hard_path, "hold_deactivated", candidate)
+                        episode_hard_reason = episode_hard_reason or reason
+                    else:
+                        adv_ema, p1_last = candidate_adv, candidate_p1
                 disp_adv, disp_p1 = adv_ema, p1_last
         # (2026-08-22 修正④) 安全弁の発火理由を主因先頭へ差し込む。決着ホールド
         # 中 (resolved_active) は `drivers` が `resolved_tracker.hold_drivers`
@@ -5828,17 +7847,59 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if enable_kill_override_attribution and not (
                 enable_resolved_exchange_eval and resolved_active):
             drivers = _drivers_for_display(drivers, kill_override_note)
+        if episode_adapter is not None:
+            ledger = episode_drive.snapshot.ledger
+            disp_adv, disp_p1, final_display_capped = (
+                _cap_unresolved_episode_display(
+                    disp_adv, disp_p1, is_unresolved=ledger.is_unresolved))
+            if final_display_capped:
+                episode_hard_candidate = True
+                episode_hard_path = _append_episode_hard_path(
+                    episode_hard_path, "final_display", True)
+                episode_hard_reason = (
+                    episode_hard_reason or "episode_unresolved_display_capped")
+            disp_p1 = _ensure_display_probability_direction(disp_adv, disp_p1)
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
         # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
         # (t - start_sec) と一致するため必ず 0 から始まる。境界が一度も
         # 起きない動画では game_start_sec=0.0 のままなので従来 (t - start_sec)
         # と完全に同一 (backwards compat)。
         t_rel = _graph_relative_time(t, start_sec, game_start_sec)
-        if fi >= write_frame and fi % step == 0 and b1 is not None and b2 is not None:
-            # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦を維持
-            history.append((t_rel, disp_adv))
-            if debug_history_out is not None:
-                debug_history_out.append((t, disp_adv))
+        if fi >= write_frame and fi % step == 0:
+            if b1 is not None and b2 is not None:
+                # settled=False の間も直近確定値(保持中)を同値追記 → グラフは平坦。
+                history.append((t_rel, disp_adv))
+                if debug_history_out is not None:
+                    debug_history_out.append((t, disp_adv))
+            if dump_display_timeline_path is not None:
+                # 実画面は盤面未確定の待機中も値を表示する。b1/b2 の有無で落とすと
+                # 試合境界が密dumpの欠測になり、張り付き時間の分母が再び壊れる。
+                display_dump_rows.append(DisplayTimelineRow(
+                    t_sec=t, game_idx=game_idx, display_adv=disp_adv,
+                    display_p1=disp_p1, adv_raw_last=model_adv_last,
+                    source=_display_timeline_source(
+                        resolved_active, resolved_just_deactivated,
+                        settled_ran_this_frame,
+                        episode_consistency_fallback,
+                        minimum_prediction_guarded),
+                    resolved_active=resolved_active,
+                    settled_ran=settled_ran_this_frame,
+                    state1=r.p1.state.name, state2=r.p2.state.name,
+                    score1=(TIMELINE_DUMP_SCORE_NONE_SENTINEL
+                            if r.p1.score is None else int(r.p1.score)),
+                    score2=(TIMELINE_DUMP_SCORE_NONE_SENTINEL
+                            if r.p2.score is None else int(r.p2.score)),
+                ))
+            if dump_exchange_episode_timeline_path is not None:
+                if episode_drive is None:
+                    raise RuntimeError("交換episode sidecar有効なのにlive snapshotが無い")
+                episode_dump_rows.append(_episode_timeline_row(
+                    episode_drive, t_sec=t, game_idx=game_idx,
+                    state1=r.p1.state.name, state2=r.p2.state.name,
+                    hard_candidate=episode_hard_candidate,
+                    hard_applied=episode_hard_applied,
+                    hard_path=episode_hard_path,
+                    hard_reason=episode_hard_reason))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
         if not render:
@@ -5941,6 +8002,41 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # と区別できる、memory feedback_zero_needs_denominator_2026-08-25)。
         if enable_nonstable_hold_is_dead:
             print(f"[is_dead保留] {isdead_hold_stats.summary()}")
+        # (2026-08-26 決着ホールド根治) どの信号でホールドを解除したかを母数付きで
+        # 必ず表示する。既定 OFF では print 自体を行わない (出力も bit-identical)。
+        if enable_resolved_absolute_chain_end:
+            print(f"[決着ホールド解除] {resolved_tracker.abs_end_summary()}")
+        if enable_resolved_live_defender and enable_resolved_live_defender_strict:
+            print(f"[side-local連鎖補正] {resolved_tracker.nondef_cycle_summary()}")
+        if (enable_resolved_episode_physical_redecide
+                or enable_resolved_episode_physical_consistency_guard):
+            print(
+                "[決着物理追従] 再決着 "
+                f"{resolved_tracker.episode_physical_redecide_count}回 / "
+                "矛盾保留 "
+                f"{resolved_tracker.episode_consistency_fallback_count}frame / "
+                "時刻先頭 "
+                f"{resolved_tracker.episode_consistency_fallback_times[:8]}")
+        # (2026-08-25 Gate 3R-5) gross累積カウンタも母数付きで必ず表示する
+        # (0/0 なら「dump行なし=測っていない」と区別できる、
+        # memory feedback_zero_needs_denominator_2026-08-25)。
+        if enable_gross_ledger_dump:
+            print(f"[gross台帳] {gross_dump_stats.summary()}")
+        # (2026-08-25 Gate 3R-6 本体) 候補/解除/確定は母数付きで必ず表示する
+        # (0/0 なら「dump行なし=測っていない」と区別できる、
+        # memory feedback_zero_needs_denominator_2026-08-25)。
+        if enable_death_confirm_sequence:
+            print(f"[死亡確定] {death_confirm_stats.summary()}")
+    if dump_display_timeline_path is not None:
+        save_display_timeline(
+            dump_display_timeline_path, video.stem, display_dump_rows)
+        print(f"[display-dump] {len(display_dump_rows)} records -> "
+              f"{dump_display_timeline_path}")
+    if dump_exchange_episode_timeline_path is not None:
+        save_episode_timeline(
+            dump_exchange_episode_timeline_path, video.stem, episode_dump_rows)
+        print(f"[episode-dump] {len(episode_dump_rows)} records -> "
+              f"{dump_exchange_episode_timeline_path}")
     if render:
         print(f"[done] {written} frames -> {out}")
     else:
@@ -6186,8 +8282,8 @@ def main() -> None:
     ap.add_argument(
         "--resolved-live-defender", action=argparse.BooleanOptionalAction, default=False,
         dest="enable_resolved_live_defender",
-        help="片側のみ連鎖中 (攻撃側継続・受け側自由行動) の間、決着値を0.5秒ごと"
-             "ライブ再評価する (2026-08-15、docs/DEMO_REVIEW_2026-08-13.md #13)。"
+        help="交換中、受け側が物理的に自由な間は決着値を0.5秒ごと"
+             "ライブ再評価する (2026-08-15、2026-08-27拡張)。"
              "攻撃側の帰結 (飛来量・仮想盤面) は凍結維持したまま、受け側の現在盤面"
              "+残り時間逓減でモデル評価/決定度増幅を再計算する。"
              "--resolved-exchange-eval 無効時は無視される。既定 OFF = 従来"
@@ -6244,6 +8340,29 @@ def main() -> None:
              "既定 OFF = 従来挙動と完全に同一。",
     )
     ap.add_argument(
+        "--resolved-episode-physical-redecide",
+        action=argparse.BooleanOptionalAction, default=False,
+        dest="enable_resolved_episode_physical_redecide",
+        help="交換台帳の未解決純残量が変化するたび決着ホールドを再計算する。"
+             "--exchange-episode-gate と --resolved-exchange-eval の併用時のみ"
+             "有効。既定 OFF。",
+    )
+    ap.add_argument(
+        "--resolved-episode-physical-consistency-guard",
+        action=argparse.BooleanOptionalAction, default=False,
+        dest="enable_resolved_episode_physical_consistency_guard",
+        help="未解決中、台帳方向と直前モデル方向の両方に逆らう単独反転を"
+             "直前確定値へ保留する。再決着は行わない。既定 OFF。",
+    )
+    ap.add_argument(
+        "--resolved-minimum-prediction-guard",
+        action=argparse.BooleanOptionalAction, default=False,
+        dest="enable_resolved_minimum_prediction_guard",
+        help="進行中連鎖の完走予測が1連鎖・40点の最小値に潰れた場合、"
+             "決着値を確定表示せず直前STABLE値を維持する。連鎖終了後は"
+             "実測結果へ戻る。既定 OFF。",
+    )
+    ap.add_argument(
         "--resolved-pending-landing-gate", action=argparse.BooleanOptionalAction,
         default=False, dest="enable_resolved_pending_landing_gate",
         help="ResolvedExchangeTracker.enable_pending_landing_gate の配線 "
@@ -6262,6 +8381,17 @@ def main() -> None:
              "0.00%% (時間予算がキーに入り毎回ミスする設計上の必然)。閾値が変われば "
              "別スコープとなり自動的に再計算される。表示更新周期 (0.5秒ごと) は "
              "変えない。--resolved-exchange-eval 無効時は無視される。"
+             "既定 OFF = 従来挙動と完全に同一。",
+    )
+    ap.add_argument(
+        "--resolved-absolute-chain-end", action=argparse.BooleanOptionalAction,
+        default=False, dest="enable_resolved_absolute_chain_end",
+        help="決着ホールドの解除条件に、連鎖の終わりの絶対律 "
+             "(連鎖している側のネクストが動いた OR その側にお邪魔が落ちた) を "
+             "OR で足す (2026-08-26 user決定の根治)。従来の「両側 chain_event が "
+             "None」は ChainEvent の断片化で打ち合い中に長時間成立せず、実測で "
+             "最大45.07秒 評価が止まっていた。新条件は解除を早めるだけで遅く "
+             "しない。--resolved-exchange-eval 無効時は無視される。"
              "既定 OFF = 従来挙動と完全に同一。",
     )
     ap.add_argument(
@@ -6401,6 +8531,24 @@ def main() -> None:
              "既定 None = 保存しない。",
     )
     ap.add_argument(
+        "--dump-display-timeline", type=Path, default=None,
+        dest="dump_display_timeline_path",
+        help="実際の表示値を非settled中も含めて毎サンプル保存する。"
+             "settled限定の --dump-timeline とは別npzへ出力する。",
+    )
+    ap.add_argument(
+        "--exchange-episode-gate", action="store_true", default=False,
+        dest="enable_exchange_episode_gate",
+        help="条件5: 交換episode未解決中の完全上書き±100をライブ/決着hold両経路で"
+             "禁止する。既定OFF、本番登録なし。",
+    )
+    ap.add_argument(
+        "--dump-exchange-episode-timeline", type=Path, default=None,
+        dest="dump_exchange_episode_timeline_path",
+        help="条件5のepisode/chain/gross/hard-overrideを毎サンプルsidecar npzへ保存。"
+             "--exchange-episode-gate が必須。",
+    )
+    ap.add_argument(
         "--stable-confirmed-is-dead", action="store_true", default=False,
         dest="enable_stable_confirmed_is_dead",
         help="--dump-timeline の is_dead1/is_dead2 列を、非STABLE中(連鎖等)に"
@@ -6420,6 +8568,52 @@ def main() -> None:
              "(--stable-confirmed-is-dead の遡及訂正はリアルタイム不可の後処理"
              "、併用時は遡及訂正が後段で上書きする)。保留行数は終了時に母数"
              "付きで表示。既定 OFF = 従来通り (bit-identical)。",
+    )
+    ap.add_argument(
+        "--gross-ledger-dump", action="store_true", default=False,
+        dest="enable_gross_ledger_dump",
+        help="--dump-timeline へ cap前 gross 累積カウンタ列 "
+             "(gross_gen/offset/dropped/wiped/clamp_loss/pending_unc/residual/"
+             "inspected_sides) を追加する (2026-08-25 Gate 3R-5、"
+             "docs/EXCHANGE_GROSS_SUPPLY_DESIGN_2026-08-25.md)。"
+             "OjamaAccountingTracker.get_gross_counters() と "
+             "classify_gross_counter_delta の読み取り専用経路で、交換台帳・"
+             "src/production_config.py へは一切配線しない (dump専用、"
+             "本番の判定表示には無関係)。保存則残差は検査 side 数を分母とし"
+             "母数付きで終了時に表示する。既定 OFF = gross_* 列は npz に"
+             "一切追加されず、旧 dump と bit-identical (backwards compat)。",
+    )
+    ap.add_argument(
+        "--death-confirm-sequence", action="store_true", default=False,
+        dest="enable_death_confirm_sequence",
+        help="--dump-timeline へ is_dead1_confirmed/is_dead2_confirmed 列を"
+             "追加する (2026-08-25 Gate 3R-6 本体、src/death_confirmation.py)。"
+             "user伝授の死亡確定条件 (12段目に設置して連鎖が起きない / "
+             "おじゃまが降って12段目が埋まる) を「候補→猶予/解除→確定」の"
+             "3段階でリアルタイムに実装する。own chain 開始 (掛け算式実読) "
+             "で候補を解除し、連鎖なしで --death-next-stationary-sec 秒"
+             "ネクストが動かなければ確定する (設計訂正2026-08-25: 「次の"
+             "ツモが置けたら確定」は死亡すると発火しない逆理のため撤回、"
+             "ネクスト不動の簡易検出に差し替え済み)。既存 is_dead1/is_dead2 "
+             "(Board.is_dead() の即時占有判定) は変更せず別列として並存。"
+             "候補/解除/確定/閾値未到達での境界消滅 (発生源別) と確定遅延"
+             "分布は母数付きで終了時に表示する。既定 OFF = "
+             "is_dead1_confirmed/is_dead2_confirmed 列は npz に一切追加"
+             "されず、旧 dump と bit-identical (backwards compat)。"
+             "(2026-08-25 Codex 独立レビュー NG 対応で修正: ①不動猶予は"
+             "候補発生時刻を基準にする ②next=None は不動の証拠にしない "
+             "③試合境界後は検証済みの実ゲーム開始まで候補受付を再凍結する。"
+             "詳細は src/death_confirmation.py docstring 参照)。",
+    )
+    ap.add_argument(
+        "--death-next-stationary-sec", type=float,
+        default=NEXT_STATIONARY_CONFIRM_SEC,
+        dest="death_next_stationary_sec",
+        help="--death-confirm-sequence の確定閾値 (秒、既定 "
+             f"{NEXT_STATIONARY_CONFIRM_SEC})。user 指定の暫定値であり "
+             "Claude がシーンから逆算した値ではない (2026-08-25 user指示、"
+             "底抜け演出検出による根治までの簡易実装)。感度の事後測定用に"
+             "変更可能にしている。",
     )
     # collect_boards_lean.py と同名・同既定 (2026-08-12 追加、対称化)。
     ap.add_argument(
@@ -6531,10 +8725,18 @@ def main() -> None:
              enable_resolved_kill_override_counter_aware=(
                  a.enable_resolved_kill_override_counter_aware),
              enable_resolved_victim_gen_live=a.enable_resolved_victim_gen_live,
+             enable_resolved_episode_physical_redecide=(
+                 a.enable_resolved_episode_physical_redecide),
+             enable_resolved_episode_physical_consistency_guard=(
+                 a.enable_resolved_episode_physical_consistency_guard),
+             enable_resolved_minimum_prediction_guard=(
+                 a.enable_resolved_minimum_prediction_guard),
              enable_resolved_counter_placement_reuse=(
                  a.enable_resolved_counter_placement_reuse),
              enable_resolved_counter_budget_quantize=(
                  a.enable_resolved_counter_budget_quantize),
+             enable_resolved_absolute_chain_end=(
+                 a.enable_resolved_absolute_chain_end),
              enable_puyo_to_empty_hsv_guard=a.enable_puyo_to_empty_hsv_guard,
              stable_majority_window=a.stable_majority_window,
              enable_ojama_fall_placement_override=a.enable_ojama_fall_placement_override,
@@ -6551,12 +8753,19 @@ def main() -> None:
              show_excluded_attribution=a.show_excluded_attribution,
              render=a.render,
              dump_timeline_path=a.dump_timeline_path,
+             dump_display_timeline_path=a.dump_display_timeline_path,
+             enable_exchange_episode_gate=a.enable_exchange_episode_gate,
+             dump_exchange_episode_timeline_path=(
+                 a.dump_exchange_episode_timeline_path),
              normalize_fps_30=normalize_fps_30,
              use_production_recognition=use_production_recognition,
              resize_1080p=resize_1080p,
              show_chain_count=a.show_chain_count,
              enable_stable_confirmed_is_dead=a.enable_stable_confirmed_is_dead,
-             enable_nonstable_hold_is_dead=a.enable_nonstable_hold_is_dead)
+             enable_nonstable_hold_is_dead=a.enable_nonstable_hold_is_dead,
+             enable_gross_ledger_dump=a.enable_gross_ledger_dump,
+             enable_death_confirm_sequence=a.enable_death_confirm_sequence,
+             death_next_stationary_sec=a.death_next_stationary_sec)
 
 
 if __name__ == "__main__":

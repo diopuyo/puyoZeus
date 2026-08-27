@@ -40,6 +40,7 @@ from src.ojama_accounting import (
     PENDING_HARD_CAP,
     SCORE_RESET_THRESHOLD,
     THEORY_DROP_PER_TURN,
+    GrossOjamaCounters,
     OjamaAccountSnapshot,
     OjamaAccountingTracker,
     cancel_own_pending_then_send_surplus,
@@ -49,6 +50,17 @@ from src.scoring import (
     OJAMA_RATE_STANDARD,
     score_to_ojama,
 )
+
+
+def _finalize_direct(
+    tracker: OjamaAccountingTracker, side: str, chain_score: int, t_sec: float,
+) -> None:
+    """gross 会計の単体検証用に score 確定処理だけを駆動する。"""
+    own = tracker._side(side)
+    own.last_stable_score = 0
+    own.score_at_chain_start = 0
+    own.chain_active = True
+    tracker._finalize_chain_end(own, tracker._other(side), chain_score, side, t_sec)
 
 
 # ============================
@@ -2979,3 +2991,74 @@ class TestCancelOwnPendingThenSendSurplus:
     def test_surplus_adds_onto_existing_other_pending(self) -> None:
         own, other = cancel_own_pending_then_send_surplus(gen=100, own_pending=30, other_pending=20)
         assert (own, other) == (0, 90)
+
+
+# =============================================================================
+# 2026-08-25 P1-3: cap 前 gross 累積カウンタ
+# =============================================================================
+
+def test_gross_counters_preserve_simultaneous_incoming_and_cancel() -> None:
+    """純差分では20減に潰れる同時応酬を、cancel=50/incoming=30で保持する。"""
+    tracker = OjamaAccountingTracker()
+    tracker._p1.forecast_incoming_uncapped = 100
+    tracker._p1.forecast_incoming = 100
+    before = tracker.get_gross_counters(0.0)
+
+    _finalize_direct(tracker, "p1", chain_score=3500, t_sec=1.0)
+    _finalize_direct(tracker, "p2", chain_score=2100, t_sec=1.0)
+    after = tracker.get_gross_counters(1.0)
+
+    assert tracker.get_snapshot(1.0).pending_p1_uncapped == 80
+    assert after.offset_uncapped_p1 - before.offset_uncapped_p1 == 50
+    assert after.generated_p2 - before.generated_p2 == 30
+
+
+def test_gross_uncapped_drop_is_counted_when_capped_pending_is_zero() -> None:
+    tracker = OjamaAccountingTracker()
+    tracker._p1.forecast_incoming = 0
+    tracker._p1.forecast_incoming_uncapped = 40
+    tracker.on_tsumo_settled("p1", 1.0)
+    gross = tracker.get_gross_counters(1.0)
+    assert gross.dropped_uncapped_p1 == THEORY_DROP_PER_TURN
+    assert tracker.get_snapshot(1.0).pending_p1_uncapped == 10
+
+
+def test_gross_generation_is_not_lost_above_display_cap() -> None:
+    tracker = OjamaAccountingTracker()
+    _finalize_direct(tracker, "p1", chain_score=36_190, t_sec=1.0)
+    assert tracker.get_gross_counters(1.0).generated_p1 == 517
+    assert tracker.get_snapshot(1.0).pending_p2 == PENDING_ABS_CAP
+
+
+def test_gross_boundary_wipe_amount_survives_skipped_boundary_frame() -> None:
+    tracker = OjamaAccountingTracker()
+    tracker._p1.forecast_incoming = 40
+    tracker._p1.forecast_incoming_uncapped = 40
+    before = tracker.get_gross_counters(0.0)
+    tracker._reset_side_boundary(tracker._p1, "p1", new_score=0, t_sec=1.0)
+    after = tracker.get_gross_counters(2.0)
+    assert after.boundary_resets_p1 - before.boundary_resets_p1 == 1
+    assert after.boundary_wiped_uncapped_p1 - before.boundary_wiped_uncapped_p1 == 40
+    assert after.offset_uncapped_p1 >= before.offset_uncapped_p1
+
+
+def test_gross_clamp_loss_is_explicit_and_snapshot_shape_is_unchanged() -> None:
+    tracker = OjamaAccountingTracker()
+    tracker._p2.forecast_incoming_uncapped = 100
+    snapshot_before = tracker.get_snapshot(0.0)
+    _finalize_direct(tracker, "p1", chain_score=199_990, t_sec=1.0)
+    gross = tracker.get_gross_counters(1.0)
+    snapshot_after_access = tracker.get_snapshot(1.0)
+    assert gross.clamp_loss_p2 == 100
+    assert set(snapshot_before.__dataclass_fields__) == set(snapshot_after_access.__dataclass_fields__)
+    assert isinstance(gross, GrossOjamaCounters)
+
+
+def test_get_gross_counters_is_side_effect_free_and_reset_starts_new_session() -> None:
+    tracker = OjamaAccountingTracker()
+    _finalize_direct(tracker, "p1", chain_score=700, t_sec=1.0)
+    first = tracker.get_gross_counters(1.0)
+    second = tracker.get_gross_counters(2.0)
+    assert first.generated_p1 == second.generated_p1 == 10
+    tracker.reset()
+    assert tracker.get_gross_counters(3.0).generated_p1 == 0
