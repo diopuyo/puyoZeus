@@ -167,6 +167,11 @@ API と整合させるため)。参加条件を満たさない発火が来たと
 - どちらかが実際に窒息した (`is_dead` が **STABLE 確定盤面**で成立)。
   ※盤面が高いだけでは窒息としない (`reference_full_board_is_not_death_2026-08-22`)。
 - episode 開始から `EPISODE_MAX_SEC` (既定 60.0 秒) 経過した。
+- normal `CLOSED` 後の遅延 `FINALIZE` で未照合量が復活した。この場合は第二episodeを
+  開かず、既存要約を `CLOSED_FORCED`、理由
+  `late_finalize_after_normal_close` へ再分類する。後続の相殺・着弾は同じ要約へ
+  backfillし、未照合が0になるまで `is_unresolved()` によるhard override禁止を維持する。
+  これによりI7「normal CLOSEDなら未照合0」を例外化せず保つ。
 
 #### 2.5.1 【2026-08-25 追記、Fix【2】】ワイプ (片側だけの予告消滅) の side 単位退役
 
@@ -337,6 +342,25 @@ finalize(event, confirmed_amount):
 > ojama_sent` (W38 の影響下) は診断で参照する可能性があるため残すが、
 > 会計にも検算にも使わない。
 
+#### 4.1.3 生成量の独立検算規約 (2026-08-25 Codex確定)
+
+Gate 3R-4 の「差±5%以内」は、台帳と同じaccumulatorを再読する自己検算ではなく、
+次の独立手順で測る。
+
+1. 母集団を動画ID・試合境界・side・時刻窓で固定し、試合外フレームを除外する。
+2. 分子はscore OCRの確定増分をイベント単位で再採取する。台帳の
+   `raw_generation_total`、`total_generated_by_pX`、`ojama_sent`は入力に使わない。
+3. 実効レートは試合開始からの経過秒と公式のマージンタイム規約から検算側で
+   独立に計算する。各sideのleftoverをイベント順に繰り越し、試合境界で0へ戻す。
+4. score OCR確定増分に全消し2100点が既に含まれる場合は再加算しない。
+   含有の有無をイベント表に明記し、不明なイベントを黙って0扱いしない。
+5. 台帳値と独立値をside・試合・chain対応表の各粒度で比較する。総量差が±5%以内でも、
+   相殺する過大・過小を許さず、残差をchain単位で全件説明する。
+6. 分母 (試合数、イベント数、score点、おじゃま個数) を必ず併記する。
+
+v51 t=459〜533の確定基準は、独立score分子126,896点、独立換算1,813個、
+台帳1,769個、差−2.43%。この値は手順の回帰fixtureであり、別動画へ70固定を流用しない。
+
 ---
 
 ## 5. chain_id の定義 — 断片の統合
@@ -434,6 +458,15 @@ AWAITING_FINALIZE 中 (§4 の絶対律を早合点しただけの状態) に、
 実データ (v51、4/4 正解): 1→2 (継続) / 1→2 (継続) / 2→6 (継続) /
 10→1・10秒後 (新規) の 4 例すべてでこの判定規則が正解と一致した。
 
+#### 5.2.5 【2026-08-26 追記】同一連鎖の累積点は running max を保持する
+
+掛け算式の`total_score`は同一物理連鎖内の累積点なので、ゲームの規則上は減少しない。
+OCRの一時下振れで過去最大値を下回った場合、追加専用の交換台帳には減算イベントがなく、
+値を戻すと保存則を壊す。`ChainIdResolver`は同一chain_id内の過去最大値を保持し、
+下振れ値を採用しない。黙って捨てず、`provisional_score_decrease_ignored_count`を
+`formula_step_observation_count`と対で監査列へ出す。段数がrunning maxを下回り
+別chain_idへ分割される場合は、この規則の対象外とする。
+
 ### 5.3 統合の手続き
 
 新しい formula 再トリガーを観測したとき:
@@ -501,13 +534,24 @@ cap 後に相殺すると架空の余剰が相手へ送られるため、履歴�
 
 ### 6.3 【2026-08-25 追記、Fix【1】】観測経路そのものを uncapped 側から再構成する
 
+> **【2026-08-25 Codex 再レビュー: 本節の旧方式は廃止・使用禁止】**
+> `pending_pX_uncapped` の純残量差分だけでは、同一フレームの
+> `incoming=30 + cancel=50` と単純な `cancel=20` を区別できない。
+> したがって本節の判別的再構成を会計の権威として実装・配線してはならない。
+> 後継として `GrossOjamaCounters` と `classify_gross_counter_delta` を実装した。
+> cap前の生成・相殺・着弾・境界ワイプ量・clamp lossをカテゴリ別の単調累積値で
+> 保持する。`boundary_reset_count`は母数だけに使い、境界で消えた量は
+> `boundary_wiped_uncapped_pX`へ直接加算するため、境界フレームを読み飛ばしても
+> 復元できる。既存の旧関数は後方互換のため残すが、新規会計の権威に使わない。
+> 2026-08-25時点では地上真値fixtureまで合格、実データ配線・検収は未完了。
+
 §6.1〜6.2 は「台帳が持つ量」の話だったが、**観測経路 (`SettlementObservation`
 の作り方) 自体も capped 側 (`total_offset_by_pX`/`total_dropped_to_pX`) を
 使っていた**ことが Gate 3 実データ検証 (2026-08-25) で判明した。
 真の生成が cap (216) を超えると、超過分が相殺にも着弾にも一切現れない
 (zenchi 実測: 5 回の cap 発火、超過合計 4,743 = 総生成の 52%)。
 
-**修正: `pending_pX_uncapped` (§6.1 のレベル値) の前フレームとの差分**
+**旧修正（退役）: `pending_pX_uncapped` (§6.1 のレベル値) の前フレームとの差分**
 から相殺・着弾・ワイプの 3 種類を判別的に再構成する
 (`classify_pending_uncapped_delta`、`src/exchange_episode_tracker.py`)。
 
@@ -720,6 +764,9 @@ hard override を禁止する」に改訂する。
 | I14 | **換算の一貫性**: 暫定と確定が同一の `score_to_ojama` 規約 (マージンタイム・leftover) を通る (§4.1.2) | 長試合で暫定と確定が系統的に乖離 |
 | I15 | **episode 不在時**: OPEN な episode が無いとき `is_unresolved() == False` | 整地だけで override が永久禁止 |
 | I16 | **FINALIZE 供給源の限定 (2026-08-25 追加)**: `source == FINALIZE_SOURCE_SCORE_OCR_DIFF` (score OCR 確定差分) 以外の FINALIZE は既定で拒否する (`allow_simulate_fallback=True` のときだけ許可)。例外は投げず `finalize_rejected_count`/`finalize_rejected_amount` に記録する | `ChainSimulator` 由来の推定 (`mechanism='baseline'`) が確定値として紛れ込み、暫定 38 個に対し推定 745 個という壊滅的な値が会計に入る |
+| I17 | **累積点の単調性 (2026-08-26 追加)**: 同一chain_idの`FORMULA_STEP.total_score`はrunning maxを保持する。下振れは値へ反映せず、無視件数/FORMULA_STEP総数を記録する | OCR下振れで追加専用台帳に減算が必要となり、処理停止または架空の火力消失が起きる |
+| I18 | **後着イベントの単一帰属 (2026-08-26追加、8/27拡張)**: close済みchainへのFIRE/STEP/FINALIZE/CANCEL/LANDは対応する旧要約だけへbackfillし、同時にOPENな新episodeへtouchしない。旧要約の残量差は`post_close_outstanding_delta_total`で新規生成と分離して検算する | 同一chain_idが新旧2要約へ入り、試合境界で重複抑制または二重計上が発生する |
+| I19 | **正式境界の原子性 (2026-08-27追加)**: 試合境界で未照合計上・chain退役した同frameの予告消失を、CANCEL/LANDとして再適用しない。除外件数・量を境界総数と対で記録する | 境界で同じ残量を未照合と着弾の両方へ計上し、退役後の未帰属決済が発生する |
 
 ### 8.1 LANDED の観測契約
 

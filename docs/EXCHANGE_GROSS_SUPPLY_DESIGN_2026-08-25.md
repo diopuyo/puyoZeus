@@ -1,6 +1,6 @@
 # 交換会計への gross 量供給設計 (P1-3 対応) — 2026-08-25
 
-status: **設計確定待ち (Codex レビュー前)。実装未着手。**
+status: **Codex修正版を実装・実データ検収済み。Gate 3R-5の既定OFF配線待ち。**
 対象 Gate: 3R-1 の 3番 / 3R-4「同時応酬で gross 相殺量が失われない」
 
 ## 1. 問題 (P1-3)
@@ -47,7 +47,8 @@ settle 20 フレーム待ち (:118, :897-904) を要するため 1 side 1 フレ
 ```
 total_offset_uncapped: int = 0    # 自己相殺の累積 (uncapped forecast 基準)
 total_dropped_uncapped: int = 0   # 着弾 drain の累積 (uncapped 帳簿側)
-boundary_reset_count: int = 0     # 境界ワイプ回数 (量は直前 pending で復元可)
+total_boundary_wiped_uncapped: int = 0  # 境界で消えたuncapped量の累積
+boundary_reset_count: int = 0     # 境界ワイプ回数 (診断母数。量の復元には使わない)
 uncapped_clamp_loss: int = 0      # サニティ切り捨てで消えた量の累積 (期待値 0)
 ```
 
@@ -58,7 +59,8 @@ uncapped_clamp_loss: int = 0      # サニティ切り捨てで消えた量の�
    `canceled_unc = min(gen, s.forecast_incoming_uncapped)` を取り
    `total_offset_uncapped` へ累積。サニティ clamp の切り捨て量を
    `uncapped_clamp_loss` へ累積 (**黙って切らない**)
-3. `_reset_side_boundary` :997 付近 — `boundary_reset_count += 1`
+3. `_reset_side_boundary` :997 付近 — reset前のpendingを
+   `total_boundary_wiped_uncapped`へ加算し、`boundary_reset_count += 1`
 
 ### 3.3 供給インタフェース (新規、既存 API 無変更)
 
@@ -70,6 +72,7 @@ class GrossOjamaCounters:
     generated_p1: int; generated_p2: int          # 既存 total_generated の再掲
     offset_uncapped_p1: int; offset_uncapped_p2: int
     dropped_uncapped_p1: int; dropped_uncapped_p2: int
+    boundary_wiped_uncapped_p1: int; boundary_wiped_uncapped_p2: int
     boundary_resets_p1: int; boundary_resets_p2: int
     clamp_loss_p1: int; clamp_loss_p2: int
 
@@ -86,7 +89,7 @@ class OjamaAccountingTracker:
 
 ### 3.4 消費側 (`src/exchange_episode_tracker.py`)
 
-- 新純関数 `classify_gross_counter_delta(prev, curr, prev_pending, curr_pending)`
+- 新純関数 `classify_gross_counter_delta(prev, curr, prev_pending, curr_pending, game_idx)`
   を :340 付近に追加 (50 行以内)。カテゴリ別 Δ をそのまま
   `SettlementObservation` に変換する。**推測しない。**
 - 恒等式残差 `pending Δ − (incoming − Δoffset − Δdropped − wipe − clamp)` を
@@ -109,7 +112,7 @@ fixture は**動画不要**。`OjamaAccountingTracker` を合成 score 列で直
 | T3 | 同一フレーム incoming + 着弾: ツモ設置 drain 30 + 相手 surplus 10 | `Δdropped_unc=30`、`incoming=10`、恒等式残差 0 |
 | T4 | **cap 超え生成** (総生成52%消失の回帰): score 36,190 → gen=517 | `generated Δ=517` ちょうど (216 に丸まらない) |
 | T5 | 保存則 (試合単位): `generated = offset_unc + sent(導出)` / `pending 終値 = Σincoming − Σdropped_unc − Σwipe − Σclamp` | 全恒等式成立 + **検査フレーム数 > 0 を分母として assert** |
-| T6 | 境界ワイプ: score 大幅減少 → pending 0 | `boundary_resets +1`、消失量が wipe に分類され `unclassified=0` |
+| T6 | 境界ワイプ: score 大幅減少 → pending 0。consumerは境界フレームを読まず前後だけ取得 | `boundary_resets +1`、`boundary_wiped_uncapped`差分が消失量と一致、残差0 |
 | T7 | clamp loss: pending を 2,857 超に駆動 | `clamp_loss > 0` と件数が出る (**黙って消えない**) |
 | T8 | OFF bit-identical: 記録済み遷移列で既存 snapshot 全 field が追加前後で一致 (golden) | 既存出力不変 |
 | T9 | 単調性 + 構造仮定: 全カウンタ非減少 (境界跨ぎ含む)、1 side 1 フレームの finalize ≤ 1 | 「合算で情報が消えない」前提の検証 |
@@ -130,15 +133,19 @@ Gate 3R-4「同時応酬で gross 相殺量が失われない」の検収 = **T1
 `src/production_config.py` は触らない (Gate 3R-0 凍結)。
 工数: 実装 0.5〜1 日 + テスト 0.5 日 (**見積もり**)。
 
-## 6. 実装前に潰す未確認事項
+## 6. 実装後の確認状況
 
-1. snapshot の全 field を動的に serialize する dump 経路の有無
-   (あれば snapshot 拡張は将来も不可と確定する)
-2. 1 side 1 フレーム finalize ≤ 1 の構造保証 (T9 で固定)
+1. `OjamaAccountSnapshot`は拡張せず、独立dataclassにしたため既存dumpの構造を変更しない。
+2. 同時応酬、cap超え517個、uncapped着弾、境界フレームskip、clamp loss、
+   accessorの副作用なしをunit testで固定した。
+3. `OjamaAccountingTracker`と`ExchangeEpisodeTracker`間の純差分変換は実装済み。
+   オーバーレイ/productionへはGate凍結に従い未配線。
+4. zenchi本番30fps条件で9,000 frame / 18,000 sideを検査し、保存則残差0、
+   最大残差0、未分類frame 0。境界ワイプ3,385個、clamp loss 0を確認した。
+   ledger側の`retired_unreconciled`も3,385で、境界消失量と一致する。
 
 ## 7. 次の手 (推奨順)
 
-1. `CLAUDE_TO_CODEX.md` へ「SPEC §6.3 廃止 + 本設計での差し替え」を依頼として追記
-2. Codex 合意後、**T8 (OFF bit-identical golden) と T1 (同時応酬) を先に失敗テストとして書いてから**実装
-   (Gate 3R-1 の再開順序 1 と整合)
-3. 上記 6 の未確認 2 点を実測で潰す
+1. Gate 3R-5としてオーバーレイへ既定OFFで配線する。
+2. timelineへgross生成・相殺・着弾・境界ワイプ・保存則残差を母数付きで追加する。
+3. OFF bit-identicalを再確認後、Gate 3R-6のstate machine遅れを閉じる。

@@ -154,6 +154,21 @@ class ResolvedChain:
 
 
 @dataclass(frozen=True)
+class ActiveChainSnapshot:
+    """進行中の連鎖を外部から安全に参照するための不変スナップショット。"""
+
+    chain_id: int
+    side: str
+    opened_at_sec: float
+    last_t_sec: float
+    step_count: int
+    provisional_score: int
+    growth_observed: bool
+    score_base: int
+    awaiting_finalize: bool
+
+
+@dataclass(frozen=True)
 class ResolverStats:
     """診断用カウンタ。黙って打ち切らない・黙って捨てないための可視化。"""
 
@@ -179,6 +194,11 @@ class ResolverStats:
     # 継続控除で累積点が控除基準を下回った (OCR 異常の証拠) 件数
     # (母数 = continuation_reopen_count)。黙って 0 に丸めず必ず数える。
     continuation_base_underflow_count: int = 0
+    # resolver が受け取った FORMULA_STEP の総数。下振れ無視件数の母数。
+    formula_step_observation_count: int = 0
+    # 同一物理連鎖の累積点が過去最大値を下回ったため、OCR下振れとして
+    # 無視した件数。累積点はゲームの規則上減らないので、値は戻さず可視化する。
+    provisional_score_decrease_ignored_count: int = 0
 
 
 class _SideState(Enum):
@@ -247,6 +267,8 @@ class ChainIdResolver:
         self._settled_echo_absorbed_count: int = 0
         self._continuation_reopen_count: int = 0
         self._continuation_base_underflow_count: int = 0
+        self._formula_step_observation_count: int = 0
+        self._provisional_score_decrease_ignored_count: int = 0
 
     # ------------------------------
     # 受付
@@ -267,6 +289,7 @@ class ChainIdResolver:
             self._maybe_force_cut(_side, obs.t_sec)
         state = self._in_flight.get(obs.side)
         if obs.kind is ObservationKind.FORMULA_STEP:
+            self._formula_step_observation_count += 1
             self._handle_formula_step(obs, state)
         elif obs.kind is ObservationKind.CHAIN_SETTLED:
             self._handle_chain_settled(obs, state)
@@ -305,7 +328,7 @@ class ChainIdResolver:
             return
         state.last_t_sec = obs.t_sec
         state.step_count = max(state.step_count, obs.chain_count)
-        state.provisional_score = self._subtract_base(obs.total_score, state.score_base)
+        self._update_provisional_score(state, obs.total_score)
 
     def _handle_formula_step_while_awaiting_finalize(
         self, obs: ChainObservation, state: _InFlight,
@@ -345,7 +368,7 @@ class ChainIdResolver:
             state.state = _SideState.GROWING
             state.last_t_sec = obs.t_sec
             state.step_count = obs.chain_count
-            state.provisional_score = self._subtract_base(obs.total_score, state.score_base)
+            self._update_provisional_score(state, obs.total_score)
             return
         self._close_side(obs.side, finalized_score=None, reason=CloseReason.SUPERSEDED)
         self._open(obs)
@@ -389,11 +412,18 @@ class ChainIdResolver:
         同一 side の連鎖は直列なので、確定クローズの後に始まった次の連鎖の
         終わりは最短でも SETTLED_ECHO_MAX_SEC (= 2.61+1.17 秒、連鎖アニメ
         実測式の 1 連鎖ぶん) 後にしか来ない (定数定義の物理的根拠を参照)。
+        ただし時間だけでは次の短い連鎖を誤吸収し得るため、段数一致を必須にし、
+        掛け算式を観測済みなら同じ経路の累積点一致も要求する。
         """
         tail = self._finalized_tail.get(obs.side)
         if tail is None:
             return False
-        return 0.0 <= obs.t_sec - tail.closed_at_sec <= SETTLED_ECHO_MAX_SEC
+        within_window = 0.0 <= obs.t_sec - tail.closed_at_sec <= SETTLED_ECHO_MAX_SEC
+        if not within_window or obs.chain_count != tail.step_count:
+            return False
+        if tail.growth_observed and obs.total_score != tail.cumulative_score:
+            return False
+        return True
 
     def _open_settled_pending(self, obs: ChainObservation) -> None:
         """CHAIN_SETTLED (in-flight 無し) を確定待ちの保留として開く (P1-2)。
@@ -581,6 +611,14 @@ class ChainIdResolver:
             return 0
         return adjusted
 
+    def _update_provisional_score(self, state: _InFlight, total_score: int) -> None:
+        """同一連鎖の累積点を物理的に単調な running max として更新する。"""
+        adjusted = self._subtract_base(total_score, state.score_base)
+        if adjusted < state.provisional_score:
+            self._provisional_score_decrease_ignored_count += 1
+            return
+        state.provisional_score = adjusted
+
     def _record_finalized_tail(
         self, side: str, *, step_count: int, cumulative_score: int,
         opened_at_sec: float, closed_at_sec: float, growth_observed: bool,
@@ -690,6 +728,23 @@ class ChainIdResolver:
         """これまでに解決 (CLOSED) した連鎖の一覧。"""
         return list(self._resolved)
 
+    def active(self) -> list[ActiveChainSnapshot]:
+        """進行中の連鎖を side 順の不変スナップショットとして返す。"""
+        return [
+            ActiveChainSnapshot(
+                chain_id=state.chain_id,
+                side=side,
+                opened_at_sec=state.opened_at_sec,
+                last_t_sec=state.last_t_sec,
+                step_count=state.step_count,
+                provisional_score=state.provisional_score,
+                growth_observed=state.growth_observed,
+                score_base=state.score_base,
+                awaiting_finalize=(state.state is _SideState.AWAITING_FINALIZE),
+            )
+            for side, state in sorted(self._in_flight.items())
+        ]
+
     def stats(self) -> ResolverStats:
         """診断カウンタのスナップショット。"""
         return ResolverStats(
@@ -703,6 +758,9 @@ class ChainIdResolver:
             settled_echo_absorbed_count=self._settled_echo_absorbed_count,
             continuation_reopen_count=self._continuation_reopen_count,
             continuation_base_underflow_count=self._continuation_base_underflow_count,
+            formula_step_observation_count=self._formula_step_observation_count,
+            provisional_score_decrease_ignored_count=(
+                self._provisional_score_decrease_ignored_count),
         )
 
 
@@ -721,6 +779,7 @@ def resolve_chain_ids(observations: Iterable[ChainObservation]) -> list[Resolved
 
 
 __all__ = [
+    "ActiveChainSnapshot",
     "CHAIN_ID_MAX_SEC",
     "FINALIZED_SOURCE_SCORE_OCR_DIFF",
     "FINALIZED_SOURCE_SIMULATE_FALLBACK",

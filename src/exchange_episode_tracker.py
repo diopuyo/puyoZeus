@@ -78,6 +78,7 @@ from src.exchange_ledger import (
     PhysicalContext,
     Side,
 )
+from src.ojama_accounting import GrossOjamaCounters
 from src.scoring import OJAMA_RATE_STANDARD, score_to_ojama
 
 # ============================
@@ -307,6 +308,86 @@ class PendingDeltaClassification:
 
 
 @dataclass(frozen=True)
+class GrossCounterDeltaClassification:
+    """gross 累積カウンタ差分を会計入力へ変換した結果。
+
+    `conservation_residual_pX` は pending 実差分とカテゴリ別 gross 差分から
+    導いた期待差分の差。検査した side 数も保持し、0 件未測定を防ぐ。
+    """
+
+    settlement: SettlementObservation | None
+    wiped_sides: tuple[Side, ...]
+    generated_by_1p: int
+    generated_by_2p: int
+    boundary_wiped_on_1p: int
+    boundary_wiped_on_2p: int
+    clamp_loss_on_1p: int
+    clamp_loss_on_2p: int
+    conservation_residual_p1: float
+    conservation_residual_p2: float
+    inspected_side_count: int
+
+
+def _nonnegative_counter_delta(prev: int, curr: int, name: str) -> int:
+    """累積カウンタ差分を返し、reset 混入を明示的に拒否する。"""
+    delta = curr - prev
+    if delta < 0:
+        raise ValueError(f"gross counter decreased: {name} ({prev} -> {curr})")
+    return delta
+
+
+def classify_gross_counter_delta(
+    prev: GrossOjamaCounters, curr: GrossOjamaCounters,
+    prev_pending: tuple[float, float], curr_pending: tuple[float, float],
+    game_idx: int,
+) -> GrossCounterDeltaClassification:
+    """カテゴリ別累積値の差から CANCEL/LAND/WIPE を推測なしで復元する。"""
+    names = (
+        "generated_p1", "generated_p2", "offset_uncapped_p1", "offset_uncapped_p2",
+        "dropped_uncapped_p1", "dropped_uncapped_p2", "boundary_wiped_uncapped_p1",
+        "boundary_wiped_uncapped_p2",
+        "boundary_resets_p1", "boundary_resets_p2", "clamp_loss_p1", "clamp_loss_p2",
+    )
+    delta = {
+        name: _nonnegative_counter_delta(getattr(prev, name), getattr(curr, name), name)
+        for name in names
+    }
+    settlement = None
+    if any(delta[name] for name in names[2:6]):
+        settlement = SettlementObservation(
+            t_sec=curr.t_sec, game_idx=game_idx,
+            canceled_by_1p=delta["offset_uncapped_p1"],
+            canceled_by_2p=delta["offset_uncapped_p2"],
+            landed_on_1p=delta["dropped_uncapped_p1"],
+            landed_on_2p=delta["dropped_uncapped_p2"],
+        )
+    expected_p1 = (
+        delta["generated_p2"] - delta["offset_uncapped_p2"]
+        - delta["offset_uncapped_p1"] - delta["dropped_uncapped_p1"]
+        - delta["boundary_wiped_uncapped_p1"] - delta["clamp_loss_p1"]
+    )
+    expected_p2 = (
+        delta["generated_p1"] - delta["offset_uncapped_p1"]
+        - delta["offset_uncapped_p2"] - delta["dropped_uncapped_p2"]
+        - delta["boundary_wiped_uncapped_p2"] - delta["clamp_loss_p2"]
+    )
+    wiped = tuple(
+        side for side, key in ((Side.P1, "boundary_resets_p1"), (Side.P2, "boundary_resets_p2"))
+        if delta[key] > 0
+    )
+    return GrossCounterDeltaClassification(
+        settlement=settlement, wiped_sides=wiped,
+        generated_by_1p=delta["generated_p1"], generated_by_2p=delta["generated_p2"],
+        boundary_wiped_on_1p=delta["boundary_wiped_uncapped_p1"],
+        boundary_wiped_on_2p=delta["boundary_wiped_uncapped_p2"],
+        clamp_loss_on_1p=delta["clamp_loss_p1"], clamp_loss_on_2p=delta["clamp_loss_p2"],
+        conservation_residual_p1=(curr_pending[0] - prev_pending[0]) - expected_p1,
+        conservation_residual_p2=(curr_pending[1] - prev_pending[1]) - expected_p2,
+        inspected_side_count=2,
+    )
+
+
+@dataclass(frozen=True)
 class _SideDeltaResult:
     """side 1 つ分の pending_uncapped 差分判別結果 (内部専用)。"""
 
@@ -486,9 +567,8 @@ class D1EpisodeTotals:
     **【コーディネーター指摘、2026-08-25 追加】**
     `post_close_settlement_dropped_count`/`_amount`: close 済み chain へ
     close 後に届いた相殺・着弾の件数・量 (`ExchangeLedger.snapshot()` の
-    同名フィールドの転記)。**根治は未着手。この値が大きければ close の
-    判定が早すぎる証拠**である (`ExchangeLedger._maybe_count_post_close_
-    settlement` docstring参照)。黙って落とさないための可視化のみ。
+    同名フィールドの転記)。live経路のmax_sec後着決済は要約へbackfillされ、
+    ここに残るのは対応要約を特定できなかった回収不能分だけである。
     """
 
     total_generated: float
@@ -713,6 +793,7 @@ class ExchangeEpisodeTracker:
 
     def __init__(
         self, *, enabled: bool = False, allow_simulate_fallback: bool = False,
+        defer_max_sec_close: bool = False,
     ) -> None:
         """
         Args:
@@ -729,7 +810,9 @@ class ExchangeEpisodeTracker:
         self._enabled = enabled
         self._allow_simulate_fallback = allow_simulate_fallback
         self._resolver = ChainIdResolver()
-        self._ledger = ExchangeLedger(allow_simulate_fallback=allow_simulate_fallback)
+        self._ledger = ExchangeLedger(
+            allow_simulate_fallback=allow_simulate_fallback,
+            defer_max_sec_close=defer_max_sec_close)
         self._last_game_idx: int | None = None
         self._context_by_t: dict[float, _ObservationContext] = {}
         self._unknown_mechanism_count: int = 0
@@ -1483,8 +1566,10 @@ __all__ = [
     "ExchangeEpisodeDiagnostics",
     "ExchangeEpisodeTracker",
     "GenerationObservation",
+    "GrossCounterDeltaClassification",
     "PendingDeltaClassification",
     "PendingUncappedFrame",
     "SettlementObservation",
+    "classify_gross_counter_delta",
     "classify_pending_uncapped_delta",
 ]

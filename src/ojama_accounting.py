@@ -223,6 +223,29 @@ class OjamaAccountSnapshot:
     pending_p2_uncapped: int = 0
 
 
+@dataclass(frozen=True)
+class GrossOjamaCounters:
+    """cap 前の会計事象を保持する side 別累積カウンタ。
+
+    `OjamaAccountSnapshot` の互換性を保つため独立した型にする。明示的な
+    `reset()` までは単調非減少で、試合境界をまたいでも値を維持する。
+    """
+
+    t_sec: float
+    generated_p1: int
+    generated_p2: int
+    offset_uncapped_p1: int
+    offset_uncapped_p2: int
+    dropped_uncapped_p1: int
+    dropped_uncapped_p2: int
+    boundary_wiped_uncapped_p1: int
+    boundary_wiped_uncapped_p2: int
+    boundary_resets_p1: int
+    boundary_resets_p2: int
+    clamp_loss_p1: int
+    clamp_loss_p2: int
+
+
 # ============================
 # 内部状態 (1 サイド分)
 # ============================
@@ -239,6 +262,12 @@ class _SideState:
     # 規則で更新するが PENDING_ABS_CAP で切らない (サニティ上限は
     # PENDING_UNCAPPED_SANITY_MAX のみ)。kill_override の相殺の引き算専用。
     forecast_incoming_uncapped: int = 0
+    # cap 前 gross 量。試合境界でもリセットせず、明示的な reset() まで累積する。
+    total_offset_uncapped: int = 0
+    total_dropped_uncapped: int = 0
+    total_boundary_wiped_uncapped: int = 0
+    boundary_reset_count: int = 0
+    uncapped_clamp_loss: int = 0
     # --- 連鎖終了検知 ---
     chain_active: bool = False           # 連鎖中フラグ
     score_at_chain_start: int | None = None  # 連鎖開始直前の score (last_valid_score から設定)
@@ -534,8 +563,10 @@ class OjamaAccountingTracker:
         # 各帳簿の残量から独立に計算する (capped が 216 で頭打ちの間、実残量
         # 517 側は 30個/手 で減り続けるのが物理的に正しい)。
         if s.forecast_incoming_uncapped > 0:
-            s.forecast_incoming_uncapped -= min(
+            uncapped_drain = min(
                 THEORY_DROP_PER_TURN, s.forecast_incoming_uncapped)
+            s.forecast_incoming_uncapped -= uncapped_drain
+            s.total_dropped_uncapped += uncapped_drain
         if s.forecast_incoming <= 0:
             return
         drain = min(THEORY_DROP_PER_TURN, s.forecast_incoming)
@@ -549,6 +580,24 @@ class OjamaAccountingTracker:
     def get_snapshot(self, t_sec: float) -> OjamaAccountSnapshot:
         """現在状態のスナップショットを返す(イベントなしでも呼べる)。"""
         return self._build_snapshot(t_sec)
+
+    def get_gross_counters(self, t_sec: float) -> GrossOjamaCounters:
+        """cap 前 gross 量の現在の累積値を副作用なしで返す。"""
+        return GrossOjamaCounters(
+            t_sec=t_sec,
+            generated_p1=self._p1.total_generated,
+            generated_p2=self._p2.total_generated,
+            offset_uncapped_p1=self._p1.total_offset_uncapped,
+            offset_uncapped_p2=self._p2.total_offset_uncapped,
+            dropped_uncapped_p1=self._p1.total_dropped_uncapped,
+            dropped_uncapped_p2=self._p2.total_dropped_uncapped,
+            boundary_wiped_uncapped_p1=self._p1.total_boundary_wiped_uncapped,
+            boundary_wiped_uncapped_p2=self._p2.total_boundary_wiped_uncapped,
+            boundary_resets_p1=self._p1.boundary_reset_count,
+            boundary_resets_p2=self._p2.boundary_reset_count,
+            clamp_loss_p1=self._p1.uncapped_clamp_loss,
+            clamp_loss_p2=self._p2.uncapped_clamp_loss,
+        )
 
     # ============================
     # 後方互換 API
@@ -738,14 +787,14 @@ class OjamaAccountingTracker:
         # 相手へ送られるが、こちらは実額 (例: 517) で相殺するため余剰が正しく
         # 小さくなる (kill_override の入力専用、根因② project_pm100_display_
         # flip_2026-08-24)。サニティ上限のみ適用 (下の cap 節参照)。
+        canceled_uncapped = min(gen, s.forecast_incoming_uncapped)
         (s.forecast_incoming_uncapped,
          other.forecast_incoming_uncapped) = cancel_own_pending_then_send_surplus(
             gen, s.forecast_incoming_uncapped, other.forecast_incoming_uncapped,
         )
-        s.forecast_incoming_uncapped = min(
-            s.forecast_incoming_uncapped, PENDING_UNCAPPED_SANITY_MAX)
-        other.forecast_incoming_uncapped = min(
-            other.forecast_incoming_uncapped, PENDING_UNCAPPED_SANITY_MAX)
+        s.total_offset_uncapped += canceled_uncapped
+        self._clamp_uncapped_pending(s)
+        self._clamp_uncapped_pending(other)
         s.total_offset += canceled
         surplus = gen - canceled
         logger.info(
@@ -993,6 +1042,8 @@ class OjamaAccountingTracker:
             "match_boundary[%s]: forecast=%d leftover=%d -> reset t=%.2f",
             label, s.forecast_incoming, s.leftover, t_sec,
         )
+        s.total_boundary_wiped_uncapped += s.forecast_incoming_uncapped
+        s.boundary_reset_count += 1
         s.forecast_incoming = 0
         s.forecast_incoming_uncapped = 0  # 並行帳簿も試合境界で必ずゼロ (2026-08-24)
         s.leftover = 0
@@ -1028,6 +1079,13 @@ class OjamaAccountingTracker:
 
     def _side(self, side: str) -> _SideState:
         return self._p1 if side == "p1" else self._p2
+
+    @staticmethod
+    def _clamp_uncapped_pending(s: _SideState) -> None:
+        """uncapped サニティ上限の切り捨て量を黙って失わず累積する。"""
+        before = s.forecast_incoming_uncapped
+        s.forecast_incoming_uncapped = min(before, PENDING_UNCAPPED_SANITY_MAX)
+        s.uncapped_clamp_loss += before - s.forecast_incoming_uncapped
 
     def _other(self, side: str) -> _SideState:
         return self._p2 if side == "p1" else self._p1
@@ -1149,6 +1207,7 @@ __all__ = [
     "PENDING_UNCAPPED_SANITY_MAX",
     "CHAIN_COALESCE_WINDOW_SEC",
     "K_SETTLE_FRAMES",
+    "GrossOjamaCounters",
     "OjamaAccountSnapshot",
     "OjamaAccountingTracker",
 ]
