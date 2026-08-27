@@ -229,6 +229,119 @@ def test_fast_mode_approximation_direction_on_real_stable_boards() -> None:
 # ============================
 
 
+def test_multi_threshold_matches_individual_calls_exactly() -> None:
+    """thresholds_ojama をまとめて渡した結果は、各閾値を個別に単独呼び
+
+    出しした結果と全K・全確率で完全一致する (S1b 2026-08-21、近似ゼロの
+    半減。浮動小数の完全一致を要求する — 近似許容ではない)。
+    """
+    board = Board()
+    for row in range(5, 13):
+        board.set(row, 0, COLOR_RED)
+        board.set(row, 2, COLOR_BLUE)
+    th_opp_fire = 6.0
+    th_forecast = 18.0
+
+    individual_a = counter_reach_probability(board, th_opp_fire, rng_seed=42)
+    individual_b = counter_reach_probability(board, th_forecast, rng_seed=42)
+    combined = counter_reach_probability(
+        board, th_opp_fire, rng_seed=42, thresholds_ojama=(th_forecast,),
+    )
+
+    assert isinstance(combined, dict)
+    assert set(combined.keys()) == {th_opp_fire, th_forecast}
+    for k in (1, 2, 3, 4):
+        assert combined[th_opp_fire].probabilities[k] == individual_a.probabilities[k]
+        assert combined[th_opp_fire].n_evaluated[k] == individual_a.n_evaluated[k]
+        assert combined[th_forecast].probabilities[k] == individual_b.probabilities[k]
+        assert combined[th_forecast].n_evaluated[k] == individual_b.n_evaluated[k]
+
+
+def test_multi_threshold_none_default_unchanged_return_type() -> None:
+    """thresholds_ojama 省略時 (既定 None) は従来どおり CounterReachResult
+
+    単体を返し、値も従来と同一 (完全後方互換、既存呼び出しは無変更)。
+    """
+    board = _empty_ish_board()
+    result = counter_reach_probability(board, threshold_ojama=6.0, rng_seed=1)
+    assert isinstance(result, CounterReachResult)
+    assert not isinstance(result, dict)
+
+
+def test_multi_threshold_dead_board_returns_dict_of_empty_results() -> None:
+    """窒息盤面 + 複数閾値でも dict 形式・全閾値ぶん0.0で返る。"""
+    combined = counter_reach_probability(
+        _dead_board(), threshold_ojama=6.0, thresholds_ojama=(12.0, 24.0),
+    )
+    assert set(combined.keys()) == {6.0, 12.0, 24.0}
+    for result in combined.values():
+        for k, p in result.probabilities.items():
+            assert p == 0.0
+
+
+def test_multi_threshold_duplicate_values_collapse_to_one_entry() -> None:
+    """threshold_ojama と thresholds_ojama に同じ値が重複しても1エントリに
+
+    統合される (dict.fromkeys の重複除去)。
+    """
+    board = _empty_ish_board()
+    combined = counter_reach_probability(
+        board, threshold_ojama=6.0, rng_seed=3, thresholds_ojama=(6.0, 12.0),
+    )
+    assert set(combined.keys()) == {6.0, 12.0}
+
+
+def test_multi_threshold_speed_roughly_halves_vs_two_individual_calls() -> None:
+    """「2閾値を個別に2回呼ぶ」と「1回でまとめる」の壁時間を比較し、
+
+    まとめ呼びがおおむね半減していることを実測する (cProfile 禁止、
+    perf_counter のみ使用、2026-08-21 S1b 受け入れ条件)。
+
+    40件フル実測は `scripts/_bench_counter_reach_multi_threshold_2026-08-21.py`
+    に分離した (project既存の _bench_* 系ベンチスクリプトの慣習に合わせ、
+    pytest 本体を170秒級で重くしないため)。本テストは pytest 常設用に
+    件数を5件へ縮小した縮小版で、同じ構造的性質 (シミュレーション自体は
+    閾値に無依存) が壊れていないことだけを軽量に見張る。
+    """
+    import time
+
+    boards: list[Board] = []
+    rng = np.random.default_rng(0)
+    for i in range(5):
+        board = Board()
+        n_puyo = 6 + int(rng.integers(0, 6))
+        cols = rng.integers(0, 6, size=n_puyo)
+        for j, col in enumerate(cols):
+            color = 1 + int((i + j) % 4)
+            row = 12 - int(j % 3)
+            board.set(row, int(col), color)
+        boards.append(board)
+    th_a, th_b = 6.0, 18.0
+
+    t0 = time.perf_counter()
+    for board in boards:
+        counter_reach_probability(board, th_a, rng_seed=1)
+        counter_reach_probability(board, th_b, rng_seed=1)
+    t_individual = time.perf_counter() - t0
+
+    t0 = time.perf_counter()
+    for board in boards:
+        counter_reach_probability(board, th_a, rng_seed=1, thresholds_ojama=(th_b,))
+    t_combined = time.perf_counter() - t0
+
+    print(
+        f"\n[INFO] 5件(縮小版) 個別2回呼び={t_individual:.3f}s "
+        f"まとめ1回呼び={t_combined:.3f}s "
+        f"比率={t_combined / t_individual:.3f}",
+    )
+    # 完全な0.5にはノイズで届かないため、余裕を持った上限0.75で「半減方向」
+    # のみ確認する (過学習/シーン逆算的な厳しい閾値は設けない)。
+    assert t_combined < t_individual * 0.75, (
+        f"まとめ呼びが個別2回呼びの75%未満に短縮されていない: "
+        f"individual={t_individual:.3f}s combined={t_combined:.3f}s"
+    )
+
+
 def test_precise_and_fast_complete_within_generous_timeout() -> None:
     """1イベントあたりの計算が異常に暴走しないことの粗いタイムアウト確認
 

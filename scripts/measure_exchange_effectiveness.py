@@ -277,11 +277,17 @@ def estimate_expected_net_damage(
          raw (お邪魔換算の平均ツモ期待火力) を期待反撃量とする。
       4. net_expected = attacker_ojama_sent − 期待反撃量 (負値は0にクランプ、
          「相手が攻撃側より多く返す見込み」を負のダメージにしない)。
-      5. ojama_damage(opp_board, net_expected) のスコア (0〜1、折れ点
-         12個/18個の非線形構造は再利用・再実装しない) を返す。net_expected
-         は相手側に着弾する正味おじゃまのため、受け側=相手の盤面
-         (opp_board) で評価する (2026-08-02 修正、旧実装は attacker_board_
-         after_fire で評価しておりバグだった)。
+      5. ojama_damage(opp_board, net_expected, virtual_landing=True) の
+         スコア (0〜1、折れ点12個/18個の非線形構造は再利用・再実装しない)
+         を返す。net_expected は相手側に着弾する正味おじゃまのため、
+         受け側=相手の盤面 (opp_board) で評価する (2026-08-02 修正、
+         旧実装は attacker_board_after_fire で評価しておりバグだった)。
+         2026-08-24 修正 (Q-04): virtual_landing=True (仮想着弾方式) を
+         明示指定する。発火点が決まらない盤面では旧方式 (引き算近似) が
+         全6列平均に希釈され、窒息寸前の列でも「受けても無害」帯に
+         同値化するバグ (docs/KNOWN_WEAKNESSES.md W33) があったため。
+         ojama_damage 自体の既定値 (virtual_landing=False) は
+         backwards compat のため変更しない。
 
     ⚠️ 正直な注記: mode="fast" は counter_reach_probability_fast のような
     高速版が expected_fire_power にはまだ存在しない (2026-08-01時点)。
@@ -320,5 +326,5 @@ def estimate_expected_net_damage(
         )
         expected_counter_ojama = result.values[k_hands].raw
     net_expected = max(0.0, attacker_ojama_sent - expected_counter_ojama)
-    damage = ojama_damage(opp_board, ojama_count=net_expected)
+    damage = ojama_damage(opp_board, ojama_count=net_expected, virtual_landing=True)
     return float(damage.score)

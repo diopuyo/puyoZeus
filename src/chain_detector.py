@@ -71,6 +71,12 @@ CHAIN_MECHANISM_BASELINE: str = "baseline"      # ① VideoChainTracker (puyo数
 CHAIN_MECHANISM_SCORE_JUMP: str = "score_jump"  # ② score急増早期発火 (機能B)
 CHAIN_MECHANISM_FORMULA: str = "formula"        # ③ 掛け算式検知早期発火 (機能D)
 CHAIN_MECHANISM_LANDING: str = "landing"        # ④ 着地直後即時連鎖判定
+# ⑤ 掛け算式 実読検証発火 (2026-08-24、STABLE凍結デッドロック根治):
+#    機能D の発火検証を「凍結盤面の simulate」でなく「画面の掛け算式を実際に
+#    読めたか」で行った疑似イベント (enable_chain_formula_read_verify)。
+#    chain_count / total_score は掛け算式の段累積 (FormulaStepAccumulator) で
+#    観測値ベースに更新されうる (enable_formula_chain_count_update)。
+CHAIN_MECHANISM_FORMULA_READ: str = "formula_read"
 
 # calibration cache: (path, mtime) -> dict
 _CALIBRATION_CACHE: dict[tuple[str, float], dict] = {}

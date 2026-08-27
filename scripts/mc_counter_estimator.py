@@ -135,16 +135,73 @@ potential_fire_power_raw_for_boards_py` (複数盤面×2手先ビームを1回�
 `_potential_fire_power_values_batch` 経由でこの tie-break も1回のバッチ
 呼び出しに統合した (`POTENTIAL_FIRE_POWER_MAX_ADD==2` [現行値] の場合のみ、
 値は完全一致)。
+
+## v3.3 選択ロジック全体のRust融合+既知ツモ重複計算排除 (2026-08-21 追加)
+
+上記3回のバッチ呼び出し (列挙+シミュレーション/current_max_chain/
+potential_fire_power) をさらに1回に統合した。`native/puyo_core/src/
+lib.rs::select_build_placement_py`+`src.puyo_core_bridge.select_build_
+placement` が `_select_build_placement` の選択ロジック全体 (22配置列挙+
+連鎖判定+2段tie-break) をRust内で完結させ、途中候補のBoardオブジェクト
+生成 (従来最大44個/手) をゼロにする (memory
+`project_counter_reach_cost_breakdown_2026-08-21` の実測根拠: 200本×15手
+規模のロールアウトで約700万盤面のシミュレーションを要求しており、その
+75%がこのtie-break経路だった)。`POTENTIAL_FIRE_POWER_MAX_ADD==2` (現行値)
+の場合のみこの融合経路を使う (それ以外は従来の個別バッチ呼び出しに
+フォールバック、値は完全一致)。
+
+さらに、既知ツモ (次・次々) が渡されている場合、その区間は乱数を消費
+しないため `n_rollouts` 本全てで厳密に同一の計算結果になる
+(`_rollout_once` 内で `rng.choice` が呼ばれるのは非既知区間のみ)。
+`_compute_known_prefix_state` でこの既知区間を1回だけ計算し、全
+ロールアウトの起点として共有する (`estimate_counter_distribution` の
+`enable_prefix_dedup` 引数、既定True。値は毎回フルに再計算した場合と
+完全一致)。短い時間予算 (相手1〜2連鎖想定) では既知2手が実時間手数の
+大部分を占めるため、この区間の重複計算排除が有効に働く。
+
+## v4 ビームロールアウト方式 (2026-08-21 追加、実験的・既定OFF)
+
+user決定 (`project_counter_beam_rollout_design_2026-08-21`、コーディネータ発注):
+「ツモのみランダム・置き方はビームサーチ」への方式変更を検証する。
+v2/v3の「1手ずつ2段tie-breakで選ぶ greedy (=幅1相当)」が「今は損だが後で
+大きい」手を捨ててしまい、溜めて大きく発火する構図を再現できない
+(v1由来の過小評価、モジュール冒頭 v1/v2 セクション参照) ことへの対策。
+
+構成 (`_rollout_once_beam` 参照): 見えているツモ (`known_pairs`) は確定、
+その先を先にまとめてランダムに引き、そのツモ列全体に対して
+`native/puyo_core` のビームサーチ (`src.puyo_core_bridge.beam_search`) で
+置き方を決める。到達できた最大火力 (running max, `BeamSearchResult.
+best_score`) を反撃値として使う。深さ (=ツモ列の長さ) は時間予算を
+`PLACEMENT_SPEED_BY_ROW_SEC` の平均値で割った近似手数 (段別の動的な時間
+消費は追跡しない、experimental な近似、既存 greedy 方式の厳密な段別追跡
+とは異なる点に注意)。
+
+**既定は現行方式 (greedy) のまま** (`estimate_counter_distribution` の
+`rollout_mode="greedy"` が既定、backwards compat)。`rollout_mode="beam"` を
+明示した場合のみこの方式に切り替わる。`beam_width` は未検証のため既定値を
+持たない (呼び出し側が明示的に指定する。幅の飽和点の実測は別途
+`scripts/_bench_counter_beam_rollout_2026-08-21.py` で行う、シーンからの
+逆算禁止 [`feedback_overfitting_awareness_2026-08-04`])。採否は user 判断
+(`project_indicator_reorg_process_2026-08-12`)。
 """
 from __future__ import annotations
 
+import math
 import random
 import zlib
 from dataclasses import dataclass
 
 import numpy as np
 
-from src.board import BOARD_COLS, COLOR_EMPTY, COLOR_OJAMA, COLOR_UNKNOWN, Board
+from src.board import (
+    BOARD_COLS,
+    BOARD_ROWS,
+    COLOR_EMPTY,
+    COLOR_OJAMA,
+    COLOR_UNKNOWN,
+    DEATH_ROW,
+    Board,
+)
 from src.chain import ChainSimulator
 from src.indicators_v2 import (
     IGNITION_TRIAL_COLORS,
@@ -160,6 +217,9 @@ from src.indicators_v2 import (
     potential_fire_power,
 )
 from src.puyo_core_bridge import NATIVE_AVAILABLE
+from src.puyo_core_bridge import beam_search as _native_beam_search
+from src.puyo_core_bridge import beam_search_continue as _native_beam_search_continue
+from src.puyo_core_bridge import exact_shallow_search as _native_exact_shallow_search
 from src.puyo_core_bridge import chain_metrics_after_drops as _native_chain_metrics_after_drops
 from src.puyo_core_bridge import (
     enumerate_and_simulate_placements as _native_enumerate_and_simulate_placements,
@@ -170,9 +230,10 @@ from src.puyo_core_bridge import (
 from src.puyo_core_bridge import (
     potential_fire_power_raw_for_boards as _native_potential_fire_power_raw_for_boards,
 )
+from src.puyo_core_bridge import select_build_placement as _native_select_build_placement
 from src.puyo_core_bridge import simulate_after_drops as _native_simulate_after_drops
 from src.puyo_core_bridge import simulate_chain as _native_simulate_chain
-from src.scoring import calculate_chain_score
+from src.scoring import OJAMA_RATE_STANDARD, calculate_chain_score, compute_effective_rate
 
 # ============================
 # 段別最速設置時間テーブル (2026-08-03 実測較正、再フィット禁止)
@@ -196,6 +257,88 @@ PLACEMENT_SPEED_BY_ROW_SEC: "dict[int, float]" = {
 # 新規にチューニングした値ではなく、テーブル内の最大値 (最も遅い側、安全側)
 # をそのまま採用する。
 PLACEMENT_SPEED_FALLBACK_SEC: float = max(PLACEMENT_SPEED_BY_ROW_SEC.values())
+
+# v4 ビームロールアウト (2026-08-21 追加) の深さ換算用平均設置時間。
+# ビームサーチは探索前にツモ列の長さ (深さ) を固定する必要があり、greedy方式
+# のような「置いた段に応じて動的に時間を消費する」追跡はできない (分岐ごとに
+# 段が異なるため)。既存の実測テーブル `PLACEMENT_SPEED_BY_ROW_SEC` (物理量)
+# の単純平均を使う (シーンからの逆算ではなく、既存の物理実測値からの導出、
+# feedback_overfitting_awareness_2026-08-04 準拠)。
+BEAM_ROLLOUT_AVG_STEP_TIME_SEC: float = (
+    sum(PLACEMENT_SPEED_BY_ROW_SEC.values()) / len(PLACEMENT_SPEED_BY_ROW_SEC)
+)
+
+# ============================
+# v5 ama方式 浅い完全探索 (exact_shallow) + auto振り分け (2026-08-21 追加)
+# ============================
+# user決定「短い連鎖はama方式(深さ2完全探索)で決定的に、長い連鎖はビーム
+# サーチで」への対応。設計記録: coordinator発注 (project_counter_beam_
+# rollout_design_2026-08-21 の後続、ama [citrus610/ama、MIT] の dfs::attack
+# 調査に基づく)。
+
+# ama の防御的枝刈り高さ閾値 (`ai/search/dfs/attack.cpp` の `height > 11`)
+# を、このプロジェクトの盤面表現から導出した値 (物理量からの導出、11を
+# そのまま持ち込まない)。このプロジェクトは6列×13行 (row0=隠し段)、窒息
+# 判定は可視最上段 (DEATH_ROW=1) の窒息列 (DEATH_COL) が埋まった時点。
+# 窒息列の高さが `BOARD_ROWS - DEATH_ROW` (=12) に達すると窒息する
+# (=height>=12 で既に窒息、この状態の候補は既存の `filter_dead=True` で
+# 別途除外済み)。ama と同じ「危険な高さ」の防御的閾値として、この値
+# (12、すなわち height>=12 で枝刈り = ama の `height>11` と同じ判定) を
+# 全列共通の防御的しきい値として採用する。
+# **注記 (2026-08-21、正直な注記)**: 窒息列 (DEATH_COL) 単体ではこの閾値は
+# 既存の `filter_dead=True` と重複する (height>=12 の窒息列は既にその
+# placement自体が death 判定で除外されているため無害)。しかし ama 同様
+# **全列**にこの閾値を適用するため、窒息していない他列がこの高さに達した
+# 場合にも枝刈りする — これは「捨てても答えが変わらない」保証がない
+# **ヒューリスティック** (ama自身の設計も同様、`exact_shallow` 専用の
+# 内部設計選択として受け入れる。bit-identical であることは主張しない。
+# `tests/test_mc_counter_estimator.py::TestExactShallowHeightPruning` で
+# 「実際にどの程度結果を変えるか」を実盤面で定量化している)。
+EXACT_SHALLOW_PRUNE_HEIGHT: int = BOARD_ROWS - DEATH_ROW  # = 12
+
+# exact_shallow 単独モードの深さ安全弁 (2026-08-21 追加)。22^depth の組合せ
+# 爆発を避けるための上限 (22^3=10,648 は数msで完了する規模、22^4=234,256
+# は1ロールアウトあたり無視できないコストになる — 実測は
+# `scripts/_bench_counter_beam_rollout_2026-08-21.py` 参照)。見えている
+# ツモ (NEXT+ダブルNEXT=2手) 相当+安全マージン1手、というuser指示の
+# 「概ね2〜3手」に対応する値。
+EXACT_SHALLOW_MAX_DEPTH: int = 3
+
+# ビームロールアウトの初期集団として exact_shallow の完全探索結果を使う
+# 深さ (2026-08-21 追加、user指示①「完全探索の結果をビームサーチの初期
+# 集団にする」)。「見えているツモ = NEXT+ダブルNEXT」に対応する2手固定
+# (`EXACT_SHALLOW_MAX_DEPTH` とは別の定数: そちらはexact_shallow単独モード
+# の安全弁、これはビーム継続の種として使う深さで、ama の
+# dfs::attack (深さ2固定) に厳密に対応する)。
+EXACT_SHALLOW_SEED_DEPTH: int = 2
+
+
+def _ojama_threshold_to_score_threshold(ojama_threshold: float, elapsed_sec: float) -> int:
+    """お邪魔換算閾値を素点 (score) の閾値に厳密変換する (2026-08-21 追加、
+    user指示②「答えを変えない打ち切り」用)。
+
+    `_score_to_ojama_count` (= `score_to_ojama`) は固定 `elapsed_sec` の下で
+    `ojama = (score + 0) // rate` (`rate = compute_effective_rate(elapsed_sec)`
+    は正の整数、`src/scoring.py::score_to_ojama` 参照) という floor除算の
+    単調非減少関数なので、厳密な逆変換が閉形式で求まる: `ojama >= k` を
+    満たす最小の score は `score = ceil(k) * rate` (floor除算の性質上、
+    `score // rate >= n ⟺ score >= n * rate`、n=ceil(k) は「ojamaは整数
+    なので k 以上になる最小の整数」)。近似・二分探索は使わない。
+    """
+    rate = compute_effective_rate(elapsed_sec, OJAMA_RATE_STANDARD)
+    return math.ceil(ojama_threshold) * rate
+
+
+def _canonical_pair(pair: "tuple[int, int]") -> "tuple[int, int]":
+    """(top,bot) と (bot,top) は到達可能な盤面集合が同一なので同一視する
+    (2026-08-21 追加、深さ1〜2限定の部分木共有キャッシュ用キー正規化)。
+
+    `native/puyo_core/src/bitboard.rs::place_pair` の回転対称性 (縦置き
+    TOP_UP/BOT_UP が top/bot を入れ替えるだけの組) により、pair=(a,b) と
+    pair=(b,a) は22配置の結果盤面集合が完全に同一になる (数学的に保証、
+    ヒューリスティックではない)。よってキャッシュキーとして安全に統合できる。
+    """
+    return (min(pair), max(pair))
 
 # ロールアウトの安全弁 (無限ループ防止)。時間予算が尽きる方が通常先に効くため
 # (段別最速でも0.134秒/手はかかる)、この上限に到達するのは時間予算が極端に
@@ -526,7 +669,23 @@ def _select_build_placement(
     往復) から `_current_max_chain_values_batch` (1回のバッチ呼び出し) に
     置き換えた (`v3.2 選択ロジックの境界コスト削減` docstring参照、値は
     従来と完全一致)。
+
+    2026-08-21 (v3.3): 上記3回 (列挙+シミュレーション/current_max_chain/
+    potential_fire_power) の個別バッチ呼び出しを、native側の
+    `select_build_placement` (1回の呼び出しで選択ロジック全体を完結、
+    途中候補の Board オブジェクト生成をゼロにする) にさらに統合した。
+    `POTENTIAL_FIRE_POWER_MAX_ADD == 2` (現行値) の場合のみこの融合経路を
+    使う (native側の固定アルゴリズムが MAX_ADD==2 の意味論のみ実装している
+    ため、それ以外の値では以下の従来経路にフォールバックする)。値は
+    従来の3回個別呼び出しと完全一致する
+    (`tests/test_puyo_core_parity.py::
+    test_select_build_placement_parity_with_reference` で確認)。
     """
+    if use_native and NATIVE_AVAILABLE and POTENTIAL_FIRE_POWER_MAX_ADD == 2:
+        return _native_select_build_placement(
+            current, pair, list(_DROP_CANDIDATES_30), POTENTIAL_FIRE_POWER_BEAM_K,
+            exclude_hidden_row_from_pop=False,  # 既存呼び出し元は全て既定Falseで統一
+        )
     candidates = _enumerate_placements_dispatch(current, pair, sim, use_native)
     build_only = [(c, p) for c, p in candidates if c == 0 and not p.is_dead()]
     if not build_only:
@@ -582,6 +741,74 @@ def _deadline_trigger_value(
     return float(immediate_fire_power(final_board, elapsed_sec=elapsed_sec, simulator=sim).raw)
 
 
+@dataclass(frozen=True)
+class _KnownPrefixState:
+    """既知ツモ区間 (乱数を消費しない先頭手) の共有ロールアウト状態
+    (2026-08-21 追加、v3.3 既知ツモ重複計算排除)。
+
+    既知ツモの処理は `rng` を一切消費しないため (`_rollout_once` 参照)、
+    `n_rollouts` 本すべてで厳密に同一の計算結果になる。1回だけ計算して
+    この状態を全ロールアウトの起点として共有することで、ロールアウトの
+    たびに同じ既知手を再計算する無駄を省く (値は毎回フルに再計算した
+    場合と完全一致、`tests/test_mc_counter_estimator.py::
+    TestKnownPrefixDedup` で確認)。
+
+    Attributes:
+        current/elapsed/hands_used/known_used: 対応する `_rollout_once`
+            ループ変数の、既知区間終了時点の値。
+        consumed_iterations: 既知区間で消費した `_hand_index` の回数
+            (`early_stop=False` の場合のみ、続行ループの開始位置として使う)。
+        early_stop: True の場合、既知区間中に窒息/置き場所無し/時間予算
+            超過/ハードキャップ到達でロールアウトが打ち切られている
+            (以降の手を打つ余地が無く、続行ループは不要)。
+    """
+    current: Board
+    elapsed: float
+    hands_used: int
+    known_used: int
+    consumed_iterations: int
+    early_stop: bool
+
+
+def _compute_known_prefix_state(
+    board: Board,
+    time_budget_sec: float,
+    known_pairs: "tuple[tuple[int, int], ...]",
+    sim: ChainSimulator,
+    use_native: bool,
+) -> _KnownPrefixState:
+    """既知ツモ区間 (乱数不使用) を1回だけ処理する
+    (`_rollout_once` の先頭ループと同一ロジック、乱数を使わない点のみ異なる)。
+    """
+    current = board
+    elapsed = 0.0
+    hands_used = 0
+    known_used = 0
+    for hand_index in range(MC_COUNTER_MAX_HANDS_HARD_CAP):
+        if current.is_dead():
+            return _KnownPrefixState(current, elapsed, hands_used, known_used, hand_index, True)
+        if not (
+            known_used < len(known_pairs) and _near_future_is_valid_pair(known_pairs[known_used])
+        ):
+            # 乱数区間 (ロールアウトごとに異なる) に入る手前で打ち切り、
+            # 続行ループがこの hand_index からランダム手を試す。
+            return _KnownPrefixState(current, elapsed, hands_used, known_used, hand_index, False)
+        placed = _select_build_placement(current, known_pairs[known_used], sim, use_native)
+        if placed is None:
+            return _KnownPrefixState(current, elapsed, hands_used, known_used, hand_index, True)
+        row_index = _placement_row_index(current._grid, placed._grid)
+        step_time = PLACEMENT_SPEED_BY_ROW_SEC.get(row_index, PLACEMENT_SPEED_FALLBACK_SEC)
+        if elapsed + step_time > time_budget_sec:
+            return _KnownPrefixState(current, elapsed, hands_used, known_used, hand_index, True)
+        elapsed += step_time
+        hands_used += 1
+        known_used += 1
+        current = placed
+    return _KnownPrefixState(
+        current, elapsed, hands_used, known_used, MC_COUNTER_MAX_HANDS_HARD_CAP, True,
+    )
+
+
 def _rollout_once(
     board: Board,
     time_budget_sec: float,
@@ -591,6 +818,7 @@ def _rollout_once(
     rng: "random.Random",
     elapsed_sec: float,
     use_native: bool = True,
+    prefix: "_KnownPrefixState | None" = None,
 ) -> McRolloutOutcome:
     """1本のロールアウト (v2: 「積んで、期限に発火」)。既知ツモ→以降ランダム
     4色で、時間予算を段別テーブルで動的に消費しながら**発火せず組み続け**、
@@ -600,12 +828,27 @@ def _rollout_once(
     段」を実測テーブルで引いて時間を消費する (盤面の埋まり具合に応じて
     段が変わり、それに応じて1手の時間も変わるため、静的な事前計算より
     物理的に正確、というv1からの設計判断を継承)。
+
+    2026-08-21 (v3.3): `prefix` (既知ツモ区間の共有計算結果、
+    `_compute_known_prefix_state` 参照) を渡すと、乱数を消費しない先頭手を
+    再計算せずその状態から続行する (値は毎回フルに計算した場合と完全一致)。
+    省略時 (None、既定) は従来どおり `board` から全て計算する
+    (backwards compat、既存呼び出し元は無変更で動く)。
     """
-    current = board
-    elapsed = 0.0
-    hands_used = 0
-    known_used = 0
-    for _hand_index in range(MC_COUNTER_MAX_HANDS_HARD_CAP):
+    if prefix is not None and prefix.early_stop:
+        achieved_ojama = _deadline_trigger_value(
+            prefix.current, known_pairs, prefix.known_used, sim, elapsed_sec, use_native,
+        )
+        return McRolloutOutcome(achieved_ojama, prefix.hands_used, prefix.elapsed)
+    if prefix is not None:
+        current, elapsed, hands_used, known_used = (
+            prefix.current, prefix.elapsed, prefix.hands_used, prefix.known_used,
+        )
+        start_hand = prefix.consumed_iterations
+    else:
+        current, elapsed, hands_used, known_used, start_hand = board, 0.0, 0, 0, 0
+
+    for _hand_index in range(start_hand, MC_COUNTER_MAX_HANDS_HARD_CAP):
         if current.is_dead():
             break
         if known_used < len(known_pairs) and _near_future_is_valid_pair(known_pairs[known_used]):
@@ -632,6 +875,212 @@ def _rollout_once(
         current, known_pairs, known_used, sim, elapsed_sec, use_native,
     )
     return McRolloutOutcome(achieved_ojama=achieved_ojama, hands_used=hands_used, time_used_sec=elapsed)
+
+
+def _time_budget_to_beam_depth(time_budget_sec: float) -> int:
+    """時間予算をビームロールアウトの探索深さ (ツモ列の長さ) に換算する
+    (v4、`BEAM_ROLLOUT_AVG_STEP_TIME_SEC` 参照)。負・ゼロ予算は深さ0。
+    """
+    if time_budget_sec <= 0.0:
+        return 0
+    depth = round(time_budget_sec / BEAM_ROLLOUT_AVG_STEP_TIME_SEC)
+    return int(min(MC_COUNTER_MAX_HANDS_HARD_CAP, max(0, depth)))
+
+
+def _draw_beam_tsumo_sequence(
+    depth: int,
+    known_pairs: "tuple[tuple[int, int], ...]",
+    colors: "tuple[int, ...]",
+    rng: "random.Random",
+) -> "list[tuple[int, int]]":
+    """深さ分のツモ列を作る: 先頭は有効な既知ツモをそのまま使い、以降
+    (既知ツモを使い切った/無効な場合含む) は `colors` から一様ランダムに
+    まとめて引く (v4、「ツモのみランダム」の実装本体)。
+    """
+    pairs: "list[tuple[int, int]]" = []
+    for i in range(depth):
+        if i < len(known_pairs) and _near_future_is_valid_pair(known_pairs[i]):
+            pairs.append(known_pairs[i])
+        else:
+            pairs.append((rng.choice(colors), rng.choice(colors)))
+    return pairs
+
+
+def _rollout_once_exact_shallow(
+    board: Board,
+    time_budget_sec: float,
+    colors: "tuple[int, ...]",
+    known_pairs: "tuple[tuple[int, int], ...]",
+    rng: "random.Random",
+    elapsed_sec: float,
+    early_exit_score: "int | None" = None,
+    _max_depth_override: "int | None" = None,
+) -> McRolloutOutcome:
+    """ama方式 (`ai/search/dfs/attack.cpp`) の浅い完全探索1本 (v5、
+    2026-08-21 追加)。見えているツモ (NEXT+ダブルNEXT、最大
+    `EXACT_SHALLOW_MAX_DEPTH` 手) を全列挙し、amaと同じ防御的高さ枝刈り
+    (`EXACT_SHALLOW_PRUNE_HEIGHT`、ヒューリスティック、モジュール
+    docstring参照) を適用する。時間予算が既知ツモの範囲・安全弁を超える
+    場合、超えた分だけランダムに引く (`_draw_beam_tsumo_sequence` 参照、
+    乱数消費はその分のみ)。
+
+    **ama との差分**: ama は `TRIGGER=100000` で「返せる/返せない」を
+    二値判定するが、本関数は連続値 (お邪魔換算) をそのまま返し、二値化
+    しない (`reference_ojama_damage_nonlinear_2026-07-29`「返せるか二値は
+    設計として誤り」準拠)。`early_exit_score` は打ち切りタイミングの
+    最適化にのみ使い、返り値自体を二値化するものではない。
+
+    Args:
+        early_exit_score: user指示②。Some(t) で running_best が t 以上に
+            達した時点で打ち切る (「閾値到達確率」用途限定、呼び出し元
+            `estimate_counter_distribution` の `early_exit_at_threshold`
+            docstring参照)。
+        _max_depth_override: テスト専用 (陽性対照: 深さ1に落とすと過小
+            評価が悪化することの確認用)。通常は None (既定の
+            `EXACT_SHALLOW_MAX_DEPTH` を使う)。
+    """
+    if board.is_dead():
+        return McRolloutOutcome(0.0, 0, 0.0)
+    max_depth = EXACT_SHALLOW_MAX_DEPTH if _max_depth_override is None else _max_depth_override
+    depth = min(_time_budget_to_beam_depth(time_budget_sec), max_depth)
+    if depth <= 0:
+        return McRolloutOutcome(0.0, 0, 0.0)
+    pairs = _draw_beam_tsumo_sequence(depth, known_pairs, colors, rng)
+    result = _native_exact_shallow_search(
+        board, pairs, exclude_hidden_row_from_pop=False, use_exact_score=True,
+        max_height=EXACT_SHALLOW_PRUNE_HEIGHT, early_exit_score=early_exit_score,
+    )
+    achieved_ojama = float(_score_to_ojama_count(float(result.best_score), elapsed_sec))
+    return McRolloutOutcome(
+        achieved_ojama=achieved_ojama, hands_used=depth,
+        time_used_sec=depth * BEAM_ROLLOUT_AVG_STEP_TIME_SEC,
+    )
+
+
+def _truncate_frontier_by_running_best(
+    frontier: "list", beam_width: int,
+) -> "list":
+    """フロンティアを running_best 降順で上位 `beam_width` 件に絞る
+    (2026-08-21 追加、user指示①「初期フロンティアは上位beam_width個」の
+    仕様通りの実装、`_rollout_once_beam` 参照)。
+
+    Python の `sorted` は安定ソート (同値は元の順序を保つ) であり、
+    native `beam::expand_one_depth` の `sort_by`(こちらも安定ソート) と
+    同じタイブレーク規則になる (両者の入力順序が同じ場合に限る、本関数の
+    入力は native 側が返した順序のまま渡される想定)。
+    """
+    return sorted(frontier, key=lambda f: f.running_best, reverse=True)[:beam_width]
+
+
+def _lookup_or_compute_exact_shallow_seed(
+    board: Board,
+    seed_pairs: "tuple[tuple[int, int], ...]",
+    early_exit_score: "int | None",
+    seed_cache: "dict[tuple[tuple[int, int], ...], object] | None",
+):
+    """深さ1〜2限定の部分木共有 (2026-08-21 追加、user指示④/③)。
+
+    `seed_pairs` の正規化キー (`_canonical_pair`、盤面到達集合が同一なので
+    数学的に安全) で `seed_cache` を引き、無ければ `exact_shallow_search`
+    を計算してキャッシュする。`seed_cache=None` なら毎回計算する
+    (呼び出し元が渡さなければ従来通り、backwards compat)。
+
+    実測 (`tests/test_mc_counter_estimator.py::TestKnownPrefixDedup` 系と
+    同じ考え方): n_rollouts=60 で深さ1の重複率83.3%・深さ2で35.0%
+    (`project_counter_beam_rollout_design_2026-08-21` 系の実測)。
+    """
+    key = tuple(_canonical_pair(p) for p in seed_pairs)
+    if seed_cache is not None and key in seed_cache:
+        return seed_cache[key]
+    result = _native_exact_shallow_search(
+        board, list(seed_pairs), exclude_hidden_row_from_pop=False, use_exact_score=True,
+        max_height=EXACT_SHALLOW_PRUNE_HEIGHT, early_exit_score=early_exit_score,
+    )
+    if seed_cache is not None:
+        seed_cache[key] = result
+    return result
+
+
+def _rollout_once_beam(
+    board: Board,
+    time_budget_sec: float,
+    colors: "tuple[int, ...]",
+    known_pairs: "tuple[tuple[int, int], ...]",
+    rng: "random.Random",
+    elapsed_sec: float,
+    beam_width: int,
+    use_exact_score: bool = True,
+    early_exit_score: "int | None" = None,
+    seed_cache: "dict[tuple[tuple[int, int], ...], object] | None" = None,
+) -> McRolloutOutcome:
+    """v4/v5 ビームロールアウト1本 (モジュール docstring「v4」「v5」参照)。
+
+    見えているツモ (`known_pairs`) 確定+その先ランダムのツモ列を1本まとめて
+    引く。**v5 (2026-08-21 追加)**: 先頭 `EXACT_SHALLOW_SEED_DEPTH` 手は
+    ama方式の完全探索 (`exact_shallow_search`、深さ2なら22+22²=506通り) で
+    処理し、その `final_frontier` (完全探索終了時点の全候補) を**ビーム
+    サーチの初期集団**として使う (user指示①「初期集団の質を上げる」、
+    コストは増えない — 深さ2までの完全探索はどちらにしろ行う)。残り
+    (深さ3以降) は従来通りビームサーチで継続する。
+
+    到達できた最大火力 (running max) を反撃値として返す。
+
+    Args:
+        beam_width: ビーム幅 (呼び出し側が明示的に指定、未検証のため既定値
+            は持たない)。
+        use_exact_score: True (既定) で評価に厳密得点 `exact_score`
+            (連結ボーナス反映) を使う。`simulate_chain` は両方を常に計算
+            するため速度上のトレードオフは無い (実測で確認済み、
+            `scripts/_bench_counter_beam_rollout_2026-08-21.py` 参照)。
+        early_exit_score: user指示②、`_rollout_once_exact_shallow` と同じ
+            意味論 (「閾値到達確率」用途限定)。
+        seed_cache: user指示④、深さ1〜2限定の部分木共有キャッシュ
+            (`_lookup_or_compute_exact_shallow_seed` 参照)。呼び出し元
+            `estimate_counter_distribution` が1回の呼び出しの中で共有する
+            (呼び出しを跨いでは保持しない、stateless原則)。
+    """
+    if board.is_dead():
+        return McRolloutOutcome(0.0, 0, 0.0)
+    depth = _time_budget_to_beam_depth(time_budget_sec)
+    if depth <= 0:
+        return McRolloutOutcome(0.0, 0, 0.0)
+    pairs = _draw_beam_tsumo_sequence(depth, known_pairs, colors, rng)
+
+    seed_depth = min(depth, EXACT_SHALLOW_SEED_DEPTH)
+    seed_pairs = tuple(pairs[:seed_depth])
+    seed_result = _lookup_or_compute_exact_shallow_seed(
+        board, seed_pairs, early_exit_score, seed_cache,
+    )
+    remaining_pairs = pairs[seed_depth:]
+
+    if not remaining_pairs or (
+        early_exit_score is not None and seed_result.best_score >= early_exit_score
+    ):
+        # 残り手が無い、または既に閾値到達が確定済み (seed_result は
+        # 打ち切りなしで完全探索を終えている場合のみこの分岐に入る、
+        # `_lookup_or_compute_exact_shallow_seed` docstring参照)。
+        best_score = seed_result.best_score
+    else:
+        # user指示①の仕様通り「484通りから上位beam_width個」に絞ってから
+        # 継続する (2026-08-21 実測で判明: 絞らずに全件[最大484件] を
+        # そのまま継続に渡すと、幅が狭い場面ではむしろ従来より遅くなる
+        # ["コストは増えない" という前提が崩れる、`_bench_counter_beam_
+        # speedups_2026-08-21.py` で確認] — 絞ることで幅が保証する計算量
+        # 上限を守りつつ、探索空間全体から選んだ質の高い種を使う、という
+        # 意図通りの動作になる)。
+        seeded_frontier = _truncate_frontier_by_running_best(seed_result.final_frontier, beam_width)
+        continued = _native_beam_search_continue(
+            seeded_frontier, seed_result.best_score, remaining_pairs, beam_width,
+            exclude_hidden_row_from_pop=False, use_exact_score=use_exact_score,
+            early_exit_score=early_exit_score,
+        )
+        best_score = continued.best_score
+
+    achieved_ojama = float(_score_to_ojama_count(float(best_score), elapsed_sec))
+    return McRolloutOutcome(
+        achieved_ojama=achieved_ojama, hands_used=depth,
+        time_used_sec=depth * BEAM_ROLLOUT_AVG_STEP_TIME_SEC,
+    )
 
 
 @dataclass(frozen=True)
@@ -670,6 +1119,84 @@ def _empty_distribution(
     )
 
 
+_ROLLOUT_MODE_GREEDY: str = "greedy"
+_ROLLOUT_MODE_BEAM: str = "beam"
+_ROLLOUT_MODE_EXACT_SHALLOW: str = "exact_shallow"
+_ROLLOUT_MODE_AUTO: str = "auto"
+_VALID_ROLLOUT_MODES: "tuple[str, ...]" = (
+    _ROLLOUT_MODE_GREEDY, _ROLLOUT_MODE_BEAM, _ROLLOUT_MODE_EXACT_SHALLOW, _ROLLOUT_MODE_AUTO,
+)
+
+
+def _resolve_auto_rollout_mode(time_budget_sec: float) -> str:
+    """`rollout_mode="auto"` の振り分け (2026-08-21 追加、v5)。
+
+    境界は**手数から物理的に**決める (`_time_budget_to_beam_depth`、
+    `PLACEMENT_SPEED_BY_ROW_SEC` の実測平均由来。シーンからの逆算ではない、
+    `feedback_overfitting_awareness_2026-08-04` 準拠)。打てる手数が
+    `EXACT_SHALLOW_MAX_DEPTH` (見えているツモの範囲+安全マージン、概ね
+    2〜3手) 以内なら決定的な `exact_shallow` (乱数無し・確実な下界)、
+    それを超えるなら `beam` に切り替える。この判定は `time_budget_sec`
+    のみに依存し盤面には依存しないため、1回の `estimate_counter_
+    distribution` 呼び出し内で全ロールアウト共通 (ロールアウトごとに
+    モードが変わることはない)。
+    """
+    depth = _time_budget_to_beam_depth(time_budget_sec)
+    return _ROLLOUT_MODE_EXACT_SHALLOW if depth <= EXACT_SHALLOW_MAX_DEPTH else _ROLLOUT_MODE_BEAM
+
+
+def _run_rollouts(
+    rollout_mode: str,
+    board: Board,
+    time_budget_sec: float,
+    colors: "tuple[int, ...]",
+    known_pairs: "tuple[tuple[int, int], ...]",
+    sim: ChainSimulator,
+    rng: "random.Random",
+    elapsed_sec: float,
+    effective_use_native: bool,
+    prefix: "_KnownPrefixState | None",
+    n_rollouts: int,
+    beam_width: "int | None",
+    beam_use_exact_score: bool,
+    early_exit_score: "int | None",
+) -> "tuple[np.ndarray, np.ndarray]":
+    """`n_rollouts` 本を実行し (お邪魔換算値, 実打手数) の配列対を返す
+    (`estimate_counter_distribution` から抽出、v4/v5 のモード分岐用)。
+    """
+    resolved_mode = (
+        _resolve_auto_rollout_mode(time_budget_sec) if rollout_mode == _ROLLOUT_MODE_AUTO
+        else rollout_mode
+    )
+    # 深さ1〜2限定の部分木共有キャッシュ (2026-08-21 追加、v5 user指示④):
+    # 1回の estimate_counter_distribution 呼び出し内 (=このロールアウト
+    # ループ) でのみ共有し、呼び出しを跨いでは保持しない (stateless原則)。
+    seed_cache: "dict[tuple[tuple[int, int], ...], object]" = {}
+
+    ojama_values = np.empty(n_rollouts, dtype=float)
+    hands_values = np.empty(n_rollouts, dtype=float)
+    for i in range(n_rollouts):
+        if resolved_mode == _ROLLOUT_MODE_BEAM:
+            assert beam_width is not None  # 呼び出し元で検証済み
+            outcome = _rollout_once_beam(
+                board, time_budget_sec, colors, known_pairs, rng, elapsed_sec,
+                beam_width, beam_use_exact_score, early_exit_score, seed_cache,
+            )
+        elif resolved_mode == _ROLLOUT_MODE_EXACT_SHALLOW:
+            outcome = _rollout_once_exact_shallow(
+                board, time_budget_sec, colors, known_pairs, rng, elapsed_sec,
+                early_exit_score,
+            )
+        else:
+            outcome = _rollout_once(
+                board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec,
+                effective_use_native, prefix,
+            )
+        ojama_values[i] = outcome.achieved_ojama
+        hands_values[i] = float(outcome.hands_used)
+    return ojama_values, hands_values
+
+
 def estimate_counter_distribution(
     board: Board,
     time_budget_sec: float,
@@ -680,6 +1207,11 @@ def estimate_counter_distribution(
     simulator: "ChainSimulator | None" = None,
     elapsed_sec: float = 0.0,
     use_native: bool = True,
+    enable_prefix_dedup: bool = True,
+    rollout_mode: str = _ROLLOUT_MODE_GREEDY,
+    beam_width: "int | None" = None,
+    beam_use_exact_score: bool = True,
+    early_exit_at_threshold: bool = False,
 ) -> McCounterDistribution:
     """時間予算 (秒) 内で応手側が実現できる反撃力 (お邪魔換算) の分布をMCで
     推定する (#24 K拡張、K=4飽和の代わりに実時間手数まで近似する)。
@@ -710,6 +1242,33 @@ def estimate_counter_distribution(
             Python経路に固定される** (モジュール docstring「v3.1 重力違反
             盤面の安全弁」参照、`_board_is_gravity_consistent` で入口1回
             のみ判定)。
+        enable_prefix_dedup: True (既定) で既知ツモ区間 (乱数不使用、
+            `_compute_known_prefix_state` 参照) を1回だけ計算して全
+            ロールアウトで共有する (2026-08-21 追加、v3.3)。False にすると
+            従来どおりロールアウトごとにフルで再計算する (パリティ検証用、
+            値は enable_prefix_dedup の値に関わらず完全一致する)。
+        rollout_mode: "greedy" (既定、既存挙動そのまま) / "beam" (v4) /
+            "exact_shallow" (v5、ama方式の浅い完全探索、モジュール
+            docstring「v5」参照) / "auto" (v5、時間予算で "exact_shallow"
+            と "beam" を自動振り分け、`_resolve_auto_rollout_mode` 参照)。
+            "beam"/"auto" 選択時は `beam_width` を明示的に指定すること
+            (未検証のため既定値を持たない、"auto" が exact_shallow に
+            振り分けられた場合は使われないが、事前に必須として要求する)。
+        beam_width: "beam"/"auto" モード時のビーム幅 (必須、他では無視)。
+        beam_use_exact_score: "beam" モード時に厳密得点 `exact_score` を
+            使うか (既定True、`_rollout_once_beam` 参照)。
+        early_exit_at_threshold: user指示②「答えを変えない打ち切り」
+            (2026-08-21 追加、既定False)。True にすると、ロールアウトの
+            running-max が `max(thresholds_ojama)` に相当する素点閾値を
+            超えた時点で以降の手を計算せず打ち切る (`beam`/`exact_shallow`
+            /`auto` モードのみ有効、`greedy` では無視)。running_best は
+            深さに対して単調非減少なので **`prob_at_least` は打ち切りの
+            有無に関わらず完全一致する** (`tests/test_mc_counter_
+            estimator.py::TestEarlyExitAtThreshold` で確認)。**`mean`/
+            `p25`/`p75` は打ち切り時点の値 [下限] になり、打ち切り無しの
+            場合の最終値より低く出る可能性がある** — 確率チャネル
+            (`prob_at_least`、学習用) にのみ使うこと。`thresholds_ojama`
+            が空の場合は打ち切り基準が無いため無効化される (無視)。
 
     Returns:
         McCounterDistribution: mean/p25/p75/到達確率/平均打手数。
@@ -719,6 +1278,14 @@ def estimate_counter_distribution(
     (rng の使い方) に一切影響しない (内側の連鎖評価バックエンドのみが
     変わる)。
     """
+    if rollout_mode not in _VALID_ROLLOUT_MODES:
+        raise ValueError(f"rollout_mode は {_VALID_ROLLOUT_MODES} のいずれか: {rollout_mode!r}")
+    if rollout_mode in (_ROLLOUT_MODE_BEAM, _ROLLOUT_MODE_AUTO) and beam_width is None:
+        raise ValueError(
+            f"rollout_mode={rollout_mode!r} 使用時は beam_width を明示的に指定してください "
+            "(未検証のため既定値を持たない、幅の飽和点は実測して呼び出し側が決めること。"
+            "'auto' が beam に振り分けられる場合に備え、'auto' でも必須にしている)。",
+        )
     sim = simulator or _SHARED_SIMULATOR
     if board.is_dead() or n_rollouts <= 0:
         return _empty_distribution(time_budget_sec, thresholds_ojama)
@@ -733,15 +1300,31 @@ def estimate_counter_distribution(
     # 全体を純Python経路に固定し、native/Python混在による不整合を防ぐ。
     effective_use_native = use_native and _board_is_gravity_consistent(board)
 
-    ojama_values = np.empty(n_rollouts, dtype=float)
-    hands_values = np.empty(n_rollouts, dtype=float)
-    for i in range(n_rollouts):
-        outcome = _rollout_once(
-            board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec,
-            effective_use_native,
-        )
-        ojama_values[i] = outcome.achieved_ojama
-        hands_values[i] = float(outcome.hands_used)
+    # 既知ツモ区間 (乱数不使用) の重複計算排除 (2026-08-21 追加、v3.3、
+    # greedyモードのみ。beamモードは既知区間もビーム探索の一部として毎回
+    # 評価するため対象外、モジュール docstring「v4」参照): 全ロールアウトで
+    # 厳密に同一の結果になるため1回だけ計算して共有する (`_KnownPrefixState`
+    # docstring参照、値は毎回再計算した場合と完全一致)。
+    prefix = (
+        _compute_known_prefix_state(board, time_budget_sec, known_pairs, sim, effective_use_native)
+        if enable_prefix_dedup and rollout_mode == _ROLLOUT_MODE_GREEDY else None
+    )
+
+    # 答えを変えない打ち切り (2026-08-21 追加、v5 user指示②): 複数閾値が
+    # あれば最大値を使う (低い閾値を超えても高い閾値はまだ分からないため、
+    # 全閾値を超えた時点でしか打ち切れない、コーディネータ指摘の通り)。
+    # お邪魔換算閾値→素点閾値の変換は厳密な逆変換
+    # (`_ojama_threshold_to_score_threshold`、二分探索や近似ではない)。
+    early_exit_score = (
+        _ojama_threshold_to_score_threshold(max(thresholds_ojama), elapsed_sec)
+        if early_exit_at_threshold and thresholds_ojama else None
+    )
+
+    ojama_values, hands_values = _run_rollouts(
+        rollout_mode, board, time_budget_sec, colors, known_pairs, sim, rng, elapsed_sec,
+        effective_use_native, prefix, n_rollouts, beam_width, beam_use_exact_score,
+        early_exit_score,
+    )
 
     prob_at_least = {float(th): float(np.mean(ojama_values >= th)) for th in thresholds_ojama}
     return McCounterDistribution(

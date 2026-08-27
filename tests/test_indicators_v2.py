@@ -1123,6 +1123,55 @@ def test_drop_ojama_remainder_random_varies() -> None:
 
 
 # ============================
+# W39: dig_resistance の決定論的シード配線 (2026-08-25 根治)
+# ============================
+
+
+def test_dig_resistance_passes_deterministic_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_dig_resistance_one が盤面由来の決定論的 seed を渡すこと (W39 配線検証)。
+
+    seed 省略 (OS乱数) だと端数列が実行ごとに変わり、有利不利スコアが
+    同一入力で最大 ±12.34 点揺れた (docs/KNOWN_WEAKNESSES.md W39)。
+    シード規約 = `_expected_fire_seed(board) ^ n_ojama` を直接検証する。
+    """
+    from src.chain import ChainSimulator
+    captured: list[tuple[int, "int | None"]] = []
+    original = ChainSimulator.drop_ojama
+
+    def _spy(
+        self: ChainSimulator, board: Board, ojama_count: int,
+        seed: "int | None" = None,
+    ) -> Board:
+        captured.append((ojama_count, seed))
+        return original(self, board, ojama_count, seed=seed)
+
+    monkeypatch.setattr(ChainSimulator, "drop_ojama", _spy)
+    board = _fragile_board()
+    iv.dig_resistance(board)
+    assert len(captured) == len(iv.OJAMA_DEFENSE_TEST_COUNTS)
+    for n_ojama, seed in captured:
+        assert seed is not None, f"n_ojama={n_ojama}: seed が未指定 (W39 退行)"
+        assert seed == iv._expected_fire_seed(board) ^ n_ojama
+
+
+def test_dig_resistance_and_ukeyasusa_repeated_calls_identical() -> None:
+    """同一盤面への繰り返し呼び出しが常に同一値になること (W39 決定性)。
+
+    修正前は端数列の OS乱数抽選により 0.0↔1/3 の離散フリップがあり得た。
+    """
+    board = _fragile_board()
+    dig_values = {iv.dig_resistance(board).score for _ in range(20)}
+    assert len(dig_values) == 1, f"dig_resistance が揺れた: {dig_values}"
+    ukey_values = {iv.ukeyasusa(board).score for _ in range(20)}
+    assert len(ukey_values) == 1, f"ukeyasusa が揺れた: {ukey_values}"
+    # ukeyasusa 内部の dig_resistance 再計算も同一 seed 規約で一致するため、
+    # dig 成分の食い違いによる合成値のズレも起きない (値の関係までは固定
+    # しない = 重み定数の変更に対する過剰結合を避ける)
+
+
+# ============================
 # IX 形・組み品質 (connected_pair_quality)
 # ============================
 
@@ -2347,17 +2396,26 @@ def test_expected_fire_power_constants_values() -> None:
 
 
 def _headroom_board(height: int) -> Board:
-    """DEATH_COL(列2)の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
+    """**全列**の高さが height になるよう非連結色 (R/B/G 巡回) で積む。
 
     隣接同色を作らないため 1 手追加でも4連結が完成せず、
-    _takapt_best_drop が best_board=None (発火点フォールバック=DEATH_COL) を
-    返すことを保証する (height<=11 なら窒息もしない)。
+    _takapt_best_drop が best_board=None (発火点が決まらない) を返すことを
+    保証する (height<=11 なら窒息もしない)。
+
+    2026-08-21 変更: 発火点が決まらないときの代用値を DEATH_COL 単独から
+    **全列平均**に変えた (user 判断)。3列目だけに積む旧 fixture では
+    「3列目は9段だが他5列は空」= 全列平均の余裕が 11.5段 になり、
+    12個/18個 (2〜3段) では何も動かず折れ点を検証できなくなる。
+    全列を同じ高さに積めば全列平均 = その列の余裕と一致し、
+    「余裕 height 段の盤面」という検証意図がそのまま保てる。
     """
     g = _empty_grid()
     colors = [COLOR_RED, COLOR_BLUE, COLOR_GREEN]
     top = BOARD_ROWS - 1
-    for i in range(height):
-        g[top - i][2] = colors[i % 3]
+    for col in range(BOARD_COLS):
+        for i in range(height):
+            # 列ごとに色の位相をずらし、横方向にも同色が並ばないようにする
+            g[top - i][col] = colors[(i + col) % 3]
     return Board.from_list(g)
 
 

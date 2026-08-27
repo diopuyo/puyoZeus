@@ -178,7 +178,24 @@ class Board:
         隠し段(row0)は判定に含めない (user確定ルール 2026-07-22)。
         COLOR_UNKNOWN は判定不能とみなして False (確定的には死んでいない)。
 
-        本メソッドは STABLE (連鎖解決後) の静止盤面に対する静的判定として使う。
+        【契約・厳守】本メソッドは STABLE (連鎖解決後) の静止盤面に対する
+        静的判定としてのみ使うこと。**連鎖中 (CHAIN/GRAVITY_SETTLE 等の
+        非STABLE state) の盤面には絶対に呼ばないこと。**
+        呼出元が「同じ Board インスタンスを非STABLE中も保持し続けている」
+        場合 (=state machine の設計原則「非STABLE中は前回STABLE盤面を
+        凍結する」) は、その凍結中の呼び出しは実質的に「連鎖中の盤面へ
+        is_dead() を呼ぶ」ことと等価になり、本契約に違反する。
+        ぷよ生死のuser伝授「盤面が高い ≠ 窒息」(memory
+        `reference_full_board_is_not_death_2026-08-22`) の通り、天井到達の
+        設置が同時に連鎖の発火トリガーになった場合、連鎖解決前の一瞬だけ
+        STABLE 判定される盤面 (=連鎖が解決すれば助かる) に対して呼ぶと、
+        誤って True (死亡) と判定される (実測: CHAIN を含む区間で凍結する
+        事故が試合時間の約8%・569秒、2026-08-24 是正、
+        `docs/KNOWN_WEAKNESSES.md` 参照)。
+        呼出元 (`scripts/visualize_advantage_overlay.py` の
+        `enable_stable_confirmed_is_dead` 等) 側で「非STABLE中の凍結呼び出し
+        を除外/遡及訂正する」ガードを設けること。
+
         ゲーム本来の判定タイミング (次ツモ・連鎖解決後) と整合する。
 
         Returns:

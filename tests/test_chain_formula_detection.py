@@ -209,7 +209,11 @@ def test_check_formula_detected_cached_score_val_matches_uncached_result() -> No
 
 
 def test_update_score_tracker_returns_delta_and_raw_score_val() -> None:
-    """_update_score_tracker が (delta, 生 score 値) の tuple を返す (修正1)。"""
+    """_update_score_tracker が (delta, 生 score 値, detail) を返す (修正1 + 2026-08-24)。
+
+    2026-08-24: 掛け算式実読 (enable_formula_value_read) のために戻り値へ
+    セル別ラベル/NCC が追加された (want_detail=False では None、従来経路)。
+    """
     from unittest.mock import MagicMock
 
     from src.score_ocr import ScoreOcr, ScoreTracker
@@ -217,15 +221,16 @@ def test_update_score_tracker_returns_delta_and_raw_score_val() -> None:
     mock_ocr = MagicMock(spec=ScoreOcr)
     mock_ocr.read_side.return_value = (500, 0.9)
     tracker = ScoreTracker("1P", mock_ocr)
-    delta, raw = RecognitionPipeline._update_score_tracker(
+    delta, raw, labels, confs = RecognitionPipeline._update_score_tracker(
         tracker, _make_blank_1080p(0),
     )
     assert raw == 500, "生 score 値 (cur_score) がそのまま返ること"
     assert delta == 0, "初回 (prev_score=None) は is_valid=False → delta=0"
+    assert labels is None and confs is None, "want_detail=False では detail なし"
 
     # 2 frame 目: prev=500, cur=700 → delta=200
     mock_ocr.read_side.return_value = (700, 0.9)
-    delta2, raw2 = RecognitionPipeline._update_score_tracker(
+    delta2, raw2, _l2, _c2 = RecognitionPipeline._update_score_tracker(
         tracker, _make_blank_1080p(0),
     )
     assert raw2 == 700
@@ -233,12 +238,33 @@ def test_update_score_tracker_returns_delta_and_raw_score_val() -> None:
 
 
 def test_update_score_tracker_none_tracker_returns_zero_and_none() -> None:
-    """tracker=None のとき (0, None) を返す (backwards compat)。"""
-    delta, raw = RecognitionPipeline._update_score_tracker(
+    """tracker=None のとき (0, None, None, None) を返す (backwards compat)。"""
+    delta, raw, labels, confs = RecognitionPipeline._update_score_tracker(
         None, _make_blank_1080p(0),
     )
     assert delta == 0
     assert raw is None
+    assert labels is None and confs is None
+
+
+def test_update_score_tracker_want_detail_returns_cells() -> None:
+    """want_detail=True でセル別ラベル/NCC が返り、delta 計算は同一 (2026-08-24)。"""
+    from unittest.mock import MagicMock
+
+    from src.score_ocr import ScoreOcr, ScoreTracker
+
+    mock_ocr = MagicMock(spec=ScoreOcr)
+    lab = (0, 0, 0, 0, 0, 5, 0, 0)
+    cnf = (0.9,) * 8
+    mock_ocr.read_side_detail.return_value = (500, 0.9, lab, cnf)
+    tracker = ScoreTracker("1P", mock_ocr)
+    delta, raw, labels, confs = RecognitionPipeline._update_score_tracker(
+        tracker, _make_blank_1080p(0), want_detail=True,
+    )
+    assert raw == 500
+    assert delta == 0
+    assert labels == lab
+    assert confs == cnf
 
 
 # ===========================================================================

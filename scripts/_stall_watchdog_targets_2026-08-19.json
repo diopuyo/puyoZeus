@@ -1,0 +1,59 @@
+{
+  "poll_interval_sec": 300,
+  "targets": [
+    {
+      "name": "regen50_collect",
+      "process_pattern": "_regen50_newmethod_2026-08-19",
+      "progress": {
+        "type": "tsv_count",
+        "path": "data/verify/regen_2026-08-19_subset50/status.tsv",
+        "column": "collect_status",
+        "value": "OK"
+      },
+      "stall_threshold_sec": 5400,
+      "restart_cmd": [
+        "setsid",
+        "-f",
+        "bash",
+        "scripts/_run_regen50_newmethod_2026-08-19.sh"
+      ],
+      "min_restart_interval_sec": 1800,
+      "max_restarts": 5,
+      "pause_flag": "data/verify/regen_2026-08-19_subset50/.paused"
+    },
+    {
+      "name": "dl_remaining50",
+      "process_pattern": "_run_dl_remaining50_2026-08-19",
+      "progress": {
+        "type": "mtime",
+        "path": "logs/dl_remaining50_2026-08-19.log"
+      },
+      "stall_threshold_sec": 3600,
+      "restart_cmd": [
+        "setsid",
+        "-f",
+        "bash",
+        "scripts/_run_dl_remaining50_2026-08-19.sh"
+      ],
+      "min_restart_interval_sec": 1800,
+      "max_restarts": 5
+    },
+    {
+      "name": "dl_all148",
+      "process_pattern": "_run_dl_all148_2026-08-19",
+      "progress": {
+        "type": "mtime",
+        "path": "logs/dl_all148_2026-08-19.log"
+      },
+      "stall_threshold_sec": 7200,
+      "restart_cmd": [
+        "setsid",
+        "-f",
+        "bash",
+        "scripts/_run_dl_all148_2026-08-19.sh"
+      ],
+      "min_restart_interval_sec": 3600,
+      "max_restarts": 5
+    }
+  ]
+}
