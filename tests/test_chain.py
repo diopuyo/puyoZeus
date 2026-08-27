@@ -482,6 +482,30 @@ class TestDropOjama:
         with pytest.raises(ValueError, match="おじゃま数が負の値"):
             sim.drop_ojama(board, -1)
 
+    # --- W39 再発防止ガード (2026-08-25): seed 未指定の端数抽選に警告 ---
+
+    def test_unseeded_remainder_warns(self, sim: ChainSimulator):
+        """端数あり + seed 未指定は RuntimeWarning (挙動自体は従来通り)。"""
+        board = Board()
+        with pytest.warns(RuntimeWarning, match="W39"):
+            sim.drop_ojama(board, 7)
+
+    def test_seeded_remainder_no_warning(self, sim: ChainSimulator):
+        """seed 指定済みなら端数があっても警告なし。"""
+        import warnings as _warnings
+        board = Board()
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error")  # 警告が出たら失敗させる
+            sim.drop_ojama(board, 7, seed=0)
+
+    def test_unseeded_multiple_of_six_no_warning(self, sim: ChainSimulator):
+        """端数ゼロ (6の倍数) なら乱数経路に入らないので seed 未指定でも警告なし。"""
+        import warnings as _warnings
+        board = Board()
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("error")
+            sim.drop_ojama(board, 12)
+
 
 # ============================
 # TestIntegration

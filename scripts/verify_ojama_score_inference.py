@@ -81,6 +81,11 @@ def collect_chain_events(
         raise RuntimeError(f"動画を開けません: {video_path}")
     try:
         reader = ImageReader()
+        # W38 注記 (2026-08-25 実測確認): 本スクリプトは tracker.update() に
+        # 試合相対時刻 t (= abs_t - start_sec) を渡すため、match_start_sec=0.0
+        # で正しい (elapsed = 試合相対)。pipeline 側の W38 (動画絶対時刻に
+        # なる配線漏れ) の影響下には無い — video_97 試合5 (絶対417s〜) で
+        # effective_rate=70 を実測確認済み (レート1張り付きは起きていない)。
         tracker_1p = VideoChainTracker(match_start_sec=0.0)
         tracker_2p = VideoChainTracker(match_start_sec=0.0)
         results: list[tuple[float, str, object]] = []

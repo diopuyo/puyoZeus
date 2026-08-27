@@ -3578,6 +3578,119 @@ def test_board_shows_real_gameplay_true_for_high_variance_frame() -> None:
     assert pipe._board_shows_real_gameplay(_high_variance_frame()) is True
 
 
+# ============================
+# (b-2) ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示
+# 「必ず試合前スコアは0」。score_zero_both 画像テンプレは配信レイアウト
+# 依存で42本中31本が盲目だった対策)
+# ============================
+
+
+def _make_latched_pipe(
+    scores: list[int],
+    enable_numeric: bool = False,
+    enable_moving: bool = False,
+) -> RecognitionPipeline:
+    """ラッチON状態の pipeline を作る (score tracker はシーケンススタブ)。"""
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=False)
+    pipe = RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        match_end_detector=_StubMatchEndDetector(),  # type: ignore[arg-type]
+        score_zero_detector=_StubScoreZeroDetector(both_zero=False),  # type: ignore[arg-type]
+        enable_large_roi_throttle=False,
+        enable_post_match_lockdown_latch=True,
+        enable_lockdown_score_numeric_release=enable_numeric,
+        enable_lockdown_score_moving_release=enable_moving,
+        # 隔離: 既定 True の match_start_full_clear は「両者スコアほぼ0」で
+        # pipeline 全体を reset() しラッチ状態ごと初期化してしまうため、
+        # ラッチ解除経路そのものの検証では無効化する (別機構の混入防止)。
+        enable_match_start_full_clear=False,
+    )
+    pipe.update(0, 5.0, _dummy_frame())
+    assert pipe._post_match_lockdown_active is True
+    # match_end_locked=False にし、score tracker をスタブに差し替える。
+    pipe._match_end_detector = None
+    pipe._score_tracker_1p = _FakeScoreTrackerSeq(list(scores))  # type: ignore[assignment]
+    pipe._score_tracker_2p = _FakeScoreTrackerSeq(list(scores))  # type: ignore[assignment]
+    return pipe
+
+
+def _run_latched_frames(
+    pipe: RecognitionPipeline, n: int, frame_fn, t0: float = 6.0,
+) -> None:
+    """ラッチ検証用に n フレーム進める (0.05 秒刻み)。"""
+    for i in range(n):
+        pipe.update(1 + i, t0 + 0.05 * i, frame_fn())
+
+
+def test_lockdown_numeric_release_flag_off_keeps_template_only() -> None:
+    """フラグ OFF (既定): 数値スコアが両側 0 でも解除信号にならない
+    (= 従来のテンプレ score_zero_both のみ、bit-identical)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=False)
+    # persist (0.5秒) を大きく超えて高分散フレームを流しても解除されない。
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "既定 OFF では数値スコア0はラッチ解除に影響してはいけない"
+        " (bit-identical)"
+    )
+
+
+def test_lockdown_numeric_release_releases_on_zero_scores() -> None:
+    """フラグ ON: 両側の score OCR 数値が 0 で持続 + 盤面ROI実ゲームプレイ
+    確認でラッチが解除される (画像テンプレ不成立でも解除できる)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is False, (
+        "数値スコア両側0の持続 + 盤面ROI確認でラッチは解除されるべき"
+    )
+
+
+def test_lockdown_numeric_release_blocked_on_decorative_screen() -> None:
+    """フラグ ON でも盤面ROIが低分散 (装飾画面の疑い) の間は数値スコア0
+    だけでは解除されない (装飾スコアカウントアップ演出対策の継承)。"""
+    pipe = _make_latched_pipe([0, 0], enable_numeric=True)
+    _run_latched_frames(pipe, 60, _dummy_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間は数値スコア0でも解除しない"
+    )
+
+
+def test_lockdown_numeric_release_not_triggered_by_final_scores() -> None:
+    """フラグ ON: 前試合の最終スコア (非0、sticky) が残っている間は数値
+    解除は発火しない (試合終了直後の誤解除防止)。"""
+    pipe = _make_latched_pipe([48200, 48200], enable_numeric=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "非0スコアが残っている間は数値解除が発火してはいけない"
+    )
+
+
+def test_lockdown_score_moving_release_releases_when_score_moves() -> None:
+    """補助解除 ON: スコアが実際に動いている (+盤面ROI実ゲームプレイ確認)
+    ならラッチを解除する (数値0の読み損ね時の相補経路)。"""
+    scores = [100 + 10 * i for i in range(40)]  # 毎フレーム+10 (>= MIN_DELTA)
+    pipe = _make_latched_pipe(scores, enable_moving=True)
+    _run_latched_frames(pipe, 30, _high_variance_frame)
+    assert pipe._post_match_lockdown_active is False, (
+        "スコアが動いている + 盤面ROI確認でラッチは解除されるべき"
+    )
+
+
+def test_lockdown_score_moving_release_blocked_on_decorative_screen() -> None:
+    """補助解除 ON でも盤面ROIが低分散 (装飾スコアカウントアップ演出の
+    疑い) の間は解除しない (過去の誤認事故の再発防止)。"""
+    scores = [100 + 10 * i for i in range(80)]
+    pipe = _make_latched_pipe(scores, enable_moving=True)
+    _run_latched_frames(pipe, 60, _dummy_frame)
+    assert pipe._post_match_lockdown_active is True, (
+        "盤面ROIが実ゲームプレイらしくない間はスコアが動いても解除しない"
+    )
+
+
 def test_board_shows_real_gameplay_false_for_flat_frame() -> None:
     """_board_shows_real_gameplay: 全 0 埋め (装飾画面相当の低分散) は
     False。"""
@@ -6156,4 +6269,459 @@ def test_ojama_write_accounting_guard_default_false_on_init_and_load_default():
         sig = inspect.signature(target)
         default = sig.parameters["enable_ojama_write_accounting_guard"].default
         assert default is False, f"{target} の既定は False であるべき: {default}"
+
+
+# ---------------------------------------------------------------------------
+# 色→別色棄却 (enable_ojama_fall_color_swap_guard、2026-08-18):
+# user発見の閃光エフェクトによる色→別色誤読 (青→緑、赤→黄 等) への対処。
+# docs/KNOWN_WEAKNESSES.md W26 参照。
+# ---------------------------------------------------------------------------
+
+
+def _make_pipe_color_swap_guard(
+    enable_flag: bool, reader: object | None = None,
+    enable_base_guard: bool = False,
+) -> RecognitionPipeline:
+    """enable_ojama_fall_color_swap_guard フラグ付きの pipeline を構築する。
+
+    `enable_base_guard` (既定 False) で enable_ojama_write_accounting_guard
+    を併用するかを選べる (独立性確認テストのため)。
+    """
+    if reader is None:
+        reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=None,
+        chain_tracker_2p=None,
+        stable_frame_count=2,
+        enable_ojama_write_accounting_guard=enable_base_guard,
+        enable_ojama_fall_color_swap_guard=enable_flag,
+    )
+
+
+def test_enable_ojama_fall_color_swap_guard_flag_off_default():
+    """フラグ OFF (default) → _enable_ojama_fall_color_swap_guard が False。"""
+    pipe = _make_pipe_color_swap_guard(False)
+    assert not pipe._enable_ojama_fall_color_swap_guard
+
+
+def test_enable_ojama_fall_color_swap_guard_flag_on():
+    """フラグ ON → _enable_ojama_fall_color_swap_guard が True。"""
+    pipe = _make_pipe_color_swap_guard(True)
+    assert pipe._enable_ojama_fall_color_swap_guard
+
+
+def test_ojama_fall_color_swap_guard_rejects_color_swap_during_ojama_fall_end_to_end():
+    """核心 end-to-end: OJAMA_FALL 中に直近安定色 (赤) のセルが閃光で緑と
+    誤読されても、cnn_board 入力段で赤に訂正される (user発見の閃光誤読
+    [青→緑、赤→黄] の直接シミュレーション)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)  # 閃光による色→別色誤読を模擬
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "OJAMA_FALL 中の色→別色誤読は入力段で直近安定色へ訂正されるべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_off_no_regression():
+    """フラグ OFF (既定) では OJAMA_FALL 中でも色→別色は従来通り素通しされる
+    (bit-identical)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "フラグ OFF では色→別色棄却は一切発火しないべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_scoped_to_ojama_fall_not_chain():
+    """スコープ限定確認: CHAIN 中は色→別色棄却が発火しない (OJAMA_FALL
+    限定、CHAIN 中の多段消去・重力補充との高速遷移エイリアシングは
+    未精査のため今回は対象外、モジュール docstring参照)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.CHAIN
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "CHAIN 中は色→別色棄却が発火せず素通しされるべき (スコープ外)"
+    )
+
+
+def test_ojama_fall_color_swap_guard_works_without_base_write_accounting_guard():
+    """enable_ojama_write_accounting_guard=False でも
+    enable_ojama_fall_color_swap_guard=True 単独で機能する
+    (会計トラッカー不在でも動作する独立フラグ設計の確認)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader, enable_base_guard=False)
+    assert pipe._ojama_fall_accounting_tracker is None, (
+        "色→別色棄却単独ではトラッカーを生成しないはず (pending 予告量不要)"
+    )
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+
+def test_ojama_fall_color_swap_guard_passthrough_new_placement_on_empty_cell():
+    """空セルへの新規色設置は棄却対象外 (prev_stable_color が色ぷよ範囲外、
+    設計要件どおり新規設置を誤って巻き込まない)。"""
+    cnn_new = Board()
+    cnn_new.set(3, 2, COLOR_GREEN)  # 未観測セル (memory 未登録 = EMPTY 扱い)
+    reader = _StubImageReader(cnn_new, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+
+    result = pipe.update(0, 10.0, _dummy_frame())
+
+    assert int(result.p1.cnn_board.get(3, 2)) == COLOR_GREEN
+
+
+def test_ojama_fall_color_swap_guard_timeout_accepts_stale_memory_after_duration():
+    """固着対策 核心 (W25と同型): 直近安定色メモリが陳腐化 (stale) して
+    いる場合でも、生CNN観測が連続 OJAMA_REJECT_TIMEOUT_SEC 秒同一の誤色を
+    示したら棄却を解除し新色を受理する。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    # frame 0 (t=0.0): ストリーク開始、タイムアウト未到達 → 棄却 (従来通り)。
+    result0 = pipe.update(0, 0.0, _dummy_frame())
+    assert int(result0.p1.cnn_board.get(9, 1)) == COLOR_RED
+
+    # frame 1 (t=OJAMA_REJECT_TIMEOUT_SEC): タイムアウト到達 → 受理。
+    result1 = pipe.update(1, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())
+    assert int(result1.p1.cnn_board.get(9, 1)) == COLOR_GREEN, (
+        "タイムアウト到達で陳腐化メモリの棄却を解除し新色を受理するべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_flicker_resets_timeout_progress():
+    """フリッカ許容なし (W25と同じ規約): 誤色が別の誤色へ切り替わると
+    ストリークが再起動し、タイムアウトへの進行が失われる。"""
+    from src.ojama_write_accounting import OJAMA_REJECT_TIMEOUT_SEC
+
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    pipe = _make_pipe_color_swap_guard(True, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    cnn_green = Board()
+    cnn_green.set(9, 1, COLOR_GREEN)
+    cnn_blue = Board()
+    cnn_blue.set(9, 1, COLOR_BLUE)
+
+    reader._p1 = cnn_green  # type: ignore[attr-defined]
+    pipe.update(0, 0.0, _dummy_frame())  # ストリーク開始 (緑) t=0.0
+    reader._p1 = cnn_blue  # type: ignore[attr-defined]
+    pipe.update(1, 1.0, _dummy_frame())  # 誤色切替 (緑→青) → 再起動
+    result = pipe.update(2, OJAMA_REJECT_TIMEOUT_SEC, _dummy_frame())  # t=1.5
+
+    # 誤色切替後の再開 (t=1.0) からの duration は 0.5 (<1.5) のため棄却される。
+    assert int(result.p1.cnn_board.get(9, 1)) == COLOR_RED, (
+        "誤色切替でストリークが再起動され、タイムアウトに届いていないため"
+        "棄却されるべき"
+    )
+
+
+def test_ojama_fall_color_swap_guard_off_streak_never_updated():
+    """フラグ OFF (default): 色→別色ストリーク辞書は一切更新されない
+    (bit-identical、_update_ojama_color_swap_streak 自体が呼ばれない)。"""
+    cnn_wrong = Board()
+    cnn_wrong.set(9, 1, COLOR_GREEN)
+    reader = _StubImageReader(cnn_wrong, _empty_board())
+    pipe = _make_pipe_color_swap_guard(False, reader=reader)
+    pipe._sm_1p.context.state = BoardState.OJAMA_FALL
+    pipe._stable_color_memory_1p[(9, 1)] = COLOR_RED
+
+    for i in range(4):
+        pipe.update(i, float(i) * 0.5, _dummy_frame())
+
+    assert pipe._ojama_color_swap_streak_1p == {}
+
+
+def test_ojama_fall_color_swap_guard_default_false_on_init_and_load_default():
+    """__init__ / load_default 両方で既定 False。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters["enable_ojama_fall_color_swap_guard"].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
+
+
+# ============================
+# 修正③根治 (2026-08-22): NextSlide即終了経路の X1/X4 誤検知抑制ガード
+# (enable_slide_exit_min_display_guard) テスト
+#
+# 背景: enable_chain_exit_next_signal=True (enable_gravity_settle_state=True
+# 採用済により強制ON) のスライド即終了経路 (l.4934-4972 付近) は timing hold /
+# max_until に一切関係なく即座に active_chain をクリアする。連鎖中に
+# NextSlideDetector が1.37秒周期で誤検知し、断片化 (cc=5等の過小連鎖数検知)
+# を引き起こしていた。信号自体は user 伝授の絶対律
+# (reference_chain_end_absolute_signals_2026-08-21) 通り正しいため、
+# 既存 X1/X4 ガード (_should_suppress_game_event_exit) と同条件をスライド
+# 経路にも適用し、誤検知だけを弾く。
+# ============================
+
+
+@dataclass
+class _StubNextSide:
+    """NextDetectionBothResult.p1/p2 相当の最小スタブ (next_pair固定)。"""
+
+    next_pair: tuple[int, int] = (1, 2)
+    dnext_pair: tuple[int, int] = (1, 2)
+
+
+@dataclass
+class _StubNextBoth:
+    p1: "_StubNextSide"
+    p2: "_StubNextSide"
+
+
+class _StubNextDetectorFixedPair:
+    """next_pair/dnext_pair が常に一定値のスタブ next_detector。
+
+    NEXT 変化に基づく game-event exit (enable_game_event_chain_exit、
+    既定 True) を誤発火させないため、値を固定して独立変数化する。
+    """
+
+    def detect_both(self, frame: np.ndarray) -> "_StubNextBoth":
+        return _StubNextBoth(p1=_StubNextSide(), p2=_StubNextSide())
+
+
+class _StubNextDetectorMutablePair:
+    """next_pair を外部から書き換え可能なスタブ next_detector。
+
+    「NEXT が実際に変化した」corroboration 経路 (_should_suppress_slide_exit)
+    を単体検証するために使う (pair 属性を test 側で更新する)。
+    """
+
+    def __init__(self, pair: tuple[int, int] = (1, 2)) -> None:
+        self.pair = pair
+
+    def detect_both(self, frame: np.ndarray) -> "_StubNextBoth":
+        side = _StubNextSide(next_pair=self.pair, dnext_pair=self.pair)
+        return _StubNextBoth(p1=side, p2=side)
+
+
+def _make_pipe_with_slide_exit_guard(
+    chain_event_1p: object,
+    enable_slide_exit_min_display_guard: bool,
+    next_detector: object | None = None,
+    enable_game_event_chain_exit: bool = True,
+) -> RecognitionPipeline:
+    """スライド誤検知抑制ガードのテスト用 pipeline を構築する。
+
+    enable_chain_exit_next_signal=True で案X(B)経路を有効化し、next_detector
+    スタブで NEXT 変化ベース game-event exit (次ツモ固定なので発火しない)
+    と分離した状態でスライド即終了経路だけを単体検証できるようにする。
+    """
+    reader = _StubImageReader(_empty_board(), _empty_board())
+    detector = _StubMatchDetector(in_match=True)
+    tracker = _StubChainTracker(chain_event_1p)
+    if next_detector is None:
+        next_detector = _StubNextDetectorFixedPair()
+    return RecognitionPipeline(
+        image_reader=reader,  # type: ignore[arg-type]
+        match_state_detector=detector,  # type: ignore[arg-type]
+        score_ocr=None,
+        chain_tracker_1p=tracker,  # type: ignore[arg-type]
+        chain_tracker_2p=None,
+        next_detector=next_detector,  # type: ignore[arg-type]
+        enable_chain_exit_next_signal=True,
+        enable_game_event_chain_exit=enable_game_event_chain_exit,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        force_in_match=True,
+    )
+
+
+def _force_slide_1p(pipe: RecognitionPipeline) -> None:
+    """pipe._slide_detector_1p.update() が常に slide_motion=True を返すよう
+    monkeypatch する (実画面の next ROI 変化を伴わずスライド検知を強制発火)。
+    """
+    from src.next_slide_detector import SlideMotionResult
+
+    def _always_slide(prev_frame: object, curr_frame: object) -> SlideMotionResult:
+        return SlideMotionResult(
+            slide_motion=True, diff_score=99.0, threshold_used=8.0,
+        )
+
+    assert pipe._slide_detector_1p is not None
+    pipe._slide_detector_1p.update = _always_slide  # type: ignore[method-assign]
+
+
+def test_slide_exit_min_display_guard_default_false_on_init_and_load_default() -> None:
+    """__init__ / load_default 両方で既定 False (backwards compat)。"""
+    import inspect
+    for target in (RecognitionPipeline.__init__, RecognitionPipeline.load_default):
+        sig = inspect.signature(target)
+        default = sig.parameters[
+            "enable_slide_exit_min_display_guard"
+        ].default
+        assert default is False, f"{target} の既定は False であるべき: {default}"
+
+
+def test_slide_exit_guard_off_clears_chain_immediately_bit_identical() -> None:
+    """フラグ OFF (既定): スライド誤検知でも従来通り即座に連鎖をクリアする
+    (回帰テスト、bit-identical の配線先固定)。
+
+    CHAIN 突入直後 (0.1秒後、X1 の 0.8秒未満) でもガード OFF なら
+    抑止されず即終了する = 従来挙動が完全に保持されていることを確認する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=False,
+    )
+    assert pipe._enable_slide_exit_min_display_guard is False
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None, "前提: CHAIN 突入済であること"
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 0.1, _dummy_frame())
+    assert pipe._active_chain_1p is None, (
+        "ガード OFF: スライド検知で従来通り即座にクリアされるべき (回帰)"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_within_min_display_window() -> None:
+    """フラグ ON + X1: CHAIN 突入から 0.8 秒未満のスライド誤検知は抑止する
+    (断片化の直接原因だった 1.37 秒周期誤検知を弾く)。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 0.1, _dummy_frame())
+    assert pipe._active_chain_1p is not None, (
+        "ガード ON + X1: 突入 0.1秒後のスライド誤検知は抑止され、"
+        "連鎖が維持されるべき (断片化防止)"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_short_chain_after_min_display() -> None:
+    """フラグ ON + X4: 最小表示時間経過後でも短連鎖 (chain_count<3) は
+    スライド即終了を抑止する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=2)  # 短連鎖
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    pipe.update(41, t_fire + 1.0, _dummy_frame())  # X1 は通過 (>=0.8s)
+    assert pipe._active_chain_1p is not None, (
+        "ガード ON + X4: 短連鎖 (count=2<3) は最小表示時間経過後も"
+        "スライド即終了を抑止すべき"
+    )
+
+
+def test_slide_exit_guard_on_suppresses_when_next_unchanged() -> None:
+    """corroboration 主機構: NEXT 値が CHAIN 開始時から変化していなければ、
+    X1/X4 (時間・連鎖数) を満たしていてもスライド即終了を抑止する。
+
+    実測 (t=6700-6720, 1P 15連鎖区間) で X1/X4 単独では 10 件中 1 件しか
+    抑止できなかった (再点火のたび chain_entry_t がリセットされ 1.37秒周期
+    > 0.8秒閾値のため無力) 事実に対応する回帰テスト。NEXT 値が不変なら
+    時間・連鎖数条件を満たしても必ず抑止されることを確認する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)  # X4 も通過する値
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+
+    _force_slide_1p(pipe)
+    # X1(>=0.8s)/X4(count>=3) は両方通過する条件だが、next_detector は固定値
+    # のため NEXT は変化していない → corroboration 不成立で抑止されるべき。
+    pipe.update(41, t_fire + 1.0, _dummy_frame())
+    assert pipe._active_chain_1p is not None, (
+        "NEXT 値が不変なら X1/X4 を満たしていても corroboration 不成立で"
+        "抑止されるべき (演出由来ノイズの可能性が高いため)"
+    )
+
+
+def test_slide_exit_guard_on_still_fires_when_next_actually_changed() -> None:
+    """user 伝授の絶対律維持確認: NEXT 値が実際に CHAIN 開始時から変化して
+    いれば、ガード ON でもスライド検知で確実に即終了する (信号を殺さない)。
+
+    enable_game_event_chain_exit=False にして NEXT 変化ベース game-event
+    経路を無効化し、スライド経路の corroboration 単体の効果を分離検証する。
+    """
+    ev = _make_chain_event(is_all_clear=False, chain_count=5)
+    next_det = _StubNextDetectorMutablePair(pair=(1, 2))
+    pipe = _make_pipe_with_slide_exit_guard(
+        None, enable_slide_exit_min_display_guard=True,
+        next_detector=next_det, enable_game_event_chain_exit=False,
+    )
+    _prime_match_active(pipe, frames=35)
+    pipe._chain_tracker_1p = _StubChainTracker(ev)  # type: ignore[assignment]
+    t_fire = 10.0
+    pipe.update(40, t_fire, _dummy_frame())
+    assert pipe._active_chain_1p is not None
+    assert pipe._chain_start_next_1p == (1, 2)
+
+    # NEXT が実際に変化した状態を、スライドを強制する前のフレームで安定
+    # 観測させる (slide=False のフレームでのみ _last_seen_next_1p が更新
+    # される実装のため)。
+    next_det.pair = (3, 4)
+    pipe.update(41, t_fire + 0.2, _dummy_frame())
+    assert pipe._last_seen_next_1p == (3, 4)
+    assert pipe._active_chain_1p is not None, (
+        "前提: game-event 経路を無効化しているため NEXT 変化だけでは"
+        "まだクリアされないこと"
+    )
+
+    _force_slide_1p(pipe)
+    pipe.update(42, t_fire + 1.0, _dummy_frame())  # X1/X4 も通過する時刻
+    assert pipe._active_chain_1p is None, (
+        "NEXT 値が実際に変化していれば、ガード ON でもスライド検知で"
+        "従来通り即終了させるべき (律の維持)"
+    )
 

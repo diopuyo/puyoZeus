@@ -399,6 +399,17 @@ class ColorClassifier:
         self._enable_specular_robust_saturation: bool = bool(
             enable_specular_robust_saturation
         )
+        # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = 完全に従来経路。
+        # 有効化は `enable_native_hsv()` 経由 (呼出側から明示的に切り替える)。
+        # 実測 6.4倍 (5.115→0.800 ms/盤面、cvtColor と境界越えを含む実効値)。
+        # bit-identical は合成パッチ 4,732 枚 × フラグ4構成で不一致0を確認済み
+        # (scripts/_verify_native_hsv_parity_2026-08-20.py、陽性対照つき)。
+        self._enable_native_hsv: bool = False
+        # Rust に渡す色レンジの平坦化キャッシュ。**dict の挿入順を保つ**
+        # (レンジ照合は先勝ちなので順序が結果を変える)。
+        # _s_min_scale やレンジ自体が変わったら破棄する。
+        self._native_ranges_cache: "np.ndarray | None" = None
+        self._native_params_cache: dict | None = None
 
     def _compute_stable_h_median(self, h_channel: np.ndarray) -> int:
         """赤色相折り返しを考慮した安定 H median を計算する。
@@ -496,6 +507,105 @@ class ColorClassifier:
             return int(_median_fast(s_flat))
         return int(_median_fast(s_flat[~specular_mask]))
 
+    def enable_native_hsv(self, enable: bool = True) -> bool:
+        """ネイティブ (Rust) HSV 分類の使用を切り替える (2026-08-20)。
+
+        native 拡張が使えない環境では False のまま据え置き、従来の Python
+        経路で動作を続ける (import 失敗で落ちない)。
+
+        Args:
+            enable: True で有効化を試みる。
+
+        Returns:
+            実際に有効化できたか。
+        """
+        if not enable:
+            self._enable_native_hsv = False
+            return False
+        if self._vote_mode:
+            # vote_mode は別アルゴリズム (per-pixel 投票) で移植対象外。
+            return False
+        try:
+            import puyo_core  # noqa: F401
+
+            if not hasattr(puyo_core, "classify_cells_hsv"):
+                return False
+        except ImportError:
+            return False
+        self._enable_native_hsv = True
+        self._native_ranges_cache = None  # 構成が変わった可能性があるので破棄
+        self._native_params_cache = None
+        return True
+
+    def _native_ranges(self) -> np.ndarray:
+        """色レンジを (R,7) int32 に平坦化する (挿入順を保持、キャッシュ)。"""
+        if self._native_ranges_cache is None:
+            rows: list[list[int]] = []
+            for color_code, ranges in self._ranges.items():
+                for r in ranges:
+                    rows.append([
+                        int(color_code), int(r.h_min), int(r.h_max),
+                        int(r.s_min), int(r.s_max), int(r.v_min), int(r.v_max),
+                    ])
+            self._native_ranges_cache = np.asarray(rows, dtype=np.int32)
+        return self._native_ranges_cache
+
+    def _native_params(self) -> dict:
+        """Rust に渡す判定パラメータ束 (キャッシュ)。
+
+        マジックナンバーを Rust に埋め込まず、Python 側の定数を単一情報源に
+        する。`_s_min_scale` は実行中に変わりうるのでキャッシュ判定に含める。
+        """
+        cached = self._native_params_cache
+        if cached is not None and cached["s_min_scale"] == float(self._s_min_scale):
+            return cached
+        params = {
+            "s_min_scale": float(self._s_min_scale),
+            "empty_v_threshold": int(EMPTY_V_THRESHOLD),
+            "ojama_s_threshold": int(OJAMA_S_THRESHOLD),
+            "ojama_v_min": int(OJAMA_V_MIN),
+            "red_green_diff_for_red": int(RED_GREEN_DIFF_FOR_RED),
+            "red_hue_wrap_threshold": int(RED_HUE_WRAP_THRESHOLD),
+            "red_hue_wrap_corrected_max": int(RED_HUE_WRAP_CORRECTED_MAX),
+            # 以下2つは _compute_stable_h_median 内のローカル定数と同値
+            "red_hue_low_max": 30,
+            "red_bimodal_min_ratio": 0.15,
+            # classify 内の `11 <= h <= 18` (赤の黄側拡張範囲)
+            "red_extend_h_min": 11,
+            "red_extend_h_max": 18,
+            "specular_v_min": int(SPECULAR_V_MIN),
+            "specular_s_max": int(SPECULAR_S_MAX),
+            "specular_fallback_min_ratio": float(SPECULAR_FALLBACK_MIN_RATIO),
+            "enable_red_hue_wrap_fix": bool(self._enable_red_hue_wrap_fix),
+            "enable_specular_robust_saturation": bool(
+                self._enable_specular_robust_saturation
+            ),
+            # classify 内の `shape[0] >= 4 and shape[1] >= 4` (サブ領域 vote 条件)
+            "subregion_min_h": 4,
+            "subregion_min_w": 4,
+        }
+        self._native_params_cache = params
+        return params
+
+    def _classify_native(self, bgr_patch: np.ndarray) -> int:
+        """ネイティブ経路で 1 パッチを分類する (Python 経路と bit-identical)。
+
+        cvtColor は Python 側 (cv2) で行い HSV を渡す。OpenCV の整数丸めを
+        Rust で再現すると 1LSB のズレが median を変え閾値ぎわで色判定が
+        反転しうるため、この経路は意図的に移植しない。
+        """
+        import puyo_core
+
+        bgr = np.ascontiguousarray(bgr_patch)
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        rects = np.asarray(
+            [[0, 0, bgr.shape[1], bgr.shape[0]]], dtype=np.int32,
+        )
+        out = puyo_core.classify_cells_hsv(
+            bgr, hsv, rects, self._native_ranges(), self._native_params(),
+        )
+        return int(out[0])
+
     def classify(self, bgr_patch: np.ndarray) -> int:
         """
         BGRパッチの色を分類して色コードを返す。
@@ -514,6 +624,11 @@ class ColorClassifier:
 
         if self._vote_mode:
             return self._classify_by_vote(bgr_patch)
+
+        # ネイティブ経路 (2026-08-20、既定 OFF)。有効時のみ分岐し、
+        # OFF なら以下の Python 実装がそのまま動く (bit-identical)。
+        if self._enable_native_hsv:
+            return self._classify_native(bgr_patch)
 
         hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
         # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
@@ -1653,6 +1768,24 @@ class ImageReader:
         board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full, skip_tier1=skip_tier1_1p)
         board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
         return board_1p, board_2p
+
+    def enable_native_hsv(self, enable: bool = True) -> bool:
+        """内部の HSV 分類器でネイティブ (Rust) 経路を使う (2026-08-20)。
+
+        HybridClassifier 配下の `_hsv` にも届くよう `_get_hsv_classifier()`
+        経由で伝播する。native が使えない環境では False を返して従来の
+        Python 経路を続ける (fail-silent を避けるため戻り値で結果を返す)。
+
+        Args:
+            enable: True で有効化を試みる。
+
+        Returns:
+            実際に有効化できたか。
+        """
+        clf = self._get_hsv_classifier()
+        if clf is None or not hasattr(clf, "enable_native_hsv"):
+            return False
+        return bool(clf.enable_native_hsv(enable))
 
     def _get_hsv_classifier(self) -> "ColorClassifier | None":
         """内部の HSV-only 分類器を取得する。

@@ -195,6 +195,19 @@ class VideoStats:
     # ------------------------------------------------
     # I1 追加メトリクス (後方互換のため全て default 付き)
     # ------------------------------------------------
+    # ------------------------------------------------
+    # W37 (2026-08-24): 試合外区間 (盤面が画面に無い) の除外に使う記録。
+    # 試合終了テロップ中は負けた側の盤面が消え、背景マスコットを CNN が
+    # 誤読した分が認識誤りとして計上されてしまう (そこに正解は存在しない)。
+    # 判定規則は user 伝授: ネクスト停止 + スコア停止 + スコア≠0 が 2 秒継続
+    # (詳細は src/off_match_window.py)。凍結の検知に 2 秒かかるため遡って外す。
+    # **主指標は変更しない。** 除外後の値を併記するための記録に徹する
+    # (feedback_paired_comparison_fixed_population_2026-08-20: 新旧併記)。
+    # ------------------------------------------------
+    # _offmatch_obs[side]: (t_sec, score, next_key) の観測列
+    _offmatch_obs: dict = field(default_factory=lambda: defaultdict(list))
+    # _frame_ledger[side]: (t_sec, そのフレームのセル数, 一致セル数)
+    _frame_ledger: dict = field(default_factory=lambda: defaultdict(list))
     # per_col_unknown_cells[col]: confirmed_board で COLOR_UNKNOWN だった cell 数 (col 別)
     per_col_unknown_cells: dict = field(default_factory=lambda: defaultdict(int))
     # per_col_stable_cells[col]: STABLE フレームで確認した cell 数 (col 別、分母)
@@ -382,18 +395,30 @@ def resolve_production_recognition_flags(
 
     Returns:
         {"enable_effect_gate": bool, ..., "burst_gate_open_threshold": float|None}
-        の13キー dict (2026-08-15: enable_ojama_fall_placement_override 追加、
+        の18キー dict (2026-08-15: enable_ojama_fall_placement_override 追加、
         2026-08-17: enable_patch_fp_hsv_guard 追加、2026-08-17: 5フラグ一括
         (floating_gap_restore/landing_color_guard/override_color_guard/
         ojama_column_stack_fix/next_history_starvation_fix) 追加、
-        user承認・構成F)。
+        user承認・構成F。2026-08-18: 5フラグ (ojama_cnn_override_warmup/
+        ojama_write_accounting_guard/match_end_persist_override/
+        post_match_lockdown_latch/result_screen_hardening) 追加、
+        user承認・全群採用)。
         呼び出し側は main() の該当ローカル変数へ代入する。
     """
-    production = (
-        recognition_load_default_kwargs() if use_production_recognition else {}
-    )
+    # 2026-08-24 是正: **採用フラグ名を手書きのリストで持つのをやめる。**
+    # 従来は下の tuple に採用のたび手で足す運用で、実際に足し忘れが
+    # 繰り返し起きていた (2026-08-15 / 08-17 / 08-18 の「配線漏れ是正」コメントが
+    # そのまま履歴になっている)。本日も掛け算式 3 フラグの採用でこの関数が
+    # 落ちた。単一情報源 `recognition_load_default_kwargs()` の**キー集合**から
+    # 自動導出することで、この種の足し忘れを構造的に無くす。
+    #
+    # 下の tuple は残す (削除しない): `use_production_recognition=False` のとき
+    # production が空になるため、キーが 1 つも生えないと呼出側が KeyError になる。
+    # つまり tuple は「最低限そろえるキーの床」として機能する。
+    adopted_kwargs = recognition_load_default_kwargs()
+    production = adopted_kwargs if use_production_recognition else {}
     resolved: dict = {}
-    for name in (
+    _legacy_names = (
         "enable_effect_gate", "enable_burst_guard_v2",
         "enable_transition_merge_guard", "enable_hidden_row_burst_guard",
         "enable_match_transition_debounce",
@@ -409,7 +434,29 @@ def resolve_production_recognition_flags(
         "enable_override_color_guard",
         "enable_ojama_column_stack_fix",
         "enable_next_history_starvation_fix",
-    ):
+        # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+        # W25系 (ojama-cnn-override-warmup/ojama-write-accounting-guard) +
+        # 境界RT系 (match-end-persist-override/post-match-lockdown-latch/
+        # result-screen-hardening)。
+        "enable_ojama_cnn_override_warmup",
+        "enable_ojama_write_accounting_guard",
+        "enable_match_end_persist_override",
+        "enable_post_match_lockdown_latch",
+        "enable_result_screen_hardening",
+        # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治)。
+        "enable_ojama_fall_color_swap_guard",
+        # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+        "enable_lockdown_score_numeric_release",
+        "enable_lockdown_score_moving_release",
+        "enable_native_hsv_classifier",
+    )
+    # 床 (旧来の手書きリスト) と単一情報源のキー集合を合わせる。
+    # bool 以外の値を取る burst_gate_open_threshold は下で個別に扱う。
+    names: list[str] = list(_legacy_names)
+    for name in adopted_kwargs:
+        if name != "burst_gate_open_threshold" and name not in names:
+            names.append(name)
+    for name in names:
         resolved[name] = bool(getattr(args, name, False)) or bool(
             production.get(name, False)
         )
@@ -500,6 +547,32 @@ def _make_pipeline_cnn(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -613,6 +686,28 @@ def _make_pipeline_cnn(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグを pipeline の
+        # 個別フラグへ展開する (enable_formula_value_read は pipeline 側で
+        # 自動 ON)。既定 False = bit-identical (backwards compat)。
+        # Q-03 是正 (2026-08-24): 個別指定との OR を取る。複合 ON なら
+        # 従来どおり全要素 ON になり、既存の呼出しは挙動不変。
+        enable_chain_formula_read_verify=(
+            enable_formula_freeze_fix or enable_chain_formula_read_verify),
+        enable_formula_chain_count_update=(
+            enable_formula_freeze_fix or enable_formula_chain_count_update),
+        enable_slide_exit_no_min_display=(
+            enable_formula_freeze_fix or enable_slide_exit_no_min_display),
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -709,6 +804,76 @@ def _open_capture(
 
 
 
+def _record_offmatch_observation(
+    pipe_cnn: RecognitionPipeline, stats: "VideoStats", t_sec: float,
+) -> None:
+    """W37: 試合外判定に使う観測 (スコア・ネクスト) を 1 フレーム分記録する。
+
+    判定そのものは行わない。集計の最後に
+    `src.off_match_window.find_off_match_spans` へ渡す。
+    **主指標には一切影響しない** (記録のみ)。
+    """
+    for side, tracker_attr, next_attr in (
+        ("1P", "_score_tracker_1p", "_last_seen_next_1p"),
+        ("2P", "_score_tracker_2p", "_last_seen_next_2p"),
+    ):
+        tracker = getattr(pipe_cnn, tracker_attr, None)
+        score = getattr(tracker, "last_score", None) if tracker else None
+        stats._offmatch_obs[side].append(
+            (t_sec, score, str(getattr(pipe_cnn, next_attr, None))),
+        )
+
+
+def compute_offmatch_excluded_acc(stats: "VideoStats") -> dict:
+    """W37: 試合外区間を除いた精度を計算する (主指標とは別に併記する)。
+
+    試合終了テロップ中は負けた側の盤面が画面から消えており、そこには
+    正解が存在しない。CNN が背景マスコットを読んだ分を認識誤りとして
+    数えるのは測定の汚染である (docs/KNOWN_WEAKNESSES.md W37)。
+
+    Returns:
+        除外後の acc / cells / 除外したセル数と区間数。
+        記録が無ければ空 dict。
+    """
+    from src.off_match_window import find_off_match_spans, is_in_spans
+    from src.off_match_window import SideObservation
+
+    if not stats._frame_ledger:
+        return {}
+    kept_cells = kept_agreed = 0
+    excluded_cells = excluded_agreed = 0
+    spans_by_side: dict = {}
+    for side, ledger in stats._frame_ledger.items():
+        obs = [
+            SideObservation(t_sec=t, score=sc, next_key=nk)
+            for t, sc, nk in stats._offmatch_obs.get(side, [])
+        ]
+        spans = find_off_match_spans(obs)
+        spans_by_side[side] = [[round(a, 3), round(b, 3)] for a, b in spans]
+        for t_sec, cells, agreed in ledger:
+            if spans and is_in_spans(t_sec, spans):
+                excluded_cells += cells
+                excluded_agreed += agreed
+            else:
+                kept_cells += cells
+                kept_agreed += agreed
+    return {
+        "acc_excluding_offmatch": (
+            kept_agreed / kept_cells if kept_cells else None),
+        "cells_excluding_offmatch": kept_cells,
+        "excluded_cells": excluded_cells,
+        "excluded_acc": (
+            excluded_agreed / excluded_cells if excluded_cells else None),
+        "spans_by_side": spans_by_side,
+        "note": (
+            "試合外 (盤面が画面に無い) 区間を除いた値。主指標 acc は未除外のまま。"
+            "判定規則は user 伝授: ネクスト停止+スコア停止+スコア≠0 が 2 秒継続、"
+            "検知点から 2 秒遡る (src/off_match_window.py)。"
+            "全消しテロップは盤面が見えていて正解も定義できるため対象外。"
+        ),
+    }
+
+
 def _eval_one_frame(
     video_id: str,
     fi: int,
@@ -740,6 +905,7 @@ def _eval_one_frame(
         frame = cv2.resize(frame, (1920, 1080), interpolation=cv2.INTER_AREA)
     res_cnn = pipe_cnn.update(fi, t_sec, frame)
     res_hsv = pipe_hsv.update(fi, t_sec, frame)
+    _record_offmatch_observation(pipe_cnn, stats, t_sec)
     for side, sr_cnn, sr_hsv in [
         ("1P", res_cnn.p1, res_hsv.p1),
         ("2P", res_cnn.p2, res_hsv.p2),
@@ -773,6 +939,7 @@ def _eval_one_frame(
         # C1: STABLE confirmed_board のぷよ数を集計 (= avg_puyo_count 計算用)
         # 改修2: side を渡して per-side 集計も有効化する
         _collect_puyo_count(sr_cnn.confirmed_board, stats, side=side)
+        _before = (stats.total_cells, stats.agreed_cells)
         _eval_side_frame(
             side, fi, t_sec, video_id,
             raw_cnn_board=sr_cnn.cnn_board,
@@ -782,6 +949,12 @@ def _eval_one_frame(
             disagreements=disagreements,
             persist_min_frames=persist_min_frames,
         )
+        # W37: このフレーム・このサイドの寄与を台帳に残す (主指標は不変)。
+        stats._frame_ledger[side].append((
+            t_sec,
+            stats.total_cells - _before[0],
+            stats.agreed_cells - _before[1],
+        ))
 
 
 def _run_frame_loop(
@@ -901,6 +1074,32 @@ def _process_video(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -997,6 +1196,23 @@ def _process_video(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        enable_formula_freeze_fix=enable_formula_freeze_fix,
+        # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+        # (backwards compat、キーワード引数呼出しのため順序ズレ懸念なし)。
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -1100,6 +1316,35 @@ def _process_video_worker(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治): 末尾追加
+    # (backwards compat、executor.submit の位置引数タプルにも同じ末尾
+    # 位置で追加すること)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat、
+    # executor.submit の位置引数タプルにも同じ末尾位置で追加すること)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1171,6 +1416,23 @@ def _process_video_worker(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        enable_formula_freeze_fix=enable_formula_freeze_fix,
+        # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+        # (backwards compat、本呼出しはキーワード引数のため順序ズレ懸念なし)。
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -1667,6 +1929,10 @@ def _build_video_acc(stats_list: list[VideoStats]) -> dict[str, dict]:
             "acc": s.agreed_cells / s.total_cells if s.total_cells > 0 else 0.0,
             "total_cells": s.total_cells,
             "agreed_cells": s.agreed_cells,
+            # W37 (2026-08-24): 試合外 (盤面が画面に無い) 区間を除いた併記値。
+            # 主指標 acc は未除外のまま変えない (新旧併記、
+            # feedback_paired_comparison_fixed_population_2026-08-20)。
+            "offmatch": compute_offmatch_excluded_acc(s),
             "disagreement_count": s.disagreement_count,
             "stable_frame_count": s.stable_frame_count,
             "is_holdout": s.is_holdout,
@@ -2624,6 +2890,67 @@ def _parse_args() -> argparse.Namespace:
             "ライブラリ default=False (無効)。 --chain-exit-next-signal で有効化。"
         ),
     )
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード (X1/X4 + NEXT値corroboration)。
+    # store_true を使う (BooleanOptionalAction の --no- 接頭辞反転バグ回避、上と同型)。
+    p.add_argument(
+        "--enable-slide-exit-min-display-guard",
+        action="store_true",
+        default=False,
+        dest="enable_slide_exit_min_display_guard",
+        help=(
+            "案X*(B) (NextSlide signal即終了) の誤検知抑制ガードを有効化する。 "
+            "連鎖中に NextSlideDetector が約1.37秒周期で誤検知し、timing hold / "
+            "max_until を無視して連鎖イベントを強制終了 (断片化) する問題への対処。 "
+            "X1 (最小表示0.8秒) / X4 (短連鎖count<3) に加え、NextDetector が実際に"
+            "観測した next_pair が CHAIN 開始時から変化したかの corroboration を "
+            "追加する (両信号が食い違う場合は色分類済み next 値を優先)。 "
+            "ライブラリ default=False (無効)。 --enable-slide-exit-min-display-guard で有効化。"
+        ),
+    )
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ (A/B バックテスト用)。
+    p.add_argument(
+        "--enable-formula-freeze-fix",
+        action="store_true",
+        default=False,
+        dest="enable_formula_freeze_fix",
+        help=(
+            "STABLE凍結デッドロック根治 3 フラグ (掛け算式 実読検証発火 "
+            "enable_chain_formula_read_verify / 段カウント更新 "
+            "enable_formula_chain_count_update / X1除外 "
+            "enable_slide_exit_no_min_display) を一括有効化する。 "
+            "凍結 confirmed_board を simulate する検証ゲートが本物の連鎖を "
+            "却下して STABLE から抜けられない構造的循環 (memory "
+            "project_stable_freeze_deadlock_2026-08-24) への対処。 "
+            "ライブラリ default=False (無効)。 **注意**: 3 要素目 "
+            "enable_slide_exit_no_min_display は親ガード "
+            "--enable-slide-exit-min-display-guard が OFF だと "
+            "src/recognition_pipeline.py:5171-5203 の and 短絡で一度も参照されない "
+            "(no-op)。完全構成を測るには親ガードも明示すること "
+            "(2026-08-24 Codex 品質精査 Q-03)。"
+        ),
+    )
+    # Q-03 是正 (2026-08-24): 複合フラグの構成要素を個別に指定できるようにする。
+    # 複合フラグだけだと「どの要素が効いているか」を切り分けられず、
+    # 実際に 3 要素目が no-op であることに長く気づけなかった。
+    # いずれも複合フラグとの OR で効く (複合 ON なら従来どおり全要素 ON)。
+    for _flag, _dest, _desc in (
+        ("--enable-chain-formula-read-verify", "enable_chain_formula_read_verify",
+         "掛け算式を実読できたフレームは凍結盤面 simulate 検証を通さず発火する "
+         "(mechanism=formula_read)。"),
+        ("--enable-formula-chain-count-update", "enable_formula_chain_count_update",
+         "進行中の formula 系イベントの chain_count/total_score を段の観測値で"
+         "更新し、hold と安全弁上限を延長する。"),
+        ("--enable-slide-exit-no-min-display", "enable_slide_exit_no_min_display",
+         "スライド即終了抑止ガードから X1 (最小表示 0.8 秒) を外す。 "
+         "**親ガード --enable-slide-exit-min-display-guard が必要** (単独では no-op)。"),
+        ("--enable-formula-step-interlude", "enable_formula_step_interlude",
+         "掛け算式の段の区切りを『幕間』(通常スコアが読めたフレーム) で判定する "
+         "(2026-08-24 Q-01 修正)。右辺の単調増加という誤った前提をやめる。"),
+    ):
+        p.add_argument(
+            _flag, action="store_true", default=False, dest=_dest,
+            help=f"{_desc} 個別指定用 (2026-08-24 Q-03)。ライブラリ default=False。",
+        )
     # feat/gravity-settle-2026-06-05: 連鎖終了直後 GRAVITY_SETTLE 状態を有効化
     # 2026-06-06 採用: default=True。--no-gravity-settle-state で無効化可。
     p.add_argument(
@@ -2837,6 +3164,88 @@ def _parse_args() -> argparse.Namespace:
             "飢餓状態対策。既定は無効 (後方互換)。"
         ),
     )
+    p.add_argument(
+        "--enable-ojama-cnn-override-warmup", action="store_true", default=False,
+        dest="enable_ojama_cnn_override_warmup",
+        help=(
+            "W25第1〜2弾 (RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。drift再同期の暴発抑制に転用済み。既定は無効"
+            "(後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-write-accounting-guard", action="store_true", default=False,
+        dest="enable_ojama_write_accounting_guard",
+        help=(
+            "W25第3弾・根治 (RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。CNN観測→状態機械入力直前の一元会計整合フィルタ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-match-end-persist-override", action="store_true", default=False,
+        dest="enable_match_end_persist_override",
+        help=(
+            "境界RT系 (b-1、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。match_end_locked の持続時間ゲート。既定は無効"
+            "(後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-post-match-lockdown-latch", action="store_true", default=False,
+        dest="enable_post_match_lockdown_latch",
+        help=(
+            "境界RT系 (b-2、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。次の本物の試合開始まで試合外とみなすラッチ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-result-screen-hardening", action="store_true", default=False,
+        dest="enable_result_screen_hardening",
+        help=(
+            "境界RT系 (③、RECOGNITION_ADOPTED 採用 2026-08-18、user承認) を"
+            "有効化する。score_actively_moving の装飾演出誤認への裏取り。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-ojama-fall-color-swap-guard", action="store_true", default=False,
+        dest="enable_ojama_fall_color_swap_guard",
+        help=(
+            "W26根治 (RECOGNITION_ADOPTED 採用 2026-08-18、docs/"
+            "KNOWN_WEAKNESSES.md W26節) を有効化する。連鎖発火の閃光による"
+            "色→別色誤読 (青→緑/赤→黄等) をOJAMA_FALL中に限定して拒否する。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-lockdown-score-numeric-release", action="store_true",
+        default=False, dest="enable_lockdown_score_numeric_release",
+        help=(
+            "(b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前"
+            "スコアは0」)。score OCR 数値が両側0であることを解除信号に OR で"
+            "加える。既定は無効 (後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-lockdown-score-moving-release", action="store_true",
+        default=False, dest="enable_lockdown_score_moving_release",
+        help=(
+            "(b-2)ラッチ解除の補助信号 (2026-08-19)。score_actively_moving + "
+            "盤面ROI実ゲームプレイ確認でラッチを解除する。既定は無効 "
+            "(後方互換)。"
+        ),
+    )
+    p.add_argument(
+        "--enable-native-hsv-classifier", action="store_true", default=False,
+        dest="enable_native_hsv_classifier",
+        help=(
+            "HSV セル分類を Rust ネイティブ実装で行う (RECOGNITION_ADOPTED 採用 "
+            "2026-08-21、認識結果は bit-identical で高速化のみが目的、"
+            "src.production_config 参照)。既定は無効 (後方互換)。"
+        ),
+    )
     # 本番構成の自動適用 (2026-08-13 是正、横展開監査 P1)。
     # scripts/visualize_recognition.py / visualize_advantage_overlay.py と同一パターン。
     p.add_argument(
@@ -2946,6 +3355,32 @@ def _collect_results(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -3046,6 +3481,23 @@ def _collect_results(
             enable_override_color_guard=enable_override_color_guard,
             enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
             enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
+            enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+            enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+            enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+            enable_native_hsv_classifier=enable_native_hsv_classifier,
+            enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+            enable_formula_freeze_fix=enable_formula_freeze_fix,
+            # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+            # (backwards compat、キーワード引数呼出しのため順序ズレ懸念なし)。
+            enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+            enable_formula_chain_count_update=enable_formula_chain_count_update,
+            enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+            enable_formula_step_interlude=enable_formula_step_interlude,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -3099,6 +3551,23 @@ def _collect_results(
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        enable_formula_freeze_fix=enable_formula_freeze_fix,
+        # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+        # (backwards compat、キーワード引数呼出しのため順序ズレ懸念なし)。
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
 
 
@@ -3171,6 +3640,32 @@ def _collect_serial(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治、末尾追加)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -3233,6 +3728,23 @@ def _collect_serial(
             enable_override_color_guard=enable_override_color_guard,
             enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
             enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+            enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+            enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+            enable_match_end_persist_override=enable_match_end_persist_override,
+            enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+            enable_result_screen_hardening=enable_result_screen_hardening,
+            enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+            enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+            enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+            enable_native_hsv_classifier=enable_native_hsv_classifier,
+            enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+            enable_formula_freeze_fix=enable_formula_freeze_fix,
+            # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+            # (backwards compat、キーワード引数呼出しのため順序ズレ懸念なし)。
+            enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+            enable_formula_chain_count_update=enable_formula_chain_count_update,
+            enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+            enable_formula_step_interlude=enable_formula_step_interlude,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3321,6 +3833,37 @@ def _collect_parallel(
     enable_override_color_guard: bool = False,
     enable_ojama_column_stack_fix: bool = False,
     enable_next_history_starvation_fix: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    enable_ojama_write_accounting_guard: bool = False,
+    enable_match_end_persist_override: bool = False,
+    enable_post_match_lockdown_latch: bool = False,
+    enable_result_screen_hardening: bool = False,
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治): 末尾追加
+    # (backwards compat、下の executor.submit 位置引数タプルにも同じ末尾
+    # 位置で追加すること。_process_video_worker の末尾引数順と完全一致
+    # させること)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    enable_native_hsv_classifier: bool = False,
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。末尾追加 (backwards compat、
+    # 下の executor.submit 位置引数タプルにも同じ末尾位置で追加すること。
+    # _process_video_worker の末尾引数順と完全一致させること)。
+    enable_slide_exit_min_display_guard: bool = False,
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。pipeline の
+    # enable_chain_formula_read_verify / enable_formula_chain_count_update /
+    # enable_slide_exit_no_min_display を一括 ON にする (A/B バックテスト用)。
+    # 末尾追加 (backwards compat)。既定 False = bit-identical。
+    enable_formula_freeze_fix: bool = False,
+    # Q-03 是正 (2026-08-24): 上記複合フラグの構成要素の個別指定。
+    # 複合フラグとの OR で効くので、既存の呼出しは挙動不変。末尾追加。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_slide_exit_no_min_display: bool = False,
+    # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
+    enable_formula_step_interlude: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3404,6 +3947,36 @@ def _collect_parallel(
                 enable_override_color_guard,
                 enable_ojama_column_stack_fix,
                 enable_next_history_starvation_fix,
+                # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用):
+                # _process_video_worker の末尾引数と完全一致させること
+                # (順序ズレ厳禁)。
+                enable_ojama_cnn_override_warmup,
+                enable_ojama_write_accounting_guard,
+                enable_match_end_persist_override,
+                enable_post_match_lockdown_latch,
+                enable_result_screen_hardening,
+                # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治):
+                # _process_video_worker の末尾引数と完全一致させること
+                # (順序ズレ厳禁)。
+                enable_ojama_fall_color_swap_guard,
+                enable_lockdown_score_numeric_release,
+                enable_lockdown_score_moving_release,
+                enable_native_hsv_classifier,
+                # 修正③ (2026-08-22): _process_video_worker の末尾引数と
+                # 完全一致させること (順序ズレ厳禁)。
+                enable_slide_exit_min_display_guard,
+                # STABLE凍結デッドロック根治 (2026-08-24): 同上、末尾一致厳守。
+                enable_formula_freeze_fix,
+                # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。
+                # _process_video_worker の末尾引数順 (enable_chain_formula_
+                # read_verify / enable_formula_chain_count_update /
+                # enable_slide_exit_no_min_display / enable_formula_step_
+                # interlude) と完全一致させること (順序ズレ厳禁。
+                # tests/test_measure_worker_arg_order_2026_08_24.py で機械検証)。
+                enable_chain_formula_read_verify,
+                enable_formula_chain_count_update,
+                enable_slide_exit_no_min_display,
+                enable_formula_step_interlude,
             )
             futures[fut] = vid
 
@@ -3598,6 +4171,32 @@ def main() -> int:
     enable_chain_exit_next_signal: bool = bool(
         getattr(args, "enable_chain_exit_next_signal", False)
     )
+    # 修正③ (2026-08-22): スライド誤検知抑制ガード。default=False (無効)。
+    enable_slide_exit_min_display_guard: bool = bool(
+        getattr(args, "enable_slide_exit_min_display_guard", False)
+    )
+    # STABLE凍結デッドロック根治 (2026-08-24): 複合フラグ。default=False (無効)。
+    enable_formula_freeze_fix: bool = bool(
+        getattr(args, "enable_formula_freeze_fix", False)
+    )
+    # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。
+    # **暫定値のみ。** 3 フラグは 2026-08-24 に RECOGNITION_ADOPTED へ採用されたので、
+    # 実効値は下の `_prf` (resolve_production_recognition_flags) で上書きする。
+    # ここで確定させてしまうと `--no-production-recognition` なしの既定実行で
+    # 採用値が効かず、「本番より劣化した認識で精度を測る」事故になる
+    # (2026-08-13 の横展開監査 P1 と同型)。
+    enable_chain_formula_read_verify: bool = bool(
+        getattr(args, "enable_chain_formula_read_verify", False)
+    )
+    enable_formula_chain_count_update: bool = bool(
+        getattr(args, "enable_formula_chain_count_update", False)
+    )
+    enable_slide_exit_no_min_display: bool = bool(
+        getattr(args, "enable_slide_exit_no_min_display", False)
+    )
+    enable_formula_step_interlude: bool = bool(
+        getattr(args, "enable_formula_step_interlude", False)
+    )
     # feat/gravity-settle-2026-06-05 (2026-06-06 採用: default=True)
     enable_gravity_settle_state: bool = bool(
         getattr(args, "enable_gravity_settle_state", True)
@@ -3649,6 +4248,14 @@ def main() -> int:
         getattr(args, "no_production_recognition", False)
     )
     _prf = resolve_production_recognition_flags(args, use_production_recognition)
+    # STABLE 凍結デッドロック根治 3 フラグ (2026-08-24 採用)。
+    # 上で args から読んだ暫定値を、採用値との OR 合成済みの実効値で上書きする。
+    # `resolve_production_recognition_flags` は
+    # `recognition_load_default_kwargs()` のキー集合から自動導出するので、
+    # 今後の採用でここに手で足す必要はない (足し忘れの構造的排除)。
+    enable_chain_formula_read_verify = _prf["enable_chain_formula_read_verify"]
+    enable_formula_chain_count_update = _prf["enable_formula_chain_count_update"]
+    enable_formula_step_interlude = _prf["enable_formula_step_interlude"]
     enable_effect_gate: bool = _prf["enable_effect_gate"]
     enable_burst_guard_v2: bool = _prf["enable_burst_guard_v2"]
     enable_transition_merge_guard: bool = _prf["enable_transition_merge_guard"]
@@ -3667,6 +4274,30 @@ def main() -> int:
     enable_ojama_column_stack_fix: bool = _prf["enable_ojama_column_stack_fix"]
     enable_next_history_starvation_fix: bool = (
         _prf["enable_next_history_starvation_fix"]
+    )
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、user承認・全群採用)。
+    enable_ojama_cnn_override_warmup: bool = _prf["enable_ojama_cnn_override_warmup"]
+    enable_ojama_write_accounting_guard: bool = (
+        _prf["enable_ojama_write_accounting_guard"]
+    )
+    enable_match_end_persist_override: bool = (
+        _prf["enable_match_end_persist_override"]
+    )
+    enable_post_match_lockdown_latch: bool = _prf["enable_post_match_lockdown_latch"]
+    enable_result_screen_hardening: bool = _prf["enable_result_screen_hardening"]
+    # 2026-08-18 追加 (RECOGNITION_ADOPTED 採用、W26根治)。
+    enable_ojama_fall_color_swap_guard: bool = (
+        _prf["enable_ojama_fall_color_swap_guard"]
+    )
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、末尾追加)。
+    enable_lockdown_score_numeric_release: bool = (
+        _prf["enable_lockdown_score_numeric_release"]
+    )
+    enable_lockdown_score_moving_release: bool = (
+        _prf["enable_lockdown_score_moving_release"]
+    )
+    enable_native_hsv_classifier: bool = (
+        _prf["enable_native_hsv_classifier"]
     )
     print(
         f"[measure] production_recognition="
@@ -3728,6 +4359,44 @@ def main() -> int:
         print(
             f"[measure] {_flag_name}={'ENABLED' if _effective else 'DISABLED'} "
             f"({'明示指定' if _flag_value is not None else 'ライブラリ既定値'})"
+        )
+    # W35 是正 (2026-08-24 Codex品質精査 Q-03): slide-exit 系・formula 系の
+    # フラグ構成が 1 行も echo されておらず、構成不一致 (docs/KNOWN_WEAKNESSES.md
+    # W35) が長期間見逃されていた。個別に実効値を明示する。
+    print(
+        f"[measure] slide_exit_min_display_guard="
+        f"{'ENABLED' if enable_slide_exit_min_display_guard else 'DISABLED'} "
+        "(親ガード。--enable-slide-exit-min-display-guard)"
+    )
+    print(
+        f"[measure] formula_freeze_fix="
+        f"{'ENABLED' if enable_formula_freeze_fix else 'DISABLED'} "
+        "(複合フラグ。ON なら下記 3 要素 [*] を強制 ON)"
+    )
+    # (name, own_value, OR複合フラグ対象か) — formula_step_interlude のみ
+    # 複合フラグとの OR 対象外 (_make_pipeline_cnn で単独 forward)。
+    _formula_freeze_components = (
+        ("chain_formula_read_verify [*]", enable_chain_formula_read_verify, True),
+        ("formula_chain_count_update [*]", enable_formula_chain_count_update, True),
+        ("slide_exit_no_min_display [*]", enable_slide_exit_no_min_display, True),
+        ("formula_step_interlude", enable_formula_step_interlude, False),
+    )
+    for _fname, _fval, _or_with_freeze in _formula_freeze_components:
+        _effective = (enable_formula_freeze_fix and _or_with_freeze) or _fval
+        _note = ""
+        if _fname.startswith("slide_exit_no_min_display") and _effective and (
+            not enable_slide_exit_min_display_guard
+        ):
+            _note = (
+                " [親ガード enable_slide_exit_min_display_guard=OFF のため "
+                "無効(no-op)、src/recognition_pipeline.py:5170-5203 の and 短絡"
+                # 2026-08-24 検証: 既存コメント記載の5134-5150は現行コードでは
+                # 5170-5203 にずれていた (要参照更新、行番号は本Edit時点で実測)。
+                "]"
+            )
+        print(
+            f"[measure] {_fname}="
+            f"{'ENABLED' if _effective else 'DISABLED'}{_note}"
         )
     disagreements: list[dict] = []
     print(f"[measure] corruption_persist_frames={persist_min_frames} (persistent corruption 集計閾値)")
@@ -3794,6 +4463,32 @@ def main() -> int:
         enable_override_color_guard=enable_override_color_guard,
         enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
         enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=enable_lockdown_score_numeric_release,
+        enable_lockdown_score_moving_release=enable_lockdown_score_moving_release,
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        enable_formula_freeze_fix=enable_formula_freeze_fix,
+        # W36 是正 (2026-08-24): ここが抜けていたため CLI --gravity-settle-state /
+        # --no-gravity-settle-state が**完全に無効**で、_collect_results の
+        # ローカル既定 False が下流へ明示的に渡り、ライブラリ既定 True を
+        # 上書きしていた。物差しは GRAVITY_SETTLE を切った状態、つまり
+        # **本番とは違うフレーム母集団**の精度を測り続けていた
+        # (docs/KNOWN_WEAKNESSES.md W36。CLI の ON/OFF で正規化ハッシュが
+        #  完全一致することを v40 で実測して確認済み)。
+        enable_gravity_settle_state=enable_gravity_settle_state,
+        # Q-03 是正 (2026-08-24): 複合フラグの構成要素の個別指定。末尾追加
+        # (backwards compat、_collect_results 以下は全てキーワード引数呼出し
+        # のため位置引数の順序ズレ懸念はない)。
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+        enable_formula_step_interlude=enable_formula_step_interlude,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -3892,6 +4587,31 @@ def main() -> int:
             # True (既定) = RECOGNITION_ADOPTED 自動適用構成、
             # False (--no-production-recognition) = 過去測定と bit-identical な旧構成。
             "use_production_recognition": use_production_recognition,
+            # W35 是正 (2026-08-24): slide-exit 系・formula 系フラグの構成を
+            # 成果物単体からも復元できるよう meta に記録する
+            # (docs/KNOWN_WEAKNESSES.md W35: 構成不一致が長期間見逃された対策)。
+            "enable_slide_exit_min_display_guard": (
+                enable_slide_exit_min_display_guard
+            ),
+            "enable_formula_freeze_fix": enable_formula_freeze_fix,
+            # 個別指定 (Q-03 是正、複合フラグとの OR 後の実効値を記録)。
+            "enable_chain_formula_read_verify": (
+                enable_formula_freeze_fix or enable_chain_formula_read_verify
+            ),
+            "enable_formula_chain_count_update": (
+                enable_formula_freeze_fix or enable_formula_chain_count_update
+            ),
+            "enable_slide_exit_no_min_display": (
+                enable_formula_freeze_fix or enable_slide_exit_no_min_display
+            ),
+            # 親子関係の明示: True でも親ガードが OFF なら no-op
+            # (src/recognition_pipeline.py:5170-5203 の and 短絡で子が参照されない)。
+            "enable_slide_exit_no_min_display_is_noop": (
+                (enable_formula_freeze_fix or enable_slide_exit_no_min_display)
+                and not enable_slide_exit_min_display_guard
+            ),
+            # Q-01 修正 (2026-08-24): 複合フラグとの OR 対象外 (単独 forward)。
+            "enable_formula_step_interlude": enable_formula_step_interlude,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

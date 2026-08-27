@@ -16,6 +16,9 @@ mod bitboard;
 
 use std::sync::OnceLock;
 
+// HSV セル分類のネイティブ実装 (2026-08-20 追加)
+mod hsv_classify;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::ThreadPool;
@@ -515,6 +518,154 @@ fn enumerate_and_simulate_placements_py(
     Ok(results)
 }
 
+// ============================
+// 選択ロジック融合 (`scripts/mc_counter_estimator.py::_select_build_placement`
+// のRust側完全移植、2026-08-21 追加、v3.3)
+// ============================
+//
+// 従来は「22配置列挙+シミュレーション (1回)」+「current_max_chain tie-break
+// (1回)」+「potential_fire_power tie-break (1回)」の最大3回のPython<->Rust
+// 往復と、途中候補ぶんのBoardオブジェクト生成 (最大44個/手、実測の主要コスト、
+// memory `project_counter_reach_cost_breakdown_2026-08-21` 参照) が必要
+// だった。本節は選択ロジック全体を1回のnative呼び出しに融合し、
+// Python側へは最終的に選ばれた1盤面のみを返す (途中候補は一切
+// Python境界を越えない)。既存3関数 (`enumerate_and_simulate_placements_py`
+// 等) は無変更 (新規追加のみ、backwards compat)。
+
+/// 全候補が発火を伴う (強制発火、`_select_build_placement` の
+/// `non_dead` 分岐) 場合のフォールバック。`chain_count` が最小の配置を選び、
+/// 実際に解決させた `final_board` を返す (Python `min(..., key=...)` と同じ
+/// 「同値タイなら先勝ち」の順序保存)。`non_dead` が空 (置き場所が無い) 場合は
+/// `None`。
+fn force_fire_fallback(
+    non_dead: &[(i32, BitBoard)],
+    exclude_hidden_row_from_pop: bool,
+) -> Option<BitBoard> {
+    if non_dead.is_empty() {
+        return None;
+    }
+    let mut best_idx = 0usize;
+    for i in 1..non_dead.len() {
+        if non_dead[i].0 < non_dead[best_idx].0 {
+            best_idx = i;
+        }
+    }
+    let placed = non_dead[best_idx].1;
+    Some(simulate_chain(&placed, exclude_hidden_row_from_pop).final_board)
+}
+
+/// tie-break本体: まず `current_max_chain` (列×色30通り探索、`drops`) で
+/// 最良の候補群 (同値タイ全件) を絞り、1件に絞れなければ
+/// `potential_fire_power_raw_one` (既存、2手先ビーム) の最大値1件を選ぶ
+/// (`_select_build_placement` のtie-break分岐と同一の「先勝ち」順序保存)。
+fn select_by_tie_break(
+    build_only: &[BitBoard],
+    drops: &[(u8, u8)],
+    beam_k: usize,
+    exclude_hidden_row_from_pop: bool,
+) -> BitBoard {
+    let chain_values: Vec<i32> = build_only
+        .iter()
+        .map(|b| {
+            drops
+                .iter()
+                .filter_map(|&(col, color)| drop_one(b, col as usize, color))
+                .map(|d| simulate_chain(&d, exclude_hidden_row_from_pop).chain_count)
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let best_potential = *chain_values.iter().max().expect("build_onlyは空でない前提");
+    let tied: Vec<BitBoard> = build_only
+        .iter()
+        .zip(chain_values.iter())
+        .filter(|(_, &v)| v == best_potential)
+        .map(|(b, _)| *b)
+        .collect();
+    if tied.len() == 1 {
+        return tied[0];
+    }
+    let mut best_idx = 0usize;
+    let mut best_pfp =
+        potential_fire_power_raw_one(&tied[0], drops, beam_k, exclude_hidden_row_from_pop);
+    for (i, b) in tied.iter().enumerate().skip(1) {
+        let v = potential_fire_power_raw_one(b, drops, beam_k, exclude_hidden_row_from_pop);
+        if v > best_pfp {
+            best_pfp = v;
+            best_idx = i;
+        }
+    }
+    tied[best_idx]
+}
+
+/// `_select_build_placement` (Python) の選択ロジック全体を1回のnative
+/// 呼び出しに融合した本体 (22配置列挙+連鎖判定+2段tie-breakをすべて
+/// Rust内で完結させる)。列挙順序は `enumerate_placements` の自然順
+/// (rotation昇順→col昇順、既存 `enumerate_and_simulate_placements_py` と
+/// 同一) を保つため、Python native経路 (ソート省略) と完全に同じ結果になる。
+fn select_build_placement_core(
+    board: &BitBoard,
+    pair: (u8, u8),
+    drops: &[(u8, u8)],
+    beam_k: usize,
+    exclude_hidden_row_from_pop: bool,
+) -> Option<BitBoard> {
+    let candidates = enumerate_placements(board, pair, false);
+    let mut build_only: Vec<BitBoard> = Vec::new();
+    let mut non_dead: Vec<(i32, BitBoard)> = Vec::new();
+    for (_placement, placed) in &candidates {
+        if bitboard_is_dead(placed) {
+            continue;
+        }
+        let chain_count = simulate_chain(placed, exclude_hidden_row_from_pop).chain_count;
+        non_dead.push((chain_count, *placed));
+        if chain_count == 0 {
+            build_only.push(*placed);
+        }
+    }
+    if build_only.is_empty() {
+        return force_fire_fallback(&non_dead, exclude_hidden_row_from_pop);
+    }
+    if build_only.len() == 1 {
+        return Some(build_only[0]);
+    }
+    Some(select_by_tie_break(&build_only, drops, beam_k, exclude_hidden_row_from_pop))
+}
+
+/// `select_build_placement_core` のPyO3バインディング (2026-08-21 追加)。
+///
+/// Args:
+///     grid: 判定対象の盤面 (13x6 flatten、長さ78)。
+///     top_color / bot_color: 設置するペアの色。
+///     drops: 列×色候補リスト (通常は列×色30通り、`_DROP_CANDIDATES_30`)。
+///     beam_k: potential_fire_power 1手目で残す上位候補数。
+///     exclude_hidden_row_from_pop: 幽霊連鎖ルール。
+///
+/// Returns:
+///     選択された配置後盤面 (13x6 flatten)。置き場所が全く無い場合は `None`。
+///     値は `scripts/mc_counter_estimator.py::_select_build_placement` の
+///     native経路 (融合前、個別呼び出し3回) と完全一致する
+///     (`tests/test_puyo_core_parity.py` でパリティ確認)。
+#[pyfunction]
+fn select_build_placement_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    top_color: u8,
+    bot_color: u8,
+    drops: Vec<(u8, u8)>,
+    beam_k: usize,
+    exclude_hidden_row_from_pop: bool,
+) -> PyResult<Option<Vec<u8>>> {
+    let arr = grid_from_pylist(grid)?;
+    let result = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        select_build_placement_core(
+            &board, (top_color, bot_color), &drops, beam_k, exclude_hidden_row_from_pop,
+        )
+    });
+    Ok(result.map(|b| board_to_grid(&b)))
+}
+
 /// ビームサーチ結果 (Python から属性アクセス可能)。
 #[pyclass]
 #[derive(Clone)]
@@ -538,8 +689,21 @@ pub struct BeamSearchResultPy {
 ///     exclude_hidden_row_from_pop: 幽霊連鎖ルール (本番既定 True)。
 ///     num_threads: rayon 並列スレッド数。None = 並列無効 (単スレッド)。
 ///         0 以下は無効 (ValueError)。
+///     use_exact_score: true で評価に厳密得点 `exact_score` (連結ボーナス
+///         反映) を使う (既定 false = 従来の `score_approx` 近似、
+///         2026-08-13 追加、backwards compat)。
+///     max_height: Some(h) で盤面のいずれかの列が高さ h 以上になった候補を
+///         枝刈りする (既定 None = 枝刈りしない、2026-08-21 追加)。
+///     early_exit_score: Some(t) で running_best が t 以上になった時点で
+///         以降の手を計算せず打ち切る (既定 None = 打ち切らない、
+///         2026-08-21 追加。`beam::beam_search_from_frontier` docstring
+///         参照、「閾値到達確率」用途限定で使うこと)。
 #[pyfunction]
-#[pyo3(signature = (grid, pairs, beam_width, exclude_hidden_row_from_pop, num_threads=None))]
+#[pyo3(signature = (
+    grid, pairs, beam_width, exclude_hidden_row_from_pop, num_threads=None,
+    use_exact_score=false, max_height=None, early_exit_score=None,
+))]
+#[allow(clippy::too_many_arguments)]
 fn beam_search_py(
     py: Python<'_>,
     grid: Vec<u8>,
@@ -547,41 +711,63 @@ fn beam_search_py(
     beam_width: usize,
     exclude_hidden_row_from_pop: bool,
     num_threads: Option<usize>,
+    use_exact_score: bool,
+    max_height: Option<u32>,
+    early_exit_score: Option<i64>,
 ) -> PyResult<BeamSearchResultPy> {
     let arr = grid_from_pylist(grid)?;
+    let result = run_beam_search_from_board(
+        py, &arr, &pairs, beam_width, exclude_hidden_row_from_pop, num_threads, use_exact_score,
+        max_height, early_exit_score,
+    )?;
+    Ok(beam_result_to_py(result))
+}
+
+/// `beam_search_py`/`exact_shallow_search_py` 共通のスレッドプール分岐処理
+/// (可読性のため抽出、2026-08-21 追加)。単一盤面を根に置いた
+/// `beam::beam_search_from_frontier` 呼び出しを num_threads に応じて
+/// 単スレ/プール実行に振り分ける。
+#[allow(clippy::too_many_arguments)]
+fn run_beam_search_from_board(
+    py: Python<'_>,
+    grid: &[u8; GRID_LEN],
+    pairs: &[(u8, u8)],
+    beam_width: usize,
+    exclude_hidden_row_from_pop: bool,
+    num_threads: Option<usize>,
+    use_exact_score: bool,
+    max_height: Option<u32>,
+    early_exit_score: Option<i64>,
+) -> PyResult<beam::BeamSearchResult> {
     if let Some(n) = num_threads {
         if n == 0 {
             return Err(PyValueError::new_err("num_threads は 1 以上を指定してください"));
         }
     }
-
-    let result = py.allow_threads(|| -> Result<beam::BeamSearchResult, String> {
-        let board = board_from_grid(&arr);
+    py.allow_threads(|| -> Result<beam::BeamSearchResult, String> {
+        let board = board_from_grid(grid);
+        let root = vec![(board, 0i64)];
         match num_threads {
-            None => Ok(beam::beam_search(
-                &board,
-                &pairs,
-                beam_width,
-                exclude_hidden_row_from_pop,
-                /*parallel=*/ false,
+            None => Ok(beam::beam_search_from_frontier(
+                root, 0, pairs, beam_width, exclude_hidden_row_from_pop,
+                /*parallel=*/ false, use_exact_score, max_height, early_exit_score,
             )),
             Some(n) => {
                 let pool = get_or_build_pool(n)?;
                 Ok(pool.install(|| {
-                    beam::beam_search(
-                        &board,
-                        &pairs,
-                        beam_width,
-                        exclude_hidden_row_from_pop,
-                        /*parallel=*/ true,
+                    beam::beam_search_from_frontier(
+                        root, 0, pairs, beam_width, exclude_hidden_row_from_pop,
+                        /*parallel=*/ true, use_exact_score, max_height, early_exit_score,
                     )
                 }))
             }
         }
     })
-    .map_err(PyValueError::new_err)?;
+    .map_err(PyValueError::new_err)
+}
 
-    Ok(BeamSearchResultPy {
+fn beam_result_to_py(result: beam::BeamSearchResult) -> BeamSearchResultPy {
+    BeamSearchResultPy {
         best_score: result.best_score,
         best_path: result
             .best_path
@@ -589,7 +775,163 @@ fn beam_search_py(
             .map(|p| (p.col, p.rotation))
             .collect(),
         best_score_per_depth: result.best_score_per_depth,
+    }
+}
+
+/// フロンティア1件のシリアライズ可能な表現 (盤面+running_bestのみ、
+/// 2026-08-21 追加、Python から属性アクセス可能)。
+#[pyclass]
+#[derive(Clone)]
+pub struct FrontierEntryPy {
+    #[pyo3(get)]
+    pub grid: Vec<u8>,
+    #[pyo3(get)]
+    pub running_best: i64,
+}
+
+#[pymethods]
+impl FrontierEntryPy {
+    /// Python 側 (`src/puyo_core_bridge.py::_beam_search_dispatch`) が
+    /// `beam_search_continue_py` に渡すフロンティアを構築するための
+    /// コンストラクタ (2026-08-21 追加)。
+    #[new]
+    fn new(grid: Vec<u8>, running_best: i64) -> Self {
+        FrontierEntryPy { grid, running_best }
+    }
+}
+
+/// フロンティア付きビームサーチ結果 (2026-08-21 追加、`exact_shallow_
+/// search_py`/`beam_search_continue_py` 用。通常の `beam_search_py` は
+/// フロンティアのシリアライズコストを避けるため `BeamSearchResultPy` の
+/// ままにしている)。
+#[pyclass]
+#[derive(Clone)]
+pub struct BeamSearchWithFrontierResultPy {
+    #[pyo3(get)]
+    pub best_score: i64,
+    #[pyo3(get)]
+    pub best_path: Vec<(u8, u8)>,
+    #[pyo3(get)]
+    pub best_score_per_depth: Vec<i64>,
+    #[pyo3(get)]
+    pub final_frontier: Vec<FrontierEntryPy>,
+}
+
+fn beam_result_to_py_with_frontier(result: beam::BeamSearchResult) -> BeamSearchWithFrontierResultPy {
+    BeamSearchWithFrontierResultPy {
+        best_score: result.best_score,
+        best_path: result.best_path.iter().map(|p| (p.col, p.rotation)).collect(),
+        best_score_per_depth: result.best_score_per_depth,
+        final_frontier: result
+            .final_frontier
+            .iter()
+            .map(|(board, running_best)| FrontierEntryPy {
+                grid: board_to_grid(board),
+                running_best: *running_best,
+            })
+            .collect(),
+    }
+}
+
+/// ama方式の浅い完全探索 (2026-08-21 追加、user指示「両方併用」)。
+/// `beam_search_py` と異なり **幅の打ち切りを一切行わない** (`pairs` の
+/// 深さだけ完全に列挙する、深さ2なら 22+22²=506通り)。結果には
+/// `final_frontier` (完全探索終了時点の全候補、`beam_search_continue_py`
+/// への継続用) も含む。
+///
+/// Args:
+///     grid/pairs/exclude_hidden_row_from_pop/use_exact_score/
+///     max_height/early_exit_score: `beam_search_py` と同一意味論。
+#[pyfunction]
+#[pyo3(signature = (
+    grid, pairs, exclude_hidden_row_from_pop, use_exact_score=true, max_height=None,
+    early_exit_score=None,
+))]
+fn exact_shallow_search_py(
+    py: Python<'_>,
+    grid: Vec<u8>,
+    pairs: Vec<(u8, u8)>,
+    exclude_hidden_row_from_pop: bool,
+    use_exact_score: bool,
+    max_height: Option<u32>,
+    early_exit_score: Option<i64>,
+) -> PyResult<BeamSearchWithFrontierResultPy> {
+    let arr = grid_from_pylist(grid)?;
+    let result = py.allow_threads(|| {
+        let board = board_from_grid(&arr);
+        beam::beam_search_from_frontier(
+            vec![(board, 0)], 0, &pairs, usize::MAX, exclude_hidden_row_from_pop,
+            /*parallel=*/ false, use_exact_score, max_height, early_exit_score,
+        )
+    });
+    Ok(beam_result_to_py_with_frontier(result))
+}
+
+/// 既存フロンティアから探索を継続する (2026-08-21 追加、user指示①③:
+/// `exact_shallow_search_py` の完全探索結果 [`final_frontier`] をビーム
+/// サーチの初期集団として渡すことで、深さ2までは完全探索・深さ3以降を
+/// ビームサーチにする「両方併用」を実現する)。深さ1〜2限定の部分木共有
+/// (同じ接頭辞のロールアウトが `final_frontier` をキャッシュして再利用) も
+/// 本関数で実現する (呼び出し元 `scripts/mc_counter_estimator.py` 側)。
+///
+/// Args:
+///     frontier: 継続元のフロンティア (`exact_shallow_search_py`/
+///         本関数自身の `final_frontier` から得た `FrontierEntryPy` 列)。
+///     global_best_in: フロンティア構築時点までの running_best 最大値。
+///     pairs: 継続する残りのツモ列。
+///     beam_width/exclude_hidden_row_from_pop/num_threads/use_exact_score/
+///         max_height/early_exit_score: `beam_search_py` と同一意味論。
+#[pyfunction]
+#[pyo3(signature = (
+    frontier, global_best_in, pairs, beam_width, exclude_hidden_row_from_pop, num_threads=None,
+    use_exact_score=true, max_height=None, early_exit_score=None,
+))]
+#[allow(clippy::too_many_arguments)]
+fn beam_search_continue_py(
+    py: Python<'_>,
+    frontier: Vec<FrontierEntryPy>,
+    global_best_in: i64,
+    pairs: Vec<(u8, u8)>,
+    beam_width: usize,
+    exclude_hidden_row_from_pop: bool,
+    num_threads: Option<usize>,
+    use_exact_score: bool,
+    max_height: Option<u32>,
+    early_exit_score: Option<i64>,
+) -> PyResult<BeamSearchWithFrontierResultPy> {
+    if let Some(n) = num_threads {
+        if n == 0 {
+            return Err(PyValueError::new_err("num_threads は 1 以上を指定してください"));
+        }
+    }
+    let root: Vec<(BitBoard, i64)> = frontier
+        .iter()
+        .map(|f| -> PyResult<(BitBoard, i64)> {
+            let arr = grid_from_pylist(f.grid.clone())?;
+            Ok((board_from_grid(&arr), f.running_best))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+
+    let result = py.allow_threads(|| -> Result<beam::BeamSearchResult, String> {
+        match num_threads {
+            None => Ok(beam::beam_search_from_frontier(
+                root, global_best_in, &pairs, beam_width, exclude_hidden_row_from_pop,
+                /*parallel=*/ false, use_exact_score, max_height, early_exit_score,
+            )),
+            Some(n) => {
+                let pool = get_or_build_pool(n)?;
+                Ok(pool.install(|| {
+                    beam::beam_search_from_frontier(
+                        root, global_best_in, &pairs, beam_width, exclude_hidden_row_from_pop,
+                        /*parallel=*/ true, use_exact_score, max_height, early_exit_score,
+                    )
+                }))
+            }
+        }
     })
+    .map_err(PyValueError::new_err)?;
+
+    Ok(beam_result_to_py_with_frontier(result))
 }
 
 /// PyO3 モジュール定義。
@@ -603,11 +945,17 @@ fn puyo_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(potential_fire_power_raw_for_boards_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_placements_py, m)?)?;
     m.add_function(wrap_pyfunction!(enumerate_and_simulate_placements_py, m)?)?;
+    m.add_function(wrap_pyfunction!(select_build_placement_py, m)?)?;
     m.add_function(wrap_pyfunction!(beam_search_py, m)?)?;
+    m.add_function(wrap_pyfunction!(exact_shallow_search_py, m)?)?;
+    m.add_function(wrap_pyfunction!(beam_search_continue_py, m)?)?;
+    m.add_function(wrap_pyfunction!(hsv_classify::classify_cells_hsv, m)?)?;
     m.add_class::<ChainSimResultPy>()?;
     m.add_class::<ChainStepInfoPy>()?;
     m.add_class::<DropSimResultPy>()?;
     m.add_class::<PlacementSimResultPy>()?;
     m.add_class::<BeamSearchResultPy>()?;
+    m.add_class::<FrontierEntryPy>()?;
+    m.add_class::<BeamSearchWithFrontierResultPy>()?;
     Ok(())
 }
