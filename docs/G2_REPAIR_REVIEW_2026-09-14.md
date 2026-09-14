@@ -46,6 +46,14 @@ A40はframe 29052〜36900をstride 2で処理し、最後の両側stepまで到�
 
 ## 提出範囲と停止境界
 
+### 収録範囲の追加監査（PR提出後）
+
+A40の固定source、回帰試験、採用した保存後検収を起点に参照を監査した。不採用の単発診断 `g2_a40_postrun_2026-09-14_v1/probe_metadata_unit.py` と `probe_metadata_unit_v2.py`、および旧 `g2_second_prefix_runtime_2026-09-14_v35`・`v36`・`v37` の各10ファイル、合計32件をPRから除外した。ローカルの原ソース・失敗票は保持し、監査失敗の事実は本書から削除しない。
+
+旧版のruntime/freezerは日付だけでは削除できない。A40の `freeze_target.evidence()` はA39の固定票が指す旧ソースのSHAを確認するが、A39 freezer自体を再帰実行しない。除外したv35〜v37はA40固定集合に含まれず、逆参照は旧freezerの歴史証拠と旧launcher内だけだった。旧v38以前の固定票の再発行はこのPRの対象外で、必要なら保持したローカル資料を使う。現行A40/A39固定集合は全保持する。
+
+独立Opusレビューのv33/v38除外案は親確認で不採用とした。`g2_second_pending_prefix_2026-09-14_v3/postrun.py` がv33のtarget_entryをimportし、`g2_legacy_m1_compatibility_2026-09-14_v1/test_saved_compatibility.py` はv38のreview_m1を読むためである。残707ファイルには動的directory参照を安全側に保持した部分があり、全ファイルが最小構成で必須という証明ではない。最小化の未証明部分を残したまま、全件必須・マージ準備完了とは主張しない。
+
 最終A40・修復依存・必要な検査sourceを選別する。既存tracked dirty、動画、モデル、巨大JSON/JSONL、外部snapshot、rawレビュー、過去失敗成果物をPRに混入しない。私有環境の依存closureを完全にポータブル化した変更ではない。
 
 PR本文に加えて修正一覧コメントを投稿し、G3は既存6動画/比較版/GT分母/遅延許容/開始条件の文書引継ぎで停止する。自動merge・本番採用・学習・G3実走は行わない。再開時は6動画を一巡してから結果と優先順位をユーザーと相談する。
