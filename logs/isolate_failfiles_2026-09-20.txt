@@ -1,0 +1,29 @@
+tests/test_advantage_overlay_fps_normalize.py | 5 failed, 1 passed in 25.47s
+tests/test_advantage_overlay_production_recognition_2026-08-13.py | 7 failed, 3 passed in 22.52s
+tests/test_advantage_overlay_timeline_dump.py | 14 failed, 42 passed in 20.35s
+tests/test_analyze_advantage_m2_projected_safe_v1.py | 1 failed, 4 passed in 23.43s
+tests/test_build_advantage_m1_clean46_manifest_unseen_review_v1.py | 1 failed, 6 passed in 28.15s
+tests/test_diagnose_video38_chain_end_shadow_v2.py | 34 passed in 113.36s (0:01:53)
+tests/test_diagnose_video38_next_enqueue_live_shadow_v1.py | 38 passed in 29.16s
+tests/test_g3_admission.py | 9 passed in 4.92s
+tests/test_g3_admission_images.py | 5 passed in 6.40s
+tests/test_g3_baseline_observers.py | 4 passed in 5.30s
+tests/test_g3_current_admission.py | 7 passed in 5.29s
+tests/test_g3_current_exit.py | 7 passed in 5.45s
+tests/test_g3_live_current_guard.py | 9 passed in 5.18s
+tests/test_g3_metadata_scope.py | 8 passed in 6.06s
+tests/test_g3_model_process.py | 6 passed in 73.17s (0:01:13)
+tests/test_g3_normal_reset_scope.py | 22 passed in 21.57s
+tests/test_g3_observer_scope.py | 7 passed in 6.02s
+tests/test_g3_palette_reset_hold.py | 13 passed in 11.26s
+tests/test_g3_video39_baseline.py | 5 passed in 5.39s
+tests/test_g3_video39_next.py | 7 passed in 5.71s
+tests/test_match_start_epoch_shadow_v1.py | 47 passed in 20.29s
+tests/test_measure_stable_cell_acc_production_recognition_2026-08-13.py | 1 failed, 5 passed in 4.56s
+tests/test_next_enqueue_live_shadow_v1.py | 56 passed in 12.76s
+tests/test_post_chain_grace_shadow_v1.py | 14 passed in 3.70s
+tests/test_revalidate_advantage_m2_increment_sources_v1.py | 3 passed in 23.33s
+tests/test_run_advantage_m2_increment_sources_v1.py | 3 passed in 24.06s
+tests/test_run_event_reserve_background_v1.py | 93 passed in 7.85s
+tests/test_visualize_recognition_inject.py | 7 passed in 3.44s
+tests/test_visualize_recognition_production_config_2026-08-13.py | 2 failed, 7 passed in 4.86s

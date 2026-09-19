@@ -6295,7 +6295,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              enable_ojama_fall_placement_override: bool | None = None,
              enable_ojama_fall_entry_hardening: bool | None = None,
              enable_ojama_fall_scoped_exit: bool | None = None,
-             enable_pseudo_chain_score_fill: bool = False,
+             enable_pseudo_chain_score_fill: bool | None = None,
              chain_hold_base_sec: "float | None" = None,
              chain_hold_per_step_sec: "float | None" = None,
              enable_slide_exit_min_display_guard: bool = False,
@@ -6971,6 +6971,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         _ojama_override_kwargs["enable_ojama_fall_placement_override"] = bool(
             _production_recognition_kwargs.get(
                 "enable_ojama_fall_placement_override", False))
+    # 採用値と明示値を一度だけ解決する。OFFかつ未指定ならキーを渡さない。
+    if enable_pseudo_chain_score_fill is not None:
+        _production_recognition_kwargs["enable_pseudo_chain_score_fill"] = bool(
+            enable_pseudo_chain_score_fill)
     pipe = RecognitionPipeline.load_default(
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
@@ -7003,10 +7007,6 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             enable_ojama_fall_entry_hardening),
         enable_ojama_fall_scoped_exit=_resolve_flag(
             "enable_ojama_fall_scoped_exit", enable_ojama_fall_scoped_exit),
-        # 根治① (W7, 2026-08-13): 疑似 ChainEvent の simulate 推定スコア充填。
-        # 未採用のため RECOGNITION_ADOPTED には含めず、直接引き渡す
-        # (既定 False、backwards compat)。
-        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
         # CHAIN 保持時間の実測較正値 (2026-08-22 修正②根治、上記docstring参照)。
         # 既定 None ならキー自体を渡さずライブラリ既定 (0.0/0.3) のまま
         # (backwards compat、未採用のため自動 ON にはしない)。
@@ -8464,7 +8464,7 @@ def main() -> None:
         help="OJAMA_FALL出口のおじゃま限定監視+会計連動 (Stage2根治、2026-08-13)。None=既定OFF")
     ap.add_argument(
         "--enable-pseudo-chain-score-fill", action=argparse.BooleanOptionalAction,
-        default=False, dest="enable_pseudo_chain_score_fill",
+        default=None, dest="enable_pseudo_chain_score_fill",
         help="W7根治① (2026-08-13、docs/KNOWN_WEAKNESSES.md): formula/landing "
              "経路の疑似ChainEventにsimulate推定スコアを充填する。既定OFF"
              " (bit-identical)。")

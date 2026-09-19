@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import math
+import json
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -51,6 +53,30 @@ def _import_lean():
     """collect_boards_lean モジュールをインポートして返す。"""
     import scripts.collect_boards_lean as mod
     return mod
+
+
+def test_event_observation_sidecar_keeps_posthoc_winners_separate() -> None:
+    mod = _import_lean()
+    report = mod._build_event_observation_sidecar(
+        0.0, [60.0, 120.0], 180.0, {0: "1P", 1: None, 2: "PANEL_UNAVAILABLE"}
+    )
+    assert report["generated_posthoc"] is True
+    assert report["winner_detector_status"] == "completed"
+    assert len(report["accepted_boundary_evidence"]) == 2
+    winners = report["winner_panel_results"]
+    assert [row["result"] for row in winners] == [
+        "winner_observed",
+        "ambiguous",
+        "panel_unavailable",
+    ]
+    assert all(row["available_sec"] == 180.0 for row in winners)
+
+
+def test_event_observation_sidecar_records_detector_failure() -> None:
+    mod = _import_lean()
+    report = mod._build_event_observation_sidecar(0.0, [], 30.0, None)
+    assert report["winner_detector_status"] == "failed"
+    assert report["winner_panel_results"] == []
 
 
 # ============================
@@ -1506,7 +1532,9 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     enable_stable_persistence_gate / enable_match_end_persist_override /
     enable_post_match_lockdown_latch / enable_result_screen_hardening /
     enable_ojama_fall_color_swap_guard / enable_chain_formula_read_verify /
-    enable_formula_chain_count_update / enable_formula_step_interlude
+    enable_formula_chain_count_update / enable_formula_step_interlude /
+    enable_event_accounting_sidecar / enable_event_physical_sidecar /
+    score_region_calibration_path / enable_event_death_sidecar
     が末尾に順次 optional 追加され、既存引数の並び・デフォルト値
     が一切変わっていないこと (backwards compat)。
     """
@@ -1514,6 +1542,69 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     mod = _import_lean()
     sig = inspect.signature(mod.collect_lean)
     params = list(sig.parameters.keys())
+    # W7根治①② の配線 (2026-09-17 末尾追加)。数値3つは None = ライブラリ既定で
+    # 従来と完全同一、真偽は False。順序も既定値も後方互換を崩さないことを固定する。
+    # W48 (2026-09-17 末尾追加、既定OFF): 着地直後の連鎖で「連鎖後の姿」へ
+    # 差し替わった frame を記録しない。認識は変えず記録の可否だけを決める。
+    # 記録時 観測優先 (2026-09-19 末尾追加、raw版は 2026-09-19 本番採用)。
+    # 記録の直前に、CNN と HSV が一致した色へ確定盤面を合わせる。
+    # raw 版はおじゃま会計フィルタを通す前の観測を基準にする。
+    # 5動画実測: 代理セル正解率 98.9161% → 99.6988% (誤り -68.8%)。
+    assert params[-1] == "enable_record_time_observation_fix_raw"
+    assert sig.parameters[
+        "enable_record_time_observation_fix_raw"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_record_time_observation_fix"
+    assert sig.parameters[
+        "enable_record_time_observation_fix"].default is False
+    params = params[:-1]
+    # 列ゲート緩和 (2026-07-25 実装、2026-09-19 配線)。効果なしのため未採用。
+    assert params[-1] == "enable_column_partial_support"
+    assert sig.parameters["enable_column_partial_support"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_chain_active_record_hold"
+    assert sig.parameters["enable_chain_active_record_hold"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_landing_chain_record_hold"
+    assert sig.parameters["enable_landing_chain_record_hold"].default is False
+    params = params[:-1]
+    # W43 (2026-09-17 末尾追加、既定OFF): 掛け算式が読めている間は連鎖を落とさない。
+    assert params[-1] == "enable_chain_hold_until_formula_quiet"
+    assert sig.parameters["enable_chain_hold_until_formula_quiet"].default is False
+    params = params[:-1]
+    # 着地色修正 (2026-09-17 末尾追加、既定OFF)。
+    assert params[-1] == "enable_landing_color_fix"
+    assert sig.parameters["enable_landing_color_fix"].default is False
+    params = params[:-1]
+    assert params[-1] == "chain_max_hold_sec"
+    assert sig.parameters["chain_max_hold_sec"].default is None
+    params = params[:-1]
+    assert params[-1] == "chain_hold_per_step_sec"
+    assert sig.parameters["chain_hold_per_step_sec"].default is None
+    params = params[:-1]
+    assert params[-1] == "chain_hold_base_sec"
+    assert sig.parameters["chain_hold_base_sec"].default is None
+    params = params[:-1]
+    assert params[-1] == "enable_pseudo_chain_score_fill"
+    assert sig.parameters["enable_pseudo_chain_score_fill"].default is False
+    params = params[:-1]
+    # 試合範囲ゲート (2026-09-17 末尾追加)。
+    assert params[-1] == "enable_match_range_gate"
+    assert sig.parameters["enable_match_range_gate"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_slide_exit_no_min_display"
+    assert sig.parameters["enable_slide_exit_no_min_display"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_slide_exit_min_display_guard"
+    assert sig.parameters["enable_slide_exit_min_display_guard"].default is False
+    params = params[:-1]
+    assert params[-1] == "enable_event_death_sidecar"
+    assert sig.parameters["enable_event_death_sidecar"].default is False
+    params = params[:-1]
+    assert params[-1] == "score_region_calibration_path"
+    assert sig.parameters["score_region_calibration_path"].default is None
+    # 既存引数の相対位置と既定値を、追加前と同じ並びで検査する。
+    params = params[:-1]
     assert params[:6] == [
         "video_path", "out_npz", "max_sec", "start_sec",
         "sample_interval_sec", "capture_next",
@@ -1538,191 +1629,196 @@ def test_collect_lean_signature_has_sample_interval_frames_appended_at_tail() ->
     # enable_chain_estimate_recording / enable_move_segmented_recording /
     # enable_physics_persistence_filter / enable_ojama_fall_color_swap_guard /
     # enable_chain_formula_read_verify / enable_formula_chain_count_update /
-    # enable_formula_step_interlude の 12件が末尾にさらに追加された分、
-    # 元の値から一律 -12 シフトしてある (旧値は git log 参照)。
-    assert params[-50] == "enable_effect_gate"
+    # enable_formula_step_interlude / enable_event_accounting_sidecar /
+    # enable_event_physical_sidecar の14件が末尾にさらに追加された分、
+    # 元の値から一律-14シフトしてある。
+    assert params[-52] == "enable_effect_gate"
     assert sig.parameters["enable_effect_gate"].default is False
-    assert params[-49] == "effect_gate_persist_sec"
+    assert params[-51] == "effect_gate_persist_sec"
     assert sig.parameters["effect_gate_persist_sec"].default is None
     # 案B 4条件AND拡張 (2026-08-04、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-48] == "enable_effect_visual_gate"
+    assert params[-50] == "enable_effect_visual_gate"
     assert sig.parameters["enable_effect_visual_gate"].default is False
     # バーストガード再設計 Stage1 (2026-08-05、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-47] == "enable_burst_guard_v2"
+    assert params[-49] == "enable_burst_guard_v2"
     assert sig.parameters["enable_burst_guard_v2"].default is False
     # バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-46] == "enable_transition_merge_guard"
+    assert params[-48] == "enable_transition_merge_guard"
     assert sig.parameters["enable_transition_merge_guard"].default is False
     # バーストガード緊急較正 (2026-08-05、factorialバックテスト用): さらに末尾に追加、既定 None。
-    assert params[-45] == "burst_gate_open_threshold"
+    assert params[-47] == "burst_gate_open_threshold"
     assert sig.parameters["burst_gate_open_threshold"].default is None
     # バーストガード Stage1.5b (2026-08-05 アーキ追補、§11、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-44] == "enable_hidden_row_burst_guard"
+    assert params[-46] == "enable_hidden_row_burst_guard"
     assert sig.parameters["enable_hidden_row_burst_guard"].default is False
     # バーストガード §12 close側再設計 (2026-08-05 アーキ確定、A/B 計測用):
     # さらに末尾に追加、既定 OFF。
-    assert params[-43] == "enable_burst_close_extension"
+    assert params[-45] == "enable_burst_close_extension"
     assert sig.parameters["enable_burst_close_extension"].default is False
     # バーストガード §12 緊急パラメータ化 (2026-08-05、A/B 計測用):
     # さらに末尾に追加、既定 None。
-    assert params[-42] == "burst_chain_gap_max_sec"
+    assert params[-44] == "burst_chain_gap_max_sec"
     assert sig.parameters["burst_chain_gap_max_sec"].default is None
     # 長時間劣化修正 A+B (2026-08-06、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-41] == "enable_online_hsv_refresh"
+    assert params[-43] == "enable_online_hsv_refresh"
     assert sig.parameters["enable_online_hsv_refresh"].default is False
     # 長時間劣化修正 A' (2026-08-06、§4追補、A/B 計測用): さらに末尾に追加、既定 OFF。
-    assert params[-40] == "enable_match_transition_debounce"
+    assert params[-42] == "enable_match_transition_debounce"
     assert sig.parameters["enable_match_transition_debounce"].default is False
     # 状態機械振動バグ B+C 修正 (2026-08-08、A/B 計測用):
     # さらに末尾に追加、既定 OFF (両 OFF で bit-identical)。
-    assert params[-39] == "enable_ojama_entry_gravity_settle_guard"
+    assert params[-41] == "enable_ojama_entry_gravity_settle_guard"
     assert (
         sig.parameters["enable_ojama_entry_gravity_settle_guard"].default is False
     )
-    assert params[-38] == "enable_gravity_settle_reset_on_exit"
+    assert params[-40] == "enable_gravity_settle_reset_on_exit"
     assert sig.parameters["enable_gravity_settle_reset_on_exit"].default is False
     # 幻盤面ガード (2026-08-08、非試合画面の除外): さらに末尾に追加、既定 OFF。
-    assert params[-37] == "enable_phantom_board_guard"
+    assert params[-39] == "enable_phantom_board_guard"
     assert sig.parameters["enable_phantom_board_guard"].default is False
     # マージンタイム逓減 (2026-08-09): さらに末尾に追加、既定 OFF。
-    assert params[-36] == "enable_margin_time_rate"
+    assert params[-38] == "enable_margin_time_rate"
     assert sig.parameters["enable_margin_time_rate"].default is False
     # 盤面確定窓 3中2多数決 (2026-08-13 user承認): さらに末尾に追加、既定 OFF。
-    assert params[-35] == "enable_stable_majority_window"
+    assert params[-37] == "enable_stable_majority_window"
     assert sig.parameters["enable_stable_majority_window"].default is False
     # OJAMA_FALL誤分類根因調査 案2/案4-lite/案3 (2026-08-13):
     # さらに末尾に追加、既定 OFF (全 OFF で bit-identical)。
-    assert params[-34] == "enable_ojama_fall_placement_override"
+    assert params[-36] == "enable_ojama_fall_placement_override"
     assert (
         sig.parameters["enable_ojama_fall_placement_override"].default is False
     )
-    assert params[-33] == "enable_ojama_fall_entry_hardening"
+    assert params[-35] == "enable_ojama_fall_entry_hardening"
     assert sig.parameters["enable_ojama_fall_entry_hardening"].default is False
-    assert params[-32] == "enable_chain_gate_raw_fallback"
+    assert params[-34] == "enable_chain_gate_raw_fallback"
     assert sig.parameters["enable_chain_gate_raw_fallback"].default is False
     # OJAMA_FALL出口の根治 案1 (2026-08-13、フル物差し回帰タスク#5向け新設):
     # さらに末尾に追加、既定 OFF (bit-identical)。collect_boards_lean.py には
     # 元々 RecognitionPipeline 側の実装のみ存在し CLI 未配線だったギャップの
     # 是正 (config (c) = OJAMA_FALL系3種の物差し比較に必要)。
-    assert params[-31] == "enable_ojama_fall_scoped_exit"
+    assert params[-33] == "enable_ojama_fall_scoped_exit"
     assert sig.parameters["enable_ojama_fall_scoped_exit"].default is False
     # フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した測定器
     # 事故の修正): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-30] == "precise_seek"
+    assert params[-32] == "precise_seek"
     assert sig.parameters["precise_seek"].default is False
     # W13根治 案1 (2026-08-16): highlight override 配線。さらに末尾に追加、
     # 既定 OFF (bit-identical、物差しv2 A/B測定用)。
-    assert params[-29] == "enable_highlight_override"
+    assert params[-31] == "enable_highlight_override"
     assert sig.parameters["enable_highlight_override"].default is False
     # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
     # さらに末尾に追加、既定 OFF (bit-identical、案1 との A/B/併用測定用)。
-    assert params[-28] == "enable_patch_fp_hsv_guard"
+    assert params[-30] == "enable_patch_fp_hsv_guard"
     assert sig.parameters["enable_patch_fp_hsv_guard"].default is False
     # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-27] == "enable_boundary_multisignal"
+    assert params[-29] == "enable_boundary_multisignal"
     assert sig.parameters["enable_boundary_multisignal"].default is False
     # W20/W21根治 (2026-08-17): 勝者パネルクロスチェック配線。さらに末尾に
     # 追加、既定 OFF (bit-identical)。
-    assert params[-26] == "enable_winner_panel_crosscheck"
+    assert params[-28] == "enable_winner_panel_crosscheck"
     assert sig.parameters["enable_winner_panel_crosscheck"].default is False
     # R2 浮きぷよ是正機構 (2026-08-17): さらに末尾に追加、既定 OFF
     # (bit-identical、hsv-guard 併用/単独 A/B 測定用)。
-    assert params[-25] == "enable_floating_gap_restore"
+    assert params[-27] == "enable_floating_gap_restore"
     assert sig.parameters["enable_floating_gap_restore"].default is False
     # W10根治 (2026-08-17): 着地セル色の継続監視ガード CLI 配線漏れの是正
     # (認識強化統一測定タスクで発見)。さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-24] == "enable_landing_color_guard"
+    assert params[-26] == "enable_landing_color_guard"
     assert sig.parameters["enable_landing_color_guard"].default is False
     # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-23] == "enable_override_color_guard"
+    assert params[-25] == "enable_override_color_guard"
     assert sig.parameters["enable_override_color_guard"].default is False
-    assert params[-22] == "enable_ojama_column_stack_fix"
+    assert params[-24] == "enable_ojama_column_stack_fix"
     assert sig.parameters["enable_ojama_column_stack_fix"].default is False
     # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): _validate_next_history
     # の ever_seen 飢餓状態対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-21] == "enable_next_history_starvation_fix"
+    assert params[-23] == "enable_next_history_starvation_fix"
     assert sig.parameters["enable_next_history_starvation_fix"].default is False
     # W25根治 案4 (2026-08-17、docs/KNOWN_WEAKNESSES.md W25): おじゃま落下
     # 白雲パーティクル誤認対策。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-20] == "enable_ojama_cnn_override_warmup"
+    assert params[-22] == "enable_ojama_cnn_override_warmup"
     assert sig.parameters["enable_ojama_cnn_override_warmup"].default is False
     # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25):
     # CNN観測入力段の会計整合フィルタ。さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-19] == "enable_ojama_write_accounting_guard"
+    assert params[-21] == "enable_ojama_write_accounting_guard"
     assert sig.parameters["enable_ojama_write_accounting_guard"].default is False
     # (d) STABLE持続確認 (2026-08-18、docs/BOUNDARY_MULTISIGNAL_DESIGN_
     # 2026-08-17.md §5): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-18] == "enable_stable_persistence_gate"
+    assert params[-20] == "enable_stable_persistence_gate"
     assert sig.parameters["enable_stable_persistence_gate"].default is False
     # (b-1) match_end持続時間ゲート (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-17] == "enable_match_end_persist_override"
+    assert params[-19] == "enable_match_end_persist_override"
     assert sig.parameters["enable_match_end_persist_override"].default is False
     # (b-2) 次試合開始までのラッチ (2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-16] == "enable_post_match_lockdown_latch"
+    assert params[-18] == "enable_post_match_lockdown_latch"
     assert sig.parameters["enable_post_match_lockdown_latch"].default is False
     # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-15] == "enable_result_screen_hardening"
+    assert params[-17] == "enable_result_screen_hardening"
     assert sig.parameters["enable_result_screen_hardening"].default is False
     # 連鎖中物理推論の配線 (enable_chain_estimate_recording、2026-08-18):
     # さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-14] == "enable_chain_estimate_recording"
+    assert params[-16] == "enable_chain_estimate_recording"
     assert sig.parameters["enable_chain_estimate_recording"].default is False
     # 1手区切り観測スケジューラ (enable_move_segmented_recording、
     # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-13] == "enable_move_segmented_recording"
+    assert params[-15] == "enable_move_segmented_recording"
     assert sig.parameters["enable_move_segmented_recording"].default is False
     # 持続的物理制約フィルタ (enable_physics_persistence_filter、
     # 2026-08-18、盤面収集の作り替え本体): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-12] == "enable_physics_persistence_filter"
+    assert params[-14] == "enable_physics_persistence_filter"
     assert sig.parameters["enable_physics_persistence_filter"].default is False
     # W26根治 (enable_ojama_fall_color_swap_guard、2026-08-18、
     # docs/KNOWN_WEAKNESSES.md W26節): さらに末尾に追加、既定 OFF
     # (bit-identical)。
-    assert params[-11] == "enable_ojama_fall_color_swap_guard"
+    assert params[-13] == "enable_ojama_fall_color_swap_guard"
     assert sig.parameters["enable_ojama_fall_color_swap_guard"].default is False
     # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示「必ず
     # 試合前スコアは0」): さらに末尾に追加、既定 OFF (bit-identical)。
-    assert params[-10] == "enable_lockdown_score_numeric_release"
+    assert params[-12] == "enable_lockdown_score_numeric_release"
     assert (
         sig.parameters["enable_lockdown_score_numeric_release"].default is False
     )
-    assert params[-9] == "enable_lockdown_score_moving_release"
+    assert params[-11] == "enable_lockdown_score_moving_release"
     assert (
         sig.parameters["enable_lockdown_score_moving_release"].default is False
     )
     # MatchEndDetector NCC 閾値上書き (2026-08-19、全消しテロップ誤検出対策の
     # A/B 用): さらに末尾に追加、既定 None (bit-identical)。
-    assert params[-8] == "match_end_ncc_threshold"
+    assert params[-10] == "match_end_ncc_threshold"
     assert sig.parameters["match_end_ncc_threshold"].default is None
     # 新試合証拠ゲート (2026-08-19、偽境界の断片化対策): さらに末尾に追加、
     # 既定 OFF (bit-identical)。
-    assert params[-7] == "enable_boundary_newmatch_evidence"
+    assert params[-9] == "enable_boundary_newmatch_evidence"
     # 試合境界の 0 リセット要求 (2026-08-20、user 指摘「減るのはただの誤認」):
     # さらに末尾へ追加、既定 OFF。試合中の score は単調増加しかしないため、
     # 減少を境界の根拠にしない (連鎖中の1桁誤読による偽境界を根絶する)。
-    assert params[-6] == "enable_score_reset_requires_zero"
+    assert params[-8] == "enable_score_reset_requires_zero"
     # 勝者判定のパネル優先 (2026-08-20、user 決定「パネル優先でいいです」):
     # さらに末尾へ追加、既定 OFF。得点系統の「高い方が勝ち」は約98%しか
     # 成立しないため、明確に読めたパネルを優先する。
-    assert params[-5] == "enable_winner_panel_priority"
+    assert params[-7] == "enable_winner_panel_priority"
     # ネイティブ (Rust) HSV セル分類 (2026-08-20): さらに末尾へ追加、既定 OFF。
     # 認識結果は bit-identical で、実測 1 frame 34.69→29.05ms (1.19倍)。
-    assert params[-4] == "enable_native_hsv_classifier"
+    assert params[-6] == "enable_native_hsv_classifier"
     assert sig.parameters["enable_native_hsv_classifier"].default is False
     # STABLE 凍結デッドロック根治 3 フラグ (2026-08-24、RECOGNITION_ADOPTED
     # 採用、user 承認): さらに末尾へ追加、既定 OFF (bit-identical)。
-    assert params[-3] == "enable_chain_formula_read_verify"
+    assert params[-5] == "enable_chain_formula_read_verify"
     assert sig.parameters["enable_chain_formula_read_verify"].default is False
-    assert params[-2] == "enable_formula_chain_count_update"
+    assert params[-4] == "enable_formula_chain_count_update"
     assert sig.parameters["enable_formula_chain_count_update"].default is False
-    assert params[-1] == "enable_formula_step_interlude"
+    assert params[-3] == "enable_formula_step_interlude"
     assert sig.parameters["enable_formula_step_interlude"].default is False
+    assert params[-2] == "enable_event_accounting_sidecar"
+    assert sig.parameters["enable_event_accounting_sidecar"].default is False
+    assert params[-1] == "enable_event_physical_sidecar"
+    assert sig.parameters["enable_event_physical_sidecar"].default is False
     assert sig.parameters["enable_winner_panel_priority"].default is False
     assert sig.parameters["enable_score_reset_requires_zero"].default is False
     assert (
@@ -1783,6 +1879,12 @@ def _run_fake_main_lean(argv_tail: list[str]) -> dict[str, object]:
         ):
             mod.main()
     return captured
+
+
+def test_main_cli_event_death_sidecar_is_dedicated_and_default_off() -> None:
+    assert _run_fake_main_lean([])["enable_event_death_sidecar"] is False
+    enabled = _run_fake_main_lean(["--enable-event-death-sidecar"])
+    assert enabled["enable_event_death_sidecar"] is True
 
 
 def test_main_cli_enable_hidden_row_burst_guard_default_false() -> None:
@@ -2073,6 +2175,36 @@ def _run_fake_collect_lean(
         out_npz = tmp_path / "out.npz"
         n = mod.collect_lean(Path("dummy_video.mp4"), out_npz, **collect_kwargs)
     return n, fake_pipeline
+
+
+def test_collect_lean_passes_explicit_score_region_offsets(tmp_path: Path) -> None:
+    """較正JSONを指定した時だけ、検証済み座標をpipelineへ渡す。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(1, fps=30.0)
+    fake_pipeline = _FakeLeanPipeline()
+    captured: dict[str, object] = {}
+    calibration_path = tmp_path / "score_region.json"
+
+    def _fake_load_offsets(path: Path, video: Path) -> dict[str, tuple[int, int]]:
+        assert path == calibration_path
+        assert video == Path("dummy_video.mp4")
+        return {"1P": (4, 8), "2P": (12, 8)}
+
+    def _fake_load_default(*args: object, **kwargs: object) -> _FakeLeanPipeline:
+        captured.update(kwargs)
+        return fake_pipeline
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _path: fake_cap)
+        mp.setattr(mod, "load_score_region_offsets_for_video", _fake_load_offsets)
+        mp.setattr(RecognitionPipeline, "load_default", _fake_load_default)
+        mod.collect_lean(
+            Path("dummy_video.mp4"), tmp_path / "out.npz",
+            score_region_calibration_path=calibration_path,
+        )
+    assert captured["score_region_offsets"] == {
+        "1P": (4, 8), "2P": (12, 8),
+    }
 
 
 def test_collect_lean_normalize_fps_30_default_omitted_applies_stride_2_for_60fps(
@@ -3137,8 +3269,274 @@ def test_collect_lean_winner_panel_crosscheck_agrees_keeps_winner(
         n = mod.collect_lean(
             Path("dummy.mp4"), out_npz, sample_interval_frames=1,
             enable_winner_panel_crosscheck=True,
+            enable_event_accounting_sidecar=True,
         )
     assert n == 0  # _FakeLeanPipeline は MENU 状態のため snapshot は 0 件
+    accounting_path = tmp_path / "out_event_accounting_v1.json"
+    accounting = json.loads(accounting_path.read_text(encoding="utf-8"))
+    assert accounting["observed_frame_count"] == 2
+    assert accounting["inspected_side_count"] == 4
+    assert accounting["rows"] == []
+
+
+def test_collect_lean_winner_panel_does_not_enable_accounting(
+    tmp_path: Path,
+) -> None:
+    """採用済みの勝者判定だけでは試験会計を起動しない。"""
+    mod = _import_lean()
+    fake_cap = _FakeCaptureLean(2, fps=30.0)
+    fake_pipeline = _FakeLeanPipeline()
+
+    class _FakeDetectorClass:
+        @classmethod
+        def load_default(cls) -> _FakeWinnerDetector:
+            return _FakeWinnerDetector([None])
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: fake_cap)
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: fake_pipeline)
+        mp.setattr(mod, "MatchWinnerDetector", _FakeDetectorClass)
+        out_npz = tmp_path / "out.npz"
+        mod.collect_lean(
+            Path("dummy.mp4"), out_npz, sample_interval_frames=1,
+            enable_winner_panel_crosscheck=True,
+        )
+    assert not (tmp_path / "out_event_accounting_v1.json").exists()
+
+
+def test_collect_lean_physical_sidecar_has_dedicated_default_off_flag(
+    tmp_path: Path,
+) -> None:
+    """物理観測は専用スイッチだけで起動し、勝者・会計スイッチへ連動しない。"""
+    mod = _import_lean()
+    out_off = tmp_path / "off.npz"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(2, fps=30.0))
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: _FakeLeanPipeline())
+        mod.collect_lean(
+            Path("dummy.mp4"), out_off, sample_interval_frames=1,
+            enable_event_accounting_sidecar=True,
+        )
+    assert not (tmp_path / "off_event_physical_v1.json").exists()
+
+    out_on = tmp_path / "on.npz"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(2, fps=30.0))
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: _FakeLeanPipeline())
+        mod.collect_lean(
+            Path("dummy.mp4"), out_on, sample_interval_frames=1,
+            enable_event_physical_sidecar=True,
+        )
+    physical = json.loads(
+        (tmp_path / "on_event_physical_v1.json").read_text(encoding="utf-8")
+    )
+    assert physical["observed_frame_count"] == 2
+    assert physical["inspected_side_count"] == 4
+    assert physical["rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("capture_next", "enable_chain_tracker", "message"),
+    [
+        (False, True, "--with-next"),
+        (True, False, "--enable-chain-tracker"),
+    ],
+)
+def test_death_sidecar_prerequisites_fail_before_video_open(
+    tmp_path: Path,
+    capture_next: bool,
+    enable_chain_tracker: bool,
+    message: str,
+) -> None:
+    mod = _import_lean()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            mod.cv2, "VideoCapture",
+            lambda _p: pytest.fail("前提不成立時に動画を開いてはならない"),
+        )
+        with pytest.raises(ValueError, match=message):
+            mod.collect_lean(
+                tmp_path / "source.mp4", tmp_path / "out.npz",
+                capture_next=capture_next,
+                enable_chain_tracker=enable_chain_tracker,
+                enable_event_death_sidecar=True,
+            )
+
+
+def test_death_sidecar_rejects_non_30fps_equivalent_before_hash(
+    tmp_path: Path,
+) -> None:
+    mod = _import_lean()
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(2, fps=60.0))
+        mp.setattr(mod, "_sha256_file", lambda _p: pytest.fail("不正rateでSHA計算禁止"))
+        with pytest.raises(ValueError, match="30fps"):
+            mod.collect_lean(
+                source, tmp_path / "out.npz", capture_next=True,
+                sample_interval_frames=1, enable_chain_tracker=True,
+                enable_event_death_sidecar=True,
+            )
+
+
+def test_death_sidecar_default_off_avoids_hash_and_ignores_existing_file(
+    tmp_path: Path,
+) -> None:
+    mod = _import_lean()
+    death_path = tmp_path / "out_event_death_v1.json"
+    death_path.write_bytes(b"keep")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(1, fps=30.0))
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: _FakeLeanPipeline())
+        mp.setattr(mod, "_sha256_file", lambda _p: pytest.fail("既定OFFでSHA計算禁止"))
+        mod.collect_lean(Path("missing.mp4"), tmp_path / "out.npz")
+    assert death_path.read_bytes() == b"keep"
+
+
+def test_death_sidecar_writes_canonical_identity_and_dense_denominators(
+    tmp_path: Path,
+) -> None:
+    mod = _import_lean()
+    source = tmp_path / "c36.mp4"
+    source.write_bytes(b"death-sidecar-source")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(2, fps=30.0))
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: _FakeLeanPipeline())
+        mod.collect_lean(
+            source, tmp_path / "out.npz", capture_next=True,
+            sample_interval_frames=1, enable_chain_tracker=True,
+            enable_event_death_sidecar=True,
+        )
+    payload = (tmp_path / "out_event_death_v1.json").read_bytes()
+    report = json.loads(payload)
+    assert report["source_video_id"] == "c36"
+    assert report["source_video_sha256"] == hashlib.sha256(
+        b"death-sidecar-source"
+    ).hexdigest()
+    assert report["timebase"] == {"denominator": 30, "numerator": 1}
+    assert report["observed_frame_count"] == report["event_count"] == 2
+    assert report["inspected_side_count"] == 4
+    assert report["processing_end_frame_exclusive"] == 2
+    assert report["requested_end_frame_exclusive"] == 2
+    assert report["decode_status"] == "requested_range_complete"
+    assert payload.endswith(b"\n") and b"\n" not in payload[:-1]
+    assert b": " not in payload
+
+
+def test_death_sidecar_existing_artifact_is_never_overwritten(
+    tmp_path: Path,
+) -> None:
+    mod = _import_lean()
+    death_path = tmp_path / "out_event_death_v1.json"
+    death_path.write_bytes(b"append-only")
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            mod.cv2, "VideoCapture",
+            lambda _p: pytest.fail("既存成果物検知後に動画を開いてはならない"),
+        )
+        with pytest.raises(FileExistsError, match="上書きしません"):
+            mod.collect_lean(
+                tmp_path / "source.mp4", tmp_path / "out.npz",
+                capture_next=True, enable_chain_tracker=True,
+                enable_event_death_sidecar=True,
+            )
+    assert death_path.read_bytes() == b"append-only"
+
+
+def test_death_observer_runs_only_after_both_side_processors(
+    tmp_path: Path,
+) -> None:
+    mod = _import_lean()
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    observed_game_indices: list[int] = []
+    observed_match_evidence: list[bool] = []
+
+    class _Recorder:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def observe(self, **kwargs: object) -> None:
+            observed_game_indices.append(int(kwargs["game_idx"]))
+            observed_match_evidence.append(bool(kwargs["match_evidence"]))
+
+        def sidecar_value(
+            self, start: int, end: int,
+            requested_end_frame_exclusive: int | None = None,
+        ) -> dict[str, object]:
+            return {
+                "start": start, "end": end,
+                "requested_end": requested_end_frame_exclusive,
+            }
+
+    def _process(*args: object, **kwargs: object) -> None:
+        side = str(args[2])
+        shared = kwargs["shared_game"]
+        shared.game_idx = 1 if side == "1P" else 2
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(mod.cv2, "VideoCapture", lambda _p: _FakeCaptureLean(1, fps=30.0))
+        mp.setattr(RecognitionPipeline, "load_default", lambda *a, **kw: _FakeLeanPipeline())
+        mp.setattr(mod, "EventDeathRecorder", _Recorder)
+        mp.setattr(mod, "_process_side_lean", _process)
+        mod.collect_lean(
+            source, tmp_path / "out.npz", capture_next=True,
+            sample_interval_frames=1, enable_chain_tracker=True,
+            enable_event_death_sidecar=True,
+        )
+    assert observed_game_indices == [2]
+    assert observed_match_evidence == [False]
+
+
+def test_death_sidecar_marks_decode_ending_before_requested_range(
+    tmp_path: Path,
+) -> None:
+    """CAP_PROP_FRAME_COUNTより早いread失敗を正常完走に見せない。"""
+    mod = _import_lean()
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+
+    class _EarlyDecodeCapture(_FakeCaptureLean):
+        def get(self, prop: int) -> float:
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 4.0
+            return super().get(prop)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            mod.cv2, "VideoCapture",
+            lambda _p: _EarlyDecodeCapture(2, fps=30.0),
+        )
+        mp.setattr(
+            RecognitionPipeline, "load_default",
+            lambda *a, **kw: _FakeLeanPipeline(),
+        )
+        mod.collect_lean(
+            source, tmp_path / "out.npz", capture_next=True,
+            sample_interval_frames=1, enable_chain_tracker=True,
+            enable_event_death_sidecar=True,
+        )
+
+    report = json.loads(
+        (tmp_path / "out_event_death_v1.json").read_text(encoding="utf-8")
+    )
+    assert report["processing_end_frame_exclusive"] == 2
+    assert report["requested_end_frame_exclusive"] == 4
+    assert report["decode_status"] == "early_eos_or_decode_failure"
+
+
+def test_physical_match_evidence_requires_both_visible_scores() -> None:
+    """設定画面の盤面風ノイズを片側の誤読だけで試合扱いしない。"""
+    mod = _import_lean()
+    both = SimpleNamespace(
+        p1=SimpleNamespace(score=0), p2=SimpleNamespace(score=120),
+    )
+    missing = SimpleNamespace(
+        p1=SimpleNamespace(score=0), p2=SimpleNamespace(score=None),
+    )
+    assert mod._physical_match_evidence(both) is True
+    assert mod._physical_match_evidence(missing) is False
 
 
 def test_collect_lean_winner_panel_crosscheck_failure_falls_back(

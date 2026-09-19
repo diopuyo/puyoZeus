@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from src.scoring import (
+    compute_effective_rate,
     OJAMA_MAX_DROP_PER_TURN,
     OJAMA_RATE_STANDARD,
     score_to_ojama,
@@ -246,6 +247,29 @@ class GrossOjamaCounters:
     clamp_loss_p2: int
 
 
+@dataclass(frozen=True)
+class AttackFinalizationCounters:
+    """確定攻撃の直近値と単調な確定回数を副作用なしで公開する。
+
+    `OjamaAccountSnapshot` の既存列を増やさず、収集時の出来事記録だけが
+    score OCR 由来の確定値を読み取るための独立インターフェース。
+    """
+
+    t_sec: float
+    finalized_count_p1: int
+    finalized_count_p2: int
+    chain_total_score_p1: int
+    chain_total_score_p2: int
+    generated_p1: int
+    generated_p2: int
+    effective_rate_p1: int
+    effective_rate_p2: int
+    leftover_before_p1: int
+    leftover_before_p2: int
+    leftover_after_p1: int
+    leftover_after_p2: int
+
+
 # ============================
 # 内部状態 (1 サイド分)
 # ============================
@@ -293,6 +317,12 @@ class _SideState:
     # --- snapshot 検証用 ---
     last_chain_total_score: int = 0     # 最後の連鎖合計得点
     chain_end_triggered: bool = False   # 今フレームで連鎖終了イベントが立ったか
+    # --- 出来事原本向けの直近確定値 (非消費型、累積回数で更新検知) ---
+    finalized_attack_count: int = 0
+    last_generated_attack: int = 0
+    last_effective_rate: int = 0
+    last_leftover_before: int = 0
+    last_leftover_after: int = 0
     # --- MENU state 管理 ---
     menu_consec_frames: int = 0         # MENU 連続フレーム数
     # --- state 明滅デバウンス ---
@@ -599,6 +629,30 @@ class OjamaAccountingTracker:
             clamp_loss_p2=self._p2.uncapped_clamp_loss,
         )
 
+    def get_attack_finalization_counters(
+        self, t_sec: float,
+    ) -> AttackFinalizationCounters:
+        """score OCR 会計が確定した攻撃の直近値を副作用なしで返す。"""
+        return AttackFinalizationCounters(
+            t_sec=t_sec,
+            finalized_count_p1=self._p1.finalized_attack_count,
+            finalized_count_p2=self._p2.finalized_attack_count,
+            chain_total_score_p1=self._p1.last_chain_total_score,
+            chain_total_score_p2=self._p2.last_chain_total_score,
+            generated_p1=self._p1.last_generated_attack,
+            generated_p2=self._p2.last_generated_attack,
+            effective_rate_p1=self._p1.last_effective_rate,
+            effective_rate_p2=self._p2.last_effective_rate,
+            leftover_before_p1=self._p1.last_leftover_before,
+            leftover_before_p2=self._p2.last_leftover_before,
+            leftover_after_p1=self._p1.last_leftover_after,
+            leftover_after_p2=self._p2.last_leftover_after,
+        )
+
+    def get_effective_rate(self, t_sec: float) -> int:
+        """現在の試合相対時刻に対する得点→おじゃま換算率を返す。"""
+        return compute_effective_rate(self._elapsed(t_sec), self._rate_base)
+
     # ============================
     # 後方互換 API
     # ============================
@@ -768,6 +822,11 @@ class OjamaAccountingTracker:
         gen = result.ojama_count
         s.total_generated += gen
         s.last_chain_total_score = chain_total
+        s.finalized_attack_count += 1
+        s.last_generated_attack = gen
+        s.last_effective_rate = result.effective_rate
+        s.last_leftover_before = leftover_before
+        s.last_leftover_after = s.leftover
         # --- 詳細デバッグログ (過剰計上診断用) ---
         logger.info(
             "finalize[%s]: score_start=%d score_after=%d chain_total=%d "
