@@ -1256,11 +1256,18 @@ def resolve_production_config_overrides(
         "enable_chain_formula_read_verify",
         "enable_formula_chain_count_update",
         "enable_formula_step_interlude",
+        # W7根治① (2026-09-17 採用)。採用済みなのにレンダ経路へ配線されておらず、
+        # レビュー動画だけ本番と違う設定で作られていた (2026-09-18 実測で発覚)。
+        "enable_pseudo_chain_score_fill",
     ):
         overrides[name] = bool(getattr(args, name, False)) or bool(
             production_recognition.get(name, False)
         )
     _threshold = getattr(args, "burst_gate_open_threshold", None)
+    # 採用台帳に追加された真偽フラグも同じ経路で解決する。数値は別扱い。
+    for name, value in production_recognition.items():
+        if type(value) is bool:
+            overrides[name] = bool(getattr(args, name, False)) or value
     overrides["burst_gate_open_threshold"] = (
         _threshold if _threshold is not None
         else production_recognition.get("burst_gate_open_threshold")
@@ -1910,6 +1917,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-pseudo-chain-score-fill", action="store_true", default=False,
+        dest="enable_pseudo_chain_score_fill",
+        help=(
+            "W7根治① (RECOGNITION_ADOPTED 採用 2026-09-17)。連鎖の得点が"
+            "「まだ計算していない」意味の 0 のまま下流のゲートへ流れるのを直す。"
+            "根拠は src.production_config 参照。"
+            "既定は無効 (後方互換、collect_boards_lean.py と同一パターン)。"
+        ),
+    )
+    parser.add_argument(
         "--enable-chain-formula-read-verify", action="store_true", default=False,
         dest="enable_chain_formula_read_verify",
         help=(
@@ -2350,6 +2367,8 @@ def main() -> int:
         # RECOGNITION_ADOPTED 採用 (2026-08-24、STABLE 凍結デッドロック根治
         # 3 フラグ、user承認、末尾追加)。
         enable_chain_formula_read_verify=args.enable_chain_formula_read_verify,
+        # W7根治① (2026-09-17 採用、2026-09-18 に配線漏れを是正)。
+        enable_pseudo_chain_score_fill=args.enable_pseudo_chain_score_fill,
         enable_formula_chain_count_update=(
             args.enable_formula_chain_count_update
         ),

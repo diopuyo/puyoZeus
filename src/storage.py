@@ -81,14 +81,20 @@ class StorageManager:
     動画URLの記録・履歴管理・動画ファイル削除・容量レポートを提供する。
     """
 
-    def __init__(self, history_path: Path = DEFAULT_HISTORY_PATH) -> None:
+    def __init__(
+        self,
+        history_path: Path = DEFAULT_HISTORY_PATH,
+        data_dir: Path = DATA_DIR,
+    ) -> None:
         """
         初期化。
 
         Args:
             history_path: 履歴JSONファイルのパス。
+            data_dir: 容量レポートの対象ディレクトリ。省略時は従来のdata/。
         """
         self._history_path: Path = history_path
+        self._data_dir: Path = data_dir
         self._history_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ============================
@@ -237,7 +243,7 @@ class StorageManager:
                   - dirs: サブディレクトリ別の容量 (bytes)
                   - file_counts: サブディレクトリ別のファイル数
         """
-        data_dir = DATA_DIR
+        data_dir = self._data_dir
 
         def dir_size(path: Path) -> tuple[int, int]:
             """(バイト数, ファイル数) を返す。"""

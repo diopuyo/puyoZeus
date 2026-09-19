@@ -1165,6 +1165,16 @@ class ExchangeLedger:
         rec = self._chains.get(chain_id) or self._retired_chains.get(chain_id)
         return rec.outstanding if rec is not None else 0.0
 
+    def amount_of(self, chain_id: int) -> float:
+        """台帳が現在採用している生成量を返す。存在しなければ0。"""
+        rec = self._chains.get(chain_id) or self._retired_chains.get(chain_id)
+        return rec.amount if rec is not None else 0.0
+
+    def finalized_amount_of(self, chain_id: int) -> float | None:
+        """受理済み確定量を返す。未確定・下げ保留・不存在ならNone。"""
+        rec = self._chains.get(chain_id) or self._retired_chains.get(chain_id)
+        return rec.finalized_amount if rec is not None else None
+
     # ------------------------------
     # 集計
     # ------------------------------

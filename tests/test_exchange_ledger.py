@@ -1082,6 +1082,21 @@ def test_retire_side_chains_removes_only_chains_generated_by_the_other_side() ->
     assert snap.retired_unreconciled == pytest.approx(40.0)
 
 
+def test_amount_getters_expose_held_downward_finalize_without_divergence() -> None:
+    """大幅下げを保留した場合、採用量と確定未受理を公開APIで区別できる。"""
+    led = ExchangeLedger()
+    ctx = _ctx(game_idx=0)
+    led.push(_fire(Side.P1, 0.0, 1), ctx)
+    led.push(_step(Side.P1, 0.1, 1, 8.0, cc=1), ctx)
+    led.push(_finalize(Side.P1, 0.2, 1, 3.0), ctx)
+
+    assert led.amount_of(1) == pytest.approx(8.0)
+    assert led.finalized_amount_of(1) is None
+    assert led.outstanding_of(1) == pytest.approx(8.0)
+    assert led.amount_of(999) == pytest.approx(0.0)
+    assert led.finalized_amount_of(999) is None
+
+
 def test_retire_side_chains_closes_episode_once_it_becomes_settled() -> None:
     """ワイプで残りの未決着分が消えた結果 episode が決着すれば、
     遅い試合境界を待たずにその場で CLOSED になる。"""

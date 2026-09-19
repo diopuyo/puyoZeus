@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Mapping
 
 import cv2
 import numpy as np
@@ -280,13 +280,40 @@ def _ensure_1080p(frame: np.ndarray) -> np.ndarray | None:
                       interpolation=cv2.INTER_AREA)
 
 
-def _crop_score_roi(frame: np.ndarray, side: Side) -> np.ndarray | None:
+def _crop_score_roi(
+    frame: np.ndarray,
+    side: Side,
+    offset: tuple[int, int] = (0, 0),
+) -> np.ndarray | None:
     """フレームから 1P/2P score ROI (65x480) を切り出す。"""
     region = SCORE_1P_REGION if side == "1P" else SCORE_2P_REGION
     y1, y2, x1, x2 = region
-    if y2 > frame.shape[0] or x2 > frame.shape[1]:
+    dx, dy = offset
+    y1, y2, x1, x2 = y1 + dy, y2 + dy, x1 + dx, x2 + dx
+    if y1 < 0 or x1 < 0 or y2 > frame.shape[0] or x2 > frame.shape[1]:
         return None
     return frame[y1:y2, x1:x2].copy()
+
+
+def _validated_region_offsets(
+    offsets: Mapping[Side, tuple[int, int]] | None,
+) -> dict[Side, tuple[int, int]]:
+    """左右別の座標補正を整数2要素へ正規化する。"""
+    result: dict[Side, tuple[int, int]] = {"1P": (0, 0), "2P": (0, 0)}
+    if offsets is None:
+        return result
+    for side, value in offsets.items():
+        if side not in result:
+            raise ValueError(f"不正なsideです: {side}")
+        if not isinstance(value, tuple) or len(value) != 2:
+            raise ValueError("score region offsetは整数2要素で指定してください")
+        if any(isinstance(item, bool) for item in value):
+            raise ValueError("score region offsetは整数2要素で指定してください")
+        dx, dy = value
+        if not isinstance(dx, int) or not isinstance(dy, int):
+            raise ValueError("score region offsetは整数2要素で指定してください")
+        result[side] = (dx, dy)
+    return result
 
 
 def _crop_digit_cell(roi: np.ndarray, idx: int, side: Side = "1P") -> np.ndarray:
@@ -324,6 +351,7 @@ class ScoreOcr:
         avg_min_confidence: float = NCC_AVG_MIN_CONFIDENCE,
         enable_matmul_ncc: bool = False,
         mult_template: np.ndarray | None = None,
+        region_offsets: Mapping[Side, tuple[int, int]] | None = None,
     ) -> None:
         """Args:
             templates: 0-9 → テンプレ画像 (50x40 BGR or grayscale) の辞書。
@@ -336,6 +364,8 @@ class ScoreOcr:
             mult_template: 掛け算式「×」テンプレ画像 (2026-08-24 追加、
                 optional)。None (default) なら read_formula_side は常に
                 invalid を返す (既存挙動への影響ゼロ、backwards compat)。
+            region_offsets: 左右別の得点表示座標補正 (dx, dy)。None は
+                両側 (0, 0) で従来動作を完全に維持する。
         """
         self._templates_gray: dict[int, np.ndarray] = {}
         # 数字部分のマスク (背景を NCC から除外して識別力を上げるため)
@@ -365,6 +395,7 @@ class ScoreOcr:
         self._mult_template_gray: np.ndarray | None = (
             _to_gray(mult_template) if mult_template is not None else None
         )
+        self._region_offsets = _validated_region_offsets(region_offsets)
         # 警告は 1 度だけ出す
         self._warned_missing = False
         if not self._templates_gray:
@@ -388,6 +419,7 @@ class ScoreOcr:
         margin_min: float = NCC_MARGIN_MIN,
         avg_min_confidence: float = NCC_AVG_MIN_CONFIDENCE,
         enable_matmul_ncc: bool = False,
+        region_offsets: Mapping[Side, tuple[int, int]] | None = None,
     ) -> "ScoreOcr":
         """models/ui_templates/score_digits/ から digit_N.png を読み込む。
 
@@ -410,6 +442,7 @@ class ScoreOcr:
             margin_min=margin_min,
             avg_min_confidence=avg_min_confidence,
             mult_template=mult_template,
+            region_offsets=region_offsets,
         )
 
     @staticmethod
@@ -480,6 +513,21 @@ class ScoreOcr:
             return None, 0.0, empty_l, empty_c
         return self._read_one_side_detail(f, side)
 
+    def read_side_detail_at_offset(
+        self,
+        frame: np.ndarray,
+        side: Side,
+        dx: int,
+        dy: int,
+    ) -> tuple[int | None, float, tuple[int | None, ...], tuple[float, ...]]:
+        """指定した一時座標で読み、インスタンスの通常設定は変更しない。"""
+        f = _ensure_1080p(frame)
+        if f is None:
+            empty_l: tuple[int | None, ...] = (None,) * DIGIT_COUNT
+            empty_c: tuple[float, ...] = (0.0,) * DIGIT_COUNT
+            return None, 0.0, empty_l, empty_c
+        return self._read_one_side_detail(f, side, (int(dx), int(dy)))
+
     def read_formula_side(
         self,
         frame: np.ndarray,
@@ -509,7 +557,7 @@ class ScoreOcr:
         f = _ensure_1080p(frame)
         if f is None:
             return _formula_invalid("bad_frame")
-        roi = _crop_score_roi(f, side)
+        roi = _crop_score_roi(f, side, self._region_offsets[side])
         if roi is None or roi.size == 0:
             return _formula_invalid("bad_roi")
         mult_ncc = self._match_mult_cell(roi, side)
@@ -603,10 +651,14 @@ class ScoreOcr:
         return score, conf, digits_t
 
     def _read_one_side_detail(
-        self, frame: np.ndarray, side: Side
+        self,
+        frame: np.ndarray,
+        side: Side,
+        offset: tuple[int, int] | None = None,
     ) -> tuple[int | None, float, tuple[int | None, ...], tuple[float, ...]]:
         """1 サイド読取りの本体 (旧 _read_one_side + セル別 NCC も返す)。"""
-        roi = _crop_score_roi(frame, side)
+        effective_offset = self._region_offsets[side] if offset is None else offset
+        roi = _crop_score_roi(frame, side, effective_offset)
         if roi is None or roi.size == 0:
             empty: tuple[int | None, ...] = (None,) * DIGIT_COUNT
             return None, 0.0, empty, (0.0,) * DIGIT_COUNT
