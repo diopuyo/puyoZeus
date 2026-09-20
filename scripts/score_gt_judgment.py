@@ -107,6 +107,12 @@ def verify_coverage(rows: list[dict[str, Any]], picks_path: pathlib.Path) -> dic
     return result
 
 
+def _path_label(path: pathlib.Path) -> str:
+    """ROOT配下は旧相対表記、外部のD保存原票は絶対表記を保持する。"""
+    label = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
+    return label.as_posix()
+
+
 def score_video(video: str, judged_path: pathlib.Path) -> dict[str, Any]:
     kit_dir = ROOT / "logs" / "diag_gt" / f"kit_video_{video}"
     picks_path = kit_dir / "picks.json"
@@ -137,8 +143,8 @@ def score_video(video: str, judged_path: pathlib.Path) -> dict[str, Any]:
     return {
         "schema": "g3_cell_accuracy/v1",
         "動画": f"video_{video}",
-        "受領票": str(receipt_path.relative_to(ROOT)).replace("\\", "/"),
-        "抽出": str(picks_path.relative_to(ROOT)).replace("\\", "/"),
+        "受領票": _path_label(receipt_path),
+        "抽出": _path_label(picks_path),
         "被覆確認": coverage,
         "母数": {
             "記録された盤面": n_recorded_boards,

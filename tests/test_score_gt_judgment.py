@@ -43,16 +43,21 @@ def test_unknown_only_has_no_decided_estimate() -> None:
     assert result["判定できた分で外挿"] is None
 
 
-def test_reference_score_never_claims_quality_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("external", [False, True])
+def test_reference_score_never_claims_quality_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, external: bool,
+) -> None:
     """旧点推定を残しながら、信頼区間と合格は明確に否定する。"""
     kit = tmp_path / "logs/diag_gt/kit_video_test"
     kit.mkdir(parents=True)
     picks_path = _picks(kit / "picks.json")
     picks = json.loads(picks_path.read_text())
-    picks.update(source_detail="receipt/npz_detail.jsonl", n_boards_with_mismatch=1,
+    receipt = (tmp_path.parent / (tmp_path.name + "_external")
+               if external else tmp_path / "receipt")
+    detail = str(receipt / "npz_detail.jsonl") if external else "receipt/npz_detail.jsonl"
+    picks.update(source_detail=detail, n_boards_with_mismatch=1,
                  n_top=1, n_random=0)
     picks_path.write_text(json.dumps(picks), encoding="utf-8")
-    receipt = tmp_path / "receipt"
     receipt.mkdir()
     (receipt / "receipt.json").write_text(json.dumps({"denominators_and_counts": {
         "npz_basis_cellframes_total": 1000, "npz_mismatch_cellframes_total": 1,
@@ -65,3 +70,6 @@ def test_reference_score_never_claims_quality_pass(tmp_path: Path, monkeypatch: 
     assert result["quality_gate_clear"] is False
     assert result["confidence_interval"] is None
     assert result["母数"]["user が判定したセル"] == 1
+    assert result["受領票"] == ((receipt / "receipt.json").as_posix()
+                                 if external else "receipt/receipt.json")
+    assert result["抽出"] == "logs/diag_gt/kit_video_test/picks.json"

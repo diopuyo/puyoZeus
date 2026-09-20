@@ -1,21 +1,23 @@
 # G3テストの再実行条件
 
-PR #27修復では、既存の隔離テスト22本・G3コード・そのCPUテストと、
+PR #27修復では、既存の隔離テスト22本と追加分離1本・G3コード・そのCPUテストと、
 参照されるG2凍結fixtureコード・固定snapshotのPythonコードを収録した。
 凍結元は書き換えず、そのまま複製している。
 モデル・動画・実走ログをGitへ追加するものではない。
 
 ## 実行
 
-Python 3.12の既存WSL環境を用いる。元の隔離22本は`tests/g3_isolated_files.txt`。
-通常群と22個の独立プロセスを合算する既存c案を、実終了コード・ログ・JUnit付きで再現する。
+Python 3.12の既存WSL環境を用いる。隔離23本は`tests/g3_isolated_files.txt`。
+通常群と23個の独立プロセスを合算するc案を、実終了コード・ログ・JUnit付きで再現する。
+追加した `test_g3_prediction_funnel.py` は、全sys.modulesの反復走査が
+他ファイルとの同居で遅くなるため分離した。テスト本文と判定条件は変更していない。
 
 ```bash
 PYTHON=/path/to/venv/bin/python bash scripts/run_g3_partitioned_tests.sh \
   /mnt/d/puyo_analyzer/verify/新規run名 full
 ```
 
-`isolated`を指定すると22本だけを実行する。全pytest成功とは扱わない。
+`isolated`を指定すると23本だけを実行する。全pytest成功とは扱わない。
 必須ファイル欠落・未収集・プロセス失敗は非ゼロ終了。既存出力先は拒否する。
 通常のpytestから恒久除外したり、外部資産が無い試験をskipへ変更したりしない。
 
@@ -34,9 +36,16 @@ G3試験の一部は保存済みG2/G3原票・モデルを必要とする。Git 
 隔離worktreeへ原票をコピーするだけでは、その来歴検査を満たさない。
 Formal100/hidden reserveは開かない。モデル出力を使う人工fixtureは動画GTではない。
 
-Windowsの`core.autocrlf`によるSHAずれを防ぐため、Python/シェルはLF、
-`data/verify/`の凍結資産はGit blobのバイト列を維持する属性を追加した。
+Windowsの`core.autocrlf`によるSHAずれを防ぐため、Python/シェルと隔離リストは原則LF、
+固定SHAの8ソースは元のCRLF/混在改行を保持する属性を追加した。
+`data/verify/`の凍結資産と通知PowerShellのBOMも元のバイト列を保持する。
 これは改行を含むコード同一性の保全であり、SHA検査を緩める変更ではない。
+
+今回の隔離checkoutはprivate mount namespace内で元の絶対パスへ割り当て、
+正規資産をread-onlyで参照した。元workspaceは書き換えていない。
+実行スクリプト・原票・入力同一性の確認は
+`D:/puyo_analyzer/verify/pr27_ready_2026-09-20_v1/` に保存している。
+通常群の中断前の成功を保持し、未実行IDを継続した手順と最終集計も同所にある。
 
 ## 合格の範囲
 
