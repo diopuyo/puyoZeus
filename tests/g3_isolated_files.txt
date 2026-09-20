@@ -11,6 +11,7 @@ tests/test_g3_model_process.py
 tests/test_g3_normal_reset_scope.py
 tests/test_g3_observer_scope.py
 tests/test_g3_palette_reset_hold.py
+tests/test_g3_prediction_funnel.py
 tests/test_g3_video39_baseline.py
 tests/test_g3_video39_next.py
 tests/test_match_start_epoch_shadow_v1.py
