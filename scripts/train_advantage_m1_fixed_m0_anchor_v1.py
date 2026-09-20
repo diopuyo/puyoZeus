@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from scripts.production_dependency_contract import (
-    dependency_receipt, production_compatible, saved_dependency_compatible,
-)
-
 import argparse
 import hashlib
 import json
@@ -1051,9 +1047,8 @@ def _build_plan(
             device if device is not None else torch.device("cpu")
         ),
     })
-    plan["production_dependency_contract"] = dependency_receipt(REPO_ROOT)
-    if not plan["production_dependency_contract"]["compatible"]:
-        raise FixedM0AnchorTrainingError("production依存値が事前登録時から変化しました")
+    if plan["code_sha256"]["production_config"] != EXPECTED_PRODUCTION_CONFIG_SHA256:
+        raise FixedM0AnchorTrainingError("production_config SHAが事前登録時から変化しました")
     return plan
 
 
