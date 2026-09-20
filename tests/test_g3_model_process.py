@@ -103,6 +103,9 @@ def test_corrupt_child_request_saved(tmp_path: Path) -> None:
     result = json.loads((tmp_path / 'failed/RESULT.json').read_text())
     assert result['status'] == 'FAILED' and result['exit_code'] != 0
     assert (tmp_path / 'failed/stderr.log').stat().st_size > 0
+    # importや資産不足で早期失敗しただけの実行を、不正入力の検証成功にしない。
+    assert 'ValueError: belief_publication:wire_tokens' in (
+        tmp_path / 'failed/stderr.log').read_text()
     assert not (tmp_path / 'failed/PACKET.json').exists()
 
 

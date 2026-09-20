@@ -3037,8 +3037,8 @@ def _process_side_lean(
         # raw 版は、おじゃま会計フィルタを通す **前** の観測を基準にする。
         # フィルタ後だと「画面は おじゃま なのに記録は色ぷよ」を直せない
         # (実測: 残った誤り 241 件のうち 89 件 = 37% がこれ)。
-        _obs = (raw_cnn_board if enable_record_time_observation_fix_raw
-                and raw_cnn_board is not None else cnn_board)
+        # raw欠測時は補正を保留し、filtered観測をrawの代用にしない。
+        _obs = raw_cnn_board if enable_record_time_observation_fix_raw else cnn_board
         effective_board, _n_fixed = _apply_record_time_observation_fix(
             effective_board, side_label, _obs, frame_bgr, image_reader,
         )

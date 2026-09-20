@@ -135,7 +135,9 @@ def test_returns_the_same_board_when_inputs_are_missing() -> None:
     assert same.get(12, 0) == 1
 
 
-@pytest.mark.parametrize("flag", ["enable_record_time_observation_fix"])
+@pytest.mark.parametrize("flag", [
+    "enable_record_time_observation_fix", "enable_record_time_observation_fix_raw",
+])
 def test_flag_defaults_to_off_everywhere(flag: str) -> None:
     """既定 OFF を、口・収集本体の両方で固定する (勝手に本番へ入らないこと)。"""
     import inspect
@@ -190,6 +192,35 @@ def test_rejected_column_keeps_other_column_correction() -> None:
     assert fixed.get(BOTTOM_ROW, 0) == 1
     assert fixed.get(BOTTOM_ROW, 1) == 3
     assert count == 1 and check_gravity_rule(fixed)[0]
+
+
+@pytest.mark.parametrize("normal,raw,expected", [
+    (False, True, 1), (True, True, 1), (True, False, 2),
+])
+def test_missing_raw_observation_never_falls_back_to_filtered(
+    normal: bool, raw: bool, expected: int, tmp_path: Path,
+) -> None:
+    """raw欠測時は確定盤面を保ち、通常モードだけfilteredで補正する。"""
+    board, observed = Board(), Board()
+    board.set(BOTTOM_ROW, TEST_COLUMN, 1)
+    observed.set(BOTTOM_ROW, TEST_COLUMN, 2)
+    original = board.grid_bytes()
+    acc, state = CBL._LeanNpzAccumulator(), CBL._SideState()
+    state.prev_tsumo_count = 1
+    CBL._process_side_lean(
+        acc, state, "1P", board, BoardState.STABLE, 100, "test", 1.0, 30,
+        tsumo_count=2, exclude_phantom=True, enable_move_segmented_recording=True,
+        enable_record_time_observation_fix=normal,
+        enable_record_time_observation_fix_raw=raw, raw_cnn_board=None,
+        cnn_board=observed, frame_bgr=object(), image_reader=_Reader(observed),
+    )
+    acc.assign_won_labels({0: {"1P": 100, "2P": 0}})
+    path = tmp_path / "raw_missing.npz"
+    acc.save(path)
+    with np.load(path) as saved:
+        assert len(saved["grids"]) == 1
+        assert saved["grids"][0][BOTTOM_ROW][TEST_COLUMN] == expected
+    assert board.grid_bytes() == original
 
 
 def test_unknown_and_hidden_row_keep_existing_gravity_semantics() -> None:
