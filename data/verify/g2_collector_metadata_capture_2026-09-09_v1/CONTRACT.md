@@ -1,0 +1,7 @@
+# 実collector metadata捕捉
+
+目的は旧prefix比較から残った未測定metadata、特に画像stableタグと共有game/全消し/queue/score/ロックの実採録を追えるようにすること。終了印だけの再走ではなく、G2採録品質の新しい必要証拠を得る。
+
+固定旧collectorの_process_side_leanを一回だけ呼び、内側の対象acc.appendも原メソッドを一回だけ呼ぶ。入力全部（object引数は実使用fieldと状態）、実append全引数、実accへ追加された全非label列、side/shared状態の前後を別sidecarへ捕捉。won/勝敗列は読まない。None/NaNを0へ補完しない。呼出し途中にstateや入力を差し替えず、appendの観測関数だけ対象instanceへ一時設置しfinallyで削除する。範囲外は元処理へ直通、既定OFF。
+
+実動画scopeは29052..36298 stride2/両側7248呼出の順序まで照合。エラーはsticky、原例外identityを保って失敗する。通常戻りを多重呼出しで再現しない。本番src/既存run/動画は変更しない。CPU正常/例外/タグ・queue欠測/全項目非干渉と独立検収の後に合成する。

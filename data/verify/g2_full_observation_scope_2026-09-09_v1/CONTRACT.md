@@ -1,0 +1,9 @@
+# 全観測scope（公開ロジックを変えない独立取得）
+
+対象は既承認video38の29052..36298/stride2。前回の実公開変更run v2はchild1のまま保存し、救済しない。今回は成功済みprovisional_context背景へ戻し、W（2Pのinfer/補正/resolve）、PB両側、SM両側の観測窓だけ全域へ広げる。current_connectionの追加候補は私有診断であり、Publisher/release/gate/新collectorを接続しない。
+
+既存機構調査：W.selected/expectedとPB.expectedはWINDOWSに依存。PB.installがW窓一致を確認し、SM/current/contextは実PB.expectedを継承。新規observerや認識実装は不要。2つの実bootstrap moduleだけをcontextmanagerで設定し、元ファイル/観測契約を上書きしない。
+
+目的は34620..34698のSM・infer・FIFOと、36000以降の復帰証拠の欠測解消。旧raw/NEXT/認識/collectorが含まれるframes.jsonl全文を成功済み参照のSHAと一致要求する。元finish検査は一切緩和しない。新receiptは実7248 side scopeと3624updateを検査する。計算完走とG2品質PASSは別。
+
+CPUでは実凍結二code/人工readerを利用して新しい観測時計の非干渉と例外復元を確認。画像内容の評価は実走後のみ。元確率を丸めず、未知会計を既知0へせず、非STABLE評価を許可しない。正式100/保護reserveには一切アクセスしない。動画の新規生成・削除なし。

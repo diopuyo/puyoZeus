@@ -1,0 +1,116 @@
+{
+  "manifest_id": "formal100_projected_aux_indicators_v1",
+  "schema_version": 1,
+  "created_at": "2026-09-04",
+  "status": "frozen_before_label_access",
+  "model_id": "projected_set_residual_cnn_v1",
+  "purpose": "auxiliary_supervision_only",
+  "value_field": "score",
+  "dtype": "float32",
+  "value_range": [0.0, 1.0],
+  "board_domains": [
+    "current_state",
+    "post_chain_state",
+    "landing_branches"
+  ],
+  "side_order": ["p1", "p2"],
+  "feature_order": [
+    "board_color_puyo_total",
+    "board_ojama_count",
+    "max_column_height",
+    "death_margin",
+    "column_bumpiness",
+    "center_bulge_color",
+    "center_bulge_ojama",
+    "color_diversity_evenness"
+  ],
+  "features": [
+    {
+      "name": "board_color_puyo_total",
+      "callable": "src.indicators_v2.board_color_puyo_total",
+      "kwargs": {},
+      "meaning": "盤面の色ぷよ総数を72で正規化"
+    },
+    {
+      "name": "board_ojama_count",
+      "callable": "src.indicators_v2.board_ojama_count",
+      "kwargs": {},
+      "meaning": "可視領域のおじゃま数を72で正規化"
+    },
+    {
+      "name": "max_column_height",
+      "callable": "src.indicators_v2.max_column_height",
+      "kwargs": {},
+      "meaning": "最大列高を12で正規化"
+    },
+    {
+      "name": "death_margin",
+      "callable": "src.indicators_v2.death_margin",
+      "kwargs": {},
+      "meaning": "窒息列の残り高さを12で正規化"
+    },
+    {
+      "name": "column_bumpiness",
+      "callable": "src.indicators_v2.column_bumpiness",
+      "kwargs": {},
+      "meaning": "隣接列高差の合計を60で正規化"
+    },
+    {
+      "name": "center_bulge_color",
+      "callable": "src.indicators_v2.center_bulge_color",
+      "kwargs": {},
+      "meaning": "色ぷよ由来の中央凸度"
+    },
+    {
+      "name": "center_bulge_ojama",
+      "callable": "src.indicators_v2.center_bulge_ojama",
+      "kwargs": {},
+      "meaning": "おじゃま由来の中央凸度"
+    },
+    {
+      "name": "color_diversity_evenness",
+      "callable": "src.indicators_v2.color_diversity_evenness",
+      "kwargs": {},
+      "meaning": "色ぷよ分布のShannon均等度"
+    }
+  ],
+  "target_shapes": {
+    "current": "float32[B,2,8]",
+    "post_chain": "float32[B,2,8]",
+    "landing": "float32[B,20,2,8]",
+    "current_mask": "bool[B,2,8]",
+    "post_chain_mask": "bool[B,2,8]",
+    "landing_mask": "bool[B,20,2,8]"
+  },
+  "rules": {
+    "same_callable_for_every_board_domain_and_side": true,
+    "horizontal_mirror_augmentation": false,
+    "side_swap_changes_slots_not_sign": true,
+    "dead_board_targets_remain_valid": true,
+    "unknown_cell_semantics": "8指標すべてでUNKNOWNセルを色・おじゃま・占有として数えない",
+    "missing_board_target_mask": false,
+    "unknown_cell_is_not_missing_board": true,
+    "invalid_or_out_of_range_value": "hard_error",
+    "raw_value_used_for_training": false,
+    "runtime_feature_input": false,
+    "auxiliary_prediction_used_at_inference": false
+  },
+  "exclusions": {
+    "immediate_fire_power": "死亡済み着弾盤面で実戦不能な仮想発火値を返すため除外",
+    "ignition_point_count": "死亡済み着弾盤面で実戦不能な仮想着手値を返すため除外",
+    "event_indicator_feature_rows": "diff列は-1から1、sum列は0から2で0から1契約を満たさない",
+    "next_or_history_dependent_indicators": "盤面単体のstateless補助正解ではない",
+    "random_or_monte_carlo_indicators": "固定再現性と単一盤面意味を満たさない"
+  },
+  "dependency_sha256": {
+    "src/indicators_v2.py": "147f89d513ce5b6a3ef4b3519f52e2e97357c117593af99d45d533a729720fb4",
+    "src/board.py": "a314348cc0132f56f6f1ddf37ba12c2c97c6f7dffdb87ab81eab27eb4a9ef01c",
+    "src/chain.py": "445824eb28136885244a92e171de1da544dfa9bb90d00c8ac5c416c9d1206e54",
+    "src/chain_bitboard.py": "980e7d7d4545488d57b1689c8f49798ef1649ffd23cc6b347ed7e500276c72ae",
+    "src/scoring.py": "6c73c1f3e4768c094b539221dc9c60ddbfeb71fa28ad02ba7b50cbc694798fe9",
+    "src/production_config.py": "4152435394271234e9b86ee206cfbe395d7d03ee76b536865ea9ba566e4070b4"
+  },
+  "production_constants": {
+    "GHOST_CHAIN_RULE_ENABLED": true
+  }
+}

@@ -1,0 +1,24 @@
+# SHA固定のPython・シェルコードをWindowsでもLFのまま取得する。
+*.py text eol=lf
+*.sh text eol=lf
+tests/g3_isolated_files.txt text eol=lf
+# 凍結検証資産は記録されたblobのバイト列をそのまま保持する。
+data/verify/** -text
+.runtime_snapshots/** -text
+docs/agent_coordination/G3_VIDEO_VALIDATION_PREREG_2026-09-07.json -text
+docs/manifests/*.tsv -text
+docs/agent_coordination/NEXT_ENQUEUE_LIVE_WIRING_PLAN_2026-09-08.md -text
+docs/agent_coordination/NEXT_LIVE_RUN_PLAN_2026-09-08.md -text
+docs/agent_coordination/C6_COMMIT_VERIFICATION_WIRING_2026-09-07.md -text
+docs/agent_coordination/CONFIRMED_ATOMIC_PUBLICATION_FIX_PLAN_2026-09-07.md -text
+# 実行時SHAが改行を含む8本を保全する。混在改行の1本だけはbyte列を固定する。
+src/board.py text eol=crlf
+src/board_state_machine.py text eol=crlf
+src/chain_detector.py text eol=crlf
+src/death_confirmation.py -text !eol
+src/fps_normalize.py text eol=crlf
+src/hidden_row_probability.py text eol=crlf
+src/next_detector.py text eol=crlf
+src/state_detectors.py text eol=crlf
+# Windows PowerShell 5.1向け通知スクリプトのBOMと原バイト列を保つ。
+scripts/g3_notify_event.ps1 -text

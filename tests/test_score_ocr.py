@@ -51,6 +51,8 @@ def _paint_score_into_frame(
     digits: list[int],
     side: str,
     templates: dict[int, np.ndarray],
+    dx: int = 0,
+    dy: int = 0,
 ) -> np.ndarray:
     """8 桁の数字を ROI に描き込み、合成テストフレームを作る。"""
     region = SCORE_1P_REGION if side == "1P" else SCORE_2P_REGION
@@ -61,8 +63,8 @@ def _paint_score_into_frame(
         if tpl is None:
             continue
         # テンプレを ROI 内の i 番目桁位置に貼る
-        ay = y1 + DIGIT_TOP
-        ax = x1 + lefts[i]
+        ay = y1 + DIGIT_TOP + dy
+        ax = x1 + lefts[i] + dx
         if tpl.shape[:2] != (DIGIT_HEIGHT, DIGIT_WIDTH):
             tpl = cv2.resize(tpl, (DIGIT_WIDTH, DIGIT_HEIGHT))
         frame[ay:ay + DIGIT_HEIGHT, ax:ax + DIGIT_WIDTH] = tpl
@@ -146,6 +148,41 @@ def test_score_ocr_specific_number_synthetic() -> None:
     _paint_score_into_frame(frame, digits, side="1P", templates=templates)
     res = ocr.read(frame)
     assert res.score_1p == 12345678
+
+
+def test_score_ocr_configured_region_offset_reads_shifted_score() -> None:
+    """表示位置がずれた映像は明示座標で読み、既定座標では読まない。"""
+    templates = _load_real_templates()
+    needed = set(range(1, 9))
+    if not needed.issubset(templates):
+        pytest.skip(f"テンプレ未整備: {needed - templates.keys()}")
+    frame = _make_blank_frame()
+    _paint_score_into_frame(
+        frame, list(range(1, 9)), "1P", templates, dx=4, dy=8,
+    )
+    assert ScoreOcr.load_default().read(frame).score_1p is None
+    shifted = ScoreOcr.load_default(region_offsets={"1P": (4, 8)})
+    assert shifted.read(frame).score_1p == 12345678
+
+
+def test_score_ocr_temporary_offset_does_not_change_normal_setting() -> None:
+    """探索用の一時座標は通常読み取りの座標を変更しない。"""
+    templates = _load_real_templates()
+    if 0 not in templates:
+        pytest.skip("digit_0 テンプレ未整備")
+    frame = _make_blank_frame()
+    _paint_score_into_frame(frame, [0] * 8, "2P", templates, dx=12, dy=8)
+    ocr = ScoreOcr.load_default()
+    score, _conf, _labels, _confs = ocr.read_side_detail_at_offset(
+        frame, "2P", 12, 8,
+    )
+    assert score == 0
+    assert ocr.read(frame).score_2p is None
+
+
+def test_score_ocr_rejects_invalid_region_offset() -> None:
+    with pytest.raises(ValueError, match="整数2要素"):
+        ScoreOcr.load_default(region_offsets={"1P": (True, 8)})
 
 
 def test_score_ocr_read_side_only() -> None:

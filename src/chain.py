@@ -352,25 +352,30 @@ class ChainSimulator:
         if ojama_count < 0:
             raise ValueError(f"おじゃま数が負の値: {ojama_count}")
 
-        work_board = board.copy()
-
         # 各列に落とすおじゃまの数を計算 (端数はランダム列)
         drop_counts = self._calc_ojama_drop_counts(ojama_count, seed=seed)
+        return self._drop_ojama_by_counts(board, drop_counts)
 
-        # 各列の下から空きセルを探しておじゃまを配置 (重力で下に落ちる)
-        for col in range(BOARD_COLS):
-            remaining = drop_counts[col]
-            if remaining == 0:
-                continue
-            for row in range(BOARD_ROWS - 1, -1, -1):
-                if work_board.get(row, col) == COLOR_EMPTY:
-                    work_board.set(row, col, COLOR_OJAMA)
-                    remaining -= 1
-                    if remaining == 0:
-                        break
-            # 置けなかった分はスキップ (is_dead() で窒息を検出)
+    def drop_ojama_with_remainder_columns(
+        self,
+        board: Board,
+        ojama_count: int,
+        remainder_columns: tuple[int, ...],
+    ) -> Board:
+        """端数おじゃまを落とす列を明示して配置する。
 
-        return work_board
+        引数の board は変更しない。端数列の順序は配置結果に影響しない。
+
+        Raises:
+            ValueError: おじゃま数、端数列数、列範囲、重複が不正な場合。
+        """
+        if ojama_count < 0:
+            raise ValueError(f"おじゃま数が負の値: {ojama_count}")
+        columns = tuple(remainder_columns)
+        drop_counts = self._calc_explicit_ojama_drop_counts(
+            ojama_count, columns,
+        )
+        return self._drop_ojama_by_counts(board, drop_counts)
 
     # ============================
     # 内部メソッド
@@ -538,6 +543,41 @@ class ChainSimulator:
                 drop_counts[col] += 1
 
         return drop_counts
+
+    @staticmethod
+    def _calc_explicit_ojama_drop_counts(
+        ojama_count: int, remainder_columns: tuple[int, ...],
+    ) -> list[int]:
+        """明示された端数列から列ごとの落下数を作る。"""
+        if len(remainder_columns) != len(set(remainder_columns)):
+            raise ValueError("端数列が重複しています")
+        if any(col < 0 or col >= BOARD_COLS for col in remainder_columns):
+            raise ValueError("端数列が範囲外です")
+        full_rows, remainder = divmod(ojama_count, OJAMA_ROW_SIZE)
+        if len(remainder_columns) != remainder:
+            raise ValueError(
+                f"端数列数が不一致: {len(remainder_columns)} "
+                f"(期待値: {remainder})"
+            )
+        selected = set(remainder_columns)
+        return [
+            full_rows + int(col in selected) for col in range(BOARD_COLS)
+        ]
+
+    @staticmethod
+    def _drop_ojama_by_counts(board: Board, drop_counts: list[int]) -> Board:
+        """列ごとの数に従い、共通の物理配置を1回だけ実行する。"""
+        work_board = board.copy()
+        for col in range(BOARD_COLS):
+            remaining = drop_counts[col]
+            for row in range(BOARD_ROWS - 1, -1, -1):
+                if remaining == 0:
+                    break
+                if work_board.get(row, col) == COLOR_EMPTY:
+                    work_board.set(row, col, COLOR_OJAMA)
+                    remaining -= 1
+            # 置けなかった分はis_dead()で窒息を検出する。
+        return work_board
 
     # ============================
     # Phase G: 確率版シミュレーション
