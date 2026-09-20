@@ -2,6 +2,20 @@
 
 状態: `READY_FOR_MANUAL_SUBMISSION`
 
+## 2026-08-29 — Codex主導の交換会計v2レビュー結果
+
+- 読み取り専用レビュー第1回で、暫定8→確定3の大幅下げを基礎台帳が保留する一方、
+  v2ローカルだけ3へ下げるP0が見つかった。
+- `ExchangeLedger.amount_of()` / `finalized_amount_of()`を追加し、v2は確定入力値でなく
+  台帳の採用値を読み戻すよう修正した。最小再現は生成8・確定済み0・未決着8・残差0。
+- 再レビューで前回P0はCLOSED、新規P0/P1なし。決済後の下げ保留は監査粒度のため
+  `late_finalization_held`へ分離した。
+- 旧手数落下はv2の決済入力に使わない。通常38番frame10932の28個確定後、
+  frame11074/11156で対応火力7+2が相殺する時系列を確認した。
+- 最新成果物は`data/verify/event_source_v1_physical_pilot_2026-08-29/results/`の
+  `*_exchange_reconciliation_v2_p10.json`等。`src/production_config.py`未変更、本番未接続。
+- 次のClaude依頼は、物理観測の信頼可能行率を改善した後の最終再レビューとする。
+
 実行開始: ユーザーがClaude Codeの制限解除後に手動で指示する。
 
 ## 2026-08-26 — 最新user決定: 学習前の指標戦略壁打ち
@@ -707,3 +721,434 @@ user決定により、先頭5試合レビュー動画は今は確定せず、Gat
   同方向の生モデル値が既に±90超なら弱めない。関連302テストPASS。
 - v10は3区間完成時点で停止・保持。v11 snapshot
   `_snapshot_cond5_codex_20260827_v11`で全8区間を3並列測定中。
+
+## 2026-08-28 — 次世代判定設計の壁打ち統合（Claude再開時の必読資料）
+
+ユーザーとCodexの後続壁打ち、およびClaudeの読取専用レビューで得た合意を、次へ統合した。
+
+`docs/ADVANTAGE_MODEL_DESIGN_AGREEMENT_2026-08-28.md`
+
+コンテキスト圧縮前を含む提案・異論・撤回・保留の発言順は、保存されたチャット原本から次へ復元した。
+
+`docs/ADVANTAGE_MODEL_WALL_DISCUSSION_TURN_BY_TURN_2026-08-28.md`
+
+上記はユーザー可視の327発言と圧縮7地点を一件ずつ記録した原文順資料である。次は論点別索引として使う。
+
+`docs/ADVANTAGE_MODEL_WALL_DISCUSSION_RECONSTRUCTION_2026-08-28.md`
+
+Claudeが次の学習データ・指標・未来探索を扱う前に、同資料を最初から最後まで読むこと。
+実装仕様は統合版を正とし、復元記録に残る撤回済み初期案を採用しないこと。
+特に次は旧案から更新されている。
+
+1. 出来事の4時刻を全て必須にしない。物理発生区間と利用可能時刻を必須とし、
+   後の確定は元記録の書換えでなく訂正記録にする。
+2. 最初の補助学習は旧5群同時投入でなく、「次の物理的出来事」と
+   「相殺後に送られる量」の限定した一組から始める。
+3. 盤面上の総ぷよ数は局面の重要な観測値として保持し、多い側、両者合計、差、
+   色ぷよ・おじゃま内訳を回帰確認する。18個刻みは初期仮説で固定値ではない。
+4. 未来探索は物理解決、一手、見えている範囲の複数手、未知色・長手数近似へ分ける。
+   相手の行動仮定をまだ固定せず、候補分布と計算費用を保持する。
+5. リアルタイム性は副次条件でなく合格条件である。毎フレーム深く探索せず、
+   状態変化時だけ計算し、古い計算を中止・破棄する。
+6. 人向け確認資料は一画面・一場面・一論点、短い映像、変更前後、平易な根拠とし、
+   スマートフォンから確認できる形式にする。
+7. 48/49マニフェストは候補割当であり、c58/c69の共通品質合格前に最終固定とみなさない。
+   入替時は旧表を上書きせず、新しい版を残す。
+8. 正式境界通知元は一つにし、最終勝敗ラベルには公式勝者表示だけを使う。
+   物理的死亡で欠けた勝者を補わない。
+
+既存 `docs/EVENT_DATASET_DESIGN_2026-08-28.md` 冒頭にも後続合意への注意を追加した。
+現在の `src/event_data_contract.py` は旧4時刻設計を基にした試作なので、新規実装を進める前に
+統合版との差分レビューが必要である。
+
+この追記は情報同期だけであり、現行モデルの削除、重み変更、`src/production_config.py`登録、
+48動画の一括処理、49動画利用、配信接続を指示しない。既存差分と証跡を変更しないこと。
+
+## 2026-08-29 — 出来事保存仕様v1 最終PASS
+
+- user決定により以後の技術設計はCodexが担当し、節目でClaudeへ独立レビューを依頼する。
+- 具体仕様は `docs/EVENT_SOURCE_SCHEMA_V1_2026-08-29.md`。
+- Claude読取専用レビュー3回を実施。第1回P0 1件/P1 7件、第2回新規P1 1件を反映し、
+  第3回で全件CLOSED、新規P0/P1なし、最終PASS。
+- 事後確認版は `data/audit_views/` へ隔離し、`model_input_allowed=false` を必須とした。
+- 次は最小書込み・読取・検査層と独立3試行の決定性試験。まだ実装・動画処理は開始していない。
+- Claudeが次に引き継ぐ場合、旧 `src/event_data_contract.py` を正本とせず、上記具体仕様を優先すること。
+
+## 2026-08-29 — 出来事原本v1 最小実装の修正後レビュー依頼
+
+- 対象: `src/event_source_v1.py`、`tests/test_event_source_v1.py`、
+  `docs/EVENT_SOURCE_SCHEMA_V1_2026-08-29.md`。
+- 第1回コードレビューはP0 0件/P1 2件。仕様例の `record_kind` と、
+  出来事行本体の改ざん試験を修正済み。
+- P2の復旧再実行性、空部品、境界値、未知拡張キー、ネストされた保存先除外、
+  観測時刻の片欠落、定数化も反映した。
+- 新旧出来事関連55件PASS、1関数50行超過0。
+- 本番配線、manifest/COMPLETE、実動画処理はまだ行っていない。
+- P0/P1の再確認と、今回の修正で新しい欠陥を入れていないかの独立確認を依頼する。
+
+## 2026-08-29 — 確定盤面アダプター・実行器レビュー依頼
+
+対象は `src/event_snapshot_adapter_v1.py`、`src/event_snapshot_export_v1.py`、
+`scripts/run_event_snapshot_pilot_v1.py` と関連試験。関連121件PASS、関数50行超過0。
+
+実動画を各3試行する前に、生成内容IDの十分性、observed選別、fpsとframe_idx、
+上書き防止、完了印、仕様との食い違いをP0/P1中心に確認してほしい。
+レビュー中は編集せず、指摘はfile:line、再現条件、最小修正案つきで返すこと。
+
+## 2026-08-29 — 攻撃会計・訂正・再採番参照の最終レビュー依頼
+
+読取専用でP0/P1を中心に独立レビューすること。編集、コミット、本番設定変更、動画処理は行わない。
+
+対象:
+
+- `src/ojama_accounting.py`
+- `src/event_accounting_observer_v1.py`
+- `src/event_accounting_adapter_v1.py`
+- `src/event_accounting_pilot_validation_v1.py`
+- `src/event_observation_adapter_v1.py`
+- `src/event_snapshot_export_v1.py`
+- `scripts/collect_boards_lean.py`
+- `scripts/run_event_snapshot_pilot_v1.py`
+- `scripts/reexport_event_snapshot_pilot_v1.py`
+- `scripts/verify_event_accounting_pilot_v1.py`
+- 対応する`tests/test_event_*.py`、`tests/test_collect_boards_lean.py`、`tests/test_ojama_accounting.py`
+
+特に確認すること:
+
+1. 非消費観測が会計本体を変えず、累積差分とpendingの保存則を正しく検査するか。
+2. 暫定攻撃が会計量を動かさず、`simulate`値を量へ昇格させず、得点確定が同じ攻撃IDを
+   `confirms`/`corrects`するか。
+3. 生成=自己相殺+送付、送付量IDのFIFO相殺/着地/境界消失、同一フレーム順が妥当か。
+4. 二回以上の統合・再採番でも`target_event_ids`と`verified_cause_event_ids`が正しい対象へ追従するか。
+5. 完了試行の独立検証が、実装と同じ式をなぞるだけの自己確認になっていないか。
+6. 全消し内訳、連鎖開始、着地盤面差を未観測として残す扱いが、確定会計を偽っていないか。
+
+実測証拠:
+
+- `data/verify/event_source_v1_accounting_pilot_2026-08-29/results/accounting_combined_validation.json`
+- `data/verify/event_source_v1_accounting_pilot_2026-08-29/results/observation_combined_validation.json`
+- 通常+難条件で24,600 side観測、確定20、同値確認8、値訂正12、訂正対象75、
+  保存則違反0、未帰属0。
+- 関連520件PASS。全pytest 6,420 passed / 13 skipped / 1 deselected / 0 failed。
+
+出力は、各指摘に重大度、file:line、最小再現、影響、最小修正案を付ける。
+指摘がなければP0/P1なしと、残るP2/既知限界を分けて明記する。
+
+## 2026-08-29 — 前回P1×4の修正後再レビュー
+
+前回指摘を全件受諾し、次を修正した。読取専用で再確認すること。
+
+- 会計観測を勝者判定から専用既定OFFスイッチへ分離。
+- 確定攻撃IDと途中連鎖候補IDを分離。複数候補は曖昧とし単一IDを主張しない。
+- 暫定102件を確定参照92件と未確定終了10件へ全数分類。未処理0。
+- 保存則残差を実測し、量IDを独立FIFO再構成。自己生成チェックを削減。
+- 標本被覆率、物理発生時間窓、同一フレーム物理順、公式試合範囲の再採番追従を追加。
+
+最終証跡:
+`data/verify/event_source_v1_accounting_pilot_p1fix2_2026-08-29/results/accounting_combined_validation.json`
+
+P0/P1が閉じたか、新しいP0/P1/P2をfile:lineと最小再現つきで返すこと。
+
+## 2026-08-29 — 会計出来事基盤の独立レビュー最終結果
+
+- 連続したレビュー指摘をすべて受諾し、最終版を`p1fix11`へ別名出力した。
+- 最終レビューで、同一フレームの送付→境界失効が再採番で逆転するP1を合成ケースで確認し、
+  `accounting_source_order`を再採番後も維持するよう修正した。
+- 修正後のClaude読取専用レビューは当該P1をCLOSED、新規P0/P1なし。
+- 残ったP2の「末尾境界後にオンライン出来事がないと公式試合範囲が逆転する」ケースも、
+  根拠のない範囲を作らず割当を省略する回帰として閉じた。
+- 実動画の同一フレーム送付+境界失効は0/3失効件であり、その修正の証拠は合成回帰である。
+  実動画2本PASSを当該分岐の証拠とは主張しない。
+- 最終実動画検証:
+  `data/verify/event_source_v1_accounting_pilot_p1fix11_2026-08-29/results/accounting_combined_validation.json`
+- 本番設定、48動画、49動画、学習は未変更。次は最小追加観測の設計へ進む。
+
+## 2026-08-29 — 物理着地と交換会計v2の最終独立レビュー依頼
+
+読取専用で、次の新規実装をP0/P1中心にレビューすること。編集、コミット、動画処理、
+本番設定変更は行わない。
+
+- `src/event_physical_observer_v1.py`
+- `src/event_physical_adapter_v1.py`
+- `src/event_exchange_reconciliation_v2.py`
+- `scripts/verify_event_exchange_reconciliation_v2.py`
+- 対応する `tests/test_event_physical_*` と `tests/test_event_exchange_reconciliation_v2.py`
+
+特に確認すること:
+
+1. 相手連鎖中の非確定な盤面変化を着地と誤認せず、確定済み残量や直接着地証拠を隠さないか。
+2. 途中の曖昧な変化を、同一連鎖の後続成長で将来行だけ回復する因果処理が妥当か。
+3. `observation_trusted`（その行の直接観測）と `trusted`（交換残量・相殺結果）の分離が、
+   不確実な値を学習可能と誤表示しないか。
+4. 生成=相殺+実着地+境界失効+残量の保存則、試合境界、途中切出し、同一フレーム順に穴がないか。
+5. 既存の既定OFF経路や本番設定へ影響していないか。
+
+難条件の最新証跡:
+`data/verify/event_source_v1_physical_pilot_2026-08-29/results/zenchi_0_260_pphys10_exchange_reconciliation_v2_p13.json`
+
+結果は重大度、file:line、最小再現、影響、最小修正案を付ける。指摘がなければ、
+P0/P1なし、残るP2・既知限界、次の48動画監査へ進めるかを分けて明記する。
+
+## 2026-08-29 — 物理着地と交換会計v2のレビュー完了
+
+- P1「期待着地0のとき、確定盤面の説明不能な正方向増加を不確実化しない」を受諾し修正。
+- 確定盤面の`garbage`/`occupied`正方向増加だけを対象とし、生CNNの負方向ノイズは除外。
+- 同一フレーム順を収集順どおり定数化し、回帰で固定。
+- Claude再レビューでP1 CLOSED、新規P0/P1なし。
+- 最新証跡は`zenchi_0_260_pphys10_exchange_reconciliation_v2_p15.json`。
+
+## 2026-08-29 — 得点表示位置の自動較正・収集配線レビュー依頼
+
+読取専用でP0/P1を中心にレビューすること。編集、コミット、動画処理、
+本番設定変更、49動画利用は行わない。
+
+対象:
+
+- `src/score_ocr.py`
+- `src/score_region_calibration.py`
+- `src/recognition_pipeline.py` の `score_region_offsets` 配線
+- `scripts/calibrate_score_regions.py`
+- `scripts/collect_boards_lean.py` の `--score-region-calibration` 配線
+- `scripts/run_event_snapshot_pilot_v1.py` の設定ハッシュ・生成内容ID配線
+- `tests/test_score_ocr.py`
+- `tests/test_score_region_calibration.py`
+- `tests/test_collect_boards_lean.py` の関連箇所
+- `tests/test_event_snapshot_export_v1.py` の関連箇所
+
+確認点:
+
+1. 複数時点の成績で改善が十分な場合だけ座標を採用し、通常映像を動かさないか。
+2. 通常得点と連鎖中の式が同じ左右別座標を使い、探索用読取りが通常設定を変更しないか。
+3. JSONの映像ID・SHA-256・採用規則検証で、別映像用設定や改ざんを拒否できるか。
+4. 収集コマンド、実行時資産ハッシュ、生成内容IDへ設定JSONが明示的に固定されるか。
+5. 省略時の既定動作が従来どおりで、`src/production_config.py`へ波及していないか。
+
+実測:
+
+- video_38: 1P 22→22、2P 19→19、採用 `(0,0)/(0,0)`。
+- video_c58: 1P 0→19で`(+4,+8)`、2P 0→17で`(+12,+8)`。
+- video_c69: 1P 0→23で`(+4,+8)`、2P 0→22で`(+12,+8)`。
+- 通常映像の既定座標 vs 明示 `(0,0)` は不一致0/34。
+- 関連354件PASS。新規・変更関数の50行超過0。
+
+指摘は重大度、file:line、最小再現、影響、最小修正案つきで返すこと。
+
+### レビュー結果
+
+- Claude読取専用レビューは5確認点すべて問題なし、新規P0/P1なし。
+- 既知限界は2ピクセル格子が1ピクセル単位の最良値を逃し得ること。ただし通常38番を動かさず、
+  c58/c69の手測り補正を自動再現したため初期値として許容する。
+- 全pytestは`6,518 passed / 13 skipped / 1 deselected / 0 failed`。
+
+## 2026-08-29 — 交換会計v2撤回後の交差検証レビュー申し送り
+
+- 600秒検収でv2の暫定火力即時相殺が通常1件、c58 2件の不一致を出したため採用根拠から撤回した。
+- 新設`src/event_exchange_cross_validation_v1.py`は、完成原本の確定`garbage_sent`と物理盤面差を
+  観測時点と事後確認へ分ける。暫定量を確定残高へ入れた件数は0。
+- 最新実測は通常が高信頼3、残高利用可3、隔離0。c58が高信頼4、観測時点確定0、
+  事後単一2、事後複数2、残高利用可1、隔離3、説明不能0。
+- 複数連鎖と、単一連鎖でも物理発生区間が重ならない事例は確定量ラベルから隔離する。
+- 最新成果物は`data/verify/event_source_v1_scorecal_first5_2026-08-29/results/`の
+  `video_38_exchange_cross_v1_relation9.json`と`video_c58_exchange_cross_v1_relation9.json`。
+- Claude CLIへ読み取り専用レビューを2回依頼したが、どちらも無出力のまま停止した。
+  ファイル変更は0。次回利用可能時に、未来漏洩、供給容量、試合/side、隔離条件を再確認してほしい。
+- 関連35件、広い関連747件PASS。全pytestは
+  `6,532 passed / 13 skipped / 1 deselected / 0 failed`（404.50秒）。
+- 別の独立レビューでP1「隔離候補が後続の確実な候補より先に容量を取る」と、その修正で生じた
+  P1「戻した容量を複数の隔離候補が重複参照する」を検出した。高信頼と照合の強さで候補全体を
+  先に並べ、一つの供給容量から全割当を一度だけ行う方式へ置換した。
+- その後、全候補の未来込み優先順位が過去の観測時点割当を変えるP1を実データ2件で検出した。
+  高信頼候補の観測時点割当を物理通番順で先に固定し、その残容量だけを事後確認へ使う方式へ修正。
+  低信頼候補は診断専用とし、確定供給容量を割り当てない。
+- `confirmed_balance_committed`は容量消費ではなく確定残高ラベルへの利用可否を表す。
+  高信頼候補への割当量は通常13、c58は33、`allocated_supply_overuse_count`は両方0。
+  全42候補の途中入力対完了入力で、観測時点値と割当元の不一致0。
+- 同一フレームの後通番を未来扱いするため、送付利用可否と暫定連鎖の事前観測を
+  `(available_frame, sequence)`で比較する。実動画該当0件のため人工逆順2件で回帰固定した。
+  同一フレーム境界は出来事通番で試合を分け、境界payloadと物理候補の局所試合番号を検査する。
+  物理発生区間・利用可能位置も結果へ追加した。専用と関連92件PASS、独立再レビュー中。
+
+## 2026-08-29 — 交差検証relation9・48本処理器の最終合格
+
+- 交差検証relation9は、独立レビューでP0/P1/P2すべて0件。48本開始可。
+- 48本処理器も、独立レビューでP0/P1/P2すべて0件。48本と保持49本の分離、3並列、
+  中断再開、別名再試行、二重起動防止、検証対象run一致を確認した。
+- 最終全pytestは`6,583 passed / 13 skipped / 1 deselected / 0 failed`（676.90秒）。
+- 今後新規取得・生成する動画は`D:\puyo_analyzer\videos\`へ用途別に保存し、削除しない。
+  既存Cドライブ動画は移動・削除せず、今回の48本処理では読取り専用で使う。
+- 49動画、本番設定、`src/production_config.py`は未変更。
+
+## 2026-09-01 — 強化レビューの2問題：原因確定と一次修正
+
+- 6分33秒は返し成功率ではない。公式第5試合が攻撃入力の隔離対象となり、盤面だけの
+  退避値を表示していた。1P連鎖中に1P盤面は凍結され、2P盤面だけ更新されたため、
+  約66個の飛来量を無視して2P表示が41.6%から48.6%へ戻った。
+- 映像391〜398秒の直接突合でも、連鎖中は1Pであり2Pの連鎖開始はない。従来の
+  「2Pが直後に返しを開始した」という説明は撤回する。
+- 攻撃入力を使えず、連鎖中・正味攻撃あり・未処理量ありのいずれかが成立する行は
+  `攻撃交換を確認中のため判定保留` とし、数値とグラフ点を隠す一次修正を実施。
+  実データ392〜398秒は23/23行が保留、対象回帰を含む42件PASS。
+- 相殺後残量問題は別に、(1)時間的な死亡確定がレビュー経路へ未配線、
+  (2)非死亡時も着地後盤面を評価せず攻撃差の10%補正だけ、の2件が残る。
+  第1試合は2P盤面73/78占有・死亡位置占有・残量約45でも2P17〜18%、
+  第2試合は残量約263・死亡位置占有でも2P約9.65%だった。
+- 既存の交換物理の純粋関数を再利用し、攻撃確定前は着地禁止、応手終了後は1ターン
+  最大30個を仮想着地、残り繰越、時間的死亡確定を最優先する設計が必要。
+- 詳細は`REVIEW_FINDING_GAME5_0633_2026-09-01.md`と
+  `REVIEW_FINDING_RESIDUAL_GARBAGE_PROBABILITY_2026-09-01.md`。本番設定は未変更。
+
+## 2026-09-01 — Claude設計レビュー反映と20試合×2本の再生成
+
+- Claude指摘を受諾し、`chain_active=False`だけを根拠にした仮想着地は表示へ採用しない。
+  STABLE復帰後も途中攻撃量や受け側の次手が残るため、着地を早めると返しを消す。
+- 全連鎖の無条件保留も不採用。隔離され攻撃入力を使えない交換だけを保留する従来AND条件を維持。
+- 死亡位置占有かつ当該side非連鎖中を新たに`death_confirmation_pending`とし、
+  `窒息の可能性を確認中のため判定保留`を表示。静止盤面から即0/100にはしない。
+- 表示ゲート契約と必須9列を追加し、列欠落成果物のfail-silentを拒否。
+- 新旧9,624行の勝率不一致0。保留576/9,624行 (5.99%)。
+  第1試合3/3、第2試合5/5、第5試合392〜398秒23/23が保留。
+- 対象46件PASS。短区間の実画面で文言・グラフ切断・音声保持を確認済み。
+- 20試合×2本をDドライブへ別名で生成完了。2本とも音声保持・全編デコード・
+  試合範囲・グラフ・学習除外を検査し、全条件PASS。
+- 出力先は`D:\puyo_analyzer\videos\review\yamada_vs_norasuke_first40_death_hold_dashboard_2026-09-01\`。
+  検査報告は`data/verify/yamada_norasuke_first40_death_hold_review_v1_2026-09-01/REPORT.json`。
+  本番設定と旧動画は未変更。
+
+## 2026-09-01 — 第2試合3分33秒の攻撃差抑止を修正し再生成
+
+- 第2試合212.2〜221.633秒では2Pへ最大約184個分の攻撃差を観測していたが、
+  最大盤面量が35個以下で36個境界を越えず、評価へ渡す攻撃差が0だった。
+  2P約23.5%は返し確率ではなく、攻撃差を除いた盤面評価の残存確率。
+- 観測攻撃差が非0で、評価へ渡した攻撃差が0または欠損の行を
+  `suppressed_attack_balance`として表示保留にした。低盤面量への未学習外挿はしない。
+- v6→v7の9,624行で勝率不一致0、旧保留解除0、新規保留312。
+  保留合計888/9,624、対象区間34/34行が新理由で保留。
+- Claude独立レビューはP0/P1なし。本編生成可。P2の旧契約過剰保留と理由遷移監査を修正し、
+  51件PASS。1〜5個の微差18行は根拠のない閾値を追加せず安全側で保留。
+- 20試合×2本を別名で生成し、音声・範囲・大型グラフ・新表示契約・学習除外・
+  全編映像音声デコードの全条件PASS。本番設定と旧動画は未変更。
+- 出力先は`D:\puyo_analyzer\videos\review\yamada_vs_norasuke_first40_suppressed_attack_hold_dashboard_2026-09-01\`。
+  検査報告は`data/verify/yamada_norasuke_first40_suppressed_attack_hold_review_v2_2026-09-01/REPORT.json`。
+
+## 2026-09-01 — 決着後の長時間保留: 第二案の独立レビュー依頼
+
+user決定は「未来が観測事実として確定しているなら高い勝率で表示する」。第一案では
+`match_boundary_evidence`を前試合の正式終了として使ったが、このイベントは実際には次試合開始側の証拠で、
+未来情報の混入と次試合への持越し余地があるためCodex独立レビューで却下した。第一案の動画・監査証跡は
+削除せず不採用証跡として保持する。
+
+第二案は次のとおり。
+
+- 現在フレームの`やった`／`ばたんきゅー`表示をP1/P2両領域で左右対称に探索
+- 3回連続一致、かつ直近2秒以内の単独死亡候補と勝敗方向が一致した場合だけ0%／100%
+- 生の両側死亡候補を連鎖状態の除外前に拒否
+- 有効な死亡確認待ち行だけを根拠にする
+- 同一試合では後続の通常行で確定値を解除せず、次試合遷移で必ず破棄
+- 次試合遷移は表示リセットと20試合動画の分割にだけ利用
+- グラフ横軸は現在までに表示した点だけで決め、未来の試合長を使わない
+
+監査結果は
+`data/verify/yamada_norasuke_visual_terminal_outcome_audit_v12_2026-09-01/REPORT.json`。
+全57試合で検出23件、公式勝者との方向不一致0件。先頭40試合では18件。問題となった公式第22試合は
+1P 100%、第25試合は2P 100%で一致した。短区間完成動画は
+`D:/puyo_analyzer/videos/review/yamada_vs_norasuke_visual_terminal_probes_2026-09-01/`。
+
+レビュー対象:
+
+- `src/review_terminal_outcome.py`
+- `scripts/render_provisional_oof_review_v1.py`
+- `scripts/_verify_review_visual_terminal_outcomes_v10_2026_09_01.py`
+- `tests/test_review_terminal_outcome.py`
+- `tests/test_render_provisional_oof_review_v1.py`
+
+特に、未来情報混入、次試合への持越し、左右非対称、曖昧候補の誤確定、動画分割の重複／欠落、
+監査の自己参照が残っていないかを確認してほしい。コード変更はせず、P1/P2とPASS/HOLDを返してほしい。
+
+### 完了追記
+
+- Codex独立レビューは最終的にP1/P2残存なしでPASS。
+- 監査v12は4走査位相すべて23件、先頭40試合18件、公式勝者方向不一致0件、境界前候補18/18拒否。
+- 先頭40試合の2本は各9件の確定表示が監査と完全一致し、音声・全編デコード・分割境界を含む全検査PASS。
+- 完成動画は`D:/puyo_analyzer/videos/review/yamada_vs_norasuke_first40_visual_terminal_dashboard_2026-09-01/`。
+- 本番設定と学習重みは未変更。以後Claudeが確認する場合は本報告を正本として読み、第一案v8/v10を採用しないこと。
+
+## 2026-09-02 14:12 JST — Phase J設計のFable独立壁打ち依頼
+
+user指示により、reserveキューの安全な監視と並行してPhase Jの設計を進める。
+動画解析、ダウンロード、学習、実行中キューへの操作は行わず、まず読取専用の設計レビューだけを依頼する。
+
+依頼正本: `docs/agent_coordination/FABLE_PHASE_J_ARCHITECTURE_PROMPT_2026-09-02.md`
+
+Fable architect/reviewerで同文書を実行し、コードと既存成果物を変更せず、応答を
+`docs/agent_coordination/CLAUDE_TO_CODEX.md`末尾へ全文転記してほしい。Codex側は既存資産の棚卸しと
+独立案を進め、Fable応答後に反論・統合する。2026-09-02 02:04以降を正とし、攻撃差10%補正は
+不採用、本番設定未変更として扱うこと。
+
+### 16:40追記
+
+Claude/Fableは夜まで利用できないため、Codex単独でv0.4まで前進した。上記依頼書を更新済み。
+レビュー時は次を追加で全文確認し、最新v0.5への反対査読として返してほしい。
+
+- `docs/PHASE_J_REALTIME_OVERLAY_SPEC_2026-09-02.md`
+- `docs/PHASE_J_IMPLEMENTATION_PLAN_2026-09-02.md`
+- `docs/PHASE_J_TEST_MATRIX_2026-09-02.md`
+- `docs/PHASE_J_REQUIREMENT_TRACEABILITY_2026-09-02.md`
+- `docs/schemas/puyo_overlay_snapshot_v1.schema.json`
+- `docs/schemas/puyo_overlay_snapshot_v1_semantic_rules.md`
+- `docs/schemas/puyo_overlay_enums_v1.json`
+
+Codex確認済み: Schema構文・全25 local ref・canonical snapshot 8例・health 5例・22 Enum集合・48 test ID・
+12 requirement ID。特に認識30fps/表示2Hzの別clock、未来評価の段階導入、レビュー成果物形式を
+過去ユーザー決定から補完した。`src/`、`scripts/`、認識資産、本番設定は変更していない。
+
+### 17:36追記
+
+追加で次も全文確認すること。
+
+- `docs/schemas/puyo_overlay_health_v1.schema.json`
+- `docs/schemas/health_examples/`のcanonical 5例
+
+Codex独立再検収で見つかったhealthのP0 1件・P1 4件は修正し、再検収はP0/P1残存なしでPASS。
+worker faultは旧確定値を理由付きhold後に非表示、telemetry faultは評価表示を継続可能だが
+runtime/healthをdegraded・監査不能とする。health error codeは版付きEnumへ固定した。
+入力方式未決定でも共通化できる`CapturedFrame`契約とcapture adapter境界も仕様6.1へ追加済み。
+このCapture/UI具体化をv0.5とする。
+
+### 17:54追記
+
+v0.5 Capture差分はCodexアーキ・検収の双方でP0/P1残存なし。最終仕様には次を含む。
+
+- CaptureSourceだけがcapture session IDを発行し、ID変更で切断通知の有無に関係なく旧jobを全無効化。
+- commitはbackend最新frameでなく、current generation発行時のimmutable入力snapshotと照合。
+- read-only leaseは単一consumerが`finally`で1回releaseし、画像をfan-out/process間へ渡さない。
+- OBSはPhase J表示を含まないclean feedだけを許し、自己再帰0をgate化。
+- A/Bは独立正解盤面、match/formal boundary clusterのseed固定paired bootstrap、coverage・遅延・
+  sample数・採否優先順位を実行前manifestへ固定。
+
+Fableはこの前提へ反対査読し、特にユーザー回答後のWindows capture backend選定を確認してほしい。
+
+## 2026-09-20 Codex: pytest修復と保存済み診断の照合
+
+添付の依頼1〜6を実施。予測入力観測の`g3_native_scope.py`とDのs3系は非干渉。
+詳細は `docs/agent_coordination/PYTEST_REPAIR_2026-09-20.md`。
+
+- 単独失敗31件の原因は旧SHA、本番フラグ二重供給、物差し・可視化の転送漏れ。
+  旧SHA7本＋定数参照4本を依存値契約へ分離した。過去SHAの来歴、dataset/model/codeの照合は保持。
+  新しい票は元ソースを保持し、読み手がSHA・値・型を再計算する。Formal100の二段ピンは変更なし。
+- 最終15ファイル197件PASS。元失敗31件をJUnitに31/31結合。
+  その後、独立検収が指摘した整数1/Trueの型すり抜けを閉じ、影響3ファイル20件PASS。
+  両件数は重複するので加算しない。原票はDの`pytest_repair_2026-09-20_v1/`。
+- 169件の同居失敗はc案。22ファイルを別プロセスとし、残りと合算して判定する。
+  既存の単独PASSを維持し、無変更再走はしていない。全pytest/G3全体の新規合格は宣言しない。
+- 5動画全長のepisodesを763,481区間集計。4動画の実NPZ食い違いは5,119 / 1,634,324基準セル。
+  重力適用単独1,838、浮き除去単独890、合計2,728 / 5,119。複数書き手は時点別責任を断定しない。
+- c80既知8セルは同runの実NPZへ8/8対応し、縦連続欠落形。重力単独5件、混在3件。
+  既知2フレームを切り出して実画面確認済み。候補ガードは他4動画2,285セルへ作用しうるため未実装。
+- 行1〜4の3,659件のうち、4動画3,151件は記録時ラベルSTABLE（連鎖履歴あり264・なし2,887）。
+  video38全長508件はnpz_detail不在で時点別結合未測定。先頭500秒の74件を代用しない。
+  states/writersだけでは全消しテロップや実画面の連鎖状態を確定できない。0件と報告しない。
+- 採点器の自己確認は47判定・既知3見積もりを全再現。関連コードと必要な未追跡依存資産だけを
+  コミット対象へ選別。元の大量未追跡物と無関係な設定・計画差分はそのまま保持する。
+- CPU親子の実起動・保存・exit0・終了を確認。認識/GPU再走・学習・本番採用は行っていない。
+- Fable最終は差分妥当の「条件付き了承」。原票提示方法による実読制約が残り、独立合格とはしない。
+  親は原JUnitと31/31対応を確認済み。無変更レビューを反復せず、制約付きで修復版を保存する。

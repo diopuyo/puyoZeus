@@ -121,6 +121,16 @@ CHAIN_FORMULA_CONSEC_FRAMES: int = 2
 # ため実質影響しないが、timing-hold のみの構成での頑健性を担保する。
 CHAIN_FORMULA_READ_HOLD_SEC: float = 2.0
 
+# W43 (2026-09-17): 「掛け算式が静かになる」までの猶予秒数
+# (enable_chain_hold_until_formula_quiet 用)。掛け算式は段ごとに出る
+# (user 伝授 reference_chain_formula_per_step_2026-08-22)。段間の幕間は
+# 実測 0.433〜0.634 秒 (FormulaStepAccumulator docstring)、video_38 14連鎖の
+# 実測でも 13→14 段目の幕間は 0.567 秒だった。最後の有効読取りからこの秒数
+# 以内は「連鎖はまだ続いている」と見なし、タイミング期限・安全弁・NextSlide
+# 即終了のいずれでも active_chain を落とさない。値は段累積器のセッション破棄
+# と同じ物理根拠 (FORMULA_SESSION_RESET_SEC = 2.0) を共用し、新しい定数を作らない。
+from src.score_ocr import FORMULA_SESSION_RESET_SEC as CHAIN_FORMULA_QUIET_SEC  # noqa: E402
+
 # 大 ROI 走査 (MatchEndDetector 800x600 / TelopDetector 720x400) の間引き間隔。
 # 2026-07-30 プロファイル実測: match_end 4.9ms x 2回/フレーム、telop 2.6ms x 2回/フレーム
 # = 合計約15ms/フレームで、認識時間の約12%を占める。
@@ -362,7 +372,7 @@ from src.placement_inferrer import (
     apply_persistent_landing_color_guard,
     DEFERRED_MAX_FRAMES,
 )
-from src.score_ocr import FormulaReadResult, ScoreOcr, ScoreTracker
+from src.score_ocr import FormulaReadResult, ScoreOcr, ScoreTracker, Side
 from src.ui_mask import UI_MASK_TARGET_CELLS
 
 # 根治⑤ (2026-08-24、Q-01): 幕間 (通常スコア表示中 = 掛け算式は非表示) を
@@ -493,6 +503,22 @@ class SideResult:
     # コメント参照)。単独の判定根拠にせず、必ずデバウンスや他信号と併用すること。
     # None = 未算出 (テストダブル等)。
     next_slide_motion: bool | None = None
+    # W48 (2026-09-17): 着地直後の連鎖判定でシミュレーション結果の盤面へ
+    # 差し替えた frame に True が立つ。この盤面は「これから起きる連鎖が
+    # 終わった後の姿」であって、画面に映っているものではない。
+    # 13連鎖ならアニメは約18秒かかるので、その間ずっと記録が画面より先を行く
+    # (実測 video_38 2P 578.37秒: 画面66個に対し記録9個、得点は18秒後に +79,085)。
+    # 本フィールドは `enable_landing_chain_record_hold` が True のときだけ
+    # 立つ。既定 False では常に False = 従来挙動と bit-identical。
+    landing_chain_started: bool = False
+    # おじゃま会計フィルタを通す **前** の観測 (2026-09-19)。
+    # `cnn_board` は `_apply_ojama_write_accounting_filter` で書き換えられた後の
+    # 姿なので、「画面が何を示していたか」を知りたい下流はこちらを見る。
+    # 実測 (video_38 先頭500秒): 記録時 観測優先を入れた後に残った誤り 241 件の
+    # うち 89 件 (37%) が「画面は おじゃま なのに記録は色ぷよ」で、
+    # フィルタ後の観測を基準にしたために直せなかったものだった。
+    # 既定 None = 従来挙動と bit-identical (誰も読まなければ影響しない)。
+    raw_cnn_board: Board | None = None
 
 
 @dataclass(frozen=True)
@@ -1789,6 +1815,34 @@ class RecognitionPipeline:
         # 相補経路 (スコアが動く = 0 を経由済み)。
         # default False = 従来挙動完全維持・bit-identical (backwards compat)。
         enable_lockdown_score_moving_release: bool = False,
+        # W43 (2026-09-17): 掛け算式が読めている間は連鎖を落とさない。
+        # video_38 f24972 (416.20秒) の実測: 14連鎖の 13 段目の幕間で
+        # NextSlideDetector が誤検知し (NEXT 値は (2,1) のまま不変)、案X*(B) の
+        # 即終了経路 (update 5244行付近) が active_chain を落として GRAVITY_SETTLE
+        # →STABLE に抜け、連鎖途中の盤面 (3セル) が確定記録された。段更新
+        # (_apply_formula_step_update) は安全弁を延ばしていたが、即終了経路は
+        # hold / max_until を見ないため効かなかった。True にすると、その side の
+        # 段累積器に CHAIN_FORMULA_QUIET_SEC 以内の有効読取りがある間は
+        # (a) タイミング期限/安全弁による強制クリア、(b) NextSlide 即終了 の
+        # 両方を抑止する。NEXT 値変化による game-event 終了 (絶対信号) には
+        # 触れない。②③⑤と同様、累積器の観測を消費するため ① を強制 ON にする。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_chain_hold_until_formula_quiet: bool = False,
+        # W48 (2026-09-17): 着地直後の連鎖判定が確定盤面を
+        # 「連鎖が終わった後の姿」へ差し替えた frame に印を付ける
+        # (`SideResult.landing_chain_started`)。認識そのものは1セルも変えない。
+        # 記録するかどうかは収集側が決める。
+        # 実測 (5動画の全数計装): 記録された盤面の「盤面側の誤り」15,617 セルのうち
+        # 57% がこの経路の連鎖シミュレータ由来だった。
+        # default False = 従来挙動完全維持・bit-identical (backwards compat)。
+        enable_landing_chain_record_hold: bool = False,
+        # W48b (2026-09-18): 着地経路だけでなく、**その側で連鎖が動いている間**は
+        # 記録しない。確定盤面を「連鎖後の姿」へ差し替えるのは着地経路だけでなく
+        # 掛け算式の早期発火・連鎖の再生からも起きる (実測: 着地経路だけを止めても
+        # 連鎖シミュレータ由来の誤りは 8,925 → 6,461 にしか減らなかった)。
+        # 既存の連鎖保持期限 (`_chain_until_Xp`) をそのまま使う。新しい定数は作らない。
+        # default False = 従来挙動完全維持・bit-identical。
+        enable_chain_active_record_hold: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -1897,6 +1951,13 @@ class RecognitionPipeline:
         self._chain_until_1p: float = 0.0
         self._active_chain_2p: ChainEvent | None = None
         self._chain_until_2p: float = 0.0
+        # W48 (2026-09-17): 着地直後の連鎖で確定盤面を「連鎖後の姿」へ
+        # 差し替えた後、その連鎖の保持期限までは記録させない。
+        # 1 frame だけ止めても次の frame が同じ盤面を記録してしまうことを
+        # 実測で確認したため、連鎖の保持期限 (既存の物理量) を流用する。
+        # 既定 OFF なので通常は -1.0 のまま使われない。
+        self._landing_chain_hold_until_1p: float = -1.0
+        self._landing_chain_hold_until_2p: float = -1.0
         # 根治 (2026-07-23): CHAIN → GRAVITY_SETTLE → STABLE 経路でも連鎖後
         # final_board 反映 (Phase C-6 の C, _step_side 内) を機能させるための退避先。
         # enable_gravity_settle_state=True (default) では CHAIN は必ず
@@ -2824,11 +2885,25 @@ class RecognitionPipeline:
         self._enable_formula_step_interlude: bool = bool(
             enable_formula_step_interlude
         )
+        # W43 (2026-09-17): 掛け算式が静かになるまで連鎖を保持する (既定 OFF)。
+        self._enable_chain_hold_until_formula_quiet: bool = bool(
+            enable_chain_hold_until_formula_quiet
+        )
+        # W48 (2026-09-17): 着地直後の連鎖で差し替えた盤面へ印を付ける (既定 OFF)。
+        self._enable_landing_chain_record_hold: bool = bool(
+            enable_landing_chain_record_hold
+        )
+        # W48b (2026-09-18): 連鎖が動いている間は記録しない (既定 OFF)。
+        self._enable_chain_active_record_hold: bool = bool(
+            enable_chain_active_record_hold
+        )
         self._enable_formula_value_read: bool = bool(enable_formula_value_read) or (
             self._enable_chain_formula_read_verify
             or self._enable_formula_chain_count_update
             # ⑤ も累積器の観測を消費するため ① を強制 ON にする。
             or self._enable_formula_step_interlude
+            # W43 も累積器の last_valid_t を消費するため ① を強制 ON にする。
+            or self._enable_chain_hold_until_formula_quiet
         )
         self._enable_slide_exit_no_min_display: bool = bool(
             enable_slide_exit_no_min_display
@@ -3530,6 +3605,17 @@ class RecognitionPipeline:
         # まま bit-identical。値指定時のみ MatchEndDetector.load_default の
         # threshold を上書きする (分布確認のうえで採用値を決める)。
         match_end_ncc_threshold: float | None = None,
+        # 動画ごとの得点表示位置補正。None は従来座標を完全維持する。
+        # 自動較正の結果を呼出元が明示して初めて有効になる。
+        score_region_offsets: "dict[Side, tuple[int, int]] | None" = None,
+        # W43 (2026-09-17): 掛け算式が静かになるまで連鎖を保持する。詳細は
+        # __init__ 側コメント参照。default False = 従来挙動完全維持・bit-identical。
+        enable_chain_hold_until_formula_quiet: bool = False,
+        # W48 (2026-09-17): 着地直後の連鎖で差し替えた盤面へ印を付ける。詳細は
+        # __init__ 側コメント参照。default False = 従来挙動完全維持・bit-identical。
+        enable_landing_chain_record_hold: bool = False,
+        # W48b (2026-09-18): 連鎖が動いている間は記録しない。詳細は __init__ 側。
+        enable_chain_active_record_hold: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3584,6 +3670,7 @@ class RecognitionPipeline:
             try:
                 score = ScoreOcr.load_default(
                     enable_matmul_ncc=enable_score_ocr_matmul,
+                    region_offsets=score_region_offsets,
                 )
             except FileNotFoundError:
                 score = None
@@ -3793,6 +3880,15 @@ class RecognitionPipeline:
             enable_lockdown_score_moving_release=(
                 enable_lockdown_score_moving_release
             ),
+            enable_chain_hold_until_formula_quiet=(
+                enable_chain_hold_until_formula_quiet
+            ),
+            enable_landing_chain_record_hold=(
+                enable_landing_chain_record_hold
+            ),
+            enable_chain_active_record_hold=(
+                enable_chain_active_record_hold
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -3958,6 +4054,9 @@ class RecognitionPipeline:
         self._chain_until_1p = 0.0
         self._active_chain_2p = None
         self._chain_until_2p = 0.0
+        # W48 (2026-09-17): 試合境界で持ち越さない。
+        self._landing_chain_hold_until_1p = -1.0
+        self._landing_chain_hold_until_2p = -1.0
         # 根治 (2026-07-23): 退避 ChainEvent も reset 時にクリア。
         self._last_chain_event_for_settle_1p = None
         self._last_chain_event_for_settle_2p = None
@@ -4755,7 +4854,11 @@ class RecognitionPipeline:
                 )
                 else self._chain_until_1p
             )
-            if time_sec < eff_until_1p:
+            # W43: 掛け算式が読めている間は期限切れでも落とさない (既定 OFF)。
+            if (
+                time_sec < eff_until_1p
+                or self._hold_chain_for_formula("1P", time_sec)
+            ):
                 chain_ev_1p = self._active_chain_1p
             else:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
@@ -4772,7 +4875,11 @@ class RecognitionPipeline:
                 )
                 else self._chain_until_2p
             )
-            if time_sec < eff_until_2p:
+            # W43: 掛け算式が読めている間は期限切れでも落とさない (既定 OFF)。
+            if (
+                time_sec < eff_until_2p
+                or self._hold_chain_for_formula("2P", time_sec)
+            ):
                 chain_ev_2p = self._active_chain_2p
             else:
                 # 案P3: MAX_HOLD 超過による強制クリア → expired フラグを立てる
@@ -5237,12 +5344,22 @@ class RecognitionPipeline:
                     ),
                 )
             )
-            if _slide_1p_now and self._active_chain_1p is not None and not _suppress_slide_1p:
+            # W43 (2026-09-17): 掛け算式が読めている間はスライド即終了を抑止する
+            # (既定 OFF)。video_38 416.20秒の誤検知 (NEXT 値不変) を直接止める。
+            _formula_hold_1p = self._hold_chain_for_formula("1P", time_sec)
+            _formula_hold_2p = self._hold_chain_for_formula("2P", time_sec)
+            if (
+                _slide_1p_now and self._active_chain_1p is not None
+                and not _suppress_slide_1p and not _formula_hold_1p
+            ):
                 # 1P 側: slide 検知 → CHAIN 即終了
                 # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
                 self._stash_and_clear_active_chain("1P")
                 chain_ev_1p = None
-            if _slide_2p_now and self._active_chain_2p is not None and not _suppress_slide_2p:
+            if (
+                _slide_2p_now and self._active_chain_2p is not None
+                and not _suppress_slide_2p and not _formula_hold_2p
+            ):
                 # 2P 側: slide 検知 → CHAIN 即終了
                 # 根治: GRAVITY_SETTLE 経由の final_board 反映用に退避してからクリア
                 self._stash_and_clear_active_chain("2P")
@@ -6462,6 +6579,38 @@ class RecognitionPipeline:
             )
         return new_ev if time_sec < eff_until else None
 
+    def _hold_chain_for_formula(self, side: str, time_sec: float) -> bool:
+        """W43 (2026-09-17): 掛け算式が読めている間は active_chain を保持すべきか。
+
+        enable_chain_hold_until_formula_quiet=True のときだけ意味を持つ。
+        判定本体は stateless な `_should_hold_chain_for_formula` に委ね、
+        ここでは side の段累積器から「最後に有効読取りがあった時刻」を
+        取り出すだけ。フラグ OFF / 累積器なし / active_chain なし は常に False
+        (= 既存経路と bit-identical)。
+
+        Args:
+            side: "1P" / "2P"。
+            time_sec: 現フレーム時刻。
+
+        Returns:
+            True = 保持 (期限切れ・スライド即終了で落とさない)。
+        """
+        if not self._enable_chain_hold_until_formula_quiet:
+            return False
+        ev = self._active_chain_1p if side == "1P" else self._active_chain_2p
+        if ev is None:
+            return False
+        accum = (
+            self._formula_accum_1p if side == "1P" else self._formula_accum_2p
+        )
+        if accum is None:
+            return False
+        return _should_hold_chain_for_formula(
+            time_sec=time_sec,
+            last_valid_t=accum.last_valid_t,
+            quiet_sec=CHAIN_FORMULA_QUIET_SEC,
+        )
+
     def _start_chain_estimate(
         self,
         side: str,
@@ -7101,6 +7250,9 @@ class RecognitionPipeline:
         # 色→別色棄却 (2026-08-18) は enable_ojama_write_accounting_guard
         # とは独立に発火し得るため、OR で本フィルタ呼出し自体をゲートする
         # (両方 False なら従来通り一切呼ばれない = bit-identical)。
+        # フィルタを通す前の姿を控える (2026-09-19)。下流が「画面が何を示していたか」
+        # を必要とするため。出力には影響しない (読む側が居なければ no-op)。
+        _raw_cnn_board = cnn_board.copy()
         if (
             self._enable_ojama_write_accounting_guard
             or self._enable_ojama_fall_color_swap_guard
@@ -7112,6 +7264,11 @@ class RecognitionPipeline:
         # 着地色診断フィールド: 非着地フレームは None のまま戻り値に載る。
         # TSUMO_FALL→STABLE 遷移時のみ上書きされる。
         _landing_diag: dict | None = None
+        # W48 (2026-09-17): 着地直後の連鎖判定でシミュレーション結果の盤面へ
+        # 差し替えた frame の印。既定 OFF のフラグが True のときだけ立つ。
+        # 判定は SideResult を組み立てる直前で行う (この frame で新しく
+        # 差し替わった場合と、差し替え済みで保持期限内の場合の両方を拾う)。
+        _landing_chain_started: bool = False
         # Phase I R-1: 自己整合性チェック (TSUMO_FALL 中のみ意味あり)。
         # baseline (= 直前 STABLE 確定盤面) と current cnn_board の
         # 色 count delta が、落下中ツモ (next_queue[-2]) と整合しているか。
@@ -7691,6 +7848,12 @@ class RecognitionPipeline:
                         ctx.confirmed_board = prev_confirmed.copy() \
                             if prev_confirmed is not None else final_board
                 if chain_count >= 1:
+                    # W48 (2026-09-17): ここで ctx.confirmed_board は
+                    # 「連鎖が終わった後の盤面」に差し替わっている。画面は
+                    # これから連鎖アニメを再生するので、この盤面を
+                    # 「観測した STABLE 盤面」として記録してはいけない。
+                    # 印だけ付け、記録するかどうかは収集側が決める
+                    # (既定 OFF なので従来は常に False = bit-identical)。
                     # 根治① (W7, 2026-08-13): formula 経路と異なり landing
                     # 経路は検証済み ChainResult を持たないため、追加で
                     # inferred_landing を simulate する (既存
@@ -7742,6 +7905,18 @@ class RecognitionPipeline:
                     else:
                         self._active_chain_2p = pseudo
                         self._chain_until_2p = chain_until
+                    # W48 (2026-09-17、既定 OFF): 確定盤面は今
+                    # 「連鎖が終わった後の姿」になった。画面はこれから
+                    # アニメを再生するので、この連鎖の保持期限までは
+                    # 記録させない。1 frame だけ止めても次の frame が
+                    # 同じ盤面を記録してしまうことを実測で確認済み
+                    # (video_38 2P 578.37秒 → 578.40秒 が同じ9個だった)。
+                    # 新しい定数は作らず、既存の保持期限を流用する。
+                    if self._enable_landing_chain_record_hold:
+                        if side == "1P":
+                            self._landing_chain_hold_until_1p = chain_until
+                        else:
+                            self._landing_chain_hold_until_2p = chain_until
                 # cycle 29 (2026-05-18): grace + landing_vote の起動は NEXT
                 # 移動検知ベース (= _step_side 末尾の landing_pending 経路) に
                 # 統一。 ここでは final_board の確定だけ行う (= ctx.confirmed_board
@@ -8633,10 +8808,26 @@ class RecognitionPipeline:
         estimated_board, board_provenance = self._compute_chain_estimate(
             side, ctx.state, time_sec,
         )
+        # W48 (2026-09-17、既定 OFF): 着地直後の連鎖で確定盤面が
+        # 「連鎖が終わった後の姿」へ差し替わっている間は記録させない。
+        # フラグ OFF では保持期限が -1.0 のままなので常に False = bit-identical。
+        _landing_chain_started = time_sec < (
+            self._landing_chain_hold_until_1p if side == "1P"
+            else self._landing_chain_hold_until_2p
+        )
+        # W48b (2026-09-18、既定 OFF): 着地経路以外 (掛け算式の早期発火・
+        # 連鎖の再生) も確定盤面を「連鎖後の姿」へ差し替える。その側で連鎖が
+        # 動いている間は、state が STABLE を名乗っていても記録しない。
+        if self._enable_chain_active_record_hold and not _landing_chain_started:
+            _chain_hold = (
+                self._chain_until_1p if side == "1P" else self._chain_until_2p
+            )
+            _landing_chain_started = time_sec < _chain_hold
         return SideResult(
             side=side,
             state=ctx.state,
             cnn_board=cnn_board,
+            raw_cnn_board=_raw_cnn_board,
             inferred_board=inferred,
             confirmed_board=published_confirmed,
             drift=drift_res,
@@ -8656,6 +8847,7 @@ class RecognitionPipeline:
             # [2026-08-26] 既に引数として受け取っていた物理スライド信号を公開する
             # (SideResult.next_slide_motion の docstring 参照)。
             next_slide_motion=slide_motion,
+            landing_chain_started=_landing_chain_started,
         )
 
 
@@ -9180,6 +9372,33 @@ def _is_game_event_chain_exit(
         return True
 
     return False
+
+
+def _should_hold_chain_for_formula(
+    time_sec: float,
+    last_valid_t: "float | None",
+    quiet_sec: float,
+) -> bool:
+    """W43: 掛け算式の最後の有効読取りから quiet_sec 以内なら連鎖を保持する (stateless)。
+
+    user 伝授 (reference_chain_formula_per_step_2026-08-22)「掛け算式は消える
+    たびに出る」= 段ごとに出るので、直近に読めていれば連鎖は続いている。
+    段間の幕間 (実測 0.433〜0.634 秒、video_38 14連鎖では 0.567 秒) は
+    quiet_sec (2.0 秒) より短いため、幕間で保持が切れることはない。
+
+    Args:
+        time_sec: 現フレーム時刻。
+        last_valid_t: 段累積器が最後に有効読取りをした時刻 (None = 未観測)。
+        quiet_sec: 静止とみなすまでの猶予秒数 (CHAIN_FORMULA_QUIET_SEC)。
+
+    Returns:
+        True = 保持。last_valid_t が None、または未来 (時刻巻き戻し) や
+        quiet_sec 超過なら False。
+    """
+    if last_valid_t is None:
+        return False
+    elapsed = time_sec - last_valid_t
+    return 0.0 <= elapsed <= quiet_sec
 
 
 def _should_suppress_slide_exit(

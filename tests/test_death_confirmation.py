@@ -267,6 +267,28 @@ def test_tracker_confirms_via_next_stationary() -> None:
     assert tr.resolved_is_dead() is True
 
 
+def test_tracker_confirmed_cannot_be_overwritten_by_new_candidate() -> None:
+    """同一死亡演出の偽遷移でconfirmedをpendingへ戻さない。"""
+    tr = DeathConfirmTracker(stationary_confirm_sec=0.1)
+    tr.update(TSUMO_FALL, False, 0.0, next_key=(1, 2), game_idx=1)
+    assert tr.update(
+        STABLE, True, 0.1, next_key=(1, 2), game_idx=1,
+    )[0] == "candidate_placement"
+    assert tr.update(
+        STABLE, True, 0.2, next_key=(1, 2), game_idx=1,
+    )[0] == "confirmed_placement"
+
+    assert tr.update(
+        OJAMA_FALL, False, 0.3, next_key=(1, 2), game_idx=1,
+    )[0] is None
+    assert tr.update(
+        STABLE, True, 0.4, next_key=(1, 2), game_idx=1,
+    )[0] is None
+    assert tr.has_pending_candidate() is False
+    assert tr.resolved_is_dead_for_game(1) is True
+    assert tr.confirmed_source == DEATH_SOURCE_PLACEMENT
+
+
 def test_tracker_next_movement_does_not_confirm_or_reset_candidate() -> None:
     """死亡していない場合、ネクストが動けば確定しない。
 
@@ -292,6 +314,116 @@ def test_tracker_next_movement_does_not_confirm_or_reset_candidate() -> None:
         event, _ = tr.update(STABLE, True, 3.0, next_key=k)
         assert event is None
     assert tr.resolved_is_dead() is False
+
+
+def test_tracker_stable_clear_alone_does_not_release_pending_candidate() -> None:
+    """死亡演出のSTABLE空誤認だけでは真の死亡候補を解除しない。"""
+    tr = DeathConfirmTracker()
+    tr.update(STABLE, False, 0.0, next_key=(1, 2))
+    tr.update(OJAMA_FALL, False, 0.5, next_key=(1, 2))
+    event, _ = tr.update(STABLE, True, 1.0, next_key=(1, 2))
+    assert event == "candidate_ojama"
+
+    event, delay = tr.update(STABLE, False, 1.2, next_key=(1, 2))
+
+    assert event is None
+    assert delay is None
+    assert tr.has_pending_candidate() is True
+    assert tr.resolved_is_dead() is False
+
+
+def test_tracker_non_stable_false_occupancy_does_not_release_candidate() -> None:
+    """非STABLE時のdeath_cell_occupied=Falseは空化の証拠にしない。"""
+    tr = DeathConfirmTracker()
+    tr.update(STABLE, False, 0.0, next_key=(1, 2))
+    tr.update(OJAMA_FALL, False, 0.5, next_key=(1, 2))
+    event, _ = tr.update(STABLE, True, 1.0, next_key=(1, 2))
+    assert event == "candidate_ojama"
+
+    event, delay = tr.update(OJAMA_FALL, False, 1.2, next_key=(1, 2))
+
+    assert event is None
+    assert delay is None
+    assert tr.has_pending_candidate() is True
+    assert tr.resolved_is_dead() is False
+
+
+def test_tracker_missing_match_evidence_does_not_arm_or_create_candidate() -> None:
+    """対戦前の偽state遷移は実試合画面の証拠なしでは候補にしない。"""
+    tr = DeathConfirmTracker()
+    tr.update(
+        TSUMO_FALL, False, 0.0, next_key=None, game_idx=0,
+        match_evidence=False,
+    )
+    event, _ = tr.update(
+        STABLE, True, 0.1, next_key=None, game_idx=0,
+        match_evidence=False,
+    )
+    tr.update(
+        OJAMA_FALL, False, 1.0, next_key=None, game_idx=0,
+        match_evidence=False,
+    )
+    event2, _ = tr.update(
+        STABLE, True, 1.1, next_key=None, game_idx=0,
+        match_evidence=False,
+    )
+
+    assert event is None and event2 is None
+    assert tr.has_pending_candidate() is False
+
+
+def test_tracker_mid_video_game_zero_arms_with_match_evidence() -> None:
+    """game_idx=0でも得点表示済みの途中開始動画を初手後に追跡する。"""
+    tr = DeathConfirmTracker()
+    tr.update(
+        STABLE, False, 0.0, next_key=(1, 2), game_idx=0,
+        match_evidence=True,
+    )
+    tr.update(
+        TSUMO_FALL, False, 0.1, next_key=(1, 2), game_idx=0,
+        match_evidence=True,
+    )
+    tr.update(
+        STABLE, False, 0.2, next_key=(1, 2), game_idx=0,
+        match_evidence=True,
+    )
+    tr.update(
+        TSUMO_FALL, False, 0.3, next_key=(1, 2), game_idx=0,
+        match_evidence=True,
+    )
+    event, _ = tr.update(
+        STABLE, True, 0.4, next_key=(1, 2), game_idx=0,
+        match_evidence=True,
+    )
+
+    assert event == "candidate_placement"
+    assert tr.has_pending_candidate() is True
+
+
+def test_tracker_missing_match_evidence_pauses_pending_confirmation_clock() -> None:
+    """pending中の得点欠測を確定時間へ算入せず、復帰後に測り直す。"""
+    tr = DeathConfirmTracker()
+    tr.update(STABLE, False, 0.0, next_key=(1, 2))
+    tr.update(OJAMA_FALL, False, 0.1, next_key=(1, 2))
+    event, _ = tr.update(STABLE, True, 0.2, next_key=(1, 2))
+    assert event == "candidate_ojama"
+
+    tr.update(
+        STABLE, True, 10.0, next_key=None, match_evidence=False,
+    )
+    event, _ = tr.update(
+        STABLE, True, 20.0, next_key=(1, 2), match_evidence=True,
+    )
+    assert event is None
+    event, _ = tr.update(
+        STABLE, True, 21.4, next_key=(1, 2), match_evidence=True,
+    )
+    assert event is None
+    event, delay = tr.update(
+        STABLE, True, 21.5, next_key=(1, 2), match_evidence=True,
+    )
+    assert event == "confirmed_ojama"
+    assert delay == pytest.approx(21.3)
 
 
 def test_tracker_stationary_timer_baseline_is_candidate_time_not_pre_history() -> None:

@@ -139,9 +139,11 @@ game_idx を振る。動画末尾で最終 score が大きい side を勝者と�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 from typing import Optional
 
@@ -149,8 +151,11 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
-from src.board import Board  # noqa: E402
+from src.board import (  # noqa: E402
+    Board, BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_UNKNOWN, HIDDEN_ROWS,
+)
 from src.board_motion import (  # noqa: E402
     STABLE_PERSISTENCE_DIFF_THRESHOLD,
     STABLE_PERSISTENCE_WINDOW_SEC,
@@ -159,9 +164,18 @@ from src.board_motion import (  # noqa: E402
     is_raw_pixel_stable,
 )
 from src.board_quality import is_phantom_board  # noqa: E402
+from src import match_range_gate as _match_range_gate
 from src.board_state_machine import BoardState  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
+from src.event_accounting_observer_v1 import EventAccountingRecorder  # noqa: E402
+from src.event_death_observer_v1 import (  # noqa: E402
+    OBSERVATION_RATE_TOLERANCE_HZ,
+    TARGET_OBSERVATION_RATE_HZ,
+    EventDeathRecorder,
+    write_sidecar_exclusive,
+)
+from src.event_physical_observer_v1 import EventPhysicalRecorder  # noqa: E402
 from src.match_winner import PANEL_UNAVAILABLE, MatchWinnerDetector  # noqa: E402
 from src.ojama_accounting import (  # noqa: E402
     OjamaAccountingTracker,
@@ -169,6 +183,9 @@ from src.ojama_accounting import (  # noqa: E402
 )
 from src.production_config import GHOST_CHAIN_RULE_ENABLED  # noqa: E402
 from src.recognition_pipeline import RecognitionPipeline, SideResult  # noqa: E402
+from src.score_region_calibration import (  # noqa: E402
+    load_score_region_offsets_for_video,
+)
 from src.self_supervised.physical_consistency import check_gravity_rule  # noqa: E402
 
 # ============================
@@ -179,6 +196,12 @@ from src.self_supervised.physical_consistency import check_gravity_rule  # noqa:
 TARGET_W: int = 1920
 TARGET_H: int = 1080
 DEFAULT_FPS: float = 30.0
+EVENT_OBSERVATION_SIDECAR_SUFFIX: str = "_event_observations_v1.json"
+EVENT_ACCOUNTING_SIDECAR_SUFFIX: str = "_event_accounting_v1.json"
+EVENT_PHYSICAL_SIDECAR_SUFFIX: str = "_event_physical_v1.json"
+EVENT_DEATH_SIDECAR_SUFFIX: str = "_event_death_v1.json"
+SHA256_CHUNK_BYTES: int = 1024 * 1024
+TIMEBASE_MAX_DENOMINATOR: int = 1_000_000
 
 # 試合境界検知(旧方式): score がこの値以上減少したら新しい試合とみなす。
 # --enable-score-reset-requires-zero 指定時は使われない (減少は誤読とみなす)。
@@ -260,6 +283,71 @@ def _compute_newmatch_evidence(result: object) -> bool:
         b1 is not None and b2 is not None
         and b1.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
         and b2.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
+    )
+
+
+def _physical_match_evidence(result: object) -> bool:
+    """両者の得点欄が読める実試合画面だけを物理観測へ許可する。"""
+    p1 = getattr(result, "p1", None)
+    p2 = getattr(result, "p2", None)
+    if p1 is None or p2 is None:
+        return False
+    return _is_visible_score(getattr(p1, "score", None)) and _is_visible_score(
+        getattr(p2, "score", None)
+    )
+
+
+def _is_visible_score(value: object) -> bool:
+    """得点OCRの未検出値と0以上の表示値を区別する。"""
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return int(value) >= 0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _sha256_file(path: Path) -> str:
+    """死亡sidecar ON時だけ入力動画の実体SHA-256を計算する。"""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(SHA256_CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_death_sidecar_prerequisites(
+    capture_next: bool,
+    enable_chain_tracker: bool,
+    death_path: Path,
+) -> None:
+    """重い処理より前に死亡観測の必須条件と非上書きを検査する。"""
+    if not capture_next:
+        raise ValueError("死亡sidecarには --with-next が必要です")
+    if not enable_chain_tracker:
+        raise ValueError("死亡sidecarには --enable-chain-tracker が必要です")
+    if death_path.exists():
+        raise FileExistsError(f"既存の死亡sidecarは上書きしません: {death_path}")
+
+
+def _create_death_recorder(
+    video_path: Path,
+    video_id: str,
+    fps: float,
+    interval_frames: int,
+) -> EventDeathRecorder:
+    """30fps相当を確認してsource identity付きobserverを生成する。"""
+    rate_hz = fps / interval_frames
+    if abs(rate_hz - TARGET_OBSERVATION_RATE_HZ) > OBSERVATION_RATE_TOLERANCE_HZ:
+        raise ValueError("死亡sidecarには30fps相当の観測間隔が必要です")
+    timebase = Fraction(1.0 / fps).limit_denominator(TIMEBASE_MAX_DENOMINATOR)
+    return EventDeathRecorder(
+        source_video_id=video_id,
+        source_video_sha256=_sha256_file(video_path),
+        timebase_numerator=timebase.numerator,
+        timebase_denominator=timebase.denominator,
+        sample_interval_frames=interval_frames,
+        observation_rate_hz=rate_hz,
     )
 
 # サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
@@ -1812,6 +1900,66 @@ def collect_lean(
     enable_chain_formula_read_verify: bool = False,
     enable_formula_chain_count_update: bool = False,
     enable_formula_step_interlude: bool = False,
+    # 出来事源の会計サイドカーを収集する試験専用スイッチ。勝者パネル判定とは
+    # 独立させ、既存の採用済み収集構成では会計観測を一切起動しない。
+    enable_event_accounting_sidecar: bool = False,
+    # 連鎖開始・全消し・着地前後盤面を記録する試験専用スイッチ。
+    # 会計サイドカーとは別ファイル・別スイッチとし、本番設定へ登録しない。
+    enable_event_physical_sidecar: bool = False,
+    # 複数フレームで事前較正した左右別の得点表示位置。None は従来座標。
+    score_region_calibration_path: Path | None = None,
+    # 死亡候補・解除・確定をdenseに記録する試験専用スイッチ。
+    enable_event_death_sidecar: bool = False,
+    # 既存の NextSlide 退出ガードを収集器から試すための実験用配線。
+    # 各 bool は load_default へ忠実に渡し、既定 False では従来挙動を維持する。
+    enable_slide_exit_min_display_guard: bool = False,
+    # 0.8秒の最低表示条件 (X1) を使わず、既存の別証拠だけで退出を判定する。
+    # True/True は不採用候補の再現検証用。親ガードとは独立に忠実転送する。
+    enable_slide_exit_no_min_display: bool = False,
+    # 試合範囲ゲート (2026-09-17、Fable 総合レビュー P2)。既存の matches.tsv
+    # (match_boundaries_v5/v4) の試合範囲外にある盤面を記録しない。認識そのものは
+    # 変えず、記録するかどうかだけを決める。既定 False = 従来挙動完全維持。
+    enable_match_range_gate: bool = False,
+    # W7根治① (2026-08-13 実装済・本番未採用): formula/landing 経路の疑似
+    # ChainEvent が total_score=0 をハードコードしている問題の充填。
+    # RecognitionPipeline 本体には実装済みだが収集器側の配線が漏れていた。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_pseudo_chain_score_fill: bool = False,
+    # W7根治② (2026-07-24 較正・2026-08-22 オーバーレイのみ配線): CHAIN 保持
+    # 時間の実測較正値 (23動画418イベント、固定項2.61秒 + 1.17秒×連鎖数)。
+    # None = ライブラリ既定 (0.0 / 0.3) で従来と bit-identical。
+    chain_hold_base_sec: float | None = None,
+    chain_hold_per_step_sec: float | None = None,
+    # 上の較正値を使うと chain_until が安全弁 CHAIN_MAX_HOLD_SEC (5.0秒) を
+    # 上回りうるため、併せて調整できるようにする。None = 既定 5.0 のまま。
+    chain_max_hold_sec: float | None = None,
+    # 着地色修正 案1 (2026-06-01 実装済・本番未採用): 着地時の色の参照元を
+    # prev_next_queue[-2] から消費済みツモ色へ切り替える。確定が遅れると
+    # [-2] が「次のツモ」を指してしまう誤色問題の修正。バグB採用で表に出た
+    # f29466 (緑を黄と誤読) がこの型。既定 False = 従来挙動完全維持。
+    enable_landing_color_fix: bool = False,
+    # W43 (2026-09-17 実装・本番未採用): 掛け算式が読めている間は連鎖を
+    # 落とさない。video_38 416.20秒で NextSlide の誤検知 (NEXT 値不変) が
+    # 14連鎖の 13 段目を切り、連鎖途中の盤面が確定記録された事故の対策。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_chain_hold_until_formula_quiet: bool = False,
+    # W48 (2026-09-17 実装・本番未採用): 着地直後の連鎖判定が確定盤面を
+    # 「連鎖が終わった後の姿」へ差し替えた frame を記録しない。
+    # 13連鎖ならアニメは約18秒かかるので、その間ずっと記録が画面より先を行く
+    # (実測 video_38 2P 578.37秒: 画面66個に対し記録9個)。
+    # 認識は1セルも変えない。記録するかどうかだけを決める。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_landing_chain_record_hold: bool = False,
+    # W48b (2026-09-18 実装・本番未採用): 着地経路だけでなく、その側で連鎖が
+    # 動いている間は記録しない。着地経路だけでは連鎖シミュレータ由来の誤りが
+    # 8,925 → 6,461 にしか減らなかった実測にもとづく。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_chain_active_record_hold: bool = False,
+    # 列ゲート緩和 (2026-07-25 実装、2026-09-19 配線)。既定 OFF。
+    enable_column_partial_support: bool = False,
+    # 記録時 観測優先 (2026-09-19、A/B 計測用)。既定 OFF。
+    enable_record_time_observation_fix: bool = False,
+    enable_record_time_observation_fix_raw: bool = False,
 ) -> int:
     """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
 
@@ -2017,6 +2165,13 @@ def collect_lean(
     Returns:
         蓄積した snapshot 数。
     """
+    death_sidecar_path = out_npz.with_name(
+        out_npz.stem + EVENT_DEATH_SIDECAR_SUFFIX
+    )
+    if enable_event_death_sidecar:
+        _validate_death_sidecar_prerequisites(
+            capture_next, enable_chain_tracker, death_sidecar_path,
+        )
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"[lean] cannot open: {video_path}", file=sys.stderr)
@@ -2042,6 +2197,8 @@ def collect_lean(
     n_frames = max(0, end_frame - start_frame)
 
     video_id = video_path.stem
+    # 試合範囲ゲート (2026-09-17、既定OFF)。既存 matches.tsv を読むだけで新しい検出器は作らない。
+    match_gate = _match_range_gate.build(video_id, _REPO_ROOT, enable_match_range_gate)
 
     # --- fps正規化 (2026-07-30 追加、既定 OFF) ---
     # 明示 --sample-interval-frames が優先。未指定かつ normalize_fps_30=True の
@@ -2054,6 +2211,15 @@ def collect_lean(
     effective_interval_frames = _resolve_sample_interval_frames(
         sample_interval_sec, fps, sample_interval_frames,
     )
+    death_recorder: EventDeathRecorder | None = None
+    if enable_event_death_sidecar:
+        try:
+            death_recorder = _create_death_recorder(
+                video_path, video_id, fps, effective_interval_frames,
+            )
+        except Exception:
+            cap.release()
+            raise
     # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
     # 見落としを後から気付けるようにするため、2026-07-28 追加)。
     print(
@@ -2066,6 +2232,12 @@ def collect_lean(
     # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
     # (enable_chain_tracker=True の場合のみ VideoChainTracker を有効化、
     #  2026-07-30 基準データ収集で CHAIN 期間中の盤面凍結を機能させるため追加)
+    score_region_offsets = (
+        None if score_region_calibration_path is None
+        else load_score_region_offsets_for_video(
+            score_region_calibration_path, video_path,
+        )
+    )
     pipeline = RecognitionPipeline.load_default(
         enable_native_hsv_classifier=enable_native_hsv_classifier,
         stable_frame_count=3,
@@ -2077,6 +2249,7 @@ def collect_lean(
         enable_effect_gate=enable_effect_gate,
         effect_gate_persist_sec=effect_gate_persist_sec,
         enable_effect_visual_gate=enable_effect_visual_gate,
+        enable_column_partial_support=enable_column_partial_support,
         enable_burst_guard_v2=enable_burst_guard_v2,
         enable_transition_merge_guard=enable_transition_merge_guard,
         burst_gate_open_threshold=burst_gate_open_threshold,
@@ -2118,6 +2291,23 @@ def collect_lean(
         enable_chain_formula_read_verify=enable_chain_formula_read_verify,
         enable_formula_chain_count_update=enable_formula_chain_count_update,
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_slide_exit_min_display_guard=enable_slide_exit_min_display_guard,
+        enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        chain_hold_base_sec=chain_hold_base_sec,
+        chain_hold_per_step_sec=chain_hold_per_step_sec,
+        chain_max_hold_sec=chain_max_hold_sec,
+        enable_landing_color_fix=enable_landing_color_fix,
+        score_region_offsets=score_region_offsets,
+        enable_chain_hold_until_formula_quiet=(
+            enable_chain_hold_until_formula_quiet
+        ),
+        enable_landing_chain_record_hold=(
+            enable_landing_chain_record_hold
+        ),
+        enable_chain_active_record_hold=(
+            enable_chain_active_record_hold
+        ),
     )
     # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
     vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
@@ -2137,14 +2327,17 @@ def collect_lean(
         multisignal_mode=enable_boundary_multisignal,
         require_newmatch_evidence=enable_boundary_newmatch_evidence,
     )
-    # クロスチェック用に処理した最終フレーム時刻を追跡 (2026-08-17 追加)。
-    last_t_sec = start_sec
-
     # おじゃま会計 (2026-08-12 追加): 動画処理開始時に一度だけ生成・リセット
     # する。試合 (game_idx) が進むたびに reset() してはならない
     # (_drive_ojama_accounting_lean のコメント参照、c系20本の教訓)。
     ojama_tracker = OjamaAccountingTracker()
     ojama_tracker.reset()
+    accounting_recorder = (
+        EventAccountingRecorder() if enable_event_accounting_sidecar else None
+    )
+    physical_recorder = (
+        EventPhysicalRecorder() if enable_event_physical_sidecar else None
+    )
     prev_bstate_p1 = BoardState.MENU
     prev_bstate_p2 = BoardState.MENU
 
@@ -2157,10 +2350,12 @@ def collect_lean(
         if enable_physics_persistence_filter else None
     )
 
+    processed_end_frame_exclusive = start_frame
     for local_i in range(n_frames):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
+        processed_end_frame_exclusive = start_frame + local_i + 1
         # --- フレーム間引き: effective_interval_frames おきに pipeline.update を呼ぶ ---
         # cap.read() は毎フレーム呼んでデコードし、間引き対象フレームはスキップ。
         # (collect_indicators_v2 と同じ方式)
@@ -2171,7 +2366,6 @@ def collect_lean(
         fi = start_frame + local_i
         t_sec = fi / fps
         result = pipeline.update(fi, t_sec, frame)
-        last_t_sec = t_sec
 
         # 試合境界マルチシグナル (W20/W21根治、2026-08-17): フレーム全体の
         # is_match_active 立ち上がりを 1 フレームにつき 1 回だけ観測する
@@ -2186,6 +2380,7 @@ def collect_lean(
             _compute_newmatch_evidence(result)
             if enable_boundary_newmatch_evidence else None
         )
+        causal_match_evidence = _physical_match_evidence(result)
         shared_game.observe_visual_signal(
             getattr(result, "is_match_active", True), t_sec,
             new_match_evidence=newmatch_evidence,
@@ -2288,12 +2483,26 @@ def collect_lean(
             post_match_lockdown_active=post_match_lockdown_active_flag,
             stable_persistence_confidence=stable_persistence_confidence_1p,
             estimated_board=estimated_board_1p,
+            match_gate=match_gate,
             board_provenance=board_provenance_1p,
             enable_chain_estimate_recording=enable_chain_estimate_recording,
             enable_move_segmented_recording=enable_move_segmented_recording,
             enable_physics_persistence_filter=enable_physics_persistence_filter,
             physics_sim=physics_sim,
             score_reset_requires_zero=enable_score_reset_requires_zero,
+            landing_chain_started=bool(
+                getattr(result.p1, "landing_chain_started", False)
+            ),
+            enable_record_time_observation_fix=(
+                enable_record_time_observation_fix
+            ),
+            enable_record_time_observation_fix_raw=(
+                enable_record_time_observation_fix_raw
+            ),
+            cnn_board=getattr(result.p1, "cnn_board", None),
+            raw_cnn_board=getattr(result.p1, "raw_cnn_board", None),
+            frame_bgr=frame,
+            image_reader=getattr(pipeline, "_reader", None),
         )
         _process_side_lean(
             acc, state_p2, "2P", result.p2.confirmed_board,
@@ -2310,14 +2519,72 @@ def collect_lean(
             post_match_lockdown_active=post_match_lockdown_active_flag,
             stable_persistence_confidence=stable_persistence_confidence_2p,
             estimated_board=estimated_board_2p,
+            match_gate=match_gate,
             board_provenance=board_provenance_2p,
             enable_chain_estimate_recording=enable_chain_estimate_recording,
             enable_move_segmented_recording=enable_move_segmented_recording,
             enable_physics_persistence_filter=enable_physics_persistence_filter,
             physics_sim=physics_sim,
             score_reset_requires_zero=enable_score_reset_requires_zero,
+            landing_chain_started=bool(
+                getattr(result.p2, "landing_chain_started", False)
+            ),
+            enable_record_time_observation_fix=(
+                enable_record_time_observation_fix
+            ),
+            enable_record_time_observation_fix_raw=(
+                enable_record_time_observation_fix_raw
+            ),
+            cnn_board=getattr(result.p2, "cnn_board", None),
+            raw_cnn_board=getattr(result.p2, "raw_cnn_board", None),
+            frame_bgr=frame,
+            image_reader=getattr(pipeline, "_reader", None),
         )
+        if death_recorder is not None:
+            death_recorder.observe(
+                frame_idx=fi,
+                t_sec=t_sec,
+                game_idx=shared_game.game_idx,
+                sides={
+                    "p1": (
+                        result.p1.state, result.p1.confirmed_board,
+                        result.p1.next_pair,
+                    ),
+                    "p2": (
+                        result.p2.state, result.p2.confirmed_board,
+                        result.p2.next_pair,
+                    ),
+                },
+                is_match_active=bool(getattr(result, "is_match_active", True)),
+                match_evidence=causal_match_evidence,
+            )
+        if accounting_recorder is not None:
+            accounting_recorder.observe(
+                fi, t_sec, ojama_tracker, game_idx=shared_game.game_idx,
+                chain_events=(
+                    ("p1", result.p1.chain_event),
+                    ("p2", result.p2.chain_event),
+                ),
+            )
+        if physical_recorder is not None:
+            physical_recorder.observe(
+                fi, t_sec, shared_game.game_idx,
+                (
+                    ("p1", result.p1.state, result.p1.confirmed_board, result.p1.chain_event),
+                    ("p2", result.p2.state, result.p2.confirmed_board, result.p2.chain_event),
+                ),
+                raw_boards={
+                    "p1": getattr(result.p1, "cnn_board", None),
+                    "p2": getattr(result.p2, "cnn_board", None),
+                },
+                match_evidence=causal_match_evidence,
+            )
     cap.release()
+    print(
+        "[lean] processed_frame_range: "
+        f"start={start_frame} end_exclusive={processed_end_frame_exclusive} "
+        f"requested_end_exclusive={end_frame}"
+    )
 
     # 事後再突合 (W22根治、2026-08-17): score-reset が視覚信号より先着した
     # ために偽陽性で記録された異常マークを、動画全体を処理し終えた時点の
@@ -2340,15 +2607,61 @@ def collect_lean(
     # crosscheck=False (既定) では panel_winners=None のまま渡され、
     # assign_won_labels は従来通り score 系統単独で判定する (bit-identical)。
     panel_winners: dict[int, str | None] | None = None
+    processing_end_sec = processed_end_frame_exclusive / fps
     if enable_winner_panel_crosscheck:
         panel_winners = _detect_panel_winners_crosscheck(
-            video_path, start_sec, shared_game.advance_times, last_t_sec,
+            video_path, start_sec, shared_game.advance_times, processing_end_sec,
         )
     acc.assign_won_labels(
         combined_final, panel_winners=panel_winners,
         panel_priority=enable_winner_panel_priority,
     )
+    death_sidecar: dict[str, object] | None = None
+    if death_recorder is not None:
+        death_sidecar = death_recorder.sidecar_value(
+            start_frame, processed_end_frame_exclusive,
+            requested_end_frame_exclusive=end_frame,
+        )
     acc.save(out_npz)
+    if death_sidecar is not None:
+        write_sidecar_exclusive(death_sidecar_path, death_sidecar)
+        print(f"[lean] event death observations -> {death_sidecar_path}")
+    if enable_winner_panel_crosscheck:
+        observation_path = out_npz.with_name(
+            out_npz.stem + EVENT_OBSERVATION_SIDECAR_SUFFIX
+        )
+        observation = _build_event_observation_sidecar(
+            start_sec, shared_game.advance_times, processing_end_sec, panel_winners
+        )
+        observation_path.write_text(
+            json.dumps(observation, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event observations -> {observation_path}")
+    if accounting_recorder is not None:
+        accounting_path = out_npz.with_name(
+            out_npz.stem + EVENT_ACCOUNTING_SIDECAR_SUFFIX
+        )
+        accounting = accounting_recorder.sidecar_value(
+            start_frame, processed_end_frame_exclusive,
+        )
+        accounting_path.write_text(
+            json.dumps(accounting, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event accounting -> {accounting_path}")
+    if physical_recorder is not None:
+        physical_path = out_npz.with_name(
+            out_npz.stem + EVENT_PHYSICAL_SIDECAR_SUFFIX
+        )
+        physical = physical_recorder.sidecar_value(
+            start_frame, processed_end_frame_exclusive,
+        )
+        physical_path.write_text(
+            json.dumps(physical, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event physical observations -> {physical_path}")
 
     # 試合境界異常イベントの永続化 (W20/W21根治、2026-08-17)。
     # multisignal_mode=False または異常なしなら書き出さない (従来挙動維持)。
@@ -2366,6 +2679,67 @@ def collect_lean(
         )
 
     return len(acc.grids)
+
+
+def _build_event_observation_sidecar(
+    start_sec: float,
+    advance_times: list[float],
+    last_observable_sec: float,
+    panel_winners: dict[int, str | None] | None,
+) -> dict[str, object]:
+    """事後検出した境界証拠とWIN★パネル結果を入力列から隔離する。"""
+
+    boundaries = [
+        {
+            "closing_game_index": index,
+            "opening_game_index": index + 1,
+            "observed_sec": round(float(value), 6),
+            "evidence_type": "accepted_boundary_signal",
+        }
+        for index, value in enumerate(advance_times)
+    ]
+    starts = [start_sec, *advance_times]
+    winner_results = [
+        _panel_result_row(index, winner, starts, last_observable_sec)
+        for index, winner in sorted((panel_winners or {}).items())
+    ]
+    return {
+        "schema_version": "event-observation-sidecar/v1",
+        "generated_posthoc": True,
+        "processing_start_sec": round(float(start_sec), 6),
+        "processing_end_sec": round(float(last_observable_sec), 6),
+        "winner_detector_status": "completed" if panel_winners is not None else "failed",
+        "accepted_boundary_evidence": boundaries,
+        "winner_panel_results": winner_results,
+    }
+
+
+def _panel_result_row(
+    game_index: int,
+    winner: str | None,
+    starts: list[float],
+    last_observable_sec: float,
+) -> dict[str, object]:
+    if winner == PANEL_UNAVAILABLE:
+        result, winner_side = "panel_unavailable", "unknown"
+    elif winner in {"1P", "2P"}:
+        result, winner_side = "winner_observed", winner
+    else:
+        result, winner_side = "ambiguous", "unknown"
+    evidence_end = (
+        starts[game_index + 1]
+        if game_index + 1 < len(starts)
+        else last_observable_sec
+    )
+    return {
+        "game_index": int(game_index),
+        "result": result,
+        "winner_side": winner_side,
+        "evidence_start_sec": round(float(starts[game_index]), 6),
+        "evidence_end_sec": round(float(evidence_end), 6),
+        "available_sec": round(float(last_observable_sec), 6),
+        "availability_reason": "posthoc_full_clip_detector",
+    }
 
 
 def _detect_panel_winners_crosscheck(
@@ -2430,6 +2804,66 @@ def _detect_panel_winners_crosscheck(
     }
 
 
+def _apply_record_time_observation_fix(
+    board: Board, side_label: str, cnn_board: Optional[Board],
+    frame_bgr: Any, image_reader: Any,
+) -> tuple[Board, int]:
+    """記録直前にCNNとHSVが一致する観測を反映する（既定OFF）。
+
+    8frameの復旧待ちを外すが、削除と追加を反映した列で重力を確認する。
+    隠し段とUNKNOWN観測は変更しない。入力盤面を変更せず、実変更数を返す。
+    """
+    if cnn_board is None or frame_bgr is None or image_reader is None:
+        return board, 0
+    from src.recognition_pipeline import DEFAULT_P1_REGION, DEFAULT_P2_REGION
+    region = DEFAULT_P1_REGION if side_label == "1P" else DEFAULT_P2_REGION
+    try:
+        hsv_board = image_reader.read_board_hsv_only(frame_bgr, region)
+    except Exception:
+        return board, 0
+    if hsv_board is None:
+        return board, 0
+    candidates: list[tuple[int, int, int]] = []
+    for r in range(HIDDEN_ROWS, BOARD_ROWS):
+        for c in range(BOARD_COLS):
+            obs = int(cnn_board.get(r, c))
+            if obs != int(hsv_board.get(r, c)) or obs == COLOR_UNKNOWN:
+                continue
+            if int(board.get(r, c)) != obs:
+                candidates.append((r, c, obs))
+    if not candidates:
+        return board, 0
+    return _apply_record_time_observation_candidates(board, candidates)
+
+
+def _apply_record_time_observation_candidates(
+    board: Board, candidates: list[tuple[int, int, int]],
+) -> tuple[Board, int]:
+    """削除後の支えで追加を選び、新規の浮きを生む列はまとめて元へ戻す。
+
+    既存の浮きは解消したと扱わない。UNKNOWNは既存の重力検査と同じく
+    観測保留とし、隠し段は検査・変更の対象外。独立な列の補正は保持する。
+    """
+    from src.board_state_machine import _check_recovery_column
+
+    fixed = board.copy()
+    add = [(r, c, v) for (r, c, v) in candidates if int(board.get(r, c)) == COLOR_EMPTY]
+    other = [(r, c, v) for (r, c, v) in candidates if int(board.get(r, c)) != COLOR_EMPTY]
+    for r, c, value in other:
+        fixed.set(r, c, value)
+    # 今回消えるセルを、追加候補の支えとして使わせない。
+    for col in {c for (_, c, _) in add}:
+        for r, c, value in _check_recovery_column(fixed, col, add):
+            fixed.set(r, c, value)
+    before = set(check_gravity_rule(board)[1])
+    new_floating = set(check_gravity_rule(fixed)[1]) - before
+    for col in {c for _, c in new_floating}:
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            fixed.set(row, col, int(board.get(row, col)))
+    count = sum(fixed.get(r, c) != board.get(r, c) for r, c, _ in candidates)
+    return (fixed, count) if count else (board, 0)
+
+
 def _process_side_lean(
     acc: _LeanNpzAccumulator,
     state: _SideState,
@@ -2460,6 +2894,16 @@ def _process_side_lean(
     enable_physics_persistence_filter: bool = False,
     physics_sim: "ChainSimulator | None" = None,
     score_reset_requires_zero: bool = False,
+    match_gate: Any = None,
+    # 記録時 観測優先 (2026-09-19、既定 OFF、A/B 計測用)。
+    enable_record_time_observation_fix: bool = False,
+    # 同上だが、おじゃま会計フィルタを通す前の観測を基準にする (2026-09-19、既定 OFF)。
+    enable_record_time_observation_fix_raw: bool = False,
+    cnn_board: Optional[Board] = None,
+    raw_cnn_board: Optional[Board] = None,
+    frame_bgr: Any = None,
+    image_reader: Any = None,
+    landing_chain_started: bool = False,
 ) -> None:
     """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
 
@@ -2583,6 +3027,21 @@ def _process_side_lean(
     ):
         effective_board = estimated_board
         effective_bstate = BoardState.STABLE
+    # 記録時 観測優先 (2026-09-19、既定 OFF): 記録する盤面を決めた後、
+    # **「前回と変わったか」を見る前に** 画面へ合わせる。後で直すと
+    # last_emitted_grid と食い違い、同じ盤面を二重に記録してしまう。
+    if (enable_record_time_observation_fix
+            or enable_record_time_observation_fix_raw) \
+            and effective_board is not None \
+            and effective_bstate == BoardState.STABLE:
+        # raw 版は、おじゃま会計フィルタを通す **前** の観測を基準にする。
+        # フィルタ後だと「画面は おじゃま なのに記録は色ぷよ」を直せない
+        # (実測: 残った誤り 241 件のうち 89 件 = 37% がこれ)。
+        # raw欠測時は補正を保留し、filtered観測をrawの代用にしない。
+        _obs = raw_cnn_board if enable_record_time_observation_fix_raw else cnn_board
+        effective_board, _n_fixed = _apply_record_time_observation_fix(
+            effective_board, side_label, _obs, frame_bgr, image_reader,
+        )
     if effective_board is None or not _should_emit(
         state, effective_board, effective_bstate, exclude_phantom=exclude_phantom,
         raw_pixel_stable=raw_pixel_stable,
@@ -2591,6 +3050,16 @@ def _process_side_lean(
         enable_physics_persistence_filter=enable_physics_persistence_filter,
         physics_sim=physics_sim,
     ):
+        return
+    # 試合範囲ゲート (2026-09-17、既定OFF): 既存 matches.tsv の試合範囲外を落とす。
+    # match_gate=None (既定) では何もしない = 従来挙動と bit-identical。
+    if match_gate is not None and not match_gate.allows(t_sec):
+        return
+    # W48 (2026-09-17、既定OFF): 着地直後の連鎖判定で確定盤面が
+    # 「連鎖が終わった後の姿」へ差し替わった frame は記録しない。
+    # 画面はこれから連鎖アニメを再生するので、この盤面は観測ではない。
+    # フラグ OFF では pipeline が印を立てないため常に False = bit-identical。
+    if landing_chain_started:
         return
     trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
     mechanism = getattr(chain_event, "mechanism", None) if chain_event is not None else None
@@ -2711,6 +3180,42 @@ def main() -> int:
         help=(
             "エフェクト時間ゲート (2026-08-03、A/B 計測用) を有効化する。"
             "満杯盤面 47 セル誤り根治の効果測定に使う。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-record-time-observation-fix", action="store_true",
+        dest="enable_record_time_observation_fix",
+        help=(
+            "記録時 観測優先 (2026-09-19、A/B 計測用) を有効化する。"
+            "記録されるのは盤面が前回と変わった瞬間だけだが、確定盤面を画面へ"
+            "合わせ直す復旧ゲートは 8 処理frame 連続の一致を要求するため、"
+            "その瞬間には原理的に間に合わない。本フラグは記録の直前に限り、"
+            "CNN と HSV が一致した色へ確定盤面を合わせる (浮きぷよを作らないよう"
+            "既存の列チェックは通す)。5動画実測で、記録された盤面の食い違いは"
+            "52.08% が盤面側の誤り、15.58% が画面側の誤りだった。既定は無効。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-record-time-observation-fix-raw", action="store_true",
+        dest="enable_record_time_observation_fix_raw",
+        help=(
+            "記録時 観測優先 (raw 版、2026-09-19、A/B 計測用)。"
+            "おじゃま会計フィルタを通す **前** の観測を基準にする。"
+            "フィルタ後だと「画面は おじゃま なのに記録は色ぷよ」を直せない"
+            "(実測: 通常版で残った誤り 241 件のうち 89 件 = 37% がこれ)。既定は無効。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-column-partial-support", action="store_true",
+        dest="enable_column_partial_support",
+        help=(
+            "列ゲート緩和 (2026-07-25 実装、2026-09-19 配線、A/B 計測用) を有効化する。"
+            "復旧ゲートの安全弁C は、書き足すセルの下に空があると浮きぷよとみなして"
+            "拒否するが、下のセルも同じ理由で埋められないため列ごと固まる。"
+            "本フラグは下のセルの連続合意が 2 frame 以上進んでいれば「支え」とみなし、"
+            "浮き扱いしない。5動画実測で、復旧ゲートが働いた場面の 55.87% が"
+            "この安全弁で落ちており、全件が「確定は空だが画面にはぷよ」方向だった。"
+            "既定は無効 (後方互換)。"
         ),
     )
     parser.add_argument(
@@ -2990,6 +3495,39 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--enable-event-accounting-sidecar", action="store_true",
+        dest="enable_event_accounting_sidecar",
+        help=(
+            "出来事源の会計観測サイドカーを収集する試験専用スイッチ。"
+            "既定は無効で、本番採用設定には登録しない。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-event-physical-sidecar", action="store_true",
+        dest="enable_event_physical_sidecar",
+        help=(
+            "連鎖開始・全消し・着地前後盤面の観測サイドカーを収集する試験専用スイッチ。"
+            "既定は無効で、本番採用設定には登録しない。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-event-death-sidecar", action="store_true",
+        dest="enable_event_death_sidecar",
+        help=(
+            "死亡候補・解除・確定のdense観測sidecarを記録する。"
+            "--with-next / --enable-chain-tracker / 30fps相当が必須。"
+            "既定は無効で、本番採用設定には登録しない。"
+        ),
+    )
+    parser.add_argument(
+        "--score-region-calibration", type=Path, default=None,
+        dest="score_region_calibration",
+        help=(
+            "得点表示位置の事前較正JSON。映像IDとSHA-256が一致する場合だけ"
+            "左右別の補正座標を使う。省略時は従来座標を完全に維持する。"
+        ),
+    )
+    parser.add_argument(
         "--enable-override-color-guard", action="store_true",
         dest="enable_override_color_guard",
         help=(
@@ -3262,6 +3800,110 @@ def main() -> int:
             "(後方互換、bit-identical)。"
         ),
     )
+    parser.add_argument(
+        "--enable-slide-exit-min-display-guard", action="store_true",
+        dest="enable_slide_exit_min_display_guard",
+        help=(
+            "既存の NextSlide 退出ガードを有効化する実験用スイッチ。"
+            "0.8秒条件 (X1) を外す不採用候補の再現検証では "
+            "--enable-slide-exit-no-min-display を併用する。既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-slide-exit-no-min-display", action="store_true",
+        dest="enable_slide_exit_no_min_display",
+        help=(
+            "NextSlide 退出ガードの0.8秒条件 (X1) を除外する。親ガードとは"
+            "独立に忠実転送し、単独指定時は親ガードが無効なので no-op。"
+            "既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-range-gate", action="store_true",
+        dest="enable_match_range_gate",
+        help=(
+            "既存 matches.tsv (match_boundaries_v5/v4) の試合範囲外にある盤面を"
+            "記録しない。新しい検出器は作らず既存資産を読むだけ。"
+            "実測 video_38 先頭240秒で 182枚中21枚が範囲外だった。"
+            "既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-pseudo-chain-score-fill", action="store_true",
+        dest="enable_pseudo_chain_score_fill",
+        help=(
+            "疑似 ChainEvent の total_score=0 ハードコードを検証済み結果で"
+            "充填する (W7根治①、2026-08-13 実装済)。台帳の実測では全連鎖の"
+            "6.14%% が該当し、うち36.6%% は永久に未確定だった。"
+            "既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--chain-hold-base-sec", type=float, default=None,
+        dest="chain_hold_base_sec",
+        help=(
+            "CHAIN 保持時間の固定項 (秒)。未指定はライブラリ既定 0.0 で"
+            "従来と完全同一。実測較正値は 2.61 (23動画418イベント、R2=0.356)。"
+        ),
+    )
+    parser.add_argument(
+        "--chain-hold-per-step-sec", type=float, default=None,
+        dest="chain_hold_per_step_sec",
+        help=(
+            "CHAIN 保持時間の連鎖数あたり係数 (秒)。未指定はライブラリ既定"
+            "0.3 で従来と完全同一。実測較正値は 1.17。"
+        ),
+    )
+    parser.add_argument(
+        "--chain-max-hold-sec", type=float, default=None,
+        dest="chain_max_hold_sec",
+        help=(
+            "CHAIN 保持の安全弁 (秒)。未指定はライブラリ既定 5.0。"
+            "較正値を使うときに併せて調整するための逃げ道。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-landing-color-fix", action="store_true",
+        dest="enable_landing_color_fix",
+        help=(
+            "着地時の色の参照元を、消費済みツモ色へ切り替える (2026-06-01 実装済)。"
+            "確定が遅れると従来の参照元が「次のツモ」を指して誤色になる。"
+            "既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-hold-until-formula-quiet", action="store_true",
+        dest="enable_chain_hold_until_formula_quiet",
+        help=(
+            "W43 (2026-09-17)。掛け算式が読めている間 (最後の有効読取りから "
+            "2.0秒以内) は、タイミング期限・安全弁・NextSlide 即終了のいずれでも"
+            "連鎖を落とさない。video_38 416.20秒で NextSlide 誤検知が 14連鎖の "
+            "13段目を切った事故の対策。NEXT 値変化による終了には触れない。"
+            "既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-landing-chain-record-hold", action="store_true",
+        dest="enable_landing_chain_record_hold",
+        help=(
+            "W48 (2026-09-17)。着地直後の連鎖判定が確定盤面を「連鎖が終わった"
+            "後の姿」へ差し替えた frame を記録しない。13連鎖ならアニメは約18秒"
+            "かかるので、その間ずっと記録が画面より先を行く (実測 video_38 2P "
+            "578.37秒: 画面66個に対し記録9個、得点は18秒後に +79,085)。"
+            "認識は1セルも変えず、記録するかどうかだけを決める。既定は無効・未採用。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-active-record-hold", action="store_true",
+        dest="enable_chain_active_record_hold",
+        help=(
+            "W48b (2026-09-18)。着地経路だけでなく、その側で連鎖が動いている間は"
+            "記録しない。確定盤面を「連鎖後の姿」へ差し替えるのは着地経路だけでなく"
+            "掛け算式の早期発火・連鎖の再生からも起きる (実測: 着地経路だけでは"
+            "連鎖シミュレータ由来の誤りが 8,925 → 6,461 にしか減らなかった)。"
+            "既存の連鎖保持期限をそのまま使う。既定は無効・未採用。"
+        ),
+    )
     args = parser.parse_args()
     # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
@@ -3277,6 +3919,13 @@ def main() -> int:
         enable_chain_tracker=args.enable_chain_tracker,
         normalize_fps_30=normalize_fps_30,
         enable_effect_gate=args.enable_effect_gate,
+        enable_column_partial_support=args.enable_column_partial_support,
+        enable_record_time_observation_fix=(
+            args.enable_record_time_observation_fix
+        ),
+        enable_record_time_observation_fix_raw=(
+            args.enable_record_time_observation_fix_raw
+        ),
         effect_gate_persist_sec=args.effect_gate_persist_sec,
         enable_effect_visual_gate=args.enable_effect_visual_gate,
         enable_burst_guard_v2=args.enable_burst_guard_v2,
@@ -3342,6 +3991,29 @@ def main() -> int:
             args.enable_formula_chain_count_update
         ),
         enable_formula_step_interlude=args.enable_formula_step_interlude,
+        enable_event_accounting_sidecar=args.enable_event_accounting_sidecar,
+        enable_event_physical_sidecar=args.enable_event_physical_sidecar,
+        score_region_calibration_path=args.score_region_calibration,
+        enable_event_death_sidecar=args.enable_event_death_sidecar,
+        enable_slide_exit_min_display_guard=(
+            args.enable_slide_exit_min_display_guard
+        ),
+        enable_slide_exit_no_min_display=args.enable_slide_exit_no_min_display,
+        enable_match_range_gate=args.enable_match_range_gate,
+        enable_pseudo_chain_score_fill=args.enable_pseudo_chain_score_fill,
+        chain_hold_base_sec=args.chain_hold_base_sec,
+        chain_hold_per_step_sec=args.chain_hold_per_step_sec,
+        chain_max_hold_sec=args.chain_max_hold_sec,
+        enable_landing_color_fix=args.enable_landing_color_fix,
+        enable_chain_hold_until_formula_quiet=(
+            args.enable_chain_hold_until_formula_quiet
+        ),
+        enable_landing_chain_record_hold=(
+            args.enable_landing_chain_record_hold
+        ),
+        enable_chain_active_record_hold=(
+            args.enable_chain_active_record_hold
+        ),
     )
     print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
     return 0

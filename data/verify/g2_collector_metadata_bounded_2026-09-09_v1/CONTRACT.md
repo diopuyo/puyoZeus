@@ -1,0 +1,9 @@
+# 採録metadata観測のメモリ上限化
+
+旧metadata実runはRSS16GiB/WSL available176MiB/swap8GiBで失速し、安全停止した。旧source/途中出力は保持し、旧runにCOMPLETEは発行しない。
+
+固定_SideState.motion_prev_grayは上流画像持続確認の画像で、_process_side_lean自身は読まない。元部品のside state前後captureはその画像を各呼出で巨大Python listへ展開しrowsに全保持していた。新部品はこの画像だけshape/dtype/content SHA descriptorに限定し、JSONLを1rowごと逐次保存する。原image/入力/state/共有game/採否/append全21非label列は変更しない。画像内容の完全再生用部品ではなく、既計測画像タグと実採録の来歴部品である。
+
+既定OFF、単回原呼出、原例外identity、sticky failure、全7248clock/順序/append/schema/tag/game検査は元部品を継承。保存imageを0や空画像で埋めず、未保存payloadを明記する。descriptorは原uint8二次元画像だけ、未知形状は拒否。動画/勝敗label/本番変更なし。
+
+CPUはgray有り両sideを含む実frozen採録の非干渉と、長い人工入力列でrowsの全件保持がないことを検査してから独立検収・新合成へ進む。旧OWNは変更しない。

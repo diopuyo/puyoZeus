@@ -43,7 +43,8 @@
    と「おじゃま (`DEATH_SOURCE_OJAMA`、OJAMA_FALL→STABLE 遷移由来)」に
    区別して記録する (user の条件が2つに分かれているため)。
 2. **猶予/解除**: 自分の連鎖開始 (掛け算式の実読による CHAIN 遷移、
-   `is_own_chain_start`) を待つ。連鎖が始まれば候補を**解除**
+   `is_own_chain_start`) を待つ。連鎖開始、NEXT変化、または新ツモ開始で
+   候補を**解除**する。STABLE空化だけは死亡演出の誤認実測があるため使わない
    (死亡ではなかったと判断、user 絶対律「連鎖を打つ直前 / 連鎖中は
    窒息としない」)。
 3. **確定 (簡易検出)**: 連鎖が始まらないまま、**ネクストが
@@ -442,8 +443,9 @@ def is_pre_match_game_idx(game_idx: int | None) -> bool:
 class DeathConfirmTracker:
     """1サイド分の死亡確定状態を保持する外部 wrapper (stateful)。
 
-    候補発生→猶予 (own chain 開始を待つ) →確定 (ネクスト不動
-    `stationary_confirm_sec` 秒) or 解除、を1サイドぶんだけ追跡する。
+    候補発生→猶予 (own chain・NEXT・新ツモを待つ)
+    →確定 (ネクスト不動 `stationary_confirm_sec` 秒) or 解除、を
+    1サイドぶんだけ追跡する。
     2サイド分必要な場合は2インスタンス生成すること
     (`scripts/collect_indicators_v2._SideTracker` と同じパターン)。
 
@@ -625,7 +627,7 @@ class DeathConfirmTracker:
     def update(
         self, curr_state: str, death_cell_occupied: bool, t_sec: float,
         next_key: object, is_match_active: bool = True,
-        game_idx: int | None = None,
+        game_idx: int | None = None, match_evidence: bool = True,
     ) -> tuple[str | None, float | None]:
         """1フレーム分の観測を反映し、(事象名, 確定遅延秒) を返す。
 
@@ -660,6 +662,10 @@ class DeathConfirmTracker:
                 `on_game_boundary()` 後は `_has_ever_placed` の値によらず
                 `_post_boundary_armed=False` で追加凍結され、
                 `is_real_new_game_start()` を観測するまで解けない。**
+            match_evidence: 両側の得点表示など、現在フレームが実試合画面
+                であることを示すcausalな外部証拠。既定Trueで既存呼出元を
+                維持する。False時は新規候補も初回armも許さず、既存pending
+                の不動timerは再開後に測り直す。
 
         Returns:
             (event, delay_sec)。event は
@@ -670,6 +676,9 @@ class DeathConfirmTracker:
             delay_sec は event が "confirmed_*" のときのみ非None
             (候補発生から確定までの秒数、診断用)。
         """
+        if not match_evidence:
+            self._pause_for_missing_match_evidence()
+            return None, None
         raw_prev_state = self._track_has_ever_placed(curr_state)
         # (Codex 指摘3) 「本当の新試合開始」= 設置完了 + 有効 next。
         # confirmed 消去 (_awaiting_new_game_clear) と境界後の再アーム
@@ -684,6 +693,12 @@ class DeathConfirmTracker:
             self._awaiting_new_game_clear = False
         if not self._post_boundary_armed and real_start:
             self._post_boundary_armed = True
+        if self.confirmed:
+            # 確定済みは正式境界または上の検証済み新試合開始までstickyにする。
+            # 同一死亡演出中の偽state遷移を新candidateとして受けると、外側の
+            # dense phaseがconfirmedからpendingへ逆戻りするため追跡を捨てる。
+            self._reset_transition_tracking()
+            return None, None
         pre_match_entry = not is_match_active or is_pre_match_game_idx(game_idx)
         frozen = (
             (pre_match_entry and not self._has_ever_placed)
@@ -707,6 +722,19 @@ class DeathConfirmTracker:
                                             death_cell_occupied, t_sec,
                                             game_idx), None
         return self._observe_pending(prev_state, curr_state, t_sec)
+
+    def _pause_for_missing_match_evidence(self) -> None:
+        """試合画面証拠の欠測を越えて候補・不動時間を連結しない。"""
+        self._raw_prev_state = None
+        if self._pending_source is None:
+            self._reset_transition_tracking()
+            return
+        # pending自体は解除しない。得点OCRの一時欠測は生存証拠でも死亡証拠
+        # でもないため、再開時にstate/NEXTの基準を取り直す。
+        self._prev_state = None
+        self._last_next_key_seen = False
+        self._last_next_change_sec = None
+        self._next_valid_now = False
 
     def _reset_transition_tracking(self) -> None:
         """候補用の遷移追跡とネクスト不動タイマーを破棄する (内部ヘルパー)。
@@ -821,8 +849,7 @@ class DeathConfirmTracker:
     def _observe_pending(
         self, prev_state: str, curr_state: str, t_sec: float,
     ) -> tuple[str | None, float | None]:
-        """猶予中: own chain 開始/生存証拠で解除、ネクスト不動が閾値を
-        超えたら確定。
+        """猶予中: own chain/生存証拠で解除し、不動時は確定。
 
         (Codex 指摘1) 不動時間の起点は「候補発生時刻」と「最後に有効な
         next が変化した時刻」の**遅い方** (=大きい方) を使う。候補発生
@@ -838,6 +865,9 @@ class DeathConfirmTracker:
         if is_own_chain_start(prev_state, curr_state):
             self._clear_pending()
             return f"released_{source}", None
+        # death演出中の傾いた盤面をSTABLE空盤面と誤認した実例があるため、
+        # death cellの空化だけは生存証拠にしない。NEXT変化または新ツモ開始を
+        # 観測するまでfail-closedで待つ。
         if self._is_survival_evidence(prev_state, curr_state):
             self._clear_pending()
             return f"released_survival_{source}", None

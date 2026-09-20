@@ -41,6 +41,9 @@ _Q03_TAIL_FLAGS: list[str] = [
     "enable_formula_chain_count_update",
     "enable_slide_exit_no_min_display",
     "enable_formula_step_interlude",
+    "enable_ojama_entry_gravity_settle_guard",
+    "enable_pseudo_chain_score_fill",
+    "enable_gravity_settle_reset_on_exit",
 ]
 
 # submit 呼出しの先頭3引数 (vid, str(vpath), (vid in holdout_ids)) は、

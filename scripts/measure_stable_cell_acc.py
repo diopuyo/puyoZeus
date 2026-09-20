@@ -51,6 +51,7 @@ from src.board import (
     COLOR_YELLOW,
 )
 from src.board_state_machine import BoardState
+from src.off_match_window import SideObservation, find_off_match_spans, is_in_spans
 from src.production_config import recognition_load_default_kwargs
 from src.recognition_evaluator import compute_avg_puyo_count
 from src.recognition_pipeline import RecognitionPipeline
@@ -78,6 +79,13 @@ COLOR_NAMES: dict[int, str] = {
 # 精度基準値
 PASS_OVERALL_THRESHOLD: float = 0.995
 PASS_PER_COLOR_THRESHOLD: float = 0.98
+
+# W36/W37 再基準化の正本8動画。この全集合を要求した実行だけは、各動画に
+# 試合終了由来の除外spanがあることも測定器健全性の必須証拠とする。
+# 任意の短いクリップは終了画面を含まないため、span 0だけでは失敗させない。
+W36_W37_REBASELINE_VIDEO_IDS: tuple[str, ...] = (
+    "v29", "v40", "v51", "v57", "v70", "v89", "v95", "v97",
+)
 
 # 認識処理間隔 (秒)
 DEFAULT_SAMPLE_INTERVAL_SEC: float = 1.0 / 30.0
@@ -384,9 +392,10 @@ def resolve_production_recognition_flags(
     採用値を自動適用する。CLI で明示 ON にされていればそれを優先する
     (OR 合成、store_true 系のため明示 OFF は元々存在しない)。
 
-    **物差しの継続性**: --no-production-recognition を明示指定すると、6フラグは
-    各 CLI 引数を明示指定しない限り全て無効 (旧 default) のまま動く。
-    過去の測定 JSON との bit-identical 比較にはこちらを使うこと。
+    **物差しの継続性**: --no-production-recognition を明示指定すると、採用フラグは
+    各 CLI 引数を明示指定しない限り旧 default へ戻る。ただしgravity-settleは
+    CLI既定Trueなので、過去構成のbit-identical再現には
+    --no-gravity-settle-stateも併記すること。
 
     Args:
         args: argparse.Namespace (または同等の属性を持つ任意オブジェクト、
@@ -573,6 +582,9 @@ def _make_pipeline_cnn(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> RecognitionPipeline:
     """CNN + HSV ハイブリッド pipeline を構築する。
 
@@ -708,6 +720,9 @@ def _make_pipeline_cnn(
         enable_slide_exit_no_min_display=(
             enable_formula_freeze_fix or enable_slide_exit_no_min_display),
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
     # None = 未指定 → RecognitionPipeline.load_default 本体の既定値に従う。
     # 明示的に True/False が渡された場合のみ上書きする (#51 系 + landing_observed_color)。
@@ -824,51 +839,89 @@ def _record_offmatch_observation(
         )
 
 
+def _offmatch_side_data(
+    stats: "VideoStats", side: str, ledger: list[tuple],
+) -> tuple[list[tuple[float, float]], dict[str, int]]:
+    """片側のW37 spanと観測健全性を返す。"""
+    obs = [
+        SideObservation(t_sec=t, score=sc, next_key=nk)
+        for t, sc, nk in stats._offmatch_obs.get(side, [])
+    ]
+    spans = find_off_match_spans(obs)
+    health = {
+        "observation_count": len(obs),
+        "score_non_none_observation_count": sum(o.score is not None for o in obs),
+        "ledger_entry_count": len(ledger),
+        "span_count": len(spans),
+    }
+    return spans, health
+
+
+def _split_offmatch_ledger(
+    ledger: list[tuple], spans: list[tuple[float, float]],
+) -> tuple[int, int, int, int]:
+    """台帳をW37 span内外に分け、セル数と合意セル数を返す。"""
+    kept_cells = kept_agreed = excluded_cells = excluded_agreed = 0
+    for t_sec, cells, agreed in ledger:
+        if spans and is_in_spans(t_sec, spans):
+            excluded_cells += cells
+            excluded_agreed += agreed
+        else:
+            kept_cells += cells
+            kept_agreed += agreed
+    return kept_cells, kept_agreed, excluded_cells, excluded_agreed
+
+
+def _sum_health(health_by_side: dict[str, dict[str, int]], key: str) -> int:
+    """片側別観測健全性の整数値を合算する。"""
+    return sum(values[key] for values in health_by_side.values())
+
+
 def compute_offmatch_excluded_acc(stats: "VideoStats") -> dict:
-    """W37: 試合外区間を除いた精度を計算する (主指標とは別に併記する)。
+    """W37試合外区間を除く併記値を返す。主指標は変更しない。
 
-    試合終了テロップ中は負けた側の盤面が画面から消えており、そこには
-    正解が存在しない。CNN が背景マスコットを読んだ分を認識誤りとして
-    数えるのは測定の汚染である (docs/KNOWN_WEAKNESSES.md W37)。
-
-    Returns:
-        除外後の acc / cells / 除外したセル数と区間数。
-        記録が無ければ空 dict。
+    盤面が消える終了テロップに正解は存在しないため、背景誤読を除外する。
+    記録が無ければ空dictを返す (docs/KNOWN_WEAKNESSES.md W37)。
     """
-    from src.off_match_window import find_off_match_spans, is_in_spans
-    from src.off_match_window import SideObservation
-
     if not stats._frame_ledger:
         return {}
     kept_cells = kept_agreed = 0
     excluded_cells = excluded_agreed = 0
-    spans_by_side: dict = {}
+    spans_by_side: dict[str, list[list[float]]] = {}
+    health_by_side: dict[str, dict[str, int]] = {}
     for side, ledger in stats._frame_ledger.items():
-        obs = [
-            SideObservation(t_sec=t, score=sc, next_key=nk)
-            for t, sc, nk in stats._offmatch_obs.get(side, [])
-        ]
-        spans = find_off_match_spans(obs)
+        spans, health = _offmatch_side_data(stats, side, ledger)
         spans_by_side[side] = [[round(a, 3), round(b, 3)] for a, b in spans]
-        for t_sec, cells, agreed in ledger:
-            if spans and is_in_spans(t_sec, spans):
-                excluded_cells += cells
-                excluded_agreed += agreed
-            else:
-                kept_cells += cells
-                kept_agreed += agreed
+        health_by_side[side] = health
+        kept, agreed, excluded, excluded_ok = _split_offmatch_ledger(ledger, spans)
+        kept_cells += kept
+        kept_agreed += agreed
+        excluded_cells += excluded
+        excluded_agreed += excluded_ok
     return {
         "acc_excluding_offmatch": (
             kept_agreed / kept_cells if kept_cells else None),
         "cells_excluding_offmatch": kept_cells,
+        "agreed_cells_excluding_offmatch": kept_agreed,
         "excluded_cells": excluded_cells,
+        "excluded_agreed_cells": excluded_agreed,
         "excluded_acc": (
             excluded_agreed / excluded_cells if excluded_cells else None),
         "spans_by_side": spans_by_side,
+        "observation_health": {
+            "observation_count": _sum_health(health_by_side, "observation_count"),
+            "score_non_none_observation_count": _sum_health(
+                health_by_side, "score_non_none_observation_count"
+            ),
+            "ledger_entry_count": _sum_health(health_by_side, "ledger_entry_count"),
+            "span_count": _sum_health(health_by_side, "span_count"),
+            "by_side": health_by_side,
+        },
         "note": (
             "試合外 (盤面が画面に無い) 区間を除いた値。主指標 acc は未除外のまま。"
             "判定規則は user 伝授: ネクスト停止+スコア停止+スコア≠0 が 2 秒継続、"
             "検知点から 2 秒遡る (src/off_match_window.py)。"
+            "このため勝者側の見える盤面も除外し得る。挙動は変更していない。"
             "全消しテロップは盤面が見えていて正解も定義できるため対象外。"
         ),
     }
@@ -1100,6 +1153,9 @@ def _process_video(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> VideoStats:
     """1 動画を処理し VideoStats を返す。
 
@@ -1213,6 +1269,9 @@ def _process_video(
         enable_formula_chain_count_update=enable_formula_chain_count_update,
         enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
     # disable_per_video_hsv=True のとき raw_hsv 軸も手調整 inject をスキップし、
     # 全 3 軸 (raw_cnn / raw_hsv / confirmed) を自動 HSV のみで動作させる。
@@ -1345,6 +1404,9 @@ def _process_video_worker(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> VideoStats:
     """並列ワーカ用: 1 動画を処理して VideoStats を返す。
 
@@ -1433,6 +1495,9 @@ def _process_video_worker(
         enable_formula_chain_count_update=enable_formula_chain_count_update,
         enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
     stats._local_disagreements = local_disagrees
     return stats
@@ -2078,6 +2143,159 @@ def _compute_holdout_summary(
         "total_cells": total,
         "correct": correct,
         "videos": holdout_ids,
+    }
+
+
+def _w36_w37_video_row(stats: VideoStats) -> dict[str, object]:
+    """W36/W37 集計用に1動画の整数台帳と補正値を返す。"""
+    offmatch = compute_offmatch_excluded_acc(stats)
+    health = offmatch.get("observation_health", {})
+    return {
+        "is_holdout": stats.is_holdout,
+        "acc_excluding_offmatch": offmatch.get("acc_excluding_offmatch"),
+        "cells_excluding_offmatch": int(offmatch.get("cells_excluding_offmatch", 0)),
+        "agreed_cells_excluding_offmatch": int(
+            offmatch.get("agreed_cells_excluding_offmatch", 0)
+        ),
+        "excluded_cells": int(offmatch.get("excluded_cells", 0)),
+        "excluded_agreed_cells": int(offmatch.get("excluded_agreed_cells", 0)),
+        "ledger_entry_count": int(health.get("ledger_entry_count", 0)),
+        "score_non_none_observation_count": int(
+            health.get("score_non_none_observation_count", 0)
+        ),
+        "span_count": int(health.get("span_count", 0)),
+    }
+
+
+def _sum_w36_w37_rows(
+    rows: dict[str, dict[str, object]], selected_ids: set[str],
+) -> dict[str, object]:
+    """指定動画のW37除外後セル数を整数合算する。"""
+    selected = [row for vid, row in rows.items() if vid in selected_ids]
+    cells = sum(int(row["cells_excluding_offmatch"]) for row in selected)
+    agreed = sum(int(row["agreed_cells_excluding_offmatch"]) for row in selected)
+    return {
+        "acc_excluding_offmatch": agreed / cells if cells else None,
+        "cells_excluding_offmatch": cells,
+        "agreed_cells_excluding_offmatch": agreed,
+    }
+
+
+def _is_w36_w37_rebaseline(requested_ids: list[str]) -> bool:
+    """正本8動画を過不足なく要求した再基準化実行かを返す。"""
+    expected = set(W36_W37_REBASELINE_VIDEO_IDS)
+    return len(requested_ids) == len(expected) and set(requested_ids) == expected
+
+
+def _build_w36_w37_summary(
+    stats_list: list[VideoStats],
+    requested_ids: list[str],
+    holdout_ids: list[str],
+) -> dict[str, object]:
+    """本番構成・試合内区間の三者一致率（認識精度代理）を集計する。"""
+    rows = {stats.video_id: _w36_w37_video_row(stats) for stats in stats_list}
+    processed_ids = list(rows)
+    requested_set = set(requested_ids)
+    processed_set = set(processed_ids)
+    holdout_set = set(holdout_ids)
+    strict_end_evidence = _is_w36_w37_rebaseline(requested_ids)
+    return {
+        "metric_kind": "production_configuration_in_match_three_way_agreement_proxy",
+        "requested_videos": requested_ids,
+        "processed_videos": processed_ids,
+        "missing_requested_videos": sorted(requested_set - processed_set),
+        "unexpected_processed_videos": sorted(processed_set - requested_set),
+        "strict_end_evidence_required": strict_end_evidence,
+        "strict_scope": "official_rebaseline_8" if strict_end_evidence else "generic_cli",
+        "overall": _sum_w36_w37_rows(rows, processed_set),
+        "holdout": {
+            **_sum_w36_w37_rows(rows, holdout_set),
+            "requested_videos": holdout_ids,
+            "processed_videos": [vid for vid in processed_ids if vid in holdout_set],
+        },
+        "per_video": rows,
+        "note": (
+            "人手真値ではなく、本番構成・試合内区間の三者一致率（認識精度代理）。"
+            "旧99.54%とは測定構成と母集団が異なるため直接比較不可。W37 spanは"
+            "凍結開始より2秒前まで広がり、勝者側の見える盤面も除外し得る。"
+            "span必須は終了画面を含む正本8動画だけで、任意クリップには課さない。"
+        ),
+    }
+
+
+def _w36_w37_health_failures(summary: dict[str, object]) -> list[str]:
+    """W36/W37補正値を採用できないfail-silent条件を列挙する。"""
+    failures: list[str] = []
+    for key, label in (
+        ("missing_requested_videos", "未処理動画"),
+        ("unexpected_processed_videos", "要求外動画"),
+    ):
+        if summary[key]:
+            failures.append(f"{label}: {summary[key]}")
+    strict = bool(summary["strict_end_evidence_required"])
+    for video_id, row in dict(summary["per_video"]).items():
+        if int(row["ledger_entry_count"]) == 0:
+            failures.append(f"{video_id}: W37セル台帳なし")
+        if int(row["score_non_none_observation_count"]) == 0:
+            failures.append(f"{video_id}: score非None観測なし")
+        if strict and int(row["span_count"]) == 0:
+            failures.append(f"{video_id}: 終了を含む正本8動画なのにW37 spanなし")
+    if int(dict(summary["overall"])["cells_excluding_offmatch"]) == 0:
+        failures.append("W37除外後overall分母が0")
+    return failures
+
+
+def _judge_w36_w37_accuracy(
+    summary: dict[str, object],
+) -> tuple[str, list[str]]:
+    """補正後proxyを判定する。旧verdict/exit codeからは独立させる。"""
+    failures = _w36_w37_health_failures(summary)
+    holdout = dict(summary["holdout"])
+    target = holdout if holdout["requested_videos"] else dict(summary["overall"])
+    target_name = "holdout" if holdout["requested_videos"] else "overall"
+    if holdout["requested_videos"]:
+        missing = set(holdout["requested_videos"]) - set(holdout["processed_videos"])
+        if missing:
+            failures.append(f"未処理holdout動画: {sorted(missing)}")
+    target_cells = int(target["cells_excluding_offmatch"])
+    target_acc = target["acc_excluding_offmatch"]
+    if target_cells == 0 or target_acc is None:
+        message = f"W37除外後{target_name}分母が0"
+        if message not in failures:
+            failures.append(message)
+    elif float(target_acc) < PASS_OVERALL_THRESHOLD:
+        failures.append(
+            f"W37除外後{target_name}三者一致率 {float(target_acc):.4f} "
+            f"< 閾値 {PASS_OVERALL_THRESHOLD:.4f}"
+        )
+    return ("PASS" if not failures else "FAIL"), failures
+
+
+def _w36_w37_meta_flags(
+    enable_gravity_settle_state: bool,
+    enable_slide_override_ojama_hold: bool,
+) -> dict[str, bool]:
+    """W36で欠けていた実効フラグを成果物へ記録する。"""
+    return {
+        "enable_gravity_settle_state": enable_gravity_settle_state,
+        "enable_slide_override_ojama_hold": enable_slide_override_ojama_hold,
+    }
+
+
+def _print_w36_w37_flags(flags: dict[str, bool]) -> None:
+    """W36対象フラグの実効値を標準ログへ出す。"""
+    for flag_name, flag_value in flags.items():
+        state = "ENABLED" if flag_value else "DISABLED"
+        print(f"[measure] {flag_name}={state} (実効値)")
+
+
+def _w36_w37_result_fields(summary: dict[str, object]) -> dict[str, object]:
+    """旧判定と混ぜずにW36/W37専用の結果キーを構成する。"""
+    verdict, failures = _judge_w36_w37_accuracy(summary)
+    return {
+        "w36_w37_summary": summary,
+        "w36_w37_accuracy_verdict": verdict,
+        "w36_w37_accuracy_failures": failures,
     }
 
 
@@ -2934,6 +3152,12 @@ def _parse_args() -> argparse.Namespace:
     # 実際に 3 要素目が no-op であることに長く気づけなかった。
     # いずれも複合フラグとの OR で効く (複合 ON なら従来どおり全要素 ON)。
     for _flag, _dest, _desc in (
+        ("--enable-ojama-entry-gravity-settle-guard", "enable_ojama_entry_gravity_settle_guard",
+         "連鎖後の落下待ち中におじゃま落下へ横取りされるのを防ぐ。"),
+        ("--enable-pseudo-chain-score-fill", "enable_pseudo_chain_score_fill",
+         "検証済みの疑似連鎖イベントに推定得点を補う。"),
+        ("--enable-gravity-settle-reset-on-exit", "enable_gravity_settle_reset_on_exit",
+         "落下待ちを抜けた際に保持状態を解除する。"),
         ("--enable-chain-formula-read-verify", "enable_chain_formula_read_verify",
          "掛け算式を実読できたフレームは凍結盤面 simulate 検証を通さず発火する "
          "(mechanism=formula_read)。"),
@@ -3381,6 +3605,9 @@ def _collect_results(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> list[VideoStats]:
     """動画リストを走らせ VideoStats リストを返す。
 
@@ -3498,6 +3725,9 @@ def _collect_results(
             enable_formula_chain_count_update=enable_formula_chain_count_update,
             enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
             enable_formula_step_interlude=enable_formula_step_interlude,
+            enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+            enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+            enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
         )
     return _collect_parallel(
         video_tasks, holdout_ids, max_frames,
@@ -3568,6 +3798,9 @@ def _collect_results(
         enable_formula_chain_count_update=enable_formula_chain_count_update,
         enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
 
 
@@ -3666,6 +3899,9 @@ def _collect_serial(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> list[VideoStats]:
     """逐次実行で VideoStats リストを返す (workers=1 の従来挙動)。"""
     stats_list: list[VideoStats] = []
@@ -3745,6 +3981,9 @@ def _collect_serial(
             enable_formula_chain_count_update=enable_formula_chain_count_update,
             enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
             enable_formula_step_interlude=enable_formula_step_interlude,
+            enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+            enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+            enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
         )
         stats_list.append(vstats)
     return stats_list
@@ -3864,6 +4103,9 @@ def _collect_parallel(
     enable_slide_exit_no_min_display: bool = False,
     # Q-01 修正 (2026-08-24): 掛け算式の段の区切りを幕間で判定する。末尾追加。
     enable_formula_step_interlude: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_pseudo_chain_score_fill: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
 ) -> list[VideoStats]:
     """ProcessPoolExecutor (spawn) で動画単位並列処理し VideoStats リストを返す。
 
@@ -3977,6 +4219,9 @@ def _collect_parallel(
                 enable_formula_chain_count_update,
                 enable_slide_exit_no_min_display,
                 enable_formula_step_interlude,
+                enable_ojama_entry_gravity_settle_guard,
+                enable_pseudo_chain_score_fill,
+                enable_gravity_settle_reset_on_exit,
             )
             futures[fut] = vid
 
@@ -4256,6 +4501,9 @@ def main() -> int:
     enable_chain_formula_read_verify = _prf["enable_chain_formula_read_verify"]
     enable_formula_chain_count_update = _prf["enable_formula_chain_count_update"]
     enable_formula_step_interlude = _prf["enable_formula_step_interlude"]
+    enable_ojama_entry_gravity_settle_guard = _prf["enable_ojama_entry_gravity_settle_guard"]
+    enable_pseudo_chain_score_fill = _prf["enable_pseudo_chain_score_fill"]
+    enable_gravity_settle_reset_on_exit = _prf["enable_gravity_settle_reset_on_exit"]
     enable_effect_gate: bool = _prf["enable_effect_gate"]
     enable_burst_guard_v2: bool = _prf["enable_burst_guard_v2"]
     enable_transition_merge_guard: bool = _prf["enable_transition_merge_guard"]
@@ -4305,6 +4553,10 @@ def main() -> int:
         "(2026-08-13 是正、src.production_config が単一情報源。"
         "--no-production-recognition で旧構成を再現可能)"
     )
+    _w36_w37_flags = _w36_w37_meta_flags(
+        enable_gravity_settle_state, enable_slide_override_ojama_hold,
+    )
+    _print_w36_w37_flags(_w36_w37_flags)
     print(f"[measure] 評価開始: videos={video_ids} holdout={holdout_ids} workers={workers}")
     print(f"[measure] 出力先: {output_path}")
     print(f"[measure] constraint_fill={'ENABLED' if enable_constraint_fill else 'DISABLED'}")
@@ -4489,6 +4741,9 @@ def main() -> int:
         enable_formula_chain_count_update=enable_formula_chain_count_update,
         enable_slide_exit_no_min_display=enable_slide_exit_no_min_display,
         enable_formula_step_interlude=enable_formula_step_interlude,
+        enable_ojama_entry_gravity_settle_guard=enable_ojama_entry_gravity_settle_guard,
+        enable_pseudo_chain_score_fill=enable_pseudo_chain_score_fill,
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
     )
     if not stats_list:
         print("[measure] 処理した動画がゼロ件。終了。", file=sys.stderr)
@@ -4504,6 +4759,10 @@ def main() -> int:
         stats_list=stats_list,
         corruption_section=corruption_section,
     )
+    w36_w37_summary = _build_w36_w37_summary(
+        stats_list, video_ids, holdout_ids,
+    )
+    w36_w37_fields = _w36_w37_result_fields(w36_w37_summary)
     # constraint_fill 無効時の注記: 本指標は 0 になりやすい
     postprocess_note: Optional[str] = None
     if not enable_constraint_fill:
@@ -4517,12 +4776,14 @@ def main() -> int:
         "disagreement_cells": disagreements[:DISAGREEMENT_OUTPUT_LIMIT],
         "disagreement_total": len(disagreements),
         "verdict": verdict, "failures": failures,
+        **w36_w37_fields,
         "meta": {
             "videos": video_ids, "holdout": holdout_ids,
             "max_frames": args.max_frames,
             "sample_interval_sec": args.sample_interval,
             "pass_overall_threshold": PASS_OVERALL_THRESHOLD,
             "pass_per_color_threshold": PASS_PER_COLOR_THRESHOLD,
+            **_w36_w37_flags,
             # constraint_fill の on/off を記録 (後日比較用)
             "enable_constraint_fill": enable_constraint_fill,
             # t2_highconf_yield の on/off を記録 (後日比較用)
@@ -4612,6 +4873,9 @@ def main() -> int:
             ),
             # Q-01 修正 (2026-08-24): 複合フラグとの OR 対象外 (単独 forward)。
             "enable_formula_step_interlude": enable_formula_step_interlude,
+            "enable_ojama_entry_gravity_settle_guard": enable_ojama_entry_gravity_settle_guard,
+            "enable_pseudo_chain_score_fill": enable_pseudo_chain_score_fill,
+            "enable_gravity_settle_reset_on_exit": enable_gravity_settle_reset_on_exit,
         },
     }
     # constraint_fill 無効時の postprocess_corruption_note を追加

@@ -22,11 +22,44 @@ import sys
 from pathlib import Path
 
 import pytest
+from functools import wraps
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import scripts.measure_stable_cell_acc as msca  # noqa: E402
 from src.production_config import recognition_load_default_kwargs  # noqa: E402
+
+
+@pytest.mark.parametrize("worker", [False, True])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_adopted_flags_reach_actual_pipeline_boundary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, worker: bool, enabled: bool,
+) -> None:
+    """逐次経路とワーカ本体を通し、実load_default直前の全採用値を確認する。"""
+    captured: list[dict] = []
+
+    class BoundaryReached(Exception):
+        pass
+
+    @wraps(msca.RecognitionPipeline.load_default)
+    def spy(**kwargs: object) -> None:
+        captured.append(kwargs)
+        raise BoundaryReached
+
+    monkeypatch.setattr(msca.RecognitionPipeline, "load_default", spy)
+    monkeypatch.setattr(msca, "_resolve_video_path", lambda *a: tmp_path / "dummy.mp4")
+    monkeypatch.setattr(msca, "_open_capture", lambda *a: (object(), 30.0, 1, 1, 1.0))
+    flags = recognition_load_default_kwargs()
+    flags = {k: (enabled if type(v) is bool else v) for k, v in flags.items()}
+    with pytest.raises(BoundaryReached):
+        if worker:
+            msca._process_video_worker("dummy", str(tmp_path / "dummy.mp4"), False,
+                                       1, 1.0, True, **flags)
+        else:
+            msca._collect_results(["dummy"], [], tmp_path, 1, 1.0, [], **flags)
+    assert len(captured) == 1
+    for key, value in flags.items():
+        assert captured[0][key] == value, key
 
 
 class _NS:

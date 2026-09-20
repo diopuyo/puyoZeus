@@ -30,7 +30,7 @@ SAMPLE_URL_2 = "https://www.youtube.com/watch?v=test_video_002"
 def tmp_manager(tmp_path: Path) -> StorageManager:
     """一時ディレクトリを使うStorageManagerを生成する。"""
     history_file = tmp_path / "video_history.json"
-    return StorageManager(history_path=history_file)
+    return StorageManager(history_path=history_file, data_dir=tmp_path)
 
 
 # ============================
@@ -219,3 +219,17 @@ class TestGetStorageUsage:
     def test_usage_total_mb_is_float(self, tmp_manager: StorageManager):
         usage = tmp_manager.get_storage_usage()
         assert isinstance(usage["total_mb"], float)
+
+    def test_usage_only_scans_configured_directory(self, tmp_path: Path):
+        target = tmp_path / "target"
+        outside = tmp_path / "outside"
+        target.mkdir()
+        outside.mkdir()
+        (target / "inside.bin").write_bytes(b"123")
+        (outside / "outside.bin").write_bytes(b"123456789")
+        manager = StorageManager(
+            history_path=tmp_path / "history.json", data_dir=target,
+        )
+        usage = manager.get_storage_usage()
+        assert usage["total_bytes"] == 3
+        assert usage["total_files"] == 1

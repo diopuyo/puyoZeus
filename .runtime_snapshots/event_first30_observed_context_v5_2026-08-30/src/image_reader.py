@@ -1,0 +1,1879 @@
+"""
+フレーム→盤面変換モジュール
+
+ぷよぷよeスポーツ (1920×1080) のスクリーンショット/フレーム画像から
+各プレイヤーの盤面データを読み取る。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import cv2
+import numpy as np
+
+from src.board import (
+    BOARD_COLS,
+    BOARD_ROWS,
+    COLOR_BLUE,
+    COLOR_EMPTY,
+    COLOR_GREEN,
+    COLOR_OJAMA,
+    COLOR_PURPLE,
+    COLOR_RED,
+    COLOR_UNKNOWN,
+    COLOR_YELLOW,
+    HIDDEN_ROWS,
+    VISIBLE_ROWS,
+    Board,
+)
+
+# ============================
+# 定数定義
+# ============================
+
+# セルサンプリング範囲 (セルサイズに対する割合)
+# puyo の中央部分のみサンプリング (目・縁・周辺背景の影響を排除し、
+# 純粋なぷよ色の median を取得)。0.5 = セル中央 50% を使用。
+CELL_SAMPLE_RATIO: float = 0.5
+
+# 空セル判定の輝度閾値 (V < この値なら空)
+EMPTY_V_THRESHOLD: int = 40
+
+# おじゃま判定の彩度閾値 (S < この値かつV > EMPTY_V_THRESHOLD ならおじゃま候補)
+# 2026-05-12 cycle 71f (提案 B): 30→20 に下げて、 灰色寄り黄ぷよ等を
+# OJAMA に倒さない. 真の OJAMA は S=10-20 範囲が大半で 20 でも十分検出可能.
+# 2026-05-11 サイクル70: 60→30 で 薄い黄色 puyo の OJAMA 誤分類を回避.
+# 真の OJAMA puyo は S<20 (= ほぼグレー) なので 30 でも安全.
+OJAMA_S_THRESHOLD: int = 20
+
+# おじゃま判定の輝度下限 (V > この値でないとおじゃまとみなさない)
+OJAMA_V_MIN: int = 100
+
+# 2026-05-11 サイクル71: per-pixel 投票方式の閾値
+# puyo 色票が全 cell ピクセル数 × VOTE_PUYO_MIN_RATIO 以上なら puyo 採用.
+# 「半分埋まり」 「ハイライト残光」 cell でも本物の色を取れるよう 10% 程度に設定.
+VOTE_PUYO_MIN_RATIO: float = 0.10
+# おじゃま票がこの割合以上なら OJAMA. ぷよぷよ ojama は ほぼ cell 全体グレーなので
+# 高めに設定 (40%).
+VOTE_OJAMA_MIN_RATIO: float = 0.40
+# 投票で red 拡張範囲 (h 11-18) を採用するかの BGR R-G ピクセル単位差閾値.
+# median 方式と同じ意味だが、 個別ピクセル単位での適用.
+VOTE_RED_EXTENDED_RG_DIFF: int = 80
+
+# 赤と黄の区別: BGR の R-G 差がこれ以上なら赤、未満なら黄
+# (赤=R突出、黄=R≈G の混合色、HSV では H/S 共に被るため BGR で区別)
+RED_GREEN_DIFF_FOR_RED: int = 80
+# 赤候補で V がこれ以下なら紫候補 (赤紫判定、暗い赤系は紫の方が真値多数)
+PURPLE_V_MAX_FOR_RED_CANDIDATE: int = 170
+
+# ============================
+# 背景 FP tier 1 (EXTREME) threshold (cycle 33/37 確定値)
+# ============================
+# tier 1: 距離 < BG_EXTREME_THRESHOLD_DEFAULT → 無条件 EMPTY (= 全 cell 共通)
+# cycle 37 sweep 結果: t=25 が「副作用最小 + v97m11 -32 件改善」 最適。
+BG_EXTREME_THRESHOLD_DEFAULT: float = 25.0
+# 軸 3-b (Phase L): 1P/2P 盤面左上エリア (visible_row >= 5, col <= 1) 用閾値。
+# 2026-05-27 v40 col=1 EMPTY 症状により軸 3-b 撤回: +15.0 → +0.0 (= DEFAULT と同値)。
+# _resolve_tier1_threshold のエリア別分岐ロジックは将来の per-region 調整のため残す。
+BG_EXTREME_THRESHOLD_LEFT_UPPER: float = BG_EXTREME_THRESHOLD_DEFAULT + 0.0
+# 左上エリアの定義: 表示行 (visible_row = row - HIDDEN_ROWS) のうち中盤 ~ 下部
+BG_LEFT_UPPER_VISIBLE_ROW_MIN: int = 5  # 表示行 5 以上 (= 表示中盤下から最下段)
+BG_LEFT_UPPER_COL_MAX: int = 1  # 列 0-1 (= 最左 2 列)
+
+# bg_fp 採取前保護モード (= I1 対応 A):
+# bg_fp が未採取の期間に tier 1 を 0.0 に設定して CNN 経路を無効化し
+# HSV-only 経路に倒す。 bg_fp 採取完了後は DEFAULT に戻る。
+BG_EXTREME_THRESHOLD_PRE_CAPTURE: float = 0.0
+
+# ============================
+# 赤色相折り返し補正 定数 (fix/v70-zeropatch-redyellow)
+# ============================
+# OpenCV HSV で赤は H 軸両端に折り返す (0-4 と 166-179 が同じ赤)。
+# H がこの値以上のピクセルを「負方向」に折り返して median を計算することで
+# 2 峰 (0 付近と 180 付近) を 1 峰に collapse し median を安定させる。
+RED_HUE_WRAP_THRESHOLD: int = 140
+# 折り返し後の H median がこの値以下なら「赤近傍」とみなして補正を適用する。
+# 折り返し後の 0 付近域 (例: -14 〜 +13) が対象。正値に変換した後の最大値。
+RED_HUE_WRAP_CORRECTED_MAX: int = 13
+
+# ============================
+# 光沢ハイライト除外 彩度計算 定数 (案D: specular highlight 対処)
+# ============================
+# ぷよ表面の白い光沢 (鏡面反射) 画素はV高・S低で、彩度 median を押し下げて
+# 色/空判定閾値 S_min 未達を引き起こす (真因: 白ハイライト球が約30%混入)。
+# これらを彩度統計から除外し、ぷよ本体画素の彩度で判定することで誤EMPTY化を防ぐ。
+#
+# 実測根拠 (memory: project_specular_highlight_empty_misread.md):
+#   赤ぷよ: 本体画素 S=160〜220、ハイライト画素 V>=220 かつ S<=60 が約30%混入
+#   → 全画素 median S=94/102 (S_min=160 未達) → EMPTY 誤判定
+#   ハイライト除外後 median S>160 → RED 正判定
+#
+# SPECULAR_V_MIN: ハイライト画素の輝度下限 (これ以上が「明るすぎる」画素)
+SPECULAR_V_MIN: int = 210
+# SPECULAR_S_MAX: ハイライト画素の彩度上限 (これ以下が「白っぽい」画素)
+SPECULAR_S_MAX: int = 60
+# SPECULAR_FALLBACK_MIN_RATIO: 除外後に残る有効画素の最小比率
+# この比率未満なら全面ハイライト等の異常とみなしてfallback (全画素統計を使用)
+SPECULAR_FALLBACK_MIN_RATIO: float = 0.20
+
+# ============================
+# データクラス
+# ============================
+
+
+@dataclass
+class HsvRange:
+    """
+    OpenCV HSV色空間の閾値範囲。
+    H: 0–180 / S: 0–255 / V: 0–255
+    赤は H が 0 付近と 170–180 で折り返すため h_max > h_min でない場合がある。
+    """
+    h_min: int
+    h_max: int
+    s_min: int = 80
+    s_max: int = 255
+    v_min: int = 80
+    v_max: int = 255
+
+
+# ============================
+# 側別 彩度適応較正 (2026-07-31)
+# ============================
+# 実測: 画面の右半分 (2P 側) は 3 動画すべてで彩度が系統的に低い
+#   盤面の彩度中央値 1P 127.0/102.0/123.5 に対し 2P 94.0/62.0/61.0
+#   ぷよ画素の彩度中央値 1P 123.0 に対し 2P 100.5 (p10 は 98 対 59)
+# にもかかわらず **盤面の色分類器は左右で同じ s_min を使っている**
+# (_s_min_scale は解像度依存の全体スケールのみで側別調整が無い)。
+# → 2P だけ HSV 判定が通りにくく、CNN と食い違って票数を余計に要求する。
+#   実測の区間B (確定側) が 1P 2.0 に対し 2P 8.0 という 4 倍差と整合する。
+#
+# 対処は背景 FP と同じ「実測から較正する」方式にする。固定の側別ハードコードは
+# キャラや動画が変わると再びずれるので採らない。
+#
+# 基準となる彩度中央値。この値の側では scale=1.0 (従来と同じ) になる。
+# 1P の実測中央値 (123.0) に合わせてある。
+SIDE_SAT_REFERENCE_MEDIAN: float = 123.0
+# 較正で許容するスケール下限 (set_s_min_scale 側のクランプと同値)。
+SIDE_SAT_SCALE_MIN: float = 0.3
+# 較正に使うサンプル画素の彩度下限。これ未満は空セル/背景とみなし較正から除く
+# (空セルばかりの盤面で scale が過剰に下がるのを防ぐ)。
+SIDE_SAT_SAMPLE_MIN: int = 40
+# 較正を確定するまでに必要なサンプルフレーム数。
+# 少なすぎると演出フレームに引きずられる。
+SIDE_SAT_CALIB_MIN_FRAMES: int = 8
+
+# cell_sample_rect のキャッシュ (2026-07-31)。
+# キー = (領域x, 領域y, 幅, 高さ, row, col)。盤面領域は P1/P2 とシフト版で数種、
+# セルは 78 個なので上限は数百エントリに収まる。
+_CELL_RECT_CACHE: dict[
+    tuple[int, int, int, int, int, int], tuple[int, int, int, int]
+] = {}
+
+
+@dataclass
+class BoardRegion:
+    """
+    フレーム画像上での盤面の矩形領域。
+
+    盤面は画面上 VISIBLE_ROWS 行 (=12) が見えており、隠し段 (row 0) は
+    画面外で直接は読み取れない。本リージョンは可視 12 行を包含する矩形を
+    表す (width/height は可視領域のみ)。
+
+    NOTE: ぷよぷよeスポーツ 1920×1080 での座標は実際の映像で要キャリブレーション。
+    """
+    x: int       # 左端X座標 (px)
+    y: int       # 上端Y座標 (px、可視領域上端)
+    width: int   # 盤面幅 (px)
+    height: int  # 可視領域の高さ (px、12行分)
+
+    @property
+    def cell_width(self) -> float:
+        """1セルの幅 (px)。"""
+        return self.width / BOARD_COLS
+
+    @property
+    def cell_height(self) -> float:
+        """1セルの高さ (px)。 可視領域高さ / VISIBLE_ROWS。"""
+        return self.height / VISIBLE_ROWS
+
+    def cell_center(self, row: int, col: int) -> tuple[int, int]:
+        """
+        指定セルの中心座標 (x, y) を返す。
+
+        row = 0..HIDDEN_ROWS-1 は画面外 (隠し段) → 画面上では領域の上方に
+        推定位置を返すが、画像データとしては確定不能。
+        row = HIDDEN_ROWS..BOARD_ROWS-1 は可視領域の行。
+        """
+        visible_row = row - HIDDEN_ROWS  # 可視領域での行番号 (-1 は隠し段)
+        cx = int(self.x + (col + 0.5) * self.cell_width)
+        cy = int(self.y + (visible_row + 0.5) * self.cell_height)
+        return cx, cy
+
+    def is_visible_row(self, row: int) -> bool:
+        """指定行が画面に見えている(読み取れる)行か。"""
+        return row >= HIDDEN_ROWS
+
+    def cell_sample_rect(self, row: int, col: int) -> tuple[int, int, int, int]:
+        """
+        指定セルのサンプリング矩形 (x1, y1, x2, y2) を返す。
+        セル中央の CELL_SAMPLE_RATIO 分の領域をサンプルする。
+
+        cycle 71i (2026-05-12 ユーザー指摘): 上部 row の下寄せロジックを撤回し、
+        全 row で cell 中央 sample に統一する. 旧 cycle 69-A/70 の下寄せは
+        「上部 cropped」 仮定だったが、 ラベリング検証で「上部 row でも
+        ぷよ全体が cell 内に収まっている / 下寄せすると上半分の色情報が
+        学習データに含まれない」 ことが判明したため.
+
+        Note: この変更で学習用 patch 領域が変わるため、 既存 CNN model は
+        新しい sample 領域で再 fine-tune する必要がある.
+        """
+        # 高速化 (2026-07-31): 実測 278.8回/frame で 0.4ms。矩形は
+        # (領域の幾何, row, col) の純関数なのでキャッシュできる。
+        # BoardRegion は frozen でない dataclass なので、幾何を**キーに含める**
+        # (座標が書き換えられても誤ったキャッシュを引かない)。
+        key = (self.x, self.y, self.width, self.height, row, col)
+        hit = _CELL_RECT_CACHE.get(key)
+        if hit is not None:
+            return hit
+        cx, cy = self.cell_center(row, col)
+        half_w = max(1, int(self.cell_width * CELL_SAMPLE_RATIO / 2))
+        half_h = max(1, int(self.cell_height * CELL_SAMPLE_RATIO / 2))
+        rect = (cx - half_w, cy - half_h, cx + half_w, cy + half_h)
+        _CELL_RECT_CACHE[key] = rect
+        return rect
+
+
+# ============================
+# デフォルト盤面領域 (1920×1080 要キャリブレーション)
+# ============================
+
+# 1P 盤面領域 (左側) — calibration_video01.json と同期
+DEFAULT_P1_REGION: BoardRegion = BoardRegion(x=282, y=160, width=384, height=720)
+
+# 2P 盤面領域 (右側) — calibration_video01.json と同期
+DEFAULT_P2_REGION: BoardRegion = BoardRegion(x=1258, y=160, width=384, height=720)
+
+
+# ============================
+# HSV 色閾値テーブル
+# ============================
+
+# 各色のHSV範囲リスト (複数範囲の OR 判定に対応)
+DEFAULT_COLOR_RANGES: dict[int, list[HsvRange]] = {
+    # 2026-05-10 FIX-A2: 全色 S_min を背景誤認識回避レベルに引き上げ
+    # 試合中の本物 puyo は S>=160 が大半なので影響少
+    COLOR_RED: [
+        # 2026-05-12 cycle 71f (提案 B): H_max 18→13 で YELLOW (= H=14-38) との
+        # 重複解消. dim 赤の救済は R-G diff チェック (= 268-273 行) で代替.
+        HsvRange(h_min=0,   h_max=13,  s_min=160, v_min=100),
+        HsvRange(h_min=166, h_max=180, s_min=160, v_min=100),
+    ],
+    COLOR_BLUE: [
+        HsvRange(h_min=100, h_max=130, s_min=160, v_min=80),
+    ],
+    COLOR_GREEN: [
+        HsvRange(h_min=50,  h_max=85,  s_min=160, v_min=80),
+    ],
+    COLOR_YELLOW: [
+        # 黄は S 低めでも観測されるが、 試合中の本物は S>=80 程度
+        # 2026-05-11 サイクル68: V_min 180→120 で上部 dim cell 救済.
+        # RED が dict 順で先に check されるため、 dim 赤との混同回避済.
+        # 2026-05-12 cycle 71f (提案 B): S_min 80→100 で灰色寄り黄を除外し
+        # OJAMA への誤判定を抑止. 真の黄ぷよは S>=120 が大半.
+        HsvRange(h_min=14,  h_max=38,  s_min=100, v_min=120),
+    ],
+    COLOR_PURPLE: [
+        HsvRange(h_min=130, h_max=165, s_min=130, v_min=80),
+    ],
+}
+
+
+# ============================
+# 色分類器
+# ============================
+
+def _median_hsv_3ch(hsv_patch: np.ndarray) -> tuple[int, int, int]:
+    """HSV パッチの H/S/V それぞれの median を 1 回の partition で求める。
+
+    高速化 (2026-07-31): `read_board` のセルループが
+    `int(np.median(hsv_patch[:, :, i]))` を 3 回呼んでおり、
+    1 フレームあたり 360 回 (120セル x 3ch) に達していた
+    (2026-07-30 の `_median_fast` 置換から漏れていた箇所)。
+
+    (N, 3) に並べて axis=0 で partition すると各チャンネルが独立に部分ソートされ、
+    k 番目の要素はチャンネルごとの順序統計量と一致する。よって
+    **3 回の np.median と返り値は完全同一**で、partition 呼び出しは 1 回で済む。
+
+    Args:
+        hsv_patch: (H, W, 3) の HSV パッチ (uint8 想定)。
+
+    Returns:
+        (h_med, s_med, v_med)。いずれも int (np.median 同様に切り捨て)。
+    """
+    flat = np.ascontiguousarray(hsv_patch).reshape(-1, 3)
+    n = flat.shape[0]
+    k = n // 2
+    if n % 2:
+        med = np.partition(flat, k, axis=0)[k].astype(np.float64)
+    else:
+        part = np.partition(flat, (k - 1, k), axis=0)
+        med = (part[k - 1].astype(np.float64) + part[k].astype(np.float64)) / 2.0
+    return int(med[0]), int(med[1]), int(med[2])
+
+
+def _median_fast(a: np.ndarray) -> float:
+    """1D 配列の median を np.median と同値で高速に計算する。
+
+    高速化 (2026-07-30): セル単位 HSV 分類は 1 フレームあたり 584 回ずつ
+    H/S の median を取っており、実測 30.8ms/frame (認識全体の 11.9%) を占めていた。
+    実測でパッチサイズ 16x16〜32x32 では np.partition が np.median の 2〜4 倍速い
+    (`scripts/_diag_median_overhead_2026-07-30.py`)。一方セル横断のまとめ計算は
+    32x32 で削減 1.3% しかなく無効だったため、関数内部の置き換えを採用した。
+
+    np.median 自身も内部で partition + 中央 2 値の平均を行うため **返り値は完全同一**。
+    (偶数長は中央 2 値の float64 平均、奇数長は中央値そのもの)
+
+    Args:
+        a: 1D numpy 配列 (uint8 / int16 等の整数型を想定)。
+
+    Returns:
+        median 値 (float)。空配列では nan (np.median と同じ)。
+    """
+    n = a.size
+    if n == 0:
+        return float("nan")
+    k = n // 2
+    if n % 2:
+        return float(np.partition(a, k)[k])
+    part = np.partition(a, (k - 1, k))
+    return (float(part[k - 1]) + float(part[k])) / 2.0
+
+
+class ColorClassifier:
+    """
+    BGR画像パッチからぷよの色を分類する。
+
+    HSV中央値を計算し、閾値テーブルと照合する。
+    """
+
+    def __init__(
+        self, color_ranges: dict[int, list[HsvRange]] | None = None,
+        vote_mode: bool = False,
+        enable_red_hue_wrap_fix: bool = True,
+        enable_specular_robust_saturation: bool = False,
+    ) -> None:
+        """
+        Args:
+            color_ranges: 色コードからHsvRangeリストへのマッピング。
+                          Noneの場合はDEFAULT_COLOR_RANGESを使用。
+            vote_mode: True なら per-pixel 投票方式で分類 (サイクル71).
+                       False (default) は HSV 中央値 + cycle 69-B サブ region vote
+                       (= 後方互換). 投票方式は混合色 cell や半分埋まり cell に強い.
+            enable_red_hue_wrap_fix: True (default) なら赤色相折り返し補正を有効化
+                (fix/v70-zeropatch-redyellow、user viz 採用済)。
+                赤の H 画素が 0-4 と 166-179 に分布する 2 峰構造で median が
+                赤/黄境界 (H=13/14) に乗りちらつく問題を修正する。
+                False = 従来の単純 median (後方互換が必要な場合のみ指定)。
+            enable_specular_robust_saturation: True なら光沢ハイライト除外彩度計算を有効化
+                (案D: fix/v70-zeropatch-redyellow)。
+                白ハイライト画素 (V>=SPECULAR_V_MIN かつ S<=SPECULAR_S_MAX) を
+                彩度 median 計算から除外することで、ぷよ表面の光沢球混入による
+                EMPTY 誤判定を防ぐ。
+                False (default) = 従来の全画素 median (完全不変、後方互換)。
+        """
+        self._ranges: dict[int, list[HsvRange]] = (
+            color_ranges if color_ranges is not None else DEFAULT_COLOR_RANGES
+        )
+        # 2026-05-11 サイクル63: 解像度依存 S_min スケール係数.
+        # 1.0 = 720p+ (= default 通り), 0.7 = 360p (S 下限緩和).
+        # 360p アップスケール時の色彩飽和度低下を補償.
+        self._s_min_scale: float = 1.0
+        # 2026-05-11 サイクル71: per-pixel 投票分類モード.
+        self._vote_mode: bool = bool(vote_mode)
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正フラグ.
+        self._enable_red_hue_wrap_fix: bool = bool(enable_red_hue_wrap_fix)
+        # 案D (fix/v70-zeropatch-redyellow): 光沢ハイライト除外彩度計算フラグ.
+        # default False = 従来の全画素 median (完全後方互換).
+        self._enable_specular_robust_saturation: bool = bool(
+            enable_specular_robust_saturation
+        )
+        # ネイティブ (Rust) HSV 分類 (2026-08-20)。既定 OFF = 完全に従来経路。
+        # 有効化は `enable_native_hsv()` 経由 (呼出側から明示的に切り替える)。
+        # 実測 6.4倍 (5.115→0.800 ms/盤面、cvtColor と境界越えを含む実効値)。
+        # bit-identical は合成パッチ 4,732 枚 × フラグ4構成で不一致0を確認済み
+        # (scripts/_verify_native_hsv_parity_2026-08-20.py、陽性対照つき)。
+        self._enable_native_hsv: bool = False
+        # Rust に渡す色レンジの平坦化キャッシュ。**dict の挿入順を保つ**
+        # (レンジ照合は先勝ちなので順序が結果を変える)。
+        # _s_min_scale やレンジ自体が変わったら破棄する。
+        self._native_ranges_cache: "np.ndarray | None" = None
+        self._native_params_cache: dict | None = None
+
+    def _compute_stable_h_median(self, h_channel: np.ndarray) -> int:
+        """赤色相折り返しを考慮した安定 H median を計算する。
+
+        fix/v70-zeropatch-redyellow: enable_red_hue_wrap_fix=True の場合のみ補正を適用。
+        OFF 時は従来の単純 median (int(np.median(h_channel))) と完全同一。
+
+        補正アルゴリズム:
+            1. H >= RED_HUE_WRAP_THRESHOLD のピクセルを (h - 180) に変換
+               (例: H=170 → -10)。これで 0-4 と 166-179 の 2 峰が
+               -14 〜 +13 の 1 峰に collapse する。
+            2. 変換後の median を計算。
+            3. median が RED_HUE_WRAP_CORRECTED_MAX (=13) 以下、かつ
+               元の h_channel に HIGH 値 (>=RED_HUE_WRAP_THRESHOLD) が
+               十分存在する 2 峰ケースでのみ補正を採用する。
+               2 峰でない場合は従来 median をそのまま返す。
+
+        Args:
+            h_channel: H チャンネルの 2D または 1D numpy 配列 (uint8, 0–180)。
+
+        Returns:
+            安定化後の H median 値 (int, 0–180)。
+        """
+        # 高速化 (2026-07-30): int16 への astype を「補正を実際に適用する分岐」まで遅延させる。
+        # ravel() は非連続 view (hsv[:, :, 0]) なのでここで uint8 の複製が 1 回だけ起きる。
+        # 旧実装は毎回 int16 複製 (2 倍のメモリ帯域) を作っていた。
+        h_flat = np.asarray(h_channel).ravel()
+        if not self._enable_red_hue_wrap_fix:
+            return int(_median_fast(h_flat))
+        # 2 峰ケース判定: LOW 側 (H < 30) と HIGH 側 (H >= 閾値) の両方が存在するか。
+        # 紫 (H=130-165) や高 H 単峰の場合は両条件を満たさないため補正対象外。
+        # RED_HUE_WRAP_THRESHOLD (=140) 未満の範囲が赤の低端 (0-30) と紫 (70-165) を分ける。
+        # 赤 2 峰 = LOW 比率 >= 15% かつ HIGH 比率 >= 15% の共存ケース。
+        RED_HUE_LOW_MAX: int = 30  # 赤低端の上限 H 値
+        n_total = max(1, h_flat.size)
+        low_ratio = float(np.count_nonzero(h_flat <= RED_HUE_LOW_MAX)) / n_total
+        # 高速化: LOW 側が不足なら HIGH 側を数えるまでもなく補正対象外 (早期打ち切り)。
+        if low_ratio >= 0.15:
+            high_mask = h_flat >= RED_HUE_WRAP_THRESHOLD
+            high_ratio = float(np.count_nonzero(high_mask)) / n_total
+            if high_ratio >= 0.15:
+                # 赤 2 峰確定: 折り返し補正を適用 (ここでのみ int16 が必要)
+                h_wrapped = h_flat.astype(np.int16)
+                h_wrapped[high_mask] -= 180
+                med_wrapped = float(_median_fast(h_wrapped))
+                if med_wrapped <= RED_HUE_WRAP_CORRECTED_MAX:
+                    # 補正採用: 負値は 0 にクランプ (赤の最低 H 値)
+                    return int(max(0, med_wrapped))
+        # 2 峰でない (= 非赤色域 or 単峰赤): 従来 median を返す
+        return int(_median_fast(h_flat))
+
+    def _compute_specular_robust_s(self, s_channel: np.ndarray, v_channel: np.ndarray) -> int:
+        """光沢ハイライト画素を除外した彩度 median を計算する (案D)。
+
+        enable_specular_robust_saturation=False の場合は従来の全画素 median と完全同一。
+
+        アルゴリズム:
+            1. ハイライト画素マスク = V >= SPECULAR_V_MIN かつ S <= SPECULAR_S_MAX
+               (白い光沢球: 明るく・彩度が低い画素群)
+            2. 有効画素 (ハイライトでない画素) の比率が SPECULAR_FALLBACK_MIN_RATIO 以上
+               なら有効画素のみの median を返す (ぷよ本体色)。
+            3. 有効画素が極少 (全面ハイライト等の異常) ならば全画素 median に fallback。
+
+        Args:
+            s_channel: S チャンネルの 2D numpy 配列 (uint8, 0–255)。
+            v_channel: V チャンネルの 2D numpy 配列 (uint8, 0–255)。
+
+        Returns:
+            彩度 median 値 (int, 0–255)。
+        """
+        # 高速化 (2026-07-30): int32 への astype を廃止 (uint8 のままで median 値は同一)。
+        # 有効画素の materialize も「実際に除外がある」場合まで遅延させる。
+        s_flat = np.asarray(s_channel).ravel()
+        if not self._enable_specular_robust_saturation:
+            # OFF 時: 従来の全画素 median と完全同一
+            return int(_median_fast(s_flat))
+        v_flat = np.asarray(v_channel).ravel()
+        n_total = max(1, s_flat.size)
+        # ハイライト画素マスク: 明るく(V高)かつ白っぽい(S低)画素
+        specular_mask = (v_flat >= SPECULAR_V_MIN) & (s_flat <= SPECULAR_S_MAX)
+        n_specular = int(np.count_nonzero(specular_mask))
+        # 有効画素が最小比率を下回る場合は fallback (全面ハイライト等の異常)
+        if s_flat.size - n_specular < int(n_total * SPECULAR_FALLBACK_MIN_RATIO):
+            return int(_median_fast(s_flat))
+        if n_specular == 0 or n_specular == s_flat.size:
+            # n_specular == 0        : 除外画素なし → 複製を作らず全画素 median (同値)
+            # n_specular == size     : 全画素ハイライト → 全画素 median
+            #
+            # 後者は既存の潜在クラッシュへのガード (2026-07-30)。
+            # 5 画素未満のパッチでは int(n_total * SPECULAR_FALLBACK_MIN_RATIO) == 0 と
+            # なり上の fallback 判定 (0 < 0) をすり抜けるため、旧実装は空配列の
+            # median = nan を int() して ValueError で落ちていた (実測確認済み)。
+            # 「全面ハイライト等の異常なら全画素 median」という fallback の意図に沿わせる。
+            # 旧実装が例外だった入力しか変えないので回帰にはならない。
+            return int(_median_fast(s_flat))
+        return int(_median_fast(s_flat[~specular_mask]))
+
+    def enable_native_hsv(self, enable: bool = True) -> bool:
+        """ネイティブ (Rust) HSV 分類の使用を切り替える (2026-08-20)。
+
+        native 拡張が使えない環境では False のまま据え置き、従来の Python
+        経路で動作を続ける (import 失敗で落ちない)。
+
+        Args:
+            enable: True で有効化を試みる。
+
+        Returns:
+            実際に有効化できたか。
+        """
+        if not enable:
+            self._enable_native_hsv = False
+            return False
+        if self._vote_mode:
+            # vote_mode は別アルゴリズム (per-pixel 投票) で移植対象外。
+            return False
+        try:
+            import puyo_core  # noqa: F401
+
+            if not hasattr(puyo_core, "classify_cells_hsv"):
+                return False
+        except ImportError:
+            return False
+        self._enable_native_hsv = True
+        self._native_ranges_cache = None  # 構成が変わった可能性があるので破棄
+        self._native_params_cache = None
+        return True
+
+    def _native_ranges(self) -> np.ndarray:
+        """色レンジを (R,7) int32 に平坦化する (挿入順を保持、キャッシュ)。"""
+        if self._native_ranges_cache is None:
+            rows: list[list[int]] = []
+            for color_code, ranges in self._ranges.items():
+                for r in ranges:
+                    rows.append([
+                        int(color_code), int(r.h_min), int(r.h_max),
+                        int(r.s_min), int(r.s_max), int(r.v_min), int(r.v_max),
+                    ])
+            self._native_ranges_cache = np.asarray(rows, dtype=np.int32)
+        return self._native_ranges_cache
+
+    def _native_params(self) -> dict:
+        """Rust に渡す判定パラメータ束 (キャッシュ)。
+
+        マジックナンバーを Rust に埋め込まず、Python 側の定数を単一情報源に
+        する。`_s_min_scale` は実行中に変わりうるのでキャッシュ判定に含める。
+        """
+        cached = self._native_params_cache
+        if cached is not None and cached["s_min_scale"] == float(self._s_min_scale):
+            return cached
+        params = {
+            "s_min_scale": float(self._s_min_scale),
+            "empty_v_threshold": int(EMPTY_V_THRESHOLD),
+            "ojama_s_threshold": int(OJAMA_S_THRESHOLD),
+            "ojama_v_min": int(OJAMA_V_MIN),
+            "red_green_diff_for_red": int(RED_GREEN_DIFF_FOR_RED),
+            "red_hue_wrap_threshold": int(RED_HUE_WRAP_THRESHOLD),
+            "red_hue_wrap_corrected_max": int(RED_HUE_WRAP_CORRECTED_MAX),
+            # 以下2つは _compute_stable_h_median 内のローカル定数と同値
+            "red_hue_low_max": 30,
+            "red_bimodal_min_ratio": 0.15,
+            # classify 内の `11 <= h <= 18` (赤の黄側拡張範囲)
+            "red_extend_h_min": 11,
+            "red_extend_h_max": 18,
+            "specular_v_min": int(SPECULAR_V_MIN),
+            "specular_s_max": int(SPECULAR_S_MAX),
+            "specular_fallback_min_ratio": float(SPECULAR_FALLBACK_MIN_RATIO),
+            "enable_red_hue_wrap_fix": bool(self._enable_red_hue_wrap_fix),
+            "enable_specular_robust_saturation": bool(
+                self._enable_specular_robust_saturation
+            ),
+            # classify 内の `shape[0] >= 4 and shape[1] >= 4` (サブ領域 vote 条件)
+            "subregion_min_h": 4,
+            "subregion_min_w": 4,
+        }
+        self._native_params_cache = params
+        return params
+
+    def _classify_native(self, bgr_patch: np.ndarray) -> int:
+        """ネイティブ経路で 1 パッチを分類する (Python 経路と bit-identical)。
+
+        cvtColor は Python 側 (cv2) で行い HSV を渡す。OpenCV の整数丸めを
+        Rust で再現すると 1LSB のズレが median を変え閾値ぎわで色判定が
+        反転しうるため、この経路は意図的に移植しない。
+        """
+        import puyo_core
+
+        bgr = np.ascontiguousarray(bgr_patch)
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        rects = np.asarray(
+            [[0, 0, bgr.shape[1], bgr.shape[0]]], dtype=np.int32,
+        )
+        out = puyo_core.classify_cells_hsv(
+            bgr, hsv, rects, self._native_ranges(), self._native_params(),
+        )
+        return int(out[0])
+
+    def classify(self, bgr_patch: np.ndarray) -> int:
+        """
+        BGRパッチの色を分類して色コードを返す。
+
+        vote_mode=True なら per-pixel 投票方式 (サイクル71).
+        vote_mode=False なら HSV 中央値 + cycle 69-B サブ region vote (default).
+
+        Args:
+            bgr_patch: shape=(H, W, 3) のBGR画像パッチ。
+
+        Returns:
+            int: 色コード (COLOR_* 定数)。
+        """
+        if bgr_patch.size == 0:
+            return COLOR_EMPTY
+
+        if self._vote_mode:
+            return self._classify_by_vote(bgr_patch)
+
+        # ネイティブ経路 (2026-08-20、既定 OFF)。有効時のみ分岐し、
+        # OFF なら以下の Python 実装がそのまま動く (bit-identical)。
+        if self._enable_native_hsv:
+            return self._classify_native(bgr_patch)
+
+        hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
+
+        if v < EMPTY_V_THRESHOLD:
+            return COLOR_EMPTY
+
+        # 色閾値照合 (OJAMA より先に: 黄等の低彩度色を OJAMA に倒さない)
+        # 赤の H 11-18 (黄と被る拡張範囲) は BGR の R-G 差で黄と区別する。
+        # 2026-05-11: _s_min_scale を s_min に乗算 (低解像度時の S 緩和).
+        red_skipped = False
+        scale = self._s_min_scale
+        for color_code, ranges in self._ranges.items():
+            for rng in ranges:
+                eff_s_min = int(rng.s_min * scale) if scale < 1.0 else rng.s_min
+                if (
+                    rng.h_min <= h <= rng.h_max
+                    and eff_s_min <= s <= rng.s_max
+                    and rng.v_min <= v <= rng.v_max
+                ):
+                    if color_code == COLOR_RED and 11 <= h <= 18:
+                        # 拡張範囲 (黄との境界) → BGR で確認
+                        g_med = int(np.median(bgr_patch[:, :, 1]))
+                        r_med = int(np.median(bgr_patch[:, :, 2]))
+                        if r_med - g_med >= RED_GREEN_DIFF_FOR_RED:
+                            return COLOR_RED
+                        # R-G 差不足 → 赤判定をスキップして黄等を試す
+                        red_skipped = True
+                        break
+                    return color_code
+            if red_skipped:
+                red_skipped = False
+                continue
+
+        if s < OJAMA_S_THRESHOLD and v >= OJAMA_V_MIN:
+            return COLOR_OJAMA
+
+        # 2026-05-11 サイクル69-B: 中央 median が EMPTY 判定された場合、 4 sub-region
+        # に分けてどれかが puyo 色を返せばそれを採用 (= 部分的に visible な puyo を救済).
+        if bgr_patch.shape[0] >= 4 and bgr_patch.shape[1] >= 4:
+            h2 = bgr_patch.shape[0] // 2
+            w2 = bgr_patch.shape[1] // 2
+            sub_patches = [
+                bgr_patch[:h2, :w2],
+                bgr_patch[:h2, w2:],
+                bgr_patch[h2:, :w2],
+                bgr_patch[h2:, w2:],
+            ]
+            sub_colors: list[int] = []
+            for sp in sub_patches:
+                if sp.size == 0:
+                    continue
+                c = self._classify_single_patch_no_subregion(sp)
+                if c not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                    sub_colors.append(c)
+            if sub_colors:
+                # 最頻 puyo 色を返す
+                from collections import Counter
+                most = Counter(sub_colors).most_common(1)[0][0]
+                return most
+
+        return COLOR_EMPTY
+
+    def _classify_single_patch_no_subregion(
+        self, bgr_patch: np.ndarray,
+    ) -> int:
+        """サブ領域 vote 用、 純 median 分類 (再帰せず)."""
+        if bgr_patch.size == 0:
+            return COLOR_EMPTY
+        hsv_patch = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
+        # fix/v70-zeropatch-redyellow: 赤色相折り返し補正 (OFF 時は単純 median で不変)
+        h = self._compute_stable_h_median(hsv_patch[:, :, 0])
+        # 案D: 光沢ハイライト除外彩度 (OFF 時は従来の全画素 median で完全不変)
+        s = self._compute_specular_robust_s(hsv_patch[:, :, 1], hsv_patch[:, :, 2])
+        v = int(_median_fast(np.asarray(hsv_patch[:, :, 2]).ravel()))
+        if v < EMPTY_V_THRESHOLD:
+            return COLOR_EMPTY
+        scale = self._s_min_scale
+        for color_code, ranges in self._ranges.items():
+            for rng in ranges:
+                eff_s_min = int(rng.s_min * scale) if scale < 1.0 else rng.s_min
+                if (
+                    rng.h_min <= h <= rng.h_max
+                    and eff_s_min <= s <= rng.s_max
+                    and rng.v_min <= v <= rng.v_max
+                ):
+                    if color_code == COLOR_RED and 11 <= h <= 18:
+                        g_med = int(np.median(bgr_patch[:, :, 1]))
+                        r_med = int(np.median(bgr_patch[:, :, 2]))
+                        if r_med - g_med < RED_GREEN_DIFF_FOR_RED:
+                            continue
+                    return color_code
+        if s < OJAMA_S_THRESHOLD and v >= OJAMA_V_MIN:
+            return COLOR_OJAMA
+        return COLOR_EMPTY
+
+    def _classify_by_vote(self, bgr_patch: np.ndarray) -> int:
+        """サイクル71: per-pixel 投票方式で分類する.
+
+        各ピクセルを HSV 色レンジに照合し、 puyo 色 (1-5) 票が最多の色を採用する.
+        median 方式と比較した利点:
+            - cell の半分だけ puyo が visible でも本物の色を取れる
+            - ハイライト残光 / 影に強い (= mean に引っ張られない)
+            - 混合色 (= puyo + 背景) でも純色領域がある程度あれば正しく取れる
+
+        判定ロジック:
+            1. puyo 色 (1-5) のうち最多票 puyo_top_votes と ojama 票 ojama_votes を比較
+            2. puyo_top_votes >= VOTE_PUYO_MIN_RATIO × 全ピクセル かつ puyo > ojama
+               → puyo 色採用
+            3. ojama_votes >= VOTE_OJAMA_MIN_RATIO × 全ピクセル → OJAMA
+            4. それ以外 → EMPTY
+
+        Args:
+            bgr_patch: shape=(H, W, 3) BGR パッチ.
+
+        Returns:
+            int: 色コード (COLOR_*).
+        """
+        hsv = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
+        h = hsv[..., 0]
+        s = hsv[..., 1]
+        v = hsv[..., 2]
+        total = int(h.size)
+        if total == 0:
+            return COLOR_EMPTY
+
+        scale = self._s_min_scale
+        votes: dict[int, int] = {}
+        # 各 puyo 色 (1-5) のピクセル票を計算
+        for color_code, ranges in self._ranges.items():
+            color_mask = np.zeros_like(h, dtype=bool)
+            for rng in ranges:
+                eff_s_min = (
+                    int(rng.s_min * scale) if scale < 1.0 else rng.s_min
+                )
+                m = (
+                    (h >= rng.h_min) & (h <= rng.h_max)
+                    & (s >= eff_s_min) & (s <= rng.s_max)
+                    & (v >= rng.v_min) & (v <= rng.v_max)
+                )
+                color_mask = color_mask | m
+            # red の拡張範囲 (h 11-18) は BGR R-G 差で黄と分離が必要.
+            # 該当ピクセルだけ R-G 差を確認し、 不足分を mask から落とす.
+            if color_code == COLOR_RED:
+                extended = (h >= 11) & (h <= 18) & color_mask
+                if bool(extended.any()):
+                    rg_diff = (
+                        bgr_patch[..., 2].astype(np.int16)
+                        - bgr_patch[..., 1].astype(np.int16)
+                    )
+                    keep = rg_diff >= VOTE_RED_EXTENDED_RG_DIFF
+                    color_mask = color_mask & (~extended | keep)
+            votes[color_code] = int(color_mask.sum())
+
+        # おじゃま票 (S 低 かつ V 高)
+        ojama_mask = (s < OJAMA_S_THRESHOLD) & (v >= OJAMA_V_MIN)
+        ojama_votes = int(ojama_mask.sum())
+
+        # puyo 票最多 (1-5 のみ対象)
+        puyo_top_color = COLOR_EMPTY
+        puyo_top_votes = 0
+        for color_code, n in votes.items():
+            if n > puyo_top_votes:
+                puyo_top_votes = n
+                puyo_top_color = color_code
+
+        puyo_min = max(1, int(total * VOTE_PUYO_MIN_RATIO))
+        ojama_min = max(1, int(total * VOTE_OJAMA_MIN_RATIO))
+
+        # 判定優先順位: puyo > ojama > empty
+        if puyo_top_votes >= puyo_min and puyo_top_votes > ojama_votes:
+            return puyo_top_color
+        if ojama_votes >= ojama_min:
+            return COLOR_OJAMA
+        return COLOR_EMPTY
+
+    def classify_batch(self, bgr_patches: list[np.ndarray]) -> list[int]:
+        """Z-3C: 複数 patch をまとめて分類 (個別 classify を回す簡易版)。
+
+        ColorClassifier 自体は per-patch ロジックなので、純粋な loop。
+        ただし呼び出しオーバーヘッド削減と、API 統一のため提供。
+        """
+        return [self.classify(p) for p in bgr_patches]
+
+    def set_color_ranges_from_simple(
+        self,
+        simple_ranges: dict[int, tuple[int, int, int, int, int, int]],
+        append: bool = True,
+    ) -> None:
+        """Z-3I: OnlineHsvCalibrator から動画別 HSV 範囲を注入。
+
+        Args:
+            simple_ranges: color → (h_min, h_max, s_min, s_max, v_min, v_max)
+            append: True なら default ranges に動画別 ranges を追加 (=広い OR 判定)、
+                    False なら上書き (旧挙動、 学習が tight すぎると一部 cell を
+                    捕捉できず empty に倒れる問題があるため default は True)。
+        """
+        new_ranges: dict[int, list[HsvRange]] = {
+            k: list(v) for k, v in self._ranges.items()
+        }
+        for color, (h_min, h_max, s_min, s_max, v_min, v_max) in (
+            simple_ranges.items()
+        ):
+            db_range = HsvRange(
+                h_min=int(h_min), h_max=int(h_max),
+                s_min=int(s_min), s_max=int(s_max),
+                v_min=int(v_min), v_max=int(v_max),
+            )
+            if append and color in new_ranges:
+                new_ranges[color] = list(new_ranges[color]) + [db_range]
+            else:
+                new_ranges[color] = [db_range]
+        self._ranges = new_ranges
+
+    def set_s_min_scale(self, scale: float) -> None:
+        """解像度依存 S_min 緩和係数を設定 (1.0=既定、 0.7=360p 想定)."""
+        self._s_min_scale = float(max(0.3, min(1.0, scale)))
+
+    def classify_hsv(self, h: int, s: int, v: int) -> int:
+        """
+        HSV値を直接渡して色分類する (テスト・デバッグ用)。
+
+        Args:
+            h: Hue (0–180)
+            s: Saturation (0–255)
+            v: Value (0–255)
+
+        Returns:
+            int: 色コード。
+
+        Note:
+            ピクセルカウント分類器に合わせて 8×8 の均一パッチを生成。
+        """
+        dummy = np.full((8, 8, 3), [h, s, v], dtype=np.uint8)
+        bgr = cv2.cvtColor(dummy, cv2.COLOR_HSV2BGR)
+        return self.classify(bgr)
+
+
+# ============================
+# 案 P2: 白ハイライト blob override ヘルパー
+# ============================
+
+def _has_puyo_highlight(patch_hsv: np.ndarray) -> bool:
+    """現フレームパッチに白ハイライト blob があれば True。
+
+    背景 FP が tier1 EMPTY と判定したセルに対して、
+    ぷよ固有の白ハイライト円を検出して「本物ぷよ」として救済する。
+    """
+    from src.background_fingerprint import detect_highlight_blob
+    return detect_highlight_blob(patch_hsv)
+
+
+# ============================
+# 画像読み取り器
+# ============================
+
+class ImageReader:
+    """
+    フレーム画像からBoard (盤面データ) を読み取るクラス。
+
+    Usage:
+        reader = ImageReader()
+        board_1p, board_2p = reader.read_both_boards(frame)
+    """
+
+    def __init__(
+        self,
+        classifier: ColorClassifier | None = None,
+        p1_region: BoardRegion | None = None,
+        p2_region: BoardRegion | None = None,
+        bg_fingerprint_p1: "BackgroundFingerprint | None" = None,
+        bg_fingerprint_p2: "BackgroundFingerprint | None" = None,
+        bg_empty_threshold: float | None = None,
+        apply_inference: bool = True,
+        floating_min_gap: int = 2,
+        use_ui_mask: bool = True,
+        use_match_state: bool = False,
+        use_telop_mask: bool = False,
+        patch_ncc_threshold: float | None = None,
+        use_highlight_override: bool = False,
+        puyo_profile_db: "PuyoColorProfileDB | None" = None,
+        enable_patch_fp_hsv_guard: bool = False,
+    ) -> None:
+        """
+        Args:
+            classifier: 色分類器。Noneの場合はデフォルトを使用。
+            p1_region: 1P盤面の領域。Noneの場合はデフォルトを使用。
+            p2_region: 2P盤面の領域。Noneの場合はデフォルトを使用。
+            bg_fingerprint_p1: 1P 試合開始時の背景 FP (Phase T サイクル 1)。
+                指定すると各セルの「ぷよあり/なし」が背景差分で先に判定される。
+            bg_fingerprint_p2: 2P 同上。
+            bg_empty_threshold: 背景との HSV 距離が これ未満なら「空」と判定。
+                None ならデフォルト (DEFAULT_EMPTY_HSV_DISTANCE)。
+            apply_inference: 浮遊ぷよ削除・隠し段推論を行うか。
+            floating_min_gap: 浮遊判定の最小ギャップ。
+            patch_ncc_threshold: PatchBackgroundFingerprint NCC 空判定閾値の上書き値。
+                None なら background_fingerprint.py の PATCH_NCC_EMPTY_THRESHOLD (= 0.92) を使用。
+                NCC sweep 用 (case d 閾値探索)。
+            use_highlight_override: 案 P2 白ハイライト blob 検出による tier1 EMPTY 却下。
+                2026-05-28 案 R3 改: デフォルトを False に変更 (案 P2 同時撤回)。
+                True の場合、tier1 が EMPTY 判定したセルでも白ハイライト blob が
+                検出されれば「ぷよあり」として classify に進む (再評価可能性のため残置)。
+                False (デフォルト) は override 無効 (= 従来挙動)。
+            puyo_profile_db: 案 R3 改 per-video ぷよ色プロファイル DB。
+                指定すると classify 後の色に対してプロファイル距離チェックを行い、
+                不一致なら EMPTY 化 (= 幻ぷよ抑制)。None で無効 (既存挙動)。
+            enable_patch_fp_hsv_guard: W13根治 案2 (2026-08-17)。tier1
+                patch-NCC 経路 (`_is_empty_tier1` の CellPatchFingerprint 分岐)
+                に cycle17-19 (2026-05, docs/CYCLE_FINDINGS.md) の AND ガードを
+                移植する。NCC が EMPTY 一致 (>= 閾値) でも、現フレームパッチを
+                単独 HSV 分類器で分類した結果が EMPTY/UNKNOWN でなければ
+                (= 明確な色相にヒット) EMPTY 判定を却下する。均一パッチ
+                (std<1e-6) が無条件 FALLBACK=1.0 で EMPTY 化される W13 の
+                根本機構への対処。False (既定) = 従来挙動と bit-identical
+                (backwards compat、docs/KNOWN_WEAKNESSES.md W13)。
+        """
+        self._classifier: ColorClassifier = classifier or ColorClassifier()
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF = 従来と bit-identical。
+        self._enable_side_sat_calibration: bool = False
+        # region の幾何をキーに (サンプル彩度の蓄積, 確定scale) を持つ
+        self._side_sat_samples: dict[tuple, list[float]] = {}
+        self._side_sat_scale: dict[tuple, float] = {}
+        self._p1_region: BoardRegion = p1_region or DEFAULT_P1_REGION
+        self._p2_region: BoardRegion = p2_region or DEFAULT_P2_REGION
+        self._bg_fp_p1 = bg_fingerprint_p1
+        self._bg_fp_p2 = bg_fingerprint_p2
+        if bg_empty_threshold is None:
+            from src.background_fingerprint import DEFAULT_EMPTY_HSV_DISTANCE
+            bg_empty_threshold = DEFAULT_EMPTY_HSV_DISTANCE
+        self._bg_threshold: float = float(bg_empty_threshold)
+        # cycle 33 (2026-05-20): tiered bg_fp empty 判定
+        # tier 1: 距離 < EXTREME 閾値 → 無条件 EMPTY (= 確実な背景、 puyo 誤認リスク無視小)
+        # tier 2: 距離 < _bg_threshold → AND 条件 (= cycle 19 既存、 HSV 単独も EMPTY 必要)
+        # 既存挙動の互換性: tier 1 を 0 に設定すれば旧挙動と同じ
+        # cycle 37 確定 (2026-05-20 深夜 sweep 結果): threshold 25.0 採用
+        # sweep 結果: t=20 (101.7) > t=25 (92.3) ✅ > t=27 (99.7) 副作用大 > t=30 (90.0)
+        # 25 が「副作用最小 + v97m11 -32 件改善」 の最適バランス。
+        # 27 は非線形挙動で auto_correction +53 副作用、 30 は v89m3 副作用 +35。
+        # 軸 3-b (Phase L): 定数参照に変更 (= マジックナンバー排除)
+        self._bg_extreme_threshold: float = BG_EXTREME_THRESHOLD_DEFAULT
+        # I1 対応 A: bg_fp 採取前は tier 1 threshold を 0 に倒して CNN 経路を無効化
+        # (= HSV-only 経路に強制)。 RecognitionPipeline が採取前後で切り替える。
+        self._pre_capture_mode: bool = False
+        # NCC sweep 用: PatchBackgroundFingerprint の空判定閾値上書き。
+        # None なら PATCH_NCC_EMPTY_THRESHOLD (= 0.92) をそのまま使う。
+        self._patch_ncc_threshold: float | None = patch_ncc_threshold
+        # 案 P2: 白ハイライト blob override (tier1 EMPTY 判定後に救済チェック)
+        # 2026-05-28 案 R3 改: デフォルト False (= 案 P2 同時撤回)
+        self._use_highlight_override: bool = bool(use_highlight_override)
+        # W13根治 案2 (2026-08-17): tier1 patch-NCC 経路への HSV AND ガード移植
+        # (cycle17-19 の従来 is_empty_by_fp 経路にあった移植漏れ)
+        self._enable_patch_fp_hsv_guard: bool = bool(enable_patch_fp_hsv_guard)
+        # 案 R3 改: per-video ぷよ色プロファイル DB (classify 後の下段 EMPTY 化用)
+        self._puyo_profile_db: "PuyoColorProfileDB | None" = puyo_profile_db
+        self._apply_inference: bool = bool(apply_inference)
+        self._floating_min_gap: int = int(floating_min_gap)
+        # UI Mask (X 印など UI オーバーレイの誤検出を排除)
+        if use_ui_mask:
+            from src.ui_mask import UiMaskMatcher
+            self._ui_matcher: "UiMaskMatcher | None" = (
+                UiMaskMatcher.load_default()
+            )
+        else:
+            self._ui_matcher = None
+        # 試合状態判定 (試合中以外は強制 EMPTY)
+        if use_match_state:
+            from src.match_state import MatchStateDetector
+            self._match_state_detector: "MatchStateDetector | None" = (
+                MatchStateDetector.load_default()
+            )
+        else:
+            self._match_state_detector = None
+        # テロップ検出 (V3.1): 検出時に被覆セルを COLOR_UNKNOWN に倒す。
+        # 中央テロップ (チャレンジャーリーグ等) で読めないセルを構造的に「不明」化。
+        if use_telop_mask:
+            from src.telop_detector import TelopDetector
+            self._telop_detector: "TelopDetector | None" = (
+                TelopDetector.load_default()
+            )
+        else:
+            self._telop_detector = None
+        # フレーム単位で 1 度だけテロップ検出する用キャッシュ (read_both_boards で更新)
+        self._cached_telop_bbox: tuple[int, int, int, int] | None = None
+        # T4: 静的背景マスク (pixel-level diff による AND ガード)
+        # RecognitionPipeline が bg_fp 採取と同タイミングで inject する。
+        self._static_mask_p1: "StaticBoardMask | None" = None
+        self._static_mask_p2: "StaticBoardMask | None" = None
+
+    def set_resolution_aware_s_min(self, source_height: int) -> None:
+        """source_height に応じて HSV/CNN を低解像度向けに調整.
+
+        源解像度 → スケール:
+            >= 720: 1.0 (既定、 CNN 主軸)
+            540-720: S 0.85x、 CNN そのまま
+            < 540: S 0.7x、 CNN override 閾値 1.01 (= 事実上無効、 HSV 主軸)
+                  -- 低解像度では CNN mode collapse で誤分類 (BLUE→RED 等) のため
+        """
+        if source_height >= 720:
+            scale = 1.0
+            cnn_override = None
+        elif source_height >= 540:
+            scale = 0.85
+            cnn_override = None
+        else:
+            scale = 0.7
+            cnn_override = 1.01  # 低解像度は CNN を信頼しない
+        # HybridClassifier 経由なら _hsv 配下、 ColorClassifier 直接ならそのまま
+        target = getattr(self._classifier, "_hsv", self._classifier)
+        if hasattr(target, "set_s_min_scale"):
+            target.set_s_min_scale(scale)
+        # CNN override 閾値も低解像度では引き上げ
+        if cnn_override is not None and hasattr(self._classifier, "set_cnn_override_prob"):
+            self._classifier.set_cnn_override_prob(cnn_override)
+
+    def set_background_fingerprints(
+        self,
+        bg_fp_p1: "BackgroundFingerprint | PatchBackgroundFingerprint | None",
+        bg_fp_p2: "BackgroundFingerprint | PatchBackgroundFingerprint | None",
+    ) -> None:
+        """試合開始時の背景 FP を設定する (動画/試合ごとに更新可能)。
+        案 d: PatchBackgroundFingerprint も受け付ける (後退互換)。
+        """
+        self._bg_fp_p1 = bg_fp_p1
+        self._bg_fp_p2 = bg_fp_p2
+
+    def set_static_mask(
+        self,
+        mask_p1: "StaticBoardMask | None",
+        mask_p2: "StaticBoardMask | None",
+    ) -> None:
+        """T4: 試合開始時の静的背景マスクを設定する (試合ごとに更新可)。
+
+        Args:
+            mask_p1: 1P 側 StaticBoardMask。None で無効化。
+            mask_p2: 2P 側 StaticBoardMask。None で無効化。
+        """
+        self._static_mask_p1 = mask_p1
+        self._static_mask_p2 = mask_p2
+
+    def set_puyo_profile_db(
+        self,
+        db: "PuyoColorProfileDB | None",
+    ) -> None:
+        """案 R3 改: per-video ぷよ色プロファイル DB を設定 (試合ごとに更新可)。
+
+        Args:
+            db: PuyoColorProfileDB インスタンス、または None (無効化)
+        """
+        self._puyo_profile_db = db
+
+    def set_pre_capture_mode(self, enabled: bool) -> None:
+        """bg_fp 採取前保護モードを切り替える (I1 対応 A)。
+
+        enabled=True のとき tier 1 threshold を BG_EXTREME_THRESHOLD_PRE_CAPTURE
+        (= 0.0) に設定し、bg_fp が None の場合でも tier 1 スキップで HSV-only
+        経路に倒す。bg_fp 採取完了後は RecognitionPipeline が False に戻す。
+
+        Args:
+            enabled: True = 採取前保護モード、 False = 通常モード (DEFAULT 閾値)。
+        """
+        self._pre_capture_mode = enabled
+
+    def _bg_fp_for_region(
+        self, region: BoardRegion,
+    ) -> "BackgroundFingerprint | None":
+        """指定 region に対応する背景 FP を返す (P1 / P2 を判別)。
+
+        ROI 動的補正で region.x/y がシフトしても判別できるよう、
+        画面中央 (x=960) より左なら P1、右なら P2 とする。
+        """
+        if region is self._p1_region:
+            return self._bg_fp_p1
+        if region is self._p2_region:
+            return self._bg_fp_p2
+        # シフト済 region: 中央線で判別
+        if region.x + region.width / 2 < 960:
+            return self._bg_fp_p1
+        return self._bg_fp_p2
+
+    @staticmethod
+    def _shifted_region(
+        base: BoardRegion, offset: tuple[float, float],
+    ) -> BoardRegion:
+        """ROI を (dx, dy) px シフトした BoardRegion を返す。
+
+        T-v2-B: ShakeDetector の検出シフトで毎フレーム ROI を補正し、
+        振動中も解析を継続できるようにする。
+        """
+        dx, dy = offset
+        return BoardRegion(
+            x=base.x + int(round(dx)),
+            y=base.y + int(round(dy)),
+            width=base.width,
+            height=base.height,
+        )
+
+    def _resolve_tier1_threshold(
+        self, visible_row: int, col: int,
+    ) -> float:
+        """tier 1 (EXTREME) threshold をセル位置に応じて返す。
+
+        優先順位:
+          1. pre_capture_mode = True → BG_EXTREME_THRESHOLD_PRE_CAPTURE (= 0.0)
+             bg_fp 未採取期間は tier 1 をスキップして HSV-only 経路に倒す (I1 対応 A)。
+          2. キャラ背景隣接エリア (軸 3-b, Phase L) → BG_EXTREME_THRESHOLD_LEFT_UPPER
+             1P: col=0,1 (= 画面左端、 キャラ背景隣接)
+          3. その他 → BG_EXTREME_THRESHOLD_DEFAULT (_bg_extreme_threshold)
+
+        Args:
+            visible_row: 表示行インデックス (0〜VISIBLE_ROWS-1)。
+            col: 列インデックス (0〜BOARD_COLS-1)。
+        """
+        if self._pre_capture_mode:
+            return BG_EXTREME_THRESHOLD_PRE_CAPTURE
+        is_outer_edge = (
+            visible_row >= BG_LEFT_UPPER_VISIBLE_ROW_MIN
+            and col <= BG_LEFT_UPPER_COL_MAX
+        )
+        return (
+            BG_EXTREME_THRESHOLD_LEFT_UPPER if is_outer_edge
+            else self._bg_extreme_threshold
+        )
+
+    def _is_empty_tier1(
+        self,
+        bg_cell: "CellFingerprint | CellPatchFingerprint",
+        cur_patch_hsv: np.ndarray,
+        cur_fp: "CellFingerprint",
+        visible_row: int,
+        col: int,
+        raw_bgr_patch: "np.ndarray | None" = None,
+    ) -> bool:
+        """tier 1 (EXTREME) 空判定。案 d の NCC 経路と従来の距離経路を切り替える。
+
+        PatchBackgroundFingerprint の場合は NCC 比較、
+        BackgroundFingerprint の場合は従来の距離閾値比較を行う。
+
+        Args:
+            bg_cell: 背景セル FP (CellFingerprint or CellPatchFingerprint)。
+            cur_patch_hsv: 現在フレームのセルパッチ HSV (float32 or uint8)。
+            cur_fp: 現在フレームの CellFingerprint (median 3 値)。
+            visible_row: 表示行インデックス (0〜VISIBLE_ROWS-1)。
+            col: 列インデックス (0〜BOARD_COLS-1)。
+            raw_bgr_patch: 現在フレームのセルパッチ BGR (生画素)。
+                W13根治 案2 (`_enable_patch_fp_hsv_guard`) の HSV 単独分類に使う。
+                None の場合はガードをスキップ (backwards compat)。
+
+        Returns:
+            True = 空 (背景と同じ)、False = ぷよあり (次 tier に進む)。
+        """
+        from src.background_fingerprint import (
+            BG_PATCH_VALID_V_MIN,
+            CellPatchFingerprint,
+            is_empty_by_patch_fp,
+        )
+        if isinstance(bg_cell, CellPatchFingerprint):
+            # 第一層ガード: bg パッチが採取失敗ゼロパッチ (V median 極小) なら
+            # NCC を実行せず False (= 非 EMPTY) を返す。
+            # これにより「採取失敗パッチが FALLBACK=1.0 → 強制 EMPTY」を防ぐ。
+            # 正当な均一 EMPTY セル (明るい平坦背景) は V median が
+            # BG_PATCH_VALID_V_MIN (5.0) を超えるため従来通り NCC 経路に進む。
+            bg_v_med = float(np.median(bg_cell.patch_hsv[:, :, 2]))
+            if bg_v_med < BG_PATCH_VALID_V_MIN:
+                return False
+            cur_cell_patch = CellPatchFingerprint(
+                patch_hsv=cur_patch_hsv.astype(np.float32),
+            )
+            # NCC sweep: None なら is_empty_by_patch_fp が PATCH_NCC_EMPTY_THRESHOLD を使用
+            if self._patch_ncc_threshold is not None:
+                ncc_empty = is_empty_by_patch_fp(
+                    cur_cell_patch, bg_cell, threshold=self._patch_ncc_threshold,
+                )
+            else:
+                ncc_empty = is_empty_by_patch_fp(cur_cell_patch, bg_cell)
+            if not ncc_empty:
+                return False
+            # W13根治 案2 (2026-08-17): cycle17-19 の AND ガード移植。
+            # 「距離 (ここでは NCC) < 閾値 で EMPTY 一致」でも「HSV 単独でも
+            # puyo 色と判定されない」の両方が必要。均一パッチ (std<1e-6) が
+            # NCC FALLBACK=1.0 で無条件 EMPTY 化される機構 (W13 の根本原因) を
+            # HSV 単独分類でせき止める。既定 False = 従来挙動 bit-identical。
+            if self._enable_patch_fp_hsv_guard and raw_bgr_patch is not None:
+                hsv_target = getattr(self._classifier, "_hsv", self._classifier)
+                hsv_only_color = COLOR_EMPTY
+                try:
+                    hsv_only_color = int(hsv_target.classify(raw_bgr_patch))
+                except Exception:
+                    hsv_only_color = COLOR_EMPTY
+                if hsv_only_color not in (COLOR_EMPTY, COLOR_UNKNOWN):
+                    return False  # HSV 単独で puyo 色 → EMPTY 却下
+            return True
+        # 従来の距離閾値比較 (BackgroundFingerprint 経路)
+        tier1_threshold = self._resolve_tier1_threshold(visible_row, col)
+        dist = cur_fp.distance_to(bg_cell)
+        return dist < tier1_threshold
+
+    def _get_static_mask_for_region(
+        self, region: BoardRegion,
+    ) -> "StaticBoardMask | None":
+        """region に対応する StaticBoardMask を返す (P1 / P2 を判別)。"""
+        if region is self._p1_region:
+            return self._static_mask_p1
+        if region is self._p2_region:
+            return self._static_mask_p2
+        # シフト済 region: 中央線で判別
+        if region.x + region.width / 2 < 960:
+            return self._static_mask_p1
+        return self._static_mask_p2
+
+    def _is_empty_static_mask(
+        self,
+        frame: np.ndarray,
+        region: BoardRegion,
+        visible_row: int,
+        col: int,
+        cur_patch_hsv: np.ndarray,
+    ) -> bool:
+        """T4: StaticBoardMask + AND ガードによる空判定。
+
+        設計:
+          A = StaticBoardMask の diff < STATIC_BG_DIFF_THRESHOLD (= 背景と同じ)
+          D = HSV 各色 range に hit (= 色あり signal)
+          戻り値 = A AND NOT D
+
+        「ぷよっぽい」 信号が 1 つでもあれば EMPTY 化しない (= fail-silent 禁止)。
+        StaticBoardMask が未設定なら常に False を返す (= 判定スキップ)。
+
+        Args:
+            frame: 現在フレーム (BGR)。
+            region: 盤面領域。
+            visible_row: 可視行インデックス (0 〜 VISIBLE_ROWS-1)。
+            col: 列インデックス (0 〜 BOARD_COLS-1)。
+            cur_patch_hsv: 現フレームのセルパッチ HSV (float32 or uint8)。
+
+        Returns:
+            True = 「背景と同じかつ色なし」 → EMPTY 化してよい。
+            False = 判定スキップ (従来経路に委ねる)。
+        """
+        from src.background_fingerprint import STATIC_BG_DIFF_THRESHOLD
+        static_mask = self._get_static_mask_for_region(region)
+        if static_mask is None:
+            return False
+        # A: pixel-level diff < 閾値
+        # _cell_bgr_patch の bg は static_mask.bg_roi の座標から切り出す
+        x1, y1, x2, y2 = region.cell_sample_rect(
+            visible_row + HIDDEN_ROWS, col,
+        )
+        img_h, img_w = frame.shape[:2]
+        x1 = max(0, min(x1, img_w - 1))
+        x2 = max(x1 + 1, min(x2, img_w))
+        y1 = max(0, min(y1, img_h - 1))
+        y2 = max(y1 + 1, min(y2, img_h))
+        cur_bgr = frame[y1:y2, x1:x2].astype(np.float32)
+        bg_roi = static_mask.bg_roi
+        bg_h, bg_w = bg_roi.shape[:2]
+        bx1 = max(0, min(x1, bg_w - 1))
+        bx2 = max(bx1 + 1, min(x2, bg_w))
+        by1 = max(0, min(y1, bg_h - 1))
+        by2 = max(by1 + 1, min(y2, bg_h))
+        bg_patch = bg_roi[by1:by2, bx1:bx2].astype(np.float32)
+        if cur_bgr.size == 0 or bg_patch.size == 0:
+            return False
+        # shape 不一致はリサイズ (region ずれ対策)
+        if cur_bgr.shape != bg_patch.shape:
+            bg_patch = cv2.resize(
+                bg_patch.astype(np.float32),
+                (cur_bgr.shape[1], cur_bgr.shape[0]),
+                interpolation=cv2.INTER_LINEAR,
+            )
+        diff_max = float(np.max(np.abs(cur_bgr - bg_patch)))
+        if diff_max >= STATIC_BG_DIFF_THRESHOLD:
+            return False  # A = False (差分大 = ぷよ存在可能性)
+        # D: HSV 各色 range に hit するか (AND ガード)
+        if cur_patch_hsv is None or cur_patch_hsv.size == 0:
+            return True  # A=True, D=False → EMPTY 化
+        h_med = int(np.median(cur_patch_hsv[:, :, 0]))
+        s_med = int(np.median(cur_patch_hsv[:, :, 1]))
+        v_med = int(np.median(cur_patch_hsv[:, :, 2]))
+        scale = getattr(
+            getattr(self._classifier, "_hsv", self._classifier),
+            "_s_min_scale", 1.0,
+        )
+        for ranges in self._classifier._ranges.values() if hasattr(
+            self._classifier, "_ranges",
+        ) else []:
+            for rng in ranges:
+                eff_s = int(rng.s_min * scale) if scale < 1.0 else rng.s_min
+                if (
+                    rng.h_min <= h_med <= rng.h_max
+                    and eff_s <= s_med <= rng.s_max
+                    and rng.v_min <= v_med <= rng.v_max
+                ):
+                    return False  # D=True → EMPTY 化キャンセル
+        return True  # A=True, D=False → EMPTY 化
+
+    def set_side_sat_calibration(self, enabled: bool) -> None:
+        """側別 彩度適応較正の有効/無効を切り替える (2026-07-31)。
+
+        既定 OFF。有効化すると各盤面領域の実測彩度から s_min スケールを
+        較正し、彩度が低い側 (実測で 2P) の HSV 判定が通りやすくなる。
+        """
+        self._enable_side_sat_calibration = bool(enabled)
+
+    def _side_sat_key(self, region: BoardRegion) -> tuple:
+        """region の幾何をキーにする (BoardRegion は frozen でないため)。"""
+        return (region.x, region.y, region.width, region.height)
+
+    def _update_side_sat_scale(
+        self, hsv_full: "np.ndarray | None", region: BoardRegion,
+    ) -> float | None:
+        """盤面領域の実測彩度から s_min スケールを較正して返す。
+
+        背景 FP と同じ「実測から較正する」方式。固定の側別ハードコードは
+        キャラや動画が変わると再びずれるので採らない。
+
+        SIDE_SAT_CALIB_MIN_FRAMES 分のサンプルが貯まるまでは None を返し、
+        呼び出し側は較正を適用しない (立ち上がりで誤った scale を焼き付けない)。
+
+        Args:
+            hsv_full: 事前計算済み HSV 全画像。None なら較正できない。
+            region: 対象の盤面領域。
+
+        Returns:
+            [SIDE_SAT_SCALE_MIN, 1.0] のスケール。未確定なら None。
+        """
+        if hsv_full is None:
+            return None
+        key = self._side_sat_key(region)
+        cached = self._side_sat_scale.get(key)
+        if cached is not None:
+            return cached
+        y1 = max(0, region.y)
+        y2 = min(hsv_full.shape[0], region.y + region.height)
+        x1 = max(0, region.x)
+        x2 = min(hsv_full.shape[1], region.x + region.width)
+        if y2 <= y1 or x2 <= x1:
+            return None
+        sat = hsv_full[y1:y2, x1:x2, 1]
+        # 空セル/背景を除いた「ぷよらしい画素」だけで中央値を取る
+        vals = sat[sat >= SIDE_SAT_SAMPLE_MIN]
+        if vals.size == 0:
+            return None
+        samples = self._side_sat_samples.setdefault(key, [])
+        samples.append(float(np.median(vals)))
+        if len(samples) < SIDE_SAT_CALIB_MIN_FRAMES:
+            return None
+        # 複数フレームの中央値を取り、演出フレームの影響を薄める
+        measured = float(np.median(np.asarray(samples)))
+        scale = measured / SIDE_SAT_REFERENCE_MEDIAN
+        scale = float(max(SIDE_SAT_SCALE_MIN, min(1.0, scale)))
+        self._side_sat_scale[key] = scale
+        return scale
+
+    def read_board(
+        self,
+        frame: np.ndarray,
+        region: BoardRegion,
+        hsv_full: np.ndarray | None = None,
+        skip_tier1: bool = False,
+    ) -> Board:
+        """
+        フレームから指定領域の盤面を読み取る。
+
+        隠し段 (row 0〜HIDDEN_ROWS-1) は画面外のため直接は見えないが、
+        物理ルール (重力) による推論を適用:
+          - 可視最上段 (row HIDDEN_ROWS) が空の列 → 隠し段も空 (確定)
+          - 可視最上段に puyo がある列 → 隠し段は UNKNOWN (回し入れの可能性)
+
+        Args:
+            frame: BGR形式のフレーム画像 (H×W×3 のnumpy配列)。
+            region: 読み取る盤面の領域 (可視領域のみ)。
+            hsv_full: 事前計算済み HSV 全画像 (省略時は内部で変換)。
+            skip_tier1: True のとき tier1 (bg_fp NCC / 距離による無条件 EMPTY 化)
+                をスキップする。NON-STABLE → STABLE 遷移直後の N frame に使用し、
+                ツモ着地直後の cell を tier1 が誤 EMPTY 化するのを防ぐ。
+                HSV + CNN の通常判定は走るので背景誤認のリスクは小さい。
+
+        Returns:
+            Board: 読み取った盤面データ。
+        """
+        img_h, img_w = frame.shape[:2]
+        board = Board()
+
+        # 背景 FP があれば「空セル先判定」用に取得
+        bg_fp = self._bg_fp_for_region(region)
+        if bg_fp is not None:
+            from src.background_fingerprint import (
+                CellFingerprint,
+                CellPatchFingerprint,
+                is_empty_by_fp,
+            )
+            # Z-3C: hsv_full を呼び出し側から受け取れば cvtColor を回避
+            if hsv_full is None:
+                hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        else:
+            hsv_full = None
+
+        # 可視領域を画像分類 (Z-3C: バッチ化)
+        has_position_api = hasattr(self._classifier, "classify_at")
+        has_batch_api = (
+            not has_position_api
+            and hasattr(self._classifier, "classify_batch")
+        )
+        # 1st pass: patch 切り出し + 背景 FP 早期判定
+        # cycle 34 (2026-05-20): bg_fp 距離も track して 2nd pass (= HybridClassifier
+        # classify_batch) に渡す → CNN logit に soft prior 適用
+        # 案 R3 改: hsv_patch も保持して 2nd pass のプロファイルチェックで再利用
+        cells_to_classify: list[
+            tuple[int, int, np.ndarray, float | None, np.ndarray | None]
+        ] = []
+        # 側別 彩度適応較正 (2026-07-31)。既定 OFF では一切触らない。
+        # 分類器は 1P/2P で共有されているので、この region の分類が終わるまで
+        # スケールを差し替え、finally で必ず元に戻す (単一スレッド前提)。
+        _sat_target = getattr(self._classifier, "_hsv", self._classifier)
+        _sat_saved: float | None = None
+        if self._enable_side_sat_calibration and hasattr(
+            _sat_target, "set_s_min_scale",
+        ):
+            _scale = self._update_side_sat_scale(hsv_full, region)
+            if _scale is not None:
+                _sat_saved = getattr(_sat_target, "_s_min_scale", 1.0)
+                # 解像度依存スケールと掛け合わせる (低解像度の緩和を潰さない)
+                _sat_target.set_s_min_scale(_sat_saved * _scale)
+        # 高速化 (2026-07-31): 旧実装はこの import をセルループ内で毎回実行していた
+        # (120回/frame)。sys.modules 参照とはいえ無駄なのでループ外に退避。
+        from src.background_fingerprint import (
+            PatchBackgroundFingerprint as _PatchBackgroundFingerprint,
+        )
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            visible_row = row - HIDDEN_ROWS
+            for col in range(BOARD_COLS):
+                x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+                x1 = max(0, min(x1, img_w - 1))
+                x2 = max(x1 + 1, min(x2, img_w))
+                y1 = max(0, min(y1, img_h - 1))
+                y2 = max(y1 + 1, min(y2, img_h))
+                patch = frame[y1:y2, x1:x2]
+                # 背景 FP 早期 EMPTY 判定 (cycle 33 tiered 化 + cycle 34 soft prior)
+                # tier 1 (cycle 33): 距離 < EXTREME 閾値 → 無条件 EMPTY
+                # tier 2 (cycle 19 既存): 距離 < _bg_threshold → AND 条件で early empty
+                # tier 3 (cycle 34): それ以外 → CNN 経路 + bg_distance を soft prior に
+                cell_bg_distance: float | None = None
+                # 案 R3 改: 1st pass で hsv_patch を記録し 2nd pass でプロファイル検査に再利用
+                cell_hsv_patch: np.ndarray | None = None
+                if bg_fp is not None and hsv_full is not None and patch.size > 0:
+                    hsv_patch = hsv_full[y1:y2, x1:x2]
+                    if hsv_patch.size > 0:
+                        cell_hsv_patch = hsv_patch  # 2nd pass 再利用用に保持
+                        # 高速化 (2026-07-31): 3ch 分の median を 1 回の
+                        # partition にまとめる (返り値は np.median 3 回と同一)
+                        h_med, s_med, v_med = _median_hsv_3ch(hsv_patch)
+                        cur_fp = CellFingerprint(h_med, s_med, v_med)
+                        bg_cell = bg_fp.cell_at(visible_row, col)
+                        dist = cur_fp.distance_to(bg_cell)
+                        cell_bg_distance = float(dist)
+                        # T4: StaticBoardMask AND ガード (既存 tier 1 より先に評価)
+                        # A (diff < 閾値) AND NOT D (HSV 色あり) の場合のみ EMPTY 化。
+                        # 片方でも「ぷよっぽい」 なら skip して従来経路に流す。
+                        if self._is_empty_static_mask(
+                            frame, region, visible_row, col, hsv_patch,
+                        ):
+                            board.set(row, col, COLOR_EMPTY)
+                            continue
+                        # tier 1: extreme close = 確実な背景 (案 d: NCC or 距離)
+                        # PatchBackgroundFingerprint の場合は _is_empty_tier1 が NCC 判定。
+                        # BackgroundFingerprint の場合は従来の距離閾値比較。
+                        # PatchBackgroundFingerprint では cell_at_patch を使う
+                        # skip_tier1=True (NON-STABLE→STABLE 遷移直後) はスキップ:
+                        # ツモ着地直後の cell を誤 EMPTY 化しない (= 失敗教訓遵守)。
+                        # HSV + CNN の通常判定は続行するため背景誤認リスクは小さい。
+                        # 高速化 (2026-07-31): import はループ外へ退避済み
+                        # (sys.modules 参照でも 120回/frame 積むと無駄)
+                        if isinstance(bg_fp, _PatchBackgroundFingerprint):
+                            bg_cell_for_tier1 = bg_fp.cell_at_patch(visible_row, col)
+                        else:
+                            bg_cell_for_tier1 = bg_cell
+                        if not skip_tier1 and self._is_empty_tier1(
+                            bg_cell_for_tier1, hsv_patch, cur_fp,
+                            visible_row, col, raw_bgr_patch=patch,
+                        ):
+                            # 案 P2: 白ハイライト blob override
+                            # tier1 が EMPTY 判定しても、ぷよ固有の白ハイライト円が
+                            # あれば「本物ぷよあり」として classify に進む
+                            if (
+                                self._use_highlight_override
+                                and _has_puyo_highlight(hsv_patch)
+                            ):
+                                pass  # EMPTY 却下 → cells_to_classify に流れる
+                            else:
+                                board.set(row, col, COLOR_EMPTY)
+                                continue
+                        # tier 2: AND 条件 (= cycle 19 既存)
+                        if is_empty_by_fp(
+                            cur_fp, bg_cell, threshold=self._bg_threshold,
+                        ):
+                            hsv_target = getattr(
+                                self._classifier, "_hsv", self._classifier,
+                            )
+                            hsv_only_color = COLOR_EMPTY
+                            try:
+                                hsv_only_color = int(
+                                    hsv_target.classify(patch),
+                                )
+                            except Exception:
+                                hsv_only_color = COLOR_EMPTY
+                            if hsv_only_color in (
+                                COLOR_EMPTY, COLOR_UNKNOWN,
+                            ):
+                                board.set(row, col, COLOR_EMPTY)
+                                continue
+                cells_to_classify.append(
+                    (row, col, patch, cell_bg_distance, cell_hsv_patch),
+                )
+
+        # 2nd pass: バッチ classify (HybridClassifier で 5-20x 高速化)
+        # cycle 34: bg_distance を classify_batch に渡して CNN logit soft prior
+        # 案B (2026-07-30): (row, col) も渡し、UI マスク判定対象セル限定を可能にする
+        # (HybridClassifier 側で ui_mask_cells 未指定なら無効化され従来通り)。
+        if has_batch_api and cells_to_classify:
+            patches = [p for _, _, p, _, _ in cells_to_classify]
+            distances = [d for _, _, _, d, _ in cells_to_classify]
+            positions = [(row, col) for row, col, _, _, _ in cells_to_classify]
+            try:
+                colors = self._classifier.classify_batch(
+                    patches, bg_distances=distances, cell_positions=positions,
+                )
+            except TypeError:
+                # backwards compat: 古い classify_batch は cell_positions 未対応
+                try:
+                    colors = self._classifier.classify_batch(
+                        patches, bg_distances=distances,
+                    )
+                except TypeError:
+                    # さらに古い classify_batch は bg_distances も未対応
+                    colors = self._classifier.classify_batch(patches)
+            for (row, col, patch, _, hsv_p), color in zip(
+                cells_to_classify, colors,
+            ):
+                # 案 R3 改: プロファイル不一致の色を EMPTY 化 (下段方向のみ)
+                color = self._apply_profile_filter(color, hsv_p, patch)
+                # classify_batch は UI mask 適用済 (HybridClassifier 内で処理)
+                board.set(row, col, color)
+        else:
+            # フォールバック: 個別 classify
+            for row, col, patch, _, hsv_p in cells_to_classify:
+                visible_row = row - HIDDEN_ROWS
+                if has_position_api:
+                    color = self._classifier.classify_at(
+                        patch, visible_row, col,
+                    )
+                else:
+                    color = self._classifier.classify(patch)
+                if (
+                    self._ui_matcher is not None
+                    and color != COLOR_EMPTY
+                    and patch.size > 0
+                    and self._ui_matcher.is_ui(patch)
+                ):
+                    color = COLOR_EMPTY
+                # 案 R3 改: プロファイル不一致の色を EMPTY 化 (下段方向のみ)
+                color = self._apply_profile_filter(color, hsv_p, patch)
+                board.set(row, col, color)
+
+        # V3.1: テロップ被覆セルを COLOR_UNKNOWN に倒す (浮遊削除前)
+        # キャッシュした bbox を使う (read_both_boards で 1 度だけ検出)
+        if (
+            self._telop_detector is not None
+            and self._cached_telop_bbox is not None
+        ):
+            from src.telop_detector import TelopDetector
+            covered = TelopDetector.cells_covered_by_bbox(
+                self._cached_telop_bbox, region,
+            )
+            for row, col in covered:
+                board.set(row, col, COLOR_UNKNOWN)
+
+        # Phase T サイクル 5: 推論強化
+        # 浮遊ぷよ (UI オーバーレイ・連鎖アニメ・落下中ぷよの誤検出) を除去
+        if self._apply_inference:
+            from src.board_rules import clear_floating_above_gap
+            board = clear_floating_above_gap(
+                board, min_gap=self._floating_min_gap, skip_hidden=True,
+            )
+
+        # 隠し段を物理推論で確定 or UNKNOWN にする
+        self._infer_hidden_rows(board)
+
+        # 側別 彩度スケールを必ず元に戻す (分類器は 1P/2P で共有のため)。
+        # read_board は単一 return なのでここが唯一の出口
+        # (途中 return が追加された場合はこの復元が漏れるので注意)。
+        if _sat_saved is not None:
+            _sat_target.set_s_min_scale(_sat_saved)
+        return board
+
+    def _apply_profile_filter(
+        self,
+        color: int,
+        hsv_patch: np.ndarray | None,
+        bgr_patch: np.ndarray,
+    ) -> int:
+        """案 R3 改: classify 結果がプロファイルに合致しない場合 EMPTY 化する。
+
+        設計制約:
+          - 下段方向のみ: classify が色を返した場合に EMPTY 化 (上段救済は禁止)
+          - hsv_patch が None (= bg_fp 未採取期間) の場合は bgr_patch から計算
+          - COLOR_EMPTY / COLOR_UNKNOWN は通過させる (変更しない)
+
+        Args:
+            color: classify が返した色コード
+            hsv_patch: 1st pass で計算済の HSV パッチ (None なら再計算)
+            bgr_patch: BGR パッチ (hsv_patch が None のとき変換元)
+
+        Returns:
+            int: 確認済み色コード (プロファイル不一致なら COLOR_EMPTY)
+        """
+        # EMPTY / UNKNOWN は変更しない
+        if color in (COLOR_EMPTY, COLOR_UNKNOWN):
+            return color
+        # プロファイル DB なし → 無効 (既存挙動維持)
+        if self._puyo_profile_db is None:
+            return color
+        # HSV 中央値を取得 (1st pass 再利用 or 再計算)
+        if hsv_patch is not None and hsv_patch.size > 0:
+            h_med = int(np.median(hsv_patch[:, :, 0]))
+            s_med = int(np.median(hsv_patch[:, :, 1]))
+            v_med = int(np.median(hsv_patch[:, :, 2]))
+        elif bgr_patch.size > 0:
+            _hsv = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2HSV)
+            h_med = int(np.median(_hsv[:, :, 0]))
+            s_med = int(np.median(_hsv[:, :, 1]))
+            v_med = int(np.median(_hsv[:, :, 2]))
+        else:
+            # パッチが空 → 判定不能、保守的に通過
+            return color
+        # プロファイル距離チェック: 不一致なら EMPTY 化
+        if not self._puyo_profile_db.is_puyo_like(color, h_med, s_med, v_med):
+            return COLOR_EMPTY
+        return color
+
+    # T-v2 系融合判定は archive/legacy_phase_t_v2/ に移動 (Phase U で廃止)。
+
+    @staticmethod
+    def _infer_hidden_rows(board: Board) -> None:
+        """
+        重力ルールから隠し段の状態を推論する (in-place)。
+
+        各列について、可視最上段 (row HIDDEN_ROWS) の状態で判定:
+          - 空 → 隠し段の同列も空 (重力により落下しているはず)
+          - 非空 → 隠し段は UNKNOWN (回し入れで puyo がある可能性)
+
+        Args:
+            board: 推論対象の盤面 (可視領域は既に読み取り済み)。
+        """
+        top_visible_row = HIDDEN_ROWS
+        for col in range(BOARD_COLS):
+            top_cell = board.get(top_visible_row, col)
+            if top_cell == COLOR_EMPTY:
+                # 重力より隠し段も空 (確定)
+                for hidden_row in range(HIDDEN_ROWS):
+                    board.set(hidden_row, col, COLOR_EMPTY)
+            else:
+                # 回し入れの可能性あり → UNKNOWN
+                for hidden_row in range(HIDDEN_ROWS):
+                    board.set(hidden_row, col, COLOR_UNKNOWN)
+
+    def read_both_boards(
+        self,
+        frame: np.ndarray,
+        p1_roi_offset: tuple[float, float] = (0.0, 0.0),
+        p2_roi_offset: tuple[float, float] = (0.0, 0.0),
+        skip_tier1_1p: bool = False,
+        skip_tier1_2p: bool = False,
+        telop_result: "TelopResult | None" = None,
+    ) -> tuple[Board, Board]:
+        """
+        フレームから1P・2P両方の盤面を読み取る。
+
+        Args:
+            frame: BGR形式のフレーム画像。
+            p1_roi_offset: 1P 盤面の ROI 補正シフト (dx, dy) px (T-v2-B)。
+                振動検出器が返した dx, dy を渡すと、毎フレーム ROI を補正
+                できる。デフォルト (0, 0) で従来挙動。
+            p2_roi_offset: 2P 盤面の ROI 補正シフト (dx, dy) px。
+            skip_tier1_1p: True のとき 1P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
+            skip_tier1_2p: True のとき 2P 側 tier1 をスキップ (NON-STABLE→STABLE 遷移直後用)。
+            telop_result: 呼出元 (RecognitionPipeline) が同一 frame に対して
+                既に計算済の TelopDetector.detect() 結果。指定すると本メソッド
+                内部の self._telop_detector.detect(frame) 再実行 (二重走査) を
+                省略してこの結果をそのまま使う。None (既定) では従来通り
+                内部で detect() を実行する (backwards compat、bit-identical)。
+                修正2 (2026-07-30): テロップ検出の重複排除。
+
+        Returns:
+            tuple[Board, Board]: (1P盤面, 2P盤面) のタプル。
+        """
+        # キャリブレーションは 1920x1080 前提。異なる解像度は自動リサイズ。
+        # C (2026-05-11): 拡大 (360p→1080p 等) は INTER_LANCZOS4 で puyo
+        # 境界をシャープに保つ. 縮小 (例 4K→1080p) は INTER_AREA が最良.
+        h, w = frame.shape[:2]
+        if (h, w) != (1080, 1920):
+            interp = cv2.INTER_LANCZOS4 if h < 1080 else cv2.INTER_AREA
+            frame = cv2.resize(frame, (1920, 1080), interpolation=interp)
+        # 試合状態判定 (試合中以外は両盤面 EMPTY)
+        if self._match_state_detector is not None:
+            from src.match_state import MatchState
+            state = self._match_state_detector.detect(frame)
+            if state.state != MatchState.IN_MATCH:
+                return Board(), Board()
+        # V3.1: テロップ検出 (フレーム単位で 1 度。read_board が cached bbox を使う)
+        # 修正2 (2026-07-30): telop_result が渡されていればそれを使い、
+        # 未指定 (None) なら従来通り自前で detect() する (backwards compat)。
+        if self._telop_detector is not None:
+            telop_res = (
+                telop_result if telop_result is not None
+                else self._telop_detector.detect(frame)
+            )
+            self._cached_telop_bbox = telop_res.bbox if telop_res.is_visible else None
+        else:
+            self._cached_telop_bbox = None
+        if p1_roi_offset == (0.0, 0.0):
+            p1_region = self._p1_region
+        else:
+            p1_region = self._shifted_region(self._p1_region, p1_roi_offset)
+        if p2_roi_offset == (0.0, 0.0):
+            p2_region = self._p2_region
+        else:
+            p2_region = self._shifted_region(self._p2_region, p2_roi_offset)
+        # Z-3C: BG FP が両 region 共通で必要 → hsv_full を 1 度計算して共有
+        hsv_full: np.ndarray | None = None
+        if (self._bg_fp_for_region(p1_region) is not None
+                or self._bg_fp_for_region(p2_region) is not None):
+            hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full, skip_tier1=skip_tier1_1p)
+        board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
+        return board_1p, board_2p
+
+    def enable_native_hsv(self, enable: bool = True) -> bool:
+        """内部の HSV 分類器でネイティブ (Rust) 経路を使う (2026-08-20)。
+
+        HybridClassifier 配下の `_hsv` にも届くよう `_get_hsv_classifier()`
+        経由で伝播する。native が使えない環境では False を返して従来の
+        Python 経路を続ける (fail-silent を避けるため戻り値で結果を返す)。
+
+        Args:
+            enable: True で有効化を試みる。
+
+        Returns:
+            実際に有効化できたか。
+        """
+        clf = self._get_hsv_classifier()
+        if clf is None or not hasattr(clf, "enable_native_hsv"):
+            return False
+        return bool(clf.enable_native_hsv(enable))
+
+    def _get_hsv_classifier(self) -> "ColorClassifier | None":
+        """内部の HSV-only 分類器を取得する。
+
+        HybridClassifier を使用している場合は _hsv (= ColorClassifier) を返す。
+        ColorClassifier 直接の場合はそのまま返す。
+        どちらでもなければ None を返す (= 復旧ゲートは発火しない)。
+        """
+        clf = self._classifier
+        # HybridClassifier は _hsv 属性に ColorClassifier を保持する
+        if hasattr(clf, "_hsv"):
+            return clf._hsv  # type: ignore[return-value]
+        if isinstance(clf, ColorClassifier):
+            return clf
+        return None
+
+    def read_board_hsv_only(
+        self,
+        frame: np.ndarray,
+        region: "BoardRegion",
+    ) -> "Board":
+        """HSV-only 分類器のみで盤面を読み取る (設計C 事後復旧ゲート用)。
+
+        CNN を使わず HSV ColorClassifier だけで判定する簡易版。
+        bg_fp / tier1 / telop マスクは適用しない。
+        目的: CNN と独立した2番目の認識器として HSV 盤面を提供し、
+        CNN==HSV 持続合意チェックに使う。
+
+        Returns:
+            Board: HSV-only 判定盤面。HSV 分類器が取得できない場合は空 Board。
+        """
+        hsv_clf = self._get_hsv_classifier()
+        if hsv_clf is None:
+            return Board()
+        h, w = frame.shape[:2]
+        if (h, w) != (1080, 1920):
+            interp = cv2.INTER_LANCZOS4 if h < 1080 else cv2.INTER_AREA
+            frame = cv2.resize(frame, (1920, 1080), interpolation=interp)
+        board = Board()
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            for col in range(BOARD_COLS):
+                x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+                x1 = max(0, min(int(x1), w - 1))
+                x2 = max(x1 + 1, min(int(x2), w))
+                y1 = max(0, min(int(y1), h - 1))
+                y2 = max(y1 + 1, min(int(y2), h))
+                patch = frame[y1:y2, x1:x2]
+                if patch.size == 0:
+                    board.set(row, col, COLOR_EMPTY)
+                    continue
+                board.set(row, col, int(hsv_clf.classify(patch)))
+        # 隠し段を物理推論で確定 or UNKNOWN にする
+        self._infer_hidden_rows(board)
+        return board
+
+    def read_both_boards_hsv(
+        self,
+        frame: np.ndarray,
+    ) -> "tuple[Board, Board]":
+        """1P/2P 両方の HSV-only 盤面を返す (設計C 事後復旧ゲート用)。
+
+        Returns:
+            (1P HSV-only 盤面, 2P HSV-only 盤面)。
+            HSV 分類器が取得できない場合は (空 Board, 空 Board)。
+        """
+        if self._get_hsv_classifier() is None:
+            return Board(), Board()
+        board_1p = self.read_board_hsv_only(frame, self._p1_region)
+        board_2p = self.read_board_hsv_only(frame, self._p2_region)
+        return board_1p, board_2p
+
+    def debug_frame(
+        self, frame: np.ndarray, region: BoardRegion
+    ) -> np.ndarray:
+        """
+        各セルのサンプリング位置をフレームに描画して返す (デバッグ用)。
+        可視領域 (row=HIDDEN_ROWS〜) のみ描画。
+
+        Args:
+            frame: BGR形式のフレーム画像。
+            region: デバッグ対象の盤面領域。
+
+        Returns:
+            np.ndarray: サンプリング矩形を描画した画像。
+        """
+        debug_img = frame.copy()
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            for col in range(BOARD_COLS):
+                x1, y1, x2, y2 = region.cell_sample_rect(row, col)
+                cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 255, 0), 1)
+        return debug_img

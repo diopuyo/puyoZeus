@@ -150,6 +150,18 @@ class TestProductionRecognitionAutoApply:
     """既定 (use_production_recognition=True) で RECOGNITION_ADOPTED が
     load_default() へ自動転送されること (項目1の是正確認)。"""
 
+    @pytest.mark.parametrize("production, explicit", [(True, False), (False, True)])
+    def test_explicit_pseudo_chain_value_wins(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        production: bool, explicit: bool,
+    ) -> None:
+        """採用後も明示値を保ち、同じキーを二重に渡さない。"""
+        _spy, calls = _stub(monkeypatch)
+        vao.generate(Path("dummy.mp4"), tmp_path / "out.mp4", max_sec=1.0, sample_interval=0.15,
+                     use_production_recognition=production,
+                     enable_pseudo_chain_score_fill=explicit)
+        assert calls[0]["enable_pseudo_chain_score_fill"] is explicit
+
     def test_default_applies_all_recognition_adopted_kwargs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
