@@ -16,8 +16,8 @@ for F in "${FILES[@]}"; do
   [[ "$F" == tests/test_*.py && -f "$F" ]] || { echo "必須テスト欠落: $F" >&2; exit 2; }
   IGNORE+=("--ignore=$F")
 done
-[[ "${#FILES[@]}" -eq 22 ]] || { echo '隔離リストは22本が必須' >&2; exit 2; }
-[[ "$(printf '%s\n' "${FILES[@]}" | sort -u | wc -l)" -eq 22 ]] || exit 2
+[[ "${#FILES[@]}" -eq 23 ]] || { echo '隔離リストは23本が必須' >&2; exit 2; }
+[[ "$(printf '%s\n' "${FILES[@]}" | sort -u | wc -l)" -eq 23 ]] || exit 2
 mkdir "$OUT" || exit 2
 export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 printf 'mode=%s\nroot=%s\npython=%s\n' "$MODE" "$ROOT" "$PYTHON" > "$OUT/START.txt"

@@ -1,6 +1,7 @@
 # SHA固定のPython・シェルコードをWindowsでもLFのまま取得する。
 *.py text eol=lf
 *.sh text eol=lf
+tests/g3_isolated_files.txt text eol=lf
 # 凍結検証資産は記録されたblobのバイト列をそのまま保持する。
 data/verify/** -text
 .runtime_snapshots/** -text
@@ -19,3 +20,5 @@ src/fps_normalize.py text eol=crlf
 src/hidden_row_probability.py text eol=crlf
 src/next_detector.py text eol=crlf
 src/state_detectors.py text eol=crlf
+# Windows PowerShell 5.1向け通知スクリプトのBOMと原バイト列を保つ。
+scripts/g3_notify_event.ps1 -text
