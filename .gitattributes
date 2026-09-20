@@ -1,0 +1,10 @@
+# SHA固定のPython・シェルコードをWindowsでもLFのまま取得する。
+*.py text eol=lf
+*.sh text eol=lf
+# 凍結検証資産は記録されたblobのバイト列をそのまま保持する。
+data/verify/** -text
+.runtime_snapshots/** -text
+docs/agent_coordination/G3_VIDEO_VALIDATION_PREREG_2026-09-07.json -text
+docs/manifests/*.tsv -text
+docs/agent_coordination/NEXT_ENQUEUE_LIVE_WIRING_PLAN_2026-09-08.md -text
+docs/agent_coordination/NEXT_LIVE_RUN_PLAN_2026-09-08.md -text

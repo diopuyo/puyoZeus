@@ -1,0 +1,58 @@
+"""1P到来専用型を2Pへ暗黙流用せず、対応済み2P物理型を明示的に束縛する。"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+
+def select(first: Any, supplied: Any, arrival: Any) -> Any:
+    """新機構の1P所有を確認し、旧2Pの原Native/数学経路を保持する。"""
+    require = arrival.B.require
+    require(type(first) is arrival.Mode and supplied.Mode is arrival.Mode,
+            'second_physical_first_type')
+    if first.connection.binding is None:
+        require(first.native is None and first.activation is None and first.arrival_ledger is None
+                and first.rows == 0 and first.error is None and not first.stream.closed,
+                'second_physical_unbound_not_initial')
+    else:
+        require(first.connection.binding.scope[-1] == '1P', 'second_physical_first_side')
+    require(arrival.BASE.B is arrival.B and issubclass(arrival.Mode, arrival.BASE.Mode),
+            'second_physical_shared_belief')
+    # 到来型は専用FIFO hook/保存先/起動資格が必要。2Pには未接続の型を渡さない。
+    return SimpleNamespace(Mode=arrival.BASE.Mode)
+
+
+def session_class(original: Any, arrival: Any) -> type:
+    first_type, second_type = arrival.Mode, arrival.BASE.Mode
+    class Session(original.Session):
+        def __init__(self, stack: Any, context: Any, policy: Any, physical: Any,
+                     contract: Any, members: Any, frames: tuple[int, ...]) -> None:
+            first = context['state']['probabilistic_tracking_mode']
+            arrival.B.require(arrival.Mode is first_type and arrival.BASE.Mode is second_type,
+                              'second_physical_type_changed')
+            arrival.B.require(context['state']['probabilistic_basis_connection'] is first.connection,
+                              'second_physical_connection_owner')
+            selected = select(first, physical, arrival)
+            super().__init__(stack, context, policy, selected, contract, members, frames)
+            self._completion_context, self._completion_first = context, first
+            self._completion_connection = first.connection
+            self._completion_bound = first.connection.binding is not None
+            self.second_physical_selection = dict(
+                first_type=type(first).__module__ + '.' + type(first).__qualname__,
+                second_type=selected.Mode.__module__ + '.' + selected.Mode.__qualname__,
+                first_arrival_source_shared=False, original_second_native_path=True,
+                quality_gate_clear=False)
+
+        def basis(self) -> None:
+            first = self._completion_context['state']['probabilistic_tracking_mode']
+            arrival.B.require(first is self._completion_first and arrival.Mode is first_type
+                              and arrival.BASE.Mode is second_type, 'second_physical_type_changed')
+            arrival.B.require(first.connection is self._completion_connection
+                              and self._completion_context['state']['probabilistic_basis_connection'] is first.connection,
+                              'second_physical_connection_owner')
+            arrival.B.require(not self._completion_bound or first.connection.binding is not None,
+                              'second_physical_binding_disappeared')
+            select(first, SimpleNamespace(Mode=first_type), arrival)
+            self._completion_bound = self._completion_bound or first.connection.binding is not None
+            return super().basis()
+    return Session

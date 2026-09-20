@@ -1,0 +1,965 @@
+{
+  "latest_storage_check_20260912": {"time":"2026-09-12 20:44:08","sources":[{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_38.mp4","exists":true,"bytes":1055045780,"size_matches_prereg":true},{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_39.mp4","exists":true,"bytes":640135892,"size_matches_prereg":true},{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c74.mp4","exists":true,"bytes":1747361997,"size_matches_prereg":true},{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c50.mp4","exists":true,"bytes":1883080942,"size_matches_prereg":true},{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c80.mp4","exists":true,"bytes":628263409,"size_matches_prereg":true},{"path":"C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c138.mp4","exists":true,"bytes":770279953,"size_matches_prereg":true}],"D_available":false,"sha_rechecked":false,"video_decoded":false,"g3_execution_started":false,"effect":"既存6入力はメタデータ確認のみ。D不在のため新規動画生成/取得は復帰まで開始しない。G2既存C入力の検証は継続可能。"},
+  "format_version": "g3-video-validation-preregistration/v1",
+  "created_at_jst": "2026-09-07T17:25:15+09:00",
+  "status": "PREREGISTERED_WAITING_G2_FIXED_CANDIDATE",
+  "g3_clear": false,
+  "training_ready": false,
+  "production_adoption": false,
+  "data_selection_complete": true,
+  "execution_started": false,
+  "formal100_read": false,
+  "hidden_reserve_read": false,
+  "outcome_labels_used_for_selection": false,
+  "source_count": 6,
+  "prerequisite": "G2の肯定的CLEARと限定PR作成後はいったん停止し、ユーザーの次のG3実走指示を待つ。再開時に候補/policy/認識snapshot/モデル/基準arm/GT分母/許容遅延を固定する。本manifestはG3 CLEARでも実走許可でもない。",
+  "non_actions": [
+    "動画DL",
+    "動画移動削除",
+    "モデル学習",
+    "再認識実行",
+    "本番設定変更"
+  ],
+  "selection_rules": {
+    "existing_set_reuse": "既存の同等な5動画以上G3事前登録集合は限定探索で未発見。video38 C1/C2/N1/N2とc80既存レビュー範囲のみ参照再利用。",
+    "excluded_early_seconds": 120,
+    "suspect": "保存auditのlarge_disagreement_candidate=trueかつ直接canonical joinあり。120秒以後のframe/side/point_id昇順先頭。",
+    "agreement": "直接canonical join、mismatch=0、raw/confirmed UNKNOWN=0、occupied>=4。120秒以後のframe/side/point_id昇順先頭。目視真値・非連鎖を保証しない。",
+    "window_padding_seconds": 30,
+    "padding_rule": "ceil(30*source_time_base_fps)の元frameを前後に付加し、末尾+1の半開区間。",
+    "late_source": "唯一の非整数fps source video_c50。source frame_countの80%以後で最初の直接join点149728、同じ±30秒規則。",
+    "quarantine": "診断に含め層別する。採録/学習許可やquarantine解除には使用しない。",
+    "independence": "source_group（YouTube ID）が6件すべて異なる。c50=旧video_63、c80=旧video_93を追加独立動画と数えない。"
+  },
+  "protected_references": {
+    "audit_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/advantage_confirmed_raw_disagreement_clean46_2026-09-07_v1",
+    "audit_report_sha256": "00978d2082b35835a74237b33a83907548fccbc95a802d6075bc03ba4e720cb4",
+    "audit_complete_sha256": "e53807e56c4e9cf36b858c0d65b39546b15deef6f65897806543b66bf1e7f4dd",
+    "phase_e_dl_index_sha256": "bc6ea87c67ef826ae7d037d0158cf9aae1262a4cd32791277467fe6c6ebeefaa",
+    "tier_index_sha256": "5a9b03ceafccc916e15efed51b476d6d7dbe83e67e8bfc949e0c3c270df5524c",
+    "expand_index_sha256": "256acefd819f80452842ede0070b5a02c05acf1b44c94657016d27dc14c9b307",
+    "expand2_index_sha256": "b30000e0dc3f34f24901e9db153ba48909bf7a8132df8b5801b7c57eeb9c544f",
+    "clean46_manifest_sha256": "75e9e726e01b77ea932eecbfff8154536aa5f3b53cd42402e9b8448579f7405d",
+    "production_config_sha256": "3fe3c2578b3196a60cffffcafa594c1f64d2a913bb0487932ac5cd8f6f86d376"
+  },
+  "sources": [
+    {
+      "source_video_id": "video_38",
+      "source_group": "Pl804jhzOl8",
+      "fold": 6,
+      "title": "【マスター進出決定トーナメント・Aブロック】なしー vs ひまこ  30先(解説：スラさん)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "マスター",
+      "tier_original_file": "data/phase_e_dl_index.tsv",
+      "source": {
+        "frame_count": 198000,
+        "height": 720,
+        "processing_end_frame_exclusive": 198000,
+        "processing_start_frame": 0,
+        "source_video_id": "video_38",
+        "source_video_path": "data/frames/video_38.mp4",
+        "source_video_sha256": "b3728078cc2e8282065e5dd78ca1c13e6a443ffdf1dc4333e3da06f0852757d3",
+        "time_base_denominator": 60,
+        "time_base_numerator": 1,
+        "width": 1280
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_38.mp4",
+      "source_exists": true,
+      "source_size_bytes": 1055045780,
+      "source_last_write_utc": "2026-08-19T04:07:58.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "b3728078cc2e8282065e5dd78ca1c13e6a443ffdf1dc4333e3da06f0852757d3",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_first30_observed_context_v5_2026-08-30/runs/schema=v1/video=video_38/build=build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a/attempt=first30-order-ambiguity-v1-38",
+      "event_manifest_sha256": "2aa799e1fd91803f5233661320be92c9ce32028045f39b7df6ef9feffb1fce9f",
+      "event_complete_sha256": "369d67f164d30350c000bc7475a275384057774bd7ea0202a5bd65036cac2fa1",
+      "source_build_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a",
+      "source_semantic_sha256": "ba56580887e71b42d67dcc3d7d7b8f95d63d7e796333f3dfb6b12683b54f8185",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_first30/schema=v1/video=video_38",
+      "table_manifest_sha256": "70542c3ea0cd208de92048008ac097cbcc515b427bf6dacd181e9d7d87c27785",
+      "audit_points_sha256": "ed0b47ead871ff23e602a612563349805c6249efeb39b58be46cd08c07e6c632",
+      "audit_flags_sha256": "a1f0c7dbd10106c24498591979ea22ff4a607a8ab13ede60635b83e89784f2c2",
+      "direct_measured": 658,
+      "direct_unmeasured": 8864,
+      "direct_large": 53,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 11316,
+          "source_time_sec": 188.6,
+          "event_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:141",
+          "point_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:141:after",
+          "side": "p1",
+          "confirmed_occupied": 9,
+          "raw_occupied": 40,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 36,
+          "canonical_join": [
+            {
+              "global_index": 52,
+              "game_key": "video_38:game-0002",
+              "state_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:state-after-000000000141",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            9516,
+            13117
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 10444,
+          "source_time_sec": 174.06666666666666,
+          "event_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:84",
+          "point_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:84:after",
+          "side": "p1",
+          "confirmed_occupied": 52,
+          "raw_occupied": 52,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 30,
+              "game_key": "video_38:game-0002",
+              "state_id": "build-15ede1493f82cb9c8ac2d1943d5fc79dcc761fbed9db8fe460f362c9f052af9a:state-after-000000000084",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            8644,
+            12245
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 60,
+        "width": 1280,
+        "height": 720,
+        "frame_count": 198000,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "既知の未来9cell・古56cell・同色NEXT・正常C1/C2/N1/N2を再利用する720p60基準。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            9516,
+            13117
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            8644,
+            12245
+          ]
+        },
+        {
+          "role": "known_failure_and_existing_controls",
+          "source_frames": [
+            33600,
+            36300
+          ],
+          "references": [
+            "CONFIRMED_REPAIR_CONTROL_WINDOWS_2026-09-07.md",
+            "video38_guard_control_lineage_2026-09-07_v1",
+            "video38_chain_completion_frames_2026-09-07_v1"
+          ],
+          "note": "G3主比較はframe0から処理。旧560秒cold-startのビット一致を別履歴へ要求しない。"
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 36300,
+        "source_seconds": 605,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/phase_e_dl_index.tsv",
+        "title_index_line": 11,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 63,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    },
+    {
+      "source_video_id": "video_39",
+      "source_group": "RNUJjULeHJI",
+      "fold": 1,
+      "title": "【マスター進出決定トーナメント・Bブロック】Yoshi100_Aus vs やまゆう 30先(解説：MASA)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "マスター",
+      "tier_original_file": "data/phase_e_dl_index.tsv",
+      "source": {
+        "frame_count": 94380,
+        "height": 1080,
+        "processing_end_frame_exclusive": 94380,
+        "processing_start_frame": 0,
+        "source_video_id": "video_39",
+        "source_video_path": "data/frames/video_39.mp4",
+        "source_video_sha256": "a021c930f722fbb5a9270838f8e5f275a73eeee6be0cc0ea5ab92d5c98fecede",
+        "time_base_denominator": 30,
+        "time_base_numerator": 1,
+        "width": 1920
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_39.mp4",
+      "source_exists": true,
+      "source_size_bytes": 640135892,
+      "source_last_write_utc": "2026-08-19T04:09:47.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "a021c930f722fbb5a9270838f8e5f275a73eeee6be0cc0ea5ab92d5c98fecede",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_first30_observed_context_v5_2026-08-30/runs/schema=v1/video=video_39/build=build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde/attempt=first30-order-ambiguity-v1-39",
+      "event_manifest_sha256": "8073d540b1b381a64376ca22b2ed338c7378a12c5d63a3d01c105a21f57f4ae7",
+      "event_complete_sha256": "6476e501e091596062a2b96ce5a43a0e20f27e2cc67a8a33b05d2061f34622d8",
+      "source_build_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde",
+      "source_semantic_sha256": "77ac1596fa07651d88fa67ab8bea05a1f084064e1418bbaa86c7dd43bfec5b4a",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_first30/schema=v1/video=video_39",
+      "table_manifest_sha256": "b16cda65fe9a0153601fdf496cde1ba1313eddc7e783ba10bcc64d115e65e62c",
+      "audit_points_sha256": "5141e8634aa3f284496e4f1919838f2f7ead3942325b374d6ebbc3cc1970b508",
+      "audit_flags_sha256": "fbeeccacb21b485b210c2be11140e2c9432401b5c5f4571d0f856573c787e874",
+      "direct_measured": 702,
+      "direct_unmeasured": 8232,
+      "direct_large": 60,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 10977,
+          "source_time_sec": 365.9,
+          "event_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:481",
+          "point_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:481:after",
+          "side": "p1",
+          "confirmed_occupied": 47,
+          "raw_occupied": 2,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 45,
+          "canonical_join": [
+            {
+              "global_index": 5014,
+              "game_key": "video_39:game-0004",
+              "state_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:state-after-000000000481",
+              "side": "p1",
+              "quarantined": true
+            }
+          ],
+          "window_frames": [
+            10077,
+            11878
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 6504,
+          "source_time_sec": 216.8,
+          "event_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:74",
+          "point_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:74:before",
+          "side": "p2",
+          "confirmed_occupied": 44,
+          "raw_occupied": 44,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 4790,
+              "game_key": "video_39:game-0002",
+              "state_id": "build-b3dc1ca13320b996642543e86efcc42432942c386a30b075045ad6c82be4acde:state-after-000000000073",
+              "side": "p2",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            5604,
+            7405
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 30.00000953592166,
+        "width": 1920,
+        "height": 1080,
+        "frame_count": 94380,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "別sourceの直接大差（raw2/confirmed47）と隔離層を含む1080p30。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            10077,
+            11878
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            5604,
+            7405
+          ]
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 11878,
+        "source_seconds": 395.93333333333334,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/phase_e_dl_index.tsv",
+        "title_index_line": 12,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 64,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    },
+    {
+      "source_video_id": "video_c74",
+      "source_group": "QCx3EPE8yEA",
+      "fold": 3,
+      "title": "【マスター・1ブロック】sym vs とりぱん 30先(解説：なしー)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "マスター",
+      "tier_original_file": "data/_dl_expand.tsv",
+      "source": {
+        "frame_count": 210724,
+        "height": 1080,
+        "processing_end_frame_exclusive": 210724,
+        "processing_start_frame": 0,
+        "source_video_id": "video_c74",
+        "source_video_path": "data/frames/video_c74.mp4",
+        "source_video_sha256": "d971a7b97d3ed47c0bdc1b08c2e0b700a890d8e908164244961d713d495674c1",
+        "time_base_denominator": 60,
+        "time_base_numerator": 1,
+        "width": 1920
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c74.mp4",
+      "source_exists": true,
+      "source_size_bytes": 1747361997,
+      "source_last_write_utc": "2026-08-18T19:03:24.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "d971a7b97d3ed47c0bdc1b08c2e0b700a890d8e908164244961d713d495674c1",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_remaining18_reexport_v3_2026-08-30/runs/schema=v1/video=video_c74/build=build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f/attempt=remaining18-order-ambiguity-v3-c74",
+      "event_manifest_sha256": "413da7d43b623c300df9e19a67ad2ff4a03ff7bbd10edfffd16f1d9a00262bda",
+      "event_complete_sha256": "da994f1ef2791abf73507c9a4aea26d780b313e9375c43c1632b4da37468df1c",
+      "source_build_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f",
+      "source_semantic_sha256": "3eeb4eac7e84eee43bb1758288711820236f57802f95a52f7446091a2ef582a5",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_remaining18/schema=v1/video=video_c74",
+      "table_manifest_sha256": "e806f021043e1c9ea34321b856a18333bb6ac27ffcaa2bc84c30e32f0d01a435",
+      "audit_points_sha256": "3bad6e35debb466b2c3ceaaa02f24e56a46c9490b742580ce511b5131e52022c",
+      "audit_flags_sha256": "06311c3e9fc74ca420b9473f37222678559d338b751e788d330876c906063955",
+      "direct_measured": 829,
+      "direct_unmeasured": 9245,
+      "direct_large": 90,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 14004,
+          "source_time_sec": 233.4,
+          "event_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:230",
+          "point_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:230:after",
+          "side": "p1",
+          "confirmed_occupied": 52,
+          "raw_occupied": 45,
+          "confirmed_unknown": 0,
+          "raw_unknown": 3,
+          "mismatch_cells": 37,
+          "canonical_join": [
+            {
+              "global_index": 168872,
+              "game_key": "video_c74:game-0002",
+              "state_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:state-after-000000000230",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            12204,
+            15805
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 10552,
+          "source_time_sec": 175.86666666666667,
+          "event_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:30",
+          "point_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:30:after",
+          "side": "p1",
+          "confirmed_occupied": 20,
+          "raw_occupied": 20,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 168789,
+              "game_key": "video_c74:game-0002",
+              "state_id": "build-dd28868c5e2bcbaeff7ba0a02e734ab350ef44702447aecd96c69158ff9f8b8f:state-after-000000000030",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            8752,
+            12353
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 60.0000113893076,
+        "width": 1920,
+        "height": 1080,
+        "frame_count": 210724,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "clean46中の直接大差候補数最大90の別source。非隔離・色配置不一致を含む1080p60。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            12204,
+            15805
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            8752,
+            12353
+          ]
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 15805,
+        "source_seconds": 263.4166666666667,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/_dl_expand.tsv",
+        "title_index_line": 41,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 221,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    },
+    {
+      "source_video_id": "video_c50",
+      "source_group": "DSsxaZk2ckI",
+      "fold": 3,
+      "title": "【マスター・4ブロック】Ponderion vs reoru 30先(解説：delta)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "マスター",
+      "tier_original_file": "data/_dl_expand.tsv",
+      "source": {
+        "frame_count": 187132,
+        "height": 1080,
+        "processing_end_frame_exclusive": 187132,
+        "processing_start_frame": 0,
+        "source_video_id": "video_c50",
+        "source_video_path": "data/frames/video_c50.mp4",
+        "source_video_sha256": "e17d5933d9ca51311fe5daa46b033e644c44dd90d5c827d6a0b3acff99252efb",
+        "time_base_denominator": 427073,
+        "time_base_numerator": 7125,
+        "width": 1920
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c50.mp4",
+      "source_exists": true,
+      "source_size_bytes": 1883080942,
+      "source_last_write_utc": "2026-08-18T17:01:27.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "e17d5933d9ca51311fe5daa46b033e644c44dd90d5c827d6a0b3acff99252efb",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_first30_observed_context_v5_2026-08-30/runs/schema=v1/video=video_c50/build=build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536/attempt=first30-order-ambiguity-v1-c50",
+      "event_manifest_sha256": "68e856925a4ee80756f2cacbf9e408fde84cda41c34b21ebe997f997015fdc68",
+      "event_complete_sha256": "24856b1505ad469f47e6f8a2b7bb4661b3b613330c2e79703f458dadd4a7ca70",
+      "source_build_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536",
+      "source_semantic_sha256": "0d32f938bd933f2012340f1b856754a4124c8e08e76b0c964da2e2f5cdc0d22e",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_first30/schema=v1/video=video_c50",
+      "table_manifest_sha256": "415ddf8ace7458f1b91f300c22c1c2717111ca0b78cea694de4f97db9674d4df",
+      "audit_points_sha256": "b174cb68c7175b59ad3637912fe61ad1807dbac4aeb7ceac54d1404174a1c109",
+      "audit_flags_sha256": "f7c89c198ad26d6b571c14eef5b56d8935604d58600d9011db87ffac70dd94db",
+      "direct_measured": 748,
+      "direct_unmeasured": 9174,
+      "direct_large": 59,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 12134,
+          "source_time_sec": 202.43553209872783,
+          "event_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:168",
+          "point_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:168:after",
+          "side": "p1",
+          "confirmed_occupied": 39,
+          "raw_occupied": 8,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 31,
+          "canonical_join": [
+            {
+              "global_index": 103797,
+              "game_key": "video_c50:game-0003",
+              "state_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:state-after-000000000168",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            10335,
+            13934
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 9388,
+          "source_time_sec": 156.62310658833502,
+          "event_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:42",
+          "point_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:42:after",
+          "side": "p1",
+          "confirmed_occupied": 28,
+          "raw_occupied": 28,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 103689,
+              "game_key": "video_c50:game-0002",
+              "state_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:state-after-000000000042",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            7589,
+            11188
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "late_history_probe",
+          "source_frame": 149728,
+          "source_time_sec": 2497.961706780808,
+          "event_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:6796",
+          "point_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:6796:after",
+          "side": "p1",
+          "confirmed_occupied": 40,
+          "raw_occupied": 41,
+          "confirmed_unknown": 0,
+          "raw_unknown": 1,
+          "mismatch_cells": 1,
+          "canonical_join": [
+            {
+              "global_index": 107820,
+              "game_key": "video_c50:game-0049",
+              "state_id": "build-5deff861a62bb93eddce6f4d8fea7f676c99ecb20608d0f23ae06a40f239a536:state-after-000000006796",
+              "side": "p1",
+              "quarantined": true
+            }
+          ],
+          "window_frames": [
+            147929,
+            151528
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 59.94007017970938,
+        "width": 1920,
+        "height": 1080,
+        "frame_count": 187132,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "唯一の非整数fps source。初期対照と80%地点以後の連続履歴監視。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            10335,
+            13934
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            7589,
+            11188
+          ]
+        },
+        {
+          "role": "late_history_probe",
+          "source_frames": [
+            147929,
+            151528
+          ]
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 151528,
+        "source_seconds": 2527.991701652879,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/_dl_expand.tsv",
+        "title_index_line": 17,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 195,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    },
+    {
+      "source_video_id": "video_c80",
+      "source_group": "6asLcTglLQI",
+      "fold": 4,
+      "title": "【マスター・2ブロック】:o vs 3 30先(解説：やまたけプロ)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "マスター",
+      "tier_original_file": "data/_dl_expand.tsv",
+      "source": {
+        "frame_count": 106920,
+        "height": 720,
+        "processing_end_frame_exclusive": 106920,
+        "processing_start_frame": 0,
+        "source_video_id": "video_c80",
+        "source_video_path": "data/frames/video_c80.mp4",
+        "source_video_sha256": "97b6671bb0ea4e34eabb31ac8ff94ea30a7a9cbc153d4e4447333d90ffb0399c",
+        "time_base_denominator": 30,
+        "time_base_numerator": 1,
+        "width": 1280
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c80.mp4",
+      "source_exists": true,
+      "source_size_bytes": 628263409,
+      "source_last_write_utc": "2026-08-18T19:31:36.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "97b6671bb0ea4e34eabb31ac8ff94ea30a7a9cbc153d4e4447333d90ffb0399c",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_remaining18_reexport_v3_2026-08-30/runs/schema=v1/video=video_c80/build=build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7/attempt=remaining18-order-ambiguity-v3-c80",
+      "event_manifest_sha256": "a1b9deccc8b433948752acee03228c5913ee592c4f80304d24e1448425588268",
+      "event_complete_sha256": "d28b6ceb5972c7d9f0a9b10e92869748e66db992828ad5db1e70f7b1415c6253",
+      "source_build_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7",
+      "source_semantic_sha256": "cc806fc3e5928315ae48347d5f1f805ae3f164b4a5ae861a57607bfa12b5bb07",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_remaining18/schema=v1/video=video_c80",
+      "table_manifest_sha256": "a6a29d3916090027fc359772c5aa84802e37f8307bcd8fdf238c97d5ac263d33",
+      "audit_points_sha256": "210f767663e579a9d3c2b19c39006820da0efcd5a9cb9e954fc1466a98df4791",
+      "audit_flags_sha256": "0eacdd4f0723f2fcb33d84ecffd69067fae905ac152097dbbd6d066bcb37c8d5",
+      "direct_measured": 675,
+      "direct_unmeasured": 9857,
+      "direct_large": 51,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 5859,
+          "source_time_sec": 195.3,
+          "event_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:235",
+          "point_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:235:before",
+          "side": "p2",
+          "confirmed_occupied": 53,
+          "raw_occupied": 47,
+          "confirmed_unknown": 0,
+          "raw_unknown": 2,
+          "mismatch_cells": 52,
+          "canonical_join": [
+            {
+              "global_index": 188874,
+              "game_key": "video_c80:game-0003",
+              "state_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:state-after-000000000233",
+              "side": "p2",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            4959,
+            6760
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 4645,
+          "source_time_sec": 154.83333333333334,
+          "event_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:124",
+          "point_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:124:after",
+          "side": "p1",
+          "confirmed_occupied": 20,
+          "raw_occupied": 20,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 188788,
+              "game_key": "video_c80:game-0002",
+              "state_id": "build-23b626609b70740db6b59980fe92f081c247c408e58daec8012ea7f78b4efbc7:state-after-000000000124",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            3745,
+            5546
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 30.00000841751078,
+        "width": 1280,
+        "height": 720,
+        "frame_count": 106920,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "既存の全試合レビュー対象区間のみ参照再利用。720p30、通常対照候補と配置不一致。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            4959,
+            6760
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            3745,
+            5546
+          ]
+        },
+        {
+          "role": "existing_full_match_review_window",
+          "source_frames": [
+            5139,
+            6030
+          ],
+          "note": "旧レビュー範囲の再利用のみ。新修復のQA合格証ではない。"
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 6760,
+        "source_seconds": 225.33333333333334,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/_dl_expand.tsv",
+        "title_index_line": 47,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 228,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    },
+    {
+      "source_video_id": "video_c138",
+      "source_group": "Z-VMWHmxeao",
+      "fold": 1,
+      "title": "【A級・6ブロック】スラさん vs にゃんきち 30先(解説：MASA)【第2回新おいうリーグ】#ぷよぷよ #ぷよぷよeスポーツ",
+      "tier": "A級",
+      "tier_original_file": "data/_dl_expand2_2026-08-07.tsv",
+      "source": {
+        "frame_count": 103680,
+        "height": 720,
+        "processing_end_frame_exclusive": 103680,
+        "processing_start_frame": 0,
+        "source_video_id": "video_c138",
+        "source_video_path": "data/frames/video_c138.mp4",
+        "source_video_sha256": "d94f505e6f1d6b62dbeb4bccf3731296abdd2a7aaa688f001b95a6aa672ec4c6",
+        "time_base_denominator": 30,
+        "time_base_numerator": 1,
+        "width": 1280
+      },
+      "source_video_absolute_path": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_c138.mp4",
+      "source_exists": true,
+      "source_size_bytes": 770279953,
+      "source_last_write_utc": "2026-08-18T23:30:22.0000000Z",
+      "source_video_sha_verified_now": false,
+      "source_video_sha_expected_from_manifest": "d94f505e6f1d6b62dbeb4bccf3731296abdd2a7aaa688f001b95a6aa672ec4c6",
+      "event_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/event_source_v1_first30_observed_context_v5_2026-08-30/runs/schema=v1/video=video_c138/build=build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a/attempt=first30-order-ambiguity-v1-c138",
+      "event_manifest_sha256": "33aa453c1d758c95604d28b4735fe69b07551e8b54e855af1f617638328b6bd2",
+      "event_complete_sha256": "c886dc1ffbac8deba5ee976f322096f5f32834bfb4ce42063bb2aa238a8ef21d",
+      "source_build_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a",
+      "source_semantic_sha256": "fd3a8b2976cd60e4e26bc37a0a2de311da488f4b1447341e00494c9a45fc9a94",
+      "table_root": "C:/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/verify/attack_quality_causal_v6_finalized_pending_guard_2026-09-04/learning_first30/schema=v1/video=video_c138",
+      "table_manifest_sha256": "ebaf778d0cc8670c5514964618a5fd3abfa6b1b95f1413202118614d603053a4",
+      "audit_points_sha256": "4855059244e98629c1a347c6229e23741b89a6ce6b4742360de0561702afb5f1",
+      "audit_flags_sha256": "004423aa2b551c81f04a72c134ecf6403439c2516f4f9f81bf84d75b8a25fc40",
+      "direct_measured": 712,
+      "direct_unmeasured": 7238,
+      "direct_large": 57,
+      "anchors": [
+        {
+          "role": "suspect",
+          "source_frame": 13446,
+          "source_time_sec": 448.2,
+          "event_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:388",
+          "point_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:388:after",
+          "side": "p1",
+          "confirmed_occupied": 48,
+          "raw_occupied": 42,
+          "confirmed_unknown": 0,
+          "raw_unknown": 2,
+          "mismatch_cells": 20,
+          "canonical_join": [
+            {
+              "global_index": 13964,
+              "game_key": "video_c138:game-0002",
+              "state_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:state-after-000000000388",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            12546,
+            14347
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frame": 11449,
+          "source_time_sec": 381.6333333333333,
+          "event_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:200",
+          "point_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:200:after",
+          "side": "p1",
+          "confirmed_occupied": 13,
+          "raw_occupied": 13,
+          "confirmed_unknown": 0,
+          "raw_unknown": 0,
+          "mismatch_cells": 0,
+          "canonical_join": [
+            {
+              "global_index": 13878,
+              "game_key": "video_c138:game-0001",
+              "state_id": "build-36cf533dfe8a7d1259ade6c199a815b9af0031317a80155c62e4cb32dbfcd80a:state-after-000000000200",
+              "side": "p1",
+              "quarantined": false
+            }
+          ],
+          "window_frames": [
+            10549,
+            12350
+          ],
+          "window_semantics": "start inclusive, end exclusive"
+        }
+      ],
+      "header_probe": {
+        "opened": true,
+        "backend": "FFMPEG",
+        "fps": 30.000008680558068,
+        "width": 1280,
+        "height": 720,
+        "frame_count": 103680,
+        "decoded_frames": 0,
+        "recognition_started": false
+      },
+      "selection_reason": "A級の別source。720p30、通常対照候補とUNKNOWNを含む疑い。",
+      "evaluation_windows": [
+        {
+          "role": "suspect",
+          "source_frames": [
+            12546,
+            14347
+          ]
+        },
+        {
+          "role": "agreement_control_candidate",
+          "source_frames": [
+            10549,
+            12350
+          ]
+        }
+      ],
+      "required_continuous_processing": {
+        "start_frame": 0,
+        "end_frame_exclusive": 14347,
+        "source_seconds": 478.23333333333335,
+        "seek_between_windows": false,
+        "validated_runtime_resume_available": false
+      },
+      "tier_evidence": {
+        "title_index_path": "data/_dl_expand2_2026-08-07.tsv",
+        "title_index_line": 43,
+        "tier_index_path": "data/video_tier_index_2026-08-07.tsv",
+        "tier_index_line": 148,
+        "top_tier_flag": 1,
+        "source_group_matches_title": true
+      }
+    }
+  ],
+  "verification_limits": {
+    "fresh_video_sha256": false,
+    "video_header_verified": true,
+    "event_part_full_rescan": false,
+    "saved_audit_selected_artifact_sha_checked": true,
+    "table_manifest_sha_checked": true,
+    "ground_truth_manifest_frozen": false,
+    "physical_qa_pass": false,
+    "formal_recognition_995_measured": false,
+    "all_46_sources_proven": false,
+    "all_source_time_proven": false,
+    "notes": "動画本体の全SHA再計算はG3直前に開始終了guardで行う。今回は軽量headerと存在/size/mtime確認のみ。"
+  },
+  "required_before_gpu": [
+    "6動画本体SHAとevent/table/audit receiptを照合",
+    "候補/基準armの新immutable snapshot・モデル・policy・native binary SHA固定",
+    "両armともframe0から同じframe系列で連続処理",
+    "評価範囲と全prefixのHOLD/欠測/状態/採録/会計を記録",
+    "未承認holdoutを含まない物差し/GT対象と集計分母を固定",
+    "正常公開追加遅延の起点と許容値を結果前に固定"
+  ],
+  "missing_policy": "読込/seek/系譜不一致は実行前FAIL。不明・UNKNOWN・row0未証明・未測定・HOLDは正常に数えず別母数。窓末尾で未完了の連鎖/次手はINCOMPLETEとし、除外せず元窓を保持した事前追記で両arm同じ尾部を延長。",
+  "next_action": "現承認はG2全検収→限定PR→G3文書準備STOP。6動画/比較版/GT分母/遅延許容/未確定事項を整理するのみでG3を起動しない。ユーザーの次の再開指示と前提充足後に、既存のvideo38 frame0..36300/video39 frame0..11878→残り4sourceという順序を用いる。",
+  "totals": {
+    "single_arm_source_frames": 236618,
+    "single_arm_source_seconds": 4495.908368319546,
+    "runtime_eta_available": false
+  },
+  "resolution_fps_coverage": {
+    "dimensions": [
+      [
+        1280,
+        720
+      ],
+      [
+        1920,
+        1080
+      ]
+    ],
+    "nominal_fps": [
+      30,
+      60,
+      59.9400701754386
+    ],
+    "distinct_observed_combinations": 5,
+    "all_46_differences_covered": false
+  }
+}

@@ -1,0 +1,7 @@
+# メモリ上限付き実公開metadata取得
+
+旧metadata実走はRAM圧迫で実child143終了、COMPLETEなし。旧source/途中保存は保持する。本unitはメモリ上限化observerを接続した新排他実走入口で、元公開/着地修復/限定finisher契約を引き継ぐ。実21非label採録値は維持、採録関数が読まない巨大gray画像だけdescriptorへ置換し逐次保存する。
+
+親CPU/独立検収/新prepare後に一回の実取得を行う。実GPU/RAM/速度を初期区間で確認し、同じRAM障害を看過しない。pending fresh現在の公開修復は元Publisherが実際に使うrelease moduleだけへ接続する。元binder/global候補・過去pending理由・会計debt・有利不利モデルは変更しない。実走前の新sourceとして凍結し、独立CPU合格前には起動しない。本番/学習/品質許可なし。
+
+資源監視は新childのPID・起動時刻・runnerを束縛し、RSS8GiB超またはWSL available2GiB未満なら対象childのみSIGTERM。終了143は失敗のまま、旧実走や他processを停止しない。JSONL画像descriptor化はメモリ保持を削減するが、絶対上限を保証するものではない。

@@ -1,0 +1,5 @@
+# 同call在庫journalの実接続
+
+親所有の合成unit。最新T2成功runと同じ入力/区間/flagsを保持し、observerだけを最外側へ追加。旧raw/NEXT/全Counter/全返値/全採録列の不変を実保存で検収する。対象は原FIFO実追加→消費、補正後resolve→origin、32798の公開格子writer。同一enqueueのsoftware occurrenceと物理identityは区別する。unknown entryを既知起点へ補完しない。0回のフックを成功と数えない。
+
+新出力で排他実行し、prepare/独立CPU検収後にのみRTX4060を使う。既存RSS8GiB/WSL空き2GiB保護、逐次JSONLを維持。既存flags、src、凍結snapshot、旧run/失敗結果、モデル、保護dataは変更しない。実COMPLETEとjournal接続品質を分離し、物理会計/学習/G2許可は自動発行しない。初回unknown gameからは在庫0を仮定せず、観測新game初期区間の検証を待つ。
