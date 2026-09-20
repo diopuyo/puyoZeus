@@ -1,0 +1,8 @@
+"""承認済み正常検収窓。勝率/成功結果に合わせて採録点を選ばない。"""
+FIRST = 29052
+INITIALIZATION_START = 33724
+EARLIEST = (33726, 33766)
+LAST = 34290
+STRIDE = 2
+MIN_GAP = 40
+SIDES = ('1P', '2P')

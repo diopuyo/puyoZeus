@@ -12,9 +12,9 @@ video_38 で確定した方式をそのまま使う (2026-09-19):
   - 判定できた分で外挿: 判定できない = 母数から除く
   - 最も甘い: 判定できない = すべて代理指標の誤検出
 
-代理指標 (CNN == HSV かつ != COLOR_UNKNOWN) は落下中のぷよ・テロップ文字を
-盤面のぷよと数えるため、実際より厳しく出る。抽出も食い違い優先なので、
-ここでの誤り率は動画全体より高く出る。
+これは偏りのある標本からの参考外挿であり、全体精度や信頼区間ではない。
+食い違い優先・盤面単位の抽出には、食い違い5セル超の盤面の除外もある。
+CNNとHSVが同時に誤るセルも測れないため、真の精度に対して保守的とは限らない。
 
 使い方:
     py -3 scripts/score_gt_judgment.py --self-check
@@ -67,8 +67,8 @@ def tally(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def estimate_accuracy(counts: dict[str, int], n_basis: int, n_mismatch: int) -> dict[str, float]:
-    """3通りの見積もりを返す。単位はパーセント。"""
+def estimate_accuracy(counts: dict[str, int], n_basis: int, n_mismatch: int) -> dict[str, float | None]:
+    """旧計算の参考値を返す。母集団精度の保証や信頼区間には使わない。"""
     n_judged = sum(counts.values())
     n_decided = counts[VERDICT_RECORDED] + counts[VERDICT_SCREEN]
     if n_judged == 0 or n_basis == 0:
@@ -79,10 +79,10 @@ def estimate_accuracy(counts: dict[str, int], n_basis: int, n_mismatch: int) -> 
 
     strict = (counts[VERDICT_SCREEN] + counts[VERDICT_UNKNOWN]) / n_judged
     lenient = counts[VERDICT_SCREEN] / n_judged
-    decided = (counts[VERDICT_SCREEN] / n_decided) if n_decided else 0.0
+    decided = (counts[VERDICT_SCREEN] / n_decided) if n_decided else None
     return {
         "最も厳しい(判定できない=全部本物)": acc(strict),
-        "判定できた分で外挿": acc(decided),
+        "判定できた分で外挿": acc(decided) if decided is not None else None,
         "最も甘い(判定できない=全部誤検出)": acc(lenient),
     }
 
@@ -95,13 +95,16 @@ def verify_coverage(rows: list[dict[str, Any]], picks_path: pathlib.Path) -> dic
         for row, col, _screen, _recorded in board["cells"]:
             expected.add((board["side"], board["frame"], row, col))
     got = {_cell_key(r) for r in rows}
-    return {
+    result = {
         "抽出したセル": len(expected),
         "判定したセル": len(rows),
         "重複": len(rows) - len(got),
         "判定漏れ": sorted(expected - got),
         "抽出外": sorted(got - expected),
     }
+    if result["重複"] or result["判定漏れ"] or result["抽出外"]:
+        raise ValueError(f"人手判定の被覆が一致しません: {result}")
+    return result
 
 
 def score_video(video: str, judged_path: pathlib.Path) -> dict[str, Any]:
@@ -157,6 +160,13 @@ def score_video(video: str, judged_path: pathlib.Path) -> dict[str, Any]:
         },
         "推定セル正解率": estimate_accuracy(counts, n_basis, n_mismatch),
         "合格線": 99.5,
+        "quality_gate_clear": False,
+        "confidence_interval": None,
+        "評価範囲": "偏った食い違い標本の参考外挿。全体精度の合格判定には使わない",
+        "抽出設計": {
+            "上位盤面": picks.get("n_top"), "無作為盤面": picks.get("n_random"),
+            "未評価": ["抽出から除かれた盤面", "CNNとHSVが同時に誤るセル"],
+        },
     }
 
 

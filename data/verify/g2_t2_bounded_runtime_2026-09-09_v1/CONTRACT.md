@@ -1,0 +1,3 @@
+# 新T2＋bounded公開の合成
+
+成功済みpending-current・bounded metadata・floating・保存契約を再利用し、split初期化後instrument開始前にT2の二生成点を追加する。旧実run569と全依存ソースは凍結。新prepare・新出力で実走する。元source、caller行、全保存guard、元collector採否とメモリ上限を維持する。actual exitと品質を分離する。T2条件の変更以外の根拠無し差分、未来finalの早期公開、正常対照喪失はFAILとして扱い、完成扱いにしない。

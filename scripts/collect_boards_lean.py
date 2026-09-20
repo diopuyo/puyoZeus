@@ -153,7 +153,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
-from src.board import Board  # noqa: E402
+from src.board import (  # noqa: E402
+    Board, BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_UNKNOWN, HIDDEN_ROWS,
+)
 from src.board_motion import (  # noqa: E402
     STABLE_PERSISTENCE_DIFF_THRESHOLD,
     STABLE_PERSISTENCE_WINDOW_SEC,
@@ -2806,38 +2808,14 @@ def _apply_record_time_observation_fix(
     board: Board, side_label: str, cnn_board: Optional[Board],
     frame_bgr: Any, image_reader: Any,
 ) -> tuple[Board, int]:
-    """記録する直前に、画面が示している色へ確定盤面を合わせる (2026-09-19、既定 OFF).
+    """記録直前にCNNとHSVが一致する観測を反映する（既定OFF）。
 
-    なぜ必要か
-    ----------
-    記録されるのは「前回の記録と盤面が変わった瞬間」だけ (`last_emitted_grid`)。
-    一方、確定盤面を画面に合わせて直せるのは事後復旧ゲートだけで、そこは
-    **8 処理frame 連続で CNN==HSV が一致すること**を要求する。
-    つまり **盤面が変わった瞬間には、復旧ゲートは原理的に間に合わない。**
-
-    5動画の実測: 記録された盤面の食い違いのうち、最終的に
-    **盤面が画面へ寄って解けたものが 52.08%、画面が盤面へ寄ったものが 15.58%**。
-    その場面では画面の方が正しいことが 3.3 倍多い。
-    だから記録の瞬間に限り、8frame の待ちを外して画面を採る。
-
-    安全のために守ること
-    --------------------
-    - **CNN と HSV の2系統が一致した色だけ**を採る (片方だけでは動かさない)。
-    - 浮きぷよを作らない。既存の列チェック `_check_recovery_column` をそのまま使い、
-      「下から連続して埋まる範囲」だけ直す。候補同士は支え合えるので列単位で直る。
-    - 隠し段 (row 0) は HSV 側が推論で埋めるため触らない。
-
-    Returns:
-        (直した盤面, 直したセル数)。直せなければ元の盤面をそのまま返す。
+    8frameの復旧待ちを外すが、削除と追加を反映した列で重力を確認する。
+    隠し段とUNKNOWN観測は変更しない。入力盤面を変更せず、実変更数を返す。
     """
     if cnn_board is None or frame_bgr is None or image_reader is None:
         return board, 0
-    from src.board import (
-        BOARD_COLS, BOARD_ROWS, COLOR_EMPTY, COLOR_UNKNOWN,
-    )
-    from src.board_state_machine import _check_recovery_column
     from src.recognition_pipeline import DEFAULT_P1_REGION, DEFAULT_P2_REGION
-    hidden_rows = 1  # row 0 は隠し段。HSV 側が推論で埋めるので触らない
     region = DEFAULT_P1_REGION if side_label == "1P" else DEFAULT_P2_REGION
     try:
         hsv_board = image_reader.read_board_hsv_only(frame_bgr, region)
@@ -2846,7 +2824,7 @@ def _apply_record_time_observation_fix(
     if hsv_board is None:
         return board, 0
     candidates: list[tuple[int, int, int]] = []
-    for r in range(hidden_rows, BOARD_ROWS):
+    for r in range(HIDDEN_ROWS, BOARD_ROWS):
         for c in range(BOARD_COLS):
             obs = int(cnn_board.get(r, c))
             if obs != int(hsv_board.get(r, c)) or obs == COLOR_UNKNOWN:
@@ -2855,16 +2833,35 @@ def _apply_record_time_observation_fix(
                 candidates.append((r, c, obs))
     if not candidates:
         return board, 0
+    return _apply_record_time_observation_candidates(board, candidates)
+
+
+def _apply_record_time_observation_candidates(
+    board: Board, candidates: list[tuple[int, int, int]],
+) -> tuple[Board, int]:
+    """削除後の支えで追加を選び、新規の浮きを生む列はまとめて元へ戻す。
+
+    既存の浮きは解消したと扱わない。UNKNOWNは既存の重力検査と同じく
+    観測保留とし、隠し段は検査・変更の対象外。独立な列の補正は保持する。
+    """
+    from src.board_state_machine import _check_recovery_column
+
     fixed = board.copy()
-    # 「空へ戻す」方向は浮きを作らないので列チェックを通さない (既存ゲートと同じ扱い)。
     add = [(r, c, v) for (r, c, v) in candidates if int(board.get(r, c)) == COLOR_EMPTY]
     other = [(r, c, v) for (r, c, v) in candidates if int(board.get(r, c)) != COLOR_EMPTY]
-    passed: list[tuple[int, int, int]] = list(other)
+    for r, c, value in other:
+        fixed.set(r, c, value)
+    # 今回消えるセルを、追加候補の支えとして使わせない。
     for col in {c for (_, c, _) in add}:
-        passed.extend(_check_recovery_column(board, col, add))
-    for (r, c, v) in passed:
-        fixed.set(r, c, v)
-    return fixed, len(passed)
+        for r, c, value in _check_recovery_column(fixed, col, add):
+            fixed.set(r, c, value)
+    before = set(check_gravity_rule(board)[1])
+    new_floating = set(check_gravity_rule(fixed)[1]) - before
+    for col in {c for _, c in new_floating}:
+        for row in range(HIDDEN_ROWS, BOARD_ROWS):
+            fixed.set(row, col, int(board.get(row, col)))
+    count = sum(fixed.get(r, c) != board.get(r, c) for r, c, _ in candidates)
+    return (fixed, count) if count else (board, 0)
 
 
 def _process_side_lean(

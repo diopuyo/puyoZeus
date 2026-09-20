@@ -1,0 +1,14 @@
+# 学習済みモデルと隠し段確率の暫定評価
+
+資産調査 g2_trained_context_asset_2026-09-09_v1/ASSET.md を親で読取。
+対象video38 sourceはfold6。学習・調整から除外されたfold6の固定3seedのみ使う。
+子はloader.py/test_loader.py/run_loader_cpu.py/LOADER_RECEIPT.mdを所有、親はscore/test_score/run_score_cpu/evaluate_actualと本文書を所有する。
+
+現在binderのledger NOT_CONNECTED、6指標UNKNOWN、supported=falseを維持し、学習済みM0-onlyで評価する。
+元boundの再bind・入力配列比較・候補の機械条件・HOLD/FAULTを保持。modelの元raw_probabilityは変えない。
+各同じsampleに各seedのモデルを一回ずつ呼び、既存calibrateをseed固有固定slopeで適用し、既存equal_seed_probability_meanで平均。
+最後のsample平均とMC標準誤差は既存samplerに任せる。raw列は同じseedで同じsample列を再生成してdigest確認し、モデル再呼出しなしで別保存する。
+
+pointmassは既存の1sample最適化を維持。非pointmassは原分布と指定seedのsampleを共有する。
+MC誤差は認識・モデル・較正誤差を含まない。新較正・新学習・本番変更・M1 residual解放は行わない。
+実runの保存来歴/同runjoin/loader再検査を通してから評価し、確率の数値到達をG2/G5の品質PASSと呼ばない。

@@ -1,0 +1,3550 @@
+"""軽量 board 抽出パス — SiameseBoardCNN 学習用 npz を高速収集する。
+
+collect_indicators_v2 の重い処理(全指標計算・ojama_disruption 等)を省略し、
+confirmed_board グリッドと勝敗 won ラベルのみを蓄積する。
+
+⚠️ 2026-08-12 追加: お邪魔会計 (OjamaAccountingTracker) は例外的に「軽量な
+真値記録」として常時駆動する (ojama_net_balance / ojama_forecast 列)。
+net収支/forecast は npz からの事後復元が不可能と確定した (score近似v1/v2は
+相関0.33-0.38で不合格、tsumo_countゲートv3も不可判定) ため、収集は認識
+パイプラインをフル実行しているという前提を活かし、追加コスト僅少 (会計は
+辞書演算のみで ChainSimulator 等の重い計算を含まない) な会計計算だけを
+本スクリプトに例外的に組み込んだ。全指標計算・ojama_disruption (モンテ
+カルロ) は依然として省略する。
+
+## 省略する処理 (既定)
+- 全指標計算 (indicators_v2 モジュール呼び出しなし。お邪魔会計のみ例外的に
+  上記の通り常時駆動する)
+- ojama_disruption (モンテカルロ計算なし)
+- NextDetector (load_next_detector=False。--with-next 指定時のみ有効化)
+- VideoChainTracker (enable_chain_tracker=False。--enable-chain-tracker 指定時のみ有効化。
+  2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が実運用で 0 件
+  だった実測があり、CHAIN 中の盤面凍結が機能しない欠陥の疑いがあるため、
+  基準データ収集ではこのフラグを明示指定して VideoChainTracker を有効化する。
+  省略時は従来通り無効 (後方互換、既存 boards_lean_fixed 系 npz の再現性維持))
+
+## 出力 npz 形式
+collect_indicators_v2 --board-npz と同形式 + won / score 列を追加:
+  grids      : (N, 13, 6) int8
+  video_id   : (N,) str
+  side       : (N,) str  "1P" / "2P"
+  t_sec      : (N,) float32
+  game_idx   : (N,) int32
+  frame_idx  : (N,) int32
+  won        : (N,) float32  1P視点の勝敗 (1.0/0.0/NaN)
+  score      : (N,) int32    スコア (-1 = None)
+  next1_a    : (N,) int8     現ネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  next1_b    : (N,) int8     現ネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_a    : (N,) int8     ダブルネクスト軸ぷよ色 (1-5、未検出/未取得は -1)
+  dnext_b    : (N,) int8     ダブルネクスト子ぷよ色 (1-5、未検出/未取得は -1)
+  chain_trigger_sec : (N,) float32  機能D (掛け算表示) 検知時刻。未検知は NaN
+                       (2026-07-29 追加、連鎖完了時刻の新方式較正用。
+                        既存 boards_lean_fixed 系 npz には存在しない新規キー
+                        であり、次回の再収集で初めて実値が入る)
+  tsumo_count : (N,) int32   試合開始からの確定ツモ設置数 (手数)。
+                       RecognitionPipeline.tsumo_count(side) の値をそのまま
+                       記録する (2026-08-12 追加、おじゃま収支近似復元 v3 の
+                       着地イベントゲート用。dedup済み STABLE snapshot は
+                       1着地に対応しないため、この列の増分を「着地イベント」
+                       の代理指標として使う)。取得不能時は -1
+                       (TSUMO_COUNT_UNKNOWN)。既存 boards_lean_fixed 系 npz
+                       には存在しない新規キーであり、次回の再収集で初めて
+                       実値が入る (後方互換: 既存 npz 読み出し側のキー集合
+                       には影響しない)。
+  all_clear_pending : (N,) int8  全消しボーナス予約中フラグ (0/1)。
+                       src.chain_detector.VideoChainTracker.all_clear_pending
+                       (公式ルール通りの全消しボーナス未消費ラッチ) をそのまま
+                       記録する (2026-08-12 追加。post-hoc の score 跳ね検出
+                       近似は過検出気味 (c143実測 ON率6.7%) と判明したため、
+                       実運用パイプラインが厳密追跡済みの値を直接保存する)。
+                       enable_chain_tracker=False (既定) の収集では
+                       VideoChainTracker 自体が無効化されており取得不能 → -1
+                       (ALL_CLEAR_PENDING_UNKNOWN)。既存 boards_lean_fixed 系
+                       npz には存在しない新規キーであり、次回の再収集で
+                       初めて実値が入る (後方互換: 既存 npz 読み出し側の
+                       キー集合には影響しない)。
+  ojama_net_balance : (N,) float32  お邪魔収支 net (own-perspective、
+                       2026-08-12 追加)。ojama_net_balance / ojama_forecast は
+                       予測貢献度1〜2位の主力指標だが、npz からの事後復元は
+                       不可能と確定した (score近似v1/v2は相関0.33-0.38で
+                       不合格、tsumo_countゲートv3も不可判定)。そのため収集
+                       中に src.ojama_accounting.OjamaAccountingTracker を
+                       実際に駆動し、STABLE snapshot ごとに真値を記録する。
+                       値は snapshot.net_balance_capped を own-perspective に
+                       変換したもの (1P はそのまま、2P は符号反転)。自分有利
+                       方向が正。取得不能時は NaN (OJAMA_NET_BALANCE_UNKNOWN)。
+                       ⚠️ 試合境界のリセットは OjamaAccountingTracker.
+                       on_state_transition が MENU 遷移/score 大幅減少を検知
+                       して内部で自動処理する。本スクリプト側では動画処理
+                       開始時に reset() を 1 回呼ぶだけでよく、game_idx が
+                       進むたびに外部から reset() してはならない (c系20本の
+                       学習データで判明した教訓: 収集を秒区間ごとに分割して
+                       都度 reset() すると、区間境界をまたぐ pending お邪魔が
+                       消えて会計が壊れる、2026-08-12発見)。既存
+                       boards_lean_fixed 系 npz には存在しない新規キーであり、
+                       次回の再収集で初めて実値が入る (後方互換)。
+  ojama_forecast    : (N,) float32  お邪魔予告 forecast (own-perspective、
+                       2026-08-12 追加)。ojama_net_balance と同じ tracker
+                       駆動で得る snapshot.forecast_p1/forecast_p2 (自分に
+                       向かう予告個数、負値は 0 にクリップ) を side 別に選択
+                       した値。取得不能時は NaN (OJAMA_FORECAST_UNKNOWN)。
+                       既存 boards_lean_fixed 系 npz には存在しない新規キー
+                       (後方互換)。
+
+  board_provenance : (N,) str  この snapshot の盤面が実観測か物理推定か
+                       (2026-08-18 追加、連鎖中物理推論の配線)。
+                       "observed" (実測STABLE) / "chain_estimate" (連鎖中の
+                       物理推定) / "chain_estimate_low_confidence" (起点誤認
+                       疑い、--enable-chain-estimate-recording では採用しない) /
+                       "chain_estimate_stale_hold" (推定保持中)。取得不能時は
+                       "" (BOARD_PROVENANCE_UNKNOWN)。既存 boards_lean_fixed 系
+                       npz には存在しない新規キー (後方互換)。
+
+  ⚠️ next1_*/dnext_* は --with-next を指定した収集時のみ実値が入る。
+  未指定 (既定) の場合は NextDetector が無効なため全て -1 (後方互換、
+  既存 boards_lean_fixed の再利用に影響なし)。
+  ⚠️ chain_trigger_sec は enable_chain_formula_detection (RecognitionPipeline
+  既定 True) が有効な収集であれば常に記録される (--with-next 等の追加指定は
+  不要)。ただし既存の boards_lean_fixed / boards_lean_fixed_regen_2026-07-28
+  npz は本キー追加より前に収集済みのため、chain_trigger_sec 列そのものが
+  存在しない (再収集しない限り遡って取得できない)。
+
+## 勝敗 won の自己ラベル付け
+score のリセット(前値 - 現値 >= SCORE_RESET_THRESHOLD)でゲーム境界を検知し
+game_idx を振る。動画末尾で最終 score が大きい side を勝者とし、
+そのゲームの各 snapshot に 1P 視点 won を付与する。
+(1P 盤面なら 1P 勝ち=1、1P 負け=0 / 2P 盤面は逆転)
+
+## 使い方
+    python -m scripts.collect_boards_lean \\
+        --video data/frames/video_29.mp4 \\
+        --out-npz /tmp/lean29.npz \\
+        --max-sec 30
+
+## --sample-interval による高速化
+    --sample-interval 0.1 を指定すると fps*0.1 フレームに 1 回だけ
+    pipeline.update を呼ぶ (collect_indicators_v2 と同じ間引き方式)。
+    cap.read() は毎フレーム呼んでデコードし、間引き対象フレームは continue
+    でスキップする。
+
+    スコアリセット検知への影響:
+      score は STABLE snapshot 取得時にのみ読む設計のため、
+      間引きで STABLE でない短命フレームを飛ばしても実害なし。
+      ゲーム終了時の score リセットは STABLE 直後の数フレームで起こるが
+      0.1 秒≒3 フレーム間引きなら次の STABLE フレームで検知できる。
+      (worst-case: 間引き幅 * fps フレーム = 約 0.2 秒の検知遅延)
+
+    推奨値: 0.1〜0.2 秒 (≒3×〜6× 高速化、snapshot 数ほぼ変わらず)。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.board import Board  # noqa: E402
+from src.board_motion import (  # noqa: E402
+    STABLE_PERSISTENCE_DIFF_THRESHOLD,
+    STABLE_PERSISTENCE_WINDOW_SEC,
+    board_roi_gray,
+    frame_diff_mean,
+    is_raw_pixel_stable,
+)
+from src.board_quality import is_phantom_board  # noqa: E402
+from src.board_state_machine import BoardState  # noqa: E402
+from src.chain import ChainSimulator  # noqa: E402
+from src.fps_normalize import resolve_normalize_fps_30_stride  # noqa: E402
+from src.event_accounting_observer_v1 import EventAccountingRecorder  # noqa: E402
+from src.event_physical_observer_v1 import EventPhysicalRecorder  # noqa: E402
+from src.match_winner import PANEL_UNAVAILABLE, MatchWinnerDetector  # noqa: E402
+from src.ojama_accounting import (  # noqa: E402
+    OjamaAccountingTracker,
+    OjamaAccountSnapshot,
+)
+from src.production_config import GHOST_CHAIN_RULE_ENABLED  # noqa: E402
+from src.recognition_pipeline import RecognitionPipeline, SideResult  # noqa: E402
+from src.score_region_calibration import (  # noqa: E402
+    load_score_region_offsets_for_video,
+)
+from src.self_supervised.physical_consistency import check_gravity_rule  # noqa: E402
+
+# ============================
+# 定数
+# ============================
+
+# 出力解像度 (認識は 1920x1080 前提)
+TARGET_W: int = 1920
+TARGET_H: int = 1080
+DEFAULT_FPS: float = 30.0
+EVENT_OBSERVATION_SIDECAR_SUFFIX: str = "_event_observations_v1.json"
+EVENT_ACCOUNTING_SIDECAR_SUFFIX: str = "_event_accounting_v1.json"
+EVENT_PHYSICAL_SIDECAR_SUFFIX: str = "_event_physical_v1.json"
+
+# 試合境界検知(旧方式): score がこの値以上減少したら新しい試合とみなす。
+# --enable-score-reset-requires-zero 指定時は使われない (減少は誤読とみなす)。
+SCORE_RESET_THRESHOLD: int = 500
+
+# 試合境界検知(新方式、2026-08-20): 「score が 0 になった」ことを境界の条件と
+# する際に、0 とみなす上限。新しい試合はスコアが必ず 0 から始まるという
+# ゲーム仕様から決めた物理的な値であり、シーンからの逆算ではない
+# (過学習禁止規約準拠)。0 ちょうどを既定とし、OCR の桁欠けを緩く拾うための
+# 余裕は設けない (余裕を持たせると連鎖中の低位誤読を再び拾うため)。
+SCORE_RESET_ZERO_MAX: int = 0
+
+# ゲーム境界の共有カウンタのデバウンス幅 [秒] (2026-07-31)。
+# 1P/2P が同じ境界を検知したときに 2 回進めないための窓。
+# 実際の 1 試合は最短 14 秒 (勝利数パネル実測) なので誤抑制しない。
+GAME_BOUNDARY_DEBOUNCE_SEC: float = 5.0
+
+# 試合境界マルチシグナル (W20/W21根治、2026-08-17) の許容窓 [秒]。
+# score-reset 検知時刻が、視覚信号 (is_match_active False→True) による直近の
+# 境界進行時刻からこの秒数以内なら「視覚信号で確認済み」とみなし異常マーク
+# しない。score OCR は STABLE snapshot 取得時にしか読まないため数フレーム分の
+# ずれが生じ得る (--sample-interval 使用時は特に)。GAME_BOUNDARY_DEBOUNCE_SEC
+# (5秒) より短く、通常の OCR 検知ラグ (概ね 1 秒未満) より十分大きい値。
+BOUNDARY_MULTISIGNAL_TOLERANCE_SEC: float = 3.0
+
+# 視覚信号 (is_match_active) 立ち上がりのノイズ持続時間フィルタ (W22根治、
+# 2026-08-17)。実測ノイズ: フェード暗転中の 0.07 秒瞬き、ロゴのワイプ
+# アニメによる 2.5 秒に 12 回の明滅 (周期約 0.2 秒)。これらより十分長く
+# 持続して初めて「本物の立ち上がり」と確定する。値はシーンからの逆算
+# ではなく、既存の物理根拠付き定数 (試合開始直後は認識/state machine が
+# 安定するまでの実測整定時間) を流用する
+# (RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START、30 frame/60fps)。
+BOUNDARY_VISUAL_RISE_PERSIST_SEC: float = (
+    RecognitionPipeline.CHAIN_BAN_SEC_AFTER_MATCH_START
+)
+
+# 「新しい試合が始まった証拠」ゲート (2026-08-19、user指示「必ず試合前
+# スコアは0」)。視覚信号 (is_match_active 立ち上がり) だけで境界を確定すると、
+# 試合中の is_active 乱れ (ラッチ解除失敗等) が偽境界を量産する
+# (実測: 50本で試合総数 2,689→4,040 に断片化、欠損試合直後ギャップ中央値
+# 0.6秒 vs 正常な試合間 10.1秒)。立ち上がり確定時に加えて
+# 「両者スコアが数値0 (score OCR、画像テンプレでない)」または
+# 「両者の確定盤面がほぼ空」のどちらかを要求する。証拠は立ち上がり確定から
+# BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC 秒以内に観測されればよい
+# (score OCR/盤面確定のラグ吸収。値は既存の BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+# と同根拠 = OCR検知ラグ<1秒より十分大きく、試合の最短長より十分小さい)。
+BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC: float = BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+
+# 「盤面がほぼ空」の上限ぷよ数 (両側それぞれ)。物理根拠: 立ち上がり確定
+# (0.5秒) + 証拠窓 (3秒) の最大3.5秒では高々3ツモ=6個しか設置できない。
+# 試合中の偽境界時点の盤面は数十個 (実測 c109 t=1669.3s は完全な試合中盤面)。
+NEW_MATCH_BOARD_MAX_PUYOS: int = 6
+
+
+def _compute_newmatch_evidence(result: object) -> bool:
+    """「新しい試合が始まった証拠」を1フレーム分判定する (stateless)。
+
+    証拠 = 両者スコアが数値0 (ScoreTracker.last_score、読めない間は前値
+    保持のため試合中は直近の実スコア>0が残る) **または** 両者の確定盤面が
+    ほぼ空 (NEW_MATCH_BOARD_MAX_PUYOS 以下。score OCR が壊れた動画
+    (c26/c58等) のフォールバック)。確定盤面が無い (None) side は盤面証拠に
+    使わない (試合中の一時クリアを空盤面と誤認しないため)。
+
+    Args:
+        result: PipelineResult (getattr ベースで古いフェイクにも安全)。
+
+    Returns:
+        証拠が観測できたら True。
+    """
+    p1 = getattr(result, "p1", None)
+    p2 = getattr(result, "p2", None)
+    if p1 is None or p2 is None:
+        return False
+    if getattr(p1, "score", None) == 0 and getattr(p2, "score", None) == 0:
+        return True
+    b1 = getattr(p1, "confirmed_board", None)
+    b2 = getattr(p2, "confirmed_board", None)
+    return (
+        b1 is not None and b2 is not None
+        and b1.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
+        and b2.count_puyos() <= NEW_MATCH_BOARD_MAX_PUYOS
+    )
+
+
+def _physical_match_evidence(result: object) -> bool:
+    """両者の得点欄が読める実試合画面だけを物理観測へ許可する。"""
+    p1 = getattr(result, "p1", None)
+    p2 = getattr(result, "p2", None)
+    if p1 is None or p2 is None:
+        return False
+    return _is_visible_score(getattr(p1, "score", None)) and _is_visible_score(
+        getattr(p2, "score", None)
+    )
+
+
+def _is_visible_score(value: object) -> bool:
+    """得点OCRの未検出値と0以上の表示値を区別する。"""
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return int(value) >= 0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+# サンプル間引き幅の下限 (0 以下指定は 1 フレームおき = 全フレームに丸める)
+MIN_SAMPLE_INTERVAL_FRAMES: int = 1
+
+
+def _resolve_sample_interval_frames(
+    sample_interval_sec: float,
+    fps: float,
+    sample_interval_frames: Optional[int] = None,
+) -> int:
+    """認識サンプル間隔を「実際に使うフレーム数」として一意に確定する。
+
+    collect_indicators_v2._resolve_sample_interval_frames と同じ仕様
+    (2026-07-28 user指示: fps に依存しない「Nフレームに1回」指定への統一)。
+    sample_interval_frames が指定された場合はそれを最優先し、fps に関係なく
+    そのフレーム数ごとに 1 回だけ認識する。省略時 (None) は従来通り
+    sample_interval_sec (秒) を fps 換算する (完全後方互換)。
+
+    Args:
+        sample_interval_sec: 認識サンプル間隔秒 (0 = 全フレーム)。
+        fps: 動画の fps。
+        sample_interval_frames: 認識サンプル間隔フレーム数 (優先指定、省略可)。
+            0 以下が渡された場合も不正値として扱い、下限 1 に丸める。
+
+    Returns:
+        実際に使うフレーム間引き幅 (最小 MIN_SAMPLE_INTERVAL_FRAMES)。
+    """
+    if sample_interval_frames is not None:
+        resolved = sample_interval_frames
+    else:
+        resolved = int(round(sample_interval_sec * fps))
+    return max(MIN_SAMPLE_INTERVAL_FRAMES, resolved)
+
+
+# 勝敗ラベルが付与できない試合の won 値
+WON_UNKNOWN: float = float("nan")
+
+# next_pair/dnext_pair が None (未検出 / NextDetector 無効) の場合の埋め値。
+# ぷよ色は 1-5 のため -1 は安全な sentinel。
+NEXT_COLOR_UNKNOWN: int = -1
+
+# chain_trigger_sec (機能D 掛け算表示検知時刻) が未検知/取得不能の場合の埋め値
+# (2026-07-29 追加)。t_sec は常に >= 0 のため NaN は安全な sentinel。
+CHAIN_TRIGGER_SEC_UNKNOWN: float = float("nan")
+
+# chain_mechanism (発火検知経路、2026-08-02 Step2 追加) が未検知/取得不能の
+# 場合の埋め値。空文字列は CHAIN_MECHANISM_* のどの値とも衝突しないため安全。
+CHAIN_MECHANISM_UNKNOWN: str = ""
+
+# tsumo_count (試合開始からの確定ツモ設置数、2026-08-12 追加) が未取得の場合の
+# 埋め値。RecognitionPipeline.tsumo_count(side) は常に 0 以上の整数を返すため
+# -1 は安全な sentinel。
+TSUMO_COUNT_UNKNOWN: int = -1
+
+# all_clear_pending (全消しボーナス予約中フラグ、2026-08-12 追加) が未取得の
+# 場合の埋め値。値は 0 (予約なし) / 1 (予約中) の二値のため -1 は安全な
+# sentinel (enable_chain_tracker=False 等で VideoChainTracker 自体が無効な
+# 収集では常にこの値になる)。
+ALL_CLEAR_PENDING_UNKNOWN: int = -1
+
+# ojama_net_balance / ojama_forecast (お邪魔会計の真値、2026-08-12 追加) が
+# 未取得の場合の埋め値。t_sec 等と同じ float32 系のため chain_trigger_sec と
+# 同方式で NaN sentinel を使う (0 は「収支ゼロ/予告ゼロ」という正当な実値と
+# 衝突するため sentinel に使えない)。
+OJAMA_NET_BALANCE_UNKNOWN: float = float("nan")
+OJAMA_FORECAST_UNKNOWN: float = float("nan")
+
+# match_end_locked (勝敗演出ロックダウン区間フラグ、2026-08-17 追加、
+# W20/W21根治) が未取得の場合の埋め値。値は 0 (非ロック中) / 1 (ロック中) の
+# 二値のため -1 は安全な sentinel (PipelineResult.match_end_locked 未対応の
+# 古い pipeline フェイク等では常にこの値になる)。
+MATCH_END_LOCKED_UNKNOWN: int = -1
+
+# post_match_lockdown_active (次試合開始までのラッチ活性フラグ、
+# 2026-08-18 追加、境界実装の仕上げ): RecognitionPipeline._post_match_
+# lockdown_active (enable_post_match_lockdown_latch 有効時のみ意味を持つ、
+# match_end_locked と同じ形式の列) が未取得の場合の埋め値。値は
+# 0 (非活性) / 1 (活性) の二値のため -1 は安全な sentinel
+# (enable_post_match_lockdown_latch=False の収集、または本属性未対応の古い
+# pipeline フェイク等では常にこの値になる)。
+POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN: int = -1
+
+# stable_persistence_confidence (2026-08-18 二次追加、STABLE持続ゲートの
+# 役割転用: 「記録拒否」→「confidenceタグ付与」、
+# scripts/_diag_stable_persistence_loss_breakdown_2026-08-18.py の実測で
+# 148再収集の行数が61%減り、しかも欠落が相手バースト直前の構え局面に
+# 偏ることが判明したため、本列導入で記録拒否をやめた)。値は
+# 0 (連鎖アニメ中/送付フラッシュ重畳の疑い、除外候補) /
+# 1 (直近 STABLE_PERSISTENCE_WINDOW_SEC 秒持続静止確認済み、信頼度高) の
+# 二値。enable_stable_persistence_gate=False (計算自体を行わない、
+# bit-identical) の収集では常にこの sentinel になる。除外要否は学習データ
+# ビルダー側のオプトインフィルタ (--exclude-match-end-locked と同じ設計
+# 思想) に委ねる (本スコープでは列を持つところまで、除外ロジックは未実装)。
+STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN: int = -1
+
+# board_provenance (2026-08-18 追加、連鎖中物理推論の配線): この snapshot の
+# 盤面が実観測か物理推定かを示す文字列。RecognitionPipeline.SideResult.
+# board_provenance をそのまま記録する (値の種類は recognition_pipeline.py:
+# 431-446 のコメント参照。"observed"/"chain_estimate"/
+# "chain_estimate_low_confidence"/"chain_estimate_stale_hold")。取得不能
+# (board_provenance 未対応の古い pipeline フェイク等) の場合は空文字列
+# BOARD_PROVENANCE_UNKNOWN で埋める (chain_mechanism と同じ sentinel 設計、
+# 実値の "observed" 等とは衝突しない)。学習データビルダー側で実測値/予測値
+# を事後選別できるようにするための列であり、除外ロジック自体はここでは
+# 実装しない (スコープ外、user判断事項)。
+BOARD_PROVENANCE_UNKNOWN: str = ""
+
+# ============================
+# 1手区切り観測スケジューラ + 持続的物理制約フィルタ (2026-08-18)
+# ============================
+#
+# 経緯 (画素静止ゲートの退行、feedback_viz_eval_required.md 対象):
+# --enable-stable-persistence-gate (画素差分による静止判定) で記録可否を
+# 決めたところ学習データが61%減り、欠落が重要局面に偏った (盤面ROIが13段分
+# あり次ツモ落下域を含むため、盤面が確定していても画面は完全静止しない、
+# user指摘)。実測 (3動画22,397行) では画素静止ゲートの棄却は局面を弁別せず
+# (通常設置中でも95.3%棄却)、物理制約違反の方が連鎖中に集中して弁別的
+# だった。そのため記録可否は「1手区切り (どの瞬間の盤面を代表として撮るか)」
+# と「物理制約 (撮った候補が汚染されていないか)」の2軸に置き換える。
+#
+# 1手区切りの検出信号 (2026-08-18、coordinator指示で user提案を採用):
+# 当初 tsumo_count 増分を主信号にする設計だったが、NEXT 表示 (next1_a/b) の
+# 繰り上がりの方が認識精度100%実証済み (project_next_detector_perfect_
+# accuracy) かつ、user確認済みのゲーム内部順序「ぷよが盤面に固定される→
+# その後NEXTが繰り上がる」により、繰り上がり検知時点で盤面は既に物理的に
+# 確定している (次ツモはまだ出現直後で盤面上方、隙間1行の着地寸前という
+# 写り込み危険な瞬間を構造的に引かない)。そのため NEXT 繰り上がりを主信号、
+# tsumo_count 増分を capture_next=False 時のフォールバックとして使う。
+#
+# 猶予フレーム数 (2026-08-18、user明確化): 「盤面が確定するのを待つ時間」
+# ではなく「認識側の一時的な乱れを吸収するための上限」。繰り上がり検知の
+# 時点で盤面は既に確定しているため、猶予窓内で最も早く得られた STABLE
+# 確定盤面を採用する (= 待つのではなく最短で取れた時点を採用、
+# _move_window_candidate_ok の move_window_recorded ラッチが担保)。
+# 猶予切れなら記録せず次の手区切りへ回す (無理な穴埋めはしない、
+# user明言「ギリギリの場合はまた0.5秒後の指標に回せばよい」)。
+# 値の根拠: 設置→盤面反映は8フレーム以内
+# (feedback_placement_reflection_8frames_2026-07-25) + stable_frame_count=3
+# 判定に要する追加フレームの余裕分 (シーン逆算ではなく既存の実測知見の合算)。
+MOVE_SEGMENT_GRACE_FRAMES: int = 15
+
+# 物理的行為状態 (自分の設置/連鎖/おじゃま落下) の集合。持続的物理制約
+# フィルタで「正当な状態遷移」を判定する際に使う (下記
+# _update_physics_transition_marker 参照)。
+_PHYSICS_LEGIT_TRANSITION_STATES: "frozenset[BoardState]" = frozenset({
+    BoardState.TSUMO_FALL, BoardState.CHAIN, BoardState.OJAMA_FALL,
+})
+
+# 連鎖中物理推論配線 (2026-08-18): 起点盤面の物理予測 chain_count が score
+# 由来 chain_count と食い違う (= 起点自体が誤認の疑いがある) ケースの
+# provenance 値。誤った起点から出した予測を学習データに混ぜないよう、
+# --enable-chain-estimate-recording の記録判断はこの値を明示的に除外する
+# (recognition_pipeline.py:434-436 のコメント「取り扱い注意」と対応)。
+CHAIN_ESTIMATE_LOW_CONFIDENCE_PROVENANCE: str = "chain_estimate_low_confidence"
+
+
+# ============================
+# 蓄積バッファ
+# ============================
+
+@dataclass
+class _LeanNpzAccumulator:
+    """board グリッド + won ラベル蓄積バッファ。
+
+    confirmed_board と score 情報を蓄積し、動画末尾で won を付与して npz 保存する。
+    score を保存することで、収集後にオフラインで何度でも勝者ラベルを再作成できる。
+    """
+    grids: list[np.ndarray] = field(default_factory=list)
+    video_ids: list[str] = field(default_factory=list)
+    sides: list[str] = field(default_factory=list)
+    t_secs: list[float] = field(default_factory=list)
+    game_idxs: list[int] = field(default_factory=list)
+    frame_idxs: list[int] = field(default_factory=list)
+    # won は後付け (動画末尾で付与する)
+    wons: list[float] = field(default_factory=list)
+    # score を保存: オフライン再ラベル付けを可能にする (None は -1 として保存)
+    scores: list[int] = field(default_factory=list)
+    # ネクスト情報 (指標①本命版検証用、2026-07 追加)。
+    # None は NEXT_COLOR_UNKNOWN (-1) として保存する。既存キー・既存呼び出しの
+    # 後方互換のため append() では末尾の optional 引数として追加する。
+    next1_as: list[int] = field(default_factory=list)
+    next1_bs: list[int] = field(default_factory=list)
+    dnext_as: list[int] = field(default_factory=list)
+    dnext_bs: list[int] = field(default_factory=list)
+    # 機能D (掛け算表示) 検知時刻 (2026-07-29 追加、連鎖完了時刻の新方式較正用)。
+    # RecognitionPipeline.SideResult.chain_event.trigger_sec をそのまま記録する。
+    # chain_event が None (掛け算表示未検知/連鎖なし) の場合は
+    # CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で埋める。既存呼び出し (引数省略) では
+    # 常に NaN のまま保存される (後方互換: 挙動不変)。
+    chain_trigger_secs: list[float] = field(default_factory=list)
+    # 発火検知経路 (CHAIN_MECHANISM_*、2026-08-02 Step2 追加)。
+    # 既存呼び出し (mechanism 省略) では CHAIN_MECHANISM_UNKNOWN ("") のまま
+    # 蓄積され、save() 時に一度も実値が入らなければ npz キー自体を書かない
+    # (後方互換: 既存 npz 読み出し側のキー集合を変えない)。
+    chain_mechanisms: list[str] = field(default_factory=list)
+    # 試合開始からの確定ツモ設置数 (手数、2026-08-12 追加)。
+    # RecognitionPipeline.tsumo_count(side) をそのまま記録する。おじゃま収支
+    # 近似復元 v3 の着地イベントゲート用 (dedup済み STABLE snapshot は
+    # 1着地に対応しないため、この列の増分を着地イベントの代理指標として使う)。
+    # None は TSUMO_COUNT_UNKNOWN (-1) として保存する。既存呼び出し
+    # (tsumo_count 省略) では常に -1 のまま保存される (後方互換: 挙動不変)。
+    tsumo_counts: list[int] = field(default_factory=list)
+    # 全消しボーナス予約中フラグ (0/1、2026-08-12 追加)。
+    # VideoChainTracker.all_clear_pending (chain_detector.py) をそのまま
+    # 記録する。None は ALL_CLEAR_PENDING_UNKNOWN (-1) として保存する。
+    # 既存呼び出し (all_clear_pending 省略) では常に -1 のまま保存される
+    # (後方互換: 挙動不変)。
+    all_clear_pendings: list[int] = field(default_factory=list)
+    # お邪魔会計の真値 (own-perspective、2026-08-12 追加)。
+    # OjamaAccountingTracker.get_snapshot() を毎処理フレーム駆動して得た
+    # net_balance_capped / forecast_p1・p2 を side 別 own-perspective に
+    # 変換した値。None は OJAMA_NET_BALANCE_UNKNOWN / OJAMA_FORECAST_UNKNOWN
+    # (NaN) として保存する。既存呼び出し (省略) では常に NaN のまま保存される
+    # (後方互換: 挙動不変)。
+    ojama_net_balances: list[float] = field(default_factory=list)
+    ojama_forecasts: list[float] = field(default_factory=list)
+    # 勝敗演出ロックダウン区間フラグ (0/1、2026-08-17 追加、W20/W21根治)。
+    # RecognitionPipeline.PipelineResult.match_end_locked (MatchEndDetector の
+    # やった/ばたんきゅー ロックダウン判定) をそのまま記録する。後段 (連鎖
+    # イベント抽出・学習データ生成) がこの区間由来の snapshot を除外できる
+    # ようにするためのマーカー列 (実際の除外適用は各消費側の個別対応が必要、
+    # 本列はマーキングのみ)。None は MATCH_END_LOCKED_UNKNOWN (-1) として
+    # 保存する。既存呼び出し (match_end_locked 省略) では常に -1 のまま保存
+    # される (後方互換: 挙動不変)。
+    match_end_lockeds: list[int] = field(default_factory=list)
+    # 次試合開始までのラッチ活性フラグ (0/1、2026-08-18 追加、境界実装の
+    # 仕上げ)。RecognitionPipeline._post_match_lockdown_active
+    # (enable_post_match_lockdown_latch 有効時のみ意味を持つ) をそのまま
+    # 記録する。match_end_lockeds と同じマーカー列方式 (除外は行わない、
+    # 学習データビルダー側のオプトインフィルタで使う)。None は
+    # POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) として保存する。既存呼び出し
+    # (post_match_lockdown_active 省略) では常に -1 のまま保存される
+    # (後方互換: 挙動不変)。
+    post_match_lockdown_actives: list[int] = field(default_factory=list)
+    # STABLE持続confidenceタグ (2026-08-18 二次追加、収集ゲート→confidence
+    # タグへの役割転用)。_update_raw_pixel_stable の判定結果をそのまま記録
+    # する (除外はしない、マーキングのみ)。None は
+    # STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1) として保存する。既存呼び
+    # 出し (省略) では常に -1 のまま保存される (後方互換: 挙動不変)。
+    stable_persistence_confidences: list[int] = field(default_factory=list)
+    # board_provenance (str、2026-08-18 追加、連鎖中物理推論の配線)。
+    # RecognitionPipeline.SideResult.board_provenance をそのまま記録する
+    # (マーキングのみ、除外はしない)。None は BOARD_PROVENANCE_UNKNOWN ("")
+    # として保存する。既存呼び出し (省略) では常に "" のまま保存される
+    # (後方互換: 挙動不変)。
+    board_provenances: list[str] = field(default_factory=list)
+
+    def append(
+        self,
+        grid: np.ndarray,
+        video_id: str,
+        side: str,
+        t_sec: float,
+        game_idx: int,
+        frame_idx: int,
+        score: int | None = None,
+        next_pair: tuple[int, int] | None = None,
+        dnext_pair: tuple[int, int] | None = None,
+        chain_trigger_sec: float | None = None,
+        mechanism: str | None = None,
+        tsumo_count: int | None = None,
+        all_clear_pending: int | None = None,
+        ojama_net_balance: float | None = None,
+        ojama_forecast: float | None = None,
+        match_end_locked: bool | None = None,
+        post_match_lockdown_active: bool | None = None,
+        stable_persistence_confidence: bool | None = None,
+        board_provenance: str | None = None,
+    ) -> None:
+        """1 STABLE snapshot を追加する。won は NaN で仮置き。
+
+        Args:
+            grid: 確定盤面グリッド (13, 6)。
+            video_id: 動画 ID 文字列。
+            side: "1P" または "2P"。
+            t_sec: タイムスタンプ (秒)。
+            game_idx: ゲーム境界カウンタ。
+            frame_idx: フレーム絶対番号。
+            score: スコア OCR 値。None は -1 に変換して保存。
+            next_pair: (軸ぷよ色, 子ぷよ色)。None は NEXT_COLOR_UNKNOWN で保存
+                (後方互換: 省略時は既存呼び出しと同じ挙動)。
+            dnext_pair: ダブルネクストの (軸ぷよ色, 子ぷよ色)。同上。
+            chain_trigger_sec: この snapshot 時点で有効な機能D 検知時刻
+                (RecognitionPipeline.SideResult.chain_event.trigger_sec)。
+                None は CHAIN_TRIGGER_SEC_UNKNOWN (NaN) で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動、2026-07-29 追加)。
+            mechanism: この snapshot 時点で有効な chain_event.mechanism
+                (CHAIN_MECHANISM_* のいずれか)。None は
+                CHAIN_MECHANISM_UNKNOWN ("") で保存する (後方互換、
+                2026-08-02 追加)。
+            tsumo_count: この snapshot 時点の RecognitionPipeline.tsumo_count
+                (side) の値 (試合開始からの確定ツモ設置数)。None は
+                TSUMO_COUNT_UNKNOWN (-1) で保存する (後方互換: 省略時は既存
+                呼び出しと同じ挙動、2026-08-12 追加)。
+            all_clear_pending: この snapshot 時点の
+                VideoChainTracker.all_clear_pending (bool、全消しボーナス
+                予約中フラグ) の値。0/1/None を受け付ける。None は
+                ALL_CLEAR_PENDING_UNKNOWN (-1) で保存する (後方互換: 省略時は
+                既存呼び出しと同じ挙動、2026-08-12 追加)。
+            ojama_net_balance: この snapshot 時点の OjamaAccountingTracker
+                収支 (own-perspective、自分有利方向が正)。None は
+                OJAMA_NET_BALANCE_UNKNOWN (NaN) で保存する (後方互換: 省略時は
+                既存呼び出しと同じ挙動、2026-08-12 追加)。
+            ojama_forecast: この snapshot 時点の OjamaAccountingTracker 予告
+                個数 (own-perspective、自分に向かう予告個数)。None は
+                OJAMA_FORECAST_UNKNOWN (NaN) で保存する (後方互換、
+                2026-08-12 追加)。
+            match_end_locked: この snapshot 時点の PipelineResult.
+                match_end_locked (勝敗演出ロックダウン区間フラグ) の値。
+                0/1/bool/None を受け付ける。None は MATCH_END_LOCKED_UNKNOWN
+                (-1) で保存する (後方互換: 省略時は既存呼び出しと同じ挙動、
+                2026-08-17 追加、W20/W21根治)。
+            post_match_lockdown_active: この snapshot 時点の
+                RecognitionPipeline._post_match_lockdown_active (次試合開始
+                までのラッチ活性フラグ、enable_post_match_lockdown_latch
+                有効時のみ意味を持つ) の値。0/1/bool/None を受け付ける。
+                None は POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動、2026-08-18 追加、
+                境界実装の仕上げ)。
+            stable_persistence_confidence: この snapshot 時点の
+                _update_raw_pixel_stable の判定結果 (True=持続静止確認済み、
+                False=連鎖アニメ中/送付フラッシュ重畳の疑い)。除外には使わず
+                記録するだけ (2026-08-18 二次追加、STABLE持続ゲートの役割
+                転用)。None は STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1) で
+                保存する (後方互換: 省略時は既存呼び出しと同じ挙動)。
+            board_provenance: この snapshot 時点の RecognitionPipeline.
+                SideResult.board_provenance ("observed"/"chain_estimate"/
+                "chain_estimate_low_confidence"/"chain_estimate_stale_hold")。
+                除外には使わず記録するだけ (2026-08-18 追加、連鎖中物理推論の
+                配線)。None は BOARD_PROVENANCE_UNKNOWN ("") で保存する
+                (後方互換: 省略時は既存呼び出しと同じ挙動)。
+        """
+        self.grids.append(grid.copy())
+        self.video_ids.append(video_id)
+        self.sides.append(side)
+        self.t_secs.append(t_sec)
+        self.game_idxs.append(game_idx)
+        self.frame_idxs.append(frame_idx)
+        self.wons.append(WON_UNKNOWN)
+        self.scores.append(score if score is not None else -1)
+        n_a, n_b = next_pair if next_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        d_a, d_b = dnext_pair if dnext_pair is not None else (NEXT_COLOR_UNKNOWN, NEXT_COLOR_UNKNOWN)
+        self.next1_as.append(int(n_a))
+        self.next1_bs.append(int(n_b))
+        self.dnext_as.append(int(d_a))
+        self.dnext_bs.append(int(d_b))
+        self.chain_trigger_secs.append(
+            chain_trigger_sec if chain_trigger_sec is not None else CHAIN_TRIGGER_SEC_UNKNOWN
+        )
+        self.chain_mechanisms.append(
+            mechanism if mechanism is not None else CHAIN_MECHANISM_UNKNOWN
+        )
+        self.tsumo_counts.append(
+            int(tsumo_count) if tsumo_count is not None else TSUMO_COUNT_UNKNOWN
+        )
+        self.all_clear_pendings.append(
+            int(all_clear_pending) if all_clear_pending is not None
+            else ALL_CLEAR_PENDING_UNKNOWN
+        )
+        self.ojama_net_balances.append(
+            float(ojama_net_balance) if ojama_net_balance is not None
+            else OJAMA_NET_BALANCE_UNKNOWN
+        )
+        self.ojama_forecasts.append(
+            float(ojama_forecast) if ojama_forecast is not None
+            else OJAMA_FORECAST_UNKNOWN
+        )
+        self.match_end_lockeds.append(
+            int(match_end_locked) if match_end_locked is not None
+            else MATCH_END_LOCKED_UNKNOWN
+        )
+        self.post_match_lockdown_actives.append(
+            int(post_match_lockdown_active)
+            if post_match_lockdown_active is not None
+            else POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN
+        )
+        self.stable_persistence_confidences.append(
+            int(stable_persistence_confidence)
+            if stable_persistence_confidence is not None
+            else STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN
+        )
+        self.board_provenances.append(
+            board_provenance if board_provenance is not None
+            else BOARD_PROVENANCE_UNKNOWN
+        )
+
+    def assign_won_labels(
+        self,
+        game_final_scores: dict[int, dict[str, int | None]],
+        panel_winners: dict[int, str | None] | None = None,
+        panel_priority: bool = False,
+    ) -> None:
+        """各 game_idx の最終 score から 1P 視点 won を付与する。
+
+        スコア判定を主とし、スコアが同点または欠損の場合のみ
+        _winner_by_survival フォールバックで窒息判定を補助する。
+
+        Args:
+            game_final_scores: {game_idx: {"1P": score_int|None, "2P": score_int|None}}
+            panel_winners: {game_idx: "1P"|"2P"|None} パネル数字差分による
+                クロスチェック勝者 (MatchWinnerDetector、W20/W21根治、
+                2026-08-17)。None (既定) は従来通り score 系統
+                (+窒息フォールバック) のみで判定する (後方互換、
+                bit-identical)。指定時は score 系統との 2 系統一致を要求し、
+                不一致または片方でも None なら判定不能 (unknown、won は
+                NaN のまま) とする (単一系統を無条件の正解にしない設計、
+                fail-silent 警戒)。値が PANEL_UNAVAILABLE (番兵値、
+                2026-08-19 追加) の試合はパネルが物理的に映らず読取不能
+                だったことを意味し、窒息判定 (_winner_by_survival) のみに
+                フォールバックする (score 単独への緩和はしない)。
+            panel_priority: True のとき、panel_winner が非 None (片側の星数
+                だけが明確に増えたと読めた場合) ならそれを無条件に採用する
+                (2026-08-20、user 決定)。得点系統の「高い方が勝ち」は約98%
+                しか成立しない近似のため、明確に読めたパネルの方を信じる。
+                既定 False は従来の 2 系統一致要求で bit-identical。
+        """
+        winner_by_game: dict[int, str | None] = {}
+        for gidx, scores in game_final_scores.items():
+            s1 = scores.get("1P")
+            s2 = scores.get("2P")
+            if s1 is not None and s2 is not None and s1 != s2:
+                # スコアで判定できる場合: 高得点側が勝者
+                score_winner = "1P" if s1 > s2 else "2P"
+            else:
+                # スコア同点・欠損時: 窒息フォールバック
+                score_winner = _winner_by_survival(self, gidx)
+            if panel_winners is None:
+                winner_by_game[gidx] = score_winner
+            else:
+                panel_winner = panel_winners.get(gidx)
+                if panel_winner == PANEL_UNAVAILABLE:
+                    # 端点 (動画冒頭イントロ / 最終試合後にリザルト画面なし)
+                    # でパネルが物理的に映らず、パネル系統が原理的に読取
+                    # 不能だった試合 (2026-08-19)。score 単独への緩和は
+                    # 断片化試合で 44.8% 誤ラベルになると実測済みのため
+                    # 行わず、物理的に確実な窒息判定 (_winner_by_survival)
+                    # のみで判定する (判定できなければ unknown のまま)。
+                    winner_by_game[gidx] = _winner_by_survival(self, gidx)
+                elif panel_priority and panel_winner is not None:
+                    # パネル優先 (2026-08-20、user 決定「パネル優先でいい
+                    # です」)。panel_winner が非 None ということは「片側の
+                    # 星数だけが明確に増えた」と読めた場合であり (両側変化・
+                    # 変化なしは None になる)、勝敗の直接表示として最も
+                    # 信頼できる。得点系統は「得点が高い方が勝ち」という
+                    # 近似で、user 伝授によれば約98%しか成立しない
+                    # (memory reference_score_winner_98pct_2026-08-20)。
+                    # 実測した食い違い (39番 試合6) は得点 1P=9,987 /
+                    # 2P=9,780 と差わずか207点の拮抗試合で、パネルは右側の
+                    # 星が 3->4 と明確に増えており (変化量39、正常試合の
+                    # 47/31 と同水準) 2P の勝ちが正しかった。従来はこれを
+                    # unknown に倒して 79 行を捨てていた。
+                    winner_by_game[gidx] = panel_winner
+                else:
+                    # 2 系統一致要求: 両者が一致したときのみ採用、
+                    # それ以外は unknown
+                    winner_by_game[gidx] = (
+                        score_winner
+                        if (score_winner is not None
+                            and score_winner == panel_winner)
+                        else None
+                    )
+
+        for i in range(len(self.wons)):
+            gidx = self.game_idxs[i]
+            winner = winner_by_game.get(gidx)
+            if winner is None:
+                continue
+            # 1P 視点: 自 side が勝者なら 1、負けなら 0
+            self.wons[i] = 1.0 if self.sides[i] == winner else 0.0
+
+    def save(self, path: Path) -> None:
+        """npz 形式で保存する。grids=(N,13,6) int8、won=(N,) float32、score=(N,) int32。
+
+        next1_a/next1_b/dnext_a/dnext_b (int8) を追加保存する (既存キーは不変、
+        後方互換)。--with-next 未指定の収集では全て NEXT_COLOR_UNKNOWN (-1)。
+        chain_trigger_sec (float32、2026-07-29 追加) も同様に追加保存する。
+        機能D 検知時刻を記録しないだけの既存呼び出しでは全て NaN
+        (CHAIN_TRIGGER_SEC_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
+        挙動には影響しない新規キー)。
+
+        chain_mechanism (str、2026-08-02 追加) は一度でも実値
+        (CHAIN_MECHANISM_UNKNOWN 以外) が記録された場合のみキーを書く。
+        一度も記録されなかった (mechanism 未指定の呼び出しのみ、または
+        ChainEvent.mechanism が全て None) 場合はキー自体を省略する
+        (後方互換: 既存 npz 読み出し側の `set(d.keys())` 依存コードを壊さない)。
+
+        tsumo_count (int32、2026-08-12 追加) は next1_a 等と同様に常に
+        追加保存する (既存キーは不変、後方互換)。tsumo_count 未指定の
+        既存呼び出しでは全て TSUMO_COUNT_UNKNOWN (-1) になる (後方互換、
+        既存 npz 読み出し側の挙動には影響しない新規キー)。
+
+        all_clear_pending (int8、2026-08-12 追加) も同様に常に追加保存する
+        (既存キーは不変、後方互換)。all_clear_pending 未指定の既存呼び出し
+        では全て ALL_CLEAR_PENDING_UNKNOWN (-1) になる (後方互換、既存 npz
+        読み出し側の挙動には影響しない新規キー)。
+
+        ojama_net_balance / ojama_forecast (float32、2026-08-12 追加) も
+        同様に常に追加保存する (既存キーは不変、後方互換)。両方未指定の
+        既存呼び出しでは全て NaN (OJAMA_NET_BALANCE_UNKNOWN /
+        OJAMA_FORECAST_UNKNOWN) になる (後方互換、既存 npz 読み出し側の
+        挙動には影響しない新規キー)。
+
+        match_end_locked (int8、2026-08-17 追加、W20/W21根治) も同様に常に
+        追加保存する (既存キーは不変、後方互換)。match_end_locked 未指定の
+        既存呼び出しでは全て MATCH_END_LOCKED_UNKNOWN (-1) になる (後方互換、
+        既存 npz 読み出し側の挙動には影響しない新規キー)。
+
+        post_match_lockdown_active (int8、2026-08-18 追加、境界実装の仕上げ)
+        も同様に常に追加保存する (既存キーは不変、後方互換)。
+        post_match_lockdown_active 未指定の既存呼び出しでは全て
+        POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) になる (後方互換、既存 npz
+        読み出し側の挙動には影響しない新規キー)。
+
+        stable_persistence_confidence (int8、2026-08-18 二次追加、STABLE持続
+        ゲートの役割転用) も同様に常に末尾に追加保存する (既存キー・既存の
+        キー順は不変、後方互換、CLAUDE.md「新指標追加時は末尾に追加」準拠)。
+        stable_persistence_confidence 未指定の既存呼び出し・
+        enable_stable_persistence_gate=False の収集では全て
+        STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1) になる (後方互換、既存
+        npz 読み出し側の挙動には影響しない新規キー)。
+
+        board_provenance (str、2026-08-18 追加、連鎖中物理推論の配線) も
+        同様に常に末尾に追加保存する (既存キー・既存のキー順は不変、
+        後方互換、CLAUDE.md「新指標追加時は末尾に追加」準拠)。実測値/予測値
+        の区別を後段 (学習データビルダー) が選別できるようにするための列で
+        あり、除外ロジック自体は本関数には実装しない。board_provenance
+        未指定の既存呼び出しでは全て BOARD_PROVENANCE_UNKNOWN ("") になる
+        (後方互換、既存 npz 読み出し側の挙動には影響しない新規キー)。
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        save_kwargs: dict[str, np.ndarray] = dict(
+            grids=np.array(self.grids, dtype=np.int8) if self.grids
+                  else np.array([], dtype=np.int8),
+            video_id=np.array(self.video_ids),
+            side=np.array(self.sides),
+            t_sec=np.array(self.t_secs, dtype=np.float32),
+            game_idx=np.array(self.game_idxs, dtype=np.int32),
+            frame_idx=np.array(self.frame_idxs, dtype=np.int32),
+            won=np.array(self.wons, dtype=np.float32),
+            score=np.array(self.scores, dtype=np.int32),
+            next1_a=np.array(self.next1_as, dtype=np.int8),
+            next1_b=np.array(self.next1_bs, dtype=np.int8),
+            dnext_a=np.array(self.dnext_as, dtype=np.int8),
+            dnext_b=np.array(self.dnext_bs, dtype=np.int8),
+            chain_trigger_sec=np.array(self.chain_trigger_secs, dtype=np.float32),
+            tsumo_count=np.array(self.tsumo_counts, dtype=np.int32),
+            all_clear_pending=np.array(self.all_clear_pendings, dtype=np.int8),
+            ojama_net_balance=np.array(self.ojama_net_balances, dtype=np.float32),
+            ojama_forecast=np.array(self.ojama_forecasts, dtype=np.float32),
+            match_end_locked=np.array(self.match_end_lockeds, dtype=np.int8),
+            post_match_lockdown_active=np.array(
+                self.post_match_lockdown_actives, dtype=np.int8,
+            ),
+            stable_persistence_confidence=np.array(
+                self.stable_persistence_confidences, dtype=np.int8,
+            ),
+            board_provenance=np.array(self.board_provenances),
+        )
+        if any(m != CHAIN_MECHANISM_UNKNOWN for m in self.chain_mechanisms):
+            save_kwargs["chain_mechanism"] = np.array(self.chain_mechanisms)
+        np.savez_compressed(str(path), **save_kwargs)
+
+
+# ============================
+# 窒息フォールバック判定ヘルパ
+# ============================
+
+# 窒息判定: 3列目(index=2)の画面内最上段(row=1、隠し段row0は除く)にぷよがあれば窒息。
+# 2026-07-22 ルール是正: 旧 row=0(隠し段)は窒息検知漏れ(完全オーバーフローしないと発火せず)。
+# board.py DEATH_ROW と同じ定義に統一。
+_DEATH_ROW: int = 1
+_DEATH_COL: int = 2
+
+
+def _winner_by_survival(
+    acc: "_LeanNpzAccumulator",
+    game_idx: int,
+) -> str | None:
+    """スコア判定不能時のフォールバック: 窒息していない側を勝者とする。
+
+    各 game_idx の末尾 snapshot の grid で窒息セル (row=_DEATH_ROW=1, col=2 != 0) を確認する。
+    どちらも窒息なし / 両方窒息 / snapshot なしの場合は None を返す。
+
+    Args:
+        acc: スナップショット蓄積バッファ。
+        game_idx: 対象ゲームのインデックス。
+
+    Returns:
+        "1P" / "2P" / None (判定不能)
+    """
+    # game_idx に属するインデックスを side 別に収集
+    idx_by_side: dict[str, list[int]] = {"1P": [], "2P": []}
+    for i, (gidx, side) in enumerate(zip(acc.game_idxs, acc.sides)):
+        if gidx == game_idx and side in idx_by_side:
+            idx_by_side[side].append(i)
+
+    def _is_suffocated(indices: list[int]) -> bool | None:
+        """末尾 snapshot で窒息しているか判定する。"""
+        if not indices:
+            return None
+        last_i = max(indices, key=lambda i: acc.t_secs[i])
+        return bool(acc.grids[last_i][_DEATH_ROW, _DEATH_COL] != 0)
+
+    suf_1p = _is_suffocated(idx_by_side["1P"])
+    suf_2p = _is_suffocated(idx_by_side["2P"])
+
+    if suf_1p is None or suf_2p is None:
+        return None  # どちらかの snapshot がない
+    if suf_1p and not suf_2p:
+        return "2P"  # 1P が窒息 → 2P 勝ち
+    if suf_2p and not suf_1p:
+        return "1P"  # 2P が窒息 → 1P 勝ち
+    return None  # 両方窒息・両方生存は判定不能
+
+
+# ============================
+# 1 side の状態管理
+# ============================
+
+@dataclass
+class _SideState:
+    """1 side の間引き・ゲーム境界管理用状態。"""
+    game_idx: int = 0
+    prev_score: int | None = None
+    last_emitted_grid: bytes | None = None
+    # game_idx ごとの最終 score を追跡
+    final_scores: dict[int, int | None] = field(default_factory=dict)
+    # おじゃま会計 tsumo delta drain 用の前回手数 (2026-08-12 追加)。
+    # collect_indicators_v2._drain_by_tsumo_delta と同じ役割だが、
+    # pipeline.tsumo_count() を再度呼ばず main loop が既に取得済みの値を
+    # 再利用するための保持先 (呼び出し回数を変えないための設計)。
+    ojama_prev_tsumo: int = 0
+    # (d) STABLE持続確認 (2026-08-18 追加、enable_stable_persistence_gate
+    # 専用): 直前フレームの盤面 ROI grayscale (src.board_motion 入力用)。
+    # enable_stable_persistence_gate=False (既定) では一切書き込まれない。
+    motion_prev_gray: "np.ndarray | None" = None
+    # 直近 STABLE_PERSISTENCE_WINDOW_SEC 秒分の (t_sec, diff_mean) 履歴。
+    motion_diffs: "list[tuple[float, float]]" = field(default_factory=list)
+
+    # --- 1手区切り観測スケジューラ (2026-08-18、enable_move_segmented_
+    #     recording 専用、既定 False では一切書き込まれない) ---
+    # 直前フレームの next_pair (繰り上がり検知用の比較基準)。
+    prev_next_pair: "tuple[int, int] | None" = None
+    # 直前フレームの tsumo_count (NEXT 未取得時のフォールバック検知 + 会計
+    # tsumo delta drain とは別系統の独立カウンタ)。
+    prev_tsumo_count: int | None = None
+    # 現在開いている記録候補窓の締切 (絶対フレーム番号)。None = 窓なし。
+    move_window_deadline_fi: int | None = None
+    # 現在の窓で既に1件記録済みか (1手=1記録のラッチ、猶予内で最短の
+    # STABLE を採用したら以降の候補は無視する)。
+    move_window_recorded: bool = False
+
+    # --- 持続的物理制約フィルタ (2026-08-18、enable_physics_persistence_
+    #     filter 専用、既定 False では一切書き込まれない) ---
+    # 直前に評価した物理制約違反 signature ((row, col, 種別) の集合)。
+    prev_violation_signature: "frozenset[tuple[int, int, str]] | None" = None
+    # 直前の評価以降に正当な状態遷移 (TSUMO_FALL/CHAIN/OJAMA_FALL) が
+    # 観測されたか (W24 教訓: 単純な連続回数閾値でなく遷移の有無も見る)。
+    legit_transition_pending: bool = False
+    # tsumo_count 増分検知専用の前回値 (2026-08-18 追加、空振りリスク是正:
+    # 60fps stride-2 間引き下では TSUMO_FALL が1フレームで観測漏れしうるため、
+    # bstate 観測に頼らない tsumo_count 増分も legit_transition_pending の
+    # 発火条件に加える)。_update_move_scheduler の prev_tsumo_count とは
+    # 独立に保持する (enable_move_segmented_recording=False でも tsumo_count
+    # 増分検知が機能するよう責務を分離)。
+    prev_tsumo_count_for_physics: int | None = None
+
+
+@dataclass
+class _SharedGameCounter:
+    """1P/2P で共有するゲーム境界カウンタ (2026-07-31 の desync 根治)。
+
+    旧実装は `_SideState.game_idx` を **side ごとに独立して**進めていた。
+    ゲーム境界は「両者共通の 1 つの事象」なのに、検知は各 side の score
+    リセットに依存するため:
+      - 検知フレームがずれると game_idx がずれる (実測 57.6% が 5秒超のずれ)
+      - **片側の score OCR が壊れている動画 (c26/c58 等) ではその side が
+        game 0 に留まり続け、以降すべてのゲームが対応しなくなる**
+    その結果 `_merge_final_scores` や won 付与が別ゲーム同士を突き合わせる。
+
+    共有カウンタにすると「どちらかが検知すれば両者が進む」ので、
+    片側の検知失敗に耐える。両者が同じ境界を検知したときに 2 回進まないよう
+    直前の進行から GAME_BOUNDARY_DEBOUNCE_SEC 以内は進めない
+    (実際の 1 試合は最短 14 秒なので誤抑制しない)。
+
+    試合境界マルチシグナル拡張 (W20/W21根治、2026-08-17):
+    multisignal_mode=True のとき、RecognitionPipeline.is_match_active
+    (score_zero + match_end_locked + ヒステリシスの統合判定、本番稼働中) の
+    False→True 立ち上がりを境界進行の**主信号**にする
+    (observe_visual_signal、collect_lean のメインループから 1 フレームに
+    1 回だけ呼ぶ想定)。旧来の score-reset 単独判定は削除せず、視覚信号が
+    近接時刻で確認できない場合の**フォールバック + 異常マーク**に降格する
+    (_update_game_boundary 側で判定、anomalies に記録)。
+    multisignal_mode=False (既定) では観測メソッドは no-op であり、
+    advance_if_new 経由の従来挙動 (score-reset 単独) と bit-identical。
+    """
+    game_idx: int = 0
+    # 最後に境界を進めた時刻 [秒]。None = まだ一度も進めていない。
+    last_advance_sec: float | None = None
+    # 試合境界マルチシグナル (2026-08-17) の有効フラグ。既定 False = 従来の
+    # score-reset 単独判定 (後方互換、bit-identical)。
+    multisignal_mode: bool = False
+    # 直近フレームで観測した is_match_active (立ち上がり検知用)。
+    # None = まだ一度も observe_visual_signal を呼んでいない。
+    _prev_is_active: bool | None = field(default=None, repr=False)
+    # 視覚信号 (is_match_active 立ち上がり) で最後に境界を進めた時刻 [秒]。
+    # advance_if_new が実際に成功した場合のみ記録される (「境界を進めた」
+    # という別の意味の記録として維持、W20/W21根治時点の意味論を保持)。
+    last_visual_advance_sec: float | None = None
+    # 視覚信号の立ち上がり候補時刻 (持続確認待ち)。BOUNDARY_VISUAL_RISE_
+    # PERSIST_SEC 秒持続すれば確定、途中で is_active=False に戻れば
+    # ノイズとして破棄する (W22根治、2026-08-17 追加)。
+    _pending_visual_rise_sec: float | None = field(default=None, repr=False)
+    # 視覚信号が確定的に立ち上がった時刻 [秒] (W22根治、2026-08-17 追加)。
+    # advance_if_new の成否と**無関係に無条件で**記録する。
+    # 「早い者勝ち」で score-reset が先にデバウンスを消費し advance_if_new
+    # が失敗しても、視覚信号自体がいつ本当に立ち上がったかを常に保持できる
+    # ようにするための専用フィールド (last_visual_advance_sec とは別物)。
+    last_visual_rise_sec: float | None = None
+    # 確定した視覚信号立ち上がり時刻を全て集めたもの (W22根治、2026-08-17
+    # 追加)。フレーム順の単一パスでは「score-reset の時点ではまだ見ぬ
+    # 未来の視覚確定」をその場で知り得ないため、_update_game_boundary の
+    # オンライン判定は厳しめ (score-reset が先着すると異常マークされる)
+    # のまま残し、動画処理完了後に _reconcile_boundary_anomalies で本リスト
+    # と時系列前後どちらの方向にも突合して偽陽性の異常マークを取り除く。
+    visual_rise_times: list[float] = field(default_factory=list)
+    # advance_if_new が実際に境界を進めた全ての時刻 [秒] (2026-08-17 追加)。
+    # MatchWinnerDetector クロスチェック用の match_starts 近似値として使う
+    # (詳細は _detect_panel_winners_crosscheck)。
+    advance_times: list[float] = field(default_factory=list)
+    # score-reset がフォールバックとして境界を進めた際の異常イベント記録
+    # (人手レビュー用、W20/W21根治)。視覚信号が近傍で確認できなかった
+    # score-reset のみを記録する (視覚信号で確認済みの通常ケースは記録しない)。
+    # _reconcile_boundary_anomalies による事後フィルタ前の生記録。
+    anomalies: list[dict] = field(default_factory=list)
+    # 「新しい試合が始まった証拠」ゲート (2026-08-19、user指示「必ず試合前
+    # スコアは0」)。True のとき、視覚立ち上がりの確定に加えて
+    # _compute_newmatch_evidence (両者スコア数値0 or 両者盤面ほぼ空) の
+    # 観測を BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC 秒以内に要求する。
+    # 既定 False = 従来挙動 (立ち上がりだけで無条件確定、bit-identical)。
+    require_newmatch_evidence: bool = False
+    # 証拠が出ないまま窓切れで破棄した立ち上がり時刻 (偽境界候補の
+    # レビュー用記録。game_idx には影響しない)。
+    rejected_rise_times: list[float] = field(default_factory=list)
+
+    def advance_if_new(self, t_sec: float) -> bool:
+        """境界を進める (デバウンス内なら進めない)。進めたら True。"""
+        if (
+            self.last_advance_sec is not None
+            and t_sec - self.last_advance_sec < GAME_BOUNDARY_DEBOUNCE_SEC
+        ):
+            return False
+        self.game_idx += 1
+        self.last_advance_sec = t_sec
+        self.advance_times.append(t_sec)
+        return True
+
+    def observe_visual_signal(
+        self,
+        is_active: bool,
+        t_sec: float,
+        new_match_evidence: bool | None = None,
+    ) -> None:
+        """フレーム毎の is_match_active を観測し、False→True 立ち上がりで
+        境界を進める (multisignal_mode=True 限定、2026-08-17 追加)。
+
+        collect_lean のメインループから 1P/2P 処理の**外側**で 1 フレームに
+        つき 1 回だけ呼ぶこと (is_match_active はフレーム全体の判定であり
+        side 別ではないため、_process_side_lean 側の 2 回呼び出しに混ぜない)。
+
+        W22根治 (2026-08-17): 立ち上がり候補は即座に確定させず、
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC 秒持続して初めて確定する
+        (フェード暗転の瞬き・ロゴワイプの明滅による偽の立ち上がりを除外)。
+        確定時刻は `last_visual_rise_sec` に advance_if_new の成否と無関係に
+        無条件で記録する (「早い者勝ち」競合で advance が失敗しても記録が
+        永久に欠落しないようにするため)。
+
+        新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」):
+        require_newmatch_evidence=True のとき、持続確認を満たした候補は
+        さらに new_match_evidence=True の観測 (両者スコア数値0 or 両者盤面
+        ほぼ空、_compute_newmatch_evidence 参照) を待つ。立ち上がりから
+        BOUNDARY_VISUAL_RISE_PERSIST_SEC + BOUNDARY_NEWMATCH_EVIDENCE_
+        WINDOW_SEC 秒以内に証拠が出なければ偽境界 (試合中の is_active 乱れ)
+        として破棄する (rejected_rise_times に記録)。境界時刻は証拠の観測
+        時刻でなく元の立ち上がり時刻を使う (従来の意味論を維持)。
+        require_newmatch_evidence=False (既定) では new_match_evidence は
+        無視され従来挙動と bit-identical。
+
+        Args:
+            is_active: このフレームの PipelineResult.is_match_active。
+            t_sec: 現在時刻 [秒]。
+            new_match_evidence: このフレームの新試合証拠 (省略可、
+                require_newmatch_evidence=False の間は未使用)。
+        """
+        if not self.multisignal_mode:
+            self._prev_is_active = is_active
+            return
+        if self._prev_is_active is False and is_active:
+            self._pending_visual_rise_sec = t_sec
+        if self._pending_visual_rise_sec is not None:
+            if not is_active:
+                # 持続せずに消えた = ノイズ (フェード瞬き/ロゴ明滅等)、破棄
+                self._pending_visual_rise_sec = None
+            elif (
+                t_sec - self._pending_visual_rise_sec
+                >= BOUNDARY_VISUAL_RISE_PERSIST_SEC
+            ):
+                confirmed_sec = self._pending_visual_rise_sec
+                if (
+                    self.require_newmatch_evidence
+                    and new_match_evidence is not True
+                ):
+                    # 証拠待ち: 窓内は候補を保持したまま次フレームで再判定。
+                    # 窓切れなら偽境界として破棄 (境界は進めない)。
+                    if (
+                        t_sec - confirmed_sec
+                        >= BOUNDARY_VISUAL_RISE_PERSIST_SEC
+                        + BOUNDARY_NEWMATCH_EVIDENCE_WINDOW_SEC
+                    ):
+                        self._pending_visual_rise_sec = None
+                        self.rejected_rise_times.append(confirmed_sec)
+                else:
+                    self._pending_visual_rise_sec = None
+                    self.last_visual_rise_sec = confirmed_sec
+                    self.visual_rise_times.append(confirmed_sec)
+                    if self.advance_if_new(confirmed_sec):
+                        self.last_visual_advance_sec = confirmed_sec
+        self._prev_is_active = is_active
+
+    def record_score_reset_anomaly(
+        self, t_sec: float, side_label: str, score_delta: int, game_idx: int,
+    ) -> None:
+        """視覚信号で確認できなかった score-reset イベントを記録する。"""
+        self.anomalies.append({
+            "t_sec": round(t_sec, 3),
+            "side": side_label,
+            "score_delta": int(score_delta),
+            "game_idx_before_advance": int(game_idx),
+        })
+
+
+def _update_game_boundary(
+    state: _SideState,
+    score: int | None,
+    shared: "_SharedGameCounter | None" = None,
+    t_sec: float = 0.0,
+    side_label: str | None = None,
+    require_zero: bool = False,
+) -> None:
+    """score リセット検知で game_idx を進める。旧ゲームの最終 score は
+    リセット直前の prev_score (高値) を記録する。
+
+    バグ修正 (旧): 旧実装はリセット発生フレームで final_scores に ≈0 の低値を
+    書き込んでから game_idx を進めていたため、旧ゲームの最終スコアが
+    リセット後低値で上書きされ勝者判定が全て None になっていた。
+
+    バグ修正 (2026-07-31): `shared` を渡すと **1P/2P 共有のカウンタ**を使い、
+    どちらかが境界を検知すれば両 side が同じ game_idx に揃う。
+    shared=None のときは従来の side 独立カウンタ (後方互換)。
+
+    試合境界マルチシグナル (W20/W21根治、2026-08-17): shared.multisignal_mode
+    =True のとき、score-reset は境界を**直接**進めない。視覚信号
+    (is_match_active 立ち上がり) が BOUNDARY_MULTISIGNAL_TOLERANCE_SEC 以内に
+    確認できていればそれで既に境界は進んでいるため何もしない。確認できて
+    いなければ「視覚信号が境界と言っていないのに score だけ急変した」異常
+    イベントとして shared.anomalies に記録した上でフォールバックとして境界を
+    進める (根治後もデータの取りこぼしを起こさないための安全弁)。
+    multisignal_mode=False では従来通り score-reset が直接 shared を進める
+    (後方互換、bit-identical)。
+
+    Args:
+        state: 対象 side の状態。
+        score: 今フレームの score OCR 値 (None は無視)。
+        shared: 共有カウンタ。None なら side 独立 (旧挙動)。
+        t_sec: 現在時刻 [秒]。shared のデバウンス判定に使う。
+        side_label: "1P"/"2P" (異常イベント記録用、省略可)。
+        require_zero: True のとき、境界を「score が 0 になった」ときだけ
+            認め、単なる減少は無視する (2026-08-20、user 指摘)。既定 False
+            は従来の減少幅判定で bit-identical。
+    """
+    if score is None:
+        return
+    if require_zero:
+        # 試合中のスコアは単調増加しかしない。したがって「減った」は
+        # ほぼ全てが OCR 誤読であり、境界の根拠にしてはならない
+        # (user 指摘 2026-08-20「減るのはただの誤認」)。新しい試合は
+        # スコアが 0 にリセットされるので、0 への遷移だけを境界とする。
+        #
+        # 旧実装 (減少幅 >= SCORE_RESET_THRESHOLD=500) の実害: 連鎖中は
+        # スコアが猛烈に増える (実測 39番 636秒台で1.6秒に3.5万点) ため、
+        # 連鎖の閃光による 1 桁の誤読が容易に 500 点超の「減少」に化け、
+        # 試合の真っ最中に偽の境界が引かれていた。実測2件とも1桁誤読:
+        #   310.4秒 5,759 -> 5,259 (7を2と誤読、差500=閾値ちょうど)
+        #   636.8秒 56,085 -> 55,085 (6を5と誤読、差1,000)
+        # 偽境界の区間は勝敗パネルが変化しないため、その試合の勝敗
+        # ラベルが丸ごと落ちる (39番: 欠損15試合中9件がこの形)。
+        is_reset = (
+            state.prev_score is not None
+            and state.prev_score > SCORE_RESET_ZERO_MAX
+            and score <= SCORE_RESET_ZERO_MAX
+        )
+    else:
+        is_reset = (
+            state.prev_score is not None
+            and state.prev_score - score >= SCORE_RESET_THRESHOLD
+        )
+    if is_reset:
+        # 旧ゲームの最終スコア = リセット直前の高値を確定
+        state.final_scores[state.game_idx] = state.prev_score
+        if shared is None:
+            state.game_idx += 1
+        elif shared.multisignal_mode:
+            # last_visual_rise_sec (W22根治): advance_if_new の成否と無関係
+            # に記録される専用フィールドと突合する。ここはオンライン
+            # (フレーム順の単一パス) の判定であり、score-reset が視覚信号
+            # より時系列で先着するケースでは依然 False になり得る
+            # (視覚確定は未来の話でまだ観測していないため)。その場合の
+            # 事後救済は動画処理完了後の _reconcile_boundary_anomalies が
+            # 担う。
+            near_visual = (
+                shared.last_visual_rise_sec is not None
+                and abs(t_sec - shared.last_visual_rise_sec)
+                    <= BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+            )
+            if not near_visual:
+                advanced = shared.advance_if_new(t_sec)
+                if advanced:
+                    shared.record_score_reset_anomaly(
+                        t_sec, side_label or "?",
+                        state.prev_score - score, state.game_idx,
+                    )
+        else:
+            shared.advance_if_new(t_sec)
+    if shared is not None:
+        # 共有カウンタに追従 (相手側・視覚信号が検知した境界にも乗る)
+        state.game_idx = shared.game_idx
+    # 現ゲームの暫定最終スコア (次フレームで上書きされ続け、最後は真の最終値)
+    state.final_scores[state.game_idx] = score
+    state.prev_score = score
+
+
+def _reconcile_boundary_anomalies(shared: "_SharedGameCounter") -> None:
+    """動画処理完了後に shared.anomalies を視覚信号の全記録と再突合する
+    (W22根治、2026-08-17 追加)。
+
+    _update_game_boundary のオンライン判定 (フレーム順の単一パス) は
+    「score-reset の時点ではまだ見ぬ未来の視覚確定」を知り得ないため、
+    実測 (c109) の通り score-reset が視覚信号より常に先着するケースでは
+    近傍判定が False になり異常マークされてしまう。動画全体を処理し終えた
+    時点では `visual_rise_times` に全ての確定立ち上がり時刻が揃っている
+    ため、ここで改めて時系列の前後どちらの方向にも近傍照合し、実際には
+    視覚信号で裏付けられていた異常マークを取り除く。
+
+    game_idx / npz 出力の割り当てタイミングには一切影響しない
+    (anomalies はレビュー用メタデータのみ)。
+    """
+    if not shared.anomalies or not shared.visual_rise_times:
+        return
+    kept: list[dict] = []
+    for anomaly in shared.anomalies:
+        t = anomaly["t_sec"]
+        confirmed_by_visual = any(
+            abs(t - rise) <= BOUNDARY_MULTISIGNAL_TOLERANCE_SEC
+            for rise in shared.visual_rise_times
+        )
+        if not confirmed_by_visual:
+            kept.append(anomaly)
+    shared.anomalies[:] = kept
+
+
+def _should_emit(
+    state: _SideState, board: Board, bstate: BoardState,
+    exclude_phantom: bool = False,
+    raw_pixel_stable: bool = True,
+    enable_move_segmented_recording: bool = False,
+    frame_idx: int = 0,
+    enable_physics_persistence_filter: bool = False,
+    physics_sim: "ChainSimulator | None" = None,
+) -> bool:
+    """STABLE かつ重複でない盤面かを判定する。
+
+    Args:
+        exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面
+            (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま盤面を
+            記録対象から外す。 collect 側は force_in_match=True で
+            MatchStateDetector を無効化しているため、 これらの画面が
+            素通りして npz に混入している (実測 0.875%、全 123 本)。
+            背景明度による分離は実測で不可能と判明したため
+            (幻 min=0.0 / 正常 max=226.9 で完全に重なる)、 盤面の物理的
+            整合 (src/board_quality.py) で弾く。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        raw_pixel_stable: (d) STABLE持続確認 (2026-08-18 導入、2026-08-18
+            二次追加で役割変更)。**この引数はもはや記録拒否には使わない**
+            (後方互換のため signature には残すが、本関数内では判定に使用
+            しない)。導入当初は False (連鎖アニメ中/送付フラッシュ重畳の
+            疑い) で snapshot を丸ごとスキップしていたが、実測
+            (scripts/_diag_stable_persistence_loss_breakdown_2026-08-18.py)
+            で 148再収集の行数が61%減り、しかも欠落が「相手のお邪魔が
+            降る前の構え」という戦術的に重要な局面に偏ることが判明した
+            (盤面ROIは13段分あり次ツモ落下域を含むため、盤面が確定して
+            いても画面は完全静止しない=user指摘)。問題の本質は精度でなく
+            被覆率だったため、判定自体は無価値ではないとして「記録拒否」
+            をやめ npz の stable_persistence_confidence 列にタグとして残す
+            方式に転用した (除外要否は学習データビルダー側のオプトイン
+            フィルタに委ねる、_process_side_lean 参照)。
+        enable_move_segmented_recording: 1手区切り観測スケジューラ
+            (2026-08-18) を有効化する。True のとき、下記の重複除外を通過した
+            候補がさらに `_move_window_candidate_ok` (窓が開いている・
+            未記録・締切内) を満たす場合のみ通過させる (1手=1記録)。
+            既定 False = 従来挙動完全維持 (bit-identical、窓判定自体を行わない)。
+        frame_idx: 現在の絶対フレーム番号 (窓の締切判定に使う、
+            enable_move_segmented_recording=False の間は未使用)。
+        enable_physics_persistence_filter: 持続的物理制約フィルタ
+            (2026-08-18) を有効化する。True のとき、上記の窓判定まで通過した
+            候補についてのみ `_is_physics_violation_persistent` を評価し、
+            持続的な違反 (同一違反が正当な状態遷移を挟まず2回連続観測) と
+            判定されたら棄却する。既定 False = 従来挙動完全維持
+            (bit-identical、物理シミュレーション計算自体を行わない)。
+        physics_sim: 持続的物理制約フィルタが使う ChainSimulator インスタンス
+            (呼出元で使い回す、ステートレス)。enable_physics_persistence_
+            filter=True のときのみ使用する。
+    """
+    if bstate != BoardState.STABLE or board is None:
+        return False
+    # 全消し直後 / 試合開始直後 (盤面ぷよ 0) は除外
+    if board.count_puyos() == 0:
+        return False
+    # 幻盤面ガード: 実戦なら窒息死が目前で安定継続し得ない盤面を弾く
+    if exclude_phantom and is_phantom_board(board._grid):
+        return False
+    # 直前と同一盤面なら間引き
+    grid_bytes = board._grid.tobytes()
+    if grid_bytes == state.last_emitted_grid:
+        return False
+    # 1手区切り観測スケジューラ (2026-08-18): 記録候補窓 (NEXT 繰り上がり/
+    # tsumo_count 増分で開く、猶予 MOVE_SEGMENT_GRACE_FRAMES フレーム) が
+    # 開いていて未記録かつ締切内のときだけ通過させる。
+    if enable_move_segmented_recording and not _move_window_candidate_ok(
+        state, frame_idx,
+    ):
+        return False
+    # 持続的物理制約フィルタ (2026-08-18): 窓判定まで通過した候補についてのみ
+    # 評価する (窓が閉じている間の候補はどのみち棄却されるため計算を省く)。
+    if enable_physics_persistence_filter and _is_physics_violation_persistent(
+        state, board, physics_sim,
+    ):
+        return False
+    return True
+
+
+def _move_window_candidate_ok(state: _SideState, frame_idx: int) -> bool:
+    """1手区切り観測スケジューラ (2026-08-18): 現フレームがこの手の代表候補
+    として有効かを判定する。
+
+    窓が開いていない (まだ手区切りイベントが検知されていない)・既に
+    この窓で1件記録済み (1手=1記録のラッチ)・締切超過 (猶予切れ、
+    次の手区切りへ回す) のいずれかなら False。
+    """
+    if state.move_window_deadline_fi is None:
+        return False
+    if state.move_window_recorded:
+        return False
+    if frame_idx > state.move_window_deadline_fi:
+        return False
+    return True
+
+
+def _update_move_scheduler(
+    state: _SideState,
+    next_pair: "tuple[int, int] | None",
+    tsumo_count: "int | None",
+    bstate: BoardState,
+    frame_idx: int,
+    enable: bool,
+) -> None:
+    """1手区切り観測スケジューラ (2026-08-18、2026-08-18 二次追補で OR 条件化)
+    の毎フレーム状態更新。
+
+    NEXT 繰り上がり (next1_a/next1_b の変化) OR tsumo_count 増分の**どちらか**
+    を「1手確定」イベントとして検知し、猶予 MOVE_SEGMENT_GRACE_FRAMES フレーム
+    の記録候補窓を開く (coordinator指示、2026-08-18 二次追補)。
+
+    **経緯 (OR化した理由)**: 当初は NEXT 繰り上がりを主信号、tsumo_count を
+    capture_next=False 時限定のフォールバックとする設計だった。だが試合は
+    4色のみ使用 (reference_four_colors_per_match_2026-07-22) のため、連続
+    する2ツモが偶然同じ色ペアになる確率が無視できない (概算6〜10%)。この
+    場合 next_pair の値が変化せず繰り上がりを検出できず、その手を丸ごと
+    取りこぼしていた (3動画実測で旧構成比77.9%の一因)。NEXT/tsumo_count の
+    どちらが先に観測されるかは実測でも拮抗 (N-before-T 52.9% / T-before-N
+    46.1%、_diag_move_segmentation_design_2026-08-18.py) だったため、
+    「どちらが先でも取りこぼさない」OR条件が素直な設計となる。
+
+    **多重記録対策**: 同一の手に対して NEXT 変化と tsumo_count 増分の両方が
+    (別フレームで) 観測されると、本関数は 2 回とも event=True を検知し
+    window_deadline/recorded をリセットしうる。しかし `_should_emit` の
+    既存の重複除外 (`grid_bytes == state.last_emitted_grid`) が実質的な
+    ラッチとして働く: 2 回目の信号が指す盤面は 1 回目の信号で既に記録
+    済みの盤面と同一 (同じ手なので新しい設置は発生していない) であり、
+    dedup チェックで棄却されるため実際に二重記録は起きない
+    (scripts/_diag_move_seg_reject_breakdown_2026-08-18.py 実測で0件確認)。
+
+    user確認済みのゲーム内部順序 (2026-08-18)「ぷよが盤面に固定される→
+    その後NEXTが繰り上がる」により、いずれの信号でも検知時点で盤面は既に
+    物理的に確定している。猶予は「待つべき時間」ではなく「認識側の一時的な
+    乱れを吸収する上限」であり、窓内で最も早く得られた STABLE を採用する
+    (`_move_window_candidate_ok` の move_window_recorded ラッチが担保)。
+
+    おじゃま落下中 (OJAMA_FALL) は物理推論を使わず降り切るまで待つ
+    (user明言) ため、既に窓が開いている間は締切を押し戻して猶予切れによる
+    未記録を防ぐ (次ツモの認識用ではなく、おじゃま降下自体に時間が掛かる
+    ケースの安全弁)。
+
+    既定 False では何もしない (bit-identical、状態も一切変更しない)。
+    """
+    if not enable:
+        return
+    next_changed = False
+    if next_pair is not None:
+        if state.prev_next_pair is not None and next_pair != state.prev_next_pair:
+            next_changed = True
+        state.prev_next_pair = next_pair
+    tsumo_incremented = False
+    if tsumo_count is not None and state.prev_tsumo_count is not None:
+        if tsumo_count > state.prev_tsumo_count:
+            tsumo_incremented = True
+    if tsumo_count is not None:
+        state.prev_tsumo_count = tsumo_count
+    event = next_changed or tsumo_incremented
+    if event:
+        state.move_window_deadline_fi = frame_idx + MOVE_SEGMENT_GRACE_FRAMES
+        state.move_window_recorded = False
+    elif (
+        bstate == BoardState.OJAMA_FALL
+        and state.move_window_deadline_fi is not None
+    ):
+        state.move_window_deadline_fi = max(
+            state.move_window_deadline_fi, frame_idx + MOVE_SEGMENT_GRACE_FRAMES,
+        )
+
+
+def _physics_violation_signature(
+    sim: ChainSimulator, board: Board,
+) -> "frozenset[tuple[int, int, str]]":
+    """物理制約違反セルの signature ((row, col, 種別) の集合) を返す。
+
+    種別は "erasable" (4連結以上の消去可能グループに属する、
+    ChainSimulator.find_erasable_groups) / "gravity" (重力違反=空中puyo、
+    check_gravity_rule) の2種。空集合 = 違反なし。
+    scripts/_diag_physics_vs_pixel_gate_2026-08-18.py の `_physics_violation`
+    と同じ土台 (既存資産の再利用、根拠は同スクリプトの実測)。
+    """
+    sig: set[tuple[int, int, str]] = set()
+    for group in sim.find_erasable_groups(board):
+        for (r, c) in group.cells:
+            sig.add((r, c, "erasable"))
+    _valid, violations = check_gravity_rule(board)
+    for (r, c) in violations:
+        sig.add((r, c, "gravity"))
+    return frozenset(sig)
+
+
+def _update_physics_transition_marker(
+    state: _SideState, bstate: BoardState, enable: bool,
+    tsumo_count: "int | None" = None,
+) -> None:
+    """持続的物理制約フィルタ (2026-08-18) 用: 正当な状態遷移の発生を記録する。
+
+    TSUMO_FALL/CHAIN/OJAMA_FALL のいずれかの bstate を観測したら「正当な
+    状態遷移が起きた」とみなし、次回の物理違反評価が消費するまで持続する
+    フラグを立てる (W24 教訓 feedback_persistence_run_needs_truth_recheck_
+    2026-08-17: 区間内の真値変化を再検証しないと誤集計になる、単純な連続
+    回数閾値だけで棄却しない)。
+
+    tsumo_count 増分も正当な遷移として扱う (2026-08-18 実測で発見した空振り
+    リスクの是正)。60fps 動画の stride-2 間引き下では TSUMO_FALL が
+    1フレームしか続かず間引きで観測されないことがあり、bstate 観測だけに
+    頼ると「本当は正当な新しい手」を誤って持続違反と判定しうる。tsumo_count
+    は一度増分すれば以降のどのサンプルフレームでも前回値との差分として検知
+    できるため、間引きに対して頑健な代替シグナルになる (_update_move_
+    scheduler の tsumo_count フォールバックと同じ発想)。
+    state.prev_tsumo_count_for_physics で独自に前回値を追跡する
+    (_update_move_scheduler の prev_tsumo_count とは別系統。
+    enable_move_segmented_recording=False (物理制約フィルタ単独使用) でも
+    tsumo_count 増分検知が機能するように責務を分離してある)。
+
+    既定 False では何もしない (bit-identical)。
+    """
+    if not enable:
+        return
+    if bstate in _PHYSICS_LEGIT_TRANSITION_STATES:
+        state.legit_transition_pending = True
+    if (
+        tsumo_count is not None
+        and state.prev_tsumo_count_for_physics is not None
+        and tsumo_count > state.prev_tsumo_count_for_physics
+    ):
+        state.legit_transition_pending = True
+    if tsumo_count is not None:
+        state.prev_tsumo_count_for_physics = tsumo_count
+
+
+def _is_physics_violation_persistent(
+    state: _SideState, board: Board, sim: "ChainSimulator | None",
+) -> bool:
+    """持続的物理制約フィルタ (2026-08-18) の判定本体。
+
+    同一の (row, col, 違反種別) signature が、間に正当な状態遷移
+    (`_update_physics_transition_marker` 参照) を挟まずに2回連続で観測
+    されたときだけ True (棄却) を返す。単発の違反 (実測: 67.6% は連鎖発火の
+    1フレーム前という正当な過渡状態) は許容する。
+
+    呼び出しのたびに state.prev_violation_signature / legit_transition_
+    pending を更新する (副作用あり、呼出元は評価対象にする候補ごとに
+    1回だけ呼ぶこと)。
+    """
+    if sim is None:
+        return False
+    sig = _physics_violation_signature(sim, board)
+    is_persistent = (
+        bool(sig)
+        and sig == state.prev_violation_signature
+        and not state.legit_transition_pending
+    )
+    state.prev_violation_signature = sig
+    state.legit_transition_pending = False
+    return is_persistent
+
+
+def _update_raw_pixel_stable(
+    state: _SideState, frame: np.ndarray, side_label: str, t_sec: float,
+    enable_stable_persistence_gate: bool,
+) -> bool:
+    """(d) STABLE持続確認 (2026-08-18): 1 side の rolling diff 窓を更新し、
+    直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の生ピクセル持続静止判定を返す。
+
+    src.board_motion (stateless 純関数) の呼び出し側 wrapper。 state
+    (motion_prev_gray / motion_diffs) の保持はこちら (collect_boards_lean.py
+    = 外部 wrapper) の責務とする (CLAUDE.md「観測指標は stateless 実装」)。
+
+    既定 False (enable_stable_persistence_gate) では計算を一切行わず
+    True を返す (bit-identical、計算コストも発生しない)。
+    """
+    if not enable_stable_persistence_gate:
+        return True
+    gray = board_roi_gray(frame, side_label)
+    if state.motion_prev_gray is not None:
+        diff = frame_diff_mean(state.motion_prev_gray, gray)
+        state.motion_diffs.append((t_sec, diff))
+        state.motion_diffs = [
+            (t, d) for t, d in state.motion_diffs
+            if t_sec - t <= STABLE_PERSISTENCE_WINDOW_SEC
+        ]
+    state.motion_prev_gray = gray
+    return is_raw_pixel_stable(
+        [d for _t, d in state.motion_diffs],
+        diff_threshold=STABLE_PERSISTENCE_DIFF_THRESHOLD,
+    )
+
+
+# ============================
+# おじゃま会計 (2026-08-12 追加)
+# ============================
+#
+# ojama_net_balance / ojama_forecast は npz からの事後復元が不可能と確定した
+# ため (score近似v1/v2は相関0.33-0.38で不合格、tsumo_countゲートv3も不可判定)、
+# 収集中に OjamaAccountingTracker を実際に駆動して真値を記録する。
+# collect_indicators_v2._drive_ojama / _drain_by_tsumo_delta と同じロジック
+# だが、以下の点で意図的に分離実装している:
+#   1. pipeline.tsumo_count() を再度呼ばない (main loop が tsumo_count npz
+#      列用に既に取得済みの値を再利用する。呼び出し回数を変えると既存
+#      _FakeLeanPipeline 系テストの呼び出し回数アサーションを壊すため)。
+#   2. tsumo_count 未対応 pipeline でも例外にならない (delta=None は skip)。
+
+
+def _drive_ojama_accounting_lean(
+    tracker: OjamaAccountingTracker,
+    state_p1: _SideState,
+    state_p2: _SideState,
+    prev_bstate_p1: BoardState,
+    prev_bstate_p2: BoardState,
+    p1: SideResult,
+    p2: SideResult,
+    tsumo_count_1p: int | None,
+    tsumo_count_2p: int | None,
+    t_sec: float,
+) -> OjamaAccountSnapshot:
+    """OjamaAccountingTracker を毎処理フレーム駆動し、現在の snapshot を返す。
+
+    試合境界のリセットは tracker.on_state_transition が MENU 遷移/score
+    大幅減少を検知して内部で自動処理する。呼び出し側 (collect_lean) は
+    動画処理開始時に reset() を 1 回呼ぶだけでよく、本関数からは reset() を
+    一切呼ばない (c系20本の学習データで判明した教訓: 収集を秒区間ごとに
+    分割して都度 reset() すると、区間境界をまたぐ pending お邪魔がリセット
+    で消えて会計が壊れる、2026-08-12発見)。
+
+    Args:
+        tracker: お邪魔会計追跡器 (動画 1 本につき 1 個、呼出元で保持)。
+        state_p1, state_p2: tsumo delta drain 用の前回手数を保持する状態。
+        prev_bstate_p1, prev_bstate_p2: 前フレームの各 side の状態。
+        p1, p2: 今フレームの pipeline.update() 結果 (side 別)。
+        tsumo_count_1p, tsumo_count_2p: 今フレームの
+            RecognitionPipeline.tsumo_count(side) の値 (main loop で既に
+            取得済み)。None は取得不能 (drain しない)。
+        t_sec: 現在時刻 (秒)。
+    """
+    tracker.on_state_transition("p1", prev_bstate_p1, p1.state, p1.score, t_sec)
+    tracker.on_state_transition("p2", prev_bstate_p2, p2.state, p2.score, t_sec)
+    _drain_ojama_by_tsumo_delta_lean(tracker, "p1", state_p1, tsumo_count_1p, t_sec)
+    _drain_ojama_by_tsumo_delta_lean(tracker, "p2", state_p2, tsumo_count_2p, t_sec)
+    return tracker.get_snapshot(t_sec)
+
+
+def _drain_ojama_by_tsumo_delta_lean(
+    tracker: OjamaAccountingTracker,
+    ojama_key: str,
+    state: _SideState,
+    tsumo_count: int | None,
+    t_sec: float,
+) -> None:
+    """tsumo_count の増分 delta 回 on_tsumo_settled を呼ぶ。
+
+    試合境界 (手数リセット) では delta < 0 になるため skip する
+    (会計は on_state_transition の MENU/score減少検知で既にリセット済み)。
+    tsumo_count=None (pipeline 未対応/未取得) の場合は何もしない。
+    """
+    if tsumo_count is None:
+        return
+    delta = tsumo_count - state.ojama_prev_tsumo
+    if delta > 0:
+        for _ in range(delta):
+            tracker.on_tsumo_settled(ojama_key, t_sec)
+    state.ojama_prev_tsumo = tsumo_count
+
+
+def _ojama_snapshot_to_own_perspective(
+    snap: OjamaAccountSnapshot,
+) -> tuple[float, float, float, float]:
+    """snapshot を 1P/2P 双方の own-perspective (net, forecast) に変換する。
+
+    net は snap.net_balance_capped の own-perspective 変換 (1P はそのまま、
+    2P は符号反転)。forecast は snap.forecast_p1/p2 を負値 0 クリップして
+    side 別に選択する (src.indicators_v2.ojama_net_balance/ojama_forecast の
+    .raw 定義と一致させ、収集後の値と学習時の値を一致させる)。
+
+    Returns:
+        (net_1p, forecast_1p, net_2p, forecast_2p) の 4 要素タプル。
+    """
+    net_1p = float(snap.net_balance_capped)
+    net_2p = -net_1p
+    forecast_1p = float(max(0, snap.forecast_p1))
+    forecast_2p = float(max(0, snap.forecast_p2))
+    return net_1p, forecast_1p, net_2p, forecast_2p
+
+
+# ============================
+# メイン収集ループ
+# ============================
+
+def collect_lean(
+    video_path: Path,
+    out_npz: Path,
+    max_sec: float = 0.0,
+    start_sec: float = 0.0,
+    sample_interval_sec: float = 0.0,
+    capture_next: bool = False,
+    sample_interval_frames: Optional[int] = None,
+    enable_chain_tracker: bool = False,
+    normalize_fps_30: bool = True,
+    enable_effect_gate: bool = False,
+    effect_gate_persist_sec: Optional[float] = None,
+    enable_effect_visual_gate: bool = False,
+    enable_burst_guard_v2: bool = False,
+    enable_transition_merge_guard: bool = False,
+    burst_gate_open_threshold: Optional[float] = None,
+    enable_hidden_row_burst_guard: bool = False,
+    enable_burst_close_extension: bool = False,
+    burst_chain_gap_max_sec: Optional[float] = None,
+    enable_online_hsv_refresh: bool = False,
+    enable_match_transition_debounce: bool = False,
+    enable_ojama_entry_gravity_settle_guard: bool = False,
+    enable_gravity_settle_reset_on_exit: bool = False,
+    enable_phantom_board_guard: bool = False,
+    enable_margin_time_rate: bool = False,
+    enable_stable_majority_window: bool = False,
+    enable_ojama_fall_placement_override: bool = False,
+    enable_ojama_fall_entry_hardening: bool = False,
+    enable_chain_gate_raw_fallback: bool = False,
+    enable_ojama_fall_scoped_exit: bool = False,
+    precise_seek: bool = False,
+    # W13根治 案1 (2026-08-16): highlight override 配線。RecognitionPipeline
+    # 本体へそのまま forward する。既定 False = 従来挙動完全維持 (backwards
+    # compat、物差しv2 A/B測定用に末尾追加)。
+    enable_highlight_override: bool = False,
+    # W13根治 案2 (2026-08-17): tier1 patch-NCC HSV AND ガード配線。
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来挙動
+    # 完全維持 (backwards compat、案1 との A/B/併用測定用)。
+    enable_patch_fp_hsv_guard: bool = False,
+    # W20/W21根治 (2026-08-17): 試合境界マルチシグナル配線。True で
+    # is_match_active (score_zero + match_end_locked + ヒステリシスの統合
+    # 判定、本番稼働中) の False→True 立ち上がりを game_idx 進行の主信号に
+    # する。score-reset 単独判定はフォールバック + 異常マーク (人手レビュー
+    # 用) に降格する (_SharedGameCounter.observe_visual_signal /
+    # _update_game_boundary 参照)。既定 False = 従来の score-reset 単独判定
+    # (後方互換、bit-identical)。
+    enable_boundary_multisignal: bool = False,
+    # W20/W21根治 (2026-08-17): 勝者判定に MatchWinnerDetector (パネル数字
+    # 差分) を接続し、score 系統の勝者判定と 2 系統一致を要求する
+    # (不一致/片方欠損は unknown、単一系統を無条件の正解にしない)。
+    # 既定 False = 従来の score 系統単独判定 (後方互換、bit-identical)。
+    # 動画を再オープンしてシークする追加コストが掛かるため既定無効。
+    enable_winner_panel_crosscheck: bool = False,
+    # R2 浮きぷよ是正機構 (2026-08-17): RecognitionPipeline 本体へそのまま
+    # forward する。既定 False = 従来挙動完全維持 (backwards compat、
+    # hsv-guard 併用/単独 A/B 測定用、末尾追加)。
+    enable_floating_gap_restore: bool = False,
+    # W10根治 (2026-08-17): 着地セル色の継続監視ガード。RecognitionPipeline
+    # 本体には既に実装済み (load_default kwarg) だが collect_boards_lean.py
+    # 側の CLI 配線が漏れていたため追加 (認識強化統一測定タスクで発見)。
+    # 既定 False = 従来挙動完全維持 (backwards compat、末尾追加)。
+    enable_landing_color_guard: bool = False,
+    # 持続誤認26件系統1/2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10):
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来挙動
+    # 完全維持 (backwards compat、統一測定 構成E 用に末尾追加)。
+    enable_override_color_guard: bool = False,
+    enable_ojama_column_stack_fix: bool = False,
+    # W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23): RecognitionPipeline
+    # 本体へそのまま forward する。既定 False = 従来挙動完全維持
+    # (backwards compat、統一測定 構成F 用に末尾追加)。
+    enable_next_history_starvation_fix: bool = False,
+    # W25根治 おじゃま落下窓の総合ガード (2026-08-17、docs/KNOWN_WEAKNESSES.md
+    # W25): RecognitionPipeline 本体へそのまま forward する。cycle 71n
+    # override 抑制 (案4) + DriftDetector needs_resync 抑制 (第2弾) の
+    # 2箇所に効く。既定 False = 従来挙動完全維持 (backwards compat、
+    # 統一測定 構成F+本フラグ の A/B 用に末尾追加)。
+    enable_ojama_cnn_override_warmup: bool = False,
+    # W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25):
+    # CNN観測入力段の会計整合フィルタ。RecognitionPipeline 本体へそのまま
+    # forward する。既定 False = 従来挙動完全維持 (backwards compat、
+    # 統一測定 構成F+第3弾フラグ の A/B 用に末尾追加)。
+    enable_ojama_write_accounting_guard: bool = False,
+    # (d) STABLE持続確認 (2026-08-18 導入、収集限定、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5。2026-08-18 二次
+    # 追加で役割変更: 記録拒否 → npz stable_persistence_confidence 列への
+    # confidenceタグ付与)。True で直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の
+    # 盤面 ROI 生ピクセルが持続静止しているか (src.board_motion.
+    # is_raw_pixel_stable) を計算し、判定結果を stable_persistence_
+    # confidence 列に記録する。**もはや _should_emit で snapshot を
+    # スキップしない** (導入当初は連鎖アニメ中/送付フラッシュ重畳の疑いの
+    # ある STABLE snapshot を丸ごと除外していたが、実測
+    # (scripts/_diag_stable_persistence_loss_breakdown_2026-08-18.py) で
+    # 148再収集の行数が61%減り、しかも欠落が相手のお邪魔着弾直前の構え局面
+    # に偏ることが判明したため。除外要否は学習データビルダー側のオプトイン
+    # フィルタに委ねる)。RecognitionPipeline 本体には実装しない (RT スコープ
+    # 外の意図的な非対称配線)。既定 False = 従来挙動完全維持・bit-identical
+    # (backwards compat、計算自体を一切行わない)。
+    enable_stable_persistence_gate: bool = False,
+    # (b-1) match_end持続時間ゲート (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1)):
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来
+    # 挙動完全維持・bit-identical (backwards compat)。
+    enable_match_end_persist_override: bool = False,
+    # (b-2) 次試合開始までのラッチ (2026-08-18、
+    # docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2)):
+    # RecognitionPipeline 本体へそのまま forward する。post_match_lockdown_
+    # active npz 列 (境界実装の仕上げ、2026-08-18) はこのフラグが False の
+    # 間は常に POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1) のまま (意味を持たない)。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_post_match_lockdown_latch: bool = False,
+    # 境界実装の仕上げ (enable_result_screen_hardening、2026-08-18、
+    # 診断 data/verify/boundary_impl_verify_2026-08-18/reignition_diag.md):
+    # RecognitionPipeline 本体へそのまま forward する。既定 False = 従来
+    # 挙動完全維持・bit-identical (backwards compat)。
+    enable_result_screen_hardening: bool = False,
+    # 連鎖中物理推論の配線 (2026-08-18、user確定要件「連鎖中は物理推論、
+    # 何秒後に終わるかでなく発火した瞬間から使い続け実測STABLE復帰で自動
+    # 的に置き換わる」)。True で confirmed_board が None かつ CHAIN/
+    # GRAVITY_SETTLE 中に SideResult.estimated_board (recognition_pipeline.py
+    # が既に毎フレーム計算・公開済み) を確定盤面の代わりに記録する
+    # (_process_side_lean 参照)。board_provenance ==
+    # CHAIN_ESTIMATE_LOW_CONFIDENCE_PROVENANCE (起点盤面誤認疑い) は採用
+    # しない。OJAMA_FALL 中は estimated_board 自体が常に None のため対象外
+    # (user明言「降り終わるまで待つ」)。board_provenance 列は本フラグの
+    # ON/OFF に関わらず常に npz へ記録する (末尾追加、既存キー・キー順は
+    # 不変)。既定 False = 従来挙動完全維持・bit-identical (backwards compat、
+    # 末尾追加)。
+    enable_chain_estimate_recording: bool = False,
+    # 1手区切り観測スケジューラ (2026-08-18、盤面収集の作り替え本体)。True で
+    # 記録トリガーを「STABLE到達イベント駆動」から「NEXT繰り上がり (capture_
+    # next=False 時は tsumo_count 増分にフォールバック) を1手区切りとし、
+    # 猶予 MOVE_SEGMENT_GRACE_FRAMES フレーム以内で最も早く得られた STABLE を
+    # その手の代表として記録する」方式に切り替える (_update_move_scheduler /
+    # _move_window_candidate_ok 参照)。--enable-stable-persistence-gate
+    # (画素静止ゲート) は記録可否の判定に使わない (2026-08-18 実測で退行確定
+    # 済み、confidence タグとしてのみ有効)。猶予内に得られなければその手は
+    # 記録しない (次の手区切りへ回す、無理な穴埋めはしない)。既定 False =
+    # 従来挙動完全維持 (backwards compat、bit-identical)。
+    enable_move_segmented_recording: bool = False,
+    # 持続的物理制約フィルタ (2026-08-18、盤面収集の作り替え本体)。True で
+    # 消去可能グループ残存/重力違反 (浮きぷよ) の signature が、間に正当な
+    # 状態遷移 (TSUMO_FALL/CHAIN/OJAMA_FALL) を挟まずに2回連続観測された
+    # 候補だけを棄却する (_is_physics_violation_persistent 参照。W24教訓:
+    # 単純な連続回数閾値だけで棄却しない)。既定 False = 従来挙動完全維持
+    # (backwards compat、bit-identical、ChainSimulator 自体を生成しない)。
+    enable_physics_persistence_filter: bool = False,
+    # W26根治 (2026-08-18、docs/KNOWN_WEAKNESSES.md W26節、RECOGNITION_ADOPTED
+    # 採用 2026-08-18): 連鎖発火の閃光による色→別色誤読 (青→緑等) をOJAMA_FALL
+    # 中に限定して拒否する。RecognitionPipeline 本体へそのまま forward する。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat、末尾追加)。
+    enable_ojama_fall_color_swap_guard: bool = False,
+    # (b-2)ラッチ解除の数値スコア化 + 補助解除 (2026-08-19、user指示「必ず
+    # 試合前スコアは0」): RecognitionPipeline 本体へそのまま forward する。
+    # score_zero_both 画像テンプレは配信レイアウト依存で42本中31本が盲目
+    # (解除不能→45秒安全弁のみ→最長178秒の試合飲み込み) だった対策。
+    # 既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_lockdown_score_numeric_release: bool = False,
+    enable_lockdown_score_moving_release: bool = False,
+    # MatchEndDetector NCC 閾値上書き (2026-08-19): 全消しテロップ誤検出
+    # (実測: 誤検出0.72 vs 本物0.98、既定0.55が低すぎる) の A/B 用。
+    # None (既定) = 既定閾値 0.55 のまま bit-identical。
+    match_end_ncc_threshold: "float | None" = None,
+    # 新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」):
+    # enable_boundary_multisignal の視覚立ち上がりによる境界確定に
+    # 「両者スコア数値0 or 両者盤面ほぼ空」の観測を AND で要求する
+    # (_SharedGameCounter.observe_visual_signal / _compute_newmatch_evidence
+    # 参照)。試合中の is_active 乱れによる偽境界の量産 (実測: 50本で試合
+    # 総数+50%断片化、won欠損38.3%) への対処。収集専用 (本番RTに波及
+    # しない)。既定 False = 従来挙動完全維持・bit-identical (backwards compat)。
+    enable_boundary_newmatch_evidence: bool = False,
+    # 試合境界を「score が 0 になった」ときだけ認める (2026-08-20、user 指摘
+    # 「減るのはただの誤認」)。試合中の score は単調増加しかしないため、
+    # 減少はほぼ全てが OCR 誤読であり境界の根拠にならない。新しい試合は
+    # score が 0 から始まるので、0 への遷移だけを境界とする。
+    # 既定 False = 従来の減少幅判定 (SCORE_RESET_THRESHOLD=500) で
+    # bit-identical (backwards compat、末尾追加)。
+    enable_score_reset_requires_zero: bool = False,
+    # 勝者判定でパネルを優先する (2026-08-20、user 決定「パネル優先でいい
+    # です」)。panel_winner が非 None なら得点系統と食い違ってもパネルを
+    # 採用する。得点系統の「高い方が勝ち」は約98%しか成立しない近似のため
+    # (memory reference_score_winner_98pct_2026-08-20)。
+    # 既定 False = 従来の2系統一致要求で bit-identical (末尾追加)。
+    enable_winner_panel_priority: bool = False,
+    # ネイティブ (Rust) HSV セル分類 (2026-08-20)。認識結果は bit-identical
+    # (合成パッチ4,732枚×フラグ4構成で不一致0、陽性対照つき) で、実測は
+    # 1 frame 34.69→29.05ms (1.19倍)。既定 False = 従来の Python 経路。
+    enable_native_hsv_classifier: bool = False,
+    # STABLE 凍結デッドロック根治 3 フラグ (2026-08-24、RECOGNITION_ADOPTED
+    # 採用、src.production_config 参照)。既定 False = 従来挙動完全維持
+    # (backwards compat、bit-identical)。
+    enable_chain_formula_read_verify: bool = False,
+    enable_formula_chain_count_update: bool = False,
+    enable_formula_step_interlude: bool = False,
+    # 出来事源の会計サイドカーを収集する試験専用スイッチ。勝者パネル判定とは
+    # 独立させ、既存の採用済み収集構成では会計観測を一切起動しない。
+    enable_event_accounting_sidecar: bool = False,
+    # 連鎖開始・全消し・着地前後盤面を記録する試験専用スイッチ。
+    # 会計サイドカーとは別ファイル・別スイッチとし、本番設定へ登録しない。
+    enable_event_physical_sidecar: bool = False,
+    # 複数フレームで事前較正した左右別の得点表示位置。None は従来座標。
+    score_region_calibration_path: Path | None = None,
+) -> int:
+    """1 動画を処理して盤面 npz を出力する。指標計算は一切行わない。
+
+    Args:
+        video_path: 入力動画パス。
+        out_npz: 出力 npz パス。
+        max_sec: 処理最大秒数 (0=全長)。
+        start_sec: 処理開始オフセット秒。
+        sample_interval_sec: フレーム間引き間隔 (秒)。0 = 全フレーム処理
+            (従来挙動)。collect_indicators_v2 と同じ間引き方式を採用:
+            cap.read() は毎フレーム呼び、sample_interval_frames おきに
+            pipeline.update を呼ぶ。
+        capture_next: True で NextDetector を有効化し next1_a/next1_b/
+            dnext_a/dnext_b を実値で記録する (指標①本命版検証用)。
+            既定 False = 従来挙動 (NextDetector 無効、全て -1 で保存、
+            後方互換)。
+        sample_interval_frames: フレーム間引き間隔 (フレーム数、省略可)。
+            指定すると fps に関係なくそのフレーム数ごとに 1 回認識し、
+            sample_interval_sec より優先される (2026-07-28 追加)。
+            省略時 (None) は sample_interval_sec の従来挙動を完全維持する
+            (後方互換)。実際に使われた間引き幅は標準出力にログされる。
+        enable_chain_tracker: True で VideoChainTracker (1P/2P) を有効化する。
+            既定 False = 従来挙動 (無効、後方互換、既存 boards_lean_fixed 系
+            npz の再現性を維持する)。
+            2026-07-30 追記: 機能D (掛け算式検知, enable_chain_formula_detection)
+            のみでは実運用で CHAIN 検知が 0 件だった実測 (chain_trigger_sec
+            非NaN率 0.0%) があり、CHAIN 期間中に盤面が凍結されず消去途中の
+            盤面が STABLE 扱いされる欠陥の疑いがある。VideoChainTracker は
+            visualize_advantage_overlay.py / collect_indicators_v2.py の
+            本番経路で既定 True (実績あり) のため、基準データ収集ではこちらを
+            有効化する。
+        normalize_fps_30: True (既定) で 60fps 動画を stride-2 (実効30fps) に
+            間引く (src.fps_normalize.resolve_normalize_fps_30_stride、
+            2026-07-30 追加)。60fps 動画を全フレーム処理すると
+            board_state_machine.py 等のフレーム数定数が想定する実時間の半分に
+            なる問題への対処。優先順位は「明示 --sample-interval-frames > 自動
+            --normalize-fps-30」: sample_interval_frames が明示指定されている
+            場合は本フラグを無視する。
+            2026-07-30 既定 True 化 (user承認済み): A/B実測で 60fps stride-2 は
+            連鎖数誤り10.4%・列まるごと欠損0%・盤面相違26.0%(中央値1セル)と、
+            30fps動画の15fps間引き (26.1%・21.7%・48.4%) より一貫して良好、
+            かつ既存24本の30fps動画と時間解像度が揃う (データセットの世代混在
+            を防ぐ)。無効化するには明示 --no-normalize-fps-30 (または本関数を
+            呼ぶ側で normalize_fps_30=False) を指定する。False 指定時は
+            従来挙動・bit-identical (30fps未満動画では stride=1 で常に無変化)。
+        enable_effect_gate: エフェクト時間ゲート (2026-08-03、A/B 計測用)。
+            True で相手連鎖中/自お邪魔着弾直後 window の間、自盤面上段
+            (board_state_machine.EFFECT_GATE_TOP_ROWS) の cell 更新に実秒
+            ベース持続確認を要求する (満杯盤面 47 セル誤り根治の検証用)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        effect_gate_persist_sec: 上記ゲートの確定に必要な持続秒数。
+            None (既定) なら RecognitionPipeline 既定値 (EFFECT_PERSIST_SEC
+            =0.4秒) を使う。enable_effect_gate=False の間は無視される。
+        enable_effect_visual_gate: 案B 4条件AND拡張 (2026-08-04、A/B 計測用)。
+            True で effect_gate_window_active を「(既存時間窓) AND (not 自
+            連鎖中) AND (not 全消しラッチ) AND (視覚グロー検出)」に拡張する。
+            enable_effect_gate=False の間は無視される (時間窓自体が発生しない
+            ため)。既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_guard_v2: バーストガード再設計 Stage1 (2026-08-05、A/B
+            計測用、docs/BURST_GUARD_DESIGN_2026-08-05.md)。True で
+            effect_gate_window_active の計算を Schmitt trigger 視覚トリガー
+            + ハード凍結方式に切り替える (案Bの enable_effect_visual_gate
+            経路とは排他)。enable_effect_gate=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_transition_merge_guard: バーストガード Stage1.5 (2026-08-05
+            アーキ追補、A/B 計測用)。True で NON-STABLE→STABLE 遷移merge
+            (`_merge_diff_only`) の直前に、物理的期待値フィルタ
+            (`_filter_transition_new_cnn_for_burst_guard`) を
+            effect_gate_window_active 中のみ適用する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_gate_open_threshold: バーストガード緊急較正 (2026-08-05、
+            factorialバックテスト用)。None (既定) なら BURST_GATE_OPEN_
+            THRESHOLD (=0.97) を使う (bit-identical)。CLOSE も同値運用。
+        enable_hidden_row_burst_guard: バーストガード Stage1.5b (2026-08-05
+            アーキ追補、§11、A/B 計測用)。True で row1-3 凍結中/close直後
+            クールダウン中の infer_hidden_row 呼び出しをスキップし、row0
+            (隠し段) の確信度100%誤色書き込みを防ぐ。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_burst_close_extension: バーストガード §12 close側再設計
+            (2026-08-05 アーキ確定、A/B 計測用)。True で生 is_open と実効
+            active信号 (遷移mergeフィルタ+hard freeze の適用条件) を分離し、
+            close後 BURST_GATE_POST_CLOSE_COOLDOWN_SEC のクールダウン、
+            および相手連鎖継続中の延長 (トリガーではない) を実効側に反映する。
+            enable_burst_guard_v2=False の間は no-op (警告ログ)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        burst_chain_gap_max_sec: バーストガード §12 緊急パラメータ化
+            (2026-08-05、A/B 計測用)。相手連鎖延長の再点火間隔上限を上書き
+            する。None (既定) = モジュール定数 BURST_GATE_OPPONENT_CHAIN_
+            GAP_MAX_SEC (=3.3、bit-identical)。**0.0 を渡すと延長を常に
+            不成立にできる** (差分実験で busy局面の凍結連鎖の犯人と確定した
+            延長機構をA/B測定で切る用途、close後クールダウン0.9秒は無関係
+            のため無改修で残る)。
+        enable_online_hsv_refresh: 長時間劣化修正 A+B (2026-08-06、
+            docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4、
+            A/B 計測用)。True で (A)試合毎に OnlineHsvCalibrator の較正を
+            リセット、(B)inject後もupdate()+再inject判定を継続する
+            (凍結ガード撤廃)。詳細は RecognitionPipeline.__init__ 参照。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_match_transition_debounce: 長時間劣化修正 A' (2026-08-06、
+            docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §4追補)。
+            True で is_active の True/False遷移を対称デバウンスし、
+            MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる
+            _match_active_started_frame/_time の誤再アーム/リセットを防ぐ。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_entry_gravity_settle_guard: 修正B (2026-08-08、
+            振動バグB+C の修正)。True で GRAVITY_SETTLE 中の OJAMA_FALL
+            新規発火を禁止する。連鎖の段間重力待ちを横取りされると
+            GravitySettleDetector 内部カウンタが残留し、次回進入時に誤って
+            1 frame で STABLE 化するバグ (バグC) を誘発する。
+            enable_gravity_settle_reset_on_exit と対で使う。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_gravity_settle_reset_on_exit: 修正C (2026-08-08、
+            振動バグB+C の修正)。True で GRAVITY_SETTLE が他 detector に
+            横取りされて弾き出された際、GravitySettleDetector の内部
+            カウンタ (_settle_start_frame 等) をその場でリセットする。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_margin_time_rate: マージンタイム逓減 (2026-08-09)。True で
+            おじゃま判定の閾値を経過時間に応じた実効レートにする。
+            従来は 70 点固定で、長い試合の後半 (実レートが 22 点まで下がる)
+            では着弾を丸ごと見逃していた (npz 実測で全着弾の 6.27%)。
+            起点は最初の1手から 95.5 秒 (user伝授)。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_stable_majority_window: 盤面確定窓 3中2多数決 (2026-08-13
+            user承認、認識99.5%物差し条件付き採用)。True で初回STABLE確定窓が
+            「stable_frame_count 連続厳密一致」から「直近3観測中2一致」に
+            切り替わる (src/board_state_machine.py 参照)。148動画収集走行中
+            のため既定 False 必須 (backwards compat)。
+        enable_phantom_board_guard: 幻盤面ガード (2026-08-08)。True で
+            非試合画面 (対戦カード紹介・ロビー・順位表) 由来の満杯おじゃま
+            盤面を snapshot として記録しない。本スクリプトは
+            force_in_match=True で MatchStateDetector を無効化しているため
+            これらの画面が素通りしており、実測で全 123 本・0.875% の
+            スナップショットが該当した (実画面 4/4 で真陽性)。背景明度に
+            よる分離は実測不可能と判明したため (幻 min=0.0 / 正常
+            max=226.9 で完全に重なる)、盤面の物理的整合
+            (src/board_quality.py) で弾く。
+            既定 False = 従来挙動完全維持 (backwards compat)。
+        enable_ojama_fall_placement_override: 案2 (2026-08-13、OJAMA_FALL
+            誤分類根因調査)。True で OJAMA_FALL 滞在中に実設置の証拠
+            (NEXT スライド or 自 side score の落下ボーナス増分) を検知したら
+            settle 判定を待たず即座に STABLE へ復帰する。全盤面ぷよ数の静止を
+            待つ既存出口判定は自分のツモ設置でも延長される (振動実害あり、
+            docs/DEMO_REVIEW_2026-08-13.md 場面1)。既定 False = 従来挙動完全
+            維持 (backwards compat、user デモレビュー承認前の savepoint 実装)。
+        enable_ojama_fall_entry_hardening: 案4-lite (2026-08-13、根因調査
+            追補)。True で OJAMA_FALL entry 判定を frame 数連続でなく実時間
+            連続に切り替え、 CHAIN 状態からの割り込み entry のみ持続時間を
+            厳格化する。stride 間引き下で chain_event が瞬間欠落した隙に
+            OJAMA_FALL が CHAIN を奪う実害への対策 (場面2)。既定 False =
+            従来挙動完全維持 (backwards compat、user デモレビュー承認前の
+            savepoint 実装)。
+        enable_chain_gate_raw_fallback: 案3 (2026-08-13、優先度最下位)。True で
+            4連結ゲートが confirmed_board 上で erasable なしと判定した場合でも、
+            cnn_board (常時最新) に erasable があれば chain_event を通す
+            (CHAIN 継続中のみ)。既定 False = 従来挙動完全維持 (backwards
+            compat)。
+        enable_ojama_fall_scoped_exit: 案1 (2026-08-13、OJAMA_FALL出口の根治、
+            docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典、
+            RecognitionPipeline.load_default の同名引数へそのまま伝播する)。
+            True で OJAMA_FALL 退出条件を「おじゃまセル限定の個数安定」に
+            切り替える (色ぷよの増減は無視)。案B (enable_ojama_fall_board_settle)
+            は盤面全体のぷよ数を見るため自分のツモ設置でも数値が変化し続け
+            出口判定を塞ぐ (根因調査で実測: 設置ブロック16/16件、高速振動)。
+            既定 False = 従来挙動完全維持 (backwards compat、user デモ
+            レビュー承認前の savepoint 実装)。
+        precise_seek: フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で
+            発見した測定器事故の修正)。True で --start-sec 指定時の
+            `cap.set(CAP_PROP_POS_FRAMES, ...)` 呼び出しを廃し、代わりに
+            frame 0 から `cap.read()` を start_frame 回だけ呼んで捨てる
+            (デコードのみ、pipeline.update は呼ばない)。cv2/ffmpeg の
+            CAP_PROP_POS_FRAMES シークはコンテナの GOP 構造に依存し、
+            同一動画でも再エンコード世代が違うと着地フレームが数十〜数百
+            フレームずれることがある (2026-08-14 実測: YouTube再DL動画で
+            人手ラベルの絶対フレーム番号との突合が惨敗 (52-61%まで崩壊)、
+            動画を再DLしていない c13 のみ従来通り97%超の整合を維持)。
+            本フラグは該当動画の再取得なしに再現できる根治であり、
+            --start-sec 0 (=本番 Phase L regen の通常運用) では
+            start_frame=0 のため cap.set 自体が元々呼ばれず無関係
+            (production 経路は無傷)。既定 False = 従来挙動完全維持
+            (backwards compat、処理コスト増のため既定では有効化しない)。
+        enable_boundary_multisignal: 試合境界マルチシグナル (W20/W21根治、
+            2026-08-17)。True で RecognitionPipeline.is_match_active
+            (score_zero + match_end_locked + ヒステリシスの統合判定、本番
+            稼働中) の False→True 立ち上がりを game_idx 進行の主信号にする。
+            score-reset 単独判定は削除せず、視覚信号が
+            BOUNDARY_MULTISIGNAL_TOLERANCE_SEC 以内に確認できない場合の
+            フォールバック + 異常マーク (out_npz と同じディレクトリに
+            `<out_npz_stem>_boundary_anomalies.json` を書き出す) に降格する。
+            既定 False = 従来の score-reset 単独判定 (後方互換、
+            bit-identical)。
+        enable_winner_panel_crosscheck: 勝者判定に MatchWinnerDetector
+            (パネル数字差分) を接続する (W20/W21根治、2026-08-17)。True で
+            score 系統の勝者判定との 2 系統一致を要求し、不一致/片方欠損は
+            unknown (won は NaN のまま) とする (単一系統を無条件の正解に
+            しない、fail-silent 警戒)。動画を再オープンしてシークするため
+            追加コストが掛かる。クロスチェック自体が失敗 (動画オープン
+            不能等) した場合は標準エラー出力に警告した上で score 系統単独
+            判定にフォールバックする (全 unknown 化はしない)。既定 False =
+            従来の score 系統単独判定 (後方互換、bit-identical)。
+
+    Returns:
+        蓄積した snapshot 数。
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        print(f"[lean] cannot open: {video_path}", file=sys.stderr)
+        return 0
+    fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    start_frame = int(start_sec * fps) if start_sec > 0.0 else 0
+    if start_frame > 0:
+        if precise_seek:
+            # GOP精度に依存しない厳密シーク: 先頭から読み捨てる (2026-08-14)。
+            for _ in range(start_frame):
+                ok_skip, _ = cap.read()
+                if not ok_skip:
+                    break
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, float(start_frame))
+
+    if max_sec > 0:
+        end_frame = min(total_frames, start_frame + int(max_sec * fps))
+    else:
+        end_frame = total_frames
+    n_frames = max(0, end_frame - start_frame)
+
+    video_id = video_path.stem
+
+    # --- fps正規化 (2026-07-30 追加、既定 OFF) ---
+    # 明示 --sample-interval-frames が優先。未指定かつ normalize_fps_30=True の
+    # ときのみ、60fps 等の動画を実効30fps に揃える stride を自動注入する。
+    if sample_interval_frames is None and normalize_fps_30:
+        sample_interval_frames = resolve_normalize_fps_30_stride(fps)
+
+    # --- フレーム間引き設定 (collect_indicators_v2 と同じ計算式) ---
+    # sample_interval_frames 指定時はそちらを優先、省略時は従来通り秒換算
+    effective_interval_frames = _resolve_sample_interval_frames(
+        sample_interval_sec, fps, sample_interval_frames,
+    )
+    # 実際に使われた間引き幅を明示ログ (fps 違いによる意図しない間引きの
+    # 見落としを後から気付けるようにするため、2026-07-28 追加)。
+    print(
+        f"[lean] sample_interval: {effective_interval_frames} frames "
+        f"(fps={fps:.3f}, sample_interval_sec={sample_interval_sec}, "
+        f"sample_interval_frames_arg={sample_interval_frames})"
+    )
+
+    # NextDetector / ChainTracker は既定 OFF で高速化
+    # (capture_next=True の場合のみ NextDetector を有効化、指標①本命版検証用)
+    # (enable_chain_tracker=True の場合のみ VideoChainTracker を有効化、
+    #  2026-07-30 基準データ収集で CHAIN 期間中の盤面凍結を機能させるため追加)
+    score_region_offsets = (
+        None if score_region_calibration_path is None
+        else load_score_region_offsets_for_video(
+            score_region_calibration_path, video_path,
+        )
+    )
+    pipeline = RecognitionPipeline.load_default(
+        enable_native_hsv_classifier=enable_native_hsv_classifier,
+        stable_frame_count=3,
+        load_score_ocr=True,
+        enable_chain_tracker=enable_chain_tracker,
+        temporal_smoothing=1,
+        load_next_detector=capture_next,
+        force_in_match=True,
+        enable_effect_gate=enable_effect_gate,
+        effect_gate_persist_sec=effect_gate_persist_sec,
+        enable_effect_visual_gate=enable_effect_visual_gate,
+        enable_burst_guard_v2=enable_burst_guard_v2,
+        enable_transition_merge_guard=enable_transition_merge_guard,
+        burst_gate_open_threshold=burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=enable_hidden_row_burst_guard,
+        enable_burst_close_extension=enable_burst_close_extension,
+        burst_chain_gap_max_sec=burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=enable_online_hsv_refresh,
+        enable_match_transition_debounce=enable_match_transition_debounce,
+        enable_ojama_entry_gravity_settle_guard=(
+            enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=enable_gravity_settle_reset_on_exit,
+        enable_margin_time_rate=enable_margin_time_rate,
+        stable_majority_window=enable_stable_majority_window,
+        enable_ojama_fall_placement_override=enable_ojama_fall_placement_override,
+        enable_ojama_fall_entry_hardening=enable_ojama_fall_entry_hardening,
+        enable_chain_gate_raw_fallback=enable_chain_gate_raw_fallback,
+        enable_ojama_fall_scoped_exit=enable_ojama_fall_scoped_exit,
+        enable_highlight_override=enable_highlight_override,
+        enable_patch_fp_hsv_guard=enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=enable_floating_gap_restore,
+        enable_landing_color_guard=enable_landing_color_guard,
+        enable_override_color_guard=enable_override_color_guard,
+        enable_ojama_column_stack_fix=enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=enable_next_history_starvation_fix,
+        enable_ojama_cnn_override_warmup=enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=enable_ojama_write_accounting_guard,
+        enable_match_end_persist_override=enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=enable_ojama_fall_color_swap_guard,
+        enable_lockdown_score_numeric_release=(
+            enable_lockdown_score_numeric_release
+        ),
+        enable_lockdown_score_moving_release=(
+            enable_lockdown_score_moving_release
+        ),
+        match_end_ncc_threshold=match_end_ncc_threshold,
+        enable_chain_formula_read_verify=enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=enable_formula_chain_count_update,
+        enable_formula_step_interlude=enable_formula_step_interlude,
+        score_region_offsets=score_region_offsets,
+    )
+    # 動画 ID をセット (per-video HSV プロファイル自動ロード用)
+    vid_match = __import__("re").search(r"(v\d+|video_\d+)", video_path.name)
+    if vid_match and hasattr(pipeline, "set_video_id"):
+        pipeline.set_video_id(vid_match.group(1))
+
+    acc = _LeanNpzAccumulator()
+    state_p1 = _SideState()
+    state_p2 = _SideState()
+    # ゲーム境界は両者共通の 1 つの事象なので共有カウンタで管理する
+    # (2026-07-31 desync 根治)。片側の score OCR が壊れていても揃う。
+    # multisignal_mode は enable_boundary_multisignal 引数をそのまま伝える
+    # (既定 False = 従来の score-reset 単独判定、W20/W21根治 2026-08-17)。
+    # require_newmatch_evidence (2026-08-19): 視覚立ち上がりの境界確定に
+    # 新試合証拠 (スコア数値0 or 盤面ほぼ空) を要求する (既定 False)。
+    shared_game = _SharedGameCounter(
+        multisignal_mode=enable_boundary_multisignal,
+        require_newmatch_evidence=enable_boundary_newmatch_evidence,
+    )
+    # おじゃま会計 (2026-08-12 追加): 動画処理開始時に一度だけ生成・リセット
+    # する。試合 (game_idx) が進むたびに reset() してはならない
+    # (_drive_ojama_accounting_lean のコメント参照、c系20本の教訓)。
+    ojama_tracker = OjamaAccountingTracker()
+    ojama_tracker.reset()
+    accounting_recorder = (
+        EventAccountingRecorder() if enable_event_accounting_sidecar else None
+    )
+    physical_recorder = (
+        EventPhysicalRecorder() if enable_event_physical_sidecar else None
+    )
+    prev_bstate_p1 = BoardState.MENU
+    prev_bstate_p2 = BoardState.MENU
+
+    # 持続的物理制約フィルタ用 ChainSimulator (2026-08-18)。ステートレスなので
+    # 動画1本につき1個使い回す (scripts/_diag_physics_vs_pixel_gate_2026-08-18.py
+    # と同じ構成、GHOST_CHAIN_RULE_ENABLED は本番採用フラグをそのまま使う)。
+    # enable_physics_persistence_filter=False では生成しない (bit-identical)。
+    physics_sim: "ChainSimulator | None" = (
+        ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
+        if enable_physics_persistence_filter else None
+    )
+
+    processed_end_frame_exclusive = start_frame
+    for local_i in range(n_frames):
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            break
+        processed_end_frame_exclusive = start_frame + local_i + 1
+        # --- フレーム間引き: effective_interval_frames おきに pipeline.update を呼ぶ ---
+        # cap.read() は毎フレーム呼んでデコードし、間引き対象フレームはスキップ。
+        # (collect_indicators_v2 と同じ方式)
+        if local_i % effective_interval_frames != 0:
+            continue
+        if frame.shape[:2] != (TARGET_H, TARGET_W):
+            frame = cv2.resize(frame, (TARGET_W, TARGET_H), interpolation=cv2.INTER_AREA)
+        fi = start_frame + local_i
+        t_sec = fi / fps
+        result = pipeline.update(fi, t_sec, frame)
+
+        # 試合境界マルチシグナル (W20/W21根治、2026-08-17): フレーム全体の
+        # is_match_active 立ち上がりを 1 フレームにつき 1 回だけ観測する
+        # (1P/2P 別の _process_side_lean 呼び出しには混ぜない)。
+        # multisignal_mode=False (既定) では no-op (bit-identical)。
+        # getattr フォールバック True: is_match_active 未対応の古い pipeline
+        # フェイク (テスト用) でも例外にならないための安全策
+        # (multisignal_mode=False の間は観測結果自体に副作用がないため無害)。
+        # 新試合証拠 (2026-08-19): ゲート有効時のみ毎フレーム計算する
+        # (無効時は計算自体を行わない = 従来コストのまま bit-identical)。
+        newmatch_evidence: "bool | None" = (
+            _compute_newmatch_evidence(result)
+            if enable_boundary_newmatch_evidence else None
+        )
+        shared_game.observe_visual_signal(
+            getattr(result, "is_match_active", True), t_sec,
+            new_match_evidence=newmatch_evidence,
+        )
+        # 勝敗演出ロックダウン区間フラグ (2026-08-17 追加、W20/W21根治)。
+        # is_match_active 同様、未対応の古い pipeline フェイクでは None のまま
+        # (後方互換: _process_side_lean 側で MATCH_END_LOCKED_UNKNOWN に埋める)。
+        match_end_locked_flag = getattr(result, "match_end_locked", None)
+        # 次試合開始までのラッチ活性フラグ (2026-08-18 追加、境界実装の仕上げ)。
+        # PipelineResult の公開フィールドではなく pipeline 側の private
+        # attribute のため getattr で参照する (enable_post_match_lockdown_
+        # latch=False の収集、または本属性未対応の古い pipeline フェイクでは
+        # None のまま、後方互換: _process_side_lean 側で
+        # POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN に埋める)。
+        post_match_lockdown_active_flag = getattr(
+            pipeline, "_post_match_lockdown_active", None,
+        )
+
+        # 試合開始からの確定ツモ設置数 (2026-08-12 追加、着地イベント代理指標用)。
+        # pipeline が tsumo_count 未対応 (フェイク等) の場合は None のまま
+        # (後方互換: _process_side_lean 側で TSUMO_COUNT_UNKNOWN に埋められる)。
+        get_tsumo_count = getattr(pipeline, "tsumo_count", None)
+        tsumo_count_1p = get_tsumo_count("1P") if callable(get_tsumo_count) else None
+        tsumo_count_2p = get_tsumo_count("2P") if callable(get_tsumo_count) else None
+
+        # おじゃま会計 (2026-08-12 追加): dedup済み STABLE snapshot だけでなく
+        # 毎処理フレーム密に駆動する (スコア変化・連鎖終了の密な観測が必要
+        # なため、production_config の --sample-interval 0 採用根拠と同じ
+        # 理由)。tsumo_count_1p/2p は直前で取得済みの値を再利用し、
+        # pipeline.tsumo_count() を再度呼ばない (呼び出し回数を変えない)。
+        ojama_snap = _drive_ojama_accounting_lean(
+            ojama_tracker, state_p1, state_p2,
+            prev_bstate_p1, prev_bstate_p2,
+            result.p1, result.p2,
+            tsumo_count_1p, tsumo_count_2p, t_sec,
+        )
+        prev_bstate_p1 = result.p1.state
+        prev_bstate_p2 = result.p2.state
+        ojama_net_1p, ojama_forecast_1p, ojama_net_2p, ojama_forecast_2p = (
+            _ojama_snapshot_to_own_perspective(ojama_snap)
+        )
+
+        # 全消しボーナス予約中フラグ (2026-08-12 追加)。VideoChainTracker.
+        # all_clear_pending (chain_detector.py) が公式ルール通りの厳密ラッチを
+        # 保持しているためそのまま取得する。RecognitionPipeline は
+        # 現時点で side 別の公開 getter を持たないため、内部で保持する
+        # side 別 VideoChainTracker (_chain_tracker_1p / _chain_tracker_2p) に
+        # getattr で安全に参照する。enable_chain_tracker=False (既定) の
+        # 収集では tracker が None のため None のまま
+        # (後方互換: _process_side_lean 側で ALL_CLEAR_PENDING_UNKNOWN に埋める)。
+        chain_tracker_1p = getattr(pipeline, "_chain_tracker_1p", None)
+        chain_tracker_2p = getattr(pipeline, "_chain_tracker_2p", None)
+        all_clear_pending_1p = getattr(chain_tracker_1p, "all_clear_pending", None)
+        all_clear_pending_2p = getattr(chain_tracker_2p, "all_clear_pending", None)
+
+        # (d) STABLE持続確認 (2026-08-18、enable_stable_persistence_gate 専用):
+        # 既定 False では _update_raw_pixel_stable が計算を一切行わず True を
+        # 返す (bit-identical)。
+        raw_pixel_stable_1p = _update_raw_pixel_stable(
+            state_p1, frame, "1P", t_sec, enable_stable_persistence_gate,
+        )
+        raw_pixel_stable_2p = _update_raw_pixel_stable(
+            state_p2, frame, "2P", t_sec, enable_stable_persistence_gate,
+        )
+        # stable_persistence_confidence npz 列 (2026-08-18 二次追加、役割
+        # 転用): enable_stable_persistence_gate=False では計算自体が
+        # 行われていない (raw_pixel_stable_*p は計算コストなしの True 固定)
+        # ため、実値と「未計算」を区別するために None (=UNKNOWN sentinel)
+        # のまま記録する。True の場合のみ実際の判定結果を記録する。
+        stable_persistence_confidence_1p = (
+            raw_pixel_stable_1p if enable_stable_persistence_gate else None
+        )
+        stable_persistence_confidence_2p = (
+            raw_pixel_stable_2p if enable_stable_persistence_gate else None
+        )
+
+        # 連鎖中物理推論の配線 (2026-08-18): SideResult.estimated_board /
+        # board_provenance は本番 SideResult に既定値付きで存在するが、
+        # テスト用の最小フェイク pipeline (SimpleNamespace) は未対応の
+        # ままのことがあるため getattr で安全に取得する (is_match_active
+        # 等と同じ後方互換パターン)。board_provenance の フォールバック値
+        # "observed" は SideResult のフィールド既定値と一致させる。
+        estimated_board_1p = getattr(result.p1, "estimated_board", None)
+        estimated_board_2p = getattr(result.p2, "estimated_board", None)
+        board_provenance_1p = getattr(result.p1, "board_provenance", "observed")
+        board_provenance_2p = getattr(result.p2, "board_provenance", "observed")
+
+        _process_side_lean(
+            acc, state_p1, "1P", result.p1.confirmed_board,
+            result.p1.state, result.p1.score, video_id, t_sec, fi,
+            next_pair=result.p1.next_pair, dnext_pair=result.p1.dnext_pair,
+            chain_event=result.p1.chain_event, shared_game=shared_game,
+            exclude_phantom=enable_phantom_board_guard,
+            tsumo_count=tsumo_count_1p,
+            all_clear_pending=all_clear_pending_1p,
+            ojama_net_balance=ojama_net_1p,
+            ojama_forecast=ojama_forecast_1p,
+            match_end_locked=match_end_locked_flag,
+            raw_pixel_stable=raw_pixel_stable_1p,
+            post_match_lockdown_active=post_match_lockdown_active_flag,
+            stable_persistence_confidence=stable_persistence_confidence_1p,
+            estimated_board=estimated_board_1p,
+            board_provenance=board_provenance_1p,
+            enable_chain_estimate_recording=enable_chain_estimate_recording,
+            enable_move_segmented_recording=enable_move_segmented_recording,
+            enable_physics_persistence_filter=enable_physics_persistence_filter,
+            physics_sim=physics_sim,
+            score_reset_requires_zero=enable_score_reset_requires_zero,
+        )
+        _process_side_lean(
+            acc, state_p2, "2P", result.p2.confirmed_board,
+            result.p2.state, result.p2.score, video_id, t_sec, fi,
+            next_pair=result.p2.next_pair, dnext_pair=result.p2.dnext_pair,
+            chain_event=result.p2.chain_event, shared_game=shared_game,
+            exclude_phantom=enable_phantom_board_guard,
+            tsumo_count=tsumo_count_2p,
+            all_clear_pending=all_clear_pending_2p,
+            ojama_net_balance=ojama_net_2p,
+            ojama_forecast=ojama_forecast_2p,
+            raw_pixel_stable=raw_pixel_stable_2p,
+            match_end_locked=match_end_locked_flag,
+            post_match_lockdown_active=post_match_lockdown_active_flag,
+            stable_persistence_confidence=stable_persistence_confidence_2p,
+            estimated_board=estimated_board_2p,
+            board_provenance=board_provenance_2p,
+            enable_chain_estimate_recording=enable_chain_estimate_recording,
+            enable_move_segmented_recording=enable_move_segmented_recording,
+            enable_physics_persistence_filter=enable_physics_persistence_filter,
+            physics_sim=physics_sim,
+            score_reset_requires_zero=enable_score_reset_requires_zero,
+        )
+        if accounting_recorder is not None:
+            accounting_recorder.observe(
+                fi, t_sec, ojama_tracker, game_idx=shared_game.game_idx,
+                chain_events=(
+                    ("p1", result.p1.chain_event),
+                    ("p2", result.p2.chain_event),
+                ),
+            )
+        if physical_recorder is not None:
+            physical_recorder.observe(
+                fi, t_sec, shared_game.game_idx,
+                (
+                    ("p1", result.p1.state, result.p1.confirmed_board, result.p1.chain_event),
+                    ("p2", result.p2.state, result.p2.confirmed_board, result.p2.chain_event),
+                ),
+                raw_boards={
+                    "p1": getattr(result.p1, "cnn_board", None),
+                    "p2": getattr(result.p2, "cnn_board", None),
+                },
+                match_evidence=_physical_match_evidence(result),
+            )
+    cap.release()
+    print(
+        "[lean] processed_frame_range: "
+        f"start={start_frame} end_exclusive={processed_end_frame_exclusive} "
+        f"requested_end_exclusive={end_frame}"
+    )
+
+    # 事後再突合 (W22根治、2026-08-17): score-reset が視覚信号より先着した
+    # ために偽陽性で記録された異常マークを、動画全体を処理し終えた時点の
+    # 視覚信号全履歴と再照合して取り除く。multisignal_mode=False では
+    # anomalies/visual_rise_times が常に空のため no-op (bit-identical)。
+    _reconcile_boundary_anomalies(shared_game)
+
+    # 新試合証拠ゲート (2026-08-19) が破棄した偽境界候補のレビュー用ログ
+    # (game_idx には影響しない。既定 OFF では常に空 = 出力なし)。
+    if shared_game.rejected_rise_times:
+        print(
+            f"[lean] boundary rises rejected (no new-match evidence): "
+            f"{len(shared_game.rejected_rise_times)} at "
+            f"{[round(t, 1) for t in shared_game.rejected_rise_times[:20]]}",
+        )
+
+    # 勝敗ラベルを付与して保存
+    combined_final = _merge_final_scores(state_p1, state_p2)
+    # 勝者クロスチェック (W20/W21根治、2026-08-17): enable_winner_panel_
+    # crosscheck=False (既定) では panel_winners=None のまま渡され、
+    # assign_won_labels は従来通り score 系統単独で判定する (bit-identical)。
+    panel_winners: dict[int, str | None] | None = None
+    processing_end_sec = processed_end_frame_exclusive / fps
+    if enable_winner_panel_crosscheck:
+        panel_winners = _detect_panel_winners_crosscheck(
+            video_path, start_sec, shared_game.advance_times, processing_end_sec,
+        )
+    acc.assign_won_labels(
+        combined_final, panel_winners=panel_winners,
+        panel_priority=enable_winner_panel_priority,
+    )
+    acc.save(out_npz)
+    if enable_winner_panel_crosscheck:
+        observation_path = out_npz.with_name(
+            out_npz.stem + EVENT_OBSERVATION_SIDECAR_SUFFIX
+        )
+        observation = _build_event_observation_sidecar(
+            start_sec, shared_game.advance_times, processing_end_sec, panel_winners
+        )
+        observation_path.write_text(
+            json.dumps(observation, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event observations -> {observation_path}")
+    if accounting_recorder is not None:
+        accounting_path = out_npz.with_name(
+            out_npz.stem + EVENT_ACCOUNTING_SIDECAR_SUFFIX
+        )
+        accounting = accounting_recorder.sidecar_value(
+            start_frame, processed_end_frame_exclusive,
+        )
+        accounting_path.write_text(
+            json.dumps(accounting, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event accounting -> {accounting_path}")
+    if physical_recorder is not None:
+        physical_path = out_npz.with_name(
+            out_npz.stem + EVENT_PHYSICAL_SIDECAR_SUFFIX
+        )
+        physical = physical_recorder.sidecar_value(
+            start_frame, processed_end_frame_exclusive,
+        )
+        physical_path.write_text(
+            json.dumps(physical, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[lean] event physical observations -> {physical_path}")
+
+    # 試合境界異常イベントの永続化 (W20/W21根治、2026-08-17)。
+    # multisignal_mode=False または異常なしなら書き出さない (従来挙動維持)。
+    if shared_game.anomalies:
+        anomaly_path = out_npz.with_name(
+            out_npz.stem + "_boundary_anomalies.json",
+        )
+        anomaly_path.write_text(
+            json.dumps(shared_game.anomalies, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(
+            f"[lean] boundary anomalies: {len(shared_game.anomalies)} events "
+            f"-> {anomaly_path}",
+        )
+
+    return len(acc.grids)
+
+
+def _build_event_observation_sidecar(
+    start_sec: float,
+    advance_times: list[float],
+    last_observable_sec: float,
+    panel_winners: dict[int, str | None] | None,
+) -> dict[str, object]:
+    """事後検出した境界証拠とWIN★パネル結果を入力列から隔離する。"""
+
+    boundaries = [
+        {
+            "closing_game_index": index,
+            "opening_game_index": index + 1,
+            "observed_sec": round(float(value), 6),
+            "evidence_type": "accepted_boundary_signal",
+        }
+        for index, value in enumerate(advance_times)
+    ]
+    starts = [start_sec, *advance_times]
+    winner_results = [
+        _panel_result_row(index, winner, starts, last_observable_sec)
+        for index, winner in sorted((panel_winners or {}).items())
+    ]
+    return {
+        "schema_version": "event-observation-sidecar/v1",
+        "generated_posthoc": True,
+        "processing_start_sec": round(float(start_sec), 6),
+        "processing_end_sec": round(float(last_observable_sec), 6),
+        "winner_detector_status": "completed" if panel_winners is not None else "failed",
+        "accepted_boundary_evidence": boundaries,
+        "winner_panel_results": winner_results,
+    }
+
+
+def _panel_result_row(
+    game_index: int,
+    winner: str | None,
+    starts: list[float],
+    last_observable_sec: float,
+) -> dict[str, object]:
+    if winner == PANEL_UNAVAILABLE:
+        result, winner_side = "panel_unavailable", "unknown"
+    elif winner in {"1P", "2P"}:
+        result, winner_side = "winner_observed", winner
+    else:
+        result, winner_side = "ambiguous", "unknown"
+    evidence_end = (
+        starts[game_index + 1]
+        if game_index + 1 < len(starts)
+        else last_observable_sec
+    )
+    return {
+        "game_index": int(game_index),
+        "result": result,
+        "winner_side": winner_side,
+        "evidence_start_sec": round(float(starts[game_index]), 6),
+        "evidence_end_sec": round(float(evidence_end), 6),
+        "available_sec": round(float(last_observable_sec), 6),
+        "availability_reason": "posthoc_full_clip_detector",
+    }
+
+
+def _detect_panel_winners_crosscheck(
+    video_path: Path,
+    start_sec: float,
+    advance_times: list[float],
+    last_observable_sec: float,
+) -> dict[int, str | None] | None:
+    """パネル数字差分によるクロスチェック勝者判定 (W20/W21根治、2026-08-17)。
+
+    敗者特定の 2 系統一致要求 (score 系統 + パネル系統) のうち、パネル系統側
+    を計算する。動画オープン不能・検出処理中の例外等、クロスチェック自体が
+    実行不能な場合は None を返し、呼び出し側は score-only の従来挙動に
+    フォールバックする (fail-silent 警戒: 失敗を隠して全 unknown にはしない)。
+
+    Args:
+        video_path: 入力動画パス (メインループの cap とは独立に開き直す。
+            MatchWinnerDetector はランダムアクセスシークを多用するため
+            専用の VideoCapture インスタンスを使う)。
+        start_sec: 処理開始オフセット秒 (= 試合 0 の開始とみなす近似値)。
+        advance_times: _SharedGameCounter.advance_times (境界を進めた時刻の
+            列。試合 1 以降の開始近似値。score-reset 検知は着地後数フレーム
+            遅れるため厳密な「レディーゴー」時刻ではないが、
+            offset_before=1.0 の余裕を持たせた数値パネル比較には十分)。
+        last_observable_sec: 最終処理フレームの時刻 (最終試合判定の探索起点)。
+
+    Returns:
+        {game_idx: "1P"|"2P"|PANEL_UNAVAILABLE|None}。全体失敗時は None。
+        PANEL_UNAVAILABLE は端点でパネルが物理的に映らず読取不能だった
+        試合 (2026-08-19 追加、assign_won_labels が窒息判定へフォールバック)。
+    """
+    match_starts = [start_sec, *advance_times]
+    try:
+        detector = MatchWinnerDetector.load_default()
+        cap2 = cv2.VideoCapture(str(video_path))
+        if not cap2.isOpened():
+            cap2.release()
+            raise RuntimeError(f"failed to reopen video: {video_path}")
+        try:
+            results = detector.detect_all_winners(
+                cap2, match_starts, last_observable_sec=last_observable_sec,
+            )
+        finally:
+            cap2.release()
+    except Exception as exc:  # noqa: BLE001 - fail-silent 回避のため意図的に捕捉
+        print(
+            f"[lean] WARNING: winner panel crosscheck failed ({exc}); "
+            f"falling back to score-only winner labeling for this video",
+            file=sys.stderr,
+        )
+        return None
+    # panel_unavailable (端点でパネルが物理的に映らず読取不能、2026-08-19) は
+    # 番兵値 PANEL_UNAVAILABLE にマップし、assign_won_labels 側で窒息判定
+    # フォールバックを許可する。getattr 既定 False は旧 API の結果オブジェクト
+    # (フィールドなし) との後方互換のため。
+    return {
+        i: (
+            PANEL_UNAVAILABLE
+            if getattr(r, "panel_unavailable", False) else r.winner
+        )
+        for i, r in enumerate(results)
+    }
+
+
+def _process_side_lean(
+    acc: _LeanNpzAccumulator,
+    state: _SideState,
+    side_label: str,
+    board: Optional[Board],
+    bstate: BoardState,
+    score: int | None,
+    video_id: str,
+    t_sec: float,
+    frame_idx: int,
+    next_pair: tuple[int, int] | None = None,
+    dnext_pair: tuple[int, int] | None = None,
+    chain_event: object | None = None,
+    shared_game: "_SharedGameCounter | None" = None,
+    exclude_phantom: bool = False,
+    tsumo_count: int | None = None,
+    all_clear_pending: int | None = None,
+    ojama_net_balance: float | None = None,
+    ojama_forecast: float | None = None,
+    match_end_locked: bool | None = None,
+    raw_pixel_stable: bool = True,
+    post_match_lockdown_active: bool | None = None,
+    stable_persistence_confidence: bool | None = None,
+    estimated_board: Optional[Board] = None,
+    board_provenance: str | None = None,
+    enable_chain_estimate_recording: bool = False,
+    enable_move_segmented_recording: bool = False,
+    enable_physics_persistence_filter: bool = False,
+    physics_sim: "ChainSimulator | None" = None,
+    score_reset_requires_zero: bool = False,
+) -> None:
+    """1 side の STABLE snapshot を蓄積する。指標計算は行わない。
+
+    next_pair/dnext_pair は capture_next=False (既定) の呼び出しでは常に
+    None (SideResult 既定値) となり、acc.append 側で -1 埋めされる
+    (後方互換)。
+
+    Args:
+        chain_event: result.p{1,2}.chain_event (src.recognition_pipeline.
+            ChainEvent | None、循環import回避のため object 型ヒント)。
+            機能D 検知時刻 (.trigger_sec) を chain_trigger_sec として記録する
+            (2026-07-29 追加、既存呼び出しは省略可・挙動不変)。
+            .mechanism (CHAIN_MECHANISM_* | None) を chain_mechanism として
+            記録する (2026-08-02 Step2 追加、同様に省略可・挙動不変)。
+        shared_game: 1P/2P 共有のゲーム境界カウンタ (2026-07-31)。
+            渡すと片側の score OCR 破綻でも game_idx がずれない。
+            None なら従来の side 独立カウンタ (後方互換)。
+        tsumo_count: RecognitionPipeline.tsumo_count(side) の値 (この
+            snapshot 時点の試合開始からの確定ツモ設置数)。None は
+            acc.append 側で TSUMO_COUNT_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        all_clear_pending: この snapshot 時点の VideoChainTracker.
+            all_clear_pending (全消しボーナス予約中フラグ) の値。None は
+            acc.append 側で ALL_CLEAR_PENDING_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        ojama_net_balance: この snapshot 時点のお邪魔会計 net 収支
+            (own-perspective)。None は acc.append 側で
+            OJAMA_NET_BALANCE_UNKNOWN (NaN) に埋められる (後方互換: 既存
+            呼び出しは省略可・挙動不変、2026-08-12 追加)。
+        ojama_forecast: この snapshot 時点のお邪魔会計予告個数
+            (own-perspective)。None は acc.append 側で
+            OJAMA_FORECAST_UNKNOWN (NaN) に埋められる (後方互換、
+            2026-08-12 追加)。
+        exclude_phantom: 幻盤面ガード (2026-08-08)。True で非試合画面由来の
+            満杯おじゃま盤面を記録しない。既定 False = 従来挙動完全維持。
+        match_end_locked: この snapshot 時点の PipelineResult.
+            match_end_locked (勝敗演出ロックダウン区間フラグ)。None は
+            acc.append 側で MATCH_END_LOCKED_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-17 追加、
+            W20/W21根治)。
+        raw_pixel_stable: (d) STABLE持続確認 (2026-08-18 導入、2026-08-18
+            二次追加で役割変更: 記録拒否には使わない、_should_emit のdocstring
+            参照)。既定 True = 従来挙動完全維持 (backwards compat)。
+        post_match_lockdown_active: この snapshot 時点の RecognitionPipeline.
+            _post_match_lockdown_active (次試合開始までのラッチ活性フラグ)。
+            None は acc.append 側で POST_MATCH_LOCKDOWN_ACTIVE_UNKNOWN (-1)
+            に埋められる (後方互換: 既存呼び出しは省略可・挙動不変、
+            2026-08-18 追加、境界実装の仕上げ)。
+        stable_persistence_confidence: この snapshot 時点の
+            _update_raw_pixel_stable 判定結果 (通常は raw_pixel_stable と
+            同じ値を渡す想定)。None は acc.append 側で
+            STABLE_PERSISTENCE_CONFIDENCE_UNKNOWN (-1) に埋められる
+            (後方互換: 既存呼び出しは省略可・挙動不変、2026-08-18 二次
+            追加、STABLE持続ゲートの役割転用)。
+        estimated_board: この snapshot 時点の RecognitionPipeline.
+            SideResult.estimated_board (起点盤面から ChainSimulator で前進
+            させた CHAIN/GRAVITY_SETTLE 中の物理推定盤面)。
+            enable_chain_estimate_recording=True のときのみ、board (実測
+            confirmed_board) が None かつ bstate が CHAIN/GRAVITY_SETTLE の
+            snapshot でこちらを代わりに記録する対象候補になる (2026-08-18
+            追加、連鎖中物理推論の配線)。既定 None = 従来挙動完全維持。
+        board_provenance: この snapshot 時点の RecognitionPipeline.
+            SideResult.board_provenance ("observed"/"chain_estimate"/
+            "chain_estimate_low_confidence"/"chain_estimate_stale_hold")。
+            board が実測のときも常に acc.append へそのまま伝搬する
+            (マーキング目的、既存挙動には影響しない新規メタデータ列)。
+            None は acc.append 側で BOARD_PROVENANCE_UNKNOWN ("") に
+            埋められる (後方互換、2026-08-18 追加)。
+        enable_chain_estimate_recording: True で estimated_board 代替記録を
+            有効化する (2026-08-18 追加、user確定要件「連鎖中は物理推論、
+            発火した瞬間から使い続け実測STABLE復帰で自動的に置き換わる」)。
+            board_provenance が CHAIN_ESTIMATE_LOW_CONFIDENCE_PROVENANCE
+            (起点盤面の物理予測と score 由来 chain_count が不一致 = 起点
+            自体が誤認の疑い) のときは採用しない。OJAMA_FALL 中は
+            estimated_board 自体が常に None (_compute_chain_estimate が
+            CHAIN/GRAVITY_SETTLE 限定のため、user明言「降り終わるまで待つ」
+            と自然に一致) で対象外になる。既定 False = 従来挙動完全維持
+            (backwards compat、bit-identical)。
+        enable_move_segmented_recording: 1手区切り観測スケジューラ
+            (2026-08-18) を有効化する。既定 False = 従来挙動完全維持
+            (bit-identical、_update_move_scheduler は no-op)。
+        enable_physics_persistence_filter: 持続的物理制約フィルタ
+            (2026-08-18) を有効化する。既定 False = 従来挙動完全維持
+            (bit-identical、_update_physics_transition_marker は no-op)。
+        physics_sim: 持続的物理制約フィルタが使う ChainSimulator インスタンス
+            (呼出元 collect_lean() で使い回す)。
+        score_reset_requires_zero: 試合境界を「score が 0 になった」ときだけ
+            認める (2026-08-20)。既定 False = 従来の減少幅判定で
+            bit-identical。
+    """
+    _update_game_boundary(
+        state, score, shared=shared_game, t_sec=t_sec, side_label=side_label,
+        require_zero=score_reset_requires_zero,
+    )
+    # 1手区切り観測スケジューラ + 持続的物理制約フィルタの毎フレーム状態更新
+    # (2026-08-18): 実際の (置換前の) bstate/next_pair/tsumo_count を見る。
+    # 既定 False では共に no-op (bit-identical、状態も変更しない)。
+    # 両関数は tsumo_count の前回値をそれぞれ独立したフィールド
+    # (prev_tsumo_count_for_physics / prev_tsumo_count) で追跡するため、
+    # 呼び出し順序はどちらが先でも良い (責務分離により相互干渉しない)。
+    _update_physics_transition_marker(
+        state, bstate, enable_physics_persistence_filter,
+        tsumo_count=tsumo_count,
+    )
+    _update_move_scheduler(
+        state, next_pair, tsumo_count, bstate, frame_idx,
+        enable_move_segmented_recording,
+    )
+    # 連鎖中物理推論の配線 (2026-08-18): confirmed_board が None かつ
+    # CHAIN/GRAVITY_SETTLE 中に限り、estimated_board を確定盤面の代わりに
+    # 記録候補とする。_should_emit は bstate==STABLE を要求するため、
+    # 採用する場合のみ「STABLE 相当」として扱う (関数本体は変更しない)。
+    effective_board = board
+    effective_bstate = bstate
+    if (
+        enable_chain_estimate_recording
+        and board is None
+        and bstate in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
+        and estimated_board is not None
+        and board_provenance != CHAIN_ESTIMATE_LOW_CONFIDENCE_PROVENANCE
+    ):
+        effective_board = estimated_board
+        effective_bstate = BoardState.STABLE
+    if effective_board is None or not _should_emit(
+        state, effective_board, effective_bstate, exclude_phantom=exclude_phantom,
+        raw_pixel_stable=raw_pixel_stable,
+        enable_move_segmented_recording=enable_move_segmented_recording,
+        frame_idx=frame_idx,
+        enable_physics_persistence_filter=enable_physics_persistence_filter,
+        physics_sim=physics_sim,
+    ):
+        return
+    trigger_sec = getattr(chain_event, "trigger_sec", None) if chain_event is not None else None
+    mechanism = getattr(chain_event, "mechanism", None) if chain_event is not None else None
+    acc.append(
+        effective_board._grid, video_id, side_label,
+        round(t_sec, 3), state.game_idx, frame_idx,
+        score=score, next_pair=next_pair, dnext_pair=dnext_pair,
+        chain_trigger_sec=trigger_sec, mechanism=mechanism,
+        tsumo_count=tsumo_count, all_clear_pending=all_clear_pending,
+        ojama_net_balance=ojama_net_balance, ojama_forecast=ojama_forecast,
+        match_end_locked=match_end_locked,
+        post_match_lockdown_active=post_match_lockdown_active,
+        stable_persistence_confidence=stable_persistence_confidence,
+        board_provenance=board_provenance,
+    )
+    state.last_emitted_grid = effective_board._grid.tobytes()
+    if enable_move_segmented_recording:
+        # 1手=1記録のラッチ (2026-08-18): 猶予窓内で最短の STABLE を採用した
+        # ので、以降の候補 (同一窓内) は次の手区切りイベントまで無視する。
+        state.move_window_recorded = True
+
+
+def _merge_final_scores(
+    state_p1: _SideState,
+    state_p2: _SideState,
+) -> dict[int, dict[str, int | None]]:
+    """両 side の final_scores を game_idx をキーに統合する。
+
+    Returns:
+        {game_idx: {"1P": score_or_None, "2P": score_or_None}}
+    """
+    all_games: set[int] = set(state_p1.final_scores) | set(state_p2.final_scores)
+    result: dict[int, dict[str, int | None]] = {}
+    for gidx in all_games:
+        result[gidx] = {
+            "1P": state_p1.final_scores.get(gidx),
+            "2P": state_p2.final_scores.get(gidx),
+        }
+    return result
+
+
+# ============================
+# CLI エントリポイント
+# ============================
+
+def main() -> int:
+    """CLI エントリポイント。"""
+    parser = argparse.ArgumentParser(description="軽量 board 抽出 (SiameseBoardCNN 学習用)")
+    parser.add_argument("--video", type=Path, required=True, help="入力動画パス")
+    parser.add_argument("--out-npz", type=Path, required=True, help="出力 npz パス")
+    parser.add_argument(
+        "--max-sec", type=float, default=0.0,
+        help="処理する最大秒数 (0=全長)",
+    )
+    parser.add_argument(
+        "--start-sec", type=float, default=0.0,
+        help="処理開始オフセット秒",
+    )
+    parser.add_argument(
+        "--sample-interval", type=float, default=0.0,
+        dest="sample_interval",
+        help=(
+            "フレーム間引き間隔 (秒)。0 = 全フレーム処理 (既定)。"
+            "0.1 で約 3×、0.2 で約 6× 高速化。"
+            "STABLE 検出・勝者判定には影響しない。"
+            "--sample-interval-frames 指定時はそちらが優先される"
+        ),
+    )
+    parser.add_argument(
+        "--sample-interval-frames", type=int, default=None,
+        dest="sample_interval_frames",
+        help=(
+            "フレーム間引き間隔 (フレーム数、省略可、整数)。"
+            "fps に関係なくこのフレーム数ごとに 1 回認識する。"
+            "--sample-interval (秒) より優先される。"
+            "例: 8フレームに1回 (60fps 想定) なら --sample-interval-frames 8"
+        ),
+    )
+    parser.add_argument(
+        "--with-next", action="store_true", dest="with_next",
+        help=(
+            "NextDetector を有効化し next1_a/next1_b/dnext_a/dnext_b を"
+            "実値で記録する (指標①本命版検証用)。既定は無効 (-1 埋め、後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-tracker", action="store_true", dest="enable_chain_tracker",
+        help=(
+            "VideoChainTracker (1P/2P) を有効化する。既定は無効 (後方互換、"
+            "既存 boards_lean_fixed 系 npz の再現性維持)。"
+            "2026-07-30 追加: 機能D (掛け算式検知) 単独では CHAIN 検知が"
+            "実運用で 0 件だった実測があり、基準データ収集ではこちらを有効化する。"
+        ),
+    )
+    parser.add_argument(
+        "--normalize-fps-30", action="store_true", dest="normalize_fps_30",
+        help=(
+            "60fps 等の動画を stride-2 相当 (実効30fps) に間引く "
+            "(src.fps_normalize.resolve_normalize_fps_30_stride、2026-07-30 追加)。"
+            "--sample-interval-frames が明示指定されている場合はそちらが優先され、"
+            "本フラグは無視される。"
+            "2026-07-30 既定 True 化 (user承認済み) により本フラグは実質 no-op "
+            "(明示しなくても既定で有効)。後方互換のため残置。"
+            "無効化するには --no-normalize-fps-30 を使う。"
+        ),
+    )
+    parser.add_argument(
+        "--no-normalize-fps-30", action="store_true", dest="no_normalize_fps_30",
+        help=(
+            "60fps stride 正規化を明示的に無効化する (2026-07-30 追加、既定 "
+            "True 化に伴う逃げ道)。--normalize-fps-30 と同時指定した場合は本"
+            "フラグ (無効化) が優先される。全フレームであることが要件の"
+            "基準データ収集等、既定 ON では困る用途で使う。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-effect-gate", action="store_true", dest="enable_effect_gate",
+        help=(
+            "エフェクト時間ゲート (2026-08-03、A/B 計測用) を有効化する。"
+            "満杯盤面 47 セル誤り根治の効果測定に使う。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-effect-visual-gate", action="store_true",
+        dest="enable_effect_visual_gate",
+        help=(
+            "案B 4条件AND拡張 (2026-08-04、A/B 計測用) を有効化する。"
+            "--enable-effect-gate の時間窓に (not 自連鎖中) AND (not 全消し"
+            "ラッチ) AND (視覚グロー検出) を追加する。--enable-effect-gate が"
+            "無効の間は無視される。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--effect-gate-persist-sec", type=float, default=None,
+        dest="effect_gate_persist_sec",
+        help="エフェクト時間ゲートの確定に必要な持続秒数 (既定 0.4秒)。",
+    )
+    parser.add_argument(
+        "--enable-burst-guard-v2", action="store_true",
+        dest="enable_burst_guard_v2",
+        help=(
+            "バーストガード再設計 Stage1 (2026-08-05、A/B 計測用) を有効化する。"
+            "docs/BURST_GUARD_DESIGN_2026-08-05.md。Schmitt trigger視覚トリガー"
+            "+ハード凍結方式に effect_gate_window_active の計算を切り替える"
+            "(--enable-effect-visual-gate とは排他)。--enable-effect-gate が"
+            "無効の間は no-op (警告ログ)。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-transition-merge-guard", action="store_true",
+        dest="enable_transition_merge_guard",
+        help=(
+            "バーストガード Stage1.5 (2026-08-05 アーキ追補、A/B 計測用) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §10。"
+            "NON-STABLE→STABLE 遷移merge直前に物理的期待値フィルタを"
+            "effect_gate_window_active 中のみ適用する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-gate-open-threshold", type=float, default=None,
+        dest="burst_gate_open_threshold",
+        help=(
+            "バーストガード緊急較正 (2026-08-05、factorialバックテスト用)。"
+            "Schmitt trigger の開窓閾値を上書きする (CLOSE も同値運用)。"
+            "既定 None = BURST_GATE_OPEN_THRESHOLD (0.97)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-hidden-row-burst-guard", action="store_true",
+        dest="enable_hidden_row_burst_guard",
+        help=(
+            "バーストガード Stage1.5b (2026-08-05 アーキ追補、§11) を有効化"
+            "する。docs/BURST_GUARD_DESIGN_2026-08-05.md §11。row1-3 凍結"
+            "中/close直後クールダウン中の infer_hidden_row 呼び出しをスキップし"
+            "row0 (隠し段) の確信度100%%誤色書き込みを防ぐ。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-burst-close-extension", action="store_true",
+        dest="enable_burst_close_extension",
+        help=(
+            "バーストガード §12 close側再設計 (2026-08-05 アーキ確定) を"
+            "有効化する。docs/BURST_GUARD_DESIGN_2026-08-05.md §12.2。"
+            "生 is_open と実効active信号 (遷移mergeフィルタ+hard freeze の"
+            "適用条件) を分離し、close後クールダウン (BURST_GATE_POST_"
+            "CLOSE_COOLDOWN_SEC) と相手連鎖継続中の延長を実効側に反映する。"
+            "--enable-burst-guard-v2 が無効の間は no-op (警告ログ)。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--burst-chain-gap-max", type=float, default=None,
+        dest="burst_chain_gap_max_sec",
+        help=(
+            "バーストガード §12 緊急パラメータ化 (2026-08-05)。相手連鎖延長の"
+            "再点火間隔上限を上書きする。既定 None = モジュール定数 3.3。"
+            "0.0 を渡すと延長を常に不成立にできる (差分実験で busy局面の"
+            "凍結連鎖の犯人と確定した延長機構をA/B測定で切る用途)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-online-hsv-refresh", action="store_true",
+        dest="enable_online_hsv_refresh",
+        help=(
+            "長時間劣化修正 A+B (2026-08-06) を有効化する。"
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md §1/§4。"
+            "試合毎のOnlineHsvCalibrator較正リセット (A) + inject後の凍結"
+            "ガード撤廃 (B) の両方を有効にする。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-transition-debounce", action="store_true",
+        dest="enable_match_transition_debounce",
+        help=(
+            "長時間劣化修正 A' (2026-08-06、§4追補) を有効化する。"
+            "docs/LONGRUN_DEGRADATION_INVESTIGATION_2026-08-06.md。"
+            "is_active の True/False遷移を対称デバウンスし、"
+            "MATCH_TRANSITION_DEBOUNCE_SEC (1.0秒) 未満のフリッカーによる "
+            "_match_active_started_frame/_time の誤再アーム/リセットを防ぐ。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-entry-gravity-settle-guard", action="store_true",
+        dest="enable_ojama_entry_gravity_settle_guard",
+        help=(
+            "修正B (2026-08-08、状態機械振動バグB+C の修正) を有効化する。"
+            "GRAVITY_SETTLE 中の OJAMA_FALL 新規発火を禁止する。"
+            "--enable-gravity-settle-reset-on-exit と対で使う。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-gravity-settle-reset-on-exit", action="store_true",
+        dest="enable_gravity_settle_reset_on_exit",
+        help=(
+            "修正C (2026-08-08、状態機械振動バグB+C の修正) を有効化する。"
+            "GRAVITY_SETTLE が他 detector に横取りされて弾き出された際、"
+            "GravitySettleDetector の内部カウンタをその場でリセットする。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--margin-time-rate", action="store_true",
+        dest="enable_margin_time_rate",
+        help=(
+            "マージンタイム逓減 (2026-08-09) を有効化する。おじゃま判定の閾値を"
+            "経過時間に応じた実効レートにする (最初の1手から95.5秒で減衰開始)。"
+            "従来の固定70では長い試合の後半で着弾の6.27%%を見逃していた。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-phantom-board-guard", action="store_true",
+        dest="enable_phantom_board_guard",
+        help=(
+            "幻盤面ガード (2026-08-08) を有効化する。非試合画面 (対戦カード"
+            "紹介・ロビー・順位表) で誤認識された満杯おじゃま盤面を snapshot "
+            "として記録しない。実測で全123本・0.875%% が該当。"
+            "既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--stable-majority-window", action="store_true",
+        dest="enable_stable_majority_window",
+        help=(
+            "盤面確定窓 3中2多数決 (2026-08-13 user承認、認識99.5%%物差し"
+            "条件付き採用) を有効化する。初回STABLE確定窓を「stable_frame_count "
+            "連続厳密一致」から「直近3観測中2一致」に切り替える (1フレーム"
+            "ノイズで振り出しに戻る問題・2値交互ノイズへの弱さの対策)。"
+            "既定は無効 (後方互換、148動画収集走行中のため既定OFF必須)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-fall-placement-override", action="store_true",
+        dest="enable_ojama_fall_placement_override",
+        help=(
+            "案2 (2026-08-13、OJAMA_FALL誤分類根因調査) を有効化する。"
+            "OJAMA_FALL 滞在中に実設置の証拠 (NEXTスライド or 自sideスコアの"
+            "落下ボーナス増分) を検知したら settle 判定を待たず即座に STABLE "
+            "へ復帰する (自分のツモ設置による出口判定延長・振動の対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-fall-entry-hardening", action="store_true",
+        dest="enable_ojama_fall_entry_hardening",
+        help=(
+            "案4-lite (2026-08-13、根因調査追補) を有効化する。OJAMA_FALL "
+            "entry 判定を frame 数連続でなく実時間連続に切り替え、CHAIN 状態"
+            "からの割り込み entry のみ持続時間を厳格化する (stride 間引き下で"
+            "chain_event が瞬間欠落した隙に OJAMA_FALL が CHAIN を奪う対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-gate-raw-fallback", action="store_true",
+        dest="enable_chain_gate_raw_fallback",
+        help=(
+            "案3 (2026-08-13、優先度最下位) を有効化する。4連結ゲートが "
+            "confirmed_board 上で erasable なしと判定した場合でも、cnn_board "
+            "(常時最新) に erasable があれば chain_event を通す (CHAIN 継続中"
+            "のみ)。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-fall-scoped-exit", action="store_true",
+        dest="enable_ojama_fall_scoped_exit",
+        help=(
+            "案1 (2026-08-13、OJAMA_FALL出口の根治、"
+            "docs/BURST_GUARD_DESIGN_2026-08-05.md §12.5 原典) を有効化する。"
+            "OJAMA_FALL 退出条件を「おじゃまセル限定の個数安定」に切り替える "
+            "(色ぷよの増減は無視、案Bの自分のツモ設置による振動の対策)。"
+            "既定は無効 (後方互換、user デモレビュー承認前の savepoint 実装)。"
+        ),
+    )
+    parser.add_argument(
+        "--precise-seek", action="store_true",
+        dest="precise_seek",
+        help=(
+            "フレーム精度シーク (2026-08-14、タスク#5 物差し回帰で発見した"
+            "測定器事故の修正) を有効化する。--start-sec 指定時の"
+            "cap.set(CAP_PROP_POS_FRAMES) を廃し、frame 0 から読み捨てる"
+            "方式に切り替える (cv2/ffmpeg の GOP依存シーク誤差を根治、"
+            "再エンコード世代が異なる動画で人手ラベルの絶対フレーム番号との"
+            "突合が大きくずれる問題への対策)。--start-sec 0 (通常の Phase L "
+            "regen 運用) では無関係。既定は無効 (後方互換、処理コスト増)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-highlight-override", action="store_true",
+        dest="enable_highlight_override",
+        help=(
+            "W13根治 案1 (2026-08-16)。ImageReader.use_highlight_override を"
+            "有効化する (白ハイライト blob 検出で patch-NCC tier1 EMPTY判定を"
+            "却下、docs/KNOWN_WEAKNESSES.md W13)。既定は無効 (後方互換、"
+            "物差しv2 A/B測定用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-patch-fp-hsv-guard", action="store_true",
+        dest="enable_patch_fp_hsv_guard",
+        help=(
+            "W13根治 案2 (2026-08-17)。ImageReader.enable_patch_fp_hsv_guard を"
+            "有効化する (tier1 patch-NCC 経路に cycle17-19 の HSV AND ガードを"
+            "移植、docs/KNOWN_WEAKNESSES.md W13)。既定は無効 (後方互換、"
+            "物差しv2 A/B/併用測定用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-floating-gap-restore", action="store_true",
+        dest="enable_floating_gap_restore",
+        help=(
+            "R2 浮きぷよ是正機構 (2026-08-17)。TSUMO_FALL/OJAMA_FALL→STABLE "
+            "遷移で「下が空・上に puyo」の物理矛盾を検出したら、上を消すの"
+            "でなく遷移前 confirmed_board から色を復元する (docs/"
+            "KNOWN_WEAKNESSES.md W13 の第二防衛線)。既定は無効 (後方互換、"
+            "hsv-guard 併用/単独 A/B 測定用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-landing-color-guard", action="store_true",
+        dest="enable_landing_color_guard",
+        help=(
+            "W10根治 (2026-08-17)。RecognitionPipeline.load_default の "
+            "enable_landing_color_guard を有効化する (着地セル色の継続監視"
+            "ガード)。CLI 配線漏れの是正 (認識強化統一測定タスクで発見)。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-boundary-multisignal", action="store_true",
+        dest="enable_boundary_multisignal",
+        help=(
+            "W20/W21根治 (2026-08-17)。試合境界マルチシグナル。"
+            "RecognitionPipeline.is_match_active (score_zero + "
+            "match_end_locked + ヒステリシスの統合判定、本番稼働中) の"
+            "False→True 立ち上がりを game_idx 進行の主信号にする。"
+            "score-reset 単独判定はフォールバック + 異常マーク "
+            "(<out_npz>_boundary_anomalies.json に記録) に降格する。"
+            "既定は無効 (後方互換、docs/KNOWN_WEAKNESSES.md W20/W21)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-winner-panel-crosscheck", action="store_true",
+        dest="enable_winner_panel_crosscheck",
+        help=(
+            "W20/W21根治 (2026-08-17)。MatchWinnerDetector (パネル数字差分) "
+            "による勝者クロスチェックを有効化する。score 系統の勝者判定との"
+            "2系統一致を要求し、不一致/片方欠損は unknown とする。"
+            "動画を再オープンしてシークするため追加コスト大。"
+            "既定は無効 (後方互換、docs/KNOWN_WEAKNESSES.md W20/W21)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-event-accounting-sidecar", action="store_true",
+        dest="enable_event_accounting_sidecar",
+        help=(
+            "出来事源の会計観測サイドカーを収集する試験専用スイッチ。"
+            "既定は無効で、本番採用設定には登録しない。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-event-physical-sidecar", action="store_true",
+        dest="enable_event_physical_sidecar",
+        help=(
+            "連鎖開始・全消し・着地前後盤面の観測サイドカーを収集する試験専用スイッチ。"
+            "既定は無効で、本番採用設定には登録しない。"
+        ),
+    )
+    parser.add_argument(
+        "--score-region-calibration", type=Path, default=None,
+        dest="score_region_calibration",
+        help=(
+            "得点表示位置の事前較正JSON。映像IDとSHA-256が一致する場合だけ"
+            "左右別の補正座標を使う。省略時は従来座標を完全に維持する。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-override-color-guard", action="store_true",
+        dest="enable_override_color_guard",
+        help=(
+            "持続誤認26件系統1 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10)。"
+            "cycle 71n の STABLE 長期不一致 override 発火セルを着地色 watch "
+            "リストに合流登録し、CNN==HSV 一致による即時再訂正の対象にする。"
+            "既定は無効 (後方互換、bit-identical、統一測定 構成E 用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-column-stack-fix", action="store_true",
+        dest="enable_ojama_column_stack_fix",
+        help=(
+            "持続誤認26件系統2 (2026-08-17、docs/KNOWN_WEAKNESSES.md W10、"
+            "c109実測)。OJAMA_FALL→STABLE 遷移 merge で、既存の色ぷよが"
+            "同一列内の二重着地衝突でおじゃまに上書きされる物理違反を防ぐ。"
+            "既定は無効 (後方互換、bit-identical、統一測定 構成E 用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-next-history-starvation-fix", action="store_true",
+        dest="enable_next_history_starvation_fix",
+        help=(
+            "W23根治 (2026-08-17、docs/KNOWN_WEAKNESSES.md W23)。"
+            "_validate_next_history の「NEXT履歴+ever_seen に無い色を強制"
+            "置換」を、試合開始直後 ever_seen が4色未満の飢餓状態の間は"
+            "スキップし観測値をそのまま通す。既定は無効 (後方互換、"
+            "bit-identical、統一測定 構成F 用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-cnn-override-warmup", action="store_true",
+        dest="enable_ojama_cnn_override_warmup",
+        help=(
+            "W25根治 おじゃま落下窓の総合ガード (2026-08-17、"
+            "docs/KNOWN_WEAKNESSES.md W25)。おじゃま落下時の白雲パーティクル"
+            "誤認対策。OJAMA_FALL entry〜exit の間 "
+            "OJAMA_OVERRIDE_EXIT_WARMUP_SEC(1.3s) 秒間、(1) cycle 71n の "
+            "STABLE 長期不一致 override の発火、(2) DriftDetector "
+            "needs_resync による sm.reset() (雲混入で confirmed_board が"
+            "丸ごと None 化される第2の実害経路への対処) の両方を抑制する。"
+            "既定は無効 (後方互換、bit-identical、構成F+本フラグ の A/B 用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-write-accounting-guard", action="store_true",
+        dest="enable_ojama_write_accounting_guard",
+        help=(
+            "W25根治 第3弾・最終 (2026-08-18、docs/KNOWN_WEAKNESSES.md W25)。"
+            "CNN観測入力段の会計整合フィルタを一元適用する。非空色セルへの"
+            "9書込みかつ pending おじゃま予告クレジット不足の場合のみ直近"
+            "安定色へ差し替える (空セルへの9書込み=正規着弾経路は対象外)。"
+            "cycle71n / drift-resync / 事後復旧ゲートは無改修。既定は無効 "
+            "(後方互換、bit-identical、構成F+第3弾フラグ の A/B 用)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-stable-persistence-gate", action="store_true",
+        dest="enable_stable_persistence_gate",
+        help=(
+            "(d) STABLE持続確認 (2026-08-18、収集限定、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §5。2026-08-18 "
+            "二次追加で役割変更: 記録拒否ではなく npz の "
+            "stable_persistence_confidence 列へのタグ付与になった。旧挙動"
+            "(収集行数が約6割減、局面偏りあり)は"
+            "scripts/_diag_stable_persistence_loss_breakdown_2026-08-18.py "
+            "参照)。"
+            "直近 STABLE_PERSISTENCE_WINDOW_SEC 秒の盤面 ROI 生ピクセルが"
+            "持続静止しているかを計算し記録するのみで、記録自体は拒否しない。"
+            "既定は無効 (後方互換、bit-identical、計算自体を行わない)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-match-end-persist-override", action="store_true",
+        dest="enable_match_end_persist_override",
+        help=(
+            "(b-1) match_end持続時間ゲート (2026-08-18、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-1))。"
+            "match_end_locked が MATCH_END_PERSIST_OVERRIDE_SEC(1.0秒) 秒以上"
+            "連続 True の場合のみ chain_in_progress による hard_match_off "
+            "抑制を上書きする。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-post-match-lockdown-latch", action="store_true",
+        dest="enable_post_match_lockdown_latch",
+        help=(
+            "(b-2) 次試合開始までのラッチ (2026-08-18、"
+            "docs/BOUNDARY_MULTISIGNAL_DESIGN_2026-08-17.md §3(b-2))。"
+            "match_end_locked の立ち上がりから、次の本物の試合開始 "
+            "(score_zero_both 持続+盤面ROI実ゲームプレイ確認) が確認される"
+            "まで試合外とみなす。post_match_lockdown_active npz 列にも"
+            "このフラグの状態が反映される。既定は無効 (後方互換、"
+            "bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-result-screen-hardening", action="store_true",
+        dest="enable_result_screen_hardening",
+        help=(
+            "境界実装の仕上げ (2026-08-18、診断 data/verify/"
+            "boundary_impl_verify_2026-08-18/reignition_diag.md)。"
+            "score_actively_moving (cycle 71f) が対戦カード紹介の装飾スコア"
+            "カウントアップ演出を実スコアリングと誤認する再点火バグに対処。"
+            "match_end_locked/latch 活性時のみ盤面ROI実ゲームプレイ確認で"
+            "score_actively_moving の信頼性を裏取りする。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-estimate-recording", action="store_true",
+        dest="enable_chain_estimate_recording",
+        help=(
+            "連鎖中物理推論の配線 (2026-08-18、user確定要件)。confirmed_board "
+            "が None かつ CHAIN/GRAVITY_SETTLE 中に SideResult.estimated_board "
+            "(recognition_pipeline.py が既に毎フレーム計算済み) を確定盤面の"
+            "代わりに記録する。board_provenance が "
+            "chain_estimate_low_confidence (起点盤面誤認疑い) の snapshot は"
+            "採用しない。OJAMA_FALL 中は estimated_board 自体が常に None のため"
+            "対象外 (user明言「降り終わるまで待つ」)。board_provenance 列自体は"
+            "本フラグの有無に関わらず常に npz へ記録する。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-move-segmented-recording", action="store_true",
+        dest="enable_move_segmented_recording",
+        help=(
+            "1手区切り観測スケジューラ (2026-08-18、盤面収集の作り替え本体)。"
+            "記録トリガーを「STABLE到達イベント駆動」から「NEXT繰り上がり "
+            "(capture_next=False 時は tsumo_count 増分にフォールバック) を"
+            "1手区切りとし、猶予15フレーム以内で最も早く得られた STABLE を"
+            "その手の代表として記録する」方式に切り替える。--enable-stable-"
+            "persistence-gate (画素静止ゲート) は記録可否に使わない (2026-08-18"
+            "実測で退行確定済み)。猶予内に得られなければ記録しない (次の手"
+            "区切りへ回す)。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-native-hsv-classifier", action="store_true",
+        dest="enable_native_hsv_classifier",
+        help=(
+            "HSV セル分類を Rust ネイティブ実装で行う (2026-08-20)。"
+            "認識結果は bit-identical (合成パッチ4,732枚×フラグ4構成で"
+            "不一致0、陽性対照で比較器の検出力も確認済み)。実測 1 frame "
+            "34.69→29.05ms (1.19倍)、1盤面あたりでは 5.115→0.800ms (6.4倍)。"
+            "効いているのは演算量ではなく per-call オーバーヘッドの消滅 "
+            "(median だけで 1,146 回/frame の Python/numpy 呼び出しがあった)。"
+            "cvtColor は移植せず Python 側 (cv2) のまま = OpenCV の整数丸めを"
+            "再現するリスクを構造的に回避。既定は無効 (後方互換)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-winner-panel-priority", action="store_true",
+        dest="enable_winner_panel_priority",
+        help=(
+            "勝者判定でWIN★パネルを優先する (2026-08-20、user 決定)。"
+            "従来は得点系統とパネル系統の2系統一致を要求し、食い違えば"
+            "判定不能にしていた。だが得点系統の「得点が高い方が勝ち」は"
+            "約98%%しか成立しない近似であり (user 伝授)、パネルが片側の星"
+            "だけ明確に増えたと読めた場合はそちらが正しい。実測 (39番 "
+            "試合6): 得点 1P=9,987 / 2P=9,780 で差207点の拮抗試合、"
+            "パネルは右の星が3->4と明確に増加 (変化量39) で2Pの勝ちが"
+            "正解だった。従来はこの79行を捨てていた。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-score-reset-requires-zero", action="store_true",
+        dest="enable_score_reset_requires_zero",
+        help=(
+            "試合境界を「score が 0 になった」ときだけ認める (2026-08-20、"
+            "user 指摘「減るのはただの誤認」)。試合中の score は単調増加"
+            "しかしないため、減少はほぼ全てが OCR 誤読であり境界の根拠に"
+            "ならない。旧方式 (減少幅>=500) は連鎖中の1桁誤読で誤発火し、"
+            "試合の真っ最中に偽の境界を引いていた (実測: 39番 310.4秒 "
+            "5,759->5,259 / 636.8秒 56,085->55,085)。偽境界の区間は勝敗"
+            "パネルが変化しないため、その試合の勝敗ラベルが丸ごと落ちる。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-physics-persistence-filter", action="store_true",
+        dest="enable_physics_persistence_filter",
+        help=(
+            "持続的物理制約フィルタ (2026-08-18、盤面収集の作り替え本体)。"
+            "消去可能グループ残存/重力違反 (浮きぷよ) の signature が、間に"
+            "正当な状態遷移 (TSUMO_FALL/CHAIN/OJAMA_FALL) を挟まずに2回連続"
+            "観測された候補だけを棄却する (W24教訓: 単純な連続回数閾値だけで"
+            "棄却しない)。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-ojama-fall-color-swap-guard", action="store_true",
+        dest="enable_ojama_fall_color_swap_guard",
+        help=(
+            "W26根治 (2026-08-18、docs/KNOWN_WEAKNESSES.md W26節、"
+            "RECOGNITION_ADOPTED 採用 2026-08-18)。連鎖発火の閃光による"
+            "色→別色誤読 (青→緑/赤→黄等) をOJAMA_FALL中に限定して拒否する。"
+            "enable_ojama_write_accounting_guard (W25) とは独立のフラグ。"
+            "既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-lockdown-score-numeric-release", action="store_true",
+        dest="enable_lockdown_score_numeric_release",
+        help=(
+            "(b-2)ラッチ解除の数値スコア化 (2026-08-19、user指示「必ず試合前"
+            "スコアは0」)。score_zero_both 画像テンプレ (配信レイアウト依存で"
+            "42本中31本が盲目) に加え、score OCR の数値が両側0であることを"
+            "解除信号に OR で加える。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-lockdown-score-moving-release", action="store_true",
+        dest="enable_lockdown_score_moving_release",
+        help=(
+            "(b-2)ラッチ解除の補助信号 (2026-08-19)。score_actively_moving "
+            "(スコアが動いている=確実に試合中) + 盤面ROI実ゲームプレイ確認で"
+            "ラッチを解除する。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--match-end-ncc-threshold", type=float, default=None,
+        dest="match_end_ncc_threshold",
+        help=(
+            "MatchEndDetector の NCC 閾値上書き (2026-08-19)。全消しテロップ"
+            "誤検出 (実測: 誤検出0.72 vs 本物0.98) 対策の A/B 用。省略時は"
+            "既定 0.55 のまま (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-boundary-newmatch-evidence", action="store_true",
+        dest="enable_boundary_newmatch_evidence",
+        help=(
+            "新試合証拠ゲート (2026-08-19、user指示「必ず試合前スコアは0」)。"
+            "--enable-boundary-multisignal の視覚立ち上がりによる境界確定に"
+            "「両者スコア数値0 or 両者盤面ほぼ空」の観測を AND で要求し、"
+            # argparse は help を % で書式展開するため、リテラルの % は
+            # %% にエスケープしないと ValueError で --help 全体が壊れる
+            # (2026-08-19 混入、2026-08-20 修正)。
+            "試合中の is_active 乱れによる偽境界 (実測: 試合総数+50%%断片化・"
+            "won欠損38.3%%) を破棄する。既定は無効 (後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-chain-formula-read-verify", action="store_true",
+        dest="enable_chain_formula_read_verify",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-chain-count-update", action="store_true",
+        dest="enable_formula_chain_count_update",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    parser.add_argument(
+        "--enable-formula-step-interlude", action="store_true",
+        dest="enable_formula_step_interlude",
+        help=(
+            "STABLE 凍結デッドロック根治 (2026-08-24)。RECOGNITION_ADOPTED "
+            "採用。根拠は src.production_config 参照。既定は無効 "
+            "(後方互換、bit-identical)。"
+        ),
+    )
+    args = parser.parse_args()
+    # 既定値解決 (2026-07-30 既定 True 化): 明示 --no-normalize-fps-30 が
+    # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず
+    # 新既定 True (collect_lean() 関数側の既定と一致させる)。
+    normalize_fps_30 = not args.no_normalize_fps_30
+    n = collect_lean(
+        args.video, args.out_npz,
+        max_sec=args.max_sec,
+        start_sec=args.start_sec,
+        sample_interval_sec=args.sample_interval,
+        capture_next=args.with_next,
+        sample_interval_frames=args.sample_interval_frames,
+        enable_chain_tracker=args.enable_chain_tracker,
+        normalize_fps_30=normalize_fps_30,
+        enable_effect_gate=args.enable_effect_gate,
+        effect_gate_persist_sec=args.effect_gate_persist_sec,
+        enable_effect_visual_gate=args.enable_effect_visual_gate,
+        enable_burst_guard_v2=args.enable_burst_guard_v2,
+        enable_transition_merge_guard=args.enable_transition_merge_guard,
+        burst_gate_open_threshold=args.burst_gate_open_threshold,
+        enable_hidden_row_burst_guard=args.enable_hidden_row_burst_guard,
+        enable_burst_close_extension=args.enable_burst_close_extension,
+        burst_chain_gap_max_sec=args.burst_chain_gap_max_sec,
+        enable_online_hsv_refresh=args.enable_online_hsv_refresh,
+        enable_match_transition_debounce=args.enable_match_transition_debounce,
+        enable_ojama_entry_gravity_settle_guard=(
+            args.enable_ojama_entry_gravity_settle_guard
+        ),
+        enable_gravity_settle_reset_on_exit=args.enable_gravity_settle_reset_on_exit,
+        enable_phantom_board_guard=args.enable_phantom_board_guard,
+        enable_margin_time_rate=args.enable_margin_time_rate,
+        enable_stable_majority_window=args.enable_stable_majority_window,
+        enable_ojama_fall_placement_override=(
+            args.enable_ojama_fall_placement_override
+        ),
+        enable_ojama_fall_entry_hardening=args.enable_ojama_fall_entry_hardening,
+        enable_chain_gate_raw_fallback=args.enable_chain_gate_raw_fallback,
+        enable_ojama_fall_scoped_exit=args.enable_ojama_fall_scoped_exit,
+        precise_seek=args.precise_seek,
+        enable_highlight_override=args.enable_highlight_override,
+        enable_patch_fp_hsv_guard=args.enable_patch_fp_hsv_guard,
+        enable_floating_gap_restore=args.enable_floating_gap_restore,
+        enable_boundary_multisignal=args.enable_boundary_multisignal,
+        enable_winner_panel_crosscheck=args.enable_winner_panel_crosscheck,
+        enable_landing_color_guard=args.enable_landing_color_guard,
+        enable_override_color_guard=args.enable_override_color_guard,
+        enable_ojama_column_stack_fix=args.enable_ojama_column_stack_fix,
+        enable_next_history_starvation_fix=(
+            args.enable_next_history_starvation_fix
+        ),
+        enable_ojama_cnn_override_warmup=args.enable_ojama_cnn_override_warmup,
+        enable_ojama_write_accounting_guard=(
+            args.enable_ojama_write_accounting_guard
+        ),
+        enable_stable_persistence_gate=args.enable_stable_persistence_gate,
+        enable_match_end_persist_override=args.enable_match_end_persist_override,
+        enable_post_match_lockdown_latch=args.enable_post_match_lockdown_latch,
+        enable_result_screen_hardening=args.enable_result_screen_hardening,
+        enable_ojama_fall_color_swap_guard=args.enable_ojama_fall_color_swap_guard,
+        enable_chain_estimate_recording=args.enable_chain_estimate_recording,
+        enable_move_segmented_recording=args.enable_move_segmented_recording,
+        enable_physics_persistence_filter=args.enable_physics_persistence_filter,
+        enable_score_reset_requires_zero=args.enable_score_reset_requires_zero,
+        enable_winner_panel_priority=args.enable_winner_panel_priority,
+        enable_native_hsv_classifier=args.enable_native_hsv_classifier,
+        enable_lockdown_score_numeric_release=(
+            args.enable_lockdown_score_numeric_release
+        ),
+        enable_lockdown_score_moving_release=(
+            args.enable_lockdown_score_moving_release
+        ),
+        match_end_ncc_threshold=args.match_end_ncc_threshold,
+        enable_boundary_newmatch_evidence=(
+            args.enable_boundary_newmatch_evidence
+        ),
+        enable_chain_formula_read_verify=args.enable_chain_formula_read_verify,
+        enable_formula_chain_count_update=(
+            args.enable_formula_chain_count_update
+        ),
+        enable_formula_step_interlude=args.enable_formula_step_interlude,
+        enable_event_accounting_sidecar=args.enable_event_accounting_sidecar,
+        enable_event_physical_sidecar=args.enable_event_physical_sidecar,
+        score_region_calibration_path=args.score_region_calibration,
+    )
+    print(f"[lean] {args.video.name} -> {args.out_npz} : {n} snapshots")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

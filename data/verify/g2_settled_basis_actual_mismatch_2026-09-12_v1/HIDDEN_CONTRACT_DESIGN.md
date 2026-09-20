@@ -1,0 +1,9 @@
+# 隠し基準の候補設計（未採用）
+
+- **適用経路の訂正**：実v4/v5のhidden_loaderは既存 `g2_hidden_basis_initialization_2026-09-11_v1/hidden_basis_gate.py` を選ぶ。この既存診断候補には可視SM一致と隠し分布の分離・rawUNKNOWN/SM空への未較正priorが実装済み。本書はその機構の新規実装案ではなく、fallback由来の資格と既存posteriorの厳密保持を追加検証する論点として扱う。未採用は追加修復/本番採用の意味。旧gate_v3再生は同じ失敗理由の再現であり実選択gate全部の再実行ではない。
+
+- 実v4では、新たにrawがUNKNOWNとなったrow0col4がSMでは旧空のまま。原PBはinfer_hidden_row由来でなくfrom_board(confirmed) fallbackで空100%。これは隠し観測の更新ではない。可視黄緑は別の原stable recovery資格が必要で、rawを確定盤面へコピーしない。
+- 既存ProbabilisticBoard.from_boardはUNKNOWNを7状態の一様事前分布にする。既存の非一点分布は維持し、fallbackで一点化された新規未観測セルだけに同じ「未較正の無情報事前分布」を使う案を検討する。測定済み・学習済み確率と呼ばず、source=unobserved_prior/原因raw_mask_unknown/original_fallback_distributionを保存する。既存の因果推論による一点分布や既存joint posteriorを無条件に上書きしない。
+- 基準資格案：可視12行は原通りraw=CNN=SM=returned、実PB可視pointmass一致、落下→STABLE/同scope/J/期限/非演出/無originを維持。隠し行は整数表現一致と分布資格を分離し、PBの元分布/追加prior/未観測maskの来歴を検証する。確定/current/会計/本番permissionは全falseのまま、既存conditioning.establish_conditionedが支持条件と除外質量を記録する。
+- 開いた論点：rawのUNKNOWN化だけで既存「空100%」を無情報へ戻してよいか、それとも以前の空に因果保証があるなら維持すべきか。対象runはresetで落下手を隔離し、infer_calls0なのでその保証は未検証。既存pointmassがfallback由来かを同callで証明する必要がある。由来不明なら拒否を維持する。
+- これは修復設計の比較であり採用/長時間実走GOではない。単にhidden比較を除外したり、rawUNKNOWNを空や一色に置換したり、既存非一様posteriorを一様化する修復は禁止。先に限定独立反証→原コアCPU→全保存/原consumer接続を検収する。
