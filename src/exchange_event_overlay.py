@@ -13,9 +13,8 @@ from src.chain_detector import CHAIN_MECHANISM_FORMULA, CHAIN_MECHANISM_FORMULA_
 from src.chain_id_resolver import ChainObservation, ObservationKind
 from src.exchange_event_evaluator import ExchangeModels, StaticInput
 from src.exchange_event_features import prefire_side_features
-from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS
+from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS, valid_nonnegative
 
-STATIC_INTERVAL_SEC = .3
 UNUSED_S1_M0 = .5  # S1/S3の特徴列にはM0がなく、G_feにはこの値を渡さない。
 
 
@@ -43,10 +42,12 @@ class ExchangeEventOverlay:
     """確定盤面以外を特徴化せず、毎認識フレームの通知を束ねる。"""
 
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
-                 signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None) -> None:
+                 signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
+                 per_side_settled: bool = False) -> None:
         self.tracker = ExchangeEventTracker(models)
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0 = m0_predictor
+        self._per_side_settled = per_side_settled
         self._history: list[list[ConfirmedSide]] = [[], []]
         self._snapshots: list[tuple[float, Any]] = []
         self._signals: dict[int, EndSignals] = {}
@@ -54,7 +55,6 @@ class ExchangeEventOverlay:
         self._previous = (None, None)
         self._game: int | None = None
         self._start: float | None = None
-        self._last_static = -np.inf
         self._falling = [False, False]
         self._chain_keys: list[tuple | None] = [None, None]
         self._scores: list[list[tuple[float, float]]] = [[], []]
@@ -62,20 +62,26 @@ class ExchangeEventOverlay:
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
                formula_totals: tuple[float | None, float | None] = (None, None),
-               displayed_scores: tuple[float | None, float | None] | None = None) -> None:
+               displayed_scores: tuple[float | None, float | None] | None = None,
+               formula_visible: tuple[bool, bool] = (False, False)) -> None:
         """発火→両側終了/確定→S3→着地後G_feの順で一括更新する。"""
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
-        fresh = self._changed_chains(sides, triggers)
+        fresh = self._changed_chains(sides, triggers, t_sec)
         if fresh:
             self._fire(result, snapshot, t_sec, triggers, fresh)
         self._observe_signals(result, snapshot, finalization, t_sec)
+        for label, visible in zip(SIDE_LABELS, formula_visible):
+            if visible:
+                self.tracker.activity(label, t_sec)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         self.tracker.finish_frame(t_sec)
         self._remember(sides, snapshot, t_sec)
-        if all(s.state == BoardState.STABLE for s in sides) and all(self._history):
+        stable = [s.state == BoardState.STABLE for s in sides]
+        settled = any(stable) if self._per_side_settled else all(stable)
+        if settled and all(self._history):
             self._static(snapshot, t_sec)
         self._previous = tuple(s.state for s in sides)
 
@@ -85,7 +91,6 @@ class ExchangeEventOverlay:
         self._game, self._start = game_idx, None
         self._history, self._snapshots, self._signals = [[], []], [], {}
         self._counts, self._previous = (0, 0), (None, None)
-        self._last_static = -np.inf
         self._falling = [False, False]
         self._chain_keys = [None, None]
         self._scores = [[], []]
@@ -102,7 +107,8 @@ class ExchangeEventOverlay:
             if side.score is not None:
                 self._scores[idx].append((t_sec, side.score))
 
-    def _changed_chains(self, sides: tuple, triggers: tuple) -> list[tuple[int, float]]:
+    def _changed_chains(self, sides: tuple, triggers: tuple,
+                        t_sec: float = 0.0) -> list[tuple[int, float]]:
         """triggerが同じ段継続も観測し、Noneの点滅後の残響は重複送信しない。"""
         changed = []
         for idx, (side, trigger) in enumerate(zip(sides, triggers)):
@@ -110,6 +116,9 @@ class ExchangeEventOverlay:
             if event is None:
                 continue
             key = (trigger, event.mechanism, event.chain_count, event.total_score)
+            if not valid_nonnegative(trigger):
+                self.tracker.missing_input("unknown_firing_side", t_sec, "S1", (idx, key))
+                continue
             if key != self._chain_keys[idx]:
                 changed.append((idx, trigger))
         return changed
@@ -120,17 +129,25 @@ class ExchangeEventOverlay:
         first = min(ts for _, ts in fresh)
         selected = [next((s for s in reversed(h) if s.t_sec < first), None)
                     for h in self._history]
-        if not all(selected):
+        if not all(selected) or self._start is None:
+            self.tracker.missing_input("missing_prefire_board", t_sec, "S1", triggers)
             return  # 発火前盤面が揃う以前の区間は未来盤面で補わない。
         elapsed = max(0.0, first - self._start)
         boards = tuple(s.board for s in selected)
-        before_snap = next(s for t, s in reversed(self._snapshots) if t < first)
-        static = self._build_static(boards, before_snap, elapsed, UNUSED_S1_M0)
-        if self.tracker.current is None:
-            prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed)
-                                for s in selected])
-        else:
-            prefire = self.tracker.firing.prefire_sides
+        before_snap = next((s for t, s in reversed(self._snapshots) if t < first), None)
+        if before_snap is None:
+            self.tracker.missing_input("missing_prefire_snapshot", t_sec, "S1", triggers)
+            return
+        try:
+            static = self._build_static(boards, before_snap, elapsed, UNUSED_S1_M0)
+            if self.tracker.current is None:
+                prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed)
+                                    for s in selected])
+            else:
+                prefire = self.tracker.firing.prefire_sides
+        except (ValueError, TypeError, FloatingPointError) as error:
+            self.tracker.missing_input("prefire_input: " + str(error), t_sec, "S1", triggers)
+            return
         observations = self._observations(result, t_sec, fresh)
         self.tracker.fire(t_sec=t_sec, triggers=triggers, static=static,
                           prefire_sides=prefire, score_elapsed_sec=elapsed,
@@ -164,7 +181,10 @@ class ExchangeEventOverlay:
         for idx, (label, side) in enumerate(zip(SIDE_LABELS, (result.p1, result.p2))):
             chain = self.tracker.latest_chain(label)
             if chain is not None and chain.end_signal_sec is None:
-                reason = self._signals[chain.chain_id].update(result, snapshot, t_sec)
+                signal = self._signals.get(chain.chain_id)
+                if signal is None:
+                    self.tracker.missing_input("missing_end_signal", t_sec, "S3", chain.chain_id)
+                reason = signal.update(result, snapshot, t_sec) if signal is not None else None
                 if reason:
                     self.tracker.end(label, t_sec, reason)
             if counts[idx] > self._counts[idx]:
@@ -203,14 +223,15 @@ class ExchangeEventOverlay:
             if self.tracker.probability is None:
                 self.tracker.source = "waiting_m0"
             return
-        if t_sec - self._last_static < STATIC_INTERVAL_SEC:
-            return
         boards = tuple(s.board for s in latest)
-        probability = self._m0(np.stack([b._grid for b in boards]),
-                               np.stack([s.queue for s in latest]))
-        event = self._build_static(boards, snapshot, t_sec - self._start, probability)
+        try:
+            probability = self._m0(np.stack([b._grid for b in boards]),
+                                   np.stack([s.queue for s in latest]))
+            event = self._build_static(boards, snapshot, t_sec - self._start, probability)
+        except (ValueError, TypeError, FloatingPointError) as error:
+            self.tracker.missing_input("static_input: " + str(error), t_sec, "G_fe")
+            return
         self.tracker.static(event, t_sec, confirmed)
-        self._last_static = t_sec
 
 
 def displayed_scores_from_pipeline(pipeline: object, frame: np.ndarray) -> tuple:
@@ -219,3 +240,9 @@ def displayed_scores_from_pipeline(pipeline: object, frame: np.ndarray) -> tuple
     if ocr is None:
         return (None, None)
     return tuple(ocr.read_side(frame, side)[0] for side in SIDE_LABELS)
+
+
+def formula_visible_from_pipeline(pipeline: object) -> tuple[bool, bool]:
+    """毎フレーム初期化される掛け算式の実読結果だけを使う。"""
+    return tuple(bool(getattr(getattr(pipeline, "_formula_last_read_" + label, None),
+                              "valid", False)) for label in ("1p", "2p"))

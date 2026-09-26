@@ -144,11 +144,14 @@ def test_equal_cancel_needs_no_landing(tracker: ExchangeEventTracker) -> None:
     assert tracker.static(static(), 5, (5, 5))
 
 
-@pytest.mark.parametrize("score", [-1, np.nan, np.inf])
-def test_invalid_finalize_rejected(tracker: ExchangeEventTracker, score: float) -> None:
+@pytest.mark.parametrize("score", [None, -1, np.nan, np.inf])
+def test_invalid_finalize_keeps_s1(tracker: ExchangeEventTracker, score: float | None) -> None:
     fire(tracker)
-    with pytest.raises(ValueError):
-        tracker.finalize("1P", 3, score)
+    tracker.finalize("1P", 3, score)
+    tracker.finish_frame(3)
+    assert tracker.source == "S1"
+    assert tracker.latest_chain("1P").score_finalize_sec is None
+    assert tracker.diagnostics[-1]["reason"] == "invalid_score_finalize"
 
 
 def test_dump_keeps_unfinished_exchange(tracker: ExchangeEventTracker, tmp_path: Path) -> None:
@@ -166,6 +169,8 @@ def test_score_before_absolute_end_waits_for_signal(tracker: ExchangeEventTracke
     assert tracker.source == "S1"
     tracker.end("1P", 4, "next")
     tracker.finish_frame(4)
+    assert tracker.source == "S1"
+    tracker.finish_frame(4 + 10 / 30)
     assert tracker.source == "S3"
     assert tracker.current.chains[0].score_finalize_sec == 3
 
@@ -176,9 +181,9 @@ def test_fall_entry_is_not_landing_completion(tracker: ExchangeEventTracker) -> 
     tracker.finalize("1P", 4, 700)
     tracker.finish_frame(4)
     tracker.fall_start("2P", 5)
-    assert not tracker.static(static(), 6, (6, 6))
+    assert tracker.static(static(), 6, (6, 6))
     tracker.landing("2P", 7)
-    assert not tracker.static(static(), 7, (7, 7))
+    assert tracker.static(static(), 7, (7, 7))
     assert tracker.static(static(), 8, (8, 8))
     assert tracker.records[0].landings == [dict(side="2P", fall_start_sec=5, t_sec=7)]
 
@@ -243,7 +248,7 @@ def test_physical_interval_closes_even_when_static_model_is_unavailable(tracker:
     tracker.finish_frame(4)
     tracker.landing("2P", 5)
     assert tracker.close_confirmed(6, (6, 6))
-    assert tracker.source == "S3" and tracker.probability == .8
+    assert tracker.source == "G_fe" and tracker.probability == .4
     fire(tracker, 7, (None, 7))
     assert len(tracker.records) == 2
     assert tracker.source == "S1"
@@ -265,10 +270,10 @@ def test_ten_post_end_frames_advance_s3_without_accounting(tracker: ExchangeEven
     for frame in range(20):
         tracker.observe_score(side, 2 + frame / 30, 800, 100)
     tracker.end(side, 3, "next")
-    for frame in range(10):
+    for frame in range(11):
         tracker.observe_score(side, 3 + frame / 30, 800, 100)
         tracker.finish_frame(3 + frame / 30)
-        assert tracker.source == ("S3" if frame == 9 else "S1")
+        assert tracker.source == ("S3" if frame == 10 else "S1")
     chain = tracker.latest_chain(side)
     assert chain.score_ready_reason == "display_stable"
     assert chain.score_finalize_sec is None
@@ -286,15 +291,17 @@ def test_display_stability_resets(tracker: ExchangeEventTracker, interruption: f
     tracker.observe_score("1P", 3.4, 800, 100)
     tracker.finish_frame(3.4)
     assert tracker.source == "S1"
-    assert tracker.latest_chain("1P").stable_frames == 1
+    assert tracker.latest_chain("1P").stable_frames == (0 if interruption == 801 else 1)
 
 
 @pytest.mark.parametrize("formula,expected", [(700, "S3"), (699, "S1"), (None, "S1")])
-def test_formula_match_is_immediate(tracker: ExchangeEventTracker, formula: float | None, expected: str) -> None:
+def test_formula_match_waits_for_end_quiet(tracker: ExchangeEventTracker, formula: float | None, expected: str) -> None:
     fire(tracker)
     tracker.end("1P", 3, "next")
     tracker.observe_score("1P", 3, 800, 100, formula)
     tracker.finish_frame(3)
+    assert tracker.source == "S1"
+    tracker.finish_frame(3 + 10 / 30)
     assert tracker.source == expected
     if expected == "S3":
         assert tracker.latest_chain("1P").score_ready_reason == "formula_match"
@@ -309,6 +316,8 @@ def test_early_score_waits_for_all_chains(tracker: ExchangeEventTracker) -> None
     tracker.end("2P", 4, "next")
     tracker.observe_score("2P", 4, 1500, 100, 1400)
     tracker.finish_frame(4)
+    assert tracker.source == "S1"
+    tracker.finish_frame(4 + 10 / 30)
     assert tracker.source == "S3"
 
 
@@ -316,7 +325,7 @@ def test_late_accounting_timestamp_survives_exchange_close(tracker: ExchangeEven
     fire(tracker)
     tracker.end("1P", 3, "next")
     tracker.observe_score("1P", 3, 800, 100, 700)
-    tracker.finish_frame(3)
+    tracker.finish_frame(3 + 10 / 30)
     tracker.landing("2P", 4)
     assert tracker.static(static(), 5, (5, 5))
     tracker.finalize("1P", 6, 710)
@@ -336,11 +345,11 @@ def test_early_close_echo_and_real_continuation_keep_exchange_identity(tracker: 
         "1P", 2, ObservationKind.FORMULA_STEP, 1, 40),), **kwargs)
     tracker.end("1P", 3, "next")
     tracker.observe_score("1P", 3, 140, 100, 40)
-    tracker.finish_frame(3)
+    tracker.finish_frame(3 + 10 / 30)
     tracker.landing("2P", 3.1)
-    tracker.static(static(), 3.2, (3.2, 3.2))
-    tracker.fire(t_sec=3.3, triggers=(3.3, None), observations=(ChainObservation(
-        "1P", 3.3, ObservationKind.CHAIN_SETTLED, 1, 40),), **kwargs)
+    tracker.static(static(), 3.4, (3.4, 3.4))
+    tracker.fire(t_sec=3.5, triggers=(3.5, None), observations=(ChainObservation(
+        "1P", 3.5, ObservationKind.CHAIN_SETTLED, 1, 40),), **kwargs)
     assert tracker.current is None and len(tracker.records) == 1
     tracker.fire(t_sec=4, triggers=(3.3, None), observations=(ChainObservation(
         "1P", 4, ObservationKind.FORMULA_STEP, 2, 360),), **kwargs)

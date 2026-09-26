@@ -6272,10 +6272,23 @@ class _ExchangeEventEndSignals:
         return self.sensor._abs_end_kind[self.side] if self.sensor._abs_ended[self.side] else None
 
 
+EXCHANGE_BOARD_CACHE_SIZE = 128
+
+
+@functools.lru_cache(maxsize=EXCHANGE_BOARD_CACHE_SIZE)
+def _exchange_board_features(grid_bytes: bytes, shape: tuple[int, int],
+                             dtype: str) -> dict[str, float]:
+    """同一の確定盤面だけ再用する。会計・経過秒・評価結果は毎回更新する。"""
+    board = Board()
+    board._grid = np.frombuffer(grid_bytes, dtype=dtype).reshape(shape).copy()
+    return _side_feats_full_base(board)
+
+
 def _exchange_static_input(boards: tuple[Board, Board], snapshot: OjamaAccountSnapshot,
                            elapsed_sec: float, m0_probability: float) -> StaticInput:
     """既存D列の変換を再用する。絶対量は反転せず、1P視点へ固定する。"""
-    own, opponent = (_side_feats_full_base(board) for board in boards)
+    own, opponent = (_exchange_board_features(board._grid.tobytes(), board._grid.shape,
+                                              board._grid.dtype.str) for board in boards)
     features = _side_feats_full(own, opponent, snapshot.net_balance_capped,
                                snapshot.forecast_p1)
     return StaticInput(np.array([features[name] for name in D_COLUMNS]),
@@ -6365,6 +6378,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              exchange_event_model_dir: Path = Path("models/exchange_event_v1"),
              dump_exchange_event_path: Path | None = None,
              exchange_event_m0_predictor: M0Predictor | None = None,
+             exchange_event_record_path: Path | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -6929,13 +6943,22 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
     event_overlay: ExchangeEventOverlay | None = None
+    event_recorder = None
+    if exchange_event_record_path is not None:
+        if not enable_exchange_event_update:
+            raise ValueError("--exchange-event-recordには--exchange-event-updateが必要")
+        from src.exchange_event_record import ExchangeEventRecorder
+        event_recorder = ExchangeEventRecorder(exchange_event_record_path, video.stem,
+            enable_per_side_settled, exchange_event_model_dir)
     if enable_exchange_event_update:
         from src.exchange_event_m0 import FileM0Predictor
         if exchange_event_m0_predictor is None:
             exchange_event_m0_predictor = FileM0Predictor(exchange_event_model_dir / "M0")
         event_overlay = ExchangeEventOverlay(
             FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
-            _exchange_static_input, _ExchangeEventEndSignals, exchange_event_m0_predictor)
+            (event_recorder.wrap_static(_exchange_static_input) if event_recorder
+             else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
+            per_side_settled=enable_per_side_settled)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -7453,9 +7476,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if event_overlay is not None:
             from src.exchange_event_m0 import formula_totals_from_pipeline
             from src.exchange_event_overlay import displayed_scores_from_pipeline
-            event_overlay.update(r, snap, tracker.get_attack_finalization_counters(t),
-                                 t, game_idx, formula_totals_from_pipeline(pipe),
-                                 displayed_scores_from_pipeline(pipe, recog_frame))
+            from src.exchange_event_overlay import formula_visible_from_pipeline
+            event_inputs = (r, snap, tracker.get_attack_finalization_counters(t),
+                            t, game_idx, formula_totals_from_pipeline(pipe),
+                            displayed_scores_from_pipeline(pipe, recog_frame),
+                            formula_visible_from_pipeline(pipe))
+            if event_recorder is not None:
+                event_recorder.update(*event_inputs)
+            event_overlay.update(*event_inputs)
         ps1, ps2 = r.p1.state, r.p2.state
         episode_drive: _EpisodeDriveResult | None = None
         episode_hard_candidate = False
@@ -7931,6 +7959,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     episode_hard_reason or "episode_unresolved_display_capped")
             disp_p1 = _ensure_display_probability_direction(disp_adv, disp_p1)
         if event_overlay is not None:
+            if event_recorder is not None and fi >= write_frame and fi % step == 0:
+                event_recorder.write(dict(kind="display", t_sec=t, game_idx=game_idx,
+                    fallback_adv=disp_adv, fallback_p1=disp_p1, adv_raw_last=model_adv_last,
+                    resolved_active=resolved_active, settled_ran=settled_ran_this_frame))
             disp_adv, disp_p1 = _exchange_display(event_overlay, disp_adv, disp_p1)
             if event_overlay.tracker.probability is not None:
                 drivers = []  # 旧モデルの主因を新しい確率の理由として表示しない。
@@ -8119,6 +8151,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
         print(f"[exchange-event] {len(event_overlay.tracker.records)} records -> {dump_exchange_event_path}")
+    if event_recorder is not None:
+        event_recorder.close()
     return written
 
 
@@ -8135,6 +8169,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--exchange-event-update", action="store_true", default=False,
                     help="撃ち合いイベント評価を有効化する（既定OFF）")
+    ap.add_argument("--exchange-event-record", type=Path, default=None,
+                    help="全評価入力をgzip JSONLへ記録する（ON時のみ、既定なし）")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8789,6 +8825,7 @@ def main() -> None:
              enable_exchange_event_update=a.exchange_event_update,
              exchange_event_model_dir=a.exchange_event_model_dir,
              dump_exchange_event_path=a.dump_exchange_events,
+             exchange_event_record_path=a.exchange_event_record,
              enable_early_fire_clear_on_finalize=a.enable_early_fire_clear_on_finalize,
              enable_kill_override_chain_completion=a.enable_kill_override_chain_completion,
              enable_kill_override_chain_gen_accumulate=(
