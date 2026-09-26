@@ -39,6 +39,9 @@ from src.board_state_machine import BoardState  # noqa: E402
 from src.chain import ChainSimulator  # noqa: E402
 from src.chain_count_truth import select_chain_count_high_confidence_band  # noqa: E402
 from src.chain_detector import ChainEvent  # noqa: E402
+from src.exchange_event_evaluator import FileExchangeModels, StaticInput  # noqa: E402
+from src.exchange_event_features import D_COLUMNS  # noqa: E402
+from src.exchange_event_overlay import ExchangeEventOverlay, M0Predictor  # noqa: E402
 from src.death_confirmation import (  # noqa: E402
     DeathConfirmStats,  # Gate 3R-6 本体: 候補/猶予/確定/解除の母数付きカウンタ (dump専用)
     DeathConfirmTracker,  # Gate 3R-6 本体: 1サイド分の死亡確定状態機械 (既定OFF)
@@ -6251,6 +6254,43 @@ def _build_counter_text(counter_p1: float, counter_p2: float) -> str:
     return f"応手確率  1P {counter_p1 * 100:.0f}%  /  2P {counter_p2 * 100:.0f}%"
 
 
+class _ExchangeEventEndSignals:
+    """既存の絶対終了判定だけを再用し、仮想盤面や決着ホールドを動かさない。"""
+
+    def __init__(self, side: int, result: PipelineResult,
+                 snapshot: OjamaAccountSnapshot, t_sec: float) -> None:
+        self.side = side
+        self.sensor = ResolvedExchangeTracker(None, enable_absolute_chain_end=True)
+        self.sensor._t_sec = t_sec
+        self.sensor._arm_absolute_chain_end(result.p1, result.p2, snapshot)
+
+    def update(self, result: PipelineResult, snapshot: OjamaAccountSnapshot,
+               t_sec: float) -> str | None:
+        """既存のNEXT基準化・連続確認・段間撤回をそのまま適用する。"""
+        self.sensor._t_sec = t_sec
+        self.sensor._observe_absolute_chain_end(result.p1, result.p2, snapshot)
+        return self.sensor._abs_end_kind[self.side] if self.sensor._abs_ended[self.side] else None
+
+
+def _exchange_static_input(boards: tuple[Board, Board], snapshot: OjamaAccountSnapshot,
+                           elapsed_sec: float, m0_probability: float) -> StaticInput:
+    """既存D列の変換を再用する。絶対量は反転せず、1P視点へ固定する。"""
+    own, opponent = (_side_feats_full_base(board) for board in boards)
+    features = _side_feats_full(own, opponent, snapshot.net_balance_capped,
+                               snapshot.forecast_p1)
+    return StaticInput(np.array([features[name] for name in D_COLUMNS]),
+                       m0_probability, elapsed_sec, source_side=0)
+
+
+def _exchange_display(overlay: ExchangeEventOverlay, adv: float,
+                      probability: float) -> tuple[float, float]:
+    """学習済みイベント確率を、既存表示の確率・有利不利変換へ接続する。"""
+    value = overlay.tracker.probability
+    if value is None:
+        return adv, probability
+    return max(-100.0, min(100.0, _winprob_to_adv(value))), value
+
+
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              start_sec: float = 0.0, end_sec: float = 0.0,
              exclude_video: str | None = None, warmup_sec: float = 0.0,
@@ -6321,8 +6361,20 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              dump_display_timeline_path: Path | None = None,
              enable_exchange_episode_gate: bool = False,
              dump_exchange_episode_timeline_path: Path | None = None,
+             enable_exchange_event_update: bool = False,
+             exchange_event_model_dir: Path = Path("models/exchange_event_v1"),
+             dump_exchange_event_path: Path | None = None,
+             exchange_event_m0_predictor: M0Predictor | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
+
+    enable_exchange_event_update: 既定OFF。ON時はS3>S1>G_feの表示を優先し、
+        旧発火速報加算と決着ホールドを無効化する。
+    exchange_event_model_dir: E1のG_fe/S1/S3成果物。S1/S3は軽量版を使う。
+    dump_exchange_event_path: ON時の時刻・確率JSONL。省略時はoutの拡張子を
+        .exchange_events.jsonlに置換する。OFF時は作成しない。
+    exchange_event_m0_predictor: 1P/2Pの盤面(2,13,6)とNEXT(2,4)からM0の
+        1P勝率を返す推論器。未指定時はモデルディレクトリのM0を読み込む。
 
     start_sec: 書き出し開始秒 (ゲームの真の開始=スコア0の瞬間)。
     warmup_sec: start_sec の何秒前から「処理だけ」始めるか (状態機械/会計の初期化用。
@@ -6876,6 +6928,19 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     """
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
+    event_overlay: ExchangeEventOverlay | None = None
+    if enable_exchange_event_update:
+        from src.exchange_event_m0 import FileM0Predictor
+        if exchange_event_m0_predictor is None:
+            exchange_event_m0_predictor = FileM0Predictor(exchange_event_model_dir / "M0")
+        event_overlay = ExchangeEventOverlay(
+            FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
+            _exchange_static_input, _ExchangeEventEndSignals, exchange_event_m0_predictor)
+        enable_early_fire_reaction = False
+        enable_resolved_exchange_eval = False
+        if dump_exchange_event_path is None:
+            dump_exchange_event_path = out.with_suffix(".exchange_events.jsonl")
+        print("[exchange-event] M0推論器接続済み。G_fe/S1/S3を使用します。")
     if enable_platt_calibration and enable_phase_calibration:
         raise ValueError(
             "enable_platt_calibration と enable_phase_calibration は同時指定不可"
@@ -7385,6 +7450,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             death_confirm_stats.record(_death_event2, _death_delay2)
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
+        if event_overlay is not None:
+            from src.exchange_event_m0 import formula_totals_from_pipeline
+            from src.exchange_event_overlay import displayed_scores_from_pipeline
+            event_overlay.update(r, snap, tracker.get_attack_finalization_counters(t),
+                                 t, game_idx, formula_totals_from_pipeline(pipe),
+                                 displayed_scores_from_pipeline(pipe, recog_frame))
         ps1, ps2 = r.p1.state, r.p2.state
         episode_drive: _EpisodeDriveResult | None = None
         episode_hard_candidate = False
@@ -7859,6 +7930,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 episode_hard_reason = (
                     episode_hard_reason or "episode_unresolved_display_capped")
             disp_p1 = _ensure_display_probability_direction(disp_adv, disp_p1)
+        if event_overlay is not None:
+            disp_adv, disp_p1 = _exchange_display(event_overlay, disp_adv, disp_p1)
+            if event_overlay.tracker.probability is not None:
+                drivers = []  # 旧モデルの主因を新しい確率の理由として表示しない。
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
         # (= (t - start_sec) - game_start_sec)。境界検知直後は game_start_sec が
         # (t - start_sec) と一致するため必ず 0 から始まる。境界が一度も
@@ -7877,11 +7952,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 display_dump_rows.append(DisplayTimelineRow(
                     t_sec=t, game_idx=game_idx, display_adv=disp_adv,
                     display_p1=disp_p1, adv_raw_last=model_adv_last,
-                    source=_display_timeline_source(
+                    source=(event_overlay.tracker.source if event_overlay is not None else _display_timeline_source(
                         resolved_active, resolved_just_deactivated,
                         settled_ran_this_frame,
                         episode_consistency_fallback,
-                        minimum_prediction_guarded),
+                        minimum_prediction_guarded)),
                     resolved_active=resolved_active,
                     settled_ran=settled_ran_this_frame,
                     state1=r.p1.state.name, state2=r.p2.state.name,
@@ -8041,6 +8116,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames -> {out}")
     else:
         print(f"[done] {written} frames (no-render)")
+    if event_overlay is not None and dump_exchange_event_path is not None:
+        event_overlay.tracker.save(dump_exchange_event_path)
+        print(f"[exchange-event] {len(event_overlay.tracker.records)} records -> {dump_exchange_event_path}")
     return written
 
 
@@ -8055,6 +8133,12 @@ def main() -> None:
     # (27.44ms/update 実測)、並列数でスケールさせる方が総スループットは高い。
     cv2.setNumThreads(1)
     ap = argparse.ArgumentParser()
+    ap.add_argument("--exchange-event-update", action="store_true", default=False,
+                    help="撃ち合いイベント評価を有効化する（既定OFF）")
+    ap.add_argument("--exchange-event-model-dir", type=Path,
+                    default=Path("models/exchange_event_v1"))
+    ap.add_argument("--dump-exchange-events", type=Path, default=None,
+                    help="撃ち合い単位の時刻と評価値JSONL（ON時は出力動画名から自動作成）")
     ap.add_argument("--video", default="data/frames/video_124_4min.mp4")
     ap.add_argument("--out", default="data/indicators_v2/overlay/advantage_v124.mp4")
     ap.add_argument("--max-sec", type=float, default=0.0)
@@ -8702,6 +8786,9 @@ def main() -> None:
              enable_platt_calibration=a.enable_platt_calibration,
              enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
+             enable_exchange_event_update=a.exchange_event_update,
+             exchange_event_model_dir=a.exchange_event_model_dir,
+             dump_exchange_event_path=a.dump_exchange_events,
              enable_early_fire_clear_on_finalize=a.enable_early_fire_clear_on_finalize,
              enable_kill_override_chain_completion=a.enable_kill_override_chain_completion,
              enable_kill_override_chain_gen_accumulate=(
