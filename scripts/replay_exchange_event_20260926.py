@@ -28,13 +28,17 @@ def static_builder(record: Path) -> Any:
     return build
 
 
-def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict) -> Any:
+def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict,
+                smoothing: Any = None) -> Any:
     """表示値と由来を今回の評価から生成し、旧経路の補助列だけ記録から使う。"""
     from scripts.visualize_advantage_overlay import (
         DisplayTimelineRow, TIMELINE_DUMP_SCORE_NONE_SENTINEL, _exchange_display,
     )
     result = inputs[0]
-    adv, probability = _exchange_display(overlay, context["fallback_adv"], context["fallback_p1"])
+    adv, probability = _exchange_display(overlay, context["fallback_adv"], context["fallback_p1"],
+                                         smoothing, context["t_sec"])
+    if overlay.tracker.probability is not None:
+        probability = overlay.tracker.probability
     scores = [TIMELINE_DUMP_SCORE_NONE_SENTINEL if s.score is None else int(s.score)
               for s in (result.p1, result.p2)]
     return DisplayTimelineRow(t_sec=context["t_sec"], game_idx=context["game_idx"],
@@ -46,7 +50,9 @@ def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict) -> 
 
 def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
-    from scripts.visualize_advantage_overlay import _ExchangeEventEndSignals, save_display_timeline
+    from scripts.visualize_advantage_overlay import (
+        _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
+    )
     from src.exchange_event_m0 import FileM0Predictor
     start = time.perf_counter()
     stream = read_records(record)
@@ -56,15 +62,17 @@ def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
         static_builder(record), _ExchangeEventEndSignals, FileM0Predictor(directory / "M0"),
         per_side_settled=header["per_side_settled"])
     rows, frames, inputs = [], 0, None
+    smoothing = _ExchangeDisplayEMA()
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
             overlay.update(*inputs)
+            _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
             if inputs is None or inputs[3:5] != (item["t_sec"], item["game_idx"]):
                 raise ValueError("表示文脈と入力フレームが不一致")
-            rows.append(display_row(overlay, inputs, item))
+            rows.append(display_row(overlay, inputs, item, smoothing))
         elif item["kind"] == "complete" and item["frames"] != frames:
             raise ValueError("記録フレーム数が不一致")
     save_display_timeline(out / "display.npz", header["video_id"], rows)

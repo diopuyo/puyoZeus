@@ -14,6 +14,8 @@ from src.chain_id_resolver import ChainObservation, ObservationKind
 from src.exchange_event_evaluator import ExchangeModels, StaticInput
 from src.exchange_event_features import prefire_side_features
 from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS, valid_nonnegative
+from src.score_ocr import FORMULA_SESSION_RESET_SEC
+from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
 
 UNUSED_S1_M0 = .5  # S1/S3の特徴列にはM0がなく、G_feにはこの値を渡さない。
 
@@ -58,6 +60,8 @@ class ExchangeEventOverlay:
         self._falling = [False, False]
         self._chain_keys: list[tuple | None] = [None, None]
         self._scores: list[list[tuple[float, float]]] = [[], []]
+        self._last_formula: list[float | None] = [None, None]
+        self._last_displayed: list[float | None] = [None, None]
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -68,14 +72,16 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
         fresh = self._changed_chains(sides, triggers, t_sec)
         if fresh:
             self._fire(result, snapshot, t_sec, triggers, fresh)
-        self._observe_signals(result, snapshot, finalization, t_sec)
-        for label, visible in zip(SIDE_LABELS, formula_visible):
+        for idx, (label, visible) in enumerate(zip(SIDE_LABELS, formula_visible)):
             if visible:
+                self._last_formula[idx] = t_sec
                 self.tracker.activity(label, t_sec)
+        self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         self.tracker.finish_frame(t_sec)
         self._remember(sides, snapshot, t_sec)
@@ -94,6 +100,19 @@ class ExchangeEventOverlay:
         self._falling = [False, False]
         self._chain_keys = [None, None]
         self._scores = [[], []]
+        self._last_formula = [None, None]
+        self._last_displayed = [None, None]
+
+    def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
+        """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""
+        for idx, label in enumerate(SIDE_LABELS):
+            score = sides[idx].score if scores is None else scores[idx]
+            previous = self._last_displayed[idx]
+            if not valid_nonnegative(score):
+                continue
+            if previous is not None and 0 < score - previous < CHAIN_TOTAL_MIN_SCORE:
+                self.tracker.note_placement(label, t_sec)
+            self._last_displayed[idx] = score
 
     def _observe_scores(self, sides: tuple, t_sec: float, formula_totals: tuple,
                         displayed_scores: tuple | None) -> None:
@@ -174,18 +193,25 @@ class ExchangeEventOverlay:
         return tuple(observations)
 
     def _observe_signals(self, result: Any, snapshot: Any, finalization: Any,
-                         t_sec: float) -> None:
+                         t_sec: float, formula_visible: tuple = (False, False)) -> None:
         """同じ得点の別連鎖も確定回数の増分で識別する。"""
         counts = (finalization.finalized_count_p1, finalization.finalized_count_p2)
         deltas = (finalization.chain_total_score_p1, finalization.chain_total_score_p2)
         for idx, (label, side) in enumerate(zip(SIDE_LABELS, (result.p1, result.p2))):
             chain = self.tracker.latest_chain(label)
-            if chain is not None and chain.end_signal_sec is None:
+            if chain is not None:
                 signal = self._signals.get(chain.chain_id)
                 if signal is None:
                     self.tracker.missing_input("missing_end_signal", t_sec, "S3", chain.chain_id)
                 reason = signal.update(result, snapshot, t_sec) if signal is not None else None
-                if reason:
+                recent_formula = (self._last_formula[idx] is not None and
+                                  t_sec - self._last_formula[idx] < FORMULA_SESSION_RESET_SEC)
+                blocked = formula_visible[idx] or (reason == "slide" and recent_formula)
+                if blocked and signal is not None:
+                    invalidate = getattr(signal, "invalidate", None)
+                    if invalidate is not None:
+                        invalidate()
+                if reason and not blocked:
                     self.tracker.end(label, t_sec, reason)
             if counts[idx] > self._counts[idx]:
                 self.tracker.finalize(label, t_sec, deltas[idx])

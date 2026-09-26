@@ -291,7 +291,8 @@ def test_display_stability_resets(tracker: ExchangeEventTracker, interruption: f
     tracker.observe_score("1P", 3.4, 800, 100)
     tracker.finish_frame(3.4)
     assert tracker.source == "S1"
-    assert tracker.latest_chain("1P").stable_frames == (0 if interruption == 801 else 1)
+    # 落下加点の増減でも安定フレーム数は再開するが、終了信号は撤回しない。
+    assert tracker.latest_chain("1P").stable_frames == 1
 
 
 @pytest.mark.parametrize("formula,expected", [(700, "S3"), (699, "S1"), (None, "S1")])

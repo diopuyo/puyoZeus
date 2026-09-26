@@ -6254,13 +6254,50 @@ def _build_counter_text(counter_p1: float, counter_p2: float) -> str:
     return f"応手確率  1P {counter_p1 * 100:.0f}%  /  2P {counter_p2 * 100:.0f}%"
 
 
+class _ExchangeEventPhysicalSensor(ResolvedExchangeTracker):
+    """ON専用。通常色のNEXT移動と連鎖側の実落下だけを終了根拠にする。"""
+
+    def _abs_side_inputs(self, r_side: object, snap: object, idx: int) -> tuple:
+        from src.board import COLOR_RED, COLOR_PURPLE
+        nxt, dropped, slide, state = super()._abs_side_inputs(r_side, snap, idx)
+        if nxt is not None and not all(COLOR_RED <= color <= COLOR_PURPLE for color in nxt):
+            nxt = None  # NEXTにはおじゃま・空・不明色が存在しない。
+        return nxt, dropped, slide, state
+
+    def _abs_end_signal(self, idx: int, r_side: object, snap: object) -> str | None:
+        nxt, dropped, slide, state = self._abs_side_inputs(r_side, snap, idx)
+        self._update_abs_baseline(idx, nxt, slide, state)
+        if not hasattr(self, "_queue_successors"):
+            self._queue_successors = [set(), set()]
+        successor = getattr(r_side, "dnext_pair", None)
+        if successor is not None and nxt == self._abs_next_at_start[idx] and not slide:
+            self._queue_successors[idx].add(tuple(successor))
+        if not self._abs_saw_chain[idx]:
+            return None
+        last_activity = self._abs_last_chain_activity_sec[idx]
+        if (state == BoardState.CHAIN.name and last_activity is not None
+                and self._t_sec - last_activity <= RESOLVED_ABS_CHAIN_ACTIVITY_QUIET_SEC):
+            return None
+        # 実落下は着地会計より先に始まる。終了を会計反映まで待たせない。
+        if state == BoardState.OJAMA_FALL.name:
+            return "ojama"
+        # 新ツモ推定状態や会計着弾の追随だけでは実際のNEXT移動を証明できない。
+        if not self._abs_baseline_ready[idx]:
+            return None
+        # 色変化はDNEXT→NEXTの送りも一致した場合だけ物理移動とする。
+        if (_is_game_event_chain_exit(nxt, self._abs_next_at_start[idx])
+                and nxt in self._queue_successors[idx]):
+            return "next"
+        return "slide" if slide else None
+
+
 class _ExchangeEventEndSignals:
     """既存の絶対終了判定だけを再用し、仮想盤面や決着ホールドを動かさない。"""
 
     def __init__(self, side: int, result: PipelineResult,
                  snapshot: OjamaAccountSnapshot, t_sec: float) -> None:
         self.side = side
-        self.sensor = ResolvedExchangeTracker(None, enable_absolute_chain_end=True)
+        self.sensor = _ExchangeEventPhysicalSensor(None, enable_absolute_chain_end=True)
         self.sensor._t_sec = t_sec
         self.sensor._arm_absolute_chain_end(result.p1, result.p2, snapshot)
 
@@ -6270,6 +6307,12 @@ class _ExchangeEventEndSignals:
         self.sensor._t_sec = t_sec
         self.sensor._observe_absolute_chain_end(result.p1, result.p2, snapshot)
         return self.sensor._abs_end_kind[self.side] if self.sensor._abs_ended[self.side] else None
+
+    def invalidate(self) -> None:
+        """式表示等で否定された終了ラッチを次フレームへ持ち越さない。"""
+        self.sensor._abs_ended[self.side] = False
+        self.sensor._abs_end_kind[self.side] = None
+        self.sensor._abs_pending_frames[self.side] = 0
 
 
 EXCHANGE_BOARD_CACHE_SIZE = 128
@@ -6295,13 +6338,33 @@ def _exchange_static_input(boards: tuple[Board, Board], snapshot: OjamaAccountSn
                        m0_probability, elapsed_sec, source_side=0)
 
 
+@dataclass
+class _ExchangeDisplayEMA:
+    """評価器の保持値と独立に、認識フレームごとの表示だけを平滑化する。"""
+
+    adv: float = 0.0
+    probability: float = 0.5
+    last_sec: float | None = None
+
+    def apply(self, adv: float, probability: float,
+              t_sec: float | None = None) -> tuple[float, float]:
+        """同一フレームの再参照では二重更新しない。初期値はOFFと同じ。"""
+        if t_sec is None or t_sec != self.last_sec:
+            self.adv = EMA_ALPHA * adv + (1 - EMA_ALPHA) * self.adv
+            self.probability = EMA_ALPHA * probability + (1 - EMA_ALPHA) * self.probability
+            self.last_sec = t_sec
+        return self.adv, self.probability
+
+
 def _exchange_display(overlay: ExchangeEventOverlay, adv: float,
-                      probability: float) -> tuple[float, float]:
+                      probability: float, smoothing: _ExchangeDisplayEMA | None = None,
+                      t_sec: float | None = None) -> tuple[float, float]:
     """学習済みイベント確率を、既存表示の確率・有利不利変換へ接続する。"""
     value = overlay.tracker.probability
     if value is None:
         return adv, probability
-    return max(-100.0, min(100.0, _winprob_to_adv(value))), value
+    converted = max(-100.0, min(100.0, _winprob_to_adv(value)))
+    return smoothing.apply(converted, value, t_sec) if smoothing else (converted, value)
 
 
 def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
@@ -7134,6 +7197,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     b1 = b2 = None
     adv_ema = 0.0
     p1_last = 0.5
+    event_display_ema = _ExchangeDisplayEMA() if event_overlay is not None else None
     model_adv_last = float("nan")
     drivers: list[tuple[str, float]] = []
     # kill_override が直近の settled 再計算で実際に発火したか (2026-08-22
@@ -7963,7 +8027,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 event_recorder.write(dict(kind="display", t_sec=t, game_idx=game_idx,
                     fallback_adv=disp_adv, fallback_p1=disp_p1, adv_raw_last=model_adv_last,
                     resolved_active=resolved_active, settled_ran=settled_ran_this_frame))
-            disp_adv, disp_p1 = _exchange_display(event_overlay, disp_adv, disp_p1)
+            disp_adv, disp_p1 = _exchange_display(
+                event_overlay, disp_adv, disp_p1, event_display_ema, t)
             if event_overlay.tracker.probability is not None:
                 drivers = []  # 旧モデルの主因を新しい確率の理由として表示しない。
         # (#8 修正) グラフに積む時刻は「現在の試合の開始からの相対時間」
@@ -7983,7 +8048,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 # 試合境界が密dumpの欠測になり、張り付き時間の分母が再び壊れる。
                 display_dump_rows.append(DisplayTimelineRow(
                     t_sec=t, game_idx=game_idx, display_adv=disp_adv,
-                    display_p1=disp_p1, adv_raw_last=model_adv_last,
+                    # ONの確率列は平滑化前を維持し、鮮度とM3の定義を変えない。
+                    display_p1=(event_overlay.tracker.probability
+                        if event_overlay is not None and event_overlay.tracker.probability is not None
+                        else disp_p1), adv_raw_last=model_adv_last,
                     source=(event_overlay.tracker.source if event_overlay is not None else _display_timeline_source(
                         resolved_active, resolved_just_deactivated,
                         settled_ran_this_frame,

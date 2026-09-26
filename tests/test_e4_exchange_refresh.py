@@ -65,21 +65,24 @@ def test_score_confirmed_pair_closes_without_landing(tracker: object) -> None:
     assert tracker.records[0].close_reason == "confirmed_after_score"
 
 
-def test_confirmed_pair_closes_before_s3_grace(tracker: object) -> None:
+def test_confirmed_pair_waits_for_s3_grace(tracker: object) -> None:
     fire(tracker)
     tracker.end("1P", 3, "next")
     tracker.finalize("1P", 3, 700)
     tracker.finish_frame(3.1)
     assert tracker.source == "S1"
-    assert tracker.static(static(), 3.1, (3.1, 3.1))
-    assert tracker.current is None and tracker.source == "G_fe"
+    assert not tracker.static(static(), 3.1, (3.1, 3.1))
+    tracker.finish_frame(3 + S3_END_QUIET_SEC)
+    assert tracker.source == "S3"
+    assert not tracker.static(static(), 3 + S3_END_QUIET_SEC, (4, 4))
+    assert tracker.static(static(), 4, (4, 4))
 
 
-def test_confirmed_pair_closes_when_end_signal_is_missing(tracker: object) -> None:
+def test_confirmed_pair_does_not_replace_missing_end_signal(tracker: object) -> None:
     fire(tracker)
     tracker.finalize("1P", 3, 700)
-    assert tracker.static(static(), 3.1, (3.1, 3.1))
-    assert tracker.current is None
+    assert not tracker.static(static(), 3.1, (3.1, 3.1))
+    assert tracker.current is not None
 
 
 @pytest.mark.parametrize("per_side", [False, True])

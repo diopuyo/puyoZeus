@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from src.chain_id_resolver import ChainIdResolver, ChainObservation, ObservationKind
+from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
 from src.exchange_event_evaluator import (
     ExchangeEndInput, ExchangeModels, FiringInput, StaticInput, evaluate_exchange_event,
 )
@@ -46,6 +47,8 @@ class ExchangeChainRecord:
     display_score: float | None = None
     stable_frames: int = 0
     last_activity_sec: float | None = None
+    drop_bonus_score: float = 0.0
+    post_end_drop_sec: float | None = None
 
 
 @dataclass
@@ -82,6 +85,7 @@ class ExchangeEventTracker:
         self._diagnostic_keys: set[tuple] = set()
         self._static_probability: float | None = None
         self._last_activity_sec = 0.0
+        self._chain_aliases: dict[int, int] = {}
 
     def boundary(self, game_idx: int, t_sec: float) -> None:
         """試合をまたぐ未完イベントを確定扱いにせず切り離す。"""
@@ -97,6 +101,7 @@ class ExchangeEventTracker:
         self._game_idx, self._s3_sec = game_idx, None
         self._static_probability = None
         self._last_activity_sec = t_sec
+        self._chain_aliases.clear()
 
     def missing_input(self, reason: str, t_sec: float, stage: str,
                       key: object = None) -> None:
@@ -131,7 +136,7 @@ class ExchangeEventTracker:
             self._seen.add((self._game_idx, side, trigger))
         self._last_activity_sec = t_sec
         for observation in observations:
-            self.resolver.push(observation)
+            self._push_chain_observation(observation)
         if self.current is None and observations and self._resume_existing(observations):
             if self.current is None:
                 return
@@ -186,7 +191,8 @@ class ExchangeEventTracker:
     def _resume_existing(self, observations: tuple[ChainObservation, ...]) -> bool:
         """早期S3後のbaseline残響は無視し、実段継続なら元の撃ち合いへ戻す。"""
         sides = {o.side for o in observations}
-        active = {c.chain_id: c for c in self.resolver.active() if c.side in sides}
+        active = {self._chain_aliases.get(c.chain_id, c.chain_id): c
+                  for c in self.resolver.active() if c.side in sides}
         for record in reversed(self.records):
             if record.game_idx != self._game_idx:
                 continue
@@ -214,12 +220,42 @@ class ExchangeEventTracker:
         chain = next((c for c in self.resolver.active() if c.side == observation.side), None)
         if chain is None:
             return
-        existing = next((c for c in self.current.chains if c.chain_id == chain.chain_id), None)
+        identity = self._chain_aliases.get(chain.chain_id, chain.chain_id)
+        existing = next((c for c in self.current.chains if c.chain_id == identity), None)
         if existing is None:
+            previous = self.latest_chain(observation.side)
+            if previous is not None and previous.end_signal_sec is None:
+                # 同側の物理終了が未観測なら別の参加連鎖を増やさない。
+                # resolverの段数訂正・baseline断片で旧IDを永久待ちにしない。
+                self._chain_aliases[chain.chain_id] = previous.chain_id
+                return
             self.current.chains.append(ExchangeChainRecord(
                 observation.side, chain.chain_id, trigger_sec, observation.t_sec))
+            self._s3_sec = None
+            values = [v for v in self.current.values if v["source"] == "S1"]
+            self.source, self.probability = "S1", values[-1]["p1"]
         elif not chain.awaiting_finalize and existing.end_signal_sec is not None:
             self._revoke_end(existing, observation.t_sec)
+
+    def note_placement(self, side: str, t_sec: float) -> None:
+        """終了後の操作加点は、次のツモを操作できた物理証拠として保存する。"""
+        chain = next((c for r in reversed(self.records) if r.game_idx == self._game_idx
+                      for c in reversed(r.chains) if c.side == side), None)
+        if chain is not None and chain.end_signal_sec is not None and t_sec > chain.end_signal_sec:
+            chain.post_end_drop_sec = t_sec
+
+    def _push_chain_observation(self, observation: ChainObservation) -> None:
+        """終了→次ツモ操作を挟んだ発火を、古い式セッションへ再結合しない。"""
+        active = next((c for c in self.resolver.active() if c.side == observation.side), None)
+        identity = self._chain_aliases.get(active.chain_id, active.chain_id) if active else None
+        previous = next((c for r in reversed(self.records) if r.game_idx == self._game_idx
+                         for c in reversed(r.chains) if c.chain_id == identity), None)
+        if (observation.kind == ObservationKind.FORMULA_STEP and previous is not None
+                and previous.end_signal_sec is not None and previous.post_end_drop_sec is not None
+                and previous.score_delta is not None):
+            self.resolver.push(ChainObservation(observation.side, observation.t_sec,
+                ObservationKind.SCORE_FINALIZE, total_score=int(previous.score_delta)))
+        self.resolver.push(observation)
 
     def _revoke_end(self, chain: ExchangeChainRecord, t_sec: float) -> None:
         """同じ側の活動再開を記録し、終了候補と早期得点を取り消す。"""
@@ -227,6 +263,8 @@ class ExchangeEventTracker:
         chain.end_signal_sec, chain.end_reason = None, None
         chain.score_ready_sec, chain.score_ready_reason = None, None
         chain.score_delta, chain.stable_frames = None, 0
+        chain.post_end_drop_sec = None
+        self._s3_sec = None
         chain.last_activity_sec = t_sec
         if self.current is not None:
             values = [v for v in self.current.values if v["source"] == "S1"]
@@ -236,8 +274,10 @@ class ExchangeEventTracker:
         """掛け算式の実表示・得点変化は同じ側の終了合図を撤回する。"""
         if self.current is None:
             return
-        self._last_activity_sec = t_sec
         chain = self.latest_chain(side)
+        if chain is None or (chain.end_signal_sec is not None and chain.post_end_drop_sec is not None):
+            return
+        self._last_activity_sec = t_sec
         if chain is not None:
             chain.last_activity_sec = t_sec
             if chain.end_signal_sec is not None and t_sec > chain.end_signal_sec:
@@ -272,7 +312,8 @@ class ExchangeEventTracker:
         chain.score_finalize_sec = t_sec
         if self.current is not None and chain in self.current.chains:
             self._last_activity_sec = t_sec
-        if any(c.chain_id == chain.chain_id for c in self.resolver.active()):
+        if any(self._chain_aliases.get(c.chain_id, c.chain_id) == chain.chain_id
+               for c in self.resolver.active()):
             self.resolver.push(ChainObservation(side, t_sec, ObservationKind.SCORE_FINALIZE,
                                                 total_score=int(score_delta)))
         if chain.score_ready_sec is None:
@@ -281,17 +322,22 @@ class ExchangeEventTracker:
     def observe_score(self, side: str, t_sec: float, score: float | None,
                       score_before: float | None = None,
                       formula_total: float | None = None) -> None:
-        """表示得点の変化を活動として記録し、終了後の得点安定を数える。"""
+        """消去得点の再開だけを活動とし、落下加点で終了を撤回しない。"""
         chain = self.latest_chain(side)
         if chain is None:
             return
+        if chain.score_before is None and valid_nonnegative(score_before):
+            chain.score_before = score_before + chain.drop_bonus_score
         previous_score = chain.display_score
+        if (chain.end_signal_sec is not None and chain.post_end_drop_sec is not None
+                and valid_nonnegative(score) and previous_score is not None
+                and score - previous_score >= CHAIN_TOTAL_MIN_SCORE):
+            return  # 操作可能になった後の消去得点を、終了済み連鎖へ足さない。
+        unchanged = score == previous_score
         if valid_nonnegative(score):
             if previous_score is not None and score != previous_score:
-                self.activity(side, t_sec)
+                unchanged = self._score_changed(chain, t_sec, score - previous_score)
             chain.display_score = score
-        if chain.score_before is None and valid_nonnegative(score_before):
-            chain.score_before = score_before
         if valid_nonnegative(formula_total) and formula_total > 0:
             chain.formula_total = formula_total
         if chain.end_signal_sec is None or chain.score_ready_sec is not None:
@@ -300,7 +346,7 @@ class ExchangeEventTracker:
             chain.display_score, chain.stable_frames = None, 0
             self.missing_input("missing_display_score_or_baseline", t_sec, "S3", chain.chain_id)
             return
-        chain.stable_frames = chain.stable_frames + 1 if score == previous_score else 1
+        chain.stable_frames = chain.stable_frames + 1 if unchanged else 1
         chain.display_score = score
         delta = score - chain.score_before
         if delta < 0:
@@ -309,6 +355,27 @@ class ExchangeEventTracker:
             self._score_ready(chain, t_sec, chain.formula_total, "formula_match")
         elif chain.stable_frames >= S3_SCORE_STABLE_FRAMES:
             self._score_ready(chain, t_sec, delta, "display_stable")
+
+    def _score_changed(self, chain: ExchangeChainRecord, t_sec: float, delta: float) -> bool:
+        """終了後の落下加点を基準へ吸収し、連鎖得点が不変ならTrueを返す。"""
+        if 0 < delta < CHAIN_TOTAL_MIN_SCORE:
+            if chain.end_signal_sec is not None:
+                chain.drop_bonus_score += delta
+                if chain.score_before is not None:
+                    chain.score_before += delta
+                return True
+            return False  # 終了前でも落下加点は連鎖活動ではない。
+        # 4個消去×10点が最小連鎖得点。通常落下の端数加点は連鎖再開ではない。
+        if delta >= CHAIN_TOTAL_MIN_SCORE:
+            self.activity(chain.side, t_sec)
+            return False
+        # 得点の減少はOCR異常として再確認するが、活動タイマーは延長しない。
+        chain.score_ready_sec, chain.score_ready_reason = None, None
+        chain.score_delta, chain.stable_frames = None, 0
+        if chain.end_signal_sec is not None and t_sec > chain.end_signal_sec:
+            values = [v for v in self.current.values if v["source"] == "S1"]
+            self.source, self.probability = "S1", values[-1]["p1"]
+        return False
 
     @staticmethod
     def _score_ready(chain: ExchangeChainRecord, t_sec: float,
@@ -372,10 +439,14 @@ class ExchangeEventTracker:
         """最後の参加連鎖の得点確定以降、両側の確定盤面が揃えば閉じる。"""
         if self.current is None:
             return True
-        if not self.current.chains or any(c.score_ready_sec is None for c in self.current.chains):
+        if not self.current.chains or any(c.score_ready_sec is None or c.end_signal_sec is None
+                                          for c in self.current.chains):
+            return False
+        # 終了確認の猶予を飛び越えてS1→G_feに直行させず、S3を実表示してから戻す。
+        if self._s3_sec is None or t_sec <= self._s3_sec:
             return False
         cutoff = max(c.score_ready_sec for c in self.current.chains)
-        return min(confirmed_times) > cutoff
+        return self._s3_sec >= cutoff and min(confirmed_times) > cutoff
 
     def static(self, event: StaticInput, t_sec: float,
                confirmed_times: tuple[float, float]) -> bool:
