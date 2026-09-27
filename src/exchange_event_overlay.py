@@ -144,7 +144,7 @@ class ExchangeEventOverlay:
 
     def _fire(self, result: Any, snapshot: Any, t_sec: float,
               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
-        """最初の発火より前の各側STABLE盤面を凍結する。"""
+        """今回の発火前に得られた各側STABLE盤面で評価入力を作る。"""
         first = min(ts for _, ts in fresh)
         selected = [next((s for s in reversed(h) if s.t_sec < first), None)
                     for h in self._history]
@@ -159,11 +159,8 @@ class ExchangeEventOverlay:
             return
         try:
             static = self._build_static(boards, before_snap, elapsed, UNUSED_S1_M0)
-            if self.tracker.current is None:
-                prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed)
-                                    for s in selected])
-            else:
-                prefire = self.tracker.firing.prefire_sides
+            prefire = np.stack([prefire_side_features(s.board._grid, s.queue, elapsed)
+                                for s in selected])
         except (ValueError, TypeError, FloatingPointError) as error:
             self.tracker.missing_input("prefire_input: " + str(error), t_sec, "S1", triggers)
             return

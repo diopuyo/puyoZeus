@@ -86,6 +86,7 @@ class ExchangeEventTracker:
         self._static_probability: float | None = None
         self._last_activity_sec = 0.0
         self._chain_aliases: dict[int, int] = {}
+        self._provisional_key: tuple | None = None
 
     def boundary(self, game_idx: int, t_sec: float) -> None:
         """試合をまたぐ未完イベントを確定扱いにせず切り離す。"""
@@ -102,6 +103,7 @@ class ExchangeEventTracker:
         self._static_probability = None
         self._last_activity_sec = t_sec
         self._chain_aliases.clear()
+        self._provisional_key = None
 
     def missing_input(self, reason: str, t_sec: float, stage: str,
                       key: object = None) -> None:
@@ -111,10 +113,10 @@ class ExchangeEventTracker:
             self._diagnostic_keys.add(identity)
             self.diagnostics.append(dict(game_idx=self._game_idx, t_sec=t_sec,
                                          reason=reason, requested_stage=stage))
-        if stage == "S3" and self.current is not None:
-            values = [v for v in self.current.values if v["source"] == "S1"]
+        if self.current is not None:
+            values = self.current.values
             if values:
-                self.source, self.probability = "S1", values[-1]["p1"]
+                self.source, self.probability = values[-1]["source"], values[-1]["p1"]
                 return
         self.probability = self._static_probability
         self.source = "G_fe" if self.probability is not None else "waiting_confirmed"
@@ -142,15 +144,25 @@ class ExchangeEventTracker:
                 return
         if observations and self.current is None and not self.resolver.active():
             return  # 得点確定後のbaseline残響から空の撃ち合いを作らない。
-        if self.current is None:
+        started = self.current is None
+        if started:
             if not self._start_exchange(t_sec, triggers, fresh, static,
                                         prefire_sides, score_elapsed_sec):
                 return
+        count_before = len(self.current.chains)
         if observations:
             for observation in observations:
                 idx = SIDE_LABELS.index(observation.side)
                 self._record_chain(observation, triggers[idx])
+            if not started and len(self.current.chains) > count_before:
+                self._refresh_firing(static, prefire_sides, t_sec)
             return
+        self._record_triggers(fresh, t_sec)
+        if not started and len(self.current.chains) > count_before:
+            self._refresh_firing(static, prefire_sides, t_sec)
+
+    def _record_triggers(self, fresh: list, t_sec: float) -> None:
+        """観測種別のない互換APIでも、新しい連鎖だけを登録する。"""
         for side, trigger in fresh:
             active = self.latest_chain(side)
             if active is not None and active.end_signal_sec is None:
@@ -161,6 +173,21 @@ class ExchangeEventTracker:
                                                 chain_count=1))
             chain = next(c for c in self.resolver.active() if c.side == side)
             self.current.chains.append(ExchangeChainRecord(side, chain.chain_id, trigger, t_sec))
+
+    def _refresh_firing(self, static: StaticInput, prefire_sides: np.ndarray,
+                        t_sec: float) -> None:
+        """参加側と最新確定盤面で再評価し、既存連鎖の確定送り量を引き継ぐ。"""
+        firing = tuple(any(c.side == side for c in self.current.chains) for side in SIDE_LABELS)
+        try:
+            event = FiringInput(static, prefire_sides, firing)
+        except (ValueError, TypeError) as error:
+            self.missing_input("firing_input: " + str(error), t_sec, "S1")
+            return
+        self.firing = event
+        self._contexts[self.current.exchange_id] = (self.firing, self._score_elapsed)
+        self._s3_sec, self._provisional_key = None, None
+        self._evaluate(self.firing, "S1", t_sec)
+        self._provisional(t_sec)
 
     def _start_exchange(self, t_sec: float, triggers: tuple, fresh: list,
                         static: StaticInput, prefire_sides: np.ndarray,
@@ -185,6 +212,7 @@ class ExchangeEventTracker:
         self.current.values.append(dict(source="S1", t_sec=t_sec, p1=self.probability))
         self.firing = event
         self._score_elapsed, self._s3_sec = score_elapsed_sec, None
+        self._provisional_key = None
         self._contexts[self.current.exchange_id] = (event, score_elapsed_sec)
         return True
 
@@ -232,8 +260,6 @@ class ExchangeEventTracker:
             self.current.chains.append(ExchangeChainRecord(
                 observation.side, chain.chain_id, trigger_sec, observation.t_sec))
             self._s3_sec = None
-            values = [v for v in self.current.values if v["source"] == "S1"]
-            self.source, self.probability = "S1", values[-1]["p1"]
         elif not chain.awaiting_finalize and existing.end_signal_sec is not None:
             self._revoke_end(existing, observation.t_sec)
 
@@ -266,9 +292,6 @@ class ExchangeEventTracker:
         chain.post_end_drop_sec = None
         self._s3_sec = None
         chain.last_activity_sec = t_sec
-        if self.current is not None:
-            values = [v for v in self.current.values if v["source"] == "S1"]
-            self.source, self.probability = "S1", values[-1]["p1"]
 
     def activity(self, side: str, t_sec: float) -> None:
         """掛け算式の実表示・得点変化は同じ側の終了合図を撤回する。"""
@@ -372,9 +395,6 @@ class ExchangeEventTracker:
         # 得点の減少はOCR異常として再確認するが、活動タイマーは延長しない。
         chain.score_ready_sec, chain.score_ready_reason = None, None
         chain.score_delta, chain.stable_frames = None, 0
-        if chain.end_signal_sec is not None and t_sec > chain.end_signal_sec:
-            values = [v for v in self.current.values if v["source"] == "S1"]
-            self.source, self.probability = "S1", values[-1]["p1"]
         return False
 
     @staticmethod
@@ -414,6 +434,7 @@ class ExchangeEventTracker:
         if t_sec - self._last_activity_sec >= EXCHANGE_IDLE_TIMEOUT_SEC:
             self._close(t_sec, "activity_timeout")
             return
+        self._provisional(t_sec)
         chains = self.current.chains
         if any(c.end_signal_sec is None or c.score_ready_sec is None for c in chains):
             return
@@ -434,6 +455,29 @@ class ExchangeEventTracker:
             return
         if self._evaluate(event, "S3", t_sec):
             self._s3_sec = t_sec
+
+    def _provisional(self, t_sec: float) -> None:
+        """確定済み連鎖と各段の累積得点を既存換算・S3モデルへ渡す。"""
+        chains = self.current.chains
+        if self._s3_sec is not None or not any(
+                c.formula_total is not None or c.score_ready_sec is not None for c in chains):
+            return
+        if (not any(c.formula_total is not None for c in chains)
+                and all(c.end_signal_sec is not None and c.score_ready_sec is not None for c in chains)):
+            return
+        scores = tuple(c.score_delta if c.score_ready_sec is not None
+                       else (c.formula_total or 0.0) for c in chains)
+        key = tuple((c.chain_id, score) for c, score in zip(chains, scores))
+        if key == self._provisional_key:
+            return
+        totals = np.array([sum(score for c, score in zip(chains, scores) if c.side == side)
+                           for side in SIDE_LABELS])
+        if not np.isfinite(totals).all():
+            return
+        event = ExchangeEndInput(self.firing, np.zeros(2), totals, self._score_elapsed)
+        if self._evaluate(event, "S3_provisional", t_sec):
+            self._provisional_key = key
+            self.current.values[-1]["score_totals"] = totals.tolist()
 
     def ready_for_static(self, t_sec: float, confirmed_times: tuple[float, float]) -> bool:
         """最後の参加連鎖の得点確定以降、両側の確定盤面が揃えば閉じる。"""

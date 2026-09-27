@@ -47,7 +47,7 @@ def test_all_participating_chains_must_finalize(tracker: ExchangeEventTracker, f
     assert all(c.awaiting_finalize for c in tracker.resolver.active())
     tracker.finalize(sides[first], 4, 700)
     tracker.finish_frame(4)
-    assert tracker.source == "S1"
+    assert tracker.source == "S3_provisional"
     tracker.finalize(sides[1-first], 5, 1400)
     tracker.finish_frame(5)
     assert tracker.source == "S3"
@@ -69,11 +69,11 @@ def test_formula_retrigger_is_same_growing_chain(tracker: ExchangeEventTracker) 
     assert len(tracker.current.chains) == 1
 
 
-def test_reply_is_bundled_but_first_trigger_flags_are_frozen(tracker: ExchangeEventTracker) -> None:
+def test_reply_is_bundled_and_updates_both_trigger_flags(tracker: ExchangeEventTracker) -> None:
     fire(tracker)
     fire(tracker, 3, (None, 3))
     assert len(tracker.current.chains) == 2
-    assert tracker.firing.firing == (True, False)
+    assert tracker.firing.firing == (True, True)
 
 
 def test_end_without_score_stays_s1_even_after_landing(tracker: ExchangeEventTracker) -> None:
@@ -109,13 +109,14 @@ def test_s3_has_priority_over_later_reply_s1(tracker: ExchangeEventTracker) -> N
     tracker.finalize("1P", 4, 700)
     tracker.finish_frame(4)
     fire(tracker, 5, (None, 5))
-    assert tracker.source == "S3"
+    assert tracker.source == "S3_provisional"
     assert not tracker.static(static(), 6, (6, 6))
     tracker.end("2P", 7, "next")
     tracker.finalize("2P", 8, 1400)
     tracker.finish_frame(8)
     assert len(tracker.records) == 1
-    assert [v["source"] for v in tracker.current.values] == ["S1", "S3", "S3"]
+    assert [v["source"] for v in tracker.current.values] == [
+        "S1", "S3", "S1", "S3_provisional", "S3"]
 
 
 def test_second_chain_same_side_gets_new_id(tracker: ExchangeEventTracker) -> None:
@@ -166,10 +167,10 @@ def test_score_before_absolute_end_waits_for_signal(tracker: ExchangeEventTracke
     fire(tracker)
     tracker.finalize("1P", 3, 700)
     tracker.finish_frame(3)
-    assert tracker.source == "S1"
+    assert tracker.source == "S3_provisional"
     tracker.end("1P", 4, "next")
     tracker.finish_frame(4)
-    assert tracker.source == "S1"
+    assert tracker.source == "S3_provisional"
     tracker.finish_frame(4 + 10 / 30)
     assert tracker.source == "S3"
     assert tracker.current.chains[0].score_finalize_sec == 3
@@ -295,13 +296,13 @@ def test_display_stability_resets(tracker: ExchangeEventTracker, interruption: f
     assert tracker.latest_chain("1P").stable_frames == 1
 
 
-@pytest.mark.parametrize("formula,expected", [(700, "S3"), (699, "S1"), (None, "S1")])
+@pytest.mark.parametrize("formula,expected", [(700, "S3"), (699, "S3_provisional"), (None, "S1")])
 def test_formula_match_waits_for_end_quiet(tracker: ExchangeEventTracker, formula: float | None, expected: str) -> None:
     fire(tracker)
     tracker.end("1P", 3, "next")
     tracker.observe_score("1P", 3, 800, 100, formula)
     tracker.finish_frame(3)
-    assert tracker.source == "S1"
+    assert tracker.source == ("S1" if formula is None else "S3_provisional")
     tracker.finish_frame(3 + 10 / 30)
     assert tracker.source == expected
     if expected == "S3":
@@ -313,11 +314,11 @@ def test_early_score_waits_for_all_chains(tracker: ExchangeEventTracker) -> None
     tracker.end("1P", 3, "next")
     tracker.observe_score("1P", 3, 800, 100, 700)
     tracker.finish_frame(3)
-    assert tracker.source == "S1"
+    assert tracker.source == "S3_provisional"
     tracker.end("2P", 4, "next")
     tracker.observe_score("2P", 4, 1500, 100, 1400)
     tracker.finish_frame(4)
-    assert tracker.source == "S1"
+    assert tracker.source == "S3_provisional"
     tracker.finish_frame(4 + 10 / 30)
     assert tracker.source == "S3"
 
