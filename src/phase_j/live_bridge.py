@@ -17,6 +17,7 @@ BATCH_PERIOD_SEC = 0.5
 QUEUE_CAPACITY = 30
 POLL_SEC = 0.05
 JOIN_SEC = 10.0
+MILLISECONDS = 1000.0
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,36 @@ class RecognitionBridge:
         self.meter: Any = None
         self.counters: list[Any] = []
         self.input_changed = False
+        self.split_evaluation = False
+        self.notification_count = 0
+        self.next_calculation = float('-inf')
+        self.state_updates: list[dict[str, Any]] = []
+        self.calculation_rows: list[dict[str, Any]] = []
+
+    def calculation_due(self, notice: RecognitionNotice) -> bool:
+        """状態更新は全件計装し、FIFOの最新状態かつ公開周期に達した時だけ計算する。"""
+        now = time.perf_counter()
+        self.notification_count += 1
+        depth = self.queue.qsize()+self.batch_remaining
+        self.state_updates.append(dict(frame=notice.frame, t_sec=notice.t_sec,
+            queue_depth=depth, milliseconds=(now-self.state_started)*MILLISECONDS))
+        clock = now if self.realtime else notice.t_sec
+        latest = getattr(self, 'latest_frame', None)
+        behind = self.realtime and (self.batch_remaining > 0 or
+                                   (latest is not None and latest.value > notice.frame))
+        if behind or clock < self.next_calculation:
+            return False
+        self.calculation_started = now
+        self.skip_features = False
+        return True
+
+    def calculation_finished(self, notice: RecognitionNotice) -> None:
+        now = time.perf_counter()
+        self.calculation_rows.append(dict(frame=notice.frame, t_sec=notice.t_sec,
+            notifications=self.notification_count, started_at=self.calculation_started,
+            milliseconds=(now-self.calculation_started)*MILLISECONDS))
+        clock = now if self.realtime else notice.t_sec
+        self.next_calculation = clock+BATCH_PERIOD_SEC
 
     def consume_input_boundary(self) -> bool:
         """機器切替後の最初の公開盤面だけ、既存の試合リセット経路を通す。"""
@@ -153,6 +184,7 @@ class RecognitionBridge:
     def timed_notice(self, notice: RecognitionNotice) -> Iterator[RecognitionNotice]:
         """CPU時間と壁時計の差はGIL/OS待ちの上限であり、GILだけとは断定しない。"""
         started, cpu = time.perf_counter(), time.thread_time()
+        self.state_started = started
         if self.meter is None:
             yield notice
         else:
@@ -179,6 +211,8 @@ class RecognitionBridge:
                 overlay: Any, result: Any, game: int, write_frame: int,
                 counter_trackers: tuple[Any, ...] = ()) -> None:
         self.active_counters = [counter for counter in counter_trackers if hasattr(counter, 'status')]
+        if self.split_evaluation:
+            self.calculation_finished(notice)
         if notice.frame >= write_frame:
             self.callback(notice, probability, advantage, overlay, result, game,
                           self.queue.qsize()+self.batch_remaining, time.perf_counter())
@@ -251,6 +285,8 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     if len(loops) != 1:
         raise ValueError('旧評価ループの構造が変更されています')
     adapt_loop(loops[0])
+    if bridge.split_evaluation:
+        split_loop(loops[0])
     if hasattr(bridge, 'pipeline_config'):
         for node in ast.walk(function):
             if isinstance(node, ast.If) and ast.unparse(node.test) == 'review_enabled':
@@ -264,6 +300,24 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     namespace = dict(vars(module), _live_bridge=bridge)
     exec(compile(ast.fix_missing_locations(tree), inspect.getfile(module), 'exec'), namespace)
     return namespace['generate']
+
+
+def split_loop(loop: ast.For) -> None:
+    """会計・状態機械の後で公開周期を判定し、旧数値合成部は公開時だけ通す。"""
+    body = loop.body
+    index = next(i for i, node in enumerate(body)
+                 if ast.unparse(node).startswith('settled_ran_this_frame ='))
+    # 得点/手数の配送予告は差分を持つので、旧settled条件のまま全通知へ移す。
+    fc = next(node for node in ast.walk(loop) if isinstance(node, ast.Assign)
+              and ast.unparse(node).startswith('fc = fctracker.update('))
+    update = ast.parse('if b1 is not None and b2 is not None and settled:\n    pass').body[0]
+    update.body = [ast.parse(ast.unparse(fc)).body[0]]
+    fc.value = ast.Name(id='fc', ctx=ast.Load())
+    checkpoint = ast.parse(
+        'if event_overlay is None:\n    raise ValueError("B7にはイベント評価が必要です")\n'
+        'if not _live_bridge.calculation_due(packet):\n    continue\n'
+        'event_overlay.calculate()').body
+    body[index:index] = [update, *checkpoint]
 
 
 def notice_digest(notice: RecognitionNotice) -> str:

@@ -181,12 +181,15 @@ class LiveOverlayServer(StreamOverlayServer):
 class LivePublisher:
     """評価からはlatest一件だけ受け取り、SnapshotHubへ単一writerで公開する。"""
 
-    def __init__(self, assets: dict[str, str], host: str, port: int) -> None:
+    def __init__(self, assets: dict[str, str], host: str, port: int,
+                 evaluation_driven: bool = False) -> None:
         self.initial = initial_snapshot(assets)
         self.hub = SnapshotHub(self.initial)
         self.state = LiveStreamState()
         self.server = LiveOverlayServer(self.state, host, port)
         self.lock, self.stop = Lock(), Event()
+        self.ready = Event()
+        self.evaluation_driven = evaluation_driven
         self.latest: dict[str, Any] | None = None
         self.input_calibration: dict[str, Any] | None = None
         self.input_events: list[dict[str, Any]] = []
@@ -203,6 +206,7 @@ class LivePublisher:
             self.latest = dict(row)
             if self.input_calibration:
                 self.latest['input_calibration'] = dict(self.input_calibration)
+            self.ready.set()
 
     def input_pending(self, now: float | dict[str, Any]) -> None:
         with self.lock:
@@ -220,6 +224,7 @@ class LivePublisher:
                 game=previous.get('game', 0), captured_at=now, recognized_at=now,
                 evaluated_at=now, queue_depth=0, raw_probability=None,
                 hold=True, input_calibration=dict(self.input_calibration))
+            self.ready.set()
 
     def _publish(self, row: dict[str, Any], revision: int, hold: float | None) -> None:
         now = time.perf_counter()
@@ -238,12 +243,18 @@ class LivePublisher:
 
     def _run(self) -> None:
         revision, previous, hold, hold_media = 0, None, None, None
+        last_row = None
         next_publish = time.perf_counter()
         try:
             while True:
+                if self.evaluation_driven:
+                    self.ready.wait()
                 time.sleep(max(0.0, next_publish-time.perf_counter()))
                 with self.lock:
                     row = self.latest
+                    self.ready.clear()
+                if self.evaluation_driven and self.stop.is_set() and row is last_row:
+                    break
                 if row is not None:
                     stale = previous == row['frame'] or row['hold']
                     if stale and hold is None:
@@ -252,6 +263,7 @@ class LivePublisher:
                     revision += 1
                     self._publish(dict(row, hold_media_sec=hold_media), revision, hold)
                     previous = row['frame']
+                    last_row = row
                 next_publish = time.perf_counter() + PUBLISH_PERIOD_SEC
                 if self.stop.is_set():
                     break
@@ -260,6 +272,7 @@ class LivePublisher:
 
     def close(self) -> None:
         self.stop.set()
+        self.ready.set()
         self.thread.join(PUBLISH_PERIOD_SEC * PUBLISHER_JOIN_PERIODS)
         self.server.stop()
         if self.thread.is_alive():

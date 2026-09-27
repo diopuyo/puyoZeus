@@ -48,6 +48,7 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py',
         'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py',
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
+        'src/phase_j/live_evaluation.py',
         'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
@@ -149,7 +150,11 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
         'capture_to_evaluation': [(r['evaluated_at']-r['captured_at'])*MILLISECONDS for r in sink.rows],
         'evaluation_to_sse': [(r['sent_at']-r['evaluated_monotonic_sec'])*MILLISECONDS for r in sent],
         'capture_to_sse': [(r['sent_at']-r['capture_monotonic_sec'])*MILLISECONDS for r in sent]}
-    return dict(realtime=options.realtime, frames=len(sink.rows), dropped_frames=bridge.source.dropped,
+    updates = [r for r in bridge.state_updates if r['t_sec'] >= options.start_sec]
+    calculations = [r for r in bridge.calculation_rows if r['t_sec'] >= options.start_sec]
+    depths = [r['queue_depth'] for r in (updates if bridge.split_evaluation else sink.rows)]
+    return dict(realtime=options.realtime, frames=len(updates) if bridge.split_evaluation else len(sink.rows),
+        calculated_frames=len(sink.rows), dropped_frames=bridge.source.dropped,
         source=getattr(options, 'source', 'video'), mc_rollouts=getattr(options, 'mc_rollouts', 30),
         cnn_device=getattr(options, 'cnn_device', 'auto'),
         gated_frames=getattr(bridge, 'gated_frames', 0),
@@ -161,8 +166,12 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
         latency_ms={name: percentile(values) for name, values in stages.items()},
         evaluation_queue=dict(capacity=QUEUE_CAPACITY, maximum=bridge.queue_max,
                              maximum_including_batch=bridge.pending_max,
-                             distribution=percentile([r['queue_depth'] for r in sink.rows]),
-                             end=0, observed=[r['queue_depth'] for r in sink.rows]),
+                             distribution=percentile(depths),
+                             end=bridge.queue.qsize()+bridge.batch_remaining, observed=depths),
+        split_evaluation=bridge.split_evaluation,
+        state_update_ms=percentile([r['milliseconds'] for r in updates]),
+        probability_calculation_ms=percentile([r['milliseconds'] for r in calculations]),
+        state_updates=bridge.state_updates, probability_calculations=bridge.calculation_rows,
         batch_starts=bridge.batch_starts, batch_sizes=bridge.batch_sizes,
         publications=sink.publisher.publications, sse_sent=sent, command=command,
         recognition=recognition, nice=os.nice(0) if hasattr(os, 'nice') else None,
@@ -186,9 +195,11 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     torch.manual_seed(SEED)
     options.no_render = True
     command = build_command(options)
-    publisher = LivePublisher(asset_hashes(), options.host, options.port)
+    split = getattr(options, 'split_evaluation', True)
+    publisher = LivePublisher(asset_hashes(), options.host, options.port, evaluation_driven=split)
     sink = ResultSink(publisher)
     bridge = make_bridge(options, sink)
+    bridge.split_evaluation = split
     sink.bridge = bridge
     bridge.async_counter = getattr(options, 'async_counter', True)
     bridge.mc_rollouts = getattr(options, 'mc_rollouts', 30)
@@ -204,15 +215,7 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
             stack.enter_context(patch.object(sys, 'argv', ['live-pipeline', *command]))
             overlay.main()
     finally:
-        try:
-            bridge.close()
-        finally:
-            try:
-                for counter in bridge.counters:
-                    counter.close()
-                publisher.close()
-            finally:
-                probe.thread.join(PROBE_JOIN_SEC)
+        close_live(bridge, publisher, probe)
     if probe.error is not None or not publisher.server.sent:
         raise RuntimeError('SSE送信の観測がありません') from probe.error
     report = metrics(bridge, sink, options, command)
@@ -225,6 +228,19 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     save_json(options.output / 'evaluations.json', sink.rows)
     save_json(options.output / 'latest.json', publisher.hub.latest.to_mapping())
     return {key: report[key] for key in ('frames', 'dropped_frames', 'latency_ms')}
+
+
+def close_live(bridge: RecognitionBridge, publisher: LivePublisher, probe: SSEProbe) -> None:
+    """評価失敗時も認識・MC・配信を順に閉じ、購読スレッドを回収する。"""
+    try:
+        bridge.close()
+    finally:
+        try:
+            for counter in bridge.counters:
+                counter.close()
+            publisher.close()
+        finally:
+            probe.thread.join(PROBE_JOIN_SEC)
 
 
 def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBridge:
@@ -251,7 +267,12 @@ def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: Recogni
     import scripts.review_data_panel as review
     stack.enter_context(patch.object(review, 'build_review_row',
         bridge.meter.wrap(review.build_review_row, 'review')))
-    if isinstance(bridge, ProcessRecognitionBridge):
+    if bridge.split_evaluation:
+        from src.phase_j.live_evaluation import SplitExchangeOverlay, sampled_ema
+        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay', SplitExchangeOverlay))
+        stack.enter_context(patch.object(overlay, '_ExchangeDisplayEMA',
+                                        sampled_ema(overlay._ExchangeDisplayEMA, bridge)))
+    elif isinstance(bridge, ProcessRecognitionBridge):
         stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
             coalescing_overlay(overlay.ExchangeEventOverlay, bridge)))
         stack.enter_context(patch.object(overlay, 'HeavyAdvCache',
@@ -318,6 +339,7 @@ def run_comparison(options: argparse.Namespace) -> dict[str, Any]:
         '--warmup-sec', str(options.warmup_sec), '--port', str(options.port),
         '--output', str(base / 'candidate')]
     candidate.append('--no-async-counter')
+    candidate.append('--no-split-evaluation')
     run_child(candidate, base / 'candidate')
     report = compare_arrays(base/'reference/display.npz', base/'candidate/display.npz')
     save_json(base / 'comparison.json', report)
@@ -339,6 +361,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--compare', action='store_true')
     parser.add_argument('--worker-mode', choices=('process', 'thread'), default='process')
     parser.add_argument('--coalesce-features', action='store_true')
+    parser.add_argument('--split-evaluation', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--async-counter', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--input-config', type=Path)
     parser.add_argument('--source', choices=('dshow', 'video'))
@@ -351,6 +374,7 @@ def parse_args() -> argparse.Namespace:
     options = apply_config(parser, sys.argv[1:])
     if options.compare:
         options.async_counter = False
+        options.split_evaluation = False
     if options.input_config:
         options.start_sec, options.end_sec, options.warmup_sec = 0.0, options.duration_sec or END_SEC-START_SEC, 0.0
     if options.compare and options.realtime:
