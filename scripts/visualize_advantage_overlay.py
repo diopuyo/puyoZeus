@@ -6444,6 +6444,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              exchange_event_record_path: Path | None = None,
              review_data_panel: bool = False,
              review_data_csv: Path | None = None,
+             exchange_event_live_count: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7034,7 +7035,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
             (event_recorder.wrap_static(_exchange_static_input) if event_recorder
              else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
-            per_side_settled=enable_per_side_settled)
+            per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -8276,6 +8277,8 @@ def main() -> None:
                     help="レビュー用の同一データを出力フレーム別CSVへ保存する")
     ap.add_argument("--exchange-event-record", type=Path, default=None,
                     help="全評価入力をgzip JSONLへ記録する（ON時のみ、既定なし）")
+    ap.add_argument("--exchange-event-live-count", action="store_true", default=False,
+                    help="E15: 確定盤面更新ごとにcount特徴とS3暫定を更新する")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8928,7 +8931,8 @@ def main() -> None:
              enable_phase_calibration=a.enable_phase_calibration,
              enable_early_fire_reaction=a.enable_early_fire_reaction,
              enable_exchange_event_update=a.exchange_event_update,
-             exchange_event_model_dir=a.exchange_event_model_dir,
+              exchange_event_model_dir=a.exchange_event_model_dir,
+              exchange_event_live_count=a.exchange_event_live_count,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,

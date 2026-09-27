@@ -1,0 +1,228 @@
+{
+  "protocol": {
+    "version": "E15_live_count",
+    "row_unit": "いずれかの側のSTABLE盤面/NEXT更新",
+    "admission": "評価時刻t_secで中盤判定。未来の終点による採否なし",
+    "scores": "観測済み連鎖だけの側別終点得点差を発火時完走予測の代理とする",
+    "weight": "撃ち合い単位で総和1",
+    "folds": "既存3seed×5動画fold",
+    "a": {
+      "baseline": "logs/f1b_counter_features/METRICS.json",
+      "oracle_max": 0.722
+    },
+    "b": {
+      "q_log_loss_max": 0.5708,
+      "zenchi_agreement_min": 0.7955,
+      "false_death_max": 1,
+      "death_denominator": 28
+    },
+    "c": {
+      "nf_2613_9_min": 700,
+      "jump_2614_08_max": 0.66,
+      "p_2694_3_min": 0.566,
+      "prefire_probability": "発火前から段階的に上昇"
+    },
+    "d": {
+      "report": "同一入力のE14/v3 OFF/ON count同値率、更新追従率"
+    }
+  },
+  "a": {
+    "input_videos": 148,
+    "videos": 144,
+    "rows": 84445,
+    "exchanges": 21466,
+    "predictions": 253335,
+    "folds": 15,
+    "metrics": {
+      "S3_prime": {
+        "auc": 0.7019269838890213,
+        "weighted_auc": 0.7080658818877754,
+        "log_loss": 0.6246427329203246,
+        "v2_auc": 0.7171875839969486,
+        "pass_a": false
+      },
+      "S3_prime_light": {
+        "auc": 0.7020251976514068,
+        "weighted_auc": 0.7084616474886645,
+        "log_loss": 0.6238263478282766,
+        "v2_auc": 0.7172028860600939,
+        "pass_a": false
+      }
+    },
+    "leak_suspected": false,
+    "passed": false
+  },
+  "b": {
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5517530993141103,
+      "auc": 0.7463660710832656
+    },
+    "zenchi": {
+      "hits": 6594,
+      "frames": 8333,
+      "agreement": 0.7913116524660987
+    },
+    "deaths": {
+      "false": 1,
+      "total": 28,
+      "unlabelled": 0,
+      "fraction": 0.03571428571428571,
+      "registered_denominator": 28
+    },
+    "checks": {
+      "q_log_loss": true,
+      "zenchi": false,
+      "deaths": true
+    },
+    "passed": false
+  },
+  "c": {
+    "nf_1p": 1153.0000000000005,
+    "prefire_p1": 0.3048880241821034,
+    "prefire_start_p1": 0.3213703243923781,
+    "prefire_window_sec": 2.0,
+    "prefire_steps": [
+      {
+        "t_sec": 2611.9166666666665,
+        "p1": 0.3213703243923781
+      },
+      {
+        "t_sec": 2612.05,
+        "p1": 0.34473142794431416
+      },
+      {
+        "t_sec": 2612.0833333333335,
+        "p1": 0.30432806423909653
+      },
+      {
+        "t_sec": 2612.116666666667,
+        "p1": 0.3475256064412833
+      },
+      {
+        "t_sec": 2612.15,
+        "p1": 0.3463982944524129
+      },
+      {
+        "t_sec": 2612.3166666666666,
+        "p1": 0.3588242507914364
+      },
+      {
+        "t_sec": 2612.45,
+        "p1": 0.29358735983595413
+      },
+      {
+        "t_sec": 2612.6833333333334,
+        "p1": 0.28931882844217527
+      },
+      {
+        "t_sec": 2612.7166666666667,
+        "p1": 0.29358735983595413
+      },
+      {
+        "t_sec": 2612.8166666666666,
+        "p1": 0.2916253797546323
+      },
+      {
+        "t_sec": 2612.85,
+        "p1": 0.2814468438072574
+      },
+      {
+        "t_sec": 2612.883333333333,
+        "p1": 0.18522494983854493
+      },
+      {
+        "t_sec": 2612.9166666666665,
+        "p1": 0.22623449864616016
+      },
+      {
+        "t_sec": 2613.2166666666667,
+        "p1": 0.23296398486972886
+      },
+      {
+        "t_sec": 2613.516666666667,
+        "p1": 0.19012039700319738
+      },
+      {
+        "t_sec": 2613.55,
+        "p1": 0.18768336976762673
+      },
+      {
+        "t_sec": 2613.5833333333335,
+        "p1": 0.19012039700319738
+      },
+      {
+        "t_sec": 2613.616666666667,
+        "p1": 0.19173765333960227
+      },
+      {
+        "t_sec": 2613.65,
+        "p1": 0.19298019179031708
+      },
+      {
+        "t_sec": 2613.7166666666667,
+        "p1": 0.19012039700319738
+      },
+      {
+        "t_sec": 2613.75,
+        "p1": 0.19086561871124522
+      },
+      {
+        "t_sec": 2613.8166666666666,
+        "p1": 0.3048880241821034
+      }
+    ],
+    "prefire_increases": 11,
+    "prefire_frames": 60,
+    "fire_jump": 0.466452743488776,
+    "fire_sec": 2614.0833333333335,
+    "late_p1": 0.7888392264888872,
+    "late_sec": 2694.2833333333333,
+    "frames": 3268,
+    "checks": {
+      "nf": true,
+      "prefire_rise": false,
+      "fire_jump": true,
+      "late_probability": true
+    },
+    "passed": false
+  },
+  "d": {
+    "frames": 3260,
+    "E14_OFF": {
+      "equal": 3260,
+      "rate": 1.0
+    },
+    "E15_ON": {
+      "equal": 150,
+      "rate": 0.046012269938650305,
+      "nf_equal": 150,
+      "nf_rate": 0.046012269938650305
+    },
+    "stable_updates": 554,
+    "refreshed_updates": 554,
+    "passed": true
+  },
+  "status": "FAIL",
+  "validation": {
+    "related_tests": {
+      "passed": 334,
+      "skipped": 1
+    },
+    "off_equivalence": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "off_frames": 6848,
+    "off_display_frames": 5948,
+    "production_config_changed": false
+  },
+  "model_sha256": {
+    "S1_prime": "ac43c1534ce388f5092df4bfda03ee862a9c694b450879b238b8df544628a9c6",
+    "S1_prime_light": "6d49daecb1281254c65547f89c612690bf5f6bf004970916200ee17ca45d7c8c",
+    "S3_prime": "3ca51ef214da2a061c173604fe98decbe38975aedfff448e35aabab0b0a2de40",
+    "S3_prime_light": "5072263bf12cf577d328f9d6aeb19dbf53cd2418510488dd18b5da0f65e63126"
+  }
+}

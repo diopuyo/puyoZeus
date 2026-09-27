@@ -46,8 +46,9 @@ class ExchangeEventOverlay:
 
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
-                 per_side_settled: bool = False) -> None:
-        self.tracker = ExchangeEventTracker(models)
+                 per_side_settled: bool = False, live_count: bool = False) -> None:
+        self.tracker = ExchangeEventTracker(models, live_count=live_count)
+        self._live_count_key: tuple | None = None
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0 = m0_predictor
         self._per_side_settled = per_side_settled
@@ -111,6 +112,7 @@ class ExchangeEventOverlay:
         self._last_formula = [None, None]
         self._last_displayed = [None, None]
         self._feature_cache.clear()
+        self._live_count_key = None
 
     def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
         """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""
@@ -217,6 +219,8 @@ class ExchangeEventOverlay:
     def _refresh_features(self, snapshot: Any, t_sec: float) -> None:
         """両側の最新確定盤面でDと近未来火力を更新し、同一盤面の探索を再用する。"""
         if getattr(self.tracker.models, "count_features", False):
+            if self.tracker.live_count:
+                self._refresh_live_count(t_sec)
             return
         if self.tracker.current is None or self._start is None or not all(self._history):
             return
@@ -234,6 +238,42 @@ class ExchangeEventOverlay:
             self.tracker.refresh_features(static, np.stack(features))
         except (ValueError, TypeError, FloatingPointError) as error:
             self.tracker.missing_input("current_input: " + str(error), t_sec, "S3")
+
+    def _refresh_live_count(self, t_sec: float) -> None:
+        """STABLE更新と連鎖遷移だけでcountを交換し、暫定S3を失効させる。"""
+        tracker = self.tracker
+        if tracker.current is None or self._start is None or not all(self._history):
+            return
+        grids, queues = [], []
+        for idx, history in enumerate(self._history):
+            latest = history[-1]
+            chain = tracker.latest_chain(SIDE_LABELS[idx])
+            grid = latest.board._grid
+            if chain is not None and (chain.end_signal_sec is None
+                                      or latest.t_sec < chain.end_signal_sec):
+                if chain.predicted_final_board is None:
+                    from src.exchange_event_count_features import completion
+                    saved = next((s for s in reversed(history) if s.t_sec < chain.trigger_sec), None)
+                    if saved is None:
+                        tracker.missing_input("missing_live_completion", t_sec, "S3", chain.chain_id)
+                        return
+                    _, _, final = completion(saved.board._grid.astype(np.int8).tobytes(), True,
+                                              chain.trigger_sec - self._start)
+                    grid = np.frombuffer(final, np.int8).reshape(saved.board._grid.shape)
+                else:
+                    grid = np.asarray(chain.predicted_final_board, dtype=np.int8)
+            grids.append(np.asarray(grid, dtype=np.int8))
+            queues.append(latest.queue)
+        observation = CountObservation(np.stack(grids), np.stack(queues),
+            t_sec - self._start, live=True, score_elapsed_sec=tracker._score_elapsed)
+        key = (tracker.current.exchange_id, observation.grids.tobytes(),
+               observation.queues.tobytes(), compute_effective_rate(observation.elapsed_sec),
+               tuple(h[-1].board._grid.tobytes() for h in self._history))
+        if key == self._live_count_key:
+            return
+        # E15はcountだけを更新し、既存のD・到着特徴の定義を保つ。
+        tracker.refresh_features(tracker.firing.static, tracker.firing.prefire_sides, observation)
+        self._live_count_key = key
 
     def _observations(self, result: Any, t_sec: float,
                       changed: list[tuple[int, float]]) -> tuple[ChainObservation, ...]:

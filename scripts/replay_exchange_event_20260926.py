@@ -48,7 +48,8 @@ def display_row(overlay: ExchangeEventOverlay, inputs: tuple, context: dict,
         score1=scores[0], score2=scores[1])
 
 
-def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
+def replay(record: Path, out: Path, model_dir: Path | None = None,
+           live_count: bool = False, observer: Any = None) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -60,13 +61,15 @@ def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
     directory = model_dir or Path(header["model_dir"])
     overlay = ExchangeEventOverlay(FileExchangeModels.load(directory, lightweight=True),
         static_builder(record), _ExchangeEventEndSignals, FileM0Predictor(directory / "M0"),
-        per_side_settled=header["per_side_settled"])
+        per_side_settled=header["per_side_settled"], live_count=live_count)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
             overlay.update(*inputs)
+            if observer is not None:
+                observer(overlay, inputs)
             _exchange_display(overlay, 0.0, 0.5, smoothing, inputs[3])
             frames += 1
         elif item["kind"] == "display":
@@ -78,7 +81,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None) -> dict:
     save_display_timeline(out / "display.npz", header["video_id"], rows)
     overlay.tracker.save(out / "events.jsonl")
     status = dict(state="completed", frames=frames, display_frames=len(rows),
-                  elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size)
+                  elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size,
+                  live_count=live_count, model_dir=str(directory))
     (out / "status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     return status
 
@@ -110,9 +114,10 @@ def main() -> None:
     parser.add_argument("record", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--exchange-event-live-count", action="store_true", default=False)
     parser.add_argument("--compare", type=Path)
     options = parser.parse_args()
-    result = replay(options.record, options.out, options.model_dir)
+    result = replay(options.record, options.out, options.model_dir, options.exchange_event_live_count)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))
