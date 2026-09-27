@@ -49,7 +49,7 @@ class ExchangeEventOverlay:
                  per_side_settled: bool = False, live_count: bool = False,
                  e16: bool = False, count_sync: bool = False,
                  death_guard: bool = False, evaluation_layers: bool = False,
-                 completion_check: bool = False) -> None:
+                 completion_check: bool = False, landing_counter_response: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
         from src.exchange_event_layers import ExchangeEvaluationLayers
@@ -75,7 +75,7 @@ class ExchangeEventOverlay:
         self._last_displayed: list[float | None] = [None, None]
         self._feature_cache: dict[tuple, np.ndarray] = {}
         from src.exchange_event_landing import ExchangeLandingProjection
-        self._landing_projection = ExchangeLandingProjection()
+        self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response)
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,

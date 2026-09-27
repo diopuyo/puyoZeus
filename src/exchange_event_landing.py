@@ -16,6 +16,7 @@ from src.exchange_virtual_board import land_pending_ojama_onto_board
 from src.indicators_v2 import (SEC_PER_HAND, estimate_chain_anim_duration_sec,
                                near_future_fire_power, NEAR_FUTURE_KNOWN_HAND_SLOTS)
 from src.production_config import GHOST_CHAIN_RULE_ENABLED
+from src.ojama_accounting import cancel_own_pending_then_send_surplus
 from src.scoring import (OJAMA_MAX_DROP_PER_TURN, score_to_ojama, calculate_chain_score,
                          BASE_SCORE_PER_PUYO)
 
@@ -69,7 +70,8 @@ def future_send(raw: bytes, shape: tuple, dtype: str, queue: tuple,
 class ExchangeLandingProjection:
     """元のS3を保存して合成の累積を防ぎ、実着地以降の二重投下を防ぐ。"""
 
-    def __init__(self) -> None:
+    def __init__(self, counter_response: bool = False) -> None:
+        self.counter_response = counter_response
         self.identity: tuple | None = None
         self.key: tuple | None = None
         self.drops = (0, 0)
@@ -302,6 +304,8 @@ class ExchangeLandingProjection:
         boards = tuple(s.board for s in latest)
         responses, credit = self._receivers(overlay.tracker, latest, incoming)
         gfe = self._landing_gfe(overlay, snapshot, latest, incoming, t_sec)
+        counter = self._counter_projection(overlay, snapshot, latest, incoming, hands, gfe, t_sec)
+        gfe = counter.get("gfe_response_p1", gfe) if counter.get("response_selected") else gfe
         probability = logit_mean(base["p1"], gfe)
         boards, responses, certain = self._death_boards(overlay.tracker, boards, responses, credit)
         landed_boards = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
@@ -340,7 +344,41 @@ class ExchangeLandingProjection:
                     overflow_rows=margins, verified_attack=evidence,
                     rejected_boards=self.rejected_boards, optimistic_send=optimistic,
                     completion_certain=certain, completion_sides=[SIDE_LABELS[i] for i in range(2)
-                        if certain[i] and self._chaining(overlay.tracker, i)])
+                        if certain[i] and self._chaining(overlay.tracker, i)], **counter)
+
+    def _counter_projection(self, overlay: Any, snapshot: Any, latest: tuple,
+                            incoming: list, hands: tuple, gfe: float, t_sec: float) -> dict:
+        """確定履歴から探索した応手を予測層だけへ反映し、二つの仮定を保存する。"""
+        if not self.counter_response:
+            return {}
+        replies, credit = self._receivers(overlay.tracker, latest, incoming)
+        net, sends, surplus = list(incoming), [None, None], [0, 0]
+        for idx in range(2):
+            if incoming[idx] <= 0:
+                continue
+            chain = overlay.tracker.latest_chain(SIDE_LABELS[idx])
+            stale = chain is not None and chain.end_signal_sec is not None and latest[idx].t_sec <= chain.end_signal_sec
+            board = replies[idx]
+            if self._chaining(overlay.tracker, idx) or stale:
+                board = self._completion_board(overlay.tracker, idx)
+                if board is None:
+                    continue  # 未解消の既発火火力を、追加の応手として二重に数えない。
+                credit[idx] = 0
+            grid = board._grid
+            sends[idx] = future_send(grid.tobytes(), grid.shape, grid.dtype.str,
+                tuple(int(v) for v in latest[idx].queue), hands[idx], overlay.tracker._score_elapsed)
+            sends[idx] = max(0, math.floor(sends[idx] + credit[idx]))
+            net[idx], net[1-idx] = cancel_own_pending_then_send_surplus(sends[idx], net[idx], net[1-idx])
+            surplus[idx] = max(0, sends[idx] - incoming[idx])
+        response_gfe = (self._landing_gfe(overlay, snapshot, latest, net, t_sec)
+                        if net != incoming else gfe)
+        selected = any(amount > 0 for amount in incoming) and all(
+            amount <= 0 or (sends[idx] is not None and sends[idx] >= amount)
+            for idx, amount in enumerate(incoming))
+        return dict(gfe_no_response_p1=gfe, gfe_response_p1=response_gfe,
+            response_selected=selected, response_layer="prediction", response_send=sends,
+            response_incoming=net, response_surplus=surplus,
+            response_board_sec=[s.t_sec for s in latest])
 
     def _optimistic_response(self, board: Board, queue: np.ndarray, hands: int, elapsed: float) -> float:
         """初回断定は既存指標の候補集合でも拒否できた場合だけに限定する。"""

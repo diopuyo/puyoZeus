@@ -45,6 +45,7 @@ PANEL_D_COLUMNS = (
 PROJECTION_FIELDS = (
     "incoming", "hands", "near_future_send", "required_cancel", "resolving_send",
     "overflow_rows", "verified_attack", "optimistic_send",
+    "response_send", "response_incoming", "response_surplus", "response_board_sec",
 )
 SIDE_FIELDS = (
     "state", "confirmed_sec", "chain_id", "exchange_step", "chain_count",
@@ -60,6 +61,8 @@ COMMON_FIELDS = (
     "p1_combined", "p1_selected", "p1_display", "display_adv",
     "projection_sec", "death_evidence_sec", "prefire_sec",
     *LAYER_COLUMNS,
+    "p1_landing_no_response", "p1_landing_response", "landing_response_selected",
+    "landing_response_layer",
 )
 CSV_FIELDS = (*COMMON_FIELDS, *(f"{side}_{name}" for side in SIDE_LABELS for name in SIDE_FIELDS))
 
@@ -212,6 +215,10 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
         if value["source"] in PROBABILITY_SOURCES:
             row[f"p1_{value['source']}"] = value["p1"]
     row["p1_landing_gfe"] = projection.get("gfe_p1")
+    row.update(p1_landing_no_response=projection.get("gfe_no_response_p1"),
+               p1_landing_response=projection.get("gfe_response_p1"),
+               landing_response_selected=projection.get("response_selected"),
+               landing_response_layer=projection.get("response_layer"))
     row["p1_combined"] = (logit_mean(projection["base_p1"], projection["gfe_p1"])
                           if projection else tracker.probability)
     sides = [_side_data(overlay, result, snapshot, record, projection, idx) for idx in range(2)]

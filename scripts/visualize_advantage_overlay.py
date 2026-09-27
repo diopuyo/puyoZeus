@@ -6446,6 +6446,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              review_data_csv: Path | None = None,
              exchange_event_live_count: bool = False,
              exchange_event_e16: bool = False,
+             exchange_event_death_guard: bool = False,
+             landing_counter_response: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7023,7 +7025,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     event_overlay: ExchangeEventOverlay | None = None
     event_recorder = None
     terminal_detector = None
-    if exchange_event_e16:
+    if exchange_event_e16 or exchange_event_death_guard:
         from src.exchange_event_terminal import ObservedDeathDetector
         terminal_detector = ObservedDeathDetector()
     if exchange_event_record_path is not None:
@@ -7041,7 +7043,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             (event_recorder.wrap_static(_exchange_static_input) if event_recorder
              else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
             per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count,
-            e16=exchange_event_e16)
+            e16=exchange_event_e16, death_guard=exchange_event_death_guard,
+            landing_counter_response=landing_counter_response)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -8291,6 +8294,10 @@ def main() -> None:
                     help="E15: 確定盤面更新ごとにcount特徴とS3暫定を更新する")
     ap.add_argument("--exchange-event-e16", action="store_true", default=False,
                     help="E16: 手番同期・死亡後発火抑止・現在/予測層の分離を有効にする")
+    ap.add_argument("--exchange-event-death-guard", action="store_true", default=False,
+                    help="E17②: 観測された窒息後の発火を拒否する")
+    ap.add_argument("--landing-counter-response", action="store_true", default=False,
+                    help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8948,6 +8955,8 @@ def main() -> None:
               exchange_event_model_dir=a.exchange_event_model_dir,
               exchange_event_live_count=a.exchange_event_live_count,
               exchange_event_e16=a.exchange_event_e16,
+              exchange_event_death_guard=a.exchange_event_death_guard,
+              landing_counter_response=a.landing_counter_response,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,
