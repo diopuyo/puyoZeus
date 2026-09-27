@@ -601,6 +601,11 @@
         "visibility": {
           "enum": ["visible", "hidden"]
         },
+        "input_status": {
+          "enum": ["verifying", "no_puyo_screen", "calibrating", "ready"]
+        },
+        "calibration_progress": {"type": "integer", "minimum": 0, "maximum": 100},
+        "message": {"type": "string"},
         "status": {
           "enum": [
             "live",

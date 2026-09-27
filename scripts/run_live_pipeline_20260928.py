@@ -45,7 +45,8 @@ def asset_hashes() -> dict[str, str]:
     """実行設定とモデル資産をDTOの再現用IDへ固定する。"""
     groups = dict(app_build_id=['scripts/run_live_pipeline_20260928.py',
         'scripts/visualize_advantage_overlay.py', 'src/phase_j/live_bridge.py',
-        'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py'],
+        'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py',
+        'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
         recognition_config_hash=['src/production_config.py'],

@@ -27,15 +27,18 @@ CALIBRATION_ROOT = Path('config/device_calibration')
 class DeviceConfig:
     name: str
     index: int
+    verification_only: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip() or type(self.index) is not int or self.index < 0:
             raise ValueError('機器名と非負の機器indexを明示してください')
+        if type(self.verification_only) is not bool:
+            raise ValueError('verification_onlyはboolが必要です')
 
     @classmethod
     def load(cls, path: Path) -> DeviceConfig:
         data = json.loads(path.read_text(encoding='utf-8'))
-        return cls(name=data['name'], index=data['index'])
+        return cls(name=data['name'], index=data['index'], verification_only=data.get('verification_only', True))
 
     @property
     def calibration_path(self) -> Path:
@@ -117,10 +120,12 @@ class DirectShowSource(FrameSource):
                  capture_factory: Callable[..., Any] = cv2.VideoCapture,
                  verifier: Callable[[np.ndarray], bool] | None = None,
                  clock: Callable[[], float] = time.perf_counter,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+                 sleep: Callable[[float], None] = time.sleep,
+                 on_status: Callable[[str], None] | None = None) -> None:
         self.config, self.duration, self.on_hold = config, duration, on_hold
         self.capture_factory, self.verifier = capture_factory, verifier
         self.clock, self.sleep, self.dropped = clock, sleep, 0
+        self.on_status = on_status
 
     def __iter__(self) -> Iterator[CapturedFrame]:
         capture = self.capture_factory(self.config.index, cv2.CAP_DSHOW)
@@ -139,7 +144,10 @@ class DirectShowSource(FrameSource):
                 elif captured-last_verify >= VERIFY_PERIOD_SEC:
                     verified, last_verify = verifier(normalized), captured
                 if not verified:
-                    self.on_hold()
+                    if self.on_status:
+                        self.on_status('verifying' if normalized is None else 'no_puyo_screen')
+                    else:
+                        self.on_hold()
                     self.sleep(READ_RETRY_SEC)
                     continue
                 elapsed = captured-origin

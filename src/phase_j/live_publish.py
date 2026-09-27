@@ -25,7 +25,7 @@ HTML = '''<!doctype html><html lang="ja"><meta charset="utf-8">
 font:28px sans-serif;text-shadow:1px 1px 3px black}</style><div id="value">待機中</div>
 <script>const events=new EventSource('/events');events.addEventListener('analysis', e=>{
 const d=JSON.parse(e.data), p=d.evaluations.practical;
-document.getElementById('value').textContent=d.display.input_status==='verifying'?'HOLD 入力確認中':
+document.getElementById('value').textContent=d.display.input_status&&d.display.input_status!=='ready'?'HOLD '+d.display.message:
 d.display.visibility==='hidden'?'待機中':
 `1P ${(p.p1_win_probability*100).toFixed(1)}% | ${p.source} | ${d.display.status}`+
 (d.evaluations.counter_search?.pending?' | 応手 計算中'+
@@ -59,15 +59,27 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         practical_queue_depth=int(row['queue_depth'] > 0),
         recognition_notification_queue_depth=row['queue_depth'], best_action_worker_health='disabled')
     payload['input'].update(event_seq=row['frame'])
+    calibration = row.get('input_calibration')
+    if (calibration and calibration['phase'] != 'ready') or row.get('input_verifying'):
+        payload['timing']['calculation_age_ms'] = None
+        input_hold(payload, row, now, hold_started)
+        return OverlaySnapshot.from_mapping(payload)
+    if calibration:
+        payload['display'].update(input_status='ready', calibration_progress=100)
     if 'display_layers' in row:
         payload['evaluations']['display_layers'] = row['display_layers']
     if 'counter_search' in row:
         payload['evaluations']['counter_search'] = row['counter_search']
     if row['raw_probability'] is None:
         payload['timing']['calculation_age_ms'] = None
-        if row.get('input_verifying'):
-            input_hold(payload, row, now, hold_started)
         return OverlaySnapshot.from_mapping(payload)
+    fill_evaluation(payload, row, now, hold_started)
+    return OverlaySnapshot.from_mapping(payload)
+
+
+def fill_evaluation(payload: dict[str, Any], row: dict[str, Any], now: float,
+                    hold_started: float | None) -> None:
+    """入力が利用可能な場合だけ評価表示を埋める。"""
     projected = row['source'] in PROJECTED_SOURCES
     hold = hold_started is not None
     payload['display'].update(visibility='visible', status='hold' if hold else
@@ -90,14 +102,17 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         advantage_score=row['advantage'], is_even=abs(row['advantage']) <= EVEN_THRESHOLD,
         origin='physical_prediction' if projected else 'model',
         calibration_id='exchange-v2-existing-display', evaluated_positions=1, source=row['source'])
-    return OverlaySnapshot.from_mapping(payload)
 
 
 def input_hold(payload: dict[str, Any], row: dict[str, Any], now: float,
                hold_started: float | None) -> None:
     """未確認入力では架空の勝率を作らず、HOLDの文字だけを表示する。"""
-    payload['display'].update(visibility='visible', status='hold', input_status='verifying',
-        message='入力確認中', update_reason='hold_started',
+    state = row.get('input_calibration', dict(phase='verifying', progress=0))
+    phase, progress = state['phase'], state['progress']
+    message = {'verifying': '入力確認中', 'no_puyo_screen': 'ぷよ画面なし',
+               'calibrating': f'色を較正中 {progress}%'}[phase]
+    payload['display'].update(visibility='visible', status='hold', input_status=phase,
+        calibration_progress=progress, message=message, update_reason='hold_started',
         primary_hold_reason='recognition_unreliable', all_hold_reasons=['recognition_unreliable'],
         hold_started_ms=int(row['t_sec']*MILLISECONDS),
         hold_elapsed_ms=int((now-(hold_started or now))*MILLISECONDS))
@@ -175,6 +190,7 @@ class LivePublisher:
         self.server = LiveOverlayServer(self.state, host, port)
         self.lock, self.stop = Lock(), Event()
         self.latest: dict[str, Any] | None = None
+        self.input_calibration: dict[str, Any] | None = None
         self.publications: list[dict[str, Any]] = []
         self.error: BaseException | None = None
         self.thread = Thread(target=self._run, name='sse-publisher', daemon=True)
@@ -186,22 +202,35 @@ class LivePublisher:
     def offer(self, row: dict[str, Any]) -> None:
         with self.lock:
             self.latest = dict(row)
+            if self.input_calibration:
+                self.latest['input_calibration'] = dict(self.input_calibration)
 
-    def input_pending(self, now: float) -> None:
+    def input_pending(self, now: float | dict[str, Any]) -> None:
         with self.lock:
+            if isinstance(now, dict):
+                self.input_calibration = dict(now)
+                if now['phase'] == 'ready':
+                    return
+                now = now['at']
+            else:
+                self.input_calibration = dict(phase='verifying', progress=0)
             previous = self.latest or {}
             self.latest = dict(frame=previous.get('frame', 0), t_sec=previous.get('t_sec', 0.0),
                 game=previous.get('game', 0), captured_at=now, recognized_at=now,
                 evaluated_at=now, queue_depth=0, raw_probability=None,
-                hold=True, input_verifying=True)
+                hold=True, input_calibration=dict(self.input_calibration))
 
     def _publish(self, row: dict[str, Any], revision: int, hold: float | None) -> None:
         now = time.perf_counter()
-        snapshot = result_snapshot(self.initial, row, now, revision, hold)
-        published = self.hub.publish(snapshot)
-        if published.fail_closed:
-            raise ValueError(f'公開DTO不正: {published.validation_report}')
-        self.state.publish(published.snapshot)
+        with self.lock:
+            # 状態変更と送出を直列化し、旧rowを取得済みの配信threadも較正ゲートへ従わせる。
+            if self.input_calibration and self.input_calibration['phase'] != 'ready':
+                row = dict(row, input_calibration=dict(self.input_calibration))
+            snapshot = result_snapshot(self.initial, row, now, revision, hold)
+            published = self.hub.publish(snapshot)
+            if published.fail_closed:
+                raise ValueError(f'公開DTO不正: {published.validation_report}')
+            self.state.publish(published.snapshot)
         self.publications.append(dict(frame=row['frame'], published_at=now,
             evaluated_at=row['evaluated_at'], captured_at=row['captured_at'],
             recognized_at=row['recognized_at'], hold=hold is not None))

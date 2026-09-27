@@ -72,9 +72,9 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
         pipe = RecognitionPipeline.load_default(**config)
         fps, start, end, stride = bounds
         if device:
-            from .live_device import DirectShowSource, DeviceConfig
-            source = DirectShowSource(DeviceConfig.load(Path(device)), duration=(end-start)/fps,
-                on_hold=lambda: queue.put(('hold', time.perf_counter())))
+            from .live_device_session import DeviceSession
+            pipe = DeviceSession(pipe, Path(device), (end-start)/fps, queue)
+            source = pipe.source
         else:
             capture = cv2.VideoCapture(video)
             capture.set(cv2.CAP_PROP_POS_FRAMES, start)
@@ -95,6 +95,8 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
         if cancel.is_set():
             break
         notice = recognize(pipe, frame)
+        if not getattr(pipe, 'publishing_ready', True):
+            continue
         if latest_frame is not None:
             latest_frame.value = notice.frame
         packet = codec.encode(notice)
@@ -170,7 +172,8 @@ class ProcessRecognitionBridge(RecognitionBridge):
         depth = self.queue.qsize()
         self.queue_max = max(self.queue_max, min(QUEUE_CAPACITY, depth+1))
         self.pending_max = max(self.pending_max, depth+1)
-        for _ in range(depth):
+        # デバイス制御通知と盤面通知の順序を維持し、古い盤面でHOLDを上書きしない。
+        for _ in range(0 if self.device else depth):
             try:
                 messages.append(self.queue.get_nowait())
             except Empty:
@@ -186,6 +189,9 @@ class ProcessRecognitionBridge(RecognitionBridge):
         if kind == 'done':
             self.finished = True
         if kind == 'hold' and self.on_hold:
+            if isinstance(value, dict) and value.get('epoch', -1) != getattr(self, 'input_epoch', -1):
+                self.input_changed = value.get('epoch', -1) > 0
+                self.input_epoch = value.get('epoch', -1)
             self.on_hold(value)
         if kind != 'notice':
             return None

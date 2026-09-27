@@ -603,9 +603,26 @@ def _snapshot_semantic_issues(payload: Payload, context: ValidationContext) -> l
         _validate_generations, _validate_both, _validate_provenance, _validate_mode,
         _validate_available_fields, _validate_hold_time, _validate_display_integrity,
         _validate_worker_lanes, _validate_best_action, _validate_layers, _validate_counter_search,
+        _validate_input_calibration,
     ):
         issues.extend(validator(payload))
     return issues
+
+
+def _validate_input_calibration(payload: Payload) -> list[ValidationIssue]:
+    """ウォームアップ中の勝率流出と進捗の不整合を拒否する。"""
+    display = payload['display']
+    phase = display.get('input_status')
+    if phase is None:
+        return []
+    progress = display.get('calibration_progress', 0)
+    practical = payload['evaluations']['practical']
+    blocked = phase != 'ready'
+    if ((blocked and (practical['availability'] == 'available' or
+                     practical['p1_win_probability'] is not None or progress >= 100))
+            or (not blocked and progress != 100)):
+        return [_issue('R23', '$.display.input_status', '較正状態と勝率または進捗が不整合です')]
+    return []
 
 
 def _validate_counter_search(payload: Payload) -> list[ValidationIssue]:

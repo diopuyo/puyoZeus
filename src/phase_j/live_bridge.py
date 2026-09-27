@@ -86,6 +86,12 @@ class RecognitionBridge:
         self.batch_ready_at = 0.0
         self.meter: Any = None
         self.counters: list[Any] = []
+        self.input_changed = False
+
+    def consume_input_boundary(self) -> bool:
+        """機器切替後の最初の公開盤面だけ、既存の試合リセット経路を通す。"""
+        changed, self.input_changed = self.input_changed, False
+        return changed
 
     def counter_context(self, result: Any, game: int) -> None:
         """非STABLE通知を含めて確定盤面世代と試合境界を追跡する。"""
@@ -203,6 +209,9 @@ def adapt_loop(loop: ast.For) -> None:
     recognition = next(i for i, code in enumerate(codes) if code.startswith('r = pipe.update('))
     drawing = next(i for i, code in enumerate(codes) if code.startswith('waiting ='))
     body = loop.body[recognition + 1:drawing]
+    reset = next(i for i, node in enumerate(body) if ast.unparse(node).startswith('if _formal_boundary:'))
+    body.insert(reset, ast.parse('_formal_boundary = _live_bridge.consume_input_boundary() '
+                                'or _formal_boundary').body[0])
     boundary = next(i for i, node in enumerate(body)
                     if ast.unparse(node).startswith('snap = _drive_ojama'))
     body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx)').body[0])
