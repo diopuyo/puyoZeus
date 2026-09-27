@@ -70,9 +70,12 @@ def future_send(raw: bytes, shape: tuple, dtype: str, queue: tuple,
 class ExchangeLandingProjection:
     """元のS3を保存して合成の累積を防ぎ、実着地以降の二重投下を防ぐ。"""
 
-    def __init__(self, counter_response: bool = False, counter_probability_model: Any = None) -> None:
+    def __init__(self, counter_response: bool = False, counter_probability_model: Any = None,
+                 hands_spec: bool = False) -> None:
         self.counter_response = counter_response
         self.counter_probability_model = counter_probability_model
+        from src.exchange_event_hands import LandingHandsObservation
+        self.hands_observation = LandingHandsObservation() if hands_spec else None
         self.identity: tuple | None = None
         self.key: tuple | None = None
         self.drops = (0, 0)
@@ -93,6 +96,8 @@ class ExchangeLandingProjection:
         """両側の通知とSTABLE履歴の更新後、確定送り量が変われば再評価する。"""
         tracker = overlay.tracker
         self._observe_frame(overlay, result, snapshot)
+        if self.hands_observation is not None:
+            self.hands_observation.observe_chains(tracker, self.counts, t_sec)
         if self._refresh_death(overlay, t_sec):
             return
         record = tracker.current or self.death_record
@@ -153,6 +158,8 @@ class ExchangeLandingProjection:
             and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
         if key != self.key:
             self.last = self._evaluate(overlay, snapshot, self.latest, incoming, hands, base, t_sec)
+            if self.hands_observation is not None:
+                self.last["hands_spec"] = [self._spec_budget(tracker, 1-i, t_sec) for i in range(2)]
             self.key = key
             if reassess and self.last["source"] != "unavoidable_death":
                 self.death, self.death_record, self.response_id = None, None, None
@@ -243,6 +250,8 @@ class ExchangeLandingProjection:
 
     def _hands(self, tracker: Any, attacker: int, t_sec: float) -> int:
         """自側連鎖中の操作不能時間を差し引き、着地前の最後の1手を加える。"""
+        if self.hands_observation is not None:
+            return self._spec_budget(tracker, attacker, t_sec)["hands"]
         chain = tracker.latest_chain(SIDE_LABELS[attacker])
         if chain is None or (chain.end_signal_sec is not None and chain.end_confirmed is not False):
             return 1
@@ -254,6 +263,11 @@ class ExchangeLandingProjection:
             busy = max(0.0, duration - max(0.0, t_sec-receiver.trigger_sec))
         return remaining_hands(max(self.counts[attacker], chain.predicted_chain_count or 0),
                                chain.trigger_sec, t_sec, busy)
+
+    def _spec_budget(self, tracker: Any, attacker: int, t_sec: float) -> dict:
+        """NEXT確定を最優先し、残演出を受け側の観測中央値で手数に変換する。"""
+        return self.hands_observation.estimate(tracker.latest_chain(SIDE_LABELS[attacker]),
+                                             attacker, t_sec, self.counts[attacker])
 
     def _chaining(self, tracker: Any, idx: int) -> bool:
         """物理連鎖中または終了未確認なら、完走後盤面での判定を要求する。"""
@@ -315,7 +329,8 @@ class ExchangeLandingProjection:
         dead, required, available = [], [0, 0], [None, None]
         margins, evidence, optimistic = [None, None], [False, False], [None, None]
         for i, landed in enumerate(landed_boards):
-            if incoming[i] <= 0 or not landed.is_dead() or not certain[i]:
+            if (incoming[i] <= 0 or not landed.is_dead() or not certain[i]
+                    or not self._known_budget(overlay.tracker, 1-i, t_sec)):
                 continue
             held = self.death is not None and SIDE_LABELS[i] in self.death["dead_sides"]
             evidence[i] = self._verified_attack(overlay.tracker, 1-i)
@@ -384,6 +399,11 @@ class ExchangeLandingProjection:
         if self.counter_probability_model is not None:
             value.update(self._counter_probability(overlay, latest, incoming, hands, value, t_sec))
         return value
+
+    def _known_budget(self, tracker: Any, attacker: int, t_sec: float) -> bool:
+        """未観測時の1手は下限なので、それだけで回避不能とは断定しない。"""
+        return self.hands_observation is None or not self._spec_budget(
+            tracker, attacker, t_sec)["reason"].startswith("missing_")
 
     def _counter_probability(self, overlay: Any, latest: tuple, incoming: list, hands: tuple,
                              value: dict, t_sec: float) -> dict:

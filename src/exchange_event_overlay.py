@@ -51,7 +51,7 @@ class ExchangeEventOverlay:
                  death_guard: bool = False, evaluation_layers: bool = False,
                  completion_check: bool = False, landing_counter_response: bool = False,
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
-                 counter_probability_model: Any = None) -> None:
+                 counter_probability_model: Any = None, landing_hands_spec: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -82,7 +82,8 @@ class ExchangeEventOverlay:
             from src.landing_counter_probability import LogisticResponseProbability
             counter_probability_model = LogisticResponseProbability.load()
         self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
-            counter_probability_model=counter_probability_model if landing_counter_prob else None)
+            counter_probability_model=counter_probability_model if landing_counter_prob else None,
+            hands_spec=landing_hands_spec)
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -93,6 +94,8 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._landing_projection.hands_observation is not None:
+            self._landing_projection.hands_observation.observe(sides, t_sec)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
             self._e16.apply(self, result, snapshot, t_sec)
             self._hold_confirmed_death(t_sec)
@@ -137,6 +140,8 @@ class ExchangeEventOverlay:
         self._last_displayed = [None, None]
         self._feature_cache.clear()
         self._live_count_key = None
+        if self._landing_projection.hands_observation is not None:
+            self._landing_projection.hands_observation.reset()
         if self._e16 is not None:
             self._e16.reset()
 

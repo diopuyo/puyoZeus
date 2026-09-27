@@ -1,0 +1,154 @@
+{
+  "videos": [
+    {
+      "source": "q_7gc4TgFig",
+      "frames": {
+        "waiting_confirmed": 1079,
+        "G_fe": 14240,
+        "S3_landing": 8353,
+        "S3": 57,
+        "confirmed_death": 2043,
+        "S3_provisional": 884,
+        "unavoidable_death": 344
+      },
+      "exchanges": 40,
+      "completed": 33,
+      "reached": 32,
+      "reach_fraction": 0.9696969696969697,
+      "display_reached": 13,
+      "display_reach_fraction": 0.3939393939393939,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 2.766666666666765,
+      "end_observed_count": 33,
+      "close_reasons": {
+        "activity_timeout": 1,
+        "match_boundary": 7,
+        "confirmed_after_score": 32
+      },
+      "unreached_last_gate": {
+        "missing_score_ready": 1
+      },
+      "small_score": {
+        "small_score_updates": 1522,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    },
+    {
+      "source": "fcXG83vInDY",
+      "frames": {
+        "waiting_confirmed": 1192,
+        "G_fe": 13911,
+        "S3_landing": 9665,
+        "unavoidable_death": 347,
+        "confirmed_death": 1092,
+        "S3_provisional": 787,
+        "S3": 6
+      },
+      "exchanges": 27,
+      "completed": 22,
+      "reached": 19,
+      "reach_fraction": 0.8636363636363636,
+      "display_reached": 3,
+      "display_reach_fraction": 0.13636363636363635,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 8.699999999999932,
+      "end_observed_count": 21,
+      "close_reasons": {
+        "activity_timeout": 3,
+        "match_boundary": 5,
+        "confirmed_after_score": 19
+      },
+      "unreached_last_gate": {
+        "missing_score_ready": 2,
+        "missing_end": 1
+      },
+      "small_score": {
+        "small_score_updates": 1917,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    },
+    {
+      "source": "mia8KCjr52g",
+      "frames": {
+        "waiting_confirmed": 771,
+        "G_fe": 15182,
+        "S3_landing": 8954,
+        "S3": 59,
+        "S3_provisional": 1129,
+        "confirmed_death": 905
+      },
+      "exchanges": 53,
+      "completed": 47,
+      "reached": 43,
+      "reach_fraction": 0.9148936170212766,
+      "display_reached": 6,
+      "display_reach_fraction": 0.1276595744680851,
+      "s1_median_seconds": 0.0,
+      "all_s1_median_seconds": 0.0,
+      "firing_to_last_end_median": 2.9333333333333087,
+      "end_observed_count": 44,
+      "close_reasons": {
+        "match_boundary": 5,
+        "confirmed_after_score": 43,
+        "activity_timeout": 4,
+        "stream_end": 1
+      },
+      "unreached_last_gate": {
+        "missing_end": 3,
+        "missing_score_ready": 1
+      },
+      "small_score": {
+        "small_score_updates": 1040,
+        "small_score_timer_resets": 0,
+        "small_score_ready_resets": 0,
+        "small_score_s3_to_s1": 0
+      },
+      "reach_pass": true,
+      "display_reach_pass": false,
+      "dwell_pass": true
+    }
+  ],
+  "pooled": {
+    "exchanges": 120,
+    "completed": 102,
+    "reached": 94,
+    "reach_fraction": 0.9215686274509803,
+    "display_reached": 22,
+    "display_reach_fraction": 0.21568627450980393,
+    "s1_median_seconds": 0.0,
+    "all_s1_median_seconds": 0.0,
+    "firing_to_last_end_median": 3.450000000000003,
+    "end_observed_count": 98,
+    "close_reasons": {
+      "activity_timeout": 8,
+      "match_boundary": 17,
+      "confirmed_after_score": 94,
+      "stream_end": 1
+    },
+    "unreached_last_gate": {
+      "missing_score_ready": 4,
+      "missing_end": 4
+    },
+    "small_score": {
+      "small_score_updates": 4479,
+      "small_score_timer_resets": 0,
+      "small_score_ready_resets": 0,
+      "small_score_s3_to_s1": 0
+    },
+    "reach_pass": true,
+    "display_reach_pass": false,
+    "dwell_pass": true
+  }
+}

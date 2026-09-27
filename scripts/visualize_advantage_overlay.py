@@ -6452,6 +6452,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              landing_counter_response: bool = False,
              confirmed_death_hold: bool = False,
              landing_counter_prob: bool = False,
+             landing_hands_spec: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7049,6 +7050,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count,
             e16=exchange_event_e16, death_guard=exchange_event_death_guard,
             landing_counter_response=landing_counter_response, confirmed_death_hold=confirmed_death_hold,
+            landing_hands_spec=landing_hands_spec,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8301,6 +8303,8 @@ def main() -> None:
                     help="E16: 手番同期・死亡後発火抑止・現在/予測層の分離を有効にする")
     ap.add_argument("--exchange-event-death-guard", action="store_true", default=False,
                     help="E17②: 観測された窒息後の発火を拒否する")
+    ap.add_argument("--landing-hands-spec", action="store_true", default=False,
+                    help="観測設置間隔とNEXT移動確定による着弾前手数（既定OFF）")
     ap.add_argument("--landing-counter-response", action="store_true", default=False,
                     help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
     ap.add_argument("--confirmed-death-hold", action="store_true", default=False,
@@ -8966,6 +8970,7 @@ def main() -> None:
               exchange_event_e16=a.exchange_event_e16,
               exchange_event_death_guard=a.exchange_event_death_guard,
               landing_counter_response=a.landing_counter_response,
+              landing_hands_spec=a.landing_hands_spec,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

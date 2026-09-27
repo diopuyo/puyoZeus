@@ -1,0 +1,719 @@
+{
+  "rows": {
+    "baseline": [
+      {
+        "source": "zenchi",
+        "exchange_id": 2,
+        "game_idx": 0,
+        "side": "1P",
+        "first_sec": 2573.2166666666667,
+        "last_sec": 2574.5833333333335,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 18,
+        "game_idx": 4,
+        "side": "1P",
+        "first_sec": 2808.1833333333334,
+        "last_sec": 2810.2833333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 23,
+        "game_idx": 5,
+        "side": "2P",
+        "first_sec": 2860.016666666667,
+        "last_sec": 2862.8166666666666,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 25,
+        "game_idx": 6,
+        "side": "1P",
+        "first_sec": 2892.2833333333333,
+        "last_sec": 2892.2833333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 27,
+        "game_idx": 7,
+        "side": "1P",
+        "first_sec": 2929.116666666667,
+        "last_sec": 2929.516666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 28,
+        "game_idx": 7,
+        "side": "1P",
+        "first_sec": 2936.2166666666667,
+        "last_sec": 2940.7166666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 32,
+        "game_idx": 9,
+        "side": "2P",
+        "first_sec": 3015.5833333333335,
+        "last_sec": 3017.55,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 46,
+        "game_idx": 13,
+        "side": "2P",
+        "first_sec": 3210.7833333333333,
+        "last_sec": 3211.15,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 52,
+        "game_idx": 15,
+        "side": "2P",
+        "first_sec": 3309.8166666666666,
+        "last_sec": 3323.5833333333335,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 54,
+        "game_idx": 16,
+        "side": "1P",
+        "first_sec": 3352.1833333333334,
+        "last_sec": 3352.2166666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 57,
+        "game_idx": 17,
+        "side": "2P",
+        "first_sec": 3397.3166666666666,
+        "last_sec": 3406.6833333333334,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 6,
+        "game_idx": 2,
+        "side": "1P",
+        "first_sec": 232.56666666666666,
+        "last_sec": 232.66666666666666,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 7,
+        "game_idx": 3,
+        "side": "1P",
+        "first_sec": 277.0,
+        "last_sec": 277.1,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 11,
+        "game_idx": 4,
+        "side": "2P",
+        "first_sec": 336.1333333333333,
+        "last_sec": 337.1333333333333,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 12,
+        "game_idx": 5,
+        "side": "2P",
+        "first_sec": 394.23333333333335,
+        "last_sec": 395.8666666666667,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 17,
+        "game_idx": 6,
+        "side": "1P",
+        "first_sec": 441.3333333333333,
+        "last_sec": 443.1666666666667,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 20,
+        "game_idx": 7,
+        "side": "1P",
+        "first_sec": 498.73333333333335,
+        "last_sec": 499.0,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 24,
+        "game_idx": 8,
+        "side": "2P",
+        "first_sec": 569.6,
+        "last_sec": 583.6666666666666,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 31,
+        "game_idx": 10,
+        "side": "1P",
+        "first_sec": 692.8666666666667,
+        "last_sec": 692.9666666666667,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 34,
+        "game_idx": 11,
+        "side": "1P",
+        "first_sec": 741.5333333333333,
+        "last_sec": 742.6333333333333,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 40,
+        "game_idx": 14,
+        "side": "1P",
+        "first_sec": 884.2666666666667,
+        "last_sec": 884.3333333333334,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 6,
+        "game_idx": 1,
+        "side": "1P",
+        "first_sec": 218.23333333333332,
+        "last_sec": 219.03333333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 7,
+        "game_idx": 1,
+        "side": "1P",
+        "first_sec": 238.4,
+        "last_sec": 238.86666666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 9,
+        "game_idx": 2,
+        "side": "1P",
+        "first_sec": 309.0,
+        "last_sec": 311.03333333333336,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 15,
+        "game_idx": 5,
+        "side": "2P",
+        "first_sec": 474.2,
+        "last_sec": 476.3,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 25,
+        "game_idx": 9,
+        "side": "2P",
+        "first_sec": 763.6,
+        "last_sec": 766.6,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 26,
+        "game_idx": 10,
+        "side": "1P",
+        "first_sec": 824.1,
+        "last_sec": 825.6333333333333,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 27,
+        "game_idx": 11,
+        "side": "2P",
+        "first_sec": 874.9333333333333,
+        "last_sec": 877.9666666666667,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      }
+    ],
+    "spec": [
+      {
+        "source": "zenchi",
+        "exchange_id": 2,
+        "game_idx": 0,
+        "side": "1P",
+        "first_sec": 2574.2833333333333,
+        "last_sec": 2575.65,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 15,
+        "game_idx": 3,
+        "side": "2P",
+        "first_sec": 2748.15,
+        "last_sec": 2749.2166666666667,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 18,
+        "game_idx": 4,
+        "side": "1P",
+        "first_sec": 2808.1833333333334,
+        "last_sec": 2810.2833333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 23,
+        "game_idx": 5,
+        "side": "2P",
+        "first_sec": 2862.5833333333335,
+        "last_sec": 2862.8166666666666,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 25,
+        "game_idx": 6,
+        "side": "1P",
+        "first_sec": 2892.0833333333335,
+        "last_sec": 2892.983333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 27,
+        "game_idx": 7,
+        "side": "1P",
+        "first_sec": 2929.116666666667,
+        "last_sec": 2929.516666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 28,
+        "game_idx": 7,
+        "side": "1P",
+        "first_sec": 2936.2166666666667,
+        "last_sec": 2940.7166666666667,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 32,
+        "game_idx": 9,
+        "side": "2P",
+        "first_sec": 3013.75,
+        "last_sec": 3015.6833333333334,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 36,
+        "game_idx": 10,
+        "side": "1P",
+        "first_sec": 3044.6833333333334,
+        "last_sec": 3044.6833333333334,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 46,
+        "game_idx": 13,
+        "side": "2P",
+        "first_sec": 3211.15,
+        "last_sec": 3211.15,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 49,
+        "game_idx": 14,
+        "side": "1P",
+        "first_sec": 3266.4166666666665,
+        "last_sec": 3267.75,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 52,
+        "game_idx": 15,
+        "side": "2P",
+        "first_sec": 3309.8166666666666,
+        "last_sec": 3321.6833333333334,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 54,
+        "game_idx": 16,
+        "side": "1P",
+        "first_sec": 3352.1833333333334,
+        "last_sec": 3353.483333333333,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "zenchi",
+        "exchange_id": 57,
+        "game_idx": 17,
+        "side": "2P",
+        "first_sec": 3393.3166666666666,
+        "last_sec": 3406.6833333333334,
+        "winner": "1P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 6,
+        "game_idx": 2,
+        "side": "1P",
+        "first_sec": 232.56666666666666,
+        "last_sec": 232.66666666666666,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 7,
+        "game_idx": 3,
+        "side": "1P",
+        "first_sec": 277.0,
+        "last_sec": 277.1,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 17,
+        "game_idx": 6,
+        "side": "1P",
+        "first_sec": 441.3333333333333,
+        "last_sec": 443.1666666666667,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 24,
+        "game_idx": 8,
+        "side": "2P",
+        "first_sec": 569.6,
+        "last_sec": 579.2,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 31,
+        "game_idx": 10,
+        "side": "1P",
+        "first_sec": 692.8666666666667,
+        "last_sec": 692.9666666666667,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 34,
+        "game_idx": 11,
+        "side": "1P",
+        "first_sec": 741.5333333333333,
+        "last_sec": 742.6333333333333,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 40,
+        "game_idx": 14,
+        "side": "1P",
+        "first_sec": 883.9666666666667,
+        "last_sec": 884.4333333333333,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 7,
+        "game_idx": 1,
+        "side": "1P",
+        "first_sec": 238.4,
+        "last_sec": 238.9,
+        "winner": "2P",
+        "false_positive": false
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 9,
+        "game_idx": 2,
+        "side": "1P",
+        "first_sec": 309.0,
+        "last_sec": 311.03333333333336,
+        "winner": "2P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 15,
+        "game_idx": 5,
+        "side": "2P",
+        "first_sec": 474.2,
+        "last_sec": 476.56666666666666,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 23,
+        "game_idx": 8,
+        "side": "1P",
+        "first_sec": 720.1,
+        "last_sec": 720.1666666666666,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 25,
+        "game_idx": 9,
+        "side": "2P",
+        "first_sec": 763.5666666666667,
+        "last_sec": 766.6,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 27,
+        "game_idx": 11,
+        "side": "2P",
+        "first_sec": 874.3333333333334,
+        "last_sec": 877.9666666666667,
+        "winner": "1P",
+        "false_positive": false,
+        "provenance": "panel_outcomes.json"
+      }
+    ]
+  },
+  "removed": [
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 6,
+      "game_idx": 1,
+      "side": "1P",
+      "first_sec": 218.23333333333332,
+      "last_sec": 219.03333333333333,
+      "winner": "2P",
+      "false_positive": false
+    },
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 26,
+      "game_idx": 10,
+      "side": "1P",
+      "first_sec": 824.1,
+      "last_sec": 825.6333333333333,
+      "winner": "2P",
+      "false_positive": false,
+      "provenance": "panel_outcomes.json"
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "exchange_id": 11,
+      "game_idx": 4,
+      "side": "2P",
+      "first_sec": 336.1333333333333,
+      "last_sec": 337.1333333333333,
+      "winner": "1P",
+      "false_positive": false
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "exchange_id": 12,
+      "game_idx": 5,
+      "side": "2P",
+      "first_sec": 394.23333333333335,
+      "last_sec": 395.8666666666667,
+      "winner": "1P",
+      "false_positive": false,
+      "provenance": "panel_outcomes.json"
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "exchange_id": 20,
+      "game_idx": 7,
+      "side": "1P",
+      "first_sec": 498.73333333333335,
+      "last_sec": 499.0,
+      "winner": "2P",
+      "false_positive": false,
+      "provenance": "panel_outcomes.json"
+    }
+  ],
+  "added": [
+    {
+      "source": "fcXG83vInDY",
+      "exchange_id": 23,
+      "game_idx": 8,
+      "side": "1P",
+      "first_sec": 720.1,
+      "last_sec": 720.1666666666666,
+      "winner": "1P",
+      "false_positive": true,
+      "provenance": "panel_outcomes.json"
+    },
+    {
+      "source": "zenchi",
+      "exchange_id": 15,
+      "game_idx": 3,
+      "side": "2P",
+      "first_sec": 2748.15,
+      "last_sec": 2749.2166666666667,
+      "winner": "1P",
+      "false_positive": false
+    },
+    {
+      "source": "zenchi",
+      "exchange_id": 36,
+      "game_idx": 10,
+      "side": "1P",
+      "first_sec": 3044.6833333333334,
+      "last_sec": 3044.6833333333334,
+      "winner": "2P",
+      "false_positive": false
+    },
+    {
+      "source": "zenchi",
+      "exchange_id": 49,
+      "game_idx": 14,
+      "side": "1P",
+      "first_sec": 3266.4166666666665,
+      "last_sec": 3267.75,
+      "winner": "2P",
+      "false_positive": false
+    }
+  ],
+  "false": {
+    "baseline": [
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 40,
+        "game_idx": 14,
+        "side": "1P",
+        "first_sec": 884.2666666666667,
+        "last_sec": 884.3333333333334,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      }
+    ],
+    "spec": [
+      {
+        "source": "q_7gc4TgFig",
+        "exchange_id": 40,
+        "game_idx": 14,
+        "side": "1P",
+        "first_sec": 883.9666666666667,
+        "last_sec": 884.4333333333333,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      },
+      {
+        "source": "fcXG83vInDY",
+        "exchange_id": 23,
+        "game_idx": 8,
+        "side": "1P",
+        "first_sec": 720.1,
+        "last_sec": 720.1666666666666,
+        "winner": "1P",
+        "false_positive": true,
+        "provenance": "panel_outcomes.json"
+      }
+    ]
+  }
+}
