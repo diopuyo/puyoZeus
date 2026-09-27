@@ -6442,9 +6442,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              dump_exchange_event_path: Path | None = None,
              exchange_event_m0_predictor: M0Predictor | None = None,
              exchange_event_record_path: Path | None = None,
+             review_data_panel: bool = False,
+             review_data_csv: Path | None = None,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
+    review_data_panel: 新方式ON時のみ、元映像の下にレビュー用データ帯を追加する。
+    review_data_csv: 同じデータを出力フレームごとに保存する。暖機は含めない。
+        両引数とも既定OFF。CSVだけの出力は既存の描画を変更しない。
     enable_exchange_event_update: 既定OFF。ON時はS3>S1>G_feの表示を優先し、
         旧発火速報加算と決着ホールドを無効化する。
     exchange_event_model_dir: E1のG_fe/S1/S3成果物。S1/S3は軽量版を使う。
@@ -7003,6 +7008,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         指示。底抜け演出検出による根治までの簡易実装)。感度を事後測定
         できるよう CLI (`--death-next-stationary-sec`) から変更可能。
     """
+    if (review_data_panel or review_data_csv is not None) and not enable_exchange_event_update:
+        raise ValueError("レビュー用データ出力には--exchange-event-updateが必要")
+    review_enabled = review_data_panel or review_data_csv is not None
+    review_csv_writer = None
+    if review_enabled:
+        from scripts.review_data_panel import (
+            ReviewCsv, build_review_row, draw_review_panel, panel_size,
+        )
     if layout not in VALID_LAYOUTS:
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
     event_overlay: ExchangeEventOverlay | None = None
@@ -7094,6 +7107,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         # 計算経路 (OUT_W/OUT_H で処理するフレーム) は layout に関わらず不変。
         canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
                        else (OUT_W, CANVAS_H))
+        if review_data_panel:
+            canvas_size = panel_size(*canvas_size)
         # stride 間引き後は書き出しフレーム数が 1/stride になるため、出力fps も
         # effective_fps (= fps/stride) にして再生時間 (実時間) を保つ
         # (normalize_fps_30=False/30fps以下入力なら stride=1 で fps と同値、
@@ -7321,6 +7336,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     # 全体を**正式境界イベント1回**へ統合する。
     _score_reset_latched = False       # 直前フレームで reset 信号が立っていたか
     _last_formal_boundary_t: float | None = None  # 最後に「正式受理」した境界の時刻
+    if review_data_csv is not None:
+        review_csv_writer = ReviewCsv(review_data_csv)
     dump_rows: list[TimelineDumpRow] = []
     display_dump_rows: list[DisplayTimelineRow] = []
     episode_dump_rows: list[EpisodeTimelineRow] = []
@@ -8077,6 +8094,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                     hard_reason=episode_hard_reason))
         if fi < write_frame:
             continue  # ウォームアップ区間は書き出さない
+        if review_enabled:
+            review_row = build_review_row(
+                event_overlay, r, snap, fi, t, game_idx, disp_p1, disp_adv,
+                _exchange_board_features, _side_feats_full)
+            if review_csv_writer is not None:
+                review_csv_writer.write(review_row)
         if not render:
             # 判定計算のみ (2026-08-11 追加)。描画・エンコードを一切行わない。
             written += 1
@@ -8155,11 +8178,15 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             frame_out = _draw_overlay(display_frame, disp_adv, disp_p1, drivers, waiting,
                                       history, t_rel, graph_total,
                                       ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2)
+        if review_data_panel:
+            frame_out = draw_review_panel(frame_out, review_row, JP_LABEL, _font)
         writer.write(frame_out)
         written += 1
         if written % 300 == 0:
             print(f"  ... {written} frames (t={t:.1f}s adv={disp_adv:+.0f})")
     cap.release()
+    if review_csv_writer is not None:
+        review_csv_writer.close()
     if writer is not None:
         writer.release()
     if dump_timeline_path is not None:
@@ -8237,6 +8264,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--exchange-event-update", action="store_true", default=False,
                     help="撃ち合いイベント評価を有効化する（既定OFF）")
+    ap.add_argument("--review-data-panel", action="store_true", default=False,
+                    help="元映像の下へレビュー用データ帯を追加する（新方式ON時のみ）")
+    ap.add_argument("--review-data-csv", type=Path, default=None,
+                    help="レビュー用の同一データを出力フレーム別CSVへ保存する")
     ap.add_argument("--exchange-event-record", type=Path, default=None,
                     help="全評価入力をgzip JSONLへ記録する（ON時のみ、既定なし）")
     ap.add_argument("--exchange-event-model-dir", type=Path,
@@ -8894,6 +8925,8 @@ def main() -> None:
              exchange_event_model_dir=a.exchange_event_model_dir,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
+             review_data_panel=a.review_data_panel,
+             review_data_csv=a.review_data_csv,
              enable_early_fire_clear_on_finalize=a.enable_early_fire_clear_on_finalize,
              enable_kill_override_chain_completion=a.enable_kill_override_chain_completion,
              enable_kill_override_chain_gen_accumulate=(
