@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import copy
+from itertools import zip_longest
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -51,7 +53,8 @@ class ExchangeEventOverlay:
                  death_guard: bool = False, evaluation_layers: bool = False,
                  completion_check: bool = False, landing_counter_response: bool = False,
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
-                 counter_probability_model: Any = None, landing_hands_spec: bool = False) -> None:
+                 counter_probability_model: Any = None, landing_hands_spec: bool = False,
+                 death_candidate_guard: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -84,6 +87,8 @@ class ExchangeEventOverlay:
         self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
             counter_probability_model=counter_probability_model if landing_counter_prob else None,
             hands_spec=landing_hands_spec)
+        from src.exchange_event_death_candidate import DeathCandidateGate
+        self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -94,6 +99,8 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._candidate_gate is not None:
+            self._candidate_gate.observe(sides, getattr(result, "confirmed_dead_sides", ()), t_sec, game_idx)
         if self._landing_projection.hands_observation is not None:
             self._landing_projection.hands_observation.observe(sides, t_sec)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
@@ -104,8 +111,7 @@ class ExchangeEventOverlay:
         self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
         fresh = self._changed_chains(sides, triggers, t_sec)
-        if fresh:
-            self._fire(result, snapshot, t_sec, triggers, fresh)
+        self._deliver_fires(result, snapshot, t_sec, triggers, fresh)
         for idx, (label, visible) in enumerate(zip(SIDE_LABELS, formula_visible)):
             if visible:
                 self._last_formula[idx] = t_sec
@@ -140,10 +146,36 @@ class ExchangeEventOverlay:
         self._last_displayed = [None, None]
         self._feature_cache.clear()
         self._live_count_key = None
+        if self._candidate_gate is not None:
+            self._candidate_gate.reset()
         if self._landing_projection.hands_observation is not None:
             self._landing_projection.hands_observation.reset()
         if self._e16 is not None:
             self._e16.reset()
+
+    def _deliver_fires(self, result: Any, snapshot: Any, stamp: float,
+                       triggers: tuple, fresh: list[tuple[int, float]]) -> None:
+        """保留中だけ通知を検査し、解除時には元の通知順で既存発火処理へ戻す。"""
+        gate = self._candidate_gate
+        if gate is None or not (any(gate.candidates) or any(gate.pending)):
+            if fresh:
+                self._fire(result, snapshot, stamp, triggers, fresh)
+            return
+        indices = {idx for idx, _ in fresh}
+        sides = (result.p1, result.p2)
+        for idx, side in enumerate(sides):
+            key = self._chain_keys[idx]
+            if key is not None and side.chain_event is not None and key[0] == side.chain_event.trigger_sec:
+                gate.accepted[idx].add(key[0])  # 既に受理済みの連鎖の段更新は新発火ではない。
+        ready = [gate.notifications(i, s.chain_event if i in indices else None, stamp)
+                 for i, s in enumerate(sides)]
+        for pair in zip_longest(*ready):
+            saved = copy(result)
+            saved.p1, saved.p2 = copy(result.p1), copy(result.p2)
+            saved.p1.chain_event, saved.p2.chain_event = pair
+            selected = [(i, event.trigger_sec) for i, event in enumerate(pair) if event is not None]
+            stamps = tuple(e.trigger_sec if e is not None else None for e in pair)
+            self._fire(saved, snapshot, stamp, stamps, selected)
 
     def _hold_confirmed_death(self, t_sec: float) -> None:
         """死亡後の更新拒否に入る前の予測値を凍結せず、境界まで確定表示する。"""

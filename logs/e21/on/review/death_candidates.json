@@ -1,0 +1,120 @@
+[
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 2569.05,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 2569.2833333333333,
+        "trigger_sec": 2569.2833333333333,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 2569.8166666666666,
+        "trigger_sec": 2569.8166666666666,
+        "mechanism": "formula_read"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 2571.016666666667
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 2572.6833333333334,
+    "outcome": "confirmed_death",
+    "held": [
+      {
+        "t_sec": 2576.8166666666666,
+        "trigger_sec": 2576.7833333333333,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 2576.983333333333
+  },
+  {
+    "game": 1,
+    "side": "2P",
+    "start_sec": 2608.75,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 2608.9166666666665,
+        "trigger_sec": 2608.9166666666665,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 2610.25,
+        "trigger_sec": 2608.9166666666665,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 2611.5833333333335,
+        "trigger_sec": 2608.9166666666665,
+        "mechanism": "formula_read"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 2612.883333333333
+  },
+  {
+    "game": 1,
+    "side": "2P",
+    "start_sec": 2632.2833333333333,
+    "outcome": "confirmed_death",
+    "held": [
+      {
+        "t_sec": 2633.8166666666666,
+        "trigger_sec": 2633.7833333333333,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 2634.75
+  },
+  {
+    "game": 2,
+    "side": "2P",
+    "start_sec": 2690.7166666666667,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 2691.8166666666666,
+        "trigger_sec": 2691.8166666666666,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 2692.5833333333335,
+        "trigger_sec": 2692.5833333333335,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 2693.1833333333334,
+        "trigger_sec": 2692.5833333333335,
+        "mechanism": "formula_read"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 2695.616666666667
+  },
+  {
+    "game": 2,
+    "side": "2P",
+    "start_sec": 2697.75,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 2698.983333333333
+  },
+  {
+    "game": 3,
+    "side": "2P",
+    "start_sec": 2772.05,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 2773.7833333333333
+  }
+]

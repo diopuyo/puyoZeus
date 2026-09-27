@@ -1,0 +1,20 @@
+{
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_candidate_guard": true
+  },
+  "baseline": "E19",
+  "q_max": 0.513079,
+  "zenchi_min": 0.8235,
+  "false_max": 1,
+  "reference_firings": 28,
+  "scene": [
+    2633.8,
+    2634.75
+  ],
+  "scene_min": 0.85,
+  "erasure": "発火後のSTABLE確定盤面で同色4個以上減少",
+  "candidate": "STABLE確定盤面[DEATH_ROW=1,DEATH_COL=2]が既知ぷよで占有",
+  "scope": "固定記録3動画+zenchi+reviewと全148原票。未観測は欠測と記録"
+}

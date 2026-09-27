@@ -1,0 +1,243 @@
+[
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 146.06666666666666,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 160.0,
+        "trigger_sec": 159.96666666666667,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 162.26666666666668
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 146.23333333333332,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 160.16666666666666,
+        "trigger_sec": 160.13333333333333,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 162.26666666666668
+  },
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 162.66666666666666,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 164.83333333333334
+  },
+  {
+    "game": 0,
+    "side": "1P",
+    "start_sec": 165.66666666666666,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 166.16666666666666,
+        "trigger_sec": 166.13333333333333,
+        "mechanism": "baseline"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 167.16666666666666
+  },
+  {
+    "game": 0,
+    "side": "2P",
+    "start_sec": 165.66666666666666,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 166.16666666666666
+  },
+  {
+    "game": 1,
+    "side": "1P",
+    "start_sec": 230.7,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 239.06666666666666
+  },
+  {
+    "game": 2,
+    "side": "1P",
+    "start_sec": 309.6,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 311.06666666666666
+  },
+  {
+    "game": 3,
+    "side": "2P",
+    "start_sec": 368.3666666666667,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 370.93333333333334
+  },
+  {
+    "game": 4,
+    "side": "2P",
+    "start_sec": 439.0,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 440.6
+  },
+  {
+    "game": 5,
+    "side": "2P",
+    "start_sec": 536.5666666666667,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 537.7333333333333
+  },
+  {
+    "game": 6,
+    "side": "1P",
+    "start_sec": 628.2,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 631.0
+  },
+  {
+    "game": 7,
+    "side": "2P",
+    "start_sec": 675.9333333333333,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 677.5333333333333
+  },
+  {
+    "game": 8,
+    "side": "2P",
+    "start_sec": 730.1666666666666,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 731.8
+  },
+  {
+    "game": 9,
+    "side": "2P",
+    "start_sec": 766.0,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 767.5
+  },
+  {
+    "game": 10,
+    "side": "1P",
+    "start_sec": 805.4666666666667,
+    "outcome": "cleared",
+    "held": [
+      {
+        "t_sec": 805.6333333333333,
+        "trigger_sec": 805.6333333333333,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 806.2333333333333,
+        "trigger_sec": 806.2333333333333,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 806.9666666666667,
+        "trigger_sec": 806.2333333333333,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 807.5666666666667,
+        "trigger_sec": 807.5666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 808.3666666666667,
+        "trigger_sec": 807.5666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 809.0,
+        "trigger_sec": 809.0,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 809.7333333333333,
+        "trigger_sec": 809.0,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 810.3666666666667,
+        "trigger_sec": 810.3666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 811.1,
+        "trigger_sec": 810.3666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 812.5,
+        "trigger_sec": 810.3666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 813.8333333333334,
+        "trigger_sec": 810.3666666666667,
+        "mechanism": "formula_read"
+      },
+      {
+        "t_sec": 815.1666666666666,
+        "trigger_sec": 810.3666666666667,
+        "mechanism": "formula_read"
+      }
+    ],
+    "accepted": [],
+    "end_sec": 817.3
+  },
+  {
+    "game": 10,
+    "side": "1P",
+    "start_sec": 823.3666666666667,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 824.3333333333334
+  },
+  {
+    "game": 10,
+    "side": "1P",
+    "start_sec": 824.6666666666666,
+    "outcome": "cleared",
+    "held": [],
+    "accepted": [],
+    "end_sec": 825.6666666666666
+  },
+  {
+    "game": 11,
+    "side": "2P",
+    "start_sec": 877.4,
+    "outcome": "confirmed_death",
+    "held": [],
+    "accepted": [],
+    "end_sec": 879.8666666666667
+  }
+]
