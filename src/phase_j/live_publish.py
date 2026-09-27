@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Event, Lock, Thread
 import time
@@ -20,18 +21,7 @@ EVEN_THRESHOLD = 3.0
 HTTP_OK = 200
 PUBLISHER_JOIN_PERIODS = 4
 PROJECTED_SOURCES = frozenset({'S3_landing', 'unavoidable_death'})
-HTML = '''<!doctype html><html lang="ja"><meta charset="utf-8">
-<title>Phase J ライブ</title><style>body{background:transparent;color:white;
-font:28px sans-serif;text-shadow:1px 1px 3px black}</style><div id="value">待機中</div>
-<script>const events=new EventSource('/events');events.addEventListener('analysis', e=>{
-const d=JSON.parse(e.data), p=d.evaluations.practical;
-document.getElementById('value').textContent=d.display.input_status&&d.display.input_status!=='ready'?'HOLD '+d.display.message:
-d.display.visibility==='hidden'?'待機中':
-`1P ${(p.p1_win_probability*100).toFixed(1)}% | ${p.source} | ${d.display.status}`+
-(d.evaluations.counter_search?.pending?' | 応手 計算中'+
-(d.evaluations.counter_search.result_generation===null?'（未取得）':'（直前値）'):'');
-});events.onerror=()=>{document.getElementById('value').textContent='HOLD 接続待ち';};
-</script></html>'''
+HTML = Path(__file__).with_name('overlay.html').read_text(encoding='utf-8')
 
 
 def utc_now() -> str:
@@ -66,10 +56,16 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         return OverlaySnapshot.from_mapping(payload)
     if calibration:
         payload['display'].update(input_status='ready', calibration_progress=100)
+    if not row.get('match_active', True):
+        payload['timing']['calculation_age_ms'] = None
+        payload['display'].update(message='次試合待ち', match_phase='between_matches')
+        return OverlaySnapshot.from_mapping(payload)
+    payload['display']['match_phase'] = 'playing'
     if 'display_layers' in row:
         payload['evaluations']['display_layers'] = row['display_layers']
     if 'counter_search' in row:
         payload['evaluations']['counter_search'] = row['counter_search']
+    payload['evaluations']['prediction_sources'] = row.get('prediction_sources', [])
     if row['raw_probability'] is None:
         payload['timing']['calculation_age_ms'] = None
         return OverlaySnapshot.from_mapping(payload)
@@ -101,7 +97,8 @@ def fill_evaluation(payload: dict[str, Any], row: dict[str, Any], now: float,
         p1_win_probability=row['probability'], p2_win_probability=1-row['probability'],
         advantage_score=row['advantage'], is_even=abs(row['advantage']) <= EVEN_THRESHOLD,
         origin='physical_prediction' if projected else 'model',
-        calibration_id='exchange-v2-existing-display', evaluated_positions=1, source=row['source'])
+        calibration_id='legacy-display' if row['source'] == 'legacy_mc' else 'exchange-v2-existing-display',
+        evaluated_positions=1, source=row['source'])
 
 
 def input_hold(payload: dict[str, Any], row: dict[str, Any], now: float,
@@ -175,6 +172,7 @@ class LiveOverlayServer(StreamOverlayServer):
                     with owner.sent_lock:
                         owner.sent.setdefault(data['identity']['stream_seq'],
                             dict(frame=data['timing']['source_available_frame'],
+                                 available=data['evaluations']['practical']['availability'] == 'available',
                                  sent_at=time.perf_counter(), **data['timing']))
 
         return Handler
@@ -191,6 +189,7 @@ class LivePublisher:
         self.lock, self.stop = Lock(), Event()
         self.latest: dict[str, Any] | None = None
         self.input_calibration: dict[str, Any] | None = None
+        self.input_events: list[dict[str, Any]] = []
         self.publications: list[dict[str, Any]] = []
         self.error: BaseException | None = None
         self.thread = Thread(target=self._run, name='sse-publisher', daemon=True)
@@ -209,11 +208,13 @@ class LivePublisher:
         with self.lock:
             if isinstance(now, dict):
                 self.input_calibration = dict(now)
+                self.input_events.append(dict(now))
                 if now['phase'] == 'ready':
                     return
                 now = now['at']
             else:
                 self.input_calibration = dict(phase='verifying', progress=0)
+                self.input_events.append(dict(self.input_calibration, at=now))
             previous = self.latest or {}
             self.latest = dict(frame=previous.get('frame', 0), t_sec=previous.get('t_sec', 0.0),
                 game=previous.get('game', 0), captured_at=now, recognized_at=now,

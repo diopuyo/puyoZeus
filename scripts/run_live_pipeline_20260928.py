@@ -46,7 +46,9 @@ def asset_hashes() -> dict[str, str]:
     groups = dict(app_build_id=['scripts/run_live_pipeline_20260928.py',
         'scripts/visualize_advantage_overlay.py', 'src/phase_j/live_bridge.py',
         'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py',
-        'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py'],
+        'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py',
+        'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
+        'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
         recognition_config_hash=['src/production_config.py'],
@@ -111,12 +113,18 @@ class ResultSink:
             score1=result.p1.score, score2=result.p2.score, queue_depth=queue_depth,
             digest=notice_digest(notice), capture_gap=notice.dropped_before > 0,
             hold=not stable and source == 'G_fe')
+        mc_included = getattr(self.bridge, 'mc_included', False)
+        row['match_active'] = getattr(result, 'is_match_active', True)
+        if mc_included:
+            row.update(source='legacy_mc', raw_probability=float(probability))
         self.rows.append(row)
         counters = getattr(self.bridge, 'active_counters', [])
         if counters:
             active = next((counter for counter in counters if counter.pending), counters[0])
             row['counter_search'] = active.status()
-        row['display_layers'] = evaluation_layers(overlay, float(probability))
+        row['display_layers'] = evaluation_layers(overlay, float(probability), mc_included)
+        row['prediction_sources'] = ['mc_counter'] if mc_included else (
+            [source] if row['display_layers']['includes_prediction'] else [])
         self.publisher.offer(row)
 
 
@@ -133,18 +141,27 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
     fps, start, end, stride = bridge.frame_bounds
     first = max(start, start + math.ceil((options.start_sec*fps-start)/stride)*stride)
     expected = len(range(first, end, stride))
-    sent = list(sink.publisher.server.sent.values())
+    sent = [r for r in sink.publisher.server.sent.values() if r.get('available', True)]
+    captured_drops = sum(options.start_sec <= t < options.end_sec
+                        for t in getattr(bridge.source, 'dropped_times', []))
     stages = {'capture_to_recognition': [(r['recognized_at']-r['captured_at'])*MILLISECONDS for r in recognition],
         'recognition_to_evaluation': [(r['evaluated_at']-r['recognized_at'])*MILLISECONDS for r in sink.rows],
         'capture_to_evaluation': [(r['evaluated_at']-r['captured_at'])*MILLISECONDS for r in sink.rows],
         'evaluation_to_sse': [(r['sent_at']-r['evaluated_monotonic_sec'])*MILLISECONDS for r in sent],
         'capture_to_sse': [(r['sent_at']-r['capture_monotonic_sec'])*MILLISECONDS for r in sent]}
     return dict(realtime=options.realtime, frames=len(sink.rows), dropped_frames=bridge.source.dropped,
+        source=getattr(options, 'source', 'video'), mc_rollouts=getattr(options, 'mc_rollouts', 30),
+        cnn_device=getattr(options, 'cnn_device', 'auto'),
+        gated_frames=getattr(bridge, 'gated_frames', 0),
+        input_transitions=sink.publisher.input_events,
+        capture_dropped_in_measured_window=captured_drops,
+        capture_drop_fraction=captured_drops/expected if expected else None,
         dropped_frames_in_measured_window=expected-len(recognition), expected_frames=expected,
         recognition_frames_including_warmup=len(bridge.recognition_rows),
         latency_ms={name: percentile(values) for name, values in stages.items()},
         evaluation_queue=dict(capacity=QUEUE_CAPACITY, maximum=bridge.queue_max,
                              maximum_including_batch=bridge.pending_max,
+                             distribution=percentile([r['queue_depth'] for r in sink.rows]),
                              end=0, observed=[r['queue_depth'] for r in sink.rows]),
         batch_starts=bridge.batch_starts, batch_sizes=bridge.batch_sizes,
         publications=sink.publisher.publications, sse_sent=sent, command=command,
@@ -174,7 +191,10 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     bridge = make_bridge(options, sink)
     sink.bridge = bridge
     bridge.async_counter = getattr(options, 'async_counter', True)
+    bridge.mc_rollouts = getattr(options, 'mc_rollouts', 30)
     publisher.start()
+    if getattr(options, 'lifecycle', False):
+        publisher.input_pending(time.perf_counter())
     probe = SSEProbe(publisher.server.address())
     try:
         probe.start()
@@ -215,6 +235,8 @@ def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBri
     bridge.on_hold = sink.publisher.input_pending
     bridge.duration = options.end_sec-options.start_sec
     bridge.config_path = options.output / 'recognition_config.json'
+    bridge.lifecycle = getattr(options, 'lifecycle', False)
+    bridge.live_config = str(options.config) if getattr(options, 'config', None) else None
     return bridge
 
 
@@ -305,9 +327,10 @@ def run_comparison(options: argparse.Namespace) -> dict[str, Any]:
 
 
 def parse_args() -> argparse.Namespace:
+    from src.phase_j.live_config import apply_config
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--video', type=Path, default=DEFAULT_VIDEO)
-    parser.add_argument('--status', type=Path, default=DEFAULT_STATUS)
+    parser.add_argument('--status', type=Path, default=Path('config/live_evaluation.json'))
     parser.add_argument('--output', type=Path, default=Path('logs/live_pipeline_20260928'))
     parser.add_argument('--start-sec', type=float, default=START_SEC)
     parser.add_argument('--end-sec', type=float, default=END_SEC)
@@ -318,14 +341,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--coalesce-features', action='store_true')
     parser.add_argument('--async-counter', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--input-config', type=Path)
-    parser.add_argument('--duration-sec', type=float, default=END_SEC-START_SEC)
+    parser.add_argument('--source', choices=('dshow', 'video'))
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--mc-rollouts', type=int, default=30)
+    parser.add_argument('--cnn-device', choices=('auto', 'cpu'), default='auto')
+    parser.add_argument('--duration-sec', type=float)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
-    options = parser.parse_args()
+    options = apply_config(parser, sys.argv[1:])
     if options.compare:
         options.async_counter = False
     if options.input_config:
-        options.start_sec, options.end_sec, options.warmup_sec = 0.0, options.duration_sec, 0.0
+        options.start_sec, options.end_sec, options.warmup_sec = 0.0, options.duration_sec or END_SEC-START_SEC, 0.0
     if options.compare and options.realtime:
         parser.error('全フレーム同値比較とrealtimeは別実行です')
     if options.compare and (options.coalesce_features or options.input_config):

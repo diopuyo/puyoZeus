@@ -603,7 +603,7 @@ def _snapshot_semantic_issues(payload: Payload, context: ValidationContext) -> l
         _validate_generations, _validate_both, _validate_provenance, _validate_mode,
         _validate_available_fields, _validate_hold_time, _validate_display_integrity,
         _validate_worker_lanes, _validate_best_action, _validate_layers, _validate_counter_search,
-        _validate_input_calibration,
+        _validate_input_calibration, _validate_mc_provenance,
     ):
         issues.extend(validator(payload))
     return issues
@@ -625,9 +625,26 @@ def _validate_input_calibration(payload: Payload) -> list[ValidationIssue]:
     return []
 
 
+def _validate_mc_provenance(payload: Payload) -> list[ValidationIssue]:
+    """MCが勝率に入った公開値には予測印とsourceを要求する。"""
+    evaluations = payload['evaluations']
+    practical = evaluations['practical']
+    mc = 'mc_counter' in evaluations.get('prediction_sources', [])
+    if practical.get('source') == 'legacy_mc' or mc:
+        if not (mc and practical.get('source') == 'legacy_mc' and
+                evaluations.get('display_layers', {}).get('includes_prediction')):
+            return [_issue('R24', '$.evaluations.prediction_sources', 'MC勝率の予測印/sourceが不整合です')]
+    return []
+
+
 def _validate_counter_search(payload: Payload) -> list[ValidationIssue]:
     """過去世代の応手を現在値として公開するDTOを拒否する。"""
     status = payload['evaluations'].get('counter_search')
+    if status and 'sides' in status:
+        for side, lane in status['sides'].items():
+            current, result = lane['generation'], lane['result_generation']
+            if result is not None and (result > current or (result != current and not lane['pending'])):
+                return [_issue('R22', f'$.evaluations.counter_search.sides.{side}', '片側MC世代が不整合です')]
     if status is None or status['result_generation'] is None:
         return []
     current, result = status['generation'], status['result_generation']

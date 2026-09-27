@@ -1,0 +1,10 @@
+{
+  "source": "dshow",
+  "name": "OBS Virtual Camera",
+  "index": 0,
+  "verification_only": true,
+  "coalesce_features": true,
+  "mc_rollouts": 30,
+  "host": "127.0.0.1",
+  "port": 8765
+}

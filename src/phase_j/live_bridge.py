@@ -183,6 +183,19 @@ class RecognitionBridge:
             self.callback(notice, probability, advantage, overlay, result, game,
                           self.queue.qsize()+self.batch_remaining, time.perf_counter())
 
+    def mc_in_display(self, overlay: Any, counter: Any, resolved: Any, active: bool) -> bool:
+        """学習済み勝率で上書きされたMCを、表示への寄与と誤記しない。"""
+        import math
+        if overlay is not None and overlay.tracker.probability is not None:
+            self.mc_included = False
+        elif active:
+            self.mc_included = math.isfinite(getattr(resolved, 'hold_defender_prob', float('nan')))
+        else:
+            result = getattr(counter, '_last_result', None)
+            self.mc_included = bool(result and counter.last_budget_sec > 0 and
+                getattr(counter, 'contributes', all(math.isfinite(p) for p in result[1:])))
+        return self.mc_included
+
     def close(self) -> None:
         self.cancel.set()
         if self.worker is not None:
@@ -220,6 +233,8 @@ def adapt_loop(loop: ast.For) -> None:
                          '(counter_tracker, resolved_tracker._counter_tracker))').body[0]
     index = next(i for i, node in enumerate(body) if ast.unparse(node).startswith('if fi < write_frame:'))
     body.insert(index, callback)
+    body.insert(index, ast.parse('_live_bridge.mc_in_display(event_overlay, counter_tracker, '
+                                 'resolved_tracker, resolved_active)').body[0])
     prefix = ast.parse('fi = packet.frame\nt = packet.t_sec\nr = packet.result()\npipe = packet.pipeline').body
     loop.target = ast.Name(id='packet', ctx=ast.Store())
     loop.iter = ast.parse('_live_bridge.observations(pipe, cap, fps, start_frame, n, stride)').body[0].value

@@ -59,7 +59,8 @@ class NoticeDeltaCodec:
 
 def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                        video: str, bounds: tuple, realtime: bool, device: str | None,
-                       latest_frame: Any = None) -> None:
+                       latest_frame: Any = None, lifecycle: bool = False,
+                       live_config: str | None = None) -> None:
     """GPU認識器はspawn先で生成し、親のCUDA状態を継承しない。"""
     from src.recognition_pipeline import RecognitionPipeline
     from scripts.run_e3_exchange_eval_20260926 import SEED
@@ -79,6 +80,10 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
             capture = cv2.VideoCapture(video)
             capture.set(cv2.CAP_PROP_POS_FRAMES, start)
             source = VideoFileSource(capture, fps, start, end, stride, realtime)
+            if lifecycle:
+                from .live_video_session import video_session
+                from .live_config import input_identity
+                pipe, source = video_session(pipe, source, queue, input_identity(live_config, video))
         send_notices(queue, cancel, pipe, source, latest_frame)
     except BaseException:
         queue.put(('error', traceback.format_exc()))
@@ -90,12 +95,13 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
 
 def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: Any = None) -> None:
     codec = NoticeDeltaCodec()
-    count, wire_bytes = 0, 0
+    count, wire_bytes, gated = 0, 0, 0
     for frame in source:
         if cancel.is_set():
             break
         notice = recognize(pipe, frame)
         if not getattr(pipe, 'publishing_ready', True):
+            gated += 1
             continue
         if latest_frame is not None:
             latest_frame.value = notice.frame
@@ -103,7 +109,9 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
         wire_bytes += len(pickle.dumps(packet, protocol=PROTOCOL))
         queue.put(('notice', packet))
         count += 1
-    queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes)))
+    queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes,
+                              dropped_times=getattr(source, 'dropped_times', []),
+                              gated=gated+getattr(source, 'gated_frames', 0))))
 
 
 class ProcessRecognitionBridge(RecognitionBridge):
@@ -143,7 +151,8 @@ class ProcessRecognitionBridge(RecognitionBridge):
         self.frame_bounds = (fps, start, end, stride)
         self.worker = self.context.Process(target=recognition_worker, name='recognition-process',
             args=(self.queue, self.cancel, pipe, self.video, self.frame_bounds, self.realtime,
-                  self.device, self.latest_frame))
+                  self.device, self.latest_frame, getattr(self, 'lifecycle', False),
+                  getattr(self, 'live_config', None)))
         self.worker.start()
         while not self.finished:
             batch = self._receive_batch()
@@ -173,7 +182,7 @@ class ProcessRecognitionBridge(RecognitionBridge):
         self.queue_max = max(self.queue_max, min(QUEUE_CAPACITY, depth+1))
         self.pending_max = max(self.pending_max, depth+1)
         # デバイス制御通知と盤面通知の順序を維持し、古い盤面でHOLDを上書きしない。
-        for _ in range(0 if self.device else depth):
+        for _ in range(0 if self.device or getattr(self, 'lifecycle', False) else depth):
             try:
                 messages.append(self.queue.get_nowait())
             except Empty:
@@ -186,6 +195,8 @@ class ProcessRecognitionBridge(RecognitionBridge):
             raise RuntimeError(value)
         if kind == 'summary':
             self.source.dropped, self.sent, self.wire_bytes = value['dropped'], value['sent'], value['wire_bytes']
+            self.gated_frames = value.get('gated', 0)
+            self.source.dropped_times = value.get('dropped_times', [])
         if kind == 'done':
             self.finished = True
         if kind == 'hold' and self.on_hold:

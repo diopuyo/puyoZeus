@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ぷよぷよ 対戦分析オーバーレイ</title>
+<style>
+  :root{color-scheme:dark;font-family:"Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;color:#f4f7fb}
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+  .panel{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:460px;
+    padding:13px 20px 14px;border:1px solid #ffffff24;border-radius:12px;background:rgba(12,17,26,.91)}
+  .meta,.scores,.player{display:flex;align-items:center}.meta{justify-content:space-between;min-height:19px}
+  .brand{font:600 10px/1.4 sans-serif;letter-spacing:2px;color:#8f9aa9}
+  .state{font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px;color:#c9d1dc}
+  .dot{width:5px;height:5px;background:#78d6b1;border-radius:50%}
+  [data-mode="waiting"] .dot{background:#e4bb72}[data-mode="offline"] .dot{background:#9aa6b5}
+  .scores{justify-content:space-between;height:47px}.player{gap:10px}.right{flex-direction:row-reverse}
+  .name{font:700 12px/1 sans-serif;letter-spacing:1px}.p1{color:#68cee6}.p2{color:#f2a59d}
+  .number{font:600 29px/1.1 sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.7px}
+  .unit{font-size:12px;color:#aab4c3;margin-left:3px}.prediction{font-size:10px;letter-spacing:.5px;
+    border:1px solid #e4bb7255;border-radius:4px;padding:3px 7px;color:#e4bb72;background:#e4bb720c}
+  .prediction[hidden]{visibility:hidden;display:block}
+  .bar{position:relative;height:6px;background:#333d4b;border-radius:4px;overflow:hidden;display:flex}
+  .fill{height:100%;transition:width .35s ease}.one{background:#68cee6;width:50%}.two{background:#f2a59d;flex:1}
+  .bar:after{content:"";position:absolute;left:50%;top:0;height:100%;width:2px;background:#111925aa}
+  [data-empty="true"] .fill{visibility:hidden}[data-empty="true"] .number{color:#798696}
+  @media(max-width:500px){.panel{width:calc(100% - 24px);bottom:12px}}
+  @media(prefers-reduced-motion:reduce){.fill{transition:none}}
+</style>
+<section class="panel" id="panel" data-mode="waiting" data-empty="true" aria-label="対戦の勝率推定">
+  <div class="meta"><span class="brand">PUYO / MATCH ANALYSIS</span>
+    <span class="state" role="status"><i class="dot" aria-hidden="true"></i><span id="state">入力確認中</span></span></div>
+  <div class="scores">
+    <div class="player"><span class="name p1">1P</span><span class="number"><span id="p1">—</span><small class="unit">%</small></span></div>
+    <span class="prediction" id="prediction" hidden>予測込み</span>
+    <div class="player right"><span class="name p2">2P</span><span class="number"><span id="p2">—</span><small class="unit">%</small></span></div>
+  </div>
+  <div class="bar" id="bar" role="img" aria-label="勝率は未取得"><div class="fill one" id="fill"></div><div class="fill two"></div></div>
+</section>
+<script>
+'use strict';
+const el=id=>document.getElementById(id);
+let watchdog;
+function unavailable(message, mode='waiting') {
+  el('panel').dataset.mode=mode;el('panel').dataset.empty='true';el('state').textContent=message;
+  el('p1').textContent=el('p2').textContent='—';el('prediction').hidden=true;
+  el('bar').setAttribute('aria-label','勝率は未取得');
+}
+function renderSnapshot(data) {
+  const display=data.display, practical=data.evaluations.practical;
+  const phase=display.input_status;
+  if(phase && phase!=='ready') {
+    const progress=Math.max(0,Math.min(99,display.calibration_progress||0));
+    return unavailable(phase==='calibrating'?`色を較正中 ${progress}%`:
+      phase==='no_puyo_screen'?'ぷよ画面なし':'入力確認中');
+  }
+  const p=practical.p1_win_probability;
+  if(display.visibility==='hidden'||practical.availability!=='available'||!Number.isFinite(p)||p<0||p>1)
+    return unavailable(display.message||'計算中');
+  const pending=Boolean(data.evaluations.counter_search?.pending)||display.status==='hold';
+  el('panel').dataset.empty='false';el('panel').dataset.mode=pending?'waiting':'live';
+  el('p1').textContent=(p*100).toFixed(1);el('p2').textContent=((1-p)*100).toFixed(1);
+  el('fill').style.width=`${p*100}%`;
+  el('prediction').hidden=!data.evaluations.display_layers?.includes_prediction;
+  el('state').textContent=pending?'計算中':'確定';
+  el('bar').setAttribute('aria-label',`1P ${(p*100).toFixed(1)}%、2P ${((1-p)*100).toFixed(1)}%`);
+}
+function connect() {
+  const stream=new EventSource('/events');
+  stream.addEventListener('analysis',event=>{
+    try {renderSnapshot(JSON.parse(event.data));}
+    catch {unavailable('入力確認中');}
+    clearTimeout(watchdog);watchdog=setTimeout(()=>unavailable('接続待ち','offline'),3500);
+  });
+  stream.onerror=()=>{clearTimeout(watchdog);unavailable('接続待ち','offline');};
+}
+connect();
+</script>
+</html>

@@ -132,3 +132,6 @@ data/verify/*
 # archive / examples 除外
 archive/
 examples/
+
+# ライブ入力の機器別較正profileは各機器に保存し、共有設定には混ぜない。
+config/device_calibration/*.json

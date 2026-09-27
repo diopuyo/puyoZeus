@@ -51,6 +51,7 @@ class VideoFileSource(FrameSource):
         self.start, self.end, self.stride = start, end, stride
         self.realtime, self.clock, self.sleep = realtime, clock, sleep
         self.dropped = 0
+        self.dropped_times: list[float] = []
         self.normalization_skipped = 0
 
     def latest_index(self, next_index: int, origin: float) -> int:
@@ -67,6 +68,7 @@ class VideoFileSource(FrameSource):
             target = self.latest_index(next_index, origin) if self.realtime else next_index
             dropped = (target - next_index) // self.stride
             self.dropped += dropped
+            self.dropped_times.extend(i/self.fps for i in range(next_index, target, self.stride))
             while index < min(target, self.end):
                 if not self.capture.grab():
                     raise EOFError(f'予定区間の途中で入力終了: {index}')

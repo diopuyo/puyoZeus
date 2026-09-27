@@ -8,6 +8,8 @@ from typing import Any
 EMPTY_RESULT = (0.0, float('nan'), float('nan'))
 JOIN_SEC = 2.0
 REFRESH_SEC = 0.5
+LIVE_ROLLOUTS = 30
+OFFLINE_ROLLOUTS = 60
 
 
 def warmup() -> None:
@@ -17,17 +19,22 @@ def warmup() -> None:
 
 def search(arguments: dict[str, Any]) -> tuple[int, tuple, float]:
     """独立プロセス内で既存探索をそのまま実行する。キャッシュは持ち越さない。"""
-    from scripts.visualize_advantage_overlay import CounterReachTracker
+    from unittest.mock import patch
+    import scripts.visualize_advantage_overlay as legacy
+    arguments = dict(arguments)
     generation = arguments.pop('generation')
-    tracker = CounterReachTracker()
-    result = tracker.update(**arguments)
+    rollouts = arguments.pop('rollouts', OFFLINE_ROLLOUTS)
+    tracker = legacy.CounterReachTracker()
+    with patch.object(legacy, 'COUNTER_N_ROLLOUTS', rollouts):
+        result = tracker.update(**arguments)
     return generation, result, tracker.last_hands
 
 
 class AsyncCounter:
     """実行中は一件だけ。古い世代の結果は直前値にも採用しない。"""
 
-    def __init__(self, executor: Any = None) -> None:
+    def __init__(self, executor: Any = None, rollouts: int = OFFLINE_ROLLOUTS) -> None:
+        self.rollouts = rollouts
         self.owns_executor = executor is None
         self.executor = executor or ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context('spawn'))
         if self.owns_executor:
@@ -101,7 +108,8 @@ class AsyncCounter:
                    and t_sec - self.result_time >= REFRESH_SEC)
         self.pending = self.result_generation != self.generation or refresh
         if self.future is None and self.pending:
-            arguments = dict(generation=self.generation, b1=b1.copy(), b2=b2.copy(), budget_sec=budget_sec,
+            arguments = dict(generation=self.generation, rollouts=self.rollouts,
+                             b1=b1.copy(), b2=b2.copy(), budget_sec=budget_sec,
                              next1=next1, next2=next2, t_sec=t_sec,
                              defender_side=defender_side, threshold_ojama=threshold_ojama,
                              reuse_if_board_unchanged=reuse_if_board_unchanged,
@@ -134,10 +142,11 @@ class AsyncCounter:
 
 def factory(bridge: Any) -> type:
     """生成されたtrackerをbridgeに登録し、通知ごとの世代監視と終了処理へつなぐ。"""
-    class LiveCounter(AsyncCounter):
+    from .live_side_counter import SideCounter
+    class LiveCounter(SideCounter):
         def __init__(self) -> None:
             # 試合リセットや補助trackerの生成でも探索processは一つに限定する。
             executor = bridge.counters[0].executor if bridge.counters else None
-            super().__init__(executor)
+            super().__init__(executor, getattr(bridge, 'mc_rollouts', LIVE_ROLLOUTS))
             bridge.counters.append(self)
     return LiveCounter

@@ -1,0 +1,15 @@
+{
+  "source": "video",
+  "name": "zenchi-video",
+  "index": 0,
+  "verification_only": true,
+  "realtime": true,
+  "coalesce_features": true,
+  "mc_rollouts": 30,
+  "cnn_device": "auto",
+  "start_sec": 2580.0,
+  "end_sec": 2700.0,
+  "warmup_sec": 1.0,
+  "host": "127.0.0.1",
+  "port": 8765
+}

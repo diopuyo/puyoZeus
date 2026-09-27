@@ -950,6 +950,8 @@
       "properties": {
         "display_layers": {"$ref": "#/$defs/display_layers"},
         "counter_search": {"$ref": "#/$defs/counter_search"},
+        "prediction_sources": {"type": "array", "uniqueItems": true,
+          "items": {"enum": ["mc_counter", "S3_landing", "unavoidable_death"]}},
         "practical": {
           "$ref": "#/$defs/practical_evaluation"
         },
@@ -968,6 +970,10 @@
       "required": ["pending", "generation", "result_generation", "request_time", "result_time", "submitted", "accepted", "discarded", "error"],
       "properties": {
         "pending": {"type": "boolean"},
+        "rollouts": {"type": "integer", "minimum": 1},
+        "sides": {"type": "object", "required": ["1P", "2P"],
+          "properties": {"1P": {"$ref": "#/$defs/counter_search"},
+                         "2P": {"$ref": "#/$defs/counter_search"}}, "additionalProperties": false},
         "generation": {"type": "integer", "minimum": 0},
         "result_generation": {"type": ["integer", "null"], "minimum": 0},
         "request_time": {"type": ["number", "null"]},
