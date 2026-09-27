@@ -60,11 +60,14 @@ class NoticeDeltaCodec:
 def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                        video: str, bounds: tuple, realtime: bool, device: str | None,
                        latest_frame: Any = None, lifecycle: bool = False,
-                       live_config: str | None = None) -> None:
+                       live_config: str | None = None, audit_path: str | None = None) -> None:
     """GPU認識器はspawn先で生成し、親のCUDA状態を継承しない。"""
     from src.recognition_pipeline import RecognitionPipeline
     from scripts.run_e3_exchange_eval_20260926 import SEED
     import torch
+    from .live_cpu import apply_runtime
+    from .live_audit import RecognitionAudit
+    apply_runtime('recognition')
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -84,7 +87,8 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                 from .live_video_session import video_session
                 from .live_config import input_identity
                 pipe, source = video_session(pipe, source, queue, input_identity(live_config, video))
-        send_notices(queue, cancel, pipe, source, latest_frame)
+        send_notices(queue, cancel, pipe, source, latest_frame,
+                     RecognitionAudit(Path(audit_path) if audit_path else None))
     except BaseException:
         queue.put(('error', traceback.format_exc()))
     finally:
@@ -93,23 +97,35 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
         queue.put(('done', None))
 
 
-def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: Any = None) -> None:
+def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: Any = None,
+                 audit: Any = None) -> None:
+    from .live_cpu import runtime_snapshot
     codec = NoticeDeltaCodec()
     count, wire_bytes, gated = 0, 0, 0
     for frame in source:
         if cancel.is_set():
             break
+        started, cpu = time.perf_counter(), time.process_time()
         notice = recognize(pipe, frame)
-        if not getattr(pipe, 'publishing_ready', True):
+        ready = getattr(pipe, 'publishing_ready', True)
+        if audit is not None:
+            audit.append(notice, frame, time.perf_counter()-started, time.process_time()-cpu, ready)
+        if not ready:
             gated += 1
             continue
         if latest_frame is not None:
             latest_frame.value = notice.frame
         packet = codec.encode(notice)
         wire_bytes += len(pickle.dumps(packet, protocol=PROTOCOL))
+        sent_at = time.perf_counter()
         queue.put(('notice', packet))
+        if audit is not None:
+            audit.queue_wait(time.perf_counter()-sent_at)
         count += 1
-    queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes,
+    runtime = runtime_snapshot('recognition')
+    if audit is not None:
+        audit.save(runtime, source)
+    queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes, runtime=runtime,
                               dropped_times=getattr(source, 'dropped_times', []),
                               gated=gated+getattr(source, 'gated_frames', 0))))
 
@@ -152,8 +168,10 @@ class ProcessRecognitionBridge(RecognitionBridge):
         self.worker = self.context.Process(target=recognition_worker, name='recognition-process',
             args=(self.queue, self.cancel, pipe, self.video, self.frame_bounds, self.realtime,
                   self.device, self.latest_frame, getattr(self, 'lifecycle', False),
-                  getattr(self, 'live_config', None)))
+                  getattr(self, 'live_config', None), getattr(self, 'audit_path', None)))
         self.worker.start()
+        from .live_cpu import apply_runtime
+        self.cpu_runtime = apply_runtime('evaluation')
         while not self.finished:
             batch = self._receive_batch()
             self.batch_ready_at = time.perf_counter()
@@ -194,6 +212,7 @@ class ProcessRecognitionBridge(RecognitionBridge):
         if kind == 'error':
             raise RuntimeError(value)
         if kind == 'summary':
+            self.recognition_runtime = value.get('runtime')
             self.source.dropped, self.sent, self.wire_bytes = value['dropped'], value['sent'], value['wire_bytes']
             self.gated_frames = value.get('gated', 0)
             self.source.dropped_times = value.get('dropped_times', [])

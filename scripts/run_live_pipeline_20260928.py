@@ -49,6 +49,7 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_device.py', 'src/phase_j/live_device_session.py', 'src/phase_j/live_calibration.py',
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
+        'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
         'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
@@ -172,6 +173,8 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
         state_update_ms=percentile([r['milliseconds'] for r in updates]),
         probability_calculation_ms=percentile([r['milliseconds'] for r in calculations]),
         state_updates=bridge.state_updates, probability_calculations=bridge.calculation_rows,
+        cpu_runtime=dict(evaluation=getattr(bridge, 'cpu_runtime', None),
+                         recognition=getattr(bridge, 'recognition_runtime', None)),
         batch_starts=bridge.batch_starts, batch_sizes=bridge.batch_sizes,
         publications=sink.publisher.publications, sse_sent=sent, command=command,
         recognition=recognition, nice=os.nice(0) if hasattr(os, 'nice') else None,
@@ -187,6 +190,8 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
 def run_live(options: argparse.Namespace) -> dict[str, Any]:
     """既定は認識と評価をspawnで隔離し、比較用threadモードだけ残す。"""
     load_start = os.getloadavg() if hasattr(os, 'getloadavg') else None
+    from src.phase_j.live_cpu import apply_runtime
+    apply_runtime('evaluation', lower_priority=False)
     import torch
     import scripts.visualize_advantage_overlay as overlay
     from scripts.run_e3_exchange_eval_20260926 import SEED
@@ -251,6 +256,7 @@ def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBri
     bridge.on_hold = sink.publisher.input_pending
     bridge.duration = options.end_sec-options.start_sec
     bridge.config_path = options.output / 'recognition_config.json'
+    bridge.audit_path = str(options.output/'recognition.npz') if getattr(options, 'recognition_audit', False) else None
     bridge.lifecycle = getattr(options, 'lifecycle', False)
     bridge.live_config = str(options.config) if getattr(options, 'config', None) else None
     return bridge
@@ -368,10 +374,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--config', type=Path)
     parser.add_argument('--mc-rollouts', type=int, default=30)
     parser.add_argument('--cnn-device', choices=('auto', 'cpu'), default='auto')
+    parser.add_argument('--cpu-threads', type=int, default=0)
+    parser.add_argument('--evaluation-nice', type=int, default=0)
+    parser.add_argument('--recognition-audit', action='store_true')
     parser.add_argument('--duration-sec', type=float)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
     options = apply_config(parser, sys.argv[1:])
+    configure_cpu(options, parser)
     if options.compare:
         options.async_counter = False
         options.split_evaluation = False
@@ -386,6 +396,16 @@ def parse_args() -> argparse.Namespace:
     if not 0 <= options.start_sec < options.end_sec or options.warmup_sec < 0:
         parser.error('計測区間が不正です')
     return options
+
+
+def configure_cpu(options: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from src.phase_j.live_cpu import configure_environment
+    try:
+        configure_environment(options.cpu_threads, options.evaluation_nice)
+    except ValueError as error:
+        parser.error(str(error))
+    if options.worker_mode == 'thread' and (options.evaluation_nice or options.recognition_audit):
+        parser.error('優先度変更と認識監査はprocessモード専用です')
 
 
 def main() -> None:

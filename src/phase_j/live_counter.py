@@ -14,6 +14,9 @@ OFFLINE_ROLLOUTS = 60
 
 def warmup() -> None:
     """最初の探索要求までに旧評価モジュールを別processで読み込む。"""
+    from .live_cpu import apply_runtime
+    import json
+    print('MC_CPU '+json.dumps(apply_runtime('mc')), flush=True)
     import scripts.visualize_advantage_overlay  # noqa: F401
 
 
