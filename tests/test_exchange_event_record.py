@@ -54,7 +54,8 @@ def test_record_flag_has_no_effect_and_replay_is_exact(
     assert sum(row["kind"] == "update" for row in rows) == FRAMES
     assert any(row["kind"] == "static_call" for row in rows)
     events = [json.loads(line) for line in (output / "events.jsonl").read_text().splitlines()]
-    assert {value["source"] for event in events for value in event["values"]} == {"S1", "S3", "G_fe"}
+    assert {value["source"] for event in events for value in event["values"]} == {
+        "S1", "S3", "S3_landing", "G_fe"}
 
 
 def test_replay_uses_changed_evaluator(recorded: Path, monkeypatch: pytest.MonkeyPatch) -> None:

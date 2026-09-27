@@ -62,6 +62,8 @@ class ExchangeEventOverlay:
         self._scores: list[list[tuple[float, float]]] = [[], []]
         self._last_formula: list[float | None] = [None, None]
         self._last_displayed: list[float | None] = [None, None]
+        from src.exchange_event_landing import ExchangeLandingProjection
+        self._landing_projection = ExchangeLandingProjection()
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -85,6 +87,7 @@ class ExchangeEventOverlay:
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         self.tracker.finish_frame(t_sec)
         self._remember(sides, snapshot, t_sec)
+        self._landing_projection.update(self, result, snapshot, t_sec)
         stable = [s.state == BoardState.STABLE for s in sides]
         settled = any(stable) if self._per_side_settled else all(stable)
         if settled and all(self._history):
@@ -237,6 +240,8 @@ class ExchangeEventOverlay:
 
     def _static(self, snapshot: Any, t_sec: float) -> None:
         """M0未指定ならG_feを偽の確率で動かさず、配線待ちを明示する。"""
+        if self._landing_projection.death is not None:
+            return
         latest = tuple(h[-1] for h in self._history)
         confirmed = tuple(s.t_sec for s in latest)
         if not self.tracker.ready_for_static(t_sec, confirmed):

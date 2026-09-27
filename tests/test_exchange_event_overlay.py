@@ -89,13 +89,17 @@ def test_generate_event_order_and_r2(monkeypatch: pytest.MonkeyPatch, tmp_path: 
                            dump_display_timeline_path=path)
     assert written == FRAMES
     row = json.loads((tmp_path / "on.exchange_events.jsonl").read_text())
-    assert [v["source"] for v in row["values"]] == ["S1", "S3", "G_fe"]
+    assert [v["source"] for v in row["values"]] == ["S1", "S3", "S3_landing", "G_fe"]
     assert row["chains"][0]["end_signal_sec"] < row["chains"][0]["score_finalize_sec"]
     with np.load(path) as saved:
         assert len(saved["t_sec"]) == FRAMES
         assert not saved["resolved_active"].any()
         for source, p1 in (("G_fe", .4), ("S1", .6), ("S3", .8)):
             assert np.all(saved["display_p1"][saved["source"] == source] == p1)
+        from src.exchange_event_landing import logit_mean
+        projected = saved["source"] == "S3_landing"
+        assert projected.any()
+        np.testing.assert_allclose(saved["display_p1"][projected], logit_mean(.8, .4))
 
 
 def test_off_never_loads_event_models(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
