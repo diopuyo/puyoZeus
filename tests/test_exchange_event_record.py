@@ -122,6 +122,7 @@ def test_update_snapshot_is_independent_of_later_mutation(tmp_path: Path) -> Non
     saved = list(read_records(path))[1]["args"]
     assert saved[0].p1.chain_event.chain_count == 1
     assert not saved[0].p1.confirmed_board._grid.any()
+    assert not saved[0].p1.chain_event.before_board._grid.any()
     assert saved[2].chain_total_score_p1 == 700
     assert saved[5:] == ((700., None), (None, 0), (True, False))
 

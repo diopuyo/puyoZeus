@@ -122,6 +122,8 @@ class ExchangeEventRecorder:
             saved = fields(side, SIDE_FIELDS)
             saved.chain_event = (fields(side.chain_event, CHAIN_FIELDS)
                                  if side.chain_event is not None else None)
+            if saved.chain_event is not None:
+                saved.chain_event.before_board = getattr(side.chain_event, "before_board", None)
             sides.append(saved)
         self.write(dict(kind="update", args=(SimpleNamespace(p1=sides[0], p2=sides[1]),
             fields(snapshot, SNAPSHOT_FIELDS), fields(finalization, FINALIZATION_FIELDS),

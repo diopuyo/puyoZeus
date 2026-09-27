@@ -128,7 +128,8 @@ def test_existing_response_steps_reassess_reduced_attack(tracker: object,
     tracker.finish_frame(2.2)
     monkeypatch.setattr(landing, "future_send", lambda *args: 1000)
     projection.update(overlay, result, snapshot, 2.2)
-    assert projection.response_id is None and response_id is not None
+    # E12: 応手連鎖中なので初回から死を固定せず、段更新後も固定しない。
+    assert projection.response_id is None and response_id is None
     assert tracker.source == "S3_landing" and tracker.probability != .98
 
 

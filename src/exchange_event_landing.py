@@ -9,6 +9,7 @@ import numpy as np
 
 from src.board import Board, BOARD_COLS, BOARD_ROWS, DEATH_COL, DEATH_ROW
 from src.chain import ChainSimulator
+from src.board_state_machine import BoardState
 from src.exchange_event_evaluator import evaluate_exchange_event
 from src.exchange_event_tracker import SIDE_LABELS
 from src.exchange_virtual_board import land_pending_ojama_onto_board
@@ -82,11 +83,14 @@ class ExchangeLandingProjection:
         self.board_changed = False
         self.rejected_boards: list[dict] = []
         self.evaluated_drops: tuple = ()
+        self.busy = (False, False)
         self.simulator = ChainSimulator(exclude_hidden_row_from_pop=GHOST_CHAIN_RULE_ENABLED)
 
     def update(self, overlay: Any, result: Any, snapshot: Any, t_sec: float) -> None:
         """両側の通知とSTABLE履歴の更新後、確定送り量が変われば再評価する。"""
         tracker = overlay.tracker
+        self.busy = tuple(getattr(s, "state", None) in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
+                          for s in (result.p1, result.p2))
         if self._refresh_death(overlay, t_sec):
             return
         record = tracker.current or self.death_record
@@ -132,7 +136,13 @@ class ExchangeLandingProjection:
         self.amount_key = amount_key
         self.evaluated_drops = dropped
         hands = tuple(self._hands(tracker, 1-i, t_sec) for i in range(2))
-        key = (amount_key, hands, tuple((s.board._grid.tobytes(), s.queue.tobytes()) for s in self.latest))
+        active = tuple(self._chaining(tracker, i) for i in range(2))
+        boards = tuple((s.board._grid.tobytes(), s.queue.tobytes()) for s in self.latest)
+        evidence = tuple(self._verified_attack(tracker, i) for i in range(2))
+        completion = tuple(self._completion_board(tracker, i) is not None for i in range(2))
+        key = (amount_key, hands, active, boards, evidence, completion)
+        reassess = reassess or (self.key is not None
+            and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
         if key != self.key:
             self.last = self._evaluate(overlay, snapshot, self.latest, incoming, hands, base, t_sec)
             self.key = key
@@ -201,15 +211,22 @@ class ExchangeLandingProjection:
             and r["t_sec"] >= self.death["t_sec"]
             and min(confirmed) > cutoff and min(confirmed) >= r["t_sec"]
             for r in record.landings)
-        if response or boundary or landed:
+        idx = SIDE_LABELS.index(side)
+        recheck = self._chaining(tracker, idx) and (
+            self._completion_board(tracker, idx) is None
+            or side not in self.death.get("completion_sides", []))
+        if response or boundary or landed or recheck:
             self.death, self.death_record, self.response_id = None, None, None
             self.key, self.amount_key = None, None
+            if tracker.source == "unavoidable_death":
+                tracker.probability = tracker._static_probability
+                tracker.source = "G_fe" if tracker.probability is not None else "waiting_confirmed"
         return bool(landed)
 
     def _incoming(self, tracker: Any, dropped: tuple, record: Any = None) -> list[int]:
         """段ごとの累積得点を既存換算し、相殺と既着地分を控除する。"""
         record = record or tracker.current
-        totals = [sum(c.score_delta if c.score_ready_sec is not None else (c.formula_total or 0)
+        totals = [sum(c.provisional_score
                       for c in record.chains if c.side == label) for label in SIDE_LABELS]
         sent = [math.floor(score_to_ojama(s, elapsed_sec=tracker._score_elapsed).ojama_count)
                 for s in totals]
@@ -224,27 +241,74 @@ class ExchangeLandingProjection:
         receiver = tracker.latest_chain(SIDE_LABELS[1-attacker])
         busy = 0.0
         if receiver is not None and receiver.end_signal_sec is None:
-            duration = estimate_chain_anim_duration_sec(self.counts[1-attacker], ANIMATION_CALIBRATION)
+            duration = estimate_chain_anim_duration_sec(
+                max(self.counts[1-attacker], receiver.predicted_chain_count or 0), ANIMATION_CALIBRATION)
             busy = max(0.0, duration - max(0.0, t_sec-receiver.trigger_sec))
-        return remaining_hands(self.counts[attacker], chain.trigger_sec, t_sec, busy)
+        return remaining_hands(max(self.counts[attacker], chain.predicted_chain_count or 0),
+                               chain.trigger_sec, t_sec, busy)
 
-    def _evaluate(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
-                  hands: tuple, base: dict, t_sec: float) -> dict:
-        """仮想受け盤面と相手の現在確定盤面をG_feへ渡し、応手不足なら固定する。"""
+    def _chaining(self, tracker: Any, idx: int) -> bool:
+        """物理連鎖中または終了未確認なら、完走後盤面での判定を要求する。"""
+        chain = tracker.latest_chain(SIDE_LABELS[idx])
+        return self.busy[idx] or (chain is not None and chain.end_signal_sec is None)
+
+    def _completion_board(self, tracker: Any, idx: int) -> Board | None:
+        """観測と矛盾しない発火時予測だけから完走後盤面を復元する。"""
+        chain = tracker.latest_chain(SIDE_LABELS[idx])
+        if chain is None or chain.predicted_final_board is None:
+            return None
+        observed = max(chain.formula_total or 0, (chain.score_delta or 0) - chain.drop_bonus_score)
+        if (observed > (chain.predicted_final_score or 0)
+                or self.counts[idx] > (chain.predicted_chain_count or 0)):
+            return None
+        board = Board()
+        board._grid = np.array(chain.predicted_final_board, dtype=board._grid.dtype)
+        return board
+
+    def _death_boards(self, tracker: Any, boards: tuple, responses: tuple,
+                      credit: list) -> tuple:
+        """連鎖中は完走盤面を使い、既に純受け量へ算入した予測火力を重ねない。"""
+        targets, replies, certain = list(boards), list(responses), [True, True]
+        for idx in range(2):
+            if not self._chaining(tracker, idx):
+                continue
+            completion = self._completion_board(tracker, idx)
+            certain[idx] = completion is not None
+            if completion is not None:
+                targets[idx] = replies[idx] = completion
+                credit[idx] = 0
+        return tuple(targets), tuple(replies), certain
+
+    def _landing_gfe(self, overlay: Any, snapshot: Any, latest: tuple,
+                     incoming: list, t_sec: float) -> float:
+        """E12の確率合成に使う仮想着弾評価を維持する。"""
         boards = tuple(s.board for s in latest)
-        responses, credit = self._receivers(overlay.tracker, latest, incoming)
         virtual = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
                         for i, b in enumerate(boards))
         elapsed = t_sec - overlay._start
         m0 = overlay._m0(np.stack([b._grid for b in virtual]), np.stack([s.queue for s in latest]))
         event = overlay._build_static(virtual, snapshot, elapsed, m0)
-        gfe = evaluate_exchange_event(event, overlay.tracker.models)
+        return evaluate_exchange_event(event, overlay.tracker.models)
+
+    def _evaluate(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
+                  hands: tuple, base: dict, t_sec: float) -> dict:
+        """完走後の受け盤面で窒息と応手不足を確認し、回避不能なら固定する。"""
+        boards = tuple(s.board for s in latest)
+        responses, credit = self._receivers(overlay.tracker, latest, incoming)
+        gfe = self._landing_gfe(overlay, snapshot, latest, incoming, t_sec)
         probability = logit_mean(base["p1"], gfe)
+        boards, responses, certain = self._death_boards(overlay.tracker, boards, responses, credit)
+        landed_boards = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
+                              for i, b in enumerate(boards))
         dead, required, available = [], [0, 0], [None, None]
         margins, evidence, optimistic = [None, None], [False, False], [None, None]
-        for i, landed in enumerate(virtual):
-            if incoming[i] <= 0 or not landed.is_dead():
+        for i, landed in enumerate(landed_boards):
+            if incoming[i] <= 0 or not landed.is_dead() or not certain[i]:
                 continue
+            held = self.death is not None and SIDE_LABELS[i] in self.death["dead_sides"]
+            evidence[i] = self._verified_attack(overlay.tracker, 1-i)
+            if not evidence[i] and not held:
+                continue  # 予測火力は確率へ反映するが、死を証明する探索には使わない。
             required[i] = minimum_cancel(boards[i], boards[1-i], incoming[i])
             grid = responses[i]._grid
             available[i] = future_send(grid.tobytes(), grid.shape, grid.dtype.str,
@@ -252,8 +316,6 @@ class ExchangeLandingProjection:
             available[i] += credit[i]
             margins[i] = (boards[i].height_of(DEATH_COL)
                 + min(incoming[i], OJAMA_MAX_DROP_PER_TURN) // BOARD_COLS - (BOARD_ROWS-DEATH_ROW))
-            held = self.death is not None and SIDE_LABELS[i] in self.death["dead_sides"]
-            evidence[i] = self._verified_attack(overlay.tracker, 1-i)
             candidate = available[i] < required[i] and (held or
                 (evidence[i] and margins[i] >= DEATH_OVERFLOW_ROWS))
             if candidate and not held:
@@ -270,7 +332,9 @@ class ExchangeLandingProjection:
                     incoming=incoming, hands=hands, required_cancel=required,
                     near_future_send=available, resolving_send=credit, dead_sides=dead,
                     overflow_rows=margins, verified_attack=evidence,
-                    rejected_boards=self.rejected_boards, optimistic_send=optimistic)
+                    rejected_boards=self.rejected_boards, optimistic_send=optimistic,
+                    completion_certain=certain, completion_sides=[SIDE_LABELS[i] for i in range(2)
+                        if certain[i] and self._chaining(overlay.tracker, i)])
 
     def _optimistic_response(self, board: Board, queue: np.ndarray, hands: int, elapsed: float) -> float:
         """初回断定は既存指標の候補集合でも拒否できた場合だけに限定する。"""
@@ -281,24 +345,38 @@ class ExchangeLandingProjection:
             tuple(int(v) for v in queue), hands + NEAR_FUTURE_KNOWN_HAND_SLOTS, elapsed)
 
     def _verified_attack(self, tracker: Any, attacker: int) -> bool:
-        """累積表示得点の差だけでは、連鎖への帰属・相殺の欠落を確定できない。"""
+        """帰属確認済みの実測得点だけで裏付けられる攻撃量に死の断定を限る。"""
         record = tracker.current or self.death_record
         chains = [c for c in record.chains if c.side == SIDE_LABELS[attacker]]
-        return bool(chains) and all(c.formula_total is not None or
-            c.score_ready_reason == "score_finalize" for c in chains)
+        return bool(chains) and all(
+            (c.formula_total is not None or c.score_ready_reason == "score_finalize")
+            and c.provisional_score <= max(c.formula_total or 0, c.score_delta or 0)
+            for c in chains)
 
     def _receivers(self, tracker: Any, latest: tuple, incoming: list) -> tuple:
         """応手探索では既発火群を解消し、未観測の自側火力を加える。"""
         boards, credit = [], []
         for i, side in enumerate(latest):
+            completion = self._completion_board(tracker, i) if self._chaining(tracker, i) else None
+            if completion is not None:
+                boards.append(completion)
+                credit.append(0)
+                continue
             if incoming[i] <= 0:
                 boards.append(side.board)
                 credit.append(0)
                 continue
-            result = self.simulator.simulate(side.board)
+            try:
+                result = self.simulator.simulate(side.board)
+            except (ValueError, TypeError, FloatingPointError):
+                if not self._chaining(tracker, i):
+                    raise
+                boards.append(side.board)
+                credit.append(0)
+                continue
             boards.append(result.final_board)
             chain = tracker.latest_chain(SIDE_LABELS[i])
-            observed = (chain.formula_total or 0) if chain and chain.end_signal_sec is None else 0
+            observed = chain.provisional_score if chain and chain.end_signal_sec is None else 0
             remaining = max(0, calculate_chain_score(result).total_score - observed)
             credit.append(math.floor(score_to_ojama(remaining, elapsed_sec=tracker._score_elapsed).ojama_count))
         return tuple(boards), credit

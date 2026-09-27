@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from src.board import Board
+from src.board import Board, COLOR_UNKNOWN
 from src.board_state_machine import BoardState
 from src.chain_detector import CHAIN_MECHANISM_FORMULA, CHAIN_MECHANISM_FORMULA_READ
 from src.chain_id_resolver import ChainObservation, ObservationKind
@@ -16,6 +16,7 @@ from src.exchange_event_features import prefire_side_features
 from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS, valid_nonnegative
 from src.score_ocr import FORMULA_SESSION_RESET_SEC
 from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
+from src.scoring import calculate_chain_score, compute_effective_rate
 
 UNUSED_S1_M0 = .5  # S1/S3の特徴列にはM0がなく、G_feにはこの値を渡さない。
 
@@ -62,6 +63,7 @@ class ExchangeEventOverlay:
         self._scores: list[list[tuple[float, float]]] = [[], []]
         self._last_formula: list[float | None] = [None, None]
         self._last_displayed: list[float | None] = [None, None]
+        self._feature_cache: dict[tuple, np.ndarray] = {}
         from src.exchange_event_landing import ExchangeLandingProjection
         self._landing_projection = ExchangeLandingProjection()
 
@@ -85,8 +87,9 @@ class ExchangeEventOverlay:
                 self.tracker.activity(label, t_sec)
         self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
-        self.tracker.finish_frame(t_sec)
         self._remember(sides, snapshot, t_sec)
+        self._refresh_features(snapshot, t_sec)
+        self.tracker.finish_frame(t_sec)
         self._landing_projection.update(self, result, snapshot, t_sec)
         stable = [s.state == BoardState.STABLE for s in sides]
         settled = any(stable) if self._per_side_settled else all(stable)
@@ -105,6 +108,7 @@ class ExchangeEventOverlay:
         self._scores = [[], []]
         self._last_formula = [None, None]
         self._last_displayed = [None, None]
+        self._feature_cache.clear()
 
     def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
         """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""
@@ -177,6 +181,52 @@ class ExchangeEventOverlay:
             if chain.chain_id not in self._signals:
                 idx = SIDE_LABELS.index(chain.side)
                 self._signals[chain.chain_id] = self._signal_factory(idx, result, snapshot, t_sec)
+                self._predict_completion(chain, (result.p1, result.p2)[idx].chain_event, idx)
+
+    def _predict_completion(self, chain: Any, event: Any, idx: int) -> None:
+        """決着先読みと同じ完走シミュレーションを発火時に一度だけ行う。"""
+        board = getattr(event, "before_board", None)
+        if board is None:
+            saved = next((s for s in reversed(self._history[idx])
+                          if s.t_sec < chain.trigger_sec), None)
+            board = saved.board if saved is not None else None
+        if board is None:
+            return
+        try:
+            result = self._landing_projection.simulator.simulate(board)
+        except (ValueError, TypeError, FloatingPointError):
+            return
+        chain.predicted_final_score = float(calculate_chain_score(result).total_score)
+        chain.predicted_chain_count = result.chain_count
+        if result.chain_count > 0 and not np.any(board._grid == COLOR_UNKNOWN):
+            chain.predicted_final_board = result.final_board._grid.tolist()
+        # 旧記録には起点盤面がない。発火通知に保存された既存シミュ結果も再用する。
+        if (event is not None and getattr(event, "before_board", None) is None
+                and event.mechanism != CHAIN_MECHANISM_FORMULA_READ):
+            chain.predicted_final_score = max(chain.predicted_final_score, event.total_score)
+            chain.predicted_chain_count = max(chain.predicted_chain_count, event.chain_count)
+            if (chain.predicted_final_score != calculate_chain_score(result).total_score
+                    or chain.predicted_chain_count != result.chain_count):
+                chain.predicted_final_board = None
+
+    def _refresh_features(self, snapshot: Any, t_sec: float) -> None:
+        """両側の最新確定盤面でDと近未来火力を更新し、同一盤面の探索を再用する。"""
+        if self.tracker.current is None or self._start is None or not all(self._history):
+            return
+        elapsed = t_sec - self._start
+        latest = tuple(h[-1] for h in self._history)
+        try:
+            static = self._build_static(tuple(s.board for s in latest), snapshot, elapsed, UNUSED_S1_M0)
+            features = []
+            for side in latest:
+                grid = side.board._grid
+                key = (grid.tobytes(), grid.dtype.str, side.queue.tobytes(), compute_effective_rate(elapsed))
+                if key not in self._feature_cache:
+                    self._feature_cache[key] = prefire_side_features(grid, side.queue, elapsed)
+                features.append(self._feature_cache[key])
+            self.tracker.refresh_features(static, np.stack(features))
+        except (ValueError, TypeError, FloatingPointError) as error:
+            self.tracker.missing_input("current_input: " + str(error), t_sec, "S3")
 
     def _observations(self, result: Any, t_sec: float,
                       changed: list[tuple[int, float]]) -> tuple[ChainObservation, ...]:

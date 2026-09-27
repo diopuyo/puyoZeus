@@ -29,7 +29,7 @@ def valid_nonnegative(value: object) -> bool:
 
 @dataclass
 class ExchangeChainRecord:
-    """時刻は動画絶対秒。得点はOCR差分のみで、推定生成量を含めない。"""
+    """時刻は動画絶対秒。実得点と発火盤面の完走予測を別々に保持する。"""
 
     side: str
     chain_id: int
@@ -49,6 +49,17 @@ class ExchangeChainRecord:
     last_activity_sec: float | None = None
     drop_bonus_score: float = 0.0
     post_end_drop_sec: float | None = None
+    predicted_final_score: float | None = None
+    predicted_chain_count: int | None = None
+    predicted_final_board: list[list[int]] | None = None
+
+    @property
+    def provisional_score(self) -> float:
+        """完走予測を観測累積の下限として使い、終了確定後は実得点を返す。"""
+        if self.score_ready_sec is not None and self.end_signal_sec is not None:
+            return self.score_delta or 0.0
+        return max(self.formula_total or 0.0, self.predicted_final_score or 0.0,
+                   self.score_delta or 0.0)
 
 
 @dataclass
@@ -456,17 +467,29 @@ class ExchangeEventTracker:
         if self._evaluate(event, "S3", t_sec):
             self._s3_sec = t_sec
 
+    def refresh_features(self, static: StaticInput, sides: np.ndarray) -> None:
+        """現在の確定盤面の特徴へ差し替え、変化があれば次の評価を更新する。"""
+        if self.firing is None or self.current is None:
+            return
+        old = self.firing
+        if (np.array_equal(old.static.d_features, static.d_features, equal_nan=True)
+                and np.array_equal(old.prefire_sides, sides, equal_nan=True)):
+            return
+        self.firing = FiringInput(static, sides, old.firing)
+        self._contexts[self.current.exchange_id] = (self.firing, self._score_elapsed)
+        self._provisional_key, self._s3_sec = None, None
+
     def _provisional(self, t_sec: float) -> None:
         """確定済み連鎖と各段の累積得点を既存換算・S3モデルへ渡す。"""
         chains = self.current.chains
         if self._s3_sec is not None or not any(
-                c.formula_total is not None or c.score_ready_sec is not None for c in chains):
+                c.formula_total is not None or (c.predicted_final_score or 0) > 0
+                or c.score_ready_sec is not None for c in chains):
             return
         if (not any(c.formula_total is not None for c in chains)
                 and all(c.end_signal_sec is not None and c.score_ready_sec is not None for c in chains)):
             return
-        scores = tuple(c.score_delta if c.score_ready_sec is not None
-                       else (c.formula_total or 0.0) for c in chains)
+        scores = tuple(c.provisional_score for c in chains)
         key = tuple((c.chain_id, score) for c, score in zip(chains, scores))
         if key == self._provisional_key:
             return
@@ -478,6 +501,8 @@ class ExchangeEventTracker:
         if self._evaluate(event, "S3_provisional", t_sec):
             self._provisional_key = key
             self.current.values[-1]["score_totals"] = totals.tolist()
+            self.current.values[-1]["predicted_final_scores"] = [
+                c.predicted_final_score for c in chains]
 
     def ready_for_static(self, t_sec: float, confirmed_times: tuple[float, float]) -> bool:
         """最後の参加連鎖の得点確定以降、両側の確定盤面が揃えば閉じる。"""
