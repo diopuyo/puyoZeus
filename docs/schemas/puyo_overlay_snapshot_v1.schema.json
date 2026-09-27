@@ -1,0 +1,1333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.puyo-analyzer.invalid/schemas/puyo-overlay-snapshot-v1.json",
+  "title": "Puyo Analyzer Phase J Overlay Snapshot v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "identity",
+    "timing",
+    "display",
+    "integrity",
+    "mode",
+    "evaluations",
+    "input",
+    "terminal",
+    "runtime",
+    "assets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "puyo-overlay-snapshot/v1"
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "timing": {
+      "$ref": "#/$defs/timing"
+    },
+    "display": {
+      "$ref": "#/$defs/display"
+    },
+    "integrity": {
+      "$ref": "#/$defs/integrity"
+    },
+    "mode": {
+      "$ref": "#/$defs/mode"
+    },
+    "evaluations": {
+      "$ref": "#/$defs/evaluations"
+    },
+    "input": {
+      "$ref": "#/$defs/input"
+    },
+    "terminal": {
+      "$ref": "#/$defs/terminal"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "assets": {
+      "$ref": "#/$defs/assets"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "display": {
+                "properties": {
+                  "visibility": {
+                    "const": "hidden"
+                  }
+                },
+                "required": ["visibility"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "integrity": {
+                "properties": {
+                  "status": {
+                    "const": "fault"
+                  }
+                },
+                "required": ["status"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "evaluations": {
+            "$ref": "#/$defs/unavailable_evaluations"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "display": {
+            "properties": {
+              "status": {
+                "const": "hold"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "display": {
+            "properties": {
+              "visibility": {
+                "const": "visible"
+              },
+              "primary_hold_reason": {
+                "$ref": "#/$defs/hold_reason"
+              },
+              "all_hold_reasons": {
+                "minItems": 1
+              },
+              "hold_started_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hold_elapsed_ms": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "display": {
+            "properties": {
+              "hold_elapsed_ms": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "integrity": {
+            "properties": {
+              "status": {
+                "const": "degraded"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "integrity": {
+            "properties": {
+              "fault_codes": {
+                "maxItems": 0
+              }
+            }
+          },
+          "runtime": {
+            "properties": {
+              "status": {
+                "const": "degraded"
+              },
+              "telemetry_health": {
+                "enum": ["degraded", "unavailable"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "display": {
+            "properties": {
+              "update_reason": {
+                "const": "hold_expired"
+              }
+            },
+            "required": ["update_reason"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "display": {
+            "properties": {
+              "visibility": {
+                "const": "visible"
+              },
+              "status": {
+                "const": "hold"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "properties": {
+                    "evaluation_mode": {
+                      "const": "practical"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evaluations": {
+                  "properties": {
+                    "practical": {
+                      "properties": {
+                        "availability": {
+                          "const": "pending"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "properties": {
+                    "evaluation_mode": {
+                      "const": "best_action"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evaluations": {
+                  "properties": {
+                    "best_action": {
+                      "properties": {
+                        "availability": {
+                          "const": "pending"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "mode": {
+                  "properties": {
+                    "evaluation_mode": {
+                      "const": "both"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evaluations": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "practical": {
+                          "properties": {
+                            "availability": {
+                              "const": "pending"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "best_action": {
+                          "properties": {
+                            "availability": {
+                              "const": "pending"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "display": {
+            "properties": {
+              "status": {
+                "const": "terminal_fact"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "display": {
+            "properties": {
+              "visibility": {
+                "const": "visible"
+              }
+            }
+          },
+          "terminal": {
+            "$ref": "#/$defs/confirmed_terminal"
+          },
+          "evaluations": {
+            "$ref": "#/$defs/terminal_evaluations"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "display": {
+                "properties": {
+                  "status": {
+                    "const": "terminal_fact"
+                  }
+                },
+                "required": ["status"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "terminal": {
+                "properties": {
+                  "winner": {
+                    "const": "1P"
+                  }
+                },
+                "required": ["winner"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "evaluations": {
+            "properties": {
+              "practical": {
+                "properties": {
+                  "p1_win_probability": {
+                    "const": 1
+                  },
+                  "p2_win_probability": {
+                    "const": 0
+                  },
+                  "advantage_score": {
+                    "const": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "display": {
+                "properties": {
+                  "status": {
+                    "const": "terminal_fact"
+                  }
+                },
+                "required": ["status"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "terminal": {
+                "properties": {
+                  "winner": {
+                    "const": "2P"
+                  }
+                },
+                "required": ["winner"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "evaluations": {
+            "properties": {
+              "practical": {
+                "properties": {
+                  "p1_win_probability": {
+                    "const": 0
+                  },
+                  "p2_win_probability": {
+                    "const": 1
+                  },
+                  "advantage_score": {
+                    "const": -100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "display": {
+            "properties": {
+              "status": {
+                "const": "result"
+              }
+            },
+            "required": ["status"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evaluations": {
+            "$ref": "#/$defs/unavailable_evaluations"
+          },
+          "terminal": {
+            "$ref": "#/$defs/confirmed_terminal"
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "nullable_string": {
+      "type": ["string", "null"]
+    },
+    "nullable_nonnegative_integer": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "nullable_nonnegative_number": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "stream_seq",
+        "reducer_revision",
+        "match_id",
+        "match_state_seq",
+        "input_generation"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stream_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reducer_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "match_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "match_state_seq": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_generation": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "source_available_frame",
+        "source_available_ms",
+        "published_at_utc",
+        "capture_to_publish_latency_ms",
+        "calculation_age_ms",
+        "last_confirmed_age_ms"
+      ],
+      "properties": {
+        "source_available_frame": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "source_available_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "published_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capture_to_publish_latency_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "calculation_age_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "last_confirmed_age_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "update_reason": {
+      "enum": [
+        "initial_snapshot",
+        "observation_update",
+        "physical_fact_update",
+        "prediction_committed",
+        "hold_started",
+        "hold_reason_changed",
+        "hold_expired",
+        "terminal_confirmed",
+        "result_transition",
+        "formal_boundary",
+        "config_pending",
+        "worker_state_changed",
+        "timer_elapsed",
+        "integrity_fault"
+      ]
+    },
+    "hold_reason": {
+      "enum": [
+        "terminal_confirmation_pending",
+        "recognition_unreliable",
+        "physics_ambiguous",
+        "prediction_worker_fault",
+        "prediction_deadline_missed",
+        "calculation_pending",
+        "both_chaining_no_new_fact"
+      ]
+    },
+    "fault_code": {
+      "enum": [
+        "sequence_gap",
+        "sequence_reversed",
+        "id_content_conflict",
+        "asset_bundle_changed_mid_match",
+        "schema_invalid",
+        "cutoff_violation",
+        "snapshot_revision_stale",
+        "unexpected_boundary",
+        "internal_invariant_failed"
+      ]
+    },
+    "display": {
+      "type": "object",
+      "required": [
+        "visibility",
+        "status",
+        "update_reason",
+        "primary_hold_reason",
+        "all_hold_reasons",
+        "hold_started_ms",
+        "hold_elapsed_ms"
+      ],
+      "properties": {
+        "visibility": {
+          "enum": ["visible", "hidden"]
+        },
+        "status": {
+          "enum": [
+            "live",
+            "physical_prediction",
+            "hold",
+            "terminal_fact",
+            "result",
+            "waiting",
+            "integrity_fault"
+          ]
+        },
+        "update_reason": {
+          "$ref": "#/$defs/update_reason"
+        },
+        "primary_hold_reason": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hold_reason"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "all_hold_reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hold_reason"
+          },
+          "uniqueItems": true
+        },
+        "hold_started_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "hold_elapsed_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["status", "fault_codes"],
+      "properties": {
+        "status": {
+          "enum": ["ok", "degraded", "fault"]
+        },
+        "fault_codes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fault_code"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "mode": {
+      "type": "object",
+      "required": ["evaluation_mode", "practical_basis"],
+      "properties": {
+        "evaluation_mode": {
+          "enum": ["practical", "best_action", "both"]
+        },
+        "practical_basis": {
+          "const": "board_baseline"
+        }
+      },
+      "additionalProperties": true
+    },
+    "practical_evaluation": {
+      "type": "object",
+      "required": [
+        "availability",
+        "request_id",
+        "input_generation",
+        "input_digest",
+        "calculation_latency_ms",
+        "calculation_age_ms",
+        "p1_win_probability",
+        "p2_win_probability",
+        "advantage_score",
+        "is_even",
+        "origin",
+        "calibration_id",
+        "evaluated_positions"
+      ],
+      "properties": {
+        "availability": {
+          "enum": ["available", "pending", "unavailable"]
+        },
+        "request_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "input_generation": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "calculation_latency_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "calculation_age_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "p1_win_probability": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "p2_win_probability": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "advantage_score": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 100
+        },
+        "is_even": {
+          "type": ["boolean", "null"]
+        },
+        "origin": {
+          "enum": ["observed", "physical_prediction", "model", null]
+        },
+        "calibration_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "evaluated_positions": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "enum": ["pending", "unavailable"]
+              }
+            },
+            "required": ["availability"]
+          },
+          "then": {
+            "properties": {
+              "p1_win_probability": {
+                "type": "null"
+              },
+              "p2_win_probability": {
+                "type": "null"
+              },
+              "advantage_score": {
+                "type": "null"
+              },
+              "is_even": {
+                "type": "null"
+              },
+              "origin": {
+                "type": "null"
+              },
+              "calculation_latency_ms": {
+                "type": "null"
+              },
+              "calculation_age_ms": {
+                "type": "null"
+              },
+              "calibration_id": {
+                "type": "null"
+              },
+              "evaluated_positions": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "unavailable"
+              }
+            },
+            "required": ["availability"]
+          },
+          "then": {
+            "properties": {
+              "request_id": {
+                "type": "null"
+              },
+              "input_generation": {
+                "type": "null"
+              },
+              "input_digest": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "best_action_evaluation": {
+      "type": "object",
+      "required": [
+        "availability",
+        "request_id",
+        "input_generation",
+        "input_digest",
+        "calculation_latency_ms",
+        "calculation_age_ms",
+        "p1_position_value",
+        "p1_position_value_low",
+        "p1_position_value_high",
+        "scale",
+        "aggregation_profile_id",
+        "search_profile_id",
+        "searched_depth",
+        "searched_nodes"
+      ],
+      "properties": {
+        "availability": {
+          "enum": ["available", "pending", "unavailable"]
+        },
+        "request_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "input_generation": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "calculation_latency_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "calculation_age_ms": {
+          "$ref": "#/$defs/nullable_nonnegative_number"
+        },
+        "p1_position_value": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 100
+        },
+        "p1_position_value_low": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 100
+        },
+        "p1_position_value_high": {
+          "type": ["number", "null"],
+          "minimum": -100,
+          "maximum": 100
+        },
+        "scale": {
+          "const": "advantage_score"
+        },
+        "aggregation_profile_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "search_profile_id": {
+          "$ref": "#/$defs/nullable_string"
+        },
+        "searched_depth": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "searched_nodes": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "enum": ["pending", "unavailable"]
+              }
+            },
+            "required": ["availability"]
+          },
+          "then": {
+            "properties": {
+              "p1_position_value": {
+                "type": "null"
+              },
+              "p1_position_value_low": {
+                "type": "null"
+              },
+              "p1_position_value_high": {
+                "type": "null"
+              },
+              "calculation_latency_ms": {
+                "type": "null"
+              },
+              "calculation_age_ms": {
+                "type": "null"
+              },
+              "aggregation_profile_id": {
+                "type": "null"
+              },
+              "search_profile_id": {
+                "type": "null"
+              },
+              "searched_depth": {
+                "type": "null"
+              },
+              "searched_nodes": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "unavailable"
+              }
+            },
+            "required": ["availability"]
+          },
+          "then": {
+            "properties": {
+              "request_id": {
+                "type": "null"
+              },
+              "input_generation": {
+                "type": "null"
+              },
+              "input_digest": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "evaluations": {
+      "type": "object",
+      "required": ["practical", "best_action", "player_adjusted"],
+      "properties": {
+        "practical": {
+          "$ref": "#/$defs/practical_evaluation"
+        },
+        "best_action": {
+          "$ref": "#/$defs/best_action_evaluation"
+        },
+        "player_adjusted": {
+          "type": "null"
+        }
+      },
+      "additionalProperties": true
+    },
+    "unavailable_practical": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/practical_evaluation"
+        },
+        {
+          "properties": {
+            "availability": {
+              "const": "unavailable"
+            },
+            "request_id": {
+              "type": "null"
+            },
+            "input_generation": {
+              "type": "null"
+            },
+            "input_digest": {
+              "type": "null"
+            },
+            "calculation_latency_ms": {
+              "type": "null"
+            },
+            "calculation_age_ms": {
+              "type": "null"
+            },
+            "p1_win_probability": {
+              "type": "null"
+            },
+            "p2_win_probability": {
+              "type": "null"
+            },
+            "advantage_score": {
+              "type": "null"
+            },
+            "is_even": {
+              "type": "null"
+            },
+            "origin": {
+              "type": "null"
+            },
+            "calibration_id": {
+              "type": "null"
+            },
+            "evaluated_positions": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "unavailable_best_action": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/best_action_evaluation"
+        },
+        {
+          "properties": {
+            "availability": {
+              "const": "unavailable"
+            },
+            "request_id": {
+              "type": "null"
+            },
+            "input_generation": {
+              "type": "null"
+            },
+            "input_digest": {
+              "type": "null"
+            },
+            "calculation_latency_ms": {
+              "type": "null"
+            },
+            "calculation_age_ms": {
+              "type": "null"
+            },
+            "p1_position_value": {
+              "type": "null"
+            },
+            "p1_position_value_low": {
+              "type": "null"
+            },
+            "p1_position_value_high": {
+              "type": "null"
+            },
+            "aggregation_profile_id": {
+              "type": "null"
+            },
+            "search_profile_id": {
+              "type": "null"
+            },
+            "searched_depth": {
+              "type": "null"
+            },
+            "searched_nodes": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "unavailable_evaluations": {
+      "type": "object",
+      "required": ["practical", "best_action", "player_adjusted"],
+      "properties": {
+        "practical": {
+          "$ref": "#/$defs/unavailable_practical"
+        },
+        "best_action": {
+          "$ref": "#/$defs/unavailable_best_action"
+        },
+        "player_adjusted": {
+          "type": "null"
+        }
+      }
+    },
+    "recognition_reason": {
+      "enum": [
+        "board_unstable",
+        "board_conflict",
+        "next_unknown",
+        "capture_gap",
+        "calibration_unavailable",
+        "recognition_asset_mismatch"
+      ]
+    },
+    "unresolved_physics_reason": {
+      "enum": [
+        "chain_resolving",
+        "cancel_unresolved",
+        "garbage_pending",
+        "landing_ambiguous",
+        "terminal_candidate_pending"
+      ]
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "event_seq",
+        "p1_board_provenance",
+        "p2_board_provenance",
+        "recognition_quality",
+        "unresolved_physics",
+        "physical_prediction_used"
+      ],
+      "properties": {
+        "event_seq": {
+          "$ref": "#/$defs/nullable_nonnegative_integer"
+        },
+        "p1_board_provenance": {
+          "enum": ["confirmed", "physics_projected", "unknown"]
+        },
+        "p2_board_provenance": {
+          "enum": ["confirmed", "physics_projected", "unknown"]
+        },
+        "recognition_quality": {
+          "type": "object",
+          "required": ["status", "reason_codes"],
+          "properties": {
+            "status": {
+              "enum": ["trusted", "partial", "untrusted"]
+            },
+            "reason_codes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/recognition_reason"
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "unresolved_physics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unresolved_physics_reason"
+          },
+          "uniqueItems": true
+        },
+        "physical_prediction_used": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "terminal": {
+      "type": "object",
+      "required": ["state", "winner", "evidence_kind", "result_code"],
+      "properties": {
+        "state": {
+          "enum": ["none", "candidate", "confirmed"]
+        },
+        "winner": {
+          "enum": ["1P", "2P", null]
+        },
+        "evidence_kind": {
+          "enum": ["visual_result_logo_bilateral_2x2", null]
+        },
+        "result_code": {
+          "enum": ["p1_win", "p2_win", null]
+        }
+      },
+      "additionalProperties": true
+    },
+    "confirmed_terminal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/terminal"
+        },
+        {
+          "properties": {
+            "state": {
+              "const": "confirmed"
+            },
+            "winner": {
+              "enum": ["1P", "2P"]
+            },
+            "evidence_kind": {
+              "const": "visual_result_logo_bilateral_2x2"
+            },
+            "result_code": {
+              "enum": ["p1_win", "p2_win"]
+            }
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "winner": {
+                  "const": "1P"
+                },
+                "result_code": {
+                  "const": "p1_win"
+                }
+              }
+            },
+            {
+              "properties": {
+                "winner": {
+                  "const": "2P"
+                },
+                "result_code": {
+                  "const": "p2_win"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "terminal_evaluations": {
+      "type": "object",
+      "required": ["practical", "best_action", "player_adjusted"],
+      "properties": {
+        "practical": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/practical_evaluation"
+            },
+            {
+              "properties": {
+                "availability": {
+                  "const": "available"
+                },
+                "p1_win_probability": {
+                  "enum": [0, 1]
+                },
+                "p2_win_probability": {
+                  "enum": [0, 1]
+                },
+                "advantage_score": {
+                  "enum": [-100, 100]
+                },
+                "is_even": {
+                  "const": false
+                },
+                "origin": {
+                  "const": "observed"
+                }
+              }
+            }
+          ]
+        },
+        "best_action": {
+          "$ref": "#/$defs/unavailable_best_action"
+        },
+        "player_adjusted": {
+          "type": "null"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "status",
+        "tier",
+        "tier_profile_id",
+        "practical_queue_depth",
+        "best_action_queue_depth",
+        "practical_worker_health",
+        "best_action_worker_health",
+        "discarded_jobs_since_match_start",
+        "telemetry_health"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["starting", "healthy", "degraded"]
+        },
+        "tier": {
+          "enum": ["lightweight", "standard", "high_accuracy", "analysis"]
+        },
+        "tier_profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "practical_queue_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "best_action_queue_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "practical_worker_health": {
+          "enum": ["starting", "healthy", "degraded", "restarting", "disabled"]
+        },
+        "best_action_worker_health": {
+          "enum": ["starting", "healthy", "degraded", "restarting", "disabled"]
+        },
+        "discarded_jobs_since_match_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "telemetry_health": {
+          "enum": ["healthy", "degraded", "unavailable"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "assets": {
+      "type": "object",
+      "required": [
+        "app_build_id",
+        "recognition_model_hash",
+        "recognition_config_hash",
+        "prediction_model_hash",
+        "calibration_hash"
+      ],
+      "properties": {
+        "app_build_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recognition_model_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recognition_config_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prediction_model_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calibration_hash": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}
