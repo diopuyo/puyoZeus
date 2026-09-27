@@ -6445,6 +6445,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              review_data_panel: bool = False,
              review_data_csv: Path | None = None,
              exchange_event_live_count: bool = False,
+             exchange_event_e16: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7021,6 +7022,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         raise ValueError(f"未知の layout: {layout!r} (有効値: {VALID_LAYOUTS})")
     event_overlay: ExchangeEventOverlay | None = None
     event_recorder = None
+    terminal_detector = None
+    if exchange_event_e16:
+        from src.exchange_event_terminal import ObservedDeathDetector
+        terminal_detector = ObservedDeathDetector()
     if exchange_event_record_path is not None:
         if not enable_exchange_event_update:
             raise ValueError("--exchange-event-recordには--exchange-event-updateが必要")
@@ -7035,7 +7040,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
             (event_recorder.wrap_static(_exchange_static_input) if event_recorder
              else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
-            per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count)
+            per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count,
+            e16=exchange_event_e16)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -7558,6 +7564,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         snap = _drive_ojama(tracker, r.p1, r.p2, ps1, ps2, t,
                             tracker_p1=tp1, tracker_p2=tp2, pipeline=pipe)
         if event_overlay is not None:
+            if terminal_detector is not None:
+                from dataclasses import replace
+                r = replace(r, confirmed_dead_sides=terminal_detector.update(recog_frame),
+                            terminal_evidence_available=True)
             from src.exchange_event_m0 import formula_totals_from_pipeline
             from src.exchange_event_overlay import displayed_scores_from_pipeline
             from src.exchange_event_overlay import formula_visible_from_pipeline
@@ -8279,6 +8289,8 @@ def main() -> None:
                     help="全評価入力をgzip JSONLへ記録する（ON時のみ、既定なし）")
     ap.add_argument("--exchange-event-live-count", action="store_true", default=False,
                     help="E15: 確定盤面更新ごとにcount特徴とS3暫定を更新する")
+    ap.add_argument("--exchange-event-e16", action="store_true", default=False,
+                    help="E16: 手番同期・死亡後発火抑止・現在/予測層の分離を有効にする")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8909,6 +8921,8 @@ def main() -> None:
         ),
     )
     a = ap.parse_args()
+    if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
+        a.exchange_event_model_dir = Path("models/exchange_event_v4")
     # 既定値解決 (collect_boards_lean.py と同じ方式): 明示 --no-normalize-fps-30 が
     # 最優先で無効化する。それ以外は --normalize-fps-30 の有無に関わらず既定 True
     # (generate() 関数側の既定と一致させる)。
@@ -8933,6 +8947,7 @@ def main() -> None:
              enable_exchange_event_update=a.exchange_event_update,
               exchange_event_model_dir=a.exchange_event_model_dir,
               exchange_event_live_count=a.exchange_event_live_count,
+              exchange_event_e16=a.exchange_event_e16,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,

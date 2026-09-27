@@ -611,7 +611,14 @@ class ExchangeEventTracker:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as stream:
             for record in self.records:
-                stream.write(json.dumps(asdict(record), ensure_ascii=False, allow_nan=False) + "\n")
+                value = asdict(record)
+                if hasattr(self, "layer_rows"):
+                    value["layers"] = [r for r in self.layer_rows if r["exchange_id"] == record.exchange_id]
+                stream.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + "\n")
+        if hasattr(self, "layer_rows"):
+            with path.with_suffix(".layers.jsonl").open("w", encoding="utf-8") as stream:
+                for row in self.layer_rows:
+                    stream.write(json.dumps(row, ensure_ascii=False, allow_nan=False)+"\n")
         counts = {reason: sum(row["reason"] == reason for row in self.diagnostics)
                   for reason in {row["reason"] for row in self.diagnostics}}
         path.with_suffix(".diagnostics.json").write_text(json.dumps(

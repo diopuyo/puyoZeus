@@ -46,8 +46,13 @@ class ExchangeEventOverlay:
 
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
-                 per_side_settled: bool = False, live_count: bool = False) -> None:
-        self.tracker = ExchangeEventTracker(models, live_count=live_count)
+                 per_side_settled: bool = False, live_count: bool = False,
+                 e16: bool = False) -> None:
+        self.tracker = ExchangeEventTracker(models, live_count=live_count or e16)
+        from src.exchange_event_layers import ExchangeEvaluationLayers
+        self._e16 = ExchangeEvaluationLayers() if e16 else None
+        if e16:
+            self.tracker.layer_rows = []
         self._live_count_key: tuple | None = None
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0 = m0_predictor
@@ -77,6 +82,9 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._e16 is not None and self._e16.before(self, result, t_sec):
+            self._e16.apply(self, result, snapshot, t_sec)
+            return
         self.tracker.begin_frame()
         self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
@@ -90,6 +98,8 @@ class ExchangeEventOverlay:
         self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         self._remember(sides, snapshot, t_sec)
+        if self._e16 is not None:
+            self._e16.observe(sides, t_sec)
         self._refresh_features(snapshot, t_sec)
         self.tracker.confirm_frame_inputs(t_sec)
         self.tracker.finish_frame(t_sec)
@@ -99,6 +109,8 @@ class ExchangeEventOverlay:
         if settled and all(self._history):
             self._static(snapshot, t_sec)
         self._previous = tuple(s.state for s in sides)
+        if self._e16 is not None:
+            self._e16.apply(self, result, snapshot, t_sec)
 
     def _reset(self, game_idx: int, t_sec: float) -> None:
         """試合内の参照履歴と信号基準をまとめて初期化する。"""
@@ -113,6 +125,8 @@ class ExchangeEventOverlay:
         self._last_displayed = [None, None]
         self._feature_cache.clear()
         self._live_count_key = None
+        if self._e16 is not None:
+            self._e16.reset()
 
     def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
         """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""
@@ -156,6 +170,9 @@ class ExchangeEventOverlay:
     def _fire(self, result: Any, snapshot: Any, t_sec: float,
               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
         """今回の発火前に得られた各側STABLE盤面で評価入力を作る。"""
+        if self._e16 is not None and any(s.accepted is None for s in self._e16.sync):
+            self.tracker.missing_input("E16_waiting_initial_count_pair", t_sec, "S1", triggers)
+            return
         first = min(ts for _, ts in fresh)
         selected = [next((s for s in reversed(h) if s.t_sec < first), None)
                     for h in self._history]
@@ -199,6 +216,8 @@ class ExchangeEventOverlay:
             board = saved.board if saved is not None else None
         if board is None:
             return
+        if self._e16 is not None and np.any(board._grid == COLOR_UNKNOWN):
+            self._e16.unknown.add(chain.chain_id)
         try:
             result = self._landing_projection.simulator.simulate(board)
         except (ValueError, TypeError, FloatingPointError):
@@ -245,8 +264,11 @@ class ExchangeEventOverlay:
         if tracker.current is None or self._start is None or not all(self._history):
             return
         grids, queues = [], []
-        for idx, history in enumerate(self._history):
-            latest = history[-1]
+        latest_sides = self._count_inputs()
+        if latest_sides is None:
+            return
+        for idx, latest in enumerate(latest_sides):
+            history = self._history[idx]
             chain = tracker.latest_chain(SIDE_LABELS[idx])
             grid = latest.board._grid
             if chain is not None and (chain.end_signal_sec is None
@@ -274,6 +296,15 @@ class ExchangeEventOverlay:
         # E15はcountだけを更新し、既存のD・到着特徴の定義を保つ。
         tracker.refresh_features(tracker.firing.static, tracker.firing.prefire_sides, observation)
         self._live_count_key = key
+
+    def _count_inputs(self) -> list[ConfirmedSide] | None:
+        """新フラグONだけ、手番が揃った確定盤面/NEXTをcountへ渡す。"""
+        if self._e16 is None:
+            return [h[-1] for h in self._history]
+        synced = [s.accepted for s in self._e16.sync]
+        if any(s is None for s in synced):
+            return None
+        return [ConfirmedSide(s.t_sec, Board.from_list(s.grid.tolist()), s.queue) for s in synced]
 
     def _observations(self, result: Any, t_sec: float,
                       changed: list[tuple[int, float]]) -> tuple[ChainObservation, ...]:

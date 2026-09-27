@@ -1,0 +1,470 @@
+[
+  {
+    "t_sec": 2698.5,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5370180010795593
+  },
+  {
+    "t_sec": 2698.5333333333333,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5390244722366333
+  },
+  {
+    "t_sec": 2698.5666666666666,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.540275514125824
+  },
+  {
+    "t_sec": 2698.6,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5393595099449158
+  },
+  {
+    "t_sec": 2698.633333333333,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5400341153144836
+  },
+  {
+    "t_sec": 2698.6666666666665,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5420863032341003
+  },
+  {
+    "t_sec": 2698.7,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5425913333892822
+  },
+  {
+    "t_sec": 2698.733333333333,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5414975881576538
+  },
+  {
+    "t_sec": 2698.766666666667,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5411122441291809
+  },
+  {
+    "t_sec": 2698.8,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5395311117172241
+  },
+  {
+    "t_sec": 2698.8333333333335,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5392589569091797
+  },
+  {
+    "t_sec": 2698.866666666667,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5365373492240906
+  },
+  {
+    "t_sec": 2698.9,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5360458493232727
+  },
+  {
+    "t_sec": 2698.9333333333334,
+    "detected": false,
+    "template": "match_end_yatta",
+    "score": 0.5319795608520508
+  },
+  {
+    "t_sec": 2698.9666666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.70005863904953
+  },
+  {
+    "t_sec": 2699.0,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.696150541305542
+  },
+  {
+    "t_sec": 2699.0333333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6902438402175903
+  },
+  {
+    "t_sec": 2699.0666666666666,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6855554580688477
+  },
+  {
+    "t_sec": 2699.1,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6779104471206665
+  },
+  {
+    "t_sec": 2699.133333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6715735197067261
+  },
+  {
+    "t_sec": 2699.1666666666665,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6662237048149109
+  },
+  {
+    "t_sec": 2699.2,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6629511117935181
+  },
+  {
+    "t_sec": 2699.233333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6611419916152954
+  },
+  {
+    "t_sec": 2699.266666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6604963541030884
+  },
+  {
+    "t_sec": 2699.3,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6607446074485779
+  },
+  {
+    "t_sec": 2699.3333333333335,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6635821461677551
+  },
+  {
+    "t_sec": 2699.366666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6676204800605774
+  },
+  {
+    "t_sec": 2699.4,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6745145916938782
+  },
+  {
+    "t_sec": 2699.4333333333334,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6830289959907532
+  },
+  {
+    "t_sec": 2699.4666666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6915940046310425
+  },
+  {
+    "t_sec": 2699.5,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7024495005607605
+  },
+  {
+    "t_sec": 2699.5333333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7120833992958069
+  },
+  {
+    "t_sec": 2699.5666666666666,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7250468134880066
+  },
+  {
+    "t_sec": 2699.6,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7370696663856506
+  },
+  {
+    "t_sec": 2699.633333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7545046806335449
+  },
+  {
+    "t_sec": 2699.6666666666665,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7739759683609009
+  },
+  {
+    "t_sec": 2699.7,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.79377281665802
+  },
+  {
+    "t_sec": 2699.733333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8180335164070129
+  },
+  {
+    "t_sec": 2699.766666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8419170379638672
+  },
+  {
+    "t_sec": 2699.8,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8653427362442017
+  },
+  {
+    "t_sec": 2699.8333333333335,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8658064603805542
+  },
+  {
+    "t_sec": 2699.866666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9176942110061646
+  },
+  {
+    "t_sec": 2699.9,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9476782083511353
+  },
+  {
+    "t_sec": 2699.9333333333334,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9723235964775085
+  },
+  {
+    "t_sec": 2699.9666666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.981483519077301
+  },
+  {
+    "t_sec": 2700.0,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.976311445236206
+  },
+  {
+    "t_sec": 2700.0333333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9668093919754028
+  },
+  {
+    "t_sec": 2700.0666666666666,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9577136039733887
+  },
+  {
+    "t_sec": 2700.1,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9534839987754822
+  },
+  {
+    "t_sec": 2700.133333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9528998732566833
+  },
+  {
+    "t_sec": 2700.1666666666665,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9589792490005493
+  },
+  {
+    "t_sec": 2700.2,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9655066728591919
+  },
+  {
+    "t_sec": 2700.233333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9769657850265503
+  },
+  {
+    "t_sec": 2700.266666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9836398363113403
+  },
+  {
+    "t_sec": 2700.3,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9777984619140625
+  },
+  {
+    "t_sec": 2700.3333333333335,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9564842581748962
+  },
+  {
+    "t_sec": 2700.366666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9274693131446838
+  },
+  {
+    "t_sec": 2700.4,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.9017152190208435
+  },
+  {
+    "t_sec": 2700.4333333333334,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8752239346504211
+  },
+  {
+    "t_sec": 2700.4666666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8499658107757568
+  },
+  {
+    "t_sec": 2700.5,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.8244670629501343
+  },
+  {
+    "t_sec": 2700.5333333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.799713671207428
+  },
+  {
+    "t_sec": 2700.5666666666666,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.777262270450592
+  },
+  {
+    "t_sec": 2700.6,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7552239298820496
+  },
+  {
+    "t_sec": 2700.633333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.73602294921875
+  },
+  {
+    "t_sec": 2700.6666666666665,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7203968167304993
+  },
+  {
+    "t_sec": 2700.7,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.7069306373596191
+  },
+  {
+    "t_sec": 2700.733333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6953831315040588
+  },
+  {
+    "t_sec": 2700.766666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.683122992515564
+  },
+  {
+    "t_sec": 2700.8,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6735084652900696
+  },
+  {
+    "t_sec": 2700.8333333333335,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6665812730789185
+  },
+  {
+    "t_sec": 2700.866666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6604899168014526
+  },
+  {
+    "t_sec": 2700.9,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6577823758125305
+  },
+  {
+    "t_sec": 2700.9333333333334,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6561485528945923
+  },
+  {
+    "t_sec": 2700.9666666666667,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6459521055221558
+  },
+  {
+    "t_sec": 2701.0,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6452698111534119
+  },
+  {
+    "t_sec": 2701.0333333333333,
+    "detected": true,
+    "template": "match_end_batan",
+    "score": 0.6563486456871033
+  },
+  {
+    "t_sec": 2701.0666666666666,
+    "detected": false,
+    "template": "match_end_batan",
+    "score": 0.0
+  }
+]

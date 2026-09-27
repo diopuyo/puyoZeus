@@ -537,6 +537,9 @@ class PipelineResult:
     # 幻盤面を個別に除外できるようにする、docs/KNOWN_WEAKNESSES.md W20)。
     # backwards compat のため default False (既存呼び出しは無指定で従来通り)。
     match_end_locked: bool = False
+    # E16専用の評価境界で追記する観測事実。既定は従来通り未供給。
+    confirmed_dead_sides: tuple[str, ...] = ()
+    terminal_evidence_available: bool = False
 
 
 # ============================

@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from src.board import BOARD_COLS
 from src.exchange_event_features import D_COLUMNS, SIDE_COLUMNS
 from src.exchange_event_landing import logit_mean
+from src.exchange_event_layers import LAYER_COLUMNS
 from src.scoring import score_to_ojama
 
 REFERENCE_WIDTH = 1280
@@ -58,6 +59,7 @@ COMMON_FIELDS = (
     *(f"p1_{name}" for name in PROBABILITY_SOURCES), "p1_landing_gfe",
     "p1_combined", "p1_selected", "p1_display", "display_adv",
     "projection_sec", "death_evidence_sec", "prefire_sec",
+    *LAYER_COLUMNS,
 )
 CSV_FIELDS = (*COMMON_FIELDS, *(f"{side}_{name}" for side in SIDE_LABELS for name in SIDE_FIELDS))
 
@@ -197,6 +199,7 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
     projection = landing.last if record and landing.identity == (game_idx, record.exchange_id) else None
     projection = projection or {}
     row = dict.fromkeys(CSV_FIELDS)
+    row.update({name: getattr(tracker, "layer_eval", {}).get(name) for name in LAYER_COLUMNS})
     row.update(frame_index=frame_index, t_sec=t_sec, game_idx=game_idx, source=tracker.source,
                exchange_id=record.exchange_id if record else None,
                exchange_step=len(record.chains) if record else 0,

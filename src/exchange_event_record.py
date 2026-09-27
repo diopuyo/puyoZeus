@@ -125,7 +125,11 @@ class ExchangeEventRecorder:
             if saved.chain_event is not None:
                 saved.chain_event.before_board = getattr(side.chain_event, "before_board", None)
             sides.append(saved)
-        self.write(dict(kind="update", args=(SimpleNamespace(p1=sides[0], p2=sides[1]),
+        saved_result = SimpleNamespace(p1=sides[0], p2=sides[1])
+        if getattr(result, "terminal_evidence_available", False):
+            saved_result.confirmed_dead_sides = result.confirmed_dead_sides
+            saved_result.terminal_evidence_available = True
+        self.write(dict(kind="update", args=(saved_result,
             fields(snapshot, SNAPSHOT_FIELDS), fields(finalization, FINALIZATION_FIELDS),
             t_sec, game_idx, formula_totals, displayed_scores, formula_visible)))
         self.frames += 1

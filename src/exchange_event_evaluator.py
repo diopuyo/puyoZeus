@@ -207,7 +207,7 @@ class FileExchangeModels:
             entry = (base if name == "G_fe" else meta)["models"][key]
             if counts and name == "S3" and (
                     not entry.get("valid") or entry.get("version") not in
-                    ("F1b_prefire_frozen", "E15_live_count")):
+                    ("F1b_prefire_frozen", "E15_live_count", "E16_synchronized_count")):
                 raise ValueError("F1b是正版モデルが必要")
             if tuple(entry["columns"]) != columns:
                 raise ValueError(f"{key}の特徴列順が不一致")

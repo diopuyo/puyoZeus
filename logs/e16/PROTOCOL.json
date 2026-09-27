@@ -1,0 +1,30 @@
+{
+  "baseline": "3385544",
+  "production_enabled": false,
+  "prerequisite": "counter_margin反転が盤面/NEXT同期ずれの場合だけ実装修正。他原因なら停止報告",
+  "replay": {
+    "q_log_loss_max": 0.5518,
+    "zenchi_agreement_min": 0.7955,
+    "false_fire_max": 1,
+    "false_fire_denominator": 28
+  },
+  "scenes": {
+    "prefire_window": [
+      2612.0,
+      2614.08
+    ],
+    "prefire_mean": "E15より高い",
+    "counter_sign_flips": 0,
+    "terminal_window": [
+      2699.5,
+      2701.0
+    ],
+    "terminal_p1_min": 0.6
+  },
+  "cv": {
+    "required": "項目1で特徴が変わる場合のみ",
+    "same_rows": 84445,
+    "folds": 15,
+    "auc_min": 0.702
+  }
+}
