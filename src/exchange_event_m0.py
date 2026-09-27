@@ -9,7 +9,7 @@ import torch
 from src.advantage_m0_current_cnn_v1 import (
     AdvantageM0CurrentCNNV2, board_categories_from_raw,
 )
-from src.exchange_event_evaluator import file_sha256
+from src.exchange_event_evaluator import file_sha256, shared_model_directory
 
 PROBABILITY_EPSILON = 1e-7
 LOGIT_LIMIT = 30.0
@@ -20,6 +20,8 @@ class FileM0Predictor:
     """推論はCPUで実行し、認識CNNとGPUメモリを競合させない。"""
 
     def __init__(self, directory: Path) -> None:
+        if not (directory / "manifest.json").exists():
+            directory = shared_model_directory(directory.parent) / directory.name
         torch.set_num_threads(CPU_THREADS)
         metadata = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         checkpoint = directory / "model.pt"

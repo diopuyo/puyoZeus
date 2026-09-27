@@ -48,6 +48,7 @@ SIDE_FIELDS = (
     "formula_total", "formula_send", "confirmed_send", "net_send", "forecast",
     "confirmed_incoming", "confirmed_incoming_rows", "incoming_rows",
     "unavoidable_death", "death_reason", *PROJECTION_FIELDS,
+    *(f"NF_ojama_k{k}" for k in range(1, 6)), "counter_margin",
     *(f"k{k}" for k in range(1, 6)), *(f"d_{name}" for name in D_COLUMNS),
 )
 COMMON_FIELDS = (
@@ -161,6 +162,12 @@ def _side_data(overlay: Any, result: Any, snapshot: Any, record: Any,
     if record is not None and tracker.firing is not None:
         for k in range(1, 6):
             values[f"k{k}"] = float(tracker.firing.prefire_sides[idx, SIDE_COLUMNS.index(f"k{k}")])
+        counts = getattr(tracker, "count_sides", None)
+        if counts is not None:
+            for k in range(1, 6):
+                values[f"NF_ojama_k{k}"] = float(np.expm1(counts[idx, k-1]))
+            margin = counts[idx, -1]
+            values["counter_margin"] = float(np.sign(margin) * np.expm1(abs(margin)))
     return values
 
 
@@ -271,12 +278,26 @@ def _side_lines(row: dict, side: str, labels: dict[str, str]) -> list[str]:
              f"応手 n={value('hands')}手  近未来火力 {value('near_future_send')}個  必要相殺 {value('required_cancel')}個",
              f"消去中火力 {value('resolving_send')}個  楽観火力 {value('optimistic_send')}個",
              f"回避不能死 {value('unavoidable_death')}  {value('death_reason')}",
-             "近未来火力(発火前・0〜1)  " + " / ".join(f"k{k}:{value(f'k{k}')}" for k in range(1, 4)),
-             "近未来火力(発火前・0〜1)  " + " / ".join(f"k{k}:{value(f'k{k}')}" for k in range(4, 6)),
+             *_fire_lines(row, side),
              "D指標（最新STABLE・学習入力値）"]
     for idx in range(0, len(PANEL_D_COLUMNS), 2):
         lines.append("   ".join(f"{labels.get(name, name)} {value('d_' + name)}"
                                 for name in PANEL_D_COLUMNS[idx:idx + 2]))
+    return lines
+
+
+def _fire_lines(row: dict, side: str) -> list[str]:
+    """v2は生個数、既存v1パネルは従来の正規化値を表示する。"""
+    counts = row.get(f"{side}_NF_ojama_k1") is not None
+    prefix = "NF_ojama_k" if counts else "k"
+    title = "送りおじゃま(個) " if counts else "近未来火力(発火前・0〜1)  "
+    def number(k: int) -> str:
+        value = row.get(f"{side}_{prefix}{k}")
+        return f"{value:.0f}" if counts and value is not None and math.isfinite(value) else _number(value)
+    lines = [title + " / ".join(f"k{k}:{number(k)}"
+                                for k in levels) for levels in (range(1, 4), range(4, 6))]
+    if counts:
+        lines[1] = lines[1].removeprefix(title) + f"  打ち返し余地 {_number(row.get(f'{side}_counter_margin'))}個"
     return lines
 
 

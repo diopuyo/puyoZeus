@@ -11,7 +11,7 @@ from src.board import Board, COLOR_UNKNOWN
 from src.board_state_machine import BoardState
 from src.chain_detector import CHAIN_MECHANISM_FORMULA, CHAIN_MECHANISM_FORMULA_READ
 from src.chain_id_resolver import ChainObservation, ObservationKind
-from src.exchange_event_evaluator import ExchangeModels, StaticInput
+from src.exchange_event_evaluator import CountObservation, ExchangeModels, StaticInput
 from src.exchange_event_features import prefire_side_features
 from src.exchange_event_tracker import ExchangeEventTracker, SIDE_LABELS, valid_nonnegative
 from src.score_ocr import FORMULA_SESSION_RESET_SEC
@@ -176,7 +176,10 @@ class ExchangeEventOverlay:
         observations = self._observations(result, t_sec, fresh)
         self.tracker.fire(t_sec=t_sec, triggers=triggers, static=static,
                           prefire_sides=prefire, score_elapsed_sec=elapsed,
-                          observations=observations)
+                          observations=observations,
+                          count_observation=(CountObservation(np.stack([s.board._grid for s in selected]),
+                              np.stack([s.queue for s in selected]), elapsed)
+                              if getattr(self.tracker.models, "count_features", False) else None))
         if self.tracker.current is None:
             return
         for chain in self.tracker.current.chains:
@@ -213,6 +216,8 @@ class ExchangeEventOverlay:
 
     def _refresh_features(self, snapshot: Any, t_sec: float) -> None:
         """両側の最新確定盤面でDと近未来火力を更新し、同一盤面の探索を再用する。"""
+        if getattr(self.tracker.models, "count_features", False):
+            return
         if self.tracker.current is None or self._start is None or not all(self._history):
             return
         elapsed = t_sec - self._start

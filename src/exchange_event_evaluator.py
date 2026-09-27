@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol, TypeAlias
 
 import numpy as np
+from src.exchange_event_count_features import CountObservation, NEW_COLUMNS, orient, side_features
 
 from src.exchange_event_features import (
     Array, D_COLUMNS, G_COLUMNS, S1_COLUMNS, S3_COLUMNS, SIDE_COLUMNS,
@@ -60,6 +61,7 @@ class FiringInput:
     static: StaticInput
     prefire_sides: Array
     firing: tuple[bool, bool]
+    count_observation: CountObservation | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.static, StaticInput):
@@ -141,10 +143,30 @@ def build_features(event: EventInput, thresholds: tuple[float, float]) -> tuple[
 def evaluate_exchange_event(event: EventInput, models: ExchangeModels) -> float:
     """入力状態だけから1P勝率を返す。凍結・遷移管理は呼出側が担当する。"""
     name, features, side = build_features(event, models.elapsed_thresholds)
+    if getattr(models, "count_features", False) and name != "G_fe":
+        features = np.r_[features, orient(count_sides(event), side)]
     probability = float(models.predict_source_probability(name, features))
     if not np.isfinite(probability) or not 0 <= probability <= 1:
         raise ValueError("モデル勝率が0〜1の範囲外")
     return probability if side == 0 else 1 - probability
+
+
+def count_sides(event: FiringInput | ExchangeEndInput) -> Array:
+    """パネルと推論が共有するF1b側別特徴。未確定得点はS1として扱う。"""
+    firing = event.firing if isinstance(event, ExchangeEndInput) else event
+    if firing.count_observation is None:
+        raise ValueError("v2の発火前盤面・NEXTが未取得")
+    if isinstance(event, ExchangeEndInput) and event.scores_confirmed:
+        return side_features(firing.count_observation, firing.firing,
+                             event.scores_before, event.scores_after)
+    return side_features(firing.count_observation, firing.firing)
+
+
+def shared_model_directory(directory: str | Path) -> Path:
+    """F1bはv1の共通G_fe・M0をそのまま使用する。"""
+    root = Path(directory)
+    meta = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    return root.parent / MODEL_VERSION if "S1_prime_light" in meta["models"] else root
 
 
 def file_sha256(path: Path) -> str:
@@ -159,6 +181,7 @@ class FileExchangeModels:
 
     elapsed_thresholds: tuple[float, float]
     estimators: dict
+    count_features: bool = False
 
     @classmethod
     def load(cls, directory: str | Path, lightweight: bool = True) -> FileExchangeModels:
@@ -167,24 +190,34 @@ class FileExchangeModels:
 
         root = Path(directory)
         meta = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-        if meta["version"] != MODEL_VERSION:
+        counts = "S1_prime_light" in meta["models"]
+        common = shared_model_directory(root) if counts else root
+        base = json.loads((common / "manifest.json").read_text(encoding="utf-8"))
+        if base["version"] != MODEL_VERSION:
             raise ValueError("非対応のモデル版")
-        thresholds = tuple(meta["elapsed_thresholds"])
+        thresholds = tuple(base["elapsed_thresholds"])
         build_features(StaticInput(np.zeros(len(D_COLUMNS)), .5, 0), thresholds)
         estimators = {}
         for name, columns in MODEL_COLUMNS.items():
+            directory = common if name == "G_fe" else root
             key = name + "_light" if lightweight and name != "G_fe" else name
-            entry = meta["models"][key]
+            if counts and name != "G_fe":
+                key = name + "_prime" + ("_light" if lightweight else "")
+                columns += NEW_COLUMNS
+            entry = (base if name == "G_fe" else meta)["models"][key]
+            if counts and name == "S3" and (
+                    not entry.get("valid") or entry.get("version") != "F1b_prefire_frozen"):
+                raise ValueError("F1b是正版モデルが必要")
             if tuple(entry["columns"]) != columns:
                 raise ValueError(f"{key}の特徴列順が不一致")
-            path = root / entry["file"]
-            if path.parent.resolve() != root.resolve() or file_sha256(path) != entry["sha256"]:
+            path = directory / entry["file"]
+            if path.parent.resolve() != directory.resolve() or file_sha256(path) != entry["sha256"]:
                 raise ValueError(f"{key}のモデルファイルが不一致")
             model = joblib.load(path)
             if model.n_features_in_ != len(columns) or list(model.classes_) != [0, 1]:
                 raise ValueError(f"{key}のモデル次元またはラベルが不正")
             estimators[name] = model
-        return cls(thresholds, estimators)
+        return cls(thresholds, estimators, counts)
 
     def predict_source_probability(self, model_name: str, features: Array) -> float:
         """分類器内部にイベント状態を蓄積せず推論する。"""

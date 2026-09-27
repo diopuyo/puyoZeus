@@ -2803,6 +2803,7 @@ def _near_future_known_expand(
     frontier: "list[tuple[float, Board]]", pair: "tuple[int, int]", sim: ChainSimulator,
     tiebreak: bool = False,
     resolve_before_death: bool = False,
+    use_exact_score: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """既知ペア (22配置、_enumerate_placements 流用) で1手展開する。
 
@@ -2825,7 +2826,8 @@ def _near_future_known_expand(
             result = sim.simulate(placed)
             if resolve_before_death and result.final_board.is_dead():
                 continue
-            score = calculate_chain_score(result).total_score
+            score = (result.exact_score if use_exact_score and hasattr(result, "exact_score")
+                     else calculate_chain_score(result).total_score)
             candidates.append((float(score), result.final_board, result.chain_count))
     return _near_future_sort_candidates(candidates, tiebreak)
 
@@ -2834,6 +2836,7 @@ def _near_future_free_expand(
     frontier: "list[tuple[float, Board]]", colors: "tuple[int, ...]", sim: ChainSimulator,
     tiebreak: bool = False,
     resolve_before_death: bool = False,
+    use_exact_score: bool = False,
 ) -> "list[tuple[float, Board, int]]":
     """自由1個ずつ (6列×色数) で1手展開する (理想ツモ、_drop_one_color 流用)。
 
@@ -2853,7 +2856,8 @@ def _near_future_free_expand(
                 result = sim.simulate(dropped)
                 if resolve_before_death and result.final_board.is_dead():
                     continue
-                score = calculate_chain_score(result).total_score
+                score = (result.exact_score if use_exact_score and hasattr(result, "exact_score")
+                         else calculate_chain_score(result).total_score)
                 candidates.append((float(score), result.final_board, result.chain_count))
     return _near_future_sort_candidates(candidates, tiebreak)
 
@@ -2879,6 +2883,7 @@ def near_future_fire_power(
     active_colors: "tuple[int, ...] | None" = None,
     tiebreak: bool = False,
     resolve_before_death: bool = False,
+    use_exact_score: bool = False,
 ) -> NearFutureFireResult:
     """XIV 近未来最大火力 (K=1..5)。
 
@@ -2915,6 +2920,8 @@ def near_future_fire_power(
             (既定 False、backwards compat。NEAR_FUTURE_TIEBREAK_* 参照)。
         resolve_before_death: E10応手専用。設置と同時の消去で助かる手も探索し、
             連鎖解消後の窒息だけを除外する。既定Falseで旧指標を維持する。
+        use_exact_score: True のときだけ結果の exact_score を優先する。
+            既定False、または属性がない場合は calculate_chain_score を使う。
 
     Returns:
         NearFutureFireResult: K別 IndicatorV2Value + 参考連鎖数 + used_real_next。
@@ -2926,6 +2933,7 @@ def near_future_fire_power(
     return _near_future_search(
         board, colors, next_pair, dnext_pair, elapsed_sec, sim, beam_width, k_levels,
         tiebreak=tiebreak, resolve_before_death=resolve_before_death,
+        use_exact_score=use_exact_score,
     )
 
 
@@ -2940,6 +2948,7 @@ def _near_future_search(
     k_levels: "tuple[int, ...]",
     tiebreak: bool = False,
     resolve_before_death: bool = False,
+    use_exact_score: bool = False,
 ) -> NearFutureFireResult:
     """near_future_fire_power の本体探索ループ (ビーム + チェックポイント)。"""
     max_k = max(k_levels)
@@ -2953,15 +2962,15 @@ def _near_future_search(
     for hand_idx in range(total_hands):
         if hand_idx == 0 and _near_future_is_valid_pair(next_pair):
             expanded = _near_future_known_expand(frontier, next_pair, sim, tiebreak=tiebreak,
-                                                 resolve_before_death=resolve_before_death)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
             used_real_next = True
         elif hand_idx == 1 and _near_future_is_valid_pair(dnext_pair):
             expanded = _near_future_known_expand(frontier, dnext_pair, sim, tiebreak=tiebreak,
-                                                 resolve_before_death=resolve_before_death)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
             used_real_next = True
         else:
             expanded = _near_future_free_expand(frontier, colors, sim, tiebreak=tiebreak,
-                                                resolve_before_death=resolve_before_death)
+                resolve_before_death=resolve_before_death, use_exact_score=use_exact_score)
         if not expanded:
             break
         frontier = [(s, b) for s, b, _c in expanded[:beam_width]]

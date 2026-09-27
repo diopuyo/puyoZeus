@@ -11,6 +11,7 @@ from src.chain_id_resolver import ChainIdResolver, ChainObservation, Observation
 from src.ojama_accounting import CHAIN_TOTAL_MIN_SCORE
 from src.exchange_event_evaluator import (
     ExchangeEndInput, ExchangeModels, FiringInput, StaticInput, evaluate_exchange_event,
+    CountObservation, count_sides,
 )
 
 SIDE_LABELS = ("1P", "2P")
@@ -153,7 +154,8 @@ class ExchangeEventTracker:
     def fire(self, *, t_sec: float, triggers: tuple[float | None, float | None],
              static: StaticInput, prefire_sides: np.ndarray,
              score_elapsed_sec: float,
-             observations: tuple[ChainObservation, ...] = ()) -> None:
+             observations: tuple[ChainObservation, ...] = (),
+             count_observation: CountObservation | None = None) -> None:
         """既存trigger_secを同定子にし、成長中の再通知は同じ連鎖へ束ねる。"""
         if len(triggers) != len(SIDE_LABELS) or any(
                 ts is not None and not valid_nonnegative(ts) for ts in triggers):
@@ -176,7 +178,7 @@ class ExchangeEventTracker:
         started = self.current is None
         if started:
             if not self._start_exchange(t_sec, triggers, fresh, static,
-                                        prefire_sides, score_elapsed_sec):
+                                        prefire_sides, score_elapsed_sec, count_observation):
                 return
         count_before = len(self.current.chains)
         if observations:
@@ -206,6 +208,8 @@ class ExchangeEventTracker:
     def _refresh_firing(self, static: StaticInput, prefire_sides: np.ndarray,
                         t_sec: float) -> None:
         """参加側と最新確定盤面で再評価し、既存連鎖の確定送り量を引き継ぐ。"""
+        if getattr(self.models, "count_features", False):
+            return  # F1bは区間の発火前観測と最初の発火側を凍結する。
         firing = tuple(any(c.side == side for c in self.current.chains) for side in SIDE_LABELS)
         try:
             event = FiringInput(static, prefire_sides, firing)
@@ -223,7 +227,8 @@ class ExchangeEventTracker:
 
     def _start_exchange(self, t_sec: float, triggers: tuple, fresh: list,
                         static: StaticInput, prefire_sides: np.ndarray,
-                        score_elapsed_sec: float) -> bool:
+                        score_elapsed_sec: float,
+                        count_observation: CountObservation | None = None) -> bool:
         """入力検証に通るまでrecordやS1を公開しない。"""
         first = min((ts for ts in triggers if ts is not None), default=None)
         firing = tuple(any(s == side and ts == first for s, ts in fresh) for side in SIDE_LABELS)
@@ -233,7 +238,7 @@ class ExchangeEventTracker:
         try:
             if not valid_nonnegative(score_elapsed_sec):
                 raise ValueError("発火経過秒が欠測")
-            event = FiringInput(static, prefire_sides, firing)
+            event = FiringInput(static, prefire_sides, firing, count_observation)
         except (ValueError, TypeError) as error:
             self.missing_input("firing_input: " + str(error), t_sec, "S1", triggers)
             return False
@@ -501,6 +506,8 @@ class ExchangeEventTracker:
 
     def refresh_features(self, static: StaticInput, sides: np.ndarray) -> None:
         """現在の確定盤面の特徴へ差し替え、変化があれば次の評価を更新する。"""
+        if getattr(self.models, "count_features", False):
+            return
         if self.firing is None or self.current is None:
             return
         old = self.firing
@@ -586,6 +593,8 @@ class ExchangeEventTracker:
             return False
         self.probability = probability
         self.source = source
+        if getattr(self.models, "count_features", False) and source != "G_fe":
+            self.count_sides = count_sides(event)
         if source == "G_fe":
             self._static_probability = probability
         if self.current is not None:
