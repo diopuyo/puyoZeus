@@ -1,0 +1,17 @@
+{
+  "counts": {
+    "attacks": 32055,
+    "landing_unattributed": 3691,
+    "no_fire_before_landing_interval": 2060,
+    "not_eligible": 23917,
+    "landing_unobserved": 1470,
+    "fire_before_landing_interval": 781,
+    "fire_inside_landing_interval": 136
+  },
+  "candidates": 8138,
+  "rows": 2841,
+  "videos": 148,
+  "positives": 781,
+  "label_source": "おじゃま増加の前後観測区間。実落下通知の代用であり、未観測の落下は復元不能",
+  "excluded": 5297
+}

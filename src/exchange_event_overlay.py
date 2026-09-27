@@ -49,11 +49,14 @@ class ExchangeEventOverlay:
                  per_side_settled: bool = False, live_count: bool = False,
                  e16: bool = False, count_sync: bool = False,
                  death_guard: bool = False, evaluation_layers: bool = False,
-                 completion_check: bool = False, landing_counter_response: bool = False) -> None:
-        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check
+                 completion_check: bool = False, landing_counter_response: bool = False,
+                 confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
+                 counter_probability_model: Any = None) -> None:
+        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
+        self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
         from src.exchange_event_layers import ExchangeEvaluationLayers
-        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard,
+        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard or confirmed_death_hold,
             e16 or evaluation_layers or completion_check, completion_check) if enabled else None
         if enabled and self._e16.layer_enabled:
             self.tracker.layer_rows = []
@@ -75,7 +78,11 @@ class ExchangeEventOverlay:
         self._last_displayed: list[float | None] = [None, None]
         self._feature_cache: dict[tuple, np.ndarray] = {}
         from src.exchange_event_landing import ExchangeLandingProjection
-        self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response)
+        if landing_counter_prob and counter_probability_model is None:
+            from src.landing_counter_probability import LogisticResponseProbability
+            counter_probability_model = LogisticResponseProbability.load()
+        self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
+            counter_probability_model=counter_probability_model if landing_counter_prob else None)
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -88,6 +95,7 @@ class ExchangeEventOverlay:
             self._reset(game_idx, t_sec)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
             self._e16.apply(self, result, snapshot, t_sec)
+            self._hold_confirmed_death(t_sec)
             return
         self.tracker.begin_frame()
         self._observe_placements(sides, displayed_scores, t_sec)
@@ -131,6 +139,21 @@ class ExchangeEventOverlay:
         self._live_count_key = None
         if self._e16 is not None:
             self._e16.reset()
+
+    def _hold_confirmed_death(self, t_sec: float) -> None:
+        """死亡後の更新拒否に入る前の予測値を凍結せず、境界まで確定表示する。"""
+        if not self._confirmed_death_hold:
+            return
+        from src.exchange_event_terminal import confirmed_winner_probability
+        probability = confirmed_winner_probability(self._e16.dead_sides)
+        if probability is None:
+            return
+        if self.tracker.source != "confirmed_death":
+            record = next((r for r in reversed(self.tracker.records) if r.game_idx == self._game), None)
+            if record is not None:
+                record.values.append(dict(source="confirmed_death", t_sec=t_sec, p1=probability,
+                                          dead_sides=sorted(self._e16.dead_sides)))
+        self.tracker.source, self.tracker.probability = "confirmed_death", probability
 
     def _observe_placements(self, sides: tuple, scores: tuple | None, t_sec: float) -> None:
         """終了済み区間についても実表示の操作加点を観測し、次の発火と区別する。"""

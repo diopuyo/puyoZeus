@@ -70,8 +70,9 @@ def future_send(raw: bytes, shape: tuple, dtype: str, queue: tuple,
 class ExchangeLandingProjection:
     """元のS3を保存して合成の累積を防ぎ、実着地以降の二重投下を防ぐ。"""
 
-    def __init__(self, counter_response: bool = False) -> None:
+    def __init__(self, counter_response: bool = False, counter_probability_model: Any = None) -> None:
         self.counter_response = counter_response
+        self.counter_probability_model = counter_probability_model
         self.identity: tuple | None = None
         self.key: tuple | None = None
         self.drops = (0, 0)
@@ -306,6 +307,7 @@ class ExchangeLandingProjection:
         gfe = self._landing_gfe(overlay, snapshot, latest, incoming, t_sec)
         counter = self._counter_projection(overlay, snapshot, latest, incoming, hands, gfe, t_sec)
         gfe = counter.get("gfe_response_p1", gfe) if counter.get("response_selected") else gfe
+        gfe = counter.get("gfe_weighted_p1", gfe)
         probability = logit_mean(base["p1"], gfe)
         boards, responses, certain = self._death_boards(overlay.tracker, boards, responses, credit)
         landed_boards = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
@@ -349,7 +351,7 @@ class ExchangeLandingProjection:
     def _counter_projection(self, overlay: Any, snapshot: Any, latest: tuple,
                             incoming: list, hands: tuple, gfe: float, t_sec: float) -> dict:
         """確定履歴から探索した応手を予測層だけへ反映し、二つの仮定を保存する。"""
-        if not self.counter_response:
+        if not self.counter_response and self.counter_probability_model is None:
             return {}
         replies, credit = self._receivers(overlay.tracker, latest, incoming)
         net, sends, surplus = list(incoming), [None, None], [0, 0]
@@ -375,10 +377,40 @@ class ExchangeLandingProjection:
         selected = any(amount > 0 for amount in incoming) and all(
             amount <= 0 or (sends[idx] is not None and sends[idx] >= amount)
             for idx, amount in enumerate(incoming))
-        return dict(gfe_no_response_p1=gfe, gfe_response_p1=response_gfe,
+        value = dict(gfe_no_response_p1=gfe, gfe_response_p1=response_gfe,
             response_selected=selected, response_layer="prediction", response_send=sends,
             response_incoming=net, response_surplus=surplus,
             response_board_sec=[s.t_sec for s in latest])
+        if self.counter_probability_model is not None:
+            value.update(self._counter_probability(overlay, latest, incoming, hands, value, t_sec))
+        return value
+
+    def _counter_probability(self, overlay: Any, latest: tuple, incoming: list, hands: tuple,
+                             value: dict, t_sec: float) -> dict:
+        """学習対象の未発火側だけ確率化し、識別対象外を確定応手として補完しない。"""
+        from src.landing_counter_probability import response_features
+        probabilities, features, reasons = [None, None], [None, None], ["no_incoming", "no_incoming"]
+        weight = 0.
+        for idx, amount in enumerate(incoming):
+            if amount <= 0:
+                continue
+            probabilities[idx] = 0.
+            reasons[idx] = "below_incoming"
+            if not value["response_selected"]:
+                continue
+            if self._chaining(overlay.tracker, idx):
+                reasons[idx] = "active_receiver_outside_training_support"
+                continue
+            side = latest[idx]
+            x = response_features(side.board._grid, side.queue, value["response_send"][idx], amount,
+                                  hands[idx], t_sec-side.t_sec, False)
+            weight = float(self.counter_probability_model.predict(x))
+            if not np.isfinite(weight) or not 0 <= weight <= 1:
+                raise ValueError("応手確率が0〜1の範囲外")
+            probabilities[idx], features[idx], reasons[idx] = weight, x.tolist(), "model"
+        mixed = weight*value["gfe_response_p1"]+(1-weight)*value["gfe_no_response_p1"]
+        return dict(gfe_weighted_p1=mixed, counter_probability=probabilities,
+                    counter_probability_features=features, counter_probability_reasons=reasons)
 
     def _optimistic_response(self, board: Board, queue: np.ndarray, hands: int, elapsed: float) -> float:
         """初回断定は既存指標の候補集合でも拒否できた場合だけに限定する。"""

@@ -1,0 +1,7831 @@
+{
+  "table": [
+    {
+      "direction": "正→誤",
+      "category": "実際に着弾前に応手",
+      "frames": 144,
+      "exchanges": 2
+    },
+    {
+      "direction": "正→誤",
+      "category": "可能予測だが着弾前の新発火なし",
+      "frames": 443,
+      "exchanges": 8
+    },
+    {
+      "direction": "正→誤",
+      "category": "応手後に相手の次撃・敗北",
+      "frames": 73,
+      "exchanges": 2
+    },
+    {
+      "direction": "正→誤",
+      "category": "その他・時刻根拠不足",
+      "frames": 0,
+      "exchanges": 0
+    },
+    {
+      "direction": "誤→正",
+      "category": "実際に着弾前に応手",
+      "frames": 0,
+      "exchanges": 0
+    },
+    {
+      "direction": "誤→正",
+      "category": "可能予測だが着弾前の新発火なし",
+      "frames": 9,
+      "exchanges": 1
+    },
+    {
+      "direction": "誤→正",
+      "category": "応手後に相手の次撃・敗北",
+      "frames": 0,
+      "exchanges": 0
+    },
+    {
+      "direction": "誤→正",
+      "category": "その他・時刻根拠不足",
+      "frames": 71,
+      "exchanges": 1
+    }
+  ],
+  "totals": {
+    "正→誤": 660,
+    "誤→正": 80
+  },
+  "groups": [
+    {
+      "direction": "正→誤",
+      "game_idx": 2,
+      "exchange_id": 10,
+      "receiver": "2P",
+      "frames": 66,
+      "first_sec": 2686.483333333333,
+      "last_sec": 2688.8166666666666,
+      "representative": {
+        "t_sec": 2687.5833333333335,
+        "game": 42,
+        "game_idx": 2,
+        "exchange_id": 10,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.5901029557985427,
+        "counter_p1": 0.19677329611103397,
+        "baseline_adv": 7.343599496755872,
+        "counter_adv": -28.076174279365233,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2687.45,
+          "p1": 0.19677329611103397,
+          "base_p1": 0.3549479572056193,
+          "gfe_p1": 0.0983397381548988,
+          "incoming": [
+            0,
+            13
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.7902017327452312,
+          "gfe_response_p1": 0.0983397381548988,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            338
+          ],
+          "response_incoming": [
+            325,
+            0
+          ],
+          "response_surplus": [
+            0,
+            325
+          ],
+          "response_board_sec": [
+            2685.116666666667,
+            2687.4166666666665
+          ]
+        }
+      },
+      "evidence": {
+        "category": "応手後に相手の次撃・敗北",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2682.7166666666667,
+          "p1": 0.2672543806549649,
+          "base_p1": 0.33765062585923783,
+          "gfe_p1": 0.20694921158192206,
+          "incoming": [
+            0,
+            5
+          ],
+          "hands": [
+            1,
+            4
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.5842576959946465,
+          "gfe_response_p1": 0.20694921158192206,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            238
+          ],
+          "response_incoming": [
+            233,
+            0
+          ],
+          "response_surplus": [
+            0,
+            233
+          ],
+          "response_board_sec": [
+            2681.35,
+            2682.616666666667
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 2684.1833333333334,
+        "reply": {
+          "side": "2P",
+          "chain_id": 9,
+          "trigger_sec": 2682.9166666666665,
+          "observed_sec": 2682.9166666666665,
+          "end_signal_sec": 2685.75,
+          "score_finalize_sec": 2686.5833333333335,
+          "score_delta": 540,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 2684.2166666666667,
+              "reason": "ojama",
+              "revoked_sec": 2684.25
+            },
+            {
+              "t_sec": 2685.75,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 2685.75,
+          "score_ready_reason": "formula_match",
+          "score_before": 1661.0,
+          "formula_total": 540,
+          "display_score": 2201,
+          "stable_frames": 1,
+          "last_activity_sec": 2685.15,
+          "drop_bonus_score": 6.0,
+          "post_end_drop_sec": 2691.516666666667,
+          "predicted_final_score": 0.0,
+          "predicted_chain_count": 0,
+          "predicted_final_board": null,
+          "end_confirmed": true
+        },
+        "next_attack": {
+          "side": "1P",
+          "chain_id": 10,
+          "trigger_sec": 2685.15,
+          "observed_sec": 2685.15,
+          "end_signal_sec": 2688.016666666667,
+          "score_finalize_sec": 2688.4166666666665,
+          "score_delta": 700.0,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 2688.016666666667,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 2688.3166666666666,
+          "score_ready_reason": "display_stable",
+          "score_before": 1367.0,
+          "formula_total": 1060,
+          "display_score": 2067,
+          "stable_frames": 10,
+          "last_activity_sec": 2687.45,
+          "drop_bonus_score": 4.0,
+          "post_end_drop_sec": 2689.7166666666667,
+          "predicted_final_score": 0.0,
+          "predicted_chain_count": 0,
+          "predicted_final_board": null,
+          "end_confirmed": true
+        },
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          13,
+          13
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              3,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              4,
+              4,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              4,
+              4
+            ],
+            [
+              9,
+              0,
+              0,
+              1,
+              5,
+              1
+            ],
+            [
+              1,
+              3,
+              4,
+              1,
+              5,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              5,
+              4,
+              3
+            ],
+            [
+              3,
+              3,
+              3,
+              9,
+              3,
+              4
+            ],
+            [
+              5,
+              5,
+              5,
+              4,
+              5,
+              5
+            ],
+            [
+              1,
+              1,
+              1,
+              5,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              3,
+              3
+            ],
+            [
+              4,
+              1,
+              4,
+              3,
+              5,
+              3
+            ],
+            [
+              4,
+              4,
+              1,
+              4,
+              4,
+              4
+            ],
+            [
+              1,
+              1,
+              4,
+              5,
+              5,
+              5
+            ]
+          ],
+          [
+            [
+              0,
+              5,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              9,
+              1,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              5,
+              5,
+              0,
+              0,
+              5,
+              4
+            ],
+            [
+              4,
+              5,
+              0,
+              1,
+              1,
+              5
+            ],
+            [
+              4,
+              3,
+              5,
+              4,
+              4,
+              1
+            ],
+            [
+              1,
+              5,
+              5,
+              4,
+              3,
+              1
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              5,
+              1
+            ],
+            [
+              1,
+              1,
+              4,
+              5,
+              1,
+              4
+            ],
+            [
+              1,
+              4,
+              4,
+              3,
+              3,
+              4
+            ],
+            [
+              5,
+              5,
+              5,
+              3,
+              5,
+              3
+            ],
+            [
+              1,
+              4,
+              3,
+              5,
+              5,
+              4
+            ],
+            [
+              1,
+              1,
+              4,
+              3,
+              3,
+              5
+            ],
+            [
+              4,
+              4,
+              3,
+              5,
+              4,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "OJAMA_FALL"
+        ],
+        "actual_seconds_to_fall": 1.466666666666697,
+        "observed_time_budget_hands": 3,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 2,
+      "exchange_id": 11,
+      "receiver": "2P",
+      "frames": 4,
+      "first_sec": 2690.5833333333335,
+      "last_sec": 2690.6833333333334,
+      "representative": {
+        "t_sec": 2690.65,
+        "game": 42,
+        "game_idx": 2,
+        "exchange_id": 11,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.6693515631932998,
+        "counter_p1": 0.374404299904671,
+        "baseline_adv": 14.771072039233475,
+        "counter_adv": -5.252302351165894,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2690.483333333333,
+          "p1": 0.374404299904671,
+          "base_p1": 0.4296922171644558,
+          "gfe_p1": 0.32221105524756827,
+          "incoming": [
+            0,
+            18
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P"
+          ],
+          "gfe_no_response_p1": 0.8446989091322709,
+          "gfe_response_p1": 0.32221105524756827,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            1078
+          ],
+          "response_incoming": [
+            1060,
+            0
+          ],
+          "response_surplus": [
+            0,
+            1060
+          ],
+          "response_board_sec": [
+            2690.45,
+            2690.483333333333
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2690.483333333333,
+          "p1": 0.374404299904671,
+          "base_p1": 0.4296922171644558,
+          "gfe_p1": 0.32221105524756827,
+          "incoming": [
+            0,
+            18
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P"
+          ],
+          "gfe_no_response_p1": 0.8446989091322709,
+          "gfe_response_p1": 0.32221105524756827,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            1078
+          ],
+          "response_incoming": [
+            1060,
+            0
+          ],
+          "response_surplus": [
+            0,
+            1060
+          ],
+          "response_board_sec": [
+            2690.45,
+            2690.483333333333
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 2691.2833333333333,
+        "reply": null,
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          11,
+          13
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            [
+              9,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              3,
+              0,
+              5,
+              1,
+              1
+            ],
+            [
+              5,
+              5,
+              5,
+              5,
+              1,
+              3
+            ],
+            [
+              3,
+              3,
+              3,
+              9,
+              3,
+              4
+            ],
+            [
+              5,
+              5,
+              5,
+              4,
+              5,
+              5
+            ],
+            [
+              1,
+              1,
+              1,
+              5,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              3,
+              3
+            ],
+            [
+              4,
+              1,
+              4,
+              3,
+              5,
+              3
+            ],
+            [
+              4,
+              4,
+              1,
+              4,
+              4,
+              4
+            ],
+            [
+              1,
+              1,
+              4,
+              5,
+              5,
+              5
+            ]
+          ],
+          [
+            [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              3,
+              0,
+              0,
+              4,
+              4
+            ],
+            [
+              5,
+              9,
+              5,
+              9,
+              5,
+              4
+            ],
+            [
+              4,
+              5,
+              9,
+              9,
+              5,
+              5
+            ],
+            [
+              4,
+              3,
+              5,
+              4,
+              4,
+              1
+            ],
+            [
+              1,
+              5,
+              5,
+              4,
+              3,
+              1
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              5,
+              1
+            ],
+            [
+              1,
+              1,
+              4,
+              5,
+              1,
+              4
+            ],
+            [
+              1,
+              4,
+              4,
+              3,
+              3,
+              4
+            ],
+            [
+              5,
+              5,
+              5,
+              3,
+              5,
+              3
+            ],
+            [
+              1,
+              4,
+              3,
+              5,
+              5,
+              4
+            ],
+            [
+              1,
+              1,
+              4,
+              3,
+              3,
+              5
+            ],
+            [
+              4,
+              4,
+              3,
+              5,
+              4,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": 0.8000000000001819,
+        "observed_time_budget_hands": 2,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "誤→正",
+      "game_idx": 5,
+      "exchange_id": 23,
+      "receiver": "1P",
+      "frames": 9,
+      "first_sec": 2848.116666666667,
+      "last_sec": 2848.383333333333,
+      "representative": {
+        "t_sec": 2848.25,
+        "game": 45,
+        "game_idx": 5,
+        "exchange_id": 23,
+        "receiver": "1P",
+        "direction": "誤→正",
+        "baseline_p1": 0.17338693510697534,
+        "counter_p1": 0.6699751513210724,
+        "baseline_adv": -31.034256330924894,
+        "counter_adv": 14.351756781118622,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2847.983333333333,
+          "p1": 0.6699751513210724,
+          "base_p1": 0.31742714557275215,
+          "gfe_p1": 0.8986001257415107,
+          "incoming": [
+            212,
+            0
+          ],
+          "hands": [
+            3,
+            1
+          ],
+          "required_cancel": [
+            185,
+            0
+          ],
+          "near_future_send": [
+            582.0,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            0,
+            null
+          ],
+          "verified_attack": [
+            true,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.08643190446341457,
+          "gfe_response_p1": 0.8986001257415107,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            582,
+            null
+          ],
+          "response_incoming": [
+            0,
+            370
+          ],
+          "response_surplus": [
+            370,
+            0
+          ],
+          "response_board_sec": [
+            2847.983333333333,
+            2844.516666666667
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2843.15,
+          "p1": 0.6326780154842623,
+          "base_p1": 0.44036691169467523,
+          "gfe_p1": 0.790363642189501,
+          "incoming": [
+            11,
+            0
+          ],
+          "hands": [
+            4,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.24409344441138503,
+          "gfe_response_p1": 0.790363642189501,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            664,
+            null
+          ],
+          "response_incoming": [
+            0,
+            653
+          ],
+          "response_surplus": [
+            653,
+            0
+          ],
+          "response_board_sec": [
+            2843.15,
+            2840.35
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 2844.016666666667,
+        "reply": null,
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          11,
+          11
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              2,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              1,
+              3,
+              0
+            ],
+            [
+              5,
+              2,
+              0,
+              1,
+              3,
+              3
+            ],
+            [
+              1,
+              9,
+              0,
+              3,
+              9,
+              1
+            ],
+            [
+              3,
+              1,
+              1,
+              3,
+              3,
+              9
+            ],
+            [
+              3,
+              1,
+              9,
+              9,
+              1,
+              9
+            ],
+            [
+              2,
+              2,
+              2,
+              1,
+              5,
+              5
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              1,
+              5
+            ],
+            [
+              1,
+              2,
+              5,
+              3,
+              1,
+              3
+            ],
+            [
+              1,
+              1,
+              2,
+              5,
+              5,
+              1
+            ],
+            [
+              2,
+              2,
+              5,
+              3,
+              3,
+              1
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              3,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              1,
+              0,
+              0,
+              2,
+              5
+            ],
+            [
+              0,
+              3,
+              0,
+              3,
+              2,
+              5
+            ],
+            [
+              0,
+              2,
+              0,
+              2,
+              3,
+              5
+            ],
+            [
+              3,
+              2,
+              2,
+              5,
+              5,
+              2
+            ],
+            [
+              3,
+              3,
+              1,
+              3,
+              5,
+              3
+            ],
+            [
+              1,
+              9,
+              3,
+              5,
+              1,
+              9
+            ],
+            [
+              3,
+              1,
+              5,
+              3,
+              1,
+              3
+            ],
+            [
+              1,
+              1,
+              2,
+              5,
+              5,
+              1
+            ],
+            [
+              2,
+              2,
+              5,
+              3,
+              3,
+              1
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "CHAIN"
+        ],
+        "actual_seconds_to_fall": 0.8666666666667879,
+        "observed_time_budget_hands": 2,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 5,
+      "exchange_id": 23,
+      "receiver": "2P",
+      "frames": 7,
+      "first_sec": 2857.1833333333334,
+      "last_sec": 2857.383333333333,
+      "representative": {
+        "t_sec": 2857.2833333333333,
+        "game": 45,
+        "game_idx": 5,
+        "exchange_id": 23,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.7571005850248954,
+        "counter_p1": 0.48375583073900513,
+        "baseline_adv": 21.050583499579435,
+        "counter_adv": -0.8217786307782301,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2857.15,
+          "p1": 0.48375583073900513,
+          "base_p1": 0.6826255157558772,
+          "gfe_p1": 0.2899013717469206,
+          "incoming": [
+            0,
+            4
+          ],
+          "hands": [
+            1,
+            3
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.8187398918238222,
+          "gfe_response_p1": 0.2899013717469206,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            48
+          ],
+          "response_incoming": [
+            44,
+            0
+          ],
+          "response_surplus": [
+            0,
+            44
+          ],
+          "response_board_sec": [
+            2851.2833333333333,
+            2857.15
+          ]
+        }
+      },
+      "evidence": {
+        "category": "応手後に相手の次撃・敗北",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2839.1833333333334,
+          "p1": 0.3988823876633456,
+          "base_p1": 0.5063996711345716,
+          "gfe_p1": 0.3003045398634224,
+          "incoming": [
+            0,
+            10
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P"
+          ],
+          "gfe_no_response_p1": 0.5264298619283235,
+          "gfe_response_p1": 0.3003045398634224,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            463
+          ],
+          "response_incoming": [
+            453,
+            0
+          ],
+          "response_surplus": [
+            0,
+            453
+          ],
+          "response_board_sec": [
+            2839.15,
+            2839.1833333333334
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 2850.65,
+        "reply": {
+          "side": "2P",
+          "chain_id": 8,
+          "trigger_sec": 2840.383333333333,
+          "observed_sec": 2840.383333333333,
+          "end_signal_sec": 2850.15,
+          "score_finalize_sec": 2851.983333333333,
+          "score_delta": 20660,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 2850.15,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 2850.15,
+          "score_ready_reason": "formula_match",
+          "score_before": 744.0,
+          "formula_total": 20660,
+          "display_score": 21404,
+          "stable_frames": 1,
+          "last_activity_sec": 2849.55,
+          "drop_bonus_score": 109.0,
+          "post_end_drop_sec": 2861.95,
+          "predicted_final_score": 0.0,
+          "predicted_chain_count": 0,
+          "predicted_final_board": null,
+          "end_confirmed": true
+        },
+        "next_attack": {
+          "side": "1P",
+          "chain_id": 9,
+          "trigger_sec": 2848.383333333333,
+          "observed_sec": 2848.383333333333,
+          "end_signal_sec": 2862.483333333333,
+          "score_finalize_sec": 2863.05,
+          "score_delta": 44020,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 2849.5833333333335,
+              "reason": "ojama",
+              "revoked_sec": 2849.75
+            },
+            {
+              "t_sec": 2862.483333333333,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 2862.483333333333,
+          "score_ready_reason": "formula_match",
+          "score_before": 1007.0,
+          "formula_total": 44020,
+          "display_score": 45027,
+          "stable_frames": 1,
+          "last_activity_sec": 2861.883333333333,
+          "drop_bonus_score": 0.0,
+          "post_end_drop_sec": null,
+          "predicted_final_score": 0.0,
+          "predicted_chain_count": 0,
+          "predicted_final_board": null,
+          "end_confirmed": true
+        },
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          12,
+          11
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              9,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              9,
+              9,
+              0,
+              1,
+              2,
+              0
+            ],
+            [
+              5,
+              2,
+              2,
+              1,
+              3,
+              0
+            ],
+            [
+              5,
+              5,
+              5,
+              2,
+              3,
+              3
+            ],
+            [
+              2,
+              2,
+              2,
+              3,
+              9,
+              1
+            ],
+            [
+              3,
+              1,
+              1,
+              3,
+              3,
+              9
+            ],
+            [
+              3,
+              1,
+              9,
+              9,
+              1,
+              9
+            ],
+            [
+              2,
+              2,
+              2,
+              1,
+              5,
+              5
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              1,
+              5
+            ],
+            [
+              1,
+              2,
+              5,
+              3,
+              1,
+              3
+            ],
+            [
+              1,
+              1,
+              2,
+              5,
+              5,
+              1
+            ],
+            [
+              2,
+              2,
+              5,
+              3,
+              3,
+              1
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              3,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              1,
+              0,
+              0,
+              2,
+              5
+            ],
+            [
+              0,
+              3,
+              0,
+              3,
+              2,
+              5
+            ],
+            [
+              0,
+              2,
+              0,
+              2,
+              3,
+              5
+            ],
+            [
+              3,
+              2,
+              0,
+              5,
+              5,
+              2
+            ],
+            [
+              3,
+              3,
+              0,
+              3,
+              5,
+              3
+            ],
+            [
+              1,
+              9,
+              3,
+              5,
+              1,
+              9
+            ],
+            [
+              3,
+              1,
+              5,
+              3,
+              1,
+              3
+            ],
+            [
+              1,
+              1,
+              2,
+              5,
+              5,
+              1
+            ],
+            [
+              2,
+              2,
+              5,
+              3,
+              3,
+              1
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": 11.466666666666697,
+        "observed_time_budget_hands": 16,
+        "time_budget_overestimate": false,
+        "no_response_cause": "未選択・NF過大・置けないの識別は記録のみでは不能"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 6,
+      "exchange_id": 25,
+      "receiver": "1P",
+      "frames": 66,
+      "first_sec": 2889.883333333333,
+      "last_sec": 2892.05,
+      "representative": {
+        "t_sec": 2890.983333333333,
+        "game": 46,
+        "game_idx": 6,
+        "exchange_id": 25,
+        "receiver": "1P",
+        "direction": "正→誤",
+        "baseline_p1": 0.32366196645284506,
+        "counter_p1": 0.5789717414136726,
+        "baseline_adv": -14.568970624475183,
+        "counter_adv": 6.517678345524974,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2890.8166666666666,
+          "p1": 0.5789717414136726,
+          "base_p1": 0.4305269579930261,
+          "gfe_p1": 0.7143914585995598,
+          "incoming": [
+            25,
+            0
+          ],
+          "hands": [
+            4,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.23249341048917121,
+          "gfe_response_p1": 0.7143914585995598,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            120,
+            null
+          ],
+          "response_incoming": [
+            0,
+            95
+          ],
+          "response_surplus": [
+            95,
+            0
+          ],
+          "response_board_sec": [
+            2890.7166666666667,
+            2890.383333333333
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2889.883333333333,
+          "p1": 0.5802180573488261,
+          "base_p1": 0.4300140518442003,
+          "gfe_p1": 0.7168989559294148,
+          "incoming": [
+            25,
+            0
+          ],
+          "hands": [
+            6,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.22790299189888688,
+          "gfe_response_p1": 0.7168989559294148,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            411,
+            null
+          ],
+          "response_incoming": [
+            0,
+            386
+          ],
+          "response_surplus": [
+            386,
+            0
+          ],
+          "response_board_sec": [
+            2889.883333333333,
+            2889.883333333333
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 2890.55,
+        "reply": null,
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          11,
+          11
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              1
+            ],
+            [
+              0,
+              0,
+              1,
+              1,
+              0,
+              5
+            ],
+            [
+              0,
+              0,
+              4,
+              2,
+              2,
+              5
+            ],
+            [
+              1,
+              0,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              5,
+              4,
+              2,
+              4,
+              4,
+              2
+            ],
+            [
+              5,
+              1,
+              4,
+              1,
+              2,
+              2
+            ],
+            [
+              1,
+              2,
+              4,
+              2,
+              1,
+              1
+            ],
+            [
+              1,
+              2,
+              2,
+              1,
+              5,
+              5
+            ],
+            [
+              5,
+              4,
+              1,
+              5,
+              4,
+              5
+            ],
+            [
+              5,
+              5,
+              4,
+              1,
+              1,
+              4
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              4,
+              4
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              2,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              4,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              1,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              2,
+              1,
+              5,
+              5
+            ],
+            [
+              5,
+              4,
+              1,
+              5,
+              4,
+              5
+            ],
+            [
+              5,
+              5,
+              4,
+              1,
+              1,
+              4
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              4,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": 0.6666666666669698,
+        "observed_time_budget_hands": 1,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 7,
+      "exchange_id": 28,
+      "receiver": "1P",
+      "frames": 32,
+      "first_sec": 2937.85,
+      "last_sec": 2938.883333333333,
+      "representative": {
+        "t_sec": 2938.383333333333,
+        "game": 47,
+        "game_idx": 7,
+        "exchange_id": 28,
+        "receiver": "1P",
+        "direction": "正→誤",
+        "baseline_p1": 0.494549707272639,
+        "counter_p1": 0.5877784630075462,
+        "baseline_adv": -0.43186945707236074,
+        "counter_adv": 7.0914609081015705,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2937.6833333333334,
+          "p1": 0.5877784630075462,
+          "base_p1": 0.580836143005766,
+          "gfe_p1": 0.5946860370905308,
+          "incoming": [
+            9,
+            0
+          ],
+          "hands": [
+            1,
+            1
+          ],
+          "required_cancel": [
+            1,
+            0
+          ],
+          "near_future_send": [
+            13.0,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            -1,
+            null
+          ],
+          "verified_attack": [
+            true,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [
+            "1P"
+          ],
+          "gfe_no_response_p1": 0.4085867276891028,
+          "gfe_response_p1": 0.5946860370905308,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            13,
+            null
+          ],
+          "response_incoming": [
+            0,
+            4
+          ],
+          "response_surplus": [
+            4,
+            0
+          ],
+          "response_board_sec": [
+            2936.3166666666666,
+            2934.85
+          ]
+        }
+      },
+      "evidence": {
+        "category": "実際に着弾前に応手",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2936.3166666666666,
+          "p1": 0.6330595212729377,
+          "base_p1": 0.5144736313170009,
+          "gfe_p1": 0.7374620311621398,
+          "incoming": [
+            5,
+            0
+          ],
+          "hands": [
+            4,
+            1
+          ],
+          "required_cancel": [
+            5,
+            0
+          ],
+          "near_future_send": [
+            18.0,
+            null
+          ],
+          "resolving_send": [
+            5,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            1,
+            null
+          ],
+          "verified_attack": [
+            true,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.42213497315578735,
+          "gfe_response_p1": 0.7374620311621398,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            18,
+            null
+          ],
+          "response_incoming": [
+            0,
+            13
+          ],
+          "response_surplus": [
+            13,
+            0
+          ],
+          "response_board_sec": [
+            2936.3166666666666,
+            2934.85
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 2939.65,
+        "reply": {
+          "side": "1P",
+          "chain_id": 6,
+          "trigger_sec": 2936.35,
+          "observed_sec": 2936.35,
+          "end_signal_sec": 2939.2166666666667,
+          "score_finalize_sec": 2941.016666666667,
+          "score_delta": 360,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 2939.2166666666667,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 2939.2166666666667,
+          "score_ready_reason": "formula_match",
+          "score_before": 349.0,
+          "formula_total": 360,
+          "display_score": 709,
+          "stable_frames": 1,
+          "last_activity_sec": 2938.5833333333335,
+          "drop_bonus_score": 7.0,
+          "post_end_drop_sec": 2940.383333333333,
+          "predicted_final_score": 360.0,
+          "predicted_chain_count": 2,
+          "predicted_final_board": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              1,
+              3,
+              0,
+              3,
+              3
+            ],
+            [
+              1,
+              4,
+              2,
+              2,
+              2,
+              1
+            ],
+            [
+              3,
+              2,
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              3,
+              2,
+              4,
+              4,
+              3,
+              1
+            ],
+            [
+              4,
+              4,
+              2,
+              1,
+              4,
+              4
+            ],
+            [
+              4,
+              3,
+              3,
+              4,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              3,
+              4,
+              3,
+              3
+            ],
+            [
+              2,
+              3,
+              1,
+              3,
+              4,
+              3
+            ],
+            [
+              2,
+              2,
+              3,
+              1,
+              1,
+              4
+            ],
+            [
+              3,
+              3,
+              1,
+              4,
+              4,
+              3
+            ]
+          ],
+          "end_confirmed": true
+        },
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          13,
+          12
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              3,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              2,
+              4,
+              3,
+              3
+            ],
+            [
+              9,
+              2,
+              2,
+              2,
+              4,
+              4
+            ],
+            [
+              1,
+              1,
+              9,
+              4,
+              9,
+              9
+            ],
+            [
+              1,
+              4,
+              2,
+              2,
+              2,
+              1
+            ],
+            [
+              3,
+              2,
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              3,
+              2,
+              4,
+              4,
+              3,
+              1
+            ],
+            [
+              4,
+              4,
+              2,
+              1,
+              4,
+              4
+            ],
+            [
+              4,
+              3,
+              3,
+              4,
+              1,
+              1
+            ],
+            [
+              1,
+              1,
+              3,
+              4,
+              3,
+              3
+            ],
+            [
+              2,
+              3,
+              1,
+              3,
+              4,
+              3
+            ],
+            [
+              2,
+              2,
+              3,
+              1,
+              1,
+              4
+            ],
+            [
+              3,
+              3,
+              1,
+              4,
+              4,
+              3
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              1,
+              0,
+              1,
+              0,
+              3
+            ],
+            [
+              4,
+              2,
+              3,
+              1,
+              4,
+              3
+            ],
+            [
+              4,
+              2,
+              2,
+              3,
+              3,
+              4
+            ],
+            [
+              2,
+              1,
+              3,
+              4,
+              4,
+              3
+            ],
+            [
+              1,
+              3,
+              4,
+              2,
+              4,
+              1
+            ],
+            [
+              1,
+              3,
+              2,
+              2,
+              1,
+              4
+            ],
+            [
+              3,
+              4,
+              4,
+              1,
+              1,
+              4
+            ],
+            [
+              3,
+              1,
+              4,
+              3,
+              3,
+              4
+            ],
+            [
+              2,
+              3,
+              1,
+              3,
+              1,
+              3
+            ],
+            [
+              2,
+              2,
+              3,
+              1,
+              1,
+              3
+            ],
+            [
+              3,
+              3,
+              1,
+              4,
+              4,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "CHAIN"
+        ],
+        "actual_seconds_to_fall": 3.333333333333485,
+        "observed_time_budget_hands": 5,
+        "time_budget_overestimate": false,
+        "no_response_cause": "未選択・NF過大・置けないの識別は記録のみでは不能"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 8,
+      "exchange_id": 30,
+      "receiver": "2P",
+      "frames": 137,
+      "first_sec": 2974.2166666666667,
+      "last_sec": 2979.1833333333334,
+      "representative": {
+        "t_sec": 2976.9166666666665,
+        "game": 48,
+        "game_idx": 8,
+        "exchange_id": 30,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.585536729481483,
+        "counter_p1": 0.29069692887161747,
+        "baseline_adv": 7.249401737704983,
+        "counter_adv": -17.130723627530454,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 2976.883333333333,
+          "p1": 0.29069692887161747,
+          "base_p1": 0.5225066505774634,
+          "gfe_p1": 0.13306909318371413,
+          "incoming": [
+            0,
+            14
+          ],
+          "hands": [
+            3,
+            1
+          ],
+          "required_cancel": [
+            0,
+            4
+          ],
+          "near_future_send": [
+            null,
+            1038.0
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            0
+          ],
+          "verified_attack": [
+            false,
+            true
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "2P"
+          ],
+          "gfe_no_response_p1": 0.6458854293277657,
+          "gfe_response_p1": 0.13306909318371413,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            1038
+          ],
+          "response_incoming": [
+            1024,
+            0
+          ],
+          "response_surplus": [
+            0,
+            1024
+          ],
+          "response_board_sec": [
+            2976.883333333333,
+            2976.1833333333334
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 2974.15,
+          "p1": 0.5059556857135127,
+          "base_p1": 0.6635146598791851,
+          "gfe_p1": 0.34720480371895823,
+          "incoming": [
+            0,
+            14
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P"
+          ],
+          "gfe_no_response_p1": 0.7550495375603916,
+          "gfe_response_p1": 0.34720480371895823,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            315
+          ],
+          "response_incoming": [
+            301,
+            0
+          ],
+          "response_surplus": [
+            0,
+            301
+          ],
+          "response_board_sec": [
+            2974.116666666667,
+            2974.05
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 2974.883333333333,
+        "reply": null,
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          12,
+          11
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              5,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              5,
+              4,
+              1,
+              5,
+              4,
+              0
+            ],
+            [
+              2,
+              4,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              2,
+              4,
+              5,
+              5,
+              4,
+              4
+            ],
+            [
+              4,
+              2,
+              5,
+              2,
+              1,
+              4
+            ],
+            [
+              4,
+              4,
+              2,
+              1,
+              5,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              5,
+              1,
+              1
+            ],
+            [
+              2,
+              4,
+              4,
+              2,
+              4,
+              5
+            ],
+            [
+              2,
+              2,
+              5,
+              2,
+              2,
+              5
+            ],
+            [
+              5,
+              5,
+              2,
+              1,
+              4,
+              4
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              4,
+              0,
+              0
+            ],
+            [
+              5,
+              0,
+              1,
+              5,
+              0,
+              0
+            ],
+            [
+              5,
+              1,
+              5,
+              1,
+              0,
+              0
+            ],
+            [
+              4,
+              2,
+              1,
+              5,
+              1,
+              4
+            ],
+            [
+              4,
+              1,
+              1,
+              5,
+              4,
+              1
+            ],
+            [
+              2,
+              2,
+              4,
+              1,
+              4,
+              1
+            ],
+            [
+              2,
+              4,
+              4,
+              5,
+              4,
+              5
+            ],
+            [
+              4,
+              2,
+              1,
+              4,
+              2,
+              5
+            ],
+            [
+              4,
+              2,
+              1,
+              4,
+              1,
+              2
+            ],
+            [
+              5,
+              5,
+              2,
+              1,
+              4,
+              2
+            ],
+            [
+              5,
+              2,
+              1,
+              4,
+              5,
+              2
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "TSUMO_FALL"
+        ],
+        "actual_seconds_to_fall": 0.7333333333331211,
+        "observed_time_budget_hands": 2,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 9,
+      "exchange_id": 32,
+      "receiver": "2P",
+      "frames": 33,
+      "first_sec": 3011.1833333333334,
+      "last_sec": 3012.25,
+      "representative": {
+        "t_sec": 3011.7166666666667,
+        "game": 49,
+        "game_idx": 9,
+        "exchange_id": 32,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.5958511735649439,
+        "counter_p1": 0.37911900047440694,
+        "baseline_adv": 6.920772870994124,
+        "counter_adv": -10.5851648204365,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3011.616666666667,
+          "p1": 0.37911900047440694,
+          "base_p1": 0.5746625910637311,
+          "gfe_p1": 0.2162798382516056,
+          "incoming": [
+            0,
+            7
+          ],
+          "hands": [
+            1,
+            5
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.6166882864736132,
+          "gfe_response_p1": 0.2162798382516056,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            614
+          ],
+          "response_incoming": [
+            607,
+            0
+          ],
+          "response_surplus": [
+            0,
+            607
+          ],
+          "response_board_sec": [
+            3010.35,
+            3011.616666666667
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3011.05,
+          "p1": 0.3331656228154623,
+          "base_p1": 0.5161950755233383,
+          "gfe_p1": 0.1896006832711335,
+          "incoming": [
+            0,
+            7
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.5822684337085694,
+          "gfe_response_p1": 0.1896006832711335,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            624
+          ],
+          "response_incoming": [
+            617,
+            0
+          ],
+          "response_surplus": [
+            0,
+            617
+          ],
+          "response_board_sec": [
+            3010.35,
+            3010.983333333333
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 3011.1833333333334,
+        "reply": null,
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          10,
+          12
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              3,
+              0
+            ],
+            [
+              1,
+              3,
+              3,
+              3,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              4,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              4,
+              4,
+              3,
+              3,
+              3
+            ],
+            [
+              3,
+              3,
+              3,
+              2,
+              2,
+              1
+            ],
+            [
+              1,
+              1,
+              1,
+              2,
+              1,
+              2
+            ],
+            [
+              2,
+              2,
+              2,
+              1,
+              2,
+              2
+            ],
+            [
+              1,
+              3,
+              4,
+              1,
+              3,
+              3
+            ],
+            [
+              1,
+              1,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              4,
+              3,
+              3,
+              2
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              4,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              3,
+              2,
+              0,
+              3,
+              1,
+              0
+            ],
+            [
+              3,
+              2,
+              2,
+              3,
+              1,
+              0
+            ],
+            [
+              4,
+              4,
+              1,
+              3,
+              1,
+              0
+            ],
+            [
+              4,
+              1,
+              1,
+              2,
+              2,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              2,
+              4,
+              2
+            ],
+            [
+              4,
+              4,
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              1,
+              3,
+              2,
+              3,
+              1,
+              3
+            ],
+            [
+              1,
+              1,
+              3,
+              2,
+              2,
+              3
+            ],
+            [
+              3,
+              3,
+              2,
+              1,
+              2,
+              1
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "TSUMO_FALL"
+        ],
+        "actual_seconds_to_fall": 0.13333333333321207,
+        "observed_time_budget_hands": 1,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 10,
+      "exchange_id": 36,
+      "receiver": "1P",
+      "frames": 32,
+      "first_sec": 3044.5833333333335,
+      "last_sec": 3045.616666666667,
+      "representative": {
+        "t_sec": 3045.116666666667,
+        "game": 50,
+        "game_idx": 10,
+        "exchange_id": 36,
+        "receiver": "1P",
+        "direction": "正→誤",
+        "baseline_p1": 0.3495389086097114,
+        "counter_p1": 0.6278187522399318,
+        "baseline_adv": -11.506185236928982,
+        "counter_adv": 12.286694107989472,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3044.95,
+          "p1": 0.6278187522399318,
+          "base_p1": 0.42022710948896613,
+          "gfe_p1": 0.796989250865426,
+          "incoming": [
+            33,
+            0
+          ],
+          "hands": [
+            3,
+            1
+          ],
+          "required_cancel": [
+            11,
+            0
+          ],
+          "near_future_send": [
+            123.0,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            1,
+            null
+          ],
+          "verified_attack": [
+            true,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.28489839188662314,
+          "gfe_response_p1": 0.796989250865426,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            123,
+            null
+          ],
+          "response_incoming": [
+            0,
+            90
+          ],
+          "response_surplus": [
+            90,
+            0
+          ],
+          "response_board_sec": [
+            3044.95,
+            3043.05
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3043.15,
+          "p1": 0.6838670999548928,
+          "base_p1": 0.584621728756223,
+          "gfe_p1": 0.7687784335919469,
+          "incoming": [
+            4,
+            0
+          ],
+          "hands": [
+            4,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.42643313883380946,
+          "gfe_response_p1": 0.7687784335919469,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            622,
+            null
+          ],
+          "response_incoming": [
+            0,
+            618
+          ],
+          "response_surplus": [
+            618,
+            0
+          ],
+          "response_board_sec": [
+            3043.15,
+            3043.05
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 3044.05,
+        "reply": null,
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          10,
+          9
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              3,
+              0
+            ],
+            [
+              5,
+              3,
+              5,
+              2,
+              1,
+              3
+            ],
+            [
+              5,
+              1,
+              2,
+              1,
+              1,
+              2
+            ],
+            [
+              3,
+              2,
+              2,
+              5,
+              2,
+              2
+            ],
+            [
+              3,
+              1,
+              1,
+              1,
+              3,
+              3
+            ],
+            [
+              5,
+              5,
+              5,
+              2,
+              5,
+              1
+            ],
+            [
+              3,
+              1,
+              2,
+              3,
+              1,
+              1
+            ],
+            [
+              3,
+              3,
+              1,
+              2,
+              2,
+              2
+            ],
+            [
+              1,
+              1,
+              5,
+              5,
+              1,
+              1
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              5,
+              0,
+              2
+            ],
+            [
+              3,
+              2,
+              0,
+              1,
+              0,
+              5
+            ],
+            [
+              3,
+              1,
+              0,
+              1,
+              0,
+              5
+            ],
+            [
+              1,
+              1,
+              3,
+              1,
+              0,
+              1
+            ],
+            [
+              3,
+              2,
+              2,
+              5,
+              5,
+              1
+            ],
+            [
+              3,
+              2,
+              3,
+              5,
+              3,
+              1
+            ],
+            [
+              5,
+              1,
+              2,
+              3,
+              2,
+              3
+            ],
+            [
+              5,
+              5,
+              1,
+              2,
+              2,
+              3
+            ],
+            [
+              1,
+              1,
+              2,
+              1,
+              1,
+              3
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "CHAIN"
+        ],
+        "actual_seconds_to_fall": 0.900000000000091,
+        "observed_time_budget_hands": 2,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 14,
+      "exchange_id": 49,
+      "receiver": "1P",
+      "frames": 61,
+      "first_sec": 3264.383333333333,
+      "last_sec": 3266.383333333333,
+      "representative": {
+        "t_sec": 3265.383333333333,
+        "game": 54,
+        "game_idx": 14,
+        "exchange_id": 49,
+        "receiver": "1P",
+        "direction": "正→誤",
+        "baseline_p1": 0.2291160559953212,
+        "counter_p1": 0.5341760255852578,
+        "baseline_adv": -24.437225118933355,
+        "counter_adv": 2.73845854912999,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3265.1833333333334,
+          "p1": 0.5341760255852578,
+          "base_p1": 0.30469560153394465,
+          "gfe_p1": 0.7500486313743167,
+          "incoming": [
+            34,
+            0
+          ],
+          "hands": [
+            4,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.16776064576893104,
+          "gfe_response_p1": 0.7500486313743167,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            412,
+            null
+          ],
+          "response_incoming": [
+            0,
+            378
+          ],
+          "response_surplus": [
+            378,
+            0
+          ],
+          "response_board_sec": [
+            3265.1833333333334,
+            3264.7833333333333
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3264.25,
+          "p1": 0.5447860951179664,
+          "base_p1": 0.29872311740507884,
+          "gfe_p1": 0.7707652528097729,
+          "incoming": [
+            38,
+            0
+          ],
+          "hands": [
+            6,
+            1
+          ],
+          "required_cancel": [
+            15,
+            0
+          ],
+          "near_future_send": [
+            299.0,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            1,
+            null
+          ],
+          "verified_attack": [
+            true,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            false
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.13797837125837828,
+          "gfe_response_p1": 0.7707652528097729,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            299,
+            null
+          ],
+          "response_incoming": [
+            0,
+            261
+          ],
+          "response_surplus": [
+            261,
+            0
+          ],
+          "response_board_sec": [
+            3264.25,
+            3264.25
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 3266.483333333333,
+        "reply": null,
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          10,
+          7
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              5,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              5,
+              5,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              9,
+              0,
+              4,
+              0
+            ],
+            [
+              9,
+              9,
+              2,
+              4,
+              1,
+              4
+            ],
+            [
+              4,
+              4,
+              4,
+              1,
+              1,
+              5
+            ],
+            [
+              1,
+              1,
+              1,
+              9,
+              5,
+              9
+            ],
+            [
+              5,
+              4,
+              2,
+              4,
+              4,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              2,
+              2,
+              2
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              5,
+              4
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              4,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              1,
+              0
+            ],
+            [
+              2,
+              0,
+              0,
+              2,
+              2,
+              0
+            ],
+            [
+              5,
+              4,
+              2,
+              4,
+              4,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              2,
+              2,
+              2
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              1,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": 2.233333333333121,
+        "observed_time_budget_hands": 4,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "誤→正",
+      "game_idx": 14,
+      "exchange_id": 50,
+      "receiver": "2P",
+      "frames": 71,
+      "first_sec": 3270.5833333333335,
+      "last_sec": 3272.9166666666665,
+      "representative": {
+        "t_sec": 3271.75,
+        "game": 54,
+        "game_idx": 14,
+        "exchange_id": 50,
+        "receiver": "2P",
+        "direction": "誤→正",
+        "baseline_p1": 0.8299280602146021,
+        "counter_p1": 0.38925712824036446,
+        "baseline_adv": 31.694091943744287,
+        "counter_adv": -8.976256289722976,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3271.516666666667,
+          "p1": 0.38925712824036446,
+          "base_p1": 0.6803251179714485,
+          "gfe_p1": 0.16028108659128695,
+          "incoming": [
+            0,
+            33
+          ],
+          "hands": [
+            1,
+            4
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.9179616419795714,
+          "gfe_response_p1": 0.16028108659128695,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            33
+          ],
+          "response_incoming": [
+            0,
+            0
+          ],
+          "response_surplus": [
+            0,
+            0
+          ],
+          "response_board_sec": [
+            3270.95,
+            3271.516666666667
+          ]
+        }
+      },
+      "evidence": {
+        "category": "その他・時刻根拠不足",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3270.5833333333335,
+          "p1": 0.23634995600751216,
+          "base_p1": 0.6994714466221942,
+          "gfe_p1": 0.039529565469012255,
+          "incoming": [
+            0,
+            33
+          ],
+          "hands": [
+            1,
+            6
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.9438514101852982,
+          "gfe_response_p1": 0.039529565469012255,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            70
+          ],
+          "response_incoming": [
+            37,
+            0
+          ],
+          "response_surplus": [
+            0,
+            37
+          ],
+          "response_board_sec": [
+            3270.5833333333335,
+            3270.5833333333335
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": null,
+        "reply": null,
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          12,
+          9
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              5
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              3,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              0,
+              5,
+              0,
+              0,
+              0,
+              2
+            ],
+            [
+              4,
+              4,
+              0,
+              5,
+              5,
+              4
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              4,
+              0,
+              0
+            ],
+            [
+              0,
+              9,
+              0,
+              5,
+              4,
+              0
+            ],
+            [
+              0,
+              5,
+              0,
+              5,
+              1,
+              0
+            ],
+            [
+              0,
+              5,
+              0,
+              5,
+              1,
+              0
+            ],
+            [
+              0,
+              2,
+              0,
+              2,
+              1,
+              2
+            ],
+            [
+              2,
+              4,
+              0,
+              2,
+              2,
+              1
+            ],
+            [
+              5,
+              4,
+              2,
+              4,
+              4,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              2,
+              2,
+              2
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              1,
+              4
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": null,
+        "observed_time_budget_hands": null,
+        "time_budget_overestimate": false,
+        "no_response_cause": "未選択・NF過大・置けないの識別は記録のみでは不能"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 15,
+      "exchange_id": 52,
+      "receiver": "2P",
+      "frames": 51,
+      "first_sec": 3308.25,
+      "last_sec": 3315.1833333333334,
+      "representative": {
+        "t_sec": 3309.0833333333335,
+        "game": 55,
+        "game_idx": 15,
+        "exchange_id": 52,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.5622060852551881,
+        "counter_p1": 0.151358864924284,
+        "baseline_adv": 4.988126033712507,
+        "counter_adv": -34.44334425579707,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3308.7833333333333,
+          "p1": 0.151358864924284,
+          "base_p1": 0.3024298532422975,
+          "gfe_p1": 0.06835660770761756,
+          "incoming": [
+            0,
+            70
+          ],
+          "hands": [
+            1,
+            3
+          ],
+          "required_cancel": [
+            0,
+            60
+          ],
+          "near_future_send": [
+            null,
+            1141.0
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            3
+          ],
+          "verified_attack": [
+            false,
+            true
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.7918304025873215,
+          "gfe_response_p1": 0.06835660770761756,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            1141
+          ],
+          "response_incoming": [
+            1071,
+            0
+          ],
+          "response_surplus": [
+            0,
+            1071
+          ],
+          "response_board_sec": [
+            3306.3166666666666,
+            3308.7833333333333
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3302.65,
+          "p1": 0.2112843013745967,
+          "base_p1": 0.23184074660253573,
+          "gfe_p1": 0.19209472275259787,
+          "incoming": [
+            0,
+            1
+          ],
+          "hands": [
+            1,
+            4
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.3855348846712361,
+          "gfe_response_p1": 0.19209472275259787,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            1019
+          ],
+          "response_incoming": [
+            1018,
+            0
+          ],
+          "response_surplus": [
+            0,
+            1018
+          ],
+          "response_board_sec": [
+            3302.616666666667,
+            3302.65
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 3303.516666666667,
+        "reply": null,
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          13,
+          13
+        ],
+        "confirmed_boards": [
+          [
+            [
+              2,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              3,
+              0,
+              0,
+              0,
+              9,
+              9
+            ],
+            [
+              3,
+              0,
+              3,
+              9,
+              5,
+              4
+            ],
+            [
+              1,
+              1,
+              3,
+              4,
+              4,
+              3
+            ],
+            [
+              3,
+              3,
+              4,
+              5,
+              5,
+              5
+            ],
+            [
+              4,
+              1,
+              5,
+              1,
+              4,
+              3
+            ],
+            [
+              5,
+              1,
+              1,
+              4,
+              3,
+              3
+            ],
+            [
+              3,
+              3,
+              3,
+              5,
+              4,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              1,
+              3,
+              3
+            ],
+            [
+              5,
+              4,
+              4,
+              5,
+              5,
+              4
+            ],
+            [
+              3,
+              5,
+              1,
+              3,
+              4,
+              5
+            ],
+            [
+              3,
+              3,
+              5,
+              1,
+              1,
+              5
+            ],
+            [
+              5,
+              5,
+              1,
+              4,
+              4,
+              3
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              3
+            ],
+            [
+              3,
+              0,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              3,
+              1,
+              4,
+              0,
+              4,
+              4
+            ],
+            [
+              3,
+              1,
+              3,
+              0,
+              5,
+              1
+            ],
+            [
+              4,
+              3,
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              5,
+              4,
+              4,
+              3,
+              5,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              1,
+              1,
+              4
+            ],
+            [
+              5,
+              5,
+              4,
+              1,
+              4,
+              3
+            ],
+            [
+              5,
+              4,
+              4,
+              5,
+              5,
+              3
+            ],
+            [
+              3,
+              5,
+              1,
+              3,
+              3,
+              5
+            ],
+            [
+              3,
+              3,
+              5,
+              1,
+              1,
+              5
+            ],
+            [
+              5,
+              5,
+              1,
+              4,
+              4,
+              3
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "STABLE"
+        ],
+        "actual_seconds_to_fall": 0.8666666666667879,
+        "observed_time_budget_hands": 2,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 16,
+      "exchange_id": 54,
+      "receiver": "1P",
+      "frames": 59,
+      "first_sec": 3348.75,
+      "last_sec": 3353.6833333333334,
+      "representative": {
+        "t_sec": 3349.7166666666667,
+        "game": 56,
+        "game_idx": 16,
+        "exchange_id": 54,
+        "receiver": "1P",
+        "direction": "正→誤",
+        "baseline_p1": 0.2301199210752635,
+        "counter_p1": 0.5221503596416185,
+        "baseline_adv": -24.133837363569477,
+        "counter_adv": 1.7733217467317308,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3348.883333333333,
+          "p1": 0.5221503596416185,
+          "base_p1": 0.3992270858212323,
+          "gfe_p1": 0.642448112051144,
+          "incoming": [
+            24,
+            0
+          ],
+          "hands": [
+            6,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P",
+            "2P"
+          ],
+          "gfe_no_response_p1": 0.11851360956820671,
+          "gfe_response_p1": 0.642448112051144,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            89,
+            null
+          ],
+          "response_incoming": [
+            0,
+            65
+          ],
+          "response_surplus": [
+            65,
+            0
+          ],
+          "response_board_sec": [
+            3348.883333333333,
+            3348.7166666666667
+          ]
+        }
+      },
+      "evidence": {
+        "category": "可能予測だが着弾前の新発火なし",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3348.75,
+          "p1": 0.5448718764629631,
+          "base_p1": 0.3992270858212323,
+          "gfe_p1": 0.6832244696243766,
+          "incoming": [
+            24,
+            0
+          ],
+          "hands": [
+            6,
+            1
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            true,
+            true
+          ],
+          "completion_sides": [
+            "1P",
+            "2P"
+          ],
+          "gfe_no_response_p1": 0.12338085693325099,
+          "gfe_response_p1": 0.6832244696243766,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            89,
+            null
+          ],
+          "response_incoming": [
+            0,
+            65
+          ],
+          "response_surplus": [
+            65,
+            0
+          ],
+          "response_board_sec": [
+            3348.75,
+            3348.7166666666667
+          ]
+        },
+        "receiver": "1P",
+        "landing_sec": 3350.7166666666667,
+        "reply": null,
+        "next_attack": null,
+        "winner": "2P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          11,
+          8
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              9,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              9,
+              0,
+              0,
+              0,
+              5
+            ],
+            [
+              9,
+              9,
+              0,
+              0,
+              1,
+              9
+            ],
+            [
+              9,
+              1,
+              0,
+              0,
+              4,
+              9
+            ],
+            [
+              9,
+              4,
+              3,
+              0,
+              9,
+              9
+            ],
+            [
+              5,
+              4,
+              4,
+              0,
+              9,
+              3
+            ],
+            [
+              1,
+              1,
+              1,
+              9,
+              1,
+              5
+            ],
+            [
+              5,
+              5,
+              5,
+              9,
+              5,
+              5
+            ],
+            [
+              4,
+              3,
+              1,
+              5,
+              4,
+              4
+            ],
+            [
+              4,
+              4,
+              3,
+              1,
+              1,
+              4
+            ],
+            [
+              3,
+              3,
+              1,
+              4,
+              4,
+              5
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0,
+              5
+            ],
+            [
+              0,
+              3,
+              0,
+              4,
+              0,
+              3
+            ],
+            [
+              0,
+              3,
+              0,
+              3,
+              3,
+              3
+            ],
+            [
+              0,
+              3,
+              1,
+              3,
+              3,
+              5
+            ],
+            [
+              3,
+              4,
+              1,
+              3,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              4,
+              1,
+              1,
+              4
+            ],
+            [
+              4,
+              4,
+              1,
+              5,
+              5,
+              5
+            ]
+          ]
+        ],
+        "states": [
+          "STABLE",
+          "CHAIN"
+        ],
+        "actual_seconds_to_fall": 1.966666666666697,
+        "observed_time_budget_hands": 3,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    },
+    {
+      "direction": "正→誤",
+      "game_idx": 17,
+      "exchange_id": 57,
+      "receiver": "2P",
+      "frames": 112,
+      "first_sec": 3393.65,
+      "last_sec": 3407.883333333333,
+      "representative": {
+        "t_sec": 3396.25,
+        "game": 57,
+        "game_idx": 17,
+        "exchange_id": 57,
+        "receiver": "2P",
+        "direction": "正→誤",
+        "baseline_p1": 0.806667341903486,
+        "counter_p1": 0.37968949629713,
+        "baseline_adv": 28.50855285858802,
+        "counter_adv": -9.698981265475851,
+        "projection": {
+          "source": "S3_landing",
+          "t_sec": 3395.983333333333,
+          "p1": 0.37968949629713,
+          "base_p1": 0.6477649625182671,
+          "gfe_p1": 0.1692485977745622,
+          "incoming": [
+            0,
+            139
+          ],
+          "hands": [
+            1,
+            3
+          ],
+          "required_cancel": [
+            0,
+            123
+          ],
+          "near_future_send": [
+            null,
+            773.0
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            2
+          ],
+          "verified_attack": [
+            false,
+            true
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.9044579064310929,
+          "gfe_response_p1": 0.1692485977745622,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            773
+          ],
+          "response_incoming": [
+            634,
+            0
+          ],
+          "response_surplus": [
+            0,
+            634
+          ],
+          "response_board_sec": [
+            3388.2833333333333,
+            3395.983333333333
+          ]
+        }
+      },
+      "evidence": {
+        "category": "実際に着弾前に応手",
+        "decision": {
+          "source": "S3_landing",
+          "t_sec": 3391.05,
+          "p1": 0.23898554958970594,
+          "base_p1": 0.4514551632415685,
+          "gfe_p1": 0.10700498680243692,
+          "incoming": [
+            0,
+            8
+          ],
+          "hands": [
+            1,
+            4
+          ],
+          "required_cancel": [
+            0,
+            0
+          ],
+          "near_future_send": [
+            null,
+            null
+          ],
+          "resolving_send": [
+            0,
+            0
+          ],
+          "dead_sides": [],
+          "overflow_rows": [
+            null,
+            null
+          ],
+          "verified_attack": [
+            false,
+            false
+          ],
+          "rejected_boards": [],
+          "optimistic_send": [
+            null,
+            null
+          ],
+          "completion_certain": [
+            false,
+            true
+          ],
+          "completion_sides": [],
+          "gfe_no_response_p1": 0.8058712994036459,
+          "gfe_response_p1": 0.10700498680243692,
+          "response_selected": true,
+          "response_layer": "prediction",
+          "response_send": [
+            null,
+            455
+          ],
+          "response_incoming": [
+            447,
+            0
+          ],
+          "response_surplus": [
+            0,
+            447
+          ],
+          "response_board_sec": [
+            3388.2833333333333,
+            3390.8166666666666
+          ]
+        },
+        "receiver": "2P",
+        "landing_sec": 3393.15,
+        "reply": {
+          "side": "2P",
+          "chain_id": 7,
+          "trigger_sec": 3391.116666666667,
+          "observed_sec": 3391.116666666667,
+          "end_signal_sec": 3392.983333333333,
+          "score_finalize_sec": 3395.05,
+          "score_delta": 46.0,
+          "end_reason": "next",
+          "end_signals": [
+            {
+              "t_sec": 3392.983333333333,
+              "reason": "next"
+            }
+          ],
+          "score_ready_sec": 3393.2833333333333,
+          "score_ready_reason": "display_stable",
+          "score_before": 630.0,
+          "formula_total": 40,
+          "display_score": 676,
+          "stable_frames": 10,
+          "last_activity_sec": 3391.983333333333,
+          "drop_bonus_score": 24.0,
+          "post_end_drop_sec": 3397.35,
+          "predicted_final_score": 0.0,
+          "predicted_chain_count": 0,
+          "predicted_final_board": null,
+          "end_confirmed": true
+        },
+        "next_attack": null,
+        "winner": "1P",
+        "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+        "max_height": [
+          13,
+          13
+        ],
+        "confirmed_boards": [
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              3
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ],
+            [
+              4,
+              4,
+              0,
+              0,
+              0,
+              4
+            ],
+            [
+              5,
+              1,
+              0,
+              5,
+              0,
+              3
+            ],
+            [
+              5,
+              5,
+              4,
+              1,
+              1,
+              4
+            ],
+            [
+              1,
+              4,
+              4,
+              1,
+              4,
+              4
+            ],
+            [
+              5,
+              5,
+              1,
+              5,
+              1,
+              1
+            ],
+            [
+              5,
+              1,
+              1,
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              4,
+              4,
+              3,
+              1,
+              3
+            ],
+            [
+              5,
+              5,
+              5,
+              1,
+              5,
+              1
+            ],
+            [
+              4,
+              3,
+              1,
+              5,
+              3,
+              3
+            ],
+            [
+              4,
+              4,
+              3,
+              1,
+              1,
+              1
+            ],
+            [
+              3,
+              3,
+              1,
+              3,
+              3,
+              5
+            ]
+          ],
+          [
+            [
+              5,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              5,
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              5,
+              3,
+              0,
+              3,
+              0,
+              0
+            ],
+            [
+              1,
+              4,
+              0,
+              3,
+              0,
+              3
+            ],
+            [
+              3,
+              4,
+              0,
+              3,
+              0,
+              1
+            ],
+            [
+              3,
+              3,
+              4,
+              1,
+              3,
+              5
+            ],
+            [
+              1,
+              1,
+              4,
+              1,
+              3,
+              3
+            ],
+            [
+              1,
+              5,
+              3,
+              4,
+              1,
+              1
+            ],
+            [
+              5,
+              5,
+              3,
+              5,
+              4,
+              1
+            ],
+            [
+              4,
+              1,
+              3,
+              5,
+              4,
+              4
+            ],
+            [
+              4,
+              4,
+              1,
+              1,
+              5,
+              5
+            ],
+            [
+              3,
+              3,
+              1,
+              3,
+              3,
+              3
+            ]
+          ]
+        ],
+        "states": [
+          "CHAIN",
+          "OJAMA_FALL"
+        ],
+        "actual_seconds_to_fall": 2.099999999999909,
+        "observed_time_budget_hands": 3,
+        "time_budget_overestimate": true,
+        "no_response_cause": "手数過大の時間的証拠あり"
+      }
+    }
+  ],
+  "representatives": {
+    "正→誤": [
+      {
+        "direction": "正→誤",
+        "game_idx": 8,
+        "exchange_id": 30,
+        "receiver": "2P",
+        "frames": 137,
+        "first_sec": 2974.2166666666667,
+        "last_sec": 2979.1833333333334,
+        "representative": {
+          "t_sec": 2976.9166666666665,
+          "game": 48,
+          "game_idx": 8,
+          "exchange_id": 30,
+          "receiver": "2P",
+          "direction": "正→誤",
+          "baseline_p1": 0.585536729481483,
+          "counter_p1": 0.29069692887161747,
+          "baseline_adv": 7.249401737704983,
+          "counter_adv": -17.130723627530454,
+          "projection": {
+            "source": "S3_landing",
+            "t_sec": 2976.883333333333,
+            "p1": 0.29069692887161747,
+            "base_p1": 0.5225066505774634,
+            "gfe_p1": 0.13306909318371413,
+            "incoming": [
+              0,
+              14
+            ],
+            "hands": [
+              3,
+              1
+            ],
+            "required_cancel": [
+              0,
+              4
+            ],
+            "near_future_send": [
+              null,
+              1038.0
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              0
+            ],
+            "verified_attack": [
+              false,
+              true
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              true,
+              true
+            ],
+            "completion_sides": [
+              "2P"
+            ],
+            "gfe_no_response_p1": 0.6458854293277657,
+            "gfe_response_p1": 0.13306909318371413,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              1038
+            ],
+            "response_incoming": [
+              1024,
+              0
+            ],
+            "response_surplus": [
+              0,
+              1024
+            ],
+            "response_board_sec": [
+              2976.883333333333,
+              2976.1833333333334
+            ]
+          }
+        },
+        "evidence": {
+          "category": "可能予測だが着弾前の新発火なし",
+          "decision": {
+            "source": "S3_landing",
+            "t_sec": 2974.15,
+            "p1": 0.5059556857135127,
+            "base_p1": 0.6635146598791851,
+            "gfe_p1": 0.34720480371895823,
+            "incoming": [
+              0,
+              14
+            ],
+            "hands": [
+              1,
+              6
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              true,
+              true
+            ],
+            "completion_sides": [
+              "1P"
+            ],
+            "gfe_no_response_p1": 0.7550495375603916,
+            "gfe_response_p1": 0.34720480371895823,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              315
+            ],
+            "response_incoming": [
+              301,
+              0
+            ],
+            "response_surplus": [
+              0,
+              301
+            ],
+            "response_board_sec": [
+              2974.116666666667,
+              2974.05
+            ]
+          },
+          "receiver": "2P",
+          "landing_sec": 2974.883333333333,
+          "reply": null,
+          "next_attack": null,
+          "winner": "1P",
+          "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+          "max_height": [
+            12,
+            11
+          ],
+          "confirmed_boards": [
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                5,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                4,
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                4,
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                5,
+                4,
+                1,
+                5,
+                4,
+                0
+              ],
+              [
+                2,
+                4,
+                1,
+                1,
+                1,
+                1
+              ],
+              [
+                2,
+                4,
+                5,
+                5,
+                4,
+                4
+              ],
+              [
+                4,
+                2,
+                5,
+                2,
+                1,
+                4
+              ],
+              [
+                4,
+                4,
+                2,
+                1,
+                5,
+                1
+              ],
+              [
+                1,
+                1,
+                1,
+                5,
+                1,
+                1
+              ],
+              [
+                2,
+                4,
+                4,
+                2,
+                4,
+                5
+              ],
+              [
+                2,
+                2,
+                5,
+                2,
+                2,
+                5
+              ],
+              [
+                5,
+                5,
+                2,
+                1,
+                4,
+                4
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                4,
+                0,
+                0
+              ],
+              [
+                5,
+                0,
+                1,
+                5,
+                0,
+                0
+              ],
+              [
+                5,
+                1,
+                5,
+                1,
+                0,
+                0
+              ],
+              [
+                4,
+                2,
+                1,
+                5,
+                1,
+                4
+              ],
+              [
+                4,
+                1,
+                1,
+                5,
+                4,
+                1
+              ],
+              [
+                2,
+                2,
+                4,
+                1,
+                4,
+                1
+              ],
+              [
+                2,
+                4,
+                4,
+                5,
+                4,
+                5
+              ],
+              [
+                4,
+                2,
+                1,
+                4,
+                2,
+                5
+              ],
+              [
+                4,
+                2,
+                1,
+                4,
+                1,
+                2
+              ],
+              [
+                5,
+                5,
+                2,
+                1,
+                4,
+                2
+              ],
+              [
+                5,
+                2,
+                1,
+                4,
+                5,
+                2
+              ]
+            ]
+          ],
+          "states": [
+            "CHAIN",
+            "TSUMO_FALL"
+          ],
+          "actual_seconds_to_fall": 0.7333333333331211,
+          "observed_time_budget_hands": 2,
+          "time_budget_overestimate": true,
+          "no_response_cause": "手数過大の時間的証拠あり"
+        }
+      },
+      {
+        "direction": "正→誤",
+        "game_idx": 17,
+        "exchange_id": 57,
+        "receiver": "2P",
+        "frames": 112,
+        "first_sec": 3393.65,
+        "last_sec": 3407.883333333333,
+        "representative": {
+          "t_sec": 3396.25,
+          "game": 57,
+          "game_idx": 17,
+          "exchange_id": 57,
+          "receiver": "2P",
+          "direction": "正→誤",
+          "baseline_p1": 0.806667341903486,
+          "counter_p1": 0.37968949629713,
+          "baseline_adv": 28.50855285858802,
+          "counter_adv": -9.698981265475851,
+          "projection": {
+            "source": "S3_landing",
+            "t_sec": 3395.983333333333,
+            "p1": 0.37968949629713,
+            "base_p1": 0.6477649625182671,
+            "gfe_p1": 0.1692485977745622,
+            "incoming": [
+              0,
+              139
+            ],
+            "hands": [
+              1,
+              3
+            ],
+            "required_cancel": [
+              0,
+              123
+            ],
+            "near_future_send": [
+              null,
+              773.0
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              2
+            ],
+            "verified_attack": [
+              false,
+              true
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.9044579064310929,
+            "gfe_response_p1": 0.1692485977745622,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              773
+            ],
+            "response_incoming": [
+              634,
+              0
+            ],
+            "response_surplus": [
+              0,
+              634
+            ],
+            "response_board_sec": [
+              3388.2833333333333,
+              3395.983333333333
+            ]
+          }
+        },
+        "evidence": {
+          "category": "実際に着弾前に応手",
+          "decision": {
+            "source": "S3_landing",
+            "t_sec": 3391.05,
+            "p1": 0.23898554958970594,
+            "base_p1": 0.4514551632415685,
+            "gfe_p1": 0.10700498680243692,
+            "incoming": [
+              0,
+              8
+            ],
+            "hands": [
+              1,
+              4
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.8058712994036459,
+            "gfe_response_p1": 0.10700498680243692,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              455
+            ],
+            "response_incoming": [
+              447,
+              0
+            ],
+            "response_surplus": [
+              0,
+              447
+            ],
+            "response_board_sec": [
+              3388.2833333333333,
+              3390.8166666666666
+            ]
+          },
+          "receiver": "2P",
+          "landing_sec": 3393.15,
+          "reply": {
+            "side": "2P",
+            "chain_id": 7,
+            "trigger_sec": 3391.116666666667,
+            "observed_sec": 3391.116666666667,
+            "end_signal_sec": 3392.983333333333,
+            "score_finalize_sec": 3395.05,
+            "score_delta": 46.0,
+            "end_reason": "next",
+            "end_signals": [
+              {
+                "t_sec": 3392.983333333333,
+                "reason": "next"
+              }
+            ],
+            "score_ready_sec": 3393.2833333333333,
+            "score_ready_reason": "display_stable",
+            "score_before": 630.0,
+            "formula_total": 40,
+            "display_score": 676,
+            "stable_frames": 10,
+            "last_activity_sec": 3391.983333333333,
+            "drop_bonus_score": 24.0,
+            "post_end_drop_sec": 3397.35,
+            "predicted_final_score": 0.0,
+            "predicted_chain_count": 0,
+            "predicted_final_board": null,
+            "end_confirmed": true
+          },
+          "next_attack": null,
+          "winner": "1P",
+          "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+          "max_height": [
+            13,
+            13
+          ],
+          "confirmed_boards": [
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                3
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                4,
+                4,
+                0,
+                0,
+                0,
+                4
+              ],
+              [
+                5,
+                1,
+                0,
+                5,
+                0,
+                3
+              ],
+              [
+                5,
+                5,
+                4,
+                1,
+                1,
+                4
+              ],
+              [
+                1,
+                4,
+                4,
+                1,
+                4,
+                4
+              ],
+              [
+                5,
+                5,
+                1,
+                5,
+                1,
+                1
+              ],
+              [
+                5,
+                1,
+                1,
+                4,
+                3,
+                3
+              ],
+              [
+                4,
+                4,
+                4,
+                3,
+                1,
+                3
+              ],
+              [
+                5,
+                5,
+                5,
+                1,
+                5,
+                1
+              ],
+              [
+                4,
+                3,
+                1,
+                5,
+                3,
+                3
+              ],
+              [
+                4,
+                4,
+                3,
+                1,
+                1,
+                1
+              ],
+              [
+                3,
+                3,
+                1,
+                3,
+                3,
+                5
+              ]
+            ],
+            [
+              [
+                5,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                4,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                5,
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                5,
+                3,
+                0,
+                3,
+                0,
+                0
+              ],
+              [
+                1,
+                4,
+                0,
+                3,
+                0,
+                3
+              ],
+              [
+                3,
+                4,
+                0,
+                3,
+                0,
+                1
+              ],
+              [
+                3,
+                3,
+                4,
+                1,
+                3,
+                5
+              ],
+              [
+                1,
+                1,
+                4,
+                1,
+                3,
+                3
+              ],
+              [
+                1,
+                5,
+                3,
+                4,
+                1,
+                1
+              ],
+              [
+                5,
+                5,
+                3,
+                5,
+                4,
+                1
+              ],
+              [
+                4,
+                1,
+                3,
+                5,
+                4,
+                4
+              ],
+              [
+                4,
+                4,
+                1,
+                1,
+                5,
+                5
+              ],
+              [
+                3,
+                3,
+                1,
+                3,
+                3,
+                3
+              ]
+            ]
+          ],
+          "states": [
+            "CHAIN",
+            "OJAMA_FALL"
+          ],
+          "actual_seconds_to_fall": 2.099999999999909,
+          "observed_time_budget_hands": 3,
+          "time_budget_overestimate": true,
+          "no_response_cause": "手数過大の時間的証拠あり"
+        }
+      },
+      {
+        "direction": "正→誤",
+        "game_idx": 2,
+        "exchange_id": 10,
+        "receiver": "2P",
+        "frames": 66,
+        "first_sec": 2686.483333333333,
+        "last_sec": 2688.8166666666666,
+        "representative": {
+          "t_sec": 2687.5833333333335,
+          "game": 42,
+          "game_idx": 2,
+          "exchange_id": 10,
+          "receiver": "2P",
+          "direction": "正→誤",
+          "baseline_p1": 0.5901029557985427,
+          "counter_p1": 0.19677329611103397,
+          "baseline_adv": 7.343599496755872,
+          "counter_adv": -28.076174279365233,
+          "projection": {
+            "source": "S3_landing",
+            "t_sec": 2687.45,
+            "p1": 0.19677329611103397,
+            "base_p1": 0.3549479572056193,
+            "gfe_p1": 0.0983397381548988,
+            "incoming": [
+              0,
+              13
+            ],
+            "hands": [
+              1,
+              6
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.7902017327452312,
+            "gfe_response_p1": 0.0983397381548988,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              338
+            ],
+            "response_incoming": [
+              325,
+              0
+            ],
+            "response_surplus": [
+              0,
+              325
+            ],
+            "response_board_sec": [
+              2685.116666666667,
+              2687.4166666666665
+            ]
+          }
+        },
+        "evidence": {
+          "category": "応手後に相手の次撃・敗北",
+          "decision": {
+            "source": "S3_landing",
+            "t_sec": 2682.7166666666667,
+            "p1": 0.2672543806549649,
+            "base_p1": 0.33765062585923783,
+            "gfe_p1": 0.20694921158192206,
+            "incoming": [
+              0,
+              5
+            ],
+            "hands": [
+              1,
+              4
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.5842576959946465,
+            "gfe_response_p1": 0.20694921158192206,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              238
+            ],
+            "response_incoming": [
+              233,
+              0
+            ],
+            "response_surplus": [
+              0,
+              233
+            ],
+            "response_board_sec": [
+              2681.35,
+              2682.616666666667
+            ]
+          },
+          "receiver": "2P",
+          "landing_sec": 2684.1833333333334,
+          "reply": {
+            "side": "2P",
+            "chain_id": 9,
+            "trigger_sec": 2682.9166666666665,
+            "observed_sec": 2682.9166666666665,
+            "end_signal_sec": 2685.75,
+            "score_finalize_sec": 2686.5833333333335,
+            "score_delta": 540,
+            "end_reason": "next",
+            "end_signals": [
+              {
+                "t_sec": 2684.2166666666667,
+                "reason": "ojama",
+                "revoked_sec": 2684.25
+              },
+              {
+                "t_sec": 2685.75,
+                "reason": "next"
+              }
+            ],
+            "score_ready_sec": 2685.75,
+            "score_ready_reason": "formula_match",
+            "score_before": 1661.0,
+            "formula_total": 540,
+            "display_score": 2201,
+            "stable_frames": 1,
+            "last_activity_sec": 2685.15,
+            "drop_bonus_score": 6.0,
+            "post_end_drop_sec": 2691.516666666667,
+            "predicted_final_score": 0.0,
+            "predicted_chain_count": 0,
+            "predicted_final_board": null,
+            "end_confirmed": true
+          },
+          "next_attack": {
+            "side": "1P",
+            "chain_id": 10,
+            "trigger_sec": 2685.15,
+            "observed_sec": 2685.15,
+            "end_signal_sec": 2688.016666666667,
+            "score_finalize_sec": 2688.4166666666665,
+            "score_delta": 700.0,
+            "end_reason": "next",
+            "end_signals": [
+              {
+                "t_sec": 2688.016666666667,
+                "reason": "next"
+              }
+            ],
+            "score_ready_sec": 2688.3166666666666,
+            "score_ready_reason": "display_stable",
+            "score_before": 1367.0,
+            "formula_total": 1060,
+            "display_score": 2067,
+            "stable_frames": 10,
+            "last_activity_sec": 2687.45,
+            "drop_bonus_score": 4.0,
+            "post_end_drop_sec": 2689.7166666666667,
+            "predicted_final_score": 0.0,
+            "predicted_chain_count": 0,
+            "predicted_final_board": null,
+            "end_confirmed": true
+          },
+          "winner": "1P",
+          "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+          "max_height": [
+            13,
+            13
+          ],
+          "confirmed_boards": [
+            [
+              [
+                0,
+                0,
+                0,
+                3,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                4,
+                4,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                4,
+                4
+              ],
+              [
+                9,
+                0,
+                0,
+                1,
+                5,
+                1
+              ],
+              [
+                1,
+                3,
+                4,
+                1,
+                5,
+                4
+              ],
+              [
+                5,
+                5,
+                4,
+                5,
+                4,
+                3
+              ],
+              [
+                3,
+                3,
+                3,
+                9,
+                3,
+                4
+              ],
+              [
+                5,
+                5,
+                5,
+                4,
+                5,
+                5
+              ],
+              [
+                1,
+                1,
+                1,
+                5,
+                4,
+                4
+              ],
+              [
+                3,
+                3,
+                3,
+                5,
+                3,
+                3
+              ],
+              [
+                4,
+                1,
+                4,
+                3,
+                5,
+                3
+              ],
+              [
+                4,
+                4,
+                1,
+                4,
+                4,
+                4
+              ],
+              [
+                1,
+                1,
+                4,
+                5,
+                5,
+                5
+              ]
+            ],
+            [
+              [
+                0,
+                5,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                9,
+                1,
+                0,
+                0,
+                0,
+                4
+              ],
+              [
+                5,
+                5,
+                0,
+                0,
+                5,
+                4
+              ],
+              [
+                4,
+                5,
+                0,
+                1,
+                1,
+                5
+              ],
+              [
+                4,
+                3,
+                5,
+                4,
+                4,
+                1
+              ],
+              [
+                1,
+                5,
+                5,
+                4,
+                3,
+                1
+              ],
+              [
+                3,
+                3,
+                3,
+                5,
+                5,
+                1
+              ],
+              [
+                1,
+                1,
+                4,
+                5,
+                1,
+                4
+              ],
+              [
+                1,
+                4,
+                4,
+                3,
+                3,
+                4
+              ],
+              [
+                5,
+                5,
+                5,
+                3,
+                5,
+                3
+              ],
+              [
+                1,
+                4,
+                3,
+                5,
+                5,
+                4
+              ],
+              [
+                1,
+                1,
+                4,
+                3,
+                3,
+                5
+              ],
+              [
+                4,
+                4,
+                3,
+                5,
+                4,
+                4
+              ]
+            ]
+          ],
+          "states": [
+            "CHAIN",
+            "OJAMA_FALL"
+          ],
+          "actual_seconds_to_fall": 1.466666666666697,
+          "observed_time_budget_hands": 3,
+          "time_budget_overestimate": true,
+          "no_response_cause": "手数過大の時間的証拠あり"
+        }
+      }
+    ],
+    "誤→正": [
+      {
+        "direction": "誤→正",
+        "game_idx": 14,
+        "exchange_id": 50,
+        "receiver": "2P",
+        "frames": 71,
+        "first_sec": 3270.5833333333335,
+        "last_sec": 3272.9166666666665,
+        "representative": {
+          "t_sec": 3271.75,
+          "game": 54,
+          "game_idx": 14,
+          "exchange_id": 50,
+          "receiver": "2P",
+          "direction": "誤→正",
+          "baseline_p1": 0.8299280602146021,
+          "counter_p1": 0.38925712824036446,
+          "baseline_adv": 31.694091943744287,
+          "counter_adv": -8.976256289722976,
+          "projection": {
+            "source": "S3_landing",
+            "t_sec": 3271.516666666667,
+            "p1": 0.38925712824036446,
+            "base_p1": 0.6803251179714485,
+            "gfe_p1": 0.16028108659128695,
+            "incoming": [
+              0,
+              33
+            ],
+            "hands": [
+              1,
+              4
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.9179616419795714,
+            "gfe_response_p1": 0.16028108659128695,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              33
+            ],
+            "response_incoming": [
+              0,
+              0
+            ],
+            "response_surplus": [
+              0,
+              0
+            ],
+            "response_board_sec": [
+              3270.95,
+              3271.516666666667
+            ]
+          }
+        },
+        "evidence": {
+          "category": "その他・時刻根拠不足",
+          "decision": {
+            "source": "S3_landing",
+            "t_sec": 3270.5833333333335,
+            "p1": 0.23634995600751216,
+            "base_p1": 0.6994714466221942,
+            "gfe_p1": 0.039529565469012255,
+            "incoming": [
+              0,
+              33
+            ],
+            "hands": [
+              1,
+              6
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              false,
+              true
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.9438514101852982,
+            "gfe_response_p1": 0.039529565469012255,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              null,
+              70
+            ],
+            "response_incoming": [
+              37,
+              0
+            ],
+            "response_surplus": [
+              0,
+              37
+            ],
+            "response_board_sec": [
+              3270.5833333333335,
+              3270.5833333333335
+            ]
+          },
+          "receiver": "2P",
+          "landing_sec": null,
+          "reply": null,
+          "next_attack": null,
+          "winner": "2P",
+          "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+          "max_height": [
+            12,
+            9
+          ],
+          "confirmed_boards": [
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                5
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                3,
+                0,
+                0,
+                0,
+                4
+              ],
+              [
+                0,
+                5,
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                4,
+                4,
+                0,
+                5,
+                5,
+                4
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                4,
+                0,
+                0
+              ],
+              [
+                0,
+                9,
+                0,
+                5,
+                4,
+                0
+              ],
+              [
+                0,
+                5,
+                0,
+                5,
+                1,
+                0
+              ],
+              [
+                0,
+                5,
+                0,
+                5,
+                1,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                2,
+                1,
+                2
+              ],
+              [
+                2,
+                4,
+                0,
+                2,
+                2,
+                1
+              ],
+              [
+                5,
+                4,
+                2,
+                4,
+                4,
+                4
+              ],
+              [
+                5,
+                5,
+                4,
+                2,
+                2,
+                2
+              ],
+              [
+                4,
+                4,
+                1,
+                5,
+                1,
+                4
+              ]
+            ]
+          ],
+          "states": [
+            "STABLE",
+            "STABLE"
+          ],
+          "actual_seconds_to_fall": null,
+          "observed_time_budget_hands": null,
+          "time_budget_overestimate": false,
+          "no_response_cause": "未選択・NF過大・置けないの識別は記録のみでは不能"
+        }
+      },
+      {
+        "direction": "誤→正",
+        "game_idx": 5,
+        "exchange_id": 23,
+        "receiver": "1P",
+        "frames": 9,
+        "first_sec": 2848.116666666667,
+        "last_sec": 2848.383333333333,
+        "representative": {
+          "t_sec": 2848.25,
+          "game": 45,
+          "game_idx": 5,
+          "exchange_id": 23,
+          "receiver": "1P",
+          "direction": "誤→正",
+          "baseline_p1": 0.17338693510697534,
+          "counter_p1": 0.6699751513210724,
+          "baseline_adv": -31.034256330924894,
+          "counter_adv": 14.351756781118622,
+          "projection": {
+            "source": "S3_landing",
+            "t_sec": 2847.983333333333,
+            "p1": 0.6699751513210724,
+            "base_p1": 0.31742714557275215,
+            "gfe_p1": 0.8986001257415107,
+            "incoming": [
+              212,
+              0
+            ],
+            "hands": [
+              3,
+              1
+            ],
+            "required_cancel": [
+              185,
+              0
+            ],
+            "near_future_send": [
+              582.0,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              0,
+              null
+            ],
+            "verified_attack": [
+              true,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              true,
+              false
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.08643190446341457,
+            "gfe_response_p1": 0.8986001257415107,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              582,
+              null
+            ],
+            "response_incoming": [
+              0,
+              370
+            ],
+            "response_surplus": [
+              370,
+              0
+            ],
+            "response_board_sec": [
+              2847.983333333333,
+              2844.516666666667
+            ]
+          }
+        },
+        "evidence": {
+          "category": "可能予測だが着弾前の新発火なし",
+          "decision": {
+            "source": "S3_landing",
+            "t_sec": 2843.15,
+            "p1": 0.6326780154842623,
+            "base_p1": 0.44036691169467523,
+            "gfe_p1": 0.790363642189501,
+            "incoming": [
+              11,
+              0
+            ],
+            "hands": [
+              4,
+              1
+            ],
+            "required_cancel": [
+              0,
+              0
+            ],
+            "near_future_send": [
+              null,
+              null
+            ],
+            "resolving_send": [
+              0,
+              0
+            ],
+            "dead_sides": [],
+            "overflow_rows": [
+              null,
+              null
+            ],
+            "verified_attack": [
+              false,
+              false
+            ],
+            "rejected_boards": [],
+            "optimistic_send": [
+              null,
+              null
+            ],
+            "completion_certain": [
+              true,
+              false
+            ],
+            "completion_sides": [],
+            "gfe_no_response_p1": 0.24409344441138503,
+            "gfe_response_p1": 0.790363642189501,
+            "response_selected": true,
+            "response_layer": "prediction",
+            "response_send": [
+              664,
+              null
+            ],
+            "response_incoming": [
+              0,
+              653
+            ],
+            "response_surplus": [
+              653,
+              0
+            ],
+            "response_board_sec": [
+              2843.15,
+              2840.35
+            ]
+          },
+          "receiver": "1P",
+          "landing_sec": 2844.016666666667,
+          "reply": null,
+          "next_attack": null,
+          "winner": "1P",
+          "reason": "着弾未観測は負例にしない。次撃後の敗北は時間順の分類で因果確定ではない",
+          "max_height": [
+            11,
+            11
+          ],
+          "confirmed_boards": [
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                2,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                1,
+                3,
+                0
+              ],
+              [
+                5,
+                2,
+                0,
+                1,
+                3,
+                3
+              ],
+              [
+                1,
+                9,
+                0,
+                3,
+                9,
+                1
+              ],
+              [
+                3,
+                1,
+                1,
+                3,
+                3,
+                9
+              ],
+              [
+                3,
+                1,
+                9,
+                9,
+                1,
+                9
+              ],
+              [
+                2,
+                2,
+                2,
+                1,
+                5,
+                5
+              ],
+              [
+                3,
+                3,
+                3,
+                5,
+                1,
+                5
+              ],
+              [
+                1,
+                2,
+                5,
+                3,
+                1,
+                3
+              ],
+              [
+                1,
+                1,
+                2,
+                5,
+                5,
+                1
+              ],
+              [
+                2,
+                2,
+                5,
+                3,
+                3,
+                1
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                3,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                2,
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                0,
+                1,
+                0,
+                0,
+                2,
+                5
+              ],
+              [
+                0,
+                3,
+                0,
+                3,
+                2,
+                5
+              ],
+              [
+                0,
+                2,
+                0,
+                2,
+                3,
+                5
+              ],
+              [
+                3,
+                2,
+                2,
+                5,
+                5,
+                2
+              ],
+              [
+                3,
+                3,
+                1,
+                3,
+                5,
+                3
+              ],
+              [
+                1,
+                9,
+                3,
+                5,
+                1,
+                9
+              ],
+              [
+                3,
+                1,
+                5,
+                3,
+                1,
+                3
+              ],
+              [
+                1,
+                1,
+                2,
+                5,
+                5,
+                1
+              ],
+              [
+                2,
+                2,
+                5,
+                3,
+                3,
+                1
+              ]
+            ]
+          ],
+          "states": [
+            "STABLE",
+            "CHAIN"
+          ],
+          "actual_seconds_to_fall": 0.8666666666667879,
+          "observed_time_budget_hands": 2,
+          "time_budget_overestimate": true,
+          "no_response_cause": "手数過大の時間的証拠あり"
+        }
+      }
+    ]
+  },
+  "note": "同一撃ち合いで受け側・分類が変わる場合は件数が重複する"
+}

@@ -11,6 +11,15 @@ SIDES = ("1P", "2P")
 TEMPLATE = Path("models/ui_templates/match_end_batan.png")
 
 
+def confirmed_winner_probability(dead_sides: set[str]) -> float | None:
+    """既存episodeの片側死亡確定方向を、勝者の確定確率へ変換する。"""
+    from src.exchange_ledger import PhysicalContext
+    from src.live_exchange_episode_tracker import LiveExchangeEpisodeTracker
+    context = PhysicalContext(p1_dead="1P" in dead_sides, p2_dead="2P" in dead_sides)
+    target = LiveExchangeEpisodeTracker._active_only_death_target(context)
+    return None if target is None else float(target > 0)
+
+
 class ObservedDeathDetector:
     """既存ばたんきゅーテンプレートを両側へ適用し、連続観測だけを公開する。"""
     def __init__(self) -> None:

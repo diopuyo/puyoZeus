@@ -1,0 +1,28 @@
+{
+  "baseline": "E15+② / 75b0cbd / logs/e17/combined",
+  "counter_probability": {
+    "q_log_loss_max": 0.5313,
+    "zenchi_agreement_min": 0.8010,
+    "false_fire_max": 1,
+    "false_fire_denominator": 28,
+    "scene_seconds": [2612.0, 2614.08],
+    "scene_mean_min_exclusive": 0.270,
+    "scene_rows": 62,
+    "half_rows": 31,
+    "scene_rise": "前半31行平均 < 後半31行平均",
+    "model": "ロジスティック回帰、動画単位15fold、評価動画の学習混入禁止",
+    "label": "予測時点で応手量>=受け量の機会に、受け側が実際に着弾前に新しく発火したか",
+    "censoring": "着弾時刻の根拠がない例を負例として扱わない",
+    "blend": "応手確率×応手ありG_fe + (1−応手確率)×応手なしG_fe。その後は既存S3との合成",
+    "default": false
+  },
+  "confirmed_death_hold": {
+    "q_log_loss_max": 0.5292656906989881,
+    "zenchi_agreement_min": 0.8040321612864515,
+    "false_fire_max": 1,
+    "false_fire_denominator": 28,
+    "default": false
+  },
+  "order": "失敗・改善分類を保存するまで評価器を修正しない",
+  "protected": "src/production_config.py"
+}

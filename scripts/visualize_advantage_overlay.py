@@ -6364,6 +6364,8 @@ def _exchange_display(overlay: ExchangeEventOverlay, adv: float,
     if value is None:
         return adv, probability
     converted = max(-100.0, min(100.0, _winprob_to_adv(value)))
+    if getattr(overlay.tracker, "source", None) == "confirmed_death":
+        return converted, value  # 決着ホールド同様、EMAの内部状態を汚さず確定値を直接表示。
     return smoothing.apply(converted, value, t_sec) if smoothing else (converted, value)
 
 
@@ -6448,6 +6450,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              exchange_event_e16: bool = False,
              exchange_event_death_guard: bool = False,
              landing_counter_response: bool = False,
+             confirmed_death_hold: bool = False,
+             landing_counter_prob: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7025,7 +7029,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     event_overlay: ExchangeEventOverlay | None = None
     event_recorder = None
     terminal_detector = None
-    if exchange_event_e16 or exchange_event_death_guard:
+    if exchange_event_e16 or exchange_event_death_guard or confirmed_death_hold:
         from src.exchange_event_terminal import ObservedDeathDetector
         terminal_detector = ObservedDeathDetector()
     if exchange_event_record_path is not None:
@@ -7044,7 +7048,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              else _exchange_static_input), _ExchangeEventEndSignals, exchange_event_m0_predictor,
             per_side_settled=enable_per_side_settled, live_count=exchange_event_live_count,
             e16=exchange_event_e16, death_guard=exchange_event_death_guard,
-            landing_counter_response=landing_counter_response)
+            landing_counter_response=landing_counter_response, confirmed_death_hold=confirmed_death_hold,
+            landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -8298,6 +8303,10 @@ def main() -> None:
                     help="E17②: 観測された窒息後の発火を拒否する")
     ap.add_argument("--landing-counter-response", action="store_true", default=False,
                     help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
+    ap.add_argument("--confirmed-death-hold", action="store_true", default=False,
+                    help="E19: 観測死亡が確定したら勝者側の確定表示を試合境界まで保持する")
+    ap.add_argument("--landing-counter-prob", action="store_true", default=False,
+                    help="E19: ロジスティック回帰の応手確率で仮想着弾G_feを合成する")
     ap.add_argument("--exchange-event-model-dir", type=Path,
                     default=Path("models/exchange_event_v1"))
     ap.add_argument("--dump-exchange-events", type=Path, default=None,
@@ -8957,6 +8966,8 @@ def main() -> None:
               exchange_event_e16=a.exchange_event_e16,
               exchange_event_death_guard=a.exchange_event_death_guard,
               landing_counter_response=a.landing_counter_response,
+              confirmed_death_hold=a.confirmed_death_hold,
+              landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,
              exchange_event_record_path=a.exchange_event_record,
              review_data_panel=a.review_data_panel,

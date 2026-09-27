@@ -52,7 +52,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            live_count: bool = False, observer: Any = None, e16: bool = False,
            count_sync: bool = False, death_guard: bool = False,
            evaluation_layers: bool = False, completion_check: bool = False,
-           landing_counter_response: bool = False) -> dict:
+           landing_counter_response: bool = False, confirmed_death_hold: bool = False,
+           landing_counter_prob: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -69,13 +70,14 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         static_builder(record), _ExchangeEventEndSignals, FileM0Predictor(directory / "M0"),
         per_side_settled=header["per_side_settled"], live_count=live_count, e16=e16,
         count_sync=count_sync, death_guard=death_guard, evaluation_layers=evaluation_layers,
-        completion_check=completion_check, landing_counter_response=landing_counter_response)
+        completion_check=completion_check, landing_counter_response=landing_counter_response,
+        confirmed_death_hold=confirmed_death_hold, landing_counter_prob=landing_counter_prob)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
         if item["kind"] == "update":
             inputs = item["args"]
-            if (e16 or death_guard or evaluation_layers or completion_check) and not getattr(
+            if (e16 or death_guard or evaluation_layers or completion_check or confirmed_death_hold) and not getattr(
                     inputs[0], "terminal_evidence_available", False):
                 raise ValueError("E16/E17再生には元映像の死亡確認信号を補完した記録が必要")
             overlay.update(*inputs)
@@ -128,6 +130,8 @@ def main() -> None:
     parser.add_argument("--exchange-event-live-count", action="store_true", default=False)
     parser.add_argument("--exchange-event-e16", action="store_true", default=False)
     parser.add_argument("--landing-counter-response", action="store_true", default=False)
+    parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
+    parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
         parser.add_argument("--exchange-event-" + name, action="store_true", default=False)
     parser.add_argument("--compare", type=Path)
@@ -137,7 +141,9 @@ def main() -> None:
                     death_guard=options.exchange_event_death_guard,
                     evaluation_layers=options.exchange_event_evaluation_layers,
                     completion_check=options.exchange_event_completion_check,
-                    landing_counter_response=options.landing_counter_response)
+                    landing_counter_response=options.landing_counter_response,
+                    confirmed_death_hold=options.confirmed_death_hold,
+                    landing_counter_prob=options.landing_counter_prob)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))
