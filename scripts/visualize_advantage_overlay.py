@@ -7108,7 +7108,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         canvas_size = ((PANEL_CANVAS_W, PANEL_CANVAS_H) if layout == "panel"
                        else (OUT_W, CANVAS_H))
         if review_data_panel:
-            canvas_size = panel_size(*canvas_size)
+            graph_height = (panel_layout_regions(subtitle_h=panel_subtitle_h)["graph"][3]
+                            if layout == "panel" else GRAPH_H)
+            canvas_size = panel_size(canvas_size[0], canvas_size[1] + graph_height)
         # stride 間引き後は書き出しフレーム数が 1/stride になるため、出力fps も
         # effective_fps (= fps/stride) にして再生時間 (実時間) を保つ
         # (normalize_fps_30=False/30fps以下入力なら stride=1 で fps と同値、
@@ -8179,6 +8181,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                                       history, t_rel, graph_total,
                                       ukey1=ukey1, ukey2=ukey2, sat1=sat1, sat2=sat2)
         if review_data_panel:
+            from scripts.review_data_panel import expand_review_graph
+            graph_region = (panel_layout_regions(subtitle_h=panel_subtitle_h)["graph"]
+                            if layout == "panel" else (0, TOP_H + OUT_H, OUT_W, GRAPH_H))
+            frame_out = expand_review_graph(frame_out, graph_region, history, t_rel, graph_total, _font)
             frame_out = draw_review_panel(frame_out, review_row, JP_LABEL, _font)
         writer.write(frame_out)
         written += 1

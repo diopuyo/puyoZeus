@@ -52,11 +52,13 @@ class ExchangeChainRecord:
     predicted_final_score: float | None = None
     predicted_chain_count: int | None = None
     predicted_final_board: list[list[int]] | None = None
+    end_confirmed: bool | None = None
 
     @property
     def provisional_score(self) -> float:
         """完走予測を観測累積の下限として使い、終了確定後は実得点を返す。"""
-        if self.score_ready_sec is not None and self.end_signal_sec is not None:
+        if (self.score_ready_sec is not None and self.end_signal_sec is not None
+                and self.end_confirmed is not False):
             return self.score_delta or 0.0
         return max(self.formula_total or 0.0, self.predicted_final_score or 0.0,
                    self.score_delta or 0.0)
@@ -98,6 +100,19 @@ class ExchangeEventTracker:
         self._last_activity_sec = 0.0
         self._chain_aliases: dict[int, int] = {}
         self._provisional_key: tuple | None = None
+        self._frame_pending = False
+        self._pending_s1 = False
+
+    def begin_frame(self) -> None:
+        """観測収集中の評価を保留し、フレーム末尾だけでモデルを呼ぶ。"""
+        self._frame_pending = True
+
+    def confirm_frame_inputs(self, t_sec: float) -> None:
+        """終了候補の静穏確認まで完走予測を保持し、段間の累積値を公開しない。"""
+        for chain in self.current.chains if self.current else ():
+            chain.end_confirmed = (chain.end_signal_sec is not None
+                and t_sec - chain.end_signal_sec + TIME_EPSILON_SEC >= S3_END_QUIET_SEC)
+        self._frame_pending = False
 
     def boundary(self, game_idx: int, t_sec: float) -> None:
         """試合をまたぐ未完イベントを確定扱いにせず切り離す。"""
@@ -115,6 +130,7 @@ class ExchangeEventTracker:
         self._last_activity_sec = t_sec
         self._chain_aliases.clear()
         self._provisional_key = None
+        self._pending_s1 = False
 
     def missing_input(self, reason: str, t_sec: float, stage: str,
                       key: object = None) -> None:
@@ -124,6 +140,8 @@ class ExchangeEventTracker:
             self._diagnostic_keys.add(identity)
             self.diagnostics.append(dict(game_idx=self._game_idx, t_sec=t_sec,
                                          reason=reason, requested_stage=stage))
+        if self._frame_pending:
+            return
         if self.current is not None:
             values = self.current.values
             if values:
@@ -197,8 +215,11 @@ class ExchangeEventTracker:
         self.firing = event
         self._contexts[self.current.exchange_id] = (self.firing, self._score_elapsed)
         self._s3_sec, self._provisional_key = None, None
-        self._evaluate(self.firing, "S1", t_sec)
-        self._provisional(t_sec)
+        if self._frame_pending:
+            self._pending_s1 = True
+        else:
+            self._evaluate(self.firing, "S1", t_sec)
+            self._provisional(t_sec)
 
     def _start_exchange(self, t_sec: float, triggers: tuple, fresh: list,
                         static: StaticInput, prefire_sides: np.ndarray,
@@ -216,11 +237,14 @@ class ExchangeEventTracker:
         except (ValueError, TypeError) as error:
             self.missing_input("firing_input: " + str(error), t_sec, "S1", triggers)
             return False
-        if not self._evaluate(event, "S1", t_sec):
+        if not self._frame_pending and not self._evaluate(event, "S1", t_sec):
             return False
         self.current = ExchangeRecord(len(self.records) + 1, self._game_idx, first)
         self.records.append(self.current)
-        self.current.values.append(dict(source="S1", t_sec=t_sec, p1=self.probability))
+        if self._frame_pending:
+            self._pending_s1 = True
+        else:
+            self.current.values.append(dict(source="S1", t_sec=t_sec, p1=self.probability))
         self.firing = event
         self._score_elapsed, self._s3_sec = score_elapsed_sec, None
         self._provisional_key = None
@@ -445,12 +469,14 @@ class ExchangeEventTracker:
         if t_sec - self._last_activity_sec >= EXCHANGE_IDLE_TIMEOUT_SEC:
             self._close(t_sec, "activity_timeout")
             return
-        self._provisional(t_sec)
+        if not self._final_ready(t_sec):
+            self._provisional(t_sec)
+            if self._pending_s1 and self._provisional_key is None:
+                self._evaluate(self.firing, "S1", t_sec)
+            self._pending_s1 = False
+            return
+        self._pending_s1 = False
         chains = self.current.chains
-        if any(c.end_signal_sec is None or c.score_ready_sec is None for c in chains):
-            return
-        if any(t_sec - c.end_signal_sec + TIME_EPSILON_SEC < S3_END_QUIET_SEC for c in chains):
-            return
         finalized = max(c.score_ready_sec for c in chains)
         if self._s3_sec is not None and finalized <= self._s3_sec:
             return
@@ -466,6 +492,12 @@ class ExchangeEventTracker:
             return
         if self._evaluate(event, "S3", t_sec):
             self._s3_sec = t_sec
+
+    def _final_ready(self, t_sec: float) -> bool:
+        """確定S3を出せるフレームでは暫定S3を先に計算しない。"""
+        return all(c.end_signal_sec is not None and c.score_ready_sec is not None
+                   and t_sec - c.end_signal_sec + TIME_EPSILON_SEC >= S3_END_QUIET_SEC
+                   for c in self.current.chains)
 
     def refresh_features(self, static: StaticInput, sides: np.ndarray) -> None:
         """現在の確定盤面の特徴へ差し替え、変化があれば次の評価を更新する。"""
@@ -487,7 +519,9 @@ class ExchangeEventTracker:
                 or c.score_ready_sec is not None for c in chains):
             return
         if (not any(c.formula_total is not None for c in chains)
-                and all(c.end_signal_sec is not None and c.score_ready_sec is not None for c in chains)):
+                and all(c.end_signal_sec is not None and c.score_ready_sec is not None for c in chains)
+                and not any(c.end_confirmed is False and (c.predicted_final_score or 0) > 0
+                            for c in chains)):
             return
         scores = tuple(c.provisional_score for c in chains)
         key = tuple((c.chain_id, score) for c, score in zip(chains, scores))

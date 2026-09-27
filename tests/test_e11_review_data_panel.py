@@ -99,7 +99,8 @@ def test_generate_review_writer_size(monkeypatch: pytest.MonkeyPatch,
                  layout=layout, review_data_panel=True, enable_exchange_event_update=True,
                  exchange_event_m0_predictor=lambda b, q: .5)
     original = (vao.OUT_W, vao.CANVAS_H) if layout == "overlay" else (vao.PANEL_CANVAS_W, vao.PANEL_CANVAS_H)
-    assert sizes == [panel.panel_size(*original)]
+    graph_height = (vao.GRAPH_H if layout == "overlay" else vao.panel_layout_regions()["graph"][3])
+    assert sizes == [panel.panel_size(original[0], original[1] + graph_height)]
     assert frames == sizes * 3
 
 

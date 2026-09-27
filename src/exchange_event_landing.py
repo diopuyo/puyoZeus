@@ -89,26 +89,14 @@ class ExchangeLandingProjection:
     def update(self, overlay: Any, result: Any, snapshot: Any, t_sec: float) -> None:
         """両側の通知とSTABLE履歴の更新後、確定送り量が変われば再評価する。"""
         tracker = overlay.tracker
-        self.busy = tuple(getattr(s, "state", None) in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
-                          for s in (result.p1, result.p2))
+        self._observe_frame(overlay, result, snapshot)
         if self._refresh_death(overlay, t_sec):
             return
         record = tracker.current or self.death_record
         if record is None or overlay._m0 is None or not all(overlay._history):
             self._hold(tracker)
             return
-        identity = (record.game_idx, record.exchange_id)
         dropped = (snapshot.total_dropped_to_p1, snapshot.total_dropped_to_p2)
-        if identity != self.identity:
-            self.identity, self.key, self.last = identity, None, None
-            before = next((s for t, s in reversed(overlay._snapshots)
-                           if t < record.trigger_sec), snapshot)
-            self.drops = (before.total_dropped_to_p1, before.total_dropped_to_p2)
-            self.counts = [0, 0]
-            self.amount_key = None
-        for idx, side in enumerate((result.p1, result.p2)):
-            if side.chain_event is not None:
-                self.counts[idx] = side.chain_event.chain_count
         base = next((v for v in reversed(record.values)
                      if v["source"] in ("S3_provisional", "S3")), None)
         if base is None:
@@ -125,6 +113,23 @@ class ExchangeLandingProjection:
             return
         amount_key = (tuple(incoming), base["t_sec"], tuple(c.chain_id for c in record.chains))
         self._project(overlay, snapshot, incoming, amount_key, base, record, t_sec)
+
+    def _observe_frame(self, overlay: Any, result: Any, snapshot: Any) -> None:
+        """当該フレームの段数と物理状態を揃えてから死保持を再判定する。"""
+        self.busy = tuple(getattr(s, "state", None) in (BoardState.CHAIN, BoardState.GRAVITY_SETTLE)
+                          for s in (result.p1, result.p2))
+        record = overlay.tracker.current or self.death_record
+        if record is not None and overlay._m0 is not None and all(overlay._history):
+            identity = (record.game_idx, record.exchange_id)
+            if identity != self.identity:
+                self.identity, self.key, self.last = identity, None, None
+                before = next((s for t, s in reversed(overlay._snapshots)
+                               if t < record.trigger_sec), snapshot)
+                self.drops = (before.total_dropped_to_p1, before.total_dropped_to_p2)
+                self.counts, self.amount_key = [0, 0], None
+        for idx, side in enumerate((result.p1, result.p2)):
+            if side.chain_event is not None:
+                self.counts[idx] = side.chain_event.chain_count
 
     def _project(self, overlay: Any, snapshot: Any, incoming: list[int], amount_key: tuple,
                  base: dict, record: Any, t_sec: float) -> None:
@@ -236,11 +241,11 @@ class ExchangeLandingProjection:
     def _hands(self, tracker: Any, attacker: int, t_sec: float) -> int:
         """自側連鎖中の操作不能時間を差し引き、着地前の最後の1手を加える。"""
         chain = tracker.latest_chain(SIDE_LABELS[attacker])
-        if chain is None or chain.end_signal_sec is not None:
+        if chain is None or (chain.end_signal_sec is not None and chain.end_confirmed is not False):
             return 1
         receiver = tracker.latest_chain(SIDE_LABELS[1-attacker])
         busy = 0.0
-        if receiver is not None and receiver.end_signal_sec is None:
+        if receiver is not None and (receiver.end_signal_sec is None or receiver.end_confirmed is False):
             duration = estimate_chain_anim_duration_sec(
                 max(self.counts[1-attacker], receiver.predicted_chain_count or 0), ANIMATION_CALIBRATION)
             busy = max(0.0, duration - max(0.0, t_sec-receiver.trigger_sec))
@@ -250,7 +255,8 @@ class ExchangeLandingProjection:
     def _chaining(self, tracker: Any, idx: int) -> bool:
         """物理連鎖中または終了未確認なら、完走後盤面での判定を要求する。"""
         chain = tracker.latest_chain(SIDE_LABELS[idx])
-        return self.busy[idx] or (chain is not None and chain.end_signal_sec is None)
+        return self.busy[idx] or (chain is not None
+            and (chain.end_signal_sec is None or chain.end_confirmed is False))
 
     def _completion_board(self, tracker: Any, idx: int) -> Board | None:
         """観測と矛盾しない発火時予測だけから完走後盤面を復元する。"""
@@ -376,7 +382,8 @@ class ExchangeLandingProjection:
                 continue
             boards.append(result.final_board)
             chain = tracker.latest_chain(SIDE_LABELS[i])
-            observed = chain.provisional_score if chain and chain.end_signal_sec is None else 0
+            observed = (chain.provisional_score if chain and
+                        (chain.end_signal_sec is None or chain.end_confirmed is False) else 0)
             remaining = max(0, calculate_chain_score(result).total_score - observed)
             credit.append(math.floor(score_to_ojama(remaining, elapsed_sec=tracker._score_elapsed).ojama_count))
         return tuple(boards), credit

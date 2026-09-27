@@ -23,6 +23,13 @@ LINE_HEIGHT = 28
 PADDING = 16
 PERCENT = 100
 TEXT_CACHE_SIZE = 512
+GRAPH_TICKS = (-100, -50, -25, 0, 25, 50, 100)
+GRAPH_LINE_WIDTH = 4
+GRAPH_LEFT_MARGIN = 64
+GRAPH_TOP_MARGIN = 32
+GRAPH_BOTTOM_MARGIN = 24
+GRAPH_P1_COLOR = (123, 198, 255)
+GRAPH_P2_COLOR = (255, 150, 130)
 PANEL_BACKGROUND = (15, 21, 32)
 SIDE_LABELS = ("1P", "2P")
 PROBABILITY_SOURCES = ("G_fe", "S1", "S3_provisional", "S3")
@@ -55,6 +62,50 @@ CSV_FIELDS = (*COMMON_FIELDS, *(f"{side}_{name}" for side in SIDE_LABELS for nam
 def panel_size(width: int, height: int) -> tuple[int, int]:
     """幅1280で18pxを確保し、元のキャンバスの下へ追加する。"""
     return width, height + round(PANEL_HEIGHT * width / REFERENCE_WIDTH)
+
+
+def expand_review_graph(frame: np.ndarray, region: tuple[int, int, int, int],
+                        history: list[tuple[float, float]], t_rel: float, total: float,
+                        font_loader: Callable) -> np.ndarray:
+    """レビュー時だけ元グラフ帯を2倍に広げ、固定軸と連続面を描く。"""
+    x, y, width, height = region
+    extra = np.zeros((height, frame.shape[1], 3), dtype=frame.dtype)
+    expanded = np.concatenate((frame[:y + height], extra, frame[y + height:]), axis=0)
+    band = Image.new('RGB', (width, height * 2), PANEL_BACKGROUND)
+    draw = ImageDraw.Draw(band)
+    left, right = GRAPH_LEFT_MARGIN, width - PADDING
+    top, bottom = GRAPH_TOP_MARGIN, band.height - GRAPH_BOTTOM_MARGIN
+    center = (top + bottom) / 2
+    horizon = max(1.0, min(total, max(t_rel, 1.0)))
+    points = [(left + max(0, min(t / horizon, 1)) * (right-left),
+               center - max(-PERCENT, min(PERCENT, a)) / PERCENT * (bottom-top) / 2)
+              for t, a in history]
+    _graph_areas(draw, points, center)
+    font = font_loader(FONT_SIZE)
+    draw.text((left, 2), '有利不利  上:1P / 下:2P', font=font, fill=GRAPH_P1_COLOR)
+    for tick in GRAPH_TICKS:
+        py = center - tick / PERCENT * (bottom-top) / 2
+        draw.line((left, py, right, py), fill=(95, 105, 120), width=1)
+        draw.text((2, py - FONT_SIZE / 2), f'{tick:+d}', font=font, fill=(230, 230, 235))
+    if len(points) > 1:
+        draw.line(points, fill=(245, 245, 250), width=GRAPH_LINE_WIDTH)
+    draw.text((left, bottom), '0秒', font=font, fill=(230, 230, 235))
+    draw.text((right - GRAPH_LEFT_MARGIN, bottom), f'{horizon:.0f}秒', font=font, fill=(230, 230, 235))
+    expanded[y:y + height * 2, x:x + width] = cv2.cvtColor(np.asarray(band), cv2.COLOR_RGB2BGR)
+    return expanded
+
+
+def _graph_areas(draw: ImageDraw.ImageDraw, points: list[tuple[float, float]],
+                  center: float) -> None:
+    """ゼロ交差で台形を分割し、正負を混ぜず面で塗る。"""
+    for a, b in zip(points, points[1:]):
+        segments = [(a, b)]
+        if (a[1] - center) * (b[1] - center) < 0:
+            cross = (a[0] + (b[0]-a[0]) * (center-a[1]) / (b[1]-a[1]), center)
+            segments = [(a, cross), (cross, b)]
+        for start, end in segments:
+            color = (45, 88, 130) if (start[1]+end[1]) / 2 <= center else (125, 58, 50)
+            draw.polygon([start, end, (end[0], center), (start[0], center)], fill=color)
 
 
 def _send(score: float | None, elapsed: float) -> int | None:

@@ -76,6 +76,7 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        self.tracker.begin_frame()
         self._observe_placements(sides, displayed_scores, t_sec)
         triggers = tuple(s.chain_event.trigger_sec if s.chain_event else None for s in sides)
         fresh = self._changed_chains(sides, triggers, t_sec)
@@ -89,6 +90,7 @@ class ExchangeEventOverlay:
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         self._remember(sides, snapshot, t_sec)
         self._refresh_features(snapshot, t_sec)
+        self.tracker.confirm_frame_inputs(t_sec)
         self.tracker.finish_frame(t_sec)
         self._landing_projection.update(self, result, snapshot, t_sec)
         stable = [s.state == BoardState.STABLE for s in sides]
