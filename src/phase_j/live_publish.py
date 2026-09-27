@@ -25,7 +25,8 @@ HTML = '''<!doctype html><html lang="ja"><meta charset="utf-8">
 font:28px sans-serif;text-shadow:1px 1px 3px black}</style><div id="value">待機中</div>
 <script>const events=new EventSource('/events');events.addEventListener('analysis', e=>{
 const d=JSON.parse(e.data), p=d.evaluations.practical;
-document.getElementById('value').textContent=d.display.visibility==='hidden'?'待機中':
+document.getElementById('value').textContent=d.display.input_status==='verifying'?'HOLD 入力確認中':
+d.display.visibility==='hidden'?'待機中':
 `1P ${(p.p1_win_probability*100).toFixed(1)}% | ${p.source} | ${d.display.status}`;
 });events.onerror=()=>{document.getElementById('value').textContent='HOLD 接続待ち';};
 </script></html>'''
@@ -56,8 +57,12 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         practical_queue_depth=int(row['queue_depth'] > 0),
         recognition_notification_queue_depth=row['queue_depth'], best_action_worker_health='disabled')
     payload['input'].update(event_seq=row['frame'])
+    if 'display_layers' in row:
+        payload['evaluations']['display_layers'] = row['display_layers']
     if row['raw_probability'] is None:
         payload['timing']['calculation_age_ms'] = None
+        if row.get('input_verifying'):
+            input_hold(payload, row, now, hold_started)
         return OverlaySnapshot.from_mapping(payload)
     projected = row['source'] in PROJECTED_SOURCES
     hold = hold_started is not None
@@ -82,6 +87,16 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         origin='physical_prediction' if projected else 'model',
         calibration_id='exchange-v2-existing-display', evaluated_positions=1, source=row['source'])
     return OverlaySnapshot.from_mapping(payload)
+
+
+def input_hold(payload: dict[str, Any], row: dict[str, Any], now: float,
+               hold_started: float | None) -> None:
+    """未確認入力では架空の勝率を作らず、HOLDの文字だけを表示する。"""
+    payload['display'].update(visibility='visible', status='hold', input_status='verifying',
+        message='入力確認中', update_reason='hold_started',
+        primary_hold_reason='recognition_unreliable', all_hold_reasons=['recognition_unreliable'],
+        hold_started_ms=int(row['t_sec']*MILLISECONDS),
+        hold_elapsed_ms=int((now-(hold_started or now))*MILLISECONDS))
 
 
 class LiveStreamState(StreamState):
@@ -167,6 +182,14 @@ class LivePublisher:
     def offer(self, row: dict[str, Any]) -> None:
         with self.lock:
             self.latest = dict(row)
+
+    def input_pending(self, now: float) -> None:
+        with self.lock:
+            previous = self.latest or {}
+            self.latest = dict(frame=previous.get('frame', 0), t_sec=previous.get('t_sec', 0.0),
+                game=previous.get('game', 0), captured_at=now, recognized_at=now,
+                evaluated_at=now, queue_depth=0, raw_probability=None,
+                hold=True, input_verifying=True)
 
     def _publish(self, row: dict[str, Any], revision: int, hold: float | None) -> None:
         now = time.perf_counter()

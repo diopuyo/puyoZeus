@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Mapping, TypeAlias
 
-from .contracts import OverlayHealth, OverlaySnapshot, SNAPSHOT_SCHEMA_VERSION
+from .contracts import DisplayLayers, OverlayHealth, OverlaySnapshot, SNAPSHOT_SCHEMA_VERSION
 
 try:  # jsonschema未導入でもmodule import自体は許す。
     import jsonschema as _jsonschema
@@ -602,10 +602,26 @@ def _snapshot_semantic_issues(payload: Payload, context: ValidationContext) -> l
     for validator in (
         _validate_generations, _validate_both, _validate_provenance, _validate_mode,
         _validate_available_fields, _validate_hold_time, _validate_display_integrity,
-        _validate_worker_lanes, _validate_best_action,
+        _validate_worker_lanes, _validate_best_action, _validate_layers,
     ):
         issues.extend(validator(payload))
     return issues
+
+
+def _validate_layers(payload: Payload) -> list[ValidationIssue]:
+    """旧DTOは受理し、C案が載るときは欠落・範囲・表示値相関を検査する。"""
+    layers = payload['evaluations'].get('display_layers')
+    if layers is None:
+        return []
+    try:
+        parsed = DisplayLayers(**layers)
+        practical = payload['evaluations']['practical']
+        expected = practical['p1_win_probability'] if practical['availability'] == 'available' else None
+        if parsed.displayed_p1 != expected:
+            raise ValueError('層別表示値と実配信値が一致しません')
+    except (ValueError, TypeError) as error:
+        return [_issue('R21', '$.evaluations.display_layers', str(error))]
+    return []
 
 
 def validate_snapshot(

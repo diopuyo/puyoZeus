@@ -82,6 +82,9 @@ class RecognitionBridge:
         self.batch_sizes: list[int] = []
         self.recognition_rows: list[dict[str, Any]] = []
         self.frame_bounds = (0.0, 0, 0, 1)
+        self.profile: list[dict[str, float]] = []
+        self.batch_ready_at = 0.0
+        self.meter: Any = None
 
     def _put(self, notice: RecognitionNotice) -> None:
         while not self.cancel.is_set():
@@ -126,10 +129,27 @@ class RecognitionBridge:
                 self.batch_sizes.append(len(batch))
                 for index, notice in enumerate(batch):
                     self.batch_remaining = len(batch)-index-1
-                    yield notice
+                    self.batch_ready_at = started
+                    yield from self.timed_notice(notice)
             next_batch = started + BATCH_PERIOD_SEC
         if self.error is not None:
             raise RuntimeError('認識workerが失敗しました') from self.error
+
+    def timed_notice(self, notice: RecognitionNotice) -> Iterator[RecognitionNotice]:
+        """CPU時間と壁時計の差はGIL/OS待ちの上限であり、GILだけとは断定しない。"""
+        started, cpu = time.perf_counter(), time.thread_time()
+        if self.meter is None:
+            yield notice
+        else:
+            with self.meter.frame(notice.frame, notice.t_sec):
+                self.meter.current.update(legacy_features=0.0, review=0.0, counter=0.0)
+                yield notice
+        finished = time.perf_counter()
+        self.profile.append(dict(frame=notice.frame, recognized_at=notice.recognized_at,
+            started_at=started, finished_at=finished,
+            batch_wait_sec=max(0.0, self.batch_ready_at-notice.recognized_at),
+            within_batch_wait_sec=started-max(self.batch_ready_at, notice.recognized_at),
+            evaluation_wall_sec=finished-started, evaluation_cpu_sec=time.thread_time()-cpu))
 
     def _drain(self) -> list[RecognitionNotice]:
         batch = []
@@ -192,6 +212,16 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     if len(loops) != 1:
         raise ValueError('旧評価ループの構造が変更されています')
     adapt_loop(loops[0])
+    if hasattr(bridge, 'pipeline_config'):
+        for node in ast.walk(function):
+            if isinstance(node, ast.If) and ast.unparse(node.test) == 'review_enabled':
+                node.test = ast.parse('review_enabled and not _live_bridge.skip_features').body[0].value
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and ast.unparse(node.func) == 'RecognitionPipeline.load_default'):
+                node.func = ast.parse('_live_bridge.pipeline_config').body[0].value
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and ast.unparse(node.func) == 'cv2.VideoCapture'):
+                node.func = ast.parse('_live_bridge.open_capture').body[0].value
     namespace = dict(vars(module), _live_bridge=bridge)
     exec(compile(ast.fix_missing_locations(tree), inspect.getfile(module), 'exec'), namespace)
     return namespace['generate']

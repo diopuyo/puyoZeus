@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -13,6 +14,34 @@ from typing import Any, ClassVar, Mapping, Self
 SNAPSHOT_SCHEMA_VERSION = "puyo-overlay-snapshot/v1"
 HEALTH_SCHEMA_VERSION = "puyo-overlay-health/v1"
 ENUM_MANIFEST_VERSION = "puyo-overlay-enums/v1"
+
+PREDICTION_DISCARD_REASONS = frozenset({
+    'unknown_cells', 'observed_exceeds_prediction', 'confirmed_board_mismatch'})
+
+
+@dataclass(frozen=True)
+class DisplayLayers:
+    """C案の追加契約。現在値は最後の確定盤面評価、予測値は未取得ならnull。"""
+
+    current_p1: float | None
+    predicted_p1: float | None
+    displayed_p1: float | None
+    includes_prediction: bool
+    prediction_discard_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        for value in (self.current_p1, self.predicted_p1, self.displayed_p1):
+            if value is not None and (isinstance(value, bool) or
+                    not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1):
+                raise ValueError('層別勝率は有限の0〜1またはnullが必要です')
+        if type(self.includes_prediction) is not bool:
+            raise ValueError('予測込みの印はboolが必要です')
+        if self.includes_prediction and (self.predicted_p1 is None or self.displayed_p1 is None):
+            raise ValueError('予測込み表示には予測値と表示値が必要です')
+        if self.prediction_discard_reason not in PREDICTION_DISCARD_REASONS | {None}:
+            raise ValueError('未知の予測破棄理由です')
+        if self.prediction_discard_reason and (self.includes_prediction or self.current_p1 is None):
+            raise ValueError('予測破棄後は現在層へ戻る必要があります')
 
 
 class Visibility(StrEnum):

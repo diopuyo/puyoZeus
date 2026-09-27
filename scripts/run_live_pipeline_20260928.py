@@ -6,6 +6,7 @@ from contextlib import ExitStack
 import hashlib
 import json
 import math
+import multiprocessing as mp
 import os
 from pathlib import Path
 import random
@@ -20,8 +21,10 @@ from urllib.request import urlopen
 import numpy as np
 
 from scripts.measure_realtime_breakdown_20260928 import DEFAULT_STATUS, DEFAULT_VIDEO, build_command
-from src.phase_j.live_bridge import RecognitionBridge, RecognitionNotice, build_live_generate, notice_digest
+from src.phase_j.live_bridge import RecognitionBridge, RecognitionNotice, build_live_generate, notice_digest, QUEUE_CAPACITY
 from src.phase_j.live_publish import LivePublisher
+from src.phase_j.live_layers import evaluation_layers
+from src.phase_j.live_process import ProcessRecognitionBridge, coalescing_overlay, coalescing_cache, coalescing_counter
 
 ROOT = Path(__file__).resolve().parents[1]
 START_SEC, END_SEC, WARMUP_SEC = 2600.0, 2640.0, 1.0
@@ -106,6 +109,7 @@ class ResultSink:
             digest=notice_digest(notice), capture_gap=notice.dropped_before > 0,
             hold=not stable and source == 'G_fe')
         self.rows.append(row)
+        row['display_layers'] = evaluation_layers(overlay, float(probability))
         self.publisher.offer(row)
 
 
@@ -132,17 +136,23 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
         dropped_frames_in_measured_window=expected-len(recognition), expected_frames=expected,
         recognition_frames_including_warmup=len(bridge.recognition_rows),
         latency_ms={name: percentile(values) for name, values in stages.items()},
-        evaluation_queue=dict(capacity=bridge.queue.maxsize, maximum=bridge.queue_max,
+        evaluation_queue=dict(capacity=QUEUE_CAPACITY, maximum=bridge.queue_max,
                              maximum_including_batch=bridge.pending_max,
-                             end=bridge.queue.qsize(), observed=[r['queue_depth'] for r in sink.rows]),
+                             end=0, observed=[r['queue_depth'] for r in sink.rows]),
         batch_starts=bridge.batch_starts, batch_sizes=bridge.batch_sizes,
         publications=sink.publisher.publications, sse_sent=sent, command=command,
-        recognition=recognition, nice=os.nice(0),
+        recognition=recognition, nice=os.nice(0) if hasattr(os, 'nice') else None,
+        evaluation_profile=bridge.profile,
+        evaluation_stages=getattr(bridge.meter, 'rows', []),
+        ipc=dict(sent=getattr(bridge, 'sent', None), received=getattr(bridge, 'received', None),
+                 bytes=getattr(bridge, 'wire_bytes', None)),
+        coalesce_features=getattr(options, 'coalesce_features', False),
+        feature_skips=getattr(bridge, 'feature_skips', {}),
         timing_basis='realtimeは予定capture壁時計、非realtimeは読出開始。SSEはsocket flush完了。')
 
 
 def run_live(options: argparse.Namespace) -> dict[str, Any]:
-    """認識のみ別スレッドへ移し、評価状態はこの単一workerが所有する。"""
+    """既定は認識と評価をspawnで隔離し、比較用threadモードだけ残す。"""
     import torch
     import scripts.visualize_advantage_overlay as overlay
     from scripts.run_e3_exchange_eval_20260926 import SEED
@@ -153,12 +163,13 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     command = build_command(options)
     publisher = LivePublisher(asset_hashes(), options.host, options.port)
     sink = ResultSink(publisher)
-    bridge = RecognitionBridge(options.realtime, sink.observe)
+    bridge = make_bridge(options, sink)
     publisher.start()
     probe = SSEProbe(publisher.server.address())
     try:
         probe.start()
         with ExitStack() as stack:
+            install_live_instrumentation(stack, overlay, bridge)
             stack.enter_context(patch.object(overlay, 'generate', build_live_generate(overlay, bridge)))
             stack.enter_context(patch.object(sys, 'argv', ['live-pipeline', *command]))
             overlay.main()
@@ -179,6 +190,37 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     save_json(options.output / 'evaluations.json', sink.rows)
     save_json(options.output / 'latest.json', publisher.hub.latest.to_mapping())
     return {key: report[key] for key in ('frames', 'dropped_frames', 'latency_ms')}
+
+
+def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBridge:
+    if getattr(options, 'worker_mode', 'process') == 'thread':
+        return RecognitionBridge(options.realtime, sink.observe)
+    bridge = ProcessRecognitionBridge(options.realtime, sink.observe, options.video,
+        getattr(options, 'coalesce_features', False), getattr(options, 'input_config', None))
+    bridge.on_hold = sink.publisher.input_pending
+    bridge.duration = options.end_sec-options.start_sec
+    bridge.config_path = options.output / 'recognition_config.json'
+    return bridge
+
+
+def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: RecognitionBridge) -> None:
+    from scripts.measure_realtime_breakdown_20260928 import FrameMeter, install_substages
+    bridge.meter = FrameMeter()
+    install_substages(stack, bridge.meter, overlay)
+    stack.enter_context(patch.object(overlay.HeavyAdvCache, 'update',
+        bridge.meter.wrap(overlay.HeavyAdvCache.update, 'legacy_features')))
+    stack.enter_context(patch.object(overlay.CounterReachTracker, 'update',
+        bridge.meter.wrap(overlay.CounterReachTracker.update, 'counter')))
+    import scripts.review_data_panel as review
+    stack.enter_context(patch.object(review, 'build_review_row',
+        bridge.meter.wrap(review.build_review_row, 'review')))
+    if isinstance(bridge, ProcessRecognitionBridge):
+        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
+            coalescing_overlay(overlay.ExchangeEventOverlay, bridge)))
+        stack.enter_context(patch.object(overlay, 'HeavyAdvCache',
+            coalescing_cache(overlay.HeavyAdvCache, bridge)))
+        stack.enter_context(patch.object(overlay, 'CounterReachTracker',
+            coalescing_counter(overlay.CounterReachTracker, bridge)))
 
 
 def compare_arrays(reference: Path, candidate: Path) -> dict[str, Any]:
@@ -250,11 +292,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--warmup-sec', type=float, default=WARMUP_SEC)
     parser.add_argument('--realtime', action='store_true')
     parser.add_argument('--compare', action='store_true')
+    parser.add_argument('--worker-mode', choices=('process', 'thread'), default='process')
+    parser.add_argument('--coalesce-features', action='store_true')
+    parser.add_argument('--input-config', type=Path)
+    parser.add_argument('--duration-sec', type=float, default=END_SEC-START_SEC)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
     options = parser.parse_args()
+    if options.input_config:
+        options.start_sec, options.end_sec, options.warmup_sec = 0.0, options.duration_sec, 0.0
     if options.compare and options.realtime:
         parser.error('全フレーム同値比較とrealtimeは別実行です')
+    if options.compare and (options.coalesce_features or options.input_config):
+        parser.error('同値比較は特徴間引きOFF・動画全フレーム専用です')
+    if options.worker_mode == 'thread' and (options.coalesce_features or options.input_config):
+        parser.error('特徴間引きとデバイス入力はprocessモード専用です')
     if not 0 <= options.start_sec < options.end_sec or options.warmup_sec < 0:
         parser.error('計測区間が不正です')
     return options
@@ -263,6 +315,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     options = parse_args()
     options.output.mkdir(parents=True, exist_ok=True)
+    if not options.compare and options.worker_mode == 'process':
+        worker = mp.get_context('spawn').Process(target=run_live, args=(options,), name='evaluation-worker')
+        worker.start()
+        worker.join()
+        if worker.exitcode:
+            raise SystemExit(worker.exitcode)
+        return
     result = run_comparison(options) if options.compare else run_live(options)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

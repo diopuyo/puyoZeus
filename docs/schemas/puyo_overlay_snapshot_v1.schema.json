@@ -943,6 +943,7 @@
       "type": "object",
       "required": ["practical", "best_action", "player_adjusted"],
       "properties": {
+        "display_layers": {"$ref": "#/$defs/display_layers"},
         "practical": {
           "$ref": "#/$defs/practical_evaluation"
         },
@@ -954,6 +955,21 @@
         }
       },
       "additionalProperties": true
+    },
+    "display_layers": {
+      "type": "object",
+      "description": "C案。現在層は最後の確定盤面評価。未取得の値・未提供の破棄理由はnull。",
+      "required": ["current_p1", "predicted_p1", "displayed_p1", "includes_prediction", "prediction_discard_reason"],
+      "properties": {
+        "current_p1": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "predicted_p1": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "displayed_p1": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "includes_prediction": {"type": "boolean"},
+        "prediction_discard_reason": {
+          "enum": [null, "unknown_cells", "observed_exceeds_prediction", "confirmed_board_mismatch"]
+        }
+      },
+      "additionalProperties": false
     },
     "unavailable_practical": {
       "allOf": [
