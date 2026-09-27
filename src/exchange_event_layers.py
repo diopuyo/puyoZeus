@@ -15,7 +15,10 @@ LAYER_COLUMNS = ("p1_current", "p1_prediction", "p1_layer_combined", "prediction
 
 class ExchangeEvaluationLayers:
     """合成を重ねず、モデル予測と現在の確定盤面評価を別々に保持する。"""
-    def __init__(self) -> None:
+    def __init__(self, sync_enabled: bool = True, death_enabled: bool = True,
+                 layer_enabled: bool = True, completion_fix: bool = False) -> None:
+        self.sync_enabled, self.death_enabled = sync_enabled, death_enabled
+        self.layer_enabled, self.completion_fix = layer_enabled, completion_fix
         self.reset()
 
     def reset(self) -> None:
@@ -29,13 +32,17 @@ class ExchangeEvaluationLayers:
         self.checked: set[int] = set()
         self.mismatches: set[int] = set()
         self.unknown: set[int] = set()
+        from src.exchange_event_completion_check import CompletionVerifier
+        self.completion = CompletionVerifier()
 
     def before(self, overlay: Any, result: Any, stamp: float) -> bool:
         """前回合成値を除き、死亡確認済みなら以後の認識演出を評価へ流さない。"""
         tracker = overlay.tracker
-        if self.prediction is not None:
+        if self.layer_enabled and self.prediction is not None:
             tracker.probability, tracker.source = self.prediction, self.prediction_source
         self.dead_sides.update(getattr(result, "confirmed_dead_sides", ()))
+        if not self.death_enabled:
+            return False
         if not self.dead_sides:
             return False
         for idx, side in enumerate((result.p1, result.p2)):
@@ -46,6 +53,8 @@ class ExchangeEvaluationLayers:
 
     def observe(self, sides: tuple, stamp: float) -> None:
         """確定盤面とNEXTを同期器へ渡し、推論・学習で同じ規則を使う。"""
+        if not self.sync_enabled:
+            return
         for sync, side in zip(self.sync, sides):
             grid = side.confirmed_board._grid if side.confirmed_board is not None else None
             queue = np.array([*(side.next_pair or (0, 0)), *(side.dnext_pair or (0, 0))])
@@ -97,7 +106,12 @@ class ExchangeEvaluationLayers:
                     and tracker._chain_aliases.get(c.chain_id, c.chain_id) == identity), default=0)
 
     def _check_completion(self, overlay: Any, result: Any, chain: Any) -> None:
-        """最初の連鎖後確定盤面を検証し、未来の照合結果を遡及適用しない。"""
+        """E16旧照合を保存し、独立フラグで終了・着手境界を限定した照合へ切り替える。"""
+        if self.completion_fix:
+            self.mismatches.discard(chain.chain_id)
+            if self.completion.check(overlay, result, chain):
+                self.mismatches.add(chain.chain_id)
+            return
         if chain.chain_id in self.checked or chain.end_signal_sec is None or chain.predicted_final_board is None:
             return
         idx = SIDES.index(chain.side)
@@ -111,6 +125,9 @@ class ExchangeEvaluationLayers:
 
     def apply(self, overlay: Any, result: Any, snapshot: Any, stamp: float) -> None:
         """現在層と予測層を等重みlogit平均し、不信頼時は現在層へ戻す。"""
+        if not self.layer_enabled:
+            return
+        overlay._completion_stamp = stamp
         tracker = overlay.tracker
         self.prediction, self.prediction_source = tracker.probability, tracker.source
         current = self._current(overlay, snapshot, stamp)

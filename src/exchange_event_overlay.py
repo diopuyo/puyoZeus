@@ -47,11 +47,15 @@ class ExchangeEventOverlay:
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
                  per_side_settled: bool = False, live_count: bool = False,
-                 e16: bool = False) -> None:
-        self.tracker = ExchangeEventTracker(models, live_count=live_count or e16)
+                 e16: bool = False, count_sync: bool = False,
+                 death_guard: bool = False, evaluation_layers: bool = False,
+                 completion_check: bool = False) -> None:
+        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check
+        self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
         from src.exchange_event_layers import ExchangeEvaluationLayers
-        self._e16 = ExchangeEvaluationLayers() if e16 else None
-        if e16:
+        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard,
+            e16 or evaluation_layers or completion_check, completion_check) if enabled else None
+        if enabled and self._e16.layer_enabled:
             self.tracker.layer_rows = []
         self._live_count_key: tuple | None = None
         self._build_static, self._signal_factory = build_static, signal_factory
@@ -170,7 +174,8 @@ class ExchangeEventOverlay:
     def _fire(self, result: Any, snapshot: Any, t_sec: float,
               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
         """今回の発火前に得られた各側STABLE盤面で評価入力を作る。"""
-        if self._e16 is not None and any(s.accepted is None for s in self._e16.sync):
+        if (self._e16 is not None and self._e16.sync_enabled
+                and any(s.accepted is None for s in self._e16.sync)):
             self.tracker.missing_input("E16_waiting_initial_count_pair", t_sec, "S1", triggers)
             return
         first = min(ts for _, ts in fresh)
@@ -299,7 +304,7 @@ class ExchangeEventOverlay:
 
     def _count_inputs(self) -> list[ConfirmedSide] | None:
         """新フラグONだけ、手番が揃った確定盤面/NEXTをcountへ渡す。"""
-        if self._e16 is None:
+        if self._e16 is None or not self._e16.sync_enabled:
             return [h[-1] for h in self._history]
         synced = [s.accepted for s in self._e16.sync]
         if any(s is None for s in synced):

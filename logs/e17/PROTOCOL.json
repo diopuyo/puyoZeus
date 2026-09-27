@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "baseline": {},
+    "sync": {
+      "count_sync": true
+    },
+    "death": {
+      "death_guard": true
+    },
+    "layers": {
+      "evaluation_layers": true
+    },
+    "all": {
+      "e16": true
+    },
+    "fixed": {
+      "completion_check": true
+    }
+  },
+  "q_max": 0.5538,
+  "zenchi_min": 0.7883,
+  "max_false": 1,
+  "death_denominator": 28,
+  "prefire": [
+    2612.0,
+    2614.08
+  ],
+  "terminal": [
+    2699.5,
+    2701.0
+  ],
+  "cv": "同期countのみ既存同一行15foldを照合再集計",
+  "combination": "①②③③′の合格条件のみ。③と③′が共に合格なら③′を優先"
+}
