@@ -1,0 +1,3316 @@
+{
+  "live": {
+    "frames": 671,
+    "expected_frames": 1200,
+    "dropped_frames_in_measured_window": 529,
+    "latency_ms": {
+      "capture_to_recognition": {
+        "count": 671,
+        "P50": 74.22590535134077,
+        "P95": 113.98134598857723,
+        "P99": 121.68551448266952
+      },
+      "recognition_to_evaluation": {
+        "count": 671,
+        "P50": 2.7949229697696865,
+        "P95": 989.5882475248072,
+        "P99": 1924.613903707357
+      },
+      "capture_to_evaluation": {
+        "count": 671,
+        "P50": 87.48097537318245,
+        "P95": 1120.2209703624249,
+        "P99": 2028.0213752877885
+      },
+      "evaluation_to_sse": {
+        "count": 82,
+        "P50": 47.71812554099597,
+        "P95": 377.98501311626757,
+        "P99": 978.6012601142272
+      },
+      "capture_to_sse": {
+        "count": 82,
+        "P50": 129.78154068696313,
+        "P95": 1485.382465037401,
+        "P99": 2058.090421188972
+      }
+    },
+    "ipc": {
+      "sent": 672,
+      "received": 672,
+      "bytes": 303125
+    },
+    "counter_search": [
+      {
+        "pending": false,
+        "generation": 200,
+        "result_generation": null,
+        "request_time": 2629.1666666666665,
+        "result_time": null,
+        "submitted": 9,
+        "accepted": 0,
+        "discarded": 9,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 64,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 46,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 45,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 36,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 1,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      },
+      {
+        "pending": false,
+        "generation": 1,
+        "result_generation": null,
+        "request_time": null,
+        "result_time": null,
+        "submitted": 0,
+        "accepted": 0,
+        "discarded": 0,
+        "error": null
+      }
+    ],
+    "nice": 0,
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "coalesce_features": true,
+    "loadavg_start": [
+      6.21435546875,
+      6.78173828125,
+      5.20654296875
+    ],
+    "loadavg_end": [
+      6.5009765625,
+      6.5986328125,
+      5.31591796875
+    ],
+    "assets": {
+      "app_build_id": "sha256:4b7d58fce609c2ffdeb76489d168ac8be742bb30dd58325d1c0047437acf2d16",
+      "recognition_model_hash": "sha256:8652cd685bdd4d6dc8825f192bded64843db28febf65ee2baee332356c749923",
+      "recognition_config_hash": "sha256:c647ac5412be128185332f11b0fcc6e579a56f9b16b5a1079ea74bea42917768",
+      "prediction_model_hash": "sha256:32b1af1cf6f544983e9654607a8141961f6dd18d272c60b58ce4b40fc2c36f7b",
+      "calibration_hash": "sha256:370ca9a8ebaacb6d087adb64c98572164daff87e55c724a39e6d5da956922ed5"
+    },
+    "queue_maximum": 29,
+    "queue_end": 0,
+    "evaluation_mean_ms": {
+      "evaluation_wall_sec": 19.38889522066997,
+      "evaluation_cpu_sec": 18.261710639880985
+    },
+    "pending_frames": 296,
+    "counter_dispatch_max_ms": 0.4923509550280869
+  },
+  "baseline_conditions": [
+    {
+      "condition": "gpu",
+      "loadavg": [
+        0.1240234375,
+        1.20849609375,
+        2.60791015625
+      ],
+      "nice": 0,
+      "time": 1790530220.1384664,
+      "exitcode": 0,
+      "status": "completed",
+      "command": [
+        "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/bin/python",
+        "-m",
+        "scripts.measure_realtime_breakdown_20260928",
+        "--start-sec",
+        "2580",
+        "--end-sec",
+        "2700",
+        "--parallel-count",
+        "1",
+        "--no-render",
+        "--output",
+        "logs/live_b4_baseline/gpu"
+      ]
+    },
+    {
+      "condition": "cpu",
+      "loadavg": [
+        1.25390625,
+        1.30322265625,
+        2.2666015625
+      ],
+      "nice": 0,
+      "time": 1790530507.409562,
+      "status": "skipped_load"
+    }
+  ],
+  "gpu_baseline": {
+    "frames": 3600,
+    "decoded_frames": 7200,
+    "processing_seconds": 263.5567533625872,
+    "processing_fps": 13.659297111796311,
+    "stages_ms": {
+      "decode_1080p": {
+        "mean": 2.688473537483434,
+        "P50": 2.5663095293566585,
+        "P95": 3.532790165627374,
+        "P99": 4.836939052329385
+      },
+      "recognition": {
+        "mean": 32.070554358765044,
+        "P50": 30.18889599479735,
+        "P95": 46.167995594441884,
+        "P99": 49.45085969695356
+      },
+      "exchange_other": {
+        "mean": 0.6162889544470495,
+        "P50": 0.5674510321114212,
+        "P95": 0.8033005637116729,
+        "P99": 1.1016113206278502
+      },
+      "features": {
+        "mean": 6.005946923606745,
+        "P50": 0.1372279948554933,
+        "P95": 26.94682533328877,
+        "P99": 196.34106393902943
+      },
+      "M0_G_fe": {
+        "mean": 0.638569250715793,
+        "P50": 1.0387475485913455,
+        "P95": 1.467548805521801,
+        "P99": 1.7499309917911872
+      },
+      "S1_S3": {
+        "mean": 0.008297878925481604,
+        "P50": 0.0,
+        "P95": 0.0,
+        "P99": 0.5961283820215589
+      },
+      "landing": {
+        "mean": 0.22414778963947254,
+        "P50": 0.005683512426912785,
+        "P95": 0.29360851331148297,
+        "P99": 0.4689482925459731
+      },
+      "render": {
+        "mean": 0.0,
+        "P50": 0.0,
+        "P95": 0.0,
+        "P99": 0.0
+      },
+      "write": {
+        "mean": 0.0,
+        "P50": 0.0,
+        "P95": 0.0,
+        "P99": 0.0
+      },
+      "exchange_total": {
+        "mean": 7.493250797334541,
+        "P50": 1.7747835081536323,
+        "P95": 28.925312304636343,
+        "P99": 221.8604148755531
+      },
+      "other": {
+        "mean": 30.95793057380231,
+        "P50": 0.7502955268137157,
+        "P95": 146.23710823070698,
+        "P99": 767.6156363246259
+      },
+      "total_ms": {
+        "mean": 73.21020926738532,
+        "P50": 35.97386149340309,
+        "P95": 248.55947420292037,
+        "P99": 922.8919265640347
+      }
+    },
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "nice": 0,
+    "parallel_count": 1,
+    "no_render": true
+  },
+  "degradation": {
+    "23": {
+      "crf": 23,
+      "command": [
+        "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2",
+        "-y",
+        "-ss",
+        "2599.0",
+        "-i",
+        "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+        "-t",
+        "41.0",
+        "-an",
+        "-vf",
+        "scale=1920:1080,format=nv12,format=yuv420p",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "23",
+        "-preset",
+        "veryfast",
+        "-threads",
+        "2",
+        "logs/live_b4_degradation/nv12_crf23.mp4"
+      ],
+      "sha256": "4e1054c868c2d777183b7611cb0d5e51b07f3f18a0147ee1cf6cd04c5f2a8c35",
+      "baseline": {
+        "frames": 1200,
+        "compared_side_frames": 725,
+        "cells": 56550,
+        "different_cells": 611,
+        "stable_availability_mismatches": 148,
+        "original_stable_side_frames": 787,
+        "degraded_stable_side_frames": 811,
+        "first_difference": [
+          102,
+          0,
+          3,
+          4
+        ],
+        "definition": "両方STABLEかつconfirmed_boardありの同時刻同side。隠し段も含む13x6。正解率ではない。",
+        "breakdown": {
+          "cells": 56550,
+          "different_cells": 611,
+          "colors": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            9,
+            10
+          ],
+          "confusion": [
+            [
+              0,
+              0,
+              23,
+              96,
+              36,
+              127,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              50,
+              0,
+              0,
+              0,
+              0,
+              0,
+              3,
+              0
+            ],
+            [
+              154,
+              0,
+              0,
+              0,
+              6,
+              0,
+              0,
+              0
+            ],
+            [
+              16,
+              0,
+              2,
+              4,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              58,
+              0,
+              4,
+              10,
+              2,
+              0,
+              0,
+              0
+            ],
+            [
+              20,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "by_side_row_col": [
+            [
+              [
+                58,
+                0,
+                0,
+                57,
+                0,
+                0
+              ],
+              [
+                0,
+                6,
+                0,
+                20,
+                0,
+                0
+              ],
+              [
+                0,
+                6,
+                0,
+                15,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                40,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                7,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                6,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                0,
+                6
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                13
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                6
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                2,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                5,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                7,
+                2,
+                2,
+                5,
+                2,
+                2
+              ],
+              [
+                20,
+                7,
+                2,
+                4,
+                2,
+                2
+              ],
+              [
+                10,
+                20,
+                4,
+                4,
+                2,
+                2
+              ],
+              [
+                4,
+                9,
+                4,
+                4,
+                2,
+                2
+              ],
+              [
+                4,
+                6,
+                4,
+                4,
+                6,
+                6
+              ],
+              [
+                4,
+                6,
+                4,
+                6,
+                6,
+                6
+              ],
+              [
+                2,
+                7,
+                6,
+                6,
+                6,
+                6
+              ],
+              [
+                2,
+                5,
+                4,
+                6,
+                6,
+                6
+              ],
+              [
+                4,
+                4,
+                4,
+                6,
+                6,
+                6
+              ],
+              [
+                2,
+                4,
+                4,
+                6,
+                4,
+                4
+              ],
+              [
+                2,
+                4,
+                4,
+                6,
+                6,
+                4
+              ],
+              [
+                2,
+                2,
+                6,
+                6,
+                4,
+                2
+              ]
+            ]
+          ],
+          "frame_types": {
+            "CHAIN/STABLE -> CHAIN/STABLE": 175,
+            "GRAVITY_SETTLE/STABLE -> GRAVITY_SETTLE/STABLE": 2,
+            "STABLE/CHAIN -> STABLE/CHAIN": 80,
+            "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 1,
+            "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 4,
+            "STABLE/OJAMA_FALL -> STABLE/STABLE": 7,
+            "STABLE/STABLE -> STABLE/STABLE": 251,
+            "STABLE/STABLE -> STABLE/TSUMO_FALL": 21,
+            "STABLE/TSUMO_FALL -> STABLE/STABLE": 40,
+            "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 28,
+            "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 2
+          },
+          "previous_states": {
+            "GRAVITY_SETTLE -> STABLE / GRAVITY_SETTLE -> STABLE": 23,
+            "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+            "GRAVITY_SETTLE -> STABLE / TSUMO_FALL -> STABLE": 4,
+            "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 13,
+            "OJAMA_FALL -> STABLE / STABLE -> STABLE": 64,
+            "STABLE -> STABLE / STABLE -> STABLE": 417,
+            "STABLE -> STABLE / TSUMO_FALL -> STABLE": 18,
+            "TSUMO_FALL -> STABLE / STABLE -> STABLE": 61,
+            "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 5
+          },
+          "hsv_confusion": {
+            "-1 -> -1": 115,
+            "0 -> 0": 80,
+            "1 -> 1": 8,
+            "2 -> 2": 72,
+            "3 -> 3": 160,
+            "4 -> 4": 43,
+            "5 -> 0": 4,
+            "5 -> 2": 1,
+            "5 -> 5": 119,
+            "9 -> 9": 9
+          },
+          "raw_disagreements_at_differences": 35,
+          "hsv_disagreements_at_visible_differences": 5,
+          "visible_differences": 496,
+          "hidden_differences": 115,
+          "absolute_hsv_delta_percentiles": [
+            [
+              0.0,
+              2.0,
+              1.0
+            ],
+            [
+              2.0,
+              8.0,
+              4.5
+            ],
+            [
+              11.525000000000006,
+              11.525000000000006,
+              5.050000000000011
+            ]
+          ]
+        }
+      },
+      "calibrated": {
+        "frames": 1200,
+        "compared_side_frames": 706,
+        "cells": 55068,
+        "different_cells": 542,
+        "stable_availability_mismatches": 167,
+        "original_stable_side_frames": 787,
+        "degraded_stable_side_frames": 792,
+        "first_difference": [
+          102,
+          0,
+          3,
+          4
+        ],
+        "definition": "両方STABLEかつconfirmed_boardありの同時刻同side。隠し段も含む13x6。正解率ではない。",
+        "breakdown": {
+          "cells": 55068,
+          "different_cells": 542,
+          "colors": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            9,
+            10
+          ],
+          "confusion": [
+            [
+              0,
+              0,
+              22,
+              96,
+              36,
+              128,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              32,
+              0,
+              0,
+              0,
+              0,
+              0,
+              3,
+              0
+            ],
+            [
+              142,
+              0,
+              0,
+              0,
+              5,
+              0,
+              0,
+              0
+            ],
+            [
+              9,
+              0,
+              1,
+              2,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              46,
+              0,
+              2,
+              7,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              10,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "by_side_row_col": [
+            [
+              [
+                58,
+                0,
+                0,
+                57,
+                0,
+                0
+              ],
+              [
+                0,
+                6,
+                0,
+                20,
+                0,
+                0
+              ],
+              [
+                0,
+                6,
+                0,
+                15,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                40,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                7,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                6,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                0,
+                6
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                13
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                6
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                2,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                5,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                6,
+                1,
+                1,
+                4,
+                1,
+                1
+              ],
+              [
+                19,
+                6,
+                1,
+                3,
+                1,
+                1
+              ],
+              [
+                9,
+                19,
+                3,
+                3,
+                1,
+                1
+              ],
+              [
+                3,
+                8,
+                3,
+                3,
+                1,
+                1
+              ],
+              [
+                3,
+                5,
+                3,
+                3,
+                4,
+                4
+              ],
+              [
+                3,
+                5,
+                3,
+                4,
+                4,
+                4
+              ],
+              [
+                2,
+                5,
+                5,
+                4,
+                4,
+                4
+              ],
+              [
+                2,
+                3,
+                3,
+                4,
+                4,
+                4
+              ],
+              [
+                3,
+                3,
+                3,
+                4,
+                4,
+                4
+              ],
+              [
+                2,
+                3,
+                6,
+                4,
+                3,
+                3
+              ],
+              [
+                2,
+                3,
+                6,
+                4,
+                5,
+                3
+              ],
+              [
+                7,
+                7,
+                4,
+                4,
+                4,
+                1
+              ]
+            ]
+          ],
+          "frame_types": {
+            "CHAIN/STABLE -> CHAIN/STABLE": 168,
+            "GRAVITY_SETTLE/STABLE -> GRAVITY_SETTLE/STABLE": 2,
+            "STABLE/CHAIN -> STABLE/CHAIN": 80,
+            "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 1,
+            "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 4,
+            "STABLE/OJAMA_FALL -> STABLE/STABLE": 7,
+            "STABLE/STABLE -> STABLE/STABLE": 189,
+            "STABLE/STABLE -> STABLE/TSUMO_FALL": 21,
+            "STABLE/TSUMO_FALL -> STABLE/STABLE": 40,
+            "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 28,
+            "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 2
+          },
+          "previous_states": {
+            "GRAVITY_SETTLE -> STABLE / GRAVITY_SETTLE -> STABLE": 23,
+            "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+            "GRAVITY_SETTLE -> STABLE / TSUMO_FALL -> STABLE": 4,
+            "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 17,
+            "OJAMA_FALL -> STABLE / STABLE -> STABLE": 64,
+            "STABLE -> STABLE / STABLE -> STABLE": 338,
+            "STABLE -> STABLE / TSUMO_FALL -> STABLE": 18,
+            "TSUMO_FALL -> STABLE / STABLE -> STABLE": 67,
+            "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 5
+          },
+          "hsv_confusion": {
+            "-1 -> -1": 115,
+            "0 -> 0": 64,
+            "1 -> 1": 4,
+            "2 -> 2": 53,
+            "3 -> 3": 148,
+            "4 -> 4": 37,
+            "5 -> 0": 2,
+            "5 -> 2": 1,
+            "5 -> 5": 112,
+            "9 -> 9": 6
+          },
+          "raw_disagreements_at_differences": 30,
+          "hsv_disagreements_at_visible_differences": 3,
+          "visible_differences": 427,
+          "hidden_differences": 115,
+          "absolute_hsv_delta_percentiles": [
+            [
+              0.0,
+              2.0,
+              1.0
+            ],
+            [
+              2.0,
+              9.0,
+              4.5
+            ],
+            [
+              11.0,
+              11.870000000000005,
+              5.740000000000009
+            ]
+          ]
+        }
+      },
+      "common_baseline": {
+        "cells": 54834,
+        "different_cells": 526,
+        "colors": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10
+        ],
+        "confusion": [
+          [
+            0,
+            0,
+            23,
+            96,
+            36,
+            127,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            32,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            130,
+            0,
+            0,
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            0,
+            1,
+            2,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            44,
+            0,
+            2,
+            6,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "by_side_row_col": [
+          [
+            [
+              58,
+              0,
+              0,
+              57,
+              0,
+              0
+            ],
+            [
+              0,
+              6,
+              0,
+              20,
+              0,
+              0
+            ],
+            [
+              0,
+              6,
+              0,
+              15,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              40,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              7,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              6,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0,
+              6
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              13
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              6
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              5,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              6,
+              1,
+              1,
+              4,
+              1,
+              1
+            ],
+            [
+              19,
+              6,
+              1,
+              3,
+              1,
+              1
+            ],
+            [
+              9,
+              19,
+              3,
+              3,
+              1,
+              1
+            ],
+            [
+              3,
+              8,
+              3,
+              3,
+              1,
+              1
+            ],
+            [
+              3,
+              5,
+              3,
+              3,
+              4,
+              4
+            ],
+            [
+              3,
+              5,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              6,
+              5,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              4,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              3,
+              3,
+              4,
+              3,
+              3
+            ],
+            [
+              2,
+              3,
+              3,
+              4,
+              4,
+              3
+            ],
+            [
+              2,
+              2,
+              4,
+              4,
+              3,
+              1
+            ]
+          ]
+        ],
+        "frame_types": {
+          "CHAIN/STABLE -> CHAIN/STABLE": 152,
+          "GRAVITY_SETTLE/STABLE -> GRAVITY_SETTLE/STABLE": 2,
+          "STABLE/CHAIN -> STABLE/CHAIN": 80,
+          "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 1,
+          "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 4,
+          "STABLE/OJAMA_FALL -> STABLE/STABLE": 7,
+          "STABLE/STABLE -> STABLE/STABLE": 189,
+          "STABLE/STABLE -> STABLE/TSUMO_FALL": 21,
+          "STABLE/TSUMO_FALL -> STABLE/STABLE": 40,
+          "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 28,
+          "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 2
+        },
+        "previous_states": {
+          "GRAVITY_SETTLE -> STABLE / GRAVITY_SETTLE -> STABLE": 23,
+          "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+          "GRAVITY_SETTLE -> STABLE / TSUMO_FALL -> STABLE": 4,
+          "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 13,
+          "OJAMA_FALL -> STABLE / STABLE -> STABLE": 64,
+          "STABLE -> STABLE / STABLE -> STABLE": 332,
+          "STABLE -> STABLE / TSUMO_FALL -> STABLE": 18,
+          "TSUMO_FALL -> STABLE / STABLE -> STABLE": 61,
+          "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 5
+        },
+        "hsv_confusion": {
+          "-1 -> -1": 115,
+          "0 -> 0": 64,
+          "1 -> 1": 4,
+          "2 -> 2": 54,
+          "3 -> 3": 135,
+          "4 -> 4": 37,
+          "5 -> 0": 2,
+          "5 -> 2": 1,
+          "5 -> 5": 108,
+          "9 -> 9": 6
+        },
+        "raw_disagreements_at_differences": 28,
+        "hsv_disagreements_at_visible_differences": 3,
+        "visible_differences": 411,
+        "hidden_differences": 115,
+        "absolute_hsv_delta_percentiles": [
+          [
+            0.0,
+            2.0,
+            1.0
+          ],
+          [
+            2.0,
+            8.0,
+            4.5
+          ],
+          [
+            11.0,
+            11.949999999999989,
+            5.899999999999977
+          ]
+        ]
+      },
+      "common_calibrated": {
+        "cells": 54834,
+        "different_cells": 542,
+        "colors": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10
+        ],
+        "confusion": [
+          [
+            0,
+            0,
+            22,
+            96,
+            36,
+            128,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            32,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            142,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            0,
+            1,
+            2,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            46,
+            0,
+            2,
+            7,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "by_side_row_col": [
+          [
+            [
+              58,
+              0,
+              0,
+              57,
+              0,
+              0
+            ],
+            [
+              0,
+              6,
+              0,
+              20,
+              0,
+              0
+            ],
+            [
+              0,
+              6,
+              0,
+              15,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              40,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              7,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              6,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              0,
+              6
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              13
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              6
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              5,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              6,
+              1,
+              1,
+              4,
+              1,
+              1
+            ],
+            [
+              19,
+              6,
+              1,
+              3,
+              1,
+              1
+            ],
+            [
+              9,
+              19,
+              3,
+              3,
+              1,
+              1
+            ],
+            [
+              3,
+              8,
+              3,
+              3,
+              1,
+              1
+            ],
+            [
+              3,
+              5,
+              3,
+              3,
+              4,
+              4
+            ],
+            [
+              3,
+              5,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              5,
+              5,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              3,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              3,
+              3,
+              3,
+              4,
+              4,
+              4
+            ],
+            [
+              2,
+              3,
+              6,
+              4,
+              3,
+              3
+            ],
+            [
+              2,
+              3,
+              6,
+              4,
+              5,
+              3
+            ],
+            [
+              7,
+              7,
+              4,
+              4,
+              4,
+              1
+            ]
+          ]
+        ],
+        "frame_types": {
+          "CHAIN/STABLE -> CHAIN/STABLE": 168,
+          "GRAVITY_SETTLE/STABLE -> GRAVITY_SETTLE/STABLE": 2,
+          "STABLE/CHAIN -> STABLE/CHAIN": 80,
+          "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 1,
+          "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 4,
+          "STABLE/OJAMA_FALL -> STABLE/STABLE": 7,
+          "STABLE/STABLE -> STABLE/STABLE": 189,
+          "STABLE/STABLE -> STABLE/TSUMO_FALL": 21,
+          "STABLE/TSUMO_FALL -> STABLE/STABLE": 40,
+          "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 28,
+          "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 2
+        },
+        "previous_states": {
+          "GRAVITY_SETTLE -> STABLE / GRAVITY_SETTLE -> STABLE": 23,
+          "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+          "GRAVITY_SETTLE -> STABLE / TSUMO_FALL -> STABLE": 4,
+          "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 17,
+          "OJAMA_FALL -> STABLE / STABLE -> STABLE": 64,
+          "STABLE -> STABLE / STABLE -> STABLE": 338,
+          "STABLE -> STABLE / TSUMO_FALL -> STABLE": 18,
+          "TSUMO_FALL -> STABLE / STABLE -> STABLE": 67,
+          "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 5
+        },
+        "hsv_confusion": {
+          "-1 -> -1": 115,
+          "0 -> 0": 64,
+          "1 -> 1": 4,
+          "2 -> 2": 53,
+          "3 -> 3": 148,
+          "4 -> 4": 37,
+          "5 -> 0": 2,
+          "5 -> 2": 1,
+          "5 -> 5": 112,
+          "9 -> 9": 6
+        },
+        "raw_disagreements_at_differences": 30,
+        "hsv_disagreements_at_visible_differences": 3,
+        "visible_differences": 427,
+        "hidden_differences": 115,
+        "absolute_hsv_delta_percentiles": [
+          [
+            0.0,
+            2.0,
+            1.0
+          ],
+          [
+            2.0,
+            9.0,
+            4.5
+          ],
+          [
+            11.0,
+            11.870000000000005,
+            5.740000000000009
+          ]
+        ]
+      },
+      "b3_reproduction": {
+        "original_equal": true,
+        "degraded_equal": true
+      }
+    },
+    "35": {
+      "crf": 35,
+      "command": [
+        "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/venv/lib/python3.12/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2",
+        "-y",
+        "-ss",
+        "2599.0",
+        "-i",
+        "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+        "-t",
+        "41.0",
+        "-an",
+        "-vf",
+        "scale=1920:1080,format=nv12,format=yuv420p",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "35",
+        "-preset",
+        "veryfast",
+        "-threads",
+        "2",
+        "logs/live_b4_degradation/nv12_crf35.mp4"
+      ],
+      "sha256": "c12dd6f5fd081073f071e6129567439c72d6390688ca22c369a1f342d15b2096",
+      "baseline": {
+        "frames": 1200,
+        "compared_side_frames": 718,
+        "cells": 56004,
+        "different_cells": 409,
+        "stable_availability_mismatches": 182,
+        "original_stable_side_frames": 787,
+        "degraded_stable_side_frames": 831,
+        "first_difference": [
+          82,
+          0,
+          0,
+          0
+        ],
+        "definition": "両方STABLEかつconfirmed_boardありの同時刻同side。隠し段も含む13x6。正解率ではない。",
+        "breakdown": {
+          "cells": 56004,
+          "different_cells": 409,
+          "colors": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            9,
+            10
+          ],
+          "confusion": [
+            [
+              0,
+              6,
+              21,
+              82,
+              28,
+              100,
+              0,
+              0
+            ],
+            [
+              10,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              0,
+              0,
+              0,
+              0,
+              0,
+              18,
+              0
+            ],
+            [
+              86,
+              5,
+              7,
+              0,
+              0,
+              4,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              12,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              26,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "by_side_row_col": [
+            [
+              [
+                59,
+                0,
+                0,
+                41,
+                0,
+                0
+              ],
+              [
+                1,
+                6,
+                0,
+                20,
+                0,
+                0
+              ],
+              [
+                0,
+                10,
+                0,
+                15,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                34,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                2,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                6,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                14
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                2,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                5,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                10,
+                0,
+                0
+              ],
+              [
+                8,
+                0,
+                2,
+                18,
+                0,
+                0
+              ],
+              [
+                10,
+                4,
+                2,
+                1,
+                0,
+                0
+              ],
+              [
+                4,
+                3,
+                6,
+                1,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                2,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                2,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                18,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                0,
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "frame_types": {
+            "CHAIN/STABLE -> CHAIN/STABLE": 106,
+            "STABLE/CHAIN -> STABLE/CHAIN": 63,
+            "STABLE/CHAIN -> STABLE/GRAVITY_SETTLE": 12,
+            "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 4,
+            "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 1,
+            "STABLE/OJAMA_FALL -> STABLE/OJAMA_FALL": 7,
+            "STABLE/STABLE -> STABLE/STABLE": 126,
+            "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 61,
+            "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 29
+          },
+          "previous_states": {
+            "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+            "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 48,
+            "OJAMA_FALL -> STABLE / STABLE -> STABLE": 31,
+            "STABLE -> STABLE / OJAMA_FALL -> STABLE": 2,
+            "STABLE -> STABLE / STABLE -> STABLE": 283,
+            "STABLE -> STABLE / TSUMO_FALL -> STABLE": 14,
+            "TSUMO_FALL -> STABLE / STABLE -> STABLE": 12,
+            "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 13
+          },
+          "hsv_confusion": {
+            "-1 -> -1": 110,
+            "0 -> 0": 53,
+            "2 -> 2": 24,
+            "3 -> 0": 1,
+            "3 -> 3": 96,
+            "4 -> 4": 24,
+            "5 -> 0": 1,
+            "5 -> 5": 55,
+            "9 -> 9": 45
+          },
+          "raw_disagreements_at_differences": 18,
+          "hsv_disagreements_at_visible_differences": 2,
+          "visible_differences": 299,
+          "hidden_differences": 110,
+          "absolute_hsv_delta_percentiles": [
+            [
+              1.0,
+              7.0,
+              2.0
+            ],
+            [
+              11.0,
+              24.549999999999983,
+              7.5
+            ],
+            [
+              18.059999999999945,
+              30.0,
+              10.0
+            ]
+          ]
+        }
+      },
+      "calibrated": {
+        "frames": 1200,
+        "compared_side_frames": 718,
+        "cells": 56004,
+        "different_cells": 409,
+        "stable_availability_mismatches": 182,
+        "original_stable_side_frames": 787,
+        "degraded_stable_side_frames": 831,
+        "first_difference": [
+          82,
+          0,
+          0,
+          0
+        ],
+        "definition": "両方STABLEかつconfirmed_boardありの同時刻同side。隠し段も含む13x6。正解率ではない。",
+        "breakdown": {
+          "cells": 56004,
+          "different_cells": 409,
+          "colors": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            9,
+            10
+          ],
+          "confusion": [
+            [
+              0,
+              6,
+              21,
+              82,
+              28,
+              100,
+              0,
+              0
+            ],
+            [
+              10,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              0,
+              0,
+              0,
+              0,
+              0,
+              18,
+              0
+            ],
+            [
+              86,
+              5,
+              7,
+              0,
+              0,
+              4,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              12,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              26,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "by_side_row_col": [
+            [
+              [
+                59,
+                0,
+                0,
+                41,
+                0,
+                0
+              ],
+              [
+                1,
+                6,
+                0,
+                20,
+                0,
+                0
+              ],
+              [
+                0,
+                10,
+                0,
+                15,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                34,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                2,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                6,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                9
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                14
+              ],
+              [
+                0,
+                0,
+                0,
+                6,
+                0,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                2,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                5,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                10,
+                0,
+                0
+              ],
+              [
+                8,
+                0,
+                2,
+                18,
+                0,
+                0
+              ],
+              [
+                10,
+                4,
+                2,
+                1,
+                0,
+                0
+              ],
+              [
+                4,
+                3,
+                6,
+                1,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                2,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                2,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                8,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                18,
+                2,
+                4,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                2,
+                0,
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "frame_types": {
+            "CHAIN/STABLE -> CHAIN/STABLE": 106,
+            "STABLE/CHAIN -> STABLE/CHAIN": 63,
+            "STABLE/CHAIN -> STABLE/GRAVITY_SETTLE": 12,
+            "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 4,
+            "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 1,
+            "STABLE/OJAMA_FALL -> STABLE/OJAMA_FALL": 7,
+            "STABLE/STABLE -> STABLE/STABLE": 126,
+            "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 61,
+            "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 29
+          },
+          "previous_states": {
+            "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+            "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 48,
+            "OJAMA_FALL -> STABLE / STABLE -> STABLE": 31,
+            "STABLE -> STABLE / OJAMA_FALL -> STABLE": 2,
+            "STABLE -> STABLE / STABLE -> STABLE": 283,
+            "STABLE -> STABLE / TSUMO_FALL -> STABLE": 14,
+            "TSUMO_FALL -> STABLE / STABLE -> STABLE": 12,
+            "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 13
+          },
+          "hsv_confusion": {
+            "-1 -> -1": 110,
+            "0 -> 0": 53,
+            "2 -> 2": 24,
+            "3 -> 0": 1,
+            "3 -> 3": 96,
+            "4 -> 4": 24,
+            "5 -> 0": 1,
+            "5 -> 5": 55,
+            "9 -> 9": 45
+          },
+          "raw_disagreements_at_differences": 18,
+          "hsv_disagreements_at_visible_differences": 2,
+          "visible_differences": 299,
+          "hidden_differences": 110,
+          "absolute_hsv_delta_percentiles": [
+            [
+              1.0,
+              7.0,
+              2.0
+            ],
+            [
+              11.0,
+              24.549999999999983,
+              7.5
+            ],
+            [
+              18.059999999999945,
+              30.0,
+              10.0
+            ]
+          ]
+        }
+      },
+      "common_baseline": {
+        "cells": 56004,
+        "different_cells": 409,
+        "colors": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10
+        ],
+        "confusion": [
+          [
+            0,
+            6,
+            21,
+            82,
+            28,
+            100,
+            0,
+            0
+          ],
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            18,
+            0
+          ],
+          [
+            86,
+            5,
+            7,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            12,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            26,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "by_side_row_col": [
+          [
+            [
+              59,
+              0,
+              0,
+              41,
+              0,
+              0
+            ],
+            [
+              1,
+              6,
+              0,
+              20,
+              0,
+              0
+            ],
+            [
+              0,
+              10,
+              0,
+              15,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              34,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              2,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              6,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              14
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              4
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              5,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              10,
+              0,
+              0
+            ],
+            [
+              8,
+              0,
+              2,
+              18,
+              0,
+              0
+            ],
+            [
+              10,
+              4,
+              2,
+              1,
+              0,
+              0
+            ],
+            [
+              4,
+              3,
+              6,
+              1,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              2,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              2,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              18,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        ],
+        "frame_types": {
+          "CHAIN/STABLE -> CHAIN/STABLE": 106,
+          "STABLE/CHAIN -> STABLE/CHAIN": 63,
+          "STABLE/CHAIN -> STABLE/GRAVITY_SETTLE": 12,
+          "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 4,
+          "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 1,
+          "STABLE/OJAMA_FALL -> STABLE/OJAMA_FALL": 7,
+          "STABLE/STABLE -> STABLE/STABLE": 126,
+          "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 61,
+          "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 29
+        },
+        "previous_states": {
+          "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+          "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 48,
+          "OJAMA_FALL -> STABLE / STABLE -> STABLE": 31,
+          "STABLE -> STABLE / OJAMA_FALL -> STABLE": 2,
+          "STABLE -> STABLE / STABLE -> STABLE": 283,
+          "STABLE -> STABLE / TSUMO_FALL -> STABLE": 14,
+          "TSUMO_FALL -> STABLE / STABLE -> STABLE": 12,
+          "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 13
+        },
+        "hsv_confusion": {
+          "-1 -> -1": 110,
+          "0 -> 0": 53,
+          "2 -> 2": 24,
+          "3 -> 0": 1,
+          "3 -> 3": 96,
+          "4 -> 4": 24,
+          "5 -> 0": 1,
+          "5 -> 5": 55,
+          "9 -> 9": 45
+        },
+        "raw_disagreements_at_differences": 18,
+        "hsv_disagreements_at_visible_differences": 2,
+        "visible_differences": 299,
+        "hidden_differences": 110,
+        "absolute_hsv_delta_percentiles": [
+          [
+            1.0,
+            7.0,
+            2.0
+          ],
+          [
+            11.0,
+            24.549999999999983,
+            7.5
+          ],
+          [
+            18.059999999999945,
+            30.0,
+            10.0
+          ]
+        ]
+      },
+      "common_calibrated": {
+        "cells": 56004,
+        "different_cells": 409,
+        "colors": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          9,
+          10
+        ],
+        "confusion": [
+          [
+            0,
+            6,
+            21,
+            82,
+            28,
+            100,
+            0,
+            0
+          ],
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            4,
+            0,
+            0,
+            0,
+            0,
+            0,
+            18,
+            0
+          ],
+          [
+            86,
+            5,
+            7,
+            0,
+            0,
+            4,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            12,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            26,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        "by_side_row_col": [
+          [
+            [
+              59,
+              0,
+              0,
+              41,
+              0,
+              0
+            ],
+            [
+              1,
+              6,
+              0,
+              20,
+              0,
+              0
+            ],
+            [
+              0,
+              10,
+              0,
+              15,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              34,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              2,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              6,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              9
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              14
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              4
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              2,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              5,
+              0
+            ]
+          ],
+          [
+            [
+              0,
+              0,
+              0,
+              10,
+              0,
+              0
+            ],
+            [
+              8,
+              0,
+              2,
+              18,
+              0,
+              0
+            ],
+            [
+              10,
+              4,
+              2,
+              1,
+              0,
+              0
+            ],
+            [
+              4,
+              3,
+              6,
+              1,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              2,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              2,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              8,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              18,
+              2,
+              4,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              2,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        ],
+        "frame_types": {
+          "CHAIN/STABLE -> CHAIN/STABLE": 106,
+          "STABLE/CHAIN -> STABLE/CHAIN": 63,
+          "STABLE/CHAIN -> STABLE/GRAVITY_SETTLE": 12,
+          "STABLE/GRAVITY_SETTLE -> STABLE/GRAVITY_SETTLE": 4,
+          "STABLE/GRAVITY_SETTLE -> STABLE/TSUMO_FALL": 1,
+          "STABLE/OJAMA_FALL -> STABLE/OJAMA_FALL": 7,
+          "STABLE/STABLE -> STABLE/STABLE": 126,
+          "STABLE/TSUMO_FALL -> STABLE/TSUMO_FALL": 61,
+          "TSUMO_FALL/STABLE -> TSUMO_FALL/STABLE": 29
+        },
+        "previous_states": {
+          "GRAVITY_SETTLE -> STABLE / STABLE -> STABLE": 6,
+          "OJAMA_FALL -> STABLE / OJAMA_FALL -> STABLE": 48,
+          "OJAMA_FALL -> STABLE / STABLE -> STABLE": 31,
+          "STABLE -> STABLE / OJAMA_FALL -> STABLE": 2,
+          "STABLE -> STABLE / STABLE -> STABLE": 283,
+          "STABLE -> STABLE / TSUMO_FALL -> STABLE": 14,
+          "TSUMO_FALL -> STABLE / STABLE -> STABLE": 12,
+          "TSUMO_FALL -> STABLE / TSUMO_FALL -> STABLE": 13
+        },
+        "hsv_confusion": {
+          "-1 -> -1": 110,
+          "0 -> 0": 53,
+          "2 -> 2": 24,
+          "3 -> 0": 1,
+          "3 -> 3": 96,
+          "4 -> 4": 24,
+          "5 -> 0": 1,
+          "5 -> 5": 55,
+          "9 -> 9": 45
+        },
+        "raw_disagreements_at_differences": 18,
+        "hsv_disagreements_at_visible_differences": 2,
+        "visible_differences": 299,
+        "hidden_differences": 110,
+        "absolute_hsv_delta_percentiles": [
+          [
+            1.0,
+            7.0,
+            2.0
+          ],
+          [
+            11.0,
+            24.549999999999983,
+            7.5
+          ],
+          [
+            18.059999999999945,
+            30.0,
+            10.0
+          ]
+        ]
+      }
+    }
+  }
+}

@@ -38,6 +38,23 @@ def test_unknown_probability_stays_hidden() -> None:
     assert snapshot.display['visibility'] == 'hidden'
 
 
+def test_counter_pending_preserves_source_generation() -> None:
+    from src.phase_j.live_counter import AsyncCounter
+    from types import SimpleNamespace
+    tracker = AsyncCounter(SimpleNamespace())
+    tracker.generation, tracker.result_generation = 3, 1
+    tracker.pending = True
+    data = dict(row(), counter_search=tracker.status())
+    snapshot = result_snapshot(initial_snapshot(ASSETS), data, 1.5, 1, None)
+    assert validate_snapshot(snapshot).is_valid
+    assert snapshot.evaluations['counter_search']['pending']
+    assert snapshot.evaluations['counter_search']['result_generation'] == 1
+    assert snapshot.evaluations['counter_search']['generation'] == 3
+    data['counter_search']['pending'] = False
+    invalid = result_snapshot(initial_snapshot(ASSETS), data, 1.5, 1, None)
+    assert not validate_snapshot(invalid).is_valid
+
+
 def test_pending_batch_is_one_job_with_all_notification_count() -> None:
     data = dict(row(), queue_depth=29)
     snapshot = result_snapshot(initial_snapshot(ASSETS), data, 1.5, 1, None)

@@ -944,6 +944,7 @@
       "required": ["practical", "best_action", "player_adjusted"],
       "properties": {
         "display_layers": {"$ref": "#/$defs/display_layers"},
+        "counter_search": {"$ref": "#/$defs/counter_search"},
         "practical": {
           "$ref": "#/$defs/practical_evaluation"
         },
@@ -953,6 +954,23 @@
         "player_adjusted": {
           "type": "null"
         }
+      },
+      "additionalProperties": true
+    },
+    "counter_search": {
+      "type": "object",
+      "description": "MC応手探索。pending中の値はresult_generationの直前値であり、現在世代の新規計算値ではない。",
+      "required": ["pending", "generation", "result_generation", "request_time", "result_time", "submitted", "accepted", "discarded", "error"],
+      "properties": {
+        "pending": {"type": "boolean"},
+        "generation": {"type": "integer", "minimum": 0},
+        "result_generation": {"type": ["integer", "null"], "minimum": 0},
+        "request_time": {"type": ["number", "null"]},
+        "result_time": {"type": ["number", "null"]},
+        "submitted": {"type": "integer", "minimum": 0},
+        "accepted": {"type": "integer", "minimum": 0},
+        "discarded": {"type": "integer", "minimum": 0},
+        "error": {"type": ["string", "null"]}
       },
       "additionalProperties": true
     },

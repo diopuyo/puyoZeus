@@ -44,7 +44,8 @@ def save_json(path: Path, data: Any) -> None:
 def asset_hashes() -> dict[str, str]:
     """実行設定とモデル資産をDTOの再現用IDへ固定する。"""
     groups = dict(app_build_id=['scripts/run_live_pipeline_20260928.py',
-        'scripts/visualize_advantage_overlay.py', 'src/phase_j/live_bridge.py'],
+        'scripts/visualize_advantage_overlay.py', 'src/phase_j/live_bridge.py',
+        'src/phase_j/live_counter.py', 'src/phase_j/live_process.py', 'src/phase_j/live_publish.py'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
         recognition_config_hash=['src/production_config.py'],
@@ -95,6 +96,7 @@ class ResultSink:
     def __init__(self, publisher: LivePublisher) -> None:
         self.publisher = publisher
         self.rows: list[dict[str, Any]] = []
+        self.bridge: Any = None
 
     def observe(self, notice: RecognitionNotice, probability: float, advantage: float,
                 overlay: Any, result: Any, game: int, queue_depth: int, evaluated_at: float) -> None:
@@ -109,6 +111,10 @@ class ResultSink:
             digest=notice_digest(notice), capture_gap=notice.dropped_before > 0,
             hold=not stable and source == 'G_fe')
         self.rows.append(row)
+        counters = getattr(self.bridge, 'active_counters', [])
+        if counters:
+            active = next((counter for counter in counters if counter.pending), counters[0])
+            row['counter_search'] = active.status()
         row['display_layers'] = evaluation_layers(overlay, float(probability))
         self.publisher.offer(row)
 
@@ -153,6 +159,7 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
 
 def run_live(options: argparse.Namespace) -> dict[str, Any]:
     """既定は認識と評価をspawnで隔離し、比較用threadモードだけ残す。"""
+    load_start = os.getloadavg() if hasattr(os, 'getloadavg') else None
     import torch
     import scripts.visualize_advantage_overlay as overlay
     from scripts.run_e3_exchange_eval_20260926 import SEED
@@ -164,6 +171,8 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     publisher = LivePublisher(asset_hashes(), options.host, options.port)
     sink = ResultSink(publisher)
     bridge = make_bridge(options, sink)
+    sink.bridge = bridge
+    bridge.async_counter = getattr(options, 'async_counter', True)
     publisher.start()
     probe = SSEProbe(publisher.server.address())
     try:
@@ -178,12 +187,17 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
             bridge.close()
         finally:
             try:
+                for counter in bridge.counters:
+                    counter.close()
                 publisher.close()
             finally:
                 probe.thread.join(PROBE_JOIN_SEC)
     if probe.error is not None or not publisher.server.sent:
         raise RuntimeError('SSE送信の観測がありません') from probe.error
     report = metrics(bridge, sink, options, command)
+    report['counter_search'] = [counter.status() for counter in bridge.counters]
+    report['loadavg_start'] = load_start
+    report['loadavg_end'] = os.getloadavg() if hasattr(os, 'getloadavg') else None
     report.update(gpu=torch.cuda.get_device_name() if torch.cuda.is_available() else None,
                   sse_probe_messages=probe.count, assets=dict(publisher.initial.assets))
     save_json(options.output / 'metrics.json', report)
@@ -219,8 +233,14 @@ def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: Recogni
             coalescing_overlay(overlay.ExchangeEventOverlay, bridge)))
         stack.enter_context(patch.object(overlay, 'HeavyAdvCache',
             coalescing_cache(overlay.HeavyAdvCache, bridge)))
-        stack.enter_context(patch.object(overlay, 'CounterReachTracker',
-            coalescing_counter(overlay.CounterReachTracker, bridge)))
+        if not getattr(bridge, 'async_counter', False):
+            stack.enter_context(patch.object(overlay, 'CounterReachTracker',
+                coalescing_counter(overlay.CounterReachTracker, bridge)))
+    if getattr(bridge, 'async_counter', False):
+        from src.phase_j.live_counter import factory
+        counter = factory(bridge)
+        stack.enter_context(patch.object(counter, 'update', bridge.meter.wrap(counter.update, 'counter')))
+        stack.enter_context(patch.object(overlay, 'CounterReachTracker', counter))
 
 
 def compare_arrays(reference: Path, candidate: Path) -> dict[str, Any]:
@@ -274,6 +294,7 @@ def run_comparison(options: argparse.Namespace) -> dict[str, Any]:
         '--start-sec', str(options.start_sec), '--end-sec', str(options.end_sec),
         '--warmup-sec', str(options.warmup_sec), '--port', str(options.port),
         '--output', str(base / 'candidate')]
+    candidate.append('--no-async-counter')
     run_child(candidate, base / 'candidate')
     report = compare_arrays(base/'reference/display.npz', base/'candidate/display.npz')
     save_json(base / 'comparison.json', report)
@@ -294,11 +315,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--compare', action='store_true')
     parser.add_argument('--worker-mode', choices=('process', 'thread'), default='process')
     parser.add_argument('--coalesce-features', action='store_true')
+    parser.add_argument('--async-counter', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--input-config', type=Path)
     parser.add_argument('--duration-sec', type=float, default=END_SEC-START_SEC)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
     options = parser.parse_args()
+    if options.compare:
+        options.async_counter = False
     if options.input_config:
         options.start_sec, options.end_sec, options.warmup_sec = 0.0, options.duration_sec, 0.0
     if options.compare and options.realtime:

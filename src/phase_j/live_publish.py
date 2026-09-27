@@ -27,7 +27,9 @@ font:28px sans-serif;text-shadow:1px 1px 3px black}</style><div id="value">待�
 const d=JSON.parse(e.data), p=d.evaluations.practical;
 document.getElementById('value').textContent=d.display.input_status==='verifying'?'HOLD 入力確認中':
 d.display.visibility==='hidden'?'待機中':
-`1P ${(p.p1_win_probability*100).toFixed(1)}% | ${p.source} | ${d.display.status}`;
+`1P ${(p.p1_win_probability*100).toFixed(1)}% | ${p.source} | ${d.display.status}`+
+(d.evaluations.counter_search?.pending?' | 応手 計算中'+
+(d.evaluations.counter_search.result_generation===null?'（未取得）':'（直前値）'):'');
 });events.onerror=()=>{document.getElementById('value').textContent='HOLD 接続待ち';};
 </script></html>'''
 
@@ -59,6 +61,8 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
     payload['input'].update(event_seq=row['frame'])
     if 'display_layers' in row:
         payload['evaluations']['display_layers'] = row['display_layers']
+    if 'counter_search' in row:
+        payload['evaluations']['counter_search'] = row['counter_search']
     if row['raw_probability'] is None:
         payload['timing']['calculation_age_ms'] = None
         if row.get('input_verifying'):

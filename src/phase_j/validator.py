@@ -602,10 +602,21 @@ def _snapshot_semantic_issues(payload: Payload, context: ValidationContext) -> l
     for validator in (
         _validate_generations, _validate_both, _validate_provenance, _validate_mode,
         _validate_available_fields, _validate_hold_time, _validate_display_integrity,
-        _validate_worker_lanes, _validate_best_action, _validate_layers,
+        _validate_worker_lanes, _validate_best_action, _validate_layers, _validate_counter_search,
     ):
         issues.extend(validator(payload))
     return issues
+
+
+def _validate_counter_search(payload: Payload) -> list[ValidationIssue]:
+    """過去世代の応手を現在値として公開するDTOを拒否する。"""
+    status = payload['evaluations'].get('counter_search')
+    if status is None or status['result_generation'] is None:
+        return []
+    current, result = status['generation'], status['result_generation']
+    if result > current or (result != current and not status['pending']):
+        return [_issue('R22', '$.evaluations.counter_search', '応手の世代と計算中表示が不整合です')]
+    return []
 
 
 def _validate_layers(payload: Payload) -> list[ValidationIssue]:

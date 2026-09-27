@@ -24,11 +24,11 @@ ENCODE_THREADS = 2
 BOARD_SHAPE = (2, 13, 6)
 
 
-def transcode(video: Path, output: Path) -> list[str]:
+def transcode(video: Path, output: Path, crf: int = CRF) -> list[str]:
     command = [imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-ss', str(START-WARMUP),
         '-i', str(video), '-t', str(END-START+WARMUP), '-an', '-vf',
         'scale=1920:1080,format=nv12,format=yuv420p', '-c:v', 'libx264',
-        '-crf', str(CRF), '-preset', 'veryfast', '-threads', str(ENCODE_THREADS), str(output)]
+        '-crf', str(crf), '-preset', 'veryfast', '-threads', str(ENCODE_THREADS), str(output)]
     with output.with_suffix('.ffmpeg.log').open('w') as log:
         subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
     return command

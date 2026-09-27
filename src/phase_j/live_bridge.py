@@ -85,6 +85,15 @@ class RecognitionBridge:
         self.profile: list[dict[str, float]] = []
         self.batch_ready_at = 0.0
         self.meter: Any = None
+        self.counters: list[Any] = []
+
+    def counter_context(self, result: Any, game: int) -> None:
+        """非STABLE通知を含めて確定盤面世代と試合境界を追跡する。"""
+        context = (game, getattr(result, 'is_match_active', True), *(
+            None if side.confirmed_board is None else side.confirmed_board.grid_bytes()
+            for side in (result.p1, result.p2)))
+        for counter in self.counters:
+            counter.invalidate(context)
 
     def _put(self, notice: RecognitionNotice) -> None:
         while not self.cancel.is_set():
@@ -161,7 +170,9 @@ class RecognitionBridge:
         return batch
 
     def observe(self, notice: RecognitionNotice, probability: float, advantage: float,
-                overlay: Any, result: Any, game: int, write_frame: int) -> None:
+                overlay: Any, result: Any, game: int, write_frame: int,
+                counter_trackers: tuple[Any, ...] = ()) -> None:
+        self.active_counters = [counter for counter in counter_trackers if hasattr(counter, 'status')]
         if notice.frame >= write_frame:
             self.callback(notice, probability, advantage, overlay, result, game,
                           self.queue.qsize()+self.batch_remaining, time.perf_counter())
@@ -192,8 +203,12 @@ def adapt_loop(loop: ast.For) -> None:
     recognition = next(i for i, code in enumerate(codes) if code.startswith('r = pipe.update('))
     drawing = next(i for i, code in enumerate(codes) if code.startswith('waiting ='))
     body = loop.body[recognition + 1:drawing]
+    boundary = next(i for i, node in enumerate(body)
+                    if ast.unparse(node).startswith('snap = _drive_ojama'))
+    body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx)').body[0])
     callback = ast.parse('_live_bridge.observe(packet, disp_p1, disp_adv, event_overlay, '
-                         'r, game_idx, write_frame)').body[0]
+                         'r, game_idx, write_frame, '
+                         '(counter_tracker, resolved_tracker._counter_tracker))').body[0]
     index = next(i for i, node in enumerate(body) if ast.unparse(node).startswith('if fi < write_frame:'))
     body.insert(index, callback)
     prefix = ast.parse('fi = packet.frame\nt = packet.t_sec\nr = packet.result()\npipe = packet.pipeline').body
