@@ -25,6 +25,8 @@ PERCENT = 100
 TEXT_CACHE_SIZE = 512
 GRAPH_TICKS = (-100, -50, -25, 0, 25, 50, 100)
 GRAPH_LINE_WIDTH = 4
+GRAPH_PLAYHEAD_COLOR = (255, 255, 0)
+GRAPH_PLAYHEAD_WIDTH = 2
 GRAPH_LEFT_MARGIN = 64
 GRAPH_TOP_MARGIN = 32
 GRAPH_BOTTOM_MARGIN = 24
@@ -77,7 +79,7 @@ def expand_review_graph(frame: np.ndarray, region: tuple[int, int, int, int],
     left, right = GRAPH_LEFT_MARGIN, width - PADDING
     top, bottom = GRAPH_TOP_MARGIN, band.height - GRAPH_BOTTOM_MARGIN
     center = (top + bottom) / 2
-    horizon = max(1.0, min(total, max(t_rel, 1.0)))
+    horizon = max(total, 1.0)
     points = [(left + max(0, min(t / horizon, 1)) * (right-left),
                center - max(-PERCENT, min(PERCENT, a)) / PERCENT * (bottom-top) / 2)
               for t, a in history]
@@ -90,6 +92,10 @@ def expand_review_graph(frame: np.ndarray, region: tuple[int, int, int, int],
         draw.text((2, py - FONT_SIZE / 2), f'{tick:+d}', font=font, fill=(230, 230, 235))
     if len(points) > 1:
         draw.line(points, fill=(245, 245, 250), width=GRAPH_LINE_WIDTH)
+    # 試合・区間全体の固定縮尺で現在の再生位置を示す。
+    playhead = left + max(0, min(t_rel / horizon, 1)) * (right-left)
+    draw.line((playhead, top, playhead, bottom),
+              fill=GRAPH_PLAYHEAD_COLOR, width=GRAPH_PLAYHEAD_WIDTH)
     draw.text((left, bottom), '0秒', font=font, fill=(230, 230, 235))
     draw.text((right - GRAPH_LEFT_MARGIN, bottom), f'{horizon:.0f}秒', font=font, fill=(230, 230, 235))
     expanded[y:y + height * 2, x:x + width] = cv2.cvtColor(np.asarray(band), cv2.COLOR_RGB2BGR)
