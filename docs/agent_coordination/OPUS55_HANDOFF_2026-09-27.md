@@ -31,7 +31,7 @@
 - 148動画CV: 中盤は撃ち合い前の静止情報で天井≈0.58、撃ち合い後情報の上限0.722。S3′（リーク是正版）中盤 .717、S1′ .652
 
 ## コミット履歴（branch）
-98397b8 E1 / 9435926 E2 / 8e48558 E3b〜E5 / 1dcdf20 E6〜E8 / 8aafa9c E9 / be85fe7 E10〜E10c / 833ffcd E11 / eabb126 E12/E12b / cd70688 E13 / **（E14+F1+E14b は本セッション末にコミット、下記参照）**
+98397b8 E1 / 9435926 E2 / 8e48558 E3b〜E5 / 1dcdf20 E6〜E8 / 8aafa9c E9 / be85fe7 E10〜E10c / 833ffcd E11 / eabb126 E12/E12b / cd70688 E13 / **b6a543b F1/F1b/E14/E14b（最新）**
 
 ## userの目視レビュー（進行中）
 - レビュー動画の規約: **zenchi `video_zenchi_c0BQoMJwwQU` の30先セット1「3本目」= 第41〜57試合（2580.566〜3427.166秒）から3試合連続の短尺**（現在は第41〜43試合）。スマホで見る → **新方式のみ・横1280・30MB以下**（SendUserFile上限30MiB）、scratchの mobile.sh/split.sh 相当（imageio_ffmpeg, crf28, 必要なら200秒分割）。PC用は D:/puyo_analyzer/videos/review/。レビュー用は「主因」要約より**データ最大表示**。
