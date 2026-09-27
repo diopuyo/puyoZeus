@@ -54,7 +54,7 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            evaluation_layers: bool = False, completion_check: bool = False,
            landing_counter_response: bool = False, confirmed_death_hold: bool = False,
            landing_counter_prob: bool = False, landing_hands_spec: bool = False,
-           death_candidate_guard: bool = False) -> dict:
+           death_candidate_guard: bool = False, death_formula_guard: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -73,7 +73,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         count_sync=count_sync, death_guard=death_guard, evaluation_layers=evaluation_layers,
         completion_check=completion_check, landing_counter_response=landing_counter_response,
         confirmed_death_hold=confirmed_death_hold, landing_counter_prob=landing_counter_prob,
-        landing_hands_spec=landing_hands_spec, death_candidate_guard=death_candidate_guard)
+        landing_hands_spec=landing_hands_spec, death_candidate_guard=death_candidate_guard,
+        death_formula_guard=death_formula_guard)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -134,6 +135,7 @@ def main() -> None:
     parser.add_argument("--landing-counter-response", action="store_true", default=False)
     parser.add_argument("--landing-hands-spec", action="store_true", default=False)
     parser.add_argument("--death-candidate-guard", action="store_true", default=False)
+    parser.add_argument("--death-formula-guard", action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
@@ -149,7 +151,8 @@ def main() -> None:
                     confirmed_death_hold=options.confirmed_death_hold,
                     landing_counter_prob=options.landing_counter_prob,
                     landing_hands_spec=options.landing_hands_spec,
-                    death_candidate_guard=options.death_candidate_guard)
+                    death_candidate_guard=options.death_candidate_guard,
+                    death_formula_guard=options.death_formula_guard)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

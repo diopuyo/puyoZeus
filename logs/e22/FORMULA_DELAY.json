@@ -1,0 +1,1638 @@
+{
+  "sources": [
+    "q_7gc4TgFig",
+    "fcXG83vInDY",
+    "mia8KCjr52g"
+  ],
+  "baseline_notifications": 180,
+  "measured": 15,
+  "censored": 165,
+  "p99_sec": 0.4666666666665833,
+  "quantile_method": "higher",
+  "max_hold_frames": 14,
+  "max_hold_sec": 0.4666666666666667,
+  "definition": "baseline初通知→同側の最初の有効式読取。試合境界・非連鎖復帰・死亡で打切り。欠測を0扱いしない。",
+  "sha256": {
+    "q_7gc4TgFig": "8597e2712bb01e8ff291055154a48bfab912096e9b7d26b95c8dc110d77b62c7",
+    "fcXG83vInDY": "e8fc2c873743a40e9f04706ce370c651992e304b3ea13f5611d1e1ce7bcf639c",
+    "mia8KCjr52g": "dd33fb7c43b5d4ff8032bb0c7d46767cc408697b41adad572cd8624dd55a02f0"
+  },
+  "rows": [
+    {
+      "source": "q_7gc4TgFig",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 127.73333333333333,
+      "observed_sec": 127.76666666666667,
+      "formula_sec": null,
+      "censor_sec": 128.9
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 128.9,
+      "observed_sec": 128.93333333333334,
+      "formula_sec": null,
+      "censor_sec": 131.66666666666666
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 0,
+      "side": "2P",
+      "trigger_sec": 132.93333333333334,
+      "observed_sec": 132.96666666666667,
+      "formula_sec": null,
+      "censor_sec": 133.6
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 135.7,
+      "observed_sec": 135.73333333333332,
+      "formula_sec": null,
+      "censor_sec": 137.13333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 137.13333333333333,
+      "observed_sec": 137.43333333333334,
+      "formula_sec": null,
+      "censor_sec": 137.83333333333334
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 151.96666666666667,
+      "observed_sec": 152.0,
+      "formula_sec": null,
+      "censor_sec": 152.43333333333334
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 1,
+      "side": "2P",
+      "trigger_sec": 157.93333333333334,
+      "observed_sec": 157.96666666666667,
+      "formula_sec": null,
+      "censor_sec": 158.46666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 177.0,
+      "observed_sec": 177.03333333333333,
+      "formula_sec": null,
+      "censor_sec": 177.06666666666666
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 2,
+      "side": "2P",
+      "trigger_sec": 209.63333333333333,
+      "observed_sec": 209.66666666666666,
+      "formula_sec": 209.73333333333332,
+      "delay_sec": 0.06666666666666288
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 210.26666666666668,
+      "observed_sec": 210.3,
+      "formula_sec": null,
+      "censor_sec": 210.46666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 236.53333333333333,
+      "observed_sec": 236.56666666666666,
+      "formula_sec": null,
+      "censor_sec": 236.6
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 266.8,
+      "observed_sec": 266.8333333333333,
+      "formula_sec": null,
+      "censor_sec": 267.46666666666664
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 269.8333333333333,
+      "observed_sec": 269.8666666666667,
+      "formula_sec": 269.96666666666664,
+      "delay_sec": 0.0999999999999659
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 277.1,
+      "observed_sec": 277.1333333333333,
+      "formula_sec": null,
+      "censor_sec": 277.43333333333334
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 279.56666666666666,
+      "observed_sec": 279.6,
+      "formula_sec": null
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 305.3666666666667,
+      "observed_sec": 305.4,
+      "formula_sec": null,
+      "censor_sec": 305.96666666666664
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 309.76666666666665,
+      "observed_sec": 309.8,
+      "formula_sec": null,
+      "censor_sec": 311.5
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 315.03333333333336,
+      "observed_sec": 315.06666666666666,
+      "formula_sec": null,
+      "censor_sec": 315.76666666666665
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 322.46666666666664,
+      "observed_sec": 322.5,
+      "formula_sec": null,
+      "censor_sec": 323.0
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 337.8333333333333,
+      "observed_sec": 337.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 338.46666666666664
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 428.26666666666665,
+      "observed_sec": 428.3,
+      "formula_sec": null,
+      "censor_sec": 428.3666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 433.3,
+      "observed_sec": 433.3333333333333,
+      "formula_sec": null,
+      "censor_sec": 433.3666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "2P",
+      "trigger_sec": 433.7,
+      "observed_sec": 433.73333333333335,
+      "formula_sec": 433.8,
+      "delay_sec": 0.06666666666666288
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "2P",
+      "trigger_sec": 437.6666666666667,
+      "observed_sec": 437.7,
+      "formula_sec": null,
+      "censor_sec": 437.96666666666664
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 443.26666666666665,
+      "observed_sec": 443.3,
+      "formula_sec": null,
+      "censor_sec": 443.43333333333334
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 6,
+      "side": "2P",
+      "trigger_sec": 447.3,
+      "observed_sec": 447.3333333333333,
+      "formula_sec": null,
+      "censor_sec": 448.43333333333334
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 476.3,
+      "observed_sec": 476.3333333333333,
+      "formula_sec": null,
+      "censor_sec": 476.3666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "2P",
+      "trigger_sec": 477.1333333333333,
+      "observed_sec": 477.1666666666667,
+      "formula_sec": null,
+      "censor_sec": 477.8333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 483.06666666666666,
+      "observed_sec": 483.1,
+      "formula_sec": null,
+      "censor_sec": 483.1666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "2P",
+      "trigger_sec": 487.53333333333336,
+      "observed_sec": 487.56666666666666,
+      "formula_sec": 487.76666666666665,
+      "delay_sec": 0.19999999999998863
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 490.56666666666666,
+      "observed_sec": 490.6,
+      "formula_sec": null,
+      "censor_sec": 491.4
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 512.1333333333333,
+      "observed_sec": 512.1666666666666,
+      "formula_sec": null,
+      "censor_sec": 513.8666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 547.6333333333333,
+      "observed_sec": 547.6666666666666,
+      "formula_sec": null,
+      "censor_sec": 548.0
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 550.5,
+      "observed_sec": 550.5333333333333,
+      "formula_sec": null,
+      "censor_sec": 551.0666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 551.6,
+      "observed_sec": 551.6333333333333,
+      "formula_sec": null,
+      "censor_sec": 552.0333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 553.3,
+      "observed_sec": 553.3333333333334,
+      "formula_sec": 553.8,
+      "delay_sec": 0.4666666666665833
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 563.4,
+      "observed_sec": 563.4333333333333,
+      "formula_sec": null,
+      "censor_sec": 563.8666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 9,
+      "side": "2P",
+      "trigger_sec": 617.9333333333333,
+      "observed_sec": 617.9666666666667,
+      "formula_sec": null,
+      "censor_sec": 618.0333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 626.5666666666667,
+      "observed_sec": 626.6,
+      "formula_sec": null,
+      "censor_sec": 626.9
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 661.9666666666667,
+      "observed_sec": 662.0,
+      "formula_sec": null,
+      "censor_sec": 663.1666666666666
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 10,
+      "side": "2P",
+      "trigger_sec": 692.5333333333333,
+      "observed_sec": 692.5666666666667,
+      "formula_sec": null,
+      "censor_sec": 692.8666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 10,
+      "side": "1P",
+      "trigger_sec": 694.2666666666667,
+      "observed_sec": 694.3,
+      "formula_sec": null,
+      "censor_sec": 695.5666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 719.3666666666667,
+      "observed_sec": 719.4,
+      "formula_sec": null,
+      "censor_sec": 719.7666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 727.5666666666667,
+      "observed_sec": 727.6,
+      "formula_sec": null,
+      "censor_sec": 728.3
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 735.9333333333333,
+      "observed_sec": 735.9666666666667,
+      "formula_sec": null,
+      "censor_sec": 736.5333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 747.5666666666667,
+      "observed_sec": 747.6,
+      "formula_sec": null,
+      "censor_sec": 748.5
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 12,
+      "side": "2P",
+      "trigger_sec": 770.4,
+      "observed_sec": 770.4333333333333,
+      "formula_sec": null,
+      "censor_sec": 770.7333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 12,
+      "side": "1P",
+      "trigger_sec": 777.6,
+      "observed_sec": 777.6333333333333,
+      "formula_sec": null,
+      "censor_sec": 778.1666666666666
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 13,
+      "side": "1P",
+      "trigger_sec": 820.7,
+      "observed_sec": 820.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 821.1333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 13,
+      "side": "1P",
+      "trigger_sec": 835.9333333333333,
+      "observed_sec": 835.9666666666667,
+      "formula_sec": null,
+      "censor_sec": 836.4666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 13,
+      "side": "1P",
+      "trigger_sec": 854.4,
+      "observed_sec": 854.4333333333333,
+      "formula_sec": null,
+      "censor_sec": 854.4666666666667
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 14,
+      "side": "2P",
+      "trigger_sec": 876.6333333333333,
+      "observed_sec": 876.6666666666666,
+      "formula_sec": null,
+      "censor_sec": 877.2333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 14,
+      "side": "1P",
+      "trigger_sec": 880.0333333333333,
+      "observed_sec": 880.0666666666667,
+      "formula_sec": 880.1333333333333,
+      "delay_sec": 0.06666666666660603
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 14,
+      "side": "2P",
+      "trigger_sec": 882.6,
+      "observed_sec": 882.6333333333333,
+      "formula_sec": 882.6333333333333,
+      "delay_sec": 0.0
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 14,
+      "side": "2P",
+      "trigger_sec": 885.7,
+      "observed_sec": 885.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 886.2333333333333
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game": 14,
+      "side": "1P",
+      "trigger_sec": 895.1333333333333,
+      "observed_sec": 895.1666666666666,
+      "formula_sec": null,
+      "censor_sec": 895.5666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 0,
+      "side": "2P",
+      "trigger_sec": 159.96666666666667,
+      "observed_sec": 160.0,
+      "formula_sec": null,
+      "censor_sec": 162.26666666666668
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 160.13333333333333,
+      "observed_sec": 160.16666666666666,
+      "formula_sec": null,
+      "censor_sec": 162.26666666666668
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 166.13333333333333,
+      "observed_sec": 166.16666666666666,
+      "formula_sec": null,
+      "censor_sec": 167.16666666666666
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 170.8,
+      "observed_sec": 170.83333333333334,
+      "formula_sec": null,
+      "censor_sec": 170.96666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 174.76666666666668,
+      "observed_sec": 174.8,
+      "formula_sec": null,
+      "censor_sec": 175.86666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 203.2,
+      "observed_sec": 203.23333333333332,
+      "formula_sec": null,
+      "censor_sec": 203.26666666666668
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 1,
+      "side": "2P",
+      "trigger_sec": 219.93333333333334,
+      "observed_sec": 219.96666666666667,
+      "formula_sec": null,
+      "censor_sec": 220.43333333333334
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 229.63333333333333,
+      "observed_sec": 229.66666666666666,
+      "formula_sec": null,
+      "censor_sec": 231.3
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "2P",
+      "trigger_sec": 269.6,
+      "observed_sec": 269.6333333333333,
+      "formula_sec": null,
+      "censor_sec": 269.8333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 270.0,
+      "observed_sec": 270.03333333333336,
+      "formula_sec": 270.1333333333333,
+      "delay_sec": 0.0999999999999659
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 271.9,
+      "observed_sec": 271.93333333333334,
+      "formula_sec": null,
+      "censor_sec": 272.7
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "2P",
+      "trigger_sec": 277.3,
+      "observed_sec": 277.3333333333333,
+      "formula_sec": null
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "2P",
+      "trigger_sec": 277.56666666666666,
+      "observed_sec": 277.6,
+      "formula_sec": null,
+      "censor_sec": 277.73333333333335
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 284.46666666666664,
+      "observed_sec": 284.5,
+      "formula_sec": 284.8,
+      "delay_sec": 0.30000000000001137
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 286.56666666666666,
+      "observed_sec": 286.6,
+      "formula_sec": null,
+      "censor_sec": 287.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 340.03333333333336,
+      "observed_sec": 340.06666666666666,
+      "formula_sec": null,
+      "censor_sec": 340.3
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 344.6333333333333,
+      "observed_sec": 344.6666666666667,
+      "formula_sec": null,
+      "censor_sec": 345.1
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 346.0,
+      "observed_sec": 346.03333333333336,
+      "formula_sec": null,
+      "censor_sec": 346.6
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 349.0,
+      "observed_sec": 349.03333333333336,
+      "formula_sec": null,
+      "censor_sec": 349.8666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 355.06666666666666,
+      "observed_sec": 355.1,
+      "formula_sec": 355.1333333333333,
+      "delay_sec": 0.03333333333330302
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 355.6,
+      "observed_sec": 355.6333333333333,
+      "formula_sec": 355.7,
+      "delay_sec": 0.06666666666666288
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 358.8,
+      "observed_sec": 358.8333333333333,
+      "formula_sec": null,
+      "censor_sec": 359.5
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 361.76666666666665,
+      "observed_sec": 361.8,
+      "formula_sec": null,
+      "censor_sec": 361.93333333333334
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 366.6666666666667,
+      "observed_sec": 366.7,
+      "formula_sec": null,
+      "censor_sec": 367.23333333333335
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 405.1333333333333,
+      "observed_sec": 405.1666666666667,
+      "formula_sec": null,
+      "censor_sec": 405.6333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 406.4,
+      "observed_sec": 406.43333333333334,
+      "formula_sec": 406.43333333333334,
+      "delay_sec": 0.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 409.56666666666666,
+      "observed_sec": 409.6,
+      "formula_sec": null,
+      "censor_sec": 410.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 417.73333333333335,
+      "observed_sec": 417.76666666666665,
+      "formula_sec": null,
+      "censor_sec": 418.2
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 465.56666666666666,
+      "observed_sec": 465.6,
+      "formula_sec": null,
+      "censor_sec": 465.96666666666664
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 477.76666666666665,
+      "observed_sec": 477.8,
+      "formula_sec": null,
+      "censor_sec": 478.26666666666665
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 507.3,
+      "observed_sec": 507.3333333333333,
+      "formula_sec": null,
+      "censor_sec": 507.6333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 526.9333333333333,
+      "observed_sec": 526.9666666666667,
+      "formula_sec": null,
+      "censor_sec": 527.0666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 530.3666666666667,
+      "observed_sec": 530.4,
+      "formula_sec": null,
+      "censor_sec": 530.4333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 566.8333333333334,
+      "observed_sec": 566.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 567.2666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 571.0,
+      "observed_sec": 571.0333333333333,
+      "formula_sec": null,
+      "censor_sec": 572.6
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "2P",
+      "trigger_sec": 587.1666666666666,
+      "observed_sec": 587.2,
+      "formula_sec": null,
+      "censor_sec": 587.6333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 617.1,
+      "observed_sec": 617.1333333333333,
+      "formula_sec": 617.1333333333333,
+      "delay_sec": 0.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 632.7333333333333,
+      "observed_sec": 632.7666666666667,
+      "formula_sec": null,
+      "censor_sec": 632.8
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 662.6,
+      "observed_sec": 662.6333333333333,
+      "formula_sec": null,
+      "censor_sec": 662.9666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 707.2666666666667,
+      "observed_sec": 707.3,
+      "formula_sec": null,
+      "censor_sec": 707.5
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 710.3333333333334,
+      "observed_sec": 710.3666666666667,
+      "formula_sec": null,
+      "censor_sec": 710.5
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 715.7,
+      "observed_sec": 715.7333333333333,
+      "formula_sec": 715.7333333333333,
+      "delay_sec": 0.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 715.9666666666667,
+      "observed_sec": 716.0,
+      "formula_sec": null,
+      "censor_sec": 716.6666666666666
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 717.0333333333333,
+      "observed_sec": 717.0666666666667,
+      "formula_sec": 717.1666666666666,
+      "delay_sec": 0.09999999999990905
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "2P",
+      "trigger_sec": 721.6333333333333,
+      "observed_sec": 721.6666666666666,
+      "formula_sec": null,
+      "censor_sec": 722.2333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 728.9333333333333,
+      "observed_sec": 728.9666666666667,
+      "formula_sec": null,
+      "censor_sec": 729.0
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 758.1,
+      "observed_sec": 758.1333333333333,
+      "formula_sec": null,
+      "censor_sec": 758.2
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 9,
+      "side": "2P",
+      "trigger_sec": 762.7,
+      "observed_sec": 762.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 763.2
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 766.4666666666667,
+      "observed_sec": 766.5,
+      "formula_sec": null
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 10,
+      "side": "1P",
+      "trigger_sec": 766.4666666666667,
+      "observed_sec": 771.1333333333333,
+      "formula_sec": null,
+      "censor_sec": 771.2333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 10,
+      "side": "2P",
+      "trigger_sec": 802.7,
+      "observed_sec": 802.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 803.0666666666667
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 10,
+      "side": "2P",
+      "trigger_sec": 829.4,
+      "observed_sec": 829.4333333333333,
+      "formula_sec": null
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 859.8,
+      "observed_sec": 859.8333333333334,
+      "formula_sec": null,
+      "censor_sec": 860.1333333333333
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game": 11,
+      "side": "1P",
+      "trigger_sec": 877.8333333333334,
+      "observed_sec": 877.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 878.4333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 128.6,
+      "observed_sec": 128.63333333333333,
+      "formula_sec": null,
+      "censor_sec": 129.33333333333334
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 0,
+      "side": "1P",
+      "trigger_sec": 129.33333333333334,
+      "observed_sec": 129.36666666666667,
+      "formula_sec": null,
+      "censor_sec": 130.0
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 132.56666666666666,
+      "observed_sec": 132.6,
+      "formula_sec": null,
+      "censor_sec": 134.16666666666666
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 134.16666666666666,
+      "observed_sec": 134.2,
+      "formula_sec": null,
+      "censor_sec": 134.3
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "2P",
+      "trigger_sec": 153.1,
+      "observed_sec": 153.13333333333333,
+      "formula_sec": null,
+      "censor_sec": 153.46666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "2P",
+      "trigger_sec": 162.1,
+      "observed_sec": 162.13333333333333,
+      "formula_sec": null,
+      "censor_sec": 162.53333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 162.9,
+      "observed_sec": 162.93333333333334,
+      "formula_sec": null,
+      "censor_sec": 164.76666666666668
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "1P",
+      "trigger_sec": 170.13333333333333,
+      "observed_sec": 170.16666666666666,
+      "formula_sec": null,
+      "censor_sec": 170.46666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 1,
+      "side": "2P",
+      "trigger_sec": 170.36666666666667,
+      "observed_sec": 170.4,
+      "formula_sec": null,
+      "censor_sec": 171.23333333333332
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 203.36666666666667,
+      "observed_sec": 203.4,
+      "formula_sec": null,
+      "censor_sec": 203.93333333333334
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 2,
+      "side": "2P",
+      "trigger_sec": 207.63333333333333,
+      "observed_sec": 207.66666666666666,
+      "formula_sec": null,
+      "censor_sec": 207.76666666666668
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 228.56666666666666,
+      "observed_sec": 228.6,
+      "formula_sec": null,
+      "censor_sec": 229.43333333333334
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 2,
+      "side": "1P",
+      "trigger_sec": 237.66666666666666,
+      "observed_sec": 237.7,
+      "formula_sec": null,
+      "censor_sec": 238.46666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 262.96666666666664,
+      "observed_sec": 263.0,
+      "formula_sec": null,
+      "censor_sec": 263.26666666666665
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 276.0,
+      "observed_sec": 276.03333333333336,
+      "formula_sec": null,
+      "censor_sec": 276.3666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 276.9,
+      "observed_sec": 276.93333333333334,
+      "formula_sec": null,
+      "censor_sec": 277.03333333333336
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 292.4,
+      "observed_sec": 292.43333333333334,
+      "formula_sec": null,
+      "censor_sec": 292.76666666666665
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 298.8,
+      "observed_sec": 298.8333333333333,
+      "formula_sec": null,
+      "censor_sec": 299.3333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 302.5,
+      "observed_sec": 302.53333333333336,
+      "formula_sec": null,
+      "censor_sec": 302.8666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "2P",
+      "trigger_sec": 322.06666666666666,
+      "observed_sec": 322.1,
+      "formula_sec": null,
+      "censor_sec": 322.6333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 333.3333333333333,
+      "observed_sec": 333.3666666666667,
+      "formula_sec": null,
+      "censor_sec": 334.7
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 3,
+      "side": "1P",
+      "trigger_sec": 336.93333333333334,
+      "observed_sec": 336.96666666666664,
+      "formula_sec": null,
+      "censor_sec": 337.46666666666664
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 376.8333333333333,
+      "observed_sec": 376.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 377.3666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 384.06666666666666,
+      "observed_sec": 384.1,
+      "formula_sec": null,
+      "censor_sec": 384.2
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 388.76666666666665,
+      "observed_sec": 388.8,
+      "formula_sec": null,
+      "censor_sec": 389.1666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 399.03333333333336,
+      "observed_sec": 399.06666666666666,
+      "formula_sec": null,
+      "censor_sec": 399.8
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 401.6666666666667,
+      "observed_sec": 401.7,
+      "formula_sec": null,
+      "censor_sec": 402.3666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "2P",
+      "trigger_sec": 409.1,
+      "observed_sec": 409.1333333333333,
+      "formula_sec": null,
+      "censor_sec": 409.6333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 4,
+      "side": "1P",
+      "trigger_sec": 418.46666666666664,
+      "observed_sec": 418.5,
+      "formula_sec": null,
+      "censor_sec": 418.6333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 457.26666666666665,
+      "observed_sec": 457.3,
+      "formula_sec": null,
+      "censor_sec": 458.0
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 491.1333333333333,
+      "observed_sec": 491.1666666666667,
+      "formula_sec": null,
+      "censor_sec": 491.56666666666666
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 491.43333333333334,
+      "observed_sec": 491.46666666666664,
+      "formula_sec": null,
+      "censor_sec": 491.8
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 502.26666666666665,
+      "observed_sec": 502.3,
+      "formula_sec": null,
+      "censor_sec": 502.53333333333336
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 505.4,
+      "observed_sec": 505.43333333333334,
+      "formula_sec": null,
+      "censor_sec": 505.8333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 510.7,
+      "observed_sec": 510.73333333333335,
+      "formula_sec": null,
+      "censor_sec": 511.0
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 512.2333333333333,
+      "observed_sec": 512.2666666666667,
+      "formula_sec": null,
+      "censor_sec": 514.2333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 516.9,
+      "observed_sec": 516.9333333333333,
+      "formula_sec": null,
+      "censor_sec": 517.2
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 525.0,
+      "observed_sec": 525.0333333333333,
+      "formula_sec": null,
+      "censor_sec": 525.4333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 527.5333333333333,
+      "observed_sec": 527.5666666666667,
+      "formula_sec": null,
+      "censor_sec": 528.0666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 545.4333333333333,
+      "observed_sec": 545.4666666666667,
+      "formula_sec": null,
+      "censor_sec": 545.9
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 553.1333333333333,
+      "observed_sec": 553.1666666666666,
+      "formula_sec": null,
+      "censor_sec": 553.8
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 554.0666666666667,
+      "observed_sec": 554.1,
+      "formula_sec": null,
+      "censor_sec": 556.4
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 556.4,
+      "observed_sec": 556.4333333333333,
+      "formula_sec": null,
+      "censor_sec": 556.8
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "2P",
+      "trigger_sec": 567.2333333333333,
+      "observed_sec": 567.2666666666667,
+      "formula_sec": null,
+      "censor_sec": 567.3333333333334
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 5,
+      "side": "1P",
+      "trigger_sec": 570.3,
+      "observed_sec": 570.3333333333334,
+      "formula_sec": null,
+      "censor_sec": 570.4
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 6,
+      "side": "2P",
+      "trigger_sec": 597.0666666666667,
+      "observed_sec": 597.1,
+      "formula_sec": null,
+      "censor_sec": 598.2666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 599.4666666666667,
+      "observed_sec": 599.5,
+      "formula_sec": null,
+      "censor_sec": 599.6
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 609.9,
+      "observed_sec": 609.9333333333333,
+      "formula_sec": null,
+      "censor_sec": 610.4666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 6,
+      "side": "1P",
+      "trigger_sec": 614.3333333333334,
+      "observed_sec": 614.3666666666667,
+      "formula_sec": null,
+      "censor_sec": 615.0666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 641.3333333333334,
+      "observed_sec": 641.3666666666667,
+      "formula_sec": null,
+      "censor_sec": 641.7333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "2P",
+      "trigger_sec": 645.7666666666667,
+      "observed_sec": 645.8,
+      "formula_sec": null,
+      "censor_sec": 645.8666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 647.0,
+      "observed_sec": 647.0333333333333,
+      "formula_sec": null,
+      "censor_sec": 648.5
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 656.8333333333334,
+      "observed_sec": 656.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 656.9
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "2P",
+      "trigger_sec": 659.5,
+      "observed_sec": 659.5333333333333,
+      "formula_sec": null,
+      "censor_sec": 674.3666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 665.7,
+      "observed_sec": 665.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 665.9
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 672.7333333333333,
+      "observed_sec": 672.7666666666667,
+      "formula_sec": null,
+      "censor_sec": 688.3
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 688.3,
+      "observed_sec": 688.3333333333334,
+      "formula_sec": null,
+      "censor_sec": 688.9666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "2P",
+      "trigger_sec": 698.8333333333334,
+      "observed_sec": 698.8666666666667,
+      "formula_sec": null,
+      "censor_sec": 698.9
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 7,
+      "side": "1P",
+      "trigger_sec": 703.9,
+      "observed_sec": 703.9333333333333,
+      "formula_sec": null,
+      "censor_sec": 704.4
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 736.2,
+      "observed_sec": 736.2333333333333,
+      "formula_sec": null,
+      "censor_sec": 736.8333333333334
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 8,
+      "side": "1P",
+      "trigger_sec": 737.9,
+      "observed_sec": 737.9333333333333,
+      "formula_sec": null,
+      "censor_sec": 738.5333333333333
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 771.0,
+      "observed_sec": 771.0333333333333,
+      "formula_sec": null,
+      "censor_sec": 772.7
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 9,
+      "side": "2P",
+      "trigger_sec": 783.7666666666667,
+      "observed_sec": 783.8,
+      "formula_sec": null,
+      "censor_sec": 787.9
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 9,
+      "side": "2P",
+      "trigger_sec": 787.9,
+      "observed_sec": 787.9333333333333,
+      "formula_sec": null,
+      "censor_sec": 788.9666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 795.2333333333333,
+      "observed_sec": 795.2666666666667,
+      "formula_sec": null,
+      "censor_sec": 796.7
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 9,
+      "side": "1P",
+      "trigger_sec": 798.7,
+      "observed_sec": 798.7333333333333,
+      "formula_sec": null,
+      "censor_sec": 798.7666666666667
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 10,
+      "side": "1P",
+      "trigger_sec": 819.4333333333333,
+      "observed_sec": 819.4666666666667,
+      "formula_sec": null,
+      "censor_sec": 820.4
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 10,
+      "side": "1P",
+      "trigger_sec": 836.1666666666666,
+      "observed_sec": 836.2,
+      "formula_sec": null,
+      "censor_sec": 836.7
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 10,
+      "side": "2P",
+      "trigger_sec": 847.0333333333333,
+      "observed_sec": 847.0666666666667,
+      "formula_sec": null,
+      "censor_sec": 847.1
+    },
+    {
+      "source": "mia8KCjr52g",
+      "game": 11,
+      "side": "2P",
+      "trigger_sec": 883.2666666666667,
+      "observed_sec": 883.3,
+      "formula_sec": null,
+      "censor_sec": 883.7666666666667
+    }
+  ]
+}

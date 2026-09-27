@@ -1,0 +1,39 @@
+{
+  "scene_rows": 29,
+  "scene_min": 0.8513024387854775,
+  "video_rows": 5948,
+  "complete": {
+    "full": {
+      "path": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/logs/review_zenchi_g41_43_e22/overlay.mp4",
+      "bytes": 359907793,
+      "frames": 5948,
+      "fps": 30.0,
+      "width": 1280,
+      "audio": "aac",
+      "seconds": 198.26666666666668
+    },
+    "csv_rows": 5948,
+    "mobile": [
+      {
+        "path": "/mnt/d/puyo_analyzer/videos/review/zenchi_g41-43_e22_mobile.mp4",
+        "bytes": 21768116,
+        "frames": 5948,
+        "fps": 30.0,
+        "width": 1280,
+        "audio": "aac",
+        "seconds": 198.26666666666668
+      }
+    ],
+    "mobile_encoding": {
+      "width": 1280,
+      "crf": 28,
+      "maxrate_kbps": 1000,
+      "audio_kbps": 128
+    }
+  },
+  "images": [
+    "logs/e22/review_2633.95.jpg",
+    "logs/e22/review_2634.80.jpg",
+    "logs/e22/review_2703.00.jpg"
+  ]
+}

@@ -1,0 +1,174 @@
+{
+  "source": "q_7gc4TgFig",
+  "M1": {
+    "exchanges": 40,
+    "s3_exchanges": 33,
+    "paired": 32,
+    "missing_s3": 7,
+    "missing_pair": 8,
+    "delta_median_sec": 1.4333333333333371,
+    "before_landing": 4,
+    "before_landing_fraction": 0.125,
+    "early": 1,
+    "early_fraction": 0.030303030303030304,
+    "pass_threshold": true,
+    "revoked": 0,
+    "revoked_fraction": 0.0,
+    "continued": 1,
+    "continued_fraction": 0.030303030303030304
+  },
+  "M2": {
+    "exchanges": 40,
+    "common_excluded": {
+      "missing_end": 8
+    },
+    "off": {
+      "eligible": 19,
+      "unreached": 2,
+      "excluded": {
+        "small_change": 13
+      },
+      "median_seconds": 0.7666666666666515
+    },
+    "on": {
+      "eligible": 15,
+      "unreached": 2,
+      "excluded": {
+        "small_change": 17
+      },
+      "median_seconds": 0.03333333333333144
+    }
+  },
+  "M3": {
+    "off": {
+      "all_frames": 27000,
+      "unlabeled_frames": 20474,
+      "groups": {
+        "all": {
+          "frames": 6526,
+          "matches": 4,
+          "log_loss": 1.1105608100516837,
+          "auc": 0.5937376725838264
+        },
+        "P_time_1": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.7171353423970013,
+          "auc": 0.24678085872115724
+        },
+        "P_time_2": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 1.4458274686030148,
+          "auc": 0.6662897633046887
+        },
+        "P_time_3": {
+          "frames": 2174,
+          "matches": 4,
+          "log_loss": 1.1687731231192522,
+          "auc": 0.7211548138857922
+        }
+      }
+    },
+    "on": {
+      "all_frames": 27000,
+      "unlabeled_frames": 20474,
+      "groups": {
+        "all": {
+          "frames": 6526,
+          "matches": 4,
+          "log_loss": 0.5110788416714259,
+          "auc": 0.7624637966078388
+        },
+        "P_time_1": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.7337404443271748,
+          "auc": 0.22580183774213625
+        },
+        "P_time_2": {
+          "frames": 2176,
+          "matches": 4,
+          "log_loss": 0.532025165598143,
+          "auc": 0.8447138820273148
+        },
+        "P_time_3": {
+          "frames": 2174,
+          "matches": 4,
+          "log_loss": 0.26724680476091744,
+          "auc": 0.9517575947603122
+        }
+      }
+    }
+  },
+  "M4": {
+    "off": {
+      "frames": 27000,
+      "minutes": 15.0,
+      "flips": 100,
+      "flips_per_minute": 6.666666666666667
+    },
+    "on": {
+      "frames": 27000,
+      "minutes": 15.0,
+      "flips": 78,
+      "flips_per_minute": 5.2
+    }
+  },
+  "freshness": {
+    "off": {
+      "frames": 27000,
+      "adjacent_pairs": 26999,
+      "equal_pairs": 26041,
+      "equal_fraction": 0.9645172043409015,
+      "longest_equal_seconds": 65.53333333333333,
+      "updates": 958,
+      "minutes": 15.0,
+      "updates_per_minute": 63.86666666666667,
+      "column": "adv_raw_last",
+      "missing_frames": 1079
+    },
+    "on": {
+      "frames": 27000,
+      "adjacent_pairs": 26999,
+      "equal_pairs": 21665,
+      "equal_fraction": 0.8024371273010111,
+      "longest_equal_seconds": 31.966666666666665,
+      "updates": 5334,
+      "minutes": 15.0,
+      "updates_per_minute": 355.6,
+      "column": "display_p1",
+      "missing_frames": 0
+    }
+  },
+  "outcome_provenance": {
+    "kind": "independent",
+    "files": {
+      "/mnt/d/puyo_analyzer/verify/judgment_unseen_q_7gc4TgFig_2026-09-25_v1/outcome_receipt_v1/RESULT.json": "0b271acd617a3d026ed6253469ff2b3d099f725028d0f5c920d267e341f27a87",
+      "/mnt/d/puyo_analyzer/verify/judgment_unseen_q_7gc4TgFig_2026-09-25_v1/counter_binding_v1/RESULT.json": "fa7fbadcea2589386559f6e9c00f0f1320070b8e92a55495567345e5f003aa16",
+      "/mnt/d/puyo_analyzer/verify/judgment_unseen_q_7gc4TgFig_2026-09-25_v1/counter_binding_v1/ASSIGNMENTS.json": "12626d3f8647ec5e6d557cba3f3f0848a9410d0a1337993a23f9f54d747f96e5"
+    },
+    "windows": [
+      {
+        "start": 4178,
+        "end": 5524,
+        "winner": "2P"
+      },
+      {
+        "start": 5524,
+        "end": 7366,
+        "winner": "2P"
+      },
+      {
+        "start": 7366,
+        "end": 8598,
+        "winner": "2P"
+      },
+      {
+        "start": 8598,
+        "end": 10704,
+        "winner": "1P"
+      }
+    ]
+  }
+}

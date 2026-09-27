@@ -54,7 +54,7 @@ class ExchangeEventOverlay:
                  completion_check: bool = False, landing_counter_response: bool = False,
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
                  counter_probability_model: Any = None, landing_hands_spec: bool = False,
-                 death_candidate_guard: bool = False) -> None:
+                 death_candidate_guard: bool = False, death_formula_guard: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -89,6 +89,8 @@ class ExchangeEventOverlay:
             hands_spec=landing_hands_spec)
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
+        from src.exchange_event_death_formula import DeathFormulaGuard
+        self._formula_guard = DeathFormulaGuard() if death_formula_guard else None
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -99,10 +101,7 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
-        if self._candidate_gate is not None:
-            self._candidate_gate.observe(sides, getattr(result, "confirmed_dead_sides", ()), t_sec, game_idx)
-        if self._landing_projection.hands_observation is not None:
-            self._landing_projection.hands_observation.observe(sides, t_sec)
+        self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
             self._e16.apply(self, result, snapshot, t_sec)
             self._hold_confirmed_death(t_sec)
@@ -148,14 +147,30 @@ class ExchangeEventOverlay:
         self._live_count_key = None
         if self._candidate_gate is not None:
             self._candidate_gate.reset()
+        if self._formula_guard is not None:
+            self._formula_guard.reset()
         if self._landing_projection.hands_observation is not None:
             self._landing_projection.hands_observation.reset()
         if self._e16 is not None:
             self._e16.reset()
 
+    def _observe_guards(self, result: Any, stamp: float, game: int,
+                        scores: tuple | None, visible: tuple) -> None:
+        """物理観測を発火処理より先に渡し、死亡確定時には保留を破棄する。"""
+        sides = (result.p1, result.p2)
+        if self._candidate_gate is not None:
+            self._candidate_gate.observe(sides, getattr(result, 'confirmed_dead_sides', ()), stamp, game)
+        if self._formula_guard is not None:
+            self._formula_guard.observe(result, stamp, game, scores, visible)
+        if self._landing_projection.hands_observation is not None:
+            self._landing_projection.hands_observation.observe(sides, stamp)
+
     def _deliver_fires(self, result: Any, snapshot: Any, stamp: float,
                        triggers: tuple, fresh: list[tuple[int, float]]) -> None:
         """保留中だけ通知を検査し、解除時には元の通知順で既存発火処理へ戻す。"""
+        if self._formula_guard is not None:
+            self._deliver_formula_fires(result, snapshot, stamp, triggers, fresh)
+            return
         gate = self._candidate_gate
         if gate is None or not (any(gate.candidates) or any(gate.pending)):
             if fresh:
@@ -169,6 +184,25 @@ class ExchangeEventOverlay:
                 gate.accepted[idx].add(key[0])  # 既に受理済みの連鎖の段更新は新発火ではない。
         ready = [gate.notifications(i, s.chain_event if i in indices else None, stamp)
                  for i, s in enumerate(sides)]
+        self._fire_notifications(result, snapshot, stamp, ready)
+
+    def _deliver_formula_fires(self, result: Any, snapshot: Any, stamp: float,
+                               triggers: tuple, fresh: list[tuple[int, float]]) -> None:
+        """E22の対象外はtriggersも含め元の呼出しをそのまま維持する。"""
+        indices, sides = {i for i, _ in fresh}, (result.p1, result.p2)
+        expected = [[s.chain_event] if i in indices else [] for i, s in enumerate(sides)]
+        ready = [self._formula_guard.notifications(i, s.chain_event if i in indices else None,
+                 self._history[i], self._chain_keys[i]) for i, s in enumerate(sides)]
+        unchanged = all(len(a) == len(b) and all(x is y for x, y in zip(a, b))
+                        for a, b in zip(ready, expected))
+        if unchanged:
+            if fresh:
+                self._fire(result, snapshot, stamp, triggers, fresh)
+        else:
+            self._fire_notifications(result, snapshot, stamp, ready)
+
+    def _fire_notifications(self, result: Any, snapshot: Any, stamp: float, ready: list) -> None:
+        """元の入力を変更せず、保留から復帰した通知を順序どおり処理する。"""
         for pair in zip_longest(*ready):
             saved = copy(result)
             saved.p1, saved.p2 = copy(result.p1), copy(result.p2)
