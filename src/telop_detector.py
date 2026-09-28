@@ -25,6 +25,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.prepared_template import PreparedImage, PreparedTemplate
+
 from src.board import BOARD_COLS, BOARD_ROWS, HIDDEN_ROWS
 
 # 既定テンプレートディレクトリ
@@ -64,6 +66,7 @@ class TelopDetector:
         threshold: float = DEFAULT_NCC_THRESHOLD,
     ) -> None:
         self._templates = templates
+        self._prepared = {name: PreparedTemplate(value) for name, value in templates.items()}
         self._threshold = threshold
 
     @classmethod
@@ -97,6 +100,7 @@ class TelopDetector:
         y2 = max(y1 + 1, min(SEARCH_Y + SEARCH_H, h))
         roi = frame_bgr[y1:y2, x1:x2]
         roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        prepared = PreparedImage(roi_gray)
 
         best_name: str | None = None
         best_score: float = -1.0
@@ -105,8 +109,7 @@ class TelopDetector:
             tH, tW = tmpl.shape[:2]
             if roi_gray.shape[0] < tH or roi_gray.shape[1] < tW:
                 continue
-            result = cv2.matchTemplate(roi_gray, tmpl, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            max_val, max_loc = self._prepared[name].peak(roi_gray, self._threshold, prepared)
             if max_val > best_score:
                 best_score = float(max_val)
                 best_name = name

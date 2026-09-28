@@ -31,6 +31,7 @@ NORM_SIZE: tuple[int, int] = (64, 64)
 
 # NCC 判定閾値（0-1）: この値以上でマッチ
 DEFAULT_NCC_THRESHOLD: float = 0.75
+NCC_DECISION_MARGIN: float = 1e-4
 
 # 案A (2026-07-30): load_default が読み込む既定テンプレート glob。
 # 実測 (scripts/_diag_ui_mask_fire_positions_2026-07-30.py、3動画x400フレーム、
@@ -78,6 +79,13 @@ class UiMaskMatcher:
     ) -> None:
         self._templates = templates
         self._threshold = threshold
+        self._normalized_templates: np.ndarray | None = None
+        if templates and all(value.shape == NORM_SIZE[::-1] for value in templates.values()):
+            vectors = np.stack([value.ravel() for value in templates.values()]).astype(np.float64)
+            centered = vectors-vectors.mean(axis=1, keepdims=True)
+            norms = np.sqrt(np.sum(centered*centered, axis=1, keepdims=True))
+            self._uniform_templates = (norms[:, 0] == 0)
+            self._normalized_templates = np.divide(centered, norms, out=np.zeros_like(centered), where=norms != 0)
 
     @classmethod
     def load_default(
@@ -131,5 +139,18 @@ class UiMaskMatcher:
         )
 
     def is_ui(self, bgr_patch: np.ndarray) -> bool:
-        """短縮メソッド: マッチすれば True。"""
-        return self.match(bgr_patch).is_ui
+        """同サイズのNCCは内積で判定し、閾値近傍だけ元の照合へ戻す。"""
+        if self._normalized_templates is None:
+            return self.match(bgr_patch).is_ui
+        if bgr_patch.size == 0:
+            return False
+        gray = cv2.cvtColor(bgr_patch, cv2.COLOR_BGR2GRAY)
+        values = cv2.resize(gray, NORM_SIZE, interpolation=cv2.INTER_AREA).ravel().astype(np.float64)
+        centered = values-values.mean()
+        norm = float(np.sqrt(np.dot(centered, centered)))
+        scores = (self._normalized_templates @ centered)/norm if norm else np.zeros(len(self._templates))
+        scores[self._uniform_templates] = 1.0
+        maximum = float(scores.max())
+        if abs(maximum-self._threshold) <= NCC_DECISION_MARGIN:
+            return self.match(bgr_patch).is_ui
+        return maximum >= self._threshold

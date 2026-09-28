@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Iterable
 
@@ -182,10 +183,12 @@ def _compute_ncc_prepared(
         float: NCC 値 (-1.0〜1.0)。均一パッチは PATCH_NCC_UNIFORM_FALLBACK。
     """
     a_flat = a.ravel().astype(np.float64)
-    if a_flat.std() < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
+    a_c = a_flat - a_flat.mean()
+    # stdとNCCで同じ平均引きを二度行わない。分散の総和・除算順はnp.stdと同じ。
+    a_std = float(np.sqrt(np.mean(a_c * a_c)))
+    if a_std < PATCH_NCC_STD_MIN or b_std < PATCH_NCC_STD_MIN:
         # 均一パッチは背景との相関不定 → 背景と同一とみなして高値返却
         return PATCH_NCC_UNIFORM_FALLBACK
-    a_c = a_flat - a_flat.mean()
     denom = float(np.sqrt(float(np.dot(a_c, a_c)) * b_selfdot))
     if denom == 0.0:
         return PATCH_NCC_UNIFORM_FALLBACK
@@ -253,6 +256,11 @@ class CellPatchFingerprint:
         tuple[int, ...],
         tuple[np.ndarray, bool, np.ndarray, float, np.ndarray, float],
     ] = field(default_factory=dict, repr=False, compare=False)
+
+    @cached_property
+    def v_median(self) -> float:
+        """読取専用の背景パッチのV中央値を一度だけ計算する。"""
+        return float(np.median(self.patch_hsv[:, :, 2]))
 
     def _as_bg_for(
         self, target_shape: tuple[int, ...],

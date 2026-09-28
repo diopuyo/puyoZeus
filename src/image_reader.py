@@ -1160,7 +1160,7 @@ class ImageReader:
         self,
         bg_cell: "CellFingerprint | CellPatchFingerprint",
         cur_patch_hsv: np.ndarray,
-        cur_fp: "CellFingerprint",
+        cur_fp: "CellFingerprint | None",
         visible_row: int,
         col: int,
         raw_bgr_patch: "np.ndarray | None" = None,
@@ -1194,7 +1194,7 @@ class ImageReader:
             # これにより「採取失敗パッチが FALLBACK=1.0 → 強制 EMPTY」を防ぐ。
             # 正当な均一 EMPTY セル (明るい平坦背景) は V median が
             # BG_PATCH_VALID_V_MIN (5.0) を超えるため従来通り NCC 経路に進む。
-            bg_v_med = float(np.median(bg_cell.patch_hsv[:, :, 2]))
+            bg_v_med = bg_cell.v_median
             if bg_v_med < BG_PATCH_VALID_V_MIN:
                 return False
             cur_cell_patch = CellPatchFingerprint(
@@ -1483,11 +1483,12 @@ class ImageReader:
                         cell_hsv_patch = hsv_patch  # 2nd pass 再利用用に保持
                         # 高速化 (2026-07-31): 3ch 分の median を 1 回の
                         # partition にまとめる (返り値は np.median 3 回と同一)
-                        h_med, s_med, v_med = _median_hsv_3ch(hsv_patch)
-                        cur_fp = CellFingerprint(h_med, s_med, v_med)
                         bg_cell = bg_fp.cell_at(visible_row, col)
-                        dist = cur_fp.distance_to(bg_cell)
-                        cell_bg_distance = float(dist)
+                        # NCCだけで空と確定するセルにはHSV中央値・距離を作らない。
+                        # 距離方式の背景FPでは従来どおりtier1の前に計算する。
+                        cur_fp = None
+                        if not isinstance(bg_fp, _PatchBackgroundFingerprint):
+                            cur_fp = CellFingerprint(*_median_hsv_3ch(hsv_patch))
                         # T4: StaticBoardMask AND ガード (既存 tier 1 より先に評価)
                         # A (diff < 閾値) AND NOT D (HSV 色あり) の場合のみ EMPTY 化。
                         # 片方でも「ぷよっぽい」 なら skip して従来経路に流す。
@@ -1524,6 +1525,9 @@ class ImageReader:
                             else:
                                 board.set(row, col, COLOR_EMPTY)
                                 continue
+                        if cur_fp is None:
+                            cur_fp = CellFingerprint(*_median_hsv_3ch(hsv_patch))
+                        cell_bg_distance = float(cur_fp.distance_to(bg_cell))
                         # tier 2: AND 条件 (= cycle 19 既存)
                         if is_empty_by_fp(
                             cur_fp, bg_cell, threshold=self._bg_threshold,
@@ -1764,10 +1768,28 @@ class ImageReader:
         hsv_full: np.ndarray | None = None
         if (self._bg_fp_for_region(p1_region) is not None
                 or self._bg_fp_for_region(p2_region) is not None):
-            hsv_full = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hsv_full = self._board_hsv_frame(frame, (p1_region, p2_region))
         board_1p = self.read_board(frame, p1_region, hsv_full=hsv_full, skip_tier1=skip_tier1_1p)
         board_2p = self.read_board(frame, p2_region, hsv_full=hsv_full, skip_tier1=skip_tier1_2p)
         return board_1p, board_2p
+
+    def _board_hsv_frame(
+        self, frame: np.ndarray, regions: tuple[BoardRegion, BoardRegion],
+    ) -> np.ndarray:
+        """盤面の参照範囲だけHSV変換する。参照しない画面中央・外枠はゼロにする。"""
+        if frame.dtype != np.uint8 or type(self).read_board is not ImageReader.read_board:
+            return cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        height, width = frame.shape[:2]
+        hsv = np.zeros_like(frame)
+        for region in regions:
+            first = region.cell_sample_rect(HIDDEN_ROWS, 0)
+            last = region.cell_sample_rect(BOARD_ROWS-1, BOARD_COLS-1)
+            x1 = max(0, min(first[0], last[0], region.x, width-1))
+            y1 = max(0, min(first[1], last[1], region.y, height-1))
+            x2 = max(x1+1, min(max(first[2], last[2], region.x+region.width), width))
+            y2 = max(y1+1, min(max(first[3], last[3], region.y+region.height), height))
+            hsv[y1:y2, x1:x2] = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+        return hsv
 
     def enable_native_hsv(self, enable: bool = True) -> bool:
         """内部の HSV 分類器でネイティブ (Rust) 経路を使う (2026-08-20)。
