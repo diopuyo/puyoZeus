@@ -1,0 +1,1005 @@
+{
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5078621188030158,
+      "auc": 0.7641503160545393
+    },
+    "zenchi": {
+      "hits": 7513,
+      "frames": 8333,
+      "agreement": 0.9015960638425538
+    },
+    "deaths": {
+      "false": 1,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": false,
+      "deaths": true,
+      "initial_score_p95": false
+    },
+    "candidate": false
+  },
+  "scores": {
+    "initial": {
+      "off": {
+        "n": 73,
+        "p50": 0.0,
+        "p95": 1162.3984220907228
+      },
+      "on": {
+        "n": 73,
+        "p50": 0.0,
+        "p95": 1162.3984220907228
+      }
+    },
+    "latest": {
+      "off": {
+        "n": 73,
+        "p50": 0.0,
+        "p95": 414.74999999999795
+      },
+      "on": {
+        "n": 73,
+        "p50": 0.0,
+        "p95": 1079.999999999995
+      }
+    },
+    "top5": [
+      {
+        "source": "fcXG83vInDY",
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 801.5,
+        "final_score": 57370,
+        "e32_initial_error": 26402.5,
+        "e33_initial_error": 26402.5,
+        "e32_last_error": 8730.0,
+        "e33_last_error": -57370.0,
+        "exclusions": [
+          {
+            "t_sec": 802.5666666666667,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 801.5,
+            "deadline_sec": 803.3866666666667,
+            "removed": 5,
+            "remaining": 0,
+            "before_score": 83772.5,
+            "after_score": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 1,
+        "trigger_sec": 267.93333333333334,
+        "final_score": 6766.0,
+        "e32_initial_error": -6726.0,
+        "e33_initial_error": -6726.0,
+        "e32_last_error": -6726.0,
+        "e33_last_error": -6726.0,
+        "exclusions": []
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 4,
+        "trigger_sec": 285.3666666666667,
+        "final_score": 34340,
+        "e32_initial_error": -2607.5,
+        "e33_initial_error": -2607.5,
+        "e32_last_error": 0.0,
+        "e33_last_error": 0.0,
+        "exclusions": []
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 6,
+        "side": "1P",
+        "chain_id": 7,
+        "trigger_sec": 584.3,
+        "final_score": 25680,
+        "e32_initial_error": 1645.996055226824,
+        "e33_initial_error": 1645.996055226824,
+        "e32_last_error": 0.0,
+        "e33_last_error": 0.0,
+        "exclusions": []
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 14,
+        "side": "1P",
+        "chain_id": 3,
+        "trigger_sec": 878.8,
+        "final_score": 40,
+        "e32_initial_error": 840.0,
+        "e33_initial_error": 840.0,
+        "e32_last_error": 840.0,
+        "e33_last_error": 840.0,
+        "exclusions": []
+      }
+    ]
+  },
+  "exclusions": {
+    "three_videos": {
+      "fires": 221,
+      "accepted": 79,
+      "chains": 18,
+      "operations": 18,
+      "removed": 632,
+      "emptied": 11,
+      "later_revoked": 7
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "fires": 83,
+        "accepted": 39,
+        "chains": 9,
+        "operations": 9,
+        "removed": 593,
+        "reasons": {
+          "next": 4,
+          "stage_timeout": 2,
+          "ojama": 3
+        },
+        "emptied": 4,
+        "later_revoked": 3
+      },
+      "fcXG83vInDY": {
+        "fires": 61,
+        "accepted": 40,
+        "chains": 9,
+        "operations": 9,
+        "removed": 39,
+        "reasons": {
+          "stage_timeout": 3,
+          "ojama": 4,
+          "next": 2
+        },
+        "emptied": 7,
+        "later_revoked": 4
+      },
+      "mia8KCjr52g": {
+        "fires": 77,
+        "accepted": 0,
+        "chains": 0,
+        "operations": 0,
+        "removed": 0,
+        "reasons": {},
+        "emptied": 0,
+        "later_revoked": 0
+      },
+      "zenchi": {
+        "fires": 96,
+        "accepted": 42,
+        "chains": 12,
+        "operations": 12,
+        "removed": 2183,
+        "reasons": {
+          "next": 6,
+          "ojama": 3,
+          "stage_timeout": 3
+        },
+        "emptied": 4,
+        "later_revoked": 3
+      },
+      "review": {
+        "fires": 27,
+        "accepted": 15,
+        "chains": 5,
+        "operations": 5,
+        "removed": 64,
+        "reasons": {
+          "next": 4,
+          "ojama": 1
+        },
+        "emptied": 1,
+        "later_revoked": 1
+      }
+    },
+    "details": [
+      {
+        "source": "q_7gc4TgFig",
+        "game": 1,
+        "side": "2P",
+        "chain_id": 4,
+        "trigger_sec": 153.5,
+        "events": [
+          {
+            "t_sec": 157.7,
+            "reason": "next",
+            "observed_count": 3,
+            "stage_sec": 156.26666666666668,
+            "deadline_sec": 158.15333333333334,
+            "removed": 1,
+            "remaining": 4,
+            "before_score": 1812.5,
+            "after_score": 1600.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 3,
+        "side": "2P",
+        "chain_id": 2,
+        "trigger_sec": 265.8333333333333,
+        "events": [
+          {
+            "t_sec": 270.8666666666667,
+            "reason": "stage_timeout",
+            "observed_count": 3,
+            "stage_sec": 268.6,
+            "deadline_sec": 270.4866666666667,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 2960.0,
+            "after_score": null,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 4,
+        "side": "2P",
+        "chain_id": 3,
+        "trigger_sec": 319.1333333333333,
+        "events": [
+          {
+            "t_sec": 320.3,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 319.1333333333333,
+            "deadline_sec": 321.02,
+            "removed": 585,
+            "remaining": 0,
+            "before_score": 360.00000000000006,
+            "after_score": null,
+            "later_revoked_sec": 320.46666666666664
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 6,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 431.9,
+        "events": [
+          {
+            "t_sec": 432.93333333333334,
+            "reason": "next",
+            "observed_count": 1,
+            "stage_sec": 431.9,
+            "deadline_sec": 433.78666666666663,
+            "removed": 1,
+            "remaining": 4,
+            "before_score": 80.0,
+            "after_score": 39.99999999999999,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 7,
+        "side": "2P",
+        "chain_id": 2,
+        "trigger_sec": 475.8333333333333,
+        "events": [
+          {
+            "t_sec": 477.73333333333335,
+            "reason": "stage_timeout",
+            "observed_count": 1,
+            "stage_sec": 475.8333333333333,
+            "deadline_sec": 477.71999999999997,
+            "removed": 1,
+            "remaining": 4,
+            "before_score": 102.5,
+            "after_score": 39.99999999999999,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 9,
+        "side": "2P",
+        "chain_id": 5,
+        "trigger_sec": 620.5666666666667,
+        "events": [
+          {
+            "t_sec": 622.0666666666667,
+            "reason": "next",
+            "observed_count": 1,
+            "stage_sec": 620.5666666666667,
+            "deadline_sec": 622.4533333333334,
+            "removed": 1,
+            "remaining": 4,
+            "before_score": 80.0,
+            "after_score": 39.99999999999999,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 11,
+        "side": "2P",
+        "chain_id": 2,
+        "trigger_sec": 723.5,
+        "events": [
+          {
+            "t_sec": 729.1,
+            "reason": "next",
+            "observed_count": 4,
+            "stage_sec": 727.6666666666666,
+            "deadline_sec": 729.5533333333333,
+            "removed": 1,
+            "remaining": 4,
+            "before_score": 3160.0,
+            "after_score": 2839.9999999999995,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 11,
+        "side": "2P",
+        "chain_id": 5,
+        "trigger_sec": 732.5,
+        "events": [
+          {
+            "t_sec": 733.7666666666667,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 732.5,
+            "deadline_sec": 734.3866666666667,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 22070.0,
+            "after_score": null,
+            "later_revoked_sec": 733.8333333333334
+          }
+        ]
+      },
+      {
+        "source": "q_7gc4TgFig",
+        "game": 14,
+        "side": "2P",
+        "chain_id": 2,
+        "trigger_sec": 878.6,
+        "events": [
+          {
+            "t_sec": 881.1,
+            "reason": "ojama",
+            "observed_count": 2,
+            "stage_sec": 879.9666666666667,
+            "deadline_sec": 881.8533333333334,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 5920.0,
+            "after_score": null,
+            "later_revoked_sec": 881.2666666666667
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 2,
+        "side": "1P",
+        "chain_id": 3,
+        "trigger_sec": 276.3666666666667,
+        "events": [
+          {
+            "t_sec": 285.7,
+            "reason": "stage_timeout",
+            "observed_count": 6,
+            "stage_sec": 283.43333333333334,
+            "deadline_sec": 285.32,
+            "removed": 5,
+            "remaining": 0,
+            "before_score": 28510.0,
+            "after_score": null,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 3,
+        "side": "1P",
+        "chain_id": 4,
+        "trigger_sec": 341.7,
+        "events": [
+          {
+            "t_sec": 342.73333333333335,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 341.7,
+            "deadline_sec": 343.58666666666664,
+            "removed": 5,
+            "remaining": 0,
+            "before_score": 1440.0,
+            "after_score": null,
+            "later_revoked_sec": 343.03333333333336
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 3,
+        "side": "2P",
+        "chain_id": 6,
+        "trigger_sec": 350.2,
+        "events": [
+          {
+            "t_sec": 356.23333333333335,
+            "reason": "stage_timeout",
+            "observed_count": 4,
+            "stage_sec": 354.3333333333333,
+            "deadline_sec": 356.21999999999997,
+            "removed": 5,
+            "remaining": 0,
+            "before_score": 12640.0,
+            "after_score": null,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 3,
+        "side": "1P",
+        "chain_id": 7,
+        "trigger_sec": 352.4,
+        "events": [
+          {
+            "t_sec": 361.8666666666667,
+            "reason": "ojama",
+            "observed_count": 7,
+            "stage_sec": 360.8666666666667,
+            "deadline_sec": 362.75333333333333,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 44820.0,
+            "after_score": null,
+            "later_revoked_sec": 362.1666666666667
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 6,
+        "side": "2P",
+        "chain_id": 5,
+        "trigger_sec": 577.4,
+        "events": [
+          {
+            "t_sec": 578.4333333333333,
+            "reason": "next",
+            "observed_count": 1,
+            "stage_sec": 577.4,
+            "deadline_sec": 579.2866666666666,
+            "removed": 13,
+            "remaining": 12,
+            "before_score": 736.875,
+            "after_score": 180.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 6,
+        "side": "2P",
+        "chain_id": 8,
+        "trigger_sec": 593.5666666666667,
+        "events": [
+          {
+            "t_sec": 604.6333333333333,
+            "reason": "ojama",
+            "observed_count": 8,
+            "stage_sec": 603.3,
+            "deadline_sec": 605.1866666666666,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 43420.0,
+            "after_score": null,
+            "later_revoked_sec": 604.7333333333333
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 8,
+        "side": "2P",
+        "chain_id": 4,
+        "trigger_sec": 714.3333333333334,
+        "events": [
+          {
+            "t_sec": 716.6333333333333,
+            "reason": "stage_timeout",
+            "observed_count": 1,
+            "stage_sec": 714.3333333333334,
+            "deadline_sec": 716.22,
+            "removed": 1,
+            "remaining": 0,
+            "before_score": 6090.0,
+            "after_score": null,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 10,
+        "side": "2P",
+        "chain_id": 1,
+        "trigger_sec": 798.4333333333333,
+        "events": [
+          {
+            "t_sec": 802.2,
+            "reason": "next",
+            "observed_count": 3,
+            "stage_sec": 801.1666666666666,
+            "deadline_sec": 803.0533333333333,
+            "removed": 3,
+            "remaining": 6,
+            "before_score": 1624.4444444444443,
+            "after_score": 1340.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "fcXG83vInDY",
+        "game": 10,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 801.5,
+        "events": [
+          {
+            "t_sec": 802.5666666666667,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 801.5,
+            "deadline_sec": 803.3866666666667,
+            "removed": 5,
+            "remaining": 0,
+            "before_score": 83772.5,
+            "after_score": null,
+            "later_revoked_sec": 802.8
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 1,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 2606.65,
+        "events": [
+          {
+            "t_sec": 2609.516666666667,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2608.05,
+            "deadline_sec": 2609.936666666667,
+            "removed": 10,
+            "remaining": 10,
+            "before_score": 7095.357142857143,
+            "after_score": 1750.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 1,
+        "trigger_sec": 2662.3166666666666,
+        "events": [
+          {
+            "t_sec": 2664.7166666666667,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2663.6833333333334,
+            "deadline_sec": 2665.57,
+            "removed": 1,
+            "remaining": 3,
+            "before_score": 631.4285714285713,
+            "after_score": 540.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 2,
+        "side": "1P",
+        "chain_id": 8,
+        "trigger_sec": 2681.383333333333,
+        "events": [
+          {
+            "t_sec": 2683.75,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2682.7166666666667,
+            "deadline_sec": 2684.6033333333335,
+            "removed": 4,
+            "remaining": 34,
+            "before_score": 400.7272727272727,
+            "after_score": 360.00000000000006,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 9,
+        "trigger_sec": 2682.9166666666665,
+        "events": [
+          {
+            "t_sec": 2684.2166666666667,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 2682.9166666666665,
+            "deadline_sec": 2684.8033333333333,
+            "removed": 48,
+            "remaining": 0,
+            "before_score": 525.5944055944057,
+            "after_score": null,
+            "later_revoked_sec": 2684.25
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 3,
+        "side": "1P",
+        "chain_id": 6,
+        "trigger_sec": 2738.483333333333,
+        "events": [
+          {
+            "t_sec": 2739.55,
+            "reason": "next",
+            "observed_count": 1,
+            "stage_sec": 2738.483333333333,
+            "deadline_sec": 2740.37,
+            "removed": 1,
+            "remaining": 119,
+            "before_score": 40.63116370808679,
+            "after_score": 40.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 5,
+        "side": "1P",
+        "chain_id": 9,
+        "trigger_sec": 2848.383333333333,
+        "events": [
+          {
+            "t_sec": 2849.5833333333335,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 2848.383333333333,
+            "deadline_sec": 2850.27,
+            "removed": 585,
+            "remaining": 0,
+            "before_score": 41647.3224852071,
+            "after_score": null,
+            "later_revoked_sec": 2849.75
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 7,
+        "side": "2P",
+        "chain_id": 5,
+        "trigger_sec": 2934.883333333333,
+        "events": [
+          {
+            "t_sec": 2940.383333333333,
+            "reason": "next",
+            "observed_count": 4,
+            "stage_sec": 2938.9166666666665,
+            "deadline_sec": 2940.8033333333333,
+            "removed": 15,
+            "remaining": 44,
+            "before_score": 3886.805970149254,
+            "after_score": 3520.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 8,
+        "side": "2P",
+        "chain_id": 2,
+        "trigger_sec": 2976.2166666666667,
+        "events": [
+          {
+            "t_sec": 2978.116666666667,
+            "reason": "stage_timeout",
+            "observed_count": 1,
+            "stage_sec": 2976.2166666666667,
+            "deadline_sec": 2978.1033333333335,
+            "removed": 5,
+            "remaining": 20,
+            "before_score": 11082.5,
+            "after_score": 39.99999999999999,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 11,
+        "side": "1P",
+        "chain_id": 6,
+        "trigger_sec": 3089.95,
+        "events": [
+          {
+            "t_sec": 3104.5833333333335,
+            "reason": "stage_timeout",
+            "observed_count": 10,
+            "stage_sec": 3102.2166666666667,
+            "deadline_sec": 3104.1033333333335,
+            "removed": 14,
+            "remaining": 0,
+            "before_score": 115740.0,
+            "after_score": null,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 12,
+        "side": "1P",
+        "chain_id": 6,
+        "trigger_sec": 3164.7833333333333,
+        "events": [
+          {
+            "t_sec": 3166.6833333333334,
+            "reason": "stage_timeout",
+            "observed_count": 1,
+            "stage_sec": 3164.7833333333333,
+            "deadline_sec": 3166.67,
+            "removed": 1083,
+            "remaining": 1715,
+            "before_score": 940.8144015289295,
+            "after_score": 40.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 13,
+        "side": "1P",
+        "chain_id": 4,
+        "trigger_sec": 3202.5833333333335,
+        "events": [
+          {
+            "t_sec": 3211.0833333333335,
+            "reason": "next",
+            "observed_count": 6,
+            "stage_sec": 3209.5833333333335,
+            "deadline_sec": 3211.4700000000003,
+            "removed": 50,
+            "remaining": 75,
+            "before_score": 20605.3125,
+            "after_score": 10680.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "zenchi",
+        "game": 15,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 3302.65,
+        "events": [
+          {
+            "t_sec": 3306.383333333333,
+            "reason": "ojama",
+            "observed_count": 3,
+            "stage_sec": 3305.35,
+            "deadline_sec": 3307.2366666666667,
+            "removed": 367,
+            "remaining": 0,
+            "before_score": 102096.45887728459,
+            "after_score": null,
+            "later_revoked_sec": 3306.65
+          }
+        ]
+      },
+      {
+        "source": "review",
+        "game": 1,
+        "side": "1P",
+        "chain_id": 2,
+        "trigger_sec": 2606.65,
+        "events": [
+          {
+            "t_sec": 2609.516666666667,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2608.05,
+            "deadline_sec": 2609.936666666667,
+            "removed": 10,
+            "remaining": 10,
+            "before_score": 7095.357142857143,
+            "after_score": 1750.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "review",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 1,
+        "trigger_sec": 2662.3166666666666,
+        "events": [
+          {
+            "t_sec": 2664.7166666666667,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2663.6833333333334,
+            "deadline_sec": 2665.57,
+            "removed": 1,
+            "remaining": 3,
+            "before_score": 631.4285714285713,
+            "after_score": 540.0,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "review",
+        "game": 2,
+        "side": "1P",
+        "chain_id": 8,
+        "trigger_sec": 2681.383333333333,
+        "events": [
+          {
+            "t_sec": 2683.75,
+            "reason": "next",
+            "observed_count": 2,
+            "stage_sec": 2682.7166666666667,
+            "deadline_sec": 2684.6033333333335,
+            "removed": 4,
+            "remaining": 34,
+            "before_score": 400.7272727272727,
+            "after_score": 360.00000000000006,
+            "later_revoked_sec": null
+          }
+        ]
+      },
+      {
+        "source": "review",
+        "game": 2,
+        "side": "2P",
+        "chain_id": 9,
+        "trigger_sec": 2682.9166666666665,
+        "events": [
+          {
+            "t_sec": 2684.2166666666667,
+            "reason": "ojama",
+            "observed_count": 1,
+            "stage_sec": 2682.9166666666665,
+            "deadline_sec": 2684.8033333333333,
+            "removed": 48,
+            "remaining": 0,
+            "before_score": 525.5944055944057,
+            "after_score": null,
+            "later_revoked_sec": 2684.25
+          }
+        ]
+      },
+      {
+        "source": "review",
+        "game": 3,
+        "side": "1P",
+        "chain_id": 6,
+        "trigger_sec": 2738.483333333333,
+        "events": [
+          {
+            "t_sec": 2739.55,
+            "reason": "next",
+            "observed_count": 1,
+            "stage_sec": 2738.483333333333,
+            "deadline_sec": 2740.37,
+            "removed": 1,
+            "remaining": 119,
+            "before_score": 40.63116370808679,
+            "after_score": 40.0,
+            "later_revoked_sec": null
+          }
+        ]
+      }
+    ]
+  },
+  "prefix": {
+    "cutoff": 816.0,
+    "source": "fcXG83vInDY",
+    "display_rows": 24481,
+    "columns": 13,
+    "event_states": 24481,
+    "all_identical": true,
+    "input_sha256": "7fe1afabafe86d05f868e37fd5bff5194bbe721bbf3a5501649032e440d2964f"
+  },
+  "same_rows": {
+    "q_7gc4TgFig": 27000,
+    "fcXG83vInDY": 27000,
+    "mia8KCjr52g": 27000,
+    "zenchi": 25398,
+    "review": 5948
+  },
+  "off": {
+    "q_7gc4TgFig": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "fcXG83vInDY": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "mia8KCjr52g": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "zenchi": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "review": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  },
+  "gates": {
+    "q": true,
+    "zenchi": false,
+    "deaths": true,
+    "initial_score_p95": false
+  },
+  "passed": false
+}

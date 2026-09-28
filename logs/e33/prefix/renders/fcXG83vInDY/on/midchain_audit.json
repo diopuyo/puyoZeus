@@ -1,0 +1,87 @@
+{
+  "candidates": 6,
+  "accepted": 4,
+  "accepted_chains": 4,
+  "next_mismatch": 1,
+  "final_mismatch": 0,
+  "final_unresolved": 1,
+  "skipped": {
+    "unknown_or_floating": 755,
+    "no_remaining_chain": 142
+  },
+  "rows": [
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 2,
+      "candidate_sec": 269.8666666666667,
+      "t_sec": 270.7,
+      "next_count": 2,
+      "observed_count": 2,
+      "observed_score": 770,
+      "expected_score": 770,
+      "predicted_final_score": 770,
+      "outcome": "accepted",
+      "final_score": 770,
+      "final_mismatch": false
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 2,
+      "candidate_sec": 406.23333333333335,
+      "t_sec": 407.0,
+      "next_count": 3,
+      "observed_count": 3,
+      "observed_score": 1260,
+      "expected_score": 1260,
+      "predicted_final_score": 4060,
+      "outcome": "accepted",
+      "final_score": 4060,
+      "final_mismatch": false
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 4,
+      "candidate_sec": 416.73333333333335,
+      "t_sec": 416.93333333333334,
+      "next_count": 2,
+      "observed_count": 2,
+      "observed_score": 1600,
+      "expected_score": 1600,
+      "predicted_final_score": 41220,
+      "outcome": "accepted",
+      "final_score": 41220,
+      "final_mismatch": false
+    },
+    {
+      "game": 5,
+      "side": "1P",
+      "chain_id": 7,
+      "candidate_sec": 535.7,
+      "t_sec": 536.0333333333333,
+      "next_count": 9,
+      "observed_count": 9,
+      "observed_score": 56250,
+      "expected_score": 56250,
+      "predicted_final_score": 56250,
+      "outcome": "accepted",
+      "final_score": null,
+      "final_mismatch": null
+    },
+    {
+      "game": 8,
+      "side": "2P",
+      "chain_id": 4,
+      "candidate_sec": 715.5,
+      "t_sec": 717.8333333333334,
+      "next_count": 2,
+      "observed_count": 3,
+      "observed_score": 2250,
+      "expected_score": 360,
+      "predicted_final_score": 6090,
+      "outcome": "next_mismatch"
+    }
+  ]
+}

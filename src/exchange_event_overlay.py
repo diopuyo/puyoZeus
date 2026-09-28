@@ -61,7 +61,7 @@ class ExchangeEventOverlay:
                  death_pending_ledger: bool = False, hidden_row_death: bool = False,
                  midchain_single_observation: bool = False,
                  prefire_candidates: bool = False, prefire_snapshot: bool = False,
-                 hidden_row_belief: bool = False) -> None:
+                 hidden_row_belief: bool = False, prefire_stage_timeout: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -95,13 +95,15 @@ class ExchangeEventOverlay:
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
         self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
             midchain_completion, hidden_row_death, midchain_single_observation)
-        self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief)
+        self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief, prefire_stage_timeout)
 
     def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False,
-                            hidden_row_belief: bool = False) -> None:
+                            hidden_row_belief: bool = False, prefire_stage_timeout: bool = False) -> None:
         """新候補の入力と死亡専用台帳を、明示ONのときだけ追加する。"""
         self._live_count_key: tuple | None = None
         self._feature_cache: dict[tuple, np.ndarray] = {}
+        if prefire_stage_timeout and not hidden_row_belief:
+            raise ValueError('--prefire-stage-timeoutには--hidden-row-beliefが必要')
         if hidden_row_belief and not prefire_snapshot:
             raise ValueError('--hidden-row-beliefには--prefire-snapshotが必要')
         from src.exchange_prefire_candidates import PrefireCandidates
@@ -114,6 +116,9 @@ class ExchangeEventOverlay:
             if hidden_row_belief:
                 from src.exchange_hidden_row_belief import HiddenRowPrefire
                 self._prefire = HiddenRowPrefire(self._landing_projection.simulator)
+                if prefire_stage_timeout:
+                    from src.exchange_prefire_stage_timeout import StageTimeoutPrefire
+                    self._prefire = StageTimeoutPrefire(self._landing_projection.simulator)
                 self.tracker.hidden_row_belief = self._prefire
         self._landing_projection.prefire = self._prefire
         if prefire_candidates:
