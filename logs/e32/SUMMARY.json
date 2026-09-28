@@ -1,0 +1,536 @@
+{
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5079773295899405,
+      "auc": 0.7641503160545393
+    },
+    "zenchi": {
+      "hits": 7664,
+      "frames": 8333,
+      "agreement": 0.9197167886715468
+    },
+    "deaths": {
+      "false": 1,
+      "total": 35,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": true,
+      "scene": false
+    },
+    "candidate": false,
+    "scene": {
+      "first_sec": 2771.25,
+      "deadline_sec": 2766.0,
+      "scenes": 1
+    }
+  },
+  "calibration": {
+    "three_videos": {
+      "n": 25,
+      "hits": 15,
+      "accuracy": 0.6,
+      "log_loss": 5.1580550506552365,
+      "bins": [
+        {
+          "lower": 0.0,
+          "upper": 0.1,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.3,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "n": 1,
+          "confidence": 0.41666666666666663,
+          "accuracy": 0.0
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "n": 17,
+          "confidence": 0.5,
+          "accuracy": 0.5882352941176471
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "n": 1,
+          "confidence": 0.6666666666666666,
+          "accuracy": 0.0
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "n": 0,
+          "confidence": null,
+          "accuracy": null
+        },
+        {
+          "lower": 0.9,
+          "upper": 1.0,
+          "n": 6,
+          "confidence": 1.0,
+          "accuracy": 0.8333333333333334
+        }
+      ]
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "n": 8,
+        "hits": 4,
+        "accuracy": 0.5,
+        "log_loss": 7.651585598055602,
+        "bins": [
+          {
+            "lower": 0.0,
+            "upper": 0.1,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.1,
+            "upper": 0.2,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.2,
+            "upper": 0.3,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.3,
+            "upper": 0.4,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.4,
+            "upper": 0.5,
+            "n": 1,
+            "confidence": 0.41666666666666663,
+            "accuracy": 0.0
+          },
+          {
+            "lower": 0.5,
+            "upper": 0.6,
+            "n": 6,
+            "confidence": 0.5,
+            "accuracy": 0.6666666666666666
+          },
+          {
+            "lower": 0.6,
+            "upper": 0.7,
+            "n": 1,
+            "confidence": 0.6666666666666666,
+            "accuracy": 0.0
+          },
+          {
+            "lower": 0.7,
+            "upper": 0.8,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.8,
+            "upper": 0.9,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.9,
+            "upper": 1.0,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          }
+        ]
+      },
+      "fcXG83vInDY": {
+        "n": 10,
+        "hits": 6,
+        "accuracy": 0.6,
+        "log_loss": 3.4562492921528,
+        "bins": [
+          {
+            "lower": 0.0,
+            "upper": 0.1,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.1,
+            "upper": 0.2,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.2,
+            "upper": 0.3,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.3,
+            "upper": 0.4,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.4,
+            "upper": 0.5,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.5,
+            "upper": 0.6,
+            "n": 5,
+            "confidence": 0.5,
+            "accuracy": 0.2
+          },
+          {
+            "lower": 0.6,
+            "upper": 0.7,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.7,
+            "upper": 0.8,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.8,
+            "upper": 0.9,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.9,
+            "upper": 1.0,
+            "n": 5,
+            "confidence": 1.0,
+            "accuracy": 1.0
+          }
+        ]
+      },
+      "mia8KCjr52g": {
+        "n": 7,
+        "hits": 5,
+        "accuracy": 0.7142857142857143,
+        "log_loss": 4.739456937201159,
+        "bins": [
+          {
+            "lower": 0.0,
+            "upper": 0.1,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.1,
+            "upper": 0.2,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.2,
+            "upper": 0.3,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.3,
+            "upper": 0.4,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.4,
+            "upper": 0.5,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.5,
+            "upper": 0.6,
+            "n": 6,
+            "confidence": 0.5,
+            "accuracy": 0.8333333333333334
+          },
+          {
+            "lower": 0.6,
+            "upper": 0.7,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.7,
+            "upper": 0.8,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.8,
+            "upper": 0.9,
+            "n": 0,
+            "confidence": null,
+            "accuracy": null
+          },
+          {
+            "lower": 0.9,
+            "upper": 1.0,
+            "n": 1,
+            "confidence": 1.0,
+            "accuracy": 0.0
+          }
+        ]
+      }
+    }
+  },
+  "counts": {
+    "three_videos": {
+      "fires": 221,
+      "accepted": 79,
+      "retained": 75,
+      "withdrawn": 4,
+      "rejected": {
+        "origin_difference": 13,
+        "no_landed_window": 72,
+        "first_score": 22,
+        "missing_first_formula": 35
+      },
+      "rejected_checks": {
+        "window": 72,
+        "a": 13,
+        "b": 0,
+        "c": 57
+      },
+      "score_absolute_error": {
+        "n": 73,
+        "p50": 0.0,
+        "p95": 1162.3984220907228
+      },
+      "exact": 45,
+      "unresolved": 6
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "fires": 83,
+        "accepted": 39,
+        "retained": 38,
+        "withdrawn": 1,
+        "rejected": {
+          "origin_difference": 7,
+          "no_landed_window": 6,
+          "first_score": 15,
+          "missing_first_formula": 16
+        },
+        "rejected_checks": {
+          "window": 6,
+          "a": 7,
+          "b": 0,
+          "c": 31
+        },
+        "score_absolute_error": {
+          "n": 36,
+          "p50": 0.0,
+          "p95": 600.3125
+        },
+        "exact": 23,
+        "unresolved": 3
+      },
+      "fcXG83vInDY": {
+        "fires": 61,
+        "accepted": 40,
+        "retained": 37,
+        "withdrawn": 3,
+        "rejected": {
+          "no_landed_window": 4,
+          "missing_first_formula": 6,
+          "first_score": 7,
+          "origin_difference": 4
+        },
+        "rejected_checks": {
+          "window": 4,
+          "a": 4,
+          "b": 0,
+          "c": 13
+        },
+        "score_absolute_error": {
+          "n": 37,
+          "p50": 0.0,
+          "p95": 3431.1999999999825
+        },
+        "exact": 22,
+        "unresolved": 3
+      },
+      "mia8KCjr52g": {
+        "fires": 77,
+        "accepted": 0,
+        "retained": 0,
+        "withdrawn": 0,
+        "rejected": {
+          "no_landed_window": 62,
+          "origin_difference": 2,
+          "missing_first_formula": 13
+        },
+        "rejected_checks": {
+          "window": 62,
+          "a": 2,
+          "b": 0,
+          "c": 13
+        },
+        "score_absolute_error": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "exact": 0,
+        "unresolved": 0
+      },
+      "zenchi": {
+        "fires": 96,
+        "accepted": 42,
+        "retained": 42,
+        "withdrawn": 0,
+        "rejected": {
+          "missing_first_formula": 27,
+          "first_score": 16,
+          "origin_difference": 7,
+          "no_landed_window": 2,
+          "palette": 2
+        },
+        "rejected_checks": {
+          "window": 2,
+          "a": 7,
+          "b": 2,
+          "c": 43
+        },
+        "score_absolute_error": {
+          "n": 40,
+          "p50": 0.0,
+          "p95": 10330.147189349113
+        },
+        "exact": 23,
+        "unresolved": 2
+      },
+      "review": {
+        "fires": 27,
+        "accepted": 15,
+        "retained": 15,
+        "withdrawn": 0,
+        "rejected": {
+          "missing_first_formula": 5,
+          "first_score": 4,
+          "origin_difference": 3
+        },
+        "rejected_checks": {
+          "window": 0,
+          "a": 3,
+          "b": 0,
+          "c": 9
+        },
+        "score_absolute_error": {
+          "n": 15,
+          "p50": 0.0,
+          "p95": 2562.7886464496955
+        },
+        "exact": 9,
+        "unresolved": 0
+      }
+    }
+  },
+  "timings": {
+    "q_7gc4TgFig": {
+      "update_sec": {
+        "n": 27000,
+        "p50": 0.001307649479713291,
+        "p95": 0.022107951878570002
+      },
+      "total_sec": 279.62909596355166
+    },
+    "fcXG83vInDY": {
+      "update_sec": {
+        "n": 27000,
+        "p50": 0.0014622655580751598,
+        "p95": 0.029192850942490613
+      },
+      "total_sec": 352.93082422192674
+    },
+    "mia8KCjr52g": {
+      "update_sec": {
+        "n": 27000,
+        "p50": 0.0018548485822975636,
+        "p95": 0.023826273967279103
+      },
+      "total_sec": 216.45242949028034
+    }
+  },
+  "report": "docs/E32_HIDDEN_ROW_BELIEF_20260928.md"
+}

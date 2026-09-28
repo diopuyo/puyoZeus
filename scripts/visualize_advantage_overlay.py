@@ -6463,6 +6463,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              midchain_single_observation: bool = False,
              prefire_candidates: bool = False,
              prefire_snapshot: bool = False,
+             hidden_row_belief: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7071,6 +7072,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             midchain_single_observation=midchain_single_observation,
             prefire_candidates=prefire_candidates,
             prefire_snapshot=prefire_snapshot,
+            hidden_row_belief=hidden_row_belief,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8361,6 +8363,8 @@ def main() -> None:
                     help="E29: 途中盤面1観測で候補化。次段得点一致までは使用しない（既定OFF）")
     ap.add_argument("--prefire-candidates", action="store_true", default=False,
                     help="E30: 保存起点の発火1・2手を全列挙し、各段の得点で絞る（既定OFF）")
+    ap.add_argument("--hidden-row-belief", action="store_true", default=False,
+                    help="発火前観測と併用し、隠し段を履歴の確率分布から推定")
     ap.add_argument("--prefire-snapshot", action="store_true", default=False,
                     help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
@@ -9043,6 +9047,7 @@ def main() -> None:
               midchain_single_observation=a.midchain_single_observation,
               prefire_candidates=a.prefire_candidates,
               prefire_snapshot=a.prefire_snapshot,
+              hidden_row_belief=a.hidden_row_belief,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

@@ -377,6 +377,11 @@ class ExchangeLandingProjection:
         responses, credit = self._receivers(overlay.tracker, latest, incoming)
         gfe, counter = self._probability_inputs(overlay, snapshot, latest, incoming, hands, t_sec)
         probability = logit_mean(base["p1"], gfe)
+        if getattr(overlay.tracker, 'hidden_row_belief', None) is not None:
+            from src.exchange_hidden_row_probability import weighted_landing
+            weighted = weighted_landing(self, overlay, snapshot, latest, hands, base, t_sec)
+            if weighted is not None:
+                probability, gfe, counter = weighted
         boards, responses, certain = self._death_boards(overlay.tracker, boards, responses, credit)
         probability_incoming = incoming
         if context is not None:

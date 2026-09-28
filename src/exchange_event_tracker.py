@@ -537,6 +537,8 @@ class ExchangeEventTracker:
             return
         scores = tuple(c.provisional_score for c in chains)
         key = tuple((c.chain_id, score) for c, score in zip(chains, scores))
+        if getattr(self, 'hidden_row_belief', None) is not None:
+            key += (('hidden_row_revision', self.hidden_row_belief.revision),)
         if key == self._provisional_key:
             return
         totals = np.array([sum(score for c, score in zip(chains, scores) if c.side == side)
@@ -593,6 +595,9 @@ class ExchangeEventTracker:
         """イベントの勝率を保持し、表示値と計装値を一致させる。"""
         try:
             probability = evaluate_exchange_event(event, self.models)
+            if source == 'S3_provisional' and getattr(self, 'hidden_row_belief', None) is not None:
+                from src.exchange_hidden_row_probability import weighted_s3
+                probability = weighted_s3(self.hidden_row_belief, self, event)
         except (ValueError, TypeError, FloatingPointError) as error:
             self.missing_input("evaluation: " + str(error), t_sec, source)
             return False

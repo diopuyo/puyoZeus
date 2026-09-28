@@ -60,7 +60,8 @@ class ExchangeEventOverlay:
                  completion_recovery: bool = False, midchain_completion: bool = False,
                  death_pending_ledger: bool = False, hidden_row_death: bool = False,
                  midchain_single_observation: bool = False,
-                 prefire_candidates: bool = False, prefire_snapshot: bool = False) -> None:
+                 prefire_candidates: bool = False, prefire_snapshot: bool = False,
+                 hidden_row_belief: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -74,8 +75,7 @@ class ExchangeEventOverlay:
         self._history: list[list[ConfirmedSide]] = [[], []]
         self._snapshots: list[tuple[float, Any]] = []
         self._signals: dict[int, EndSignals] = {}
-        self._counts = (0, 0)
-        self._previous = (None, None)
+        self._counts, self._previous = (0, 0), (None, None)
         self._game: int | None = None
         self._start: float | None = None
         self._falling = [False, False]
@@ -95,12 +95,15 @@ class ExchangeEventOverlay:
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
         self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
             midchain_completion, hidden_row_death, midchain_single_observation)
-        self._initialize_prefire(prefire_candidates, prefire_snapshot)
+        self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief)
 
-    def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False) -> None:
+    def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False,
+                            hidden_row_belief: bool = False) -> None:
         """新候補の入力と死亡専用台帳を、明示ONのときだけ追加する。"""
         self._live_count_key: tuple | None = None
         self._feature_cache: dict[tuple, np.ndarray] = {}
+        if hidden_row_belief and not prefire_snapshot:
+            raise ValueError('--hidden-row-beliefには--prefire-snapshotが必要')
         from src.exchange_prefire_candidates import PrefireCandidates
         self._prefire = PrefireCandidates(self._landing_projection.simulator) if prefire_candidates else None
         if prefire_snapshot:
@@ -108,6 +111,10 @@ class ExchangeEventOverlay:
                 raise ValueError('発火前観測と配置列挙は同時指定できない')
             from src.exchange_prefire_snapshot import PrefireSnapshot
             self._prefire = PrefireSnapshot(self._landing_projection.simulator)
+            if hidden_row_belief:
+                from src.exchange_hidden_row_belief import HiddenRowPrefire
+                self._prefire = HiddenRowPrefire(self._landing_projection.simulator)
+                self.tracker.hidden_row_belief = self._prefire
         self._landing_projection.prefire = self._prefire
         if prefire_candidates:
             from src.exchange_landing_safety import LandingStateSafety
@@ -143,8 +150,7 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
-        if self._prefire is not None:
-            self._prefire.observe_colors(sides)
+        self._observe_prefire(sides, t_sec, game_idx)
         self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
             self._e16.apply(self, result, snapshot, t_sec)
@@ -180,6 +186,13 @@ class ExchangeEventOverlay:
         self._previous = tuple(s.state for s in sides)
         if self._e16 is not None:
             self._e16.apply(self, result, snapshot, t_sec)
+
+    def _observe_prefire(self, sides: tuple, stamp: float, game: int) -> None:
+        """予測入力を復元してから、明示ONの因果履歴を更新する。"""
+        if self._prefire is not None:
+            self._prefire.observe_colors(sides)
+            if hasattr(self._prefire, 'observe_history'):
+                self._prefire.observe_history(sides, stamp, game)
 
     def _observe_predictions(self, result: Any, stamp: float) -> None:
         """既存途中予測を更新してから、発火候補の平均を予測層へ反映する。"""
