@@ -11,7 +11,7 @@ from src.board_state_machine import BoardState
 from src.chain import ChainSimulator
 from src.chain_detector import CHAIN_MECHANISM_FORMULA_READ
 from src.exchange_event_tracker import valid_nonnegative, TIME_EPSILON_SEC
-from src.exchange_midchain_completion import remaining, SETTLE_SAMPLES, MAX_SETTLE_GAP_SEC
+from src.exchange_midchain_completion import remaining, SETTLE_SAMPLES, SINGLE_SETTLE_SAMPLE, MAX_SETTLE_GAP_SEC
 from src.match_color_evidence import MatchColorEvidence
 
 GAME_COLOR_COUNT = 4
@@ -42,8 +42,9 @@ def enumerate_hidden(board: Board, colors: tuple, count: int, score: float,
 class HiddenRowDeathCompletion:
     """確率層の連鎖レコードへ一切書き込まない、死亡専用の候補台帳。"""
 
-    def __init__(self, simulator: ChainSimulator) -> None:
+    def __init__(self, simulator: ChainSimulator, single_observation: bool = False) -> None:
         self.simulator = simulator
+        self.required_samples = SINGLE_SETTLE_SAMPLE if single_observation else SETTLE_SAMPLES
         self.entries: dict[tuple, dict] = {}
         self.color_evidence = [MatchColorEvidence(), MatchColorEvidence()]
         self.palettes: tuple = ((), ())
@@ -110,7 +111,7 @@ class HiddenRowDeathCompletion:
         self.revision += 1
 
     def _sample(self, key: tuple, entry: dict, side: Any, stamp: float) -> None:
-        """隠し段以外の欠測がなく、同一盤面が二観測続いた時だけ全列挙する。"""
+        """隠し段以外の欠測がない盤面を必要観測数で全列挙し、次段式を待つ。"""
         board = getattr(side, 'midchain_board', None)
         if side.state in (BoardState.MENU, BoardState.TSUMO_FALL, BoardState.OJAMA_FALL):
             entry['pending'] = None
@@ -131,7 +132,7 @@ class HiddenRowDeathCompletion:
         continuous = TIME_EPSILON_SEC < gap <= MAX_SETTLE_GAP_SEC+TIME_EPSILON_SEC
         entry['samples'] = entry['samples']+1 if entry['settle'] == identity and continuous else 1
         entry['settle'], entry['stamp'] = identity, stamp
-        if entry['samples'] < SETTLE_SAMPLES or entry['used_count'] == entry['formula'][0]:
+        if entry['samples'] < self.required_samples or entry['used_count'] == entry['formula'][0]:
             return
         options, trials = enumerate_hidden(board, colors, *entry['formula'], self.simulator)
         row = dict(game=key[0], side=entry['chain'].side, chain_id=key[2], candidate_sec=stamp,

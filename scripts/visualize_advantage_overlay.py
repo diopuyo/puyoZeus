@@ -6460,6 +6460,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              pending_ledger: bool = False, color_score_safety: bool = False,
              completion_recovery: bool = False, midchain_completion: bool = False,
              death_pending_ledger: bool = False, hidden_row_death: bool = False,
+             midchain_single_observation: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7065,6 +7066,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             pending_ledger=pending_ledger, color_score_safety=color_score_safety,
             completion_recovery=completion_recovery, midchain_completion=midchain_completion,
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
+            midchain_single_observation=midchain_single_observation,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8342,6 +8344,8 @@ def main() -> None:
                     help="E23: 応手を挟む複数回の上限着弾で回避不能死を検査（既定OFF）")
     ap.add_argument("--landing-state-safety", action="store_true", default=False,
                     help="E25: 交換独立予告台帳・整合した完走復元・複数着弾限定の盤面検証（既定OFF）")
+    ap.add_argument("--midchain-single-observation", action="store_true", default=False,
+                    help="E29: 途中盤面1観測で候補化。次段得点一致までは使用しない（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
                  "death-pending-ledger", "hidden-row-death"):
         ap.add_argument("--" + flag, action="store_true", default=False,
@@ -9019,6 +9023,7 @@ def main() -> None:
               pending_ledger=a.pending_ledger, color_score_safety=a.color_score_safety,
               completion_recovery=a.completion_recovery, midchain_completion=a.midchain_completion,
               death_pending_ledger=a.death_pending_ledger, hidden_row_death=a.hidden_row_death,
+              midchain_single_observation=a.midchain_single_observation,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

@@ -1,0 +1,41 @@
+{
+  "defaults_off": true,
+  "production_unchanged": true,
+  "models_and_inputs_unchanged": true,
+  "max_function_lines": 50,
+  "records": {
+    "logs/e26/records/fcXG83vInDY.jsonl.gz": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+    "logs/e26/records/mia8KCjr52g.jsonl.gz": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+    "logs/e26/records/q_7gc4TgFig.jsonl.gz": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+    "logs/e26/records/review.jsonl.gz": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7",
+    "logs/e26/records/zenchi.jsonl.gz": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+  },
+  "preregistration_sha256": "6c3178d65a365cd2f58467e521be5b0164527657862fc838b8e0dfa3304e4b32",
+  "off_controls": {
+    "OFF_fcXG83vInDY": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_mia8KCjr52g": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_q_7gc4TgFig": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_review": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_zenchi": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  }
+}

@@ -14,6 +14,7 @@ from src.scoring import calculate_step_score
 from src.exchange_event_tracker import valid_nonnegative, OBSERVATION_FPS, TIME_EPSILON_SEC
 
 SETTLE_SAMPLES = 2
+SINGLE_SETTLE_SAMPLE = 1
 MAX_SETTLE_GAP_SEC = SETTLE_SAMPLES / OBSERVATION_FPS
 PREDICTION_FIELDS = ('predicted_final_score', 'predicted_chain_count', 'predicted_final_board')
 
@@ -44,8 +45,9 @@ def remaining(board: Board, count: int, score: float, simulator: ChainSimulator)
 class MidchainCompletion:
     """盤面履歴を変更せず、連鎖IDごとに候補・採用・最終照合を管理する。"""
 
-    def __init__(self, simulator: ChainSimulator) -> None:
+    def __init__(self, simulator: ChainSimulator, single_observation: bool = False) -> None:
         self.simulator = simulator
+        self.required_samples = SINGLE_SETTLE_SAMPLE if single_observation else SETTLE_SAMPLES
         self.entries: dict[tuple, dict] = {}
         self.audit: list[dict] = []
         self.skipped: Counter = Counter()
@@ -115,7 +117,7 @@ class MidchainCompletion:
         entry['active'] = None
 
     def _sample(self, key: tuple, entry: dict, side: Any, stamp: float) -> None:
-        """重力待ち中の連続二観測一致・支持ありだけを落ち切り候補にする。"""
+        """支持のある盤面を必要観測数で候補化し、採用は次段式まで保留する。"""
         board = getattr(side, 'midchain_board', None)
         if side.state in (BoardState.MENU, BoardState.TSUMO_FALL, BoardState.OJAMA_FALL):
             entry['pending'] = None
@@ -134,7 +136,7 @@ class MidchainCompletion:
         continuous = TIME_EPSILON_SEC < stamp-previous_stamp <= MAX_SETTLE_GAP_SEC+TIME_EPSILON_SEC
         entry['samples'] = entry['samples']+1 if entry['settle'] == identity and continuous else 1
         entry['settle'], entry['stamp'] = identity, stamp
-        if entry['samples'] < SETTLE_SAMPLES or entry['used_count'] == count:
+        if entry['samples'] < self.required_samples or entry['used_count'] == count:
             return
         value = remaining(board, count, score, self.simulator)
         if value is None:

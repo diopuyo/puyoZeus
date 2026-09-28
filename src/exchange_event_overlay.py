@@ -58,7 +58,8 @@ class ExchangeEventOverlay:
                  multi_landing_death: bool = False, landing_state_safety: bool = False,
                  pending_ledger: bool = False, color_score_safety: bool = False,
                  completion_recovery: bool = False, midchain_completion: bool = False,
-                 death_pending_ledger: bool = False, hidden_row_death: bool = False) -> None:
+                 death_pending_ledger: bool = False, hidden_row_death: bool = False,
+                 midchain_single_observation: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -69,8 +70,7 @@ class ExchangeEventOverlay:
             self.tracker.layer_rows = []
         self._live_count_key: tuple | None = None
         self._build_static, self._signal_factory = build_static, signal_factory
-        self._m0 = m0_predictor
-        self._per_side_settled = per_side_settled
+        self._m0, self._per_side_settled = m0_predictor, per_side_settled
         self._history: list[list[ConfirmedSide]] = [[], []]
         self._snapshots: list[tuple[float, Any]] = []
         self._signals: dict[int, EndSignals] = {}
@@ -94,22 +94,26 @@ class ExchangeEventOverlay:
             landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
             color_score_safety=color_score_safety, completion_recovery=completion_recovery,
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
-        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard, midchain_completion, hidden_row_death)
+        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
+            midchain_completion, hidden_row_death, midchain_single_observation)
 
     def _initialize_prediction_guards(self, death_candidate_guard: bool,
                                       death_formula_guard: bool, midchain_completion: bool,
-                                      hidden_row_death: bool = False) -> None:
+                                      hidden_row_death: bool = False,
+                                      midchain_single_observation: bool = False) -> None:
         """既定OFFの追加検証器をまとめて初期化する。"""
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
         from src.exchange_event_death_formula import DeathFormulaGuard
         self._formula_guard = DeathFormulaGuard() if death_formula_guard else None
         from src.exchange_midchain_completion import MidchainCompletion
-        self._midchain = MidchainCompletion(self._landing_projection.simulator) if midchain_completion else None
+        self._midchain = MidchainCompletion(self._landing_projection.simulator,
+            single_observation=midchain_single_observation) if midchain_completion else None
         if self._midchain is not None:
             self._landing_projection.midchain = self._midchain
         from src.exchange_hidden_row_death import HiddenRowDeathCompletion
-        self._hidden_death = HiddenRowDeathCompletion(self._landing_projection.simulator) if hidden_row_death else None
+        self._hidden_death = HiddenRowDeathCompletion(self._landing_projection.simulator,
+            single_observation=midchain_single_observation) if hidden_row_death else None
         self._landing_projection.hidden_death = self._hidden_death
 
     def update(self, result: Any, snapshot: Any, finalization: Any,

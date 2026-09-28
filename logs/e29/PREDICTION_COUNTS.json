@@ -1,0 +1,100 @@
+{
+  "three_videos": {
+    "midchain": {
+      "accepted": 20,
+      "accepted_chains": 16,
+      "next_mismatch": 6,
+      "final_mismatch": 5,
+      "final_unresolved": 2
+    },
+    "hidden": {
+      "accepted": 5,
+      "accepted_chains": 5,
+      "next_mismatch": 9,
+      "final_mismatch": 3,
+      "final_unresolved": 0
+    }
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "midchain": {
+        "accepted": 10,
+        "accepted_chains": 8,
+        "next_mismatch": 2,
+        "final_mismatch": 2,
+        "final_unresolved": 0
+      },
+      "hidden": {
+        "accepted": 2,
+        "accepted_chains": 2,
+        "next_mismatch": 3,
+        "final_mismatch": 1,
+        "final_unresolved": 0
+      }
+    },
+    "fcXG83vInDY": {
+      "midchain": {
+        "accepted": 10,
+        "accepted_chains": 8,
+        "next_mismatch": 4,
+        "final_mismatch": 3,
+        "final_unresolved": 2
+      },
+      "hidden": {
+        "accepted": 3,
+        "accepted_chains": 3,
+        "next_mismatch": 6,
+        "final_mismatch": 2,
+        "final_unresolved": 0
+      }
+    },
+    "mia8KCjr52g": {
+      "midchain": {
+        "accepted": 0,
+        "accepted_chains": 0,
+        "next_mismatch": 0,
+        "final_mismatch": 0,
+        "final_unresolved": 0
+      },
+      "hidden": {
+        "accepted": 0,
+        "accepted_chains": 0,
+        "next_mismatch": 0,
+        "final_mismatch": 0,
+        "final_unresolved": 0
+      }
+    },
+    "zenchi": {
+      "midchain": {
+        "accepted": 5,
+        "accepted_chains": 4,
+        "next_mismatch": 6,
+        "final_mismatch": 1,
+        "final_unresolved": 1
+      },
+      "hidden": {
+        "accepted": 8,
+        "accepted_chains": 6,
+        "next_mismatch": 6,
+        "final_mismatch": 4,
+        "final_unresolved": 0
+      }
+    },
+    "review": {
+      "midchain": {
+        "accepted": 1,
+        "accepted_chains": 1,
+        "next_mismatch": 1,
+        "final_mismatch": 1,
+        "final_unresolved": 0
+      },
+      "hidden": {
+        "accepted": 5,
+        "accepted_chains": 3,
+        "next_mismatch": 2,
+        "final_mismatch": 1,
+        "final_unresolved": 0
+      }
+    }
+  }
+}

@@ -58,7 +58,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            multi_landing_death: bool = False, landing_state_safety: bool = False,
            pending_ledger: bool = False, color_score_safety: bool = False,
            completion_recovery: bool = False, midchain_completion: bool = False,
-           death_pending_ledger: bool = False, hidden_row_death: bool = False) -> dict:
+           death_pending_ledger: bool = False, hidden_row_death: bool = False,
+           midchain_single_observation: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -82,7 +83,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
         color_score_safety=color_score_safety, completion_recovery=completion_recovery,
         midchain_completion=midchain_completion,
-        death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
+        death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
+        midchain_single_observation=midchain_single_observation)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -153,7 +155,7 @@ def main() -> None:
     parser.add_argument("--multi-landing-death", action="store_true", default=False)
     parser.add_argument("--landing-state-safety", action="store_true", default=False)
     for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
-                 "death-pending-ledger", "hidden-row-death"):
+                 "death-pending-ledger", "hidden-row-death", "midchain-single-observation"):
         parser.add_argument("--" + name, action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
@@ -177,7 +179,8 @@ def main() -> None:
                     pending_ledger=options.pending_ledger, color_score_safety=options.color_score_safety,
                     completion_recovery=options.completion_recovery,
                     midchain_completion=options.midchain_completion,
-                    death_pending_ledger=options.death_pending_ledger, hidden_row_death=options.hidden_row_death)
+                    death_pending_ledger=options.death_pending_ledger, hidden_row_death=options.hidden_row_death,
+                    midchain_single_observation=options.midchain_single_observation)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

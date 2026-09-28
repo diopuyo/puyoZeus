@@ -1,0 +1,15 @@
+{
+  "enumerated": 0,
+  "combinations": 0,
+  "accepted": 0,
+  "next_mismatch": 0,
+  "used": 0,
+  "uses": 0,
+  "skipped": {
+    "ineligible": 1040
+  },
+  "rows": [],
+  "final_mismatch": 0,
+  "final_unresolved": 0,
+  "accepted_chains": 0
+}
