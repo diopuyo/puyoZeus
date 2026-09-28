@@ -1,0 +1,8 @@
+{
+  "source_sha256": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b",
+  "video": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+  "fps": 60.0,
+  "windows_path": "logs/e31/records/zenchi.jsonl.windows.json.gz",
+  "windows_sha256": "5c8431e0c7199cb916348f7e5b6ac7023227c710fef4984d580ca8d84ff46601",
+  "window_count": 96
+}

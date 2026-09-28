@@ -521,6 +521,8 @@ class SideResult:
     raw_cnn_board: Board | None = None
     # E26: 明示ON時だけ、予測専用読取器で補完。現在層の盤面には使用しない。
     midchain_board: Board | None = None
+    # E31: 発火前画像の多数決。現在層には書き戻さない。
+    prefire_snapshot: dict | None = None
 
 
 @dataclass(frozen=True)

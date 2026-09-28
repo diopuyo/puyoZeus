@@ -239,6 +239,8 @@ def _prediction_label(overlay: Any, record: Any, game_idx: int) -> str:
         return ''
     prefire = getattr(overlay, '_prefire', None)
     if prefire is not None and prefire.provenance(record.chains):
+        if prefire.provenance(record.chains)[0].get('method') == 'prefire_snapshot':
+            return '（発火前盤面から予測）'
         return '（発火候補予測込み）'
     midchain = getattr(overlay, '_midchain', None)
     return ('（途中完走予測込み）' if midchain is not None

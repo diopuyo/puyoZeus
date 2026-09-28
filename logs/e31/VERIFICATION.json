@@ -1,0 +1,129 @@
+{
+  "default_off": true,
+  "production_unchanged": true,
+  "models_inputs_unchanged": true,
+  "same_rows": {
+    "q_7gc4TgFig": {
+      "frames": 27000,
+      "rejected_only_identical": {
+        "all_columns_before_first_accept": 4521,
+        "current_columns_before_game_accept": 18529,
+        "historical_display_ema_differences": 143,
+        "historical_display_ema_max": 2.322096069233327
+      }
+    },
+    "fcXG83vInDY": {
+      "frames": 27000,
+      "rejected_only_identical": {
+        "all_columns_before_first_accept": 5881,
+        "current_columns_before_game_accept": 18291,
+        "historical_display_ema_differences": 119,
+        "historical_display_ema_max": 0.0567837619892515
+      }
+    },
+    "mia8KCjr52g": {
+      "frames": 27000,
+      "rejected_only_identical": {
+        "all_columns_before_first_accept": 27000,
+        "current_columns_before_game_accept": 27000,
+        "historical_display_ema_differences": 0,
+        "historical_display_ema_max": 0.0
+      }
+    },
+    "zenchi": {
+      "frames": 25398,
+      "rejected_only_identical": {
+        "all_columns_before_first_accept": 3298,
+        "current_columns_before_game_accept": 18951,
+        "historical_display_ema_differences": 152,
+        "historical_display_ema_max": 4.2926778428754195
+      }
+    },
+    "review": {
+      "frames": 5948,
+      "rejected_only_identical": {
+        "all_columns_before_first_accept": 3343,
+        "current_columns_before_game_accept": 4150,
+        "historical_display_ema_differences": 0,
+        "historical_display_ema_max": 0.0
+      }
+    }
+  },
+  "off_controls": {
+    "OFF_fcXG83vInDY": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_mia8KCjr52g": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_q_7gc4TgFig": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_review": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    },
+    "OFF_zenchi": {
+      "display": "byte_identical",
+      "events": "byte_identical",
+      "diagnostics": "identical"
+    }
+  },
+  "max_function_lines": 50,
+  "records": {
+    "logs/e26/records/fcXG83vInDY.jsonl.gz": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+    "logs/e26/records/mia8KCjr52g.jsonl.gz": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+    "logs/e26/records/q_7gc4TgFig.jsonl.gz": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+    "logs/e26/records/review.jsonl.gz": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7",
+    "logs/e26/records/zenchi.jsonl.gz": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+  },
+  "added_inputs": {
+    "q_7gc4TgFig": {
+      "original_sha256": "632c360c0cce2ef968019ae9514d0efae0ab3e85f0251cea05174ef98732dd4f",
+      "enriched_sha256": "3e47e7a3ca7eb9e2b4c9f19e961eea4f47b94fce6cb1826cd7cadf62dea6a79b",
+      "rows": 69449
+    },
+    "fcXG83vInDY": {
+      "original_sha256": "e88b553c571514c404d4eac2becf9097e28f2e604b41d92b196aeff0dd19a70b",
+      "enriched_sha256": "d221874ee5fbc7e5a4240ee89577840c61b1a3f08ae0a2dcb2f2318eca4e2b48",
+      "rows": 68574
+    },
+    "mia8KCjr52g": {
+      "original_sha256": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+      "enriched_sha256": "b3cea0e4a295291d1e99e1e2994d91f5de52b09d0881e6c1005f79566e2f8d0d",
+      "rows": 70157
+    },
+    "zenchi": {
+      "original_sha256": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b",
+      "enriched_sha256": "a3241a4806c19557ca0719b2583a78247ca86aefd20149c21149a67550602b7a",
+      "rows": 69719
+    },
+    "review": {
+      "original_sha256": "ae2aa3407e1d4194efa5b2895bf06c3d1a9953bc33de1b5330798f9085334ce7",
+      "enriched_sha256": "f721524ad94f03f0a28f272f9e2085dfdf712b269e99cfa97c92094eb850e410",
+      "rows": 17569
+    }
+  },
+  "withdrawals": [
+    {
+      "source": "fcXG83vInDY",
+      "game": 8,
+      "chain_id": 4,
+      "t_sec": 717.8333333333334,
+      "reason": "stage_gap",
+      "baseline_p1": [
+        0.13482289775197576
+      ],
+      "actual_p1": [
+        0.13482289775197576
+      ]
+    }
+  ]
+}

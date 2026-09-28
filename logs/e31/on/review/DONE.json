@@ -1,0 +1,21 @@
+{
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "color_score_safety": true,
+    "multi_landing_death": true,
+    "midchain_completion": true,
+    "death_pending_ledger": true,
+    "hidden_row_death": true,
+    "prefire_snapshot": true
+  },
+  "model": "v3",
+  "state": "completed",
+  "frames": 6848,
+  "display_frames": 5948,
+  "elapsed_seconds": 54.36136740795337,
+  "record_bytes": 404461,
+  "live_count": true,
+  "model_dir": "models/exchange_event_v3"
+}

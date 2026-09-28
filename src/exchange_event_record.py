@@ -54,7 +54,7 @@ def decode(value: Any) -> Any:
         return [decode(v) for v in value]
     if not isinstance(value, dict):
         return value
-    if "board" in value:
+    if "board" in value and len(value) == 1:
         board = Board()
         board._grid = decode(value["board"])
         return board
@@ -120,6 +120,8 @@ class ExchangeEventRecorder:
         sides = []
         for side in (result.p1, result.p2):
             saved = fields(side, SIDE_FIELDS)
+            if getattr(side, 'prefire_snapshot', None) is not None:
+                saved.prefire_snapshot = side.prefire_snapshot
             if getattr(side, 'midchain_board', None) is not None:
                 saved.midchain_board = side.midchain_board
             saved.chain_event = (fields(side.chain_event, CHAIN_FIELDS)

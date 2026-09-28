@@ -6462,6 +6462,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              death_pending_ledger: bool = False, hidden_row_death: bool = False,
              midchain_single_observation: bool = False,
              prefire_candidates: bool = False,
+             prefire_snapshot: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7069,6 +7070,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
             midchain_single_observation=midchain_single_observation,
             prefire_candidates=prefire_candidates,
+            prefire_snapshot=prefire_snapshot,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -7076,6 +7078,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             dump_exchange_event_path = out.with_suffix(".exchange_events.jsonl")
         print("[exchange-event] M0推論器接続済み。G_fe/S1/S3を使用します。")
     midchain_reader = None
+    snapshot_reader = None
+    if prefire_snapshot:
+        from src.prefire_snapshot_reader import PrefireSnapshotReader
+        snapshot_reader = PrefireSnapshotReader()
     if event_overlay is not None and (midchain_completion or hidden_row_death):
         from src.midchain_board_reader import MidchainBoardReader
         midchain_reader = MidchainBoardReader()
@@ -7608,6 +7614,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 observed = midchain_reader.read(recog_frame, (r.p1, r.p2))
                 r = replace(r, p1=replace(r.p1, midchain_board=observed[0]),
                             p2=replace(r.p2, midchain_board=observed[1]))
+            if snapshot_reader is not None:
+                from dataclasses import replace
+                observed = snapshot_reader.update(recog_frame, (r.p1, r.p2), t, game_idx)
+                r = replace(r, p1=replace(r.p1, prefire_snapshot=observed[0]),
+                            p2=replace(r.p2, prefire_snapshot=observed[1]))
             event_inputs = (r, snap, tracker.get_attack_finalization_counters(t),
                             t, game_idx, formula_totals_from_pipeline(pipe),
                             displayed_scores_from_pipeline(pipe, recog_frame),
@@ -8350,6 +8361,8 @@ def main() -> None:
                     help="E29: 途中盤面1観測で候補化。次段得点一致までは使用しない（既定OFF）")
     ap.add_argument("--prefire-candidates", action="store_true", default=False,
                     help="E30: 保存起点の発火1・2手を全列挙し、各段の得点で絞る（既定OFF）")
+    ap.add_argument("--prefire-snapshot", action="store_true", default=False,
+                    help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
                  "death-pending-ledger", "hidden-row-death"):
         ap.add_argument("--" + flag, action="store_true", default=False,
@@ -9029,6 +9042,7 @@ def main() -> None:
               death_pending_ledger=a.death_pending_ledger, hidden_row_death=a.hidden_row_death,
               midchain_single_observation=a.midchain_single_observation,
               prefire_candidates=a.prefire_candidates,
+              prefire_snapshot=a.prefire_snapshot,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

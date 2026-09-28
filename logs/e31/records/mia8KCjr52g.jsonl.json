@@ -1,0 +1,8 @@
+{
+  "source_sha256": "aac342c853ce01fda6cafb7dc57d42d77ce8640454e0974f7f62a81e29e753d0",
+  "video": "/mnt/d/puyo_analyzer/videos/source/mia8KCjr52g_first_0_900_20260925_v1.mp4",
+  "fps": 30.0,
+  "windows_path": "logs/e31/records/mia8KCjr52g.jsonl.windows.json.gz",
+  "windows_sha256": "87996bb17b07298fa0b662bcee7af33e4a4712f25460343944be68312ddce37e",
+  "window_count": 77
+}

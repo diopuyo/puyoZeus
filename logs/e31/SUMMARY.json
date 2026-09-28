@@ -1,0 +1,198 @@
+{
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5104336767196771,
+      "auc": 0.764024517323914
+    },
+    "zenchi": {
+      "hits": 7124,
+      "frames": 8333,
+      "agreement": 0.8549141965678627
+    },
+    "deaths": {
+      "false": 1,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": true,
+      "zenchi": true,
+      "deaths": true,
+      "scene": false
+    },
+    "candidate": false,
+    "scene": {
+      "first_sec": 2771.25,
+      "deadline_sec": 2766.0,
+      "scenes": 1
+    }
+  },
+  "counts": {
+    "three_videos": {
+      "fires": 221,
+      "accepted": 31,
+      "retained": 30,
+      "withdrawn": 1,
+      "rejected": {
+        "origin_difference": 6,
+        "no_landed_window": 72,
+        "unknown": 87,
+        "first_score": 7,
+        "missing_first_formula": 18
+      },
+      "rejected_checks": {
+        "window": 72,
+        "a": 6,
+        "b": 87,
+        "c": 25
+      },
+      "score_absolute_error": {
+        "n": 29,
+        "p50": 0.0,
+        "p95": 0.5999999999999979
+      },
+      "exact": 27,
+      "unresolved": 2
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "fires": 83,
+        "accepted": 17,
+        "retained": 17,
+        "withdrawn": 0,
+        "rejected": {
+          "origin_difference": 4,
+          "no_landed_window": 6,
+          "unknown": 44,
+          "first_score": 4,
+          "missing_first_formula": 8
+        },
+        "rejected_checks": {
+          "window": 6,
+          "a": 4,
+          "b": 44,
+          "c": 12
+        },
+        "score_absolute_error": {
+          "n": 16,
+          "p50": 0.0,
+          "p95": 3.25
+        },
+        "exact": 15,
+        "unresolved": 1
+      },
+      "fcXG83vInDY": {
+        "fires": 61,
+        "accepted": 14,
+        "retained": 13,
+        "withdrawn": 1,
+        "rejected": {
+          "no_landed_window": 4,
+          "missing_first_formula": 3,
+          "unknown": 35,
+          "origin_difference": 2,
+          "first_score": 3
+        },
+        "rejected_checks": {
+          "window": 4,
+          "a": 2,
+          "b": 35,
+          "c": 6
+        },
+        "score_absolute_error": {
+          "n": 13,
+          "p50": 0.0,
+          "p95": 0.3999999999999986
+        },
+        "exact": 12,
+        "unresolved": 1
+      },
+      "mia8KCjr52g": {
+        "fires": 77,
+        "accepted": 0,
+        "retained": 0,
+        "withdrawn": 0,
+        "rejected": {
+          "no_landed_window": 62,
+          "unknown": 8,
+          "missing_first_formula": 7
+        },
+        "rejected_checks": {
+          "window": 62,
+          "a": 0,
+          "b": 8,
+          "c": 7
+        },
+        "score_absolute_error": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "exact": 0,
+        "unresolved": 0
+      },
+      "zenchi": {
+        "fires": 96,
+        "accepted": 12,
+        "retained": 12,
+        "withdrawn": 0,
+        "rejected": {
+          "unknown": 52,
+          "missing_first_formula": 22,
+          "origin_difference": 4,
+          "no_landed_window": 2,
+          "first_score": 3,
+          "palette": 1
+        },
+        "rejected_checks": {
+          "window": 2,
+          "a": 4,
+          "b": 53,
+          "c": 25
+        },
+        "score_absolute_error": {
+          "n": 11,
+          "p50": 0.0,
+          "p95": 3.0
+        },
+        "exact": 10,
+        "unresolved": 1
+      },
+      "review": {
+        "fires": 27,
+        "accepted": 3,
+        "retained": 3,
+        "withdrawn": 0,
+        "rejected": {
+          "unknown": 20,
+          "missing_first_formula": 3,
+          "origin_difference": 1
+        },
+        "rejected_checks": {
+          "window": 0,
+          "a": 1,
+          "b": 20,
+          "c": 3
+        },
+        "score_absolute_error": {
+          "n": 3,
+          "p50": 0.0,
+          "p95": 0.0
+        },
+        "exact": 3,
+        "unresolved": 0
+      }
+    }
+  },
+  "report": "docs/E31_PREFIRE_SNAPSHOT_20260928.md"
+}
