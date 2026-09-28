@@ -73,8 +73,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     header = next(stream)
     match_gate = None
     if prefire_origin_guard:
-        from src.exchange_prefire_origin import origin_match_gate
-        match_gate = origin_match_gate(header['video_id'], Path(__file__).resolve().parents[1])
+        from src.exchange_prefire_origin import recorded_match_gate
+        match_gate = recorded_match_gate(header, Path(__file__).resolve().parents[1])
     experimental = count_sync or death_guard or evaluation_layers or completion_check
     default_model = ("models/exchange_event_v4" if e16 or count_sync else
                      "models/exchange_event_v3" if experimental else header["model_dir"])

@@ -31,6 +31,17 @@ def origin_match_gate(video_id: str, root: Path) -> MatchRangeGate:
     return gate
 
 
+def recorded_match_gate(header: dict, root: Path) -> MatchRangeGate:
+    """新規収集の固定範囲を優先し、旧形式では既存ファイルを参照する。"""
+    saved = header.get('prefire_match_ranges')
+    if saved is None:
+        return origin_match_gate(header['video_id'], root)
+    gate = MatchRangeGate(tuple(tuple(pair) for pair in saved['ranges']), saved['source'])
+    if not gate.active:
+        raise ValueError('E34の保存済み試合範囲が空')
+    return gate
+
+
 class PrefireOriginGuard:
     """認識側のW48b保持印を使い、連鎖途中・試合外の起点更新を抑止する。"""
 
@@ -51,7 +62,7 @@ class PrefireOriginGuard:
         for idx, side in enumerate(sides):
             hold = getattr(side, 'prefire_origin_hold', None)
             if hold is None:
-                raise ValueError('E34のW48b保持印が未取得: 元認識からの補完が必要')
+                raise ValueError('E34のW48b保持印が未取得: 保持印付き固定入力の再収集が必要')
             if side.state != BoardState.STABLE or side.confirmed_board is None:
                 continue
             if not self.gate.allows(stamp):
