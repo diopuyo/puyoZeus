@@ -1,0 +1,409 @@
+{
+  "t_sec": 490.8666666666667,
+  "original": {
+    "dead": true,
+    "reason": "all_responses_dead",
+    "rounds": [
+      [
+        {
+          "incoming": 597,
+          "optimistic_send": 235.0,
+          "maximum_send": 236,
+          "cancelled": 236,
+          "dropped": 30,
+          "remaining": 331,
+          "responses": 20
+        }
+      ],
+      [
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 11
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 11
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 2
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 1.0,
+          "maximum_send": 1.0,
+          "cancelled": 1,
+          "dropped": 30,
+          "remaining": 300,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 2
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 3
+        },
+        {
+          "incoming": 331,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 301,
+          "responses": 4
+        }
+      ],
+      [
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 200
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 200
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 100
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 125
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 175
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 150
+        },
+        {
+          "incoming": 301,
+          "optimistic_send": 0.0,
+          "maximum_send": 0.0,
+          "cancelled": 0,
+          "dropped": 30,
+          "remaining": 271,
+          "responses": 125
+        }
+      ]
+    ],
+    "nodes": 8031
+  },
+  "elapsed": 30.066666666666663,
+  "queue": [
+    2,
+    5,
+    2,
+    2
+  ],
+  "hands": 1,
+  "incoming": 597,
+  "optimistic_before": 235.0,
+  "pending_sensitivity": {
+    "162": {
+      "dead": false,
+      "reason": "optimistic_cancel",
+      "rounds": [],
+      "nodes": 0
+    },
+    "182": {
+      "dead": false,
+      "reason": "optimistic_cancel",
+      "rounds": [],
+      "nodes": 0
+    }
+  }
+}
