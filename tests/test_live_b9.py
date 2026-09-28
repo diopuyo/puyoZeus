@@ -108,16 +108,16 @@ def test_repeated_pixels_hold_until_changed() -> None:
     session = Mock()
     video = VerifiedVideo([frame(0), frame(.5), frame(1), frame(2, 101)], session,
                           verifier=lambda image: True, continuous=True)
-    assert [r.media_sec for r in video] == [0, .5, 2]
-    session.hold.assert_called_once_with('verifying')
+    assert [r.media_sec for r in video] == [0, .5]
+    assert session.hold.call_args.args == ('verifying',)
 
 
 def test_resolution_switch_gates_both_directions() -> None:
     session = Mock()
     source = [frame(0), frame(.1, 101, (1280, 720)), frame(.2, 102, (1280, 720)), frame(.3, 103)]
     video = VerifiedVideo(source, session, verifier=lambda image: True, continuous=True)
-    assert [r.media_sec for r in video] == [0, .2]
-    assert session.hold.call_count == 2
+    assert [r.media_sec for r in video] == [0]
+    assert session.hold.call_count == 3
 
 
 @pytest.mark.parametrize('phase', ['verifying', 'calibrating', 'no_puyo_screen'])
@@ -269,6 +269,7 @@ def test_fault_report_checks_sse_not_just_process_exit(tmp_path: Path, problem: 
 
 def test_five_minute_windows_separate_drop_and_latency_samples(tmp_path: Path) -> None:
     from scripts.analyze_live_b9 import windows
+    (tmp_path/'metrics.json').write_text(json.dumps(dict(expected_frames=21000)))
     write_lines(tmp_path/'runtime.jsonl', [dict(at=t, progress=dict(t_sec=t), queue_depth=2) for t in (1, 299, 301, 599, 601, 699)])
     write_lines(tmp_path/'resources.jsonl', [dict(at=t, rss_bytes=100, handles=4, vram_mib=None) for t in (2, 302, 602)])
     (tmp_path/'recognition.json').write_text(json.dumps(dict(dropped_times=[10, 300, 650])))

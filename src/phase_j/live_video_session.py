@@ -3,13 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 from pathlib import Path
-import hashlib
 
 from .live_device import PuyoScreenVerifier, VERIFY_PERIOD_SEC
 from .live_device_session import DeviceSession
 from .live_source import CapturedFrame
-
-FINGERPRINT_STRIDE = 8
+from .live_input_guard import FrameContinuity
 
 
 class VerifiedVideo:
@@ -19,21 +17,23 @@ class VerifiedVideo:
         self.verifier = verifier or PuyoScreenVerifier()
         self.gated_frames = 0
         self.continuous = continuous
-        self.previous_size: tuple | None = None
-        self.digest: bytes | None = None
-        self.changed_at = 0.
+        self.continuity = FrameContinuity(VERIFY_PERIOD_SEC)
+
+    def transport_ready(self, frame: CapturedFrame) -> bool:
+        """形式契約の逸脱と映像停止を、盤面内容より優先して遮断する。"""
+        size = getattr(frame, 'source_size', None) or (frame.image.shape[1], frame.image.shape[0])
+        if not self.continuity.ready(frame.image, size, frame.media_sec):
+            self.session.hold('verifying')
+            self.gated_frames += 1
+            return False
+        return True
 
     def fault_gate(self, frame: CapturedFrame) -> bool:
         """故障ラベルは参照せず、入力サイズ・画素・経過時刻で再確認する。"""
-        size_changed = self.previous_size is not None and frame.source_size != self.previous_size
-        self.previous_size = frame.source_size
-        digest = hashlib.blake2b(frame.image[::FINGERPRINT_STRIDE, ::FINGERPRINT_STRIDE].tobytes()).digest()
-        if digest != self.digest:
-            self.digest, self.changed_at = digest, frame.media_sec
-        repeated = frame.media_sec-self.changed_at >= VERIFY_PERIOD_SEC
-        valid = self.verifier(frame.image)
-        if size_changed or repeated or not valid:
-            self.session.hold('no_puyo_screen' if not valid else 'verifying')
+        if not self.transport_ready(frame):
+            return False
+        if not self.verifier(frame.image):
+            self.session.hold('no_puyo_screen')
             self.gated_frames += 1
             return False
         return True
@@ -52,6 +52,9 @@ class VerifiedVideo:
             if self.continuous:
                 if self.fault_gate(frame):
                     yield frame
+                continue
+            if not self.transport_ready(frame):
+                verified, last_check = False, float('-inf')
                 continue
             # 固定ファイルは入口だけ確認する。対戦演出で履歴を切らず、試合内外は認識器へ渡す。
             if not verified and frame.media_sec-last_check >= VERIFY_PERIOD_SEC:

@@ -207,7 +207,7 @@ def test_measurement_uses_live_realtime_120_seconds(condition: str, device: str)
 
 def test_fixed_video_keeps_recognition_across_game_effects() -> None:
     from src.phase_j.live_video_session import VerifiedVideo
-    frames = [SimpleNamespace(media_sec=t, image=None) for t in range(4)]
+    frames = [SimpleNamespace(media_sec=t, image=np.full((18, 32, 3), t, np.uint8)) for t in range(4)]
     verifier, session = Mock(side_effect=[False, True, False]), SimpleNamespace(hold=Mock())
     source = VerifiedVideo(frames, session, verifier)
     assert list(source) == frames[1:]

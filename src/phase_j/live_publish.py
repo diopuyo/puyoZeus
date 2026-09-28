@@ -146,6 +146,17 @@ class LiveOverlayServer(StreamOverlayServer):
         super().__init__(state, host, port)
         self.sent: dict[int, dict[str, Any]] = {}
         self.sent_lock = Lock()
+        self.invalidated_at = float('-inf')
+
+    def sendable(self, data: dict[str, Any]) -> dict[str, Any] | None:
+        """2Hz待機中に失効した評価は送らず、公開済みの最新HOLDを優先する。"""
+        latest = self.state.latest()
+        if latest and latest['identity']['stream_seq'] > data['identity']['stream_seq']:
+            data = latest
+        if (data['evaluations']['practical']['availability'] == 'available' and
+                data['timing']['capture_monotonic_sec'] <= self.invalidated_at):
+            return None
+        return data
 
     def _make_handler_class(self) -> type:
         parent = super()._make_handler_class()
@@ -165,6 +176,9 @@ class LiveOverlayServer(StreamOverlayServer):
             def _write_sse(self, event: str, data: dict[str, Any]) -> None:
                 if event == 'analysis':
                     time.sleep(max(0.0, self.last_analysis + PUBLISH_PERIOD_SEC-time.perf_counter()))
+                    data = owner.sendable(data)
+                    if data is None:
+                        return
                 super()._write_sse(event, data)
                 if event == 'analysis':
                     self.last_analysis = time.perf_counter()
@@ -219,6 +233,7 @@ class LivePublisher:
             else:
                 self.input_calibration = dict(phase='verifying', progress=0)
                 self.input_events.append(dict(self.input_calibration, at=now))
+            self.server.invalidated_at = max(self.server.invalidated_at, now)
             previous = self.latest or {}
             self.latest = dict(frame=previous.get('frame', 0), t_sec=previous.get('t_sec', 0.0),
                 game=previous.get('game', 0), captured_at=now, recognized_at=now,

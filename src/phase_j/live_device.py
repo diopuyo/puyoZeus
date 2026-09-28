@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from .live_source import CapturedFrame, FrameSource, NATIVE_SIZE, RECOGNITION_HZ
+from .live_input_guard import FrameContinuity
 
 ASPECT_TOLERANCE = 0.01
 VERIFY_PERIOD_SEC = 1.0
@@ -130,6 +131,7 @@ class DirectShowSource(FrameSource):
     def __iter__(self) -> Iterator[CapturedFrame]:
         capture = self.capture_factory(self.config.index, cv2.CAP_DSHOW)
         origin, last_verify, verified = self.clock(), float('-inf'), False
+        continuity = FrameContinuity(VERIFY_PERIOD_SEC)
         try:
             verifier = self.verifier or PuyoScreenVerifier()
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, NATIVE_SIZE[0])
@@ -139,20 +141,23 @@ class DirectShowSource(FrameSource):
                 captured = self.clock()
                 ok, image = capture.read() if capture.isOpened() else (False, None)
                 normalized = self._normalize(image) if ok else None
-                if normalized is None:
+                size = (image.shape[1], image.shape[0]) if normalized is not None else None
+                transport_ready = normalized is not None and continuity.ready(normalized, size, captured)
+                if not transport_ready:
                     verified = False
+                    last_verify = float('-inf')
                 elif captured-last_verify >= VERIFY_PERIOD_SEC:
                     verified, last_verify = verifier(normalized), captured
                 if not verified:
                     if self.on_status:
-                        self.on_status('verifying' if normalized is None else 'no_puyo_screen')
+                        self.on_status('verifying' if not transport_ready else 'no_puyo_screen')
                     else:
                         self.on_hold()
                     self.sleep(READ_RETRY_SEC)
                     continue
                 elapsed = captured-origin
                 yield CapturedFrame(round(elapsed*RECOGNITION_HZ), elapsed,
-                                    captured, self.clock(), normalized)
+                                    captured, self.clock(), normalized, source_size=size)
                 self.sleep(max(0.0, captured+1/RECOGNITION_HZ-self.clock()))
         finally:
             capture.release()

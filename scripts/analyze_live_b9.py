@@ -46,18 +46,23 @@ def samples(path: Path) -> list[dict]:
 
 
 def windows(path: Path, start: float, end: float) -> list[dict]:
+    expected_total = int(json.loads((path/'metrics.json').read_text())['expected_frames'])
     runtime = lines(path/'runtime.jsonl')
     resources, sent = lines(path/'resources.jsonl'), samples(path)
     drops = json.loads((path/'recognition.json').read_text())['dropped_times']
     output = []
-    for lo in np.arange(start, end, WINDOW_SEC):
-        hi = min(lo+WINDOW_SEC, end)
+    for value in np.arange(start, end, WINDOW_SEC):
+        # NumPyの比較結果をsumへ渡すとint64へ伝播し、JSON保存に失敗する。
+        lo = float(value)
+        hi = float(min(lo+WINDOW_SEC, end))
         ticks = [r for r in runtime if lo <= r['progress'].get('t_sec', -1) < hi]
         selected = [r for r in resources if ticks and ticks[0]['at'] <= r['at'] <= ticks[-1]['at']]
         rows = [r for r in sent if available(r) and
                 lo <= r['payload']['timing']['source_available_ms']/1000 < hi]
         delay = [(r['received_at']-r['payload']['timing']['capture_monotonic_sec'])*1000 for r in rows]
         expected = round((hi-lo)*FPS)
+        if hi == end:
+            expected = expected_total-sum(row['expected'] for row in output)
         drop = sum(lo <= t < hi for t in drops)
         output.append(dict(start_sec=float(lo), end_sec=float(hi), resource_samples=len(selected),
             rss_p50=quantile([r['rss_bytes'] for r in selected], 50),
@@ -117,17 +122,18 @@ def fault_result(path: Path) -> dict:
     phases = [r['payload'].get('display', {}).get('input_status') for r in during+after]
     stale = [r for r in after if available(r) and
              r['payload']['timing']['source_available_ms']/1000+TIME_RESOLUTION_SEC < end['t_sec']]
-    invalid_frames = [r for r in sent if available(r) and begin['kind'] in ('black', 'other', 'stall')
-        and begin['t_sec'] <= r['payload']['timing']['source_available_ms']/1000 < end['t_sec']]
+    invalid_frames = [r for r in sent if available(r) and
+        begin['t_sec'] <= r['payload']['timing']['source_available_ms']/1000 < end['t_sec']]
     required = {'calibrating', 'ready', 'no_puyo_screen' if begin['kind'] in ('black', 'other') else 'verifying'}
     missing = sorted(required-set(phases))
-    return dict(kind=begin['kind'], passed=restored is not None and not unsafe and not stale
+    exposed = sum(available(r) for r in during)
+    return dict(kind=begin['kind'], passed=restored is not None and not unsafe and not stale and not exposed
                 and not invalid_frames and not missing and input_hold(first),
         recovery_sec=None if restored is None else restored['received_at']-end['at'],
         first_after_recovery=None if first is None else first['payload'],
         first_is_hold=input_hold(first),
         input_statuses=list(dict.fromkeys(phases)), invalid_status_probability_count=len(unsafe),
-        stale_after_recovery_count=len(stale), available_during_fault=sum(available(r) for r in during),
+        stale_after_recovery_count=len(stale), available_during_fault=exposed,
         invalid_frame_probability_count=len(invalid_frames), missing_statuses=missing,
         note='数値のGTがないため最初の復帰表示はHOLDを要求。数値なら正しいと推測せず未合格とする')
 
