@@ -174,6 +174,8 @@ class ExchangeLandingProjection:
             reassess = reassess or self.key != key
         if self.death_only_inputs:
             key += (tuple(self.safety.ledger.pending), getattr(getattr(self, 'hidden_death', None), 'revision', 0))
+            if getattr(self, 'prefire', None) is not None:
+                key += (self.prefire.revision,)
             reassess = reassess or self.key != key
         reassess = reassess or (self.key is not None
             and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
@@ -263,8 +265,8 @@ class ExchangeLandingProjection:
 
     def _hidden_completion(self, chain: Any) -> bool:
         """死亡保持の再検査だけで隠し段上限の有効性を参照する。"""
-        engine = getattr(self, 'hidden_death', None)
-        return engine is not None and engine.maximum(chain) is not None
+        from src.exchange_death_inputs import maximum_response
+        return maximum_response(self, chain) is not None
 
     def _incoming(self, tracker: Any, dropped: tuple, record: Any = None) -> list[int]:
         """段ごとの累積得点を既存換算し、相殺と既着地分を控除する。"""
@@ -275,6 +277,8 @@ class ExchangeLandingProjection:
                       for c in record.chains if c.side == label) for label in SIDE_LABELS]
         sent = [math.floor(score_to_ojama(s, elapsed_sec=tracker._score_elapsed).ojama_count)
                 for s in totals]
+        if getattr(self, 'prefire', None) is not None:
+            sent = self.prefire.sends(record.chains, tracker._score_elapsed) or sent
         return [max(0, sent[1-i] - sent[i] - max(0, dropped[i] - self.drops[i]))
                 for i in range(2)]
 
@@ -336,6 +340,10 @@ class ExchangeLandingProjection:
                      incoming: list, t_sec: float) -> float:
         """E12の確率合成に使う仮想着弾評価を維持する。"""
         boards = tuple(s.board for s in latest)
+        if getattr(self, 'prefire', None) is not None:
+            boards = tuple(self._completion_board(overlay.tracker, i) or b
+                if self.prefire.active(overlay.tracker.latest_chain(SIDE_LABELS[i])) else b
+                for i, b in enumerate(boards))
         virtual = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
                         for i, b in enumerate(boards))
         elapsed = t_sec - overlay._start

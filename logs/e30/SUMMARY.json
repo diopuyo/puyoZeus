@@ -1,0 +1,447 @@
+{
+  "metrics": {
+    "variant": "on",
+    "q": {
+      "frames": 6526,
+      "matches": 4,
+      "log_loss": 0.5245433769884452,
+      "auc": 0.7511807999553097
+    },
+    "zenchi": {
+      "hits": 7307,
+      "frames": 8333,
+      "agreement": 0.8768750750030001
+    },
+    "deaths": {
+      "false": 1,
+      "total": 37,
+      "unlabelled": 0
+    },
+    "scenes": {
+      "prefire_frames": 62,
+      "prefire_mean": 0.2702919012720453,
+      "margin_sign_flips": 3,
+      "terminal_frames": 45,
+      "terminal_min": 1.0
+    },
+    "gates": {
+      "q": false,
+      "zenchi": true,
+      "deaths": true,
+      "scene": false
+    },
+    "candidate": false,
+    "scene": {
+      "first_sec": 2771.25,
+      "deadline_sec": 2766.0,
+      "scenes": 1,
+      "baseline_first_sec": 2771.25
+    }
+  },
+  "counts": {
+    "three_videos": {
+      "fires": 45,
+      "enumerated": 45,
+      "skipped": 0,
+      "remaining": 24,
+      "zero": 21,
+      "became_zero": 21,
+      "final_unresolved": 0,
+      "remaining_last_absolute_error": {
+        "n": 24,
+        "p50": 430.2320302648171,
+        "p95": 4641.461390236936
+      },
+      "first_absolute_error": {
+        "n": 34,
+        "p50": 2001.8056443812502,
+        "p95": 51729.86779284392
+      },
+      "last_absolute_error": {
+        "n": 34,
+        "p50": 908.8431876606684,
+        "p95": 55783.44444444442
+      },
+      "enumeration_seconds": {
+        "n": 45,
+        "p50": 1.4246688690036535,
+        "p95": 3.179698922066017
+      },
+      "filtering_seconds": {
+        "n": 205,
+        "p50": 0.0006845250027254224,
+        "p95": 0.007215592567808919
+      }
+    },
+    "sources": {
+      "q_7gc4TgFig": {
+        "fires": 28,
+        "enumerated": 28,
+        "skipped": 0,
+        "remaining": 16,
+        "zero": 12,
+        "became_zero": 12,
+        "final_unresolved": 0,
+        "remaining_last_absolute_error": {
+          "n": 16,
+          "p50": 231.73160919540234,
+          "p95": 3266.0304628999343
+        },
+        "first_absolute_error": {
+          "n": 20,
+          "p50": 1013.9296807592751,
+          "p95": 30886.79705003736
+        },
+        "last_absolute_error": {
+          "n": 20,
+          "p50": 449.2097074895532,
+          "p95": 12014.000000000038
+        },
+        "enumeration_seconds": {
+          "n": 28,
+          "p50": 1.5460959065239877,
+          "p95": 3.1208896782947697
+        },
+        "filtering_seconds": {
+          "n": 107,
+          "p50": 0.0012117980513721704,
+          "p95": 0.007872104342095551
+        }
+      },
+      "fcXG83vInDY": {
+        "fires": 17,
+        "enumerated": 17,
+        "skipped": 0,
+        "remaining": 8,
+        "zero": 9,
+        "became_zero": 9,
+        "final_unresolved": 0,
+        "remaining_last_absolute_error": {
+          "n": 8,
+          "p50": 927.9340967515774,
+          "p95": 15264.782147591683
+        },
+        "first_absolute_error": {
+          "n": 14,
+          "p50": 20016.13103953148,
+          "p95": 53409.53844258255
+        },
+        "last_absolute_error": {
+          "n": 14,
+          "p50": 2277.06105592142,
+          "p95": 55783.44444444444
+        },
+        "enumeration_seconds": {
+          "n": 17,
+          "p50": 1.307251987978816,
+          "p95": 2.682571912417187
+        },
+        "filtering_seconds": {
+          "n": 98,
+          "p50": 0.00027549051446840167,
+          "p95": 0.006014985521323974
+        }
+      },
+      "mia8KCjr52g": {
+        "fires": 0,
+        "enumerated": 0,
+        "skipped": 0,
+        "remaining": 0,
+        "zero": 0,
+        "became_zero": 0,
+        "final_unresolved": 0,
+        "remaining_last_absolute_error": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "first_absolute_error": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "last_absolute_error": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "enumeration_seconds": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "filtering_seconds": {
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "zenchi": {
+        "fires": 27,
+        "enumerated": 27,
+        "skipped": 0,
+        "remaining": 20,
+        "zero": 7,
+        "became_zero": 7,
+        "final_unresolved": 1,
+        "remaining_last_absolute_error": {
+          "n": 19,
+          "p50": 655.2380952380952,
+          "p95": 4238.478991596626
+        },
+        "first_absolute_error": {
+          "n": 22,
+          "p50": 1506.690573358234,
+          "p95": 68252.5577742349
+        },
+        "last_absolute_error": {
+          "n": 22,
+          "p50": 905.4271174118502,
+          "p95": 70890.16883116879
+        },
+        "enumeration_seconds": {
+          "n": 27,
+          "p50": 1.625921516912058,
+          "p95": 2.5681734291487373
+        },
+        "filtering_seconds": {
+          "n": 126,
+          "p50": 0.00021912145894020796,
+          "p95": 0.006028942530974746
+        }
+      },
+      "review": {
+        "fires": 11,
+        "enumerated": 11,
+        "skipped": 0,
+        "remaining": 7,
+        "zero": 4,
+        "became_zero": 4,
+        "final_unresolved": 0,
+        "remaining_last_absolute_error": {
+          "n": 7,
+          "p50": 1155.6161395856052,
+          "p95": 3211.788198047196
+        },
+        "first_absolute_error": {
+          "n": 9,
+          "p50": 1055.3047929269428,
+          "p95": 79939.07936507936
+        },
+        "last_absolute_error": {
+          "n": 9,
+          "p50": 1570.7894736842104,
+          "p95": 82256.0
+        },
+        "enumeration_seconds": {
+          "n": 11,
+          "p50": 1.432221294962801,
+          "p95": 2.063360671978444
+        },
+        "filtering_seconds": {
+          "n": 42,
+          "p50": 8.953502401709557e-06,
+          "p95": 0.005883468815591177
+        }
+      }
+    }
+  },
+  "scene": [
+    {
+      "game": 3,
+      "side": "2P",
+      "chain_id": 9,
+      "trigger_sec": 2751.383333333333,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        4,
+        9,
+        0,
+        0
+      ],
+      "trials": 19960,
+      "skipped": null,
+      "enumeration_sec": 1.468246803036891,
+      "initial": {
+        "candidates": 3655,
+        "unique": 2141,
+        "mean_score": 8852.6292749658,
+        "mean_send": 126.14555403556771,
+        "predicted_count": 13
+      },
+      "observations": [
+        {
+          "t_sec": 2751.383333333333,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.002614335040561855,
+          "candidates": 882,
+          "unique": 366,
+          "mean_score": 7112.3015873015875,
+          "mean_send": 101.32426303854875,
+          "predicted_count": 13
+        },
+        {
+          "t_sec": 2752.6833333333334,
+          "count": 2,
+          "observed": 420,
+          "erased_colors": null,
+          "filter_sec": 0.000978230033069849,
+          "candidates": 527,
+          "unique": 229,
+          "mean_score": 10592.675521821631,
+          "mean_send": 151.1707779886148,
+          "predicted_count": 13
+        },
+        {
+          "t_sec": 2754.116666666667,
+          "count": 3,
+          "observed": 1320,
+          "erased_colors": null,
+          "filter_sec": 0.0003898260183632374,
+          "candidates": 12,
+          "unique": 3,
+          "mean_score": 1320.0,
+          "mean_send": 18.0,
+          "predicted_count": 3
+        },
+        {
+          "t_sec": 2755.45,
+          "count": 4,
+          "observed": 2600,
+          "erased_colors": null,
+          "filter_sec": 1.3196025975048542e-05,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2756.75,
+          "count": 5,
+          "observed": 5160,
+          "erased_colors": null,
+          "filter_sec": 6.224028766155243e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2758.15,
+          "count": 6,
+          "observed": 9000,
+          "erased_colors": null,
+          "filter_sec": 5.451962351799011e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2759.516666666667,
+          "count": 7,
+          "observed": 15500,
+          "erased_colors": null,
+          "filter_sec": 5.119945853948593e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2760.883333333333,
+          "count": 8,
+          "observed": 21900,
+          "erased_colors": null,
+          "filter_sec": 5.478039383888245e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2762.2833333333333,
+          "count": 9,
+          "observed": 29580,
+          "erased_colors": null,
+          "filter_sec": 6.023910827934742e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2763.616666666667,
+          "count": 10,
+          "observed": 40880,
+          "erased_colors": null,
+          "filter_sec": 5.667912773787975e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2764.95,
+          "count": 11,
+          "observed": 51120,
+          "erased_colors": null,
+          "filter_sec": 8.628936484456062e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2766.3166666666666,
+          "count": 12,
+          "observed": 62640,
+          "erased_colors": null,
+          "filter_sec": 5.502952262759209e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 2767.6833333333334,
+          "count": 13,
+          "observed": 75440,
+          "erased_colors": null,
+          "filter_sec": 5.655921995639801e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": true,
+      "uses": 3,
+      "final_score": 75440,
+      "remaining": 0,
+      "first_mean_score": 7112.3015873015875,
+      "first_error": -68327.69841269842,
+      "last_mean_score": 1320.0,
+      "last_error": -74120.0,
+      "became_zero": true
+    }
+  ],
+  "report": "docs/E30_PREFIRE_CANDIDATES_20260928.md"
+}

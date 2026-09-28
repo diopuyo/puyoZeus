@@ -1,0 +1,2380 @@
+{
+  "rows": [
+    {
+      "game": 1,
+      "side": "1P",
+      "chain_id": 5,
+      "trigger_sec": 156.0,
+      "colors": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        2,
+        1,
+        2,
+        5
+      ],
+      "trials": 35860,
+      "skipped": null,
+      "enumeration_sec": 1.5940145780332386,
+      "initial": {
+        "candidates": 9607,
+        "unique": 5529,
+        "mean_score": 463.7056313105028,
+        "mean_send": 6.215884251066931,
+        "predicted_count": 7
+      },
+      "observations": [
+        {
+          "t_sec": 156.0,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.01069208001717925,
+          "candidates": 5541,
+          "unique": 3427,
+          "mean_score": 547.0023461469049,
+          "mean_send": 7.330445767911929,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 157.43333333333334,
+          "count": 2,
+          "observed": 360,
+          "erased_colors": null,
+          "filter_sec": 0.0023807979887351394,
+          "candidates": 354,
+          "unique": 247,
+          "mean_score": 6066.1581920903955,
+          "mean_send": 86.48022598870057,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 158.86666666666667,
+          "count": 3,
+          "observed": 1000,
+          "erased_colors": null,
+          "filter_sec": 0.0010993489995598793,
+          "candidates": 254,
+          "unique": 205,
+          "mean_score": 7828.031496062992,
+          "mean_send": 111.69291338582677,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 160.2,
+          "count": 4,
+          "observed": 4800,
+          "erased_colors": null,
+          "filter_sec": 0.0005707010859623551,
+          "candidates": 252,
+          "unique": 204,
+          "mean_score": 7882.222222222223,
+          "mean_send": 112.46825396825396,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 161.63333333333333,
+          "count": 5,
+          "observed": 7360,
+          "erased_colors": null,
+          "filter_sec": 0.0006626690737903118,
+          "candidates": 244,
+          "unique": 200,
+          "mean_score": 7807.540983606557,
+          "mean_send": 111.40163934426229,
+          "predicted_count": 7
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 7360,
+      "remaining": 244,
+      "first_mean_score": 547.0023461469049,
+      "first_error": -6812.9976538530955,
+      "last_mean_score": 7807.540983606557,
+      "last_error": 447.54098360655735,
+      "became_zero": false
+    },
+    {
+      "game": 2,
+      "side": "1P",
+      "chain_id": 7,
+      "trigger_sec": 229.33333333333334,
+      "colors": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "queue": [
+        4,
+        4,
+        2,
+        5
+      ],
+      "trials": 27400,
+      "skipped": null,
+      "enumeration_sec": 1.5709070940501988,
+      "initial": {
+        "candidates": 8289,
+        "unique": 4808,
+        "mean_score": 419.8117987694535,
+        "mean_send": 5.4871516467607675,
+        "predicted_count": 10
+      },
+      "observations": [
+        {
+          "t_sec": 229.33333333333334,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.0030987790087237954,
+          "candidates": 1416,
+          "unique": 550,
+          "mean_score": 197.85310734463278,
+          "mean_send": 2.4096045197740112,
+          "predicted_count": 9
+        }
+      ],
+      "used": true,
+      "uses": 1,
+      "final_score": 100,
+      "remaining": 1416,
+      "first_mean_score": 197.85310734463278,
+      "first_error": 97.85310734463278,
+      "last_mean_score": 197.85310734463278,
+      "last_error": 97.85310734463278,
+      "became_zero": false
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 319.1333333333333,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "trials": 15960,
+      "skipped": null,
+      "enumeration_sec": 0.487673430936411,
+      "initial": {
+        "candidates": 1729,
+        "unique": 853,
+        "mean_score": 433.81145170618856,
+        "mean_send": 5.906882591093117,
+        "predicted_count": 3
+      },
+      "observations": [
+        {
+          "t_sec": 319.1333333333333,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.001796719036065042,
+          "candidates": 1328,
+          "unique": 688,
+          "mean_score": 416.53614457831327,
+          "mean_send": 5.619728915662651,
+          "predicted_count": 3
+        },
+        {
+          "t_sec": 320.5,
+          "count": 2,
+          "observed": 360,
+          "erased_colors": null,
+          "filter_sec": 0.0016964089591056108,
+          "candidates": 725,
+          "unique": 449,
+          "mean_score": 509.29655172413794,
+          "mean_send": 7.108965517241379,
+          "predicted_count": 3
+        }
+      ],
+      "used": true,
+      "uses": 5,
+      "final_score": 360,
+      "remaining": 725,
+      "first_mean_score": 416.53614457831327,
+      "first_error": 56.53614457831327,
+      "last_mean_score": 509.29655172413794,
+      "last_error": 149.29655172413794,
+      "became_zero": false
+    },
+    {
+      "game": 4,
+      "side": "2P",
+      "chain_id": 8,
+      "trigger_sec": 337.26666666666665,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        2,
+        5,
+        2,
+        5
+      ],
+      "trials": 9040,
+      "skipped": null,
+      "enumeration_sec": 0.2902410270180553,
+      "initial": {
+        "candidates": 1233,
+        "unique": 610,
+        "mean_score": 380.8191403081914,
+        "mean_send": 5.120032441200324,
+        "predicted_count": 4
+      },
+      "observations": [
+        {
+          "t_sec": 337.26666666666665,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.0011880439706146717,
+          "candidates": 885,
+          "unique": 462,
+          "mean_score": 435.31073446327684,
+          "mean_send": 5.917514124293786,
+          "predicted_count": 4
+        },
+        {
+          "t_sec": 338.73333333333335,
+          "count": 2,
+          "observed": 700,
+          "erased_colors": null,
+          "filter_sec": 0.0006845250027254224,
+          "candidates": 176,
+          "unique": 74,
+          "mean_score": 700.0,
+          "mean_send": 10.0,
+          "predicted_count": 2
+        }
+      ],
+      "used": true,
+      "uses": 28,
+      "final_score": 700,
+      "remaining": 176,
+      "first_mean_score": 435.31073446327684,
+      "first_error": -264.68926553672316,
+      "last_mean_score": 700.0,
+      "last_error": 0.0,
+      "became_zero": false
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 2,
+      "trigger_sec": 379.2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        1,
+        5,
+        5,
+        5
+      ],
+      "trials": 12480,
+      "skipped": null,
+      "enumeration_sec": 1.135611318051815,
+      "initial": {
+        "candidates": 2967,
+        "unique": 1790,
+        "mean_score": 2383.4816312773846,
+        "mean_send": 33.575328614762384,
+        "predicted_count": 11
+      },
+      "observations": [
+        {
+          "t_sec": 379.2,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.002557349973358214,
+          "candidates": 762,
+          "unique": 379,
+          "mean_score": 2032.8608923884515,
+          "mean_send": 28.636482939632547,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 380.56666666666666,
+          "count": 2,
+          "observed": 420,
+          "erased_colors": null,
+          "filter_sec": 0.001229614019393921,
+          "candidates": 133,
+          "unique": 91,
+          "mean_score": 2690.2255639097743,
+          "mean_send": 38.285714285714285,
+          "predicted_count": 6
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 420,
+      "remaining": 133,
+      "first_mean_score": 2032.8608923884515,
+      "first_error": 1612.8608923884515,
+      "last_mean_score": 2690.2255639097743,
+      "last_error": 2270.2255639097743,
+      "became_zero": false
+    },
+    {
+      "game": 5,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 386.43333333333334,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        4,
+        4,
+        4,
+        3
+      ],
+      "trials": 160,
+      "skipped": null,
+      "enumeration_sec": 0.013882208964787424,
+      "initial": {
+        "candidates": 40,
+        "unique": 32,
+        "mean_score": 873.5,
+        "mean_send": 12.1,
+        "predicted_count": 5
+      },
+      "observations": [
+        {
+          "t_sec": 386.43333333333334,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 3.126799128949642e-05,
+          "candidates": 2,
+          "unique": 1,
+          "mean_score": 100.0,
+          "mean_send": 1.0,
+          "predicted_count": 1
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 100,
+      "remaining": 2,
+      "first_mean_score": 100.0,
+      "first_error": 0.0,
+      "last_mean_score": 100.0,
+      "last_error": 0.0,
+      "became_zero": false
+    },
+    {
+      "game": 6,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 433.9,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        4,
+        4,
+        2,
+        4
+      ],
+      "trials": 23400,
+      "skipped": null,
+      "enumeration_sec": 2.2823602750431746,
+      "initial": {
+        "candidates": 6845,
+        "unique": 4266,
+        "mean_score": 1328.9159970781593,
+        "mean_send": 18.594156318480643,
+        "predicted_count": 9
+      },
+      "observations": [
+        {
+          "t_sec": 433.9,
+          "count": 2,
+          "observed": 220,
+          "erased_colors": null,
+          "filter_sec": 0.0029657280538231134,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 180.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 6,
+      "side": "2P",
+      "chain_id": 7,
+      "trigger_sec": 438.46666666666664,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        3,
+        4,
+        4
+      ],
+      "trials": 29200,
+      "skipped": null,
+      "enumeration_sec": 1.6419426940847188,
+      "initial": {
+        "candidates": 6948,
+        "unique": 3907,
+        "mean_score": 767.9332181922855,
+        "mean_send": 10.425014392630972,
+        "predicted_count": 9
+      },
+      "observations": [
+        {
+          "t_sec": 438.46666666666664,
+          "count": 4,
+          "observed": 680,
+          "erased_colors": null,
+          "filter_sec": 0.0028442179318517447,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 100.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 4,
+      "trigger_sec": 480.0,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        1,
+        2,
+        2
+      ],
+      "trials": 11320,
+      "skipped": null,
+      "enumeration_sec": 1.683468530070968,
+      "initial": {
+        "candidates": 3607,
+        "unique": 2188,
+        "mean_score": 18192.642084835043,
+        "mean_send": 259.5020792902689,
+        "predicted_count": 15
+      },
+      "observations": [
+        {
+          "t_sec": 480.0,
+          "count": 1,
+          "observed": 450,
+          "erased_colors": null,
+          "filter_sec": 0.0019297039834782481,
+          "candidates": 71,
+          "unique": 63,
+          "mean_score": 912.8169014084507,
+          "mean_send": 12.732394366197184,
+          "predicted_count": 4
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 450,
+      "remaining": 71,
+      "first_mean_score": 912.8169014084507,
+      "first_error": 462.8169014084507,
+      "last_mean_score": 912.8169014084507,
+      "last_error": 462.8169014084507,
+      "became_zero": false
+    },
+    {
+      "game": 7,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 483.1666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        4,
+        2,
+        1
+      ],
+      "trials": 36080,
+      "skipped": null,
+      "enumeration_sec": 1.806117985979654,
+      "initial": {
+        "candidates": 7789,
+        "unique": 4593,
+        "mean_score": 831.5021183720631,
+        "mean_send": 11.421106688920272,
+        "predicted_count": 10
+      },
+      "observations": [
+        {
+          "t_sec": 483.1666666666667,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.009116337052546442,
+          "candidates": 4073,
+          "unique": 2565,
+          "mean_score": 1229.9582617235453,
+          "mean_send": 17.04591210410017,
+          "predicted_count": 10
+        },
+        {
+          "t_sec": 484.5,
+          "count": 2,
+          "observed": 920,
+          "erased_colors": null,
+          "filter_sec": 0.002331334981136024,
+          "candidates": 2,
+          "unique": 1,
+          "mean_score": 920.0,
+          "mean_send": 13.0,
+          "predicted_count": 2
+        },
+        {
+          "t_sec": 485.8333333333333,
+          "count": 3,
+          "observed": 1560,
+          "erased_colors": null,
+          "filter_sec": 7.658801041543484e-05,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 1560,
+      "remaining": 0,
+      "first_mean_score": 1229.9582617235453,
+      "first_error": -330.0417382764547,
+      "last_mean_score": 920.0,
+      "last_error": -640.0,
+      "became_zero": true
+    },
+    {
+      "game": 7,
+      "side": "1P",
+      "chain_id": 6,
+      "trigger_sec": 486.03333333333336,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        1,
+        2,
+        4
+      ],
+      "trials": 22420,
+      "skipped": null,
+      "enumeration_sec": 2.547487512929365,
+      "initial": {
+        "candidates": 7534,
+        "unique": 4613,
+        "mean_score": 2021.304751791877,
+        "mean_send": 28.38930183169631,
+        "predicted_count": 9
+      },
+      "observations": [
+        {
+          "t_sec": 486.03333333333336,
+          "count": 1,
+          "observed": 240,
+          "erased_colors": null,
+          "filter_sec": 0.004708757041953504,
+          "candidates": 211,
+          "unique": 175,
+          "mean_score": 3478.341232227488,
+          "mean_send": 49.279620853080566,
+          "predicted_count": 6
+        },
+        {
+          "t_sec": 487.4,
+          "count": 2,
+          "observed": 1410,
+          "erased_colors": null,
+          "filter_sec": 0.00041494506876915693,
+          "candidates": 52,
+          "unique": 41,
+          "mean_score": 5019.2307692307695,
+          "mean_send": 71.17307692307692,
+          "predicted_count": 6
+        },
+        {
+          "t_sec": 488.8,
+          "count": 3,
+          "observed": 3610,
+          "erased_colors": null,
+          "filter_sec": 0.0001766629284247756,
+          "candidates": 52,
+          "unique": 41,
+          "mean_score": 5019.2307692307695,
+          "mean_send": 71.17307692307692,
+          "predicted_count": 6
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 3610,
+      "remaining": 52,
+      "first_mean_score": 3478.341232227488,
+      "first_error": -131.65876777251196,
+      "last_mean_score": 5019.2307692307695,
+      "last_error": 1409.2307692307695,
+      "became_zero": false
+    },
+    {
+      "game": 8,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 554.4333333333333,
+      "colors": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "trials": 15360,
+      "skipped": null,
+      "enumeration_sec": 0.5799348530126736,
+      "initial": {
+        "candidates": 2392,
+        "unique": 1348,
+        "mean_score": 422.53344481605353,
+        "mean_send": 5.546822742474917,
+        "predicted_count": 6
+      },
+      "observations": [
+        {
+          "t_sec": 554.4333333333333,
+          "count": 3,
+          "observed": 120,
+          "erased_colors": null,
+          "filter_sec": 0.0011940950062125921,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 555.7666666666667,
+          "count": 4,
+          "observed": 160,
+          "erased_colors": null,
+          "filter_sec": 5.444977432489395e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 83.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 8,
+      "side": "1P",
+      "chain_id": 7,
+      "trigger_sec": 562.7666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "queue": [
+        2,
+        5,
+        5,
+        1
+      ],
+      "trials": 8940,
+      "skipped": null,
+      "enumeration_sec": 0.3204698290210217,
+      "initial": {
+        "candidates": 1333,
+        "unique": 772,
+        "mean_score": 116.53413353338334,
+        "mean_send": 1.1800450112528131,
+        "predicted_count": 4
+      },
+      "observations": [
+        {
+          "t_sec": 562.7666666666667,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.002068735077045858,
+          "candidates": 1114,
+          "unique": 655,
+          "mean_score": 112.45960502692998,
+          "mean_send": 1.1023339317773788,
+          "predicted_count": 4
+        },
+        {
+          "t_sec": 564.1666666666666,
+          "count": 2,
+          "observed": 360,
+          "erased_colors": null,
+          "filter_sec": 0.0011770459823310375,
+          "candidates": 172,
+          "unique": 124,
+          "mean_score": 360.0,
+          "mean_send": 5.0,
+          "predicted_count": 2
+        },
+        {
+          "t_sec": 565.5,
+          "count": 3,
+          "observed": 1000,
+          "erased_colors": null,
+          "filter_sec": 0.0002032080665230751,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 566.9,
+          "count": 4,
+          "observed": 2280,
+          "erased_colors": null,
+          "filter_sec": 6.12006988376379e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 568.2333333333333,
+          "count": 5,
+          "observed": 4840,
+          "erased_colors": null,
+          "filter_sec": 5.8639561757445335e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 569.6666666666666,
+          "count": 6,
+          "observed": 9740,
+          "erased_colors": null,
+          "filter_sec": 6.504007615149021e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 571.0333333333333,
+          "count": 7,
+          "observed": 14860,
+          "erased_colors": null,
+          "filter_sec": 6.000977009534836e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 572.3666666666667,
+          "count": 8,
+          "observed": 21260,
+          "erased_colors": null,
+          "filter_sec": 5.480949766933918e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 573.7,
+          "count": 9,
+          "observed": 28940,
+          "erased_colors": null,
+          "filter_sec": 5.853013135492802e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 575.0666666666667,
+          "count": 10,
+          "observed": 37900,
+          "erased_colors": null,
+          "filter_sec": 5.993060767650604e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 576.4666666666667,
+          "count": 11,
+          "observed": 48140,
+          "erased_colors": null,
+          "filter_sec": 5.286070518195629e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 577.8333333333334,
+          "count": 12,
+          "observed": 59660,
+          "erased_colors": null,
+          "filter_sec": 5.576061084866524e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 579.2,
+          "count": 13,
+          "observed": 72460,
+          "erased_colors": null,
+          "filter_sec": 5.935085937380791e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 580.5333333333333,
+          "count": 14,
+          "observed": 90160,
+          "erased_colors": null,
+          "filter_sec": 5.9730373322963715e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 581.8666666666667,
+          "count": 15,
+          "observed": 113380,
+          "erased_colors": null,
+          "filter_sec": 5.705980584025383e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": true,
+      "uses": 20,
+      "final_score": null,
+      "remaining": 0,
+      "first_mean_score": 112.45960502692998,
+      "first_error": null,
+      "last_mean_score": 360.0,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 620.5666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        1,
+        4,
+        3
+      ],
+      "trials": 33580,
+      "skipped": null,
+      "enumeration_sec": 1.4065621310146526,
+      "initial": {
+        "candidates": 5024,
+        "unique": 2893,
+        "mean_score": 439.15406050955414,
+        "mean_send": 5.786226114649682,
+        "predicted_count": 12
+      },
+      "observations": [
+        {
+          "t_sec": 620.5666666666667,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.00774503406137228,
+          "candidates": 3825,
+          "unique": 2372,
+          "mean_score": 490.878431372549,
+          "mean_send": 6.5001307189542485,
+          "predicted_count": 12
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 40,
+      "remaining": 3825,
+      "first_mean_score": 490.878431372549,
+      "first_error": 450.878431372549,
+      "last_mean_score": 490.878431372549,
+      "last_error": 450.878431372549,
+      "became_zero": false
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 6,
+      "trigger_sec": 622.4666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        4,
+        3,
+        4,
+        1
+      ],
+      "trials": 21680,
+      "skipped": null,
+      "enumeration_sec": 1.1150830599945039,
+      "initial": {
+        "candidates": 4151,
+        "unique": 2615,
+        "mean_score": 1178.7448807516262,
+        "mean_send": 16.376776680317995,
+        "predicted_count": 12
+      },
+      "observations": [
+        {
+          "t_sec": 622.4666666666667,
+          "count": 2,
+          "observed": 220,
+          "erased_colors": null,
+          "filter_sec": 0.0014503099955618382,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 180.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 9,
+      "side": "1P",
+      "chain_id": 8,
+      "trigger_sec": 627.5,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        2,
+        3,
+        2
+      ],
+      "trials": 20180,
+      "skipped": null,
+      "enumeration_sec": 3.4404504960402846,
+      "initial": {
+        "candidates": 5706,
+        "unique": 3480,
+        "mean_score": 18826.435331230285,
+        "mean_send": 268.4845776375745,
+        "predicted_count": 12
+      },
+      "observations": [
+        {
+          "t_sec": 627.5,
+          "count": 3,
+          "observed": 400,
+          "erased_colors": null,
+          "filter_sec": 0.0034578419290483,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 628.8666666666667,
+          "count": 4,
+          "observed": 1280,
+          "erased_colors": null,
+          "filter_sec": 6.417976692318916e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 920.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 9,
+      "trigger_sec": 630.0666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        3,
+        3,
+        1,
+        4
+      ],
+      "trials": 30800,
+      "skipped": null,
+      "enumeration_sec": 1.0681317440466955,
+      "initial": {
+        "candidates": 4236,
+        "unique": 2411,
+        "mean_score": 185.9112370160529,
+        "mean_send": 2.1973559962228517,
+        "predicted_count": 4
+      },
+      "observations": [
+        {
+          "t_sec": 630.0666666666667,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.006882351008243859,
+          "candidates": 3050,
+          "unique": 1898,
+          "mean_score": 189.24590163934425,
+          "mean_send": 2.217049180327869,
+          "predicted_count": 4
+        },
+        {
+          "t_sec": 631.4333333333333,
+          "count": 2,
+          "observed": 920,
+          "erased_colors": null,
+          "filter_sec": 0.002301141037605703,
+          "candidates": 24,
+          "unique": 23,
+          "mean_score": 1234.1666666666667,
+          "mean_send": 17.416666666666668,
+          "predicted_count": 4
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 920,
+      "remaining": 24,
+      "first_mean_score": 189.24590163934425,
+      "first_error": -730.7540983606557,
+      "last_mean_score": 1234.1666666666667,
+      "last_error": 314.16666666666674,
+      "became_zero": false
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 10,
+      "trigger_sec": 636.2666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        4,
+        2,
+        1,
+        1
+      ],
+      "trials": 27000,
+      "skipped": null,
+      "enumeration_sec": 1.5212847189977765,
+      "initial": {
+        "candidates": 6157,
+        "unique": 3779,
+        "mean_score": 785.6634724703589,
+        "mean_send": 10.732174760435276,
+        "predicted_count": 11
+      },
+      "observations": [
+        {
+          "t_sec": 636.2666666666667,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.0036174709675833583,
+          "candidates": 823,
+          "unique": 338,
+          "mean_score": 195.72296476306198,
+          "mean_send": 2.370595382746051,
+          "predicted_count": 4
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 100,
+      "remaining": 823,
+      "first_mean_score": 195.72296476306198,
+      "first_error": 95.72296476306198,
+      "last_mean_score": 195.72296476306198,
+      "last_error": 95.72296476306198,
+      "became_zero": false
+    },
+    {
+      "game": 9,
+      "side": "1P",
+      "chain_id": 11,
+      "trigger_sec": 637.4666666666667,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        1,
+        1,
+        2,
+        1
+      ],
+      "trials": 13060,
+      "skipped": null,
+      "enumeration_sec": 1.3145707190269604,
+      "initial": {
+        "candidates": 3111,
+        "unique": 1642,
+        "mean_score": 14107.344905175185,
+        "mean_send": 201.0315011250402,
+        "predicted_count": 12
+      },
+      "observations": [
+        {
+          "t_sec": 637.4666666666667,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.003163606976158917,
+          "candidates": 1089,
+          "unique": 669,
+          "mean_score": 33071.12947658402,
+          "mean_send": 471.9889807162534,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 638.8333333333334,
+          "count": 2,
+          "observed": 420,
+          "erased_colors": null,
+          "filter_sec": 0.0020005099941045046,
+          "candidates": 633,
+          "unique": 434,
+          "mean_score": 49188.70458135861,
+          "mean_send": 702.1943127962086,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 640.2333333333333,
+          "count": 3,
+          "observed": 1320,
+          "erased_colors": null,
+          "filter_sec": 0.0016390261007472873,
+          "candidates": 552,
+          "unique": 374,
+          "mean_score": 51074.61956521739,
+          "mean_send": 729.125,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 641.6333333333333,
+          "count": 4,
+          "observed": 2600,
+          "erased_colors": null,
+          "filter_sec": 0.0018861510325223207,
+          "candidates": 498,
+          "unique": 331,
+          "mean_score": 49674.618473895585,
+          "mean_send": 709.1325301204819,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 643.0,
+          "count": 5,
+          "observed": 5160,
+          "erased_colors": null,
+          "filter_sec": 0.0014284088974818587,
+          "candidates": 498,
+          "unique": 331,
+          "mean_score": 49674.618473895585,
+          "mean_send": 709.1325301204819,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 644.4,
+          "count": 6,
+          "observed": 9000,
+          "erased_colors": null,
+          "filter_sec": 0.001470179995521903,
+          "candidates": 473,
+          "unique": 315,
+          "mean_score": 49775.91966173361,
+          "mean_send": 710.5771670190275,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 645.7666666666667,
+          "count": 7,
+          "observed": 22400,
+          "erased_colors": null,
+          "filter_sec": 0.0012117980513721704,
+          "candidates": 448,
+          "unique": 299,
+          "mean_score": 49866.763392857145,
+          "mean_send": 711.859375,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 647.1666666666666,
+          "count": 8,
+          "observed": 30500,
+          "erased_colors": null,
+          "filter_sec": 0.0009685000404715538,
+          "candidates": 326,
+          "unique": 208,
+          "mean_score": 51819.754601226996,
+          "mean_send": 739.8159509202454,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 648.5666666666667,
+          "count": 9,
+          "observed": 38180,
+          "erased_colors": null,
+          "filter_sec": 0.0007708129705861211,
+          "candidates": 303,
+          "unique": 197,
+          "mean_score": 51521.18811881188,
+          "mean_send": 735.5511551155115,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 649.9,
+          "count": 10,
+          "observed": 47140,
+          "erased_colors": null,
+          "filter_sec": 0.0006206739926710725,
+          "candidates": 221,
+          "unique": 140,
+          "mean_score": 49870.769230769234,
+          "mean_send": 711.9366515837104,
+          "predicted_count": 12
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 47140,
+      "remaining": 221,
+      "first_mean_score": 33071.12947658402,
+      "first_error": -14068.870523415979,
+      "last_mean_score": 49870.769230769234,
+      "last_error": 2730.769230769234,
+      "became_zero": false
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 12,
+      "trigger_sec": 638.8333333333334,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        1,
+        2,
+        3
+      ],
+      "trials": 28000,
+      "skipped": null,
+      "enumeration_sec": 1.5896638290723786,
+      "initial": {
+        "candidates": 5284,
+        "unique": 3262,
+        "mean_score": 417.42997728993186,
+        "mean_send": 5.4748296744890235,
+        "predicted_count": 11
+      },
+      "observations": [
+        {
+          "t_sec": 638.8333333333334,
+          "count": 2,
+          "observed": 200,
+          "erased_colors": null,
+          "filter_sec": 0.0024314280599355698,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 100.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 9,
+      "side": "2P",
+      "chain_id": 13,
+      "trigger_sec": 642.3333333333334,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "trials": 23260,
+      "skipped": null,
+      "enumeration_sec": 1.3020748849958181,
+      "initial": {
+        "candidates": 4644,
+        "unique": 2657,
+        "mean_score": 2850.1528854435833,
+        "mean_send": 40.18432385874247,
+        "predicted_count": 12
+      },
+      "observations": [
+        {
+          "t_sec": 642.3333333333334,
+          "count": 1,
+          "observed": 100,
+          "erased_colors": null,
+          "filter_sec": 0.003912391024641693,
+          "candidates": 1339,
+          "unique": 836,
+          "mean_score": 6969.058999253174,
+          "mean_send": 99.05451829723674,
+          "predicted_count": 12
+        },
+        {
+          "t_sec": 643.7,
+          "count": 2,
+          "observed": 420,
+          "erased_colors": null,
+          "filter_sec": 0.0013061410281807184,
+          "candidates": 16,
+          "unique": 6,
+          "mean_score": 420.0,
+          "mean_send": 6.0,
+          "predicted_count": 2
+        },
+        {
+          "t_sec": 645.1,
+          "count": 3,
+          "observed": 1060,
+          "erased_colors": null,
+          "filter_sec": 1.8212012946605682e-05,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 646.4666666666667,
+          "count": 4,
+          "observed": 2760,
+          "erased_colors": null,
+          "filter_sec": 6.095971912145615e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 647.7666666666667,
+          "count": 5,
+          "observed": 5320,
+          "erased_colors": null,
+          "filter_sec": 6.017973646521568e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 649.1333333333333,
+          "count": 6,
+          "observed": 9160,
+          "erased_colors": null,
+          "filter_sec": 6.304006092250347e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 650.4666666666667,
+          "count": 7,
+          "observed": 15660,
+          "erased_colors": null,
+          "filter_sec": 7.1480171754956245e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 651.9,
+          "count": 8,
+          "observed": 23760,
+          "erased_colors": null,
+          "filter_sec": 5.9549929574131966e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 653.2666666666667,
+          "count": 9,
+          "observed": 31440,
+          "erased_colors": null,
+          "filter_sec": 6.7659420892596245e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 654.6333333333333,
+          "count": 10,
+          "observed": 42740,
+          "erased_colors": null,
+          "filter_sec": 6.029964424669743e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 656.0,
+          "count": 11,
+          "observed": 63620,
+          "erased_colors": null,
+          "filter_sec": 6.176996976137161e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 63620,
+      "remaining": 0,
+      "first_mean_score": 6969.058999253174,
+      "first_error": -56650.941000746825,
+      "last_mean_score": 420.0,
+      "last_error": -63200.0,
+      "became_zero": true
+    },
+    {
+      "game": 11,
+      "side": "2P",
+      "chain_id": 2,
+      "trigger_sec": 723.5,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        3,
+        3,
+        1,
+        3
+      ],
+      "trials": 35240,
+      "skipped": null,
+      "enumeration_sec": 1.0572535319952294,
+      "initial": {
+        "candidates": 3714,
+        "unique": 1833,
+        "mean_score": 672.4959612277868,
+        "mean_send": 9.236672051696285,
+        "predicted_count": 10
+      },
+      "observations": [
+        {
+          "t_sec": 723.5,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.008528315927833319,
+          "candidates": 3217,
+          "unique": 1665,
+          "mean_score": 695.9620764687597,
+          "mean_send": 9.549269505750699,
+          "predicted_count": 10
+        },
+        {
+          "t_sec": 724.8666666666667,
+          "count": 2,
+          "observed": 920,
+          "erased_colors": null,
+          "filter_sec": 0.002553071011789143,
+          "candidates": 131,
+          "unique": 100,
+          "mean_score": 1732.824427480916,
+          "mean_send": 24.442748091603054,
+          "predicted_count": 4
+        },
+        {
+          "t_sec": 726.2666666666667,
+          "count": 3,
+          "observed": 1560,
+          "erased_colors": null,
+          "filter_sec": 0.00047778605949133635,
+          "candidates": 117,
+          "unique": 94,
+          "mean_score": 1782.2222222222222,
+          "mean_send": 25.128205128205128,
+          "predicted_count": 4
+        },
+        {
+          "t_sec": 727.6666666666666,
+          "count": 4,
+          "observed": 2840,
+          "erased_colors": null,
+          "filter_sec": 0.00023489096201956272,
+          "candidates": 15,
+          "unique": 12,
+          "mean_score": 2840.0,
+          "mean_send": 40.0,
+          "predicted_count": 4
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 2840,
+      "remaining": 15,
+      "first_mean_score": 695.9620764687597,
+      "first_error": -2144.0379235312403,
+      "last_mean_score": 2840.0,
+      "last_error": 0.0,
+      "became_zero": false
+    },
+    {
+      "game": 11,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 728.7,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        2,
+        3,
+        4,
+        1
+      ],
+      "trials": 36300,
+      "skipped": null,
+      "enumeration_sec": 1.8158568870276213,
+      "initial": {
+        "candidates": 8334,
+        "unique": 4848,
+        "mean_score": 1945.2531797456204,
+        "mean_send": 27.256299496040317,
+        "predicted_count": 6
+      },
+      "observations": [
+        {
+          "t_sec": 728.7,
+          "count": 3,
+          "observed": 1310,
+          "erased_colors": null,
+          "filter_sec": 0.004714185022749007,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 730.1333333333333,
+          "count": 4,
+          "observed": 2350,
+          "erased_colors": null,
+          "filter_sec": 6.215996108949184e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 731.5333333333333,
+          "count": 5,
+          "observed": 2990,
+          "erased_colors": null,
+          "filter_sec": 6.590038537979126e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 732.8666666666667,
+          "count": 6,
+          "observed": 4690,
+          "erased_colors": null,
+          "filter_sec": 6.360001862049103e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 734.2333333333333,
+          "count": 7,
+          "observed": 10210,
+          "erased_colors": null,
+          "filter_sec": 6.911926902830601e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 9000.0,
+      "remaining": 0,
+      "first_mean_score": null,
+      "first_error": null,
+      "last_mean_score": null,
+      "last_error": null,
+      "became_zero": true
+    },
+    {
+      "game": 12,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 780.0,
+      "colors": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        3,
+        5,
+        2,
+        5
+      ],
+      "trials": 39020,
+      "skipped": null,
+      "enumeration_sec": 2.027335711987689,
+      "initial": {
+        "candidates": 7246,
+        "unique": 3869,
+        "mean_score": 5979.708804857853,
+        "mean_send": 84.93844879933756,
+        "predicted_count": 8
+      },
+      "observations": [
+        {
+          "t_sec": 780.0,
+          "count": 1,
+          "observed": 180,
+          "erased_colors": null,
+          "filter_sec": 0.004993224982172251,
+          "candidates": 152,
+          "unique": 65,
+          "mean_score": 2357.1052631578946,
+          "mean_send": 33.11842105263158,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 781.4,
+          "count": 2,
+          "observed": 1060,
+          "erased_colors": null,
+          "filter_sec": 0.00015126506332308054,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 1060,
+      "remaining": 0,
+      "first_mean_score": 2357.1052631578946,
+      "first_error": 1297.1052631578946,
+      "last_mean_score": 2357.1052631578946,
+      "last_error": 1297.1052631578946,
+      "became_zero": true
+    },
+    {
+      "game": 13,
+      "side": "2P",
+      "chain_id": 3,
+      "trigger_sec": 819.2333333333333,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        5,
+        1,
+        5,
+        3
+      ],
+      "trials": 31600,
+      "skipped": null,
+      "enumeration_sec": 2.8660496219526976,
+      "initial": {
+        "candidates": 9463,
+        "unique": 5566,
+        "mean_score": 1960.2398816442987,
+        "mean_send": 27.503857127760753,
+        "predicted_count": 11
+      },
+      "observations": [
+        {
+          "t_sec": 819.2333333333333,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.017407628009095788,
+          "candidates": 7333,
+          "unique": 4590,
+          "mean_score": 1957.346243011046,
+          "mean_send": 27.443201963725624,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 820.6,
+          "count": 2,
+          "observed": 540,
+          "erased_colors": null,
+          "filter_sec": 0.0079265630338341,
+          "candidates": 1297,
+          "unique": 829,
+          "mean_score": 8483.831919814958,
+          "mean_send": 120.55512721665382,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 822.0,
+          "count": 3,
+          "observed": 1180,
+          "erased_colors": null,
+          "filter_sec": 0.003354112966917455,
+          "candidates": 907,
+          "unique": 569,
+          "mean_score": 10287.23263506064,
+          "mean_send": 146.27012127894156,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 823.3666666666667,
+          "count": 4,
+          "observed": 2880,
+          "erased_colors": null,
+          "filter_sec": 0.0024990770034492016,
+          "candidates": 907,
+          "unique": 569,
+          "mean_score": 10287.23263506064,
+          "mean_send": 146.27012127894156,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 824.8333333333334,
+          "count": 5,
+          "observed": 5440,
+          "erased_colors": null,
+          "filter_sec": 0.0026680820155888796,
+          "candidates": 904,
+          "unique": 567,
+          "mean_score": 10311.814159292035,
+          "mean_send": 146.61946902654867,
+          "predicted_count": 11
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 5440,
+      "remaining": 904,
+      "first_mean_score": 1957.346243011046,
+      "first_error": -3482.6537569889542,
+      "last_mean_score": 10311.814159292035,
+      "last_error": 4871.814159292035,
+      "became_zero": false
+    },
+    {
+      "game": 13,
+      "side": "1P",
+      "chain_id": 4,
+      "trigger_sec": 825.9,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "trials": 38940,
+      "skipped": null,
+      "enumeration_sec": 3.258111247094348,
+      "initial": {
+        "candidates": 7665,
+        "unique": 4240,
+        "mean_score": 6548.880626223092,
+        "mean_send": 93.08897586431833,
+        "predicted_count": 8
+      },
+      "observations": [
+        {
+          "t_sec": 825.9,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.012040463974699378,
+          "candidates": 4284,
+          "unique": 2388,
+          "mean_score": 5064.3930905695615,
+          "mean_send": 71.86928104575163,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 827.3333333333334,
+          "count": 2,
+          "observed": 540,
+          "erased_colors": null,
+          "filter_sec": 0.005687577999196947,
+          "candidates": 1097,
+          "unique": 764,
+          "mean_score": 14754.275296262535,
+          "mean_send": 210.26071103008204,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 828.7,
+          "count": 3,
+          "observed": 1680,
+          "erased_colors": null,
+          "filter_sec": 0.002813494997099042,
+          "candidates": 812,
+          "unique": 560,
+          "mean_score": 18950.418719211822,
+          "mean_send": 270.1145320197044,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 830.0666666666667,
+          "count": 4,
+          "observed": 3380,
+          "erased_colors": null,
+          "filter_sec": 0.0034899009624496102,
+          "candidates": 740,
+          "unique": 511,
+          "mean_score": 19186.64864864865,
+          "mean_send": 273.4662162162162,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 831.4,
+          "count": 5,
+          "observed": 7400,
+          "erased_colors": null,
+          "filter_sec": 0.002554135979153216,
+          "candidates": 614,
+          "unique": 415,
+          "mean_score": 19034.16938110749,
+          "mean_send": 271.21986970684037,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 832.8,
+          "count": 6,
+          "observed": 13340,
+          "erased_colors": null,
+          "filter_sec": 0.00164982199203223,
+          "candidates": 414,
+          "unique": 314,
+          "mean_score": 18666.666666666668,
+          "mean_send": 265.9951690821256,
+          "predicted_count": 7
+        },
+        {
+          "t_sec": 834.2,
+          "count": 7,
+          "observed": 19840,
+          "erased_colors": null,
+          "filter_sec": 0.0008498959941789508,
+          "candidates": 62,
+          "unique": 49,
+          "mean_score": 19840.0,
+          "mean_send": 283.0,
+          "predicted_count": 7
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 19840,
+      "remaining": 62,
+      "first_mean_score": 5064.3930905695615,
+      "first_error": -14775.606909430438,
+      "last_mean_score": 19840.0,
+      "last_error": 0.0,
+      "became_zero": false
+    },
+    {
+      "game": 13,
+      "side": "2P",
+      "chain_id": 5,
+      "trigger_sec": 835.5333333333333,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "queue": [
+        1,
+        3,
+        5,
+        1
+      ],
+      "trials": 16900,
+      "skipped": null,
+      "enumeration_sec": 1.7982907689874992,
+      "initial": {
+        "candidates": 4664,
+        "unique": 2583,
+        "mean_score": 9383.289022298457,
+        "mean_send": 133.55381646655232,
+        "predicted_count": 11
+      },
+      "observations": [
+        {
+          "t_sec": 835.5333333333333,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.007298902957700193,
+          "candidates": 3420,
+          "unique": 2008,
+          "mean_score": 10709.21052631579,
+          "mean_send": 152.45497076023392,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 836.9333333333333,
+          "count": 2,
+          "observed": 360,
+          "erased_colors": null,
+          "filter_sec": 0.004192507010884583,
+          "candidates": 880,
+          "unique": 582,
+          "mean_score": 34909.204545454544,
+          "mean_send": 498.2556818181818,
+          "predicted_count": 11
+        },
+        {
+          "t_sec": 838.3333333333334,
+          "count": 3,
+          "observed": 1000,
+          "erased_colors": null,
+          "filter_sec": 0.0013908360851928592,
+          "candidates": 17,
+          "unique": 9,
+          "mean_score": 8040.0,
+          "mean_send": 114.47058823529412,
+          "predicted_count": 10
+        },
+        {
+          "t_sec": 839.7,
+          "count": 4,
+          "observed": 2700,
+          "erased_colors": null,
+          "filter_sec": 4.3910928070545197e-05,
+          "candidates": 4,
+          "unique": 2,
+          "mean_score": 30920.0,
+          "mean_send": 441.0,
+          "predicted_count": 10
+        },
+        {
+          "t_sec": 841.0666666666667,
+          "count": 5,
+          "observed": 5260,
+          "erased_colors": null,
+          "filter_sec": 1.219194382429123e-05,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 842.4333333333333,
+          "count": 6,
+          "observed": 11200,
+          "erased_colors": null,
+          "filter_sec": 6.3909683376550674e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 843.7666666666667,
+          "count": 7,
+          "observed": 26160,
+          "erased_colors": null,
+          "filter_sec": 7.140100933611393e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 845.2333333333333,
+          "count": 8,
+          "observed": 32560,
+          "erased_colors": null,
+          "filter_sec": 6.419024430215359e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        },
+        {
+          "t_sec": 846.6,
+          "count": 9,
+          "observed": 40240,
+          "erased_colors": null,
+          "filter_sec": 6.2480103224515915e-06,
+          "candidates": 0,
+          "unique": 0,
+          "mean_score": null,
+          "mean_send": null,
+          "predicted_count": null
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 40240,
+      "remaining": 0,
+      "first_mean_score": 10709.21052631579,
+      "first_error": -29530.78947368421,
+      "last_mean_score": 30920.0,
+      "last_error": -9320.0,
+      "became_zero": true
+    },
+    {
+      "game": 14,
+      "side": "1P",
+      "chain_id": 5,
+      "trigger_sec": 885.1,
+      "colors": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "queue": [
+        4,
+        1,
+        0,
+        0
+      ],
+      "trials": 20080,
+      "skipped": null,
+      "enumeration_sec": 1.221040570992045,
+      "initial": {
+        "candidates": 3341,
+        "unique": 1665,
+        "mean_score": 7159.862316671655,
+        "mean_send": 101.8048488476504,
+        "predicted_count": 8
+      },
+      "observations": [
+        {
+          "t_sec": 885.1,
+          "count": 1,
+          "observed": 40,
+          "erased_colors": null,
+          "filter_sec": 0.004082093946635723,
+          "candidates": 2553,
+          "unique": 1323,
+          "mean_score": 6489.134351743048,
+          "mean_send": 92.20955738347043,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 886.5,
+          "count": 2,
+          "observed": 360,
+          "erased_colors": null,
+          "filter_sec": 0.003290403983555734,
+          "candidates": 938,
+          "unique": 622,
+          "mean_score": 14185.543710021322,
+          "mean_send": 202.2494669509595,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 887.8666666666667,
+          "count": 3,
+          "observed": 1260,
+          "erased_colors": null,
+          "filter_sec": 0.002231996040791273,
+          "candidates": 573,
+          "unique": 428,
+          "mean_score": 16448.184991273996,
+          "mean_send": 234.46247818499128,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 889.3,
+          "count": 4,
+          "observed": 2540,
+          "erased_colors": null,
+          "filter_sec": 0.0018521359888836741,
+          "candidates": 573,
+          "unique": 428,
+          "mean_score": 16448.184991273996,
+          "mean_send": 234.46247818499128,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 890.6666666666666,
+          "count": 5,
+          "observed": 5840,
+          "erased_colors": null,
+          "filter_sec": 0.002961624995805323,
+          "candidates": 552,
+          "unique": 417,
+          "mean_score": 16669.4384057971,
+          "mean_send": 237.6286231884058,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 892.0,
+          "count": 6,
+          "observed": 10740,
+          "erased_colors": null,
+          "filter_sec": 0.0013526849215850234,
+          "candidates": 352,
+          "unique": 252,
+          "mean_score": 15896.363636363636,
+          "mean_send": 226.52272727272728,
+          "predicted_count": 8
+        },
+        {
+          "t_sec": 893.3666666666667,
+          "count": 7,
+          "observed": 15860,
+          "erased_colors": null,
+          "filter_sec": 0.0010843739146366715,
+          "candidates": 352,
+          "unique": 252,
+          "mean_score": 15896.363636363636,
+          "mean_send": 226.52272727272728,
+          "predicted_count": 8
+        }
+      ],
+      "used": false,
+      "uses": 0,
+      "final_score": 15860,
+      "remaining": 352,
+      "first_mean_score": 6489.134351743048,
+      "first_error": -9370.865648256953,
+      "last_mean_score": 15896.363636363636,
+      "last_error": 36.36363636363603,
+      "became_zero": false
+    }
+  ]
+}

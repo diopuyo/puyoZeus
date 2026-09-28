@@ -213,10 +213,7 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
                projection_sec=projection.get("t_sec"),
                death_evidence_sec=(landing.death or {}).get("t_sec"),
                prefire_sec=record.trigger_sec if record else None)
-    midchain = getattr(overlay, '_midchain', None)
-    if (midchain is not None and record is not None and midchain.provenance(game_idx, record.chains)
-            and tracker.source not in ('G_fe', 'confirmed_death', 'E16_current')):
-        row['source'] += '（途中完走予測込み）'
+    row['source'] += _prediction_label(overlay, record, game_idx)
     for value in record.values if record else ():
         if value["source"] in PROBABILITY_SOURCES:
             row[f"p1_{value['source']}"] = value["p1"]
@@ -234,6 +231,18 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
     for label, values in zip(SIDE_LABELS, sides):
         row.update({f"{label}_{key}": value for key, value in values.items()})
     return row
+
+
+def _prediction_label(overlay: Any, record: Any, game_idx: int) -> str:
+    """現在層・死亡観測と区別し、候補に基づく予測を画面とCSVへ明示する。"""
+    if record is None or overlay.tracker.source in ('G_fe', 'confirmed_death', 'E16_current'):
+        return ''
+    prefire = getattr(overlay, '_prefire', None)
+    if prefire is not None and prefire.provenance(record.chains):
+        return '（発火候補予測込み）'
+    midchain = getattr(overlay, '_midchain', None)
+    return ('（途中完走予測込み）' if midchain is not None
+            and midchain.provenance(game_idx, record.chains) else '')
 
 
 def _add_design_features(sides: list[dict], overlay: Any, snapshot: Any,

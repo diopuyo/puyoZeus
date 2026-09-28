@@ -32,10 +32,9 @@ def death_inputs(projection: Any, overlay: Any, latest: tuple, incoming: list) -
     boards, replies, certain = projection._death_boards(tracker, tuple(s.board for s in latest), replies, credit)
     boards, replies, hidden = list(boards), list(replies), [None, None]
     verified = [projection.safety.ledger.verified(i) for i in range(2)]
-    engine = getattr(projection, 'hidden_death', None)
     for idx in range(2):
         chain = tracker.latest_chain(f'{idx+1}P')
-        bound = engine.maximum(chain) if engine is not None and projection._chaining(tracker, idx) else None
+        bound = maximum_response(projection, chain) if projection._chaining(tracker, idx) else None
         if bound is None:
             continue
         key = (idx, chain.chain_id)
@@ -62,7 +61,11 @@ def hidden_proof(projection: Any, bound: dict, queue: tuple, incoming: int,
                  hands: int, elapsed: float, stamp: float) -> dict:
     """最大打ち返しの全同点盤面が死亡する場合だけ証明成立とする。"""
     from src.exchange_event_multilanding import cached_proof
-    projection.hidden_death.mark_used(bound, stamp)
+    if bound.get('prefire'):
+        row = bound['audit']
+        row['used'], row['uses'] = True, row['uses']+1
+    else:
+        projection.hidden_death.mark_used(bound, stamp)
     results = []
     for value in bound['options']:
         board = Board()
@@ -71,5 +74,18 @@ def hidden_proof(projection: Any, bound: dict, queue: tuple, incoming: int,
         results.append(result)
         if not result['dead']:
             break
-    return dict(dead=all(r['dead'] for r in results), reason='hidden_maximum_response',
+    return dict(dead=all(r['dead'] for r in results),
+        reason='prefire_maximum_response' if bound.get('prefire') else 'hidden_maximum_response',
         maximum_score=bound['score'], tied_boards=len(bound['options']), checked=len(results), proofs=results)
+
+
+def maximum_response(projection: Any, chain: Any) -> dict | None:
+    """独立した二つの予測があれば、より楽観的な最大値と全同点盤面を使う。"""
+    bounds = [v for name in ('hidden_death', 'prefire')
+              if (engine := getattr(projection, name, None)) is not None
+              and (v := engine.maximum(chain)) is not None]
+    if not bounds:
+        return None
+    best = dict(max(bounds, key=lambda v: v['score']))
+    best['options'] = [v for bound in bounds if bound['score'] == best['score'] for v in bound['options']]
+    return best
