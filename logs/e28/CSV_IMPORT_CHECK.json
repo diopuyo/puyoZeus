@@ -1,0 +1,6 @@
+{
+  "dataRows": 480,
+  "columns": 37,
+  "blankNotZero": true,
+  "inspection": "{\"kind\":\"region\",\"sheet\":\"判定経路\",\"address\":\"I1:M4\",\"rows\":4,\"cols\":5,\"nonEmpty\":17,\"blank\":3,\"text\":17,\"maxTextLength\":17,\"preview\":[[\"p2_formula_score\",\"p2_midchain\",\"p2_hidden\",\"p2_hidden_samples\",\"p2_hidden_unknown\"],[\"1320\",\"GRAVITY_SETTLE以外\",\"GRAVITY_SETTLE以外\",\"0\",null],[\"1320\",\"GRAVITY_SETTLE以外\",\"GRAVITY_SETTLE以外\",\"0\",null],[\"1320\",\"GRAVITY_SETTLE以外\",\"GRAVITY_SETTLE以外\",\"0\",null]],\"previewAddress\":\"I1:M4\",\"previewRows\":4,\"previewCols\":5}"
+}

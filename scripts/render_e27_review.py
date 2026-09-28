@@ -1,4 +1,4 @@
-"""E27の全検収条件を満たした場合だけ、E22条件の音声付きレビューを作る。"""
+"""E27の検収合格または明示的な候補承認に基づき、音声付きレビューを作る。"""
 from __future__ import annotations
 
 import csv
@@ -10,9 +10,9 @@ import imageio_ffmpeg
 from scripts import render_e18_review_20260928 as video
 
 
-def run() -> None:
+def run(approved_candidate: bool = False) -> None:
     """横1280・CRF28・映像上限1Mbps・30MB以下・音声保持を検証する。"""
-    assert json.loads(Path('logs/e27/on/METRICS.json').read_text())['candidate']
+    assert approved_candidate or json.loads(Path('logs/e27/on/METRICS.json').read_text())['candidate']
     prior = video.prior
     dest = prior.ROOT/'logs/review_zenchi_g41_43_e27'
     prior.DEST = video.DEST = dest

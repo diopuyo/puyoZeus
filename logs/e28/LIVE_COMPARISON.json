@@ -1,0 +1,16 @@
+{
+  "observations": 690,
+  "matched_fields": [
+    "t_sec",
+    "pending",
+    "midchain_status",
+    "hidden_status",
+    "safety",
+    "multi_landing"
+  ],
+  "result": "identical",
+  "example_sec": 2755.016666666667,
+  "probability_incoming": 489,
+  "death_incoming": 490,
+  "note": "489対490は確率入力と死亡専用台帳の区別。固定記録と動画の差ではない。"
+}

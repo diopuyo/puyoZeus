@@ -1,0 +1,74 @@
+{
+  "scene_observations": 480,
+  "scene_landing_evaluations": 89,
+  "multi_reasons": {
+    "uncertain_completion": 86,
+    "board_unsettled": 3
+  },
+  "midchain_adopted": 0,
+  "hidden_adopted": 0,
+  "multi_searches": 0,
+  "unavoidable_death_sec": null,
+  "first_completion_certain": 2770.616666666667,
+  "exchange_closed_sec": 2770.7166666666667,
+  "first_raw_p2_le_5": 2771.15,
+  "first_display_p2_le_5": 2771.25,
+  "first_visual_sec": 2755.016666666667,
+  "display_delay_sec": 16.23333333333312,
+  "single_sample_checks": [
+    {
+      "t_sec": 2752.65,
+      "trials": 25,
+      "candidates": 0,
+      "next_sec": 2752.6833333333334,
+      "next_count": 2,
+      "matching": 0,
+      "maximum_score": null,
+      "adopted": false
+    },
+    {
+      "t_sec": 2755.4166666666665,
+      "trials": 25,
+      "candidates": 25,
+      "next_sec": 2755.45,
+      "next_count": 4,
+      "matching": 25,
+      "maximum_score": 75440,
+      "adopted": false
+    },
+    {
+      "t_sec": 2756.7166666666667,
+      "trials": 5,
+      "candidates": 5,
+      "next_sec": 2756.75,
+      "next_count": 5,
+      "matching": 5,
+      "maximum_score": 75440,
+      "adopted": false
+    },
+    {
+      "t_sec": 2760.8166666666666,
+      "trials": 5,
+      "candidates": 5,
+      "next_sec": 2760.883333333333,
+      "next_count": 8,
+      "matching": 5,
+      "maximum_score": 75440,
+      "adopted": false
+    },
+    {
+      "t_sec": 2770.15,
+      "trials": 5,
+      "candidates": 0,
+      "next_sec": null,
+      "next_count": 14,
+      "matching": 0,
+      "maximum_score": null,
+      "adopted": false
+    }
+  ],
+  "terminal_times": {
+    "confirmed_death": 2773.7833333333333,
+    "unavoidable_death": null
+  }
+}
