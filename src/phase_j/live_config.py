@@ -11,6 +11,12 @@ LIVE_DURATION_SEC = 24*60*60
 
 
 def apply_config(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.Namespace:
+    defaults = json.loads(Path('config/live_defaults.json').read_text(encoding='utf-8'))
+    # 比較用threadモードは認識と評価を同一processで実行するためniceを変えない。
+    if '--worker-mode=thread' in argv or any(a == '--worker-mode' and argv[i+1:i+2] == ['thread']
+                                            for i, a in enumerate(argv)):
+        defaults['evaluation_nice'] = 0
+    parser.set_defaults(**defaults)
     probe = argparse.ArgumentParser(add_help=False)
     probe.add_argument('--config', type=Path)
     config, _ = probe.parse_known_args(argv)

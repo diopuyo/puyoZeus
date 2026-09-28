@@ -35,11 +35,23 @@ def apply_runtime(role: str, lower_priority: bool = True) -> dict[str, Any]:
             torch.set_num_interop_threads(threads)
     if lower_priority and nice:
         if not hasattr(os, 'nice'):
-            raise RuntimeError('evaluation_niceはWSL/Linux用です')
-        current = os.nice(0)
-        if current < nice:
-            os.nice(nice-current)
+            windows_below_normal()
+        else:
+            current = os.nice(0)
+            if current < nice:
+                os.nice(nice-current)
     return runtime_snapshot(role)
+
+
+def windows_below_normal() -> None:
+    """Windows実機では相当する低優先度クラスを使う（数値niceとの同値ではない）。"""
+    import ctypes
+    below_normal = 0x4000
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetCurrentProcess.restype = ctypes.c_void_p
+    kernel.SetPriorityClass.argtypes = (ctypes.c_void_p, ctypes.c_ulong)
+    if not kernel.SetPriorityClass(kernel.GetCurrentProcess(), below_normal):
+        raise ctypes.WinError(ctypes.get_last_error())
 
 
 def runtime_snapshot(role: str) -> dict[str, Any]:

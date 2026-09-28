@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ProcessPoolExecutor
 import multiprocessing as mp
+import os
 from typing import Any
 
 EMPTY_RESULT = (0.0, float('nan'), float('nan'))
@@ -39,7 +40,9 @@ class AsyncCounter:
     def __init__(self, executor: Any = None, rollouts: int = OFFLINE_ROLLOUTS) -> None:
         self.rollouts = rollouts
         self.owns_executor = executor is None
-        self.executor = executor or ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context('spawn'))
+        from .live_lifetime import protect_parent
+        self.executor = executor or ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context('spawn'),
+            initializer=protect_parent, initargs=(os.getpid(),))
         if self.owns_executor:
             self.executor.submit(warmup)
         self.future: Future | None = None

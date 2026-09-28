@@ -124,11 +124,17 @@ class RecognitionBridge:
         changed, self.input_changed = self.input_changed, False
         return changed
 
-    def counter_context(self, result: Any, game: int) -> None:
+    def counter_context(self, result: Any, game: int, t_sec: float | None = None,
+                        captured_at: float | None = None) -> None:
         """非STABLE通知を含めて確定盤面世代と試合境界を追跡する。"""
         context = (game, getattr(result, 'is_match_active', True), *(
             None if side.confirmed_board is None else side.confirmed_board.grid_bytes()
             for side in (result.p1, result.p2)))
+        if t_sec is not None:
+            self.game_starts = getattr(self, 'game_starts', [])
+            if context[1] and getattr(self, 'previous_game_context', None) != context[:2]:
+                self.game_starts.append(dict(game=game, t_sec=t_sec, captured_at=captured_at))
+            self.previous_game_context = context[:2]
         for counter in self.counters:
             counter.invalidate(context)
 
@@ -261,7 +267,7 @@ def adapt_loop(loop: ast.For) -> None:
                                 'or _formal_boundary').body[0])
     boundary = next(i for i, node in enumerate(body)
                     if ast.unparse(node).startswith('snap = _drive_ojama'))
-    body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx)').body[0])
+    body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx, t, packet.captured_at)').body[0])
     callback = ast.parse('_live_bridge.observe(packet, disp_p1, disp_adv, event_overlay, '
                          'r, game_idx, write_frame, '
                          '(counter_tracker, resolved_tracker._counter_tracker))').body[0]

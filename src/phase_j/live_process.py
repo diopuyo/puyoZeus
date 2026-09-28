@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import fields, replace
 import multiprocessing as mp
 import json
+import os
 from pathlib import Path
 import pickle
 from queue import Empty
@@ -23,6 +24,7 @@ PROTOCOL = pickle.HIGHEST_PROTOCOL
 NOTICE_FIELDS = frozenset({'side', 'state', 'confirmed_board', 'score', 'score_delta',
     'chain_event', 'next_pair', 'dnext_pair', 'next_slide_motion', 'landing_chain_started'})
 EMPTY_COUNTER_RESULT = (0.0, float('nan'), float('nan'))
+PROGRESS_PERIOD_SEC = 1.0
 
 
 class NoticeDeltaCodec:
@@ -60,8 +62,11 @@ class NoticeDeltaCodec:
 def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                        video: str, bounds: tuple, realtime: bool, device: str | None,
                        latest_frame: Any = None, lifecycle: bool = False,
-                       live_config: str | None = None, audit_path: str | None = None) -> None:
+                       live_config: str | None = None, audit_path: str | None = None,
+                       fault_plan: dict | None = None, parent_pid: int | None = None) -> None:
     """GPU認識器はspawn先で生成し、親のCUDA状態を継承しない。"""
+    from .live_lifetime import protect_parent
+    protect_parent(parent_pid)
     from src.recognition_pipeline import RecognitionPipeline
     from scripts.run_e3_exchange_eval_20260926 import SEED
     import torch
@@ -72,6 +77,7 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
     np.random.seed(SEED)
     torch.manual_seed(SEED)
     capture = None
+    fault = None
     try:
         pipe = RecognitionPipeline.load_default(**config)
         fps, start, end, stride = bounds
@@ -82,11 +88,14 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
         else:
             capture = cv2.VideoCapture(video)
             capture.set(cv2.CAP_PROP_POS_FRAMES, start)
-            source = VideoFileSource(capture, fps, start, end, stride, realtime)
+            if fault_plan:
+                from .live_faults import FaultPlan, FaultInjector
+                fault = FaultInjector(FaultPlan(**fault_plan), lambda event: queue.put(('fault', event)))
+            source = VideoFileSource(capture, fps, start, end, stride, realtime, fault=fault)
             if lifecycle:
                 from .live_video_session import video_session
                 from .live_config import input_identity
-                pipe, source = video_session(pipe, source, queue, input_identity(live_config, video))
+                pipe, source = video_session(pipe, source, queue, input_identity(live_config, video), bool(fault))
         send_notices(queue, cancel, pipe, source, latest_frame,
                      RecognitionAudit(Path(audit_path) if audit_path else None))
     except BaseException:
@@ -94,6 +103,8 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
     finally:
         if capture is not None:
             capture.release()
+        if fault is not None:
+            fault.close()
         queue.put(('done', None))
 
 
@@ -102,12 +113,16 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
     from .live_cpu import runtime_snapshot
     codec = NoticeDeltaCodec()
     count, wire_bytes, gated = 0, 0, 0
+    last_progress = float('-inf')
     for frame in source:
         if cancel.is_set():
             break
         started, cpu = time.perf_counter(), time.process_time()
         notice = recognize(pipe, frame)
         ready = getattr(pipe, 'publishing_ready', True)
+        if frame.media_sec-last_progress >= PROGRESS_PERIOD_SEC:
+            queue.put(('progress', dict(t_sec=frame.media_sec, dropped=source.dropped)))
+            last_progress = frame.media_sec
         if audit is not None:
             audit.append(notice, frame, time.perf_counter()-started, time.process_time()-cpu, ready)
         if not ready:
@@ -168,7 +183,8 @@ class ProcessRecognitionBridge(RecognitionBridge):
         self.worker = self.context.Process(target=recognition_worker, name='recognition-process',
             args=(self.queue, self.cancel, pipe, self.video, self.frame_bounds, self.realtime,
                   self.device, self.latest_frame, getattr(self, 'lifecycle', False),
-                  getattr(self, 'live_config', None), getattr(self, 'audit_path', None)))
+                  getattr(self, 'live_config', None), getattr(self, 'audit_path', None),
+                  getattr(self, 'fault_plan', None), os.getpid()))
         self.worker.start()
         from .live_cpu import apply_runtime
         self.cpu_runtime = apply_runtime('evaluation')
@@ -209,6 +225,11 @@ class ProcessRecognitionBridge(RecognitionBridge):
 
     def _message(self, message: tuple[str, Any]) -> RecognitionNotice | None:
         kind, value = message
+        if kind == 'progress':
+            self.progress = value
+        if kind == 'fault' and getattr(self, 'runtime_path', None):
+            with (self.runtime_path/'faults.jsonl').open('a', encoding='utf-8') as stream:
+                stream.write(json.dumps(value)+'\n')
         if kind == 'error':
             raise RuntimeError(value)
         if kind == 'summary':

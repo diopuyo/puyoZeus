@@ -50,6 +50,8 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
         'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
+        'src/phase_j/live_faults.py', 'src/phase_j/live_lifetime.py', 'src/phase_j/live_telemetry.py',
+        'config/live_defaults.json',
         'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
         recognition_model_hash=['models/cnn_phase_b_large_v2.pt', 'models/cnn_global_best.pt',
                                 'models/cnn_best.pt'],
@@ -71,11 +73,12 @@ def asset_hashes() -> dict[str, str]:
 class SSEProbe:
     """localhostの実購読を維持し、サーバが実際にSSE送出した遅延を測れるようにする。"""
 
-    def __init__(self, address: tuple[str, int]) -> None:
+    def __init__(self, address: tuple[str, int], output: Path | None = None) -> None:
         self.url = 'http://%s:%s/events' % address
         self.ready = Event()
         self.error: BaseException | None = None
         self.count = 0
+        self.output = output
         self.thread = Thread(target=self._read, name='sse-smoke-subscriber', daemon=True)
 
     def _read(self) -> None:
@@ -85,6 +88,10 @@ class SSEProbe:
                 for line in response:
                     if line.startswith(b'data: '):
                         self.count += 1
+                        if self.output:
+                            with self.output.open('a', encoding='utf-8') as stream:
+                                stream.write(json.dumps(dict(received_at=time.perf_counter(),
+                                    payload=json.loads(line[len(b'data: '):])))+'\n')
         except BaseException as error:
             self.error = error
             self.ready.set()
@@ -211,10 +218,13 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     publisher.start()
     if getattr(options, 'lifecycle', False):
         publisher.input_pending(time.perf_counter())
-    probe = SSEProbe(publisher.server.address())
+    runtime_path = options.output if getattr(options, 'runtime_audit', False) else None
+    probe = SSEProbe(publisher.server.address(), runtime_path/'sse.jsonl' if runtime_path else None)
     try:
         probe.start()
         with ExitStack() as stack:
+            from src.phase_j.live_telemetry import RuntimeTelemetry
+            stack.enter_context(RuntimeTelemetry(bridge, sink, runtime_path))
             install_live_instrumentation(stack, overlay, bridge)
             stack.enter_context(patch.object(overlay, 'generate', build_live_generate(overlay, bridge)))
             stack.enter_context(patch.object(sys, 'argv', ['live-pipeline', *command]))
@@ -257,6 +267,8 @@ def make_bridge(options: argparse.Namespace, sink: ResultSink) -> RecognitionBri
     bridge.duration = options.end_sec-options.start_sec
     bridge.config_path = options.output / 'recognition_config.json'
     bridge.audit_path = str(options.output/'recognition.npz') if getattr(options, 'recognition_audit', False) else None
+    bridge.runtime_path = options.output if getattr(options, 'runtime_audit', False) else None
+    bridge.fault_plan = getattr(options, 'fault_plan', None)
     bridge.lifecycle = getattr(options, 'lifecycle', False)
     bridge.live_config = str(options.config) if getattr(options, 'config', None) else None
     return bridge
@@ -377,11 +389,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--cpu-threads', type=int, default=0)
     parser.add_argument('--evaluation-nice', type=int, default=0)
     parser.add_argument('--recognition-audit', action='store_true')
+    add_fault_arguments(parser)
     parser.add_argument('--duration-sec', type=float)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT)
     options = apply_config(parser, sys.argv[1:])
     configure_cpu(options, parser)
+    configure_fault(options, parser)
     if options.compare:
         options.async_counter = False
         options.split_evaluation = False
@@ -408,13 +422,54 @@ def configure_cpu(options: argparse.Namespace, parser: argparse.ArgumentParser) 
         parser.error('優先度変更と認識監査はprocessモード専用です')
 
 
+def add_fault_arguments(parser: argparse.ArgumentParser) -> None:
+    from src.phase_j.live_faults import KINDS
+    parser.add_argument('--video-fault', choices=KINDS)
+    parser.add_argument('--fault-at-sec', type=float, default=2620.)
+    parser.add_argument('--fault-duration-sec', type=float)
+    parser.add_argument('--fault-video', type=str)
+    parser.add_argument('--runtime-audit', action='store_true')
+
+
+def configure_fault(options: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from dataclasses import asdict
+    from src.phase_j.live_faults import FaultPlan, STALL_DURATION_SEC, DEFAULT_DURATION_SEC
+    options.fault_plan = None
+    if not options.video_fault:
+        return
+    if options.source != 'video' or not options.lifecycle or not options.realtime:
+        parser.error('故障注入は--source video --realtimeの統合入力で使用してください')
+    duration = options.fault_duration_sec
+    if duration is None:
+        duration = STALL_DURATION_SEC if options.video_fault == 'stall' else DEFAULT_DURATION_SEC
+    try:
+        plan = FaultPlan(options.video_fault, options.fault_at_sec, duration, options.fault_video)
+        if not options.start_sec <= plan.at_sec < plan.at_sec+duration < options.end_sec:
+            raise ValueError('故障と復帰を測定区間に収めてください')
+        options.fault_plan = asdict(plan)
+    except ValueError as error:
+        parser.error(str(error))
+
+
+def evaluation_child(options: argparse.Namespace, parent_pid: int) -> None:
+    import signal
+    from src.phase_j.live_lifetime import protect_parent
+    protect_parent(parent_pid)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    run_live(options)
+
+
 def main() -> None:
+    import signal
+    from src.phase_j.live_lifetime import join_evaluation
+    signal.signal(signal.SIGINT, signal.default_int_handler)
     options = parse_args()
     options.output.mkdir(parents=True, exist_ok=True)
     if not options.compare and options.worker_mode == 'process':
-        worker = mp.get_context('spawn').Process(target=run_live, args=(options,), name='evaluation-worker')
+        worker = mp.get_context('spawn').Process(target=evaluation_child,
+            args=(options, os.getpid()), name='evaluation-worker')
         worker.start()
-        worker.join()
+        join_evaluation(worker)
         if worker.exitcode:
             raise SystemExit(worker.exitcode)
         return

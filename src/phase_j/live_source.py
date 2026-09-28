@@ -25,6 +25,7 @@ class CapturedFrame:
     acquired_at: float
     image: np.ndarray
     dropped_before: int = 0
+    source_size: tuple[int, int] | None = None
 
 
 class FrameSource(ABC):
@@ -44,7 +45,8 @@ class VideoFileSource(FrameSource):
     def __init__(self, capture: Any, fps: float, start: int, end: int,
                  stride: int, realtime: bool = False,
                  clock: Callable[[], float] = time.perf_counter,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+                 sleep: Callable[[float], None] = time.sleep,
+                 fault: Any = None, on_hold: Callable | None = None) -> None:
         if fps <= 0 or stride < 1 or fps / stride > RECOGNITION_HZ + FPS_TOLERANCE:
             raise ValueError('入力の正規化周波数が不正です')
         self.capture, self.fps = capture, fps
@@ -53,6 +55,7 @@ class VideoFileSource(FrameSource):
         self.dropped = 0
         self.dropped_times: list[float] = []
         self.normalization_skipped = 0
+        self.fault, self.on_hold = fault, on_hold
 
     def latest_index(self, next_index: int, origin: float) -> int:
         """まだ到来していない画像へ進まない。終端の次のslotも許し全残りを捨てる。"""
@@ -65,6 +68,8 @@ class VideoFileSource(FrameSource):
         origin = self.clock()
         index, next_index = self.start, self.start
         while next_index < self.end:
+            if self.fault is not None:
+                self.fault.before(next_index/self.fps, self.sleep, self.on_hold)
             target = self.latest_index(next_index, origin) if self.realtime else next_index
             dropped = (target - next_index) // self.stride
             self.dropped += dropped
@@ -84,7 +89,10 @@ class VideoFileSource(FrameSource):
             if not ok or image is None:
                 raise EOFError(f'予定区間の途中で入力終了: {target}')
             index, next_index = target + 1, target + self.stride
+            if self.fault is not None:
+                image = self.fault.transform(image, target/self.fps)
+            source_size = image.shape[1], image.shape[0]
             if image.shape[:2] != NATIVE_SIZE[::-1]:
                 image = cv2.resize(image, NATIVE_SIZE, interpolation=cv2.INTER_AREA)
             yield CapturedFrame(target, target / self.fps, captured,
-                                self.clock(), image, dropped)
+                                self.clock(), image, dropped, source_size)
