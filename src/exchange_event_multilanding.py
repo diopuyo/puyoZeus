@@ -146,25 +146,30 @@ def cached_proof(projection: Any, board: Board, queue: tuple, incoming: int,
 
 
 def evaluate_multilanding(projection: Any, overlay: Any, latest: tuple, incoming: list,
-                          hands: tuple, t_sec: float, value: dict) -> dict:
+                          hands: tuple, t_sec: float, value: dict, context: dict | None = None) -> dict:
     """E22の死亡を維持し、確実な入力でのみ複数着弾の証明を追加する。"""
     replies, credit = projection._receivers(overlay.tracker, latest, incoming)
     boards, replies, certain = projection._death_boards(
         overlay.tracker, tuple(s.board for s in latest), replies, credit)
+    hidden = [None, None]
+    if context is not None:
+        incoming, boards, replies, certain, credit, hidden = (context[k] for k in
+            ('incoming', 'boards', 'replies', 'certain', 'credit', 'hidden'))
     dead, audits = list(value['dead_sides']), []
     for i, board in enumerate(replies):
         side = f'{i+1}P'
-        blockers = [('single_landing', incoming[i] <= OJAMA_MAX_DROP_PER_TURN),
+        blockers = [('single_landing', incoming[i] <= (0 if hidden[i] else OJAMA_MAX_DROP_PER_TURN)),
             ('already_dead', side in dead), ('uncertain_completion', not certain[i]),
             ('unknown_budget', not projection._known_budget(overlay.tracker, 1-i, t_sec)),
-            ('unverified_attack', not projection._verified_attack(overlay.tracker, 1-i)),
+            ('unverified_attack', not (context['verified'][i] if context is not None
+                                      else projection._verified_attack(overlay.tracker, 1-i))),
             ('unknown_board', bool(np.any(boards[i]._grid == COLOR_UNKNOWN)))]
         reason = next((name for name, blocked in blockers if blocked), None)
-        if reason is None and getattr(projection, 'safety', None) is not None:
+        if reason is None and hidden[i] is None and getattr(projection, 'safety', None) is not None:
             reason = projection.safety.blocker(projection, overlay.tracker, i, t_sec)
-        result = dict(dead=False, reason=reason) if reason else cached_proof(
-            projection, board, tuple(int(v) for v in latest[i].queue), incoming[i], hands[i],
-            overlay.tracker._score_elapsed, credit[i])
+        result = dict(dead=False, reason=reason) if reason else _proof(projection,
+            board, latest[i].queue, incoming[i], hands[i],
+            overlay.tracker._score_elapsed, credit[i], hidden[i], t_sec)
         audits.append(result)
         if result['dead']:
             dead.append(side)
@@ -178,3 +183,13 @@ def evaluate_multilanding(projection: Any, overlay: Any, latest: tuple, incoming
         from src.exchange_event_landing import logit_mean
         value.update(source='S3_landing', p1=logit_mean(value['base_p1'], value['gfe_p1']))
     return value
+
+
+def _proof(projection: Any, board: Board, queue: np.ndarray, incoming: int, hands: int,
+           elapsed: float, credit: int, hidden: dict | None, stamp: float) -> dict:
+    """隠し段の最大応手は死亡専用の全同点盤面証明へ渡す。"""
+    queue = tuple(int(v) for v in queue)
+    if hidden is not None:
+        from src.exchange_death_inputs import hidden_proof
+        return hidden_proof(projection, hidden, queue, incoming, hands, elapsed, stamp)
+    return cached_proof(projection, board, queue, incoming, hands, elapsed, credit)

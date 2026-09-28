@@ -73,14 +73,18 @@ class ExchangeLandingProjection:
     def __init__(self, counter_response: bool = False, counter_probability_model: Any = None,
                  hands_spec: bool = False, multi_landing_death: bool = False,
                  landing_state_safety: bool = False, pending_ledger: bool = False,
-                 color_score_safety: bool = False, completion_recovery: bool = False) -> None:
+                 color_score_safety: bool = False, completion_recovery: bool = False,
+                 death_pending_ledger: bool = False, hidden_row_death: bool = False) -> None:
         self.counter_response = counter_response
+        self.death_pending_ledger = death_pending_ledger
+        self.death_only_inputs = death_pending_ledger or hidden_row_death
         self.multi_landing_death = multi_landing_death
         from src.exchange_landing_safety import LandingStateSafety
         self.safety = LandingStateSafety(landing_state_safety or pending_ledger,
             landing_state_safety or color_score_safety,
             landing_state_safety or completion_recovery) if any((landing_state_safety,
-                pending_ledger, color_score_safety, completion_recovery)) else None
+                pending_ledger, color_score_safety, completion_recovery,
+                death_pending_ledger, hidden_row_death)) else None
         self.multi_landing_cache: dict[tuple, dict] = {}
         self.counter_probability_model = counter_probability_model
         from src.exchange_event_hands import LandingHandsObservation
@@ -123,7 +127,7 @@ class ExchangeLandingProjection:
             return
         self._select_boards(overlay, t_sec)
         incoming = self._incoming(tracker, dropped, record)
-        if not any(incoming):
+        if not any(incoming) and not (self.death_pending_ledger and any(self.safety.ledger.pending)):
             tracker.source, tracker.probability = base["source"], base["p1"]
             self.amount_key = None
             if self.board_changed or dropped == self.evaluated_drops:
@@ -167,6 +171,9 @@ class ExchangeLandingProjection:
         key = (amount_key, hands, active, boards, evidence, completion)
         if self.safety is not None and self.safety.guard_enabled:
             key += (self.safety.signature(self, tracker, t_sec),)
+            reassess = reassess or self.key != key
+        if self.death_only_inputs:
+            key += (tuple(self.safety.ledger.pending), getattr(getattr(self, 'hidden_death', None), 'revision', 0))
             reassess = reassess or self.key != key
         reassess = reassess or (self.key is not None
             and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
@@ -244,7 +251,7 @@ class ExchangeLandingProjection:
             for r in record.landings)
         idx = SIDE_LABELS.index(side)
         recheck = self._chaining(tracker, idx) and (
-            self._completion_board(tracker, idx) is None
+            (self._completion_board(tracker, idx) is None and not self._hidden_completion(chain))
             or side not in self.death.get("completion_sides", []))
         if response or boundary or landed or recheck:
             self.death, self.death_record, self.response_id = None, None, None
@@ -253,6 +260,11 @@ class ExchangeLandingProjection:
                 tracker.probability = tracker._static_probability
                 tracker.source = "G_fe" if tracker.probability is not None else "waiting_confirmed"
         return bool(landed)
+
+    def _hidden_completion(self, chain: Any) -> bool:
+        """死亡保持の再検査だけで隠し段上限の有効性を参照する。"""
+        engine = getattr(self, 'hidden_death', None)
+        return engine is not None and engine.maximum(chain) is not None
 
     def _incoming(self, tracker: Any, dropped: tuple, record: Any = None) -> list[int]:
         """段ごとの累積得点を既存換算し、相殺と既着地分を控除する。"""
@@ -334,32 +346,60 @@ class ExchangeLandingProjection:
     def _evaluate(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
                   hands: tuple, base: dict, t_sec: float) -> dict:
         """既定はE22そのまま。明示ONだけ複数着弾の保守的証明を追加する。"""
-        value = self._evaluate_single(overlay, snapshot, latest, incoming, hands, base, t_sec)
+        from src.exchange_death_inputs import death_inputs
+        context = death_inputs(self, overlay, latest, incoming) if self.death_only_inputs else None
+        value = self._evaluate_single(overlay, snapshot, latest, incoming, hands, base, t_sec, context)
+        if context is not None:
+            value['death_incoming'] = context['incoming']
+            value['hidden_death_scores'] = [v['score'] if v else None for v in context['hidden']]
         if self.safety is not None:
             value['state_safety'] = self.safety.signature(self, overlay.tracker, t_sec)
             value['pending_ledger'] = self.safety.ledger.pending
         if self.multi_landing_death:
             from src.exchange_event_multilanding import evaluate_multilanding
-            return evaluate_multilanding(self, overlay, latest, incoming, hands, t_sec, value)
+            value = evaluate_multilanding(self, overlay, latest, incoming, hands, t_sec, value, context)
+        if context is not None and not any(incoming) and value['source'] != 'unavoidable_death':
+            value.update(source=base['source'], p1=base['p1'])
         return value
 
     def _evaluate_single(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
-                         hands: tuple, base: dict, t_sec: float) -> dict:
+                         hands: tuple, base: dict, t_sec: float, context: dict | None = None) -> dict:
         """完走後の受け盤面で窒息と応手不足を確認し、回避不能なら固定する。"""
         boards = tuple(s.board for s in latest)
         responses, credit = self._receivers(overlay.tracker, latest, incoming)
-        gfe = self._landing_gfe(overlay, snapshot, latest, incoming, t_sec)
-        counter = self._counter_projection(overlay, snapshot, latest, incoming, hands, gfe, t_sec)
-        gfe = counter.get("gfe_response_p1", gfe) if counter.get("response_selected") else gfe
-        gfe = counter.get("gfe_weighted_p1", gfe)
+        gfe, counter = self._probability_inputs(overlay, snapshot, latest, incoming, hands, t_sec)
         probability = logit_mean(base["p1"], gfe)
         boards, responses, certain = self._death_boards(overlay.tracker, boards, responses, credit)
+        probability_incoming = incoming
+        if context is not None:
+            incoming, boards, responses, certain, credit = (context[k] for k in
+                ('incoming', 'boards', 'replies', 'certain', 'credit'))
+        metrics = self._single_death_metrics(overlay, latest, incoming, hands, t_sec,
+                                              boards, responses, certain, credit, context)
+        dead = metrics['dead_sides']
+        if len(dead) == 1:
+            probability = (UNAVOIDABLE_DEATH_PROBABILITY if dead[0] == "1P"
+                           else 1 - UNAVOIDABLE_DEATH_PROBABILITY)
+        return dict(source="unavoidable_death" if len(dead) == 1 else "S3_landing",
+                    t_sec=t_sec, p1=probability, base_p1=base["p1"], gfe_p1=gfe,
+                    incoming=probability_incoming, hands=hands, required_cancel=metrics['required_cancel'],
+                    near_future_send=metrics['near_future_send'], resolving_send=credit, dead_sides=dead,
+                    overflow_rows=metrics['overflow_rows'], verified_attack=metrics['verified_attack'],
+                    rejected_boards=self.rejected_boards, optimistic_send=metrics['optimistic_send'],
+                    completion_certain=certain, completion_sides=[SIDE_LABELS[i] for i in range(2)
+                        if certain[i] and self._chaining(overlay.tracker, i)], **counter)
+
+    def _single_death_metrics(self, overlay: Any, latest: tuple, incoming: list, hands: tuple,
+                              t_sec: float, boards: tuple, responses: tuple, certain: list,
+                              credit: list, context: dict | None) -> dict:
+        """死亡専用受け量で単発着弾を判定し、確率の計算には触れない。"""
         landed_boards = tuple(land_pending_ojama_onto_board(b, boards[1-i], incoming[i])[0]
                               for i, b in enumerate(boards))
         dead, required, available = [], [0, 0], [None, None]
         margins, evidence, optimistic = [None, None], [False, False], [None, None]
         for i, landed in enumerate(landed_boards):
             if (incoming[i] <= 0 or not landed.is_dead() or not certain[i]
+                    or (context is not None and context['hidden'][i] is not None)
                     or not self._known_budget(overlay.tracker, 1-i, t_sec)):
                 continue
             held = self.death is not None and SIDE_LABELS[i] in self.death["dead_sides"]
@@ -381,17 +421,16 @@ class ExchangeLandingProjection:
                 candidate = optimistic[i] < required[i]
             if candidate:
                 dead.append(SIDE_LABELS[i])
-        if len(dead) == 1:
-            probability = (UNAVOIDABLE_DEATH_PROBABILITY if dead[0] == "1P"
-                           else 1 - UNAVOIDABLE_DEATH_PROBABILITY)
-        return dict(source="unavoidable_death" if len(dead) == 1 else "S3_landing",
-                    t_sec=t_sec, p1=probability, base_p1=base["p1"], gfe_p1=gfe,
-                    incoming=incoming, hands=hands, required_cancel=required,
-                    near_future_send=available, resolving_send=credit, dead_sides=dead,
-                    overflow_rows=margins, verified_attack=evidence,
-                    rejected_boards=self.rejected_boards, optimistic_send=optimistic,
-                    completion_certain=certain, completion_sides=[SIDE_LABELS[i] for i in range(2)
-                        if certain[i] and self._chaining(overlay.tracker, i)], **counter)
+        return dict(required_cancel=required, near_future_send=available, dead_sides=dead,
+                    overflow_rows=margins, verified_attack=evidence, optimistic_send=optimistic)
+
+    def _probability_inputs(self, overlay: Any, snapshot: Any, latest: tuple,
+                            incoming: list, hands: tuple, stamp: float) -> tuple:
+        """死亡専用台帳・隠し段候補を受け取らず、従来の確率入力だけを計算する。"""
+        gfe = self._landing_gfe(overlay, snapshot, latest, incoming, stamp)
+        counter = self._counter_projection(overlay, snapshot, latest, incoming, hands, gfe, stamp)
+        gfe = counter.get('gfe_response_p1', gfe) if counter.get('response_selected') else gfe
+        return counter.get('gfe_weighted_p1', gfe), counter
 
     def _counter_projection(self, overlay: Any, snapshot: Any, latest: tuple,
                             incoming: list, hands: tuple, gfe: float, t_sec: float) -> dict:

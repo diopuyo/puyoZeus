@@ -1,0 +1,100 @@
+{
+  "three_videos": {
+    "exchanges": 2,
+    "evaluations": 5
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "exchanges": 0,
+      "evaluations": 0,
+      "rows": []
+    },
+    "fcXG83vInDY": {
+      "exchanges": 2,
+      "evaluations": 5,
+      "rows": [
+        {
+          "game": 3,
+          "exchange": 9,
+          "side": 2,
+          "first_sec": 342.93333333333334,
+          "maximum_score": 1600,
+          "death_incoming": 0
+        },
+        {
+          "game": 5,
+          "exchange": 15,
+          "side": 2,
+          "first_sec": 524.9666666666667,
+          "maximum_score": 2360,
+          "death_incoming": 0
+        }
+      ]
+    },
+    "mia8KCjr52g": {
+      "exchanges": 0,
+      "evaluations": 0,
+      "rows": []
+    },
+    "zenchi": {
+      "exchanges": 4,
+      "evaluations": 59,
+      "rows": [
+        {
+          "game": 2,
+          "exchange": 8,
+          "side": 1,
+          "first_sec": 2682.7166666666667,
+          "maximum_score": 1000,
+          "death_incoming": 0
+        },
+        {
+          "game": 3,
+          "exchange": 11,
+          "side": 1,
+          "first_sec": 2732.15,
+          "maximum_score": 1000,
+          "death_incoming": 0
+        },
+        {
+          "game": 11,
+          "exchange": 36,
+          "side": 2,
+          "first_sec": 3089.016666666667,
+          "maximum_score": 103580,
+          "death_incoming": 0
+        },
+        {
+          "game": 13,
+          "exchange": 43,
+          "side": 1,
+          "first_sec": 3204.016666666667,
+          "maximum_score": 10680,
+          "death_incoming": 0
+        }
+      ]
+    },
+    "review": {
+      "exchanges": 2,
+      "evaluations": 7,
+      "rows": [
+        {
+          "game": 2,
+          "exchange": 8,
+          "side": 1,
+          "first_sec": 2682.7166666666667,
+          "maximum_score": 1000,
+          "death_incoming": 0
+        },
+        {
+          "game": 3,
+          "exchange": 11,
+          "side": 1,
+          "first_sec": 2732.15,
+          "maximum_score": 1000,
+          "death_incoming": 0
+        }
+      ]
+    }
+  }
+}

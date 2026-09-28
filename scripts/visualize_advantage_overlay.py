@@ -6459,6 +6459,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              landing_state_safety: bool = False,
              pending_ledger: bool = False, color_score_safety: bool = False,
              completion_recovery: bool = False, midchain_completion: bool = False,
+             death_pending_ledger: bool = False, hidden_row_death: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7063,6 +7064,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             landing_state_safety=landing_state_safety,
             pending_ledger=pending_ledger, color_score_safety=color_score_safety,
             completion_recovery=completion_recovery, midchain_completion=midchain_completion,
+            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -7070,7 +7072,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             dump_exchange_event_path = out.with_suffix(".exchange_events.jsonl")
         print("[exchange-event] M0推論器接続済み。G_fe/S1/S3を使用します。")
     midchain_reader = None
-    if event_overlay is not None and midchain_completion:
+    if event_overlay is not None and (midchain_completion or hidden_row_death):
         from src.midchain_board_reader import MidchainBoardReader
         midchain_reader = MidchainBoardReader()
     if enable_platt_calibration and enable_phase_calibration:
@@ -8296,6 +8298,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         if event_overlay._midchain is not None:
             from scripts.run_e3_exchange_eval_20260926 import save_json
             save_json(dump_exchange_event_path.with_suffix('.midchain.json'), event_overlay._midchain.summary())
+        if event_overlay._hidden_death is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.hidden_death.json'), event_overlay._hidden_death.summary())
         print(f"[exchange-event] {len(event_overlay.tracker.records)} records -> {dump_exchange_event_path}")
     if event_recorder is not None:
         event_recorder.close()
@@ -8337,7 +8342,8 @@ def main() -> None:
                     help="E23: 応手を挟む複数回の上限着弾で回避不能死を検査（既定OFF）")
     ap.add_argument("--landing-state-safety", action="store_true", default=False,
                     help="E25: 交換独立予告台帳・整合した完走復元・複数着弾限定の盤面検証（既定OFF）")
-    for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion"):
+    for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
+                 "death-pending-ledger", "hidden-row-death"):
         ap.add_argument("--" + flag, action="store_true", default=False,
                         help="E26: 独立した予測層実験（既定OFF）")
     ap.add_argument("--landing-counter-response", action="store_true", default=False,
@@ -9012,6 +9018,7 @@ def main() -> None:
               landing_state_safety=a.landing_state_safety,
               pending_ledger=a.pending_ledger, color_score_safety=a.color_score_safety,
               completion_recovery=a.completion_recovery, midchain_completion=a.midchain_completion,
+              death_pending_ledger=a.death_pending_ledger, hidden_row_death=a.hidden_row_death,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

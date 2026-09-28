@@ -1,0 +1,52 @@
+{
+  "three_videos": {
+    "enumerated": 26,
+    "combinations": 490,
+    "accepted": 2,
+    "next_mismatch": 1,
+    "used": 0,
+    "uses": 0
+  },
+  "sources": {
+    "q_7gc4TgFig": {
+      "enumerated": 18,
+      "combinations": 430,
+      "accepted": 0,
+      "next_mismatch": 1,
+      "used": 0,
+      "uses": 0
+    },
+    "fcXG83vInDY": {
+      "enumerated": 8,
+      "combinations": 60,
+      "accepted": 2,
+      "next_mismatch": 0,
+      "used": 0,
+      "uses": 0
+    },
+    "mia8KCjr52g": {
+      "enumerated": 0,
+      "combinations": 0,
+      "accepted": 0,
+      "next_mismatch": 0,
+      "used": 0,
+      "uses": 0
+    },
+    "zenchi": {
+      "enumerated": 22,
+      "combinations": 470,
+      "accepted": 4,
+      "next_mismatch": 2,
+      "used": 0,
+      "uses": 0
+    },
+    "review": {
+      "enumerated": 13,
+      "combinations": 365,
+      "accepted": 2,
+      "next_mismatch": 1,
+      "used": 0,
+      "uses": 0
+    }
+  }
+}

@@ -1,0 +1,314 @@
+{
+  "e26": [
+    {
+      "t_sec": 490.8,
+      "source": "S3_landing",
+      "incoming": [
+        469,
+        0
+      ],
+      "pending_ledger": [
+        54,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06341329045384117
+    },
+    {
+      "t_sec": 490.8333333333333,
+      "source": "S3_landing",
+      "incoming": [
+        469,
+        0
+      ],
+      "pending_ledger": [
+        54,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 490.8666666666667,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.1666666666667,
+      "source": "unavoidable_death",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.2,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.5,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06508959566212297
+    },
+    {
+      "t_sec": 491.53333333333336,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06342952720158364
+    },
+    {
+      "t_sec": 491.56666666666666,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06155813872450054
+    },
+    {
+      "t_sec": 491.6,
+      "source": "S3_landing",
+      "incoming": [
+        596,
+        0
+      ],
+      "pending_ledger": [
+        181,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5295234161603929,
+      "gfe_p1": 0.06155813872450054
+    }
+  ],
+  "e27": [
+    {
+      "t_sec": 490.8,
+      "source": "S3_landing",
+      "incoming": [
+        469,
+        0
+      ],
+      "death_incoming": [
+        54,
+        0
+      ],
+      "pending_ledger": [
+        54,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06341329045384117
+    },
+    {
+      "t_sec": 490.8333333333333,
+      "source": "S3_landing",
+      "incoming": [
+        469,
+        0
+      ],
+      "death_incoming": [
+        54,
+        0
+      ],
+      "pending_ledger": [
+        54,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 490.8666666666667,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.1666666666667,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.2,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06442586712727817
+    },
+    {
+      "t_sec": 491.5,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06508959566212297
+    },
+    {
+      "t_sec": 491.53333333333336,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06342952720158364
+    },
+    {
+      "t_sec": 491.56666666666666,
+      "source": "S3_landing",
+      "incoming": [
+        597,
+        0
+      ],
+      "death_incoming": [
+        182,
+        0
+      ],
+      "pending_ledger": [
+        182,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5359041610358655,
+      "gfe_p1": 0.06155813872450054
+    },
+    {
+      "t_sec": 491.6,
+      "source": "S3_landing",
+      "incoming": [
+        596,
+        0
+      ],
+      "death_incoming": [
+        181,
+        0
+      ],
+      "pending_ledger": [
+        181,
+        0
+      ],
+      "dead_sides": [],
+      "base_p1": 0.5295234161603929,
+      "gfe_p1": 0.06155813872450054
+    }
+  ]
+}

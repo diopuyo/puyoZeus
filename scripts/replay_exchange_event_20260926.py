@@ -57,7 +57,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            death_candidate_guard: bool = False, death_formula_guard: bool = False,
            multi_landing_death: bool = False, landing_state_safety: bool = False,
            pending_ledger: bool = False, color_score_safety: bool = False,
-           completion_recovery: bool = False, midchain_completion: bool = False) -> dict:
+           completion_recovery: bool = False, midchain_completion: bool = False,
+           death_pending_ledger: bool = False, hidden_row_death: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -80,7 +81,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         death_formula_guard=death_formula_guard, multi_landing_death=multi_landing_death,
         landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
         color_score_safety=color_score_safety, completion_recovery=completion_recovery,
-        midchain_completion=midchain_completion)
+        midchain_completion=midchain_completion,
+        death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -105,6 +107,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     if overlay._midchain is not None:
         from scripts.run_e3_exchange_eval_20260926 import save_json
         save_json(out / 'midchain_audit.json', overlay._midchain.summary())
+    if overlay._hidden_death is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'hidden_death_audit.json', overlay._hidden_death.summary())
     status = dict(state="completed", frames=frames, display_frames=len(rows),
                   elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size,
                   live_count=live_count, model_dir=str(directory))
@@ -147,7 +152,8 @@ def main() -> None:
     parser.add_argument("--death-formula-guard", action="store_true", default=False)
     parser.add_argument("--multi-landing-death", action="store_true", default=False)
     parser.add_argument("--landing-state-safety", action="store_true", default=False)
-    for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion"):
+    for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
+                 "death-pending-ledger", "hidden-row-death"):
         parser.add_argument("--" + name, action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
@@ -170,7 +176,8 @@ def main() -> None:
                     landing_state_safety=options.landing_state_safety,
                     pending_ledger=options.pending_ledger, color_score_safety=options.color_score_safety,
                     completion_recovery=options.completion_recovery,
-                    midchain_completion=options.midchain_completion)
+                    midchain_completion=options.midchain_completion,
+                    death_pending_ledger=options.death_pending_ledger, hidden_row_death=options.hidden_row_death)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

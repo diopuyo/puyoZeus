@@ -1,0 +1,466 @@
+{
+  "source": "review",
+  "overlapping_reasons": {
+    "hidden_outside_limit": 202,
+    "floating": 235,
+    "colors_unconfirmed": 5
+  },
+  "target_rows": [
+    {
+      "t_sec": 2750.016666666667,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2751.25,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2752.65,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 1,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2753.983333333333,
+      "game": 3,
+      "side": 2,
+      "unknown": 4,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2754.016666666667,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2754.05,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2754.0833333333335,
+      "game": 3,
+      "side": 2,
+      "unknown": 3,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2755.4166666666665,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 1,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2756.7166666666667,
+      "game": 3,
+      "side": 2,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 1,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2758.05,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2759.4166666666665,
+      "game": 3,
+      "side": 2,
+      "unknown": 3,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2759.45,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2759.483333333333,
+      "game": 3,
+      "side": 2,
+      "unknown": 3,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2760.7833333333333,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2760.8166666666666,
+      "game": 3,
+      "side": 2,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 1,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2760.85,
+      "game": 3,
+      "side": 2,
+      "unknown": 2,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.516666666667,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.55,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.5833333333335,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.616666666667,
+      "game": 3,
+      "side": 1,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.65,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": false,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.6833333333334,
+      "game": 3,
+      "side": 1,
+      "unknown": 1,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": false,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.7166666666667,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    },
+    {
+      "t_sec": 2761.75,
+      "game": 3,
+      "side": 1,
+      "unknown": 0,
+      "colors": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "settle_samples": 0,
+      "reasons": {
+        "hidden_outside_limit": true,
+        "visible_unknown": false,
+        "floating": true,
+        "colors_unconfirmed": false
+      }
+    }
+  ]
+}

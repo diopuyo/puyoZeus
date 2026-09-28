@@ -57,7 +57,8 @@ class ExchangeEventOverlay:
                  death_candidate_guard: bool = False, death_formula_guard: bool = False,
                  multi_landing_death: bool = False, landing_state_safety: bool = False,
                  pending_ledger: bool = False, color_score_safety: bool = False,
-                 completion_recovery: bool = False, midchain_completion: bool = False) -> None:
+                 completion_recovery: bool = False, midchain_completion: bool = False,
+                 death_pending_ledger: bool = False, hidden_row_death: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -91,11 +92,13 @@ class ExchangeEventOverlay:
             counter_probability_model=counter_probability_model if landing_counter_prob else None,
             hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death,
             landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
-            color_score_safety=color_score_safety, completion_recovery=completion_recovery)
-        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard, midchain_completion)
+            color_score_safety=color_score_safety, completion_recovery=completion_recovery,
+            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
+        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard, midchain_completion, hidden_row_death)
 
     def _initialize_prediction_guards(self, death_candidate_guard: bool,
-                                      death_formula_guard: bool, midchain_completion: bool) -> None:
+                                      death_formula_guard: bool, midchain_completion: bool,
+                                      hidden_row_death: bool = False) -> None:
         """既定OFFの追加検証器をまとめて初期化する。"""
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
@@ -105,6 +108,9 @@ class ExchangeEventOverlay:
         self._midchain = MidchainCompletion(self._landing_projection.simulator) if midchain_completion else None
         if self._midchain is not None:
             self._landing_projection.midchain = self._midchain
+        from src.exchange_hidden_row_death import HiddenRowDeathCompletion
+        self._hidden_death = HiddenRowDeathCompletion(self._landing_projection.simulator) if hidden_row_death else None
+        self._landing_projection.hidden_death = self._hidden_death
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -133,6 +139,8 @@ class ExchangeEventOverlay:
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
         if self._midchain is not None:
             self._midchain.observe(self, result, t_sec)
+        if self._hidden_death is not None:
+            self._hidden_death.observe(self, result, t_sec)
         self._remember(sides, snapshot, t_sec)
         if self._e16 is not None:
             self._e16.observe(sides, t_sec)
@@ -170,6 +178,8 @@ class ExchangeEventOverlay:
             self._landing_projection.safety.reset()
         if self._midchain is not None:
             self._midchain.reset()
+        if self._hidden_death is not None:
+            self._hidden_death.reset()
         self.tracker.boundary(game_idx, t_sec)
         self._game, self._start = game_idx, None
         self._history, self._snapshots, self._signals = [[], []], [], {}
