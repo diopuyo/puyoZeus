@@ -17,6 +17,29 @@ from src.phase_j.live_eval_supervisor import FAILURE_LIMIT
 OUTPUT = Path('logs/live_b16')
 
 
+def resume_reference(root: Path) -> None:
+    """保存済み実時間運転を保持し、参照と品質集計だけを再開する。"""
+    launch = json.loads((root/'launch.json').read_text())
+    report = json.loads((root/'report.json').read_text())
+    if not report['reached_end'] or not (root/'realtime/metrics.json').exists():
+        raise ValueError('完走済みの実時間運転が必要です')
+    if source_hashes() != launch['source_hashes']:
+        raise ValueError('保存済み運転と現在の認識コードが異なります')
+    if not wait_idle(time.monotonic()+MAX_WAIT_SECONDS, root, 'B17 offline reference'):
+        return
+    try:
+        if source_hashes() != launch['source_hashes']:
+            raise ValueError('待機中に認識コードが変わりました')
+        reference(root)
+        report['quality'] = quality_report(root)
+        save(root/'report.json', report)
+        save(root/'status.json', dict(state='finished', phase='offline_reference', pid=os.getpid()))
+    except Exception as error:
+        save(root/'status.json', dict(state='failed', phase='offline_reference',
+                                     pid=os.getpid(), error=str(error)))
+        raise
+
+
 def error_report(root: Path) -> dict:
     result = runtime_report(root)
     path = root/'realtime/evaluation_errors.jsonl'
@@ -62,6 +85,12 @@ def run(root: Path, commit: str) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=OUTPUT)
-    parser.add_argument('--commit', required=True)
+    parser.add_argument('--commit')
+    parser.add_argument('--reference-only', action='store_true')
     options = parser.parse_args()
-    run(options.output, options.commit)
+    if options.reference_only:
+        resume_reference(options.output)
+    elif options.commit:
+        run(options.output, options.commit)
+    else:
+        parser.error('新規運転には --commit が必要です')

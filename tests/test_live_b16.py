@@ -152,9 +152,8 @@ def test_dead_worker_is_restarted(remote: SupervisedOverlay) -> None:
     previous = remote.process.pid
     remote.process.terminate()
     remote.process.join()
-    remote.update(*inputs(0))
     with pytest.raises(EvaluationError):
-        remote.calculate()
+        remote.update(*inputs(0))
     assert remote.process.pid != previous
     remote.update(*inputs(.5))
     remote.calculate()

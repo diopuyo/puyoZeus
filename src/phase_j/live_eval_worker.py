@@ -71,6 +71,8 @@ def execute(overlay: Any, request: dict) -> dict:
     overlay.failure_stage = 'calculate'
     if request.get('fault'):
         raise RuntimeError('B16故障注入: '+request['fault'])
+    if request['op'] == 'advance':
+        return dict(kind='ok')  # 境界の退避記録は公開応答まで子が保持する。
     if request['op'] != 'updates':
         overlay.calculate()
     return state(overlay)
@@ -96,8 +98,9 @@ def serve(connection: Any, config: tuple, overlay: Any) -> None:
                 return
             try:
                 if request['op'] == 'records':
-                    reply = dict(kind='ok', records=[asdict(r) for r in overlay.tracker.records],
-                                 diagnostics=overlay.tracker.diagnostics)
+                    tracker = overlay.tracker
+                    reply = dict(kind='ok', records=tracker.sealed+[asdict(r) for r in tracker.records],
+                                 diagnostics=tracker.sealed_diagnostics+tracker.diagnostics)
                 else:
                     if request.get('reset'):
                         overlay = make_overlay(connection, config)

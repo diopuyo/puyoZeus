@@ -97,11 +97,15 @@ class SupervisedOverlay:
         blob = pickle.dumps(('update', args), protocol=pickle.HIGHEST_PROTOCOL)
         self.journal.append(blob)
         self.pending.append(blob)
-
-    def calculate(self) -> None:
+        # 物理更新を公開周期まで貯めず、最新通知の到着時に完了させる。
         commands = list(self.journal) if self.dirty else self.pending
-        request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault)
-        self.fault, self.static_error = None, None
+        self.request(dict(op='advance', commands=commands, reset=self.dirty))
+        self.pending.clear()
+        self.dirty = False
+
+    def request(self, request: dict) -> dict:
+        """物理更新と公開計算の両方を同じ障害隔離境界で処理する。"""
+        self.static_error = None
         try:
             self.connection.send(request)
             reply = self.receive()
@@ -111,6 +115,13 @@ class SupervisedOverlay:
         if reply['kind'] == 'error':
             self.failed(dict(reply, **(self.static_error or {})))
             raise EvaluationError(reply['message'])
+        return reply
+
+    def calculate(self) -> None:
+        commands = list(self.journal) if self.dirty else self.pending
+        request = dict(op='batch', commands=commands, reset=self.dirty, fault=self.fault)
+        self.fault = None
+        reply = self.request(request)
         self.pending.clear()
         self.journal.append(pickle.dumps(('calculate', ())))
         self.dirty = False
