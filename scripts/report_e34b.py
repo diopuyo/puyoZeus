@@ -57,11 +57,19 @@ def input_difference(source: str) -> dict:
                 first_mismatch_sec=first_sec, first_side_mismatch_sec=first_side)
 
 
-def prepare_cohort() -> dict:
-    """ON実行前に新OFFの採用連鎖・真値・表示行をE33bの方式で固定する。"""
+def freeze_score_cohort() -> dict:
+    """3記録の新OFFが揃った時点で一度だけ採点行を固定し、ON後に作り直さない。"""
+    if (OUT/'COHORT.json').exists():
+        return read(OUT/'COHORT.json')
+    assert all((directory('off', s)/'DONE.json').exists() for s in SOURCES)
     score_trace.OUT = OUT
     score_trace.baseline_directory = lambda s: directory('off', s)
-    result = score_trace.prepare_cohort()
+    return score_trace.prepare_cohort()
+
+
+def prepare_cohort() -> dict:
+    """得点行の固定を確認し、5記録が揃ってから旧新差分と出所を確定する。"""
+    result = freeze_score_cohort()
     save_json(OUT/'NONDETERMINISM.json', {s: input_difference(s) for s in prior.ALL_SOURCES})
     for source in prior.ALL_SOURCES:
         path = OUT/'records'/f'{source}.jsonl.json'
@@ -100,29 +108,48 @@ def metrics(variant: str) -> dict:
     return value
 
 
+def score_metrics() -> dict:
+    """固定済み3記録の全採点行をE33bと同じ物差しで評価する。"""
+    scores_module.OUT, scores_module.VARIANTS = OUT, ('off', 'on')
+    try:
+        return scores_module.scores()
+    except AssertionError:
+        from scripts.e34b_score_audit import audit_scores
+        return audit_scores(OUT)
+
+
 def report() -> dict:
     """事前登録した相対許容幅を、新OFFの実測値に適用する。"""
     checks = compare_rows()
     values = {v: metrics(v) for v in ('off', 'on')}
-    scores_module.OUT, scores_module.VARIANTS = OUT, ('off', 'on')
-    scores = scores_module.scores()
+    scores = score_metrics()
     a, b = values['off'], values['on']
     assert a['q']['frames'] == b['q']['frames'] and a['zenchi']['frames'] == b['zenchi']['frames']
     limits = dict(q=a['q']['log_loss']+LOSS_ALLOWANCE,
-                  zenchi=a['zenchi']['agreement']-AGREEMENT_ALLOWANCE, score=scores['off']['mean']*SCORE_RATIO)
+                  zenchi=a['zenchi']['agreement']-AGREEMENT_ALLOWANCE,
+                  score=scores['off']['mean']*SCORE_RATIO if scores['off']['mean'] is not None else None)
     gates = dict(q=b['q']['log_loss'] <= limits['q'], zenchi=b['zenchi']['agreement'] >= limits['zenchi'],
         deaths=b['deaths']['unlabelled'] == 0 and b['deaths']['false']/max(1, b['deaths']['total']) <= 1/28,
-        score_mean=scores['on']['mean'] <= limits['score'])
+        score_mean=limits['score'] is not None and scores['on']['mean'] is not None and
+                   scores['on']['mean'] <= limits['score'])
     for variant, value in values.items():
         value.pop('gates', None)
         value.pop('candidate', None)
         save_json(OUT/variant/'METRICS.json', value)
     result = dict(metrics=values, scores=scores, limits=limits, gates=gates, passed=all(gates.values()),
         comparisons=checks, nondeterminism=read(OUT/'NONDETERMINISM.json'),
-        cohort=read(OUT/'COHORT.json'), adoptions={v: adoptions(v) for v in ('off', 'on')})
+        cohort=read(OUT/'COHORT.json'), adoptions={v: adoptions(v) for v in ('off', 'on')},
+        residuals=read(OUT/'RESIDUALS.json'))
     save_json(OUT/'SUMMARY.json', result)
     return result
 
 
 if __name__ == '__main__':
-    print(report())
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--freeze-score-cohort', action='store_true')
+    group.add_argument('--scores-only', action='store_true')
+    options = parser.parse_args()
+    action = freeze_score_cohort if options.freeze_score_cohort else score_metrics if options.scores_only else report
+    print(action())

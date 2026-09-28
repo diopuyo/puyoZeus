@@ -77,10 +77,10 @@ def main() -> None:
             from scripts.report_e34b import prepare_cohort
             prepare_cohort()
     if args.phase in ('all', 'on'):
-        from scripts.report_e34b import report
-        print(report(), flush=True)
         from scripts.e34b_residuals import residuals
         print(residuals(), flush=True)
+        from scripts.report_e34b import report
+        print(report(), flush=True)
 
 
 if __name__ == '__main__':

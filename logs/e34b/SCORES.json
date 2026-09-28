@@ -1,0 +1,20 @@
+{
+  "off": {
+    "n": 12046,
+    "measured_n": 12046,
+    "unmeasurable_n": 0,
+    "complete": true,
+    "mean": 740.3287529609788,
+    "p50": 0.0,
+    "p95": 3846.0
+  },
+  "on": {
+    "n": 12046,
+    "measured_n": 11871,
+    "unmeasurable_n": 175,
+    "complete": false,
+    "mean": null,
+    "p50": null,
+    "p95": null
+  }
+}

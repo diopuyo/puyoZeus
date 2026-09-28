@@ -1,0 +1,31 @@
+{
+  "counts": {
+    "E16_fire_after_observed_death": 4
+  },
+  "events": [
+    {
+      "game_idx": 0,
+      "t_sec": 2578.5833333333335,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 1,
+      "t_sec": 2634.75,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 2,
+      "t_sec": 2700.85,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    },
+    {
+      "game_idx": 3,
+      "t_sec": 2776.116666666667,
+      "reason": "E16_fire_after_observed_death",
+      "requested_stage": "S1"
+    }
+  ]
+}

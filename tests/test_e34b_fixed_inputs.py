@@ -111,3 +111,42 @@ def test_d1_missing_origin_is_not_residual_improvement() -> None:
     paired = paired_counts(dict(off=[base, other], on=[missing, dict(other, cells=[])]))
     assert paired['fires'] == 1 and paired['total_fires'] == 2
     assert paired['residual_cells'] == dict(off=1, on=0)
+
+
+def test_score_cohort_is_never_rebuilt_after_freezing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(report, 'OUT', tmp_path)
+    (tmp_path/'COHORT.json').write_text('{"frozen": true}', encoding='utf-8')
+    monkeypatch.setattr(report.score_trace, 'prepare_cohort', lambda: pytest.fail('固定済み行の再選択'))
+    assert report.freeze_score_cohort() == dict(frozen=True)
+
+
+def test_d1_changes_match_original_strictly_prefire_history(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import gzip
+    from scripts import e34b_residuals as residuals
+    monkeypatch.setattr(residuals, 'OUT', tmp_path)
+    (tmp_path/'records').mkdir()
+    with gzip.open(tmp_path/'records/sample.windows.json.gz', 'wt') as stream:
+        stream.write('{"0:0:4.0": {}}')
+    before, current = Board(), Board()
+    before._grid[-1, 0], current._grid[-1, 0] = 1, 2
+    rows = []
+    for stamp, board in ((1., before), (2., None), (3., before), (4., current)):
+        first = NS(confirmed_board=board, chain_event=NS(trigger_sec=4.) if stamp == 4 else None)
+        second = NS(confirmed_board=None, chain_event=None)
+        rows.append(dict(kind='update', args=(NS(p1=first, p2=second), None, None, stamp, 0)))
+    monkeypatch.setattr(residuals, 'read_records', lambda _: iter(rows))
+    result = residuals.observations('sample')['0:0:4.0']['changes']
+    assert result == [before._grid.tolist(), before._grid.tolist()]
+
+
+def test_score_failure_preserves_denominator_and_e33b_source_contract() -> None:
+    import numpy as np
+    from scripts.e34b_score_audit import correspondence, measured_summary
+    target = dict(t_sec=1., game=0, side='1P', chain_id=2)
+    row = dict(t_sec=1., game=0, source='unavoidable_death', value_sec=1.,
+               scores=[dict(side='1P', chain_id=2, score=100.)])
+    assert correspondence(target, row) == (None, 'nonprediction_display')
+    assert correspondence(target, dict(row, source='S3_landing')) == (100., None)
+    summary = measured_summary([100., np.nan], [100., 200.])
+    assert summary['n'] == 2 and summary['measured_n'] == 1 and summary['unmeasurable_n'] == 1
+    assert summary['mean'] is None and summary['complete'] is False

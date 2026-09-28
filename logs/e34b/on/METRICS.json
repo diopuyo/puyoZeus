@@ -1,0 +1,27 @@
+{
+  "variant": "on",
+  "q": {
+    "frames": 6526,
+    "matches": 4,
+    "log_loss": 0.5843974180349579,
+    "auc": 0.7195266809331666
+  },
+  "zenchi": {
+    "hits": 7363,
+    "frames": 8333,
+    "agreement": 0.8835953438137526
+  },
+  "deaths": {
+    "false": 6,
+    "total": 33,
+    "unlabelled": 0
+  },
+  "scenes": {
+    "prefire_frames": 62,
+    "prefire_mean": 0.3208328463014425,
+    "margin_sign_flips": 3,
+    "terminal_frames": 45,
+    "terminal_min": 1.0
+  },
+  "scene_first_sec": 2771.3166666666666
+}

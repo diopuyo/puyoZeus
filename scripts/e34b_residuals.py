@@ -17,17 +17,20 @@ def observations(source: str) -> dict:
     """収集時に保存した多数決と原観測を読み、直前の確定盤面変更を添える。"""
     with gzip.open(OUT/'records'/f'{source}.windows.json.gz', 'rt', encoding='utf-8') as stream:
         windows = json.load(stream)
-    game, changes, seen = None, [[], []], set()
+    game, changes, previous, seen = None, [[], []], [None, None], set()
     for record in read_records(OUT/'records'/f'{source}.jsonl.gz'):
         if record['kind'] != 'update':
             continue
-        result, current = record['args'][0], record['args'][4]
+        result, stamp, current = record['args'][0], record['args'][3], record['args'][4]
         if current != game:
-            game, changes = current, [[], []]
+            game, changes, previous = current, [[], []], [None, None]
         for idx, side in enumerate((result.p1, result.p2)):
             board = side.confirmed_board
-            if board is not None and (not changes[idx] or changes[idx][-1] != board._grid.tolist()):
-                changes[idx].append(board._grid.tolist())
+            grid = board._grid.tolist() if board is not None else None
+            if grid != previous[idx]:
+                previous[idx] = grid
+                if grid is not None:
+                    changes[idx].append(dict(t=stamp, board=grid))
             event = side.chain_event
             if event is None:
                 continue
@@ -35,7 +38,7 @@ def observations(source: str) -> dict:
             if key in seen:
                 continue
             seen.add(key)
-            windows[key]['changes'] = changes[idx][-2:]
+            windows[key]['changes'] = [v['board'] for v in changes[idx] if v['t'] < event.trigger_sec][-2:]
     return windows
 
 
@@ -49,12 +52,11 @@ def difference(source: str, origin: dict, window: dict) -> dict:
         return row
     candidates = pair_candidates(window)
     pair = candidates[0] if len(candidates) == 1 else []
-    if (source, row['trigger']) in SIMULATION:
-        for previous in reversed(window['changes']):
-            added = cells(previous, snapshot)
-            if len(added) == 2 and all(previous[r][c] == 0 and 1 <= snapshot[r][c] <= 5 for r, c in added):
-                pair = added
-                break
+    if (source, row['trigger']) in SIMULATION and len(window['changes']) >= 2:
+        previous = window['changes'][-2]
+        added = cells(previous, snapshot)
+        if len(added) == 2 and all(previous[r][c] == 0 and 1 <= snapshot[r][c] <= 5 for r, c in added):
+            pair = added
     frames = [f for f in window['raw_frames'] if window['start_sec'] <= f['t_sec'] <= window['end_sec']]
     for r, c in cells(board, snapshot):
         cell = dict(row=r, col=c, origin=board[r][c], snapshot=snapshot[r][c],

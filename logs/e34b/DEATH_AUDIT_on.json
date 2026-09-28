@@ -1,0 +1,4579 @@
+[
+  {
+    "source": "zenchi",
+    "exchange_id": 3,
+    "game_idx": 0,
+    "side": "1P",
+    "first_sec": 2572.6833333333334,
+    "last_sec": 2574.5833333333335,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 2572.6833333333334,
+      "p1": 0.02,
+      "base_p1": 0.5200301572984933,
+      "gfe_p1": 0.3600977303095435,
+      "incoming": [
+        14,
+        0
+      ],
+      "hands": [
+        6,
+        1
+      ],
+      "required_cancel": [
+        13,
+        0
+      ],
+      "near_future_send": [
+        0.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        0.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        13,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        13,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 2572.6833333333334
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 19,
+    "game_idx": 5,
+    "side": "2P",
+    "first_sec": 2860.983333333333,
+    "last_sec": 2862.8166666666666,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 2860.983333333333,
+      "p1": 0.98,
+      "base_p1": 0.6771283135627898,
+      "gfe_p1": 0.9465244418805655,
+      "incoming": [
+        0,
+        333.0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        313
+      ],
+      "near_future_send": [
+        null,
+        0.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        1
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        68.0
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        333
+      ],
+      "hidden_death_scores": [
+        44020,
+        null
+      ],
+      "state_safety": [
+        null,
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        333
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 5,
+          "accepted_sec": 2858.2833333333333,
+          "layer": "prediction"
+        }
+      ],
+      "held_from_sec": 2860.983333333333,
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 44020.0,
+          "mean_send": 628.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 20,
+    "game_idx": 6,
+    "side": "1P",
+    "first_sec": 2892.516666666667,
+    "last_sec": 2894.116666666667,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 2892.516666666667,
+      "p1": 0.02,
+      "base_p1": 0.37352528209622826,
+      "gfe_p1": 0.20189189727690734,
+      "incoming": [
+        25.0,
+        0
+      ],
+      "hands": [
+        2,
+        1
+      ],
+      "required_cancel": [
+        16,
+        0
+      ],
+      "near_future_send": [
+        5.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        5.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        25,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        1800
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        25,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 2892.516666666667,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 1,
+          "candidates": 1.0,
+          "mean_score": 1800.0,
+          "mean_send": 25.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 22,
+    "game_idx": 7,
+    "side": "1P",
+    "first_sec": 2929.05,
+    "last_sec": 2929.3166666666666,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 2929.05,
+      "p1": 0.02,
+      "base_p1": 0.3638050295121945,
+      "gfe_p1": 0.33961624419057224,
+      "incoming": [
+        8,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        8,
+        0
+      ],
+      "near_future_send": [
+        0.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        1,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        0.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        8,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        8,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 2929.05
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 29,
+    "game_idx": 9,
+    "side": "2P",
+    "first_sec": 3016.2833333333333,
+    "last_sec": 3017.55,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3016.2833333333333,
+      "p1": 0.98,
+      "base_p1": 0.922869823761614,
+      "gfe_p1": 0.7287395989947584,
+      "incoming": [
+        0,
+        23
+      ],
+      "hands": [
+        1,
+        11
+      ],
+      "required_cancel": [
+        0,
+        36
+      ],
+      "near_future_send": [
+        null,
+        0.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        5
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        0.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        36
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        36
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3016.2833333333333
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 32,
+    "game_idx": 12,
+    "side": "1P",
+    "first_sec": 3162.55,
+    "last_sec": 3163.7833333333333,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3162.55,
+      "p1": 0.02,
+      "base_p1": 0.3480740563643897,
+      "gfe_p1": 0.025399498195000786,
+      "incoming": [
+        323,
+        0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        327,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        null,
+        null
+      ],
+      "pending_ledger": [
+        327,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": true,
+          "reason": "all_responses_dead",
+          "rounds": [
+            [
+              {
+                "incoming": 327,
+                "optimistic_send": 244.0,
+                "maximum_send": 244.0,
+                "cancelled": 244,
+                "dropped": 30,
+                "remaining": 53,
+                "responses": 17
+              }
+            ],
+            [
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              },
+              {
+                "incoming": 53,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 23,
+                "responses": 2
+              }
+            ]
+          ],
+          "nodes": 103
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3162.55
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 40,
+    "game_idx": 15,
+    "side": "2P",
+    "first_sec": 3321.7833333333333,
+    "last_sec": 3323.5833333333335,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3321.7833333333333,
+      "p1": 0.98,
+      "base_p1": 0.5804041190552872,
+      "gfe_p1": 0.4899944760953075,
+      "incoming": [
+        0,
+        1521.0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        1521
+      ],
+      "near_future_send": [
+        null,
+        0.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        5
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        0.0
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        1521
+      ],
+      "hidden_death_scores": [
+        107580,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        1521
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3321.7833333333333,
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 2,
+          "candidates": 1.0,
+          "mean_score": 107580.0,
+          "mean_send": 1536.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 41,
+    "game_idx": 16,
+    "side": "2P",
+    "first_sec": 3336.7166666666667,
+    "last_sec": 3336.7166666666667,
+    "winner": "2P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3336.7166666666667,
+      "p1": 0.98,
+      "base_p1": 0.6833202318741483,
+      "gfe_p1": 0.6552452670806804,
+      "incoming": [
+        0,
+        1536
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        1536
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        null
+      ],
+      "pending_ledger": [
+        0,
+        1536
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": true,
+          "reason": "all_responses_dead",
+          "rounds": [
+            [
+              {
+                "incoming": 1536,
+                "optimistic_send": 1.0,
+                "maximum_send": 1.0,
+                "cancelled": 1,
+                "dropped": 30,
+                "remaining": 1505,
+                "responses": 22
+              }
+            ],
+            [
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 6
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 7
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 6
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 7
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              },
+              {
+                "incoming": 1505,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 1475,
+                "responses": 8
+              }
+            ]
+          ],
+          "nodes": 506
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3336.7166666666667
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 42,
+    "game_idx": 16,
+    "side": "2P",
+    "first_sec": 3341.55,
+    "last_sec": 3344.2166666666667,
+    "winner": "2P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3341.55,
+      "p1": 0.98,
+      "base_p1": 0.4560179125239338,
+      "gfe_p1": 0.19657112896370135,
+      "incoming": [
+        17.0,
+        0
+      ],
+      "hands": [
+        6,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        1519
+      ],
+      "hidden_death_scores": [
+        null,
+        1210
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        0,
+        1519
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": true,
+          "reason": "prefire_maximum_response",
+          "maximum_score": 1210,
+          "tied_boards": 1,
+          "checked": 1,
+          "proofs": [
+            {
+              "dead": true,
+              "reason": "all_responses_dead",
+              "rounds": [
+                [
+                  {
+                    "incoming": 1519,
+                    "optimistic_send": 6.0,
+                    "maximum_send": 6.0,
+                    "cancelled": 6,
+                    "dropped": 30,
+                    "remaining": 1483,
+                    "responses": 6
+                  }
+                ],
+                [
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1483,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1453,
+                    "responses": 20
+                  }
+                ]
+              ],
+              "nodes": 288
+            }
+          ]
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3341.55,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 3,
+          "candidates": 1.0,
+          "mean_score": 1210.0,
+          "mean_send": 17.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 44,
+    "game_idx": 16,
+    "side": "2P",
+    "first_sec": 3348.75,
+    "last_sec": 3353.85,
+    "winner": "2P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3348.75,
+      "p1": 0.98,
+      "base_p1": 0.09002399227557766,
+      "gfe_p1": 0.08440523570452158,
+      "incoming": [
+        41.0,
+        0
+      ],
+      "hands": [
+        8,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        1478
+      ],
+      "hidden_death_scores": [
+        null,
+        2900
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        0,
+        1478
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": true,
+          "reason": "prefire_maximum_response",
+          "maximum_score": 2900,
+          "tied_boards": 1,
+          "checked": 1,
+          "proofs": [
+            {
+              "dead": true,
+              "reason": "all_responses_dead",
+              "rounds": [
+                [
+                  {
+                    "incoming": 1478,
+                    "optimistic_send": 10.0,
+                    "maximum_send": 11,
+                    "cancelled": 11,
+                    "dropped": 30,
+                    "remaining": 1437,
+                    "responses": 9
+                  }
+                ],
+                [
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  },
+                  {
+                    "incoming": 1437,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1407,
+                    "responses": 22
+                  }
+                ],
+                [
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 150
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 200
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 200
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 150
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 200
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 200
+                  },
+                  {
+                    "incoming": 1407,
+                    "optimistic_send": 0.0,
+                    "maximum_send": 0.0,
+                    "cancelled": 0,
+                    "dropped": 30,
+                    "remaining": 1377,
+                    "responses": 175
+                  }
+                ]
+              ],
+              "nodes": 8137
+            }
+          ]
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3348.75,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 2900.0,
+          "mean_send": 41.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "zenchi",
+    "exchange_id": 46,
+    "game_idx": 17,
+    "side": "2P",
+    "first_sec": 3406.6833333333334,
+    "last_sec": 3406.6833333333334,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 3406.6833333333334,
+      "p1": 0.98,
+      "base_p1": 0.7142062521643102,
+      "gfe_p1": 0.8320140264497978,
+      "incoming": [
+        0,
+        1358.0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        1355
+      ],
+      "near_future_send": [
+        null,
+        18.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        4
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        865.0
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "1P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        0,
+        1358
+      ],
+      "hidden_death_scores": [
+        95580,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        1358
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 3406.6833333333334,
+      "prefire_prediction": [
+        {
+          "side": "1P",
+          "chain_id": 4,
+          "candidates": 1.0,
+          "mean_score": 95580.0,
+          "mean_send": 1365.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 5,
+    "game_idx": 2,
+    "side": "1P",
+    "first_sec": 231.1,
+    "last_sec": 232.66666666666666,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 231.1,
+      "p1": 0.02,
+      "base_p1": 0.26316795169984375,
+      "gfe_p1": 0.0706309259446123,
+      "incoming": [
+        515,
+        0
+      ],
+      "hands": [
+        2,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        536,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        null,
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        536,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": true,
+          "reason": "all_responses_dead",
+          "rounds": [
+            [
+              {
+                "incoming": 536,
+                "optimistic_send": 5.0,
+                "maximum_send": 6,
+                "cancelled": 6,
+                "dropped": 30,
+                "remaining": 500,
+                "responses": 159
+              }
+            ],
+            [
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 1.0,
+                "maximum_send": 1.0,
+                "cancelled": 1,
+                "dropped": 30,
+                "remaining": 469,
+                "responses": 76
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 125
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 6.0,
+                "maximum_send": 8,
+                "cancelled": 8,
+                "dropped": 30,
+                "remaining": 462,
+                "responses": 74
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 100
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 75
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 25
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 0
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              },
+              {
+                "incoming": 500,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 470,
+                "responses": 50
+              }
+            ]
+          ],
+          "nodes": 11442
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 231.1
+    }
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 6,
+    "game_idx": 3,
+    "side": "1P",
+    "first_sec": 270.0,
+    "last_sec": 271.43333333333334,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 270.0,
+      "p1": 0.02,
+      "base_p1": 0.3471027282211133,
+      "gfe_p1": 0.11993013515302917,
+      "incoming": [
+        28,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        21,
+        0
+      ],
+      "near_future_send": [
+        5.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        5.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        28,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        28,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 270.0
+    }
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 10,
+    "game_idx": 4,
+    "side": "2P",
+    "first_sec": 322.0,
+    "last_sec": 340.73333333333335,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 322.0,
+      "p1": 0.98,
+      "base_p1": 0.6673314055060083,
+      "gfe_p1": 0.805795392878764,
+      "incoming": [
+        0,
+        80
+      ],
+      "hands": [
+        1,
+        2
+      ],
+      "required_cancel": [
+        0,
+        74
+      ],
+      "near_future_send": [
+        null,
+        14.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        3
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        69.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        83
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "board_unsettled"
+      ],
+      "pending_ledger": [
+        0,
+        83
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 322.0
+    }
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 11,
+    "game_idx": 5,
+    "side": "2P",
+    "first_sec": 384.8666666666667,
+    "last_sec": 395.8666666666667,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 384.8666666666667,
+      "p1": 0.98,
+      "base_p1": 0.8931036185589758,
+      "gfe_p1": 0.7714458940709424,
+      "incoming": [
+        0,
+        126
+      ],
+      "hands": [
+        1,
+        4
+      ],
+      "required_cancel": [
+        0,
+        126
+      ],
+      "near_future_send": [
+        null,
+        0.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        5
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        0.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        126
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        126
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 384.8666666666667
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 16,
+    "game_idx": 6,
+    "side": "1P",
+    "first_sec": 441.3333333333333,
+    "last_sec": 442.8666666666667,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 441.3333333333333,
+      "p1": 0.02,
+      "base_p1": 0.1838571437431123,
+      "gfe_p1": 0.14910746627037116,
+      "incoming": [
+        10,
+        0
+      ],
+      "hands": [
+        12,
+        1
+      ],
+      "required_cancel": [
+        11,
+        0
+      ],
+      "near_future_send": [
+        0.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        1,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        0.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        11,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        11,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 441.3333333333333
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 19,
+    "game_idx": 7,
+    "side": "1P",
+    "first_sec": 494.76666666666665,
+    "last_sec": 499.0,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 494.76666666666665,
+      "p1": 0.02,
+      "base_p1": 0.4084745350059354,
+      "gfe_p1": 0.03975112630428389,
+      "incoming": [
+        132,
+        0
+      ],
+      "hands": [
+        10,
+        1
+      ],
+      "required_cancel": [
+        119,
+        0
+      ],
+      "near_future_send": [
+        41.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        41.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        132,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        132,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 494.76666666666665
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 24,
+    "game_idx": 8,
+    "side": "1P",
+    "first_sec": 562.2666666666667,
+    "last_sec": 562.2666666666667,
+    "winner": "1P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 562.2666666666667,
+      "p1": 0.02,
+      "base_p1": 0.1863060178800611,
+      "gfe_p1": 0.14666727331569426,
+      "incoming": [
+        65,
+        0
+      ],
+      "hands": [
+        11,
+        1
+      ],
+      "required_cancel": [
+        61,
+        0
+      ],
+      "near_future_send": [
+        0.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        4,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        0.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        65,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        65,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 562.2666666666667
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 24,
+    "game_idx": 8,
+    "side": "2P",
+    "first_sec": 570.1,
+    "last_sec": 583.6666666666666,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 570.1,
+      "p1": 0.98,
+      "base_p1": 0.5592732909131176,
+      "gfe_p1": 0.7451077972696191,
+      "incoming": [
+        0,
+        77
+      ],
+      "hands": [
+        1,
+        3
+      ],
+      "required_cancel": [
+        0,
+        62
+      ],
+      "near_future_send": [
+        null,
+        8.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        2
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        8.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        77
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "board_unsettled"
+      ],
+      "pending_ledger": [
+        0,
+        77
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 570.1
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 29,
+    "game_idx": 9,
+    "side": "1P",
+    "first_sec": 656.0666666666667,
+    "last_sec": 656.9333333333333,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 656.0666666666667,
+      "p1": 0.02,
+      "base_p1": 0.41353758610623687,
+      "gfe_p1": 0.028260092045508767,
+      "incoming": [
+        237.0000000000001,
+        0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        237,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        63620
+      ],
+      "state_safety": [
+        null,
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        237,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": true,
+          "reason": "all_responses_dead",
+          "rounds": [
+            [
+              {
+                "incoming": 237,
+                "optimistic_send": 18.0,
+                "maximum_send": 18.0,
+                "cancelled": 18,
+                "dropped": 30,
+                "remaining": 189,
+                "responses": 9
+              }
+            ],
+            [
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 16
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 16
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              },
+              {
+                "incoming": 189,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 159,
+                "responses": 18
+              }
+            ]
+          ],
+          "nodes": 349
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 656.0666666666667,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 11,
+          "candidates": 1.0,
+          "mean_score": 63620.0,
+          "mean_send": 908.0000000000001,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "q_7gc4TgFig",
+    "exchange_id": 32,
+    "game_idx": 11,
+    "side": "1P",
+    "first_sec": 741.5333333333333,
+    "last_sec": 742.6333333333333,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 741.5333333333333,
+      "p1": 0.02,
+      "base_p1": 0.4496468568749727,
+      "gfe_p1": 0.015233693086298102,
+      "incoming": [
+        210.0,
+        0
+      ],
+      "hands": [
+        3,
+        1
+      ],
+      "required_cancel": [
+        192,
+        0
+      ],
+      "near_future_send": [
+        72.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        1,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        72.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        210,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        22070
+      ],
+      "state_safety": [
+        "board_unsettled",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        210,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 741.5333333333333,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 5,
+          "candidates": 1.0,
+          "mean_score": 22070.0,
+          "mean_send": 315.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 4,
+    "game_idx": 1,
+    "side": "1P",
+    "first_sec": 218.23333333333332,
+    "last_sec": 219.03333333333333,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 218.23333333333332,
+      "p1": 0.02,
+      "base_p1": 0.2680364198405095,
+      "gfe_p1": 0.02186543567237417,
+      "incoming": [
+        350.0,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        352,
+        0
+      ],
+      "near_future_send": [
+        248.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        3,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        248.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        362,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        25820
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        362,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 218.23333333333332,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 6,
+          "candidates": 1.0,
+          "mean_score": 25820.0,
+          "mean_send": 368.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    }
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 5,
+    "game_idx": 1,
+    "side": "1P",
+    "first_sec": 238.4,
+    "last_sec": 238.86666666666667,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 238.4,
+      "p1": 0.02,
+      "base_p1": 0.09402376953499911,
+      "gfe_p1": 0.015630398222773477,
+      "incoming": [
+        142,
+        0
+      ],
+      "hands": [
+        13,
+        1
+      ],
+      "required_cancel": [
+        192,
+        0
+      ],
+      "near_future_send": [
+        1.0,
+        null
+      ],
+      "resolving_send": [
+        1,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        5,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        1.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "death_incoming": [
+        192,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        null
+      ],
+      "pending_ledger": [
+        192,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 238.4
+    }
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 7,
+    "game_idx": 2,
+    "side": "1P",
+    "first_sec": 309.0,
+    "last_sec": 311.03333333333336,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 309.0,
+      "p1": 0.02,
+      "base_p1": 0.09960319636206724,
+      "gfe_p1": 0.006675599791832787,
+      "incoming": [
+        39.0,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        52,
+        0
+      ],
+      "near_future_send": [
+        5.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        5.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "hidden_row_weighted": true,
+      "death_incoming": [
+        68,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        2760
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        68,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 309.0,
+      "prefire_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 6,
+          "candidates": 1.0,
+          "mean_score": 2760.0,
+          "mean_send": 39.0,
+          "method": "prefire_snapshot",
+          "label": "発火前盤面から予測"
+        }
+      ]
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 12,
+    "game_idx": 5,
+    "side": "2P",
+    "first_sec": 473.73333333333335,
+    "last_sec": 475.5,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 473.73333333333335,
+      "p1": 0.98,
+      "base_p1": 0.6538377978226722,
+      "gfe_p1": 0.8366515867286929,
+      "incoming": [
+        0,
+        214
+      ],
+      "hands": [
+        1,
+        3
+      ],
+      "required_cancel": [
+        0,
+        197
+      ],
+      "near_future_send": [
+        null,
+        1.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        2
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        1.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        214
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        214
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 473.73333333333335
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 14,
+    "game_idx": 5,
+    "side": "2P",
+    "first_sec": 530.5,
+    "last_sec": 537.8,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 530.5,
+      "p1": 0.98,
+      "base_p1": 0.630038402342925,
+      "gfe_p1": 0.9377986254293922,
+      "incoming": [
+        0,
+        38
+      ],
+      "hands": [
+        1,
+        9
+      ],
+      "required_cancel": [
+        0,
+        22
+      ],
+      "near_future_send": [
+        null,
+        14.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        2
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        14.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        38
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "board_unsettled"
+      ],
+      "pending_ledger": [
+        0,
+        38
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 530.5
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 17,
+    "game_idx": 6,
+    "side": "1P",
+    "first_sec": 603.3,
+    "last_sec": 603.5666666666667,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 603.3,
+      "p1": 0.02,
+      "base_p1": 0.25228486825550744,
+      "gfe_p1": 0.019968948389547256,
+      "incoming": [
+        112,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        156,
+        0
+      ],
+      "near_future_send": [
+        40.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        40.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        172,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        172,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 603.3
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 20,
+    "game_idx": 8,
+    "side": "1P",
+    "first_sec": 720.1,
+    "last_sec": 720.1,
+    "winner": "1P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 720.1,
+      "p1": 0.02,
+      "base_p1": 0.17679244045697712,
+      "gfe_p1": 0.046971661669201074,
+      "incoming": [
+        27,
+        0
+      ],
+      "hands": [
+        4,
+        1
+      ],
+      "required_cancel": [
+        20,
+        0
+      ],
+      "near_future_send": [
+        14.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        2,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        14.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        true
+      ],
+      "completion_sides": [
+        "2P"
+      ],
+      "death_incoming": [
+        36,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "board_unsettled",
+        null
+      ],
+      "pending_ledger": [
+        36,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [
+        {
+          "side": "2P",
+          "chain_id": 4,
+          "accepted_sec": 715.7333333333333,
+          "layer": "prediction"
+        }
+      ],
+      "held_from_sec": 720.1
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 22,
+    "game_idx": 9,
+    "side": "2P",
+    "first_sec": 763.6,
+    "last_sec": 766.6,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 763.6,
+      "p1": 0.98,
+      "base_p1": 0.7354798635192313,
+      "gfe_p1": 0.7465760117955598,
+      "incoming": [
+        0,
+        30
+      ],
+      "hands": [
+        1,
+        4
+      ],
+      "required_cancel": [
+        0,
+        13
+      ],
+      "near_future_send": [
+        null,
+        10.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        1
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        10.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        36
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        36
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 763.6
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 23,
+    "game_idx": 10,
+    "side": "1P",
+    "first_sec": 822.7,
+    "last_sec": 825.8666666666667,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 822.7,
+      "p1": 0.02,
+      "base_p1": 0.22949535020719591,
+      "gfe_p1": 0.04089560961862332,
+      "incoming": [
+        165,
+        0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        174,
+        0
+      ],
+      "near_future_send": [
+        20.0,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        3,
+        null
+      ],
+      "verified_attack": [
+        true,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        79.0,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        184,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "color_score_mismatch",
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        184,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "already_dead"
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 822.7
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 23,
+    "game_idx": 10,
+    "side": "2P",
+    "first_sec": 806.9,
+    "last_sec": 807.4333333333333,
+    "winner": "2P",
+    "false_positive": true,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 806.9,
+      "p1": 0.98,
+      "base_p1": 0.45792525232950465,
+      "gfe_p1": 0.6578279654510942,
+      "incoming": [
+        0,
+        50
+      ],
+      "hands": [
+        1,
+        2
+      ],
+      "required_cancel": [
+        0,
+        30
+      ],
+      "near_future_send": [
+        null,
+        0.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        1
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        28.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        50
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "board_unsettled"
+      ],
+      "pending_ledger": [
+        0,
+        50
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 806.9
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "fcXG83vInDY",
+    "exchange_id": 24,
+    "game_idx": 11,
+    "side": "2P",
+    "first_sec": 873.4,
+    "last_sec": 877.9666666666667,
+    "winner": "1P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 873.4,
+      "p1": 0.98,
+      "base_p1": 0.6157465492005972,
+      "gfe_p1": 0.9152662397983962,
+      "incoming": [
+        0,
+        322
+      ],
+      "hands": [
+        1,
+        4
+      ],
+      "required_cancel": [
+        0,
+        322
+      ],
+      "near_future_send": [
+        null,
+        274.0
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "2P"
+      ],
+      "overflow_rows": [
+        null,
+        3
+      ],
+      "verified_attack": [
+        false,
+        true
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        274.0
+      ],
+      "completion_certain": [
+        false,
+        true
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        0,
+        332
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        "completion_prefix_unverified",
+        "color_score_mismatch"
+      ],
+      "pending_ledger": [
+        0,
+        332
+      ],
+      "multi_landing": [
+        {
+          "dead": false,
+          "reason": "single_landing"
+        },
+        {
+          "dead": false,
+          "reason": "already_dead"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 873.4
+    },
+    "provenance": "panel_outcomes.json"
+  },
+  {
+    "source": "mia8KCjr52g",
+    "exchange_id": 8,
+    "game_idx": 2,
+    "side": "1P",
+    "first_sec": 236.5,
+    "last_sec": 237.16666666666666,
+    "winner": "2P",
+    "false_positive": false,
+    "first": {
+      "source": "unavoidable_death",
+      "t_sec": 236.5,
+      "p1": 0.02,
+      "base_p1": 0.36321751722320716,
+      "gfe_p1": 0.09498754043140516,
+      "incoming": [
+        884,
+        0
+      ],
+      "hands": [
+        1,
+        1
+      ],
+      "required_cancel": [
+        0,
+        0
+      ],
+      "near_future_send": [
+        null,
+        null
+      ],
+      "resolving_send": [
+        0,
+        0
+      ],
+      "dead_sides": [
+        "1P"
+      ],
+      "overflow_rows": [
+        null,
+        null
+      ],
+      "verified_attack": [
+        false,
+        false
+      ],
+      "rejected_boards": [],
+      "optimistic_send": [
+        null,
+        null
+      ],
+      "completion_certain": [
+        true,
+        false
+      ],
+      "completion_sides": [],
+      "death_incoming": [
+        880,
+        0
+      ],
+      "hidden_death_scores": [
+        null,
+        null
+      ],
+      "state_safety": [
+        null,
+        "completion_prefix_unverified"
+      ],
+      "pending_ledger": [
+        880,
+        0
+      ],
+      "multi_landing": [
+        {
+          "dead": true,
+          "reason": "all_responses_dead",
+          "rounds": [
+            [
+              {
+                "incoming": 880,
+                "optimistic_send": 473.0,
+                "maximum_send": 473.0,
+                "cancelled": 473,
+                "dropped": 30,
+                "remaining": 377,
+                "responses": 20
+              }
+            ],
+            [
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              },
+              {
+                "incoming": 377,
+                "optimistic_send": 0.0,
+                "maximum_send": 0.0,
+                "cancelled": 0,
+                "dropped": 30,
+                "remaining": 347,
+                "responses": 0
+              }
+            ]
+          ],
+          "nodes": 76
+        },
+        {
+          "dead": false,
+          "reason": "single_landing"
+        }
+      ],
+      "midchain_prediction": [],
+      "held_from_sec": 236.5
+    },
+    "provenance": "panel_outcomes.json"
+  }
+]
