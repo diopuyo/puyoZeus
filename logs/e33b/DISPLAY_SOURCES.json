@@ -1,0 +1,14 @@
+{
+  "off": {
+    "S3_landing": 11008,
+    "S3_provisional": 394
+  },
+  "e33": {
+    "S3_landing": 11006,
+    "S3_provisional": 396
+  },
+  "on": {
+    "S3_landing": 11006,
+    "S3_provisional": 396
+  }
+}

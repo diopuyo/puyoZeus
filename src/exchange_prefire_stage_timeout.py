@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from src.chain import ChainSimulator
 from src.exchange_hidden_row_belief import HiddenRowPrefire
 from src.score_ocr import FORMULA_STEP_CONFIRM_FRAMES
 
@@ -19,6 +20,10 @@ ABSOLUTE_END_REASONS = ('next', 'slide', 'ojama')
 class StageTimeoutPrefire(HiddenRowPrefire):
     """E32の得点照合後に、次段の不在という因果観測を追加する。"""
 
+    def __init__(self, simulator: ChainSimulator, timeout_only: bool = False) -> None:
+        super().__init__(simulator)
+        self.timeout_only = timeout_only
+
     def _filter(self, entry: dict, key: tuple, stamp: float) -> None:
         """同じ段の再通知では時計を延長しない。"""
         previous = entry['last']
@@ -34,7 +39,7 @@ class StageTimeoutPrefire(HiddenRowPrefire):
             entry = self.entries.get(chain.chain_id) if chain else None
             if entry is None or not entry['options'] or 'stage_sec' not in entry:
                 continue
-            absolute = (chain.end_signal_sec is not None and chain.end_signal_sec <= stamp
+            absolute = (not self.timeout_only and chain.end_signal_sec is not None and chain.end_signal_sec <= stamp
                         and chain.end_reason in ABSOLUTE_END_REASONS)
             visible = overlay._last_formula[idx] == stamp
             expired = stamp > entry['stage_sec'] + STAGE_TIMEOUT_SEC

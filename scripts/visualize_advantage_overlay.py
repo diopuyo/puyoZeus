@@ -6465,6 +6465,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_snapshot: bool = False,
              hidden_row_belief: bool = False,
              prefire_stage_timeout: bool = False,
+             prefire_stage_timeout_only: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7075,6 +7076,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             prefire_snapshot=prefire_snapshot,
             hidden_row_belief=hidden_row_belief,
             prefire_stage_timeout=prefire_stage_timeout,
+            prefire_stage_timeout_only=prefire_stage_timeout_only,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8369,6 +8371,8 @@ def main() -> None:
                     help="発火前観測と併用し、隠し段を履歴の確率分布から推定")
     ap.add_argument("--prefire-stage-timeout", action="store_true", default=False,
                     help="E33: 次段の式の不在・絶対終了信号で長い候補を除外（既定OFF）")
+    ap.add_argument("--prefire-stage-timeout-only", action="store_true", default=False,
+                    help="E33b: 終了信号を使わず段間隔タイムアウトだけで候補を除外（既定OFF）")
     ap.add_argument("--prefire-snapshot", action="store_true", default=False,
                     help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
@@ -9053,6 +9057,7 @@ def main() -> None:
               prefire_snapshot=a.prefire_snapshot,
               hidden_row_belief=a.hidden_row_belief,
               prefire_stage_timeout=a.prefire_stage_timeout,
+              prefire_stage_timeout_only=a.prefire_stage_timeout_only,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,
