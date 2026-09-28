@@ -61,7 +61,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            death_pending_ledger: bool = False, hidden_row_death: bool = False,
            midchain_single_observation: bool = False, prefire_candidates: bool = False,
            prefire_snapshot: bool = False, hidden_row_belief: bool = False,
-           prefire_stage_timeout: bool = False, prefire_stage_timeout_only: bool = False) -> dict:
+           prefire_stage_timeout: bool = False, prefire_stage_timeout_only: bool = False,
+           prefire_origin_guard: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -70,6 +71,10 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
     start = time.perf_counter()
     stream = read_records(record)
     header = next(stream)
+    match_gate = None
+    if prefire_origin_guard:
+        from src.exchange_prefire_origin import origin_match_gate
+        match_gate = origin_match_gate(header['video_id'], Path(__file__).resolve().parents[1])
     experimental = count_sync or death_guard or evaluation_layers or completion_check
     default_model = ("models/exchange_event_v4" if e16 or count_sync else
                      "models/exchange_event_v3" if experimental else header["model_dir"])
@@ -88,7 +93,8 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
         midchain_single_observation=midchain_single_observation, prefire_candidates=prefire_candidates,
         prefire_snapshot=prefire_snapshot, hidden_row_belief=hidden_row_belief,
-        prefire_stage_timeout=prefire_stage_timeout, prefire_stage_timeout_only=prefire_stage_timeout_only)
+        prefire_stage_timeout=prefire_stage_timeout, prefire_stage_timeout_only=prefire_stage_timeout_only,
+        prefire_origin_guard=prefire_origin_guard, prefire_match_gate=match_gate)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -110,6 +116,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
             raise ValueError("記録フレーム数が不一致")
     save_display_timeline(out / "display.npz", header["video_id"], rows)
     overlay.tracker.save(out / "events.jsonl")
+    if overlay._origin_guard is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'origin_guard_audit.json', overlay._origin_guard.summary())
     if overlay._midchain is not None:
         from scripts.run_e3_exchange_eval_20260926 import save_json
         save_json(out / 'midchain_audit.json', overlay._midchain.summary())
@@ -160,6 +169,7 @@ def main() -> None:
     parser.add_argument("--death-candidate-guard", action="store_true", default=False)
     parser.add_argument("--death-formula-guard", action="store_true", default=False)
     parser.add_argument("--multi-landing-death", action="store_true", default=False)
+    parser.add_argument("--prefire-origin-guard", action="store_true", default=False)
     parser.add_argument("--landing-state-safety", action="store_true", default=False)
     for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
                  "death-pending-ledger", "hidden-row-death", "midchain-single-observation", "prefire-candidates", "prefire-snapshot", "hidden-row-belief", "prefire-stage-timeout", "prefire-stage-timeout-only"):
@@ -191,7 +201,8 @@ def main() -> None:
                     prefire_candidates=options.prefire_candidates, prefire_snapshot=options.prefire_snapshot,
                     hidden_row_belief=options.hidden_row_belief,
                     prefire_stage_timeout=options.prefire_stage_timeout,
-                    prefire_stage_timeout_only=options.prefire_stage_timeout_only)
+                    prefire_stage_timeout_only=options.prefire_stage_timeout_only,
+                    prefire_origin_guard=options.prefire_origin_guard)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

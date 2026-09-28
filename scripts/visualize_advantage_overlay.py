@@ -6466,6 +6466,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              hidden_row_belief: bool = False,
              prefire_stage_timeout: bool = False,
              prefire_stage_timeout_only: bool = False,
+             prefire_origin_guard: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7030,6 +7031,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         指示。底抜け演出検出による根治までの簡易実装)。感度を事後測定
         できるよう CLI (`--death-next-stationary-sec`) から変更可能。
     """
+    if prefire_origin_guard and not (enable_exchange_event_update and prefire_snapshot):
+        raise ValueError('E34には--exchange-event-updateと--prefire-snapshotが必要')
     if (review_data_panel or review_data_csv is not None) and not enable_exchange_event_update:
         raise ValueError("レビュー用データ出力には--exchange-event-updateが必要")
     review_enabled = review_data_panel or review_data_csv is not None
@@ -7056,6 +7059,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         from src.exchange_event_m0 import FileM0Predictor
         if exchange_event_m0_predictor is None:
             exchange_event_m0_predictor = FileM0Predictor(exchange_event_model_dir / "M0")
+        prefire_match_gate = None
+        if prefire_origin_guard:
+            from src.exchange_prefire_origin import origin_match_gate
+            prefire_match_gate = origin_match_gate(video.stem, Path(__file__).resolve().parents[1])
         event_overlay = ExchangeEventOverlay(
             FileExchangeModels.load(exchange_event_model_dir, lightweight=True),
             (event_recorder.wrap_static(_exchange_static_input) if event_recorder
@@ -7077,6 +7084,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             hidden_row_belief=hidden_row_belief,
             prefire_stage_timeout=prefire_stage_timeout,
             prefire_stage_timeout_only=prefire_stage_timeout_only,
+            prefire_origin_guard=prefire_origin_guard, prefire_match_gate=prefire_match_gate,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -7177,6 +7185,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     _production_recognition_kwargs = (
         recognition_load_default_kwargs() if use_production_recognition else {}
     )
+    if prefire_origin_guard:
+        # 収集側W48/W48bの印だけを有効化し、盤面・STABLE判定は変更しない。
+        _production_recognition_kwargs.update(enable_landing_chain_record_hold=True,
+                                             enable_chain_active_record_hold=True)
     # tri-state 解決 (2026-08-15): 明示指定 (not None) は常にそれを使う。未指定
     # (None) かつ production_recognition が OFF のときはキー自体を渡さない
     # (test_no_production_recognition_skips_adopted_kwargs が要求する「RECOGNITION_
@@ -7625,6 +7637,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
                 observed = snapshot_reader.update(recog_frame, (r.p1, r.p2), t, game_idx)
                 r = replace(r, p1=replace(r.p1, prefire_snapshot=observed[0]),
                             p2=replace(r.p2, prefire_snapshot=observed[1]))
+            if prefire_origin_guard:
+                r = replace(r, p1=replace(r.p1, prefire_origin_hold=r.p1.landing_chain_started),
+                            p2=replace(r.p2, prefire_origin_hold=r.p2.landing_chain_started))
             event_inputs = (r, snap, tracker.get_attack_finalization_counters(t),
                             t, game_idx, formula_totals_from_pipeline(pipe),
                             displayed_scores_from_pipeline(pipe, recog_frame),
@@ -8316,6 +8331,10 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames (no-render)")
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
+        if event_overlay._origin_guard is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.origin_guard.json'),
+                      event_overlay._origin_guard.summary())
         if event_overlay._midchain is not None:
             from scripts.run_e3_exchange_eval_20260926 import save_json
             save_json(dump_exchange_event_path.with_suffix('.midchain.json'), event_overlay._midchain.summary())
@@ -8373,6 +8392,8 @@ def main() -> None:
                     help="E33: 次段の式の不在・絶対終了信号で長い候補を除外（既定OFF）")
     ap.add_argument("--prefire-stage-timeout-only", action="store_true", default=False,
                     help="E33b: 終了信号を使わず段間隔タイムアウトだけで候補を除外（既定OFF）")
+    ap.add_argument("--prefire-origin-guard", action="store_true", default=False,
+                    help="E34: 収集側の連鎖保持・試合範囲を予測起点保存へ適用（既定OFF）")
     ap.add_argument("--prefire-snapshot", action="store_true", default=False,
                     help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
@@ -9058,6 +9079,7 @@ def main() -> None:
               hidden_row_belief=a.hidden_row_belief,
               prefire_stage_timeout=a.prefire_stage_timeout,
               prefire_stage_timeout_only=a.prefire_stage_timeout_only,
+              prefire_origin_guard=a.prefire_origin_guard,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

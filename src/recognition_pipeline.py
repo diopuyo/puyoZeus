@@ -523,6 +523,8 @@ class SideResult:
     midchain_board: Board | None = None
     # E31: 発火前画像の多数決。現在層には書き戻さない。
     prefire_snapshot: dict | None = None
+    # E34: W48bを有効にした描画・補完だけが保存する。Noneは未取得。
+    prefire_origin_hold: bool | None = None
 
 
 @dataclass(frozen=True)

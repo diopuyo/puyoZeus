@@ -62,7 +62,8 @@ class ExchangeEventOverlay:
                  midchain_single_observation: bool = False,
                  prefire_candidates: bool = False, prefire_snapshot: bool = False,
                  hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
-                 prefire_stage_timeout_only: bool = False) -> None:
+                 prefire_stage_timeout_only: bool = False,
+                 prefire_origin_guard: bool = False, prefire_match_gate: Any = None) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -98,6 +99,12 @@ class ExchangeEventOverlay:
             midchain_completion, hidden_row_death, midchain_single_observation)
         self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief,
                                  prefire_stage_timeout, prefire_stage_timeout_only)
+        self._origin_guard = None
+        if prefire_origin_guard:
+            from src.exchange_prefire_origin import PrefireOriginGuard
+            if not prefire_snapshot or prefire_match_gate is None:
+                raise ValueError('E34には--prefire-snapshotと既存試合範囲が必要')
+            self._origin_guard = PrefireOriginGuard(prefire_match_gate)
 
     def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False,
                             hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
@@ -161,6 +168,8 @@ class ExchangeEventOverlay:
         sides = (result.p1, result.p2)
         if self._game != game_idx:
             self._reset(game_idx, t_sec)
+        if self._origin_guard is not None:
+            self._origin_guard.observe(sides, t_sec)
         self._observe_prefire(sides, t_sec, game_idx)
         self._observe_guards(result, t_sec, game_idx, displayed_scores, formula_visible)
         if self._e16 is not None and self._e16.before(self, result, t_sec):
@@ -239,6 +248,8 @@ class ExchangeEventOverlay:
 
     def _reset(self, game_idx: int, t_sec: float) -> None:
         """試合内の参照履歴と信号基準をまとめて初期化する。"""
+        if self._origin_guard is not None:
+            self._origin_guard.reset()
         if self._landing_projection.safety is not None:
             self._landing_projection.safety.reset()
         if self._midchain is not None:
@@ -421,19 +432,24 @@ class ExchangeEventOverlay:
 
     def _predict_completion(self, chain: Any, event: Any, idx: int) -> None:
         """既存起点予測を維持し、明示ONだけ欠落起点の候補と整合証拠を保持する。"""
-        self._predict_completion_base(chain, event, idx)
+        history = self._history[idx]
+        if self._origin_guard is not None:
+            event = self._origin_guard.select(chain, event, idx, self._game)
+            history = self._origin_guard.history[idx]
+        self._predict_completion_base(chain, event, idx, history)
         if self._landing_projection.safety is not None:
             self._landing_projection.safety.recovery.seed(
-                chain, event, self._history[idx], self._landing_projection.simulator,
+                chain, event, history, self._landing_projection.simulator,
                 allow_recovery=self._landing_projection.safety.recovery_enabled)
         if self._prefire is not None:
-            self._prefire.seed(chain, event, self._history[idx], self._game, self.tracker._score_elapsed)
+            self._prefire.seed(chain, event, history, self._game, self.tracker._score_elapsed)
 
-    def _predict_completion_base(self, chain: Any, event: Any, idx: int) -> None:
+    def _predict_completion_base(self, chain: Any, event: Any, idx: int,
+                                 history: list | None = None) -> None:
         """決着先読みと同じ完走シミュレーションを発火時に一度だけ行う。"""
         board = getattr(event, "before_board", None)
         if board is None:
-            saved = next((s for s in reversed(self._history[idx])
+            saved = next((s for s in reversed(self._history[idx] if history is None else history)
                           if s.t_sec < chain.trigger_sec), None)
             board = saved.board if saved is not None else None
         if board is None:

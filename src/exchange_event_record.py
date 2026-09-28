@@ -120,6 +120,8 @@ class ExchangeEventRecorder:
         sides = []
         for side in (result.p1, result.p2):
             saved = fields(side, SIDE_FIELDS)
+            if getattr(side, 'prefire_origin_hold', None) is not None:
+                saved.prefire_origin_hold = side.prefire_origin_hold
             if getattr(side, 'prefire_snapshot', None) is not None:
                 saved.prefire_snapshot = side.prefire_snapshot
             if getattr(side, 'midchain_board', None) is not None:
