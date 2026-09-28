@@ -212,6 +212,7 @@ class RecognitionBridge:
 
     def timed_notice(self, notice: RecognitionNotice) -> Iterator[RecognitionNotice]:
         """CPU時間と壁時計の差はGIL/OS待ちの上限であり、GILだけとは断定しない。"""
+        self.current_notice = notice
         started, cpu = time.perf_counter(), time.thread_time()
         self.state_started = started
         if self.meter is None:
@@ -245,6 +246,8 @@ class RecognitionBridge:
         if notice.frame >= write_frame:
             self.callback(notice, probability, advantage, overlay, result, game,
                           self.queue.qsize()+self.batch_remaining, time.perf_counter())
+        if hasattr(self, 'event_evaluator'):
+            self.event_evaluator.succeeded()
 
     def mc_in_display(self, overlay: Any, counter: Any, resolved: Any, active: bool) -> bool:
         """学習済み勝率で上書きされたMCを、表示への寄与と誤記しない。"""
@@ -317,6 +320,9 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     adapt_loop(loops[0])
     if bridge.split_evaluation:
         split_loop(loops[0])
+    from .live_eval_supervisor import guard_loop, evaluation_failure
+    if getattr(bridge, 'isolate_evaluation', False):
+        guard_loop(loops[0])
     from .live_retention import TIMELINE_ROWS, timeline_spool
     for node in function.body:
         if isinstance(node, ast.AnnAssign) and ast.unparse(node.target) in TIMELINE_ROWS:
@@ -331,7 +337,8 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                     and ast.unparse(node.func) == 'cv2.VideoCapture'):
                 node.func = ast.parse('_live_bridge.open_capture').body[0].value
-    namespace = dict(vars(module), _live_bridge=bridge, _timeline_spool=timeline_spool)
+    namespace = dict(vars(module), _live_bridge=bridge, _timeline_spool=timeline_spool,
+                     _evaluation_failure=evaluation_failure)
     exec(compile(ast.fix_missing_locations(tree), inspect.getfile(module), 'exec'), namespace)
     return namespace['generate']
 

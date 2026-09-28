@@ -14,6 +14,7 @@ class DeferredTracker(ExchangeEventTracker):
     def __init__(self, models: Any) -> None:
         super().__init__(models)
         self.pending: tuple | None = None
+        self._deferred_records: dict[int, tuple] = {}
 
     def _evaluate(self, event: Any, source: str, t_sec: float) -> bool:
         # 未計算値を既知の勝率と偽らない。公開直前にこの行だけ数値を埋める。
@@ -21,6 +22,7 @@ class DeferredTracker(ExchangeEventTracker):
         self.pending = (event, source, t_sec, value)
         if self.current is not None:
             self.current.values.append(value)
+            self._deferred_records[self.current.exchange_id] = self.pending
         return True
 
     def calculate(self) -> None:
@@ -36,7 +38,17 @@ class DeferredTracker(ExchangeEventTracker):
     def boundary(self, game_idx: int, t_sec: float) -> None:
         if game_idx != self._game_idx:
             self.pending = None
+            self._deferred_records.clear()
         super().boundary(game_idx, t_sec)
+
+    def _resume_existing(self, observations: tuple) -> bool:
+        """物理区間の再開時、閉じる前に未計算だったS3の入力も復元する。"""
+        resumed = super()._resume_existing(observations)
+        if resumed and self.current is not None:
+            pending = self._deferred_records.get(self.current.exchange_id)
+            if pending is not None and pending[-1].get('deferred'):
+                self.pending = pending
+        return resumed
 
     def _close(self, t_sec: float, reason: str) -> None:
         self.pending = None

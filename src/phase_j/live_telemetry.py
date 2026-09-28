@@ -24,7 +24,11 @@ class RuntimeTelemetry:
         return self
 
     def snapshot(self) -> dict:
+        evaluator = getattr(self.bridge, 'event_evaluator', None)
         return dict(at=time.perf_counter(), evaluation_pid=os.getpid(),
+            event_evaluation_pid=evaluator.process.pid if evaluator else None,
+            evaluation_restarts=evaluator.restarts if evaluator else 0,
+            evaluation_errors=evaluator.error_count if evaluator else 0,
             progress=getattr(self.bridge, 'progress', {}),
             queue_depth=self.bridge.queue.qsize()+self.bridge.batch_remaining,
             game_starts=list(getattr(self.bridge, 'game_starts', [])),

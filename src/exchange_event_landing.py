@@ -99,7 +99,7 @@ class ExchangeLandingProjection:
         dropped = (snapshot.total_dropped_to_p1, snapshot.total_dropped_to_p2)
         base = next((v for v in reversed(record.values)
                      if v["source"] in ("S3_provisional", "S3")), None)
-        if base is None:
+        if base is None or base.get("p1") is None:
             self._hold(tracker)
             return
         self._select_boards(overlay, t_sec)

@@ -49,6 +49,9 @@ def result_snapshot(initial: OverlaySnapshot, row: dict[str, Any], now: float,
         practical_queue_depth=int(row['queue_depth'] > 0),
         recognition_notification_queue_depth=row['queue_depth'], best_action_worker_health='disabled')
     payload['input'].update(event_seq=row['frame'])
+    if row.get('evaluation_error'):
+        evaluation_hold(payload, row, now, hold_started)
+        return OverlaySnapshot.from_mapping(payload)
     calibration = row.get('input_calibration')
     if (calibration and calibration['phase'] != 'ready') or row.get('input_verifying'):
         payload['timing']['calculation_age_ms'] = None
@@ -113,6 +116,17 @@ def input_hold(payload: dict[str, Any], row: dict[str, Any], now: float,
         primary_hold_reason='recognition_unreliable', all_hold_reasons=['recognition_unreliable'],
         hold_started_ms=int(row['t_sec']*MILLISECONDS),
         hold_elapsed_ms=int((now-(hold_started or now))*MILLISECONDS))
+
+
+def evaluation_hold(payload: dict, row: dict, now: float, started: float | None) -> None:
+    """失敗した計算は値として公開せず、次の成功まで理由付きHOLDにする。"""
+    payload['timing']['calculation_age_ms'] = None
+    payload['runtime'].update(status='degraded', practical_worker_health='degraded')
+    payload['display'].update(visibility='visible', status='hold', message='評価エラー',
+        update_reason='hold_started', primary_hold_reason='prediction_worker_fault',
+        all_hold_reasons=['prediction_worker_fault'],
+        hold_started_ms=int(row['t_sec']*MILLISECONDS),
+        hold_elapsed_ms=int((now-(started or now))*MILLISECONDS))
 
 
 class LiveStreamState(StreamState):
@@ -222,6 +236,19 @@ class LivePublisher:
                 self.latest['input_calibration'] = dict(self.input_calibration)
             self.ready.set()
 
+    def evaluation_hold(self, notice: Any, game: int) -> None:
+        """評価例外を配信し、待機中の旧評価もこのHOLDへ置き換える。"""
+        with self.lock:
+            self.latest = dict(frame=notice.frame, t_sec=notice.t_sec, game=game,
+                captured_at=notice.captured_at, recognized_at=notice.recognized_at,
+                evaluated_at=time.perf_counter(), queue_depth=0, raw_probability=None,
+                hold=True, evaluation_error=True)
+            self.server.invalidated_at = max(self.server.invalidated_at, notice.captured_at)
+            row = self.latest
+            self.ready.set()
+        # 通常の公開周期を待たずHOLDを確定し、SSE待機中の旧評価も失効させる。
+        self._publish(row, 0, time.perf_counter())
+
     def input_pending(self, now: float | dict[str, Any]) -> None:
         with self.lock:
             if isinstance(now, dict):
@@ -245,6 +272,9 @@ class LivePublisher:
         now = time.perf_counter()
         with self.lock:
             # 状態変更と送出を直列化し、旧rowを取得済みの配信threadも較正ゲートへ従わせる。
+            revision = max(revision, self.hub.latest.identity['reducer_revision']+1)
+            if self.latest and self.latest.get('evaluation_error'):
+                row = self.latest
             if self.input_calibration and self.input_calibration['phase'] != 'ready':
                 row = dict(row, input_calibration=dict(self.input_calibration))
             snapshot = result_snapshot(self.initial, row, now, revision, hold)

@@ -219,6 +219,9 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     sink = ResultSink(publisher)
     bridge = make_bridge(options, sink)
     bridge.split_evaluation = split
+    bridge.evaluation_directory = options.output
+    bridge.evaluation_hold = publisher.evaluation_hold
+    bridge.isolate_evaluation = split
     sink.bridge = bridge
     bridge.async_counter = getattr(options, 'async_counter', True)
     bridge.mc_rollouts = getattr(options, 'mc_rollouts', 30)
@@ -271,6 +274,8 @@ def install_retention(stack: ExitStack, storage: ExitStack, overlay: Any,
     directory = output/'spool'
     install_logs(storage, bridge, sink, directory)
     stack.enter_context(bounded_chain_caches())
+    if getattr(bridge, 'isolate_evaluation', False):
+        return
     stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
         bounded_overlay(overlay.ExchangeEventOverlay, directory, storage)))
 
@@ -278,6 +283,8 @@ def install_retention(stack: ExitStack, storage: ExitStack, overlay: Any,
 def close_live(bridge: RecognitionBridge, publisher: LivePublisher, probe: SSEProbe) -> None:
     """評価失敗時も認識・MC・配信を順に閉じ、購読スレッドを回収する。"""
     try:
+        if hasattr(bridge, 'event_evaluator'):
+            bridge.event_evaluator.close()
         bridge.close()
     finally:
         try:
@@ -317,7 +324,10 @@ def install_live_instrumentation(stack: ExitStack, overlay: Any, bridge: Recogni
         bridge.meter.wrap(review.build_review_row, 'review')))
     if bridge.split_evaluation:
         from src.phase_j.live_evaluation import SplitExchangeOverlay, sampled_ema
-        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay', SplitExchangeOverlay))
+        from src.phase_j.live_eval_supervisor import factory
+        evaluator = (factory(bridge, bridge.evaluation_directory)
+                     if getattr(bridge, 'isolate_evaluation', False) else SplitExchangeOverlay)
+        stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay', evaluator))
         stack.enter_context(patch.object(overlay, '_ExchangeDisplayEMA',
                                         sampled_ema(overlay._ExchangeDisplayEMA, bridge)))
     elif isinstance(bridge, ProcessRecognitionBridge):
