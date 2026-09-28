@@ -85,6 +85,7 @@ class ExchangeEventTracker:
     def __init__(self, models: ExchangeModels) -> None:
         self.models = models
         self.records: list[ExchangeRecord] = []
+        self._next_exchange_id = 1
         self.current: ExchangeRecord | None = None
         self.resolver = ChainIdResolver()
         self.firing: FiringInput | None = None
@@ -244,7 +245,8 @@ class ExchangeEventTracker:
             return False
         if not self._frame_pending and not self._evaluate(event, "S1", t_sec):
             return False
-        self.current = ExchangeRecord(len(self.records) + 1, self._game_idx, first)
+        self.current = ExchangeRecord(self._next_exchange_id, self._game_idx, first)
+        self._next_exchange_id += 1
         self.records.append(self.current)
         if self._frame_pending:
             self._pending_s1 = True

@@ -149,6 +149,10 @@ class AsyncCounter:
 def factory(bridge: Any) -> type:
     """生成されたtrackerをbridgeに登録し、通知ごとの世代監視と終了処理へつなぐ。"""
     from .live_side_counter import SideCounter
+    from .live_spool import bounded_enabled
+    if bounded_enabled() and not bridge.counters:
+        from .live_retention import CounterRegistry
+        bridge.counters = CounterRegistry()
     class LiveCounter(SideCounter):
         def __init__(self) -> None:
             # 試合リセットや補助trackerの生成でも探索processは一つに限定する。

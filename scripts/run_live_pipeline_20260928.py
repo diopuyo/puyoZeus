@@ -37,8 +37,10 @@ PROBE_JOIN_SEC = 2
 
 
 def save_json(path: Path, data: Any) -> None:
+    from src.phase_j.live_spool import json_default
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False,
+                               default=json_default), encoding='utf-8')
 
 
 def asset_hashes() -> dict[str, str]:
@@ -50,6 +52,8 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
         'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
+        'src/phase_j/live_cache.py', 'src/phase_j/live_memory.py',
+        'src/phase_j/live_retention.py', 'src/phase_j/live_spool.py', 'src/exchange_event_tracker.py',
         'src/phase_j/live_faults.py', 'src/phase_j/live_lifetime.py', 'src/phase_j/live_telemetry.py',
         'config/live_defaults.json',
         'src/phase_j/live_video_session.py', 'src/phase_j/overlay.html', 'config/live_evaluation.json'],
@@ -220,12 +224,21 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
         publisher.input_pending(time.perf_counter())
     runtime_path = options.output if getattr(options, 'runtime_audit', False) else None
     probe = SSEProbe(publisher.server.address(), runtime_path/'sse.jsonl' if runtime_path else None)
+    with ExitStack() as storage:
+        return execute_session(options, overlay, bridge, sink, publisher, probe, runtime_path,
+                               command, load_start, storage, torch)
+
+
+def execute_session(options: Any, overlay: Any, bridge: Any, sink: Any, publisher: Any,
+                    probe: Any, runtime_path: Path | None, command: list[str],
+                    load_start: Any, storage: ExitStack, torch: Any) -> dict:
     try:
         probe.start()
         with ExitStack() as stack:
             from src.phase_j.live_telemetry import RuntimeTelemetry
             stack.enter_context(RuntimeTelemetry(bridge, sink, runtime_path))
             install_live_instrumentation(stack, overlay, bridge)
+            install_retention(stack, storage, overlay, bridge, sink, options.output)
             stack.enter_context(patch.object(overlay, 'generate', build_live_generate(overlay, bridge)))
             stack.enter_context(patch.object(sys, 'argv', ['live-pipeline', *command]))
             overlay.main()
@@ -243,6 +256,20 @@ def run_live(options: argparse.Namespace) -> dict[str, Any]:
     save_json(options.output / 'evaluations.json', sink.rows)
     save_json(options.output / 'latest.json', publisher.hub.latest.to_mapping())
     return {key: report[key] for key in ('frames', 'dropped_frames', 'latency_ms')}
+
+
+def install_retention(stack: ExitStack, storage: ExitStack, overlay: Any,
+                      bridge: Any, sink: Any, output: Path) -> None:
+    from src.phase_j.live_spool import bounded_enabled
+    if not bounded_enabled():
+        return
+    from src.phase_j.live_cache import bounded_chain_caches
+    from src.phase_j.live_retention import install_logs, bounded_overlay
+    directory = output/'spool'
+    install_logs(storage, bridge, sink, directory)
+    stack.enter_context(bounded_chain_caches())
+    stack.enter_context(patch.object(overlay, 'ExchangeEventOverlay',
+        bounded_overlay(overlay.ExchangeEventOverlay, directory, storage)))
 
 
 def close_live(bridge: RecognitionBridge, publisher: LivePublisher, probe: SSEProbe) -> None:

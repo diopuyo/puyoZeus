@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from contextlib import ExitStack
 import multiprocessing as mp
 import json
 import os
@@ -63,7 +64,8 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                        video: str, bounds: tuple, realtime: bool, device: str | None,
                        latest_frame: Any = None, lifecycle: bool = False,
                        live_config: str | None = None, audit_path: str | None = None,
-                       fault_plan: dict | None = None, parent_pid: int | None = None) -> None:
+                       fault_plan: dict | None = None, parent_pid: int | None = None,
+                       retention_path: str | None = None) -> None:
     """GPU認識器はspawn先で生成し、親のCUDA状態を継承しない。"""
     from .live_lifetime import protect_parent
     protect_parent(parent_pid)
@@ -71,15 +73,37 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
     from scripts.run_e3_exchange_eval_20260926 import SEED
     import torch
     from .live_cpu import apply_runtime
-    from .live_audit import RecognitionAudit
     apply_runtime('recognition')
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
-    capture = None
-    fault = None
     try:
-        pipe = RecognitionPipeline.load_default(**config)
+        with ExitStack() as storage:
+            configure_recognition_retention(storage)
+            pipe = RecognitionPipeline.load_default(**config)
+            run_recognition_input(queue, cancel, pipe, video, bounds, realtime, device,
+                                  latest_frame, lifecycle, live_config, audit_path, fault_plan, retention_path)
+    except BaseException:
+        queue.put(('error', traceback.format_exc()))
+    finally:
+        queue.put(('done', None))
+
+
+def configure_recognition_retention(storage: ExitStack) -> None:
+    from .live_spool import bounded_enabled
+    if bounded_enabled():
+        from .live_cache import bounded_chain_caches
+        storage.enter_context(bounded_chain_caches())
+
+
+def run_recognition_input(queue: Any, cancel: Any, pipe: Any, video: str, bounds: tuple,
+                          realtime: bool, device: str | None, latest_frame: Any,
+                          lifecycle: bool, live_config: str | None,
+                          audit_path: str | None, fault_plan: dict | None,
+                          retention_path: str | None = None) -> None:
+    from .live_audit import RecognitionAudit
+    capture, fault = None, None
+    try:
         fps, start, end, stride = bounds
         if device:
             from .live_device_session import DeviceSession
@@ -96,21 +120,23 @@ def recognition_worker(queue: Any, cancel: Any, config: dict[str, Any],
                 from .live_video_session import video_session
                 from .live_config import input_identity
                 pipe, source = video_session(pipe, source, queue, input_identity(live_config, video), bool(fault))
-        send_notices(queue, cancel, pipe, source, latest_frame,
-                     RecognitionAudit(Path(audit_path) if audit_path else None))
-    except BaseException:
-        queue.put(('error', traceback.format_exc()))
+        with ExitStack() as storage:
+            diagnostics = recognition_logs(storage, source, retention_path, pipe)
+            audit = RecognitionAudit(Path(audit_path) if audit_path else None)
+            if hasattr(audit.rows, 'close'):
+                storage.callback(audit.rows.close)
+            send_notices(queue, cancel, pipe, source, latest_frame, audit, diagnostics)
     finally:
         if capture is not None:
             capture.release()
         if fault is not None:
             fault.close()
-        queue.put(('done', None))
 
 
 def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: Any = None,
-                 audit: Any = None) -> None:
-    from .live_cpu import runtime_snapshot
+                 audit: Any = None, diagnostics: Any = None) -> None:
+    from .live_memory import MemoryProbe
+    probe = MemoryProbe('recognition')
     codec = NoticeDeltaCodec()
     count, wire_bytes, gated = 0, 0, 0
     last_progress = float('-inf')
@@ -125,6 +151,12 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
             last_progress = frame.media_sec
         if audit is not None:
             audit.append(notice, frame, time.perf_counter()-started, time.process_time()-cpu, ready)
+        if diagnostics is not None:
+            from .live_retention import archive_recognition_alerts
+            archive_recognition_alerts(pipe, diagnostics)
+        if probe.path:
+            probe.sample(frame.media_sec, dict(pipe=getattr(pipe, 'pipe', pipe), audit=audit,
+                                              source=source, codec=codec))
         if not ready:
             gated += 1
             continue
@@ -137,12 +169,40 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
         if audit is not None:
             audit.queue_wait(time.perf_counter()-sent_at)
         count += 1
+    finish_recognition(queue, source, audit, count, wire_bytes, gated)
+
+
+def finish_recognition(queue: Any, source: Any, audit: Any, count: int,
+                       wire_bytes: int, gated: int) -> None:
+    from .live_cpu import runtime_snapshot
     runtime = runtime_snapshot('recognition')
     if audit is not None:
         audit.save(runtime, source)
     queue.put(('summary', dict(dropped=source.dropped, sent=count, wire_bytes=wire_bytes, runtime=runtime,
-                              dropped_times=getattr(source, 'dropped_times', []),
+                              dropped_times=list(getattr(source, 'dropped_times', [])),
                               gated=gated+getattr(source, 'gated_frames', 0))))
+
+
+def recognition_logs(storage: ExitStack, source: Any, path: str | None, pipe: Any = None) -> Any:
+    from .live_spool import bounded_enabled, DiskFIFO
+    if path is None or not bounded_enabled():
+        return None
+    from .live_retention import spool
+    raw = source
+    while hasattr(raw, 'source'):
+        raw = raw.source
+    if hasattr(raw, 'dropped_times'):
+        raw.dropped_times = spool(storage, Path(path), 'dropped_times')
+    target = getattr(pipe, 'pipe', pipe)
+    for side in ('1p', '2p'):
+        name = '_pending_tsumo_'+side
+        if hasattr(target, name):
+            fifo = DiskFIFO(Path(path)/(name+'.pickle'))
+            for value in getattr(target, name):
+                fifo.append(value)
+            setattr(target, name, fifo)
+            storage.callback(fifo.close)
+    return spool(storage, Path(path), 'recognition_alerts')
 
 
 class ProcessRecognitionBridge(RecognitionBridge):
@@ -184,7 +244,8 @@ class ProcessRecognitionBridge(RecognitionBridge):
             args=(self.queue, self.cancel, pipe, self.video, self.frame_bounds, self.realtime,
                   self.device, self.latest_frame, getattr(self, 'lifecycle', False),
                   getattr(self, 'live_config', None), getattr(self, 'audit_path', None),
-                  getattr(self, 'fault_plan', None), os.getpid()))
+                  getattr(self, 'fault_plan', None), os.getpid(),
+                  str(self.config_path.parent/'spool') if self.config_path else None))
         self.worker.start()
         from .live_cpu import apply_runtime
         self.cpu_runtime = apply_runtime('evaluation')

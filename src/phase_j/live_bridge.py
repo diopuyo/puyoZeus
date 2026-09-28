@@ -93,6 +93,18 @@ class RecognitionBridge:
         self.next_calculation = float('-inf')
         self.state_updates: list[dict[str, Any]] = []
         self.calculation_rows: list[dict[str, Any]] = []
+        from .live_memory import MemoryProbe
+        self.memory_probe = MemoryProbe('evaluation')
+
+    def memory_sample(self, local: dict[str, Any], t_sec: float) -> None:
+        from .live_memory import evaluation_roots
+        if hasattr(self, 'spool_directory') and local.get('game_idx') != getattr(self, '_retention_game', None):
+            self._retention_game = local.get('game_idx')
+            recorder = local.get('event_recorder')
+            if recorder is not None:
+                recorder.static_keys.clear()
+        if self.memory_probe.path:
+            self.memory_probe.sample(t_sec, evaluation_roots(local, self))
 
     def calculation_due(self, notice: RecognitionNotice) -> bool:
         """状態更新は全件計装し、FIFOの最新状態かつ公開周期に達した時だけ計算する。"""
@@ -125,7 +137,8 @@ class RecognitionBridge:
         return changed
 
     def counter_context(self, result: Any, game: int, t_sec: float | None = None,
-                        captured_at: float | None = None) -> None:
+                        captured_at: float | None = None,
+                        counter_trackers: tuple | None = None) -> None:
         """非STABLE通知を含めて確定盤面世代と試合境界を追跡する。"""
         context = (game, getattr(result, 'is_match_active', True), *(
             None if side.confirmed_board is None else side.confirmed_board.grid_bytes()
@@ -135,7 +148,11 @@ class RecognitionBridge:
             if context[1] and getattr(self, 'previous_game_context', None) != context[:2]:
                 self.game_starts.append(dict(game=game, t_sec=t_sec, captured_at=captured_at))
             self.previous_game_context = context[:2]
-        for counter in self.counters:
+        from .live_spool import bounded_enabled
+        counters = counter_trackers if counter_trackers is not None and bounded_enabled() else self.counters
+        for counter in counters:
+            if not hasattr(counter, 'invalidate'):
+                continue
             counter.invalidate(context)
 
     def _put(self, notice: RecognitionNotice) -> None:
@@ -267,7 +284,8 @@ def adapt_loop(loop: ast.For) -> None:
                                 'or _formal_boundary').body[0])
     boundary = next(i for i, node in enumerate(body)
                     if ast.unparse(node).startswith('snap = _drive_ojama'))
-    body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx, t, packet.captured_at)').body[0])
+    body.insert(boundary, ast.parse('_live_bridge.counter_context(r, game_idx, t, packet.captured_at, '
+                                    '(counter_tracker, resolved_tracker._counter_tracker))').body[0])
     callback = ast.parse('_live_bridge.observe(packet, disp_p1, disp_adv, event_overlay, '
                          'r, game_idx, write_frame, '
                          '(counter_tracker, resolved_tracker._counter_tracker))').body[0]
@@ -293,6 +311,10 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
     adapt_loop(loops[0])
     if bridge.split_evaluation:
         split_loop(loops[0])
+    from .live_retention import TIMELINE_ROWS, timeline_spool
+    for node in function.body:
+        if isinstance(node, ast.AnnAssign) and ast.unparse(node.target) in TIMELINE_ROWS:
+            node.value = ast.parse(f'_timeline_spool(_live_bridge, {ast.unparse(node.target)!r})').body[0].value
     if hasattr(bridge, 'pipeline_config'):
         for node in ast.walk(function):
             if isinstance(node, ast.If) and ast.unparse(node.test) == 'review_enabled':
@@ -303,7 +325,7 @@ def build_live_generate(module: Any, bridge: RecognitionBridge) -> Callable[...,
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                     and ast.unparse(node.func) == 'cv2.VideoCapture'):
                 node.func = ast.parse('_live_bridge.open_capture').body[0].value
-    namespace = dict(vars(module), _live_bridge=bridge)
+    namespace = dict(vars(module), _live_bridge=bridge, _timeline_spool=timeline_spool)
     exec(compile(ast.fix_missing_locations(tree), inspect.getfile(module), 'exec'), namespace)
     return namespace['generate']
 
@@ -320,6 +342,7 @@ def split_loop(loop: ast.For) -> None:
     update.body = [ast.parse(ast.unparse(fc)).body[0]]
     fc.value = ast.Name(id='fc', ctx=ast.Load())
     checkpoint = ast.parse(
+        '_live_bridge.memory_sample(locals(), t)\n'
         'if event_overlay is None:\n    raise ValueError("B7にはイベント評価が必要です")\n'
         'if not _live_bridge.calculation_due(packet):\n    continue\n'
         'event_overlay.calculate()').body

@@ -15,6 +15,9 @@ class RecognitionAudit:
     def __init__(self, path: Path | None) -> None:
         self.path = path
         self.rows: list[dict[str, Any]] = []
+        from .live_spool import DiskRows, bounded_enabled
+        if path is not None and bounded_enabled():
+            self.rows = DiskRows(path.parent/'spool'/'recognition.pickle')
 
     def append(self, notice: Any, frame: Any, wall: float, cpu: float, ready: bool) -> None:
         if self.path is None:
@@ -46,5 +49,7 @@ class RecognitionAudit:
         arrays = {key: np.array([r[key] for r in self.rows]) for key in self.rows[0]} if self.rows else {}
         np.savez_compressed(self.path, **arrays)
         metadata = dict(runtime=runtime, notifications=len(self.rows), dropped=source.dropped,
-                        dropped_times=getattr(source, 'dropped_times', []))
+                        dropped_times=list(getattr(source, 'dropped_times', [])))
         self.path.with_suffix('.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
+        if hasattr(self.rows, 'close'):
+            self.rows.close()
