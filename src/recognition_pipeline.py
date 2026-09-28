@@ -519,6 +519,8 @@ class SideResult:
     # フィルタ後の観測を基準にしたために直せなかったものだった。
     # 既定 None = 従来挙動と bit-identical (誰も読まなければ影響しない)。
     raw_cnn_board: Board | None = None
+    # E26: 明示ON時だけ、予測専用読取器で補完。現在層の盤面には使用しない。
+    midchain_board: Board | None = None
 
 
 @dataclass(frozen=True)

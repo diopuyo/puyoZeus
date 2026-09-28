@@ -56,7 +56,11 @@ class ColorScoreGuard:
 class LandingStateSafety:
     """状態は評価ラッパーに閉じ込め、基礎指標と本番設定を変更しない。"""
 
-    def __init__(self) -> None:
+    def __init__(self, ledger_enabled: bool = True, guard_enabled: bool = True,
+                 recovery_enabled: bool = True) -> None:
+        self.ledger_enabled = ledger_enabled
+        self.guard_enabled = guard_enabled
+        self.recovery_enabled = recovery_enabled
         self.reset()
 
     def reset(self) -> None:
@@ -96,8 +100,13 @@ class LandingStateSafety:
 
     def blocker(self, projection: Any, tracker: Any, idx: int, stamp: float) -> str | None:
         """この条件の呼出先は追加の複数着弾判定だけに限定する。"""
+        if not self.guard_enabled:
+            return None
         if projection._chaining(tracker, idx):
             chain = tracker.latest_chain(f'{idx+1}P')
+            midchain = getattr(projection, 'midchain', None)
+            if midchain is not None and midchain.verified(chain):
+                return None
             return None if self.recovery.consistent(chain) else 'completion_prefix_unverified'
         return self.guards[idx].blocker(stamp)
 

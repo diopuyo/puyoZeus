@@ -47,7 +47,8 @@ class CompletionRecovery:
         self.entries: dict[int, dict] = {}
         self.audit: list[dict] = []
 
-    def seed(self, chain: Any, event: Any, history: list, simulator: ChainSimulator) -> None:
+    def seed(self, chain: Any, event: Any, history: list, simulator: ChainSimulator,
+             allow_recovery: bool = True) -> None:
         """発火時の起点だけを使い、後の盤面や勝敗から候補を作らない。"""
         saved = next((s for s in reversed(history) if s.t_sec < chain.trigger_sec), None)
         board = getattr(event, 'before_board', None)
@@ -56,6 +57,8 @@ class CompletionRecovery:
             return
         original = candidate(board, simulator)
         recover = chain.predicted_final_board is None and chain.predicted_chain_count == 0
+        if recover and not allow_recovery:
+            return
         if recover and (saved is None or chain.trigger_sec-saved.t_sec > SEC_PER_HAND):
             return
         options = enumerate_completions(board, simulator) if recover else ([original] if original else [])

@@ -120,6 +120,8 @@ class ExchangeEventRecorder:
         sides = []
         for side in (result.p1, result.p2):
             saved = fields(side, SIDE_FIELDS)
+            if getattr(side, 'midchain_board', None) is not None:
+                saved.midchain_board = side.midchain_board
             saved.chain_event = (fields(side.chain_event, CHAIN_FIELDS)
                                  if side.chain_event is not None else None)
             if saved.chain_event is not None:

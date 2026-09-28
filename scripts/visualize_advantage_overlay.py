@@ -6457,6 +6457,8 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              death_formula_guard: bool = False,
              multi_landing_death: bool = False,
              landing_state_safety: bool = False,
+             pending_ledger: bool = False, color_score_safety: bool = False,
+             completion_recovery: bool = False, midchain_completion: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7059,12 +7061,18 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             death_formula_guard=death_formula_guard,
             multi_landing_death=multi_landing_death,
             landing_state_safety=landing_state_safety,
+            pending_ledger=pending_ledger, color_score_safety=color_score_safety,
+            completion_recovery=completion_recovery, midchain_completion=midchain_completion,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
             dump_exchange_event_path = out.with_suffix(".exchange_events.jsonl")
         print("[exchange-event] M0推論器接続済み。G_fe/S1/S3を使用します。")
+    midchain_reader = None
+    if event_overlay is not None and midchain_completion:
+        from src.midchain_board_reader import MidchainBoardReader
+        midchain_reader = MidchainBoardReader()
     if enable_platt_calibration and enable_phase_calibration:
         raise ValueError(
             "enable_platt_calibration と enable_phase_calibration は同時指定不可"
@@ -7589,6 +7597,11 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             from src.exchange_event_m0 import formula_totals_from_pipeline
             from src.exchange_event_overlay import displayed_scores_from_pipeline
             from src.exchange_event_overlay import formula_visible_from_pipeline
+            if midchain_reader is not None:
+                from dataclasses import replace
+                observed = midchain_reader.read(recog_frame, (r.p1, r.p2))
+                r = replace(r, p1=replace(r.p1, midchain_board=observed[0]),
+                            p2=replace(r.p2, midchain_board=observed[1]))
             event_inputs = (r, snap, tracker.get_attack_finalization_counters(t),
                             t, game_idx, formula_totals_from_pipeline(pipe),
                             displayed_scores_from_pipeline(pipe, recog_frame),
@@ -8280,6 +8293,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         print(f"[done] {written} frames (no-render)")
     if event_overlay is not None and dump_exchange_event_path is not None:
         event_overlay.tracker.save(dump_exchange_event_path)
+        if event_overlay._midchain is not None:
+            from scripts.run_e3_exchange_eval_20260926 import save_json
+            save_json(dump_exchange_event_path.with_suffix('.midchain.json'), event_overlay._midchain.summary())
         print(f"[exchange-event] {len(event_overlay.tracker.records)} records -> {dump_exchange_event_path}")
     if event_recorder is not None:
         event_recorder.close()
@@ -8321,6 +8337,9 @@ def main() -> None:
                     help="E23: 応手を挟む複数回の上限着弾で回避不能死を検査（既定OFF）")
     ap.add_argument("--landing-state-safety", action="store_true", default=False,
                     help="E25: 交換独立予告台帳・整合した完走復元・複数着弾限定の盤面検証（既定OFF）")
+    for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion"):
+        ap.add_argument("--" + flag, action="store_true", default=False,
+                        help="E26: 独立した予測層実験（既定OFF）")
     ap.add_argument("--landing-counter-response", action="store_true", default=False,
                     help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
     ap.add_argument("--confirmed-death-hold", action="store_true", default=False,
@@ -8991,6 +9010,8 @@ def main() -> None:
               death_formula_guard=a.death_formula_guard,
               multi_landing_death=a.multi_landing_death,
               landing_state_safety=a.landing_state_safety,
+              pending_ledger=a.pending_ledger, color_score_safety=a.color_score_safety,
+              completion_recovery=a.completion_recovery, midchain_completion=a.midchain_completion,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

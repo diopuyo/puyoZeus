@@ -1,0 +1,17 @@
+{
+  "off_review": {
+    "display": "byte_identical",
+    "events": "byte_identical",
+    "diagnostics": "identical"
+  },
+  "off_q": {
+    "display": "byte_identical",
+    "events": "byte_identical",
+    "diagnostics": "identical"
+  },
+  "legacy_e25": {
+    "display": "byte_identical",
+    "events": "byte_identical",
+    "diagnostics": "identical"
+  }
+}

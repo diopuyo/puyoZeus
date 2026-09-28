@@ -1,0 +1,11 @@
+{
+  "source": "logs/e16/records/zenchi.jsonl.gz",
+  "source_sha256": "f3cb9e45ec77ee2a400aaf19542f22b693e68a59b298dece15bed97822c0d9f7",
+  "video": "/mnt/c/Users/ryouj/.gemini/antigravity/scratch/puyo_analyzer/data/frames/video_zenchi_c0BQoMJwwQU.mp4",
+  "fps": 60.0,
+  "model": "models/cnn_phase_b_large_v2.pt",
+  "model_sha256": "e68f9409c521f1e464e0e9bed0c2054a0501ec7c5e3121a36bc8fc25c0a0a403",
+  "frames": 26298,
+  "recognized": 1488,
+  "sha256": "e5a2dd50cf727dfda38b64f698cecc03c33a83cdac49bc1d8577767fc44b684b"
+}

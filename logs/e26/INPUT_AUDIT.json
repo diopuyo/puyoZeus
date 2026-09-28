@@ -1,0 +1,295 @@
+{
+  "q_7gc4TgFig": {
+    "counts": {
+      "MENU": 4336,
+      "cnn_board": 0,
+      "STABLE": 30014,
+      "OJAMA_FALL": 3657,
+      "TSUMO_FALL": 3919,
+      "CHAIN": 10750,
+      "GRAVITY_SETTLE": 1285,
+      "EFFECT": 39
+    },
+    "transitions": {
+      "None->MENU": 2,
+      "MENU->STABLE": 101,
+      "STABLE->OJAMA_FALL": 349,
+      "OJAMA_FALL->STABLE": 398,
+      "STABLE->MENU": 83,
+      "STABLE->TSUMO_FALL": 1696,
+      "TSUMO_FALL->STABLE": 1623,
+      "STABLE->CHAIN": 74,
+      "CHAIN->GRAVITY_SETTLE": 242,
+      "GRAVITY_SETTLE->STABLE": 80,
+      "OJAMA_FALL->MENU": 4,
+      "MENU->CHAIN": 1,
+      "GRAVITY_SETTLE->CHAIN": 135,
+      "TSUMO_FALL->OJAMA_FALL": 64,
+      "OJAMA_FALL->CHAIN": 25,
+      "GRAVITY_SETTLE->OJAMA_FALL": 16,
+      "GRAVITY_SETTLE->MENU": 10,
+      "TSUMO_FALL->CHAIN": 9,
+      "OJAMA_FALL->EFFECT": 2,
+      "CHAIN->MENU": 2,
+      "EFFECT->MENU": 2,
+      "GRAVITY_SETTLE->TSUMO_FALL": 1,
+      "TSUMO_FALL->MENU": 1
+    },
+    "scene": []
+  },
+  "fcXG83vInDY": {
+    "counts": {
+      "MENU": 4964,
+      "cnn_board": 0,
+      "STABLE": 29130,
+      "OJAMA_FALL": 3931,
+      "TSUMO_FALL": 3374,
+      "CHAIN": 11462,
+      "GRAVITY_SETTLE": 1119,
+      "EFFECT": 20
+    },
+    "transitions": {
+      "None->MENU": 2,
+      "MENU->STABLE": 160,
+      "STABLE->OJAMA_FALL": 490,
+      "OJAMA_FALL->STABLE": 511,
+      "STABLE->MENU": 145,
+      "STABLE->TSUMO_FALL": 1571,
+      "TSUMO_FALL->STABLE": 1528,
+      "TSUMO_FALL->OJAMA_FALL": 42,
+      "STABLE->CHAIN": 64,
+      "CHAIN->GRAVITY_SETTLE": 213,
+      "GRAVITY_SETTLE->STABLE": 74,
+      "OJAMA_FALL->MENU": 8,
+      "TSUMO_FALL->CHAIN": 6,
+      "GRAVITY_SETTLE->CHAIN": 122,
+      "OJAMA_FALL->CHAIN": 23,
+      "GRAVITY_SETTLE->MENU": 3,
+      "GRAVITY_SETTLE->OJAMA_FALL": 9,
+      "GRAVITY_SETTLE->TSUMO_FALL": 5,
+      "STABLE->EFFECT": 1,
+      "CHAIN->MENU": 1,
+      "EFFECT->MENU": 1,
+      "CHAIN->OJAMA_FALL": 1
+    },
+    "scene": []
+  },
+  "mia8KCjr52g": {
+    "counts": {
+      "MENU": 2889,
+      "cnn_board": 0,
+      "STABLE": 31246,
+      "OJAMA_FALL": 5544,
+      "CHAIN": 9705,
+      "GRAVITY_SETTLE": 1203,
+      "TSUMO_FALL": 3378,
+      "EFFECT": 35
+    },
+    "transitions": {
+      "None->MENU": 2,
+      "MENU->STABLE": 147,
+      "STABLE->OJAMA_FALL": 583,
+      "OJAMA_FALL->STABLE": 624,
+      "STABLE->MENU": 133,
+      "STABLE->CHAIN": 79,
+      "CHAIN->GRAVITY_SETTLE": 215,
+      "GRAVITY_SETTLE->STABLE": 70,
+      "OJAMA_FALL->MENU": 5,
+      "STABLE->TSUMO_FALL": 1220,
+      "TSUMO_FALL->STABLE": 1176,
+      "TSUMO_FALL->OJAMA_FALL": 42,
+      "GRAVITY_SETTLE->CHAIN": 129,
+      "STABLE->EFFECT": 1,
+      "CHAIN->MENU": 1,
+      "EFFECT->MENU": 1,
+      "TSUMO_FALL->CHAIN": 3,
+      "GRAVITY_SETTLE->OJAMA_FALL": 7,
+      "GRAVITY_SETTLE->MENU": 7,
+      "OJAMA_FALL->CHAIN": 7,
+      "MENU->OJAMA_FALL": 3,
+      "TSUMO_FALL->MENU": 1,
+      "GRAVITY_SETTLE->TSUMO_FALL": 2,
+      "CHAIN->OJAMA_FALL": 1
+    },
+    "scene": []
+  },
+  "zenchi": {
+    "counts": {
+      "MENU": 83,
+      "cnn_board": 0,
+      "STABLE": 29268,
+      "TSUMO_FALL": 7816,
+      "OJAMA_FALL": 2748,
+      "CHAIN": 11193,
+      "GRAVITY_SETTLE": 1488
+    },
+    "transitions": {
+      "None->MENU": 2,
+      "MENU->STABLE": 33,
+      "STABLE->TSUMO_FALL": 2410,
+      "TSUMO_FALL->STABLE": 2373,
+      "STABLE->OJAMA_FALL": 310,
+      "OJAMA_FALL->STABLE": 346,
+      "STABLE->CHAIN": 99,
+      "CHAIN->GRAVITY_SETTLE": 265,
+      "GRAVITY_SETTLE->CHAIN": 139,
+      "GRAVITY_SETTLE->STABLE": 89,
+      "STABLE->MENU": 20,
+      "TSUMO_FALL->OJAMA_FALL": 44,
+      "OJAMA_FALL->CHAIN": 23,
+      "GRAVITY_SETTLE->OJAMA_FALL": 14,
+      "GRAVITY_SETTLE->MENU": 11,
+      "GRAVITY_SETTLE->TSUMO_FALL": 12,
+      "TSUMO_FALL->CHAIN": 5,
+      "CHAIN->OJAMA_FALL": 1
+    },
+    "scene": []
+  },
+  "review": {
+    "counts": {
+      "MENU": 21,
+      "cnn_board": 0,
+      "STABLE": 7380,
+      "TSUMO_FALL": 1810,
+      "OJAMA_FALL": 775,
+      "CHAIN": 3250,
+      "GRAVITY_SETTLE": 460
+    },
+    "transitions": {
+      "None->MENU": 2,
+      "MENU->STABLE": 7,
+      "STABLE->TSUMO_FALL": 595,
+      "TSUMO_FALL->STABLE": 589,
+      "STABLE->OJAMA_FALL": 97,
+      "OJAMA_FALL->STABLE": 101,
+      "STABLE->CHAIN": 30,
+      "CHAIN->GRAVITY_SETTLE": 81,
+      "GRAVITY_SETTLE->CHAIN": 38,
+      "GRAVITY_SETTLE->STABLE": 29,
+      "STABLE->MENU": 3,
+      "TSUMO_FALL->OJAMA_FALL": 9,
+      "OJAMA_FALL->CHAIN": 11,
+      "GRAVITY_SETTLE->OJAMA_FALL": 6,
+      "GRAVITY_SETTLE->MENU": 2,
+      "GRAVITY_SETTLE->TSUMO_FALL": 5,
+      "TSUMO_FALL->CHAIN": 2
+    },
+    "scene": [
+      {
+        "t_sec": 2751.383333333333,
+        "previous": "STABLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2752.65,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2752.6833333333334,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2753.983333333333,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2754.116666666667,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2755.4166666666665,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2755.45,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2756.7166666666667,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2756.75,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2758.05,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2758.0833333333335,
+        "previous": "GRAVITY_SETTLE",
+        "state": "STABLE"
+      },
+      {
+        "t_sec": 2758.15,
+        "previous": "STABLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2759.4166666666665,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2759.516666666667,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2760.7833333333333,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2760.883333333333,
+        "previous": "GRAVITY_SETTLE",
+        "state": "CHAIN"
+      },
+      {
+        "t_sec": 2770.15,
+        "previous": "CHAIN",
+        "state": "GRAVITY_SETTLE"
+      },
+      {
+        "t_sec": 2770.1833333333334,
+        "previous": "GRAVITY_SETTLE",
+        "state": "STABLE"
+      },
+      {
+        "t_sec": 2770.25,
+        "previous": "STABLE",
+        "state": "OJAMA_FALL"
+      },
+      {
+        "t_sec": 2770.35,
+        "previous": "OJAMA_FALL",
+        "state": "STABLE"
+      },
+      {
+        "t_sec": 2771.0833333333335,
+        "previous": "STABLE",
+        "state": "TSUMO_FALL"
+      },
+      {
+        "t_sec": 2771.15,
+        "previous": "TSUMO_FALL",
+        "state": "STABLE"
+      },
+      {
+        "t_sec": 2771.6833333333334,
+        "previous": "STABLE",
+        "state": "OJAMA_FALL"
+      }
+    ]
+  }
+}

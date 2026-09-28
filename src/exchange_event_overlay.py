@@ -44,7 +44,7 @@ SignalFactory = Callable[[int, Any, Any, float], EndSignals]
 
 
 class ExchangeEventOverlay:
-    """確定盤面以外を特徴化せず、毎認識フレームの通知を束ねる。"""
+    """現在層は確定盤面だけを使い、途中盤面は明示ONの予測層へ限定する。"""
 
     def __init__(self, models: ExchangeModels, build_static: StaticBuilder,
                  signal_factory: SignalFactory, m0_predictor: M0Predictor | None = None,
@@ -55,7 +55,9 @@ class ExchangeEventOverlay:
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
                  counter_probability_model: Any = None, landing_hands_spec: bool = False,
                  death_candidate_guard: bool = False, death_formula_guard: bool = False,
-                 multi_landing_death: bool = False, landing_state_safety: bool = False) -> None:
+                 multi_landing_death: bool = False, landing_state_safety: bool = False,
+                 pending_ledger: bool = False, color_score_safety: bool = False,
+                 completion_recovery: bool = False, midchain_completion: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -88,11 +90,21 @@ class ExchangeEventOverlay:
         self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
             counter_probability_model=counter_probability_model if landing_counter_prob else None,
             hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death,
-            landing_state_safety=landing_state_safety)
+            landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
+            color_score_safety=color_score_safety, completion_recovery=completion_recovery)
+        self._initialize_prediction_guards(death_candidate_guard, death_formula_guard, midchain_completion)
+
+    def _initialize_prediction_guards(self, death_candidate_guard: bool,
+                                      death_formula_guard: bool, midchain_completion: bool) -> None:
+        """既定OFFの追加検証器をまとめて初期化する。"""
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
         from src.exchange_event_death_formula import DeathFormulaGuard
         self._formula_guard = DeathFormulaGuard() if death_formula_guard else None
+        from src.exchange_midchain_completion import MidchainCompletion
+        self._midchain = MidchainCompletion(self._landing_projection.simulator) if midchain_completion else None
+        if self._midchain is not None:
+            self._landing_projection.midchain = self._midchain
 
     def update(self, result: Any, snapshot: Any, finalization: Any,
                t_sec: float, game_idx: int,
@@ -119,12 +131,16 @@ class ExchangeEventOverlay:
                 self.tracker.activity(label, t_sec)
         self._observe_signals(result, snapshot, finalization, t_sec, formula_visible)
         self._observe_scores(sides, t_sec, formula_totals, displayed_scores)
+        if self._midchain is not None:
+            self._midchain.observe(self, result, t_sec)
         self._remember(sides, snapshot, t_sec)
         if self._e16 is not None:
             self._e16.observe(sides, t_sec)
         self._refresh_features(snapshot, t_sec)
         self.tracker.confirm_frame_inputs(t_sec)
         self.tracker.finish_frame(t_sec)
+        if self._midchain is not None:
+            self._mark_midchain_prediction(t_sec)
         self._landing_projection.update(self, result, snapshot, t_sec)
         stable = [s.state == BoardState.STABLE for s in sides]
         settled = any(stable) if self._per_side_settled else all(stable)
@@ -134,10 +150,26 @@ class ExchangeEventOverlay:
         if self._e16 is not None:
             self._e16.apply(self, result, snapshot, t_sec)
 
+    def _mark_midchain_prediction(self, stamp: float) -> None:
+        """途中完走盤面を使うS3出力だけに、予測層由来を記録する。"""
+        record = self.tracker.current
+        if record is None:
+            return
+        provenance = self._midchain.provenance(self._game, record.chains)
+        if not provenance:
+            return
+        for value in reversed(record.values):
+            if value['t_sec'] != stamp:
+                break
+            if value['source'].startswith('S3'):
+                value['midchain_prediction'] = provenance
+
     def _reset(self, game_idx: int, t_sec: float) -> None:
         """試合内の参照履歴と信号基準をまとめて初期化する。"""
         if self._landing_projection.safety is not None:
             self._landing_projection.safety.reset()
+        if self._midchain is not None:
+            self._midchain.reset()
         self.tracker.boundary(game_idx, t_sec)
         self._game, self._start = game_idx, None
         self._history, self._snapshots, self._signals = [[], []], [], {}
@@ -315,7 +347,8 @@ class ExchangeEventOverlay:
         self._predict_completion_base(chain, event, idx)
         if self._landing_projection.safety is not None:
             self._landing_projection.safety.recovery.seed(
-                chain, event, self._history[idx], self._landing_projection.simulator)
+                chain, event, self._history[idx], self._landing_projection.simulator,
+                allow_recovery=self._landing_projection.safety.recovery_enabled)
 
     def _predict_completion_base(self, chain: Any, event: Any, idx: int) -> None:
         """決着先読みと同じ完走シミュレーションを発火時に一度だけ行う。"""

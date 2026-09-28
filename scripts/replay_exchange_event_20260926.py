@@ -55,7 +55,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
            landing_counter_response: bool = False, confirmed_death_hold: bool = False,
            landing_counter_prob: bool = False, landing_hands_spec: bool = False,
            death_candidate_guard: bool = False, death_formula_guard: bool = False,
-           multi_landing_death: bool = False, landing_state_safety: bool = False) -> dict:
+           multi_landing_death: bool = False, landing_state_safety: bool = False,
+           pending_ledger: bool = False, color_score_safety: bool = False,
+           completion_recovery: bool = False, midchain_completion: bool = False) -> dict:
     """認識器も動画も開かず、tracker・終了判定・全評価器を新規生成する。"""
     from scripts.visualize_advantage_overlay import (
         _ExchangeEventEndSignals, _ExchangeDisplayEMA, _exchange_display, save_display_timeline,
@@ -76,7 +78,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
         confirmed_death_hold=confirmed_death_hold, landing_counter_prob=landing_counter_prob,
         landing_hands_spec=landing_hands_spec, death_candidate_guard=death_candidate_guard,
         death_formula_guard=death_formula_guard, multi_landing_death=multi_landing_death,
-        landing_state_safety=landing_state_safety)
+        landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
+        color_score_safety=color_score_safety, completion_recovery=completion_recovery,
+        midchain_completion=midchain_completion)
     rows, frames, inputs = [], 0, None
     smoothing = _ExchangeDisplayEMA()
     for item in stream:
@@ -98,6 +102,9 @@ def replay(record: Path, out: Path, model_dir: Path | None = None,
             raise ValueError("記録フレーム数が不一致")
     save_display_timeline(out / "display.npz", header["video_id"], rows)
     overlay.tracker.save(out / "events.jsonl")
+    if overlay._midchain is not None:
+        from scripts.run_e3_exchange_eval_20260926 import save_json
+        save_json(out / 'midchain_audit.json', overlay._midchain.summary())
     status = dict(state="completed", frames=frames, display_frames=len(rows),
                   elapsed_seconds=time.perf_counter() - start, record_bytes=record.stat().st_size,
                   live_count=live_count, model_dir=str(directory))
@@ -140,6 +147,8 @@ def main() -> None:
     parser.add_argument("--death-formula-guard", action="store_true", default=False)
     parser.add_argument("--multi-landing-death", action="store_true", default=False)
     parser.add_argument("--landing-state-safety", action="store_true", default=False)
+    for name in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion"):
+        parser.add_argument("--" + name, action="store_true", default=False)
     parser.add_argument("--confirmed-death-hold", action="store_true", default=False)
     parser.add_argument("--landing-counter-prob", action="store_true", default=False)
     for name in ("count-sync", "death-guard", "evaluation-layers", "completion-check"):
@@ -158,7 +167,10 @@ def main() -> None:
                     death_candidate_guard=options.death_candidate_guard,
                     death_formula_guard=options.death_formula_guard,
                     multi_landing_death=options.multi_landing_death,
-                    landing_state_safety=options.landing_state_safety)
+                    landing_state_safety=options.landing_state_safety,
+                    pending_ledger=options.pending_ledger, color_score_safety=options.color_score_safety,
+                    completion_recovery=options.completion_recovery,
+                    midchain_completion=options.midchain_completion)
     if options.compare:
         result["equivalence"] = compare(options.compare, options.out)
     print(json.dumps(result, ensure_ascii=False))

@@ -213,6 +213,10 @@ def build_review_row(overlay: Any, result: Any, snapshot: Any, frame_index: int,
                projection_sec=projection.get("t_sec"),
                death_evidence_sec=(landing.death or {}).get("t_sec"),
                prefire_sec=record.trigger_sec if record else None)
+    midchain = getattr(overlay, '_midchain', None)
+    if (midchain is not None and record is not None and midchain.provenance(game_idx, record.chains)
+            and tracker.source not in ('G_fe', 'confirmed_death', 'E16_current')):
+        row['source'] += '（途中完走予測込み）'
     for value in record.values if record else ():
         if value["source"] in PROBABILITY_SOURCES:
             row[f"p1_{value['source']}"] = value["p1"]

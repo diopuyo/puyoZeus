@@ -72,11 +72,15 @@ class ExchangeLandingProjection:
 
     def __init__(self, counter_response: bool = False, counter_probability_model: Any = None,
                  hands_spec: bool = False, multi_landing_death: bool = False,
-                 landing_state_safety: bool = False) -> None:
+                 landing_state_safety: bool = False, pending_ledger: bool = False,
+                 color_score_safety: bool = False, completion_recovery: bool = False) -> None:
         self.counter_response = counter_response
         self.multi_landing_death = multi_landing_death
         from src.exchange_landing_safety import LandingStateSafety
-        self.safety = LandingStateSafety() if landing_state_safety else None
+        self.safety = LandingStateSafety(landing_state_safety or pending_ledger,
+            landing_state_safety or color_score_safety,
+            landing_state_safety or completion_recovery) if any((landing_state_safety,
+                pending_ledger, color_score_safety, completion_recovery)) else None
         self.multi_landing_cache: dict[tuple, dict] = {}
         self.counter_probability_model = counter_probability_model
         from src.exchange_event_hands import LandingHandsObservation
@@ -161,13 +165,15 @@ class ExchangeLandingProjection:
         evidence = tuple(self._verified_attack(tracker, i) for i in range(2))
         completion = tuple(self._completion_board(tracker, i) is not None for i in range(2))
         key = (amount_key, hands, active, boards, evidence, completion)
-        if self.safety is not None:
+        if self.safety is not None and self.safety.guard_enabled:
             key += (self.safety.signature(self, tracker, t_sec),)
             reassess = reassess or self.key != key
         reassess = reassess or (self.key is not None
             and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
         if key != self.key:
             self.last = self._evaluate(overlay, snapshot, self.latest, incoming, hands, base, t_sec)
+            if getattr(overlay, '_midchain', None) is not None:
+                self.last['midchain_prediction'] = overlay._midchain.provenance(overlay._game, record.chains)
             if self.hands_observation is not None:
                 self.last["hands_spec"] = [self._spec_budget(tracker, 1-i, t_sec) for i in range(2)]
             self.key = key
@@ -250,7 +256,7 @@ class ExchangeLandingProjection:
 
     def _incoming(self, tracker: Any, dropped: tuple, record: Any = None) -> list[int]:
         """段ごとの累積得点を既存換算し、相殺と既着地分を控除する。"""
-        if self.safety is not None:
+        if self.safety is not None and self.safety.ledger_enabled:
             return self.safety.ledger.pending
         record = record or tracker.current
         totals = [sum(c.provisional_score
@@ -288,7 +294,7 @@ class ExchangeLandingProjection:
             and (chain.end_signal_sec is None or chain.end_confirmed is False))
 
     def _completion_board(self, tracker: Any, idx: int) -> Board | None:
-        """観測と矛盾しない発火時予測だけから完走後盤面を復元する。"""
+        """観測と矛盾しない予測だけから完走後盤面を復元する。"""
         chain = tracker.latest_chain(SIDE_LABELS[idx])
         if chain is None or chain.predicted_final_board is None:
             return None

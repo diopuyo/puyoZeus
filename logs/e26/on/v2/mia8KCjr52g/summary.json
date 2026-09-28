@@ -1,0 +1,159 @@
+{
+  "source": "mia8KCjr52g",
+  "M1": {
+    "exchanges": 53,
+    "s3_exchanges": 44,
+    "paired": 44,
+    "missing_s3": 9,
+    "missing_pair": 9,
+    "delta_median_sec": 2.8000000000000114,
+    "before_landing": 4,
+    "before_landing_fraction": 0.09090909090909091,
+    "early": 0,
+    "early_fraction": 0.0,
+    "pass_threshold": true,
+    "revoked": 0,
+    "revoked_fraction": 0.0,
+    "continued": 0,
+    "continued_fraction": 0.0
+  },
+  "M2": {
+    "exchanges": 53,
+    "common_excluded": {
+      "not_completed": 3,
+      "missing_end": 7
+    },
+    "off": {
+      "eligible": 31,
+      "unreached": 5,
+      "excluded": {
+        "small_change": 12
+      },
+      "median_seconds": 0.0999999999999659
+    },
+    "on": {
+      "eligible": 24,
+      "unreached": 1,
+      "excluded": {
+        "small_change": 19
+      },
+      "median_seconds": 0.36666666666667425
+    }
+  },
+  "M3": {
+    "off": {
+      "all_frames": 27000,
+      "unlabeled_frames": 25668,
+      "groups": {
+        "all": {
+          "frames": 1332,
+          "matches": 1,
+          "log_loss": 0.622132280449618,
+          "auc": null
+        },
+        "P_time_1": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.7121283478479158,
+          "auc": null
+        },
+        "P_time_2": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.8488646835486019,
+          "auc": null
+        },
+        "P_time_3": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.3054038099523361,
+          "auc": null
+        }
+      }
+    },
+    "on": {
+      "all_frames": 27000,
+      "unlabeled_frames": 25668,
+      "groups": {
+        "all": {
+          "frames": 1332,
+          "matches": 1,
+          "log_loss": 0.7327607042852174,
+          "auc": null
+        },
+        "P_time_1": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.65404004503849,
+          "auc": null
+        },
+        "P_time_2": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.9419675869947782,
+          "auc": null
+        },
+        "P_time_3": {
+          "frames": 444,
+          "matches": 1,
+          "log_loss": 0.6022744808223841,
+          "auc": null
+        }
+      }
+    }
+  },
+  "M4": {
+    "off": {
+      "frames": 27000,
+      "minutes": 15.0,
+      "flips": 96,
+      "flips_per_minute": 6.4
+    },
+    "on": {
+      "frames": 27000,
+      "minutes": 15.0,
+      "flips": 100,
+      "flips_per_minute": 6.666666666666667
+    }
+  },
+  "freshness": {
+    "off": {
+      "frames": 27000,
+      "adjacent_pairs": 26999,
+      "equal_pairs": 25935,
+      "equal_fraction": 0.9605911330049262,
+      "longest_equal_seconds": 123.43333333333334,
+      "updates": 1064,
+      "minutes": 15.0,
+      "updates_per_minute": 70.93333333333334,
+      "column": "adv_raw_last",
+      "missing_frames": 771
+    },
+    "on": {
+      "frames": 27000,
+      "adjacent_pairs": 26999,
+      "equal_pairs": 21558,
+      "equal_fraction": 0.7984740175562058,
+      "longest_equal_seconds": 89.76666666666667,
+      "updates": 5441,
+      "minutes": 15.0,
+      "updates_per_minute": 362.73333333333335,
+      "column": "display_p1",
+      "missing_frames": 0
+    }
+  },
+  "outcome_provenance": {
+    "kind": "recognition_reference",
+    "files": {
+      "/mnt/d/puyo_analyzer/verify/judgment_unseen_mia8KCjr52g_2026-09-25_v1/first_game_recovered_v1/RESULT.json": "cb66de94246ab7da04d137998208a0d01c9d595af2b592e818d2a1a23b5463df",
+      "/mnt/d/puyo_analyzer/verify/judgment_unseen_mia8KCjr52g_2026-09-25_v1/first_game_4020_5351_v2/PLAN.json": "f9b10269bbe1a2250076e99e3184b62c2e01a65ed652f378f2bfc87760448452"
+    },
+    "windows": [
+      {
+        "start": 4020,
+        "end": 5352,
+        "winner": "1P"
+      }
+    ]
+  }
+}
