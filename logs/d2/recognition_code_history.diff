@@ -1,0 +1,15 @@
+﻿diff --git a/src/recognition_pipeline.py b/src/recognition_pipeline.py
+index 433c21c..0feba6a 100644
+--- a/src/recognition_pipeline.py
++++ b/src/recognition_pipeline.py
+@@ -521,0 +522,6 @@ class SideResult:
++    # E26: 明示ON時だけ、予測専用読取器で補完。現在層の盤面には使用しない。
++    midchain_board: Board | None = None
++    # E31: 発火前画像の多数決。現在層には書き戻さない。
++    prefire_snapshot: dict | None = None
++    # E34: W48bを有効にした描画・補完だけが保存する。Noneは未取得。
++    prefire_origin_hold: bool | None = None
+@@ -539,0 +546,3 @@ class PipelineResult:
++    # E16専用の評価境界で追記する観測事実。既定は従来通り未供給。
++    confirmed_dead_sides: tuple[str, ...] = ()
++    terminal_evidence_available: bool = False

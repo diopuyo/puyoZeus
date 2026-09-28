@@ -1,0 +1,258 @@
+{
+  "q_reset": [
+    {
+      "t_sec": 1.7666666666666666,
+      "frame_idx": 53,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 1.9333333333333333,
+      "frame_idx": 58,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.1,
+      "frame_idx": 63,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.2666666666666666,
+      "frame_idx": 68,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.433333333333333,
+      "frame_idx": 73,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.6,
+      "frame_idx": 78,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.7666666666666666,
+      "frame_idx": 83,
+      "resets": [
+        {
+          "caller": "_apply_baseline_broken_counter",
+          "line": 6993,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": false
+          }
+        },
+        {
+          "caller": "_apply_baseline_broken_counter",
+          "line": 6993,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": false
+          }
+        }
+      ]
+    },
+    {
+      "t_sec": 2.9,
+      "frame_idx": 87,
+      "resets": [
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        },
+        {
+          "caller": "_step_side",
+          "line": 8305,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": true
+          }
+        }
+      ]
+    }
+  ],
+  "q_reset_old": [
+    {
+      "t_sec": 2.3666666666666667,
+      "frame_idx": 71,
+      "resets": [
+        {
+          "caller": "_apply_baseline_broken_counter",
+          "line": 6993,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": false
+          }
+        },
+        {
+          "caller": "_apply_baseline_broken_counter",
+          "line": 6993,
+          "file": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/src/recognition_pipeline.py",
+          "args": {
+            "tuple": []
+          },
+          "kwargs": {
+            "keep_match_state": false
+          }
+        }
+      ]
+    }
+  ]
+}
