@@ -71,9 +71,12 @@ class ExchangeLandingProjection:
     """元のS3を保存して合成の累積を防ぎ、実着地以降の二重投下を防ぐ。"""
 
     def __init__(self, counter_response: bool = False, counter_probability_model: Any = None,
-                 hands_spec: bool = False, multi_landing_death: bool = False) -> None:
+                 hands_spec: bool = False, multi_landing_death: bool = False,
+                 landing_state_safety: bool = False) -> None:
         self.counter_response = counter_response
         self.multi_landing_death = multi_landing_death
+        from src.exchange_landing_safety import LandingStateSafety
+        self.safety = LandingStateSafety() if landing_state_safety else None
         self.multi_landing_cache: dict[tuple, dict] = {}
         self.counter_probability_model = counter_probability_model
         from src.exchange_event_hands import LandingHandsObservation
@@ -98,6 +101,8 @@ class ExchangeLandingProjection:
         """両側の通知とSTABLE履歴の更新後、確定送り量が変われば再評価する。"""
         tracker = overlay.tracker
         self._observe_frame(overlay, result, snapshot)
+        if self.safety is not None:
+            self.safety.observe(overlay, result, snapshot, t_sec)
         if self.hands_observation is not None:
             self.hands_observation.observe_chains(tracker, self.counts, t_sec)
         if self._refresh_death(overlay, t_sec):
@@ -156,6 +161,9 @@ class ExchangeLandingProjection:
         evidence = tuple(self._verified_attack(tracker, i) for i in range(2))
         completion = tuple(self._completion_board(tracker, i) is not None for i in range(2))
         key = (amount_key, hands, active, boards, evidence, completion)
+        if self.safety is not None:
+            key += (self.safety.signature(self, tracker, t_sec),)
+            reassess = reassess or self.key != key
         reassess = reassess or (self.key is not None
             and (self.key[1] != hands or self.key[3] != boards or self.key[5] != completion))
         if key != self.key:
@@ -242,6 +250,8 @@ class ExchangeLandingProjection:
 
     def _incoming(self, tracker: Any, dropped: tuple, record: Any = None) -> list[int]:
         """段ごとの累積得点を既存換算し、相殺と既着地分を控除する。"""
+        if self.safety is not None:
+            return self.safety.ledger.pending
         record = record or tracker.current
         totals = [sum(c.provisional_score
                       for c in record.chains if c.side == label) for label in SIDE_LABELS]
@@ -319,6 +329,9 @@ class ExchangeLandingProjection:
                   hands: tuple, base: dict, t_sec: float) -> dict:
         """既定はE22そのまま。明示ONだけ複数着弾の保守的証明を追加する。"""
         value = self._evaluate_single(overlay, snapshot, latest, incoming, hands, base, t_sec)
+        if self.safety is not None:
+            value['state_safety'] = self.safety.signature(self, overlay.tracker, t_sec)
+            value['pending_ledger'] = self.safety.ledger.pending
         if self.multi_landing_death:
             from src.exchange_event_multilanding import evaluate_multilanding
             return evaluate_multilanding(self, overlay, latest, incoming, hands, t_sec, value)
@@ -453,6 +466,8 @@ class ExchangeLandingProjection:
 
     def _verified_attack(self, tracker: Any, attacker: int) -> bool:
         """帰属確認済みの実測得点だけで裏付けられる攻撃量に死の断定を限る。"""
+        if self.safety is not None:
+            return self.safety.ledger.verified(1-attacker)
         record = tracker.current or self.death_record
         chains = [c for c in record.chains if c.side == SIDE_LABELS[attacker]]
         return bool(chains) and all(

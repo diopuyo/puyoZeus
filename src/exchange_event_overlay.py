@@ -55,7 +55,7 @@ class ExchangeEventOverlay:
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
                  counter_probability_model: Any = None, landing_hands_spec: bool = False,
                  death_candidate_guard: bool = False, death_formula_guard: bool = False,
-                 multi_landing_death: bool = False) -> None:
+                 multi_landing_death: bool = False, landing_state_safety: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -87,7 +87,8 @@ class ExchangeEventOverlay:
             counter_probability_model = LogisticResponseProbability.load()
         self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
             counter_probability_model=counter_probability_model if landing_counter_prob else None,
-            hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death)
+            hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death,
+            landing_state_safety=landing_state_safety)
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
         from src.exchange_event_death_formula import DeathFormulaGuard
@@ -135,6 +136,8 @@ class ExchangeEventOverlay:
 
     def _reset(self, game_idx: int, t_sec: float) -> None:
         """試合内の参照履歴と信号基準をまとめて初期化する。"""
+        if self._landing_projection.safety is not None:
+            self._landing_projection.safety.reset()
         self.tracker.boundary(game_idx, t_sec)
         self._game, self._start = game_idx, None
         self._history, self._snapshots, self._signals = [[], []], [], {}
@@ -308,6 +311,13 @@ class ExchangeEventOverlay:
                 self._predict_completion(chain, (result.p1, result.p2)[idx].chain_event, idx)
 
     def _predict_completion(self, chain: Any, event: Any, idx: int) -> None:
+        """既存起点予測を維持し、明示ONだけ欠落起点の候補と整合証拠を保持する。"""
+        self._predict_completion_base(chain, event, idx)
+        if self._landing_projection.safety is not None:
+            self._landing_projection.safety.recovery.seed(
+                chain, event, self._history[idx], self._landing_projection.simulator)
+
+    def _predict_completion_base(self, chain: Any, event: Any, idx: int) -> None:
         """決着先読みと同じ完走シミュレーションを発火時に一度だけ行う。"""
         board = getattr(event, "before_board", None)
         if board is None:
@@ -326,7 +336,7 @@ class ExchangeEventOverlay:
         chain.predicted_chain_count = result.chain_count
         if result.chain_count > 0 and not np.any(board._grid == COLOR_UNKNOWN):
             chain.predicted_final_board = result.final_board._grid.tolist()
-        # 旧記録には起点盤面がない。発火通知に保存された既存シミュ結果も再用する。
+        # 起点盤面を持たない通知では、保存された既存シミュ結果も再用する。
         if (event is not None and getattr(event, "before_board", None) is None
                 and event.mechanism != CHAIN_MECHANISM_FORMULA_READ):
             chain.predicted_final_score = max(chain.predicted_final_score, event.total_score)

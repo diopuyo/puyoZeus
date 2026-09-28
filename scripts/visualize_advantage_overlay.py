@@ -6456,6 +6456,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              death_candidate_guard: bool = False,
              death_formula_guard: bool = False,
              multi_landing_death: bool = False,
+             landing_state_safety: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7057,6 +7058,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             death_candidate_guard=death_candidate_guard,
             death_formula_guard=death_formula_guard,
             multi_landing_death=multi_landing_death,
+            landing_state_safety=landing_state_safety,
             landing_counter_prob=landing_counter_prob)
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
@@ -8317,6 +8319,8 @@ def main() -> None:
                     help="窒息セル占有側のbaseline発火だけを式読取・得点増加で確認（既定OFF）")
     ap.add_argument("--multi-landing-death", action="store_true", default=False,
                     help="E23: 応手を挟む複数回の上限着弾で回避不能死を検査（既定OFF）")
+    ap.add_argument("--landing-state-safety", action="store_true", default=False,
+                    help="E25: 交換独立予告台帳・整合した完走復元・複数着弾限定の盤面検証（既定OFF）")
     ap.add_argument("--landing-counter-response", action="store_true", default=False,
                     help="E18: 受け量以上の応手がある場合に打ち返し後の仮想着弾を使う")
     ap.add_argument("--confirmed-death-hold", action="store_true", default=False,
@@ -8986,6 +8990,7 @@ def main() -> None:
               death_candidate_guard=a.death_candidate_guard,
               death_formula_guard=a.death_formula_guard,
               multi_landing_death=a.multi_landing_death,
+              landing_state_safety=a.landing_state_safety,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

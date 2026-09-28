@@ -160,6 +160,8 @@ def evaluate_multilanding(projection: Any, overlay: Any, latest: tuple, incoming
             ('unverified_attack', not projection._verified_attack(overlay.tracker, 1-i)),
             ('unknown_board', bool(np.any(boards[i]._grid == COLOR_UNKNOWN)))]
         reason = next((name for name, blocked in blockers if blocked), None)
+        if reason is None and getattr(projection, 'safety', None) is not None:
+            reason = projection.safety.blocker(projection, overlay.tracker, i, t_sec)
         result = dict(dead=False, reason=reason) if reason else cached_proof(
             projection, board, tuple(int(v) for v in latest[i].queue), incoming[i], hands[i],
             overlay.tracker._score_elapsed, credit[i])

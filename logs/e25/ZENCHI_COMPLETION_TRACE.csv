@@ -1,0 +1,14 @@
+game,t_sec,side,chain_id,count,observed,candidates,reason,recovered
+3,2751.383333333333,2P,9,1,100,2,ambiguous_completion,False
+3,2752.6833333333334,2P,9,2,420,1,awaiting_end_confirmation,False
+3,2754.116666666667,2P,9,3,1320,0,prefix_mismatch,False
+3,2755.45,2P,9,4,2600,0,prefix_mismatch,False
+3,2756.75,2P,9,5,5160,0,prefix_mismatch,False
+3,2758.15,2P,9,6,9000,0,prefix_mismatch,False
+3,2759.516666666667,2P,9,7,15500,0,prefix_mismatch,False
+3,2760.883333333333,2P,9,8,21900,0,prefix_mismatch,False
+3,2762.2833333333333,2P,9,9,29580,0,prefix_mismatch,False
+3,2763.616666666667,2P,9,10,40880,0,prefix_mismatch,False
+3,2764.95,2P,9,11,51120,0,prefix_mismatch,False
+3,2766.3166666666666,2P,9,12,62640,0,prefix_mismatch,False
+3,2767.6833333333334,2P,9,13,75440,0,prefix_mismatch,False

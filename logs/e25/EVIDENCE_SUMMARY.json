@@ -1,0 +1,52 @@
+{
+  "scene": {
+    "evaluations": 89,
+    "reasons": {
+      "uncertain_completion": 86,
+      "board_unsettled": 3
+    },
+    "recovered": 0
+  },
+  "previous_errors": [
+    {
+      "version": "e23",
+      "source": "q_7gc4TgFig",
+      "t_sec": 832.7333333333333,
+      "side": "2P",
+      "incoming": 66,
+      "dead": true,
+      "reason": "all_responses_dead",
+      "safety": null
+    },
+    {
+      "version": "e25",
+      "source": "q_7gc4TgFig",
+      "t_sec": 832.7333333333333,
+      "side": "2P",
+      "incoming": 66,
+      "dead": false,
+      "reason": "board_unsettled",
+      "safety": "board_unsettled"
+    },
+    {
+      "version": "e23",
+      "source": "fcXG83vInDY",
+      "t_sec": 490.8666666666667,
+      "side": "1P",
+      "incoming": 597,
+      "dead": true,
+      "reason": "all_responses_dead",
+      "safety": null
+    },
+    {
+      "version": "e25",
+      "source": "fcXG83vInDY",
+      "t_sec": 490.8666666666667,
+      "side": "1P",
+      "incoming": 182,
+      "dead": false,
+      "reason": "board_unsettled",
+      "safety": "board_unsettled"
+    }
+  ]
+}

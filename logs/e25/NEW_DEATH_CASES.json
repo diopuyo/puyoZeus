@@ -1,0 +1,90 @@
+{
+  "summary": {
+    "cases": 5,
+    "new": 4,
+    "earlier": 1,
+    "actually_survived": 1,
+    "unresolved": 0,
+    "new_errors": 0,
+    "new_unresolved": 0,
+    "earlier_errors": 1,
+    "earlier_unresolved": 0
+  },
+  "cases": [
+    {
+      "source": "q_7gc4TgFig",
+      "game_idx": 9,
+      "exchange_id": 29,
+      "side": "1P",
+      "change": "new",
+      "first_sec": 656.0666666666667,
+      "baseline_first_sec": null,
+      "winner": "2P",
+      "observed_death_sec": 663.1666666666666,
+      "observed_opponent_death_sec": null,
+      "actually_died": true,
+      "error": false,
+      "evidence": "terminal_signal"
+    },
+    {
+      "source": "q_7gc4TgFig",
+      "game_idx": 14,
+      "exchange_id": 40,
+      "side": "1P",
+      "change": "earlier",
+      "first_sec": 883.9666666666667,
+      "baseline_first_sec": 884.2666666666667,
+      "winner": "1P",
+      "observed_death_sec": null,
+      "observed_opponent_death_sec": 899.6333333333333,
+      "actually_died": false,
+      "error": true,
+      "evidence": "terminal_signal"
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game_idx": 3,
+      "exchange_id": 11,
+      "side": "2P",
+      "change": "new",
+      "first_sec": 366.0,
+      "baseline_first_sec": null,
+      "winner": "1P",
+      "observed_death_sec": 370.93333333333334,
+      "observed_opponent_death_sec": null,
+      "actually_died": true,
+      "error": false,
+      "evidence": "terminal_signal"
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game_idx": 4,
+      "exchange_id": 12,
+      "side": "2P",
+      "change": "new",
+      "first_sec": 435.6,
+      "baseline_first_sec": null,
+      "winner": "1P",
+      "observed_death_sec": 440.6,
+      "observed_opponent_death_sec": null,
+      "actually_died": true,
+      "error": false,
+      "evidence": "terminal_signal"
+    },
+    {
+      "source": "fcXG83vInDY",
+      "game_idx": 6,
+      "exchange_id": 18,
+      "side": "1P",
+      "change": "new",
+      "first_sec": 626.7333333333333,
+      "baseline_first_sec": null,
+      "winner": "2P",
+      "observed_death_sec": 631.0,
+      "observed_opponent_death_sec": null,
+      "actually_died": true,
+      "error": false,
+      "evidence": "terminal_signal"
+    }
+  ]
+}
