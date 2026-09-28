@@ -56,13 +56,18 @@ class VideoFileSource(FrameSource):
         self.dropped_times: list[float] = []
         self.normalization_skipped = 0
         self.fault, self.on_hold = fault, on_hold
+        from .live_degrade import EventPriority
+        self.event_priority = EventPriority()
 
     def latest_index(self, next_index: int, origin: float) -> int:
         """まだ到来していない画像へ進まない。終端の次のslotも許し全残りを捨てる。"""
         elapsed = max(0.0, self.clock() - origin)
         due = self.start + math.floor(elapsed * self.fps / self.stride) * self.stride
         limit = self.start + math.ceil((self.end - self.start) / self.stride) * self.stride
-        return max(next_index, min(due, limit))
+        target = max(next_index, min(due, limit))
+        if target >= limit:
+            return target
+        return self.event_priority.select(next_index, target, self.stride, self.fps)
 
     def __iter__(self) -> Iterator[CapturedFrame]:
         origin = self.clock()

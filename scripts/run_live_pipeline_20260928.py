@@ -52,6 +52,8 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
         'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
+        'src/phase_j/live_load.py', 'src/phase_j/live_degrade.py', 'src/phase_j/live_source.py',
+        'src/phase_j/live_capture_buffer.py',
         'src/phase_j/live_cache.py', 'src/phase_j/live_memory.py',
         'src/phase_j/live_retention.py', 'src/phase_j/live_spool.py', 'src/exchange_event_tracker.py',
         'src/phase_j/live_faults.py', 'src/phase_j/live_lifetime.py', 'src/phase_j/live_telemetry.py',
@@ -167,6 +169,7 @@ def metrics(bridge: RecognitionBridge, sink: ResultSink, options: argparse.Names
     depths = [r['queue_depth'] for r in (updates if bridge.split_evaluation else sink.rows)]
     return dict(realtime=options.realtime, frames=len(updates) if bridge.split_evaluation else len(sink.rows),
         calculated_frames=len(sink.rows), dropped_frames=bridge.source.dropped,
+        frame_bounds=dict(fps=fps, start=start, end=end, stride=stride),
         source=getattr(options, 'source', 'video'), mc_rollouts=getattr(options, 'mc_rollouts', 30),
         cnn_device=getattr(options, 'cnn_device', 'auto'),
         gated_frames=getattr(bridge, 'gated_frames', 0),
@@ -443,13 +446,23 @@ def configure_cpu(options: argparse.Namespace, parser: argparse.ArgumentParser) 
     from src.phase_j.live_cpu import configure_environment
     try:
         configure_environment(options.cpu_threads, options.evaluation_nice)
+        for field in ('cpu_isolation', 'adaptive_evaluation', 'event_priority'):
+            if type(getattr(options, field, False)) is not bool:
+                raise ValueError(field+'はboolが必要です')
+            os.environ['PUYO_'+field.upper()] = str(int(getattr(options, field, False)))
+        if hasattr(os, 'sched_getaffinity'):
+            os.environ['PUYO_LIVE_RESERVED_CPU'] = str(min(os.sched_getaffinity(0)))
     except ValueError as error:
         parser.error(str(error))
-    if options.worker_mode == 'thread' and (options.evaluation_nice or options.recognition_audit):
+    enabled = any(getattr(options, field, False) for field in
+                  ('cpu_isolation', 'adaptive_evaluation', 'event_priority'))
+    if options.worker_mode == 'thread' and (options.evaluation_nice or options.recognition_audit or enabled):
         parser.error('優先度変更と認識監査はprocessモード専用です')
 
 
 def add_fault_arguments(parser: argparse.ArgumentParser) -> None:
+    for flag in ('cpu-isolation', 'adaptive-evaluation', 'event-priority'):
+        parser.add_argument('--'+flag, action=argparse.BooleanOptionalAction, default=False)
     from src.phase_j.live_faults import KINDS
     parser.add_argument('--video-fault', choices=KINDS)
     parser.add_argument('--fault-at-sec', type=float, default=2620.)

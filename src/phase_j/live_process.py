@@ -145,6 +145,8 @@ def send_notices(queue: Any, cancel: Any, pipe: Any, source: Any, latest_frame: 
             break
         started, cpu = time.perf_counter(), time.process_time()
         notice = recognize(pipe, frame)
+        from .live_degrade import feedback_event
+        feedback_event(source, notice)
         ready = getattr(pipe, 'publishing_ready', True)
         if frame.media_sec-last_progress >= PROGRESS_PERIOD_SEC:
             queue.put(('progress', dict(t_sec=frame.media_sec, dropped=source.dropped)))

@@ -95,6 +95,9 @@ class RecognitionBridge:
         self.calculation_rows: list[dict[str, Any]] = []
         from .live_memory import MemoryProbe
         self.memory_probe = MemoryProbe('evaluation')
+        from .live_degrade import EvaluationPacer
+        self.pacer = EvaluationPacer(realtime)
+        self.calculation_period = BATCH_PERIOD_SEC
 
     def memory_sample(self, local: dict[str, Any], t_sec: float) -> None:
         from .live_memory import evaluation_roots
@@ -114,6 +117,8 @@ class RecognitionBridge:
         self.state_updates.append(dict(frame=notice.frame, t_sec=notice.t_sec,
             queue_depth=depth, milliseconds=(now-self.state_started)*MILLISECONDS))
         clock = now if self.realtime else notice.t_sec
+        if self.pacer.enabled:
+            self.calculation_period = self.pacer.period(now, now-notice.captured_at)
         latest = getattr(self, 'latest_frame', None)
         behind = self.realtime and (self.batch_remaining > 0 or
                                    (latest is not None and latest.value > notice.frame))
@@ -127,9 +132,10 @@ class RecognitionBridge:
         now = time.perf_counter()
         self.calculation_rows.append(dict(frame=notice.frame, t_sec=notice.t_sec,
             notifications=self.notification_count, started_at=self.calculation_started,
+            period_sec=self.calculation_period,
             milliseconds=(now-self.calculation_started)*MILLISECONDS))
         clock = now if self.realtime else notice.t_sec
-        self.next_calculation = clock+BATCH_PERIOD_SEC
+        self.next_calculation = clock+self.calculation_period
 
     def consume_input_boundary(self) -> bool:
         """機器切替後の最初の公開盤面だけ、既存の試合リセット経路を通す。"""

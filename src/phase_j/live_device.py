@@ -127,10 +127,31 @@ class DirectShowSource(FrameSource):
         self.capture_factory, self.verifier = capture_factory, verifier
         self.clock, self.sleep, self.dropped = clock, sleep, 0
         self.on_status = on_status
+        from .live_degrade import EventPriority
+        self.event_priority = EventPriority()
+
+    def _capture(self) -> Any:
+        if not self.event_priority.enabled:
+            return self.capture_factory(self.config.index, cv2.CAP_DSHOW)
+        from .live_capture_buffer import BufferedCapture
+        return BufferedCapture(self.capture_factory, (self.config.index, cv2.CAP_DSHOW),
+                               self.event_priority, self.clock)
+
+    def _read(self, capture: Any) -> tuple[float, Any, tuple[int, int] | None]:
+        captured = self.clock()
+        ok, image = capture.read() if capture.isOpened() else (False, None)
+        if self.event_priority.enabled:
+            captured = capture.last_captured_at if ok else captured
+            self.dropped = capture.dropped
+        normalized = self._normalize(image) if ok else None
+        size = (image.shape[1], image.shape[0]) if normalized is not None else None
+        return captured, normalized, size
 
     def __iter__(self) -> Iterator[CapturedFrame]:
-        capture = self.capture_factory(self.config.index, cv2.CAP_DSHOW)
+        capture = self._capture()
         origin, last_verify, verified = self.clock(), float('-inf'), False
+        if self.event_priority.enabled:
+            capture.origin, capture.duration = origin, self.duration
         continuity = FrameContinuity(VERIFY_PERIOD_SEC)
         try:
             verifier = self.verifier or PuyoScreenVerifier()
@@ -138,10 +159,7 @@ class DirectShowSource(FrameSource):
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, NATIVE_SIZE[1])
             capture.set(cv2.CAP_PROP_FPS, RECOGNITION_HZ)
             while self.clock()-origin < self.duration:
-                captured = self.clock()
-                ok, image = capture.read() if capture.isOpened() else (False, None)
-                normalized = self._normalize(image) if ok else None
-                size = (image.shape[1], image.shape[0]) if normalized is not None else None
+                captured, normalized, size = self._read(capture)
                 transport_ready = normalized is not None and continuity.ready(normalized, size, captured)
                 if not transport_ready:
                     verified = False
@@ -157,10 +175,13 @@ class DirectShowSource(FrameSource):
                     continue
                 elapsed = captured-origin
                 yield CapturedFrame(round(elapsed*RECOGNITION_HZ), elapsed,
-                                    captured, self.clock(), normalized, source_size=size)
+                                    captured, self.clock(), normalized,
+                                    dropped_before=getattr(capture, 'dropped_before', 0), source_size=size)
                 self.sleep(max(0.0, captured+1/RECOGNITION_HZ-self.clock()))
         finally:
             capture.release()
+            if self.event_priority.enabled:
+                self.dropped = capture.dropped
 
     @staticmethod
     def _normalize(image: np.ndarray | None) -> np.ndarray | None:
