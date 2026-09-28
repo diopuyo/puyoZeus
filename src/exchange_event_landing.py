@@ -71,8 +71,10 @@ class ExchangeLandingProjection:
     """元のS3を保存して合成の累積を防ぎ、実着地以降の二重投下を防ぐ。"""
 
     def __init__(self, counter_response: bool = False, counter_probability_model: Any = None,
-                 hands_spec: bool = False) -> None:
+                 hands_spec: bool = False, multi_landing_death: bool = False) -> None:
         self.counter_response = counter_response
+        self.multi_landing_death = multi_landing_death
+        self.multi_landing_cache: dict[tuple, dict] = {}
         self.counter_probability_model = counter_probability_model
         from src.exchange_event_hands import LandingHandsObservation
         self.hands_observation = LandingHandsObservation() if hands_spec else None
@@ -315,6 +317,15 @@ class ExchangeLandingProjection:
 
     def _evaluate(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
                   hands: tuple, base: dict, t_sec: float) -> dict:
+        """既定はE22そのまま。明示ONだけ複数着弾の保守的証明を追加する。"""
+        value = self._evaluate_single(overlay, snapshot, latest, incoming, hands, base, t_sec)
+        if self.multi_landing_death:
+            from src.exchange_event_multilanding import evaluate_multilanding
+            return evaluate_multilanding(self, overlay, latest, incoming, hands, t_sec, value)
+        return value
+
+    def _evaluate_single(self, overlay: Any, snapshot: Any, latest: tuple, incoming: list,
+                         hands: tuple, base: dict, t_sec: float) -> dict:
         """完走後の受け盤面で窒息と応手不足を確認し、回避不能なら固定する。"""
         boards = tuple(s.board for s in latest)
         responses, credit = self._receivers(overlay.tracker, latest, incoming)

@@ -1,0 +1,22 @@
+{
+  "baseline": "E22 / 541b44a",
+  "options": {
+    "death_guard": true,
+    "confirmed_death_hold": true,
+    "death_formula_guard": true,
+    "multi_landing_death": true
+  },
+  "q_max": 0.513079,
+  "zenchi_min": 0.8262,
+  "max_false": 1,
+  "reference_firings": 28,
+  "scene": [
+    2755.0,
+    2771.0
+  ],
+  "p2_max": 0.05,
+  "criterion": "初到達時刻がE22より早い",
+  "max_search_nodes": 20000,
+  "max_landings": 13,
+  "uncertainty": "UNKNOWN・探索打切り・生存応手ありは新たな死亡にしない"
+}

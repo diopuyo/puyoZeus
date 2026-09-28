@@ -54,7 +54,8 @@ class ExchangeEventOverlay:
                  completion_check: bool = False, landing_counter_response: bool = False,
                  confirmed_death_hold: bool = False, landing_counter_prob: bool = False,
                  counter_probability_model: Any = None, landing_hands_spec: bool = False,
-                 death_candidate_guard: bool = False, death_formula_guard: bool = False) -> None:
+                 death_candidate_guard: bool = False, death_formula_guard: bool = False,
+                 multi_landing_death: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -86,7 +87,7 @@ class ExchangeEventOverlay:
             counter_probability_model = LogisticResponseProbability.load()
         self._landing_projection = ExchangeLandingProjection(counter_response=landing_counter_response,
             counter_probability_model=counter_probability_model if landing_counter_prob else None,
-            hands_spec=landing_hands_spec)
+            hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death)
         from src.exchange_event_death_candidate import DeathCandidateGate
         self._candidate_gate = DeathCandidateGate(self._landing_projection.simulator) if death_candidate_guard else None
         from src.exchange_event_death_formula import DeathFormulaGuard

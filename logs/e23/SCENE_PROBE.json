@@ -1,0 +1,103 @@
+{
+  "t_sec": 2770.616666666667,
+  "elapsed_seconds": 0.3294463100610301,
+  "dead": true,
+  "reason": "all_responses_dead",
+  "rounds": [
+    [
+      {
+        "incoming": 171,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 141,
+        "responses": 10
+      }
+    ],
+    [
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 10
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 12
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 8
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 12
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 12
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 10
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 8
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 10
+      },
+      {
+        "incoming": 141,
+        "optimistic_send": 0.0,
+        "maximum_send": 0.0,
+        "cancelled": 0,
+        "dropped": 30,
+        "remaining": 111,
+        "responses": 12
+      }
+    ]
+  ],
+  "nodes": 244
+}
