@@ -1,0 +1,8406 @@
+[
+  {
+    "t": 128.93333333333334,
+    "game": 0,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 128.9,
+      "chain_count": 1,
+      "total_score": 1100,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1100.0,
+    "distribution": []
+  },
+  {
+    "t": 132.96666666666667,
+    "game": 0,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 132.93333333333334,
+      "chain_count": 1,
+      "total_score": 600,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 600.0,
+    "distribution": []
+  },
+  {
+    "t": 135.73333333333332,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 135.7,
+      "chain_count": 1,
+      "total_score": 1600,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1600.0,
+    "distribution": []
+  },
+  {
+    "t": 137.63333333333333,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 137.63333333333333,
+    "predicted_score": 1600.0,
+    "distribution": []
+  },
+  {
+    "t": 137.93333333333334,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": null,
+    "score_delta": 0.0,
+    "end_signal_sec": 137.63333333333333,
+    "predicted_score": 1600.0,
+    "distribution": []
+  },
+  {
+    "t": 150.7,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 600,
+    "event": {
+      "trigger_sec": 150.7,
+      "chain_count": 1,
+      "total_score": 600,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 600.0,
+    "distribution": [
+      {
+        "prefix": [
+          600
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 151.73333333333332,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 600,
+    "event": null,
+    "score_delta": 600,
+    "end_signal_sec": 151.73333333333332,
+    "predicted_score": 600.0,
+    "distribution": [
+      {
+        "prefix": [
+          600
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 153.5,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 153.5,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1812.5,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          700,
+          1600
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          700,
+          1600,
+          3300
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 154.86666666666667,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 700,
+    "event": {
+      "trigger_sec": 154.13333333333333,
+      "chain_count": 2,
+      "total_score": 700,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1812.5,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          700,
+          1600
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          700,
+          1600,
+          3300
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 156.0,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 156.0,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 156.26666666666668,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1600,
+    "event": {
+      "trigger_sec": 155.46666666666667,
+      "chain_count": 3,
+      "total_score": 1600,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1812.5,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          700,
+          1600
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          700,
+          1600,
+          3300
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 157.16666666666666,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 157.16666666666666,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 157.4,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 157.7,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1600,
+    "event": null,
+    "score_delta": 1600,
+    "end_signal_sec": 157.7,
+    "predicted_score": 1812.5,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          700,
+          1600
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          700,
+          1600,
+          3300
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 161.5,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 4800,
+    "event": null,
+    "score_delta": 4800,
+    "end_signal_sec": 161.5,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 161.6,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 4800,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 161.86666666666667,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 161.86666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 8160.0,
+    "distribution": []
+  },
+  {
+    "t": 163.13333333333333,
+    "game": 1,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 7360,
+    "event": null,
+    "score_delta": 7360,
+    "end_signal_sec": 163.13333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 168.96666666666667,
+    "game": 1,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 8160,
+    "event": null,
+    "score_delta": 8160,
+    "end_signal_sec": 168.96666666666667,
+    "predicted_score": 8160.0,
+    "distribution": []
+  },
+  {
+    "t": 205.86666666666667,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 205.83333333333334,
+      "chain_count": 2,
+      "total_score": 700,
+      "mechanism": "landing"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 700,
+    "distribution": []
+  },
+  {
+    "t": 206.96666666666667,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 206.96666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1340.0,
+    "distribution": []
+  },
+  {
+    "t": 208.9,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 700,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 208.9,
+    "predicted_score": 700,
+    "distribution": []
+  },
+  {
+    "t": 209.2,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 700,
+    "event": null,
+    "score_delta": 701.0,
+    "end_signal_sec": 208.9,
+    "predicted_score": 700,
+    "distribution": []
+  },
+  {
+    "t": 210.26666666666668,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1520,
+    "event": {
+      "trigger_sec": 209.63333333333333,
+      "chain_count": 3,
+      "total_score": 1340,
+      "mechanism": "baseline"
+    },
+    "score_delta": 881,
+    "end_signal_sec": null,
+    "predicted_score": 1340.0,
+    "distribution": []
+  },
+  {
+    "t": 210.56666666666666,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 210.56666666666666,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14760.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.75
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          13390,
+          17230
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1880,
+          3980,
+          10190,
+          14030
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 211.86666666666667,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1520,
+    "event": null,
+    "score_delta": 881,
+    "end_signal_sec": 211.86666666666667,
+    "predicted_score": 1340.0,
+    "distribution": []
+  },
+  {
+    "t": 212.0,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 211.43333333333334,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14760.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.75
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          13390,
+          17230
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1880,
+          3980,
+          10190,
+          14030
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 213.36666666666667,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1000,
+    "event": {
+      "trigger_sec": 211.43333333333334,
+      "chain_count": 3,
+      "total_score": 1000,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14864.285714285712,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.857142857142857
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          13390,
+          17230
+        ],
+        "weight": 0.14285714285714285
+      }
+    ]
+  },
+  {
+    "t": 214.73333333333332,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 4420,
+    "event": {
+      "trigger_sec": 214.73333333333332,
+      "chain_count": 4,
+      "total_score": 4420,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14864.285714285712,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.857142857142857
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          13390,
+          17230
+        ],
+        "weight": 0.14285714285714285
+      }
+    ]
+  },
+  {
+    "t": 216.13333333333333,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 10630,
+    "event": {
+      "trigger_sec": 215.36666666666667,
+      "chain_count": 5,
+      "total_score": 10630,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14470.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.9999999999999999
+      }
+    ]
+  },
+  {
+    "t": 217.5,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 14470,
+    "event": {
+      "trigger_sec": 216.76666666666668,
+      "chain_count": 6,
+      "total_score": 14470,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 14470.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.9999999999999999
+      }
+    ]
+  },
+  {
+    "t": 218.8,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 218.8,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 50860.0,
+    "distribution": []
+  },
+  {
+    "t": 219.86666666666667,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 14470,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 219.86666666666667,
+    "predicted_score": 14470.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.9999999999999999
+      }
+    ]
+  },
+  {
+    "t": 220.16666666666666,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 14470,
+    "event": null,
+    "score_delta": 14481.0,
+    "end_signal_sec": 219.86666666666667,
+    "predicted_score": 14470.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4420,
+          10630,
+          14470
+        ],
+        "weight": 0.9999999999999999
+      }
+    ]
+  },
+  {
+    "t": 229.33333333333334,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 229.33333333333334,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 230.76666666666668,
+    "game": 2,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 100,
+    "event": null,
+    "score_delta": 100,
+    "end_signal_sec": 230.76666666666668,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 232.3,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 51300,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 232.3,
+    "predicted_score": 50860.0,
+    "distribution": []
+  },
+  {
+    "t": 232.6,
+    "game": 2,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 51300,
+    "event": null,
+    "score_delta": 51313.0,
+    "end_signal_sec": 232.3,
+    "predicted_score": 50860.0,
+    "distribution": []
+  },
+  {
+    "t": 262.3333333333333,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 262.3333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1000.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 263.7,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 262.3333333333333,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1000.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 265.06666666666666,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1000,
+    "event": {
+      "trigger_sec": 264.3333333333333,
+      "chain_count": 3,
+      "total_score": 1000,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1000.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 265.8333333333333,
+    "game": 3,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 265.8333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 2960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 266.56666666666666,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1000,
+    "event": null,
+    "score_delta": 1000,
+    "end_signal_sec": 266.56666666666666,
+    "predicted_score": 1000.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 267.23333333333335,
+    "game": 3,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 265.8333333333333,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 2960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 268.6,
+    "game": 3,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1260,
+    "event": {
+      "trigger_sec": 265.8333333333333,
+      "chain_count": 3,
+      "total_score": 1260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 2960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 271.56666666666666,
+    "game": 3,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 2960,
+    "event": null,
+    "score_delta": 2960,
+    "end_signal_sec": 271.56666666666666,
+    "predicted_score": 2960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 271.93333333333334,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 271.93333333333334,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 274.23333333333335,
+    "game": 3,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 240,
+    "event": {
+      "trigger_sec": 274.23333333333335,
+      "chain_count": 1,
+      "total_score": 240,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 240.0,
+    "distribution": [
+      {
+        "prefix": [
+          240
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 275.1333333333333,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 275.1333333333333,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 277.1333333333333,
+    "game": 3,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 277.1,
+      "chain_count": 2,
+      "total_score": 1390,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1390.0,
+    "distribution": []
+  },
+  {
+    "t": 304.03333333333336,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 304.03333333333336,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 305.06666666666666,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 305.06666666666666,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 308.5,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 308.5,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 309.56666666666666,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 309.56666666666666,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 313.1666666666667,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 240,
+    "event": {
+      "trigger_sec": 313.1666666666667,
+      "chain_count": 1,
+      "total_score": 240,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 240.0,
+    "distribution": [
+      {
+        "prefix": [
+          240
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 314.8,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 240,
+    "event": null,
+    "score_delta": 240,
+    "end_signal_sec": 314.8,
+    "predicted_score": 240.0,
+    "distribution": [
+      {
+        "prefix": [
+          240
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 316.6333333333333,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 316.6333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          2060,
+          5960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 318.0,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 317.2,
+      "chain_count": 2,
+      "total_score": 540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          2060,
+          5960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 319.1333333333333,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 319.1333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.00000000000006,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 319.4,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2060,
+    "event": {
+      "trigger_sec": 318.6,
+      "chain_count": 3,
+      "total_score": 2060,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          2060,
+          5960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 320.3,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 320.3,
+    "predicted_score": 360.00000000000006,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 320.46666666666664,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.00000000000006,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 320.5,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 320.5,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.00000000000006,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 320.76666666666665,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5960,
+    "event": {
+      "trigger_sec": 320.03333333333336,
+      "chain_count": 4,
+      "total_score": 5960,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          2060,
+          5960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 321.6666666666667,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": 360,
+    "end_signal_sec": 321.6666666666667,
+    "predicted_score": 360.00000000000006,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 322.26666666666665,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 5960,
+    "event": null,
+    "score_delta": 5960,
+    "end_signal_sec": 322.26666666666665,
+    "predicted_score": 5960.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          2060,
+          5960
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 322.56666666666666,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 400,
+    "event": {
+      "trigger_sec": 322.56666666666666,
+      "chain_count": 3,
+      "total_score": 400,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5020.0,
+    "distribution": []
+  },
+  {
+    "t": 326.6,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 326.6,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 327.96666666666664,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 420,
+    "event": {
+      "trigger_sec": 327.1666666666667,
+      "chain_count": 2,
+      "total_score": 420,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 329.3,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1060,
+    "event": {
+      "trigger_sec": 328.6,
+      "chain_count": 3,
+      "total_score": 1060,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 330.2,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 5380,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 330.2,
+    "predicted_score": 5020.0,
+    "distribution": []
+  },
+  {
+    "t": 330.5,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 5380,
+    "event": null,
+    "score_delta": 5020.0,
+    "end_signal_sec": 330.2,
+    "predicted_score": 5020.0,
+    "distribution": []
+  },
+  {
+    "t": 330.6666666666667,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2760,
+    "event": {
+      "trigger_sec": 329.93333333333334,
+      "chain_count": 4,
+      "total_score": 2760,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 332.1,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5320,
+    "event": {
+      "trigger_sec": 329.93333333333334,
+      "chain_count": 5,
+      "total_score": 5320,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 333.43333333333334,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 10220,
+    "event": {
+      "trigger_sec": 329.93333333333334,
+      "chain_count": 6,
+      "total_score": 10220,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 334.76666666666665,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 15340,
+    "event": {
+      "trigger_sec": 329.93333333333334,
+      "chain_count": 7,
+      "total_score": 15340,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 336.1333333333333,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 21740,
+    "event": {
+      "trigger_sec": 329.93333333333334,
+      "chain_count": 8,
+      "total_score": 21740,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 337.26666666666665,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 337.26666666666665,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 338.5,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 21740,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 338.5,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 338.8,
+    "game": 4,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 21740,
+    "event": null,
+    "score_delta": 21753.0,
+    "end_signal_sec": 338.5,
+    "predicted_score": 21740.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          10220,
+          15340,
+          21740
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 340.1666666666667,
+    "game": 4,
+    "side": "2P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 700,
+    "event": null,
+    "score_delta": 700,
+    "end_signal_sec": 340.1666666666667,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 377.93333333333334,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 377.93333333333334,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 79053.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          5260,
+          9100,
+          14220,
+          20620,
+          28300,
+          37260,
+          50160,
+          64660,
+          77460
+        ],
+        "weight": 0.375
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          5260,
+          9100,
+          14220,
+          20620,
+          28300,
+          37260,
+          60750,
+          75250,
+          88050
+        ],
+        "weight": 0.0625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          5260,
+          9100,
+          14220,
+          20620,
+          28300,
+          37260,
+          60750,
+          75250,
+          88050,
+          102130
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          3100,
+          5660,
+          9500,
+          14620,
+          21020,
+          28700,
+          37660,
+          50560,
+          65060,
+          77860
+        ],
+        "weight": 0.15625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          3100,
+          5660,
+          9500,
+          14620,
+          21020,
+          28700,
+          37660,
+          61150,
+          75650,
+          88450
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          3520,
+          6080,
+          9920,
+          15040,
+          21440,
+          29120,
+          38080,
+          50980,
+          65480,
+          78280
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          4330,
+          6890,
+          10730,
+          15850,
+          22250,
+          29930,
+          38890,
+          51790,
+          66290,
+          79090
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          5520,
+          9360,
+          14480,
+          20880,
+          28560,
+          37520,
+          50420,
+          64920,
+          77720
+        ],
+        "weight": 0.15625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          5520,
+          9360,
+          14480,
+          20880,
+          28560,
+          37520,
+          61010,
+          75510,
+          88310
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920,
+          9760,
+          14880,
+          21280,
+          28960,
+          37920,
+          50820,
+          65320,
+          78120
+        ],
+        "weight": 0.03125
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1500,
+          3200,
+          5760,
+          9600,
+          14720,
+          21120,
+          28800,
+          37760,
+          50660,
+          65160,
+          77960
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 0.078125
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          3280,
+          5840,
+          9680,
+          14800,
+          21200,
+          28880,
+          37840,
+          50740,
+          65240,
+          78040
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1440,
+          3140,
+          5700,
+          9540,
+          14660,
+          21060,
+          28740,
+          37700,
+          50600,
+          65100,
+          77900
+        ],
+        "weight": 0.015625
+      },
+      {
+        "prefix": [
+          40,
+          700,
+          1340,
+          3040,
+          5600,
+          9440,
+          14560,
+          20960,
+          28640,
+          37600,
+          50500,
+          65000,
+          77800
+        ],
+        "weight": 0.015625
+      }
+    ]
+  },
+  {
+    "t": 379.2,
+    "game": 5,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 379.2,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 379.3,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 378.46666666666664,
+      "chain_count": 2,
+      "total_score": 540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77734.28571428571,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 0.7142857142857142
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          3280,
+          5840,
+          9680,
+          14800,
+          21200,
+          28880,
+          37840,
+          50740,
+          65240,
+          78040
+        ],
+        "weight": 0.14285714285714285
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1440,
+          3140,
+          5700,
+          9540,
+          14660,
+          21060,
+          28740,
+          37700,
+          50600,
+          65100,
+          77900
+        ],
+        "weight": 0.14285714285714285
+      }
+    ]
+  },
+  {
+    "t": 380.6333333333333,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1180,
+    "event": {
+      "trigger_sec": 379.96666666666664,
+      "chain_count": 3,
+      "total_score": 1180,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77706.66666666667,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 0.8333333333333333
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          3280,
+          5840,
+          9680,
+          14800,
+          21200,
+          28880,
+          37840,
+          50740,
+          65240,
+          78040
+        ],
+        "weight": 0.16666666666666666
+      }
+    ]
+  },
+  {
+    "t": 381.53333333333336,
+    "game": 5,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 420,
+    "event": null,
+    "score_delta": 420,
+    "end_signal_sec": 381.53333333333336,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 381.96666666666664,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2880,
+    "event": {
+      "trigger_sec": 381.23333333333335,
+      "chain_count": 4,
+      "total_score": 2880,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 383.3,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5440,
+    "event": {
+      "trigger_sec": 382.56666666666666,
+      "chain_count": 5,
+      "total_score": 5440,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 384.7,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 9280,
+    "event": {
+      "trigger_sec": 383.93333333333334,
+      "chain_count": 6,
+      "total_score": 9280,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 386.03333333333336,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 14400,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 7,
+      "total_score": 14400,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 386.43333333333334,
+    "game": 5,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 386.43333333333334,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 387.4,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 20800,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 8,
+      "total_score": 20800,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 387.9,
+    "game": 5,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 100,
+    "event": null,
+    "score_delta": 100,
+    "end_signal_sec": 387.9,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 388.8,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 28480,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 9,
+      "total_score": 28480,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 390.1666666666667,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 37440,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 10,
+      "total_score": 37440,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 391.5,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 50340,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 11,
+      "total_score": 50340,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 392.8666666666667,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 64840,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 12,
+      "total_score": 64840,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 394.23333333333335,
+    "game": 5,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 77640,
+    "event": {
+      "trigger_sec": 385.3333333333333,
+      "chain_count": 13,
+      "total_score": 77640,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 77640.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440,
+          9280,
+          14400,
+          20800,
+          28480,
+          37440,
+          50340,
+          64840,
+          77640
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 426.8,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 426.8,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 427.8333333333333,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 427.8333333333333,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 431.9,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 431.9,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 80.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 432.43333333333334,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 432.43333333333334,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 65.95352915387988,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.9188952213941259
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.08110477860587464
+      }
+    ]
+  },
+  {
+    "t": 432.93333333333334,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 432.93333333333334,
+    "predicted_score": 80.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 433.9,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 220,
+    "event": {
+      "trigger_sec": 433.9,
+      "chain_count": 2,
+      "total_score": 220,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 434.3666666666667,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 433.7,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40,
+    "end_signal_sec": null,
+    "predicted_score": 65.95352915387988,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.9188952213941259
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.08110477860587464
+      }
+    ]
+  },
+  {
+    "t": 434.43333333333334,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": true,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 434.43333333333334,
+      "chain_count": 2,
+      "total_score": 540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": 40,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 435.6333333333333,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": true,
+    "formula_visible": false,
+    "formula_total": 540,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 435.6333333333333,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 435.73333333333335,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 220,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 435.73333333333335,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 436.03333333333336,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 220,
+    "event": null,
+    "score_delta": 180.0,
+    "end_signal_sec": 435.73333333333335,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 436.3666666666667,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 580,
+    "event": {
+      "trigger_sec": 436.3666666666667,
+      "chain_count": 3,
+      "total_score": 580,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 437.43333333333334,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 580,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 437.43333333333334,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 437.73333333333335,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 580,
+    "event": {
+      "trigger_sec": 437.6666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40.0,
+    "end_signal_sec": 437.43333333333334,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 438.46666666666664,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 680,
+    "event": {
+      "trigger_sec": 438.46666666666664,
+      "chain_count": 4,
+      "total_score": 680,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 439.96666666666664,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 680,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 439.96666666666664,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 440.26666666666665,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 680,
+    "event": null,
+    "score_delta": 100.0,
+    "end_signal_sec": 439.96666666666664,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 441.3333333333333,
+    "game": 6,
+    "side": "2P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 720,
+    "event": {
+      "trigger_sec": 441.3333333333333,
+      "chain_count": 5,
+      "total_score": 720,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 443.3,
+    "game": 6,
+    "side": "1P",
+    "chain_id": 9,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 220,
+    "event": {
+      "trigger_sec": 443.26666666666665,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.0,
+    "distribution": []
+  },
+  {
+    "t": 474.3,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 474.3,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 475.8333333333333,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 475.8333333333333,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 475.8333333333333,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 475.8333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 102.5,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 477.8,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 477.1333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40,
+    "end_signal_sec": 477.8,
+    "predicted_score": 102.5,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 478.9,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 478.9,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 420.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 480.0,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 450,
+    "event": {
+      "trigger_sec": 480.0,
+      "chain_count": 1,
+      "total_score": 450,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 480.3,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 420,
+    "event": {
+      "trigger_sec": 479.53333333333336,
+      "chain_count": 2,
+      "total_score": 420,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 420.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 481.23333333333335,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 450,
+    "event": null,
+    "score_delta": 450,
+    "end_signal_sec": 481.23333333333335,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 482.5,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 420,
+    "event": null,
+    "score_delta": 420,
+    "end_signal_sec": 482.5,
+    "predicted_score": 420.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 483.1666666666667,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 483.1666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 486.03333333333336,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 240,
+    "event": {
+      "trigger_sec": 486.03333333333336,
+      "chain_count": 1,
+      "total_score": 240,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 486.9,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1560,
+    "event": null,
+    "score_delta": 1560,
+    "end_signal_sec": 486.9,
+    "predicted_score": 1560,
+    "distribution": []
+  },
+  {
+    "t": 488.43333333333334,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1600,
+    "event": {
+      "trigger_sec": 488.43333333333334,
+      "chain_count": 4,
+      "total_score": 1600,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 35700.0,
+    "distribution": []
+  },
+  {
+    "t": 490.1333333333333,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 3610,
+    "event": null,
+    "score_delta": 3610,
+    "end_signal_sec": 490.1333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 499.23333333333335,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 499.23333333333335,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 500.26666666666665,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 37260,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 500.26666666666665,
+    "predicted_score": 35700.0,
+    "distribution": []
+  },
+  {
+    "t": 500.56666666666666,
+    "game": 7,
+    "side": "2P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 37260,
+    "event": null,
+    "score_delta": 35700.0,
+    "end_signal_sec": 500.26666666666665,
+    "predicted_score": 35700.0,
+    "distribution": []
+  },
+  {
+    "t": 500.6666666666667,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 502.1,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1260,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 3,
+      "total_score": 1260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 503.46666666666664,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 3360,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 4,
+      "total_score": 3360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 504.8,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 6660,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 5,
+      "total_score": 6660,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 506.1333333333333,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 11560,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 6,
+      "total_score": 11560,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 507.5,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 18060,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 7,
+      "total_score": 18060,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 25290.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          31100
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 508.93333333333334,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 24460,
+    "event": {
+      "trigger_sec": 499.46666666666664,
+      "chain_count": 8,
+      "total_score": 24460,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 24460.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.9999999999999998
+      }
+    ]
+  },
+  {
+    "t": 511.9,
+    "game": 7,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 24460,
+    "event": null,
+    "score_delta": 24460,
+    "end_signal_sec": 511.9,
+    "predicted_score": 24460.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          6660,
+          11560,
+          18060,
+          24460
+        ],
+        "weight": 0.9999999999999998
+      }
+    ]
+  },
+  {
+    "t": 546.3666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 546.3666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 547.4,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 547.4,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 548.8,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 548.8,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0000000000000024
+      }
+    ]
+  },
+  {
+    "t": 549.1333333333333,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 80,
+    "event": {
+      "trigger_sec": 549.1333333333333,
+      "chain_count": 2,
+      "total_score": 80,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 550.3,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 550.3,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0000000000000024
+      }
+    ]
+  },
+  {
+    "t": 551.4,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 80,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 551.4,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 551.6,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 80,
+    "event": {
+      "trigger_sec": 551.6,
+      "chain_count": 2,
+      "total_score": 80,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 551.7,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 80,
+    "event": {
+      "trigger_sec": 551.6,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40.0,
+    "end_signal_sec": 551.4,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 553.0666666666667,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 80,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 553.0666666666667,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 553.3666666666667,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 80,
+    "event": {
+      "trigger_sec": 553.3,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40.0,
+    "end_signal_sec": 553.0666666666667,
+    "predicted_score": 40.0,
+    "distribution": []
+  },
+  {
+    "t": 554.4333333333333,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 120,
+    "event": {
+      "trigger_sec": 554.4333333333333,
+      "chain_count": 3,
+      "total_score": 120,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 557.2,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 160,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 557.2,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 557.5,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 160,
+    "event": null,
+    "score_delta": 83.0,
+    "end_signal_sec": 557.2,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 558.2333333333333,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 200,
+    "event": {
+      "trigger_sec": 558.2333333333333,
+      "chain_count": 5,
+      "total_score": 200,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 4400.0,
+    "distribution": []
+  },
+  {
+    "t": 562.7666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 562.7666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 2398.7968441814596,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.7416173570019718
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.18343195266272233
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 0.014792899408284018
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720
+        ],
+        "weight": 0.010848126232741616
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720,
+          10560,
+          15680,
+          23780,
+          41510
+        ],
+        "weight": 0.0019723865877712033
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4320,
+          6880,
+          11780,
+          16900,
+          23300,
+          30980
+        ],
+        "weight": 0.010848126232741616
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4320,
+          10530,
+          15430,
+          20550,
+          26950
+        ],
+        "weight": 0.0019723865877712033
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4760,
+          7320,
+          12220,
+          17340,
+          23740,
+          31420
+        ],
+        "weight": 0.0019723865877712033
+      },
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 0.026627218934911278
+      },
+      {
+        "prefix": [
+          40,
+          540,
+          1180
+        ],
+        "weight": 0.0019723865877712033
+      },
+      {
+        "prefix": [
+          40,
+          700
+        ],
+        "weight": 0.0019723865877712033
+      },
+      {
+        "prefix": [
+          40,
+          920
+        ],
+        "weight": 0.0019723865877712033
+      }
+    ]
+  },
+  {
+    "t": 563.3333333333334,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 4560,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 563.3333333333334,
+    "predicted_score": 4400.0,
+    "distribution": []
+  },
+  {
+    "t": 563.6333333333333,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 4560,
+    "event": {
+      "trigger_sec": 563.4,
+      "chain_count": 4,
+      "total_score": 4400,
+      "mechanism": "baseline"
+    },
+    "score_delta": 4400.0,
+    "end_signal_sec": 563.3333333333334,
+    "predicted_score": 4400.0,
+    "distribution": []
+  },
+  {
+    "t": 564.1666666666666,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 562.9,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 10402.270742358078,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.812227074235807
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 0.06550218340611355
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720
+        ],
+        "weight": 0.048034934497816595
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720,
+          10560,
+          15680,
+          23780,
+          41510
+        ],
+        "weight": 0.008733624454148471
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4320,
+          6880,
+          11780,
+          16900,
+          23300,
+          30980
+        ],
+        "weight": 0.048034934497816595
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4320,
+          10530,
+          15430,
+          20550,
+          26950
+        ],
+        "weight": 0.008733624454148471
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          4760,
+          7320,
+          12220,
+          17340,
+          23740,
+          31420
+        ],
+        "weight": 0.008733624454148471
+      }
+    ]
+  },
+  {
+    "t": 565.5,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1000,
+    "event": {
+      "trigger_sec": 562.9,
+      "chain_count": 3,
+      "total_score": 1000,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 66344.28571428571,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 0.5357142857142856
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720
+        ],
+        "weight": 0.39285714285714285
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2700,
+          6720,
+          10560,
+          15680,
+          23780,
+          41510
+        ],
+        "weight": 0.07142857142857141
+      }
+    ]
+  },
+  {
+    "t": 566.9,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2280,
+    "event": {
+      "trigger_sec": 562.9,
+      "chain_count": 4,
+      "total_score": 2280,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 568.2333333333333,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 4840,
+    "event": {
+      "trigger_sec": 562.9,
+      "chain_count": 5,
+      "total_score": 4840,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 569.6666666666666,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 9740,
+    "event": {
+      "trigger_sec": 569.6666666666666,
+      "chain_count": 6,
+      "total_score": 9740,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 571.0333333333333,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 14860,
+    "event": {
+      "trigger_sec": 569.6666666666666,
+      "chain_count": 7,
+      "total_score": 14860,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 572.3666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 21260,
+    "event": {
+      "trigger_sec": 571.6666666666666,
+      "chain_count": 8,
+      "total_score": 21260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 573.0666666666667,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 573.0666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 573.7,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 28940,
+    "event": {
+      "trigger_sec": 573.0,
+      "chain_count": 9,
+      "total_score": 28940,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 574.1333333333333,
+    "game": 8,
+    "side": "2P",
+    "chain_id": 8,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 574.1333333333333,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 575.0666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 37900,
+    "event": {
+      "trigger_sec": 574.3333333333334,
+      "chain_count": 10,
+      "total_score": 37900,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 576.4666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 48140,
+    "event": {
+      "trigger_sec": 575.7,
+      "chain_count": 11,
+      "total_score": 48140,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 577.8333333333334,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 59660,
+    "event": {
+      "trigger_sec": 575.7,
+      "chain_count": 12,
+      "total_score": 59660,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 579.2,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 72460,
+    "event": {
+      "trigger_sec": 575.7,
+      "chain_count": 13,
+      "total_score": 72460,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 580.5333333333333,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 90160,
+    "event": {
+      "trigger_sec": 575.7,
+      "chain_count": 14,
+      "total_score": 90160,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 581.8666666666667,
+    "game": 8,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 113380,
+    "event": {
+      "trigger_sec": 575.7,
+      "chain_count": 15,
+      "total_score": 113380,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 113380.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1000,
+          2280,
+          4840,
+          9740,
+          14860,
+          21260,
+          28940,
+          37900,
+          48140,
+          59660,
+          72460,
+          90160,
+          113380
+        ],
+        "weight": 1.0000000000000004
+      }
+    ]
+  },
+  {
+    "t": 615.8333333333334,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 615.8,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "landing"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 616.7666666666667,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 616.7333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "landing"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 617.5,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 617.5,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 617.8,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 42.0,
+    "end_signal_sec": 617.5,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 618.4333333333333,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 618.4333333333333,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 618.7333333333333,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 41.0,
+    "end_signal_sec": 618.4333333333333,
+    "predicted_score": 40,
+    "distribution": []
+  },
+  {
+    "t": 620.5666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 620.5666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 80.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 622.0666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 622.0666666666667,
+    "predicted_score": 80.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 622.4666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 220,
+    "event": {
+      "trigger_sec": 622.4666666666667,
+      "chain_count": 2,
+      "total_score": 220,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 623.5,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 220,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 623.5,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 623.8,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 6,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 220,
+    "event": null,
+    "score_delta": 180.0,
+    "end_signal_sec": 623.5,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 623.8333333333334,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 623.8333333333334,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.0,
+    "distribution": []
+  },
+  {
+    "t": 626.2666666666667,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 7,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": 360,
+    "end_signal_sec": 626.2666666666667,
+    "predicted_score": 360.0,
+    "distribution": []
+  },
+  {
+    "t": 627.5,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 400,
+    "event": {
+      "trigger_sec": 627.5,
+      "chain_count": 3,
+      "total_score": 400,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 629.9333333333333,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1280,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 629.9333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 630.0666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 9,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 630.0666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 630.2333333333333,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 8,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1280,
+    "event": null,
+    "score_delta": 920.0,
+    "end_signal_sec": 629.9333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 632.9666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 9,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 920,
+    "event": null,
+    "score_delta": 920,
+    "end_signal_sec": 632.9666666666667,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 636.2666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 10,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 636.2666666666667,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 100.0,
+    "distribution": [
+      {
+        "prefix": [
+          100
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 637.4666666666667,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 11,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 637.4666666666667,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 637.6666666666666,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 10,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 100,
+    "event": null,
+    "score_delta": 100,
+    "end_signal_sec": 637.6666666666666,
+    "predicted_score": 100.0,
+    "distribution": [
+      {
+        "prefix": [
+          100
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 638.8333333333334,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 12,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 200,
+    "event": {
+      "trigger_sec": 638.8333333333334,
+      "chain_count": 2,
+      "total_score": 200,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 639.9,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 12,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 200,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 639.9,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 640.2,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 12,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 200,
+    "event": null,
+    "score_delta": 100.0,
+    "end_signal_sec": 639.9,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 642.3333333333334,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 642.3333333333334,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63962.5,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 0.625
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          3580,
+          6140,
+          9980,
+          16480,
+          24580,
+          32260,
+          43560,
+          64440
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          4390,
+          6950,
+          10790,
+          17290,
+          25390,
+          33070,
+          44370,
+          65250
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1320,
+          3020,
+          5580,
+          9420,
+          15920,
+          24020,
+          31700,
+          43000,
+          63880
+        ],
+        "weight": 0.109375
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1560,
+          3260,
+          5820,
+          9660,
+          16160,
+          24260,
+          31940,
+          43240,
+          64120
+        ],
+        "weight": 0.015625
+      }
+    ]
+  },
+  {
+    "t": 643.7,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 420,
+    "event": {
+      "trigger_sec": 643.7,
+      "chain_count": 2,
+      "total_score": 420,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63962.5,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 0.625
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          3580,
+          6140,
+          9980,
+          16480,
+          24580,
+          32260,
+          43560,
+          64440
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          4390,
+          6950,
+          10790,
+          17290,
+          25390,
+          33070,
+          44370,
+          65250
+        ],
+        "weight": 0.125
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1320,
+          3020,
+          5580,
+          9420,
+          15920,
+          24020,
+          31700,
+          43000,
+          63880
+        ],
+        "weight": 0.109375
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1560,
+          3260,
+          5820,
+          9660,
+          16160,
+          24260,
+          31940,
+          43240,
+          64120
+        ],
+        "weight": 0.015625
+      }
+    ]
+  },
+  {
+    "t": 645.1,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1060,
+    "event": {
+      "trigger_sec": 645.1,
+      "chain_count": 3,
+      "total_score": 1060,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63969.99999999999,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 0.7142857142857143
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          3580,
+          6140,
+          9980,
+          16480,
+          24580,
+          32260,
+          43560,
+          64440
+        ],
+        "weight": 0.14285714285714282
+      },
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          4390,
+          6950,
+          10790,
+          17290,
+          25390,
+          33070,
+          44370,
+          65250
+        ],
+        "weight": 0.14285714285714282
+      }
+    ]
+  },
+  {
+    "t": 646.4666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2760,
+    "event": {
+      "trigger_sec": 646.4666666666667,
+      "chain_count": 4,
+      "total_score": 2760,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 647.7666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5320,
+    "event": {
+      "trigger_sec": 646.4666666666667,
+      "chain_count": 5,
+      "total_score": 5320,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 649.1333333333333,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 9160,
+    "event": {
+      "trigger_sec": 647.8333333333334,
+      "chain_count": 6,
+      "total_score": 9160,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 650.4666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 15660,
+    "event": {
+      "trigger_sec": 649.2333333333333,
+      "chain_count": 7,
+      "total_score": 15660,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 650.9333333333333,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 11,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 47140,
+    "event": null,
+    "score_delta": 47140,
+    "end_signal_sec": 650.9333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 651.9,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 23760,
+    "event": {
+      "trigger_sec": 650.6,
+      "chain_count": 8,
+      "total_score": 23760,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 653.2666666666667,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 31440,
+    "event": {
+      "trigger_sec": 650.6,
+      "chain_count": 9,
+      "total_score": 31440,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 654.6333333333333,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 42740,
+    "event": {
+      "trigger_sec": 650.6,
+      "chain_count": 10,
+      "total_score": 42740,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 656.0,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 63620,
+    "event": {
+      "trigger_sec": 650.6,
+      "chain_count": 11,
+      "total_score": 63620,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 657.5333333333333,
+    "game": 9,
+    "side": "2P",
+    "chain_id": 13,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 63620,
+    "event": null,
+    "score_delta": 63620,
+    "end_signal_sec": 657.5333333333333,
+    "predicted_score": 63620.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          420,
+          1060,
+          2760,
+          5320,
+          9160,
+          15660,
+          23760,
+          31440,
+          42740,
+          63620
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 662.0,
+    "game": 9,
+    "side": "1P",
+    "chain_id": 14,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 47140,
+    "event": {
+      "trigger_sec": 661.9666666666667,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 360.0,
+    "distribution": []
+  },
+  {
+    "t": 688.8333333333334,
+    "game": 10,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 688.8,
+      "chain_count": 2,
+      "total_score": 1800,
+      "mechanism": "landing"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1800,
+    "distribution": []
+  },
+  {
+    "t": 692.0333333333333,
+    "game": 10,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1800,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 692.0333333333333,
+    "predicted_score": 1800,
+    "distribution": []
+  },
+  {
+    "t": 692.3333333333334,
+    "game": 10,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1800,
+    "event": null,
+    "score_delta": 1801.0,
+    "end_signal_sec": 692.0333333333333,
+    "predicted_score": 1800,
+    "distribution": []
+  },
+  {
+    "t": 694.3,
+    "game": 10,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 694.2666666666667,
+      "chain_count": 4,
+      "total_score": 4940,
+      "mechanism": "baseline"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 4940.0,
+    "distribution": []
+  },
+  {
+    "t": 717.6666666666666,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 280,
+    "event": {
+      "trigger_sec": 717.6666666666666,
+      "chain_count": 1,
+      "total_score": 280,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 280.0,
+    "distribution": [
+      {
+        "prefix": [
+          280
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 719.1333333333333,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 280,
+    "event": null,
+    "score_delta": 280,
+    "end_signal_sec": 719.1333333333333,
+    "predicted_score": 280.0,
+    "distribution": [
+      {
+        "prefix": [
+          280
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 723.5,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 723.5,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 3160.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840,
+          5400
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 724.5666666666667,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 724.5666666666667,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1210.0,
+    "distribution": []
+  },
+  {
+    "t": 724.8666666666667,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 920,
+    "event": {
+      "trigger_sec": 724.1333333333333,
+      "chain_count": 2,
+      "total_score": 920,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 3160.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840,
+          5400
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 725.8,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 725.8,
+    "predicted_score": 1210.0,
+    "distribution": []
+  },
+  {
+    "t": 725.9,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1210.0,
+    "distribution": []
+  },
+  {
+    "t": 726.2666666666667,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1560,
+    "event": {
+      "trigger_sec": 725.7,
+      "chain_count": 3,
+      "total_score": 1560,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 3160.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840,
+          5400
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 727.2,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1210,
+    "event": null,
+    "score_delta": 1210,
+    "end_signal_sec": 727.2,
+    "predicted_score": 1210.0,
+    "distribution": []
+  },
+  {
+    "t": 727.6666666666666,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2840,
+    "event": {
+      "trigger_sec": 726.8333333333334,
+      "chain_count": 4,
+      "total_score": 2840,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 3160.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840,
+          5400
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 728.7,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1310,
+    "event": {
+      "trigger_sec": 728.7,
+      "chain_count": 3,
+      "total_score": 1310,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 729.1,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 2840,
+    "event": null,
+    "score_delta": 2840,
+    "end_signal_sec": 729.1,
+    "predicted_score": 3160.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          920,
+          1560,
+          2840,
+          5400
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 732.5,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 732.5,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 732.8,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 2990,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 732.8,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 732.8333333333334,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2990,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 733.7666666666667,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 733.7666666666667,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 733.8333333333334,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 733.8666666666667,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 733.8666666666667,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 735.1333333333333,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": 360,
+    "end_signal_sec": 735.1333333333333,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 735.2333333333333,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 735.2666666666667,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1260,
+    "event": {
+      "trigger_sec": 735.2666666666667,
+      "chain_count": 3,
+      "total_score": 1260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 735.7333333333333,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 10210,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 735.7333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 736.0333333333333,
+    "game": 11,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 10210,
+    "event": {
+      "trigger_sec": 735.9333333333333,
+      "chain_count": 2,
+      "total_score": 1140,
+      "mechanism": "baseline"
+    },
+    "score_delta": 9000.0,
+    "end_signal_sec": 735.7333333333333,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 736.6666666666666,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2960,
+    "event": {
+      "trigger_sec": 735.2666666666667,
+      "chain_count": 4,
+      "total_score": 2960,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 738.0333333333333,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 6260,
+    "event": {
+      "trigger_sec": 735.2666666666667,
+      "chain_count": 5,
+      "total_score": 6260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 739.4,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 10100,
+    "event": {
+      "trigger_sec": 735.2666666666667,
+      "chain_count": 6,
+      "total_score": 10100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 740.8333333333334,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 22070,
+    "event": {
+      "trigger_sec": 740.8333333333334,
+      "chain_count": 7,
+      "total_score": 22070,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 742.3,
+    "game": 11,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 22070,
+    "event": null,
+    "score_delta": 22070,
+    "end_signal_sec": 742.3,
+    "predicted_score": 22070.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2960,
+          6260,
+          10100,
+          22070
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 769.1333333333333,
+    "game": 12,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 769.1333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 770.1666666666666,
+    "game": 12,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 770.1666666666666,
+    "predicted_score": 40.0,
+    "distribution": [
+      {
+        "prefix": [
+          40
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 774.9,
+    "game": 12,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 774.9,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 540.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 776.2666666666667,
+    "game": 12,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 775.4666666666667,
+      "chain_count": 2,
+      "total_score": 540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 540.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 777.2666666666667,
+    "game": 12,
+    "side": "1P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 540,
+    "event": null,
+    "score_delta": 540,
+    "end_signal_sec": 777.2666666666667,
+    "predicted_score": 540.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 779.9333333333333,
+    "game": 12,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 779.9333333333333,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 100.0,
+    "distribution": [
+      {
+        "prefix": [
+          100
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 780.0,
+    "game": 12,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 180,
+    "event": {
+      "trigger_sec": 780.0,
+      "chain_count": 1,
+      "total_score": 180,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 781.4666666666667,
+    "game": 12,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 100,
+    "event": null,
+    "score_delta": 100,
+    "end_signal_sec": 781.4666666666667,
+    "predicted_score": 100.0,
+    "distribution": [
+      {
+        "prefix": [
+          100
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 782.4333333333333,
+    "game": 12,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1060,
+    "event": null,
+    "score_delta": 1060,
+    "end_signal_sec": 782.4333333333333,
+    "predicted_score": 1060,
+    "distribution": []
+  },
+  {
+    "t": 815.9666666666667,
+    "game": 13,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": null,
+    "event": {
+      "trigger_sec": 815.9333333333333,
+      "chain_count": 3,
+      "total_score": 2670,
+      "mechanism": "landing"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 2670,
+    "distribution": []
+  },
+  {
+    "t": 819.2333333333333,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 819.2333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 820.5,
+    "game": 13,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 2670,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": 820.5,
+    "predicted_score": 2670,
+    "distribution": []
+  },
+  {
+    "t": 820.6,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 540,
+    "event": {
+      "trigger_sec": 819.6666666666666,
+      "chain_count": 2,
+      "total_score": 540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 820.8,
+    "game": 13,
+    "side": "1P",
+    "chain_id": 1,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 2670,
+    "event": {
+      "trigger_sec": 820.7,
+      "chain_count": 3,
+      "total_score": 2670,
+      "mechanism": "baseline"
+    },
+    "score_delta": 2672.0,
+    "end_signal_sec": 820.5,
+    "predicted_score": 2670,
+    "distribution": []
+  },
+  {
+    "t": 822.0,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1180,
+    "event": {
+      "trigger_sec": 819.6666666666666,
+      "chain_count": 3,
+      "total_score": 1180,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 823.3666666666667,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2880,
+    "event": {
+      "trigger_sec": 819.6666666666666,
+      "chain_count": 4,
+      "total_score": 2880,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 824.8333333333334,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5440,
+    "event": {
+      "trigger_sec": 824.8333333333334,
+      "chain_count": 5,
+      "total_score": 5440,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 825.9,
+    "game": 13,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 825.9,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 826.3333333333334,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 5440,
+    "event": null,
+    "score_delta": 5440,
+    "end_signal_sec": 826.3333333333334,
+    "predicted_score": 5440.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          540,
+          1180,
+          2880,
+          5440
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 835.5333333333333,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 835.5333333333333,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 835.7,
+    "game": 13,
+    "side": "1P",
+    "chain_id": 4,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 19840,
+    "event": null,
+    "score_delta": 19840,
+    "end_signal_sec": 835.7,
+    "predicted_score": 0.0,
+    "distribution": []
+  },
+  {
+    "t": 848.1,
+    "game": 13,
+    "side": "2P",
+    "chain_id": 5,
+    "accepted": false,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 40240,
+    "event": null,
+    "score_delta": 40240,
+    "end_signal_sec": 848.1,
+    "predicted_score": 40240,
+    "distribution": []
+  },
+  {
+    "t": 873.5333333333333,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 100,
+    "event": {
+      "trigger_sec": 873.5333333333333,
+      "chain_count": 1,
+      "total_score": 100,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1600.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          1600
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 874.9,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1600,
+    "event": {
+      "trigger_sec": 873.5333333333333,
+      "chain_count": 2,
+      "total_score": 1600,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 1600.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          1600
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 876.4,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 1,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 1600,
+    "event": null,
+    "score_delta": 1600,
+    "end_signal_sec": 876.4,
+    "predicted_score": 1600.0,
+    "distribution": [
+      {
+        "prefix": [
+          100,
+          1600
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 878.6,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 878.6,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 878.8,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 878.8,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 880.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          880
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 879.9666666666667,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 879.9666666666667,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 880.7,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 880,
+    "event": {
+      "trigger_sec": 880.0333333333333,
+      "chain_count": 2,
+      "total_score": 880,
+      "mechanism": "baseline"
+    },
+    "score_delta": 40,
+    "end_signal_sec": null,
+    "predicted_score": 880.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          880
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 880.7666666666667,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 880,
+    "event": {
+      "trigger_sec": 880.7666666666667,
+      "chain_count": 2,
+      "total_score": 880,
+      "mechanism": "formula_read"
+    },
+    "score_delta": 40,
+    "end_signal_sec": null,
+    "predicted_score": 880.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          880
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 881.1,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": 360,
+    "end_signal_sec": 881.1,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 881.2666666666667,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": null,
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 881.3,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1260,
+    "event": {
+      "trigger_sec": 881.3,
+      "chain_count": 3,
+      "total_score": 1260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 881.7333333333333,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 3,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 880,
+    "event": null,
+    "score_delta": 40,
+    "end_signal_sec": 881.7333333333333,
+    "predicted_score": 880.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          880
+        ],
+        "weight": 0.9999999999999976
+      }
+    ]
+  },
+  {
+    "t": 885.1,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 40,
+    "event": {
+      "trigger_sec": 885.1,
+      "chain_count": 1,
+      "total_score": 40,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 16383.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          14930,
+          20050
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 885.4666666666667,
+    "game": 14,
+    "side": "2P",
+    "chain_id": 2,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 5920,
+    "event": null,
+    "score_delta": 5920,
+    "end_signal_sec": 885.4666666666667,
+    "predicted_score": 5920.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          3360,
+          5920
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  {
+    "t": 886.5,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 360,
+    "event": {
+      "trigger_sec": 885.1,
+      "chain_count": 2,
+      "total_score": 360,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 16383.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          14930,
+          20050
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 887.8666666666667,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 1260,
+    "event": {
+      "trigger_sec": 885.1,
+      "chain_count": 3,
+      "total_score": 1260,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 16383.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          14930,
+          20050
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 889.3,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 2540,
+    "event": {
+      "trigger_sec": 885.1,
+      "chain_count": 4,
+      "total_score": 2540,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 16383.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          14930,
+          20050
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 890.6666666666666,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 5840,
+    "event": {
+      "trigger_sec": 885.1,
+      "chain_count": 5,
+      "total_score": 5840,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 16383.75,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 0.875
+      },
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          14930,
+          20050
+        ],
+        "weight": 0.125
+      }
+    ]
+  },
+  {
+    "t": 892.0,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 10740,
+    "event": {
+      "trigger_sec": 892.0,
+      "chain_count": 6,
+      "total_score": 10740,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 15860.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 1.0000000000000002
+      }
+    ]
+  },
+  {
+    "t": 893.3666666666667,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": true,
+    "formula_total": 15860,
+    "event": {
+      "trigger_sec": 892.0,
+      "chain_count": 7,
+      "total_score": 15860,
+      "mechanism": "formula_read"
+    },
+    "score_delta": null,
+    "end_signal_sec": null,
+    "predicted_score": 15860.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 1.0000000000000002
+      }
+    ]
+  },
+  {
+    "t": 894.9,
+    "game": 14,
+    "side": "1P",
+    "chain_id": 5,
+    "accepted": true,
+    "withdrawn": false,
+    "formula_visible": false,
+    "formula_total": 15860,
+    "event": null,
+    "score_delta": 15860,
+    "end_signal_sec": 894.9,
+    "predicted_score": 15860.0,
+    "distribution": [
+      {
+        "prefix": [
+          40,
+          360,
+          1260,
+          2540,
+          5840,
+          10740,
+          15860
+        ],
+        "weight": 1.0000000000000002
+      }
+    ]
+  }
+]

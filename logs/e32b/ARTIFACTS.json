@@ -1,0 +1,304 @@
+﻿{
+    "base_commit":  "b7fa3e9993fd19d2d96ea7d9398bb2eef1c39da3",
+    "existing_code_diff":  [
+
+                           ],
+    "files":  [
+                  {
+                      "sha256":  "574c3a1136b271be8c93a9f6b7cb2e2f95900744e76b248f3613cd5fcfa9b9c1",
+                      "path":  "docs/E32B_CAUSAL_AUDIT_20260929.md"
+                  },
+                  {
+                      "sha256":  "70939293e78ab85ae96e5a1fe6d7ffffee6f44987eb491245b87ec49ee21daca",
+                      "path":  "logs/e32b/cutoffs.json"
+                  },
+                  {
+                      "sha256":  "f0b88bebf9aff2934ab40809e8f780d75b9467aa953c8d135419099641f9ea3f",
+                      "path":  "logs/e32b/gain_intervals.json"
+                  },
+                  {
+                      "sha256":  "f276283ac2a72a1224c3baccfc954112dec0603861c8124d3b8f466d26c45a94",
+                      "path":  "logs/e32b/images/fcXG83vInDY_267.933.jpg"
+                  },
+                  {
+                      "sha256":  "b8782f14bd2627bd3e03456dcc25bb834bb0fb6838561a7b05a687c5465d626e",
+                      "path":  "logs/e32b/images/fcXG83vInDY_269.967.jpg"
+                  },
+                  {
+                      "sha256":  "3fe0844ba629739392819cdad164eb0cf982b878dda98e0d392290ef99ca8eef",
+                      "path":  "logs/e32b/images/fcXG83vInDY_275.000.jpg"
+                  },
+                  {
+                      "sha256":  "32e4fc7bf231781a7d8cb47a5ffcdccd12dc1906b69c3c971e1940d0dc077764",
+                      "path":  "logs/e32b/images/fcXG83vInDY_817.000.jpg"
+                  },
+                  {
+                      "sha256":  "080187462ad5c01659169734b73831869f2a0612f6e6da117b7d11f53eed550b",
+                      "path":  "logs/e32b/images/manifest.json"
+                  },
+                  {
+                      "sha256":  "66ad32f6b9bf1dd176558ede99cdbe4ca6e78f2e6a8fa6e0768d99f139fb4e5b",
+                      "path":  "logs/e32b/images/q_7gc4TgFig_878.800.jpg"
+                  },
+                  {
+                      "sha256":  "09fd678ae48c4566a777c0f86e97096cf3a485de91dd36b2c807d1af3e7d4224",
+                      "path":  "logs/e32b/images/q_7gc4TgFig_880.767.jpg"
+                  },
+                  {
+                      "sha256":  "97b460160a36e00ffc30aa73696b5ec6f29b185e20ee40cc8672ea25ab6b95ed",
+                      "path":  "logs/e32b/images/q_7gc4TgFig_882.800.jpg"
+                  },
+                  {
+                      "sha256":  "a1ecf5e0aacb9d7a1ee660e6449dae359f6130e4f6aedf82b2442a6a50b9fbc0",
+                      "path":  "logs/e32b/images/zenchi_2848.383.jpg"
+                  },
+                  {
+                      "sha256":  "9e948e9375e30457b78c4ed2bf608e55693d0be839540eba4506238b4e68e47d",
+                      "path":  "logs/e32b/images/zenchi_2934.883.jpg"
+                  },
+                  {
+                      "sha256":  "7d920f252b44bf95006a1186d51426c0a355dc50a0bb26951a549dc839f1e77f",
+                      "path":  "logs/e32b/images/zenchi_2936.217.jpg"
+                  },
+                  {
+                      "sha256":  "f6e9ce3a9684872e1d21e41bbe5e9d8bf8ab5b12dcd5bd5a17c2fcb85c64ce09",
+                      "path":  "logs/e32b/images/zenchi_2938.917.jpg"
+                  },
+                  {
+                      "sha256":  "b3cb6744bbcdd1e518f4cd838583c16eea60760cde998c43ff292b2f45965622",
+                      "path":  "logs/e32b/images/zenchi_3095.350.jpg"
+                  },
+                  {
+                      "sha256":  "3518ecf06e704675fe7d246da507525840d6d07e8b5d64eb23c94bc8b69d059c",
+                      "path":  "logs/e32b/images/zenchi_3102.217.jpg"
+                  },
+                  {
+                      "sha256":  "ec10a023811ed8780c2eb0a5f0b7257f9b2abd5aa1ba49b539f78b6bbec70b49",
+                      "path":  "logs/e32b/images/zenchi_3109.183.jpg"
+                  },
+                  {
+                      "sha256":  "0ac2318c2c1dd1a20e416fbbecd4ae08d8856f0628bb1d398f57d000dd3cdcce",
+                      "path":  "logs/e32b/images/zenchi_3110.083.jpg"
+                  },
+                  {
+                      "sha256":  "4dcd1d29484b8b78a59100bc51a47b53724671eb5e1ba5948e90da347bfe95a8",
+                      "path":  "logs/e32b/images/zenchi_3314.917.jpg"
+                  },
+                  {
+                      "sha256":  "02b3b377692efddcba280bfd74abff1ce94c9b0ce5ae356719fc75f85b1a87a3",
+                      "path":  "logs/e32b/inputs/zenchi_2849.050.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "8064d8d93e3104ed84c5f7cc1c9ce583ba94b4921e12558a0d4a8e29c9c3dfc5",
+                      "path":  "logs/e32b/inputs/zenchi_3100.817.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "9680a5441b8daaf52d6ec68d7695002082fc04f65748d684eaa14c9c6b43d7a8",
+                      "path":  "logs/e32b/inputs/zenchi_3110.050.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "5a29a88307acf49f6eac14d7dba0e0e9a7c3c2189a5ad97542e0a8cf1b9b6f48",
+                      "path":  "logs/e32b/prefix_comparison.json"
+                  },
+                  {
+                      "sha256":  "1174c9733e8b476b4797788528ef54584efe5f6a139279b7c387938ebc21475e",
+                      "path":  "logs/e32b/preliminary.json"
+                  },
+                  {
+                      "sha256":  "b6f125b2cfc1a34a58c2f893851884129d6edea5976109ada024e50c788ceb28",
+                      "path":  "logs/e32b/reconstructed_errors.json"
+                  },
+                  {
+                      "sha256":  "be1fe2262b44f50a80e6e4591a196ccbf02b92edcd4b462b9176c295bd87f476",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/candidates.json"
+                  },
+                  {
+                      "sha256":  "4e3c4a1322e88d11864de308fb488815eb9a2ebd1d37f5e51a1facc63218f7aa",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/chains.json"
+                  },
+                  {
+                      "sha256":  "487d6dbd043887bce9ce68f5cb69b70a5f2e3b01e78f8e36f0425174defba362",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/display.npz"
+                  },
+                  {
+                      "sha256":  "617c685e909d72af1871b9da6d624a1f77750794d2d9a76486d174400e9dc20c",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/DONE.json"
+                  },
+                  {
+                      "sha256":  "a338fd704b898d99524808e520af0a350f4ee88769a47f458cd9d26725547dc6",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "e9c75743605d403dda8ac9bef1466b111f0bcfa4789bc4dade7e8e8e91e9a02f",
+                      "path":  "logs/e32b/replays/fcXG83vInDY/events.jsonl"
+                  },
+                  {
+                      "sha256":  "7541b4fdaace7ae080e1329a1de01a03b8e15eb57a3dd29ecde716c08eebda8b",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/candidates.json"
+                  },
+                  {
+                      "sha256":  "32f6d24dd1c7e023b10bd61f9478bce79fa572ac9764939aa4ce13168572116f",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/chains.json"
+                  },
+                  {
+                      "sha256":  "b33e6e0b95f9e546a381facb9b64cf73d2bea1534b569d432eadc6445608e8e1",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/display.npz"
+                  },
+                  {
+                      "sha256":  "4bd39e60539d829242aed8a018a30aba6a43c08c67228881dcf103870119a6ac",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/DONE.json"
+                  },
+                  {
+                      "sha256":  "7f9652184378d45691b7c59dbdcbfe17fa4e9acf16c98e33746d0c791e85a365",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "19e68968ff55c665b360b2782681822b7221f2f2de43d8a24d6813af88676163",
+                      "path":  "logs/e32b/replays/q_7gc4TgFig/events.jsonl"
+                  },
+                  {
+                      "sha256":  "466377378111dca4eb292c86a446dd677cf0a321cfaae8ed6514f076e0b6a8db",
+                      "path":  "logs/e32b/replays/zenchi/candidates.json"
+                  },
+                  {
+                      "sha256":  "ecab0ffdb7210f2caa32e91efbda9a9c3986d9ef53562c3c774943d62d8be6af",
+                      "path":  "logs/e32b/replays/zenchi/chains.json"
+                  },
+                  {
+                      "sha256":  "c4b9b43ec530ce4e01f3898eb9a4dab7b0af9848cb2fd59316ed34a40fa3fe8d",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_2849.050.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "582b6ecf6ce3714934cd083cc82653f3fadbb09341e6b1f72af40820f3f2f913",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_2849.050.jsonl"
+                  },
+                  {
+                      "sha256":  "62041e090d4e1a6e8a5f4931c9e460d648494840c18798d00db330eed1364f8f",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_3100.817.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "3819e5628f84125e82b16aeb1d8e2528ce7169dc6566a85793fdff24cde35975",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_3100.817.jsonl"
+                  },
+                  {
+                      "sha256":  "62041e090d4e1a6e8a5f4931c9e460d648494840c18798d00db330eed1364f8f",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_3110.050.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "43d6d012b028dba96da8e44c4bd26ba34aebb63aaa3388900ee5564fd612454b",
+                      "path":  "logs/e32b/replays/zenchi/checkpoint_3110.050.jsonl"
+                  },
+                  {
+                      "sha256":  "9e078260708406037e5b12d680842a28e34c5ffcab6671893f90424402fc1ac8",
+                      "path":  "logs/e32b/replays/zenchi/display.npz"
+                  },
+                  {
+                      "sha256":  "cede80c2cb5c3823f608fff497748e4d75e467ac06cba54b4ce0c8b968c7366c",
+                      "path":  "logs/e32b/replays/zenchi/DONE.json"
+                  },
+                  {
+                      "sha256":  "95adaac28ec469648c7e45565db5c556e8d9fe0febc96156686907ba605bac0c",
+                      "path":  "logs/e32b/replays/zenchi/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "c2f2090b5b2dcdb4c259feff24afa8cf10169578b2b6b828dddc93fe37c0a588",
+                      "path":  "logs/e32b/replays/zenchi/events.jsonl"
+                  },
+                  {
+                      "sha256":  "8303547724ccac509d907fc0faf42c6ae3e510ae5b274b4316d3555fdb5ab6ee",
+                      "path":  "logs/e32b/replays/zenchi/trace.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "bdb719f51231f91d4d97674bcb044f03fa076381e81875ca67693fdaf652b335",
+                      "path":  "logs/e32b/replays/zenchi_2849.050/display.npz"
+                  },
+                  {
+                      "sha256":  "2c3ed623c258b763064c7e36d00650afcc13b6cb5f3351a7e6dc67d4d4dc42ed",
+                      "path":  "logs/e32b/replays/zenchi_2849.050/DONE.json"
+                  },
+                  {
+                      "sha256":  "c4b9b43ec530ce4e01f3898eb9a4dab7b0af9848cb2fd59316ed34a40fa3fe8d",
+                      "path":  "logs/e32b/replays/zenchi_2849.050/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "582b6ecf6ce3714934cd083cc82653f3fadbb09341e6b1f72af40820f3f2f913",
+                      "path":  "logs/e32b/replays/zenchi_2849.050/events.jsonl"
+                  },
+                  {
+                      "sha256":  "d0627230d9a2534578abd6c775723d594620f7d89f13c588954f7b905016e447",
+                      "path":  "logs/e32b/replays/zenchi_2849.050/trace.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "c9f90cd29ae45608d0df15133dc4564295ced4e2cf8ae14c8192b5ddea8486a3",
+                      "path":  "logs/e32b/replays/zenchi_3100.817/display.npz"
+                  },
+                  {
+                      "sha256":  "b22aa31f0a5c731c160848f6e685adf82ed01950026e76febddcecdd2ea287d8",
+                      "path":  "logs/e32b/replays/zenchi_3100.817/DONE.json"
+                  },
+                  {
+                      "sha256":  "62041e090d4e1a6e8a5f4931c9e460d648494840c18798d00db330eed1364f8f",
+                      "path":  "logs/e32b/replays/zenchi_3100.817/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "3819e5628f84125e82b16aeb1d8e2528ce7169dc6566a85793fdff24cde35975",
+                      "path":  "logs/e32b/replays/zenchi_3100.817/events.jsonl"
+                  },
+                  {
+                      "sha256":  "9afcae91e8b92738cfdcd20ebf9723cf727bd0733d24bcba1a9d498ac0646c4f",
+                      "path":  "logs/e32b/replays/zenchi_3100.817/trace.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "305f255ce5f5e89b27675e50220dfc8b3f7d394355cc1077a2464dc777627016",
+                      "path":  "logs/e32b/replays/zenchi_3110.050/display.npz"
+                  },
+                  {
+                      "sha256":  "444c5c3b5432ad036d1129e0d3dc6fdd7557716fa6c436617f7eb3db27015928",
+                      "path":  "logs/e32b/replays/zenchi_3110.050/DONE.json"
+                  },
+                  {
+                      "sha256":  "751a95b3a9c06b7edf4bdc67cd1d8c6648206b0f803550a5868d62a185cf1d70",
+                      "path":  "logs/e32b/replays/zenchi_3110.050/events.diagnostics.json"
+                  },
+                  {
+                      "sha256":  "43d6d012b028dba96da8e44c4bd26ba34aebb63aaa3388900ee5564fd612454b",
+                      "path":  "logs/e32b/replays/zenchi_3110.050/events.jsonl"
+                  },
+                  {
+                      "sha256":  "9a61ee9b3751962cadb9c386ea508be42d70f5331eb3f33dcc7f328b06e65ba3",
+                      "path":  "logs/e32b/replays/zenchi_3110.050/trace.jsonl.gz"
+                  },
+                  {
+                      "sha256":  "75448ca38df60532ad2517d00a27c56fa7622bb4054138f6cb6f263fb786268d",
+                      "path":  "logs/e32b/score_error_details.json"
+                  },
+                  {
+                      "sha256":  "85a8d464ebdf257f5a673898994e3939b5b05e9c22ef1cb6808f8b0662383796",
+                      "path":  "logs/e32b/score_inputs.json"
+                  },
+                  {
+                      "sha256":  "a7859f7acc98ebc4263666d3dbb83917e356bdd87d07f1a6bfada7fbb899341b",
+                      "path":  "logs/e32b/SUMMARY.json"
+                  },
+                  {
+                      "sha256":  "76dd796e2e2a6404e72c4aee6b46db7351876968bd2185e0c126721a9ec62e21",
+                      "path":  "logs/e32b/visibility.json"
+                  },
+                  {
+                      "sha256":  "a0e5394e040b6444c2b24ab296775a79c6722ea0738b37f0141740d0bb2c405d",
+                      "path":  "scripts/_launch_e32b.sh"
+                  },
+                  {
+                      "sha256":  "a2351819f0f4415c4c9725e3020a227726b4604cbd68e716415e1c2f03e90c0e",
+                      "path":  "scripts/audit_e32b.py"
+                  },
+                  {
+                      "sha256":  "1f8e5a72befcedd815830a4fa011a3114280f138d027b517cd6b3d98922bc7fc",
+                      "path":  "scripts/capture_e32b_evidence.py"
+                  },
+                  {
+                      "sha256":  "26c7e77f4ce386d9c0c342dbc218e7be889eeafd6dd281be267c055ca3600193",
+                      "path":  "scripts/report_e32b.py"
+                  }
+              ]
+}
