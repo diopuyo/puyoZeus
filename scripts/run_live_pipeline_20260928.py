@@ -61,6 +61,7 @@ def asset_hashes() -> dict[str, str]:
         'src/phase_j/live_side_counter.py', 'src/phase_j/live_config.py',
         'src/phase_j/live_evaluation.py',
         'src/phase_j/live_notification_eval.py', 'src/phase_j/live_snapshot.py', 'src/image_reader.py',
+        'src/phase_j/live_snapshot_quality.py',
         'src/phase_j/live_eval_worker.py', 'src/phase_j/live_eval_supervisor.py',
         'src/phase_j/live_cpu.py', 'src/phase_j/live_audit.py',
         'src/phase_j/live_load.py', 'src/phase_j/live_degrade.py', 'src/phase_j/live_source.py',

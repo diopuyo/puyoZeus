@@ -1430,6 +1430,7 @@ class ImageReader:
         else:
             hsv_full = None
 
+        self._remember_live_hsv_pixels(hsv_full, region)
         # 可視領域を画像分類 (Z-3C: バッチ化)
         has_position_api = hasattr(self._classifier, "classify_at")
         has_batch_api = (
@@ -1631,6 +1632,18 @@ class ImageReader:
         if _sat_saved is not None:
             _sat_target.set_s_min_scale(_sat_saved)
         return board
+
+    def _remember_live_hsv_pixels(self, hsv: np.ndarray | None, region: BoardRegion) -> None:
+        """既に変換した同一ROIのHSV画素を、ライブの品質判定へviewで渡す。"""
+        observations = getattr(self, '_live_hsv_pixels', None)
+        if observations is None or hsv is None:
+            return
+        from time import perf_counter
+        started = perf_counter()
+        for idx, target in enumerate((self._p1_region, self._p2_region)):
+            if region == target and idx not in observations:
+                observations[idx] = hsv[region.y:region.y+region.height, region.x:region.x+region.width]
+        self._live_raw_board_sec += perf_counter()-started
 
     def _remember_live_observation(self, board: Board, region: BoardRegion) -> None:
         """ライブ窓に限り、浮遊除去前の既存読取結果を複製する。再推論はしない。"""

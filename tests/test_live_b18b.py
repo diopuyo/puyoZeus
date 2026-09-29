@@ -99,20 +99,20 @@ def test_jitter_matching_excludes_outside_window_and_future() -> None:
 
 
 def test_retain_reuses_raw_board_without_cnn(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.animation_filter import AnimationFilter
     from src.board import Board
-    monkeypatch.setattr('src.phase_j.live_snapshot.is_effect_glow_active', lambda *args: False)
     value = window()
     region = SimpleNamespace(x=0, y=0, width=20, height=20)
     board = Board()
     board._grid[-1, :2] = 1
     value.reader = SimpleNamespace(_p1_region=region, _p2_region=region,
-        read_board=Mock(side_effect=AssertionError('追加CNN禁止')), read_board_hsv_only=Mock(return_value=board))
-    value.filters, value.cost = (AnimationFilter(), AnimationFilter()), dict(hsv_sec=0.)
+        read_board=Mock(side_effect=AssertionError('追加CNN禁止')),
+        read_board_hsv_only=Mock(side_effect=AssertionError('未使用HSVの追加読取禁止')))
+    value.filters = (SimpleNamespace(observe=Mock(return_value=(False, False))),)*2
+    value.cost = dict(hsv_sec=0.)
     value.retain(np.zeros((20, 20, 3), dtype=np.uint8), SimpleNamespace(raw_cnn_board=board), 0, 0.)
-    assert value.buffers[0][0]['cnn'] == board._grid.tolist()
+    assert value.buffers[0][0]['cnn'] is board._grid
     value.reader.read_board.assert_not_called()
-    value.reader.read_board_hsv_only.assert_called_once()
+    value.reader.read_board_hsv_only.assert_not_called()
     value.reader._live_hsv_boards = {0: board}
     value.reader.read_board_hsv_only.reset_mock()
     value.retain(np.zeros((20, 20, 3), dtype=np.uint8), SimpleNamespace(raw_cnn_board=board), 0, 1/30)

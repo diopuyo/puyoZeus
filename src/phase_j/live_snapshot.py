@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Any
 import numpy as np
 
-from src.animation_filter import AnimationFilter
 from src.board import BOARD_ROWS, BOARD_COLS, HIDDEN_ROWS, COLOR_UNKNOWN
 from src.board_state_machine import BoardState
-from src.effect_glow_detector import is_effect_glow_active
 from src.exchange_event_terminal import ObservedDeathDetector
-from src.prefire_snapshot_reader import WINDOW_SEC, grounded, vote_window
+from src.prefire_snapshot_reader import WINDOW_SEC, vote_window
 from .live_source import RECOGNITION_HZ
+from .live_snapshot_quality import SnapshotQuality
 
 WINDOW_FRAMES = round(WINDOW_SEC * RECOGNITION_HZ)
 TRIGGER_DELAY_SEC = WINDOW_SEC
@@ -22,13 +21,26 @@ TIME_TOLERANCE = 1e-6
 SLOT_TOLERANCE_SEC = 0.5 / RECOGNITION_HZ
 
 
+@dataclass(slots=True)
+class SnapshotObservation:
+    """画像読取時点で独立済みの小さい整数盤面を、複製・リスト化せず保持する。"""
+    t_sec: float
+    cnn: np.ndarray
+    hsv: np.ndarray | None
+    quality: bool
+    glow: bool
+
+    def __getitem__(self, key: str) -> Any:
+        return getattr(self, key)
+
+
 class LiveSnapshotInputs:
     """取得窓と通知遅れの余裕を保持し、再通知には確定済み原票を返す。"""
 
     def __init__(self, reader: Any) -> None:
         self.reader = reader
         self.buffers = (deque(maxlen=HISTORY_FRAMES), deque(maxlen=HISTORY_FRAMES))
-        self.filters = (AnimationFilter(), AnimationFilter())
+        self.filters = (SnapshotQuality(), SnapshotQuality())
         self.latest: list[tuple | None] = [None, None]
         self.terminal = ObservedDeathDetector()
         self.previous_scores: tuple = (None, None)
@@ -70,12 +82,12 @@ class LiveSnapshotInputs:
                 frames.append(dict(t_sec=stamp, cnn=np.zeros((BOARD_ROWS, BOARD_COLS)), quality='missing_frame'))
             else:
                 quality = row['glow'] if not frames else row['quality']
-                frames.append(dict(row, t_sec=stamp, quality=quality))
+                frames.append(dict(t_sec=stamp, cnn=row['cnn'], hsv=row['hsv'], quality=quality))
         value = vote_window(frames, trigger)
         self.latest[idx] = (trigger, value)
         return value
 
-    def frame_at(self, idx: int, stamp: float, trigger: float) -> dict | None:
+    def frame_at(self, idx: int, stamp: float, trigger: float) -> SnapshotObservation | dict | None:
         """動画は時刻完全一致、機器の取得揺れは同じ30Hz区画内だけで対応する。"""
         exact = next((r for r in self.buffers[idx]
                       if abs(r['t_sec']-stamp) < TIME_TOLERANCE), None)
@@ -88,23 +100,22 @@ class LiveSnapshotInputs:
                    key=lambda r: abs(r['t_sec']-stamp), default=None)
 
     def retain(self, frame: np.ndarray, side: Any, idx: int, stamp: float) -> None:
+        started = perf_counter()
         region = (self.reader._p1_region, self.reader._p2_region)[idx]
-        crop = frame[region.y:region.y+region.height, region.x:region.x+region.width].copy()
-        quality = self.filters[idx].is_animation(crop, (0, 0, region.width, region.height)).reason
-        glow = is_effect_glow_active(frame, region, frozenset(range(HIDDEN_ROWS, BOARD_ROWS)))
+        pixels = getattr(self.reader, '_live_hsv_pixels', {}).get(idx)
         board = self.observed_board(side, idx)
+        # 浮遊盤面はvote_windowが必ず除外するので、採否に使われないグロー集計を省く。
+        landed = board is not None and not np.any((board._grid[:-1] != 0) & (board._grid[1:] == 0))
+        quality, glow = self.filters[idx].observe(frame, region, pixels, check_glow=landed)
+        observed_at = perf_counter()
+        self.cost['quality_sec'] = self.cost.get('quality_sec', 0.)+observed_at-started
         if board is None:
             return
-        # 多数決に参加できる着地画像に限ってHSV単独の裏取りを保存する。
-        hsv, started = None, perf_counter()
-        if not quality and not glow and grounded(board._grid):
-            observed = getattr(self.reader, '_live_hsv_boards', {}).get(idx)
-            if observed is None:
-                observed = self.reader.read_board_hsv_only(frame, region)
-            hsv = observed._grid.tolist()
-        self.cost['hsv_sec'] += perf_counter()-started
-        self.buffers[idx].append(dict(t_sec=stamp, cnn=board._grid.tolist(), hsv=hsv,
-            quality=quality or ('effect_glow' if glow else ''), glow='effect_glow' if glow else ''))
+        # E31 vote_windowはHSV列を参照しない。既存観測だけ残し、未使用の追加読取はしない。
+        hsv = getattr(self.reader, '_live_hsv_boards', {}).get(idx)
+        self.buffers[idx].append(SnapshotObservation(stamp, board._grid,
+            hsv._grid if hsv is not None else None, quality or glow, glow))
+        self.cost['buffer_sec'] = self.cost.get('buffer_sec', 0.)+perf_counter()-observed_at
 
     def update(self, frame: np.ndarray, result: Any, stamp: float) -> Any:
         started = perf_counter()
@@ -142,6 +153,7 @@ def prepare_recognition(pipe: Any) -> None:
     if hasattr(owner, '_reader'):
         owner._reader._live_raw_boards = {}
         owner._reader._live_hsv_boards = {}
+        owner._reader._live_hsv_pixels = {}
         owner._reader._live_raw_board_sec = 0.
 
 
