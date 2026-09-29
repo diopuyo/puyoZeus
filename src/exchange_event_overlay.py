@@ -64,7 +64,8 @@ class ExchangeEventOverlay:
                  hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,
                  prefire_stage_timeout_only: bool = False,
                  prefire_origin_guard: bool = False, prefire_match_gate: Any = None,
-                 post_counter_death_bound: bool = False) -> None:
+                 post_counter_death_bound: bool = False,
+                 single_death_proof_guard: bool = False) -> None:
         enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
         self._confirmed_death_hold = confirmed_death_hold
         self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
@@ -95,7 +96,8 @@ class ExchangeEventOverlay:
             hands_spec=landing_hands_spec, multi_landing_death=multi_landing_death,
             landing_state_safety=landing_state_safety, pending_ledger=pending_ledger,
             color_score_safety=color_score_safety, completion_recovery=completion_recovery,
-            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death)
+            death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
+            single_death_proof_guard=single_death_proof_guard)
         self._landing_projection.post_counter_bound = None
         if post_counter_death_bound:
             if not (multi_landing_death and death_pending_ledger and confirmed_death_hold):

@@ -74,17 +74,19 @@ class ExchangeLandingProjection:
                  hands_spec: bool = False, multi_landing_death: bool = False,
                  landing_state_safety: bool = False, pending_ledger: bool = False,
                  color_score_safety: bool = False, completion_recovery: bool = False,
-                 death_pending_ledger: bool = False, hidden_row_death: bool = False) -> None:
+                 death_pending_ledger: bool = False, hidden_row_death: bool = False,
+                 single_death_proof_guard: bool = False) -> None:
         self.counter_response = counter_response
         self.death_pending_ledger = death_pending_ledger
         self.death_only_inputs = death_pending_ledger or hidden_row_death
         self.multi_landing_death = multi_landing_death
+        self.single_death_proof_guard = single_death_proof_guard
         from src.exchange_landing_safety import LandingStateSafety
         self.safety = LandingStateSafety(landing_state_safety or pending_ledger,
-            landing_state_safety or color_score_safety,
+            landing_state_safety or color_score_safety or single_death_proof_guard,
             landing_state_safety or completion_recovery) if any((landing_state_safety,
                 pending_ledger, color_score_safety, completion_recovery,
-                death_pending_ledger, hidden_row_death)) else None
+                death_pending_ledger, hidden_row_death, single_death_proof_guard)) else None
         self.multi_landing_cache: dict[tuple, dict] = {}
         self.counter_probability_model = counter_probability_model
         from src.exchange_event_hands import LandingHandsObservation
@@ -402,7 +404,8 @@ class ExchangeLandingProjection:
                     overflow_rows=metrics['overflow_rows'], verified_attack=metrics['verified_attack'],
                     rejected_boards=self.rejected_boards, optimistic_send=metrics['optimistic_send'],
                     completion_certain=certain, completion_sides=[SIDE_LABELS[i] for i in range(2)
-                        if certain[i] and self._chaining(overlay.tracker, i)], **counter)
+                        if certain[i] and self._chaining(overlay.tracker, i)], **counter,
+                    **({'single_death_proof': metrics['proofs']} if self.single_death_proof_guard else {}))
 
     def _single_death_metrics(self, overlay: Any, latest: tuple, incoming: list, hands: tuple,
                               t_sec: float, boards: tuple, responses: tuple, certain: list,
@@ -412,6 +415,7 @@ class ExchangeLandingProjection:
                               for i, b in enumerate(boards))
         dead, required, available = [], [0, 0], [None, None]
         margins, evidence, optimistic = [None, None], [False, False], [None, None]
+        proofs = [None, None]
         for i, landed in enumerate(landed_boards):
             if (incoming[i] <= 0 or not landed.is_dead() or not certain[i]
                     or (context is not None and context['hidden'][i] is not None)
@@ -434,10 +438,15 @@ class ExchangeLandingProjection:
                 optimistic[i] = self._optimistic_response(responses[i], latest[i].queue,
                     hands[i], overlay.tracker._score_elapsed) + credit[i]
                 candidate = optimistic[i] < required[i]
+            if candidate and self.single_death_proof_guard:
+                from src.exchange_single_death_proof import prove_single_candidate
+                proofs[i] = prove_single_candidate(self, overlay, latest[i], responses[i],
+                    incoming[i], hands[i], credit[i], i, t_sec)
+                candidate = proofs[i]['dead']
             if candidate:
                 dead.append(SIDE_LABELS[i])
         return dict(required_cancel=required, near_future_send=available, dead_sides=dead,
-                    overflow_rows=margins, verified_attack=evidence, optimistic_send=optimistic)
+                    overflow_rows=margins, verified_attack=evidence, optimistic_send=optimistic, proofs=proofs)
 
     def _probability_inputs(self, overlay: Any, snapshot: Any, latest: tuple,
                             incoming: list, hands: tuple, stamp: float) -> tuple:
