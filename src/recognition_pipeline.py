@@ -1852,6 +1852,7 @@ class RecognitionPipeline:
         # 既存の連鎖保持期限 (`_chain_until_Xp`) をそのまま使う。新しい定数は作らない。
         # default False = 従来挙動完全維持・bit-identical。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
     ) -> None:
         # B2 (A/B 対照実験): BG_FP_FORCE_MAX_PUYO を instance 変数で上書き可能に。
         # None なら class attribute 値 (= 144) を使う。
@@ -2136,6 +2137,14 @@ class RecognitionPipeline:
         self._prev_frame: np.ndarray | None = None
         # Score tracker (任意): ScoreOcr が無ければ delta=0 固定
         self._score_ocr = score_ocr
+        self._placement_reconcile = None
+        if enable_placement_signal_reconcile:
+            from src.placement_signal_runtime import PlacementSignalRuntime
+            classifier = getattr(image_reader, '_classifier', None)
+            ocr = score_ocr if score_ocr is not None else ScoreOcr.load_default()
+            self._placement_reconcile = PlacementSignalRuntime(
+                getattr(classifier, '_cnn', classifier), ocr._mult_template_gray,
+            )
         self._score_tracker_1p: ScoreTracker | None = (
             ScoreTracker("1P", score_ocr) if score_ocr else None
         )
@@ -3625,6 +3634,7 @@ class RecognitionPipeline:
         enable_landing_chain_record_hold: bool = False,
         # W48b (2026-09-18): 連鎖が動いている間は記録しない。詳細は __init__ 側。
         enable_chain_active_record_hold: bool = False,
+        enable_placement_signal_reconcile: bool = False,
     ) -> "RecognitionPipeline":
         """デフォルト構成でロードする。
 
@@ -3898,6 +3908,7 @@ class RecognitionPipeline:
             enable_chain_active_record_hold=(
                 enable_chain_active_record_hold
             ),
+            enable_placement_signal_reconcile=enable_placement_signal_reconcile,
         )
 
     # ------------------------------------------------------------------
@@ -4053,6 +4064,8 @@ class RecognitionPipeline:
                 VideoChainTracker 既定の 0.0 (= 動画絶対時刻がそのまま
                 elapsed になる旧挙動) を維持する。
         """
+        if self._placement_reconcile is not None:
+            self._placement_reconcile.reset()
         self._sm_1p.reset()
         self._sm_2p.reset()
         self._gen_1p.reset()
@@ -4276,10 +4289,19 @@ class RecognitionPipeline:
             self._online_hsv_injected = False
             self._online_hsv_injected_colors.clear()
 
+    def observe_placement_frame(
+        self, frame_idx: int, time_sec: float, frame: np.ndarray,
+    ) -> None:
+        """R1専用の原フレーム入力。OFFでは読取りも状態変更も行わない。"""
+        runtime = getattr(self, '_placement_reconcile', None)
+        if runtime is not None:
+            runtime.observe(self, frame_idx, time_sec, frame)
+
     def update(
         self, frame_idx: int, time_sec: float, frame: np.ndarray,
     ) -> PipelineResult:
         """1 frame 投入、結果を返す."""
+        self.observe_placement_frame(frame_idx, time_sec, frame)
         # 0. 解像度依存 S_min 調整は呼び出し側 (viz/diag script) が
         # set_resolution_aware_s_min で明示設定する. pipeline.update に渡る
         # frame は image_reader で 1920x1080 にリサイズ済のため、 ここでの

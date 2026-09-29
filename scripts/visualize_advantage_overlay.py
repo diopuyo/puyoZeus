@@ -6467,6 +6467,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_stage_timeout: bool = False,
              prefire_stage_timeout_only: bool = False,
              prefire_origin_guard: bool = False,
+             placement_signal_reconcile: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7207,6 +7208,7 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
         _production_recognition_kwargs["enable_pseudo_chain_score_fill"] = bool(
             enable_pseudo_chain_score_fill)
     pipe = RecognitionPipeline.load_default(
+        enable_placement_signal_reconcile=placement_signal_reconcile,
         stable_frame_count=3, load_score_ocr=True, enable_chain_tracker=True,
         temporal_smoothing=1, load_next_detector=True, force_in_match=force_in_match,
         # 未指定 (None) はライブラリ既定に解決する = 本番と同じ挙動を描画する
@@ -7419,10 +7421,14 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
     prev_gross_counters: "GrossOjamaCounters | None" = None
     prev_gross_pending_unc: tuple[int, int] | None = None
     gross_dump_stats = _GrossDumpStats()
+    if placement_signal_reconcile:
+        pipe._placement_reconcile.log_to(out.parent / 'placement_signal_reconcile.jsonl')
     for fi in range(start_frame, n):
         ok, frame = cap.read()
         if not ok or frame is None:
             break
+        if placement_signal_reconcile:
+            pipe.observe_placement_frame(fi, fi / fps, frame)
         # --- 60fps→30fps 正規化 (2026-08-12 追加) ---
         # cap.read() は毎フレーム呼んでデコードし (シーク禁止、収集側
         # collect_boards_lean.py:819-827 と同じ方式)、stride 非対象フレームは
@@ -9035,6 +9041,8 @@ def main() -> None:
             "構成の再現・A/B比較用)。"
         ),
     )
+    ap.add_argument('--placement-signal-reconcile', action='store_true',
+                    help='置き完了合図で可視セルを一度だけ照合・修正する（既定OFF）')
     from src.exchange_event_cli import parse_exchange_event_args
     a = parse_exchange_event_args(ap)
     if a.exchange_event_e16 and a.exchange_event_model_dir == Path("models/exchange_event_v1"):
@@ -9081,6 +9089,7 @@ def main() -> None:
               prefire_stage_timeout=a.prefire_stage_timeout,
               prefire_stage_timeout_only=a.prefire_stage_timeout_only,
               prefire_origin_guard=a.prefire_origin_guard,
+              placement_signal_reconcile=a.placement_signal_reconcile,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,
