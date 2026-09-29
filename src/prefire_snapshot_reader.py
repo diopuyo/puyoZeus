@@ -5,7 +5,7 @@ from typing import Any
 import cv2
 import numpy as np
 from src.animation_filter import AnimationFilter
-from src.board import Board, COLOR_UNKNOWN, BOARD_ROWS, BOARD_COLS, HIDDEN_ROWS
+from src.board import Board, COLOR_OJAMA, COLOR_UNKNOWN, BOARD_ROWS, BOARD_COLS, HIDDEN_ROWS
 from src.effect_glow_detector import is_effect_glow_active
 from src.match_color_evidence import GAME_COLOR_COUNT
 from src.midchain_board_reader import MidchainBoardReader
@@ -98,7 +98,7 @@ def validate_snapshot(origin: Board | None, snapshot: dict | None, colors: tuple
         return 'invalid_shape', None
     if np.any(grid == COLOR_UNKNOWN):
         return 'unknown', None
-    if len(colors) != GAME_COLOR_COUNT or not set(np.unique(grid)) <= {0, 9, *colors}:
+    if len(colors) != GAME_COLOR_COUNT or not set(np.unique(grid)) <= {0, COLOR_OJAMA, *colors}:
         return 'palette', None
     if not grounded(grid):
         return 'floating', None

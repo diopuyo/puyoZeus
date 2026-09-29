@@ -67,27 +67,11 @@ class ExchangeEventOverlay:
                  post_counter_death_bound: bool = False,
                  single_death_proof_guard: bool = False,
                  single_death_proof_negative_only: bool = False) -> None:
-        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
-        self._confirmed_death_hold = confirmed_death_hold
-        self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
-        from src.exchange_event_layers import ExchangeEvaluationLayers
-        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard or confirmed_death_hold,
-            e16 or evaluation_layers or completion_check, completion_check) if enabled else None
-        if enabled and self._e16.layer_enabled:
-            self.tracker.layer_rows = []
+        self._initialize_layers(models, live_count, e16, count_sync, death_guard,
+                                evaluation_layers, completion_check, confirmed_death_hold)
         self._build_static, self._signal_factory = build_static, signal_factory
         self._m0, self._per_side_settled = m0_predictor, per_side_settled
-        self._history: list[list[ConfirmedSide]] = [[], []]
-        self._snapshots: list[tuple[float, Any]] = []
-        self._signals: dict[int, EndSignals] = {}
-        self._counts, self._previous = (0, 0), (None, None)
-        self._game: int | None = None
-        self._start: float | None = None
-        self._falling = [False, False]
-        self._chain_keys: list[tuple | None] = [None, None]
-        self._scores: list[list[tuple[float, float]]] = [[], []]
-        self._last_formula: list[float | None] = [None, None]
-        self._last_displayed: list[float | None] = [None, None]
+        self._initialize_state()
         from src.exchange_event_landing import ExchangeLandingProjection
         if landing_counter_prob and counter_probability_model is None:
             from src.landing_counter_probability import LogisticResponseProbability
@@ -100,22 +84,59 @@ class ExchangeEventOverlay:
             death_pending_ledger=death_pending_ledger, hidden_row_death=hidden_row_death,
             single_death_proof_guard=single_death_proof_guard,
             single_death_proof_negative_only=single_death_proof_negative_only)
-        self._landing_projection.post_counter_bound = None
-        if post_counter_death_bound:
-            if not (multi_landing_death and death_pending_ledger and confirmed_death_hold):
-                raise ValueError('E35には複数着弾・死亡台帳・死亡保持（本番構成）が必要')
-            from src.exchange_post_counter_bound import PostCounterDeathBound
-            self._landing_projection.post_counter_bound = PostCounterDeathBound()
+        self._initialize_post_counter(post_counter_death_bound,
+            multi_landing_death and death_pending_ledger and confirmed_death_hold)
         self._initialize_prediction_guards(death_candidate_guard, death_formula_guard,
             midchain_completion, hidden_row_death, midchain_single_observation)
         self._initialize_prefire(prefire_candidates, prefire_snapshot, hidden_row_belief,
                                  prefire_stage_timeout, prefire_stage_timeout_only)
+        self._initialize_origin_guard(prefire_origin_guard, prefire_snapshot, prefire_match_gate)
+
+    def _initialize_layers(self, models: ExchangeModels, live_count: bool, e16: bool,
+                           count_sync: bool, death_guard: bool, evaluation_layers: bool,
+                           completion_check: bool, confirmed_death_hold: bool) -> None:
+        """追跡器とE16評価層を、いずれかの層フラグがONのときだけ組み立てる。"""
+        enabled = e16 or count_sync or death_guard or evaluation_layers or completion_check or confirmed_death_hold
+        self._confirmed_death_hold = confirmed_death_hold
+        self.tracker = ExchangeEventTracker(models, live_count=live_count or enabled)
+        from src.exchange_event_layers import ExchangeEvaluationLayers
+        self._e16 = ExchangeEvaluationLayers(e16 or count_sync, e16 or death_guard or confirmed_death_hold,
+            e16 or evaluation_layers or completion_check, completion_check) if enabled else None
+        if enabled and self._e16.layer_enabled:
+            self.tracker.layer_rows = []
+
+    def _initialize_state(self) -> None:
+        """試合内で持つ履歴・信号・得点の初期値を用意する。"""
+        self._history: list[list[ConfirmedSide]] = [[], []]
+        self._snapshots: list[tuple[float, Any]] = []
+        self._signals: dict[int, EndSignals] = {}
+        self._counts, self._previous = (0, 0), (None, None)
+        self._game: int | None = None
+        self._start: float | None = None
+        self._falling = [False, False]
+        self._chain_keys: list[tuple | None] = [None, None]
+        self._scores: list[list[tuple[float, float]]] = [[], []]
+        self._last_formula: list[float | None] = [None, None]
+        self._last_displayed: list[float | None] = [None, None]
+
+    def _initialize_post_counter(self, enabled: bool, production_ready: bool) -> None:
+        """E35の打ち返し後死亡上限を、本番構成の前提が揃うときだけ有効にする。"""
+        self._landing_projection.post_counter_bound = None
+        if enabled:
+            if not production_ready:
+                raise ValueError('E35には複数着弾・死亡台帳・死亡保持（本番構成）が必要')
+            from src.exchange_post_counter_bound import PostCounterDeathBound
+            self._landing_projection.post_counter_bound = PostCounterDeathBound()
+
+    def _initialize_origin_guard(self, enabled: bool, prefire_snapshot: bool,
+                                 match_gate: Any) -> None:
+        """E34の起点ガードを、発火前観測と試合範囲があるときだけ有効にする。"""
         self._origin_guard = None
-        if prefire_origin_guard:
+        if enabled:
             from src.exchange_prefire_origin import PrefireOriginGuard
-            if not prefire_snapshot or prefire_match_gate is None:
+            if not prefire_snapshot or match_gate is None:
                 raise ValueError('E34には--prefire-snapshotと既存試合範囲が必要')
-            self._origin_guard = PrefireOriginGuard(prefire_match_gate)
+            self._origin_guard = PrefireOriginGuard(match_gate)
 
     def _initialize_prefire(self, prefire_candidates: bool, prefire_snapshot: bool = False,
                             hidden_row_belief: bool = False, prefire_stage_timeout: bool = False,

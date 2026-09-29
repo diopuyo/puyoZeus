@@ -32,8 +32,9 @@ def main() -> None:
         attach(row['args'][0], result, args[2])
         original(self, result, *args)
         frames += 1
-    def configured(**kwargs: Any) -> RecognitionPipeline:
-        return load(**dict(kwargs, enable_landing_chain_record_hold=True, enable_chain_active_record_hold=True))
+    def configured(*args: Any, **kwargs: Any) -> RecognitionPipeline:
+        # 位置引数も元の load_default へそのまま渡す (署名を保つ)。
+        return load(*args, **dict(kwargs,enable_landing_chain_record_hold=True, enable_chain_active_record_hold=True))
     ExchangeEventRecorder.update, RecognitionPipeline.load_default = capture, configured
     sys.argv = ['probe', *[v.replace(str(source.resolve()), str(OUT.resolve())) for v in command[3:]]]
     sys.argv[sys.argv.index('--max-sec')+1] = str(SECONDS)
