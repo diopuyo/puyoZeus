@@ -20,6 +20,12 @@ RENDER = "scripts.visualize_advantage_overlay"
 REPLAY = "scripts.replay_exchange_event_20260926"
 
 
+# 2026-09-30 追加 (e36b検収): E35 + D5 + D5b。R1b認識側は別バケット。
+E36B_ADDED = ["--post-counter-death-bound", "--single-death-proof-guard",
+              "--single-death-proof-negative-only"]
+E36B_EVIDENCE = (".507565", "7,676/8,333", "1/39", "2760.38", "2026-09-30")
+
+
 def fixed_flags() -> list[str]:
     """実際の検収結果に保存された引数をCLI表記へ変換する。"""
     done = json.loads((ROOT / "logs/e32/on/review/DONE.json").read_text())
@@ -46,13 +52,18 @@ def test_fixed_execution_conditions() -> None:
         assert done["options"] == run_e32.OPTIONS
         assert done["model_dir"] == "models/exchange_event_v3"
         assert done["live_count"] is True
-    assert shlex.split(config.exchange_event_flags()) == fixed_flags()
+    assert shlex.split(config.exchange_event_flags()) == fixed_flags() + E36B_ADDED
     assert len(set(fixed_flags())) == len(fixed_flags())
 
 
 @pytest.mark.parametrize("entry", config.EXCHANGE_EVENT_ADOPTED)
 def test_provenance(entry: config.AdoptedFlag) -> None:
     """全採用項目に日付と検収根拠が残る。"""
+    if entry.flag in E36B_ADDED:
+        assert entry.adopted == "2026-09-30"
+        for evidence in E36B_EVIDENCE:
+            assert evidence in entry.reason
+        return
     assert entry.adopted == "2026-09-29"
     for evidence in (".507977", "91.9717%", "7,664/8,333", "1/35", "E32b",
                      "リークなし", "E34c", "114,146/114,146", "user承認"):
@@ -87,7 +98,8 @@ def cli_options(module: str, argv: list[str], monkeypatch: pytest.MonkeyPatch) -
 def test_cli_effective_arguments(module: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """両CLIで一括指定と固定検収の全実効引数が一致し、未採用はOFF。"""
     required = ["input.jsonl.gz", "--out", "unused"] if module == REPLAY else []
-    explicit = cli_options(module, required + fixed_flags(), monkeypatch)
+    r1b = shlex.split(config.placement_reconcile_flags()) if module == RENDER else []
+    explicit = cli_options(module, required + fixed_flags() + E36B_ADDED + r1b, monkeypatch)
     production = cli_options(module, required + ["--production-exchange-event"], monkeypatch)
     assert production.pop("production_exchange_event") is True
     assert explicit.pop("production_exchange_event") is False
@@ -118,3 +130,41 @@ def test_existing_configuration_unchanged() -> None:
     definitions.update({node.target.id: node for node in current.body if isinstance(node, ast.AnnAssign)})
     for name, expected in previous["sha256_ast"].items():
         assert hashlib.sha256(ast.dump(definitions[name]).encode()).hexdigest() == expected, name
+
+
+def e36b_cli_flags() -> set[str]:
+    """e36bの実行設定 (run_e36b.options) をCLIフラグ表記へ直す。R1b認識側は別に足す。"""
+    from scripts import run_e36b
+    flags = set()
+    for name, enabled in run_e36b.options().items():
+        assert enabled is True
+        flags.add(("--exchange-event-" if name == "death_guard" else "--") + name.replace("_", "-"))
+    return flags
+
+
+def test_production_flags_equal_e36b_configuration() -> None:
+    """本番の撃ち合いフラグ集合 + 認識側R1bが、e36bの合格構成とちょうど一致する。"""
+    production = set(shlex.split(config.exchange_event_flags()))
+    replay_side = {f for f in production if not f.startswith("--exchange-event-model")
+                   and f not in ("--exchange-event-update", "--exchange-event-live-count")
+                   and not f.startswith("models/")}
+    # e36bにはlive_count/update/model_dirがrun側で暗黙に入る。残りの実験フラグは完全一致。
+    assert e36b_cli_flags() == replay_side
+    assert config.placement_reconcile_flags() == "--placement-signal-reconcile"
+    assert "--placement-signal-reconcile-ojama" not in config.placement_reconcile_flags()
+
+
+def test_render_production_enables_r1b_and_replay_does_not_receive_it(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """描画CLIは本番指定でR1bもONになり、再生CLIは(引数を持たないので)影響を受けない。"""
+    render = cli_options(RENDER, ["--production-exchange-event"], monkeypatch)
+    assert render["placement_signal_reconcile"] is True
+    assert render["placement_signal_reconcile_ojama"] is False
+    for name in ("post_counter_death_bound", "single_death_proof_guard",
+                 "single_death_proof_negative_only"):
+        assert render[name] is True
+    replay = cli_options(REPLAY, ["input.jsonl.gz", "--out", "unused", "--production-exchange-event"],
+                         monkeypatch)
+    assert "placement_signal_reconcile" not in replay
+    plain = cli_options(RENDER, [], monkeypatch)
+    assert plain["placement_signal_reconcile"] is False and plain["post_counter_death_bound"] is False

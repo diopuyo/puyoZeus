@@ -6469,6 +6469,9 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
              prefire_origin_guard: bool = False,
              placement_signal_reconcile: bool = False,
              placement_signal_reconcile_ojama: bool = False,
+             post_counter_death_bound: bool = False,
+             single_death_proof_guard: bool = False,
+             single_death_proof_negative_only: bool = False,
              ) -> int:
     """有利不利オーバーレイ動画を生成。書き出しフレーム数を返す。
 
@@ -7087,7 +7090,12 @@ def generate(video: Path, out: Path, max_sec: float, sample_interval: float,
             prefire_stage_timeout=prefire_stage_timeout,
             prefire_stage_timeout_only=prefire_stage_timeout_only,
             prefire_origin_guard=prefire_origin_guard, prefire_match_gate=prefire_match_gate,
-            landing_counter_prob=landing_counter_prob)
+            landing_counter_prob=landing_counter_prob,
+            # 専用ラッパーの partial 指定を上書きしないよう、True のときだけ渡す。
+            **{name: True for name, on in (
+                ('post_counter_death_bound', post_counter_death_bound),
+                ('single_death_proof_guard', single_death_proof_guard),
+                ('single_death_proof_negative_only', single_death_proof_negative_only)) if on})
         enable_early_fire_reaction = False
         enable_resolved_exchange_eval = False
         if dump_exchange_event_path is None:
@@ -8402,6 +8410,12 @@ def main() -> None:
                     help="E33b: 終了信号を使わず段間隔タイムアウトだけで候補を除外（既定OFF）")
     ap.add_argument("--prefire-origin-guard", action="store_true", default=False,
                     help="E34: 収集側の連鎖保持・試合範囲を予測起点保存へ適用（既定OFF）")
+    ap.add_argument("--post-counter-death-bound", action="store_true", default=False,
+                    help="E35: 打ち返し後の死亡上限（既定OFF、本番は--production-exchange-event）")
+    ap.add_argument("--single-death-proof-guard", action="store_true", default=False,
+                    help="D5: 単発死亡候補を全応手の消去後盤面で証明（既定OFF）")
+    ap.add_argument("--single-death-proof-negative-only", action="store_true", default=False,
+                    help="D5b: 取消を生存枝・相殺可能の証明だけに限定（D5併用時のみ、既定OFF）")
     ap.add_argument("--prefire-snapshot", action="store_true", default=False,
                     help="E31: 発火直前画像の多数決を予測層だけに使用（既定OFF）")
     for flag in ("pending-ledger", "color-score-safety", "completion-recovery", "midchain-completion",
@@ -9095,6 +9109,9 @@ def main() -> None:
               prefire_origin_guard=a.prefire_origin_guard,
               placement_signal_reconcile=a.placement_signal_reconcile,
               placement_signal_reconcile_ojama=a.placement_signal_reconcile_ojama,
+              post_counter_death_bound=a.post_counter_death_bound,
+              single_death_proof_guard=a.single_death_proof_guard,
+              single_death_proof_negative_only=a.single_death_proof_negative_only,
               confirmed_death_hold=a.confirmed_death_hold,
               landing_counter_prob=a.landing_counter_prob,
              dump_exchange_event_path=a.dump_exchange_events,

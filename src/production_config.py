@@ -1421,6 +1421,29 @@ EXCHANGE_EVENT_ADOPTED: tuple[AdoptedFlag, ...] = (
         '--hidden-row-belief', "2026-09-29",
         'E27+E31+E32固定検収: q .507977 / zenchi 91.9717% (7,664/8,333) / 誤発火1/35。E32b打ち切り再生でリークなし。E34c固定入力の再収集一致114,146/114,146。user承認2026-09-29。抽出元: scripts/_launch_e32.sh → run_e32 → run_e31/run_e27 → run_e17_ablation_20260928.worker、logs/e32/on/review/DONE.json。',
     ),
+    AdoptedFlag(
+        '--post-counter-death-bound', "2026-09-30",
+        'E35 打ち返し後の死亡上限 (コミット0f28a04)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-guard', "2026-09-30",
+        'D5 単発着弾死亡を全応手の消去後盤面で証明してから確定 (71d378d)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+    AdoptedFlag(
+        '--single-death-proof-negative-only', "2026-09-30",
+        'D5b 取消を生存枝・相殺可能の証明だけに限定 (0b8a76b)。 e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
+)
+
+# R1b 認識側の置き完了合図照合 (NEXT移動+掛け算式の2合図)。撃ち合い評価の再生CLIは
+# 保存済み記録を読むだけで受け付けないため、EXCHANGE_EVENT_ADOPTED とは別バケットにする。
+# RECOGNITION_ADOPTED は load_default kwargs へ機械変換され (enable_* 名の重複供給で
+# TypeError)、かつ AST 固定テストで凍結されているため、そこへは入れない。
+PLACEMENT_RECONCILE_ADOPTED: tuple[AdoptedFlag, ...] = (
+    AdoptedFlag(
+        '--placement-signal-reconcile', "2026-09-30",
+        'R1b (82d3baf) 置き完了合図の照合 (NEXT移動+掛け算式、おじゃま合図は含めない): e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
+    ),
 )
 
 
@@ -1472,6 +1495,11 @@ def exchange_event_flags() -> str:
     return _join(EXCHANGE_EVENT_ADOPTED)
 
 
+def placement_reconcile_flags() -> str:
+    """R1b認識側の合図照合フラグ (描画CLIだけが受け付ける) を返す。"""
+    return _join(PLACEMENT_RECONCILE_ADOPTED)
+
+
 def visualization_flags() -> str:
     """認識オーバーレイ表示の本番構成フラグを返す。"""
     return _join(VISUALIZATION_ADOPTED)
@@ -1485,6 +1513,7 @@ def describe() -> str:
         ("認識(収集専用)", COLLECT_ONLY_ADOPTED),
         ("有利不利", ADVANTAGE_ADOPTED),
         ("撃ち合いイベント評価", EXCHANGE_EVENT_ADOPTED),
+        ("認識(置き完了合図の照合)", PLACEMENT_RECONCILE_ADOPTED),
         ("表示", VISUALIZATION_ADOPTED),
         ("連鎖シミュレーション", CHAIN_SIM_ADOPTED),
         ("指標大整理", INDICATOR_REORG_DECISIONS),
