@@ -1,0 +1,14 @@
+{
+  "candidates": 2,
+  "accepted": 0,
+  "accepted_chains": 0,
+  "next_mismatch": 0,
+  "final_mismatch": 0,
+  "final_unresolved": 0,
+  "skipped": {
+    "unknown_or_floating": 222,
+    "missing_formula": 10,
+    "no_remaining_chain": 53
+  },
+  "rows": []
+}

@@ -1,0 +1,951 @@
+{
+  "measurements": [
+    {
+      "source": "q_7gc4TgFig",
+      "frame": 4152,
+      "t": 138.4,
+      "side": 0,
+      "moving": true,
+      "ncc": 0.9689160585403442,
+      "gain": 1.18131323158741,
+      "dx": 0,
+      "dy": 23,
+      "detection_frame": 4152,
+      "detection_t": 138.4,
+      "onset_uncertainty_frames": 0,
+      "i": 4152,
+      "type": "NEXT",
+      "state": "STABLE",
+      "game": 1,
+      "repeated": false,
+      "during_chain": false,
+      "cycle_start": 133.76666666666668,
+      "cycle_end": 138.4,
+      "cycle_number": 2,
+      "cycle_left_censored": false,
+      "lower": 4013,
+      "upper": 4160,
+      "signals": [
+        {
+          "frame": 4152,
+          "t": 138.4,
+          "side": 0,
+          "moving": true,
+          "ncc": 0.9689160585403442,
+          "gain": 1.18131323158741,
+          "dx": 0,
+          "dy": 23,
+          "detection_frame": 4152,
+          "detection_t": 138.4,
+          "onset_uncertainty_frames": 0,
+          "i": 4152,
+          "type": "NEXT",
+          "state": "STABLE",
+          "game": 1,
+          "repeated": false,
+          "during_chain": false
+        }
+      ],
+      "write_indices": [
+        122,
+        123,
+        124,
+        125
+      ],
+      "status": "対応候補",
+      "fps": 30.0,
+      "write_t": 138.1,
+      "write_i": 4143,
+      "early": true,
+      "stage": 12,
+      "cells": [],
+      "placement_confirmed": true,
+      "landing_cells": [
+        [
+          12,
+          2
+        ],
+        [
+          12,
+          3
+        ]
+      ],
+      "signal_evidence": "原映像NEXT絵柄移動",
+      "write_additions": [
+        [
+          12,
+          2
+        ],
+        [
+          12,
+          3
+        ]
+      ],
+      "written_stage": 12,
+      "reference_frame": 4152,
+      "added_delay_native_frames": 9,
+      "added_delay_30fps": 9.000000000000341,
+      "observed_cells": 71,
+      "write_board": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          5,
+          5,
+          0,
+          0
+        ]
+      ],
+      "initial_comparison_cells": 0
+    }
+  ],
+  "count_trace.json": [],
+  "prefire_audit.json": {
+    "rows": [
+      {
+        "game": 0,
+        "side": "1P",
+        "chain_id": 1,
+        "trigger_sec": 128.9,
+        "reason": "origin_difference",
+        "accepted": false,
+        "withdrawn": false,
+        "snapshot": {
+          "reason": null,
+          "board": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "start_sec": 128.36666666666667,
+          "end_sec": 128.43333333333334,
+          "frames": 3
+        },
+        "used": false,
+        "uses": 0,
+        "predicted_score": null,
+        "observations": [],
+        "hidden_distributions": [],
+        "enumerated": 0,
+        "retained_mass": 0.0,
+        "enumeration_sec": 0.00021162000484764576
+      }
+    ],
+    "calibration": [
+      {
+        "prior_sec": 308.46666666666664,
+        "observed_sec": 309.6333333333333,
+        "col": 1,
+        "row": 2,
+        "probs": {
+          "0": 0.5,
+          "2": 0.125,
+          "3": 0.125,
+          "4": 0.125,
+          "5": 0.125
+        },
+        "actual": 0,
+        "predicted": 0,
+        "confidence": 0.5,
+        "hit": true,
+        "log_loss": 0.6931471805599453,
+        "game": 4,
+        "side": "1P"
+      }
+    ]
+  },
+  "records": {
+    "kind": "header",
+    "version": 1,
+    "video_id": "q_7gc4TgFig_first_0_900_20260925_v1",
+    "per_side_settled": true,
+    "model_dir": "models/exchange_event_v1",
+    "prefire_match_ranges": {
+      "ranges": {
+        "tuple": [
+          {
+            "tuple": [
+              140.0,
+              243.0
+            ]
+          },
+          {
+            "tuple": [
+              595.0,
+              670.0
+            ]
+          },
+          {
+            "tuple": [
+              673.0,
+              702.0
+            ]
+          },
+          {
+            "tuple": [
+              705.0,
+              753.0
+            ]
+          },
+          {
+            "tuple": [
+              756.0,
+              860.0
+            ]
+          }
+        ]
+      },
+      "source": "/mnt/c/Users/ryouj/.codex/worktrees/exev/puyo_analyzer/data/verify/match_boundaries_v5/q_7gc4TgFig_first_0_900_20260925_v1/matches.tsv",
+      "sha256": "f324ab7d324dfad0df7f4314754f6bffc918abff92a4d50e041a22d29fe30091"
+    }
+  },
+  "followup": {
+    "frame": 0,
+    "t": 0.0,
+    "sides": [
+      {
+        "cnn": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            9,
+            0,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            9,
+            9,
+            9,
+            9
+          ]
+        ],
+        "hsv": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            0,
+            9,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            9,
+            0,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            0,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            0,
+            0,
+            0,
+            9,
+            9
+          ],
+          [
+            0,
+            0,
+            9,
+            9,
+            9,
+            9
+          ]
+        ],
+        "quality": "",
+        "erasing": false
+      },
+      {
+        "cnn": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            0
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            0
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            9,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            9,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ]
+        ],
+        "hsv": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            9,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            9,
+            9,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            9,
+            9,
+            9,
+            9,
+            0
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            0
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            9,
+            0,
+            9,
+            9,
+            0,
+            9
+          ],
+          [
+            0,
+            9,
+            9,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            9,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ]
+        ],
+        "quality": "",
+        "erasing": false
+      }
+    ]
+  },
+  "display": {
+    "video_id": {
+      "shape": [],
+      "sample": "q_7gc4TgFig_first_0_900_20260925_v1"
+    },
+    "t_sec": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        0.0,
+        0.03333333333333333
+      ]
+    },
+    "game_idx": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        0,
+        0
+      ]
+    },
+    "state1": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        "MENU",
+        "MENU"
+      ]
+    },
+    "state2": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        "MENU",
+        "MENU"
+      ]
+    },
+    "display_adv": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        0.0,
+        0.0
+      ]
+    },
+    "display_p1": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        0.5,
+        0.5
+      ]
+    },
+    "adv_raw_last": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        NaN,
+        NaN
+      ]
+    },
+    "source": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        "waiting_confirmed",
+        "waiting_confirmed"
+      ]
+    },
+    "resolved_active": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        false,
+        false
+      ]
+    },
+    "settled_ran": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        false,
+        false
+      ]
+    },
+    "score1": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        -1,
+        -1
+      ]
+    },
+    "score2": {
+      "shape": [
+        27000
+      ],
+      "sample": [
+        -1,
+        -1
+      ]
+    }
+  }
+}
