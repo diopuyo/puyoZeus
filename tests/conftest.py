@@ -37,6 +37,21 @@ def isolated_frozen_imports() -> Iterator[None]:
         sys.modules.update(saved)
 
 
+@contextmanager
+def restored_process_state() -> Iterator[None]:
+    """一般moduleが変えたcwdと検索順を、次のmoduleへ持ち越さない。
+
+    凍結snapshotへのchdirが残ると、spawn子が本番srcでなく旧srcを読み、
+    cwd相対のテストも別の場所を見る。src実体は触らない（class同一性を保つ）。
+    """
+    paths, directory = list(sys.path), os.getcwd()
+    try:
+        yield
+    finally:
+        os.chdir(directory)
+        sys.path[:] = paths
+
+
 @pytest.fixture(scope='module', autouse=True)
 def isolate_frozen_loader(request: pytest.FixtureRequest) -> Iterator[None]:
     """ハッシュ固定された検収fixture自体を変えず、その外側を隔離する。"""
@@ -44,4 +59,5 @@ def isolate_frozen_loader(request: pytest.FixtureRequest) -> Iterator[None]:
         with isolated_frozen_imports():
             yield
     else:
-        yield
+        with restored_process_state():
+            yield

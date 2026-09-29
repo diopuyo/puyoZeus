@@ -161,7 +161,7 @@ def test_supervisor_save_exposes_audits(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(SupervisedOverlay, 'start', Mock())
     overlay = SupervisedOverlay(Models(), build_static, Signals, m0, directory=tmp_path)
     overlay.connection = Mock()
-    overlay.receive = Mock(return_value=dict(records=[], diagnostics=[],
+    overlay.receive = Mock(return_value=dict(kind='ok', records=[], diagnostics=[],
         audits=dict(_origin_guard=None, _midchain={'rows': [1]}, _hidden_death={'rows': []})))
     overlay.save(tmp_path/'events.jsonl')
     assert overlay._origin_guard is None
