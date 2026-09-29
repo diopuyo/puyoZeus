@@ -1444,6 +1444,10 @@ PLACEMENT_RECONCILE_ADOPTED: tuple[AdoptedFlag, ...] = (
         '--placement-signal-reconcile', "2026-09-30",
         'R1b (82d3baf) 置き完了合図の照合 (NEXT移動+掛け算式、おじゃま合図は含めない): e36b検収 (R1b合図照合+E35+D5+D5b): q .507565 / zenchi 92.12% (7,676/8,333) / 誤発火1/39 / 3:00場面 2760.38秒 (門2766.0秒以内)。本番(E27+E31+E32 q .507977 / zenchi 7,664)から改善。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/e36b/SUMMARY.json、scripts/run_e36b.py options()。第14試合1P 884秒の誤確定は残存 (D5b単体では直らない、既知)。',
     ),
+    AdoptedFlag(
+        '--next-recolor-pair-guard', "2026-09-30",
+        'cycle65 NEXT履歴色補正の対整合ガード (d3c5b0d)。確定遅延時に1手先のqueueで着地セルを上書きする誤りを止める (根因: logs/match14_misread/DIAGNOSIS.md)。 c65全長検収 (R1b+E35+D5+D5b+本ガード、E36事前登録門): q .507567 (門 .508040) / zenchi 92.06% (7,671/8,333、門7,671) / 誤発火0/37 (門1/35) / 3:00場面 2760.38秒 (門2766.0秒) / 第14試合1P 884秒の誤確定0。E36b本番比 q +0.000002 / zenchi -5フレーム / 誤発火 1→0。影子測定 4動画 書換セル正解 269→581/584 (悪化1セル zenchi 3155.75秒)。user一括承認2026-09-30 (DECISIONS.md)。抽出元: logs/c65_guard/e36b_on、logs/c65_guard/RESULT.md。',
+    ),
 )
 
 
