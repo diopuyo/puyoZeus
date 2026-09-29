@@ -117,18 +117,45 @@ class SupervisedOverlay:
 
     def update(self, *args: Any) -> None:
         self.t_sec, game = args[3:5]
-        self.game = game
+        changed, self.game = game != self.game, game
         blob = pickle.dumps(('update', args), protocol=pickle.HIGHEST_PROTOCOL)
         self.journal.append(blob)
         self.pending.append(blob)
         # 物理更新を公開周期まで貯めず、最新通知の到着時に完了させる。
         commands = list(self.journal) if self.dirty else self.pending
-        reply = self.request(dict(op='advance', commands=commands, reset=self.dirty,
-                                  smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
+        try:
+            reply = self.request(dict(op='advance', commands=commands, reset=self.dirty,
+                                      smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
+        except EvaluationError:
+            if not (changed and self.dirty and len(commands) > 1):
+                raise
+            commands = self._drop_unreplayable_match(game)
+            reply = self.request(dict(op='advance', commands=commands, reset=True,
+                                      smoothing=self.boundary_smoothing, next_id=self.boundary_next_id))
         commit_history(self, reply, commands)
         self.smoothing = reply['smoothing']
         self.pending.clear()
         self.dirty = False
+
+    def _drop_unreplayable_match(self, game: int) -> list[bytes]:
+        """前試合の再実行が失敗した時だけ、新試合の通知からjournalを作り直す。
+
+        前試合に適用できない通知が残ると、境界の回収が一度も成功せず全試合が止まる。
+        前試合の交換はこの時点で回収不能なので、破棄した件数を記録して先へ進む。
+        """
+        rows = list(self.journal)
+        start = next(i for i, blob in enumerate(rows)
+                     if (lambda row: row[0] == 'update' and row[1][4] == game)(pickle.loads(blob)))
+        replacement = DiskRows(self.directory/f'evaluation-journal-{self.request_id}-dropped.pickle')
+        replacement.extend(rows[start:])
+        replacement.stream.flush()
+        previous, self.journal = self.journal, replacement
+        previous.close()
+        previous.path.unlink()
+        self.boundary_smoothing = self.smoothing
+        log_event(self.directory, dict(kind='unreplayable_match_dropped', t_sec=self.t_sec,
+            game=game, dropped_notifications=start, kept_notifications=len(rows)-start))
+        return rows[start:]
 
     def request(self, request: dict) -> dict:
         """物理更新と公開計算の両方を同じ障害隔離境界で処理する。"""
