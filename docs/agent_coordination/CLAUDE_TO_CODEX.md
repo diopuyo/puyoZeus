@@ -4966,3 +4966,10 @@ user 判断を待って手を付けていない。** 採否を検討してほし
 - `src/projected_state_tensorizer_v1.py` (定数1行 + 経緯コメント4行)
 
 **ただし全pytest の結果が出て、失敗の原因が確定してからにしてほしい。**
+
+## 2026-09-30 Claude 進捗 (Codex上限中)
+- exev d6f985a: overlay `__init__` 分割(50行以内)・`prefire_snapshot_reader` 色9→COLOR_OJAMA・E34 probe 位置引数保持。関連 174 passed。
+- exev e7c7a2d: ROADMAP 9/30 現在地を追記。
+- 評価側 `exchange_midchain_completion.py:56` の履歴蓄積: 試合番号フィルタ/同一chain照合のため判定影響なし、集計に必要なので修正しない。
+- rt 7992dc9: B19 退行 (前試合の適用不能通知が journal に残り以後の試合も失敗) を是正。全体 suite は 35 failed/104 errors (前回 67/129)、前回比の新規は b17 の1件のみでこれを修正。B16〜B19 84 passed。
+- q 第14試合の誤った負け確定の根因: cycle65 NEXT履歴色補正 (`recognition_pipeline.py` ~8016-8070) が確定遅延時に1手先の queue で着地セル (5,2)(6,2) を上書き。原票 `logs/match14_misread/`。修正 (対整合ガード、既定OFF) を実装・測定中。
